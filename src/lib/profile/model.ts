@@ -186,14 +186,23 @@ export interface TermLabel {
  *
  *   - `none` — a single stateless completion. Fans out into several drafts.
  *   - `read` — may read lore, chapters and memory before writing (续写).
+ *   - `write` — reads, and authors **files**: create/append/edit/verify plus
+ *     the deliverable exports. Not the knowledge base, not pictures, not
+ *     memory. The tier a task declares when its product is a document rather
+ *     than a change to the project's own state.
  *   - `full` — the whole toolset, including L1 writes and `propose_edit`.
+ *
+ * `write` exists because `full` is not free: its schemas ride on every round,
+ * and on a 32k local model they alone exceed the input ceiling (see
+ * `contextForecast.test.ts`). A task that never touches the knowledge base
+ * should not pay for the tools that do — see `presetForTools`.
  *
  * Anything other than `none` runs the agent loop, and therefore produces a
  * single draft: every round reports into one shared execution log, and the
  * write-capable set additionally can't have concurrent runs touching one lore
  * folder. See `draftCountFor`.
  */
-export type TaskTools = "none" | "read" | "full";
+export type TaskTools = "none" | "read" | "write" | "full";
 
 /**
  * Where a task's result belongs once the author accepts it.
@@ -363,13 +372,16 @@ export const DEFAULT_TASKS: readonly TaskDef[] = [
   {
     // HTML 工件：图示/架构图/宣传页 as a self-contained .html deliverable —
     // the one-click entry the plan's 三期 promised (docs/feature/html-artifact-plan.md).
-    // Freeform + full toolset: the author describes the page, the agent reads
-    // the material and proposes it via create_file (L2 approval).
+    // Freeform + the `write` tier: the author describes the page, the agent
+    // reads the material and proposes it via create_file (L2 approval). It
+    // never touches the knowledge base, so it does not carry the tools that
+    // would — which on a small model is the difference between the knowledge
+    // base getting a budget and getting nothing.
     id: "htmlArtifact",
     labelKey: "ai.tasks.htmlArtifact",
     descKey: "ai.tasks.htmlArtifactDesc",
     instructionKey: "ai.instructions.htmlArtifact",
-    tools: "full",
+    tools: "write",
     target: "detached",
     freeform: true,
   },
@@ -1783,7 +1795,7 @@ export function parseCategoryList(raw: unknown, issues: string[]): ProfileCatego
  */
 export const TASK_ID_RE = CATEGORY_ID_RE;
 const MAX_TASKS = 16;
-const TASK_TOOLS: TaskTools[] = ["none", "read", "full"];
+const TASK_TOOLS: TaskTools[] = ["none", "read", "write", "full"];
 const TASK_TARGETS: TaskTarget[] = ["append", "replace", "detached"];
 
 function optionalFlag(value: unknown, name: string, issues: string[]): boolean | undefined {

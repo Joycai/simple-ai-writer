@@ -319,17 +319,25 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     } else {
       instruction = builtIn;
     }
-    // The workflow roster goes to every full-toolset task (the capability the
-    // read_workflow tool ships with, per presets) — matched on the declared
-    // tool tier, never on the task id.
-    if (task.tools === "full") {
+    // Each roster goes with the tool it serves — matched on the preset's
+    // declared capability, never on the tool tier and never on the task id.
+    //
+    // This used to read `task.tools === "full"`, which was the same thing while
+    // `full` was the only tier carrying either tool. It stopped being the same
+    // thing the moment a narrower tier appeared: `write` has read_workflow and
+    // no export_docx, so a tier test would have sent it a list of Word formats
+    // it cannot use and withheld the workflow roster its read_workflow exists
+    // to serve.
+    if (preset?.tools.includes("read_workflow")) {
       const workflowSection = await workflowBriefingSection(projectPath);
-      // Same layer, same reason: without the roster the model knows export_docx
-      // exists but not which formats it may name — so it would either always
-      // take the default or guess an id and eat an error.
+      if (workflowSection) instruction += `\n\n${workflowSection}`;
+    }
+    // Without this roster the model knows export_docx exists but not which
+    // formats it may name — so it would either always take the default or guess
+    // an id and eat an error.
+    if (preset?.tools.includes("export_docx")) {
       const docxFormats = currentFormats();
       const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
-      if (workflowSection) instruction += `\n\n${workflowSection}`;
       if (docxSection) instruction += `\n\n${docxSection}`;
     }
     // 作者意图进匹配靶，折进 extras 一次，同上面的 loreScope。

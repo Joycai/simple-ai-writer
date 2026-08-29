@@ -8,7 +8,7 @@ Tasks are pack data (`docs/reference/architecture.md` → Tasks), so this is an 
 
 1. Add a `TaskDef` to the pack's `tasks` in `src/lib/profile/model.ts`:
    - `instructionKey` — an `ai.instructions.*` key holding the prompt (or `freeform: true` to let the author type it)
-   - `tools` — `none` for a plain completion, `read` to let it consult lore/chapters first, `full` for the write-capable toolset. Anything but `none` runs the agent loop and produces a single draft
+   - `tools` — `none` for a plain completion, `read` to let it consult lore/chapters first, `write` when the task's product is a **document** (read + create/append/edit/verify + the deliverable exports, but nothing that changes the knowledge base), `full` for the whole toolset. Anything but `none` runs the agent loop and produces a single draft. **Reach for `write` before `full`**: the schemas ride on every round, and `full` is ~15k against `write`'s ~4k — on a small local model that difference is the knowledge base getting a budget or getting nothing (`agentToolBudget.test.ts`, `contextForecast.test.ts`)
    - `target` — `append` / `replace` / `detached`, i.e. where an accepted result goes
    - flags as needed: `needsSelection`, `referenceWindow`, `continuation` (append-only), `hidden`
 2. Add the instruction to **both** locales under `ai.instructions`, plus a `labelKey`/`descKey` under `ai.tasks` (or literal `labelZh`/`labelEn` for a hand-written `profile.json`, where new i18n keys aren't possible).
