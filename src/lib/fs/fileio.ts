@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { toPosixPath } from "../paths";
 
+/**
+ * Read a text file. Non-UTF-8 encodings (GBK, Shift_JIS, UTF-16 with BOM…) are
+ * detected and decoded Rust-side (`decode_text` in commands.rs) instead of
+ * erroring, VSCode-style; only genuinely binary content is refused. The string
+ * that arrives here is always UTF-8, so a later {@link writeFile} of edited
+ * content converts the file to UTF-8 on disk.
+ */
 export async function readFile(path: string): Promise<string> {
   return invoke("fs_read_text_file", { path });
 }

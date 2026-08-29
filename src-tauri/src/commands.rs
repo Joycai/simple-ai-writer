@@ -127,11 +127,57 @@ pub fn fs_write_text_file(
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
-/// Read UTF-8 text from a file.
+/// Decode file bytes into text, guessing the encoding the way an editor does.
+///
+/// The order matters:
+/// 1. **BOM** — checked even before the UTF-8 fast path, because a UTF-8 BOM
+///    *is* valid UTF-8 and would otherwise survive as a U+FEFF prefix that
+///    breaks frontmatter detection (`---` no longer starts the file). It also
+///    has to precede the binary check: a UTF-16 file is full of NUL bytes.
+///    `encoding_rs`'s `decode` sniffs all three BOMs and strips them.
+/// 2. **Strict UTF-8** — real UTF-8 virtually never fails this, and GBK
+///    virtually never passes it, so no detector gets a chance to second-guess
+///    a well-formed file.
+/// 3. **NUL ⇒ binary** — none of the legacy encodings chardetng can name uses
+///    0x00, so a buffer containing one is a binary file. "Decoding" it would
+///    hand the editor garbage that a later save writes back over the original;
+///    an honest error is the only safe answer. (BOM-less UTF-16 lands here
+///    too — rare enough that erroring beats guessing.)
+/// 4. **chardetng** over the whole buffer — GBK/GB18030, Shift_JIS, Big5,
+///    EUC-KR, windows-125x…; undecodable sequences become U+FFFD rather than
+///    an error, same as VSCode.
+///
+/// Whatever the source encoding, the result is a Rust `String` — UTF-8 — so
+/// the next save through `fs_write_text_file` rewrites the file as UTF-8.
+fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
+    const BOMS: [&[u8]; 3] = [&[0xEF, 0xBB, 0xBF], &[0xFF, 0xFE], &[0xFE, 0xFF]];
+    if BOMS.iter().any(|bom| bytes.starts_with(bom)) {
+        let (text, _, _) = encoding_rs::UTF_8.decode(&bytes);
+        return Ok(text.into_owned());
+    }
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(err) => {
+            let bytes = err.into_bytes();
+            if bytes.contains(&0) {
+                return Err("not a text file (contains NUL bytes)".into());
+            }
+            let mut detector = chardetng::EncodingDetector::new();
+            detector.feed(&bytes, true);
+            let encoding = detector.guess(None, true);
+            let (text, _, _) = encoding.decode(&bytes);
+            Ok(text.into_owned())
+        }
+    }
+}
+
+/// Read text from a file, guessing the encoding when it isn't UTF-8 —
+/// see [`decode_text`].
 #[command]
 pub fn fs_read_text_file(path: String, scope: State<'_, FsScope>) -> Result<String, String> {
     scope.check(&path)?;
-    fs::read_to_string(&path).map_err(|e| e.to_string())
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    decode_text(bytes)
 }
 
 /// Append UTF-8 text to a file, creating it (and parent dirs) if missing.
@@ -366,8 +412,69 @@ pub fn open_with_default_app(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_within, valid_category};
+    use super::{decode_text, is_within, valid_category};
     use std::path::Path;
+
+    #[test]
+    fn utf8_passes_through_unchanged() {
+        let text = "# 第一章\n\n她说：「走吧。」\n";
+        assert_eq!(decode_text(text.as_bytes().to_vec()).unwrap(), text);
+    }
+
+    #[test]
+    fn utf8_bom_is_stripped() {
+        // A surviving U+FEFF prefix would break frontmatter detection — the
+        // file would no longer start with `---`.
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice("---\ntitle: x\n---\n".as_bytes());
+        assert_eq!(decode_text(bytes).unwrap(), "---\ntitle: x\n---\n");
+    }
+
+    #[test]
+    fn gbk_is_detected_and_decoded() {
+        // "第一章：风起" in GBK — decoding it as UTF-8 is what used to error.
+        // (encode's third value is *had_errors*, hence the negation.)
+        let (gbk, _, had_errors) = encoding_rs::GBK.encode("第一章：风起");
+        assert!(!had_errors, "test string must be GBK-encodable");
+        assert_eq!(decode_text(gbk.into_owned()).unwrap(), "第一章：风起");
+    }
+
+    #[test]
+    fn shift_jis_is_detected_and_decoded() {
+        // The translate feature's users have Japanese source files.
+        let text = "第一章　風の音がした。彼女は振り返った。";
+        let (sjis, _, had_errors) = encoding_rs::SHIFT_JIS.encode(text);
+        assert!(!had_errors);
+        assert_eq!(decode_text(sjis.into_owned()).unwrap(), text);
+    }
+
+    #[test]
+    fn utf16le_bom_is_decoded() {
+        // Notepad's historical "Unicode" default — full of NUL bytes, so this
+        // also proves the BOM check runs before the binary check.
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in "chapter 一".encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        assert_eq!(decode_text(bytes).unwrap(), "chapter 一");
+    }
+
+    #[test]
+    fn utf16be_bom_is_decoded() {
+        let mut bytes = vec![0xFE, 0xFF];
+        for unit in "第一章".encode_utf16() {
+            bytes.extend_from_slice(&unit.to_be_bytes());
+        }
+        assert_eq!(decode_text(bytes).unwrap(), "第一章");
+    }
+
+    #[test]
+    fn binary_content_is_refused_not_garbled() {
+        // A PNG header: guessing an encoding here would hand the editor
+        // garbage that the next save writes back over the image.
+        let bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00];
+        assert!(decode_text(bytes).is_err());
+    }
 
     #[test]
     fn is_within_matches_on_whole_components() {
