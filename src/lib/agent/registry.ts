@@ -976,7 +976,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "search_text",
         description:
-          "Full-text search across the project's documents. Scans every document file in the workspace (recursively, including subfolders) and returns each hit as file path + line number + a snippet of the surrounding line. This is the way to locate a scene, a name, or a piece of foreshadowing — use it instead of reading chapters one by one with read_file, then read_file only the chapter the hits point at. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+          "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \"entity · file\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
         parameters: {
           type: "object",
           properties: {
@@ -988,7 +988,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             folder: {
               type: "string",
               description:
-                "Subfolder to limit the search to, relative to the project root (e.g. one volume). Omit to search the whole project.",
+                "Subfolder to limit the search to, relative to the project root (e.g. one volume). Omit to search the whole project — passing it also skips the knowledge base, which has no folders.",
             },
           },
           required: ["query"],
@@ -997,7 +997,9 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { query?: string; folder?: string };
-      return searchWritingFiles(call.id, ctx.projectPath, args.query ?? "", args.folder);
+      return searchWritingFiles(
+        call.id, ctx.projectPath, args.query ?? "", args.folder, ctx.loreIndex, ctx.loreScope,
+      );
     },
   },
 

@@ -517,14 +517,108 @@ interface HitAt {
   col: number;
 }
 
+/**
+ * The knowledge base's own budget, kept separate from the manuscript's.
+ *
+ * A shared cap would let a common word in a 300-chapter book spend the whole
+ * allowance before the one entry that *defines* that word is ever reported —
+ * and the entry is usually what the question was about. Smaller numbers than
+ * the manuscript's because an entry is short: four hits in one entry file is
+ * most of the entry already.
+ */
+const LORE_MAX_HITS = 12;
+const LORE_MAX_PER_FILE = 4;
+
 /** One file's hits, held until the whole search decides how to render them. */
 interface FileHits {
+  /**
+   * What the model acts on, which differs by side: a path for a document
+   * (`propose_edit` takes it), `entity · file` for the knowledge base
+   * (`edit_lore_file` takes those two). Rendering never re-derives it.
+   */
   path: string;
   lines: string[];
   at: HitAt[];
   /** Hits found in this file beyond the per-file cap. */
   omitted: number;
 }
+
+/** One side of a search — the manuscript, or the knowledge base. */
+interface Section {
+  found: FileHits[];
+  /** Matching lines seen, the ones the caps left out included. */
+  total: number;
+  /** Matching lines actually rendered. */
+  shown: number;
+  /** Files with at least one hit. */
+  matched: number;
+  /** Files actually read, hit or not. */
+  scanned: number;
+}
+
+function emptySection(): Section {
+  return { found: [], total: 0, shown: 0, matched: 0, scanned: 0 };
+}
+
+/** Fold one text's hits into a section, under that section's own caps. */
+function scanText(
+  section: Section,
+  label: string,
+  text: string,
+  needle: string,
+  maxPerFile: number,
+  maxHits: number,
+): void {
+  section.scanned++;
+  if (!text.toLowerCase().includes(needle)) return;
+  section.matched++;
+
+  const lines = text.split(/\r?\n/);
+  const at: HitAt[] = [];
+  let inFile = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const col = lines[i].toLowerCase().indexOf(needle);
+    if (col < 0) continue;
+    inFile++;
+    section.total++;
+    if (at.length < maxPerFile && section.shown < maxHits) {
+      at.push({ line: i, col });
+      section.shown++;
+    }
+  }
+  if (at.length) section.found.push({ path: label, lines, at, omitted: inFile - at.length });
+}
+
+/**
+ * Render one section's blocks.
+ *
+ * The context decision is taken **per section** rather than over the search as
+ * a whole: the two sides answer different questions, and a manuscript flooded
+ * by a common word would otherwise strip the context off the single knowledge-
+ * base hit that had actually located the answer — costing exactly the extra
+ * round §5.2 exists to remove.
+ */
+function renderSection(
+  section: Section,
+  needleLen: number,
+): { blocks: string[]; withContext: boolean } {
+  const withContext = section.shown > 0 && section.shown <= SEARCH_CONTEXT_MAX_HITS;
+  const blocks = section.found.map((file) => {
+    const body = withContext
+      ? file.at.map((h) => hitWithContext(file.lines, h, needleLen)).join("\n  ⋮\n")
+      : file.at
+          .map((h) => `  L${h.line + 1}: ${snippetAround(file.lines[h.line], h.col, needleLen)}`)
+          .join("\n");
+    return (
+      `${file.path}\n${body}` +
+      (file.omitted > 0 ? `\n  [... ${file.omitted} more in this file ...]` : "")
+    );
+  });
+  return { blocks, withContext };
+}
+
+const CONTEXT_NOTE =
+  '(">" marks the matching line, the rest is the text around it — enough to write the edit from, without reading the file again.)';
 
 /**
  * A hit and its neighbours, numbered the way read_file numbers them.
@@ -588,15 +682,43 @@ function snippetAround(line: string, at: number, matchLen: number): string {
 }
 
 /**
- * Plain-text, case-insensitive search across the manuscript. Deliberately not
- * regex: the query comes from a model, and a pathological pattern would hang
- * the UI thread with no way for the author to interrupt it.
+ * Plain-text, case-insensitive search across the manuscript **and the
+ * knowledge base**. Deliberately not regex: the query comes from a model, and
+ * a pathological pattern would hang the UI thread with no way for the author
+ * to interrupt it.
+ *
+ * ## Why the knowledge base is in here rather than in a tool of its own
+ *
+ * It was in neither. `read_dir_recursive` skips dotfiles, so `.ai-writer/lore/`
+ * has never been visible to this scan — and there was no other content search
+ * over it. "Which entry mentions the bronze key" was therefore answered by
+ * `list_lore_entities` followed by `read_lore_entity` on candidate after
+ * candidate: on a fifty-entry project, up to fifty rounds at ~15k of tool
+ * schema each, to find something a scan finds in one.
+ *
+ * A second tool would have cost ~250 schema tokens on every round of every run
+ * to say a second time what this one already says. One search, one mental
+ * model — the way a coding agent has exactly one grep. What differs is the
+ * *label*: a document block is headed by its path, a knowledge-base block by
+ * `entity · file`, because those are the two arguments `edit_lore_file` takes.
+ * Reporting a lore hit as a path would be reporting a coordinate no write tool
+ * on that side accepts.
+ *
+ * Two things it deliberately does not do. It does not widen `read_file` —
+ * that tool still refuses `.ai-writer` (a prompt-injected model reading
+ * profile.json back to whoever planted the instruction), and a search returns
+ * lines from files the model can already read whole by name. And it does not
+ * cross the 取材范围 fence: a scan is automatic discovery, which is the one
+ * thing the fence narrows, so the out-of-scope count is reported instead of
+ * the entries themselves (lib/lore/collections).
  */
 export async function searchWritingFiles(
   toolCallId: string,
   projectPath: string,
   query: string,
   folder?: string,
+  loreIndex?: LoreIndex,
+  loreScope?: string | null,
 ): Promise<ToolResult> {
   const q = (query ?? "").trim();
   if (!q) return { toolCallId, content: "Error: 'query' argument is required." };
@@ -619,12 +741,8 @@ export async function searchWritingFiles(
 
   const scope = folder || "the project folder";
   const needle = q.toLowerCase();
-  const blocks: string[] = [];
-  let totalHits = 0;
-  let shownHits = 0;
-  let matchedFiles = 0;
 
-  const found: FileHits[] = [];
+  const docs = emptySection();
   for (const path of files) {
     let text: string;
     try {
@@ -632,61 +750,90 @@ export async function searchWritingFiles(
     } catch {
       continue; // unreadable file — skip rather than fail the whole search
     }
-    if (!text.toLowerCase().includes(needle)) continue;
-    matchedFiles++;
+    scanText(docs, path, text, needle, SEARCH_MAX_PER_FILE, SEARCH_MAX_HITS);
+  }
 
-    const lines = text.split(/\r?\n/);
-    const at: HitAt[] = [];
-    let inFile = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const col = lines[i].toLowerCase().indexOf(needle);
-      if (col < 0) continue;
-      inFile++;
-      totalHits++;
-      if (at.length < SEARCH_MAX_PER_FILE && shownHits < SEARCH_MAX_HITS) {
-        at.push({ line: i, col });
-        shownHits++;
+  // `folder` narrows to a manuscript subtree, and asking for one subtree is
+  // asking for that subtree only — so it skips the knowledge base rather than
+  // silently ignoring the narrowing on one of the two sides.
+  const scanLore = !!loreIndex && !folder;
+  const lore = emptySection();
+  if (scanLore) {
+    const scoped = scopeLoreIndex(loreIndex!, loreScope ?? null);
+    for (const entities of Object.values(scoped)) {
+      for (const e of entities) {
+        const filenames = e.mdFiles?.length ? e.mdFiles : ["index.md"];
+        for (const filename of filenames) {
+          if (filename === "images.md") continue; // a gallery manifest, not prose
+          let text: string;
+          try {
+            text = await readEntityFile(e.dirPath, filename);
+          } catch {
+            continue;
+          }
+          scanText(lore, `${e.name} · ${filename}`, text, needle, LORE_MAX_PER_FILE, LORE_MAX_HITS);
+        }
       }
     }
-    if (!at.length) continue; // counted above; the global cap ate its budget
-    found.push({ path, lines, at, omitted: inFile - at.length });
   }
 
-  // Few enough hits that the model has plainly located its target: give the
-  // lines around each one, so the edit can be written from this result instead
-  // of costing a read_file round for the same passage (edit-loop-plan.md §5.2).
-  const withContext = shownHits > 0 && shownHits <= SEARCH_CONTEXT_MAX_HITS;
-  for (const file of found) {
-    const body = withContext
-      ? file.at.map((h) => hitWithContext(file.lines, h, q.length)).join("\n  ⋮\n")
-      : file.at.map((h) => `  L${h.line + 1}: ${snippetAround(file.lines[h.line], h.col, q.length)}`)
-          .join("\n");
-    blocks.push(
-      `${file.path}\n${body}` +
-        (file.omitted > 0 ? `\n  [... ${file.omitted} more in this file ...]` : ""),
-    );
-  }
+  const hidden = scanLore ? outOfScopeCount(loreIndex!, loreScope ?? null) : 0;
+  const fenceNote =
+    hidden > 0
+      ? `\n\n(The knowledge-base scan was limited to the collection "${loreScope}"; ${hidden} further ` +
+        `${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and were not searched. You can still ` +
+        "read one by name with read_lore_entity if the author asks for it.)"
+      : "";
 
-  if (totalHits === 0) {
+  if (docs.total + lore.total === 0) {
+    const searched = scanLore
+      ? `${docs.scanned} document${docs.scanned === 1 ? "" : "s"} and ${lore.scanned} knowledge-base file${lore.scanned === 1 ? "" : "s"} searched`
+      : `${docs.scanned} file${docs.scanned === 1 ? "" : "s"} searched`;
+    // Said here and nowhere else, because this is where the wrong conclusion
+    // gets drawn: a folder-scoped miss is not evidence the project lacks it.
+    const narrowed = folder
+      ? " The knowledge base was not searched, because 'folder' narrowed this call to one subtree — search again without it to cover the whole project."
+      : "";
     return {
       toolCallId,
       content:
-        `No matches for "${q}" in ${scope} (${files.length} file${files.length === 1 ? "" : "s"} searched). ` +
-        "Matching is literal and case-insensitive — try a shorter or differently-worded phrase.",
+        `No matches for "${q}" in ${scope} (${searched}). ` +
+        "Matching is literal and case-insensitive — try a shorter or differently-worded phrase." +
+        narrowed +
+        fenceNote,
     };
   }
 
-  const header =
-    `${totalHits} matching line${totalHits === 1 ? "" : "s"} in ${matchedFiles} file${matchedFiles === 1 ? "" : "s"} ` +
-    `for "${q}" (${files.length} searched):` +
-    (withContext
-      ? '\n(">" marks the matching line, the rest is the text around it — enough to write the edit from, without reading the file again.)'
-      : "");
-  const trailer =
-    shownHits < totalHits
-      ? `\n\n[... ${totalHits - shownHits} more matching lines not shown — narrow the query, or pass 'folder' to scope the search ...]`
-      : "";
-  return { toolCallId, content: `${header}\n\n${blocks.join("\n\n")}${trailer}` };
+  const parts: string[] = [];
+
+  if (docs.total > 0) {
+    const { blocks, withContext } = renderSection(docs, q.length);
+    parts.push(
+      `${docs.total} matching line${docs.total === 1 ? "" : "s"} in ${docs.matched} document${docs.matched === 1 ? "" : "s"} ` +
+        `for "${q}" (${docs.scanned} searched):` +
+        (withContext ? `\n${CONTEXT_NOTE}` : "") +
+        `\n\n${blocks.join("\n\n")}` +
+        (docs.shown < docs.total
+          ? `\n\n[... ${docs.total - docs.shown} more matching lines in documents not shown — narrow the query, or pass 'folder' to scope the search ...]`
+          : ""),
+    );
+  }
+
+  if (lore.total > 0) {
+    const { blocks, withContext } = renderSection(lore, q.length);
+    parts.push(
+      `Knowledge base — ${lore.total} matching line${lore.total === 1 ? "" : "s"} in ${lore.matched} ` +
+        `entry file${lore.matched === 1 ? "" : "s"} (${lore.scanned} searched). Each block is headed ` +
+        `"entity · file": those are edit_lore_file's 'entity' and 'file' arguments — propose_edit does not reach these.` +
+        (withContext ? `\n${CONTEXT_NOTE}` : "") +
+        `\n\n${blocks.join("\n\n")}` +
+        (lore.shown < lore.total
+          ? `\n\n[... ${lore.total - lore.shown} more matching lines in the knowledge base not shown ...]`
+          : ""),
+    );
+  }
+
+  return { toolCallId, content: parts.join("\n\n") + fenceNote };
 }
 
 /** Characters one read_file call may return, before it pages. */

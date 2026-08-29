@@ -122,7 +122,7 @@ describe("条的几何", () => {
    * （32k × 0.5 利用率）只有 14k 能花在输入上——固定成本还没算进去就已经超了。
    * 大模型上无关紧要，小模型上它意味着知识库分到零。钉在这里是为了让「工具集
    * 又长了」在这个尺度上有一个会说话的地方，而不是只在棘轮里变成一个更大的数
-   * 字：真正的答案是按任务收窄工具集（见 docs/feature/agent/edit-loop-plan.md §8）。
+   * 字：真正的答案是按任务收窄工具集（见 docs/feature/agent/edit-loop-plan.md §7）。
    */
   it("小模型上 agent 档的工具表就已经超出输入上限", () => {
     const f = planForecast(input({ runTask: taskById("agent") }))!;
