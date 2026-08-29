@@ -35,6 +35,9 @@ export const PREF_KEYS = [
   "app:sidebarWidth",
   "app:rightPanelWidth",
   "app:recentProjects",
+  "app:pinnedProjects",
+  "app:projectOpenedAt",
+  "app:pinHintDone",
   "app:loreBudgetTokens",
   "app:contextUtilization",
   "app:aiDrawerMode",
@@ -113,6 +116,9 @@ export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX] as cons
  */
 export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "app:recentProjects",
+  "app:pinnedProjects",
+  "app:projectOpenedAt",
+  "app:pinHintDone",
   "manuscript:onboarding-done",
 ];
 

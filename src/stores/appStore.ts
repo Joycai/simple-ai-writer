@@ -1,14 +1,24 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { deletePref, LORE_SCOPE_PREFIX, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
-import { mergeRecentProjects, parseRecentProjects, RECENT_PROJECTS_MAX } from "../lib/recentProjects";
+import {
+  capRecentProjects,
+  isProjectPinned,
+  mergeOpenedAt,
+  mergePinnedProjects,
+  mergeRecentProjects,
+  parseOpenedAt,
+  parsePinnedProjects,
+  parseRecentProjects,
+  pruneOpenedAt,
+} from "../lib/recentProjects";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
 import {
   DEFAULT_IMAGE_LONG_EDGE, IMAGE_LONG_EDGE_KEY, IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
 } from "../lib/image/downscalePlan";
-import { isSamePath } from "../lib/paths";
+import { isSamePath, toPosixPath } from "../lib/paths";
 import { docModel } from "../lib/profile/active";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
@@ -43,6 +53,9 @@ const PREVIEW_ZOOM_KEY = "app:previewZoom";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
+const PINNED_PROJECTS_KEY = "app:pinnedProjects";
+const OPENED_AT_KEY = "app:projectOpenedAt";
+const PIN_HINT_KEY = "app:pinHintDone";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
 const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
@@ -94,9 +107,13 @@ function storedPreviewZoom(): number {
 }
 
 // Normalisation, dedup and the cap live in lib/recentProjects (pure, shared
-// with the multi-instance merge that runs at persist time).
-function loadRecentProjects(): string[] {
-  return parseRecentProjects(readPref(RECENT_PROJECTS_KEY));
+// with the multi-instance merge that runs at persist time). The cap counts
+// unpinned entries only, so the pin row has to be read first.
+function loadPinnedProjects(): string[] {
+  return parsePinnedProjects(readPref(PINNED_PROJECTS_KEY));
+}
+function loadRecentProjects(pinned: readonly string[]): string[] {
+  return parseRecentProjects(readPref(RECENT_PROJECTS_KEY), pinned);
 }
 
 const SIDEBAR_MIN = 160;
@@ -176,6 +193,7 @@ const storedAiDrawerMode = (): AiDrawerMode => {
 
 /** The pref-backed slice, re-derivable in one call. */
 function prefBackedState() {
+  const pinnedProjects = loadPinnedProjects();
   return {
     theme: storedTheme(),
     language: storedLang(),
@@ -184,7 +202,10 @@ function prefBackedState() {
     previewZoom: storedPreviewZoom(),
     sidebarWidth: storedSidebarWidth(),
     rightPanelWidth: storedRightPanelWidth(),
-    recentProjects: loadRecentProjects(),
+    pinnedProjects,
+    recentProjects: loadRecentProjects(pinnedProjects),
+    projectOpenedAt: parseOpenedAt(readPref(OPENED_AT_KEY)),
+    pinHintDone: readPref(PIN_HINT_KEY) === "1",
     loreBudgetTokens: storedLoreBudget(),
     contextUtilization: storedContextUtilization(),
     draftCount: storedDraftCount(),
@@ -239,6 +260,18 @@ interface AppState {
   sidebarWidth: number;
   rightPanelWidth: number;
   recentProjects: string[];
+  /**
+   * The projects the author pinned: a set of markers over `recentProjects`,
+   * not a second list. Pinned entries survive 清空, are exempt from the
+   * recents cap, and sort above the rest (`splitProjects`).
+   */
+  pinnedProjects: string[];
+  /** When each listed project was last opened (path → epoch ms). Only the
+   *  widest sidebar layout prints it; a missing stamp simply shows nothing. */
+  projectOpenedAt: Record<string, number>;
+  /** The "you can pin a project" hint is a first-run nudge: one successful
+   *  pin retires it for good. */
+  pinHintDone: boolean;
   /** Token budget for lore injection (the 【知识库】 block). */
   loreBudgetTokens: number;
   /** Share of the model's context window one request may occupy (0–1). */
@@ -302,7 +335,23 @@ interface AppState {
   setImageMaxLongEdge: (px: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
-  clearRecentProjects: () => void;
+  /**
+   * Drop every unpinned entry and **return the list as it was**, so the panel
+   * can offer an undo. Deliberately leaves the per-project preferences of the
+   * dropped projects alone — an undo five seconds later has to put back a
+   * whole project, not a name. `collectUnlistedProjectPrefs` is the other half.
+   */
+  clearRecentProjects: () => string[];
+  /** Put a list returned by `clearRecentProjects` back, verbatim. */
+  restoreRecentProjects: (previous: string[]) => void;
+  /**
+   * Release the preferences keyed to projects that are no longer listed
+   * anywhere (`ai:pinnedLore:<path>`, `lore:scope:<path>`, the open-at stamp).
+   * Called once the undo window on a clear has closed.
+   */
+  collectUnlistedProjectPrefs: () => void;
+  pinProject: (path: string) => void;
+  unpinProject: (path: string) => void;
   setActiveSideTab: (tab: SideTab) => void;
 
   /**
@@ -499,14 +548,65 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addRecentProject: (path) => {
     set((state) => {
-      const next = [path, ...state.recentProjects.filter((p) => !isSamePath(p, path))].slice(
-        0, RECENT_PROJECTS_MAX,
+      const pinned = state.pinnedProjects;
+      const next = capRecentProjects(
+        [path, ...state.recentProjects.filter((p) => !isSamePath(p, path))],
+        pinned,
       );
       // Merged, not overwritten: another instance may have opened *its*
       // project since this one hydrated, and saving our snapshot plainly
-      // would evict that entry (see lib/recentProjects).
-      writePrefMerged(RECENT_PROJECTS_KEY, JSON.stringify(next), mergeRecentProjects);
-      return { recentProjects: next };
+      // would evict that entry (see lib/recentProjects). The merge is given
+      // our pin set for the same reason the cap above is — a union trimmed
+      // without it would evict a pinned project.
+      writePrefMerged(RECENT_PROJECTS_KEY, JSON.stringify(next), (db, ours) =>
+        mergeRecentProjects(db, ours, pinned));
+      // Merged too, and "later wins" there: the other instance may have opened
+      // its own project since we hydrated, and its stamp is the newer fact.
+      const projectOpenedAt = { ...state.projectOpenedAt, [toPosixPath(path)]: Date.now() };
+      writePrefMerged(OPENED_AT_KEY, JSON.stringify(projectOpenedAt), mergeOpenedAt);
+      return { recentProjects: next, projectOpenedAt };
+    });
+  },
+
+  /**
+   * Pin a project: it stops being evictable and stops being cleared.
+   *
+   * Merged like `addRecentProject` — a pin made in another instance must not
+   * be dropped by this one saving its snapshot.
+   */
+  pinProject: (path) => {
+    set((state) => {
+      if (isProjectPinned(state.pinnedProjects, path)) return {};
+      // Appended, not prepended: a new pin lands at the end of 「已固定」 so the
+      // rows already there do not shift under the author's cursor (设计稿 15
+      // 屏 1b: the row slides to the section's last place).
+      const pinnedProjects = [...state.pinnedProjects, path];
+      writePrefMerged(PINNED_PROJECTS_KEY, JSON.stringify(pinnedProjects), mergePinnedProjects);
+      if (!state.pinHintDone) writePref(PIN_HINT_KEY, "1");
+      return { pinnedProjects, pinHintDone: true };
+    });
+  },
+
+  /**
+   * Release a pin. Overwritten rather than merged, exactly like
+   * `removeRecentProject`: a merge would hand the pin straight back from the
+   * other instance's copy.
+   *
+   * Dropping the pin puts the entry back under the cap, so the list can now
+   * be over it — re-cap here rather than waiting for the next open, or the
+   * eleventh unpinned project would sit there until something else evicted it.
+   */
+  unpinProject: (path) => {
+    set((state) => {
+      if (!isProjectPinned(state.pinnedProjects, path)) return {};
+      const pinnedProjects = state.pinnedProjects.filter((p) => !isSamePath(p, path));
+      writePref(PINNED_PROJECTS_KEY, JSON.stringify(pinnedProjects));
+      const recentProjects = capRecentProjects(state.recentProjects, pinnedProjects);
+      if (recentProjects.length !== state.recentProjects.length) {
+        writePrefMerged(RECENT_PROJECTS_KEY, JSON.stringify(recentProjects), (db, ours) =>
+          mergeRecentProjects(db, ours, pinnedProjects));
+      }
+      return { pinnedProjects, recentProjects };
     });
   },
 
@@ -520,17 +620,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const next = state.recentProjects.filter((p) => !isSamePath(p, path));
       writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      // ✕ means "forget this project", so it releases the pin too. Leaving it
+      // would keep the row on screen — the pinned group is drawn from the pin
+      // row, not from the recents (see lib/recentProjects → splitProjects).
+      const pinnedProjects = state.pinnedProjects.filter((p) => !isSamePath(p, path));
+      if (pinnedProjects.length !== state.pinnedProjects.length) {
+        writePref(PINNED_PROJECTS_KEY, JSON.stringify(pinnedProjects));
+      }
       prunePrefsWithPrefix(PINNED_LORE_PREFIX, (p) => !isSamePath(p, path));
       prunePrefsWithPrefix(LORE_SCOPE_PREFIX, (p) => !isSamePath(p, path));
-      return { recentProjects: next };
+      const projectOpenedAt = pruneOpenedAt(state.projectOpenedAt, [...next, ...pinnedProjects]);
+      writePref(OPENED_AT_KEY, JSON.stringify(projectOpenedAt));
+      return { recentProjects: next, pinnedProjects, projectOpenedAt };
     });
   },
 
+  // 清空 keeps the pinned projects — that is what the pin is for. The pin row
+  // itself is untouched; only the unpinned recents go.
   clearRecentProjects: () => {
-    deletePref(RECENT_PROJECTS_KEY);
-    prunePrefsWithPrefix(PINNED_LORE_PREFIX, () => false);
-    prunePrefsWithPrefix(LORE_SCOPE_PREFIX, () => false);
-    set({ recentProjects: [] });
+    const state = get();
+    const previous = state.recentProjects;
+    const next = previous.filter((p) => isProjectPinned(state.pinnedProjects, p));
+    if (next.length === previous.length) return [];
+    if (next.length === 0) deletePref(RECENT_PROJECTS_KEY);
+    else writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
+    set({ recentProjects: next });
+    return previous;
+  },
+
+  restoreRecentProjects: (previous) => {
+    set((state) => {
+      const pinned = state.pinnedProjects;
+      const recentProjects = capRecentProjects(previous, pinned);
+      writePrefMerged(RECENT_PROJECTS_KEY, JSON.stringify(recentProjects), (db, ours) =>
+        mergeRecentProjects(db, ours, pinned));
+      return { recentProjects };
+    });
+  },
+
+  collectUnlistedProjectPrefs: () => {
+    const { recentProjects, pinnedProjects, projectOpenedAt } = get();
+    const listed = [...recentProjects, ...pinnedProjects];
+    const keep = (p: string) => listed.some((q) => isSamePath(q, p));
+    prunePrefsWithPrefix(PINNED_LORE_PREFIX, keep);
+    prunePrefsWithPrefix(LORE_SCOPE_PREFIX, keep);
+    const next = pruneOpenedAt(projectOpenedAt, listed);
+    if (Object.keys(next).length === Object.keys(projectOpenedAt).length) return;
+    writePref(OPENED_AT_KEY, JSON.stringify(next));
+    set({ projectOpenedAt: next });
   },
 
   reloadFromPrefs: () => {

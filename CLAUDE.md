@@ -92,7 +92,7 @@ Rules when touching this: components derive the task menu and categories from th
 - `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories = the enabled packs' union + the project's user-defined ones + the always-present `custom` bucket; novel contributes characters, world, factions, items, skills, style)
 
 **Code**
-- `src/components/layout/` — Main layout structure (TitleBar, IconRail, Sidebar, FileTree, EditorArea, EditorBottomStrip, AiRail)
+- `src/components/layout/` — Main layout structure (TitleBar, IconRail, Sidebar, FileTree, RecentProjects — the sidebar's no-project panel: 已固定 / 最近打开 两节，固定＝换节住而不是行上的标记，见 `docs/feature/file-panel-pin-ui-brief.md` — EditorArea, EditorBottomStrip, AiRail)
 - `src/components/editor/` — CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, icon-only and stateless on purpose — reflecting the caret's formatting would cost a store write per keystroke, so only the heading dropdown reads state, and only when it opens), preview renderer + its zoom control
 - `src/components/ai/` — AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)
 - `src/components/lore/` — Lore browser, LoreGenerator, LoreImproveModal, LoreWall, `collections/` (the second axis's UI — 装订栏 / 卡片装订边 / 取材范围切换器 / 归集清单 / 集合管理; **分类用颜色，集合用装订**, and the `3px double` rule that keeps the fence from ever looking like a filter — see `docs/reference/design-system.md` → 集合 · 装订语汇), FacetEditModal + `ai/FacetAiAssistantModal` (AI-assisted facet splitting), LoreDictNormalizeModal（词典标准化：AI 只搬运词对、格式由 `formatDictBody` 渲染；入口在 AI 中心，仅 `dict` 条目可见）
