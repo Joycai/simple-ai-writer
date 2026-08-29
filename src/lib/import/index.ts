@@ -30,13 +30,14 @@
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
-import { fileExists, writeBinaryFile, writeFile } from "../fs/fileio";
+import { fileExists, makeDir, writeBinaryFile, writeFile } from "../fs/fileio";
 import { IMAGE_EXTENSIONS, TEXT_EXTENSIONS } from "../fs/images";
+import { assetRelDirFor } from "../image/assets";
 import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
 import { pptxToMarkdown } from "../fs/pptx";
 import { xlsxToMarkdown } from "./xlsx";
-import { baseName } from "../paths";
+import { baseName, dirName } from "../paths";
 
 /**
  * What gets converted to markdown. Legacy .doc/.xls/.ppt are left out on
@@ -137,27 +138,52 @@ export async function uniqueImportPath(
 }
 
 /**
+ * A picture a converter pulled out of the source document. The converter
+ * embeds the link (`assetRelDir/name`) in its markdown and hands the bytes
+ * back here — it stays a pure bytes-in/result-out layer, and the import loop
+ * remains the only place that touches the disk.
+ */
+export interface ConvertedAsset {
+  /** File name ("p3-1.jpg"); the directory is the caller's `assetRelDir`. */
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** What a conversion yields: the markdown body plus its extracted images. */
+export interface ConvertResult {
+  markdown: string;
+  assets: ConvertedAsset[];
+}
+
+/**
  * Convert one document's bytes to markdown. The docx/pdf converters are
  * lazy-imported modules of their own (both carry a heavy parser); xlsx and
  * pptx parse in Rust so there is nothing to defer.
+ *
+ * `assetRelDir` is the document-relative folder image links point at
+ * ("assets/<group>") — computable before conversion because the import loop
+ * fixes the target path first. Only the pdf converter extracts images today;
+ * the others return an empty asset list (docx is the planned next slice —
+ * docs/feature/import-images-plan.md §6).
  */
 export async function convertToMarkdown(
   ext: ConvertExt,
   data: Uint8Array,
-): Promise<string> {
+  assetRelDir: string,
+): Promise<ConvertResult> {
   switch (ext) {
     case "docx": {
       const { docxToMarkdown } = await import("./docx");
-      return docxToMarkdown(data);
+      return { markdown: await docxToMarkdown(data), assets: [] };
     }
     case "xlsx":
-      return tidyMarkdown(await xlsxToMarkdown(data));
+      return { markdown: tidyMarkdown(await xlsxToMarkdown(data)), assets: [] };
     case "pdf": {
       const { pdfToMarkdown } = await import("./pdf");
-      return pdfToMarkdown(data);
+      return pdfToMarkdown(data, assetRelDir);
     }
     case "pptx":
-      return pptxToMarkdown(data);
+      return { markdown: await pptxToMarkdown(data), assets: [] };
   }
 }
 
@@ -209,8 +235,23 @@ export async function importDocumentsDialog(
       }
       const target = await uniqueImportPath(destDir, importedName(name, mode));
       if (mode === "convert") {
-        const markdown = await convertToMarkdown(extensionOf(name) as ConvertExt, data);
+        const relDir = assetRelDirFor(target);
+        const { markdown, assets } = await convertToMarkdown(
+          extensionOf(name) as ConvertExt,
+          data,
+          relDir,
+        );
         await writeFile(target, markdown.length ? `${markdown}\n` : "");
+        // Assets after the markdown: a failure here loses pictures, not the
+        // text — it surfaces through the per-file failures channel below while
+        // the document itself stays imported.
+        if (assets.length > 0) {
+          const dir = `${dirName(target)}/${relDir}`;
+          await makeDir(dir);
+          for (const asset of assets) {
+            await writeBinaryFile(`${dir}/${asset.name}`, asset.bytes);
+          }
+        }
       } else if (mode === "copy-text") {
         // Decoded, not copied byte-for-byte: see the module docs on encoding.
         // No `tidyMarkdown` — that is a repair for converter output, and

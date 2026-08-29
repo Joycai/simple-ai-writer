@@ -7,7 +7,12 @@
  */
 import { describe, expect, it } from "vitest";
 import { htmlToMarkdown, tidyMarkdown } from "../import/markdown";
-import { itemsToLines, linesToMarkdown, type PdfTextItem } from "../import/pdf";
+import {
+  itemsToLines,
+  linesToMarkdown,
+  pageToMarkdown,
+  type PdfTextItem,
+} from "../import/pdf";
 import { decodeText } from "../import/text";
 import {
   baseName,
@@ -105,6 +110,66 @@ describe("pdf line reconstruction", () => {
   it("handles empty and single-line pages", () => {
     expect(linesToMarkdown([])).toBe("");
     expect(linesToMarkdown([{ y: 700, text: "唯一一行" }])).toBe("唯一一行");
+  });
+});
+
+describe("pageToMarkdown image placement", () => {
+  const lines = [
+    { y: 700, text: "第一段第一行" },
+    { y: 680, text: "第一段第二行" },
+    { y: 620, text: "第二段" },
+  ];
+
+  it("inserts an image as its own paragraph where its top edge falls", () => {
+    const md = pageToMarkdown(lines, [{ y: 650, relPath: "assets/bid/p1-1.jpg" }]);
+    expect(md).toBe(
+      "第一段第一行\n第一段第二行\n\n![](assets/bid/p1-1.jpg)\n\n第二段",
+    );
+  });
+
+  it("splits a paragraph an image lands inside", () => {
+    const md = pageToMarkdown(
+      [
+        { y: 700, text: "上半句" },
+        { y: 680, text: "下半句" },
+      ],
+      [{ y: 690, relPath: "assets/bid/p1-1.jpg" }],
+    );
+    expect(md).toBe("上半句\n\n![](assets/bid/p1-1.jpg)\n\n下半句");
+  });
+
+  it("places images above and below all text at the edges", () => {
+    const md = pageToMarkdown(lines, [
+      { y: 800, relPath: "assets/bid/p1-1.jpg" },
+      { y: 100, relPath: "assets/bid/p1-2.jpg" },
+    ]);
+    expect(md.startsWith("![](assets/bid/p1-1.jpg)\n\n第一段第一行")).toBe(true);
+    expect(md.endsWith("第二段\n\n![](assets/bid/p1-2.jpg)")).toBe(true);
+  });
+
+  it("renders an image-only page (a scanned page) top to bottom", () => {
+    const md = pageToMarkdown(
+      [],
+      [
+        { y: 100, relPath: "assets/bid/p1-2.jpg" },
+        { y: 800, relPath: "assets/bid/p1-1.jpg" },
+      ],
+    );
+    expect(md).toBe("![](assets/bid/p1-1.jpg)\n\n![](assets/bid/p1-2.jpg)");
+  });
+
+  it("percent-encodes non-ASCII path segments, keeping the slashes", () => {
+    const md = pageToMarkdown([], [{ y: 100, relPath: "assets/标书/p1-1.jpg" }]);
+    expect(md).toBe("![](assets/%E6%A0%87%E4%B9%A6/p1-1.jpg)");
+  });
+
+  it("keeps the text's own paragraph grouping around an inserted image", () => {
+    // The image at the top must not disturb how the lines below it group: the
+    // 60pt hole before 第二段 stays a paragraph break, the 20pt gaps stay soft.
+    const md = pageToMarkdown(lines, [{ y: 800, relPath: "assets/bid/p1-1.jpg" }]);
+    expect(md).toBe(
+      "![](assets/bid/p1-1.jpg)\n\n第一段第一行\n第一段第二行\n\n第二段",
+    );
   });
 });
 
