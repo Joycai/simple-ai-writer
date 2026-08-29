@@ -1,4 +1,4 @@
-﻿/**
+/**
  * A ratchet on what the toolset costs every request.
  *
  * This number is not an incidental one. The assistant preset's schemas ride on
@@ -252,9 +252,3 @@ describe("tool schema budget", () => {
     }
   });
 });
-
-
-
-
-
-
