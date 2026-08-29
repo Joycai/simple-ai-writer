@@ -28,6 +28,7 @@
  */
 
 import { sameCollection, type LoreIndex } from "../lore";
+import { loreCategories } from "../profile/active";
 import { findEntityByName } from "./tools";
 
 export type LorePlanAction = "create" | "update" | "move" | "delete";
@@ -72,12 +73,14 @@ export interface LorePlanStep {
    */
   entity: string;
   /**
-   * Collection steps only: which entries move in or out. Empty/absent means the
-   * step is about the collection itself (create / rename / delete), not its
-   * membership.
+   * Collection / category steps: which entries this step moves. Empty/absent
+   * means the step is about the collection or category *itself* (create /
+   * rename / delete), not its membership.
    *
-   * This is the authorisation boundary for a filing pass: a `file_lore_entries`
-   * call may only touch entries this list names.
+   * This is the authorisation boundary for a reorganisation pass:
+   * `file_lore_entries` — and, for a category step, `move_lore_entity` — may
+   * only touch entries this list names. Approving 「归入 12 条」 is not
+   * approving the 13th.
    */
   members?: string[];
   /** "update" only: which file in the entity dir. Omitted = any file. */
@@ -89,6 +92,38 @@ export interface LorePlanStep {
 /** A step's target, with the default applied. */
 export function stepTarget(step: LorePlanStep): LorePlanTarget {
   return step.target ?? "entity";
+}
+
+/**
+ * 一份已批准的方案要装载哪些延迟工具组（`runtime.ts` 按方案形状下发）。
+ *
+ * 这条映射住在这里而不是在 runtime 的循环里，因为它是**关于 target 轴的知识**：
+ * 哪一种步骤由哪一个工具兑现。规则写在别处的代价刚刚被踩过一次——给分类补上
+ * 「搬入」这条路时，只有 target 那一侧改了，于是一份只有一条 category/move 步骤的
+ * 方案（正是这次要做的那种「一行卡」）会把 `lore_organize` 装上，却**不装**
+ * `move_lore_entity`：作者批准了，模型却拿不到兑现它的工具，而且不报错——它只是
+ * 看不见那个工具名。
+ *
+ *   lore_write     条目步骤（写正文/元数据/改名…），以及**搬进某个分类**那种
+ *                  category 步骤——兑现它的是 `move_lore_entity`，它在这一组里。
+ *   lore_organize  集合步骤（建/改名/删/归集），以及**新建分类**那种 category
+ *                  步骤——兑现它们的是 `manage_collection` / `file_lore_entries` /
+ *                  `create_lore_category`。
+ *
+ * 两边都不是「有非条目步骤就全装」：批准一份「改写条目正文」的方案不该顺手把集合
+ * 工具塞进来，反过来也一样。
+ */
+export function planLoadsEntityWrites(steps: readonly LorePlanStep[]): boolean {
+  return steps.some(
+    (s) => stepTarget(s) === "entity" || (stepTarget(s) === "category" && s.action === "move"),
+  );
+}
+
+/** @see planLoadsEntityWrites */
+export function planLoadsOrganize(steps: readonly LorePlanStep[]): boolean {
+  return steps.some(
+    (s) => stepTarget(s) === "collection" || (stepTarget(s) === "category" && s.action === "create"),
+  );
 }
 
 export interface LorePlan {
@@ -130,6 +165,34 @@ function sameEntity(loreIndex: LoreIndex, planned: string, called: string): bool
   const ea = findEntityByName(loreIndex, planned);
   const eb = findEntityByName(loreIndex, called);
   return !!ea && ea === eb;
+}
+
+/**
+ * Whether a plan step's category and a tool call's category name the same one.
+ *
+ * The two sides speak different dialects and both are legitimate. A plan is
+ * written for the author, so its step says 「势力」; `move_lore_entity` takes the
+ * **folder id** (`factions`) because that is what its enum offers and what the
+ * scanner trusts. Exact string equality would refuse every bulk move whose card
+ * the author had just approved — a gate failure that reads as the agent
+ * malfunctioning, exactly what `sameEntity` exists to prevent one axis over.
+ *
+ * `loreCategories()` is read here rather than closed over: the enabled packs
+ * change while the app is running, and a module-scope copy would freeze the
+ * label table to whichever workspace loaded first (see lib/profile/active).
+ */
+function sameCategory(planned: string, called: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase();
+  if (norm(planned) === norm(called)) return true;
+  const idOf = (s: string): string | null => {
+    const n = norm(s);
+    const hit = loreCategories().find(
+      (c) => norm(c.id) === n || norm(c.labelZh) === n || norm(c.labelEn) === n,
+    );
+    return hit ? hit.id : null;
+  };
+  const a = idOf(planned);
+  return a !== null && a === idOf(called);
 }
 
 /** One-line rendering of a step, for the error text the model has to act on. */
@@ -196,7 +259,7 @@ export function checkPlan(
         s.action === action &&
         (target === "collection"
           ? sameCollection(s.entity, entity)
-          : s.entity.trim().toLowerCase() === entity.trim().toLowerCase()) &&
+          : sameCategory(s.entity, entity)) &&
         (!opts?.member ||
           !s.members?.length ||
           s.members.some((m) => sameEntity(loreIndex, m, opts.member!))),

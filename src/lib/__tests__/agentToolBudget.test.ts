@@ -173,6 +173,15 @@ describe("tool schema budget", () => {
     // report waiting to happen. The wording is the compact one on purpose;
     // the first draft explained the drop-for-other-models rule twice over and
     // cost 50 more for nothing.
+    // 9,453 after the category target learned it is also a move *destination*:
+    // **−4**. That is not a rounding accident — it is a rewording rather than
+    // an addition, and both sentences came out shorter than the ones they
+    // replaced (`target` gained "or move entries into it", `members` stopped
+    // saying "collection steps only" for a rule that now covers both axes).
+    // The 51 that change does cost sits on `move_lore_entity`, which is
+    // deferred: a run pays it only once the author has approved a plan, which
+    // is the only moment "one category step, not twelve entity steps" could
+    // change what the model does.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
     expect(residentTokens).toBeLessThanOrEqual(9_500);

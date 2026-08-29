@@ -32,7 +32,7 @@ import {
   parseHandoffBrief, runWriterHandoff, type HandoffBrief,
 } from "./handoff";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
-import { stepTarget } from "./plan";
+import { planLoadsEntityWrites, planLoadsOrganize } from "./plan";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -484,9 +484,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // 装载是**按方案形状**分的，不是全有全无：批准一份「改写条目正文」的方案不该
     // 顺手把集合工具也塞进来，反过来也一样。同一个信号（已批准的步骤）回答两个
     // 不同的问题——「有没有条目要写」和「有没有组织结构要动」。
+    //
+    // 「哪种步骤由哪个工具兑现」这条映射住在 plan.ts：它是关于 target 轴的知识，
+    // 而不是关于这个循环的（尤其 category/move 走的是 lore_write，见那里的注释）。
     const steps = runToolContext.lorePlan?.steps ?? [];
-    const wantsWrite = steps.some((s) => stepTarget(s) === "entity");
-    const wantsOrganize = steps.some((s) => stepTarget(s) !== "entity");
+    const wantsWrite = planLoadsEntityWrites(steps);
+    const wantsOrganize = planLoadsOrganize(steps);
     for (const [group, wanted] of [
       ["lore_write", wantsWrite],
       ["lore_organize", wantsOrganize],

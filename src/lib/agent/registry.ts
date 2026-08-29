@@ -1091,13 +1091,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
                     type: "string",
                     enum: LORE_PLAN_TARGETS,
                     description:
-                      "What kind of thing this step acts on. Omit for an entity (the usual case). Use 'collection' to create/rename/delete a collection or to move entries in or out of one, 'category' to create a new category. A reorganisation belongs in ONE collection step per collection, not one step per entry — the author has to be able to read the card.",
+                      "What kind of thing this step acts on. Omit for an entity (the usual case). Use 'collection' to create/rename/delete one or move entries in or out, 'category' to create one or move entries into it. A reorganisation belongs in ONE step per collection or category, not one step per entry — the author has to be able to read the card.",
                   },
                   members: {
                     type: "array",
                     items: { type: "string" },
                     description:
-                      "collection steps only: the entries this step moves in or out. Naming them here is what authorises filing them — file_lore_entries refuses any entry the step did not list.",
+                      "collection/category steps: the entries this step moves. Naming them here is what authorises moving them — the write refuses any entry the step did not list.",
                   },
                   file: {
                     type: "string",
@@ -1687,7 +1687,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "move_lore_entity",
         description:
-          "Rename a lore entity and/or move it to a different category. This is the ONLY way to change an entity's name or category — update_lore_file refuses both because the folder location is what the scanner trusts. On a rename the old name is kept as an alias by default so it still matches in already-written chapters (pass keep_old_name_as_alias=false when the old name was simply wrong), and the entity's folder is re-slugged to match — the result reports where it now lives. The previous index.md is backed up automatically.",
+          "Rename a lore entity and/or move it to a different category. This is the ONLY way to change an entity's name or category — update_lore_file refuses both because the folder location is what the scanner trusts. On a rename the old name is kept as an alias by default so it still matches in already-written chapters (pass keep_old_name_as_alias=false when the old name was simply wrong), and the entity's folder is re-slugged to match — the result reports where it now lives. Moving many entries into one category needs only ONE plan step (target 'category', that category as `entity`, the entries in `members`) — call this once per entry against that single step, rather than proposing a step each. The previous index.md is backed up automatically.",
         parameters: {
           type: "object",
           properties: {
