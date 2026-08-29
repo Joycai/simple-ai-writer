@@ -170,14 +170,40 @@ describe("条的几何", () => {
     expect(seg(withBriefing, "system")).toBeGreaterThan(seg(without, "system"));
   });
 
-  /** 排版格式清单只接在 full 层任务的指令尾部（`aiTaskStore` 就是这么做的）。 */
-  it("排版格式清单只算给 full 层任务", () => {
-    const full = planForecast(input({ runTask: taskById("htmlArtifact"), docxRosterChars: 900 }))!;
-    const fullNone = planForecast(input({ runTask: taskById("htmlArtifact"), docxRosterChars: 0 }))!;
-    const none = planForecast(input({ runTask: taskById("polish"), docxRosterChars: 900 }))!;
-    const noneNone = planForecast(input({ runTask: taskById("polish"), docxRosterChars: 0 }))!;
-    expect(seg(full, "system") - seg(fullNone, "system")).toBe(900);
-    expect(seg(none, "system")).toBe(seg(noneNone, "system"));
+  /**
+   * 排版格式清单跟着 `export_docx` 走，不是跟着档位走（`aiTaskStore` 挂它的判据
+   * 就是这一条）。
+   *
+   * 这条用例原来拿 `htmlArtifact` 当「full 层」的例子——那时它确实是。现在它是
+   * `write` 档、没有 export_docx，于是它**不该**收到这份清单：一份它用不上的
+   * Word 格式表，在这条链上最长的那类任务里每轮都要付一遍。
+   */
+  it("排版格式清单跟着 export_docx 走，不跟着档位走", () => {
+    const carries = (id: string) => {
+      const withRoster = planForecast(input({ runTask: taskById(id), docxRosterChars: 900 }))!;
+      const without = planForecast(input({ runTask: taskById(id), docxRosterChars: 0 }))!;
+      return seg(withRoster, "system") - seg(without, "system");
+    };
+    expect(carries("agent")).toBe(900); // full 档：有 export_docx
+    expect(carries("htmlArtifact")).toBe(0); // write 档：没有
+    expect(carries("polish")).toBe(0); // 无工具
+  });
+
+  /**
+   * 收窄工具集的整个理由，钉成一个数。
+   *
+   * 同一个模型、同一份指令，只有档位不同：`write` 档不带知识库写工具、生图、
+   * memory 和另外两条导出线，于是它的工具段明显更短，「余量」也就真的还剩下
+   * 一些——而 `agent` 在这个 32k 的模型上已经把上限吃光了。
+   */
+  it("write 档的工具段明显小于 full 档，而且没有把预算吃光", () => {
+    const write = planForecast(input({ runTask: taskById("htmlArtifact") }))!;
+    const full = planForecast(input({ runTask: taskById("agent") }))!;
+
+    expect(write.usedTokens).toBeLessThan(full.usedTokens);
+    expect(full.over).toBe(true);
+    expect(write.over).toBe(false);
+    expect(seg(write, "free")).toBeGreaterThan(0);
   });
 
   /** 工具段走 token→字→token 的往返，必须原样回来（提示词里印的就是回来那个数）。 */

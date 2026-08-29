@@ -41,7 +41,7 @@ vi.mock("../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
 vi.mock("../../i18n", () => ({ default: { t: (key: string) => key, language: "zh-CN" } }));
 
 import { getToolDefinitions, partitionByGroup } from "../agent/registry";
-import { AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
+import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, WRITE_PRESET } from "../agent/presets";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../roleplay/presets";
 import { estimateToolsTokens } from "../ai/tokenEstimate";
 
@@ -149,15 +149,33 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * author who never turns PowerPoint export on is exactly the author whose
  * diagrams nobody is checking.
  *
- * But note what this raise has run into, and do not raise past it again:
- * `contextForecast.test.ts` now pins the fact that on a **32k local model** the
+ * But note what this raise ran into, and do not raise past it again:
+ * `contextForecast.test.ts` pins the fact that on a **32k local model** the
  * assistant's schemas alone exceed the whole input ceiling (15.3k of 14k), so
- * the knowledge base gets nothing. That is not a number to grow; it is the
- * argument for narrowing the toolset per task — a `htmlArtifact` run needs
- * neither the lore writers nor roleplay nor image generation, and would carry
- * about a third of this. See docs/feature/agent/edit-loop-plan.md §8.
+ * the knowledge base gets nothing.
+ *
+ * That argument has since been acted on rather than merely written down: the
+ * `write` tier (below) carries **4,017** for a task whose product is a
+ * document, and `htmlArtifact` — the longest-file, most-rounds task in the app
+ * — now runs on it. The assistant's number stays what it is because nothing
+ * can come out of it without taking capability away; the answer to "the
+ * toolset keeps growing" is a narrower *tier*, not a bigger number here.
+ * See docs/feature/agent/edit-loop-plan.md §7.
  */
 const AGENT_ASSIST_CAP = 15_400;
+/**
+ * The `write` tier — a task whose product is a document (docs/feature/agent/
+ * edit-loop-plan.md §7). **Measured 4,017**, against the assistant's 15,337
+ * whole / 9,948 resident: the same run, minus every tool it was never going to
+ * call.
+ *
+ * This is the cap that matters now. The assistant's is a worst case nobody can
+ * shrink without taking capability away; this one is the shape a *task* should
+ * be, and the number to defend. A tool added here should have been asked for by
+ * `ai.instructions.htmlArtifact` — if the instruction never names it, the run
+ * pays for it every round and calls it never.
+ */
+const WRITE_CAP = 4_300;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -171,6 +189,7 @@ describe("tool schema budget", () => {
   it.each([
     ["agent-assist", AGENT_ASSIST_PRESET, AGENT_ASSIST_CAP],
     ["continue", CONTINUE_PRESET, CONTINUE_CAP],
+    ["write", WRITE_PRESET, WRITE_CAP],
     ["roleplay-narrator", NARRATOR_PRESET, NARRATOR_CAP],
     ["roleplay-character", ROLEPLAY_PRESET, ROLEPLAY_CAP],
   ])("%s stays within its per-request budget", (_name, preset, cap) => {

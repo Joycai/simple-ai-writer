@@ -142,9 +142,8 @@ export function planForecast(input: ForecastInput): ContextForecast | null {
   // 成因（文件头）。
   const isContinue = !!runTask.continuation;
   const supportsExtras = !!runTask.referenceWindow;
-  const toolSchemaTokens = plannedToolTokens(
-    presetForTools(runTask.tools), subAgents, models,
-  );
+  const preset = presetForTools(runTask.tools);
+  const toolSchemaTokens = plannedToolTokens(preset, subAgents, models);
 
   // 工具说明也在系统层里（`aiTaskStore` 把它接在 basePrompt 后面），read 层的那
   // 份将近 400 tokens——续写是用得最多的任务，漏掉它就等于每次都少算一点。
@@ -152,8 +151,10 @@ export function planForecast(input: ForecastInput): ContextForecast | null {
     runTask.tools, promptParams(input.isZh, runTask.packId),
   ).length;
   const systemChars = systemPromptChars + toolBriefingChars;
-  const taskChars =
-    instructionChars + (runTask.tools === "full" ? (input.docxRosterChars ?? 0) : 0);
+  // docx 格式清单跟着它服务的那个工具走，和 aiTaskStore 挂它的判据同一条——按
+  // 档位判会把 `write` 档算多：那一档没有 export_docx，也就从来收不到这份清单。
+  const carriesDocxRoster = preset?.tools.includes("export_docx") ?? false;
+  const taskChars = instructionChars + (carriesDocxRoster ? (input.docxRosterChars ?? 0) : 0);
   // 作者这一次带进来的材料。续写不带选区，其余任务不带大纲/附加知识——同一个
   // `runTask` 决定的，和上面那三条分支同源。
   const authorChars = isContinue

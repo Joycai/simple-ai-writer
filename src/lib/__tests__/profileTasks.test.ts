@@ -500,6 +500,20 @@ describe("parseProfile — tasks", () => {
     expect(issues.join(" ")).toContain("unknown tools");
   });
 
+  // A pack may declare the narrow tier too — that is the whole point of it
+  // being a tier rather than a special case for one built-in task.
+  it("accepts the write tier from a pack", () => {
+    const { profile, issues } = parseProfile(
+      {
+        ...base,
+        tasks: [{ id: "brief", tools: "write", target: "detached", freeform: true }],
+      },
+      NOVEL_PROFILE,
+    );
+    expect(profile.tasks.find((t) => t.id === "brief")?.tools).toBe("write");
+    expect(issues.join(" ")).not.toContain("unknown tools");
+  });
+
   it("drops tasks that are unusable for other reasons", () => {
     const { profile, issues } = parseProfile(
       {

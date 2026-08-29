@@ -200,6 +200,56 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
 };
 
 /**
+ * `write` 档 —— **产出一份文档**的任务：查、写、验、交付，仅此。
+ *
+ * 为什么它该存在，而不是让 `htmlArtifact` 继续用 `full`：工具 schema 每一轮
+ * 原样重发，而 `full` 是 15.3k。一个 32k 的本地模型上，那已经超过整个输入上限
+ * （`contextForecast.test.ts` 钉着这条），知识库因此分到零——作者看到的是注入
+ * 报告空白，然后去改一份本来没问题的条目。图示/宣传页恰恰是文件最长、轮数最多
+ * 的那类任务，也就是最先撞上它的那个。
+ *
+ * 收窄的依据是**任务真的会调什么**，不是「什么看起来无害」：
+ *   - 知识库只读不写。这条任务的指令原文是「必要时查{{kb}}」——查，不改。整套
+ *     lore 写工具连同 `propose_lore_plan` 因此不在这里；它们对这条任务只是一条
+ *     永远走不到的岔路。
+ *   - 没有生图。页面里的图形是内联 SVG，这是这条产品线的前提（见
+ *     html-artifact-plan D3），而 `generate_image` 是要花钱的。
+ *   - 没有 memory、没有删除、没有 docx/xlsx 导出：产物是 .html，那两个导出吃
+ *     的是 markdown。少掉 `export_docx` 也就少掉它随身的格式清单（见
+ *     aiTaskStore 的 roster 分支）。
+ *   - **留着 `inspect_html`**：这条任务是全应用最需要验证回路的那一个。
+ *
+ * `maxRounds` 24 而不是 40：一份页面的形状是「读几份材料 → 骨架 → 逐节追加 →
+ * 量一遍 → 修」，不是 `full` 那种扫整个 lore 文件夹的活。
+ */
+export const WRITE_PRESET: TaskPreset = {
+  id: "write",
+  tools: [
+    // 查
+    "list_files",
+    "read_file",
+    "read_slides",
+    "search_text",
+    "list_lore_entities",
+    "read_lore_entity",
+    "read_image",
+    "read_workflow",
+    // 验
+    "inspect_html",
+    // 写（L2，逐个过审批卡）
+    "create_file",
+    "append_file",
+    "propose_edit",
+    "rewrite_lines",
+    "rewrite_document",
+    // 交付
+    "export_pptx",
+  ],
+  maxRounds: 24,
+  finishPolicy: "force-text",
+};
+
+/**
  * 写手子代理的子跑 preset —— 一次运行的**收尾**，不是一个可以被调用的任务。
  *
  * 只读工具，而且是**索引式**的那几个：交接单给的是路径，写手自己去读（材料本来
@@ -238,6 +288,8 @@ export function presetForTools(tools: TaskTools): TaskPreset | null {
       return null;
     case "read":
       return CONTINUE_PRESET;
+    case "write":
+      return WRITE_PRESET;
     case "full":
       return AGENT_ASSIST_PRESET;
   }
@@ -256,10 +308,12 @@ export function presetForTools(tools: TaskTools): TaskPreset | null {
  * seeded context alone, which reads to the author as the agent ignoring the
  * knowledge base at random.
  *
- * Only the read tier gets one. `full` tasks already carry their own briefing in
- * the *task* layer (`ai.instructions.agent`, `ai.instructions.htmlArtifact`),
- * and `none` has nothing to brief — a briefing there would be paid-for tokens
- * describing tools the request never sends.
+ * Only the read tier gets one. `write` and `full` tasks already carry their own
+ * briefing in the *task* layer (`ai.instructions.htmlArtifact`,
+ * `ai.instructions.agent`) — a task that declares one of those tiers is one
+ * whose instruction is about using the tools — and `none` has nothing to brief:
+ * a briefing there would be paid-for tokens describing tools the request never
+ * sends.
  *
  * A function of the tier rather than of the task id, for the same reason
  * `presetForTools` is: a pack can declare any number of read-tool tasks and
