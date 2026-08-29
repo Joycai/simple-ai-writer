@@ -1,6 +1,6 @@
-# 导入文档的图片抽取（PDF · docx）
+# 导入文档的图片抽取（PDF · docx · pptx）
 
-> **Status: `shipped`** — PR-1（#389：`ConvertResult` 接缝 + PDF 全链路）、PR-2（#390：docx 复用）均已合并，真机验证 2026-08-29 通过。实现出入记在 §8；pptx 抽图（§2 非目标）仍未做。
+> **Status: `shipped`** — PR-1（#389：`ConvertResult` 接缝 + PDF 全链路）、PR-2（#390：docx 复用）均已合并，真机验证 2026-08-29 通过。实现出入记在 §8。§2 里推迟的 pptx 抽图随后补上（§9，Rust 侧解 media）。
 
 ## 1. 背景与现状
 
@@ -21,7 +21,7 @@
 **非目标**
 
 - **矢量图不做。** PDF 里用路径画的图表/示意图不是光栅 XObject，这条路拿不到；要拿只能整页渲染再裁剪，那是另一个方案（§7 否掉了）。和表格降级成文本一样，这是格式限制，文档一下即可。
-- **pptx 不在本轮。** 它的转换在 Rust（`src-tauri/src/pptx.rs`），接缝一样能用，但抽图得在 Rust 侧解 zip media 目录，另开一片再做。
+- **pptx 不在本轮。** 它的转换在 Rust（`src-tauri/src/pptx.rs`），接缝一样能用，但抽图得在 Rust 侧解 zip media 目录，另开一片再做。（后来补上了——见 §9。）
 - **OCR 不做。** 扫描件抽出来的是整页图，不是文字。
 
 ## 3. 设计
@@ -120,3 +120,17 @@ docx 不需要定位层——图片本来就在 HTML 流里的正确位置。
 - **PDF 胶水层对 `page.objs` 的两种对象形态都接**（新版 pdfjs 的 `{bitmap: ImageBitmap}` 与旧形态 `{data, width, height, kind}`），方案只提了要接、没定形状；全局资源（`g_` 前缀 id）落在 `commonObjs`，也在实现里补上了。
 
 其余与方案一致：三条取舍规则的阈值原样（24pt / 32px / ≥3 页且 ≥30%）、含 alpha → PNG 否则 JPEG 0.9、`p<页>-<序>` 命名、抽取整体 try/catch 丢图不丢文。
+
+## 9. pptx 抽图（§2 推迟的那片）
+
+pptx 的转换器在 Rust（`src-tauri/src/pptx.rs`），图早就被**看见**了——`parse_slide` 解析 `<a:blip r:embed>`、渲染成 `_[image: image7.png]_` 占位——缺的只是把 `ppt/media/` 的字节带回来。所以这一片没有定位层、没有编码层，只有「读出来、名字起好、跨 IPC 送回接缝」：
+
+- **`pptx_to_markdown` 返回 `{markdown, assets}`**（`PptxImport`，每张资产 `{name, data: base64}`），正文里被留下的图从占位变成真链接 `![alt](assets/…/s3-1.png)`。alt 取自 `p:cNvPr@descr`（PowerPoint 的替换文字），同 docx 取 `wp:docPr@descr` 一条来源。TS 侧（`lib/fs/pptx.ts`）解 base64 后原样交给 `index.ts` 的既有落盘循环——转换器仍然一个字节都不写盘。
+- **`read_slides`（agent 翻页）一点不动。** 收集器是 `Option`，翻页路径传 `None`：agent 读的是文字，每翻一页拖着整页图片过 IPC 会把分页做的事（pptx-plan D3）全赔回去。占位符 `_[image: …]_` 在那条路上原样保留。
+- **白名单同 docx**：png/jpg（jpeg 归一成 jpg）/gif/webp，对齐 `lib/fs/images` 的可打开种类；media 里的 EMF/WMF/SVG/音视频不抽，占位符原样留下（PDF/docx 的「只取光栅」同一条线）。
+- **去重按 media part，不按哈希。** pptx 的包格式已经替我们去过重：跨页复用的图指向同一个 `ppt/media/` 条目，按 zip 路径 memoize 即可——首见的页命名（`s<页>-<序>.<ext>`，对齐 PDF 的 `p<页>-<序>`），之后每处都链接同一个文件。PDF 那套 SHA-256 + 装饰过滤在这里没有对象：版式母版上的 logo 根本不出现在 slide XML 里，天然不进结果。
+- **链接目录由 TS 编码后传入**（`asset_dir` 参数，percent-encode 每段）。编码规则住在 `lib/image/assets.ts` 一侧，Rust 不再实现一份——两份实现只会漂移；Rust 生成的文件名是纯 ASCII（`s3-1.png`），无需编码。
+- **预算截断时回滚资产。** `convert_range` 是先渲染整页再判预算的（页边界纪律），被丢弃的那页已经收了图——`assets.truncate` 回滚，不然 md 里没链接的孤儿文件会落进 `assets/`。
+- rels 指向不存在的 media、或 media 为空字节：占位符兜底，不出资产（丢图不丢文，同 PDF 的 per-page try/catch 精神）。
+
+测试在 `pptx.rs` 内联（真 zip fixture）：抽取 + 链接位置、EMF 不抽占位保留、跨页复用一份资产多处链接、缺失 media 兜底、翻页路径不带字节。这台开发机 `cargo test` 起不来（见 CLAUDE 备忘），由 CI 跑。
