@@ -110,6 +110,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
 | [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |
+| [file-panel-pin-ui-brief.md](feature/file-panel-pin-ui-brief.md) | `shipped` | 「最近打开」加固定：**固定＝换节住**（两个小节，不是行上的标记）· 「清空最近」长在它清的那一节的标题行里（于是「全部都被固定」的禁用态根本不存在）· 一行只留一个有状态的图标。含与设计稿 15 的七处出入，以及「撤销把 per-project 偏好的回收推迟到窗口关闭」那条时序 |
 | [prompt-snippets-ui-brief.md](feature/prompt-snippets-ui-brief.md) | `shipped` | 提示词库（快捷片段）：右键存入、模型选择器同款的取用浮层、设置页重做，以及五件明确没做的事 |
 | [path-spelling-plan.md](feature/path-spelling-plan.md) | `shipped` `unverified` | Normalise at the door, one spelling app-wide. §6 needs a real Windows machine |
 | [web-access-plan.md](feature/web-access-plan.md) | `research` `stale` | 局域网 Web 访问：桌面进程里嵌 axum、前端 transport 三态、绝对路径不上网线、API key 不下发浏览器。结论仍成立，但数字基于 v1.17.0——文首有复核表 |

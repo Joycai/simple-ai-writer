@@ -26,6 +26,8 @@
  */
 
 /** Fixed keys. One row each. */
+import { isSamePath } from "./paths";
+
 export const PREF_KEYS = [
   "app:theme",
   "app:language",
@@ -35,6 +37,9 @@ export const PREF_KEYS = [
   "app:sidebarWidth",
   "app:rightPanelWidth",
   "app:recentProjects",
+  "app:pinnedProjects",
+  "app:projectOpenedAt",
+  "app:pinHintDone",
   "app:loreBudgetTokens",
   "app:contextUtilization",
   "app:aiDrawerMode",
@@ -113,6 +118,9 @@ export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX] as cons
  */
 export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "app:recentProjects",
+  "app:pinnedProjects",
+  "app:projectOpenedAt",
+  "app:pinHintDone",
   "manuscript:onboarding-done",
 ];
 
@@ -453,27 +461,46 @@ async function migrateFromLocalStorage(db: Db): Promise<void> {
   }
 }
 
+/** One project-list row as a plain string list; `null` = unreadable. */
+function storedProjectList(key: string): string[] | null {
+  try {
+    const raw = JSON.parse(cache.get(key) ?? "[]") as unknown;
+    return Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : [];
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Drop per-project preferences whose project is no longer in the recents list.
+ * Drop per-project preferences whose project is no longer listed anywhere.
  *
  * `ai:pinnedLore:<absolute path>` accumulated one row per project ever opened
  * and nothing ever removed one — renaming or moving a folder orphaned its row
  * permanently, and even "clear recent projects" left them all behind. The
- * recents list is the app's own answer to "which projects still exist", so it
- * is the right thing to collect against; a project the author reopens later
- * simply starts with nothing pinned, which is what it would have shown anyway.
+ * project lists are the app's own answer to "which projects still exist", so
+ * they are the right thing to collect against; a project the author reopens
+ * later simply starts with nothing pinned, which is what it would have shown
+ * anyway.
+ *
+ * **Both** lists, not just the recents: a pinned project can outlive the
+ * recents row (`lib/recentProjects` → `splitProjects`, and the cross-instance
+ * race its header documents), and it is still on screen in 「已固定」 —
+ * sweeping it here would delete the lore pins of a project the author
+ * deliberately kept. An unreadable row is not evidence of anything, so either
+ * one being unparseable calls the whole sweep off.
+ *
+ * Matched with `isSamePath`, not string equality: a row written by an older
+ * build carries the host's spelling of the same path.
  */
 function collectOrphanedProjectPrefs(): void {
-  let live: string[] = [];
-  try {
-    const raw = JSON.parse(cache.get("app:recentProjects") ?? "[]") as unknown;
-    if (Array.isArray(raw)) live = raw.filter((p): p is string => typeof p === "string");
-  } catch {
-    // An unreadable recents list is not grounds for deleting anything.
-    return;
-  }
-  const alive = new Set(live);
-  const dropped = prunePrefsWithPrefix(PINNED_LORE_PREFIX, (path) => alive.has(path));
+  const recents = storedProjectList("app:recentProjects");
+  const pinned = storedProjectList("app:pinnedProjects");
+  if (recents === null || pinned === null) return;
+  const alive = [...recents, ...pinned];
+  const dropped = prunePrefsWithPrefix(
+    PINNED_LORE_PREFIX,
+    (path) => alive.some((p) => isSamePath(p, path)),
+  );
   if (dropped.length) {
     console.info(`[prefs] released ${dropped.length} preference(s) for projects no longer listed.`);
   }

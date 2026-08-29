@@ -1,0 +1,325 @@
+/*
+ * 文件面板 · 未打开项目时的两节列表（设计稿 15「固定最近项目」）。
+ *
+ * 两条规则解释了这个文件里几乎所有别扭的地方：
+ *
+ * 1. **固定＝换节住**，不是行上的标记。所以「已固定」和「最近打开」各是一节，
+ *    空的一节整节不渲染 —— 「清空最近」按钮长在「最近打开」的标题行里，全部
+ *    固定时它跟着那一节一起消失，于是根本没有禁用态要画。
+ * 2. **密度靠容器查询而不是 JS**。栏宽是拖出来的，拖动过程中宽度只活在 CSS 变量
+ *    里（appStore 不会每次 mousemove 都写一次），所以读 store 的断点会在松手前
+ *    一直是旧的。三档按**栏宽**分：<240 单行无路径 · 240–399 双行有路径 ·
+ *    ≥400 单行带时间。写进 @container 的数字都要**减 1**——侧栏的 1px 右边框吃在
+ *    宽度里（border-box），栏宽 240 的容器实测是 239。
+ */
+
+.panel {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 10px;
+}
+
+/* ── 打开文件夹 + 一句说明 ─────────────────────────────────────────────── */
+
+.head {
+  padding: 16px 12px 0;
+}
+.openBtn {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--color-sienna);
+  color: var(--color-card);
+  border: none;
+  font: 500 12.5px/1 var(--font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.openBtn:hover { background: var(--color-sienna-hover); }
+.openBtn:active { transform: scale(0.98); }
+.openBtn:disabled { opacity: 0.5; cursor: wait; }
+
+/* Only shown when both sections are empty — with rows on screen the rail's
+   job is the list, not the explanation (设计稿 15 屏 1a vs 1d①). */
+.blurb {
+  margin: 14px 12px 0;
+  font: 400 11.5px/1.7 var(--font-sans);
+  color: var(--color-text-faint);
+}
+
+/* ── 小节标题 ─────────────────────────────────────────────────────────── */
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 12px 6px;
+  height: 28px;
+  box-sizing: border-box;
+}
+.sectionLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Two spellings of one label, because a container query can swap layout but
+   not words: the narrow rail gets the short one. */
+.labelShort { display: none; }
+
+.rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-soft);
+}
+.count {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+/* The whole head is the toggle once the pinned section can collapse. */
+.sectionToggle {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}
+.chevron {
+  flex: none;
+  color: var(--color-text-muted);
+  display: flex;
+  transition: transform var(--transition-fast);
+}
+.chevronCollapsed { transform: rotate(-90deg); }
+
+.clearBtn {
+  all: unset;
+  flex: none;
+  padding: 3px 6px;
+  font: 400 10.5px/1 var(--font-sans);
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.clearBtn:hover { color: var(--color-accent); background: var(--color-bg-hover); }
+.clearBtn:disabled { opacity: 0.5; cursor: wait; }
+
+/* ── 行 ───────────────────────────────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  align-items: center;
+  transition: background var(--transition-fast);
+}
+.row:hover { background: var(--color-bg-hover); }
+
+.open {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.open:disabled { opacity: 0.5; cursor: wait; }
+.name {
+  font: 500 12.5px/1.4 var(--font-sans);
+  font-style: normal;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.path {
+  font: 400 10px/1.4 var(--font-mono);
+  font-style: normal;
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Keep the tail (the folder itself); the head is the disposable part —
+     an RTL box makes the ellipsis land at the *start*. `plaintext` is what
+     keeps the text itself LTR: without it the paragraph direction is RTL and
+     a POSIX path's leading "/" is reordered to the visual end ("Users/w/x/"). */
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+  min-width: 0;
+}
+.time {
+  display: none;
+  flex: none;
+  font: 400 10.5px/1.5 var(--font-mono);
+  font-style: normal;
+  color: var(--color-text-faint);
+}
+
+/*
+ * The row's one icon. Unpinned rows have none at rest — the path takes the
+ * full width — and it grows in on hover; pinned rows carry it always, because
+ * there it is a *state*, and a state that only appears on hover cannot answer
+ * "what survives 清空".
+ */
+.pinBtn {
+  all: unset;
+  position: relative;
+  flex: none;
+  width: 0;
+  height: 22px;
+  margin-right: 0;
+  opacity: 0;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: opacity var(--transition-fast), width var(--transition-fast),
+    margin-right var(--transition-fast), background var(--transition-fast),
+    color var(--transition-fast);
+}
+/* `:focus-visible` is in this list for a reason: the button stays in the tab
+   order while it is 0px wide, and the app's focus ring is a box-shadow — on a
+   zero-width box it paints nothing, so a keyboard user would be focused on an
+   invisible control. */
+.row:hover .pinBtn,
+.pinBtn:focus-visible,
+.pinBtn.pinned {
+  width: 22px;
+  margin-right: 4px;
+  opacity: 1;
+}
+.pinBtn:active {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+.pinBtn:active svg { stroke-width: 1.7; }
+
+.icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast);
+}
+/* Pinned + hover ⇒ the filled Pin crossfades into PinOff in place: the icon
+   stops reporting the state and starts offering the action. */
+.iconOff { opacity: 0; }
+.row:hover .pinned .iconRest,
+.pinned:focus-visible .iconRest { opacity: 0; }
+.row:hover .pinned .iconOff,
+.pinned:focus-visible .iconOff { opacity: 1; }
+
+/*
+ * The focus ring, restated. `global.css` carries one on `:focus-visible`, but
+ * every button here starts with `all: unset` — same specificity (one class vs
+ * one pseudo-class), and this stylesheet is injected after global.css, so the
+ * reset wins the tie and the ring never paints.
+ */
+.open:focus-visible,
+.pinBtn:focus-visible,
+.clearBtn:focus-visible,
+.sectionToggle:focus-visible,
+.undo:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
+
+/* ── 清空后的就地确认条 ───────────────────────────────────────────────── */
+
+.confirm {
+  margin: 12px 8px 0;
+  background: var(--color-accent-tint);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+  overflow: hidden;
+}
+.confirmInner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+}
+.confirmText {
+  flex: 1;
+  min-width: 0;
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.undo {
+  all: unset;
+  flex: none;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.undo:hover { color: var(--color-sienna-hover); }
+
+/* ── 「可以固定」的一行提示 ───────────────────────────────────────────── */
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 12px 0;
+  font: 400 10.5px/1.4 var(--font-sans);
+  color: var(--color-text-faint);
+}
+.hint svg { flex: none; }
+
+/* ── 密度三档 ─────────────────────────────────────────────────────────── */
+
+/* 窄栏：路径、时间、提示行整个撤掉（那个宽度里提示会折成三行，比它要解决的
+   问题更吵），行变单行，标题缩到四个字以内。图标不牺牲 —— 它是固定态唯一的
+   静息信号。完整路径退到 tooltip。 */
+@container (max-width: 238px) {
+  .path,
+  .time,
+  .hint { display: none; }
+  .open {
+    flex-direction: row;
+    align-items: center;
+    padding: 7px 10px;
+  }
+  .head { padding: 16px 10px 0; }
+  .sectionHead { padding: 16px 10px 6px; gap: 6px; }
+  .sectionLabel { font-size: 9.5px; letter-spacing: 0.16em; }
+  .clearBtn { font-size: 10px; padding: 2px 0; }
+  .labelFull { display: none; }
+  .labelShort { display: inline; }
+}
+
+/* 宽栏：名 / 路径 / 时间落在同一条基线上，行更矮更密；时间戳只在这一档出现。 */
+@container (min-width: 399px) {
+  .open {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 14px;
+  }
+  .name { flex: none; }
+  .path {
+    flex: 1;
+    direction: ltr;
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .time { display: inline; }
+  .head { padding: 16px 14px 0; }
+  .sectionHead { padding: 18px 14px 6px; gap: 10px; }
+  .hint { padding: 9px 14px 0; }
+}

@@ -1,14 +1,14 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
-import { ExternalLink, Search as SearchIcon, X } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
+import { RecentProjects } from "./RecentProjects";
 import { OutlinePanel } from "../editor/OutlinePanel";
-import { openInNewWindow } from "../../lib/instance";
 import { loreEntityCount } from "../../lib/lore";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
@@ -74,12 +74,7 @@ export function Sidebar() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const activeSideTab = useAppStore((s) => s.activeSideTab);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
-  const recentProjects = useAppStore((s) => s.recentProjects);
-  const removeRecentProject = useAppStore((s) => s.removeRecentProject);
-  const clearRecentProjects = useAppStore((s) => s.clearRecentProjects);
   const projectPath = useProjectStore((s) => s.projectPath);
-  const openProject = useProjectStore((s) => s.openProject);
-  const isLoading = useProjectStore((s) => s.isLoading);
   const terms = useTerms();
 
   const projectName = basename(projectPath);
@@ -124,72 +119,14 @@ export function Sidebar() {
           新面板应立即落位；keyed motion.div 仍会重置子树。 */}
       <motion.div
         key={projectPath ? activeSideTab : "empty"}
-        className={isTree ? styles.contentFlush : styles.content}
+        className={projectPath && isTree ? styles.contentFlush : styles.content}
         variants={contentVariants}
         initial="initial"
         animate="animate"
         transition={springPanel}
       >
         {!projectPath ? (
-          <div className={styles.emptyState}>
-            <div>{t("project.noProjectTitle")}</div>
-            <div>{t("project.noProjectDesc")}</div>
-            <button
-              className={styles.openBtn}
-              onClick={() => openProject()}
-              disabled={isLoading}
-            >
-              {isLoading ? "…" : t("project.openFolder")}
-            </button>
-
-            {recentProjects.length > 0 && (
-              <div className={styles.recent}>
-                <div className={styles.recentHead}>
-                  <span className={styles.recentLabel}>{t("project.recentTitle")}</span>
-                  <button
-                    className={styles.recentClear}
-                    onClick={clearRecentProjects}
-                    disabled={isLoading}
-                  >
-                    {t("project.clearRecent")}
-                  </button>
-                </div>
-                <ul className={styles.recentList}>
-                  {recentProjects.map((path) => (
-                    <li key={path} className={styles.recentItem}>
-                      <button
-                        className={styles.recentOpen}
-                        onClick={() => openProject(path)}
-                        disabled={isLoading}
-                        title={path}
-                      >
-                        <span className={styles.recentName}>{basename(path)}</span>
-                        <span className={styles.recentPath}>{path}</span>
-                      </button>
-                      {/* A sibling instance straight onto this project — the
-                          multi-open path for "several workspaces at once". */}
-                      <button
-                        className={styles.recentAction}
-                        onClick={() => void openInNewWindow(path).catch((e) => console.warn("[instance]", e))}
-                        title={t("project.openInNewWindow")}
-                        aria-label={t("project.openInNewWindow")}
-                      >
-                        <ExternalLink size={12} strokeWidth={1.8} />
-                      </button>
-                      <button
-                        className={styles.recentRemove}
-                        onClick={() => removeRecentProject(path)}
-                        title={t("project.removeRecent")}
-                        aria-label={t("project.removeRecent")}
-                      >
-                        <X size={12} strokeWidth={1.8} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
+          <RecentProjects />
         ) : (
           <>
             {isTree && <FileTree />}
