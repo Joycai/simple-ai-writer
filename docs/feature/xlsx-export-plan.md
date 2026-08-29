@@ -1,6 +1,6 @@
 # 导出 Excel（.xlsx）——agent 产出工作簿
 
-> 状态：`shipped`（一期）。Beta 开关：设置 → 通用 → 实验功能 → 「Excel 导出」，默认关。
+> 状态：`shipped`（一期，PR #394 已合并）。Beta 开关：设置 → 通用 → 实验功能 → 「Excel 导出」，默认关。
 > 需求：**能导出 xlsx**。落点和 docx 那条一样是「agent 能产出」，不是导出菜单里多一个格式——
 > 理由见 §7。读的方向早就有了（`src-tauri/src/xlsx.rs`，calamine），这一片补上写的方向。
 
