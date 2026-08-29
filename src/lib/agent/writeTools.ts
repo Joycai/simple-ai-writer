@@ -952,6 +952,103 @@ async function loreEditReceipt(
   return appliedReceipt(`${dirPath}/${file}`, before, from, to);
 }
 
+/**
+ * Replace a line region of an entity file — `rewrite_lines` for the knowledge
+ * base (edit-loop-plan.md §14 L3). Same coordinate system as everything else
+ * on this side: line numbers count the whole file, frontmatter included, and
+ * come from `read_lore_entity`'s numbering. The frontmatter itself is refused
+ * — a line-range rewrite over YAML is how a facet silently stops being
+ * injected, which is the same reason `edit_lore_file` matches the body only.
+ */
+export async function rewriteLoreLinesTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; start_line?: number; end_line?: number; content?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const checked = checkEntityFilename(toolCallId, args.file ?? "index.md");
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  if (typeof args.content !== "string") {
+    return {
+      toolCallId,
+      content: "Error: 'content' argument is required (the replacement text for those lines; an empty string deletes them).",
+    };
+  }
+  const from = Math.floor(Number(args.start_line));
+  const to = Math.floor(Number(args.end_line));
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < from) {
+    return {
+      toolCallId,
+      content: "Error: 'start_line' and 'end_line' must be whole numbers with start_line ≥ 1 and end_line ≥ start_line (read_lore_entity numbers the lines).",
+    };
+  }
+
+  let raw: string;
+  try {
+    raw = await readEntityFile(entity.dirPath, file);
+  } catch {
+    return {
+      toolCallId,
+      content: `Error: "${file}" does not exist in entity "${entity.name}" (its files: ${facetFileList(entity)}).`,
+    };
+  }
+
+  // The frontmatter's line span. `head` keeps the closing delimiter's whole
+  // line, so its line count is exactly the lines a region may not touch.
+  const { head } = splitFrontmatter(raw);
+  const headLines = head === "" ? 0 : head.split("\n").length - (head.endsWith("\n") ? 1 : 0);
+  if (from <= headLines) {
+    return {
+      toolCallId,
+      content:
+        `Error: lines 1-${headLines} of ${file} are its frontmatter, which this tool never touches — ` +
+        "use update_lore_meta (index.md) or update_facet_meta (a facet) for metadata. The body starts " +
+        `at line ${headLines + 1}.`,
+    };
+  }
+
+  const slice = sliceLines(raw, from, to);
+  if (!slice) {
+    return {
+      toolCallId,
+      content: `Error: start_line ${from} is past the end of the file, which has ${countLines(raw)} line(s).`,
+    };
+  }
+  // Same welding guard as the manuscript tool: the range carries its last
+  // line's terminator, and a replacement without one would run the following
+  // line onto this text.
+  let replacement = args.content;
+  if (slice.text.endsWith("\n") && replacement !== "" && !replacement.endsWith("\n")) {
+    replacement += "\n";
+  }
+  if (replacement === slice.text) {
+    return { toolCallId, content: `Lines ${from}-${slice.to} already read exactly like that — nothing to do.` };
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  const next = raw.slice(0, slice.start) + replacement + raw.slice(slice.start + slice.text.length);
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  await writeEntityFile(entity.dirPath, file, next);
+  refreshFacetInSnapshot(entity, file, next);
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Rewrote lines ${from}-${slice.to} of ${file} on entity "${entity.name}".` +
+      (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.` +
+      (await appliedReceipt(`${entity.dirPath}/${file}`, raw, from, slice.to)),
+  };
+}
+
 // ─── update_facet_meta / delete_lore_file (facet-level surgery) ──────────────
 
 /**

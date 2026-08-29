@@ -157,6 +157,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "update_lore_meta",
     "append_lore_file",
     "edit_lore_file",
+    "rewrite_lore_lines",
     "update_facet_meta",
     "delete_lore_file",
     "add_lore_image",

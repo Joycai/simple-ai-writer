@@ -187,8 +187,15 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * has stayed within ~500 tokens across the last five slices while this one grew
  * by 1,700. A change that moves *resident* is the one that deserves the
  * argument, not this.
+ *
+ * **15,937** with the knowledge base's read paging + `rewrite_lore_lines`
+ * (edit-loop-plan.md §14), cap 15,600 → 16,000. The split is the sanctioned
+ * shape again: the new tool's 321 is all deferred; what moved resident is
+ * `read_lore_entity` growing `file`/`start_line` (170 → 280, **+110**) — the
+ * one read-side change §14 budgeted (~+90 estimated), bought to end "reading
+ * an entry = paying for all of it" on large entries. Resident 9,996 → 10,106.
  */
-const AGENT_ASSIST_CAP = 15_600;
+const AGENT_ASSIST_CAP = 16_000;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
