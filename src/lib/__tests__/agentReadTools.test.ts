@@ -622,8 +622,54 @@ describe("formatLoreIndex", () => {
     expect(out).toContain("  - Aria: 骑士");
     expect(out).toMatch(/\[npcs\] {2}\(no enabled capability pack declares this category/);
     expect(out).toContain("  - Guard: (no summary)");
-    // An empty category is still not listed, orphan or not.
+    // An empty category gets no header of its own — it moves to the one-line
+    // "no entries yet" summary instead (asserted below).
     expect(out).not.toContain("[world]");
+    expect(out).toMatch(/Categories with no entries yet[^\n]*world/);
+  });
+
+  /**
+   * id↔标签对照。模型看到的一直只有英文文件夹 id，作者说的却是标签——「characters
+   * 就是人物」这件事在这里说出来之前，模型的正解是新建一个「人物」分类（真实事故，
+   * 见 docs/feature/agent/lore-category-visibility-plan.md）。
+   */
+  it("pairs a declared category with the label the author actually sees", () => {
+    const out = formatLoreIndex(
+      { characters: [{ name: "Aria", summary: "骑士" } as never] },
+      null,
+      undefined,
+      true,
+    );
+    expect(out).toContain("[characters(人物)]");
+    // The pairing sentence rides along: parameters take the id, not the label.
+    expect(out).toContain("take the id, never the label");
+  });
+
+  it("lists declared-but-empty categories as valid targets instead of hiding them", () => {
+    const out = formatLoreIndex(
+      { characters: [{ name: "Aria", summary: "" } as never] },
+      null,
+      undefined,
+      true,
+    );
+    expect(out).toContain("Categories with no entries yet");
+    expect(out).toContain("world(世界观)");
+  });
+
+  it("tells an empty project where entries may go, not just that nothing is here", () => {
+    const out = formatLoreIndex({}, null, undefined, true);
+    expect(out).toContain("No lore entities found in this project.");
+    expect(out).toContain("characters(人物)");
+  });
+
+  it("does not call a category emptied by the 取材范围 empty", () => {
+    // Under a fence the fence note explains the narrowing; a category whose
+    // entries are merely out of scope must not read as "no entries yet".
+    const index = {
+      characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[],
+      world: [] as never[],
+    };
+    expect(formatLoreIndex(index, "小说A")).not.toContain("Categories with no entries yet");
   });
 
   /**

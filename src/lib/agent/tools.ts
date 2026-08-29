@@ -16,7 +16,8 @@ import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
 import { collectionViews, entityCollections, imageSlotChecklistText, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
-import { isKnownCategory } from "../profile/active";
+import { findCategory, loreCategories } from "../profile/active";
+import { categoryRef } from "../profile/model";
 import {
   baseName,
   decodeLinkSegments,
@@ -54,6 +55,7 @@ export function formatLoreIndex(
   loreIndex: LoreIndex,
   scope?: string | null,
   declared?: readonly string[],
+  isZh = false,
 ): string {
   const scoped = scopeLoreIndex(loreIndex, scope ?? null);
   const hidden = outOfScopeCount(loreIndex, scope ?? null);
@@ -80,11 +82,16 @@ export function formatLoreIndex(
     // An orphan category — no enabled pack declares it (see lib/lore/categories).
     // Its entries read and edit like any other, but `create_lore_entity` and
     // `move_lore_entity` refuse it, so say so here rather than letting the model
-    // discover it by having a call rejected.
-    const orphan = isKnownCategory(category)
+    // discover it by having a call rejected. A declared category is rendered
+    // through `categoryRef` — the author speaks the label, the tools take the
+    // id, and this listing is the one place the model learns they are the same
+    // thing (an id-only listing is how "characters" and a new 「人物」 end up
+    // coexisting as duplicates).
+    const cat = findCategory(category);
+    const orphan = cat
       ? ""
       : "  (no enabled capability pack declares this category — you can read and edit these entries, but you cannot create or move entries into it)";
-    lines.push(`[${category}]${orphan}`);
+    lines.push(`[${cat ? categoryRef(cat, isZh) : category}]${orphan}`);
     for (const e of entities) {
       // 归属跟在名字后面，未归集的什么都不写——「没有方括号」就是未归集，比写一个
       // "(unfiled)" 便宜，而且让一眼扫下去哪些还没分家变得显眼。
@@ -93,12 +100,32 @@ export function formatLoreIndex(
       lines.push(`  - ${e.name}${tag}: ${e.summary || "(no summary)"}`);
     }
   }
+
+  // Declared-but-empty categories, rendered as one line rather than one header
+  // each. Without it, a project whose entries have not reached the pack's
+  // categories yet reads as "this project has no 人物 category" — which is
+  // exactly the misread that makes the model propose creating a duplicate.
+  // Suppressed under a 取材范围: a category emptied by the fence is not empty,
+  // and the fence note already explains the narrowing.
+  const empty = scope
+    ? []
+    : loreCategories().filter((c) => !(scoped[c.id]?.length));
+  const emptyNote = empty.length
+    ? `\n\nCategories with no entries yet (valid targets for create_lore_entity / move_lore_entity): ${empty.map((c) => categoryRef(c, isZh)).join(", ")}.`
+    : "";
+  // Only worth a sentence when at least one id(label) pair actually rendered.
+  const hasLabels =
+    loreCategories().some((c) => categoryRef(c, isZh) !== c.id) &&
+    (lines.length > 0 || empty.length > 0);
+  const labelHint = hasLabels
+    ? "\n(Categories read id(author-facing label) — category parameters take the id, never the label.)"
+    : "";
+
   if (lines.length === 0) {
-    return scope
-      ? `No lore entities in the collection "${scope}".${fence}`
-      : "No lore entities found in this project.";
+    if (scope) return `No lore entities in the collection "${scope}".${fence}`;
+    return `No lore entities found in this project.${emptyNote}${labelHint}`;
   }
-  return catalogue + lines.join("\n") + fence;
+  return catalogue + lines.join("\n") + emptyNote + labelHint + fence;
 }
 
 /** Case-insensitive entity lookup by name or alias across all categories. */

@@ -24,7 +24,9 @@ vi.mock("../fs/fileio", () => ({
   readDir: vi.fn(async () => []),
 }));
 vi.mock("../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
-vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
+// zh-CN so the category substitution renders its id(label) pairs — the case
+// where the pairing exists at all (English labels mostly equal the ids).
+vi.mock("../../i18n", () => ({ default: { t: (key: string) => key, language: "zh-CN" } }));
 
 import { getToolDefinitions } from "../agent/registry";
 import { resetActiveWorkspace, setActiveWorkspace } from "../profile/active";
@@ -89,14 +91,23 @@ describe("lore categories named in a tool description", () => {
   const describeOf = (id: "list_lore_entities") =>
     getToolDefinitions([id])[0].function.description;
 
-  it("substitutes the active profile's categories", () => {
+  it("substitutes the active profile's categories as id(label) pairs", () => {
     setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     const text = describeOf("list_lore_entities");
-    expect(text).toContain("npcs, locations");
+    // The label rides with the id: the id is the wire value, the label is the
+    // word the author actually uses — hide it and the model reinvents 「人物」
+    // beside characters (docs/feature/agent/lore-category-visibility-plan.md).
+    expect(text).toContain("npcs(NPC), locations(地点)");
     // Prose listing the wrong categories misleads the model exactly as much as a
     // wrong enum would — it asks for lore the project doesn't have.
     expect(text).not.toContain("characters");
     expect(text).not.toContain("skills");
+  });
+
+  it("keeps the enum itself id-only — the label never becomes a wire value", () => {
+    const [def] = getToolDefinitions(["create_lore_entity"]);
+    const props = def.function.parameters.properties as Record<string, { enum?: string[] }>;
+    for (const value of props.category.enum ?? []) expect(value).not.toContain("(");
   });
 
   it("leaves no placeholder behind for any builtin profile", () => {

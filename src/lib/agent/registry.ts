@@ -20,8 +20,10 @@
 import type { ToolDefinition } from "../ai/types";
 import type { DocFormat, SpecRow } from "../docx/format";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
+import i18n from "../../i18n";
 import { type LoreIndex } from "../lore";
-import { loreCategoryIds } from "../profile/active";
+import { loreCategories, loreCategoryIds } from "../profile/active";
+import { categoryRef } from "../profile/model";
 import {
   formatLoreIndex,
   listWritingFiles,
@@ -711,7 +713,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => ({
       toolCallId: call.id,
-      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope, ctx.organize?.collections),
+      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope, ctx.organize?.collections, i18n.language === "zh-CN"),
     }),
   },
 
@@ -3000,9 +3002,15 @@ function withProfileCategories(
 
   // A tool that names the categories in prose is as misleading as a wrong enum:
   // told "characters, world, …", a model asks for lore that doesn't exist here.
+  // Rendered through `categoryRef` — `id(label)` — because the id alone is the
+  // other half of that bug: a model that has never seen 「characters ＝ 人物」
+  // answers a Chinese author by creating a duplicate category. This rides the
+  // resident schema (~40 tokens for the default workspace), priced in
+  // agentToolBudget.test.ts when the resident cap moved to 12,000.
   if (describesCategories) {
+    const refs = loreCategories().map((c) => categoryRef(c, i18n.language === "zh-CN"));
     // split/join rather than replaceAll — the project's TS target predates it.
-    fn.description = fn.description.split(CATEGORY_PLACEHOLDER).join(ids.join(", "));
+    fn.description = fn.description.split(CATEGORY_PLACEHOLDER).join(refs.join(", "));
   }
 
   const properties = definition.function.parameters.properties;
