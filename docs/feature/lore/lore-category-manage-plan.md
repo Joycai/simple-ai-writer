@@ -1,6 +1,6 @@
 # 分类的管理面——批量移动、删除，以及 agent 那一侧的缺口
 
-> 状态：**分片 1、2 已实施**（墙上多选 →「移到分类」+ 置顶重指；「删除分类」的两出口确认）。分片 3 为 `planned`。
+> 状态：**已实施**（三片：墙上多选 →「移到分类」+ 置顶重指；「删除分类」的两出口确认；agent 方案卡的分类 target 轴）。
 > 相关：[`lore-collection-plan.md`](./lore-collection-plan.md)（第二根轴，它的管理面是**做全了**的那一根）、
 > [`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、
 > [`design-system.md`](../../reference/design-system.md) → 知识库设计语言。
@@ -124,17 +124,39 @@ i18n 的 `categoriesHint` 是诚实的（「移除分类不会删除其文件夹
 「搬空之后分类自己消失」，都由 [`orphanCategories.test.ts`](../../../src/lib/__tests__/orphanCategories.test.ts)
 既有的用例锁着；这一片新加的用例只覆盖 `relocationTargets`。
 
-## 6. 分片 3（planned）：给 `move_lore_entity` 接上 target 轴
+## 6. 分片 3（已实施）：给 `move_lore_entity` 接上 target 轴
 
-`plan.ts` 的步骤已经有 entity / collection / **category** 三种 target，`organizeTools` 用上了
-前两种。`move_lore_entity` 过门时 target 恒为 `entity`
-（[`writeTools.ts`](../../../src/lib/agent/writeTools.ts)），所以「把这 12 条挪到 X」在方案卡上
-是 12 行——[`organizeTools.ts`](../../../src/lib/agent/organizeTools.ts) 开头说的「一张让作者
-橡皮图章的卡」，集合那侧躲开了，分类这侧正踩着。
+`plan.ts` 的步骤本来就有 entity / collection / **category** 三种 target，但 `move_lore_entity`
+过门时 target 恒为 `entity`，所以「把这 12 条挪到势力」在方案卡上是 **12 行**——
+[`organizeTools.ts`](../../../src/lib/agent/organizeTools.ts) 开头说的「一张让作者橡皮图章的
+卡」，集合那侧躲开了，分类这侧一直踩着。
 
-补法是加一种 target 为 `category` 的步骤（「把 ⟨旧分类⟩ 的 N 条移到 ⟨新分类⟩」），并让
-`move_lore_entity` 在过门时同时接受它。**仍然不加**分类的改名/删除工具：第 2 节那一栏
-没变，而分片 2 一旦落地，作者在 app 里就有了做这件事的地方。
+现在一条 `{ action: "move", target: "category", entity: "势力", members: [...] }` 的步骤就够，
+`move_lore_entity` 逐条兑现它（[`writeTools.ts`](../../../src/lib/agent/writeTools.ts) 的
+`moveGate`）。授权边界不变：**只动 `members` 列出的那些**，批准 12 条不是批准第 13 条。
+
+三条在真机上**不报错**、因而必须写下来的：
+
+1. **卡上是标签，工具收的是 id。** 方案是写给作者读的，步骤上写「势力」；`move_lore_entity`
+   的参数是文件夹 id（`factions`），因为那是它 enum 里的值、也是扫描器认的东西。字符串
+   直接比会把**刚批准完的**每一次批量搬家都拒掉——作者读到的是「agent 坏了」。所以
+   `plan.ts` 有 `sameCategory`，和 `sameEntity` 在另一根轴上做同一件事。
+2. **`category` + `move` 装的是 `lore_write`，不是 `lore_organize`。** 这一条是做的过程中
+   踩出来的：只改了 target 那一侧之后，一份只有一条 category/move 步骤的方案（正是这次
+   要造的那种「一行卡」）会把组织结构工具装上、却**不装** `move_lore_entity`——作者批准了，
+   模型却拿不到兑现它的工具，而且不报错，它只是看不见那个工具名。映射因此收进
+   `planLoadsEntityWrites` / `planLoadsOrganize`（[`plan.ts`](../../../src/lib/agent/plan.ts)），
+   和 target 轴住在一起，而不是散在 `runtime.ts` 的循环里。
+3. **改名不吃这条路。** 一个分类步骤说的是「谁搬进来」，从来不是「顺便改个名字」——
+   `moveGate` 只在带 `new_category` 时才回退到分类步骤。
+
+**仍然不加**分类的改名/删除工具：§2 那一栏没变，而分片 2 落地之后，作者在 app 里已经有
+做这件事的地方（`create_lore_category` 的工具结果现在直接指向知识库墙的分类右键）。
+
+代价记在 [`agentToolBudget.test.ts`](../../../src/lib/__tests__/agentToolBudget.test.ts)：常驻
+那一半 **9,457 → 9,453（−4）**，因为两句 schema 说明是**改写**而不是新增，都比它们替掉的
+那两句更短；真正的 +51 落在 `move_lore_entity` 上，而它是延迟装载的——一次运行只在作者
+批准了方案之后才付这笔钱，也正是那句话唯一可能改变模型行为的时刻。
 
 ## 7. 被否掉的
 

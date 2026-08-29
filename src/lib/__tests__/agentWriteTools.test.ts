@@ -1220,6 +1220,62 @@ describe("move_lore_entity", () => {
   });
 });
 
+/**
+ * 一张卡替掉十二行：把一批条目搬进同一个分类，方案上是**一条** target 为 category
+ * 的步骤，`move_lore_entity` 逐条兑现它。
+ *
+ * 这一组守的是 `moveGate`：分类步骤能授权搬家，但只授权它列出的那些条目，也从不
+ * 授权改名——一个分类步骤说的是「谁搬进来」，从来不是「顺便改个名字」。
+ */
+describe("move_lore_entity — 由一条分类步骤授权", () => {
+  const categoryPlan = (members: string[]): LorePlanStep[] => [
+    { action: "move", target: "category", entity: "势力", members, detail: "把这几条归到势力" },
+  ];
+
+  function ctxWithCategoryPlan(members: string[]) {
+    const gate = createPlanGate();
+    gate.steps.push(...categoryPlan(members));
+    return makeCtx({ lorePlan: gate });
+  }
+
+  it("卡上写「势力」，工具传 factions —— 同一个分类，放行", async () => {
+    const ctx = ctxWithCategoryPlan(["Ava", "Kael"]);
+    const res = await run("move_lore_entity", { entity: "Ava", new_category: "factions" }, ctx);
+
+    expect(res.content).toContain("characters → factions");
+    expect(fs.get(dirOf("factions", "ava") + "/index.md")).toContain("category: factions");
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("members 没列到的条目照样拒绝 —— 批准 12 条不是批准第 13 条", async () => {
+    const ctx = ctxWithCategoryPlan(["Kael"]);
+    const res = await run("move_lore_entity", { entity: "Ava", new_category: "factions" }, ctx);
+
+    expect(res.content).toContain("does not cover");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  it("改名不走这条路 —— 分类步骤说的是谁搬进来，不是顺便改个名字", async () => {
+    const ctx = ctxWithCategoryPlan(["Ava"]);
+    const res = await run("move_lore_entity", { entity: "Ava", new_name: "Ava Reyne" }, ctx);
+
+    expect(res.content).toContain("does not cover");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+  });
+
+  it("两条路都不通时，报错要告诉模型那条一行的路存在", async () => {
+    const ctx = makeCtx({ lorePlan: createPlanGate() });
+    ctx.lorePlan!.steps.push({ action: "update", entity: "Ava", detail: "只批准了改正文" });
+    const res = await run("move_lore_entity", { entity: "Ava", new_category: "factions" }, ctx);
+
+    expect(res.content).toContain("does not cover");
+    // 否则模型只会把同一个调用原样重发一遍。
+    expect(res.content).toContain('target "category"');
+    expect(res.content).toContain("members");
+  });
+});
+
 // ─── delete_lore_entity ──────────────────────────────────────────────────────
 
 describe("delete_lore_entity", () => {

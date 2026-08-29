@@ -16,6 +16,11 @@
  * 而改名/删除会让每个成员条目的文件夹搬家，并让 `[[lore:分类/id]]` 路径引用和特征
  * 置顶失效。集合三个都给，因为它只是 frontmatter 上的一个字段，可逆且便宜。
  *
+ * 分类**作为搬入目的地**则和集合齐平了：一个 target 为 `category` 的 move 步骤，
+ * `members` 列出这一批条目，`move_lore_entity` 逐条过这一个步骤的门（见
+ * `writeTools.ts` 的 `moveGate`）。所以「把 12 条归到势力」在卡上是一行，不是十二行
+ * ——这一条本来就是这个文件开头那段话的重点，只是分类这一侧晚补了一步。
+ *
  * ## 这一组是 deferred 的
  *
  * 全部挂 `group: "lore_organize"`，方案批准之前根本不下发（`runtime.ts`）。而且是
@@ -197,6 +202,6 @@ export async function createLoreCategoryTool(
     toolCallId,
     content:
       `Created category "${label}" (id: ${id}). New entries can go in it via create_lore_entity, and existing ones via move_lore_entity. ` +
-      "There is no tool to rename or delete a category: a category is a folder on disk, so either would relocate every member entry and stale its `[[lore:…]]` path citations. Ask the author to do that in the app.",
+      "There is no tool to rename or delete a category: a category is a folder on disk, so either would relocate every member entry and stale its `[[lore:…]]` path citations. Ask the author to do it in the app — right-clicking a category on the knowledge-base wall offers exactly that.",
   };
 }

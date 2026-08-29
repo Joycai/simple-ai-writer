@@ -1678,6 +1678,52 @@ function relocateInSnapshot(
   (loreIndex[next.category] ??= []).push(entity);
 }
 
+/**
+ * 一次移动的方案门，**两条路都认**：
+ *
+ *   1. 这一条自己的 entity 步骤——「move Ava —— 挪到势力」。改名走的永远是这条。
+ *   2. 目标分类的 category 步骤——「move 势力 [Ava, Kel, …] —— 把这 12 条归到势力」。
+ *
+ * 第二条是这个函数存在的全部理由。没有它，「把这 12 条挪到势力」在方案卡上就是
+ * **12 行**，而 `organizeTools.ts` 开头讲的正是这件事：作者读不完的卡等于没有卡，
+ * 门降级成橡皮图章——那比没有门更糟，因为它看上去像一道门。集合那一侧靠 target 轴
+ * 躲开了，分类这一侧一直踩着。
+ *
+ * 顺序是先 entity 后 category，而不是反过来：entity 步骤更具体，它的 `detail` 会被
+ * 回显进工具结果，作者在日志里读到的就该是他自己写下的那一行。
+ *
+ * 授权边界仍然逐条过：category 步骤列了谁才动得了谁（`checkPlan` 的 `member`）。
+ * 批准「12 条」不是批准第 13 条。改名不吃这条路——一个分类步骤说的是「谁搬进来」，
+ * 从来不是「顺便把它改个名字」。
+ */
+function moveGate(
+  toolCallId: string,
+  ctx: ToolContext,
+  entityName: string,
+  newCategory?: string,
+): { refusal: ToolResult } | { step: LorePlanStep } {
+  const direct = checkPlan(ctx.lorePlan, ctx.loreIndex, "move", entityName);
+  if (direct.ok) return { step: direct.step };
+  if (!newCategory) return { refusal: { toolCallId, content: direct.message } };
+
+  const viaCategory = checkPlan(ctx.lorePlan, ctx.loreIndex, "move", newCategory, undefined, {
+    target: "category",
+    member: entityName,
+  });
+  if (viaCategory.ok) return { step: viaCategory.step };
+  // 两条都不通时回 entity 那条的报错——它列出了全部已批准步骤，是模型下一步真正
+  // 要读的东西——再补一句告诉它另一条路存在，否则它只会把同一个调用重发一遍。
+  return {
+    refusal: {
+      toolCallId,
+      content:
+        `${direct.message}\n` +
+        `A bulk move can also be covered by ONE step with target "category", entity "${newCategory}", ` +
+        "and every entry listed in `members` — propose that instead of one step per entry.",
+    },
+  };
+}
+
 /** Case-insensitive de-duplicating alias append. */
 function withAlias(aliases: string[], extra: string): string[] {
   const lower = extra.toLowerCase();
@@ -1732,7 +1778,7 @@ export async function moveLoreEntityTool(
     }
   }
 
-  const gated = gate(toolCallId, ctx, "move", entity.name);
+  const gated = moveGate(toolCallId, ctx, entity.name, newCategory);
   if ("refusal" in gated) return gated.refusal;
 
   // Frontmatter is the source of truth for summary/aliases; the scanned entity
