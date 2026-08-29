@@ -208,4 +208,48 @@ describe("create_lore_category", () => {
     expect(r.content).toContain("does not cover");
     expect(calls.categories).toEqual([]);
   });
+
+  /**
+   * 查重。真实事故的另一半（docs/feature/agent/lore-category-visibility-plan.md）：
+   * 模型拿作者的中文说法（「人物」）当新分类名，而那正是 `characters` 的标签。
+   * 幂等成功而不是报错——报错只会让模型换个名字重试，《人物2》恰恰是最坏的结果。
+   */
+  it("label 撞上现有分类的标签时幂等返回、点名该用的 id，绝不新建", async () => {
+    const ctx = ctxWith([{ target: "category", action: "create", entity: "人物", detail: "—" }]);
+    const r = await createLoreCategoryTool("c1", { label: "人物" }, ctx);
+    expect(r.content).toContain("already exists");
+    expect(r.content).toContain('"characters"');
+    expect(calls.categories).toEqual([]);
+  });
+
+  it("id 与英文标签同样命中查重，忽略大小写与首尾空白", async () => {
+    for (const label of ["Characters", "  CHARACTERS  ", "characters"]) {
+      const ctx = ctxWith([{ target: "category", action: "create", entity: label, detail: "—" }]);
+      const r = await createLoreCategoryTool("c1", { label }, ctx);
+      expect(r.content).toContain("already exists");
+    }
+    expect(calls.categories).toEqual([]);
+  });
+
+  it("查重先于方案门——「它已存在」是只读事实，不需要方案就能说", async () => {
+    const r = await createLoreCategoryTool("c1", { label: "人物" }, ctxWith([]));
+    expect(r.content).toContain("already exists");
+    expect(r.content).not.toContain("approved plan");
+    expect(calls.categories).toEqual([]);
+  });
+});
+
+describe("agent 指令与工具的说法一致", () => {
+  it("指令不再宣称「分类没有增删工具」，而是指向 create_lore_category 的复用优先流程", async () => {
+    const zh = (await import("../../i18n/locales/zh-CN.json")).default as {
+      ai: { instructions: { agent: string } };
+    };
+    const en = (await import("../../i18n/locales/en.json")).default as {
+      ai: { instructions: { agent: string } };
+    };
+    expect(zh.ai.instructions.agent).not.toContain("分类本身没有增删工具");
+    expect(zh.ai.instructions.agent).toContain("create_lore_category");
+    expect(en.ai.instructions.agent).not.toContain("No tool creates or deletes categories");
+    expect(en.ai.instructions.agent).toContain("create_lore_category");
+  });
 });

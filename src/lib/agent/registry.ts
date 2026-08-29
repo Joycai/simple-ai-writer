@@ -1141,7 +1141,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Entity category — must be one that already exists. No tool creates categories; a new one is the author's act (Settings → 工作台 or the lore wall).",
+                "Entity category — must be one that already exists (create_lore_category, plan-gated, adds one only when none fits).",
             },
             summary: { type: "string", description: "One-line summary shown in listings and used for activation" },
             aliases: {
@@ -1703,7 +1703,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Category to move the entity into — must be one that already exists (no tool creates categories). Omit to keep the current one.",
+                "Category to move the entity into — must exist (create_lore_category adds one only when none fits). Omit to keep the current one.",
             },
             keep_old_name_as_alias: {
               type: "boolean",
