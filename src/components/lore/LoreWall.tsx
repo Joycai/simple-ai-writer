@@ -33,6 +33,7 @@ import {
 import { CollectionRail } from "./collections/CollectionRail";
 import { BindingEdge } from "./collections/BindingEdge";
 import { CollectionAssignMenu, type AssignMode } from "./collections/CollectionAssignMenu";
+import { CategoryMoveMenu } from "./CategoryMoveMenu";
 import { CollectionsManageModal } from "./collections/CollectionsManageModal";
 import { ScopeBand, ScopeButton, ScopeMenu, type ScopeMenuAnchor } from "./collections/ScopePicker";
 import cs from "./collections/collections.module.css";
@@ -66,7 +67,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity, deleteEntity, detailPath, detailEditing, openDetail } = useLoreStore();
+  const { index, scanProject, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
   const scope = useLoreStore((s) => s.scope);
   const setScope = useLoreStore((s) => s.setScope);
   const { projectPath } = useProjectStore();
@@ -103,6 +104,8 @@ export function LoreWall() {
   const [assign, setAssign] = useState<
     { mode: AssignMode; anchor: { x: number; y: number; above?: boolean }; entities: LoreEntity[] } | null
   >(null);
+  /** 「移到分类」的浮层。和归集清单分开两个状态：两块板子的语汇不同，合并只会长出一堆 if。 */
+  const [catMove, setCatMove] = useState<{ x: number; y: number; above?: boolean } | null>(null);
   const [showManage, setShowManage] = useState(false);
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const cardRefs = useRef(new Map<string, HTMLElement>());
@@ -309,6 +312,36 @@ export function LoreWall() {
       await fileIntoCollections(entities, add, remove);
     } catch (e) {
       console.warn("[lore] filing failed:", e);
+    }
+  };
+
+  /**
+   * 把选中的这批搬进 `category`。
+   *
+   * 搬完**不退出多选**，而是把选中态跟着新 dirPath 改过去：搬错一批的时候，作者要的
+   * 下一个动作是「再搬回去」，清空选中会让他重新框一遍二十张卡。
+   *
+   * 只有失败才弹窗。成功是墙上看得见的——卡片换了颜色、分类计数变了——而每次成功都
+   * 弹一次的提示，第三次就变成了下意识点掉的东西。
+   */
+  const moveSelectedToCategory = async (category: string) => {
+    if (!projectPath || selectedEntities.length === 0) return;
+    const targets = selectedEntities;
+    try {
+      const { moves, failed } = await moveToCategory(projectPath, targets, category);
+      if (moves.length > 0) {
+        const byFrom = new Map(moves.map((m) => [m.from, m.to]));
+        setSelected((cur) => new Set([...cur].map((p) => byFrom.get(p) ?? p)));
+        anchorRef.current = anchorRef.current
+          ? (byFrom.get(anchorRef.current) ?? anchorRef.current)
+          : null;
+      }
+      if (failed.length > 0) {
+        window.alert(t("lore.categoryMove.failed", { list: failed.join("、") }));
+      }
+    } catch (e) {
+      console.warn("[lore] category move failed:", e);
+      window.alert(t("lore.categoryMove.failed", { list: targets.map((x) => x.name).join("、") }));
     }
   };
 
@@ -931,6 +964,18 @@ export function LoreWall() {
               </span>
               <span className={cs.selectBreakdown}>{selectedBreakdown}</span>
               <span style={{ flex: 1 }} />
+              {/* 分类在集合之前：第一根轴排在第二根轴左边，两颗集合按钮仍然连着。 */}
+              <button
+                type="button"
+                className={`${cs.selectBtn} ${cs.selectBtnSecondary}`}
+                disabled={selected.size === 0}
+                onClick={(ev) => {
+                  const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                  setCatMove({ x: r.left, y: r.top - 8, above: true });
+                }}
+              >
+                {t("lore.categoryMove.cta")}
+              </button>
               <button
                 type="button"
                 className={cs.selectBtn}
@@ -1013,6 +1058,15 @@ export function LoreWall() {
           anchor={assign.anchor}
           onCommit={(add, remove) => void commitAssign(assign.entities, add, remove)}
           onClose={() => setAssign(null)}
+        />
+      )}
+
+      {catMove && (
+        <CategoryMoveMenu
+          entities={selectedEntities}
+          anchor={catMove}
+          onPick={(category) => void moveSelectedToCategory(category)}
+          onClose={() => setCatMove(null)}
         />
       )}
 

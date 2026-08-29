@@ -81,6 +81,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [lore-collection-ui-brief.md](feature/lore/lore-collection-ui-brief.md) | `shipped` | The Claude Design brief for the collections UI turn (screens 24–31) |
 | [lore-retrieval-plan.md](feature/lore/lore-retrieval-plan.md) | `shipped` | 取材准确度第 0–2 级：作者意图进匹配靶、`[[lore:…]]` 引用图扩展、查询扩展喂回子串匹配器。三条不变量（子串通道优先 · 每条命中都要可解释可动手 · 无静默截断）；向量通道为什么推迟，以及重启条件（§6.1）。实现出入在 §9——尤其 §9.1：引用带入的条目**不能**挂 L0 保底层，那一层不受预算限制 |
 | [lore-granularity-research.md](feature/lore/lore-granularity-research.md) | `research` | Six directions surveyed. 1+3 became the facet plan; 2, 4, 6 are still open |
+| [lore-category-manage-plan.md](feature/lore/lore-category-manage-plan.md) | `partial` | 分类的管理面：墙上多选批量改分类（已实施，含置顶重指）；「删除分类」为什么今天不删任何东西、该怎么补；agent 那侧的 target 轴缺口。为什么分类和集合的管理面天生不对称 |
 
 ### feature/knowledge-base/ — the sync server
 

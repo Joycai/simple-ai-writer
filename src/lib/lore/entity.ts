@@ -507,6 +507,71 @@ export async function fileEntities(
   return touched;
 }
 
+/** 一次搬家的落点：置顶重指要用旧新两个 dirPath。 */
+export type CategoryMove = { from: string; to: string };
+
+/**
+ * 把一批条目搬进另一个分类——知识库墙上多选之后的那一下。
+ *
+ * 和 `fileEntities` 是同一个形状（逐条独立、单条失败不中断整批、正文原样带走），但
+ * 语义相反：集合是**只加不减**的多值标签，分类是**替换**，而且是磁盘上的文件夹，所以
+ * 每一条都会搬家。两处的差别只有这一段注释和返回值，剩下的都刻意长得一样。
+ *
+ * 三件事在返回值里，因为界面必须能分开说：
+ *   moves   真的搬了的（旧 → 新 dirPath）。调用方拿它重指置顶——置顶按绝对路径存，
+ *           不重指的话批量移动就等于静默取消这一批的置顶（见 `repointPins`）。
+ *   skipped 本来就在目标分类里的。算进「已移动 N 条」会给作者一个含水的数字。
+ *   failed  读不出或写不进的条目名。报出来，而不是让一次「20 条」实际只搬了 18 条。
+ *
+ * 没有 index.md 的条目也照搬：扫描器允许这种条目存在（列出来、用默认值），这里就照
+ * `move_lore_entity` 的老办法用扫描到的元数据重建一份，而不是把它留在原地。
+ */
+export async function moveEntitiesToCategory(
+  projectPath: string,
+  entities: readonly LoreEntity[],
+  category: CategoryId,
+): Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }> {
+  const moves: CategoryMove[] = [];
+  const failed: string[] = [];
+  let skipped = 0;
+
+  for (const entity of entities) {
+    if (entity.category === category) {
+      skipped++;
+      continue;
+    }
+    try {
+      // index.md 缺失不是错：扫描器允许，重建一份最小正文即可。summary/aliases 用
+      // 扫描到的值——它们本来就是从这个文件读出来的。
+      let body = `# ${entity.name}\n`;
+      try {
+        body = parseFrontmatter(await readFile(`${entity.dirPath}/index.md`)).content;
+      } catch {
+        // no index.md — the write below creates one from the scanned metadata
+      }
+      const from = entity.dirPath;
+      const moved = await saveEntityMetaAndBody(
+        projectPath,
+        entity,
+        {
+          name: entity.name,
+          aliases: entity.aliases ?? [],
+          category,
+          summary: entity.summary,
+          // 显式带上——`dict` 的那条纪律在这里同样适用。
+          dict: entity.dict,
+        },
+        body,
+      );
+      moves.push({ from, to: moved.dirPath });
+    } catch (e) {
+      console.warn(`[lore] could not move ${entity.dirPath} to ${category}:`, e);
+      failed.push(entity.name);
+    }
+  }
+  return { moves, skipped, failed };
+}
+
 // ─── Entity metadata persistence ─────────────────────────────────────────────
 
 /** Serialize entity metadata to the index.md YAML frontmatter block. */

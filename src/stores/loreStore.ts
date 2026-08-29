@@ -2,8 +2,13 @@ import { create } from "zustand";
 import {
   scanLore,
   createEntity,
+  loadPinnedLore,
+  moveEntitiesToCategory,
   readEntityFile,
+  repointPins,
+  savePinnedLore,
   writeEntityFile,
+  type CategoryMove,
   type LoreIndex,
   type LoreEntity,
   type CategoryId,
@@ -63,6 +68,18 @@ interface LoreState {
   saveNow: () => Promise<void>;
   createNewEntity: (projectPath: string, category: CategoryId, id: string, name: string) => Promise<void>;
   deleteEntity: (projectPath: string, entity: LoreEntity) => Promise<void>;
+  /**
+   * 把一批条目搬进另一个分类（知识库墙多选之后的那一下）。返回真搬了哪些（旧 → 新
+   * dirPath）、跳过多少（本来就在那儿）、哪几条没搬成——三样界面要分开说。
+   *
+   * `moves` 而不是一个计数：调用方的选中态也是按 dirPath 存的，搬完不跟着改就会整批
+   * 落空，而作者刚搬错了一批时最想要的正是「原样选中、再搬回去」。
+   */
+  moveToCategory: (
+    projectPath: string,
+    entities: readonly LoreEntity[],
+    category: CategoryId,
+  ) => Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }>;
 }
 
 /**
@@ -250,5 +267,27 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (get().selectedEntity?.id === entity.id) {
       set({ selectedEntity: null, selectedFile: null, fileContent: "" });
     }
+  },
+
+  moveToCategory: async (projectPath, entities, category) => {
+    const { moves, skipped, failed } = await moveEntitiesToCategory(projectPath, entities, category);
+    // 置顶跟着搬。顺序是「先重指、再重扫」：墙上的置顶记号是按 `index` 重算的
+    // （LoreWall 的 pinnedDirs），扫描在后，作者就不会看见中间那一帧「置顶没了」。
+    if (moves.length > 0) {
+      savePinnedLore(projectPath, repointPins(loadPinnedLore(projectPath), moves));
+    }
+    await get().scanProject(projectPath);
+    // 详情页握的是 dirPath，被搬走的那一条得跟过去而不是被关掉——作者看的还是同一条
+    // 条目，关掉它等于说「你刚才那下把它弄丢了」。编辑区的 selectedEntity 同理。
+    const relocate = (dir: string | null | undefined) =>
+      dir ? (moves.find((m) => m.from === dir)?.to ?? dir) : dir;
+    const { detailPath, selectedEntity } = get();
+    const nextDetail = relocate(detailPath);
+    if (nextDetail !== detailPath) set({ detailPath: nextDetail ?? null });
+    if (selectedEntity && moves.some((m) => m.from === selectedEntity.dirPath)) {
+      const moved = get().index[category]?.find((e) => e.dirPath === relocate(selectedEntity.dirPath));
+      set({ selectedEntity: moved ?? null, ...(moved ? {} : { selectedFile: null, fileContent: "" }) });
+    }
+    return { moves, skipped, failed };
   },
 }));

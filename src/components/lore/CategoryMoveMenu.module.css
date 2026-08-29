@@ -1,0 +1,70 @@
+/*
+ * 「移到分类」的浮层。几何上和归集清单（collections.module.css 的 .assign*）是同一块
+ * 板子——它们是同一条动作条上前后脚弹出的两个菜单，尺寸不一致只会显得是两个功能。
+ * 不同的是**语汇**：这里是分类色点 + 单选，没有勾选框、没有三态、更没有装订双线
+ * （3px double 归集合所有，见 design-system.md → 集合 · 装订语汇）。
+ */
+.menu {
+  position: fixed;
+  z-index: 420;
+  width: 250px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--lore-flip-border);
+  box-shadow: var(--lore-shadow-modal);
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+
+.head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.title {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+/* 影响面那一行是等宽的：它是个数字，作者会去数它。 */
+.breakdown { font: 400 10px/1.4 var(--font-mono); color: var(--color-text-faint); }
+
+.list { padding: 4px 0; display: flex; flex-direction: column; overflow-y: auto; }
+.row {
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+  transition: background var(--transition-fast);
+}
+.row:hover { background: var(--lore-sub-bg); }
+/* 当前分类照常列出：「都在这儿了」本身就是一次有用的回答。 */
+.rowHere { cursor: default; opacity: 0.55; }
+.rowHere:hover { background: none; }
+
+/* 分类的唯一记号。6px，永远紧挨着标签——两个分类撞色是可以接受的（见 catColor）。 */
+.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.name {
+  font: 400 13px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.count { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+
+.foot {
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-base);
+}
+/* 常驻脚注而不是弹窗：它每次都成立，而每次都弹的东西第三次就被无视了。 */
+.note { font: italic 400 10px/1.45 var(--font-serif); color: var(--color-text-muted); }

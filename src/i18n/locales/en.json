@@ -2250,6 +2250,15 @@
       "title": "New knowledge-base category",
       "placeholder": "e.g. Meeting notes, Research…"
     },
+    "categoryMove": {
+      "cta": "Move to category ▾",
+      "title": "Move {{n}} to…",
+      "from": "Currently: {{list}}",
+      "allHere": "All already here",
+      "someHere": "{{n}} already here",
+      "note": "A category is a folder on disk, so these entries move with it; [[lore:category/id]] citations re-point to the new location.",
+      "failed": "These could not be moved: {{list}}"
+    },
     "run": {
       "generating": "Generating",
       "done": "Done",

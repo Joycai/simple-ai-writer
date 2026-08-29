@@ -36,9 +36,42 @@ export function savePinnedLore(projectPath: string | null, paths: string[]): voi
  */
 export function pinnedEntityDirs(pins: string[]): Set<string> {
   const out = new Set<string>();
-  for (const raw of pins) {
-    const hash = raw.lastIndexOf("#");
-    out.add(hash > 0 && hash < raw.length - 1 ? raw.slice(0, hash) : raw);
-  }
+  for (const raw of pins) out.add(splitPin(raw).dir);
   return out;
+}
+
+/**
+ * 一条置顶拆成「条目目录」和「特征后缀」。
+ *
+ * 两个读置顶的地方（问「这条越不越栏」和「搬家之后它指哪」）必须用同一条拆法，否则
+ * 一个把 `…/角色/凯尔#外袍` 当条目目录、另一个当特征，结果是重指之后墙上还画着旧的。
+ */
+function splitPin(raw: string): { dir: string; facet: string } {
+  const hash = raw.lastIndexOf("#");
+  return hash > 0 && hash < raw.length - 1
+    ? { dir: raw.slice(0, hash), facet: raw.slice(hash) }
+    : { dir: raw, facet: "" };
+}
+
+/**
+ * 条目搬家之后把置顶重新指过去。
+ *
+ * 置顶的键是**绝对路径**，而改分类（或改名）会把整个条目文件夹挪走——不重指的话，
+ * 批量移动 20 条就等于静默取消这 20 条的置顶。作者不会收到任何提示，要等到下一次运行
+ * 读到一段没带人设的正文才发现，那时已经很难把两件事联系起来。
+ *
+ * 纯函数：读写 prefs 的那一步留给调用方，这样它可以被单测，也可以在一次搬家里只写一次盘。
+ * 特征后缀原样带过去——搬家改的是条目住在哪，不是它有哪些特征。
+ */
+export function repointPins(
+  pins: readonly string[],
+  moves: readonly { from: string; to: string }[],
+): string[] {
+  if (moves.length === 0) return [...pins];
+  const byFrom = new Map(moves.map((m) => [m.from, m.to]));
+  return pins.map((raw) => {
+    const { dir, facet } = splitPin(raw);
+    const to = byFrom.get(dir);
+    return to ? `${to}${facet}` : raw;
+  });
 }

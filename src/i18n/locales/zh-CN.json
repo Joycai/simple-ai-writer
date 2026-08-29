@@ -2245,6 +2245,15 @@
       "title": "新建知识库分类",
       "placeholder": "如：会议纪要、竞品调研…"
     },
+    "categoryMove": {
+      "cta": "移到分类 ▾",
+      "title": "移到分类 · {{n}} 条",
+      "from": "当前：{{list}}",
+      "allHere": "全部已在",
+      "someHere": "{{n}} 条已在",
+      "note": "分类是磁盘上的文件夹，这一批会连文件夹一起搬走；写成 [[lore:分类/id]] 的引用会改指新位置。",
+      "failed": "这几条没能移动：{{list}}"
+    },
     "run": {
       "generating": "生成中",
       "done": "完成",
