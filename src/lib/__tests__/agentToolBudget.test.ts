@@ -174,8 +174,21 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * At 15 tokens of headroom the next addition to this preset does not fit at
  * all. That is the intended state, not a problem to solve by raising the number
  * again: read §5 of agent-tool-context-lld.md, then put it in a tier.
+ *
+ * **15,506** after `edit_lore_file` gained `occurrence` / `replace_all`
+ * (+121), cap 15,400 → 15,600. This is the one shape of growth §5 says yes to,
+ * and the evidence is in the numbers rather than in the argument: the
+ * **resident half did not move** (9,996 before and after), because every token
+ * of the +121 is inside the `lore_write` group, which does not reach the wire
+ * until the author approves a lore plan — the exact moment the tool becomes
+ * callable at all. The `write` tier is unmoved too, at 4,065.
+ *
+ * So read the two numbers together, and treat the resident one as the bill: it
+ * has stayed within ~500 tokens across the last five slices while this one grew
+ * by 1,700. A change that moves *resident* is the one that deserves the
+ * argument, not this.
  */
-const AGENT_ASSIST_CAP = 15_400;
+const AGENT_ASSIST_CAP = 15_600;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
@@ -277,6 +290,11 @@ describe("tool schema budget", () => {
     // docs/feature/agent/lore-category-visibility-plan.md): the tight cap was
     // making a ~20-token honesty fix look like a regression. The 15,000
     // full-preset cap did NOT move and is now the binding one — headroom 130.
+    // 9,996 after search_text grew to cover the knowledge base (+48) — and
+    // still 9,996 after edit_lore_file gained occurrence/replace_all (+121),
+    // because that tool is deferred. Those two slices are the clearest example
+    // of what this assertion is for: the full preset moved 169 tokens and the
+    // number a conversation actually pays moved 48.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
     expect(residentTokens).toBeLessThanOrEqual(12_000);
