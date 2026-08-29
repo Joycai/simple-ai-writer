@@ -15,9 +15,10 @@
  * off (lib/agent/routing.ts).
  */
 
-import { fileExists } from "../fs/fileio";
+import { fileExists, readFile } from "../fs/fileio";
 import { resolveWorkspacePath } from "../paths";
 import { pptxPathFor } from "../pptx";
+import { WHOLE_PAGE_TIER, splitHtmlDeck } from "../pptx/htmlSlides";
 import type { PptxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -64,11 +65,26 @@ export async function exportPptxTool(
     return { toolCallId, content: `Error: "${target}" does not end in .pptx.` };
   }
 
+  // The division is text-level, so it costs one read and is knowable before
+  // anything is rendered — see PptxProposal. Everything else about the
+  // conversion still needs a DOM and still waits for approval.
+  let html: string;
+  try {
+    html = await readFile(source);
+  } catch (e) {
+    return { toolCallId, content: `Error reading ${source}: ${String(e)}` };
+  }
+  const { tier, slides } = splitHtmlDeck(html);
+  const wholePage = tier === WHOLE_PAGE_TIER;
+
   const proposal: PptxProposal = {
     kind: "pptx",
     id: `pptx-${++proposalCounter}`,
     path: target,
     sourcePath: source,
+    slides: slides.length,
+    tier,
+    wholePage,
     reason: args.reason,
   };
 

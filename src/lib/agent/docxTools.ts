@@ -15,7 +15,7 @@
 
 import { fileExists, readFile } from "../fs/fileio";
 import { baseName, resolveWorkspacePath } from "../paths";
-import { docxPathFor } from "../docx";
+import { docxPathFor, outlineMarkdown } from "../docx";
 import { eastAsiaFontsOf, formatSpecRows, formatSummary } from "../docx/format";
 import { missingFonts } from "../docx/fontCheck";
 import { readDocFormat } from "../docx/read";
@@ -90,6 +90,19 @@ export async function exportDocxTool(
   const { format, origin } = resolved;
   const source_text = await readFile(source);
 
+  // 内容侧的预检，和 export_xlsx 「没有表格就早退」同一条：与其让作者批准一份
+  // 空文件，不如现在就说清楚。frontmatter 不算正文，所以一份只有 frontmatter
+  // 的文档在这里正是 0 块。
+  const outline = outlineMarkdown(source_text);
+  if (outline.blocks === 0) {
+    return {
+      toolCallId,
+      content:
+        `Error: "${source}" has no content to convert — nothing but frontmatter or whitespace. ` +
+        "Write the document first, then export it.",
+    };
+  }
+
   const proposal: DocxProposal = {
     kind: "docx",
     id: `docx-${++proposalCounter}`,
@@ -103,6 +116,7 @@ export async function exportDocxTool(
     spec: formatSpecRows(format),
     missingFonts: missingFonts(eastAsiaFontsOf(format)),
     sourceChars: source_text.length,
+    outline,
     reason: args.reason,
   };
 

@@ -34,13 +34,28 @@ interface FrameProps {
  * goes through this component, so the sandbox parameters exist in exactly one
  * place (docs/feature/html-artifact-plan.md §4).
  *
- * The document goes in through a `blob:` URL, and that choice is load-bearing:
- *   - `srcdoc` (and any same-origin injection) inherits the app window's CSP,
- *     whose `script-src 'self'` blocks the inline scripts these pages live on.
- *     A blob document is its own opaque origin, so its scripts run.
- *   - `sandbox="allow-scripts"` — and nothing more. No `allow-same-origin`
- *     (scripts must never reach the app's window, IPC, or Tauri API), no
- *     `allow-top-navigation`, no `allow-popups`.
+ * The document goes in through a `blob:` URL under
+ * `sandbox="allow-scripts"` — and nothing more. No `allow-same-origin`
+ * (scripts must never reach the app's window, IPC, or Tauri API), no
+ * `allow-top-navigation`, no `allow-popups`.
+ *
+ * **The page's own scripts do not run here, and never have.** This comment
+ * used to claim the opposite — that a blob document is its own opaque origin,
+ * so its scripts execute — and that is wrong: a `blob:` document *inherits the
+ * CSP of the page that created it*, and being an opaque origin exempts it from
+ * same-origin access, not from policy. Under the app's `script-src 'self'` no
+ * inline script in this frame executes, with or without the sandbox attribute.
+ * Verified the hard way in 2026-08, when the PPTX exporter's measuring script
+ * was injected here and silently did nothing for twenty seconds a time; the
+ * exporter now gets through by a `sha256-` allowance for that one file
+ * (lib/pptx/harvest.ts), and everything the page brought with it stays
+ * blocked. See docs/feature/html-artifact-plan.md D2.
+ *
+ * What that means for what the author sees: this preview renders CSS and
+ * inline SVG faithfully and shows an interactive page as its inert first
+ * frame. The separate preview window (`preview.rs`, its own custom protocol
+ * and therefore not under this CSP) is where scripts actually run — which is
+ * what the toolbar's window and browser buttons are for.
  */
 export function HtmlFrame({ source, baseDir, debounceMs = 0, generation = 0, className }: FrameProps) {
   const { t } = useTranslation();

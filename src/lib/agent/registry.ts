@@ -18,6 +18,7 @@
  */
 
 import type { ToolDefinition } from "../ai/types";
+import type { DocxOutline } from "../docx";
 import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
@@ -40,6 +41,7 @@ import {
 import { LORE_PLAN_ACTIONS, LORE_PLAN_TARGETS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
+import { inspectHtmlTool } from "./htmlTools";
 import {
   createLoreCategoryTool,
   fileLoreEntriesTool,
@@ -338,11 +340,24 @@ export interface IllustrateProposal extends ProposalBase {
  * The conversion runs on approval rather than at proposal time because it needs
  * a DOM to lay the page out in, and that exists in the renderer where proposals
  * are applied — not in the tool loop. See lib/pptx.
+ *
+ * **The division, though, is knowable now** — it is text-level (`splitHtmlDeck`)
+ * — and it is the one thing about this export an author can act on before
+ * approving. "12 slides on `section.slide`" and "1 slide, the whole page" are
+ * the difference between a deck and a page someone only thinks is a deck, and
+ * until these two fields existed the card could not tell them apart: it showed
+ * two paths, the author approved, and a squashed one-slide deck appeared.
  */
 export interface PptxProposal extends ProposalBase {
   kind: "pptx";
   /** The `.html` the deck is rendered from. `path` is where the .pptx lands. */
   sourcePath: string;
+  /** How many slides the page divides into, counted at proposal time. */
+  slides: number;
+  /** The selector that divided it, or the "whole page" fallback's own name. */
+  tier: string;
+  /** True when no slide selector matched and the page became one slide. */
+  wholePage: boolean;
 }
 
 /**
@@ -371,6 +386,11 @@ export interface DocxProposal extends ProposalBase {
   /** Fonts this format names that are not installed here. Not an error. */
   missingFonts: string[];
   sourceChars: number;
+  /**
+   * What the conversion will produce, counted from the markdown at proposal
+   * time — the content half of the preflight the format half already had.
+   */
+  outline: DocxOutline;
 }
 
 /**
@@ -651,6 +671,7 @@ export type ToolId =
   | "list_files"
   | "read_file"
   | "read_slides"
+  | "inspect_html"
   | "search_text"
   | "read_memory"
   | "read_workflow"
@@ -923,6 +944,29 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
       return readSlidesFile(call.id, args.path, ctx.projectPath, args.start_slide);
     },
+  },
+
+  inspect_html: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "inspect_html",
+        description:
+          "Lay a project .html page out in a real browser and report what it MEASURED — the one way to check a page you cannot see. Writes nothing. Reports how the page divided into slides and on which selector, the slide size, any box that ends up outside its slide (and by how many pixels), slides that render empty, and pictures that failed to load. Call it after writing or revising a deck or a diagram, before export_pptx and before telling the author it is done: a heading that spills off slide 3 is invisible in the source and obvious here. Takes a few seconds — it waits for fonts and images.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path of the .html page to measure",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => inspectHtmlTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   search_text: {

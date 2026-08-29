@@ -138,8 +138,26 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * result the model is already reading" was the only affordable place to put any
  * of it — and it is the better place anyway, since the rule then arrives at the
  * moment it applies instead of thousands of tokens earlier.
+ *
+ * 15,337 with `inspect_html`: **+202**, cap 15,200 → 15,400. §5 was read first
+ * and again does not fit: what makes `lore_write` deferrable is a gate that
+ * makes those tools *fail* until it opens, so withholding them changes nothing
+ * about the model's path. `inspect_html` is the opposite — it is callable from
+ * round one and its entire value is being callable *early*, because it is the
+ * only thing in this loop that tells the model what its page actually became.
+ * Nor can it ride the pptx Beta: measuring a page is not exporting one, and the
+ * author who never turns PowerPoint export on is exactly the author whose
+ * diagrams nobody is checking.
+ *
+ * But note what this raise has run into, and do not raise past it again:
+ * `contextForecast.test.ts` now pins the fact that on a **32k local model** the
+ * assistant's schemas alone exceed the whole input ceiling (15.3k of 14k), so
+ * the knowledge base gets nothing. That is not a number to grow; it is the
+ * argument for narrowing the toolset per task — a `htmlArtifact` run needs
+ * neither the lore writers nor roleplay nor image generation, and would carry
+ * about a third of this. See docs/feature/agent/edit-loop-plan.md §8.
  */
-const AGENT_ASSIST_CAP = 15_200;
+const AGENT_ASSIST_CAP = 15_400;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */

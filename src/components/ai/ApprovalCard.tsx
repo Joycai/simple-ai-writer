@@ -311,6 +311,27 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
         <ArrowRight size={12} className={styles.moveArrow} />
         <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
       </div>
+
+      <div className={styles.pptxSplit}>
+        <span className={styles.pptxSlides}>
+          {t("ai.approval.pptxSlideCount", {
+            n: proposal.slides,
+            defaultValue: "{{n}} 张幻灯片",
+          })}
+        </span>
+        {/* 兜底那一支没有选择器可报，下面那句警告才是它要说的话。 */}
+        {!proposal.wholePage && <span className={styles.pptxTier}>{proposal.tier}</span>}
+      </div>
+
+      {proposal.wholePage && (
+        <div className={styles.pptxWarn}>
+          {t("ai.approval.pptxWholePage", {
+            defaultValue:
+              "页面里没有幻灯片分节，整页会压成一张。分页请用 <section class=\"slide\">。",
+          })}
+        </div>
+      )}
+
       <div className={styles.emptyNote}>{t("ai.approval.pptxNote")}</div>
     </>
   );
@@ -340,6 +361,42 @@ function DocxBody({ proposal }: { proposal: DocxProposal }) {
         <ArrowRight size={12} className={styles.moveArrow} />
         <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
       </div>
+
+      {/* 内容侧的预检。格式那一栏说的是「长什么样」，这一行说的是「有什么」——
+          一份作者以为写了三张表的报告在这里写着「表格 0」，是打开 Word 之前
+          唯一能发现它的地方。 */}
+      <div className={styles.docxOutline}>
+        <span>
+          {t("ai.approval.docxBlocks", { n: proposal.outline.blocks, defaultValue: "{{n}} 块" })}
+        </span>
+        {proposal.outline.headings > 0 && (
+          <span>
+            {t("ai.approval.docxHeadings", {
+              n: proposal.outline.headings,
+              defaultValue: "标题 {{n}}",
+            })}
+          </span>
+        )}
+        {proposal.outline.tables > 0 && (
+          <span>
+            {t("ai.approval.docxTables", { n: proposal.outline.tables, defaultValue: "表格 {{n}}" })}
+          </span>
+        )}
+        {proposal.outline.images > 0 && (
+          <span>
+            {t("ai.approval.docxImages", { n: proposal.outline.images, defaultValue: "图片 {{n}}" })}
+          </span>
+        )}
+      </div>
+
+      {proposal.outline.degraded.length > 0 && (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.docxWillDegrade", {
+            what: proposal.outline.degraded.join("、"),
+            defaultValue: "会落成简单形式：{{what}}",
+          })}
+        </div>
+      )}
 
       <div
         className={`${styles.docxOrigin} ${quiet ? "" : styles.docxOriginMarked} ${
