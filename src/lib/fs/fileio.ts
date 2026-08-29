@@ -47,6 +47,14 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/** Inverse of {@link toBase64} — for bytes a Rust command hands back in JSON. */
+export function fromBase64(text: string): Uint8Array {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 export async function makeDir(path: string): Promise<void> {
   return invoke("fs_create_dir", { path });
 }

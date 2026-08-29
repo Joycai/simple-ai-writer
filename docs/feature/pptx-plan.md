@@ -117,6 +117,8 @@ docx/xlsx/pdf 的转换器都在 `lib/import/`，因为它们只有导入这一�
 
 **未做**：`.pptx` 在编辑器里没有预览（点开仍是二进制），FileTree 没有专属图标，`@` 选择器不收 .pptx。这些是三期，取决于二期用下来是否真需要。
 
+**后续增补（2026-08-29）**：导入这条路（`pptx_to_markdown`）现在会抽取 deck 的光栅图片——`_[image: …]_` 占位变成指向 `assets/<文档名>/` 的真链接，字节作为 `PptxImport.assets` 随 IPC 回传。`read_slides` 的翻页路径**不受影响**（收集器传 `None`，占位符原样），D3「翻页时整份 deck 从不跨 IPC」不破。设计与取舍记在 `docs/feature/import-images-plan.md` §9。
+
 ## 4. 生成端：HTML → PPTX（已实施，Beta 开关）
 
 ### 4.1 起点：作者已经在用 HTML

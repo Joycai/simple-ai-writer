@@ -13,7 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { toBase64 } from "./fileio";
+import { fromBase64, toBase64 } from "./fileio";
 
 /**
  * Ceiling on a presentation handed to the whole-file converter.
@@ -41,14 +41,51 @@ export function isPptxPath(path: string): boolean {
   return /\.pptx$/i.test(path);
 }
 
-/** A whole presentation as markdown — the importer's path. */
-export async function pptxToMarkdown(data: Uint8Array): Promise<string> {
+/**
+ * One picture the converter pulled out of the deck — the shape of the
+ * importer's `ConvertedAsset`, declared here rather than imported because
+ * `lib/import` already depends on this module and a type is not worth the
+ * reversed edge.
+ */
+export interface PptxAsset {
+  name: string;
+  bytes: Uint8Array;
+}
+
+/** What a whole-file conversion yields: markdown plus its extracted pictures. */
+export interface PptxImport {
+  markdown: string;
+  assets: PptxAsset[];
+}
+
+/**
+ * A whole presentation as markdown — the importer's path.
+ *
+ * `assetRelDir` is the document-relative folder image links point at
+ * ("assets/<文档名>"); it is percent-encoded here, per path segment, so the
+ * links Rust embeds match the ones the PDF and docx converters write
+ * (`lib/image/assets.ts` convention) without re-implementing the encoding in
+ * Rust. Asset bytes ride back base64 and are decoded before they reach the
+ * import loop.
+ */
+export async function pptxToMarkdown(
+  data: Uint8Array,
+  assetRelDir: string,
+): Promise<PptxImport> {
   if (data.byteLength > MAX_PPTX_BYTES) {
     throw new Error(
       `Presentation is too large to import (max ${MAX_PPTX_BYTES / 1024 / 1024} MB)`,
     );
   }
-  return invoke<string>("pptx_to_markdown", { data: toBase64(data) });
+  const assetDir = assetRelDir.split("/").map(encodeURIComponent).join("/");
+  const result = await invoke<{
+    markdown: string;
+    assets: { name: string; data: string }[];
+  }>("pptx_to_markdown", { data: toBase64(data), assetDir });
+  return {
+    markdown: result.markdown,
+    assets: result.assets.map((a) => ({ name: a.name, bytes: fromBase64(a.data) })),
+  };
 }
 
 /**

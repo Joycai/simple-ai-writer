@@ -162,9 +162,10 @@ export interface ConvertResult {
  *
  * `assetRelDir` is the document-relative folder image links point at
  * ("assets/<group>") — computable before conversion because the import loop
- * fixes the target path first. The pdf and docx converters extract images;
- * xlsx and pptx return an empty asset list (pptx converts in Rust — its
- * extraction is a slice of its own, docs/feature/import-images-plan.md §2).
+ * fixes the target path first. The pdf, docx and pptx converters extract
+ * embedded raster images (pptx does it in Rust, the bytes ride the IPC reply);
+ * only xlsx returns an empty asset list — a workbook's pictures are floating
+ * decorations with no cell to anchor a link to.
  */
 export async function convertToMarkdown(
   ext: ConvertExt,
@@ -183,7 +184,7 @@ export async function convertToMarkdown(
       return pdfToMarkdown(data, assetRelDir);
     }
     case "pptx":
-      return { markdown: await pptxToMarkdown(data), assets: [] };
+      return pptxToMarkdown(data, assetRelDir);
   }
 }
 

@@ -710,7 +710,7 @@ The workspace is the **whole project directory** — documents live wherever the
 
 演示文稿是 zip 里的一堆 XML，模型拿到字节等于拿到噪声，所以解析在 Rust：`src-tauri/src/pptx.rs`，前端只有 `src/lib/fs/pptx.ts` 这一跳。两个入口共用一个转换函数：
 
-- **导入**（`pptx_to_markdown`，字节走 IPC）：`CONVERT_EXTENSIONS` 里的第四种，产物是 markdown 文件。这一步顺带把 `@` 引用、`search_text`、`read_file` 分页、RAG 全部打通——它们面对的已经是普通文本了。
+- **导入**（`pptx_to_markdown`，字节走 IPC）：`CONVERT_EXTENSIONS` 里的第四种，产物是 markdown 文件加 deck 里的光栅图片——media 部件在 Rust 侧抽出、base64 随 IPC 回传，`index.ts` 的导入循环落到 `assets/<文档名>/`，正文的 `_[image: …]_` 占位变成真链接（`docs/feature/import-images-plan.md` §9）。这一步顺带把 `@` 引用、`search_text`、`read_file` 分页、RAG 全部打通——它们面对的已经是普通文本了。
 - **Agent 直读**（`pptx_read_slides` → `read_slides` 工具，走**路径**+`FsScope::check`）：作者从外部拷进项目的 .pptx 不必先导入。分段在 Rust 侧按幻灯片切，整份 deck 从不跨 IPC；这也是为什么它不是"读字节再切"。
 
 设计上要记住的几条：
