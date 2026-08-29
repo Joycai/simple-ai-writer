@@ -104,6 +104,16 @@ describe("lore categories named in a tool description", () => {
     expect(text).not.toContain("skills");
   });
 
+  it("no schema still claims no tool creates categories — create_lore_category exists", () => {
+    // The pre-organizeTools wording survived in two parameter descriptions and
+    // sent the model to the author for something it can propose itself.
+    for (const def of getToolDefinitions(["create_lore_entity", "move_lore_entity"])) {
+      const text = def.function.description + JSON.stringify(def.function.parameters);
+      expect(text.toLowerCase()).not.toContain("no tool creates");
+      expect(text).toContain("create_lore_category");
+    }
+  });
+
   it("keeps the enum itself id-only — the label never becomes a wire value", () => {
     const [def] = getToolDefinitions(["create_lore_entity"]);
     const props = def.function.parameters.properties as Record<string, { enum?: string[] }>;

@@ -104,8 +104,11 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * 14,870 with the lore-plan category-target rewording (+51 on move_lore_entity,
  * −4 resident) and the category id(label) pairs in list_lore_entities'
  * description (+19 resident, zh worst case — the i18n mock pins zh-CN so this
- * file measures the expensive variant). Headroom 130: the next description
- * that grows here should check this number first.
+ * file measures the expensive variant). Then 14,861 (−9, resident unmoved)
+ * when the stale "No tool creates categories" sentences on create_lore_entity
+ * and move_lore_entity — written before create_lore_category existed — were
+ * replaced by shorter pointers to it. Headroom 139: the next description that
+ * grows here should check this number first.
  *
  * What the ratchet is still for is the thing it was always for — a NEW TOOL, or
  * a run of them, slipping in unpriced. At 15,000 that signal is weaker, so the
@@ -249,6 +252,9 @@ describe("tool schema budget", () => {
     }
   });
 });
+
+
+
 
 
 
