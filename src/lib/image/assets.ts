@@ -72,13 +72,22 @@ function shortHash(s: string): string {
 }
 
 /**
+ * The document-relative part of the asset folder ("assets/<group>") — what a
+ * markdown link starts with. The importer computes links with this before the
+ * document exists on disk.
+ */
+export function assetRelDirFor(docPath: string): string {
+  return `${ASSETS_DIR}/${safeAssetName(stemOf(docPath))}`;
+}
+
+/**
  * The folder holding one document's illustrations.
  *
  * Derived from the document's *name*, which is why moving or renaming a
  * document has to bring this along — see `moveDocumentAssets`.
  */
 export function assetDirFor(docPath: string): string {
-  return `${dirOf(docPath)}/${ASSETS_DIR}/${safeAssetName(stemOf(docPath))}`;
+  return `${dirOf(docPath)}/${assetRelDirFor(docPath)}`;
 }
 
 export interface SavedAsset {
