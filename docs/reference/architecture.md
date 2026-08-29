@@ -680,6 +680,7 @@ Because those targets are also imported statically elsewhere (components), the b
 ### File I/O
 - `src/lib/fs/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
 - All paths resolved via Tauri plugin (no raw fs access)
+- **Text encoding is guessed on read, converted on save** (`decode_text` in `src-tauri/src/commands.rs`): `fs_read_text_file` tries BOM → strict UTF-8 → chardetng (GBK/Shift_JIS/Big5/windows-125x…), so a file the author copied in from a Chinese-Windows machine opens instead of erroring. Order matters and each step's reason is on the function: BOM before the UTF-8 fast path (a UTF-8 BOM *is* valid UTF-8 and a surviving U+FEFF breaks frontmatter detection) and before the NUL check (UTF-16 is full of NULs); a NUL past that point means binary, which is **refused** rather than guessed — decoding a PNG "successfully" hands the editor garbage that the next save writes back over the image. Whatever the source encoding, the decoded string is UTF-8, so saving an edited file converts it to UTF-8 on disk — the write path never needs to know. The frontend's own GBK fallback in `lib/import/text.ts` predates this and stays: imports read bytes for other reasons and its pure form is what the tests pin.
 
 ### Organising files (sidebar)
 

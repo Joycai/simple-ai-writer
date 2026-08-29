@@ -78,6 +78,14 @@ quick-xml = "0.41"
 # Binary file writes cross the IPC boundary as base64 rather than a JSON array
 # of numbers — see `fs_write_binary_file`.
 base64 = "0.22"
+# Text-encoding guessing for `fs_read_text_file` (see `decode_text` in
+# commands.rs). A file the author drops into the workspace is as likely GBK
+# (Chinese Windows) or Shift_JIS as UTF-8; before this, anything non-UTF-8 was
+# a hard read error. chardetng is Firefox's detector, encoding_rs its decoder —
+# both already proven on exactly this problem, and encoding_rs is in the tree
+# transitively anyway.
+encoding_rs = "0.8"
+chardetng = "0.1"
 
 # instance.rs asks the OS whether a workspace lock's holder PID is still alive
 # (the advisory multi-open guard). std has no process-liveness call; both
