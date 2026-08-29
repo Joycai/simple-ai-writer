@@ -1,0 +1,121 @@
+/*
+ * 「删除分类」的确认面板。
+ *
+ * 几何和知识库墙上的「新建分类」是同一块板子（LoreWall.module.css 的 .modal*）——
+ * 建和删是同一处的一对动作，尺寸不一致只会显得是两个功能。自带一份而不是去 import
+ * 那个模块，是因为这块板子有第二个调用方（设置 → 工作台），而 LoreWall 的样式表
+ * 里装的是整面墙。
+ *
+ * 这里唯一多出来的语汇是**两个出口**：一条会搬走条目、一条不会，所以它们是两张
+ * 可选的卡而不是一个复选框——复选框会让「没勾」也成为一个默认后果。
+ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(42, 37, 32, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--lore-shadow-modal);
+  min-width: 440px;
+  max-width: 520px;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.header { display: flex; flex-direction: column; gap: 6px; }
+.eyebrow {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-sienna);
+  text-transform: uppercase;
+}
+.title {
+  font: 300 22px/1.1 var(--font-serif);
+  color: var(--color-text-primary);
+  letter-spacing: -0.012em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.body { display: flex; flex-direction: column; gap: 12px; }
+/* 影响面那一句。作者要数它，所以数字走等宽。 */
+.count { font: 400 13px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+.countNum { font: 500 13px/1 var(--font-mono); color: var(--color-text-primary); }
+
+/* ── 两个出口 ─────────────────────────────────────────────────────────── */
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.choice:hover { border-color: var(--color-border-strong); }
+.choiceOn { border-color: var(--color-sienna); background: var(--color-card); }
+.choiceHead { display: flex; align-items: center; gap: 8px; }
+.radio {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid var(--lore-neutral-line);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.radioOn { border-color: var(--color-sienna); }
+.radioDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-sienna); }
+.choiceName { font: 500 13px/1.2 var(--font-sans); color: var(--color-text-primary); }
+/* 后果写在选项里，而不是等作者点了才说。 */
+.choiceNote { font: italic 400 11px/1.5 var(--font-serif); color: var(--color-text-muted); padding-left: 19px; }
+
+.targets { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 0 19px; }
+.target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.targetOn { border-color: var(--color-sienna); color: var(--color-text-primary); }
+.targetDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+.error { font: 400 12px/1.5 var(--font-sans); color: var(--color-red, #b91c1c); }
+
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.btnSecondary {
+  padding: 8px 14px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+/* 删除是不可逆那一侧，所以按钮不是 sienna 而是红——全应用只有这一类动作用它。 */
+.btnDanger {
+  padding: 8px 14px;
+  background: var(--color-red, #b91c1c);
+  color: var(--color-card);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.btnDanger:disabled, .btnSecondary:disabled { opacity: 0.5; cursor: not-allowed; }

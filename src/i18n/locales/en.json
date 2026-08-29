@@ -228,9 +228,9 @@
       "disablePack": "Disable {{pack}}",
       "disabledHasData": "{{count}} category folder(s) still hold content — the entries stay visible and editable; re-enabling restores the category's name and type schema",
       "categoriesSection": "Custom knowledge-base categories",
-      "categoriesHint": "Define this project's own categories alongside what the enabled packs provide. Removing a category keeps its folder and entries on disk; add it back to see them again.",
+      "categoriesHint": "Define this project's own categories alongside what the enabled packs provide. Removing one asks where its entries should go first — none of them are ever deleted. Right-clicking a category on the knowledge-base wall opens the same dialog.",
       "addCategory": "Add",
-      "removeCategory": "Remove category (folder kept)",
+      "removeCategory": "Remove category…",
       "renameCategory": "Rename",
       "newCategoryPlaceholder": "New category name, e.g. Meeting notes"
     },
@@ -2258,6 +2258,24 @@
       "someHere": "{{n}} already here",
       "note": "A category is a folder on disk, so these entries move with it; [[lore:category/id]] citations re-point to the new location.",
       "failed": "These could not be moved: {{list}}"
+    },
+    "categoryDelete": {
+      "menu": "Delete category…",
+      "menuEmpty": "Move {{n}} out and empty…",
+      "menuFromPack": "From a capability pack — turn the pack off in Settings → Workspace",
+      "chipHint": "Right-click to manage this category",
+      "eyebrow": "Delete category",
+      "eyebrowEmpty": "Empty category",
+      "empty": "This category is empty. Removing it only drops the filter from the project.",
+      "count": "entries live here. A category is a folder on disk, so deleting it does not delete them — say where they go first.",
+      "moveLabel": "Move all {{n}} to…",
+      "moveNote": "Entries move into the target category's folder; [[lore:category/id]] citations re-point to the new location.",
+      "noTargets": "No other category to move into — create one first.",
+      "keepLabel": "Remove the category, keep the folder and entries",
+      "keepNote": "Nothing is deleted and the AI still reads them, but the category degrades to undeclared: its label becomes the folder name “{{id}}”, and nothing new can be created in it.",
+      "confirm": "Delete category",
+      "confirmEmpty": "Move out and empty",
+      "working": "Working…"
     },
     "run": {
       "generating": "Generating",
