@@ -29,7 +29,10 @@
  * 不需要模型自己开口要工具（`load_tools` 那条路被实测否掉了）。
  */
 
+import i18n from "../../i18n";
 import { sameCollection, type LoreEntity } from "../lore";
+import { loreCategories } from "../profile/active";
+import { categoryRef } from "../profile/model";
 import { checkPlan, type LorePlanAction } from "./plan";
 import type { LoreOrganizer, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
@@ -193,6 +196,27 @@ export async function createLoreCategoryTool(
 
   const label = String(args.label ?? "").trim();
   if (!label) return { toolCallId, content: "Error: 'label' is required — what the author will see this category called." };
+
+  // 查重先于方案门，且幂等成功而不是报错——同 manage_collection 的 create：报错只会
+  // 让模型换个名字重试，而《人物2》恰恰是最坏的结果。三路比对（id / labelZh /
+  // labelEn，忽略大小写），因为撞车的典型形态就是模型拿作者的中文说法当新分类名，
+  // 而那正是某个现有 id 的标签。只查已声明分类：label 撞上孤儿文件夹的场景不拦——
+  // 同名自定义分类会「收养」那个文件夹，正是停用包降级设计期望的迁出路径。
+  const key = label.toLowerCase();
+  const existing = loreCategories().find(
+    (c) =>
+      c.id.toLowerCase() === key ||
+      c.labelZh.trim().toLowerCase() === key ||
+      c.labelEn.trim().toLowerCase() === key,
+  );
+  if (existing) {
+    return {
+      toolCallId,
+      content:
+        `Category "${label}" already exists as ${categoryRef(existing, i18n.language === "zh-CN")} — nothing to create. ` +
+        `File entries into it with create_lore_entity / move_lore_entity, passing the id "${existing.id}".`,
+    };
+  }
 
   const g = gate(toolCallId, ctx, "create", label, "category");
   if ("refusal" in g) return g.refusal;

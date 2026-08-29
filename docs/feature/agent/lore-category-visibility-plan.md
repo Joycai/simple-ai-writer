@@ -1,8 +1,9 @@
 # Agent 建重复分类的修复：让模型看见分类全貌 + create_lore_category 查重
 
-> **状态：`planned`** —— 2026-08-29 定案，同日两次对照 main 更新（最终对照 56f374e，
-> 分类管理面**三片全部落地**，含 agent 方案卡的 category-target 轴），两片 PR 均未动工，
-> 动工时从最新 main 拉分支。起因是一次真实事故：作者让 agent「整理并归类小说类的知识库
+> **状态：`shipped`** —— 2026-08-29 定案（同日两次对照 main 更新，最终对照 56f374e——
+> 分类管理面三片全部落地，含 agent 方案卡的 category-target 轴），当日两片实现完毕：
+> PR-A（读侧对照 + 预算放宽）、PR-B（查重 + 文案纠偏），实现出入已回写各节。
+> 起因是一次真实事故：作者让 agent「整理并归类小说类的知识库
 > 条目」，它没有用小说包的 characters/world/… 分类，而是新建了一批中文标签、id 为 `kb-N`
 > 的自定义分类。分析结论：结构性问题，对**所有**能力包和自定义分类成立。
 > 相关：[`lore-category-manage-plan.md`](../lore/lore-category-manage-plan.md) —— 同一根轴的
@@ -92,11 +93,11 @@
    幂等而非报错，理由同 `manage_collection`：报错只会让模型换个名字重试，而换名字
    恰恰是最坏结果。只查已声明分类；label 撞上孤儿文件夹 id 的场景不拦——同名自定义
    分类会「收养」那个文件夹，这正是停用包降级设计里期望的迁出路径。
-2. **两处参数描述纠偏**（deferred 组，替换不加长）：
-   - `create_lore_entity.category`："No tool creates categories; a new one is the author's
-     act (Settings → 工作台 or the lore wall)." → "create_lore_category (plan-gated) adds
-     one only when none fits."
-   - `move_lore_entity.new_category` 同句同改。
+2. **两处参数描述纠偏**（deferred 组，替换后净缩 9 token——全集 14,870 → 14,861）：
+   - `create_lore_entity.category` → "must be one that already exists
+     (create_lore_category, plan-gated, adds one only when none fits)."
+   - `move_lore_entity.new_category` → "must exist (create_lore_category adds one only
+     when none fits)."
 3. **`ai.instructions.agent`**（zh-CN + en 两份）：「分类本身没有增删工具：需要新分类时，
    请作者在 设置 → 工作台 或{{kb}}墙上创建，不要往不存在的分类里写。」→
    「分类优先复用现有的——工具描述和 list_lore_entities 都给出分类 id 与作者所见名称的
