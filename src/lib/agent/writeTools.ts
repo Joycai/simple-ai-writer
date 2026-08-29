@@ -81,7 +81,7 @@ import {
   resolveRelativePath,
   resolveWorkspacePath,
 } from "../paths";
-import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
+import { allEntityNames, findEntityByName, headingIndex, type ToolResult } from "./tools";
 import { baseName, dirName } from "../paths";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
@@ -2035,6 +2035,35 @@ function reportDecision(
   };
 }
 
+/**
+ * The map of a file the model just created: how many lines it came to, and
+ * where its headings landed.
+ *
+ * A create is the one write whose content the model knows perfectly and whose
+ * *coordinates* it does not know at all. The next call is usually
+ * `append_file` (positionless, needs nothing) — but when it is `rewrite_lines`
+ * into the skeleton just written, the model has no line numbers, and the only
+ * way to get them is to read back a file it wrote itself. That read is a whole
+ * round of tool schema for text already in the conversation.
+ *
+ * Measured from the file rather than counted off the argument, for the same
+ * reason §4.3's shift is: a trailing newline has more than one place to be off
+ * by one, and being off by one here is silent. The index is `read_file`'s own,
+ * so a section is named the same way whether the model read the file or made
+ * it (edit-loop-plan.md §5.1).
+ */
+async function createdMap(path: string): Promise<string> {
+  let text: string;
+  try {
+    text = await readFile(path);
+  } catch {
+    return ""; // the file is written; not being able to describe it is not an error
+  }
+  const lines = countLines(text);
+  const index = headingIndex(text);
+  return ` It is ${lines} line${lines === 1 ? "" : "s"} long.` + (index ? `\n\n${index}` : "");
+}
+
 export async function createChapterTool(
   toolCallId: string,
   args: { path?: string; content?: string; reason?: string },
@@ -2073,7 +2102,8 @@ export async function createChapterTool(
     content: args.content,
     reason: args.reason?.trim() || undefined,
   });
-  return reportDecision(toolCallId, decision, `Created ${path}.`);
+  const done = `Created ${path}.` + (decision.approved ? await createdMap(path) : "");
+  return reportDecision(toolCallId, decision, done);
 }
 
 /**
@@ -2129,7 +2159,8 @@ export async function createFileTool(
     content: args.content,
     reason: args.reason?.trim() || undefined,
   });
-  return reportDecision(toolCallId, decision, `Created ${target.path}.`);
+  const done = `Created ${target.path}.` + (decision.approved ? await createdMap(target.path) : "");
+  return reportDecision(toolCallId, decision, done);
 }
 
 /** Create an empty folder — a volume, a materials directory, any grouping. */
