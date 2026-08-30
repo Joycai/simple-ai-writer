@@ -45,6 +45,11 @@ interface Props {
   position: { index: number; total: number } | null;
   /** Orphan category whose pack is disabled → neutral colours + one mono note. */
   degraded: boolean;
+  /**
+   * 「改完那节」的一次性淡染目标：`facet-<file>` 或 `index`（设计稿 16 屏 1d）。
+   * 由 LoreDetail 在保存回调里点名，超时自清。
+   */
+  flashId?: string | null;
 }
 
 /** TOC anchor ids: fixed tops + one per 面 + one per facet (sub-items). */
@@ -75,6 +80,7 @@ export function LoreReadView({
   next,
   position,
   degraded,
+  flashId = null,
 }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
@@ -106,11 +112,16 @@ export function LoreReadView({
     indexLoaded && !indexLoadFailed && !indexBody.trim() &&
     entity.facets.length === 0 && entity.images.length === 0;
 
-  // ── 档案头大图：缺 cover 字段，缺省取第一个配图组的第一张；一张都没有则不画 ──
+  // ── 档案头大图：作者指定的 cover 优先（指向的文件不在图库＝按缺席处理）；
+  //    缺省取第一个配图组的第一张；一张都没有则不画 ──
   const coverImg = useMemo(() => {
+    if (entity.cover) {
+      const hit = entity.images.find((i) => i.file === entity.cover);
+      if (hit) return hit;
+    }
     for (const sec of imgSections) if (sec.images.length > 0) return sec.images[0];
     return entity.images[0] ?? null;
-  }, [imgSections, entity.images]);
+  }, [entity.cover, imgSections, entity.images]);
   const coverUrl = coverImg ? imageDataUrls[coverImg.absPath] ?? null : null;
 
   // ── 页边目录的锚点列 ──
@@ -204,8 +215,12 @@ export function LoreReadView({
   );
   const editFacetTitle = t("lore.read.editSection", { defaultValue: "编辑这一节" });
 
-  /** mono 边注：注入方式 · 触发词 · 字数（读取失败时字数换成失败注记）。 */
-  const facetMetaLine = (f: LoreFacet, failed: boolean) => {
+  /**
+   * mono 边注的**顶层构件**：注入方式（触发词整段算一件）· 字数/失败注记
+   * （· 无所属面）。行内态 join(" · ")；宽态真边注一件一行——按字符串里的 ·
+   * 拆会把触发词「衣 · 装束 · 袖」从中间劈开。
+   */
+  const facetMetaParts = (f: LoreFacet, failed: boolean) => {
     const parts: string[] = [];
     if (f.mode === "always") {
       parts.push(t("lore.read.modeResident", { defaultValue: "常驻 · 每次都注入" }));
@@ -226,7 +241,7 @@ export function LoreReadView({
           }),
     );
     if (degraded && f.slot) parts.push(t("lore.read.noSlot", { defaultValue: "无所属面" }));
-    return parts.join(" · ");
+    return parts;
   };
 
   const MODE_MARK: Record<LoreFacet["mode"], string> = {
@@ -239,9 +254,21 @@ export function LoreReadView({
   const facetNode = (f: LoreFacet, opts?: { inGroup?: boolean; priorityTag?: "active" | "plain" }) => {
     const body = bodies?.get(f.file);
     const failed = bodies !== null && body === null;
+    const metaParts = facetMetaParts(f, failed);
     return (
-      <div key={f.file} className={`${s.sect} ${s.facetSect}`} ref={setAnchorEl(`facet-${f.file}`)}>
+      <div
+        key={f.file}
+        className={`${s.sect} ${s.facetSect} ${flashId === `facet-${f.file}` ? s.flash : ""}`}
+        ref={setAnchorEl(`facet-${f.file}`)}
+      >
         {editMark(() => onEditFacet(f.file), editFacetTitle)}
+        {/* ≥1400：同一串 mono 推到纸右页边成真边注（1c）——文字与常态完全一致，
+            只按 · 拆行换位置；显隐全在 CSS，两份只画一份 */}
+        <div className={s.metaSide} aria-hidden>
+          {metaParts.map((part, i) => (
+            <div key={i}>{part}</div>
+          ))}
+        </div>
         <div className={`${s.mark} ${opts?.inGroup ? s.markAuto : MODE_MARK[f.mode]}`} />
         <div className={s.facetTitleRow}>
           <span className={s.facetTitle}>{f.title}</span>
@@ -256,7 +283,7 @@ export function LoreReadView({
             </span>
           )}
         </div>
-        <div className={s.metaLine}>{facetMetaLine(f, failed)}</div>
+        <div className={`${s.metaLine} ${s.metaInline}`}>{metaParts.join(" · ")}</div>
         {failed ? (
           <div className={s.failedRow}>
             <span className={s.emptyNote}>
@@ -456,7 +483,10 @@ export function LoreReadView({
                 <>
                   {/* ===== 主条目 / 词表 ===== */}
                   {(indexBody.trim() || indexLoadFailed) && (
-                    <section className={`${s.sect} ${s.topSect}`} ref={setAnchorEl("index")}>
+                    <section
+                      className={`${s.sect} ${s.topSect} ${flashId === "index" ? s.flash : ""}`}
+                      ref={setAnchorEl("index")}
+                    >
                       {editMark(onEditEntity, editFacetTitle)}
                       <div className={s.faceHead}>
                         <span className={s.faceName}>

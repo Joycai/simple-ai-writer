@@ -12,6 +12,7 @@ import {
   type LoreImage,
   addLoreImage,
   buildFacetBlocks,
+  setEntityCover,
   assignableCategories,
   collectionViews,
   entityCollections,
@@ -175,6 +176,19 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // Lightbox state: which gallery image to show at full size (index into
   // entity.images), or null when the lightbox is closed.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  // 阅读模式「改完那节」的一次性淡染（设计稿 16 屏 1d）：保存回调点名要闪的
+  // 锚点，动画由 CSS 播一次，超时清掉以免模式切换回来时重播。管理台没有这个
+  // 记号，所以只在阅读态点亮。
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerFlash = (id: string) => {
+    if (useLoreStore.getState().detailMode !== "read") return;
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlashId(id);
+    flashTimer.current = setTimeout(() => setFlashId(null), 1500);
+  };
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   // Every close of the lightbox goes through the shell's animated close; the
   // fallback hard-close only runs if the ref is read before the shell mounts.
@@ -437,6 +451,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       replaceLocation(() => useLoreStore.getState().openDetail(moved.dirPath));
       setContent(dBody.trimStart());
       setEditing(false);
+      // 从阅读模式进的编辑，回去时同一记号：改过的主条目节淡染一次。
+      triggerFlash("index");
     } finally {
       setBusy(false);
     }
@@ -444,6 +460,19 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   const refresh = async () => {
     if (projectPath) await scanProject(projectPath);
+  };
+
+  // 设为 / 取消档案头图（设计稿 16 屏 1z/1f 的建议入口，落在 lightbox——
+  // 两种看法都从这里放大图片，一个入口两处可达）。同一张再点一次即取消。
+  const handleSetCover = async (file: string) => {
+    if (!projectPath || busy) return;
+    setBusy(true);
+    try {
+      await setEntityCover(entity, entity.cover === file ? null : file);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleAddImages = async (slot: string | null = null) => {
@@ -839,6 +868,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           file={facetModal.file}
           initialSlot={facetModal.slot ?? null}
           onClose={() => setFacetModal(null)}
+          onSaved={(file) => triggerFlash(`facet-${file}`)}
         />
       )}
       {showSplit && (
@@ -903,6 +933,15 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                       {(previewIndex ?? 0) + 1} / {entity.images.length}
                     </span>
                   )}
+                  <button
+                    className={styles.lightboxCoverBtn}
+                    onClick={() => void handleSetCover(previewImg.file)}
+                    disabled={busy}
+                  >
+                    {entity.cover === previewImg.file
+                      ? t("lore.read.unsetCover", { defaultValue: "取消档案头图" })
+                      : t("lore.read.setCover", { defaultValue: "设为档案头图" })}
+                  </button>
                 </div>
                 {previewImg.desc && <div className={styles.lightboxDesc}>{previewImg.desc}</div>}
               </figcaption>
@@ -1137,6 +1176,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           next={neighbors.next ? { name: neighbors.next.name, open: () => openDetail(neighbors.next!.dirPath) } : null}
           position={neighbors.index > 0 ? { index: neighbors.index, total: neighbors.total } : null}
           degraded={orphanPack !== null}
+          flashId={flashId}
         />
       ) : (<>
       {/* 屏 23 — the type came from a pack that is off. Muted, never an error

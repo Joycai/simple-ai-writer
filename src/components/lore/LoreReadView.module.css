@@ -156,6 +156,14 @@
 .sect { position: relative; transition: background var(--transition-fast); }
 .sect:hover { background: var(--lore-bind-bg); }
 
+/* 改完回到原位：被改那节 320ms 一次 tint → 透明的淡染（设计稿 1d）。
+   延迟 160ms 让位给弹窗/表单的收场动画；backwards 在延迟期先持住起色。 */
+@keyframes sectFlash {
+  from { background: var(--color-accent-tint); }
+  to   { background: transparent; }
+}
+.flash { animation: sectFlash 320ms var(--ease-out) 160ms backwards; }
+
 .editMark {
   position: absolute;
   top: 0;
@@ -388,10 +396,31 @@
   .toc { display: block; }
 }
 
-/* ── 宽态：图库 3 列 ────────────────────────────────────────────────── */
+/* ── 宽态 ≥1400：图库 3 列 + mono 边注推成纸右页边的真边注（1c/1f-1）──────
+   同一串文字按 · 拆行、只换位置；边注贴纸右沿（border-left 一道细线），
+   目录保持在更外侧右边——1f-1「目录在左」与 1d-2「目录在右」矛盾，取后者：
+   目录不随宽度跳边，边注「落在纸右侧页边栏」两屏说法一致。 */
+
+.metaSide { display: none; }
 
 @container (min-width: 1400px) {
   .imgGrid { grid-template-columns: 1fr 1fr 1fr; }
+  /* 纸右留出边注栏（74 内边距 + 14 间距 + 120 栏 ≈ 134），目录顺延其后 */
+  .paper { margin-right: 126px; }
+  .facetSect .metaInline { display: none; }
+  .metaSide {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: calc(100% + 88px); /* 段右沿 → 纸边 74 + 间距 14 */
+    width: 120px;
+    border-left: 1px solid var(--color-border-soft);
+    padding: 12px 0 4px 12px;
+    font: 400 10px/1.75 var(--font-mono);
+    color: var(--color-text-muted);
+  }
+  /* 组内的段窄 23px（9px 组边 + 14px gap），边注仍对齐纸边 */
+  .groupBody .metaSide { left: calc(100% + 111px); }
 }
 
 /* ── 窄态 ≤900：纸贴满（stage 左右各留 16）· padding 44/28 · 装订边 22 ── */

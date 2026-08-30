@@ -1089,3 +1089,16 @@
   font-weight: 500;
 }
 .modeBtnActive:hover { background: var(--color-accent-tint); }
+
+/* lightbox 里的「设为档案头图」（设计稿 16 · cover 指定入口） */
+.lightboxCoverBtn {
+  margin-left: 14px;
+  padding: 0 0 1px;
+  border: none;
+  background: none;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-strong);
+  cursor: pointer;
+}
+.lightboxCoverBtn:disabled { opacity: 0.5; cursor: default; }

@@ -119,6 +119,7 @@ async function readEntity(
   let summary = "";
   let dict = false;
   let collections: string[] = [];
+  let cover: string | null = null;
 
   const citeTargets: string[] = [];
   try {
@@ -139,6 +140,7 @@ async function readEntity(
     // is kept verbatim (only trimmed/deduped): a collection nothing declares is
     // still a real collection — see lib/lore/collections.
     collections = normalizeCollections(data.collections);
+    if (typeof data.cover === "string" && data.cover.trim()) cover = data.cover.trim();
   } catch {
     // index.md missing — entity still listed with defaults
   }
@@ -208,7 +210,7 @@ async function readEntity(
     return true;
   });
 
-  return { id, category, dirPath, name, aliases, summary, dict, collections, avatarPath, mdFiles, images, facets, refs };
+  return { id, category, dirPath, name, aliases, summary, dict, collections, cover, avatarPath, mdFiles, images, facets, refs };
 }
 
 /**
@@ -589,6 +591,8 @@ export function serializeEntityFrontmatter(meta: EntityMeta): string {
     // Only marked dictionaries carry the line — every other entity's
     // frontmatter stays exactly what it was before the field existed.
     ...(meta.dict ? ["dict: true"] : []),
+    // Same absence rule for the cover: no cover, no line.
+    ...(meta.cover ? [`cover: ${yamlQuote(meta.cover)}`] : []),
     // Same rule for collections: 未归集 writes no line at all, so an existing
     // knowledge base is byte-identical until the author actually files an entry.
     // Written as a JSON-quoted inline array so names with commas or brackets
@@ -623,7 +627,12 @@ export async function saveEntityMetaAndBody(
   // field every caller must remember to carry (the trap `dict` documents, with
   // six write sites to get wrong). Omitting it means "leave the filing alone";
   // clearing it is an explicit `[]`, which is distinguishable from undefined.
-  const filed: EntityMeta = { ...meta, collections: meta.collections ?? entity.collections };
+  // `cover` follows the same discipline: absent = keep, clearing is `null`.
+  const filed: EntityMeta = {
+    ...meta,
+    collections: meta.collections ?? entity.collections,
+    cover: meta.cover === undefined ? entity.cover ?? null : meta.cover,
+  };
   const content = serializeEntityFrontmatter(filed) + "\n" + body.trimStart();
   await writeFile(`${entity.dirPath}/index.md`, content);
 
@@ -664,6 +673,28 @@ export function isGalleryManifest(file: string): boolean {
 /** Read a specific file inside an entity directory. */
 export async function readEntityFile(dirPath: string, filename: string): Promise<string> {
   return readFile(`${dirPath}/${filename}`);
+}
+
+/**
+ * 设为 / 取消档案头图（lightbox 的入口）：只改 frontmatter 的 `cover`，正文
+ * 从磁盘上现读现留。经 `saveEntityMetaAndBody` 走会要求调用方手上有一份可信的
+ * 正文——lightbox 在管理台和阅读模式都能开，两处的正文加载状态不一样，这里
+ * 自己读一次反而是唯一总是对的做法。index.md 读不到时抛错而不是盲写：凭扫描时
+ * 的旧 meta 重造整份 frontmatter 会把读失败放大成数据丢失。
+ */
+export async function setEntityCover(entity: LoreEntity, cover: string | null): Promise<void> {
+  const raw = await readFile(`${entity.dirPath}/index.md`);
+  const body = parseFrontmatter(raw).content;
+  const meta: EntityMeta = {
+    name: entity.name,
+    aliases: entity.aliases,
+    category: entity.category,
+    summary: entity.summary,
+    dict: entity.dict,
+    collections: entity.collections,
+    cover,
+  };
+  await writeFile(`${entity.dirPath}/index.md`, serializeEntityFrontmatter(meta) + "\n" + body.trimStart());
 }
 
 /**
