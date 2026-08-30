@@ -271,6 +271,50 @@ describe("lore_write is withheld until a plan is approved", () => {
       .not.toContain("设定资料");
   });
 
+  /**
+   * The shrink must never land on 0: trimHistory reads a falsy ceiling as "no
+   * ceiling — don't trim", so a clamp to 0 would switch trimming OFF at the
+   * exact moment the schemas outgrew the window — unbounded history growth on
+   * precisely the smallest-window models. Floored at 1, those runs keep
+   * trimming maximally instead of not at all.
+   */
+  it("keeps trimming when the loaded group swallows the whole ceiling (floor at 1, not 0)", async () => {
+    const gate = createPlanGate();
+    const fat = "设定资料。".repeat(40);
+    const seed: AgentRuntimeOptions["messages"] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      { role: "assistant", content: null, tool_calls: [
+        { id: "old1", type: "function", function: { name: "list_lore_entities", arguments: "{}" } },
+      ] },
+      { role: "tool", tool_call_id: "old1", content: fat },
+    ];
+    const seedTokens = estimateMessagesTokens(seed);
+    const groupCost = toolTokensOf(partitionByGroup(PRESET.tools).deferred.lore_write);
+    // The premise: the ceiling fits round 1 whole, and the group's cost then
+    // swallows it entirely — the spot where Math.max(0, …) landed on exactly 0.
+    expect(seedTokens + 60).toBeLessThan(groupCost);
+
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      done,
+    ], () => {
+      gate.steps.push({ action: "create", entity: "Ava", detail: "新建" });
+    });
+    queueRound([{ text: "done" }, done]);
+    const opts = { ...makeOptions(gate), messages: seed };
+    opts.inputCeilingTokens = seedTokens + 60;
+
+    await runAgent(opts);
+
+    const trims = opts.events.filter(
+      (e): e is Extract<AgentEvent, { kind: "context-trimmed" }> => e.kind === "context-trimmed",
+    );
+    expect(trims.length).toBeGreaterThan(0);
+    expect(seed.find((m) => m.role === "tool" && m.tool_call_id === "old1")!.content)
+      .not.toContain("设定资料");
+  });
+
   it("reports the round's real tool cost, which grows with the load", async () => {
     const gate = createPlanGate();
     queueRound([

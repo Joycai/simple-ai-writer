@@ -20,11 +20,9 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
 
-/** Same, for the tool-pack dev switch and the orchestrator Beta. */
-const packDev = { on: false };
+/** Same, for the 助手工具包模式 (orchestrator) Beta. */
 const orchestratorBeta = { on: false };
 vi.mock("../packFlag", () => ({
-  isToolPackEnabled: () => packDev.on,
   isOrchestratorEnabled: () => orchestratorBeta.on,
 }));
 
@@ -533,54 +531,43 @@ describe("routeTools — run_pack", () => {
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
 
-  it("is absent while the dev flag is off, even for an opted-in surface", () => {
-    packDev.on = false;
+  it("is absent while the Beta is off, even for an opted-in surface", () => {
+    orchestratorBeta.on = false;
     expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
       .not.toContain("run_pack");
   });
 
-  it("is absent for a surface that did not opt in, even with the flag on", () => {
-    packDev.on = true;
+  it("is absent for a surface that did not opt in, even with the Beta on", () => {
+    orchestratorBeta.on = true;
     try {
       expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools)
         .not.toContain("run_pack");
-    } finally {
-      packDev.on = false;
-    }
-  });
-
-  it("is absent without a workspace — a pack has no material bus to run on", () => {
-    packDev.on = true;
-    try {
-      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, undefined, MODELS, { packs: true }).tools)
-        .not.toContain("run_pack");
-    } finally {
-      packDev.on = false;
-    }
-  });
-
-  it("is appended by the orchestrator Beta alone — the thin tier's only write path", () => {
-    // The two switches answer different questions (dev = A/B alongside the
-    // full toolset; Beta = the thin tier), but either must suffice: an
-    // orchestrator run without run_pack could read and never act.
-    orchestratorBeta.on = true;
-    try {
-      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
-        .toContain("run_pack");
     } finally {
       orchestratorBeta.on = false;
     }
   });
 
-  it("is appended when flag + opt-in + workspace all hold — planning view too", () => {
-    packDev.on = true;
+  it("is absent without a workspace — a pack has no material bus to run on", () => {
+    orchestratorBeta.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, undefined, MODELS, { packs: true }).tools)
+        .not.toContain("run_pack");
+    } finally {
+      orchestratorBeta.on = false;
+    }
+  });
+
+  it("is appended when Beta + opt-in + workspace all hold — planning view too", () => {
+    // The thin tier's ONLY write path: an orchestrator run without run_pack
+    // could read and never act.
+    orchestratorBeta.on = true;
     try {
       expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
         .toContain("run_pack");
       expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { packs: true }).tools)
         .toContain("run_pack");
     } finally {
-      packDev.on = false;
+      orchestratorBeta.on = false;
     }
   });
 });

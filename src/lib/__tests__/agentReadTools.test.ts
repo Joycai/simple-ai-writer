@@ -1107,3 +1107,55 @@ describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）
     expect(content).not.toContain("too large");
   });
 });
+
+describe("read_lore_entity — file 参数的路径包含", () => {
+  /**
+   * `file` 是模型控制的字符串，和写侧的 checkEntityFilename 走同一道门：任何能
+   * 导航的东西（'/'、'\'、'..'）在拼路径之前就拒绝。没有这道门，`../` 能把读
+   * 范围扩到整个项目根——包括 read_file/search_text 特意封死的 .ai-writer 内部。
+   */
+  const KAEL = "/proj/.ai-writer/lore/characters/kael";
+  const index = {
+    characters: [{
+      name: "Kael",
+      dirPath: KAEL,
+      mdFiles: ["index.md", "backstory.md"],
+      images: [],
+      facets: [{ file: "backstory.md", title: "背景", group: null }],
+    }],
+  } as never;
+
+  beforeEach(() => {
+    fs.set(KAEL + "/index.md", "A knight.");
+    fs.set(KAEL + "/backstory.md", "Orphaned young.");
+    // A resolving filesystem would serve this key for the traversal below —
+    // the gate must refuse before the path is ever built.
+    fs.set(KAEL + "/../../../tasks/t1/task.md", "SECRET TASK NOTES");
+  });
+
+  it("拒绝 ../ 穿越，机密一个字不过界", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false, "../../../tasks/t1/task.md");
+    expect(content).toContain("must be a plain .md filename");
+    expect(content).not.toContain("SECRET TASK NOTES");
+  });
+
+  it("拒绝反斜杠形式的穿越", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false, "..\\..\\project.md");
+    expect(content).toContain("must be a plain .md filename");
+  });
+
+  it("拒绝 ./images.md——图集拒读不吃前缀绕过", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false, "./images.md");
+    expect(content).toContain("must be a plain .md filename");
+  });
+
+  it("Images.md 也按图集拒读——装机盘是大小写不敏感的", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false, "Images.md");
+    expect(content).toContain("read_lore_image");
+  });
+
+  it("拒绝信息里列出这条条目真有的文件", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false, "../other.md");
+    expect(content).toContain("index.md, backstory.md");
+  });
+});

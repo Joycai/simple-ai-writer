@@ -15,7 +15,7 @@ import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
-import { collectionViews, entityCollections, imageSlotChecklistText, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
+import { collectionViews, entityCollections, imageSlotChecklistText, isGalleryManifest, isPlainEntityFilename, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { findCategory, loreCategories } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import {
@@ -371,7 +371,14 @@ async function readEntitySingleFile(
   canRewrite = false,
 ): Promise<ToolResult> {
   const wanted = file.trim();
-  if (wanted === "images.md") {
+  if (!isPlainEntityFilename(wanted)) {
+    const files = (found.mdFiles ?? []).filter((f) => !isGalleryManifest(f)).join(", ") || "index.md";
+    return {
+      toolCallId,
+      content: `Error: 'file' must be a plain .md filename inside the entity directory (no paths). Files on entity "${found.name}": ${files}.`,
+    };
+  }
+  if (isGalleryManifest(wanted)) {
     return {
       toolCallId,
       content:
@@ -382,7 +389,7 @@ async function readEntitySingleFile(
   try {
     raw = await readEntityFile(found.dirPath, wanted);
   } catch {
-    const files = (found.mdFiles ?? []).filter((f) => f !== "images.md").join(", ") || "index.md";
+    const files = (found.mdFiles ?? []).filter((f) => !isGalleryManifest(f)).join(", ") || "index.md";
     return {
       toolCallId,
       content: `Error: "${wanted}" does not exist on entity "${found.name}". Its files: ${files}.`,

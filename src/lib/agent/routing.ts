@@ -20,7 +20,7 @@ import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
-import { isOrchestratorEnabled, isToolPackEnabled } from "./packFlag";
+import { isOrchestratorEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -60,8 +60,8 @@ export interface RouteOptions {
    * May this surface dispatch tool packs (`run_pack`)? Opt-in like the others,
    * and for a structural reason on top of the usual one: a pack sub-run needs
    * the approval / plan channels *and* `selfConn` threaded through ToolContext,
-   * which only chat does today. The tool additionally hides behind the dev
-   * flag (`packFlag`) — tool-pack-plan.md slice 2 ships it dark.
+   * which only chat does today. The tool additionally hides behind the
+   * 助手工具包模式 Beta (`packFlag`) — off means absent.
    */
   packs?: boolean;
 }
@@ -189,13 +189,12 @@ function route(
   // Appended like `delegate`, and gated like a Beta: off means absent, not
   // refused. The workspace requirement is the delegate's, for the same reason
   // — a pack's materials arrive as note paths and its report lands as a note,
-  // so a surface without a workspace has no bus to run it on. Either switch
-  // suffices: the dev flag is the A/B form (full toolset + run_pack), the
-  // orchestrator Beta is the thin tier whose ONLY write path this is — an
-  // orchestrator run without run_pack could read and never act.
+  // so a surface without a workspace has no bus to run it on. The orchestrator
+  // Beta is the thin tier whose ONLY write path this is — an orchestrator run
+  // without run_pack could read and never act.
   if (
     options?.packs &&
-    (isToolPackEnabled() || isOrchestratorEnabled()) &&
+    isOrchestratorEnabled() &&
     hasWorkspace &&
     !tools.includes("run_pack")
   ) {

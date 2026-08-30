@@ -642,6 +642,25 @@ export async function saveEntityMetaAndBody(
   return { dirPath: newDir, category: meta.category, id: newId };
 }
 
+/**
+ * True when a model-supplied `file` argument is a plain .md filename that stays
+ * inside the entity directory — no separators, no `..`. Every tool that lets
+ * the model name an entity file (read or write) must gate on this before a
+ * path is built, or the argument becomes a traversal into the rest of the
+ * project.
+ */
+export function isPlainEntityFilename(file: string): boolean {
+  return /^[^/\\]+\.md$/.test(file) && !file.includes("..");
+}
+
+/**
+ * The gallery-manifest check, case-insensitive because the filesystems the app
+ * ships on (Windows, macOS) are — "Images.md" opens images.md there.
+ */
+export function isGalleryManifest(file: string): boolean {
+  return file.toLowerCase() === "images.md";
+}
+
 /** Read a specific file inside an entity directory. */
 export async function readEntityFile(dirPath: string, filename: string): Promise<string> {
   return readFile(`${dirPath}/${filename}`);

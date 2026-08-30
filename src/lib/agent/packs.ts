@@ -33,14 +33,13 @@ import type { StreamMessage } from "../ai/types";
 import { costFor, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
-import { CONTEXT_UTILIZATION_DEFAULT, inputCeilingFor } from "../context/budget";
+import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
 import { applyExportFlags } from "./routing";
 import { isOrchestratorEnabled } from "./packFlag";
-import { partitionByGroup } from "./registry";
 import type { ToolContext, ToolId } from "./registry";
 import { runAgent, type AgentRunResult } from "./runtime";
-import { toolTokensOf } from "./toolCost";
+import { messageCeilingForTools } from "./toolCost";
 import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { syncLore } from "./writeTools";
@@ -309,16 +308,15 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   ];
 
   const conn: AiConn = ctx.selfConn;
-  // The sub-run sizes its own message ceiling the way every surface does
-  // (toolCost.messageCeilingFor's subtraction, inlined here because the pack's
-  // toolset is already resolved): the window is the model's, the schema share
-  // is the pack's resident half — the runtime shrinks it further if the shared
+  // The sub-run sizes its own message ceiling the way every surface does —
+  // through the toolCost seam, on the already-resolved toolset (no routing, no
+  // handoff on a pack preset): the window is the model's, the schema share is
+  // the pack's resident half — the runtime shrinks it further if the shared
   // plan gate loads a deferred group mid-run.
-  const { resident } = partitionByGroup(preset.tools);
-  const inputCeilingTokens = Math.max(
-    0,
-    inputCeilingFor(conn.model.contextSize, ctx.contextUtilization ?? CONTEXT_UTILIZATION_DEFAULT) -
-      toolTokensOf(resident),
+  const inputCeilingTokens = messageCeilingForTools(
+    conn.model.contextSize,
+    ctx.contextUtilization ?? CONTEXT_UTILIZATION_DEFAULT,
+    preset.tools,
   );
 
   let output = "";
