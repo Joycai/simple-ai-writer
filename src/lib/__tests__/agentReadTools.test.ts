@@ -997,7 +997,7 @@ describe("read_lore_entity — 互斥组标注", () => {
     const { content } = await readLoreEntity("c1", "Kael", index, false);
     expect(content).toContain("=== outfit-armor.md === [group: outfit —");
     expect(content).toContain("=== outfit-casual.md === [group: outfit —");
-    expect(content).toContain("=== backstory.md ===\nOrphaned young.");
+    expect(content).toContain("=== backstory.md ===\n     1\tOrphaned young.");
     expect(content).not.toContain("=== index.md === [group");
   });
 
@@ -1005,5 +1005,79 @@ describe("read_lore_entity — 互斥组标注", () => {
     const { content } = await readLoreEntity("c1", "Kael", index, false);
     expect(content).toContain("Silver plate.");
     expect(content).toContain("Linen dress.");
+  });
+
+  it("行号契约的那句话跟在结果末尾——规则在它生效的地方到达", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    expect(content).toContain("line numbers count from the top of each FILE");
+  });
+});
+
+describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）", () => {
+  /**
+   * 在这一片之前，读一条条目 = 读它的全部：一个八特征的人物每次随手一查都要付
+   * 几万字符。上限之内维持整条返回（一轮拿到全部是省轮数的正形状）；超了才降级
+   * 成 index.md + 文件表，靠 `file` 参数按名点读。
+   */
+  const BIG = "/proj/.ai-writer/lore/characters/big";
+  const FAT = "线索。".repeat(4_000); // 12,000 chars — alone past the 10k cap
+  const index = {
+    characters: [{
+      name: "Big",
+      dirPath: BIG,
+      mdFiles: ["index.md", "history.md", "outfit.md"],
+      images: [],
+      facets: [
+        { file: "history.md", title: "过往", group: null },
+        { file: "outfit.md", title: "常服", group: "outfit" },
+      ],
+    }],
+  } as never;
+
+  beforeEach(() => {
+    fs.set(BIG + "/index.md", "# Big\n\n主角。");
+    fs.set(BIG + "/history.md", FAT);
+    fs.set(BIG + "/outfit.md", "素色长衫。");
+  });
+
+  it("超上限时给 index.md + 文件表，而不是全文", async () => {
+    const { content } = await readLoreEntity("c1", "Big", index, false);
+
+    expect(content).toContain("     3\t主角。"); // index.md still arrives, numbered
+    expect(content).toContain("too large to return whole");
+    expect(content).toContain('- history.md: "过往", 1 lines, 12000 chars');
+    expect(content).toContain('- outfit.md: "常服"');
+    expect(content).not.toContain("线索。线索。"); // the fat body itself stays out
+  });
+
+  it("file 参数点读一个文件，按 read_file 的同一套分页", async () => {
+    fs.set(BIG + "/history.md", Array.from({ length: 300 }, (_, i) => `第${i + 1}行线索。${"废".repeat(20)}`).join("\n"));
+
+    const first = await readLoreEntity("c1", "Big", index, false, "history.md");
+    expect(first.content).toContain("=== history.md ===");
+    expect(first.content).toContain("     1\t第1行线索。");
+    expect(first.content).toMatch(/lines 1-(\d+) of 300 shown/);
+    const next = Number(first.content.match(/pass start_line=(\d+) to continue/)![1]);
+
+    const second = await readLoreEntity("c1", "Big", index, false, "history.md", next);
+    expect(second.content).toContain(`${String(next).padStart(6)}\t第${next}行线索。`);
+  });
+
+  it("file 拼错时报出这条条目真有的文件", async () => {
+    const { content } = await readLoreEntity("c1", "Big", index, false, "histroy.md");
+    expect(content).toContain('"histroy.md" does not exist');
+    expect(content).toContain("index.md, history.md, outfit.md");
+  });
+
+  it("images.md 拒读——图集另有自己的通道", async () => {
+    const { content } = await readLoreEntity("c1", "Big", index, false, "images.md");
+    expect(content).toContain("read_lore_image");
+  });
+
+  it("小条目一个字都不降级——整条返回仍是常态", async () => {
+    fs.set(BIG + "/history.md", "短短的过往。");
+    const { content } = await readLoreEntity("c1", "Big", index, false);
+    expect(content).toContain("短短的过往。");
+    expect(content).not.toContain("too large");
   });
 });

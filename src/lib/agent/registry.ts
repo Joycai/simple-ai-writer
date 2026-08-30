@@ -79,6 +79,7 @@ import {
   createLoreFacetTool,
   appendLoreFileTool,
   editLoreFileTool,
+  rewriteLoreLinesTool,
   deleteChapterTool,
   deleteDirectoryTool,
   deleteLoreEntityTool,
@@ -683,6 +684,7 @@ export type ToolId =
   | "update_lore_meta"
   | "append_lore_file"
   | "edit_lore_file"
+  | "rewrite_lore_lines"
   | "update_facet_meta"
   | "delete_lore_file"
   | "add_lore_image"
@@ -771,13 +773,21 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_lore_entity",
         description:
-          "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
+          "Read a lore entity: its index.md and supplementary .md files, with per-file line numbers. A very large entry comes back as index.md plus a table of its other files — pass 'file' to read one of those (paged; 'start_line' continues). The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
         parameters: {
           type: "object",
           properties: {
             entity: {
               type: "string",
               description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "One .md filename inside the entity to read alone — for a facet of a large entry, or to continue past the page limit. Omit for the whole entity.",
+            },
+            start_line: {
+              type: "number",
+              description: "1-based line to start at, with 'file' only. Omit to read from the top.",
             },
           },
           required: ["entity"],
@@ -786,10 +796,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => {
       // `name` accepted as a fallback — the parameter's pre-1.28 spelling.
-      const args = JSON.parse(call.arguments || "{}") as { entity?: string; name?: string };
+      const args = JSON.parse(call.arguments || "{}") as {
+        entity?: string; name?: string; file?: string; start_line?: number;
+      };
       const entity = args.entity ?? args.name;
       if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
-      return readLoreEntity(call.id, entity, ctx.loreIndex, ctx.multimodal);
+      return readLoreEntity(call.id, entity, ctx.loreIndex, ctx.multimodal, args.file, args.start_line);
     },
   },
 
@@ -1432,6 +1444,43 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => editLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  rewrite_lore_lines: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "rewrite_lore_lines",
+        description:
+          "Replace a REGION of an entity's .md file, named by line numbers, with new text — what rewrite_lines is for the manuscript, this is for the knowledge base (applied immediately with a backup, once the approved lore plan covers it). This is how a LONG facet gets restructured without re-emitting the whole file: only the replacement is sent. Line numbers are the ones read_lore_entity shows — per file, frontmatter counted — but the frontmatter itself is off-limits (use update_lore_meta / update_facet_meta for metadata). Pass an empty 'content' to delete the lines. For one exact snippet use edit_lore_file instead.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "Filename inside the entity directory (default: index.md)",
+            },
+            start_line: {
+              type: "number",
+              description: "First line to replace (1-based, as read_lore_entity numbers them)",
+            },
+            end_line: { type: "number", description: "Last line to replace (inclusive)" },
+            content: {
+              type: "string",
+              description: "The new text for those lines; an empty string deletes them",
+            },
+          },
+          required: ["entity", "start_line", "end_line", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => rewriteLoreLinesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   update_facet_meta: {

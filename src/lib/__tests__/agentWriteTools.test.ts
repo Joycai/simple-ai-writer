@@ -103,7 +103,7 @@ const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
-  "update_lore_meta", "append_lore_file", "edit_lore_file",
+  "update_lore_meta", "append_lore_file", "edit_lore_file", "rewrite_lore_lines",
   "create_lore_facet", "update_facet_meta", "delete_lore_file",
   "add_lore_image", "update_lore_image", "delete_lore_image",
   "set_lore_avatar", "copy_lore_file", "move_lore_entity", "delete_lore_entity",
@@ -605,6 +605,92 @@ describe("edit_lore_file", () => {
       expect(res.content).toContain("read the entry again");
       expect(res.content).not.toContain("It now occupies");
     });
+  });
+});
+
+describe("rewrite_lore_lines", () => {
+  /**
+   * `rewrite_lines` for the knowledge base (edit-loop-plan.md §14 L3): a long
+   * facet gets restructured by naming a line region instead of re-emitting the
+   * whole file through update_lore_file. Coordinates are the file's own lines,
+   * frontmatter counted — the same ones read_lore_entity numbers and
+   * edit_lore_file's refusals report.
+   */
+  const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+  // Frontmatter is lines 1-4; the body starts at line 5 (blank), prose at 6-7.
+  const TWO_LINES = `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n黑色的披风。\n磨损的护腕。\n`;
+
+  beforeEach(() => {
+    fs.set(ARMOR, TWO_LINES);
+  });
+
+  it("rewrites the named region and hands back the applied receipt", async () => {
+    const ctx = makeCtx();
+    const res = await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 6, end_line: 6, content: "银色的披风。\n新配的胸甲。",
+    }, ctx);
+
+    expect(fs.get(ARMOR)).toBe(`---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n银色的披风。\n新配的胸甲。\n磨损的护腕。\n`);
+    expect(res.content).toContain("Rewrote lines 6-6");
+    // The receipt: new range, shift, and the applied region — what replaces
+    // the re-read (§4.3, same appliedReceipt as the manuscript side).
+    expect(res.content).toContain("It now occupies lines 6-7");
+    expect(res.content).toContain("+1 line(s)");
+    expect(res.content).toContain("     6\t银色的披风。");
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  // A line-range rewrite over YAML is how a facet silently stops being
+  // injected — the exact reason edit_lore_file matches the body only.
+  it("refuses a range that touches the frontmatter, and says where the body starts", async () => {
+    const ctx = makeCtx();
+    const res = await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 2, end_line: 6, content: "x",
+    }, ctx);
+
+    expect(res.content).toContain("lines 1-4 of armor.md are its frontmatter");
+    expect(res.content).toContain("body starts at line 5");
+    expect(fs.get(ARMOR)).toBe(TWO_LINES);
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  // The welding guard the manuscript tool has, for the same reason: the range
+  // carries its last line's terminator, and a replacement without one would
+  // run the next line onto this text.
+  it("restores the trailing newline the model omitted", async () => {
+    await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 6, end_line: 6, content: "银色的披风。",
+    }, makeCtx());
+
+    expect(fs.get(ARMOR)).toContain("银色的披风。\n磨损的护腕。");
+  });
+
+  it("deletes the lines when content is empty", async () => {
+    const res = await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 6, end_line: 7, content: "",
+    }, makeCtx());
+
+    expect(fs.get(ARMOR)).toBe(`---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n`);
+    expect(res.content).toContain("Those lines are gone");
+  });
+
+  it("refuses a range past the end, naming the file's real length", async () => {
+    const res = await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 99, end_line: 99, content: "x",
+    }, makeCtx());
+
+    expect(res.content).toContain("past the end");
+    expect(res.content).toContain("7 line(s)");
+  });
+
+  it("stays behind the plan gate like every other lore write", async () => {
+    const ctx = makeCtx({ lorePlan: createPlanGate() });
+    const res = await run("rewrite_lore_lines", {
+      entity: "Ava", file: "armor.md", start_line: 6, end_line: 6, content: "x",
+    }, ctx);
+
+    expect(res.content).toContain("Error");
+    expect(fs.get(ARMOR)).toBe(TWO_LINES);
   });
 });
 

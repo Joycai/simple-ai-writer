@@ -161,11 +161,73 @@ export function allEntityNames(loreIndex: LoreIndex): string {
  * gallery (previously: 5 images / ~35MB on one call, timing out — see the
  * 2026-07-31 trigger-keywords hang).
  */
+/**
+ * Total characters of entity text one call returns whole. Past it, the reply
+ * degrades to index.md plus a per-file table — the `file` parameter is how the
+ * rest is read, one file at a time, paged like `read_file`.
+ *
+ * Deliberately generous: everything-in-one-call is the round-efficient shape
+ * and most entities fit. What this cap exists for is the eight-facet character
+ * whose every casual lookup was paying tens of thousands of characters — the
+ * exact case edit-loop-plan.md §14 records.
+ */
+const ENTITY_MAX_CHARS = 10_000;
+
+/**
+ * Page `raw` by whole lines from `from`, under `READ_MAX_CHARS` — the same
+ * paging contract `read_file` keeps, shared here so "read the rest with
+ * start_line=N" means one thing in both tools.
+ */
+function pageLines(raw: string, from: number): {
+  body: string;
+  from: number;
+  to: number;
+  total: number;
+  notes: string[];
+} | { error: string } {
+  const lines = raw.split(/\r?\n/);
+  const start = Math.max(1, Math.floor(from));
+  if (start > lines.length) {
+    return { error: `start_line ${start} is past the end of the file, which has ${lines.length} line(s).` };
+  }
+  let taken = 0;
+  let chars = 0;
+  for (let i = start - 1; i < lines.length; i++) {
+    const cost = lines[i].length + 1;
+    if (taken > 0 && chars + cost > READ_MAX_CHARS) break;
+    chars += cost;
+    taken++;
+  }
+  const to = start + taken - 1;
+  let body = lines.slice(start - 1, to).join("\n");
+  const cutMidLine = body.length > READ_MAX_CHARS;
+  if (cutMidLine) body = body.slice(0, READ_MAX_CHARS);
+  const notes = [
+    start === 1 && to === lines.length && !cutMidLine
+      ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
+      : `lines ${start}-${to} of ${lines.length} shown`,
+  ];
+  if (cutMidLine) notes.push(`line ${start} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`);
+  if (to < lines.length) notes.push(`pass start_line=${to + 1} to continue`);
+  return { body: numberLines(body, start), from: start, to, total: lines.length, notes };
+}
+
+/**
+ * The one sentence that makes the numbers usable: they are the coordinates
+ * every lore tool on this side speaks (search_text's hits, edit_lore_file's
+ * refusals and receipts, rewrite_lore_lines' range).
+ */
+const LORE_GUTTER_NOTE =
+  "line numbers count from the top of each FILE, frontmatter included — they are what " +
+  "rewrite_lore_lines takes, and the number before each tab is never part of the content";
+
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
   multimodal: boolean,
+  file?: string,
+  startLine?: number,
 ): Promise<ToolResult> {
   const found = findEntityByName(loreIndex, name);
 
@@ -175,6 +237,8 @@ export async function readLoreEntity(
       content: `Entity "${name}" not found. Available: ${allEntityNames(loreIndex) || "none"}`,
     };
   }
+
+  if (file) return readEntitySingleFile(toolCallId, found, file, startLine);
 
   // Mutual-exclusion groups, from the scan. The injection path enforces them
   // (lib/context/loreSelect picks one member per group); this path cannot,
@@ -189,18 +253,55 @@ export async function readLoreEntity(
   }
 
   const filenames = found.mdFiles?.length ? found.mdFiles : ["index.md"];
-  const parts: string[] = [];
+  const contents = new Map<string, string>();
   for (const filename of filenames) {
     if (filename === "images.md") continue; // surfaced separately as the gallery block
     try {
-      const content = await readEntityFile(found.dirPath, filename);
-      const group = groupOf.get(filename);
-      const note = group
-        ? ` [group: ${group} — mutually exclusive with the other facets in this group; use only one of them in any single scene]`
-        : "";
-      parts.push(`=== ${filename} ===${note}\n${content}`);
+      contents.set(filename, await readEntityFile(found.dirPath, filename));
     } catch {
       // skip unreadable files silently
+    }
+  }
+
+  const groupNote = (filename: string): string => {
+    const group = groupOf.get(filename);
+    return group
+      ? ` [group: ${group} — mutually exclusive with the other facets in this group; use only one of them in any single scene]`
+      : "";
+  };
+
+  const parts: string[] = [];
+  const total = [...contents.values()].reduce((n, c) => n + c.length, 0);
+  if (total > ENTITY_MAX_CHARS) {
+    // Too much to hand over whole. index.md — the entry's core — still comes
+    // back (paged), and the facets become a table the model can read the way
+    // it reads a folder: pick the one file the task needs and ask for it by
+    // name. Without this shape an eight-facet character cost tens of thousands
+    // of characters on every casual lookup (edit-loop-plan.md §14), and the
+    // alternative shape — always one file per call — would cost a round per
+    // facet on the entities that DO fit, which is the wrong trade on this
+    // codebase's own metric (§1: a round is the expensive thing).
+    const index = contents.get("index.md");
+    if (index !== undefined) {
+      const page = pageLines(index, 1);
+      if (!("error" in page)) {
+        parts.push(`=== index.md ===\n${page.body}\n\n[... ${page.notes.join("; ")} ...]`);
+      }
+    }
+    const rows = [...contents.entries()]
+      .filter(([f]) => f !== "index.md")
+      .map(([f, c]) => {
+        const title = (found.facets ?? []).find((x) => x.file === f)?.title;
+        return `- ${f}: ${title ? `"${title}", ` : ""}${c.split(/\r?\n/).length} lines, ${c.length} chars${groupOf.get(f) ? ` [group: ${groupOf.get(f)}]` : ""}`;
+      });
+    parts.push(
+      `=== other files === (this entry is ${total} chars in all — too large to return whole; ` +
+        `call read_lore_entity(entity: "${found.name}", file: ...) for the one you need)\n` +
+        rows.join("\n"),
+    );
+  } else {
+    for (const [filename, content] of contents) {
+      parts.push(`=== ${filename} ===${groupNote(filename)}\n${numberLines(content, 1)}`);
     }
   }
 
@@ -239,7 +340,47 @@ export async function readLoreEntity(
   const imageChecklist = imageSlotChecklistText(found);
   if (imageChecklist) parts.push(`=== image slots ===\n${imageChecklist}`);
 
-  return { toolCallId, content: parts.join("\n\n") || "(no content)" };
+  if (parts.length === 0) return { toolCallId, content: "(no content)" };
+  return { toolCallId, content: `${parts.join("\n\n")}\n\n[... ${LORE_GUTTER_NOTE} ...]` };
+}
+
+/**
+ * One file of an entity, paged — how a big entry is read past the table, and
+ * how a targeted lookup skips paying for the facets it does not need.
+ */
+async function readEntitySingleFile(
+  toolCallId: string,
+  found: LoreEntity,
+  file: string,
+  startLine?: number,
+): Promise<ToolResult> {
+  const wanted = file.trim();
+  if (wanted === "images.md") {
+    return {
+      toolCallId,
+      content:
+        "Error: images.md is the gallery's manifest, not prose — the gallery is already listed in the entity view, and a specific picture is read with read_lore_image.",
+    };
+  }
+  let raw: string;
+  try {
+    raw = await readEntityFile(found.dirPath, wanted);
+  } catch {
+    const files = (found.mdFiles ?? []).filter((f) => f !== "images.md").join(", ") || "index.md";
+    return {
+      toolCallId,
+      content: `Error: "${wanted}" does not exist on entity "${found.name}". Its files: ${files}.`,
+    };
+  }
+  const page = pageLines(raw, startLine ?? 1);
+  if ("error" in page) return { toolCallId, content: `Error: ${page.error}` };
+  const group = (found.facets ?? []).find((f) => f.file === wanted)?.group;
+  const note = group ? ` [group: ${group}]` : "";
+  return {
+    toolCallId,
+    content:
+      `=== ${wanted} ===${note}\n${page.body}\n\n[... ${page.notes.join("; ")}; ${LORE_GUTTER_NOTE} ...]`,
+  };
 }
 
 /** Fetch one specific image from an entity's gallery (or its avatar) as
