@@ -8,7 +8,7 @@
  * functions in scrollSync.ts, where it is tested.
  */
 import type { EditorView } from "@codemirror/view";
-import { lineAtOffset, offsetAtLine, type LineAnchor, type ScrollMapping } from "./scrollSync";
+import { lineAtOffset, offsetAtLine, type AnchorSource, type ScrollMapping } from "./scrollSync";
 
 /**
  * Line mapping for the editor pane, backed by CodeMirror's block geometry.
@@ -48,44 +48,79 @@ export function editorScrollMap(view: EditorView): ScrollMapping {
  * Line mapping for the preview pane, backed by the `data-line` /
  * `data-line-end` attributes on its top-level blocks.
  *
- * Anchor *elements* are cached until the debounced rebuild replaces them
- * (checked by `isConnected`); their *positions* are measured fresh on every
- * call, because image decodes, mermaid renders and zoom changes all move
- * blocks without any DOM swap. Measuring through rects also means the
- * preview's CSS `zoom` needs no special handling — rects and scrollTop live in
- * the same, already-scaled coordinate space.
+ * Anchor *elements* (and their parsed line spans — nothing that needs layout)
+ * are cached until the debounced rebuild replaces them; their *positions* are
+ * still measured fresh on every query, because image decodes, mermaid renders
+ * and zoom changes all move blocks without any DOM swap — but lazily, through
+ * an {@link AnchorSource}, so only the O(log n) blocks the binary search
+ * probes pay a `getBoundingClientRect`. The eager version of this rebuilt the
+ * whole anchor array inside the scroll handler: a 2000-paragraph chapter paid
+ * ~2000 rect reads per scroll event for the ~11 that were consulted.
+ * Measuring through rects also means the preview's CSS `zoom` needs no
+ * special handling — rects and scrollTop live in the same, already-scaled
+ * coordinate space.
  */
 export function previewScrollMap(scroller: HTMLElement): ScrollMapping {
-  let els: HTMLElement[] = [];
-  const anchors = (): LineAnchor[] => {
-    if (els.length === 0 || !els[0].isConnected) {
-      els = [...scroller.querySelectorAll<HTMLElement>("[data-line]")];
+  /** The anchor elements with their line spans — the layout-free half. */
+  let blocks: { el: HTMLElement; line: number; endLine: number }[] = [];
+  /**
+   * Identity of the rendered document's first block (scroller > page > first
+   * child) at the last query. The debounced re-render swaps the page's
+   * innerHTML, so this reference changes on every rebuild — and stays `null`
+   * for an anchorless document, which is what the old `els.length === 0`
+   * re-query condition got wrong: it walked the whole subtree with
+   * `querySelectorAll` on every scroll event of such a document, forever.
+   * `undefined` = never queried.
+   */
+  let lastProbe: Element | null | undefined;
+
+  const refresh = () => {
+    const probe = scroller.firstElementChild?.firstElementChild ?? null;
+    const fresh =
+      lastProbe !== undefined &&
+      probe === lastProbe &&
+      (blocks.length === 0 || blocks[0].el.isConnected);
+    if (fresh) return;
+    lastProbe = probe;
+    blocks = [];
+    for (const el of scroller.querySelectorAll<HTMLElement>("[data-line]")) {
+      const line = Number(el.dataset.line);
+      if (!Number.isFinite(line)) continue;
+      const end = Number(el.dataset.lineEnd);
+      blocks.push({
+        el,
+        line,
+        endLine: Number.isFinite(end) && end > line ? end : line + 1,
+      });
     }
+  };
+
+  /** One query's lazy view — measured against this instant's origin. */
+  const source = (): AnchorSource | null => {
+    refresh();
+    if (blocks.length === 0) return null;
     // Content-space origin (where scrollTop 0 puts the viewport top), in
     // screen coordinates — subtracting it converts rects into offsets that
     // compare directly against scrollTop.
     const origin = scroller.getBoundingClientRect().top - scroller.scrollTop;
-    const out: LineAnchor[] = [];
-    for (const el of els) {
-      const line = Number(el.dataset.line);
-      if (!Number.isFinite(line)) continue;
-      const end = Number(el.dataset.lineEnd);
-      const rect = el.getBoundingClientRect();
-      out.push({
-        line,
-        endLine: Number.isFinite(end) && end > line ? end : line + 1,
-        top: rect.top - origin,
-        bottom: rect.bottom - origin,
-      });
-    }
-    return out;
+    return {
+      length: blocks.length,
+      at(i) {
+        const b = blocks[i];
+        const rect = b.el.getBoundingClientRect();
+        return { line: b.line, endLine: b.endLine, top: rect.top - origin, bottom: rect.bottom - origin };
+      },
+    };
   };
+
   return {
     lineAtTop() {
-      return lineAtOffset(anchors(), scroller.scrollTop);
+      const s = source();
+      return s ? lineAtOffset(s, scroller.scrollTop) : null;
     },
     scrollToLine(line) {
-      const y = offsetAtLine(anchors(), line);
+      const s = source();
+      const y = s ? offsetAtLine(s, line) : null;
       if (y === null) return false;
       scroller.scrollTop = y;
       return true;
