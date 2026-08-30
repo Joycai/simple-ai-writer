@@ -66,4 +66,18 @@ describe("serializeEntityFrontmatter / parseFrontmatter round-trip", () => {
     // stay byte-identical to what it was before the field existed.
     expect(serializeEntityFrontmatter(plain)).not.toContain("dict");
   });
+
+  it("cover round-trips; entities without one don't carry the line at all", () => {
+    const withCover: EntityMeta = {
+      name: "沈知微", aliases: [], category: "characters", summary: "",
+      cover: "portrait-sheet.png",
+    };
+    expect(roundTrip(withCover).cover).toBe("portrait-sheet.png");
+
+    // Same absence rule as dict/collections: no cover, no line — and an
+    // explicit null (the "取消档案头图" path) writes nothing either.
+    const plain: EntityMeta = { name: "Ava", aliases: [], category: "characters", summary: "" };
+    expect(serializeEntityFrontmatter(plain)).not.toContain("cover");
+    expect(serializeEntityFrontmatter({ ...plain, cover: null })).not.toContain("cover");
+  });
 });

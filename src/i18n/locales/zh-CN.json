@@ -1966,7 +1966,9 @@
       "degradedAction": "去管理台处理",
       "emptyInvite": "这一条目前只有这一句。去管理台写正文，或添一条特征。",
       "emptyAction": "去管理台 →",
-      "editSection": "编辑这一节"
+      "editSection": "编辑这一节",
+      "setCover": "设为档案头图",
+      "unsetCover": "取消档案头图"
     },
     "wallStats": "{{n}} 条 · {{r}} 关系",
     "wallNoMatch": "未找到匹配的{{entry}}",

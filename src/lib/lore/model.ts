@@ -119,6 +119,13 @@ export interface LoreEntity {
    * 和 `dict` 一样是显式的作者开关，不是从名字或分类猜出来的。
    */
   collections: string[];
+  /**
+   * 阅读模式档案头大图指向的图库文件名，frontmatter `cover`（设计稿 16 屏
+   * 1z/1f 的「主图」）。作者在 lightbox 里显式指定；缺席时阅读模式取第一个
+   * 配图组的第一张。指向的文件不在图库里时按缺席处理——图删了封面就静默退回
+   * 缺省，绝不报错。展示专用：注入路径一个字都不读它。
+   */
+  cover?: string | null;
   mdFiles: string[];   // list of *.md filenames in the folder
   /** Parsed from images.md (each `## filename` heading + following paragraph). */
   images: LoreImage[];
@@ -217,4 +224,9 @@ export interface EntityMeta {
    * 传 `[]`，那和 undefined 是分得开的。
    */
   collections?: string[];
+  /**
+   * 档案头大图（见 `LoreEntity.cover`）。同 `collections` 的纪律：**缺席即
+   * 「保持原样」**（`saveEntityMetaAndBody` 补默认值），清除是显式的 `null`。
+   */
+  cover?: string | null;
 }

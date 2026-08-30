@@ -49,6 +49,12 @@ interface Props {
    */
   initialSlot?: string | null;
   onClose: () => void;
+  /**
+   * Fires after a successful save (with the saved/created file name), before
+   * the modal closes — the read mode uses it to flash the edited section
+   * (设计稿 16 屏 1d). Cancel/close never fires it.
+   */
+  onSaved?: (file: string) => void;
 }
 
 /** Which fields a slot's defaults filled, for the 预填 badges (屏 21). */
@@ -58,7 +64,7 @@ const NO_PREFILL: Prefilled = { mode: false, keys: false, group: false, priority
 /** The three injection modes, in the mockup's order, with their explanations. */
 const MODES: FacetMeta["mode"][] = ["auto", "always", "manual"];
 
-export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Props) {
+export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSaved }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
@@ -227,12 +233,14 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
         priority: Number.isFinite(priority) ? priority : 0,
         mode,
       };
+      let savedFile = file;
       if (file) {
         await saveFacetFile(entity.dirPath, file, meta, body);
       } else {
-        await createFacetFile(entity.dirPath, meta, body);
+        savedFile = await createFacetFile(entity.dirPath, meta, body);
       }
       await scanProject(projectPath);
+      if (savedFile) onSaved?.(savedFile);
       requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

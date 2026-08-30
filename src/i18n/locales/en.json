@@ -1971,7 +1971,9 @@
       "degradedAction": "Handle in Manage",
       "emptyInvite": "This entry has only this line so far. Write the body or add a facet in Manage.",
       "emptyAction": "Go to Manage →",
-      "editSection": "Edit this section"
+      "editSection": "Edit this section",
+      "setCover": "Use as header image",
+      "unsetCover": "Remove header image"
     },
     "wallStats": "{{n}} {{entries}} · {{r}} links",
     "wallNoMatch": "No matching {{entry}}",
