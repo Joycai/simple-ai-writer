@@ -1115,6 +1115,10 @@
       "instruction": "Write the overall digest of this set of documents, within 300 words."
     },
     "agent": {
+      "progress": {
+        "search": "{{done}}/{{total}} files",
+        "searchHits": "{{done}}/{{total}} files · {{hits}} hits"
+      },
       "log": {
         "title": "Execution Log",
         "countTools": "{{count}} tool calls",

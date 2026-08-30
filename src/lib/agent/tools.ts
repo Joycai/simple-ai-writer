@@ -28,6 +28,8 @@ import {
 import { extractHeadings } from "../fs/markdown";
 import { readDirRecursive, type FileNode } from "../project";
 import { numberLines } from "./lineEcho";
+import type { ToolProgress } from "./events";
+import i18n from "../../i18n";
 
 export interface ToolCall {
   id: string;
@@ -830,6 +832,76 @@ function isSearchableFile(name: string): boolean {
   return isChapterFile(name) || isHtmlPath(name);
 }
 
+/**
+ * The knowledge-base files one search will read, in the order it reads them.
+ *
+ * Split out from the scan so the **denominator exists before the first await**:
+ * a progress line that starts counting without knowing what it is counting
+ * towards answers the wrong half of the question. Walking the index is free —
+ * it is already in memory; only the file reads are not.
+ */
+function scopedLoreFiles(
+  loreIndex: LoreIndex,
+  loreScope: string | null,
+): { dirPath: string; name: string; filename: string }[] {
+  const out: { dirPath: string; name: string; filename: string }[] = [];
+  for (const entities of Object.values(scopeLoreIndex(loreIndex, loreScope))) {
+    for (const e of entities) {
+      for (const filename of e.mdFiles?.length ? e.mdFiles : ["index.md"]) {
+        if (filename === "images.md") continue; // a gallery manifest, not prose
+        out.push({ dirPath: e.dirPath, name: e.name, filename });
+      }
+    }
+  }
+  return out;
+}
+
+/** How often a long-running read tool may repaint its row. */
+const PROGRESS_EVERY_MS = 150;
+
+/**
+ * A progress reporter that fires at most every `everyMs`.
+ *
+ * Time, not a count, and the clock starts now: a search over a 300-chapter
+ * project is 350 sequential reads, and reporting each one would be 350 store
+ * writes for a row that can only ever show the last of them. Starting the clock
+ * at construction also means a search that finishes inside one period — nearly
+ * all of them — reports **nothing at all**, so the log stays as quiet as the
+ * wait was short, with no threshold constant to guess at.
+ *
+ * The label is built by a thunk so the string is composed only when it is
+ * actually going to be shown.
+ */
+function throttledProgress(
+  onProgress: ((p: ToolProgress) => void) | undefined,
+  everyMs: number,
+): (make: () => ToolProgress) => void {
+  if (!onProgress) return () => {};
+  let last = Date.now();
+  return (make) => {
+    const now = Date.now();
+    if (now - last < everyMs) return;
+    last = now;
+    onProgress(make());
+  };
+}
+
+/** One search's progress line. Shown to the author, so it is translated. */
+function searchProgress(done: number, total: number, hits: number): ToolProgress {
+  return {
+    label: hits
+      ? i18n.t("ai.agent.progress.searchHits", {
+          defaultValue: "{{done}}/{{total}} 个文件 · 命中 {{hits}} 处",
+          done, total, hits,
+        })
+      : i18n.t("ai.agent.progress.search", {
+          defaultValue: "{{done}}/{{total}} 个文件",
+          done, total,
+        }),
+    ratio: total ? done / total : undefined,
+  };
+}
+
 /** Searchable files under a recursively-listed tree, depth-first. */
 function collectChapterFiles(nodes: FileNode[], out: string[]): void {
   for (const n of nodes) {
@@ -883,14 +955,29 @@ function snippetAround(line: string, at: number, matchLen: number): string {
  * thing the fence narrows, so the out-of-scope count is reported instead of
  * the entries themselves (lib/lore/collections).
  */
+/**
+ * Everything `search_text` needs beyond the query.
+ *
+ * An object rather than four more positional parameters: the tail of that list
+ * was already `folder?, loreIndex?, loreScope?` and a call site passing them in
+ * the wrong order still type-checks against `string | undefined`.
+ */
+export interface SearchOptions {
+  /** Narrow to one manuscript subtree — which also skips the knowledge base. */
+  folder?: string;
+  loreIndex?: LoreIndex;
+  loreScope?: string | null;
+  /** `ToolContext.onProgress` — see `throttledProgress` for the rate. */
+  onProgress?: (p: ToolProgress) => void;
+}
+
 export async function searchWritingFiles(
   toolCallId: string,
   projectPath: string,
   query: string,
-  folder?: string,
-  loreIndex?: LoreIndex,
-  loreScope?: string | null,
+  opts: SearchOptions = {},
 ): Promise<ToolResult> {
+  const { folder, loreIndex, loreScope } = opts;
   const q = (query ?? "").trim();
   if (!q) return { toolCallId, content: "Error: 'query' argument is required." };
 
@@ -913,39 +1000,47 @@ export async function searchWritingFiles(
   const scope = folder || "the project folder";
   const needle = q.toLowerCase();
 
+  // `folder` narrows to a manuscript subtree, and asking for one subtree is
+  // asking for that subtree only — so it skips the knowledge base rather than
+  // silently ignoring the narrowing on one of the two sides.
+  const scanLore = !!loreIndex && !folder;
+  // Listed before either side is read, because the denominator has to exist
+  // before the first `await` for the progress line to mean anything. Walking
+  // the index costs nothing — it is already in memory.
+  const loreFiles = scanLore ? scopedLoreFiles(loreIndex!, loreScope ?? null) : [];
+
   const docs = emptySection();
+  const lore = emptySection();
+  const total = files.length + loreFiles.length;
+  const report = throttledProgress(opts.onProgress, PROGRESS_EVERY_MS);
+  let done = 0;
+  const tick = () => {
+    done++;
+    report(() => searchProgress(done, total, docs.total + lore.total));
+  };
+
   for (const path of files) {
     let text: string;
     try {
       text = await readFile(path);
     } catch {
+      tick();
       continue; // unreadable file — skip rather than fail the whole search
     }
     scanText(docs, path, text, needle, SEARCH_MAX_PER_FILE, SEARCH_MAX_HITS);
+    tick();
   }
 
-  // `folder` narrows to a manuscript subtree, and asking for one subtree is
-  // asking for that subtree only — so it skips the knowledge base rather than
-  // silently ignoring the narrowing on one of the two sides.
-  const scanLore = !!loreIndex && !folder;
-  const lore = emptySection();
-  if (scanLore) {
-    const scoped = scopeLoreIndex(loreIndex!, loreScope ?? null);
-    for (const entities of Object.values(scoped)) {
-      for (const e of entities) {
-        const filenames = e.mdFiles?.length ? e.mdFiles : ["index.md"];
-        for (const filename of filenames) {
-          if (filename === "images.md") continue; // a gallery manifest, not prose
-          let text: string;
-          try {
-            text = await readEntityFile(e.dirPath, filename);
-          } catch {
-            continue;
-          }
-          scanText(lore, `${e.name} · ${filename}`, text, needle, LORE_MAX_PER_FILE, LORE_MAX_HITS);
-        }
-      }
+  for (const f of loreFiles) {
+    let text: string;
+    try {
+      text = await readEntityFile(f.dirPath, f.filename);
+    } catch {
+      tick();
+      continue;
     }
+    scanText(lore, `${f.name} · ${f.filename}`, text, needle, LORE_MAX_PER_FILE, LORE_MAX_HITS);
+    tick();
   }
 
   const hidden = scanLore ? outOfScopeCount(loreIndex!, loreScope ?? null) : 0;
