@@ -117,6 +117,41 @@ describe("PREF_KEYS covers what the source actually stores", () => {
     expect(used.size).toBeGreaterThan(0); // the scan itself still works
     expect([...used].filter((k) => !prefs.isPrefKey(k)).sort()).toEqual([]);
   });
+
+  /**
+   * The literal-call scan above has a blind spot the codebase's own house style
+   * walks straight into: every flag module writes `const KEY = "app:…"` and
+   * calls `readPref(KEY)` — no literal ever reaches the call site. That is
+   * exactly how `app:toolPackDev` / `app:toolPackOrchestratorBeta` shipped
+   * unregistered and got silently dropped by config-backup restore (and how
+   * `ai:translate:linesPerChunk` sat unregistered for a whole release). So scan
+   * the *literals themselves*: any owned-prefix string in source is either a
+   * registered key or a declared per-project family prefix.
+   */
+  it("has an entry for every owned-prefix string literal — const-indirected keys included", () => {
+    const sources = import.meta.glob("../../**/*.{ts,tsx}", {
+      query: "?raw",
+      import: "default",
+      eager: true,
+    }) as Record<string, string>;
+
+    const found = new Set<string>();
+    // Double/single quotes only: backtick-wrapped mentions in comments (markdown
+    // style) and template literals with interpolation are not key declarations.
+    const pattern = /["']((?:app|ai|manuscript):[A-Za-z0-9:_-]+)["']/g;
+    for (const [path, source] of Object.entries(sources)) {
+      if (path.includes("__tests__")) continue;
+      for (const m of source.matchAll(pattern)) found.add(m[1]);
+    }
+
+    expect(found.size).toBeGreaterThan(30); // the scan itself still works
+    const strays = [...found].filter((k) =>
+      k.endsWith(":")
+        ? !prefs.PREF_KEY_PREFIXES.includes(k as never) // a family declares its prefix
+        : !prefs.isPrefKey(k),
+    );
+    expect(strays.sort()).toEqual([]);
+  });
 });
 
 describe("before hydration", () => {
