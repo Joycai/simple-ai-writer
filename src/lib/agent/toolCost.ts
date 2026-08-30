@@ -103,6 +103,20 @@ export function plannedToolTokens(
 }
 
 /**
+ * The subtraction itself, floored at 1 — never 0. `trimHistory` and the
+ * runtime's checkpoint nudge both read a falsy ceiling as "no ceiling, don't
+ * trim", so letting the clamp land on 0 would switch trimming OFF at exactly
+ * the moment the schemas outgrew the window — the silent-overflow mode this
+ * module exists to prevent, on precisely the smallest-window models. 1 means
+ * "trim to almost nothing", which is the honest instruction for that state
+ * (the run is pathological either way; the pre-flight gate is where that
+ * surfaces, not here).
+ */
+function flooredCeiling(ceiling: number, toolTokens: number): number {
+  return Math.max(1, ceiling - toolTokens);
+}
+
+/**
  * The ceiling a run's **messages** must fit under: the input ceiling minus the
  * tool schemas.
  *
@@ -123,7 +137,23 @@ export function messageCeilingFor(
   options?: RouteOptions,
 ): number {
   const ceiling = inputCeilingFor(contextSize, utilization);
-  return Math.max(0, ceiling - plannedToolTokens(preset, subs, models, options));
+  return flooredCeiling(ceiling, plannedToolTokens(preset, subs, models, options));
+}
+
+/**
+ * The same subtraction for a toolset that is **already resolved** — a pack
+ * sub-run hands `runAgent` its preset verbatim, with no routing and no
+ * handoff, so `messageCeilingFor` (which measures the *routed* toolset) would
+ * price a request that sub-run never sends. Same resident-only accounting,
+ * same floor; only the toolset's provenance differs.
+ */
+export function messageCeilingForTools(
+  contextSize: number | undefined,
+  utilization: number,
+  tools: readonly ToolId[],
+): number {
+  const { resident } = partitionByGroup(tools);
+  return flooredCeiling(inputCeilingFor(contextSize, utilization), toolTokensOf(resident));
 }
 
 /** Test seam — the memo is keyed on live profile state. */

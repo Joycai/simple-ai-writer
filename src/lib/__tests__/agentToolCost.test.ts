@@ -31,6 +31,7 @@ vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 import {
   __resetToolCostCache,
   messageCeilingFor,
+  messageCeilingForTools,
   plannedToolTokens,
   toolTokensOf,
 } from "../agent/toolCost";
@@ -119,11 +120,36 @@ describe("messageCeilingFor", () => {
       .toBe(50_000 - tools);
   });
 
-  it("never goes negative on a window smaller than the toolset", () => {
-    expect(messageCeilingFor(1_000, 0.5, AGENT_ASSIST_PRESET, NO_SUBS, [])).toBe(0);
+  /**
+   * Floored at 1, never 0: trimHistory (and the runtime's checkpoint nudge)
+   * read a falsy ceiling as "no ceiling — don't trim", so a clamp to 0 would
+   * switch trimming OFF on exactly the windows too small to afford it.
+   */
+  it("floors at 1 on a window smaller than the toolset — 0 would read as 'no ceiling'", () => {
+    expect(messageCeilingFor(1_000, 0.5, AGENT_ASSIST_PRESET, NO_SUBS, [])).toBe(1);
   });
 
   it("leaves a toolless run's ceiling untouched", () => {
     expect(messageCeilingFor(100_000, 0.5, null, NO_SUBS, [])).toBe(50_000);
+  });
+});
+
+describe("messageCeilingForTools", () => {
+  it("prices the resolved toolset's resident half — what a pack sub-run puts on the wire", () => {
+    const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
+    expect(messageCeilingForTools(100_000, 0.5, AGENT_ASSIST_PRESET.tools))
+      .toBe(50_000 - toolTokensOf(resident));
+  });
+
+  it("skips routing — an unrouted toolset costs more than the routed plan", () => {
+    // messageCeilingFor measures the routed set (subagent strips, Beta
+    // filters); the pack path sends its preset verbatim, so its ceiling must
+    // be lower, not equal.
+    expect(messageCeilingForTools(100_000, 0.5, AGENT_ASSIST_PRESET.tools))
+      .toBeLessThan(messageCeilingFor(100_000, 0.5, AGENT_ASSIST_PRESET, NO_SUBS, []));
+  });
+
+  it("shares the floor of 1", () => {
+    expect(messageCeilingForTools(1_000, 0.5, AGENT_ASSIST_PRESET.tools)).toBe(1);
   });
 });
