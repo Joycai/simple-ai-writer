@@ -532,6 +532,16 @@ export interface ToolContext {
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
+   * The tools this run may actually call — filled in by `executeRegisteredTool`
+   * from its own `allowed` list, never by callers. Read-side handlers use it to
+   * keep their result trailers honest: `read_lore_entity`'s gutter note names
+   * `rewrite_lore_lines` only when the running toolset holds it, because on the
+   * eight presets that don't, a note advertising the tool steers the model into
+   * an unknown-tool round (and on the assist preset the tool is deferred — it
+   * genuinely isn't callable until a plan loads its group).
+   */
+  allowedTools?: readonly ToolId[];
+  /**
    * Called after a write-auto tool changed lore on disk: rescan loreStore so
    * the UI reflects the agent's edit immediately, and **return the fresh
    * index** so the run's snapshot can be brought back in line with it (see
@@ -822,7 +832,10 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       };
       const entity = args.entity ?? args.name;
       if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
-      return readLoreEntity(call.id, entity, ctx.loreIndex, ctx.multimodal, args.file, args.start_line);
+      return readLoreEntity(
+        call.id, entity, ctx.loreIndex, ctx.multimodal, args.file, args.start_line,
+        ctx.allowedTools?.includes("rewrite_lore_lines") ?? false,
+      );
     },
   },
 
@@ -3339,7 +3352,10 @@ export async function executeRegisteredTool(
   const tool = isAllowed(call.name) ? REGISTRY[call.name] : undefined;
   if (!tool) return { toolCallId: call.id, content: `Unknown tool: ${call.name}` };
   try {
-    return await tool.execute(call, ctx);
+    // A copy, not a mutation: ctx is shared across a round's calls. Handlers
+    // that patch run state do it through the objects ctx points at (the lore
+    // snapshot, the plan gate), which the spread preserves by reference.
+    return await tool.execute(call, { ...ctx, allowedTools: allowed });
   } catch (e) {
     return { toolCallId: call.id, content: `Error: ${String(e)}` };
   }

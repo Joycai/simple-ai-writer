@@ -760,6 +760,37 @@ function notifyApproval(bodyKey: string, params?: Record<string, string>): void 
 }
 
 /** Basename, for a notification that must fit on one line. */
+/**
+ * The chat session's system layer: writing prompt + tier briefing + the
+ * read-once rosters (workflow cards; docx formats on the assist tier only —
+ * the orchestrator holds no export tool to name formats for).
+ *
+ * One function because it is built at two moments that must agree: seeding a
+ * new session, and rewriting history[0] when the 助手工具包模式 Beta flips
+ * mid-session. The briefing is the one part of the read-once layer that must
+ * not lie about the toolset — the orchestrator's mandates every write go
+ * through `run_pack`, which routing removes the moment the Beta goes off, so
+ * a stale one steers the model into "Unknown tool" on every write attempt.
+ */
+async function chatSystemPrompt(projectPath: string, orchestrating: boolean): Promise<string> {
+  const { useAiStore } = await import("./aiStore");
+  const { prompts, activePromptId } = useAiStore.getState();
+  const writingPrompt =
+    prompts.find((p) => p.id === activePromptId)?.content ?? profileSystemPrompt();
+  const workflowSection = await workflowBriefingSection(projectPath);
+  const docxFormats = currentFormats();
+  const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
+  const briefing = i18n.t(
+    orchestrating ? "ai.instructions.orchestrator" : "ai.instructions.agent",
+    promptParams(i18n.language === "zh-CN"),
+  );
+  return (
+    `${writingPrompt}\n\n${briefing}` +
+    (workflowSection ? `\n\n${workflowSection}` : "") +
+    (docxSection && !orchestrating ? `\n\n${docxSection}` : "")
+  );
+}
+
 function fileLabel(path: string): string {
   return baseName(path) || path;
 }
@@ -1229,11 +1260,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       );
       let history = get().chatHistory;
       if (!history) {
-        const { useAiStore: aiStore2 } = await import("./aiStore");
-
-        const { prompts, activePromptId } = aiStore2.getState();
-        const writingPrompt =
-          prompts.find((p) => p.id === activePromptId)?.content ?? profileSystemPrompt();
         // The agent briefing belongs in the SYSTEM layer, not in the first user
         // turn: only the system message survives every later turn intact. Seeded
         // as a task-layer instruction it decayed after turn one — the author's
@@ -1242,26 +1268,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         //
         // The workflow roster rides with the briefing (same layer, same
         // stability) and is read once per session, like the rest of the seed:
-        // a card edited mid-session is picked up by the next session.
-        const workflowSection = await workflowBriefingSection(projectPath);
-        // Same layer, same reason: without the roster the model knows export_docx
-        // exists but not which formats it may name — so it would either always
-        // take the default or guess an id and eat an error.
-        const docxFormats = currentFormats();
-        const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
-        // The orchestrator tier gets its own briefing: the assist one teaches
+        // a card edited mid-session is picked up by the next session. The
+        // orchestrator tier gets its own briefing — the assist one teaches
         // tools this tier does not hold, which reads as the assistant being
-        // broken. The docx roster is skipped with it — no export tool here to
-        // name formats for; the export pack reads them via read_doc_format.
+        // broken. Construction shared with the mid-session tier refresh below:
+        // see chatSystemPrompt.
         const orchestrating = chatPreset === ORCHESTRATOR_PRESET;
-        const briefing = i18n.t(
-          orchestrating ? "ai.instructions.orchestrator" : "ai.instructions.agent",
-          promptParams(i18n.language === "zh-CN"),
-        );
-        const systemPrompt =
-          `${writingPrompt}\n\n${briefing}` +
-          (workflowSection ? `\n\n${workflowSection}` : "") +
-          (docxSection && !orchestrating ? `\n\n${docxSection}` : "");
+        const systemPrompt = await chatSystemPrompt(projectPath, orchestrating);
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject. Loaded only
@@ -1318,6 +1331,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         meta.seedContext = seed.seedContext;
         meta.lastDocPath = activeFilePath ?? null;
         meta.bodyDocPath = wantsDocBody ? activeFilePath ?? null : null;
+        meta.briefingTier = orchestrating ? "orchestrator" : "assist";
         noteTurnStart(meta, seed.question);
         // The seeded lore goes in the injection ledger, carried by the seed
         // block — otherwise turn 2's retrieval would re-inject everything the
@@ -1356,6 +1370,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // and appending onto that makes the provider reject not just this turn
         // but every turn after it. Repair before adding to it.
         repairToolCallPairing(history);
+
+        // ── Tier refresh (the roleplay refreshSystemPrompt pattern) ──
+        // The system layer is read-once for *wording* (rosters, prompt edits),
+        // but the briefing must not lie about the toolset: the orchestrator's
+        // mandates every write go through run_pack, and routing removes that
+        // tool the moment the Beta goes off — a stale briefing then steers the
+        // model into "Unknown tool" on every write attempt (the reverse flip
+        // teaches write tools the thin tier doesn't hold, and never teaches
+        // run_pack). So when the tier flipped between turns, rewrite
+        // history[0] in place with the current tier's full system layer.
+        const tierNow = chatPreset === ORCHESTRATOR_PRESET ? "orchestrator" : "assist";
+        const tierMeta = get().chatMeta;
+        if (tierMeta && tierMeta.briefingTier !== tierNow && history[0]?.role === "system") {
+          history[0].content = await chatSystemPrompt(projectPath, tierNow === "orchestrator");
+          tierMeta.briefingTier = tierNow;
+          set({ chatHistory: history });
+          bumpContext();
+        }
 
         // ── Compaction (docs/feature/agent/chat-memory-plan.md §4) ──
         // Between turns, before this turn's question goes in: if the history

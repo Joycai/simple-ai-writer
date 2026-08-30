@@ -112,6 +112,13 @@ interface SerializedChat {
     lastDocPath: string | null;
     /** Additive since 1.18.8 — an older row restores as "body never injected". */
     bodyDocPath?: string | null;
+    /**
+     * Additive since 1.38 — which tier's briefing history[0] carries, so the
+     * mid-session Beta-flip refresh (agentStore.sendChat) works on a restored
+     * session too. An older row restores as "assist", which every pre-1.37
+     * session was.
+     */
+    briefingTier?: "assist" | "orchestrator";
   };
   usage: PersistedUsage | null;
   /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
@@ -147,6 +154,7 @@ export function serializeChatSession(snap: ChatSnapshot): string {
       }),
       lastDocPath: snap.meta.lastDocPath,
       bodyDocPath: snap.meta.bodyDocPath,
+      briefingTier: snap.meta.briefingTier,
     },
     usage: snap.usage,
     ...(snap.taskId ? { taskId: snap.taskId } : {}),
@@ -248,6 +256,7 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
   // to be described (or re-sent) again on the next turn.
   meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? toPosixPath(data.meta.lastDocPath) : null;
   meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? toPosixPath(data.meta.bodyDocPath) : null;
+  meta.briefingTier = data.meta.briefingTier === "orchestrator" ? "orchestrator" : "assist";
 
   return {
     turns: normalizeTurns(data.turns),

@@ -216,10 +216,24 @@ function pageLines(raw: string, from: number): {
  * The one sentence that makes the numbers usable: they are the coordinates
  * every lore tool on this side speaks (search_text's hits, edit_lore_file's
  * refusals and receipts, rewrite_lore_lines' range).
+ *
+ * `rewrite_lore_lines` is named only when the running toolset actually holds
+ * it (the registry passes that in via ctx.allowedTools). Eight presets carry
+ * read_lore_entity without any lore write tool — continue, the lore modals,
+ * the writer, roleplay, the orchestrator tier — and a trailer advertising a
+ * tool the run cannot call steers the model into an unknown-tool round; on
+ * the assist preset the tool is deferred, so even there the name is honest
+ * only after a plan loads its group.
  */
-const LORE_GUTTER_NOTE =
-  "line numbers count from the top of each FILE, frontmatter included — they are what " +
-  "rewrite_lore_lines takes, and the number before each tab is never part of the content";
+function loreGutterNote(canRewrite: boolean): string {
+  return (
+    "line numbers count from the top of each FILE, frontmatter included — they are " +
+    (canRewrite
+      ? "what rewrite_lore_lines takes"
+      : "the coordinates the lore tools speak") +
+    ", and the number before each tab is never part of the content"
+  );
+}
 
 export async function readLoreEntity(
   toolCallId: string,
@@ -228,6 +242,7 @@ export async function readLoreEntity(
   multimodal: boolean,
   file?: string,
   startLine?: number,
+  canRewrite = false,
 ): Promise<ToolResult> {
   const found = findEntityByName(loreIndex, name);
 
@@ -238,7 +253,7 @@ export async function readLoreEntity(
     };
   }
 
-  if (file) return readEntitySingleFile(toolCallId, found, file, startLine);
+  if (file) return readEntitySingleFile(toolCallId, found, file, startLine, canRewrite);
 
   // Mutual-exclusion groups, from the scan. The injection path enforces them
   // (lib/context/loreSelect picks one member per group); this path cannot,
@@ -341,7 +356,7 @@ export async function readLoreEntity(
   if (imageChecklist) parts.push(`=== image slots ===\n${imageChecklist}`);
 
   if (parts.length === 0) return { toolCallId, content: "(no content)" };
-  return { toolCallId, content: `${parts.join("\n\n")}\n\n[... ${LORE_GUTTER_NOTE} ...]` };
+  return { toolCallId, content: `${parts.join("\n\n")}\n\n[... ${loreGutterNote(canRewrite)} ...]` };
 }
 
 /**
@@ -353,6 +368,7 @@ async function readEntitySingleFile(
   found: LoreEntity,
   file: string,
   startLine?: number,
+  canRewrite = false,
 ): Promise<ToolResult> {
   const wanted = file.trim();
   if (!isPlainEntityFilename(wanted)) {
@@ -386,7 +402,7 @@ async function readEntitySingleFile(
   return {
     toolCallId,
     content:
-      `=== ${wanted} ===${note}\n${page.body}\n\n[... ${page.notes.join("; ")}; ${LORE_GUTTER_NOTE} ...]`,
+      `=== ${wanted} ===${note}\n${page.body}\n\n[... ${page.notes.join("; ")}; ${loreGutterNote(canRewrite)} ...]`,
   };
 }
 

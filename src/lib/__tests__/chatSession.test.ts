@@ -48,6 +48,7 @@ function makeSnapshot(): ChatSnapshot {
   meta.summary = summaryMsg;
   meta.summaryText = "早前摘要";
   meta.lastDocPath = "/proj/writing/ch2.md";
+  meta.briefingTier = "orchestrator";
   noteTurnStart(meta, q1);
   noteTurnStart(meta, q2);
   recordInjections(meta, [ARIA], injMsg);
@@ -75,6 +76,9 @@ describe("chat session round-trip", () => {
     expect(restored.meta.injected.get("/lore/aria")!.coreCarrier).toBe(h[7]);
     expect(restored.meta.summaryText).toBe("早前摘要");
     expect(restored.meta.lastDocPath).toBe("/proj/writing/ch2.md");
+    // The tier travels: a restored orchestrator session must still detect a
+    // mid-session Beta flip (agentStore's tier refresh reads this field).
+    expect(restored.meta.briefingTier).toBe("orchestrator");
     expect(restored.usage).toEqual(snap.usage);
     expect(restored.turns).toEqual(snap.turns);
 

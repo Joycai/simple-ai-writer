@@ -122,6 +122,16 @@ export interface ChatSessionMeta {
    * occasional extra read.
    */
   bodyDocPath: string | null;
+  /**
+   * Which tier's briefing history[0] currently carries. The system layer is
+   * seeded once per session (read-once, like the rosters) — but the briefing
+   * is the one part that must not lie about the toolset: the orchestrator's
+   * mandates every write go through `run_pack`, which routing removes the
+   * moment the Beta goes off. So a mid-session tier flip rewrites history[0]
+   * in place (agentStore.sendChat), and this field is how it knows the seeded
+   * tier without parsing the prompt back out of the message.
+   */
+  briefingTier: "assist" | "orchestrator";
 }
 
 export function createSessionMeta(): ChatSessionMeta {
@@ -133,6 +143,7 @@ export function createSessionMeta(): ChatSessionMeta {
     injected: new Map(),
     lastDocPath: null,
     bodyDocPath: null,
+    briefingTier: "assist",
   };
 }
 
