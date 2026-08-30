@@ -675,7 +675,9 @@
       "heading3": "Heading 3",
       "heading4": "Heading 4",
       "quote": "Quote",
-      "bulletList": "Bullet List"
+      "bulletList": "Bullet List",
+      "tidyParagraphs": "Tidy paragraphs",
+      "tidyParagraphsN": "Tidy paragraphs ({{n}})"
     }
   },
   "ai": {

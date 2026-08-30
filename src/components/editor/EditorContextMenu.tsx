@@ -14,6 +14,7 @@ import {
   Heading3,
   Quote,
   List,
+  Pilcrow,
   ImagePlus,
   Image as ImageIcon,
 } from "lucide-react";
@@ -34,7 +35,9 @@ import {
   toggleQuote,
   toggleBulletList,
   insertLink,
+  tidyParagraphs,
 } from "../../lib/editor/format";
+import { normalizeParagraphs } from "../../lib/format/paragraphs";
 
 /** Render a shortcut hint using the platform's modifier glyphs. */
 function sc(...keys: string[]): string {
@@ -65,6 +68,18 @@ export function EditorContextMenu({
 }) {
   const { t } = useTranslation();
   const sel = hasSelection(view);
+  // Counted here rather than after the fact: the menu is built on right-click,
+  // so one pass over the document buys a label that says what the command would
+  // do. Scoped like the command itself — the selection when there is one.
+  const range = view.state.selection.main;
+  const scope = range.empty
+    ? view.state.doc.toString()
+    : view.state.sliceDoc(
+        view.state.doc.lineAt(range.from).from,
+        view.state.doc.lineAt(range.to).to,
+      );
+  const counts = normalizeParagraphs(scope);
+  const tidy = { total: counts.separated + counts.collapsed + counts.trimmed };
 
   const items: ContextMenuEntry[] = [
     { kind: "item", icon: <Scissors size={13} />, label: t("editor.menu.cut"),
@@ -109,6 +124,21 @@ export function EditorContextMenu({
       shortcut: sc("Mod", "Shift", "."), action: () => toggleQuote(view) },
     { kind: "item", icon: <List size={13} />, label: t("editor.menu.bulletList"),
       shortcut: sc("Mod", "Shift", "8"), action: () => toggleBulletList(view) },
+    { kind: "divider" },
+    // The only entry here that rewrites the whole document rather than the
+    // caret's surroundings, so it is the only one that says in advance how much
+    // it will change — and greys itself out when the answer is nothing. That
+    // ordering (know, then commit) is the same one the approval cards keep, and
+    // it is what makes a document-wide edit reasonable to offer from a menu.
+    {
+      kind: "item",
+      icon: <Pilcrow size={13} />,
+      label: tidy.total
+        ? t("editor.menu.tidyParagraphsN", { n: tidy.total })
+        : t("editor.menu.tidyParagraphs"),
+      disabled: tidy.total === 0,
+      action: () => { tidyParagraphs(view); },
+    },
   ];
 
   return <ContextMenu x={x} y={y} items={items} onClose={onClose} />;

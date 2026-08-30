@@ -8,6 +8,7 @@
  * line the selection touches.
  */
 import { EditorSelection } from "@codemirror/state";
+import { normalizeParagraphs, type NormalizeResult } from "../format/paragraphs";
 import type { EditorView } from "@codemirror/view";
 
 /** Wrap (or unwrap) each selection range with an inline marker like `**`. */
@@ -377,4 +378,40 @@ export async function pasteClipboard(view: EditorView): Promise<void> {
     /* clipboard denied */
   }
   view.focus();
+}
+
+/**
+ * Tidy paragraph spacing across the document, or across the selection when
+ * there is one.
+ *
+ * One transaction, so ⌘Z takes the whole thing back — which is what makes a
+ * whole-document rewrite an acceptable thing to offer at all. The caret is kept
+ * where it was rather than restored to a character offset: the offsets have all
+ * moved, and putting the cursor at a stale one would scroll the author somewhere
+ * they were not.
+ *
+ * Returns what changed, so the caller can tell the author — a command that
+ * silently does nothing to an already-tidy file is indistinguishable from one
+ * that is broken.
+ */
+export function tidyParagraphs(view: EditorView): NormalizeResult {
+  const { state } = view;
+  const sel = state.selection.main;
+  // A selection is tidied as a region: whole lines, so a paragraph is never
+  // half-processed. With no selection the scope is the document.
+  const from = sel.empty ? 0 : state.doc.lineAt(sel.from).from;
+  const to = sel.empty ? state.doc.length : state.doc.lineAt(sel.to).to;
+
+  const result = normalizeParagraphs(state.sliceDoc(from, to));
+  if (result.text === state.sliceDoc(from, to)) return result;
+
+  view.dispatch(
+    state.update({
+      changes: { from, to, insert: result.text },
+      selection: EditorSelection.cursor(Math.min(sel.head, from + result.text.length)),
+      userEvent: "input.format",
+    }),
+  );
+  view.focus();
+  return result;
 }

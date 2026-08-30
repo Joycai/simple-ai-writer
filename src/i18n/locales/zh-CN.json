@@ -675,7 +675,9 @@
       "heading3": "三级标题",
       "heading4": "四级标题",
       "quote": "引用",
-      "bulletList": "无序列表"
+      "bulletList": "无序列表",
+      "tidyParagraphs": "整理段落",
+      "tidyParagraphsN": "整理段落（{{n}} 处）"
     }
   },
   "ai": {
