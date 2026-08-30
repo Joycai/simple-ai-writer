@@ -110,6 +110,7 @@ import {
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { executeDelegate, type SubAgentKind } from "./subagent";
+import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent } from "./events";
@@ -599,6 +600,25 @@ export interface ToolContext {
    */
   resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
   /**
+   * The connection this run itself is on — what `run_pack` dispatches its
+   * sub-run with. Injected by the caller that resolved the conn, because the
+   * runtime only ever sees the flattened `ConnOptions` and cannot rebuild the
+   * `Model`/`Provider` rows a nested run's accounting needs.
+   *
+   * A separate field from `resolveSubAgent` on purpose: a pack runs the
+   * *parent's own model* (tool-pack-plan D1 — its point is a narrower toolset,
+   * not a different binding), so routing it through the subagent resolver
+   * would invent a kind that isn't one. Absent = this surface cannot run
+   * packs, and `run_pack` says so instead of failing downstream.
+   */
+  selfConn?: AiConn;
+  /**
+   * The author's context-utilization setting, for sizing a pack sub-run's own
+   * message ceiling. Injected (appStore state) because lib cannot read stores;
+   * a pack falls back to `CONTEXT_UTILIZATION_DEFAULT` when absent.
+   */
+  contextUtilization?: number;
+  /**
    * A narrator's window onto the other roleplay scenes. **Reaches only
    * transcript.md / summary.md** — another agent's wire history has no path
    * here, which is what makes the isolation structural rather than a promise
@@ -734,6 +754,7 @@ export type ToolId =
   | "revise_memory"
   | "recall"
   | "delegate"
+  | "run_pack"
   | "translate";
 
 function parseArgs<T>(raw: string): T {
@@ -3091,6 +3112,55 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: executeDelegate,
+  },
+
+  run_pack: {
+    // "read" is honest here even though packs write: the dispatch itself puts
+    // nothing on disk. Every write inside the sub-run still lands through its
+    // own tool's tier — L2 blocks on the same approval card, L1 lore writes on
+    // the same plan gate — because the child receives the parent's channel
+    // objects themselves (tool-pack-plan D3). There is no write this tool can
+    // reach that its caller's surface couldn't already.
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "run_pack",
+        description:
+          "Dispatch one self-contained WRITE job to a specialist agent carrying a focused toolset for it. " +
+          "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html); " +
+          "'lore_edit' — create, update or reorganize knowledge-base entries; " +
+          "'export' — convert documents to pptx/docx/xlsx. " +
+          "The specialist cannot see this conversation: state the WHOLE job in 'task' — source paths, " +
+          "target file or entry names, and the exact changes wanted — and list material files or note " +
+          "paths in 'references'. Its writes go through the author's usual approval cards. " +
+          "Reading, research and answering questions are YOUR job, never a pack's.",
+        parameters: {
+          type: "object",
+          properties: {
+            pack: {
+              type: "string",
+              enum: ["file_write", "lore_edit", "export"],
+              description:
+                "file_write — document work; lore_edit — knowledge-base work; export — file conversion.",
+            },
+            task: {
+              type: "string",
+              description:
+                "A complete, self-contained brief. The pack agent cannot see this conversation, " +
+                "so state everything it needs to do the whole job.",
+            },
+            references: {
+              type: "array",
+              items: { type: "string" },
+              description: "Paths the pack should read: source documents and/or task note paths.",
+            },
+          },
+          required: ["pack", "task"],
+        },
+      },
+    },
+    execute: executeRunPack,
   },
 
   translate: {

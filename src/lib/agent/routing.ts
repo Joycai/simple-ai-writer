@@ -20,6 +20,7 @@ import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
+import { isToolPackEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -55,6 +56,14 @@ export interface RouteOptions {
    * invisible card would hang the whole sweep.
    */
   askAuthor?: boolean;
+  /**
+   * May this surface dispatch tool packs (`run_pack`)? Opt-in like the others,
+   * and for a structural reason on top of the usual one: a pack sub-run needs
+   * the approval / plan channels *and* `selfConn` threaded through ToolContext,
+   * which only chat does today. The tool additionally hides behind the dev
+   * flag (`packFlag`) — tool-pack-plan.md slice 2 ships it dark.
+   */
+  packs?: boolean;
 }
 
 /**
@@ -161,6 +170,14 @@ function route(
   // see it, so its cost is pinned in that file's routed-tools assertion.
   if (options?.askAuthor && !tools.includes("ask_author")) {
     tools.push("ask_author");
+  }
+
+  // Appended like `delegate`, and gated like a Beta: off means absent, not
+  // refused. The workspace requirement is the delegate's, for the same reason
+  // — a pack's materials arrive as note paths and its report lands as a note,
+  // so a surface without a workspace has no bus to run it on.
+  if (options?.packs && isToolPackEnabled() && hasWorkspace && !tools.includes("run_pack")) {
+    tools.push("run_pack");
   }
 
   // Search subagent takes over web search: withhold serverTools from main agent.

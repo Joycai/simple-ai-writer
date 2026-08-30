@@ -20,6 +20,10 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
 
+/** Same, for the tool-pack dev switch. */
+const packDev = { on: false };
+vi.mock("../packFlag", () => ({ isToolPackEnabled: () => packDev.on }));
+
 import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
 
@@ -504,5 +508,62 @@ describe("routeTools — ask_author", () => {
       .toContain("ask_author");
     expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { askAuthor: true }).tools)
       .toContain("ask_author");
+  });
+});
+
+/**
+ * run_pack needs THREE yeses: the dev flag (tool-pack-plan slice 2 ships it
+ * dark), the surface's opt-in (only chat threads selfConn + the approval
+ * channels through ToolContext), and a workspace (the pack's material bus).
+ * Any single no must mean absent — same argument as every Beta above.
+ */
+describe("routeTools — run_pack", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+  };
+
+  it("is absent while the dev flag is off, even for an opted-in surface", () => {
+    packDev.on = false;
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
+      .not.toContain("run_pack");
+  });
+
+  it("is absent for a surface that did not opt in, even with the flag on", () => {
+    packDev.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools)
+        .not.toContain("run_pack");
+    } finally {
+      packDev.on = false;
+    }
+  });
+
+  it("is absent without a workspace — a pack has no material bus to run on", () => {
+    packDev.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, undefined, MODELS, { packs: true }).tools)
+        .not.toContain("run_pack");
+    } finally {
+      packDev.on = false;
+    }
+  });
+
+  it("is appended when flag + opt-in + workspace all hold — planning view too", () => {
+    packDev.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
+        .toContain("run_pack");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { packs: true }).tools)
+        .toContain("run_pack");
+    } finally {
+      packDev.on = false;
+    }
   });
 });
