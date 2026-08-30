@@ -20,7 +20,7 @@ import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
-import { isToolPackEnabled } from "./packFlag";
+import { isOrchestratorEnabled, isToolPackEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -175,8 +175,16 @@ function route(
   // Appended like `delegate`, and gated like a Beta: off means absent, not
   // refused. The workspace requirement is the delegate's, for the same reason
   // — a pack's materials arrive as note paths and its report lands as a note,
-  // so a surface without a workspace has no bus to run it on.
-  if (options?.packs && isToolPackEnabled() && hasWorkspace && !tools.includes("run_pack")) {
+  // so a surface without a workspace has no bus to run it on. Either switch
+  // suffices: the dev flag is the A/B form (full toolset + run_pack), the
+  // orchestrator Beta is the thin tier whose ONLY write path this is — an
+  // orchestrator run without run_pack could read and never act.
+  if (
+    options?.packs &&
+    (isToolPackEnabled() || isOrchestratorEnabled()) &&
+    hasWorkspace &&
+    !tools.includes("run_pack")
+  ) {
     tools.push("run_pack");
   }
 

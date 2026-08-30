@@ -27,7 +27,15 @@ vi.mock("../../docx/flag", () => ({ isDocxExportEnabled: () => docxBeta.on }));
 const xlsxBeta = { on: false };
 vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 
-import { executeRunPack, PACK_IDS, PACK_PRESETS } from "../packs";
+/** The orchestrator Beta — chatAgentPreset's one input. */
+const orchestratorBeta = { on: false };
+vi.mock("../packFlag", () => ({
+  isToolPackEnabled: () => false,
+  isOrchestratorEnabled: () => orchestratorBeta.on,
+}));
+
+import { chatAgentPreset, executeRunPack, ORCHESTRATOR_PRESET, PACK_IDS, PACK_PRESETS } from "../packs";
+import { AGENT_ASSIST_PRESET } from "../presets";
 import { partitionByGroup } from "../registry";
 
 describe("tool packs", () => {
@@ -123,6 +131,37 @@ describe("tool packs", () => {
       for (const id of PACK_IDS) {
         expect(PACK_PRESETS[id].tools).not.toContain("generate_image" as never);
         expect(PACK_PRESETS[id].tools).not.toContain("edit_image" as never);
+      }
+    });
+
+    it("the orchestrator holds no document, knowledge-base or export write tool", () => {
+      // D4's clean boundary: "who writes?" has a one-word answer — a pack.
+      // update_memory is the deliberate exception (tiny, frequent, not worth a
+      // dispatch), and the imagegen trio rides its own existing shape (routing
+      // strips it when no image binding is live).
+      const writes = [
+        "propose_edit", "rewrite_lines", "rewrite_document", "append_file",
+        "create_file", "create_chapter", "delete_chapter", "delete_directory",
+        "propose_lore_plan", "create_lore_entity", "update_lore_file",
+        "edit_lore_file", "delete_lore_entity", "manage_collection",
+        "export_pptx", "export_docx", "export_xlsx",
+      ];
+      for (const t of writes) {
+        expect(ORCHESTRATOR_PRESET.tools).not.toContain(t as never);
+      }
+      expect(ORCHESTRATOR_PRESET.tools).toContain("update_memory");
+      // run_pack itself is routing's to append — listing it here would make it
+      // appear even where the surface never threaded the channels through.
+      expect(ORCHESTRATOR_PRESET.tools).not.toContain("run_pack" as never);
+    });
+
+    it("chatAgentPreset is the Beta switch's one seam", () => {
+      expect(chatAgentPreset()).toBe(AGENT_ASSIST_PRESET);
+      orchestratorBeta.on = true;
+      try {
+        expect(chatAgentPreset()).toBe(ORCHESTRATOR_PRESET);
+      } finally {
+        orchestratorBeta.on = false;
       }
     });
   });

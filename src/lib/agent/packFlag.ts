@@ -25,3 +25,23 @@ export function isToolPackEnabled(): boolean {
 export function setToolPackEnabled(enabled: boolean): void {
   writePref(KEY, enabled ? "1" : "0");
 }
+
+/**
+ * 分片 3 的 Beta 开关（设置 → 通用 → 实验功能）：chat 换到 **orchestrator 档**
+ * ——主控只带查/读/笔记/记忆的轻常驻，写入全部经 `run_pack` 派给执行代理
+ * （`ORCHESTRATOR_PRESET`，见 packs.ts）。
+ *
+ * 与上面的 dev 开关是两个独立的旋钮，因为它们回答两个不同的问题：dev 开关 =
+ * 「全量工具的 chat **多出** run_pack」（A/B 对照用，模型可派可不派）；Beta =
+ * 「chat 的写工具**只剩** run_pack」（真正的瘦身档）。Beta 开着时 run_pack
+ * 必须在场，所以 routing 的追加条件是两者取或。
+ */
+const ORCHESTRATOR_KEY = "app:toolPackOrchestratorBeta";
+
+export function isOrchestratorEnabled(): boolean {
+  return readPref(ORCHESTRATOR_KEY) === "1";
+}
+
+export function setOrchestratorEnabled(enabled: boolean): void {
+  writePref(ORCHESTRATOR_KEY, enabled ? "1" : "0");
+}

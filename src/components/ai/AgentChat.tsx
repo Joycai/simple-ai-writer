@@ -57,7 +57,7 @@ import { splitMentions } from "../../lib/agent/mentionText";
 import {
   computeContextBreakdown,
 } from "../../lib/agent/contextBreakdown";
-import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
+import { chatAgentPreset } from "../../lib/agent/packs";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
@@ -519,10 +519,15 @@ export function AgentChat() {
   // measuring, and is the same function agentStore budgets the run with — this
   // bar and that ceiling cannot disagree about what the tools cost.
   const toolTokens = useMemo(
-    // `{ handoff: true }` for the same reason agentStore passes it: this bar
-    // reports what the *next* request will carry, and on a writer run that
-    // includes the handoff schema.
-    () => plannedToolTokens(AGENT_ASSIST_PRESET, effectiveSubs, models, { handoff: true }),
+    // `{ handoff: true, packs: true }` for the same reason agentStore passes
+    // them: this bar reports what the *next* request will carry — on a writer
+    // run that includes the handoff schema, and with a pack switch on, the
+    // run_pack schema. `chatAgentPreset()` rather than the assist preset for
+    // the same reason again: with the orchestrator Beta on, the next request
+    // carries the thin tier, and this bar is where the作者 sees that saving.
+    // (Flag flips don't re-render this memo — the number catches up on the
+    // next deps change or remount, same read-once tolerance as the briefing.)
+    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true }),
     [effectiveSubs, models],
   );
   const context = useMemo(

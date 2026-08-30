@@ -11,6 +11,7 @@ import { isXlsxExportEnabled, setXlsxExportEnabled } from "../../../lib/xlsx/fla
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
+import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
@@ -77,6 +78,7 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
+  const [orchestratorOn, setOrchestratorOn] = useState(isOrchestratorEnabled());
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -148,6 +150,11 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const toggleComfy = (enabled: boolean) => {
     setComfyUiEnabled(enabled);
     setComfyOn(enabled);
+  };
+
+  const toggleOrchestrator = (enabled: boolean) => {
+    setOrchestratorEnabled(enabled);
+    setOrchestratorOn(enabled);
   };
 
   const toggleNotify = (enabled: boolean) => {
@@ -379,12 +386,22 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
         <Row
           title={t("systemSettings.general.comfyuiLabel")}
           desc={t("systemSettings.general.comfyuiHint")}
-          last
         >
           <Toggle
             on={comfyOn}
             onChange={toggleComfy}
             label={t("systemSettings.general.comfyuiLabel")}
+          />
+        </Row>
+        <Row
+          title={t("systemSettings.general.toolPackLabel")}
+          desc={t("systemSettings.general.toolPackHint")}
+          last
+        >
+          <Toggle
+            on={orchestratorOn}
+            onChange={toggleOrchestrator}
+            label={t("systemSettings.general.toolPackLabel")}
           />
         </Row>
       </Section>

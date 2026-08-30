@@ -20,9 +20,13 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
 
-/** Same, for the tool-pack dev switch. */
+/** Same, for the tool-pack dev switch and the orchestrator Beta. */
 const packDev = { on: false };
-vi.mock("../packFlag", () => ({ isToolPackEnabled: () => packDev.on }));
+const orchestratorBeta = { on: false };
+vi.mock("../packFlag", () => ({
+  isToolPackEnabled: () => packDev.on,
+  isOrchestratorEnabled: () => orchestratorBeta.on,
+}));
 
 import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
@@ -552,6 +556,19 @@ describe("routeTools — run_pack", () => {
         .not.toContain("run_pack");
     } finally {
       packDev.on = false;
+    }
+  });
+
+  it("is appended by the orchestrator Beta alone — the thin tier's only write path", () => {
+    // The two switches answer different questions (dev = A/B alongside the
+    // full toolset; Beta = the thin tier), but either must suffice: an
+    // orchestrator run without run_pack could read and never act.
+    orchestratorBeta.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { packs: true }).tools)
+        .toContain("run_pack");
+    } finally {
+      orchestratorBeta.on = false;
     }
   });
 
