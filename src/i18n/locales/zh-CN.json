@@ -1115,6 +1115,10 @@
       "instruction": "请输出这组文稿的整体摘要，长度控制在 400 字以内。"
     },
     "agent": {
+      "progress": {
+        "search": "{{done}}/{{total}} 个文件",
+        "searchHits": "{{done}}/{{total}} 个文件 · 命中 {{hits}} 处"
+      },
       "log": {
         "title": "执行日志",
         "countTools": "{{count}} 次工具调用",

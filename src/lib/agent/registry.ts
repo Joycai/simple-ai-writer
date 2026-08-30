@@ -1053,9 +1053,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { query?: string; folder?: string };
-      return searchWritingFiles(
-        call.id, ctx.projectPath, args.query ?? "", args.folder, ctx.loreIndex, ctx.loreScope,
-      );
+      return searchWritingFiles(call.id, ctx.projectPath, args.query ?? "", {
+        folder: args.folder,
+        loreIndex: ctx.loreIndex,
+        loreScope: ctx.loreScope,
+        onProgress: ctx.onProgress,
+      });
     },
   },
 

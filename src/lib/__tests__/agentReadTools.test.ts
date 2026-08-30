@@ -104,6 +104,7 @@ vi.mock("../fs/pptx", async (importOriginal) => ({
   }),
 }));
 
+import { readFile } from "../fs/fileio";
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 import { formatLoreIndex, readLoreEntity, type ToolResult } from "../agent/tools";
 import { MAX_IMAGE_BYTES } from "../fs/images";
@@ -964,6 +965,88 @@ describe("search_text — 知识库这一侧", () => {
     expect(out).toContain('No matches for "青铜钥匙"');
     expect(out).toContain("The knowledge base was not searched");
     expect(out).not.toContain("云锦");
+  });
+});
+
+describe("search_text — 进度", () => {
+  const LORE = "/proj/.ai-writer/lore";
+  const entry = (id: string) => ({
+    name: id,
+    dirPath: `${LORE}/characters/${id}`,
+    mdFiles: ["index.md"],
+    images: [],
+    facets: [],
+    collections: [],
+  });
+
+  /** N documents plus M knowledge-base entries, all readable, none matching. */
+  function seed(docs: number, entries: number) {
+    for (let i = 0; i < docs; i++) fs.set(`${PROJECT}/ch${i}.md`, "无关。");
+    const index = { characters: [] as ReturnType<typeof entry>[] };
+    for (let i = 0; i < entries; i++) {
+      const e = entry(`e${i}`);
+      fs.set(`${e.dirPath}/index.md`, "无关。");
+      index.characters.push(e);
+    }
+    return index;
+  }
+
+  it("一次很快的搜索一个字都不报", async () => {
+    // The whole point of throttling on time rather than on a file count: the
+    // search that finishes before the first period never repaints the row, so
+    // nothing has to guess a "large project" threshold.
+    seed(6, 2);
+    const onProgress = vi.fn();
+    await callFull("search_text", { query: "青铜钥匙" }, { onProgress });
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+
+  it("慢下来之后才报，分母含知识库那一侧", async () => {
+    const index = seed(2, 2);
+    const real = vi.mocked(readFile).getMockImplementation()!;
+    vi.useFakeTimers();
+    // Every read costs 100ms of wall clock; the period is 150ms.
+    vi.mocked(readFile).mockImplementation(async (p: string) => {
+      vi.advanceTimersByTime(100);
+      return real(p);
+    });
+    try {
+      const onProgress = vi.fn();
+      await callFull("search_text", { query: "青铜钥匙" }, {
+        loreIndex: index as never,
+        onProgress,
+      });
+      // 4 files at 100ms against a 150ms period: reports land on #2 and #4.
+      expect(onProgress.mock.calls.map(([p]) => p.ratio)).toEqual([0.5, 1]);
+      expect(onProgress.mock.calls[0][0].label).toContain("2/4");
+      expect(onProgress.mock.calls[1][0].label).toContain("4/4");
+    } finally {
+      vi.mocked(readFile).mockImplementation(real);
+      vi.useRealTimers();
+    }
+  });
+
+  it("读不出来的文件照样计入已扫，否则进度会停在那儿", async () => {
+    // A permission error skips the scan, not the count — the wait for that file
+    // is over either way, and a denominator the numerator can never reach is
+    // worse than no progress at all.
+    seed(4, 0);
+    unreadable.add(`${PROJECT}/ch1.md`);
+    const real = vi.mocked(readFile).getMockImplementation()!;
+    vi.useFakeTimers();
+    vi.mocked(readFile).mockImplementation(async (p: string) => {
+      vi.advanceTimersByTime(200);
+      return real(p);
+    });
+    try {
+      const onProgress = vi.fn();
+      await callFull("search_text", { query: "青铜钥匙" }, { onProgress });
+      const last = onProgress.mock.calls[onProgress.mock.calls.length - 1];
+      expect(last[0].ratio).toBe(1);
+    } finally {
+      vi.mocked(readFile).mockImplementation(real);
+      vi.useRealTimers();
+    }
   });
 });
 
