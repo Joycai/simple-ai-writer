@@ -12,6 +12,7 @@ import { HtmlPreview } from "../editor/HtmlPreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
 import { MOD_KEY } from "../../lib/platform";
 import { isHtmlPath, isImagePath } from "../../lib/fs/images";
+import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import styles from "./EditorArea.module.css";
 import { dirName, isSamePath } from "../../lib/paths";
@@ -132,6 +133,21 @@ export function EditorArea() {
             <div className={styles.emptyCta}>
               <button className={styles.emptyCtaBtn} onClick={() => loadFile(activeFilePath)}>
                 {t("editor.loadErrorRetry")}
+              </button>
+              {/* The main audience is files this editor will never open (a
+                  .zip, a .psd, a BOM-less UTF-16 doc) — hand them to the OS
+                  instead of making the author dig the file out of a file
+                  manager. No saveNow() first: nothing was loaded, so there
+                  is no buffer that could be dirty. */}
+              <button
+                className={styles.emptyCtaBtn}
+                onClick={() => {
+                  openWithDefaultApp(activeFilePath).catch((e) =>
+                    console.error("[EditorArea] open with default app failed:", e),
+                  );
+                }}
+              >
+                {t("editor.loadErrorOpenExternal")}
               </button>
             </div>
           </div>

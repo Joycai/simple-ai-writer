@@ -638,6 +638,7 @@
     "loadErrorTitle": "本章未能加载",
     "loadErrorHint": "读取失败：{{message}}。磁盘上的文件未被改动 — 可重试，或在应用外检查该文件。",
     "loadErrorRetry": "重试",
+    "loadErrorOpenExternal": "用系统默认方式打开",
     "showSidebar": "展开左侧栏",
     "hideSidebar": "收起左侧栏",
     "showRightPanel": "展开右侧栏",

@@ -638,6 +638,7 @@
     "loadErrorTitle": "This chapter didn't load",
     "loadErrorHint": "Reading it failed: {{message}}. The file on disk hasn't been touched — retry, or check the file outside the app.",
     "loadErrorRetry": "Retry",
+    "loadErrorOpenExternal": "Open with default app",
     "showSidebar": "Show sidebar",
     "hideSidebar": "Hide sidebar",
     "showRightPanel": "Show right panel",
