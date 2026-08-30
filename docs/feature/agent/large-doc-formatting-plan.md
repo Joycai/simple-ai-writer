@@ -1,6 +1,6 @@
 # 大文档格式化：插入清单与段落地图
 
-> 状态：`planned`
+> 状态：`partial`（一至四期已实施；五期实测复核未做，见 §5）
 > 起因：2026-08-30 用「给一份巨大的、没有标题的 md 加标题、区分段落」这个场景量了一遍现有编辑回路。回路本身没有断——`rewrite_lines` 分块、行号契约、回执位移、standing grant 全都在为它铺路——但成本形状是错的：**轮数 O(文件大小)，正文两次过模型之手**。100k 字符的文件，光 `read_file` 逐页通读就是 25 轮（每轮 ≈15.9k schema + 历史重放），`headingIndex` 在最需要地图的文件上恰好失效（加标题正是任务本身，而索引要求 ≥2 个标题），写回去还得把每一段原文重新打一遍——长跑后半段历史已被压缩折叠，重打就是凭记忆重建，静默改写（paraphrase）风险被放到最大。
 > 尺子沿用 [`edit-loop-plan.md`](edit-loop-plan.md) §1：**贵的是轮数，不是正文；省一轮 ≈ 15k+ token**。五期按收益排序，每期独立可交付，单人顺序执行。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约 / 回执 / `write` 档，本文全部机制的地基）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（新工具入驻的成本纪律）
@@ -24,14 +24,16 @@
 | 文件 | 改什么 |
 |---|---|
 | `src/lib/agent/registry.ts` | 新 `InsertProposal`（`kind: "insert"`）：`insertions[]`、每点提案时抓取的上下各 1 行 `context`（卡不重读文件）、以及 `lineCount`（提案时的文件总行数，I7 的守卫，`EditProposal.occurrences` 的镜像）。进 `Proposal` 联合类型；工具定义描述**压在 ~200 token 内**（见 1.3） |
-| `src/lib/agent/editApply.ts` | 纯函数 `applyInsertions(text, insertions)`：排序去重、从后往前拼接、每段插入文本强制以 `\n` 收尾（标题必须独占一行——`rewrite_lines` 的 welding guard 同款，模型不用记） |
+| `src/lib/agent/editApply.ts` | 纯函数 `applyInsertions(text, insertions, expectedLines?)`：从后往前拼接、强制换行收尾。**实施时把 I7 的行数守卫从 store 挪进了这里**——它和 `applyFindReplace` 的 `occurrences` 是同一样东西（写入的前置条件，不是调用方的礼貌），放在纯层还顺带可测。另有 `insertionLanding` 供回执做算术 |
 | `src/lib/agent/writeTools.ts` | `insertLinesTool`：`manuscriptTarget` 过路径、校验插入点区间与去重、抓 context、建提案、blocks on approval。回执逐点报**新行号**（位移单调累计），末尾用 `countLines(after) − countLines(before) === Σ 插入行数` 自校验，量自文件而非参数（I3） |
-| `src/stores/agentStore.ts` | `applyProposal` 新 case：先校验 `countLines(当前) === proposal.lineCount`，不符拒绝（文件在卡挂着时动了）；backup 走既有机制 |
+| `src/stores/agentStore.ts` | `applyProposal` 新 case `applyInsert`：把 `lineCount` 传给 `applyInsertions` 复核（拒绝在纯层），backup 走既有机制 |
 | `src/components/ai/ApprovalCard.tsx` | 新卡样式：逐点一行 `L120 之前插入` + 插入文本 + 上下文各 1 行。作者读到的恰好是那些标题本身，不是一份全文 diff |
 | `src/lib/agent/presets.ts` | 进 `AGENT_ASSIST_PRESET` 与 `WRITE_PRESET`（格式化从 chat 和 htmlArtifact 两条路都会走到） |
 | i18n（zh-CN / en） | `ai.instructions.agent` 加一句：纯插入（加标题、插空行、补章节分隔）用 `insert_lines` 一次提交清单，不要用 `rewrite_lines` 重发原文 |
 
 ### 1.3 schema 账（这期唯一要辩护的地方）
+
+> **实施结果**：`insert_lines` 实测 **316 token**（初稿 404，说明文字压掉四分之一后的数）。assist 15,937 → 16,252（cap 16,000 → 16,400），`write` 4,175 → 4,491（cap 4,300 → 4,600）——注意 `write` 的基线在此之前已从记录的 4,065 漂到 4,175，一并记进了棘轮注释。全部落在 **resident**，所以按那份测试自己的规矩写了论证而不只是改数字；§5 读过，deferral 第三次不适用（没有任何门让它在打开之前失败）。`contextForecast.test.ts` 仍绿。
 
 `agentToolBudget.test.ts` 现状：assist 全量 15,937 / cap 16,000（余量 63），resident 10,106；`write` 档 4,065 / cap 4,300。`insert_lines` 没有 lore-plan 那样的门，进不了 deferred 组，**落 resident**，预算 +≈220，两个 cap 都要动（assist → 16,300 量级，write 视实测）。
 
@@ -51,6 +53,8 @@
 - 成本：≤60 行 × ~15 token ≈ 900 token/次分页读——比它省下的「翻完全文才知道该指哪里」小一个数量级；有标题的文件一个字不多付（标题索引优先）。
 - 测试进 `lib/__tests__`：有标题→不出段落图；无标题→出；封顶与省略；CRLF；围栏内的空行不当段界。
 
+> **实施结果**：多做了一件计划里没有的事，而它是这一期能不能成立的关键——**取前 60 段改成跨全文等距取样**。400 段的文档取前 60 段只映射到前六分之一，模型照样要翻完剩下的，地图在**最大的那批文件上**恰好什么都没买到。取样后每行仍是真实的段首行号，表头写明是每第 N 段。
+
 **工作量：0.5–1 天。**
 
 ## 3. 三期：指令层——分页读一轮多发
@@ -59,6 +63,8 @@
 
 - `ai.instructions.agent`（zh/en）加一句：顺序翻页可以一轮并发多个 `read_file`。
 - `pageLines` 的续读尾注 `pass start_line=N to continue` 补半句「（一轮可发多个）」——运行时输出，规则在生效那一刻到达（D1）；`read_lore_entity` 的分页共用同一实现，顺带受益。
+
+> **实施结果**：比计划的小——通读时「只读调用要在同一轮里一次发完」这条**指令里本来就有**，缺的只是「同一个文件的连续几页也算互相独立」这半句（模型会把翻页当成有先后依赖）。两处都补了：`ai.instructions.agent` 的并发那一条，以及 `pageLines` 续读尾注（`read_file` 和 `read_lore_entity` 共用）。
 
 零 schema，零机制改动。25 页 → 7 轮，≈ 27 万 token。**工作量：0.5 天，可随任何一期先行。**
 
@@ -69,6 +75,8 @@
 - 纯函数 `normalizeParagraphs(text)`（新 `src/lib/format/paragraphs.ts`）：段落间保证一个空行、3+ 连续空行折为 1、去行尾空白；frontmatter / 围栏代码块 / 表格原样保护。
 - 入口做**作者侧**：命令面板 + 编辑器一条命令，走 CodeMirror 事务（undo 完整保留）。零 agent 成本、零 schema。
 - **不做** agent 工具（见 D3）：空行插入 `insert_lines` 已能表达，独立工具是每轮白付的 schema；等实际用量说话再议。
+
+> **实施结果**：入口做在**编辑器右键菜单**而不是命令面板——面板是搜索驱动的（文件/条目命中 + 三个动作），不是命令注册表，塞一条进去要先把它改成另一种东西。菜单项**先数后做**：右键时跑一遍纯函数，标签写成「整理段落（12 处）」、无事可做时置灰——它是那份菜单里唯一改动整篇文档的一条，所以也是唯一需要在作者点下去之前就说清自己要干什么的一条。插空行的判据落在**句末标点**上：硬换行断在句子中间，所以不会被拆——「判不出来就什么都不做」。
 
 **工作量：1 天。**
 
