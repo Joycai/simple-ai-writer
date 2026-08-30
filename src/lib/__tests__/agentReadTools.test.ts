@@ -251,7 +251,9 @@ describe("read_file", () => {
     const out = await read({ path: `${PROJECT}/writing/ch1.md` });
 
     expect(out).toContain("lines 1-20 of 50 shown");
-    expect(out).toContain("start_line=21");
+    // The exact phrase read_lore_entity's paging emits too — one pageLines
+    // implementation, so the continue hint cannot fork between the tools.
+    expect(out).toContain("pass start_line=21 to continue");
     // Cut on a line boundary — no partial line before the note.
     expect(out.split("\n\n[...")[0].split("\n")).toHaveLength(20);
   });
