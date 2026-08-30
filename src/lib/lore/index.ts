@@ -8,6 +8,8 @@ export * from "./model";
 export * from "./categories";
 export * from "./entity";
 export * from "./slots";
+export * from "./facetBlocks";
+export * from "./readView";
 export * from "./gallery";
 export * from "./transfer";
 export * from "./match";

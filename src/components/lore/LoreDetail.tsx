@@ -6,10 +6,12 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import {
   type CategoryId,
+  type FacetBlock,
   type LoreEntity,
   type LoreFacet,
   type LoreImage,
   addLoreImage,
+  buildFacetBlocks,
   assignableCategories,
   collectionViews,
   entityCollections,
@@ -72,36 +74,6 @@ interface Props {
   onBack: () => void;
   /** Open directly in edit mode (used by the wall's card context menu). */
   initialEditing?: boolean;
-}
-
-/**
- * Facet rows for one list: a plain facet stays a row, facets sharing a
- * mutual-exclusion group collapse into one dashed box in first-seen order,
- * highest priority first inside it.
- *
- * Pulled out of the component so the flat list and each slot section (屏 19) run
- * the same grouping. A group whose facets carry different slots lands in the
- * section of the first one seen — mutually exclusive facets are one 面 by
- * definition, and splitting the box across sections would make the "only one of
- * these is injected" rule unreadable.
- */
-type FacetBlock =
-  | { kind: "facet"; facet: LoreFacet }
-  | { kind: "group"; group: string; facets: LoreFacet[] };
-
-function buildFacetBlocks(facets: readonly LoreFacet[]): FacetBlock[] {
-  const blocks: FacetBlock[] = [];
-  const byGroup = new Map<string, LoreFacet[]>();
-  for (const f of facets) {
-    if (!f.group) { blocks.push({ kind: "facet", facet: f }); continue; }
-    const existing = byGroup.get(f.group);
-    if (existing) { existing.push(f); continue; }
-    const list = [f];
-    byGroup.set(f.group, list);
-    blocks.push({ kind: "group", group: f.group, facets: list });
-  }
-  for (const list of byGroup.values()) list.sort((a, b) => b.priority - a.priority);
-  return blocks;
 }
 
 export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
