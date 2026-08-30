@@ -2463,3 +2463,105 @@ describe("streamCompletion — top_p / frequency_penalty", () => {
     expect(calls[0].body.top_p).toBeUndefined();
   });
 });
+
+/**
+ * 工具参数流式进度（`{toolArgs}`）。
+ *
+ * 一次工具调用必须整个交出去——半个 JSON 对象没法执行——所以模型把一章正文写进
+ * `rewrite_lines` 的那一两分钟里，这一层之上一个字都看不到。这组测试钉住的是：
+ * 报进度**不改变**最终交出去的那次调用，而且短调用一个字都不报。
+ */
+describe("streamCompletion — 工具参数的流式进度", () => {
+  const TOOL_DEF: ToolDefinition = {
+    type: "function",
+    function: {
+      name: "rewrite_lines",
+      description: "Rewrite a line range",
+      parameters: { type: "object", properties: { content: { type: "string" } } },
+    },
+  };
+
+  /** OpenAI 的四片参数增量，拼起来是一个完整的 JSON。 */
+  const OPENAI_ARG_DELTAS = [
+    `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"rewrite_lines","arguments":"{\\"con"}}]}}]}\n`,
+    `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"tent\\":\\""}}]}}]}\n`,
+    `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"第一章"}}]}}]}\n`,
+    `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"}"}}]}}]}\n`,
+    `data: [DONE]\n`,
+  ];
+
+  const ANTHROPIC_ARG_DELTAS = [
+    `data: {"type":"message_start","message":{"usage":{"input_tokens":5}}}\n\n`,
+    `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"rewrite_lines"}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"con"}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"tent\\":\\""}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"第一章"}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\\"}"}}\n\n`,
+    `data: {"type":"content_block_stop","index":0}\n\n`,
+    `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}\n\n`,
+    `data: {"type":"message_stop"}\n\n`,
+  ];
+
+  /** Make every `Date.now()` land a full period later than the last. */
+  function slowClock(): () => void {
+    let t = 1_700_000_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => (t += 500));
+    return () => spy.mockRestore();
+  }
+
+  const argsChunks = (received: StreamChunk[]) =>
+    received.filter((c): c is { toolArgs: { name: string; chars: number } } => "toolArgs" in c);
+
+  for (const [label, standard, chunks] of [
+    ["openai", "openai", OPENAI_ARG_DELTAS],
+    ["anthropic", "anthropic", ANTHROPIC_ARG_DELTAS],
+  ] as const) {
+    it(`${label}：慢的时候逐次报出已到的参数字数`, async () => {
+      const restore = slowClock();
+      try {
+        const { received } = await collect({ standard, chunks: [...chunks], tools: [TOOL_DEF] });
+        const progress = argsChunks(received);
+        expect(progress.length).toBeGreaterThan(0);
+        // 只增不减，而且最后一次等于真正交出去的那串参数的长度。
+        const sizes = progress.map((c) => c.toolArgs.chars);
+        expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
+        expect(progress[0].toolArgs.name).toBe("rewrite_lines");
+
+        const call = received.find((c) => "toolCalls" in c) as { toolCalls: { arguments: string }[] };
+        expect(call.toolCalls[0].arguments).toBe(`{"content":"第一章"}`);
+        expect(sizes[sizes.length - 1]).toBe(call.toolCalls[0].arguments.length);
+      } finally {
+        restore();
+      }
+    });
+
+    it(`${label}：一次很快的调用一个字都不报`, async () => {
+      // 时钟从构造那一刻起走，所以在一个周期内跑完的调用——绝大多数调用——
+      // 根本不产生这种 chunk。没有阈值要猜。
+      const { received } = await collect({ standard, chunks: [...chunks], tools: [TOOL_DEF] });
+      expect(argsChunks(received)).toEqual([]);
+    });
+  }
+
+  it("参数为空的调用不报进度，也照样交出 {}", async () => {
+    const restore = slowClock();
+    try {
+      const { received } = await collect({
+        standard: "anthropic",
+        tools: [TOOL_DEF],
+        chunks: [
+          `data: {"type":"message_start","message":{"usage":{"input_tokens":1}}}\n\n`,
+          `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"rewrite_lines"}}\n\n`,
+          `data: {"type":"content_block_stop","index":0}\n\n`,
+          `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":2}}\n\n`,
+          `data: {"type":"message_stop"}\n\n`,
+        ],
+      });
+      expect(argsChunks(received)).toEqual([]);
+      const call = received.find((c) => "toolCalls" in c) as { toolCalls: { arguments: string }[] };
+      expect(call.toolCalls[0].arguments).toBe("{}");
+    } finally {
+      restore();
+    }
+  });
+});

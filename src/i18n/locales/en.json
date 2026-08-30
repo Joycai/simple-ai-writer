@@ -1177,6 +1177,8 @@
         "roundNoTools": "reasoning only",
         "showEarlierRounds": "{{n}} earlier rounds",
         "subAgents": "Subagents",
+        "toolArgs": "Writing {{tool}} · {{chars}} chars",
+        "toolArgsDone": "Call arguments {{tool}} · {{chars}} chars",
         "subAgent": "Subagent",
         "packRun": "Pack agent",
         "pack": {

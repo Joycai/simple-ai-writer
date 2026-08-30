@@ -8,6 +8,7 @@ import {
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { openaiUrl } from "./urls";
+import { createToolArgsProgress } from "./toolArgsProgress";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
 
 /**
@@ -154,6 +155,15 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   // across network chunks, and parsing the halves would silently drop tokens/usage.
   let buffer = "";
 
+  // See toolArgsProgress: the calls themselves cannot be handed over until the
+  // stream ends, so this is the only thing that can be said while they arrive.
+  const reportToolArgs = createToolArgsProgress(opts.onChunk);
+  const argChars = () => {
+    let n = 0;
+    for (const tc of toolCallMap.values()) n += tc.args.length;
+    return n;
+  };
+
   const emitToolCalls = () => {
     if (toolCallMap.size === 0) return;
     const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
@@ -217,7 +227,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
         const entry = toolCallMap.get(idx)!;
         if (partial.id) entry.id += partial.id;
         if (partial.function?.name) entry.name += partial.function.name;
-        if (partial.function?.arguments) entry.args += partial.function.arguments;
+        if (partial.function?.arguments) {
+          entry.args += partial.function.arguments;
+          reportToolArgs(() => ({ name: entry.name, chars: argChars() }));
+        }
       }
     }
     // content_filter fires with little or no text — Azure OpenAI and several

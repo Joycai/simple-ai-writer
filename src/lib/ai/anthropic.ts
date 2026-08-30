@@ -26,6 +26,7 @@ import {
   renderSearchResults,
   type ServerToolEvent,
 } from "./serverTools";
+import { createToolArgsProgress } from "./toolArgsProgress";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -608,6 +609,15 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const serverToolNames = new Map<string, string>();
   let finished = false;
 
+  // See toolArgsProgress: the calls themselves cannot be handed over until the
+  // stream ends, so this is the only thing that can be said while they arrive.
+  const reportToolArgs = createToolArgsProgress(opts.onChunk);
+  const argChars = () => {
+    let n = 0;
+    for (const tc of toolBlocks.values()) n += tc.args.length;
+    return n;
+  };
+
   const emitToolCalls = () => {
     if (toolBlocks.size === 0) return;
     const toolCalls: AccumulatedToolCall[] = [...toolBlocks.entries()]
@@ -837,7 +847,12 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
           } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
             blockArgs.set(index, (blockArgs.get(index) ?? "") + delta.partial_json);
             const entry = toolBlocks.get(index);
-            if (entry) entry.args += delta.partial_json;
+            if (entry) {
+              entry.args += delta.partial_json;
+              // `toolBlocks` only — a server-side search's query streams the
+              // same way (blockArgs above), but nothing local is waiting on it.
+              reportToolArgs(() => ({ name: entry.name, chars: argChars() }));
+            }
           } else if (delta?.type === "signature_delta" && typeof delta.signature === "string") {
             if (block) block.signature = String(block.signature ?? "") + delta.signature;
           } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
