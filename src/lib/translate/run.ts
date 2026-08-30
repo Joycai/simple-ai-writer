@@ -185,6 +185,20 @@ export interface DocProgress {
   total: number;
   /** 到目前为止失败的块数。 */
   failed: number;
+  /**
+   * 已处理 / 需要翻译的行数与字数。
+   *
+   * 分母是**送进模型的那些行**，不是文档的行数：空行、URL、分隔线根本不进请求
+   * （见 `chunk.isTranslatable`），把它们算进分母，一份对话体小说的进度条会停在
+   * 六成不动——那正好是这个数字要回答的问题的反面。
+   *
+   * 块数已经能画进度条了，行/字仍然要给：块是我们的切法，一块可以是三行对白也
+   * 可以是三段独白，作者对「还剩多久」的感觉是按字来的。
+   */
+  lines: number;
+  totalLines: number;
+  chars: number;
+  totalChars: number;
 }
 
 export interface FailedChunk {
@@ -243,12 +257,23 @@ export async function runDocument(text: string, o: RunDocumentOptions): Promise<
   const out = [...allLines];
   const usage: TranslateUsage = { inputTokens: 0, outputTokens: 0 };
   const failed: FailedChunk[] = [];
+  const chunkChars = (c: TranslateChunk) => c.lines.reduce((n, l) => n + l.text.length, 0);
+  const totalLines = chunks.reduce((n, c) => n + c.lines.length, 0);
+  const totalChars = chunks.reduce((n, c) => n + chunkChars(c), 0);
+  let lines = 0;
+  let chars = 0;
+  const report = (done: number) =>
+    o.onProgress?.({ done, total: chunks.length, failed: failed.length, lines, totalLines, chars, totalChars });
   // 行号 → 要插在它前面的标记。分开收集，因为直接往 `out` 里插会让后面每一块
   // 的行号全部失效。
   const markers = new Map<number, string>();
 
   let carry: CarrySource | null = null;
   let aborted = false;
+
+  // 开跑之前先报一次 0：第一块要几十秒才回来，而「这份稿子有多大」是作者在那
+  // 几十秒里唯一想知道的事。等第一块译完再说，等待里最难熬的那一段恰好没有字。
+  if (chunks.length) report(0);
 
   for (const [i, chunk] of chunks.entries()) {
     if (o.signal?.aborted) {
@@ -290,7 +315,10 @@ export async function runDocument(text: string, o: RunDocumentOptions): Promise<
       // carry 不动：见文件头第 2 条。
     }
 
-    o.onProgress?.({ done: i + 1, total: chunks.length, failed: failed.length });
+    // 失败的块也算「处理完」：它的等待确实结束了，而没译出来这件事由 failed 说。
+    lines += chunk.lines.length;
+    chars += chunkChars(chunk);
+    report(i + 1);
   }
 
   // 标记从后往前插，这样前面的行号还没被动过。

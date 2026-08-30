@@ -21,7 +21,8 @@ import type {
   AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
 import {
-  createServerToolLog, type AgentEvent, type RoundLimitDecision, type TruncationDecision,
+  createServerToolLog, type AgentEvent, type RoundLimitDecision, type ToolStep,
+  type TruncationDecision,
 } from "./events";
 
 // Re-exported: callers reach the round-cap contract through the runtime that
@@ -1106,11 +1107,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ? tc.arguments.slice(0, TOOL_ARGS_DETAIL_CHARS)
         : tc.arguments;
 
-      opts.onEvent({
-        kind: "tool-step",
-        step: { round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running", argsTruncated },
-        at: Date.now(),
-      });
+      // Held rather than inlined so a progress report can re-send *this* step.
+      // `appendAgentEventTo` supersedes a row by (parentStep, call id, name), so
+      // resending the same object advances the one row — a step rebuilt by the
+      // tool, with an id of its own, would print a second row under the first.
+      const runningStep: ToolStep = {
+        round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running", argsTruncated,
+      };
+      opts.onEvent({ kind: "tool-step", step: runningStep, at: Date.now() });
 
       // Executor never throws — bad calls come back as error-text results the
       // model can read and correct on the next round.
@@ -1118,6 +1122,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ...runToolContext,
         signal: opts.signal,
         onNestedEvent: opts.onEvent,
+        onProgress: (progress) =>
+          opts.onEvent({ kind: "tool-step", step: { ...runningStep, progress }, at: Date.now() }),
       };
       // `activeTools`, NOT `preset.tools`: this list is the security boundary,
       // not an optimisation. Leave it as the preset's full set and a deferred

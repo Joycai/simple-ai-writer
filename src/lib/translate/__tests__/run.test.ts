@@ -41,7 +41,7 @@ vi.mock("../../ai", () => ({
   },
 }));
 
-import { runChunk, runDocument } from "../run";
+import { runChunk, runDocument, type DocProgress } from "../run";
 import { splitDocument } from "../chunk";
 
 const CONN = { baseUrl: "http://x/v1", apiKey: "", standard: "openai_compat", modelId: "sakura" } as never;
@@ -143,7 +143,9 @@ describe("runDocument", () => {
     ]);
   });
 
-  it("逐块报进度", async () => {
+  it("逐块报进度，且开跑前先报一次 0", async () => {
+    // 那个 0 不是凑数：第一块要几十秒才回来，作者在那几十秒里唯一能看到的
+    // 就是它——总量在，进度条就有底。
     script = [{ text: zh(2) }, { text: zh(2) }, { text: zh(2) }];
     const seen: string[] = [];
     await runDocument(DOC, {
@@ -151,7 +153,28 @@ describe("runDocument", () => {
       linesPerChunk: 2,
       onProgress: (p) => seen.push(`${p.done}/${p.total}·${p.failed}`),
     });
-    expect(seen).toEqual(["1/3·0", "2/3·0", "3/3·0"]);
+    expect(seen).toEqual(["0/3·0", "1/3·0", "2/3·0", "3/3·0"]);
+  });
+
+  it("进度的行/字分母只数送进模型的行", async () => {
+    // 空行和 URL 根本不进请求，算进分母进度条就永远到不了头。
+    script = [{ text: zh(2) }, { text: zh(2) }, { text: zh(2) }];
+    const seen: DocProgress[] = [];
+    await runDocument(DOC, { conn: CONN, linesPerChunk: 2, onProgress: (p) => seen.push(p) });
+    const last = seen[seen.length - 1];
+    expect(last.totalLines).toBe(6);          // 文档 8 行，其中 2 行没有日文
+    expect(last.lines).toBe(6);
+    expect(last.totalChars).toBe(jp(6).split("\n").join("").length);
+    expect(last.chars).toBe(last.totalChars);
+    expect(seen[0]).toMatchObject({ done: 0, lines: 0, chars: 0, totalLines: 6 });
+  });
+
+  it("失败的块也算处理完——它的等待确实结束了", async () => {
+    script = Array.from({ length: 6 }, () => broken);
+    const seen: DocProgress[] = [];
+    await runDocument(jp(2), { conn: CONN, onProgress: (p) => seen.push(p) });
+    const last = seen[seen.length - 1];
+    expect(last).toMatchObject({ done: 1, total: 1, failed: 1, lines: 2, totalLines: 2 });
   });
 
   it("失败的块保留原文，并在它前面留一行标记", async () => {

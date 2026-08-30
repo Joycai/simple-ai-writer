@@ -112,29 +112,43 @@ function translatedPath(source: string): string {
 }
 
 /**
- * 一行进度，写进执行日志。
+ * 「约剩 …」。
  *
- * 复用同一个 `toolCallId` 让 `appendAgentEventTo` **就地替换**这一行（它按
- * kind + parentStep + toolCallId + name 找），于是日志里是一行数字在走，而不是
- * 三十行「块 N 完成」。挂在 `parentStep` 下面，所以运行时自己那一行不受影响。
+ * 两块之后才给：第一块的耗时里含着本地模型的加载和显存预热，拿它外推六十块会
+ * 报出一个荒唐的数——而作者只会记住报出来的第一个数。译完最后一块也不给，那一刻
+ * 剩下的是审批卡，不是翻译。
  */
-function progressReporter(ctx: ToolContext, callId: string, name: string) {
+function remainingLabel(startedAt: number, p: DocProgress): string | null {
+  if (p.done < 2 || p.done >= p.total) return null;
+  const seconds = Math.round((((Date.now() - startedAt) / p.done) * (p.total - p.done)) / 1000);
+  if (seconds < 60) return `约剩 ${Math.max(1, seconds)} 秒`;
+  return `约剩 ${Math.round(seconds / 60)} 分`;
+}
+
+/**
+ * 一行进度，交给执行日志就地更新那一行工具调用。
+ *
+ * 这条链上唯一没有别的信号的地方：一份三万字的稿子要在这个工具里待四五分钟，
+ * 而工具循环期间日志上只有一行不动的「日中翻译 · foo.md」——它和一个卡死的端点
+ * 长得一模一样，而那两件事作者的反应完全不同。
+ *
+ * 三个分母都给：块是我们的切法，行和字才是作者对稿子的度量。名字不进 label——
+ * 行和标题行已经写着是哪个工具、哪份文件了。
+ */
+function progressReporter(ctx: ToolContext) {
+  const startedAt = Date.now();
   return (p: DocProgress) => {
-    ctx.onNestedEvent?.({
-      kind: "tool-step",
-      parentStep: callId,
-      step: {
-        round: 0,
-        toolCallId: `${callId}-progress`,
-        name: "translate",
-        argumentSummary: name,
-        status: p.done === p.total ? "done" : "running",
-        resultSummary:
-          `${p.done}/${p.total} 块` + (p.failed ? ` · ${p.failed} 块失败` : ""),
-        argsTruncated: false,
-        resultTruncated: false,
-      },
-      at: Date.now(),
+    const parts = [
+      `${p.done}/${p.total} 块`,
+      `${p.lines.toLocaleString()}/${p.totalLines.toLocaleString()} 行`,
+      `${p.chars.toLocaleString()}/${p.totalChars.toLocaleString()} 字`,
+    ];
+    const eta = remainingLabel(startedAt, p);
+    if (eta) parts.push(eta);
+    if (p.failed) parts.push(`${p.failed} 块失败`);
+    ctx.onProgress?.({
+      label: parts.join(" · "),
+      ratio: p.total ? p.done / p.total : undefined,
     });
   };
 }
@@ -269,7 +283,7 @@ async function translateFile(
     dict: dict.entries,
     signal: ctx.signal,
     linesPerChunk: translateLinesPerChunk(),
-    onProgress: progressReporter(ctx, toolCallId, baseName(source)),
+    onProgress: progressReporter(ctx),
   });
   // 记在账上，无论成败：失败的那些请求也真的发出去了。
   await recordUsage(ctx, conn, outcome.usage);

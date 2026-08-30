@@ -126,13 +126,15 @@ describe("buildLogModel — current activity", () => {
   });
 });
 
-describe("buildLogModel — subagents", () => {
+describe("buildLogModel — sub-runs", () => {
   const args = JSON.stringify({ kind: "search", task: "查一下 2026 年的行业报告" });
+  const packArgs = JSON.stringify({ pack: "lore_edit", task: "把新出场的人物补进知识库" });
 
-  const log = (): AgentEvent[] => [
+  /** A dispatching step plus the sub-run it forwarded under its id. */
+  const log = (name: string, callArgs: string): AgentEvent[] => [
     runStart(),
     roundStart(1),
-    tool("delegate", "d1", 1, "done", args),
+    tool(name, "d1", 1, "done", callArgs),
     { kind: "round-start", round: 1, maxRounds: 2, estInputTokens: 200, at: at(), parentStep: "d1" },
     { ...tool("web_search", "s1", 1), parentStep: "d1" },
     roundStart(2),
@@ -140,9 +142,10 @@ describe("buildLogModel — subagents", () => {
   ];
 
   it("lifts delegations into their own band, with the nested log attached", () => {
-    const model = buildLogModel(log(), false);
+    const model = buildLogModel(log("delegate", args), false);
     expect(model.subagents).toHaveLength(1);
     const [sub] = model.subagents;
+    expect(sub.via).toBe("delegate");
     expect(sub.kind).toBe("search");
     expect(sub.task).toBe("查一下 2026 年的行业报告");
     expect(sub.status).toBe("done");
@@ -151,12 +154,35 @@ describe("buildLogModel — subagents", () => {
     expect(sub.events.map((e) => e.kind)).toEqual(["round-start", "tool-step"]);
   });
 
-  it("still counts the delegation as a round's work, but not as a round row", () => {
-    const model = buildLogModel(log(), false);
+  it("gives a run_pack dispatch the same card, named by its pack", () => {
+    // The regression this rule exists for: `run_pack` forwards exactly like
+    // `delegate` does, but the old rule read the tool's NAME — so with the
+    // 助手工具包模式 Beta on, every write happened inside a run the log
+    // dropped whole (`log.filter(e => !e.parentStep)` and nothing to catch it).
+    const model = buildLogModel(log("run_pack", packArgs), false);
+    expect(model.subagents).toHaveLength(1);
+    const [sub] = model.subagents;
+    expect(sub.via).toBe("pack");
+    expect(sub.kind).toBe("lore_edit");
+    expect(sub.task).toBe("把新出场的人物补进知识库");
+    expect(sub.events).toHaveLength(2);
+  });
+
+  it("gives a card to a dispatcher it has never heard of", () => {
+    // The point of the structural rule: the next tool to forward a sub-run
+    // shows up on the day it is written, without editing logModel. It just
+    // gets a plain label until someone adds one.
+    const model = buildLogModel(log("some_future_tool", "{}"), false);
+    expect(model.subagents).toHaveLength(1);
+    expect(model.subagents[0]).toMatchObject({ via: "tool", kind: null });
+  });
+
+  it("still counts the dispatch as a round's work, but not as a round row", () => {
+    const model = buildLogModel(log("delegate", args), false);
     // The round remembers it happened…
     expect(model.rounds[0].events.map((e) => e.kind)).toEqual(["tool-step"]);
     // …but the renderer must not draw it twice.
-    expect(roundRows(model.rounds[0])).toEqual([]);
+    expect(roundRows(model.rounds[0], model.cardedSteps)).toEqual([]);
     expect(model.summary.toolCount).toBe(2);
   });
 
@@ -165,6 +191,7 @@ describe("buildLogModel — subagents", () => {
       runStart(),
       roundStart(1),
       tool("delegate", "d1", 1, "running", args),
+      { kind: "round-start", round: 1, maxRounds: 2, estInputTokens: 200, at: at(), parentStep: "d1" },
       tool("delegate", "d1", 1, "done", args),
     ];
     const model = buildLogModel(events, false);
@@ -172,7 +199,21 @@ describe("buildLogModel — subagents", () => {
     expect(model.subagents[0].status).toBe("done");
   });
 
-  it("has no subagent band at all when nothing was delegated", () => {
+  it("leaves a dispatch that never started anything as an ordinary row", () => {
+    // No sub-run happened, so there is nothing for a card to hold — and the
+    // error the author needs is on the row itself rather than hidden one
+    // disclosure deep inside an empty card.
+    const events: AgentEvent[] = [
+      runStart(),
+      roundStart(1),
+      tool("delegate", "d1", 1, "error", args),
+    ];
+    const model = buildLogModel(events, false);
+    expect(model.subagents).toEqual([]);
+    expect(roundRows(model.rounds[0], model.cardedSteps)).toHaveLength(1);
+  });
+
+  it("has no subagent band at all when nothing was dispatched", () => {
     expect(buildLogModel([runStart(), roundStart(1), tool("read_file", "a")], false).subagents)
       .toEqual([]);
   });

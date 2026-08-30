@@ -1174,6 +1174,12 @@
         "showEarlierRounds": "{{n}} earlier rounds",
         "subAgents": "Subagents",
         "subAgent": "Subagent",
+        "packRun": "Pack agent",
+        "pack": {
+          "file_write": "{{doc}} writes",
+          "lore_edit": "{{kb}} writes",
+          "export": "Export"
+        },
         "subRunning": "Running",
         "subDone": "Done",
         "subFailed": "Failed",

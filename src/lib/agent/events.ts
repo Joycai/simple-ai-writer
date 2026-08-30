@@ -42,6 +42,27 @@ export type TruncationDecision = { action: "continue" } | { action: "stop" };
 
 export type ToolStepStatus = "running" | "done" | "error";
 
+/**
+ * How far along a call that runs for minutes rather than seconds is.
+ *
+ * Display only, and only meaningful while the step is `running`. The loop is
+ * blocked on the call either way, so without this a four-minute translation is
+ * one motionless row — indistinguishable from a hung endpoint, which is the one
+ * thing the author would act on. Emitted by re-sending the *same* step (same
+ * toolCallId), so `appendAgentEventTo` replaces the row in place and the log
+ * counts up on one line instead of printing sixty.
+ *
+ * The tool decides the units: only it knows whether it is counting chunks,
+ * files, or pages. What it must not do is put its own name in the label — the
+ * row and the headline already say which tool this is.
+ */
+export interface ToolProgress {
+  /** One short line: how far along, in the tool's own units. */
+  label: string;
+  /** 0–1, for the row's hairline bar. Omitted when the total isn't knowable. */
+  ratio?: number;
+}
+
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
 export interface ToolStep {
   round: number;
@@ -62,6 +83,12 @@ export interface ToolStep {
    */
   argsTruncated?: boolean;
   resultTruncated?: boolean;
+  /**
+   * Live progress, set only while the call is in flight and only by tools that
+   * report it (`ToolContext.onProgress`). Never persisted meaningfully: the
+   * settled step that replaces this one carries the result instead.
+   */
+  progress?: ToolProgress;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */

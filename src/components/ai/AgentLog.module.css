@@ -150,11 +150,31 @@
 .subResult { padding: 0 0 0 var(--space-3); }
 
 .row {
+  position: relative; /* 承载运行中那根进度线，见 .rowProgress */
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   padding: 4px var(--space-3);
   font: 400 11px/1.6 var(--font-sans);
+}
+
+/* 运行中的工具行底压一根 1px 进度线——与 SyncPresence 同一套语汇：行本身不
+   变形、不加高，只有一根线在走。收在行的内缘（左右各留 var(--space-3)），
+   所以它读起来属于这一行，而不是把日志横切成两段。 */
+.rowProgress {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: 0;
+  height: 1px;
+  background: var(--color-bar-track);
+}
+.bare .rowProgress { left: 0; right: 0; }
+.rowProgressFill {
+  display: block;
+  height: 100%;
+  background: var(--color-sienna);
+  transition: width var(--transition-base);
 }
 .bare > .list > .row,
 .bare > .list > .rowGroup > .row { padding-left: 0; padding-right: 0; }
@@ -254,6 +274,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 进度比一句结果摘要长，而它左边那半行（工具名 + 参数）此刻恰好是最不需要读全的
+   一半——参数在运行期间一个字都不会变。所以让出去。 */
+.rowMetaProgress { max-width: 62%; }
 .rowTime {
   flex-shrink: 0;
   color: var(--color-text-faint);
