@@ -70,6 +70,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [tool-pack-plan.md](feature/agent/tool-pack-plan.md) | `implemented` | 工具包：chat 主控只带读查 + 分发（常驻实测 ≈10k → ≈3.7k），写类工作经 `run_pack` 派给只带对应 pack 的子运行（跑主模型，审批通道透传）；台架过闸（gemma 级 30/30，qwen 级的失败与 pack 无关）；「助手工具包模式」Beta 默认关——分发可靠性按模型分档，默认开会让派不动的模型在 chat 里写不了任何东西 |
 | [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
+| [tool-progress-plan.md](feature/agent/tool-progress-plan.md) | `partial` | 长任务的进度：等待分三类（工具自己在循环 / 工具卡在别人手里 / 根本还没有工具），`ToolContext.onProgress` 缝 + translate 已并；清点了模型流式写长文件（最值钱）、生图轮询 600s、`search_text` 逐文件串行，并记下 `run_pack` 与 handoff 的嵌套日志整段不可见这两个同源 bug |
 | [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇 + 段的合计等于上限）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |
 | [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
 | [lore-category-visibility-plan.md](feature/agent/lore-category-visibility-plan.md) | `shipped` | Agent 建重复分类的修复：模型从未见过分类标签、空分类在列表里隐形、`create_lore_category` 不查重、指令文案陈旧——PR-A 读侧 id↔标签对照（description + 结果文本，常驻预算随之放宽到 12,000），PR-B 写侧幂等查重 + 文案纠偏；与 lore-category-manage-plan 分片 3 互补 |
