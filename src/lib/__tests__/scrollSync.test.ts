@@ -320,4 +320,34 @@ describe("anchor interpolation", () => {
     expect(lineAtOffset(flat, 100)).toBe(4);
     expect(offsetAtLine(flat, 3)).toBe(100);
   });
+
+  /**
+   * The whole point of AnchorSource: the preview measures a block's rect only
+   * when `at(i)` is called, so the number of probes per query IS the number of
+   * layout reads per scroll event. If a change makes the interpolation walk
+   * the list linearly, this stops being O(log n) and a 2000-block document is
+   * back to 2000 rect reads per event.
+   */
+  it("consults O(log n) anchors per query through a lazy source, with array-identical results", () => {
+    const n = 1024;
+    const big: LineAnchor[] = Array.from({ length: n }, (_, i) => ({
+      line: i * 3,
+      endLine: i * 3 + 2,
+      top: i * 40,
+      bottom: i * 40 + 30,
+    }));
+    let probes = 0;
+    const lazy = { length: n, at: (i: number) => (probes++, big[i]) };
+
+    for (const y of [0, 35, 40_960 / 2, 40_930, 12_345]) {
+      probes = 0;
+      expect(lineAtOffset(lazy, y)).toBe(lineAtOffset(big, y));
+      expect(probes).toBeLessThanOrEqual(2 * Math.ceil(Math.log2(n)) + 4);
+    }
+    for (const line of [0, 1.5, 1536, 3070, 777]) {
+      probes = 0;
+      expect(offsetAtLine(lazy, line)).toBe(offsetAtLine(big, line));
+      expect(probes).toBeLessThanOrEqual(2 * Math.ceil(Math.log2(n)) + 4);
+    }
+  });
 });

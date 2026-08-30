@@ -75,14 +75,34 @@ export interface LineAnchor {
   bottom: number;
 }
 
+/**
+ * Random access over the anchor list without demanding a materialised array.
+ *
+ * The interpolation below only ever *probes* O(log n) anchors per query (one
+ * binary search plus a neighbour or two) — but an eager `LineAnchor[]` costs
+ * one `getBoundingClientRect` per block to build, and the preview used to
+ * rebuild it on every scroll event: a 2000-paragraph chapter paid ~2000 rect
+ * reads per event for ~11 that were looked at. A source measures on `at(i)`
+ * instead, so laziness is the caller's choice and a plain array still
+ * qualifies via the union.
+ */
+export interface AnchorSource {
+  readonly length: number;
+  at(i: number): LineAnchor;
+}
+
+export type Anchors = readonly LineAnchor[] | AnchorSource;
+
+const at = (s: Anchors, i: number): LineAnchor => (Array.isArray(s) ? s[i] : (s as AnchorSource).at(i));
+
 /** Index of the last anchor whose `key` is <= value, or -1. */
-function lastAtOrBelow(anchors: readonly LineAnchor[], key: "top" | "line", value: number): number {
+function lastAtOrBelow(anchors: Anchors, key: "top" | "line", value: number): number {
   let lo = 0;
   let hi = anchors.length - 1;
-  if (anchors[0][key] > value) return -1;
+  if (at(anchors, 0)[key] > value) return -1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
-    if (anchors[mid][key] <= value) lo = mid;
+    if (at(anchors, mid)[key] <= value) lo = mid;
     else hi = mid - 1;
   }
   return lo;
@@ -98,21 +118,21 @@ function lastAtOrBelow(anchors: readonly LineAnchor[], key: "top" | "line", valu
  * first anchor (the pane's leading padding), ramp from line 0; past the last,
  * clamp to its end.
  */
-export function lineAtOffset(anchors: readonly LineAnchor[], y: number): number | null {
+export function lineAtOffset(anchors: Anchors, y: number): number | null {
   if (anchors.length === 0) return null;
   const i = lastAtOrBelow(anchors, "top", y);
   if (i < 0) {
-    const first = anchors[0];
+    const first = at(anchors, 0);
     if (first.top <= 0 || first.line <= 0) return first.line;
     return (Math.max(y, 0) / first.top) * first.line;
   }
-  const a = anchors[i];
+  const a = at(anchors, i);
   if (y < a.bottom) {
     const height = a.bottom - a.top;
     if (height <= 0) return a.line;
     return a.line + ((y - a.top) / height) * (a.endLine - a.line);
   }
-  const next = anchors[i + 1];
+  const next = i + 1 < anchors.length ? at(anchors, i + 1) : undefined;
   if (!next) return a.endLine;
   const gap = next.top - a.bottom;
   const lines = next.line - a.endLine;
@@ -121,21 +141,21 @@ export function lineAtOffset(anchors: readonly LineAnchor[], y: number): number 
 }
 
 /** The content offset where fractional source line `line` sits. Inverse of `lineAtOffset`. */
-export function offsetAtLine(anchors: readonly LineAnchor[], line: number): number | null {
+export function offsetAtLine(anchors: Anchors, line: number): number | null {
   if (anchors.length === 0) return null;
   const i = lastAtOrBelow(anchors, "line", line);
   if (i < 0) {
-    const first = anchors[0];
+    const first = at(anchors, 0);
     if (first.line <= 0 || first.top <= 0) return Math.max(first.top, 0);
     return (Math.max(line, 0) / first.line) * first.top;
   }
-  const a = anchors[i];
+  const a = at(anchors, i);
   if (line < a.endLine) {
     const lines = a.endLine - a.line;
     if (lines <= 0) return a.top;
     return a.top + ((line - a.line) / lines) * (a.bottom - a.top);
   }
-  const next = anchors[i + 1];
+  const next = i + 1 < anchors.length ? at(anchors, i + 1) : undefined;
   if (!next) return a.bottom;
   const gap = next.top - a.bottom;
   const lines = next.line - a.endLine;
