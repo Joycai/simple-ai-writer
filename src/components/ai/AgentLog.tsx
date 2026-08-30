@@ -269,20 +269,46 @@ function ToolStepDetail({ step }: { step: ToolStep }) {
   );
 }
 
+/**
+ * A tool call as one row.
+ *
+ * While the call is in flight the right-hand slot carries its progress instead
+ * of the result it does not have yet (`ToolStep.progress`) — a long call is
+ * otherwise a row that sits still for minutes, which reads exactly like a hung
+ * endpoint. The hairline under the row is the same figure again, coarsely: the
+ * text answers "how far", the bar answers it without being read.
+ */
 function ToolStepRow({ step }: { step: ToolStep }) {
   const { t } = useTranslation();
   const terms = useTerms();
   const args = formatToolArgs(step.argumentSummary);
-  const result = step.status === "running" ? "" : formatToolResult(step.resultSummary);
+  const running = step.status === "running";
+  const progress = running ? step.progress : undefined;
+  const result = running ? "" : formatToolResult(step.resultSummary);
   return (
     <>
-      <Marker state={step.status === "running" ? "running" : step.status === "done" ? "done" : "error"} />
+      <Marker state={running ? "running" : step.status === "done" ? "done" : "error"} />
       <span className={styles.rowName}>
         {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name, doc: terms.doc, entry: terms.entry })}
         {args && <span className={styles.rowArgs} title={step.argumentSummary}> · {args}</span>}
       </span>
-      {result && (
-        <span className={styles.rowMetaRight} title={step.resultSummary}>{result}</span>
+      {progress ? (
+        <span
+          className={`${styles.rowMetaRight} ${styles.rowMetaProgress}`}
+          title={progress.label}
+        >
+          {progress.label}
+        </span>
+      ) : (
+        result && <span className={styles.rowMetaRight} title={step.resultSummary}>{result}</span>
+      )}
+      {progress?.ratio !== undefined && (
+        <span className={styles.rowProgress} aria-hidden="true">
+          <span
+            className={styles.rowProgressFill}
+            style={{ width: `${Math.round(Math.min(1, Math.max(0, progress.ratio)) * 100)}%` }}
+          />
+        </span>
       )}
     </>
   );
@@ -696,6 +722,13 @@ function useHeadline(model: AgentLogModel): string {
         entry: terms.entry,
       });
       const args = formatToolArgs(current.step.argumentSummary);
+      // The collapsed header is the only line an author watching a long call
+      // sees, so progress belongs here and not only in the row below — and it
+      // *replaces* the arguments rather than following them: this line clips
+      // from the right, the path is static and one row down, and the numbers
+      // are the half that has to survive the clip.
+      const progress = current.step.status === "running" ? current.step.progress?.label : undefined;
+      if (progress) return `${name} · ${progress}`;
       return args ? `${name} · ${args}` : name;
     }
     case "reasoning":

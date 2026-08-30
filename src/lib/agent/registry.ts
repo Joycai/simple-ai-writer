@@ -113,7 +113,7 @@ import { executeDelegate, type SubAgentKind } from "./subagent";
 import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
-import type { AgentEvent } from "./events";
+import type { AgentEvent, ToolProgress } from "./events";
 import type { AiConn } from "../ai/conn";
 
 export type ToolAccess = "read" | "write-auto" | "write-approval";
@@ -598,6 +598,16 @@ export interface ToolContext {
    * Forward events from nested child agents into the parent's execution log.
    */
   onNestedEvent?: (event: AgentEvent) => void;
+  /**
+   * Report how far along this call is, for tools that take minutes.
+   *
+   * The runtime re-emits its own running step with the progress attached, so
+   * the tool never has to reconstruct the step's identity (round, call id,
+   * arguments) — getting any of those wrong would print a second row instead of
+   * advancing the first. Call it as often as there is something new to say; the
+   * log replaces in place.
+   */
+  onProgress?: (progress: ToolProgress) => void;
   /**
    * Resolver for child agent connections. Injected by the caller from aiStore,
    * avoiding reverse dependencies from lib/agent into stores.
