@@ -336,6 +336,86 @@ describe("read_file", () => {
     });
   });
 
+  /**
+   * The map for the file the heading index cannot map — and that is not an edge
+   * case, it is the document someone asks an agent to ADD headings to. Before
+   * this, "give this wall of text some structure" began with paging the whole
+   * thing 4,000 characters at a time, because the one map read_file offered
+   * needed the structure that was missing.
+   */
+  describe("paragraph index", () => {
+    /** `n` paragraphs of one long line each, blank-line separated. */
+    const paragraphs = (n: number) =>
+      Array.from({ length: n }, (_, i) => `第${i + 1}段起头，${"文".repeat(195)}`).join("\n\n");
+
+    it("maps a headingless document by its paragraph starts", async () => {
+      fs.set(`${PROJECT}/长文.md`, paragraphs(30));
+
+      const out = await read({ path: `${PROJECT}/长文.md` });
+
+      expect(out).toContain("This file has no headings");
+      // Blank-line separated, so paragraph k starts on line 2k-1.
+      expect(out).toContain("L1  第1段起头");
+      expect(out).toContain("L21  第11段起头");
+      // The opening is clipped — this is a map, not a second copy of the file.
+      expect(out).toContain("…");
+      // And it precedes the page it indexes.
+      expect(out.indexOf("L21  第11段起头")).toBeLessThan(out.indexOf("     1\t第1段起头"));
+    });
+
+    it("yields to the heading index when there is one", async () => {
+      const headed = `# 总述\n\n${paragraphs(20)}\n\n## 小节\n\n${paragraphs(20)}`;
+      fs.set(`${PROJECT}/有标题.md`, headed);
+
+      const out = await read({ path: `${PROJECT}/有标题.md` });
+      expect(out).toContain("Headings in this file");
+      expect(out).not.toContain("This file has no headings");
+    });
+
+    it("omits the map when the whole file came back", async () => {
+      fs.set(`${PROJECT}/短.md`, "一段\n\n二段");
+      expect(await read({ path: `${PROJECT}/短.md` })).not.toContain("This file has no headings");
+    });
+
+    it("says nothing about a file with only one paragraph", async () => {
+      // One row is not a map of anything.
+      fs.set(`${PROJECT}/一整段.txt`, `${"字".repeat(199)}\n`.repeat(40));
+      expect(await read({ path: `${PROJECT}/一整段.txt` })).not.toContain("This file has no headings");
+    });
+
+    /**
+     * The property that makes the map worth having on the files it exists for.
+     * Taking the first sixty paragraphs of a 400-paragraph manuscript maps its
+     * first sixth and leaves the model paging for everything else — the map
+     * would have bought nothing on precisely the largest documents.
+     */
+    it("samples across the WHOLE file rather than listing the first sixty", async () => {
+      fs.set(`${PROJECT}/巨长.md`, paragraphs(400));
+
+      const out = await read({ path: `${PROJECT}/巨长.md` });
+      const index = out.split("     1\t")[0];
+
+      expect(index).toContain("400 paragraphs");
+      expect(index).toContain("every 7th one");
+      // Reaches the far end of the document, which is the whole point.
+      expect(index).toContain("第393段起头");
+      // And stays inside its row budget.
+      expect(index.split("\n").filter((l) => /^L\d+ /.test(l)).length).toBeLessThanOrEqual(60);
+    });
+
+    it("does not treat a blank line inside a code fence as a paragraph break", async () => {
+      // Same rule extractHeadings keeps: a map that says otherwise sends an
+      // edit into the middle of a code block.
+      fs.set(
+        `${PROJECT}/带围栏.md`,
+        `开头一段\n\n\`\`\`js\nconst a = 1;\n\nconst b = 2;\n\`\`\`\n\n${paragraphs(30)}`,
+      );
+
+      const index = (await read({ path: `${PROJECT}/带围栏.md` })).split("     1\t")[0];
+      expect(index).not.toContain("const b");
+    });
+  });
+
   it("errors when start_line is past the end", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "一\n二");
 

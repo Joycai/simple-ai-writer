@@ -217,7 +217,19 @@ function pageLines(raw: string, from: number): {
       : `lines ${start}-${to} of ${lines.length} shown`,
   ];
   if (cutMidLine) notes.push(`line ${start} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`);
-  if (to < lines.length) notes.push(`pass start_line=${to + 1} to continue`);
+  // The "in one round" half is the expensive one to leave unsaid. Paging reads
+  // as a sequence, so a model treats page N+1 as waiting on page N and spends a
+  // round — and the whole tool schema — on each one; reading a long document
+  // through therefore costs more in schema than the document is worth. They are
+  // in fact independent calls the runtime runs concurrently
+  // (`partitionParallelSegments`). Said here rather than only in the system
+  // instruction because this is where it applies, and by the time the model is
+  // reading this trailer the instruction is thousands of tokens upstream (D1).
+  if (to < lines.length) {
+    notes.push(
+      `pass start_line=${to + 1} to continue — several pages can be requested in the same round, they do not wait on each other`,
+    );
+  }
   return { body: numberLines(body, start), from: start, to, total: lines.length, whole, notes };
 }
 
@@ -1149,6 +1161,84 @@ export function headingIndex(text: string): string {
     .join("\n");
 }
 
+/** Characters of a paragraph's opening kept in the map. */
+const PARAGRAPH_PREVIEW_CHARS = 24;
+
+/**
+ * The document's paragraphs and the lines they start on — the map for a file
+ * that `headingIndex` cannot map.
+ *
+ * It exists because of an exact blind spot. The heading index is what lets a
+ * model jump to a region instead of paging 4,000 characters at a time, and it
+ * needs two headings to produce anything — so the one document where structure
+ * is *missing*, which is precisely the document someone asks an agent to add
+ * headings to, is the one that comes back with no map at all. The model's only
+ * remaining move is to read the whole thing: a 100k-character file is 25 paged
+ * rounds before it can propose a single heading, at which point the schema
+ * bill dwarfs the document.
+ *
+ * The paragraph breaks are the structure that IS there, so they are what gets
+ * offered. Same appearance rule as the heading index (only when the response
+ * could not carry the whole file), same coordinates, and no parameter — a map
+ * you have to ask for costs the round it saves (edit-loop-plan.md D2).
+ *
+ * Fenced code is skipped the way `extractHeadings` skips it: a blank line
+ * inside a fence is not a paragraph break, and a map that says otherwise sends
+ * an edit into the middle of a code block.
+ */
+export function paragraphIndex(text: string): string {
+  const lines = text.split("\n");
+  const starts: { line: number; preview: string }[] = [];
+  let inFence = false;
+  let atStart = true; // the next non-blank line begins a paragraph
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      inFence = !inFence;
+      atStart = false;
+      continue;
+    }
+    if (inFence) continue;
+    if (line.trim() === "") {
+      atStart = true;
+      continue;
+    }
+    if (!atStart) continue;
+    atStart = false;
+    const opening = line.trim();
+    starts.push({
+      line: i + 1,
+      preview:
+        opening.length > PARAGRAPH_PREVIEW_CHARS
+          ? `${opening.slice(0, PARAGRAPH_PREVIEW_CHARS)}…`
+          : opening,
+    });
+  }
+
+  // One paragraph is not a map of anything.
+  if (starts.length < INDEX_MIN_HEADINGS) return "";
+
+  // Too many to list: take every Nth across the WHOLE file rather than the
+  // first sixty. The difference matters precisely on the documents this exists
+  // for — a 400-paragraph manuscript's first sixty paragraphs map its first
+  // sixth, so the model would still have to page through the rest to find
+  // anything, and the map would have bought nothing. Sampled, it is a coarse
+  // map of all of it, and every row is still a real line the model can read
+  // from or insert before.
+  const step = Math.ceil(starts.length / INDEX_MAX_ROWS);
+  const shown = step > 1 ? starts.filter((_, i) => i % step === 0) : starts;
+  const header =
+    step > 1
+      ? `This file has no headings. It has ${starts.length} paragraphs; every ${step}th one is listed ` +
+        "below with the line it starts on — read around any of them for the rest. insert_lines and " +
+        "rewrite_lines take these numbers, so a region can be named without paging to it:"
+      : "This file has no headings. Its paragraphs start on these lines — insert_lines and " +
+        "rewrite_lines take these numbers, so a region can be named without paging to it:";
+
+  return [header, ...shown.map((p) => `L${p.line}  ${p.preview}`)].join("\n");
+}
+
 /**
  * Read a manuscript file, optionally starting partway in.
  *
@@ -1202,7 +1292,9 @@ export async function readWritingFile(
 
   // The map goes in front of the page, and only when there is more file than
   // the page carries — a response holding the whole file needs no map of it.
-  const index = page.whole ? "" : headingIndex(raw);
+  // Headings first; paragraphs are the fallback for the file that has none,
+  // which is exactly the file most in need of a map (see paragraphIndex).
+  const index = page.whole ? "" : headingIndex(raw) || paragraphIndex(raw);
   return {
     toolCallId,
     content: `${index ? `${index}\n\n` : ""}${page.body}\n\n[... ${notes.join("; ")} ...]`,
