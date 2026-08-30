@@ -34,10 +34,8 @@ import { costFor, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { CONTEXT_UTILIZATION_DEFAULT, inputCeilingFor } from "../context/budget";
-import { isDocxExportEnabled } from "../docx/flag";
-import { isPptxExportEnabled } from "../pptx/flag";
-import { isXlsxExportEnabled } from "../xlsx/flag";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
+import { applyExportFlags } from "./routing";
 import { isOrchestratorEnabled } from "./packFlag";
 import { partitionByGroup } from "./registry";
 import type { ToolContext, ToolId } from "./registry";
@@ -224,20 +222,17 @@ function clip(text: string, maxChars: number): string {
 }
 
 /**
- * The export pack's toolset with the Beta switches applied — the same rule
- * `routeTools` applies to the main preset: an export the author hasn't turned
- * on is *absent*, not refused. Returns the tools, or null when every export
- * line is off, in which case the pack itself must be refused (a specialist
- * with nothing but read tools would "finish" without exporting anything).
+ * The export pack's toolset with the Beta switches applied — the same
+ * `applyExportFlags` rule routing applies to the main preset, called rather
+ * than copied: the mapping carries a non-obvious pairing (`read_doc_format`
+ * rides the docx flag) that two hand-synced lists would fork. Returns the
+ * tools, or null when every export line is off, in which case the pack itself
+ * must be refused (a specialist with nothing but read tools would "finish"
+ * without exporting anything).
  */
 function exportPackTools(): ToolId[] | null {
-  const tools = PACK_PRESETS.export.tools.filter((t) => {
-    if (t === "export_pptx") return isPptxExportEnabled();
-    if (t === "export_docx" || t === "read_doc_format") return isDocxExportEnabled();
-    if (t === "export_xlsx") return isXlsxExportEnabled();
-    return true;
-  });
-  return tools.some((t) => t.startsWith("export_")) ? [...tools] : null;
+  const tools = applyExportFlags([...PACK_PRESETS.export.tools]);
+  return tools.some((t) => t.startsWith("export_")) ? tools : null;
 }
 
 /**
@@ -286,6 +281,15 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
       );
     }
     tools = filtered;
+  }
+  // The vision-strip counterpart for a sub-run. Routing strips read_image /
+  // read_lore_image from the main surface when a vision subagent is live; a
+  // pack sub-run has no delegate and cannot reach vision at all, so its
+  // condition is the model's own capability: on a text-only conn the tool
+  // could only ever answer "cannot accept images" — absent, not refused, the
+  // same rule as every Beta above.
+  if (ctx.selfConn.model.type !== "multimodal") {
+    tools = tools.filter((t) => t !== "read_lore_image" && t !== "read_image");
   }
   const preset: TaskPreset = { ...PACK_PRESETS[pack], tools };
 

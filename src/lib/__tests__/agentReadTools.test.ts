@@ -1011,6 +1011,32 @@ describe("read_lore_entity — 互斥组标注", () => {
     const { content } = await readLoreEntity("c1", "Kael", index, false);
     expect(content).toContain("line numbers count from the top of each FILE");
   });
+
+  it("行号提示不点名 rewrite_lore_lines——除非本次运行真的持有它", async () => {
+    // 八个 preset 带 read_lore_entity 却没有任何 lore 写工具（续写/设定改进/
+    // facet/写手/扮演/orchestrator 档）：向它们宣传一个不可调用的工具，模型照做
+    // 就是一轮 Unknown tool。持有与否由 registry 从 allowed 表传入。
+    const bare = await readLoreEntity("c1", "Kael", index, false);
+    expect(bare.content).not.toContain("rewrite_lore_lines");
+    const armed = await readLoreEntity("c1", "Kael", index, false, undefined, undefined, true);
+    expect(armed.content).toContain("what rewrite_lore_lines takes");
+  });
+
+  it("registry 把 allowed 表接进 ctx——工具在场时提示点名它", async () => {
+    const res = await executeRegisteredTool(
+      { id: "c1", name: "read_lore_entity", arguments: JSON.stringify({ entity: "Kael" }) },
+      ["read_lore_entity", "rewrite_lore_lines"],
+      { ...ctx, loreIndex: index },
+    );
+    expect(res.content).toContain("what rewrite_lore_lines takes");
+
+    const without = await executeRegisteredTool(
+      { id: "c2", name: "read_lore_entity", arguments: JSON.stringify({ entity: "Kael" }) },
+      ["read_lore_entity"],
+      { ...ctx, loreIndex: index },
+    );
+    expect(without.content).not.toContain("rewrite_lore_lines");
+  });
 });
 
 describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）", () => {

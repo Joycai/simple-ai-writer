@@ -225,6 +225,27 @@ describe("tool packs", () => {
       expect(preset.tools).not.toContain("export_pptx");
       expect(preset.tools).not.toContain("export_xlsx");
     });
+
+    it("strips read_lore_image on a text-only conn — absent, not refused", async () => {
+      // A pack sub-run has no delegate and cannot reach the vision subagent,
+      // so the routing strip's job falls to the model's own capability here:
+      // on a text-only conn the tool could only ever answer "cannot accept
+      // images".
+      happyRun();
+      await executeRunPack(callFor({ pack: "lore_edit", task: "统一角色卡" }), makeCtx());
+      const preset = mockRunAgent.mock.calls[0][0].preset;
+      expect(preset.tools).not.toContain("read_lore_image");
+    });
+
+    it("keeps read_lore_image when the parent model is multimodal — a direct read beats a hop", async () => {
+      happyRun();
+      await executeRunPack(
+        callFor({ pack: "lore_edit", task: "统一角色卡" }),
+        makeCtx({ selfConn: { provider, model: { ...model, type: "multimodal" }, apiKey: "k" } }),
+      );
+      const preset = mockRunAgent.mock.calls[0][0].preset;
+      expect(preset.tools).toContain("read_lore_image");
+    });
   });
 
   describe("the sub-run's contract", () => {

@@ -85,6 +85,29 @@ export function routeTools(
 }
 
 /**
+ * The Beta-flag → export-tool rule, shared by `route()` (the main preset) and
+ * the export pack's own filtering (packs.ts): an export the author hasn't
+ * turned on is *absent*, not refused. One function because the mapping carries
+ * a non-obvious pairing — `read_doc_format` rides the docx flag — and two
+ * hand-synced copies is how the next export format ships in one list and not
+ * the other.
+ */
+export function applyExportFlags(tools: ToolId[]): ToolId[] {
+  let out = tools;
+  if (!isPptxExportEnabled()) {
+    out = out.filter((t) => t !== "export_pptx");
+  }
+  if (!isDocxExportEnabled()) {
+    const wordTools = new Set<ToolId>(["export_docx", "read_doc_format"]);
+    out = out.filter((t) => !wordTools.has(t));
+  }
+  if (!isXlsxExportEnabled()) {
+    out = out.filter((t) => t !== "export_xlsx");
+  }
+  return out;
+}
+
+/**
  * The toolset the next request *will* carry, for surfaces that estimate before
  * running. The chat store creates its task workspace at run start
  * (stores/agentStore taskWorkspace()), so an estimate taken while idle must
@@ -135,16 +158,7 @@ function route(
   // refused: a tool the model can see but that answers "the author has not
   // enabled this" reads to the author as the assistant being broken, and
   // wastes a round finding out. Same argument as the image tools above.
-  if (!isPptxExportEnabled()) {
-    tools = tools.filter((t) => t !== "export_pptx");
-  }
-  if (!isDocxExportEnabled()) {
-    const wordTools = new Set<ToolId>(["export_docx", "read_doc_format"]);
-    tools = tools.filter((t) => !wordTools.has(t));
-  }
-  if (!isXlsxExportEnabled()) {
-    tools = tools.filter((t) => t !== "export_xlsx");
-  }
+  tools = applyExportFlags(tools);
 
   // If any delegate-capable subagent is enabled and we have an
   // active/provisional workspace, provide delegate. `imagegen` must not count:
