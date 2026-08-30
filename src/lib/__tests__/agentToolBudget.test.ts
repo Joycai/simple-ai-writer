@@ -44,7 +44,7 @@ import { getToolDefinitions, partitionByGroup } from "../agent/registry";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, WRITE_PRESET } from "../agent/presets";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../roleplay/presets";
 import { estimateToolsTokens } from "../ai/tokenEstimate";
-import { PACK_PRESETS } from "../agent/packs";
+import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../agent/packs";
 
 /**
  * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
@@ -352,6 +352,24 @@ describe("tool schema budget", () => {
     expect(residentOf("file_write")).toBeLessThanOrEqual(5_400);
     expect(residentOf("lore_edit")).toBeLessThanOrEqual(2_600);
     expect(residentOf("export")).toBeLessThanOrEqual(3_200);
+  });
+
+  it("keeps the orchestrator tier where the plan priced it", () => {
+    // tool-pack-plan §3.1 estimated the orchestrator's resident half at
+    // ≈3.5–4.5k. Measured at slice 3: 4,789 with the imagegen trio listed
+    // (present only while an image binding is live — routing strips it
+    // otherwise), 2,849 without it, and the routed appends (run_pack +
+    // delegate + ask_author) at 860 — so a typical no-imagegen session pays
+    // ≈3.7k against the assist tier's ≈10k. The relational assertion is the
+    // feature itself: if the orchestrator ever costs more than half of
+    // assist's resident half, the dispatch overhead stops buying anything.
+    const { resident } = partitionByGroup(ORCHESTRATOR_PRESET.tools);
+    const orches = estimateToolsTokens(getToolDefinitions(resident));
+    expect(orches).toBeLessThanOrEqual(5_200);
+    const assist = estimateToolsTokens(
+      getToolDefinitions(partitionByGroup(AGENT_ASSIST_PRESET.tools).resident),
+    );
+    expect(orches).toBeLessThan(assist * 0.55);
   });
 
   it("gives every tool a description worth its place", () => {

@@ -37,7 +37,8 @@ import { CONTEXT_UTILIZATION_DEFAULT, inputCeilingFor } from "../context/budget"
 import { isDocxExportEnabled } from "../docx/flag";
 import { isPptxExportEnabled } from "../pptx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
-import type { TaskPreset } from "./presets";
+import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
+import { isOrchestratorEnabled } from "./packFlag";
 import { partitionByGroup } from "./registry";
 import type { ToolContext, ToolId } from "./registry";
 import { runAgent, type AgentRunResult } from "./runtime";
@@ -137,6 +138,71 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
     serverTools: "off",
   },
 };
+
+/**
+ * The orchestrator tier — chat's thin resident half when the tool-pack Beta is
+ * on (tool-pack-plan §3.1, slice 3).
+ *
+ * What it keeps is what the plan's §1 table says should be resident: the whole
+ * read/search set, story memory (both halves — memory upkeep is tiny and
+ * frequent, exactly the wrong shape to pay a dispatch for), the task
+ * workspace (its notes are the material bus every brief points into), and the
+ * image-generation trio — 生图不进 pack: those tools already have their own
+ * shape (imagegen subagent + routing strips them when no binding is live), so
+ * listing them here costs nothing for an author without the binding.
+ *
+ * What it deliberately does NOT hold: any document, knowledge-base or export
+ * write tool — that is D4's clean boundary ("主控不持有任何写工具"), the thing
+ * that makes the answer to "who writes?" one word. `run_pack` / `delegate` /
+ * `ask_author` are appended by routing, same as on the assist preset.
+ *
+ * maxRounds matches AGENT_ASSIST: it is also what one 继续 press grants, and
+ * an orchestrator round is cheap by construction — the cap is about runaway
+ * loops, not about budget.
+ */
+export const ORCHESTRATOR_PRESET: TaskPreset = {
+  id: "agent-orchestrator",
+  tools: [
+    "list_lore_entities",
+    "read_lore_entity",
+    "read_lore_image",
+    "read_image",
+    "list_files",
+    "read_file",
+    "read_slides",
+    "search_text",
+    "read_memory",
+    "read_workflow",
+    "update_memory",
+    "generate_image",
+    "edit_image",
+    "redraw_lore_image",
+    "task_plan",
+    "task_progress",
+    "write_note",
+    "read_note",
+    "list_notes",
+  ],
+  maxRounds: 40,
+  finishPolicy: "force-text",
+  scratchpad: "required",
+};
+
+/**
+ * The preset chat runs on, resolved from the Beta switch — the ONE seam every
+ * chat-side reader goes through (ceiling, routing, round cap, briefing choice,
+ * the context meter). Two of these disagreeing is exactly the drift the
+ * messageCeilingFor comment warns about, so nothing reads the flag directly.
+ *
+ * Read at call time, never cached: the author can flip the switch in Settings
+ * between turns. (The system-layer *briefing* is still seeded once per
+ * session — a mid-session flip changes the toolset on the next turn but keeps
+ * the old briefing until a new session, same read-once contract as the
+ * workflow roster.)
+ */
+export function chatAgentPreset(): TaskPreset {
+  return isOrchestratorEnabled() ? ORCHESTRATOR_PRESET : AGENT_ASSIST_PRESET;
+}
 
 /** Same clip as a delegate's summary — the artefacts are on disk, not in here. */
 const PACK_SUMMARY_CHARS = 800;

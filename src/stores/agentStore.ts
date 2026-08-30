@@ -75,7 +75,7 @@ import {
   recordSourceRef,
   type TaskWorkspaceHandle,
 } from "../lib/agent/taskWorkspace";
-import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
+import { chatAgentPreset, ORCHESTRATOR_PRESET } from "../lib/agent/packs";
 import { routeTools } from "../lib/agent/routing";
 import {
   resolveSubAgentConn, visionSubAgentModel, withSessionOverrides, type SubAgentKind,
@@ -1212,10 +1212,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
        * separately, and the visible symptom was the context bar standing past
        * its own compaction mark with nothing happening.
        */
+      // The Beta switch decides the tier for the WHOLE turn: ceiling, routing,
+      // round cap and briefing all read this one value (lib/agent/packs).
+      const chatPreset = chatAgentPreset();
       const messageCeiling = messageCeilingFor(
         model.contextSize,
         contextUtilization,
-        AGENT_ASSIST_PRESET,
+        chatPreset,
         effectiveSubs,
         useAiStore.getState().models,
         // The handoff schema rides on every round of a writer run — the whole
@@ -1246,10 +1249,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // take the default or guess an id and eat an error.
         const docxFormats = currentFormats();
         const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
+        // The orchestrator tier gets its own briefing: the assist one teaches
+        // tools this tier does not hold, which reads as the assistant being
+        // broken. The docx roster is skipped with it — no export tool here to
+        // name formats for; the export pack reads them via read_doc_format.
+        const orchestrating = chatPreset === ORCHESTRATOR_PRESET;
+        const briefing = i18n.t(
+          orchestrating ? "ai.instructions.orchestrator" : "ai.instructions.agent",
+          promptParams(i18n.language === "zh-CN"),
+        );
         const systemPrompt =
-          `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}` +
+          `${writingPrompt}\n\n${briefing}` +
           (workflowSection ? `\n\n${workflowSection}` : "") +
-          (docxSection ? `\n\n${docxSection}` : "");
+          (docxSection && !orchestrating ? `\n\n${docxSection}` : "");
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject. Loaded only
@@ -1468,14 +1480,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // here rather than on the preset is what keeps AiPanel's Agent mode —
       // which runs the very same preset object — out of it.
       const routed = routeTools(
-        AGENT_ASSIST_PRESET, effectiveSubs, tw, useAiStore.getState().models,
+        chatPreset, effectiveSubs, tw, useAiStore.getState().models,
         // askAuthor: the question card renders in the approvals area below.
         // packs: chat is the surface that threads the approval channels and
         // selfConn through ToolContext — see run_pack's guards (agent/packs).
         { handoff: true, askAuthor: true, packs: true },
       );
       const effectivePreset = {
-        ...AGENT_ASSIST_PRESET,
+        ...chatPreset,
         tools: routed.tools,
         serverTools: routed.serverTools,
         finishPolicy: routed.finishPolicy,
@@ -1564,7 +1576,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           get().requestTruncationDecision(recoveries, controller),
         onRoundLimit: (roundsUsed) =>
           get().requestRoundExtension(
-            roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller,
+            roundsUsed, chatPreset.maxRounds, controller,
             // Evaluated here, at the cap — not at run start. A workspace the
             // model created three rounds ago counts; pausing with nothing on
             // disk would throw the turn away, since pause keeps only what was
@@ -1714,7 +1726,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const messageCeiling = messageCeilingFor(
       model.contextSize,
       useAppStore.getState().contextUtilization,
-      AGENT_ASSIST_PRESET,
+      chatAgentPreset(),
       effectiveSubs,
       models,
       // Same as sendChat's: this is the chat, so a writer run carries the
