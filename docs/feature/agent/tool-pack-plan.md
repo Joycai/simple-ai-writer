@@ -1,6 +1,6 @@
 # 工具包（tool pack）：主控编排 + 专职子代理执行
 
-> 状态：`in-progress`（分片 1 台架已过闸——§5.1；分片 2、3 已落地——§6.2/§6.3，Beta 开关默认关；分片 4「默认开否」待真机数据）
+> 状态：`implemented`（四个分片全部落地——§6；「助手工具包模式」Beta **默认关**，决定与重开条件见 §6.4）
 > 起因：2026-08-30，作者提出——项目里绝大部分任务是分类的（lore 写 / 文件写 / 杂项转换 / 读与查），真正需要常驻的只有读查和通用工具，其余都是「到了某个 task 才集中使用、且几乎不同时使用」。设想：把一类工具打成 pack，主控知道要干哪类活时唤起**只带这个 pack** 的 inline 子代理去做；主控自己负责收集材料和编排步骤。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（量纲与七期工作）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（§5 延迟装载机制 · §6 `load_tools` 的否决与重开条件）、[`subagent-lld.md`](subagent-lld.md)（delegate 机制）、[`writer-subagent-plan.md`](writer-subagent-plan.md)（`deliverTo` 契约）
 
@@ -93,7 +93,7 @@ orchestrator（chat 主控）保留：全部读查（≈2.0k）、memory、`task
 1. ✅ **台架**（不进代码库，结果记进本文档）——2026-08-30 已跑，结果与判定在 §5.1。
 2. ✅ pack preset + `run_pack` + 子上下文透传（`requestApproval`/`lorePlan`/auto-approve），**默认关**——chat 照旧全量工具，`run_pack` 仅在 dev 开关下出现。落点（2026-08-30）：`lib/agent/packs.ts`（三个 pack preset + `executeRunPack`）、`packFlag.ts`（偏好键 `app:toolPackDev`，这一片**没有设置 UI**——分片 3 才挂 Beta 开关）、routing 的 `packs` opt-in（chat 独有，三个条件缺一即缺席：dev 开关 + surface 声明 + 工作区）。要点：pack 跑父运行自己的 conn（`ToolContext.selfConn`，caller 注入——runtime 手里只有拍平的 `ConnOptions`，重建不出计费要的 Model 行）；透传的是父上下文的**同一批通道对象**（审批卡照常渲染在主 surface，本轮已批的方案经共享闸门自动给子运行装载延迟组——runtime 每轮从 `lorePlan.steps` 重读，不需要新机制）；lore_edit 收尾后 `syncLore(ctx)` 把父快照拉平，否则本轮后续回合解析不出 pack 刚建的条目；嵌套派发在结构上不存在（pack 工具集里没有 `run_pack`/`delegate`）。实测 schema：`run_pack` 313，pack 常驻 file_write 4,982 / lore_edit 2,258（写组 5,020 照旧随方案装载）/ export 2,889——全部落在 §3.1 的估算之内，钉在 `agentToolBudget.test.ts`。
 3. ✅ orchestrator 档接入 chat（设置 → 通用 → 实验功能「助手工具包模式」）。落点（2026-08-30）：`ORCHESTRATOR_PRESET`（packs.ts——全部读查 + memory 两件 + 任务清单/笔记 + 生图三件**照旧列出**、由 routing 按 imagegen 绑定剥留；D4 边界成立：不持有任何文档/知识库/导出写工具，`run_pack` 是唯一写路径、仍由 routing 追加）；`chatAgentPreset()` 是 Beta 开关的**唯一读点**——ceiling、routing、轮数上限、briefing、AgentChat 计量条全走它，两处对不上正是 messageCeilingFor 那条注释警告的漂移；orchestrator 档换用自己的 briefing（`ai.instructions.orchestrator`：先查后动 / 派单纪律 / 清单 / 配图 / 工作方式），docx 格式清单随之不注入（export pack 用 `read_doc_format` 自取）。**计量实测**：orchestrator 常驻 4,789（含生图三件）/ 2,849（无 imagegen 绑定的典型会话），routing 追加三件（run_pack+delegate+ask_author）860——典型会话 ≈3.7k 对 assist 档 ≈10k，落在 §3.1 的 3.5–4.5k 估算内；钉进 `agentToolBudget.test.ts`（含关系断言：orchestrator < assist 常驻 × 0.55）。已知取舍：briefing 随会话播种一次，开关中途翻转时工具面下一条消息即切、briefing 到新会话才换（与工作流清单同一条 read-once 契约，设置项文案已写明）。
-4. 按实测决定默认开否 + 收尾（指令层、文档、`agentToolBudget` 新增 orchestrator/pack 的棘轮）。
+4. ✅ 按实测决定默认开否 + 收尾（2026-08-30）。**决定：默认关，作者按模型自选。** 依据是三轮台架一致的同一个事实——分发可靠性按模型分档：gemma4-26b 在 §5.1 的台架措辞和**发货措辞**（真实 `ai.instructions.orchestrator` + 真实 `run_pack` schema，本条的复验轮）下都过线（复验：S1 9–10/10 派发、S2/S3 各 10/10；工单按真实契约判定 9/9 合格——发货 schema 把材料路径放 `references` 或允许读后内联，首轮 4/10 的「不合格」是旧判定只认 task 字符串的盲区，抽查工单实物全部自包含），而 qwen3.8-27b 两种措辞下 S1 都近乎全失（0/10 与 1/10，陷在重读循环里，对照臂同败）。应用无法预知作者绑哪一档模型，默认开会让派不动的模型在 chat 里**安静地**写不了任何东西——坏在作者第一次要求写入时才暴露。Beta 开关的意义正是把选择交给知道自己模型的作者。重开条件：真机跨模型档的使用报告，或将来给模型加一次 endpointProbe 式的派发探测、让默认值随模型走。收尾清单：`agentToolBudget` 的 orchestrator/pack 棘轮（分片 2/3 已钉：run_pack ≤400、pack 常驻三档、orchestrator ≤5,200 + 关系断言 < assist×0.55）、CLAUDE.md 与 docs/README.md 的指针与状态、指令层（orchestrator briefing 即分片 3 交付，无遗留）。dev 开关（`app:toolPackDev`）**保留**：给新模型验派发能力时，全量工具 + run_pack 的 A/B 形态仍是唯一对照。
 
 ## 7. 决策与弃案
 
