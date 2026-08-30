@@ -511,7 +511,11 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       loadedGroups.add(group);
       activeTools.push(...deferred[group]);
       if (messageCeiling !== undefined) {
-        messageCeiling = Math.max(0, messageCeiling - toolTokensOf(deferred[group]));
+        // Floored at 1, never 0: trimHistory and the checkpoint nudge both read
+        // a falsy ceiling as "no ceiling" — a clamp to 0 would turn trimming
+        // OFF at the exact moment the schemas outgrew the window (see
+        // toolCost.flooredCeiling, the same rule at the pre-run producers).
+        messageCeiling = Math.max(1, messageCeiling - toolTokensOf(deferred[group]));
       }
       opts.onEvent({
         kind: "tools-loaded",
