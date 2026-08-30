@@ -294,7 +294,9 @@ describe("update_lore_file", () => {
 
   it("refuses path traversal, non-md files, and images.md", async () => {
     const ctx = makeCtx();
-    for (const file of ["../evil.md", "sub/evil.md", "note.txt", "images.md"]) {
+    // Images.md included: the filesystems the app ships on are case-insensitive,
+    // so a case-varied spelling writes the same manifest.
+    for (const file of ["../evil.md", "sub/evil.md", "note.txt", "images.md", "Images.md"]) {
       const res = await run("update_lore_file", { entity: "Ava", file, content: "x" }, ctx);
       expect(res.content).toMatch(/^Error/);
     }
@@ -919,7 +921,7 @@ describe("delete_lore_file", () => {
 
   it("refuses index.md / images.md and reports a file that is not there", async () => {
     const ctx = makeCtx();
-    for (const file of ["index.md", "images.md"]) {
+    for (const file of ["index.md", "images.md", "Index.md"]) {
       const res = await run("delete_lore_file", { entity: "Ava", file }, ctx);
       expect(res.content).toContain("app-managed");
     }

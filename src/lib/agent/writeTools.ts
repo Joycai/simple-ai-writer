@@ -33,6 +33,8 @@ import {
   createEntityWithContent,
   dropLoreImageEntry,
   facetFileName,
+  isGalleryManifest,
+  isPlainEntityFilename,
   parseFacetMeta,
   readEntityFile,
   saveEntityMetaAndBody,
@@ -345,9 +347,6 @@ export async function createLoreEntityTool(
 
 // ─── update_lore_file ────────────────────────────────────────────────────────
 
-/** Reserved names the agent may never write through this tool. */
-const REFUSED_FILES = new Set(["images.md"]);
-
 /**
  * Validate a model-supplied filename as a writable file inside the entity dir.
  * The argument is model-controlled, so anything that could navigate ('/', '\',
@@ -357,13 +356,13 @@ const REFUSED_FILES = new Set(["images.md"]);
  */
 function checkEntityFilename(toolCallId: string, raw: unknown): ToolResult | string {
   const file = String(raw ?? "").trim();
-  if (!/^[^/\\]+\.md$/.test(file) || file.includes("..")) {
+  if (!isPlainEntityFilename(file)) {
     return {
       toolCallId,
       content: "Error: 'file' must be a plain .md filename inside the entity directory (no paths).",
     };
   }
-  if (REFUSED_FILES.has(file)) {
+  if (isGalleryManifest(file)) {
     return {
       toolCallId,
       content:
@@ -1061,10 +1060,11 @@ function checkFacetFilename(toolCallId: string, file: string | undefined): ToolR
   if (!f) {
     return { toolCallId, content: "Error: 'file' argument is required (the facet's .md filename inside the entity directory)." };
   }
-  if (!/^[^/\\]+\.md$/.test(f) || f.includes("..")) {
+  if (!isPlainEntityFilename(f)) {
     return { toolCallId, content: "Error: 'file' must be a plain .md filename inside the entity directory (no paths)." };
   }
-  if (RESERVED_ENTITY_FILES.includes(f)) {
+  // Case-insensitive: the filesystems the app ships on are, so "Index.md" IS index.md.
+  if (RESERVED_ENTITY_FILES.includes(f.toLowerCase())) {
     return {
       toolCallId,
       content: `Error: ${f} is app-managed and not a facet — use update_lore_file for index.md, and update_lore_image / delete_lore_image for the gallery.`,
