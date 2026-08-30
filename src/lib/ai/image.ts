@@ -53,6 +53,33 @@ export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute):
   return familyOf(standard) === "gemini" ? "gemini" : "images-api";
 }
 
+/**
+ * How a submitted image task is getting on, for the routes that poll.
+ *
+ * The two async routes take **minutes** (their deadline is 10) and, once the
+ * author has approved, the only thing above this layer is a tool step sitting
+ * on "running" — which is what a dead endpoint looks like too. Reported here
+ * rather than timed from outside because only this loop knows the endpoint is
+ * still answering, and (on DashScope) whether the task is queued or drawing.
+ *
+ * `timeoutMs` is the useful half: it turns "is this stuck?" into "it has eight
+ * more minutes before it gives up".
+ */
+export interface ImageProgress {
+  /**
+   * What the endpoint says it is doing. Omitted where it cannot say — ComfyUI's
+   * history only records *finished* runs, so an absent entry means queued or
+   * drawing and there is no way to tell which.
+   */
+  phase?: "queued" | "running";
+  /** Polls made so far. */
+  polls: number;
+  /** Milliseconds since the task was submitted. */
+  elapsedMs: number;
+  /** When this task will be abandoned. */
+  timeoutMs: number;
+}
+
 export interface ImageRequest {
   prompt: string;
   /** Input images as base64 data URLs. Non-empty turns the call into an edit. */
@@ -65,6 +92,12 @@ export interface ImageRequest {
   mask?: string;
   /** How many images to return. Providers cap this; the caller should too. */
   n?: number;
+  /**
+   * Called by the submit-and-poll routes while they wait. Never called by the
+   * synchronous ones: one request has nothing to report between "sent" and
+   * "answered", and inventing a tick there would be an animation, not a fact.
+   */
+  onProgress?: (p: ImageProgress) => void;
   /**
    * Negative prompt — what must not appear. Only the comfyui route has a wire
    * spelling for it (the workflow's negative node); every other route ignores
@@ -1061,6 +1094,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
 
     let polls = 0;
     let misses = 0;
+    const submittedAt = Date.now();
     for (;;) {
       await sleep(polls < 10 ? DASHSCOPE_POLL_MS : DASHSCOPE_POLL_SLOW_MS, deadline.signal);
       polls++;
@@ -1083,7 +1117,15 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
       misses = 0;
 
       const status = json.output?.task_status;
-      if (status === "PENDING" || status === "RUNNING") continue;
+      if (status === "PENDING" || status === "RUNNING") {
+        req.onProgress?.({
+          phase: status === "PENDING" ? "queued" : "running",
+          polls,
+          elapsedMs: Date.now() - submittedAt,
+          timeoutMs: DASHSCOPE_TASK_TIMEOUT_MS,
+        });
+        continue;
+      }
       if (status === "SUCCEEDED") {
         const { urls, texts } = parseDashscopeOutput(json.output);
         return await collectDashscopeImages(urls, texts, deadline.signal);
@@ -1270,8 +1312,11 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
     log.note({ taskId: promptId });
 
     let misses = 0;
+    let polls = 0;
+    const submittedAt = Date.now();
     for (;;) {
       await sleep(COMFY_POLL_MS, deadline.signal);
+      polls++;
 
       let entry: ComfyHistoryEntry | undefined;
       try {
@@ -1287,8 +1332,16 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
       }
       misses = 0;
 
-      // History only records finished runs — absent means still queued/running.
-      if (!entry) continue;
+      // History only records finished runs — absent means still queued/running,
+      // and there is no way here to tell which, so `phase` is left out.
+      if (!entry) {
+        req.onProgress?.({
+          polls,
+          elapsedMs: Date.now() - submittedAt,
+          timeoutMs: COMFY_TASK_TIMEOUT_MS,
+        });
+        continue;
+      }
       if (entry.status?.status_str === "error") {
         throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status));
       }

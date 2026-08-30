@@ -7,7 +7,9 @@
  * rejected proposal must cost nothing.
  */
 
-import { generateImage, isEditUnsupportedError } from "../ai/image";
+import i18n from "../../i18n";
+import { generateImage, isEditUnsupportedError, type ImageProgress } from "../ai/image";
+import type { ToolProgress } from "../agent/events";
 import { imageCostFor } from "../ai/configDb";
 import type { IllustrateProposal } from "../agent/registry";
 import { dataUrlToBytes } from "../fs/images";
@@ -17,6 +19,33 @@ import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
 import { imageRequestParams, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
+
+/** `m:ss`, the same clock the execution log's round timer shows. */
+function clock(ms: number): string {
+  const secs = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
+
+/**
+ * One line of "still drawing", for the tool row the author is looking at.
+ *
+ * Deliberately **no `ratio`**: nothing here knows how far along the picture is.
+ * A bar filling towards the timeout would read as progress and would be full at
+ * exactly the moment the task is abandoned — the one number that must not look
+ * like completion. The cap is stated as text instead, which is the useful half:
+ * it turns "is this stuck?" into "it has eight more minutes".
+ */
+function imageWaitProgress(p: ImageProgress): ToolProgress {
+  return {
+    label: i18n.t(p.phase === "queued" ? "ai.agent.progress.imageQueued" : "ai.agent.progress.image", {
+      defaultValue: p.phase === "queued"
+        ? "排队中 · 已等 {{elapsed}} · 上限 {{cap}}"
+        : "生成中 · 已等 {{elapsed}} · 上限 {{cap}}",
+      elapsed: clock(p.elapsedMs),
+      cap: clock(p.timeoutMs),
+    }),
+  };
+}
 
 /** What an applied illustration reports back to the model. */
 export interface IllustrationOutcome {
@@ -45,6 +74,12 @@ export async function runIllustration(
    * completion.
    */
   signal?: AbortSignal,
+  /**
+   * Where the wait is reported while the picture is drawn — the approving tool
+   * call's own `ctx.onProgress`, handed down through the approval (see
+   * agentStore.settleApproval). Only the polling routes ever call it.
+   */
+  onProgress?: (p: ToolProgress) => void,
 ): Promise<IllustrationOutcome> {
   const { useAiStore } = await import("../../stores/aiStore");
   const { models, providers } = useAiStore.getState();
@@ -84,8 +119,9 @@ export async function runIllustration(
   const negative = model.caps?.route === "comfyui" && proposal.negative?.trim()
     ? { negative: proposal.negative.trim() }
     : {};
-  const req = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal };
-  const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel, { edit: true }), signal };
+  const progress = onProgress ? { onProgress: (p: ImageProgress) => onProgress(imageWaitProgress(p)) } : {};
+  const req = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal, ...progress };
+  const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel, { edit: true }), signal, ...progress };
 
   // Input images: the picture being edited, plus any references a generation
   // leans on. Either kind makes the call image-conditioned, so both ride the

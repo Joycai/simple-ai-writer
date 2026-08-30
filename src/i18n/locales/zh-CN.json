@@ -1116,6 +1116,8 @@
     },
     "agent": {
       "progress": {
+        "image": "生成中 · 已等 {{elapsed}} · 上限 {{cap}}",
+        "imageQueued": "排队中 · 已等 {{elapsed}} · 上限 {{cap}}",
         "search": "{{done}}/{{total}} 个文件",
         "searchHits": "{{done}}/{{total}} 个文件 · 命中 {{hits}} 处"
       },

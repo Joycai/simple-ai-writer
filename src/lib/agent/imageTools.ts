@@ -121,7 +121,9 @@ async function proposeIllustration(
     };
   }
 
-  const decision = await ctx.requestApproval(proposal);
+  // The wait that matters here is on the far side of the approval: drawing is
+  // minutes, and until the picture lands this call is parked in this promise.
+  const decision = await ctx.requestApproval(proposal, ctx.onProgress);
   if (!decision.approved) {
     return {
       toolCallId,

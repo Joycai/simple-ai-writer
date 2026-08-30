@@ -1116,6 +1116,8 @@
     },
     "agent": {
       "progress": {
+        "image": "Generating · {{elapsed}} elapsed · {{cap}} cap",
+        "imageQueued": "Queued · {{elapsed}} elapsed · {{cap}} cap",
         "search": "{{done}}/{{total}} files",
         "searchHits": "{{done}}/{{total}} files · {{hits}} hits"
       },

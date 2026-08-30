@@ -653,10 +653,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // 本次都批准 is keyed to the controller here, not to a conversation:
             // a panel task is one job start to finish, so the grant dies with
             // the run (agentStore.rejectAll clears it on every exit path).
-            requestApproval: (p) =>
+            requestApproval: (p, onApplyProgress) =>
               useAgentStore.getState().requestApproval(p, controller, {
                 signal: controller.signal,
                 autoApproveKey: controller,
+                onApplyProgress,
               }),
             // Lore changes are gated on an approved plan; the gate is per-run,
             // so each task starts with a clean slate.

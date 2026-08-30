@@ -56,7 +56,7 @@ import {
 import {
   listChatSessions, loadChatSession, upsertChatSession, type ChatSessionRow,
 } from "../lib/agent/sessionDb";
-import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
+import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
   CHAT_AUTO_APPROVE_KEY, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsIllustrate,
@@ -151,6 +151,18 @@ export interface ApprovalBinding {
    * lib/agent/approvalRouting for the one rule and why the default is "show".
    */
   surface?: string;
+  /**
+   * Where to report the wait while the approved proposal is being *carried
+   * out*, for the kinds whose apply is the slow part.
+   *
+   * Approving a picture is instantaneous; drawing it polls for up to ten
+   * minutes (`lib/ai/image`), and in that window the tool call is parked inside
+   * `requestApproval` with no way to say anything — the log shows a step on
+   * "running", which is also what a dead endpoint shows. This is the tool's own
+   * `ctx.onProgress`, passed down by the call that asked, so what it advances
+   * is that call's own row.
+   */
+  onApplyProgress?: (p: ToolProgress) => void;
 }
 
 export interface PendingApproval extends ApprovalBinding {
@@ -548,7 +560,11 @@ interface ApplyOutcome {
  * Carry out what an approved proposal asked for. Throwing here is how a failure
  * reaches the model as a rejection — never swallow one and report success.
  */
-async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<ApplyOutcome> {
+async function applyProposal(
+  proposal: Proposal,
+  signal?: AbortSignal,
+  onProgress?: (p: ToolProgress) => void,
+): Promise<ApplyOutcome> {
   const { useProjectStore } = await import("./projectStore");
   const { createEntry, moveEntry, deleteEntry, copyEntry } = useProjectStore.getState();
 
@@ -592,7 +608,7 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
       // proposal time — a rejected card costs nothing.
       const { runIllustration } = await import("../lib/image/illustrate");
       const { projectPath: root } = useProjectStore.getState();
-      const outcome = await runIllustration(proposal, root ?? "", signal);
+      const outcome = await runIllustration(proposal, root ?? "", signal, onProgress);
       if (proposal.dest.kind === "lore") {
         // The gallery grew — rescan so the entity view shows it at once.
         // Awaited: this function's caller reports the outcome to the model, and
@@ -729,7 +745,9 @@ async function settleApproval(
   auto: boolean,
 ): Promise<void> {
   try {
-    const { report, imagePath, resultPath } = await applyProposal(item.proposal, item.signal);
+    const { report, imagePath, resultPath } = await applyProposal(
+      item.proposal, item.signal, item.onApplyProgress,
+    );
     // A picture goes into the transcript as well as onto disk — into the turn
     // the request came from, named at request time. The task panel shares
     // this queue and binds no turn, so its images stay out of the chat.
@@ -1573,10 +1591,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
               m.useMemoryStore.getState().loadForActiveFile(),
             );
           },
-          requestApproval: (p) =>
+          requestApproval: (p, onApplyProgress) =>
             get().requestApproval(p, controller, {
               turnId: assistantTurn.id,
               signal: controller.signal,
+              onApplyProgress,
               // Not the controller: 本次对话都批准 has to outlive the turn it
               // was pressed in, which is the whole point of the button.
               autoApproveKey: CHAT_AUTO_APPROVE_KEY,

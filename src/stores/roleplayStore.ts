@@ -725,7 +725,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
               mutateMemory(agent.id, (doc) =>
                 reviseRecord(doc, recId, patch, Math.floor(Date.now() / 1000))),
           } satisfies AgentMemoryStore,
-          requestApproval: async (p) => {
+          requestApproval: async (p, onApplyProgress) => {
             const { useAgentStore } = await import("./agentStore");
             // key 用本 agent 的 controller，绝不能是 CHAT_AUTO_APPROVE_KEY 那样
             // 的字面量——几个 agent 共用一个字面量会让 A 的「本次都批准」
@@ -733,6 +733,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             return useAgentStore.getState().requestApproval(p, controller, {
               signal: controller.signal,
               autoApproveKey: controller,
+              onApplyProgress,
               // 卡片归本 agent 的对话区渲染，不归对话助手——三个并发的 agent
               // 各看各的（lib/agent/approvalRouting）。
               surface: agent.id,

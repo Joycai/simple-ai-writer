@@ -564,7 +564,18 @@ export interface ToolContext {
    * (the resolver applies the edit before resolving) or rejects. Absent when
    * the surface can't render an approval card — the tool then errors.
    */
-  requestApproval?: (proposal: Proposal) => Promise<ApprovalDecision>;
+  requestApproval?: (
+    proposal: Proposal,
+    /**
+     * Where to report the wait *after* the author approves, for the kinds whose
+     * apply is the slow part — a picture polls for minutes (`lib/image`), and
+     * by then this tool is parked inside the promise below with no other way to
+     * say anything. Pass `ctx.onProgress` and the store calls it while it works
+     * (agentStore.settleApproval); the row it advances is this call's own,
+     * because it is this call's own callback.
+     */
+    onApplyProgress?: (p: ToolProgress) => void,
+  ) => Promise<ApprovalDecision>;
   /**
    * Plan-approval channel, same blocking contract, for propose_lore_plan.
    * Absent (or `lorePlan` absent) means the surface can't gate lore changes,

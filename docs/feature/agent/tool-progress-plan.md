@@ -1,6 +1,6 @@
 # 长任务的进度：工具卡片能报什么、报不了什么
 
-> Status: `partial` — §2.0 / §2.2 A / §3.1 已并（[#420](https://github.com/Joycai/simple-ai-writer/pull/420)），§2.1 已并（[#421](https://github.com/Joycai/simple-ai-writer/pull/421)），§2.2 B 在 [#424](https://github.com/Joycai/simple-ai-writer/pull/424)；只剩 §2.3（生图 / 导出）仍是提案。
+> Status: `shipped` — 清点定下的五片全部并入：§2.0 / §2.2 A / §3.1（[#420](https://github.com/Joycai/simple-ai-writer/pull/420)）、§2.1（[#421](https://github.com/Joycai/simple-ai-writer/pull/421)）、§2.2 B（[#424](https://github.com/Joycai/simple-ai-writer/pull/424)）、§2.3 生图那一半（[#425](https://github.com/Joycai/simple-ai-writer/pull/425)）。**故意没做**的两处写在 §2.3 末尾和 §4。
 >
 > 起因：作者实机反馈「跑整文件翻译时等的心里没底」，随后要求对**所有长/大文件操作**（html / md / txt）做同一件事的清点。
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | `translate`（整文件） | 分钟 | ✅ 块/行/字 + ETA | 已做 | 块 · 行 · 字 |
 | **模型把长正文流进工具参数**（`rewrite_document` / `rewrite_lines` / `create_file` / `append_file` / `propose_edit` / 写 .html） | 30 秒 – 3 分钟 | ✅ 轮次秒表 + 已写字数（§2.2 A/B 已做；Gemini 只有秒表） | 已做 | 已生成字数 |
-| `generate_image` / `edit_image` / `redraw_lore_image` | 30 秒 – **10 分钟** | 批准后一直 running，无数字 | 能，但缝在 store 侧 | 轮询次数 / 已用时 / 上限 |
+| `generate_image` / `edit_image` / `redraw_lore_image` | 30 秒 – **10 分钟** | ✅ 排队中 / 生成中 · 已等 · 上限（§2.3 已做） | 已做 | 已等 / 放弃上限 |
 | `search_text` | 大项目上秒级 | ✅ 已扫 N/M 个文件 · 命中数（§2.1 已做） | 已做 | 文件 |
 | `export_pptx` / `export_docx` / `export_xlsx` | 秒级（harvest 上限 20s） | 无 | 能，同生图那条缝 | 幻灯片 / 工作表 |
 | `inspect_html` | 秒级 | 无 | 同上 | 幻灯片 |
@@ -101,14 +101,15 @@
   少了这条，思考模型的标题行会在一章正文流过去的整段时间里停在「正在思考」。
 - Gemini 家族拿不到增量（`gemini.ts:288`），退化成 A 的秒表。
 
-### 2.3 生图 / 导出 —— 缝不在工具这边
+### 2.3 已做（生图那一半）· 缝不在工具这边（PR #425）
 
-要报进度，得让审批通道把工具步的身份带过去：`PendingApproval`（`agentStore.ts:156`）今天有 `runId` / `turnId` / `signal`，没有 `toolCallId`。加上它之后，`settleApproval` 就能往**同一行**发 progress：
+原计划是给 `PendingApproval` 加 `toolCallId`，由 store 重建那一步再发。**做的时候换了个方向**：让工具把**自己的** `ctx.onProgress` 顺着审批递下去（`requestApproval(proposal, onApplyProgress)` → `ApprovalBinding.onApplyProgress` → `settleApproval` → `runIllustration`）。理由就是 §2.0 那一条：store 手上没有 `round` 也没有 `argumentSummary`，用它重建的步会把那一行的参数清掉；而工具自己的回调推的天然就是它自己那一行。
 
-- 生图：`轮询中 · 已等 48 秒 / 上限 10 分`（ComfyUI 还能读到队列位置，DashScope 只有 task 状态）。
-- pptx：`第 7/24 页已量`（harvest 的 `harvester.js` 本来就是逐节点走的，但它一次 postMessage 回全部 —— 要报页级进度得让它中途也发消息，那是改 `harvester.js`，**要同步更新 `tauri.conf.json` 的 sha256 和 `htmlSlides.ts` 的选择器清单**，代价一下就上去了）。
+进度**不是**在 store 里掐表算出来的，而是轮询循环报的（`lib/ai/image` 的 `ImageProgress`）：只有那一层知道端点还在应答，也只有它（在 DashScope 上）知道任务是在排队还是在画。ComfyUI 的 `/history` 只记完成的运行，查不到就是「排队或正在画」而无从分辨，所以那一路**不带 `phase`** —— 猜一个词填上去比不说更糟。
 
-建议只做**生图的「已等 / 上限」**（不需要碰 harvester，纯计时），导出秒级先不做。
+**故意没有 `ratio`。** 这里没人知道画到哪儿了，而一根朝着超时填满的进度条会被读成进度，并且恰好在任务被放弃的那一刻满格 —— 那是唯一一个绝不能长得像「完成」的数。上限改成写进文字：`生成中 · 已等 1:22 · 上限 10:00`，把「是不是卡了」变成「它还有八分多钟」。
+
+**导出（pptx / docx / xlsx）没做**，是秒级：pptx 要报页级进度得让 `harvester.js` 中途也 postMessage，而那要同步改 `tauri.conf.json` 的 sha256 和 `htmlSlides.ts` 的选择器清单 —— 代价一下就上去了，收益是几秒钟。
 
 ### 2.4 明确排在后面
 
@@ -156,6 +157,6 @@ token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，�
 | PR 2 | §2.2 A：轮次秒表 | 小 | **高** —— 唯一对四个协议家族一视同仁的一改 | ✅ 已做 |
 | PR 3 | §2.1 `search_text` 的 N/M | 小 | 中 | ✅ 已做（#421） |
 | PR 4 | §2.2 B：流式参数字数（含适配器固件测试） | 中 | 高 | ✅ 已做（#424） |
-| PR 5 | §2.3 生图的「已等 / 上限」 | 中 | 中 | |
+| PR 5 | §2.3 生图的「已等 / 上限」 | 中 | 中 | ✅ 已做（#425） |
 
 每片之间停下来，等作者在真机上看过再往下走。

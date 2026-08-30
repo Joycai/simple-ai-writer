@@ -10,9 +10,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IllustrateProposal } from "../agent/registry";
 
-const runIllustration = vi.fn(async () => ({ path: "/proj/w/assets/pic.png", markdown: "", degraded: false }));
+const runIllustration = vi.fn(async (..._args: unknown[]) => ({
+  path: "/proj/w/assets/pic.png", markdown: "", degraded: false,
+}));
 vi.mock("../image/illustrate", () => ({
-  runIllustration: () => runIllustration(),
+  // Arguments forwarded, not dropped: the fourth one is the progress channel
+  // the approving tool call handed down, and losing it is exactly the bug the
+  // last test in this file guards against.
+  runIllustration: (...args: unknown[]) => runIllustration(...args),
 }));
 // `refreshFileTree` is part of the stub because applying a non-lore
 // illustration calls it: the picture is written with the raw byte writer, so
@@ -73,6 +78,21 @@ describe("counted illustrate grant", () => {
     expect(useAgentStore.getState().pending).toHaveLength(1);
     expect(runIllustration).toHaveBeenCalledTimes(2);
     useAgentStore.getState().rejectAll("cleanup", run);
+  });
+
+  it("hands the approving call's progress channel to the drawing", async () => {
+    // Approving is instantaneous; drawing polls for up to ten minutes, and in
+    // that window the tool call is parked inside requestApproval. Without this
+    // channel the log shows a step on "running" for ten minutes, which is what
+    // a dead endpoint shows too.
+    const run = {};
+    const onApplyProgress = vi.fn();
+    useAgentStore.getState().grantIllustrations(KEY, run, 1);
+
+    await useAgentStore.getState().requestApproval(illu(), run, { autoApproveKey: KEY, onApplyProgress });
+
+    expect(runIllustration).toHaveBeenCalledTimes(1);
+    expect(runIllustration.mock.calls[0][3]).toBe(onApplyProgress);
   });
 
   it("voids the leftover budget when the granting run ends — even for chat", () => {

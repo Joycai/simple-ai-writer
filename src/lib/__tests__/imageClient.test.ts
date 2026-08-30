@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   dashscopeNativeBase, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
+  type ImageProgress,
 } from "../ai/image";
 
 const OPENAI = {
@@ -643,6 +644,62 @@ describe("generateImage · dashscope route", () => {
       expect(calls[0].headers.get("x-dashscope-async")).toBe("enable");
       expect(calls[1].url).toBe(`${NATIVE}/tasks/t1`);
       expect(res.images[0].dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    });
+
+    it("轮询时报出进度：排队 / 生成，各带已等多久和放弃上限", async () => {
+      // 批准之后这次工具调用就停在审批的 promise 里了，日志上只剩一个 running
+      // 的工具步——那和端点挂了长得一模一样。上限是有用的那一半：把「是不是卡了」
+      // 变成「它还有八分钟」。
+      vi.useFakeTimers();
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      let poll = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          const u = String(url);
+          if (u.endsWith("/services/aigc/image-generation/generation")) {
+            return new Response(JSON.stringify({ output: { task_id: "t1", task_status: "PENDING" } }), {
+              status: 200, headers: { "content-type": "application/json" },
+            });
+          }
+          if (u.endsWith("/tasks/t1")) {
+            poll++;
+            const output =
+              poll === 1
+                ? { task_id: "t1", task_status: "PENDING" }
+                : poll === 2
+                  ? { task_id: "t1", task_status: "RUNNING" }
+                  : { task_id: "t1", task_status: "SUCCEEDED", results: [{ url: "https://cdn/x.png" }] };
+            return new Response(JSON.stringify({ output }), {
+              status: 200, headers: { "content-type": "application/json" },
+            });
+          }
+          return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+        }),
+      );
+
+      const seen: ImageProgress[] = [];
+      const pending = generateImage(WAN, { prompt: "a cat", onProgress: (p) => seen.push(p) });
+      pending.catch(() => {});
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await pending;
+
+      // 成功的那一次不报——那一刻等待结束了，说话的是结果。
+      expect(seen.map((p) => p.phase)).toEqual(["queued", "running"]);
+      expect(seen.map((p) => p.polls)).toEqual([1, 2]);
+      expect(seen[1].elapsedMs).toBeGreaterThan(seen[0].elapsedMs);
+      expect(seen[0].timeoutMs).toBe(600_000);
+    });
+
+    it("同步路由一次都不报——一个请求没有中间状态可言", async () => {
+      // 那种「先动起来再说」的假进度条正是这里要避免的：一条 tick 就是一句
+      // 「我知道进展」，而同步路由在发出去和答回来之间什么都不知道。
+      mockJson({ data: [{ b64_json: "aGk=" }] });
+      const seen: ImageProgress[] = [];
+      await generateImage(OPENAI, { prompt: "x", onProgress: (p) => seen.push(p) });
+      expect(seen).toEqual([]);
     });
 
     it("reports a failed task with its own error message", async () => {
