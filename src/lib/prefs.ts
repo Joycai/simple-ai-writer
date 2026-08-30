@@ -58,6 +58,8 @@ export const PREF_KEYS = [
   "app:roleplayBeta",
   "app:translateBeta",
   "app:comfyuiBeta",
+  // 助手工具包模式（orchestrator 档）的 Beta 开关 — lib/agent/packFlag.
+  "app:toolPackOrchestratorBeta",
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",
@@ -93,6 +95,8 @@ export const PREF_KEYS = [
   "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
   "ai:translate:useLore",
+  // 翻译每块行数（设置 → 子代理）— lib/translate/flag.
+  "ai:translate:linesPerChunk",
 ] as const;
 
 /**

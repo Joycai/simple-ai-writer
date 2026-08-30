@@ -30,7 +30,6 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 /** The orchestrator Beta — chatAgentPreset's one input. */
 const orchestratorBeta = { on: false };
 vi.mock("../packFlag", () => ({
-  isToolPackEnabled: () => false,
   isOrchestratorEnabled: () => orchestratorBeta.on,
 }));
 
