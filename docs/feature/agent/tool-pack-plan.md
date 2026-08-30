@@ -1,6 +1,6 @@
 # 工具包（tool pack）：主控编排 + 专职子代理执行
 
-> 状态：`draft`（盘点与概要设计；分片 1 台架已跑、证据闸门已过——见 §5.1，分片 2 起未实施）
+> 状态：`in-progress`（分片 1 台架已过闸——§5.1；分片 2 已落地、默认关、无 UI——§6.2；分片 3 orchestrator 档未实施）
 > 起因：2026-08-30，作者提出——项目里绝大部分任务是分类的（lore 写 / 文件写 / 杂项转换 / 读与查），真正需要常驻的只有读查和通用工具，其余都是「到了某个 task 才集中使用、且几乎不同时使用」。设想：把一类工具打成 pack，主控知道要干哪类活时唤起**只带这个 pack** 的 inline 子代理去做；主控自己负责收集材料和编排步骤。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（量纲与七期工作）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（§5 延迟装载机制 · §6 `load_tools` 的否决与重开条件）、[`subagent-lld.md`](subagent-lld.md)（delegate 机制）、[`writer-subagent-plan.md`](writer-subagent-plan.md)（`deliverTo` 契约）
 
@@ -91,7 +91,7 @@ orchestrator（chat 主控）保留：全部读查（≈2.0k）、memory、`task
 ## 6. 分片
 
 1. ✅ **台架**（不进代码库，结果记进本文档）——2026-08-30 已跑，结果与判定在 §5.1。
-2. pack preset + `run_pack` + 子上下文透传（`requestApproval`/`lorePlan`/auto-approve），**默认关**——chat 照旧全量工具，`run_pack` 仅在 dev 开关下出现。
+2. ✅ pack preset + `run_pack` + 子上下文透传（`requestApproval`/`lorePlan`/auto-approve），**默认关**——chat 照旧全量工具，`run_pack` 仅在 dev 开关下出现。落点（2026-08-30）：`lib/agent/packs.ts`（三个 pack preset + `executeRunPack`）、`packFlag.ts`（偏好键 `app:toolPackDev`，这一片**没有设置 UI**——分片 3 才挂 Beta 开关）、routing 的 `packs` opt-in（chat 独有，三个条件缺一即缺席：dev 开关 + surface 声明 + 工作区）。要点：pack 跑父运行自己的 conn（`ToolContext.selfConn`，caller 注入——runtime 手里只有拍平的 `ConnOptions`，重建不出计费要的 Model 行）；透传的是父上下文的**同一批通道对象**（审批卡照常渲染在主 surface，本轮已批的方案经共享闸门自动给子运行装载延迟组——runtime 每轮从 `lorePlan.steps` 重读，不需要新机制）；lore_edit 收尾后 `syncLore(ctx)` 把父快照拉平，否则本轮后续回合解析不出 pack 刚建的条目；嵌套派发在结构上不存在（pack 工具集里没有 `run_pack`/`delegate`）。实测 schema：`run_pack` 313，pack 常驻 file_write 4,982 / lore_edit 2,258（写组 5,020 照旧随方案装载）/ export 2,889——全部落在 §3.1 的估算之内，钉在 `agentToolBudget.test.ts`。
 3. orchestrator 档接入 chat（设置 → 实验功能 Beta 开关），计量条对照实测记录。
 4. 按实测决定默认开否 + 收尾（指令层、文档、`agentToolBudget` 新增 orchestrator/pack 的棘轮）。
 
@@ -106,6 +106,6 @@ orchestrator（chat 主控）保留：全部读查（≈2.0k）、memory、`task
 
 ## 8. 还没定
 
-- pack 子代理的 `maxRounds`（初步：file_write 16 / lore_edit 24 / export 8）。
-- brief 模板要不要强制带「材料清单」段（台架看失真率再定）。
-- 失败回注的形状：pack 子代理撞轮数上限/被拒时，主控收到什么才能既不重试原样、也不放弃整个任务。
+- ~~pack 子代理的 `maxRounds`~~ 分片 2 按初步值落地（file_write 16 / lore_edit 24 / export 8），分片 3 的真机数据再调。
+- ~~brief 模板要不要强制带「材料清单」段~~ 台架 30/30 工单无失真（§5.1），不强制：复用 `subagentTask`/`subagentTaskWithRefs` 两个既有模板，`references` 传路径。
+- ~~失败回注的形状~~ 分片 2 的答案：pack 抛错 → 一条工具错误（`the <pack> pack failed: …`）；跑完但零输出 → 指向执行日志的错误；正常收尾 → 报告全文存 note、摘要 800 字符回注，并明说「改动是否落盘以审批卡为准」。撞轮数上限不阻塞（pack preset 没接 `onRoundLimit`）——最后一轮 force-text 收笔，报告里自然写到哪算哪；要不要给 pack 也接 继续/收尾 卡，留给分片 3 的实测。

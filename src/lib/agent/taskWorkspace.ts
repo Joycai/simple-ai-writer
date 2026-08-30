@@ -62,9 +62,9 @@ export interface TaskDoc {
  * that module already imports this one — the kinds are a stable wire vocabulary
  * either way (they appear verbatim in saved note headers).
  */
-export type NoteOrigin = "search" | "vision" | "longread" | "pdf" | "main";
+export type NoteOrigin = "search" | "vision" | "longread" | "pdf" | "pack" | "main";
 
-const NOTE_ORIGINS: readonly NoteOrigin[] = ["search", "vision", "longread", "pdf", "main"];
+const NOTE_ORIGINS: readonly NoteOrigin[] = ["search", "vision", "longread", "pdf", "pack", "main"];
 
 export interface TaskNoteHeader {
   slug: string;

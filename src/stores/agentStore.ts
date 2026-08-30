@@ -1220,8 +1220,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         useAiStore.getState().models,
         // The handoff schema rides on every round of a writer run — the whole
         // point of this module is that a ceiling must not assume a schema the
-        // request carries. See lib/agent/toolCost.
-        { handoff: true },
+        // request carries. See lib/agent/toolCost. `packs` for the same
+        // reason: with the dev flag on, run_pack is resident on every round.
+        { handoff: true, packs: true },
       );
       let history = get().chatHistory;
       if (!history) {
@@ -1469,7 +1470,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const routed = routeTools(
         AGENT_ASSIST_PRESET, effectiveSubs, tw, useAiStore.getState().models,
         // askAuthor: the question card renders in the approvals area below.
-        { handoff: true, askAuthor: true },
+        // packs: chat is the surface that threads the approval channels and
+        // selfConn through ToolContext — see run_pack's guards (agent/packs).
+        { handoff: true, askAuthor: true, packs: true },
       );
       const effectivePreset = {
         ...AGENT_ASSIST_PRESET,
@@ -1546,6 +1549,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             const { models: allModels, providers: allProviders } = useAiStore.getState();
             return resolveSubAgentConn(k, allModels, allProviders, effectiveSubs, loadApiKey);
           },
+          // The run's own conn + the author's utilization setting, for
+          // run_pack's nested run (packs run the parent's model — D1).
+          selfConn: { provider, model, apiKey },
+          contextUtilization,
         },
         signal: controller.signal,
         // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
@@ -1712,7 +1719,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       models,
       // Same as sendChat's: this is the chat, so a writer run carries the
       // handoff schema on every round and the ceiling must know it.
-      { handoff: true },
+      { handoff: true, packs: true },
     );
 
     // Same repair sendChat does before touching an inherited history: a turn

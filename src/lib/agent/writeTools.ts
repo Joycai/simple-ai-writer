@@ -214,7 +214,7 @@ export async function proposeLorePlanTool(
  * Invariant for callers: resync **last**, and never touch disk through an
  * entity resolved before it — those objects are detached once this returns.
  */
-async function syncLore(ctx: ToolContext): Promise<void> {
+export async function syncLore(ctx: ToolContext): Promise<void> {
   try {
     const fresh = await ctx.onLoreChanged?.();
     if (!fresh) return;

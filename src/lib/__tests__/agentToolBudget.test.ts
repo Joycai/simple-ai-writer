@@ -44,6 +44,7 @@ import { getToolDefinitions, partitionByGroup } from "../agent/registry";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, WRITE_PRESET } from "../agent/presets";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../roleplay/presets";
 import { estimateToolsTokens } from "../ai/tokenEstimate";
+import { PACK_PRESETS } from "../agent/packs";
 
 /**
  * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
@@ -337,10 +338,26 @@ describe("tool schema budget", () => {
     expect(appended).toBeLessThanOrEqual(1_000);
   });
 
+  it("keeps each tool pack's resident half inside the plan's budget", () => {
+    // tool-pack-plan.md §3.1/§4: a pack sub-run pays its resident schemas on
+    // every round, and the plan's whole economic argument prices file_write at
+    // ≈5.5k. Measured at slice 2: run_pack 313, file_write 4,982,
+    // lore_edit 2,258 (its write tools stay in the deferred groups — 5,020
+    // more that load only when the shared plan gate's steps demand),
+    // export 2,889. The caps have the usual ratchet slack; a trip means a
+    // pack quietly grew past what the dispatch was supposed to buy.
+    expect(estimateToolsTokens(getToolDefinitions(["run_pack"]))).toBeLessThanOrEqual(400);
+    const residentOf = (pack: keyof typeof PACK_PRESETS) =>
+      estimateToolsTokens(getToolDefinitions(partitionByGroup(PACK_PRESETS[pack].tools).resident));
+    expect(residentOf("file_write")).toBeLessThanOrEqual(5_400);
+    expect(residentOf("lore_edit")).toBeLessThanOrEqual(2_600);
+    expect(residentOf("export")).toBeLessThanOrEqual(3_200);
+  });
+
   it("gives every tool a description worth its place", () => {
     // A tool the model can see but can't tell apart from its neighbours is
     // worse than no tool: it costs schema tokens *and* buys a wrong call.
-    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate", "ask_author"])) {
+    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate", "ask_author", "run_pack"])) {
       expect(def.function.description.trim().length).toBeGreaterThan(40);
       // The category placeholder is substituted per call — one that survives
       // into the wire means the model is being shown literal `{{…}}`.
