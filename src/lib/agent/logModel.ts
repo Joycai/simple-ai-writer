@@ -20,8 +20,40 @@
 
 import type { AgentEvent, ToolStep, ToolStepStatus } from "./events";
 
-/** The tool whose steps become subagent cards rather than round rows. */
-const DELEGATE_TOOL = "delegate";
+/**
+ * How a sub-run was dispatched — decides how its card is *labelled*, nothing
+ * more. Whether a step gets a card at all is decided structurally: by whether
+ * anything was forwarded under its id (see `buildLogModel`).
+ *
+ * `"tool"` is the honest answer for a dispatcher this file has never heard of:
+ * it gets a card labelled with its own tool name. That is the whole point of
+ * the split — the previous rule was "the tool is called `delegate`", and under
+ * it `run_pack` forwarded its entire sub-run into a filter that dropped every
+ * event (`log.filter(e => !e.parentStep)`), so with the 助手工具包模式 Beta on,
+ * every write happened inside a run the log did not show. `translate` lost its
+ * progress line to the same rule. Three times is enough: a new dispatcher now
+ * appears the day it is written, and the worst it can suffer is a plain label.
+ */
+export type SubRunVia = "delegate" | "pack" | "tool";
+
+/** `delegate`'s kind argument — see `delegateKind` for why this is a regex. */
+const DELEGATE_KIND_RE = /"kind"\s*:\s*"([A-Za-z_-]+)"/;
+/** `run_pack`'s pack argument, read the same tolerant way. */
+const PACK_ID_RE = /"pack"\s*:\s*"([A-Za-z_-]+)"/;
+
+/** The two dispatchers this file can name. Labelling only — never gating. */
+const DISPATCHERS: Record<string, { via: SubRunVia; arg: RegExp }> = {
+  delegate: { via: "delegate", arg: DELEGATE_KIND_RE },
+  run_pack: { via: "pack", arg: PACK_ID_RE },
+};
+
+/** What to call this sub-run, best effort. */
+function dispatchOf(step: ToolStep): { via: SubRunVia; kind: string | null } {
+  const d = DISPATCHERS[step.name];
+  if (!d) return { via: "tool", kind: null };
+  const m = d.arg.exec(step.argumentSummary);
+  return { via: d.via, kind: m ? m[1] : null };
+}
 
 export interface RoundGroup {
   round: number;
@@ -32,17 +64,21 @@ export interface RoundGroup {
   toolTokens: number;
   at: number;
   /**
-   * Everything this round produced, in order — delegate steps included. A
+   * Everything this round produced, in order — dispatch steps included. A
    * delegation happened *in* a round and the group should say so; the renderer
-   * skips those rows because they get a section of their own.
+   * skips those rows because they get a section of their own (pass
+   * `AgentLogModel.cardedSteps` to `roundRows`).
    */
   events: AgentEvent[];
 }
 
 export interface SubAgentRun {
-  /** The delegate call's id — also the `parentStep` its nested events carry. */
+  /** The dispatching call's id — also the `parentStep` its events carry. */
   toolCallId: string;
-  /** search / vision / longread, or null when truncated arguments hid it. */
+  /** How it was dispatched, for labelling. */
+  via: SubRunVia;
+  /** search / vision / longread, or the pack id; null when the arguments
+      were truncated past it, and always null for `via: "tool"`. */
   kind: string | null;
   /** The delegated instruction, best effort — empty when it didn't survive. */
   task: string;
@@ -84,6 +120,15 @@ export interface AgentLogModel {
    */
   roundLimits: Extract<AgentEvent, { kind: "round-limit" }>[];
   subagents: SubAgentRun[];
+  /**
+   * The tool-call ids that became cards. `roundRows` needs it so the same step
+   * isn't drawn twice — once as a round row, once as the card it opens.
+   *
+   * On the model rather than re-derived by the renderer: it is the same rule
+   * both places have to agree on, and the last time those two lived apart a
+   * whole class of sub-run went missing from one of them.
+   */
+  cardedSteps: ReadonlySet<string>;
   summary: LogSummary;
   /**
    * What the run is doing right now, or the last thing it did. Null while a
@@ -107,7 +152,7 @@ export interface AgentLogModel {
  * near the front and survives the cut.
  */
 export function delegateKind(argumentSummary: string): string | null {
-  const m = /"kind"\s*:\s*"([A-Za-z_-]+)"/.exec(argumentSummary);
+  const m = DELEGATE_KIND_RE.exec(argumentSummary);
   return m ? m[1] : null;
 }
 
@@ -141,6 +186,17 @@ function findLast<T>(items: readonly T[], pred: (item: T) => boolean): T | undef
  */
 export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): AgentLogModel {
   const top = log.filter((e) => !e.parentStep);
+  // Nested events bucketed by the step they were forwarded under, in one pass.
+  // This is also what decides which steps get a card: a step *with* a sub-run
+  // under it, whatever the tool is called. The old rule read the tool's name,
+  // which is how `run_pack` came to forward a whole run into nothing.
+  const nested = new Map<string, AgentEvent[]>();
+  for (const e of log) {
+    if (!e.parentStep) continue;
+    const list = nested.get(e.parentStep);
+    if (list) list.push(e);
+    else nested.set(e.parentStep, [e]);
+  }
   const preamble: AgentEvent[] = [];
   const rounds: RoundGroup[] = [];
   const roundLimits: Extract<AgentEvent, { kind: "round-limit" }>[] = [];
@@ -183,21 +239,28 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
 
     if (event.kind === "tool-step") {
       toolCount++;
-      if (event.step.name === DELEGATE_TOOL) {
+      const inside = nested.get(event.step.toolCallId);
+      // A card iff something ran inside. A dispatcher that failed before it
+      // started anything therefore stays an ordinary row carrying its error —
+      // which is where the author will look for it, rather than inside an
+      // empty card they have to open first.
+      if (inside) {
         // One card per call: the step is emitted twice (running, then settled)
         // and `appendAgentEventTo` replaces in place, so a well-formed log holds
         // one — but a log stitched from a resumed session need not, and a
         // duplicated card would read as two delegations.
         const existing = subIndex.get(event.step.toolCallId);
+        const { via, kind } = dispatchOf(event.step);
         const run: SubAgentRun = {
           toolCallId: event.step.toolCallId,
-          kind: delegateKind(event.step.argumentSummary),
+          via,
+          kind,
           task: delegateTask(event.step.argumentSummary),
           status: event.step.status,
           round: event.step.round,
           at: event.at,
           step: event.step,
-          events: log.filter((e) => e.parentStep === event.step.toolCallId),
+          events: inside,
         };
         if (existing) {
           Object.assign(existing, run);
@@ -225,6 +288,7 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
     rounds,
     roundLimits,
     subagents,
+    cardedSteps: new Set(subagents.map((s) => s.toolCallId)),
     summary: {
       state,
       rounds: rounds.length,
@@ -339,13 +403,15 @@ export function sumTokens(logs: readonly (readonly AgentEvent[])[]): TokenTotals
 /**
  * The rows a round contributes to the log body.
  *
- * Delegations are dropped: they are rendered as subagent cards, and a row in
- * both places reads as two separate things having happened.
+ * Steps that became cards are dropped: they render in the subagent band, and a
+ * row in both places reads as two separate things having happened. `carded` is
+ * `AgentLogModel.cardedSteps` — required rather than optional so a caller
+ * cannot quietly get the duplicate.
  */
-export function roundRows(group: RoundGroup): AgentEvent[] {
+export function roundRows(group: RoundGroup, carded: ReadonlySet<string>): AgentEvent[] {
   return group.events.filter(
     (e) =>
-      !(e.kind === "tool-step" && e.step.name === DELEGATE_TOOL) &&
+      !(e.kind === "tool-step" && carded.has(e.step.toolCallId)) &&
       // The handoff has no row here at all: it is not a step inside the run,
       // it is the seam where the run changes hands, so it renders on the turn
       // itself (components/ai/WriterTurn) with the work order attached to it.

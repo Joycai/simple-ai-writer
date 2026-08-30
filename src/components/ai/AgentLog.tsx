@@ -12,10 +12,11 @@
  *      Opens onto the tail of the log, which is the answer to "and now?".
  *   ② rounds — the finished iterations, newest first, as an accordion: one open
  *      at a time, because two expanded rounds are already taller than the panel.
- *   ③ subagents — one card per delegation, carrying the nested log it brought
- *      back. Absent entirely when nothing was delegated. Finished ones stay,
- *      marked done: what the search found is usually why the answer says what
- *      it says.
+ *   ③ subagents — one card per **sub-run**, carrying the nested log it brought
+ *      back: a delegation, a `run_pack` dispatch, or anything else that forwards
+ *      events under its step id (the rule is structural — see logModel.SubRunVia).
+ *      Absent entirely when nothing dispatched. Finished ones stay, marked done:
+ *      what the search found is usually why the answer says what it says.
  *
  * The shape is computed by `lib/agent/logModel` (pure, tested); everything here
  * is presentation. The task plan is a fourth band, owned by the session rather
@@ -64,6 +65,45 @@ const ROUND_WINDOW = 5;
 
 /** How much of the log's tail the header opens onto. */
 const TAIL_ROWS = 6;
+
+/**
+ * Seconds a round must have been running before its timer appears.
+ *
+ * Most rounds settle in two or three, and a clock that shows up at 0:01 and
+ * vanishes at 0:04 is jitter on every round in exchange for nothing. It earns
+ * its place only once the round has gone quiet — which is exactly the case it
+ * exists for: a model streaming a long tool argument (a rewritten chapter, a
+ * whole .html page) emits NOTHING until it is finished, because every adapter
+ * hands tool calls over whole. Minutes can pass with "思考中…" as the only sign
+ * of life, and an author cannot tell that from a hung endpoint.
+ */
+const ROUND_TIMER_FLOOR_S = 5;
+
+/**
+ * How long the live round has been going, `M:SS`, ticking once a second.
+ *
+ * Null when no round is live, and until the floor above is crossed. The
+ * one-second re-render costs nothing: `buildLogModel` is memoised on the log,
+ * so only the header line re-renders, and during a text round the transcript is
+ * already re-rendering per streamed chunk anyway.
+ *
+ * It keeps counting while a round is blocked on an approval card, which is
+ * deliberate: that is the case where the author walked away, came back, and
+ * needs to know the run has been waiting on *them* for six minutes.
+ */
+function useRoundElapsed(startedAt: number | null): string | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (startedAt === null) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+  if (startedAt === null) return null;
+  const secs = Math.floor((now - startedAt) / 1000);
+  if (secs < ROUND_TIMER_FLOOR_S) return null;
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
 
 function formatLogTime(at: number): string {
   const d = new Date(at);
@@ -863,10 +903,31 @@ function SubAgentCard({
   showTime: boolean;
 }) {
   const { t } = useTranslation();
-  const Icon = (run.kind && SUB_ICONS[run.kind]) || Bot;
-  const kindLabel = run.kind
-    ? t(`systemSettings.subagents.${run.kind}`, { defaultValue: run.kind })
-    : t("ai.agent.log.subAgent", { defaultValue: "子代理" });
+  const terms = useTerms();
+  // Three vocabularies, because three different things dispatch a sub-run and
+  // calling them all 子代理 would be wrong twice: a pack is the author's own
+  // model doing the writing, not a specialist on another model. `via: "tool"`
+  // is whatever dispatcher this component has not been told about yet — it
+  // still gets a card, labelled with its own tool name (logModel.SubRunVia).
+  const Icon = (run.via === "delegate" && run.kind && SUB_ICONS[run.kind]) || Bot;
+  const kindLabel =
+    run.via === "delegate"
+      ? run.kind
+        ? t(`systemSettings.subagents.${run.kind}`, { defaultValue: run.kind })
+        : t("ai.agent.log.subAgent", { defaultValue: "子代理" })
+      : run.via === "pack"
+        ? run.kind
+          ? t(`ai.agent.log.pack.${run.kind}`, {
+              defaultValue: run.kind,
+              doc: terms.doc,
+              kb: terms.kb,
+            })
+          : t("ai.agent.log.packRun", { defaultValue: "执行代理" })
+        : t(`ai.agent.tool.${run.step.name}`, {
+            defaultValue: run.step.name,
+            doc: terms.doc,
+            entry: terms.entry,
+          });
 
   return (
     <li className={styles.rowGroup}>
@@ -933,6 +994,12 @@ export function AgentLog({
   const { t } = useTranslation();
   const model = useMemo(() => buildLogModel(log, isRunning), [log, isRunning]);
   const headline = useHeadline(model);
+  // The live round's own start, not the run's: a run is long for honest reasons
+  // (twelve rounds of real work), whereas one round that has been going for two
+  // minutes is the thing worth noticing.
+  const elapsed = useRoundElapsed(
+    model.currentRound ? (model.rounds[model.rounds.length - 1]?.at ?? null) : null,
+  );
   const showTime = !compact;
 
   // The header's disclosure follows the run: open while it is live (that is the
@@ -962,7 +1029,10 @@ export function AgentLog({
     () =>
       model.rounds.map((group, i) => ({
         group,
-        rows: i === 0 ? [...model.preamble, ...roundRows(group)] : roundRows(group),
+        rows:
+          i === 0
+            ? [...model.preamble, ...roundRows(group, model.cardedSteps)]
+            : roundRows(group, model.cardedSteps),
       })),
     [model],
   );
@@ -1016,11 +1086,20 @@ export function AgentLog({
         <span className={styles.headName}>{headline}</span>
         <span className={styles.headMeta}>
           {model.currentRound
-            ? t("ai.agent.log.roundShort", {
-                defaultValue: "{{round}}/{{max}} 轮",
-                round: model.currentRound.round,
-                max: model.currentRound.maxRounds,
-              })
+            ? [
+                t("ai.agent.log.roundShort", {
+                  defaultValue: "{{round}}/{{max}} 轮",
+                  round: model.currentRound.round,
+                  max: model.currentRound.maxRounds,
+                }),
+                // The clock rides with the round chip rather than with the
+                // headline: the headline is already the busiest line in the
+                // component (a tool's own progress lands there), and "which
+                // round, how long" is one thought.
+                elapsed,
+              ]
+                .filter(Boolean)
+                .join(" · ")
             : model.summary.outputTokens > 0
               ? `${formatTokenCount(model.summary.inputTokens)} / ${formatTokenCount(model.summary.outputTokens)} tk`
               : null}

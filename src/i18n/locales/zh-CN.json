@@ -1174,6 +1174,12 @@
         "showEarlierRounds": "更早的 {{n}} 轮",
         "subAgents": "子代理",
         "subAgent": "子代理",
+        "packRun": "执行代理",
+        "pack": {
+          "file_write": "{{doc}}写入",
+          "lore_edit": "{{kb}}写入",
+          "export": "导出"
+        },
         "subRunning": "进行中",
         "subDone": "已完成",
         "subFailed": "失败",
