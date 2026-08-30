@@ -174,15 +174,21 @@ export function allEntityNames(loreIndex: LoreIndex): string {
 const ENTITY_MAX_CHARS = 10_000;
 
 /**
- * Page `raw` by whole lines from `from`, under `READ_MAX_CHARS` — the same
- * paging contract `read_file` keeps, shared here so "read the rest with
- * start_line=N" means one thing in both tools.
+ * Page `raw` by whole lines from `from`, under `READ_MAX_CHARS` — THE paging
+ * implementation, not a copy of one: `read_file` (readWritingFile) and the
+ * lore paths both run this loop, so "read the rest with start_line=N" means
+ * one thing everywhere and a tuning of the budget, the first-line-overflow
+ * rule or the trailer wording cannot fork between tools. The first line is
+ * always taken even when it alone exceeds the budget — otherwise a file
+ * written as one long paragraph per line would return nothing at all.
  */
 function pageLines(raw: string, from: number): {
   body: string;
   from: number;
   to: number;
   total: number;
+  /** start === 1 && to === total && nothing cut — callers skip their maps on it. */
+  whole: boolean;
   notes: string[];
 } | { error: string } {
   const lines = raw.split(/\r?\n/);
@@ -202,14 +208,15 @@ function pageLines(raw: string, from: number): {
   let body = lines.slice(start - 1, to).join("\n");
   const cutMidLine = body.length > READ_MAX_CHARS;
   if (cutMidLine) body = body.slice(0, READ_MAX_CHARS);
+  const whole = start === 1 && to === lines.length && !cutMidLine;
   const notes = [
-    start === 1 && to === lines.length && !cutMidLine
+    whole
       ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
       : `lines ${start}-${to} of ${lines.length} shown`,
   ];
   if (cutMidLine) notes.push(`line ${start} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`);
   if (to < lines.length) notes.push(`pass start_line=${to + 1} to continue`);
-  return { body: numberLines(body, start), from: start, to, total: lines.length, notes };
+  return { body: numberLines(body, start), from: start, to, total: lines.length, whole, notes };
 }
 
 /**
@@ -1087,56 +1094,23 @@ export async function readWritingFile(
     return { toolCallId, content: `Error reading file: ${String(e)}` };
   }
 
-  const lines = raw.split(/\r?\n/);
-  const from = Math.max(1, Math.floor(startLine ?? 1));
-  if (from > lines.length) {
-    return {
-      toolCallId,
-      content: `Error: start_line ${from} is past the end of the file, which has ${lines.length} line(s).`,
-    };
-  }
+  // One paging implementation for every tool that reads by line: see pageLines.
+  const page = pageLines(raw, startLine ?? 1);
+  if ("error" in page) return { toolCallId, content: `Error: ${page.error}` };
 
-  // Take whole lines until the budget is spent. The first line is always taken
-  // even if it alone exceeds the budget — otherwise a file written as one long
-  // paragraph per line would return nothing at all.
-  let taken = 0;
-  let chars = 0;
-  for (let i = from - 1; i < lines.length; i++) {
-    const cost = lines[i].length + 1;
-    if (taken > 0 && chars + cost > READ_MAX_CHARS) break;
-    chars += cost;
-    taken++;
-  }
-  const to = from + taken - 1;
-
-  let content = lines.slice(from - 1, to).join("\n");
-  const cutMidLine = content.length > READ_MAX_CHARS;
-  if (cutMidLine) content = content.slice(0, READ_MAX_CHARS);
-
-  const isWholeFile = from === 1 && to === lines.length && !cutMidLine;
   // The gutter note rides on every read, whole file included: it is the only
   // place the "these digits are not in the file" rule is stated, and stating it
   // here — in the same result the numbers arrive in — is both free and better
   // placed than a sentence in four tool descriptions would be (plan §D1).
-  const notes = [
-    isWholeFile
-      ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
-      : `lines ${from}-${to} of ${lines.length} shown`,
-    "the number before each tab is the line number, not file content — never copy it into an edit",
-  ];
-  if (cutMidLine) {
-    notes.push(
-      `line ${from} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`,
-    );
-  }
-  if (to < lines.length) notes.push(`call read_file again with start_line=${to + 1} to continue`);
+  const notes = [...page.notes];
+  notes.splice(1, 0, "the number before each tab is the line number, not file content — never copy it into an edit");
 
   // The map goes in front of the page, and only when there is more file than
   // the page carries — a response holding the whole file needs no map of it.
-  const index = isWholeFile ? "" : headingIndex(raw);
+  const index = page.whole ? "" : headingIndex(raw);
   return {
     toolCallId,
-    content: `${index ? `${index}\n\n` : ""}${numberLines(content, from)}\n\n[... ${notes.join("; ")} ...]`,
+    content: `${index ? `${index}\n\n` : ""}${page.body}\n\n[... ${notes.join("; ")} ...]`,
   };
 }
 
