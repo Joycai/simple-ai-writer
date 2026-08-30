@@ -760,3 +760,74 @@ describe("repairToolCallPairing", () => {
     expect(history).toHaveLength(before);
   });
 });
+
+describe("tool-argument progress", () => {
+  /** A round that streams argument progress, then delivers the call whole. */
+  const argRound = (extra: Record<string, unknown>[] = []) => [
+    ...extra,
+    { toolArgs: { name: "read_file", chars: 1200 } },
+    { toolArgs: { name: "read_file", chars: 4800 } },
+    {
+      toolCalls: [
+        { index: 0, id: "t1", name: "read_file", arguments: JSON.stringify({ path: "/p/a.md" }) },
+      ],
+    },
+    { done: true, inputTokens: 1, outputTokens: 1 },
+  ];
+
+  it("grows one row, then settles it when the call lands", async () => {
+    // The row must not be left spinning above the tool step it produced: the
+    // arguments are not still arriving once the call is in hand.
+    queueRound(argRound());
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const live = opts.events.filter((e) => e.kind === "tool-args");
+    expect(live).toMatchObject([
+      { round: 1, name: "read_file", chars: 1200, done: false },
+      { round: 1, name: "read_file", chars: 4800, done: false },
+      { round: 1, name: "read_file", chars: 4800, done: true },
+    ]);
+    // Folded through the log helper they collapse to a single row per round.
+    const folded = live.reduce(appendAgentEventTo, [] as AgentEvent[]);
+    expect(folded).toHaveLength(1);
+    expect(folded[0]).toMatchObject({ chars: 4800, done: true });
+  });
+
+  it("ends the thinking row as soon as the arguments start arriving", async () => {
+    // Same rule the `text` branch applies, for the other way a round can end.
+    // Without it a thinking model's header stays on 正在思考 while a chapter's
+    // worth of arguments streams past underneath it.
+    queueRound(argRound([{ reasoning: "pondering" }]));
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const round1 = opts.events.filter(
+      (e) => (e.kind === "reasoning" || e.kind === "tool-args") && (e as { round: number }).round === 1,
+    );
+    const firstArgs = round1.findIndex((e) => e.kind === "tool-args");
+    const reasoningDone = round1.findIndex((e) => e.kind === "reasoning" && (e as { done: boolean }).done);
+    expect(reasoningDone).toBeGreaterThanOrEqual(0);
+    expect(reasoningDone).toBeLessThan(firstArgs);
+  });
+
+  it("says nothing at all for a round that never reported any", async () => {
+    // Nearly every round: the adapters only report once a call has been
+    // streaming for longer than one period, so the quiet case must stay quiet
+    // rather than emitting an empty settled row at the end.
+    queueRound([
+      { toolCalls: [{ index: 0, id: "t1", name: "read_file", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(opts.events.some((e) => e.kind === "tool-args")).toBe(false);
+  });
+});

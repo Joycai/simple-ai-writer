@@ -200,6 +200,23 @@ export type StreamChunk =
    * only — nothing branches on it.
    */
   | { turnResumed: { leg: number; final: boolean } }
+  /**
+   * How much of this round's tool-call arguments has arrived so far.
+   *
+   * Progress, not data: the calls themselves are delivered whole in `toolCalls`
+   * at the very end of the stream, because half a JSON object cannot be
+   * executed. That end is exactly the problem this variant exists for — a model
+   * writing a rewritten chapter into `rewrite_lines` streams for a minute or
+   * two, and until this every consumer saw *nothing at all* in that window,
+   * which is indistinguishable from a hung endpoint.
+   *
+   * `chars` counts every call in the round, not just the named one: a round can
+   * open several calls, and the author is waiting on the round. Throttled by
+   * the adapter (`createToolArgsProgress`), and ignored by construction by
+   * consumers that don't know about it. Endpoints that hand function calls over
+   * whole rather than in fragments (Gemini) never produce it.
+   */
+  | { toolArgs: { name: string; chars: number } }
   | {
       done: true;
       inputTokens: number;

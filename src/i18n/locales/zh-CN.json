@@ -1177,6 +1177,8 @@
         "roundNoTools": "仅思考",
         "showEarlierRounds": "更早的 {{n}} 轮",
         "subAgents": "子代理",
+        "toolArgs": "正在写 {{tool}} · {{chars}} 字",
+        "toolArgsDone": "调用参数 {{tool}} · {{chars}} 字",
         "subAgent": "子代理",
         "packRun": "执行代理",
         "pack": {

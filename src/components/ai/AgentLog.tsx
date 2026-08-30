@@ -553,6 +553,28 @@ function AgentLogRow({ row, showTime, runStatus }: {
       // `buildLogModel` hoists top-level ones into `model.roundLimits`, rendered
       // after the round accordion. Kept so no source of the event goes blank.
       return <RoundLimitLine event={event} showTime={showTime} />;
+    case "tool-args":
+      // The one row that exists purely because a tool call arrives whole: while
+      // its arguments stream there is nothing else to show, and afterwards the
+      // number is the only record of how big the thing the model wrote was.
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          {event.done ? <span className={styles.rowIndent} /> : <span className={styles.markerSpinner} />}
+          <span className={styles.rowMetaText}>
+            {t(event.done ? "ai.agent.log.toolArgsDone" : "ai.agent.log.toolArgs", {
+              defaultValue: event.done ? "调用参数 {{tool}} · {{chars}} 字" : "正在写 {{tool}} · {{chars}} 字",
+              tool: t(`ai.agent.tool.${event.name}`, {
+                defaultValue: event.name,
+                doc: terms.doc,
+                entry: terms.entry,
+              }),
+              chars: event.chars.toLocaleString(),
+            })}
+          </span>
+          {roundChip}
+          {time}
+        </li>
+      );
     case "turn-resumed":
       // Why one round is taking several requests' worth of time and money.
       return (
@@ -775,6 +797,16 @@ function useHeadline(model: AgentLogModel): string {
       return current.done
         ? t("ai.agent.log.reasoning", { defaultValue: "思考过程" })
         : t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" });
+    case "tool-args":
+      return t(current.done ? "ai.agent.log.toolArgsDone" : "ai.agent.log.toolArgs", {
+        defaultValue: current.done ? "调用参数 {{tool}} · {{chars}} 字" : "正在写 {{tool}} · {{chars}} 字",
+        tool: t(`ai.agent.tool.${current.name}`, {
+          defaultValue: current.name,
+          doc: terms.doc,
+          entry: terms.entry,
+        }),
+        chars: current.chars.toLocaleString(),
+      });
     case "context-seeded":
       return t("ai.agent.log.seededContext", { defaultValue: "读取上下文" });
     case "tools-loaded":

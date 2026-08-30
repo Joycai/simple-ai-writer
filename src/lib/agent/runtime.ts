@@ -649,6 +649,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         at: reasoningStart,
       });
     };
+    /**
+     * The last tool-arguments progress this round reported, or null if it never
+     * got slow enough to report one. Held so the row can be settled at the end
+     * — a spinner stranded above the step it produced reads as still running.
+     */
+    const argsRow: { last: { name: string; chars: number } | null } = { last: null };
     /** This round's text, still provisional — kept only if it ends in prose. */
     let roundText = "";
     /** Searches the endpoint ran for itself this round, as log rows. */
@@ -787,6 +793,24 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             // is dropped below and the display reverts.
             roundText += chunk.text;
             opts.onOutputText(committedText + roundText);
+          } else if ("toolArgs" in chunk) {
+            // The call has started, so the thinking is over — the same rule the
+            // `text` branch above applies, for the other way a round can end.
+            // Without it a thinking model's headline stays on 正在思考 while a
+            // chapter's worth of arguments streams past underneath it.
+            if (reasoningText && !reasoningDone) {
+              reasoningDone = true;
+              reportReasoning(true);
+            }
+            argsRow.last = chunk.toolArgs;
+            opts.onEvent({
+              kind: "tool-args",
+              round,
+              name: chunk.toolArgs.name,
+              chars: chunk.toolArgs.chars,
+              done: false,
+              at: Date.now(),
+            });
           } else if ("toolCalls" in chunk) {
             roundToolCalls = chunk.toolCalls;
             roundGeminiModelParts = chunk._geminiModelParts;
@@ -827,6 +851,20 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       if (!reasoningDone) {
         reasoningDone = true;
         reportReasoning(true);
+      }
+      // Same for the arguments row: whatever happened to this round, they are
+      // not still arriving. Emitted only when one was reported at all, so a
+      // round whose calls streamed in under a report period stays silent.
+      if (argsRow.last) {
+        opts.onEvent({
+          kind: "tool-args",
+          round,
+          name: argsRow.last.name,
+          chars: argsRow.last.chars,
+          done: true,
+          at: Date.now(),
+        });
+        argsRow.last = null;
       }
       // The request has been sent, so the nudge has done its job. Retracting
       // it here (rather than never adding it) keeps it out of a persistent

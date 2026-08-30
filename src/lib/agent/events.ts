@@ -227,6 +227,36 @@ export type AgentEvent = AgentEventScope & (
     }
   | {
       /**
+       * This round's tool-call arguments are still streaming in.
+       *
+       * The longest silence the log can contain. A tool call reaches the
+       * runtime whole, at the end of the stream — it has to, half a JSON object
+       * cannot be executed — so a model writing a rewritten chapter into
+       * `rewrite_lines` spends a minute or two producing nothing this log could
+       * show. "思考中…" for two minutes and a hung endpoint look identical, and
+       * the author's response to those two is not the same.
+       *
+       * Re-emitted as the number grows and replaced in place (keyed on round,
+       * like `reasoning`), then once more with `done` when the calls land — so
+       * the round keeps one line saying how big the thing it wrote was, rather
+       * than a spinner stranded above the step that followed it.
+       *
+       * Only rounds whose arguments take longer than one report period produce
+       * this at all, and only on endpoints that stream the fragments (not
+       * Gemini) — see `lib/ai/toolArgsProgress`.
+       */
+      kind: "tool-args";
+      round: number;
+      /** The tool whose arguments last grew — the round may have several. */
+      name: string;
+      /** Argument characters accumulated this round, across every call in it. */
+      chars: number;
+      /** False while fragments are still arriving. */
+      done: boolean;
+      at: number;
+    }
+  | {
+      /**
        * The endpoint stopped mid-turn and the adapter handed the turn back so
        * the model could keep going (`lib/ai/anthropic.ts`).
        *
@@ -423,12 +453,14 @@ function replaceableIndex(log: AgentEvent[], event: AgentEvent): number {
         e.step.name === event.step.name,
     );
   }
-  if (event.kind === "reasoning") {
+  if (event.kind === "reasoning" || event.kind === "tool-args") {
     return log.findIndex(
       (e) =>
-        e.kind === "reasoning" &&
+        e.kind === event.kind &&
         e.parentStep === event.parentStep &&
-        e.round === event.round,
+        // `round` is on both variants; the kind check above has already paired
+        // them, TypeScript just cannot see it through the union.
+        (e as { round: number }).round === event.round,
     );
   }
   return -1;

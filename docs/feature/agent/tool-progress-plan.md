@@ -1,6 +1,6 @@
 # 长任务的进度：工具卡片能报什么、报不了什么
 
-> Status: `partial` — §2.0（`ToolContext.onProgress` 缝 + translate）、§2.2 A（轮次秒表）、§3.1（子运行卡改成结构判定）在 [#420](https://github.com/Joycai/simple-ai-writer/pull/420)，§2.1（`search_text`）在 [#421](https://github.com/Joycai/simple-ai-writer/pull/421)（基于 #420）；§2.2 B / §2.3 仍是提案。
+> Status: `partial` — §2.0 / §2.2 A / §3.1 已并（[#420](https://github.com/Joycai/simple-ai-writer/pull/420)），§2.1 已并（[#421](https://github.com/Joycai/simple-ai-writer/pull/421)），§2.2 B 在 [#424](https://github.com/Joycai/simple-ai-writer/pull/424)；只剩 §2.3（生图 / 导出）仍是提案。
 >
 > 起因：作者实机反馈「跑整文件翻译时等的心里没底」，随后要求对**所有长/大文件操作**（html / md / txt）做同一件事的清点。
 
@@ -23,7 +23,7 @@
 | 路径 | 量级 | 现在显示 | 能报吗 | 单位 |
 |---|---|---|---|---|
 | `translate`（整文件） | 分钟 | ✅ 块/行/字 + ETA | 已做 | 块 · 行 · 字 |
-| **模型把长正文流进工具参数**（`rewrite_document` / `rewrite_lines` / `create_file` / `append_file` / `propose_edit` / 写 .html） | 30 秒 – 3 分钟 | ⏱ 轮次秒表（§2.2 A 已做）；**字数仍然没有** | 能（三家协议里两家） | 已生成字数 |
+| **模型把长正文流进工具参数**（`rewrite_document` / `rewrite_lines` / `create_file` / `append_file` / `propose_edit` / 写 .html） | 30 秒 – 3 分钟 | ✅ 轮次秒表 + 已写字数（§2.2 A/B 已做；Gemini 只有秒表） | 已做 | 已生成字数 |
 | `generate_image` / `edit_image` / `redraw_lore_image` | 30 秒 – **10 分钟** | 批准后一直 running，无数字 | 能，但缝在 store 侧 | 轮询次数 / 已用时 / 上限 |
 | `search_text` | 大项目上秒级 | ✅ 已扫 N/M 个文件 · 命中数（§2.1 已做） | 已做 | 文件 |
 | `export_pptx` / `export_docx` / `export_xlsx` | 秒级（harvest 上限 20s） | 无 | 能，同生图那条缝 | 幻灯片 / 工作表 |
@@ -71,7 +71,7 @@
 出现，硬写中文会让英文界面的作者看到一行中文。translate 那条标签仍是硬写的中文 —— 它是
 日中翻译，暂时随它去。
 
-### 2.2 模型流式写长文件 —— 最值钱的一个（A 已做，B 待定）
+### 2.2 已做 · 模型流式写长文件（A 在 #420，B 在 #424）
 
 **这是作者说的「长/大文件操作」的正主。** 让助手重写一章 3,000 字的正文，模型要吐 ~4,000 token 的 `content` 参数；40 tok/s 就是 100 秒的**完全静默**（非思考模型连那一行 reasoning 都没有）。而这恰恰是这个应用最主要的一件事。
 
@@ -85,14 +85,21 @@
 
 把「冻住」变成「活着，而且我知道等了多久」—— 这是本次全部问题里性价比最高的一改，也是唯一对**四个协议家族一视同仁**的一改。
 
-**B. 流式参数字数（要动协议层）**
+**B. 流式参数字数 —— 已做**
 
-- `StreamOptions.onChunk` 加一种：`{ toolCallProgress: { name, chars } }`。
-- `openai.ts` 累加 `entry.args` 的地方（`:220`）与 `anthropic.ts` 的 `input_json_delta` 处各发一次，**在适配器里节流**（每 ~200ms 一次，否则一秒几十个事件）。
-- 运行时把它变成一行日志：`正在写入 rewrite_lines · 3,240 字`。这一行**不是 tool-step**（那一步还不存在），要么新开一种事件，要么复用 reasoning 那种「同轮就地替换」的行。
-- Gemini 家族没有增量，退化成 A。
-
-代价：中（3 个文件 + 一种新 chunk + 一行 UI）。收益：高。风险：适配器是全应用最不该出错的一层，这条改动**只加分支不改既有路径**，且没有它 tool call 照常工作 —— 可测（给适配器喂一段带 `tool_calls` 增量的 SSE 固件，断言 progress 事件的条数与最终 arguments 不变）。
+- `StreamChunk` 加一种 `{ toolArgs: { name, chars } }`。**进度，不是数据**：调用本身仍然只在流
+  结束时整个交出（半个 JSON 对象没法执行），这一种只说「到了多少」。
+- 两个发点：`openai.ts` 累加 `entry.args` 处、`anthropic.ts` 的 `input_json_delta` 处。节流收在
+  共用的 `lib/ai/toolArgsProgress`，两个适配器不能各跑各的速度 —— 读者看到的是同一行。
+  **时钟同样从构造那一刻起走**（与 `search_text` 同一条）：在一个周期（200ms）内跑完的调用
+  一个字都不报，于是「读文件」这种小调用天然安静，没有阈值要猜。
+- `chars` 是**整轮所有调用**的合计，不只是点名的那一个：一轮可以开好几个调用，而作者等的是
+  这一轮。
+- 运行时把它变成 `tool-args` 事件（按轮就地替换，同 `reasoning`），并在轮末再发一次
+  `done: true` —— 否则那一行会永远转着圈停在它自己产出的那个工具步上面。
+- **参数一开始到，思考就结束了**：`toolArgs` 到达时和 `text` 到达时一样把 reasoning 标 done。
+  少了这条，思考模型的标题行会在一章正文流过去的整段时间里停在「正在思考」。
+- Gemini 家族拿不到增量（`gemini.ts:288`），退化成 A 的秒表。
 
 ### 2.3 生图 / 导出 —— 缝不在工具这边
 
@@ -148,7 +155,7 @@ token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，�
 | PR 1 | §3.1 子运行卡改成结构判定 | 小 | 中 —— 这是「日志在骗人」类的问题 | ✅ 已做 |
 | PR 2 | §2.2 A：轮次秒表 | 小 | **高** —— 唯一对四个协议家族一视同仁的一改 | ✅ 已做 |
 | PR 3 | §2.1 `search_text` 的 N/M | 小 | 中 | ✅ 已做（#421） |
-| PR 4 | §2.2 B：流式参数字数（含适配器固件测试） | 中 | 高 | |
+| PR 4 | §2.2 B：流式参数字数（含适配器固件测试） | 中 | 高 | ✅ 已做（#424） |
 | PR 5 | §2.3 生图的「已等 / 上限」 | 中 | 中 | |
 
 每片之间停下来，等作者在真机上看过再往下走。
