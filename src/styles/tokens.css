@@ -337,6 +337,7 @@
   --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05); /* index-card hard shadow */
   --lore-card-shadow-lg:  3px 4px 0 rgba(60, 40, 20, 0.05); /* featured 2x2 card */
   --lore-card-shadow-hover: 4px 6px 0 rgba(60, 40, 20, 0.08);
+  --lore-card-shadow-xl:  6px 8px 0 rgba(60, 40, 20, 0.06); /* 阅读模式的纸（设计稿 16）——lg 之上一档，仍是纸感不是海拔 */
   --lore-bg-input:        #FFFDF6;   /* textareas / editors inside lore modals */
   --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
 
@@ -595,6 +596,7 @@
   --lore-card-shadow:     2px 3px 0 rgba(0, 0, 0, 0.35);
   --lore-card-shadow-lg:  3px 4px 0 rgba(0, 0, 0, 0.35);
   --lore-card-shadow-hover: 4px 6px 0 rgba(0, 0, 0, 0.45);
+  --lore-card-shadow-xl:  6px 8px 0 rgba(0, 0, 0, 0.28); /* 阴影永远是纸的背面而不是光——赭石不参与 */
   --lore-bg-input:        #18140F;
   --lore-shadow-modal:    0 12px 48px rgba(0, 0, 0, 0.60);
 

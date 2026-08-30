@@ -43,6 +43,9 @@ export const PREF_KEYS = [
   "app:loreBudgetTokens",
   "app:contextUtilization",
   "app:aiDrawerMode",
+  // 条目详情打开成哪种看法：阅读（书页）/ 管理（三栏台）。缺席＝阅读。
+  // 常量与解析在 lib/lore/readView（LORE_DETAIL_MODE_PREF）。
+  "app:loreDetailMode",
   "app:draftCount",
   "app:defaultMaxOutput",
   // Longest edge a picture may have when it is sent to a model; anything

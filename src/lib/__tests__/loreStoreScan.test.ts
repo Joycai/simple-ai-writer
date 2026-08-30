@@ -52,6 +52,9 @@ vi.mock("../lore", () => ({
   createEntity: vi.fn(),
   readEntityFile: vi.fn(async () => ""),
   writeEntityFile: vi.fn(async () => {}),
+  // Called at store creation (detailMode's initial value).
+  parseDetailMode: () => "read",
+  LORE_DETAIL_MODE_PREF: "app:loreDetailMode",
 }));
 vi.mock("../fs/fileio", () => ({ removeDir: vi.fn() }));
 

@@ -666,6 +666,31 @@ export async function readEntityFile(dirPath: string, filename: string): Promise
   return readFile(`${dirPath}/${filename}`);
 }
 
+/**
+ * Read every facet's body (frontmatter stripped) for the read mode, which lays
+ * the full texts out on one page (docs/feature/lore/lore-browse-mode-ui-brief.md).
+ *
+ * Per-file tolerance: a facet whose file cannot be read maps to `null` — the
+ * page renders a placeholder row for that one section and keeps reading — while
+ * a legitimately empty body stays `""`. Scan metadata (`entity.facets`) is the
+ * roster; a file listed there but gone from disk is exactly the failure case
+ * this shape exists for.
+ */
+export async function readFacetBodies(entity: LoreEntity): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  await Promise.all(
+    (entity.facets ?? []).map(async (f) => {
+      try {
+        const raw = await readEntityFile(entity.dirPath, f.file);
+        out.set(f.file, parseFrontmatter(raw).content);
+      } catch {
+        out.set(f.file, null);
+      }
+    }),
+  );
+  return out;
+}
+
 /** Write a specific file inside an entity directory. */
 export async function writeEntityFile(
   dirPath: string,

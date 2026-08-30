@@ -8,10 +8,13 @@ import {
   repointPins,
   savePinnedLore,
   writeEntityFile,
+  parseDetailMode,
+  LORE_DETAIL_MODE_PREF,
   type CategoryMove,
   type LoreIndex,
   type LoreEntity,
   type CategoryId,
+  type LoreDetailMode,
 } from "../lib/lore";
 import type { LoreScope } from "../lib/lore";
 import { makeDir, renamePath } from "../lib/fs/fileio";
@@ -36,6 +39,16 @@ interface LoreState {
   detailPath: string | null;
   /** Whether that detail view opens straight into edit mode. */
   detailEditing: boolean;
+  /**
+   * 详情页此刻的看法：阅读（书页）或管理（三栏台）。全局偏好
+   * `app:loreDetailMode`，缺席＝阅读（见 lib/lore/readView）。
+   *
+   * 不挂在 appStore 的 `reloadFromPrefs` 上：`openDetail` 每次打开都从偏好重读，
+   * 配置导入或另一个实例写下的值最迟在下一次点开卡片时生效——模式只在详情开着时
+   * 才被消费，比让三处导入点各记一笔便宜。`detailEditing` 与它正交：编辑表单在
+   * 两种看法之上（右键「编辑」直达表单，不改这里）。
+   */
+  detailMode: LoreDetailMode;
   /**
    * A passage handed to the wall's AI-extract modal, waiting for it to mount.
    *
@@ -62,6 +75,8 @@ interface LoreState {
   /** Read the staged passage exactly once. */
   takePendingExtract: () => string | null;
   openDetail: (dirPath: string | null, editing?: boolean) => void;
+  /** 切换阅读/管理并记住（全局，不分项目）。 */
+  setDetailMode: (mode: LoreDetailMode) => void;
   selectEntity: (entity: LoreEntity) => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
   setFileContent: (content: string) => void;
@@ -118,6 +133,7 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   saveTimer: null,
   detailPath: null,
   detailEditing: false,
+  detailMode: parseDetailMode(readPref(LORE_DETAIL_MODE_PREF)),
   pendingExtract: null,
   scope: null,
 
@@ -128,7 +144,18 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     return text;
   },
 
-  openDetail: (dirPath, editing = false) => set({ detailPath: dirPath, detailEditing: editing }),
+  openDetail: (dirPath, editing = false) =>
+    set({
+      detailPath: dirPath,
+      detailEditing: editing,
+      // 打开时重读，不只信内存值 —— 见 detailMode 的注释。
+      detailMode: parseDetailMode(readPref(LORE_DETAIL_MODE_PREF)),
+    }),
+
+  setDetailMode: (mode) => {
+    set({ detailMode: mode });
+    writePref(LORE_DETAIL_MODE_PREF, mode);
+  },
 
   scanProject: (projectPath) => {
     // Share a scan that is queued but not yet reading disk — see the note above.
