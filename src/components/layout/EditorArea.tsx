@@ -14,6 +14,7 @@ import { MOD_KEY } from "../../lib/platform";
 import { isHtmlPath, isImagePath } from "../../lib/fs/images";
 import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { linkScrollers } from "../../lib/editor/scrollSync";
+import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchors";
 import styles from "./EditorArea.module.css";
 import { dirName, isSamePath } from "../../lib/paths";
 
@@ -31,10 +32,12 @@ export function EditorArea() {
 
   const previewPaneRef = useRef<HTMLDivElement>(null);
 
-  // Split view: keep editor and preview scrolled to the same relative position.
-  // Neither pane is the scrolling element — CodeMirror scrolls on .cm-scroller
-  // inside it, and the preview scrolls on its own root — so the link binds to
-  // those two.
+  // Split view: keep editor and preview showing the same part of the document,
+  // aligned by source line (data-line anchors on the preview side, CodeMirror
+  // block geometry on the editor side — see lib/editor/scrollAnchors). Neither
+  // pane is the scrolling element — CodeMirror scrolls on .cm-scroller inside
+  // it, and the preview scrolls on its own root — so the link binds to those
+  // two.
   //
   // The editor's scroller comes from `editorView.scrollDOM` rather than a
   // querySelector, and editorView is a dependency, because CodeEditor builds
@@ -49,8 +52,11 @@ export function EditorArea() {
     if (viewMode !== "split" || !activeFilePath || isImage || isHtml) return;
     const editor = editorView?.scrollDOM;
     const preview = previewPaneRef.current?.querySelector<HTMLElement>("[data-preview-scroller]");
-    if (!editor || !preview) return;
-    return linkScrollers(editor, preview);
+    if (!editorView || !editor || !preview) return;
+    return linkScrollers(editor, preview, {
+      mapA: editorScrollMap(editorView),
+      mapB: previewScrollMap(preview),
+    });
   }, [viewMode, activeFilePath, isImage, isHtml, editorView]);
 
   // Load file when active path changes. Images are rendered directly (see below),

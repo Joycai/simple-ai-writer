@@ -92,7 +92,10 @@ export function Preview({ source, basePath }: Props) {
 
   useEffect(() => {
     if (!ref.current) return;
-    ref.current.innerHTML = renderMarkdown(shown);
+    // lineAnchors: the data-line stamps EditorArea's split-view scroll link
+    // aligns on. Harmless when the pane is shown alone, and always stamping
+    // keeps the rendered DOM identical between preview and split mode.
+    ref.current.innerHTML = renderMarkdown(shown, { lineAnchors: true });
 
     // Mark lore citations that don't resolve against the current index — the
     // visible half of the grounding audit (click navigation is app-global).

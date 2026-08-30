@@ -70,8 +70,37 @@ md.renderer.rules.lore_cite = (tokens, idx) => {
   return `<span class="lore-cite" ${CITE_ATTR}="${esc(target)}" role="link" tabindex="0">${esc(label)}</span>`;
 };
 
-export function renderMarkdown(source: string): string {
-  return md.render(source);
+// ── Source line anchors ───────────────────────────────────────────────────────
+// Stamps `data-line` / `data-line-end` (markdown-it's token.map, 0-based
+// [start, end)) onto **top-level** block tags, so the split view can align the
+// preview with the editor by source line instead of by scroll percentage.
+//
+// Top-level only (`token.level === 0`) on purpose: nested blocks (a paragraph
+// inside a blockquote) produce overlapping line ranges, and the interpolation
+// in lib/editor/scrollSync assumes anchors that ascend in both line and pixel
+// order. Disjoint top-level ranges guarantee that; lines inside a compound
+// block are reached by interpolating across its [start, end) span.
+//
+// Behind an env flag rather than always on: renderMarkdown also produces
+// exported HTML, chat bubbles and approval cards, none of which should carry
+// editor plumbing in their markup.
+md.core.ruler.push("source_line_anchors", (state) => {
+  if (!(state.env as { lineAnchors?: boolean } | null)?.lineAnchors) return;
+  for (const token of state.tokens) {
+    if (!token.map || token.level !== 0 || token.nesting < 0 || token.hidden) continue;
+    if (token.type === "inline") continue;
+    token.attrSet("data-line", String(token.map[0]));
+    token.attrSet("data-line-end", String(token.map[1]));
+  }
+});
+
+export interface RenderMarkdownOptions {
+  /** Stamp data-line/data-line-end source anchors for scroll syncing. */
+  lineAnchors?: boolean;
+}
+
+export function renderMarkdown(source: string, opts?: RenderMarkdownOptions): string {
+  return md.render(source, { lineAnchors: opts?.lineAnchors === true });
 }
 
 /**
