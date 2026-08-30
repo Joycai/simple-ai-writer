@@ -64,8 +64,9 @@ import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile, backupFileByMove } from "./backup";
 import {
-  applyFindReplace, countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines,
-  type EditTarget,
+  applyFindReplace, countLines, describeEditTarget, findOccurrences, insertionLanding,
+  occurrenceAt, sliceLines,
+  type EditTarget, type Insertion,
 } from "./editApply";
 import { echoRegion, lineOfOffset, shiftNote } from "./lineEcho";
 import {
@@ -2938,6 +2939,227 @@ export async function rewriteLinesTool(
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : "") +
       (await appliedReceipt(target.path, original, from, slice.to)),
   };
+}
+
+// ─── insert_lines ────────────────────────────────────────────────────────────
+
+/**
+ * Insertion points one call may carry.
+ *
+ * Generous, because the whole point is that a document's structure arrives as
+ * one list and one card: 60 headings over a long manuscript is the case this
+ * tool was written for, not an abuse of it. What the cap is really for is the
+ * degenerate shape — a model inserting a blank line between every paragraph of
+ * a 5,000-line file — where the card stops being reviewable and the argument
+ * list stops fitting in a reply. Splitting into several calls costs a card
+ * each, which is the right price for work that large.
+ */
+const MAX_INSERTIONS = 100;
+
+/** Longest context line kept for the card; a whole paragraph would bury it. */
+const INSERT_CONTEXT_CHARS = 80;
+
+/** Rows of "old line → new line" the receipt prints before it summarises. */
+const INSERT_RECEIPT_ROWS = 40;
+
+/** Insertions echoed with their surrounding lines; past this, numbers only. */
+const INSERT_ECHO_MAX = 3;
+
+function clipLine(line: string | undefined): string {
+  const text = (line ?? "").trim();
+  return text.length > INSERT_CONTEXT_CHARS ? `${text.slice(0, INSERT_CONTEXT_CHARS)}…` : text;
+}
+
+/**
+ * Add structure to a document without re-sending it.
+ *
+ * The shape this completes: `append_file` decoupled per-call size from file
+ * size at the *end* of a file, and this does it in the middle. Everything else
+ * on the manuscript side needs the old text in hand — `propose_edit` quotes it
+ * into `find`, `rewrite_lines` replaces it, `rewrite_document` carries all of
+ * it — so "put a heading here" was previously priced as "re-emit the section
+ * you are putting it in front of". On the document this tool exists for (long,
+ * unstructured, being given headings) that is the whole file, twice, plus the
+ * paraphrase risk of every re-typed character.
+ *
+ * The model therefore sends coordinates and new text only. Bottom-up
+ * application is the mechanism rather than an instruction (see
+ * `applyInsertions`), so the numbers it read stay usable across the whole list.
+ */
+export async function insertLinesTool(
+  toolCallId: string,
+  args: { path?: string; insertions?: unknown; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "insert_lines", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  const raw = Array.isArray(args.insertions) ? args.insertions : null;
+  if (!raw || raw.length === 0) {
+    return {
+      toolCallId,
+      content:
+        "Error: 'insertions' must be a non-empty array of {line, text} — every place to insert, in one call.",
+    };
+  }
+  if (raw.length > MAX_INSERTIONS) {
+    return {
+      toolCallId,
+      content:
+        `Error: ${raw.length} insertions in one call, which is past the ${MAX_INSERTIONS} limit — the author ` +
+        "could not review that as one card. Send the document's structure in several calls, top to bottom; " +
+        "line numbers do not shift between calls as long as you work from the bottom of the file upwards.",
+    };
+  }
+
+  let original: string;
+  try {
+    original = await readFile(target.path);
+  } catch (e) {
+    return { toolCallId, content: `Error reading file: ${String(e)}` };
+  }
+
+  const lines = original.split(/\r?\n/);
+  const lineCount = countLines(original);
+  if (original === "") {
+    return {
+      toolCallId,
+      content: `Error: ${target.path} is empty, so there are no lines to insert before. Use append_file to write into it.`,
+    };
+  }
+
+  const insertions: Insertion[] = [];
+  const seen = new Map<number, number>();
+  for (const [i, item] of raw.entries()) {
+    const entry = (item ?? {}) as Record<string, unknown>;
+    const line = Math.floor(Number(entry.line));
+    if (!Number.isFinite(line) || line < 1) {
+      return {
+        toolCallId,
+        content: `Error: insertion ${i + 1} has line "${String(entry.line)}" — it must be a whole number ≥ 1 (read_file numbers the lines).`,
+      };
+    }
+    if (line > lineCount) {
+      return {
+        toolCallId,
+        content:
+          `Error: insertion ${i + 1} names line ${line}, but the file has ${lineCount} line(s). ` +
+          "Text goes in BEFORE the line you name, so the last usable number is " + lineCount +
+          " — to add at the very end of the file, use append_file.",
+      };
+    }
+    if (typeof entry.text !== "string" || entry.text === "") {
+      return {
+        toolCallId,
+        content: `Error: insertion ${i + 1} is missing 'text' — the lines to insert. To remove lines instead, use rewrite_lines with an empty 'content'.`,
+      };
+    }
+    const clash = seen.get(line);
+    if (clash !== undefined) {
+      return {
+        toolCallId,
+        content:
+          `Error: insertions ${clash + 1} and ${i + 1} both target line ${line}, so their order is undefined. ` +
+          "Combine them into one entry whose 'text' carries both pieces in the order you want them.",
+      };
+    }
+    seen.set(line, i);
+    insertions.push({ line, text: entry.text });
+  }
+
+  const landing = insertionLanding(insertions);
+  const context = landing.map((l) => ({
+    before: clipLine(lines[l.line - 2]),
+    after: clipLine(lines[l.line - 1]),
+  }));
+
+  const decision = await ctx.requestApproval!({
+    kind: "insert",
+    id: `insert-${++proposalCounter}`,
+    path: target.path,
+    // Sorted, so the card reads down the document and the receipt below
+    // indexes the same way the author saw it.
+    insertions: landing.map((l) => ({
+      line: l.line,
+      text: insertions.find((ins) => ins.line === l.line)!.text,
+    })),
+    context,
+    lineCount,
+    reason: args.reason?.trim() || undefined,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content:
+        `The author REJECTED these insertions${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
+        "Nothing was written. Adjust per the reason or move on; do not resend the same list.",
+    };
+  }
+
+  const added = landing.reduce((n, l) => n + l.added, 0);
+  return {
+    toolCallId,
+    content:
+      `Inserted ${landing.length} piece(s) into ${target.path}, ${added} new line(s) in all. ` +
+      "Nothing that was already in the file changed." +
+      (decision.auto ? " Applied under a standing grant — nobody read it." : "") +
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : "") +
+      (await insertReceipt(target.path, original, landing)),
+  };
+}
+
+/**
+ * Where the insertions actually landed — this kind's version of §4.3's receipt.
+ *
+ * An insertion pass shifts everything below every insertion point, so without
+ * this the model's whole map of the file is stale the moment the card is
+ * approved, and a follow-up edit would need the document read again. The
+ * arithmetic is `insertionLanding`'s; what happens here is that it is **checked
+ * against the file** before being handed over. If the two disagree, the honest
+ * answer is to say so and let the model re-read — a confidently wrong line
+ * number does not fail, it edits the wrong place (I3).
+ */
+async function insertReceipt(
+  path: string,
+  before: string,
+  landing: readonly { line: number; newLine: number; added: number }[],
+): Promise<string> {
+  let after: string;
+  try {
+    after = await readFile(path);
+  } catch {
+    return ""; // the write succeeded; not being able to describe it is not an error
+  }
+
+  const measured = countLines(after) - countLines(before);
+  const expected = landing.reduce((n, l) => n + l.added, 0);
+  if (measured !== expected) {
+    return (
+      ` The file grew by ${measured} line(s), not the ${expected} these insertions add — ` +
+      "something else changed it too, so read it again before naming any line numbers."
+    );
+  }
+
+  const shown = landing.slice(0, INSERT_RECEIPT_ROWS);
+  const rows = shown.map((l) => `  line ${l.line} → now line ${l.newLine}`).join("\n");
+  const omitted = landing.length - shown.length;
+  const last = landing[landing.length - 1];
+  const tail =
+    `\nEverything below line ${last.newLine} has moved by +${expected}; nothing above the first ` +
+    "insertion moved at all — no need to re-read to name the next range.";
+
+  // A pass of two or three is a targeted change and worth showing; forty is a
+  // restructuring, where echoing every region would spend the round this whole
+  // tool exists to save.
+  const echo =
+    landing.length <= INSERT_ECHO_MAX
+      ? `\n\n${landing
+          .map((l) => echoRegion(after, l.newLine, l.newLine + l.added - 1))
+          .join("\n  ⋮\n")}`
+      : "";
+
+  return ` Where they landed:\n${rows}` + (omitted > 0 ? `\n  [... ${omitted} more ...]` : "") + tail + echo;
 }
 
 // ─── rewrite_document ────────────────────────────────────────────────────────

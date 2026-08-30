@@ -154,6 +154,105 @@ export function sliceLines(text: string, from: number, to: number): LineSlice | 
   return { text: text.slice(start, end), start, to: last, lineCount };
 }
 
+// ─── Insertions (insert_lines) ───────────────────────────────────────────────
+
+/** One insertion: `text` goes in **before** 1-based line `line`. */
+export interface Insertion {
+  line: number;
+  text: string;
+}
+
+/**
+ * Give an insertion its own terminator, so it cannot weld onto the line it is
+ * inserted before.
+ *
+ * The trailing side is forced and the leading side is not, and that asymmetry
+ * is the whole rule: a missing terminator makes `## 标题` and the paragraph
+ * below it one line, which is silent corruption; a missing *blank* line above
+ * it is a judgement about how the author wants their markdown to breathe, and
+ * the model expresses that by starting `text` with a newline.
+ *
+ * Plain `\n` even in a CRLF file — the same thing `rewrite_lines` does with its
+ * welding guard. Two conventions for one file's terminators would be worse than
+ * one imperfect one.
+ */
+function terminate(text: string): string {
+  return text.endsWith("\n") ? text : `${text}\n`;
+}
+
+/** How many lines an insertion adds to the file. */
+export function insertedLineCount(text: string): number {
+  return terminate(text).split("\n").length - 1;
+}
+
+/**
+ * Splice insertions into the text as it stands *now*.
+ *
+ * Applied bottom-up, which is what lets the model send the line numbers it read
+ * without compensating for its own shifts: every insertion is located in the
+ * text before any of them have moved anything. That discipline — "order your
+ * edits from the bottom of the file upwards" — is the one `rewrite_lines`
+ * asks the model to keep by hand and the one it gets wrong on a long pass, so
+ * here it is the mechanism instead of an instruction.
+ *
+ * `expectedLines` is this write's version of `applyFindReplace`'s `occurrences`,
+ * and it is here rather than at the call site for the same reason that one is:
+ * the check is the write's precondition, not the caller's courtesy. An edit
+ * notices a document that moved on because its `find` no longer counts the
+ * same; an insertion has no text to re-find, so the file's *length* is the only
+ * evidence available — and every line number on the card is wrong the moment it
+ * changes. Splicing anyway would put the heading inside a sentence, and nothing
+ * about the result would look wrong to anyone.
+ */
+export function applyInsertions(
+  text: string,
+  insertions: readonly Insertion[],
+  expectedLines?: number,
+): string {
+  const lineCount = countLines(text);
+  if (expectedLines !== undefined && lineCount !== expectedLines) {
+    throw new Error(
+      `Document changed — it now has ${lineCount} lines, not the ${expectedLines} the card was built from.`,
+    );
+  }
+  const starts = lineStarts(text);
+  const ordered = [...insertions].sort((a, b) => b.line - a.line);
+
+  let out = text;
+  for (const ins of ordered) {
+    if (!Number.isInteger(ins.line) || ins.line < 1 || ins.line > lineCount) {
+      throw new Error(
+        `Document changed — line ${ins.line} no longer exists (the file has ${lineCount} line(s)).`,
+      );
+    }
+    const at = starts[ins.line - 1];
+    out = out.slice(0, at) + terminate(ins.text) + out.slice(at);
+  }
+  return out;
+}
+
+/**
+ * Where each insertion ends up once they have all been applied, in the order
+ * the author reads them (ascending).
+ *
+ * Pure, and the reason it is: this is the number that replaces a re-read, so it
+ * is worth being able to test without touching disk. The caller still checks it
+ * against the file (see `insertReceipt`) — the arithmetic being right is not
+ * the same as the write having done what the arithmetic assumed.
+ */
+export function insertionLanding(
+  insertions: readonly Insertion[],
+): { line: number; newLine: number; added: number }[] {
+  const ordered = [...insertions].sort((a, b) => a.line - b.line);
+  let shift = 0;
+  return ordered.map((ins) => {
+    const added = insertedLineCount(ins.text);
+    const newLine = ins.line + shift;
+    shift += added;
+    return { line: ins.line, newLine, added };
+  });
+}
+
 /**
  * Which occurrence of `slice` the one at `offset` is, 1-based, and how many
  * there are in total.

@@ -10,8 +10,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyFindReplace,
+  applyInsertions,
   describeEditTarget,
   findOccurrences,
+  insertionLanding,
   occurrenceAt,
   sliceLines,
 } from "../editApply";
@@ -133,5 +135,104 @@ describe("occurrenceAt", () => {
 
   it("reports a unique region as the only one", () => {
     expect(occurrenceAt("a\nb\n", "b\n", 2)).toEqual({ occurrences: 1, index: 1 });
+  });
+});
+
+/**
+ * Insertions — the write that adds lines and changes none.
+ *
+ * Two properties carry the whole design. **Bottom-up application** is what lets
+ * the model send the line numbers it read without compensating for its own
+ * shifts; if that ever became top-down, every insertion after the first would
+ * land one section too high, and nothing about the result would look wrong.
+ * **The forced terminator** is the other: without it a heading welds onto the
+ * paragraph it was inserted in front of, which is silent corruption of the one
+ * thing this tool exists to produce.
+ */
+describe("applyInsertions", () => {
+  const DOC = "一\n二\n三\n";
+
+  it("inserts before the named line", () => {
+    expect(applyInsertions(DOC, [{ line: 2, text: "## 标题" }])).toBe("一\n## 标题\n二\n三\n");
+  });
+
+  it("applies bottom-up, so every line number is the one the model read", () => {
+    // Both numbers refer to the ORIGINAL file. Applied top-down, the second
+    // insertion would land after "二" instead of before "三".
+    expect(
+      applyInsertions(DOC, [
+        { line: 2, text: "A" },
+        { line: 3, text: "B" },
+      ]),
+    ).toBe("一\nA\n二\nB\n三\n");
+    // Order in the list must not matter.
+    expect(
+      applyInsertions(DOC, [
+        { line: 3, text: "B" },
+        { line: 2, text: "A" },
+      ]),
+    ).toBe("一\nA\n二\nB\n三\n");
+  });
+
+  it("terminates the insertion so it cannot weld onto the following line", () => {
+    expect(applyInsertions(DOC, [{ line: 1, text: "# 顶" }])).toBe("# 顶\n一\n二\n三\n");
+    // Already terminated: no second newline is added.
+    expect(applyInsertions(DOC, [{ line: 1, text: "# 顶\n" }])).toBe("# 顶\n一\n二\n三\n");
+  });
+
+  it("leaves the leading side to the model — that is how a blank line is asked for", () => {
+    expect(applyInsertions(DOC, [{ line: 2, text: "\n## 标题" }])).toBe("一\n\n## 标题\n二\n三\n");
+  });
+
+  it("inserts before a last line that has no terminator", () => {
+    expect(applyInsertions("一\n二", [{ line: 2, text: "X" }])).toBe("一\nX\n二");
+  });
+
+  it("refuses a line that no longer exists rather than clamping", () => {
+    // Clamping would write at a position the author never approved.
+    expect(() => applyInsertions(DOC, [{ line: 4, text: "X" }])).toThrow(/no longer exists/);
+    expect(() => applyInsertions(DOC, [{ line: 0, text: "X" }])).toThrow(/no longer exists/);
+  });
+});
+
+describe("insertionLanding", () => {
+  it("reports where each piece ends up, in reading order", () => {
+    expect(
+      insertionLanding([
+        { line: 10, text: "B" },
+        { line: 3, text: "A" },
+      ]),
+    ).toEqual([
+      { line: 3, newLine: 3, added: 1 },
+      // One line went in above it, so line 10 is now line 11.
+      { line: 10, newLine: 11, added: 1 },
+    ]);
+  });
+
+  it("counts every line a multi-line insertion adds", () => {
+    expect(
+      insertionLanding([
+        { line: 5, text: "\n## 标题\n" },
+        { line: 9, text: "X" },
+      ]),
+    ).toEqual([
+      { line: 5, newLine: 5, added: 2 },
+      { line: 9, newLine: 11, added: 1 },
+    ]);
+  });
+});
+
+describe("applyInsertions — the file moved on", () => {
+  it("refuses when the document is no longer the length the card was built from", () => {
+    // The author kept typing while the card waited. Every line number on it now
+    // points somewhere they never looked, and an insertion has no `find` to
+    // re-locate — so the length is the only evidence there is.
+    expect(() => applyInsertions("一\n二\n三\n四\n", [{ line: 2, text: "X" }], 3)).toThrow(
+      /now has 4 lines, not the 3/,
+    );
+  });
+
+  it("applies when the length still matches", () => {
+    expect(applyInsertions("一\n二\n三\n", [{ line: 2, text: "X" }], 3)).toBe("一\nX\n二\n三\n");
   });
 });

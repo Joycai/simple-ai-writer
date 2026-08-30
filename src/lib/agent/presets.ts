@@ -174,6 +174,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "propose_edit",
     "rewrite_document",
     "rewrite_lines",
+    "insert_lines",
     "append_file",
     "create_chapter",
     "create_file",
@@ -242,6 +243,7 @@ export const WRITE_PRESET: TaskPreset = {
     "append_file",
     "propose_edit",
     "rewrite_lines",
+    "insert_lines",
     "rewrite_document",
     // 交付
     "export_pptx",

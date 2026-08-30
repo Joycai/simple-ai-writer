@@ -18,6 +18,7 @@
  */
 
 import type { ToolDefinition } from "../ai/types";
+import type { Insertion } from "./editApply";
 import type { DocxOutline } from "../docx";
 import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
@@ -94,6 +95,7 @@ import {
   appendFileTool,
   rewriteDocumentTool,
   rewriteLinesTool,
+  insertLinesTool,
   proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
@@ -207,6 +209,41 @@ export interface AppendProposal extends ProposalBase {
   content: string;
   /** Length of the file before the append — the card's "grew from" figure. */
   originalChars: number;
+}
+
+/**
+ * Splice new lines into a document without touching a byte of what is there.
+ *
+ * The kind that exists because "add structure to this" — headings over a wall
+ * of text, section breaks, a blank line between welded paragraphs — is not a
+ * replacement at all, and expressing it as one is what made it expensive. As an
+ * `edit` it is unaddressable (the text being inserted *at* repeats), and as a
+ * `rewrite`/`rewrite_lines` the model has to re-emit every original line it is
+ * keeping: the body is paid for twice, once on the way in and once on the way
+ * back, and each character it re-types is one it can quietly paraphrase. On a
+ * long document, after compaction has folded the original read away, "re-type
+ * it" means "reconstruct it from memory" — which is the one failure the author
+ * cannot see on a card, because the diff they would have to read is the whole
+ * file.
+ *
+ * So the model sends coordinates and new text only, and the runtime assembles
+ * the bytes. `lineCount` is this kind's version of `EditProposal.occurrences`:
+ * the file's length when the author saw the card, re-checked at apply time, so
+ * a document that moved on while the card waited is refused rather than
+ * spliced at stale positions.
+ */
+export interface InsertProposal extends ProposalBase {
+  kind: "insert";
+  /** Each `text` goes in before its 1-based `line`, applied bottom-up. */
+  insertions: Insertion[];
+  /**
+   * A line of the file either side of each insertion point, captured when the
+   * proposal was built — so the card can show *where* each piece lands without
+   * reading the file again. Indexed alongside `insertions`.
+   */
+  context: { before: string; after: string }[];
+  /** Lines the file had when this proposal was built. See the note above. */
+  lineCount: number;
 }
 
 /** Add a file (or folder) that does not exist yet, with its opening text. */
@@ -430,6 +467,7 @@ export type Proposal =
   | EditProposal
   | RewriteProposal
   | AppendProposal
+  | InsertProposal
   | CreateProposal
   | MoveProposal
   | DeleteProposal
@@ -754,6 +792,7 @@ export type ToolId =
   | "propose_edit"
   | "rewrite_document"
   | "rewrite_lines"
+  | "insert_lines"
   | "append_file"
   | "create_chapter"
   | "create_file"
@@ -2147,6 +2186,52 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => rewriteLinesTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  insert_lines: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "insert_lines",
+        description:
+          "Add lines to a document without re-sending anything already in it: headings over a wall of text, section breaks, blank lines. Send every insertion point in ONE call. They apply bottom-up, so the line numbers you read stay valid across the whole list — never compensate for your own shifts. Use this rather than rewrite_lines whenever nothing existing changes; rewrite_lines makes you re-type every line you keep. append_file adds at the very end. Nothing is written until the author approves the card; the call blocks until they decide.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the document, as returned by list_files",
+            },
+            insertions: {
+              type: "array",
+              description: "Every insertion point, any order",
+              items: {
+                type: "object",
+                properties: {
+                  line: {
+                    type: "number",
+                    description: "1-based line to insert BEFORE (read_file's numbers)",
+                  },
+                  text: {
+                    type: "string",
+                    description:
+                      "Lines to insert. A trailing newline is added; start with one to leave a blank line above.",
+                  },
+                },
+                required: ["line", "text"],
+              },
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["path", "insertions"],
+        },
+      },
+    },
+    execute: (call, ctx) => insertLinesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   append_file: {

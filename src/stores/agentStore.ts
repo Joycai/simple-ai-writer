@@ -43,7 +43,7 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
-import { applyFindReplace } from "../lib/agent/editApply";
+import { applyFindReplace, applyInsertions } from "../lib/agent/editApply";
 import {
   coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, planFold,
   recordInjectionsFromReport,
@@ -102,7 +102,7 @@ import {
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type {
-  AppendProposal, ApprovalDecision, AskAnswer, AskQuestion, EditProposal, Proposal,
+  AppendProposal, ApprovalDecision, AskAnswer, AskQuestion, EditProposal, InsertProposal, Proposal,
   RewriteProposal,
 } from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
@@ -542,6 +542,35 @@ async function applyAppend(proposal: AppendProposal): Promise<string | null> {
 }
 
 /**
+ * Apply approved insertions. Returns the pre-write backup path.
+ *
+ * The recorded line count is passed through to be re-checked against the file
+ * as it stands now — `applyInsertions` owns that refusal, exactly as
+ * `applyFindReplace` owns the occurrence check `applyEdit` relies on. The
+ * author may have kept typing while the card sat there, and every line number
+ * on that card points somewhere else the moment they did.
+ */
+async function applyInsert(proposal: InsertProposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { projectPath, activeFilePath } = useProjectStore.getState();
+  const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
+
+  const splice = (text: string): string =>
+    applyInsertions(text, proposal.insertions, proposal.lineCount);
+
+  if (isSamePath(activeFilePath, proposal.path)) {
+    // Same reason as applyEdit: through the editor, so unsaved work survives
+    // and the change is visible and autosaved at once.
+    const { useEditorStore } = await import("./editorStore");
+    const { content, setContent } = useEditorStore.getState();
+    setContent(splice(content));
+  } else {
+    await writeFile(proposal.path, splice(await readFile(proposal.path)));
+  }
+  return backupPath;
+}
+
+/**
  * What an applied proposal reports.
  *
  * `report` is what the model is told (historically just a backup path, hence
@@ -577,6 +606,9 @@ async function applyProposal(
 
     case "append":
       return { report: await applyAppend(proposal) };
+
+    case "insert":
+      return { report: await applyInsert(proposal) };
 
     case "create": {
       const dir = parentDir(proposal.path);
