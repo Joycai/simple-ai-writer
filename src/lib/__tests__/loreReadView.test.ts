@@ -32,9 +32,11 @@ import {
   entityReadStats,
   parseDetailMode,
   readFacetBodies,
+  splitDictBody,
   type LoreEntity,
   type LoreFacet,
 } from "../lore";
+import { parseDictBody } from "../translate/glossary";
 import { PREF_KEYS } from "../prefs";
 
 const facet = (file: string, charCount: number): LoreFacet => ({
@@ -109,6 +111,34 @@ describe("entityReadStats", () => {
 
   it("clamps a negative index length to zero", () => {
     expect(entityReadStats(entity(), -1).totalChars).toBe(0);
+  });
+});
+
+describe("splitDictBody", () => {
+  it("splits word pairs from prose without swallowing either", () => {
+    const body = "## 地名\nFrostmere->霜泽 #地名\n这是一段说明文字。\n\nreeve=里正";
+    const { entries, rest } = splitDictBody(body);
+    expect(entries).toEqual([
+      { src: "Frostmere", dst: "霜泽", note: "地名" },
+      { src: "reeve", dst: "里正" },
+    ]);
+    // 标题与说明按原样 markdown 落在词表下方；空行不攒进 rest。
+    expect(rest).toBe("## 地名\n这是一段说明文字。");
+  });
+
+  it("classifies each line exactly as parseDictBody would — one判定，两份用途", () => {
+    // 宽容规则的代表行：全角＝分隔符、列表前缀。逐行判定必须与整体解析一致。
+    const body = "- 文香＝芙美香\nsrc->src";
+    const { entries } = splitDictBody(body);
+    expect(entries).toEqual(parseDictBody(body));
+    // src->src 被 parseDictBody 拒收（src === dst），于是归入 rest。
+    expect(splitDictBody(body).rest).toBe("src->src");
+  });
+
+  it("returns everything as rest for a body with no pairs", () => {
+    const { entries, rest } = splitDictBody("只有说明。\n\n没有词对。");
+    expect(entries).toEqual([]);
+    expect(rest).toBe("只有说明。\n没有词对。");
   });
 });
 

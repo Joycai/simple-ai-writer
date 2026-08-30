@@ -1068,3 +1068,24 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* ── 阅读|管理 两态 segmented（设计稿 16 屏 1d） ─────────────────────────
+   选中＝accent tint + 3px 赭石左边；hover 未选＝中性底，绝不赭石。 */
+.modeSwitch { display: flex; border: 1px solid var(--color-border); }
+.modeBtn {
+  padding: 5px 13px;
+  border: none;
+  background: none;
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.modeBtn:hover { background: var(--color-bg-hover); }
+.modeBtnActive {
+  background: var(--color-accent-tint);
+  border-left: 3px solid var(--color-sienna);
+  color: var(--color-text);
+  font-weight: 500;
+}
+.modeBtnActive:hover { background: var(--color-accent-tint); }

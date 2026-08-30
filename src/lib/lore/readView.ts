@@ -9,6 +9,7 @@
  */
 
 import type { LoreEntity } from "./model";
+import { parseDictBody, type GlossaryEntry } from "../translate/glossary";
 
 /**
  * 详情页的两种看法：阅读（单栏书页）/ 管理（屏 15 的三栏台）。
@@ -69,4 +70,30 @@ export function entityReadStats(entity: LoreEntity, indexBodyChars: number): Ent
     imageCount: (entity.images ?? []).length,
     totalChars: Math.max(0, indexBodyChars) + facets.reduce((n, f) => n + (f.charCount || 0), 0),
   };
+}
+
+/** 词典正文拆成「词表 + 其余行」（设计稿 16 屏 1e）。 */
+export interface DictSplit {
+  entries: GlossaryEntry[];
+  /** 解析不成词对的非空行，按原样 markdown 落在词表下方——不吞掉内容。 */
+  rest: string;
+}
+
+/**
+ * 阅读模式把 `dict` 条目的正文渲染成双栏词表；这里按行分拣。
+ *
+ * 每行的判定**就是** `parseDictBody` 对单行的判定（逐行喂给它，而不是抄一份
+ * 正则）——词表页显示的行集必须和翻译真正用到的行集一字不差，两份实现迟早在
+ * `=` 分隔符或列表前缀这类宽容规则上分道扬镳。空行不进 `rest`：它们在原文里
+ * 只是词对之间的呼吸，攒成 markdown 段落反而生出空段。
+ */
+export function splitDictBody(body: string): DictSplit {
+  const entries: GlossaryEntry[] = [];
+  const restLines: string[] = [];
+  for (const line of body.split("\n")) {
+    const parsed = parseDictBody(line);
+    if (parsed.length > 0) entries.push(...parsed);
+    else if (line.trim()) restLines.push(line);
+  }
+  return { entries, rest: restLines.join("\n") };
 }

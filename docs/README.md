@@ -82,7 +82,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [lore-entry-type-plan.md](feature/lore/lore-entry-type-plan.md) | `partial` | Entry types as a category schema. Phases 1–4 built; `subtypes` deliberately dropped (§6) |
 | [lore-collection-plan.md](feature/lore/lore-collection-plan.md) | `shipped` | Collections: the second axis (which body of work an entry belongs to) + the 取材范围 fence |
 | [lore-collection-ui-brief.md](feature/lore/lore-collection-ui-brief.md) | `shipped` | The Claude Design brief for the collections UI turn (screens 24–31) |
-| [lore-browse-mode-ui-brief.md](feature/lore/lore-browse-mode-ui-brief.md) | `planned` | 条目**阅读模式**的设计任务书：单栏书页版式把主条目 + 特征全文 + 配图一次排开，注入语义退成边注；与三栏管理台并列切换。数据全现成，唯一新读的是特征正文（懒加载） |
+| [lore-browse-mode-ui-brief.md](feature/lore/lore-browse-mode-ui-brief.md) | `shipped` | 条目**阅读模式**（设计稿 16 → `LoreReadView`）：墙上摊开的一张纸把主条目 + 特征全文 + 配图一次排开，注入语义退成节头短线与 mono 边注（三种线靠粗细与断续区分，手动不降透明；互斥组是骑缝组边不是盒子）；只读不催。含任务书原文与八处设计稿出入 |
 | [lore-retrieval-plan.md](feature/lore/lore-retrieval-plan.md) | `shipped` | 取材准确度第 0–2 级：作者意图进匹配靶、`[[lore:…]]` 引用图扩展、查询扩展喂回子串匹配器。三条不变量（子串通道优先 · 每条命中都要可解释可动手 · 无静默截断）；向量通道为什么推迟，以及重启条件（§6.1）。实现出入在 §9——尤其 §9.1：引用带入的条目**不能**挂 L0 保底层，那一层不受预算限制 |
 | [lore-granularity-research.md](feature/lore/lore-granularity-research.md) | `research` | Six directions surveyed. 1+3 became the facet plan; 2, 4, 6 are still open |
 | [lore-category-manage-plan.md](feature/lore/lore-category-manage-plan.md) | `shipped` | 分类的管理面三片：墙上多选批量改分类（含置顶重指）·「删除分类」的两出口确认（两扇门共用一次，orphan 拿到搬空这条出路）· agent 方案卡的分类 target 轴（一行替十二行，含「哪种步骤装哪组延迟工具」那条踩过的坑）。为什么分类和集合的管理面天生不对称 |

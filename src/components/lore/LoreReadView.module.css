@@ -1,0 +1,406 @@
+/* 阅读模式（设计稿 16）：格纸墙上摊开的一张纸。
+   纸 820 × 内容量高 · 正文测量 660 · 整墙滚动，纸不自滚。
+   容器查询三档：≥1300 出页边目录 · ≤900 收窄 · ≥1400 图库 3 列。 */
+
+.wall {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--lore-wall-bg);
+  background-image:
+    linear-gradient(var(--lore-wall-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lore-wall-grid) 1px, transparent 1px);
+  background-size: 36px 36px;
+  container-type: inline-size;
+  animation: readIn 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes readIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall { animation: fadeIn 120ms var(--ease-out); }
+}
+
+.stage {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 28px;
+  padding: 36px 16px 64px;
+}
+
+/* ── 纸 ─────────────────────────────────────────────────────────────── */
+
+.paper {
+  width: 820px;
+  max-width: 100%;
+  flex-shrink: 1;
+  min-width: 0;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--lore-card-shadow-xl);
+  display: flex;
+  align-items: stretch;
+}
+
+/* 装订边：卡片的 22px 放大成纸的左沿 30px；未归集不写字 */
+.bindEdge {
+  width: 30px;
+  flex-shrink: 0;
+  border-right: 1px dashed var(--lore-bind-line);
+  background: var(--lore-bind-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+}
+.bindItem { display: flex; flex-direction: column; align-items: center; }
+.bindSep { width: 12px; height: 1px; background: var(--lore-flip-border); margin: 12px 0; }
+.bindMark {
+  writing-mode: vertical-rl;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--lore-bind-mark);
+}
+
+.pageCol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.catBand { height: 2px; flex-shrink: 0; }
+.inner { padding: 40px 74px 0 56px; }
+
+.spacer { flex: 1; }
+.hairline { flex: 1; height: 1px; background: var(--color-border-soft); }
+
+/* ── 档案头 ─────────────────────────────────────────────────────────── */
+
+.hero { display: flex; gap: 20px; align-items: flex-start; }
+.avatar, .avatarFallback { width: 88px; height: 88px; flex-shrink: 0; object-fit: cover; }
+.avatarFallback {
+  color: var(--color-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 300 42px/1 var(--font-serif);
+}
+.cover {
+  width: 150px;
+  height: 88px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+  cursor: zoom-in;
+}
+.heroRight { flex: 1; min-width: 0; padding-top: 2px; }
+.name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text); }
+.hitNote {
+  margin-top: 12px;
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+}
+.hitChips { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+/* 命中词：划线的词而不是又一个盒子——无框、tag 底 + 2px 赭石下划线。
+   别名与名称同形：数据上它们平权。 */
+.hitChip {
+  padding: 4px 10px 3px;
+  background: var(--color-tag-bg);
+  border-bottom: 2px solid var(--color-sienna);
+  font: 400 14px/1.3 var(--font-serif);
+  color: var(--color-text);
+}
+
+/* ── 元信息行 / 降级注 ──────────────────────────────────────────────── */
+
+.metaRow {
+  margin-top: 22px;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.metaCat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.catDot { width: 7px; height: 7px; flex-shrink: 0; }
+.metaDivider { width: 1px; height: 11px; background: var(--color-border); }
+.metaMono { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
+.metaEdgeNote { font: italic 300 11px/1 var(--font-serif); color: var(--color-text-faint); }
+
+/* 降级：出现，但只出现一次、只有一行。不上警告色、不占块。 */
+.degradedRow {
+  margin-top: 22px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px dashed var(--lore-neutral-line);
+  font: 400 10px/1.7 var(--font-mono);
+  color: var(--color-text-muted);
+}
+.inlineLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-strong);
+  cursor: pointer;
+}
+
+/* ── 节（编辑记号挂在这上面） ───────────────────────────────────────── */
+
+.sect { position: relative; transition: background var(--transition-fast); }
+.sect:hover { background: var(--lore-bind-bg); }
+
+.editMark {
+  position: absolute;
+  top: 0;
+  left: -38px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--lore-neutral-line);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+/* 真 <button>，始终在 tab 序列里；纯 hover 显形是焦点陷阱 */
+.sect:hover .editMark,
+.editMark:focus-visible { opacity: 1; }
+.editMark:focus-visible {
+  border-color: var(--color-sienna);
+  background: var(--color-accent-tint);
+  color: var(--color-sienna);
+  box-shadow: 0 0 0 2px var(--color-tag-bg);
+}
+
+/* ── 概要 = 导语 ────────────────────────────────────────────────────── */
+
+.lede { margin-top: 26px; padding-left: 20px; border-left: 3px solid var(--color-sienna); }
+.ledeText { font: italic 300 20px/1.75 var(--font-serif); color: var(--color-text); }
+.ledeNote { margin-top: 8px; font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
+
+/* ── 节头基线与注入记号 ─────────────────────────────────────────────── */
+
+.topSect { margin-top: 34px; }
+.faceHead { margin-top: 44px; display: flex; align-items: baseline; gap: 12px; }
+.topSect .faceHead { margin-top: 0; }
+.faceName { font: 400 22px/1.3 var(--font-serif); color: var(--color-text); }
+.faceTag {
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+}
+
+/* 三种节头短线：不靠颜色深浅区分，靠粗细与断续（深浅两主题同理） */
+.mark { width: 28px; }
+.topSect .mark { margin-top: 12px; }
+.markResident { height: 3px; background: var(--color-sienna); }
+.markAuto { height: 1px; background: var(--lore-neutral-line); }
+.markManual { height: 0; border-top: 1px dotted var(--lore-neutral-line); }
+
+.facetSect { margin-top: 30px; }
+.faceHead + .facetSect, .faceHead + .groupWrap { margin-top: 26px; }
+.facetTitleRow { margin-top: 12px; display: flex; align-items: baseline; gap: 10px; }
+.facetTitle { font: 500 19px/1.4 var(--font-serif); color: var(--color-text); }
+.prioActive { font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
+.prioPlain { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+.metaLine { margin-top: 6px; font: 400 11px/1.6 var(--font-mono); color: var(--color-text-muted); }
+
+/* 正文：md-body 面，字号档归这块面（主题只能 --md-scale 微调） */
+.md { margin-top: 12px; --md-size: 16px; }
+
+.emptyNote { margin-top: 12px; font: italic 300 14px/1.7 var(--font-serif); color: var(--color-text-faint); }
+.failedRow { margin-top: 12px; display: flex; align-items: baseline; gap: 8px; }
+.retryLink {
+  padding: 0;
+  border: none;
+  background: none;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-strong);
+  cursor: pointer;
+}
+
+/* ── 互斥组：骑缝组边，不是虚线盒——盒子会把完整正文压成引文块 ──────── */
+
+.groupWrap { margin-top: 34px; display: flex; gap: 14px; }
+.groupEdge {
+  width: 9px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-top: 6px;
+}
+.groupEdgeCap { width: 9px; height: 1px; background: var(--lore-neutral-line); }
+.groupEdgeLine { width: 1px; flex: 1; background: var(--lore-neutral-line); }
+.groupBody { flex: 1; min-width: 0; }
+.groupBody .facetSect { margin-top: 22px; }
+.groupBody .facetSect + .facetSect { margin-top: 26px; }
+/* 组内的编辑记号越过组边（9px 边 + 14px gap） */
+.groupBody .editMark { left: -61px; }
+
+/* ── 配图 ───────────────────────────────────────────────────────────── */
+
+.imgGroupHead {
+  margin-top: 26px;
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+.imgGrid { margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.figure { margin: 0; cursor: zoom-in; min-width: 0; }
+.figureImg {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+}
+/* 缩略图未就绪/读不到时的斜纹占位（设计稿 18 的占位卡语汇） */
+.figurePh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-bg-inset),
+    var(--color-bg-inset) 8px,
+    var(--color-bg-surface) 8px,
+    var(--color-bg-surface) 16px
+  );
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+.figureCaption { margin-top: 8px; font: 400 13px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+.figureCaptionMono { margin-top: 8px; font: 400 10px/1.6 var(--font-mono); color: var(--color-text-faint); }
+
+/* ── 落款与过渡行 ───────────────────────────────────────────────────── */
+
+.colophon {
+  margin-top: 46px;
+  padding: 14px 0 28px;
+  border-top: 1px dashed var(--color-border);
+  font: 400 10px/1.9 var(--font-mono);
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+.nextRow {
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--lore-bind-bg);
+  padding: 16px 74px 16px 56px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.nextLabel { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
+.nextName {
+  padding: 0;
+  border: none;
+  background: none;
+  font: 400 19px/1.3 var(--font-serif);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.nextName:hover { color: var(--color-accent); }
+.nextArrow { font: 500 13px/1 var(--font-sans); color: var(--color-accent); }
+.nextPos { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+
+/* ── 空条目：一句邀请，不放空态卡片 ─────────────────────────────────── */
+
+.emptyBlock {
+  margin-top: 30px;
+  padding: 16px 0 34px;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.emptyInvite { font: italic 300 15px/1.7 var(--font-serif); color: var(--color-text-muted); }
+.emptyAction {
+  align-self: flex-start;
+  padding: 0 0 1px;
+  border: none;
+  background: none;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-strong);
+  cursor: pointer;
+}
+
+/* ── 页边目录：≥1300 容器宽出现在纸右侧（1d-2 的精确稿） ────────────── */
+
+.toc {
+  display: none;
+  width: 200px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 8px;
+}
+.tocHead {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.tocItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.tocItemActive { color: var(--color-text); font-weight: 500; }
+.tocTick { width: 8px; height: 1px; background: var(--lore-flip-border); flex-shrink: 0; }
+.tocTickActive { width: 14px; height: 3px; background: var(--color-sienna); flex-shrink: 0; }
+.tocSub {
+  width: 100%;
+  display: block;
+  padding: 5px 0 5px 17px;
+  border: none;
+  background: none;
+  text-align: left;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+.tocSub:hover { color: var(--color-text-secondary); }
+
+@container (min-width: 1300px) {
+  .toc { display: block; }
+}
+
+/* ── 宽态：图库 3 列 ────────────────────────────────────────────────── */
+
+@container (min-width: 1400px) {
+  .imgGrid { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* ── 窄态 ≤900：纸贴满（stage 左右各留 16）· padding 44/28 · 装订边 22 ── */
+
+@container (max-width: 900px) {
+  .inner { padding: 30px 28px 0 28px; }
+  .bindEdge { width: 22px; }
+  .imgGrid { grid-template-columns: 1fr; }
+  .nextRow { padding: 16px 28px; }
+  /* -38 的页边记号在贴满的纸上无处可挂 */
+  .editMark { display: none; }
+}

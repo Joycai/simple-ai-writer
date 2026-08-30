@@ -62,6 +62,7 @@ import { LoreDictNormalizeModal } from "./LoreDictNormalizeModal";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
+import { LoreReadView } from "./LoreReadView";
 import { LoreImageGenModal } from "./ai/LoreImageGenModal";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { categoryColor } from "./catColor";
@@ -84,6 +85,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const scanProject = useLoreStore((s) => s.scanProject);
   const deleteEntity = useLoreStore((s) => s.deleteEntity);
   const openDetail = useLoreStore((s) => s.openDetail);
+  const detailMode = useLoreStore((s) => s.detailMode);
+  const setDetailMode = useLoreStore((s) => s.setDetailMode);
   const setMainView = useAppStore((s) => s.setMainView);
   const terms = useTerms();
   const scope = useLoreStore((st) => st.scope);
@@ -123,6 +126,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   // Previous/next entity in wall order, for the breadcrumb's pager. Uses the
   // same flattening as the wall so the ‹ › order matches what the author saw.
+  // index/total (1-based) feed the read mode's 过渡行 「第 i / n 条」.
   const neighbors = useMemo(() => {
     const flat: LoreEntity[] = [];
     for (const c of indexCategories(loreIndex)) for (const e of (loreIndex[c.id] ?? [])) flat.push(e);
@@ -130,6 +134,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     return {
       prev: i > 0 ? flat[i - 1] : null,
       next: i >= 0 && i < flat.length - 1 ? flat[i + 1] : null,
+      index: i + 1,
+      total: flat.length,
     };
   }, [loreIndex, entity.dirPath]);
 
@@ -192,6 +198,25 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [previewIndex, entity.images.length]);
+
+  // R 在阅读/管理两态间来回（设计稿 16 屏 1d）。编辑表单、任何模态/菜单开着、
+  // 或焦点在输入框里时不生效——一个字母键必须让位于正在打字的人。
+  const anyOverlayOpen =
+    showAiHub || showImprove || showMetaImprove || showDictNormalize ||
+    facetModal !== null || showSplit || showImageGen || moreMenu !== null ||
+    assignAnchor !== null || previewIndex !== null;
+  useEffect(() => {
+    if (editing || anyOverlayOpen) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== "r" && ev.key !== "R") return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.isComposing) return;
+      const target = ev.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      setDetailMode(useLoreStore.getState().detailMode === "read" ? "manage" : "read");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, anyOverlayOpen, setDetailMode]);
 
   // If the previewed image gets removed (delete) while the lightbox is open,
   // close it rather than render an out-of-bounds slide.
@@ -933,6 +958,28 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           <>
             <span className={styles.crumbId}>id: {entity.id}</span>
             <span className={styles.crumbDivider} />
+            {/* 两态写字不用图标：一个扭转的图标要靠记忆（设计稿 16 屏 1d）。
+                快捷键 R 来回；hover 未选那格是中性底，绝不赭石。 */}
+            <div
+              className={styles.modeSwitch}
+              role="group"
+              aria-label={t("lore.read.modeSwitch", { defaultValue: "查看模式" })}
+            >
+              <button
+                className={`${styles.modeBtn} ${detailMode === "read" ? styles.modeBtnActive : ""}`}
+                onClick={() => setDetailMode("read")}
+                title={t("lore.read.modeSwitchKey", { defaultValue: "R 切换" })}
+              >
+                {t("lore.read.modeRead", { defaultValue: "阅读" })}
+              </button>
+              <button
+                className={`${styles.modeBtn} ${detailMode === "manage" ? styles.modeBtnActive : ""}`}
+                onClick={() => setDetailMode("manage")}
+                title={t("lore.read.modeSwitchKey", { defaultValue: "R 切换" })}
+              >
+                {t("lore.read.modeManage", { defaultValue: "管理" })}
+              </button>
+            </div>
             <button
               className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
               onClick={startEntityEdit}
@@ -1074,24 +1121,24 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
             </div>
           </div>
         </div>
-      ) : (<>
-      {moreMenu && (
-        <ContextMenu
-          x={moreMenu.x}
-          y={moreMenu.y}
-          items={([
-            { kind: "item", icon: <ExternalLink size={13} />, label: t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" }),
-              action: openInEditor },
-            { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
-              action: () => void reveal() },
-            { kind: "divider" },
-            { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
-              action: () => void handleDelete() },
-          ] satisfies ContextMenuEntry[])}
-          onClose={() => setMoreMenu(null)}
+      ) : detailMode === "read" ? (
+        <LoreReadView
+          entity={entity}
+          indexBody={content}
+          indexLoaded={contentLoaded}
+          indexLoadFailed={contentLoadFailed}
+          onRetryIndex={() => setContentVersion((v) => v + 1)}
+          avatarUrl={avatarUrl}
+          imageDataUrls={imageDataUrls}
+          onEditEntity={startEntityEdit}
+          onEditFacet={(file) => setFacetModal({ file })}
+          onPreviewImage={setPreviewIndex}
+          onOpenManage={() => setDetailMode("manage")}
+          next={neighbors.next ? { name: neighbors.next.name, open: () => openDetail(neighbors.next!.dirPath) } : null}
+          position={neighbors.index > 0 ? { index: neighbors.index, total: neighbors.total } : null}
+          degraded={orphanPack !== null}
         />
-      )}
-
+      ) : (<>
       {/* 屏 23 — the type came from a pack that is off. Muted, never an error
           colour: the entry is intact and still injected exactly as before, so an
           alarming treatment here would misreport the state. */}
@@ -1527,6 +1574,24 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </div>
       </div>
       </>)}
+
+      {/* 分支之外：⋯ 菜单从 crumbBar 打开，阅读/管理两态都要能用 */}
+      {moreMenu && (
+        <ContextMenu
+          x={moreMenu.x}
+          y={moreMenu.y}
+          items={([
+            { kind: "item", icon: <ExternalLink size={13} />, label: t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" }),
+              action: openInEditor },
+            { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
+              action: () => void reveal() },
+            { kind: "divider" },
+            { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
+              action: () => void handleDelete() },
+          ] satisfies ContextMenuEntry[])}
+          onClose={() => setMoreMenu(null)}
+        />
+      )}
 
       {assignAnchor && (
         <CollectionAssignMenu
