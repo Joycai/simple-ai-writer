@@ -9,7 +9,14 @@
  * in is EditorArea's job, verified in a browser.
  */
 import { describe, expect, it, vi } from "vitest";
-import { linkScrollers, type Scrollable } from "../editor/scrollSync";
+import {
+  lineAtOffset,
+  linkScrollers,
+  offsetAtLine,
+  type LineAnchor,
+  type Scrollable,
+  type ScrollMapping,
+} from "../editor/scrollSync";
 
 /** A scrollable that dispatches real 'scroll' events when scrollTop is written. */
 function fakeScroller(scrollHeight: number, clientHeight: number) {
@@ -181,5 +188,136 @@ describe("linkScrollers", () => {
     const spyA = vi.spyOn(a, "addEventListener");
     linkScrollers(a, b, manualTimers().opts);
     expect(spyA).toHaveBeenCalledWith("scroll", expect.any(Function), { passive: true });
+  });
+});
+
+describe("linkScrollers with line mappings", () => {
+  /** A mapping whose calls are recorded, answering with canned values. */
+  function fakeMap(line: number | null, accept = true) {
+    const calls: { lineAtTop: number; scrollTo: number[] } = { lineAtTop: 0, scrollTo: [] };
+    const map: ScrollMapping = {
+      lineAtTop() {
+        calls.lineAtTop++;
+        return line;
+      },
+      scrollToLine(l) {
+        calls.scrollTo.push(l);
+        return accept;
+      },
+    };
+    return { map, calls };
+  }
+
+  it("carries the driver's line across instead of the scroll percentage", () => {
+    const a = fakeScroller(2000, 500);
+    const b = fakeScroller(5000, 500);
+    const mapA = fakeMap(42.5);
+    const mapB = fakeMap(null);
+    linkScrollers(a, b, { ...manualTimers().opts, mapA: mapA.map, mapB: mapB.map });
+
+    a.scrollTop = 750;
+    expect(mapB.calls.scrollTo).toEqual([42.5]);
+    // And no proportional write happened on top of the mapped one.
+    expect(b.scrollTop).toBe(0);
+  });
+
+  it("falls back to proportional when the driver's line is unknowable", () => {
+    const a = fakeScroller(2000, 500);
+    const b = fakeScroller(5000, 500);
+    const mapA = fakeMap(null);
+    const mapB = fakeMap(null);
+    linkScrollers(a, b, { ...manualTimers().opts, mapA: mapA.map, mapB: mapB.map });
+
+    a.scrollTop = 750;
+    expect(mapB.calls.scrollTo).toEqual([]);
+    expect(b.scrollTop).toBe(2250);
+  });
+
+  it("falls back to proportional when the follower has nothing to aim with", () => {
+    const a = fakeScroller(2000, 500);
+    const b = fakeScroller(5000, 500);
+    const mapA = fakeMap(42.5);
+    const mapB = fakeMap(null, /* accept */ false);
+    linkScrollers(a, b, { ...manualTimers().opts, mapA: mapA.map, mapB: mapB.map });
+
+    a.scrollTop = 750;
+    expect(mapB.calls.scrollTo).toEqual([42.5]);
+    expect(b.scrollTop).toBe(2250);
+  });
+
+  it("snaps the extremes without consulting the mapping", () => {
+    // Each pane's leading padding sits outside its line space, so mapping at
+    // the edges would leave the follower shy of its own top/bottom.
+    const a = fakeScroller(2000, 500);
+    const b = fakeScroller(5000, 500);
+    const t = manualTimers();
+    const mapA = fakeMap(42.5);
+    const mapB = fakeMap(null);
+    linkScrollers(a, b, { ...t.opts, mapA: mapA.map, mapB: mapB.map });
+
+    a.scrollTop = 1500; // a's max
+    expect(b.scrollTop).toBe(4500);
+    expect(mapA.calls.lineAtTop).toBe(0);
+
+    t.flush();
+    a.scrollTop = 0;
+    expect(b.scrollTop).toBe(0);
+    expect(mapA.calls.lineAtTop).toBe(0);
+  });
+});
+
+describe("anchor interpolation", () => {
+  // Three top-level blocks with a gap (an unanchored block, or plain margins)
+  // between the second and third:
+  //   lines [0,2)  → px [64, 164)
+  //   lines [3,5)  → px [180, 280)
+  //   lines [9,10) → px [400, 460)
+  const anchors: LineAnchor[] = [
+    { line: 0, endLine: 2, top: 64, bottom: 164 },
+    { line: 3, endLine: 5, top: 180, bottom: 280 },
+    { line: 9, endLine: 10, top: 400, bottom: 460 },
+  ];
+
+  it("interpolates inside a block across its full line span", () => {
+    expect(lineAtOffset(anchors, 64)).toBe(0);
+    expect(lineAtOffset(anchors, 114)).toBe(1); // halfway down a 2-line block
+    expect(offsetAtLine(anchors, 1)).toBe(114);
+    expect(offsetAtLine(anchors, 4)).toBe(230); // halfway down the second block
+  });
+
+  it("interpolates the skipped lines across the gap between blocks", () => {
+    // Gap 280→400 px carries lines 5→9.
+    expect(lineAtOffset(anchors, 340)).toBe(7);
+    expect(offsetAtLine(anchors, 7)).toBe(340);
+  });
+
+  it("ramps the leading padding from line 0 and clamps past the end", () => {
+    // First anchor starts at line 0, so everything above it is line 0…
+    expect(lineAtOffset(anchors, 30)).toBe(0);
+    expect(offsetAtLine(anchors, 0)).toBe(64);
+    // …and past the last block there is nothing further to name.
+    expect(lineAtOffset(anchors, 9999)).toBe(10);
+    expect(offsetAtLine(anchors, 9999)).toBe(460);
+  });
+
+  it("ramps proportionally when the document starts with unanchored lines", () => {
+    const late: LineAnchor[] = [{ line: 4, endLine: 6, top: 100, bottom: 200 }];
+    expect(lineAtOffset(late, 50)).toBe(2);
+    expect(offsetAtLine(late, 2)).toBe(50);
+    expect(lineAtOffset(late, -10)).toBe(0);
+    expect(offsetAtLine(late, -3)).toBe(0);
+  });
+
+  it("returns null with no anchors so the caller can fall back", () => {
+    expect(lineAtOffset([], 100)).toBeNull();
+    expect(offsetAtLine([], 3)).toBeNull();
+  });
+
+  it("survives a zero-height block without dividing by it", () => {
+    const flat: LineAnchor[] = [{ line: 2, endLine: 4, top: 100, bottom: 100 }];
+    // y is at (not before) the block, and the block is over at the same px —
+    // the far edge, not NaN.
+    expect(lineAtOffset(flat, 100)).toBe(4);
+    expect(offsetAtLine(flat, 3)).toBe(100);
   });
 });
