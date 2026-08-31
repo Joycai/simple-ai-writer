@@ -17,8 +17,14 @@
 //!     which is how a second instance starts on a different workspace without
 //!     clicking through the picker;
 //!   - **spawning a sibling instance** (`spawn_new_instance`), the "new
-//!     window" button — a new *process*, because every store in the frontend
-//!     (and `lib/profile/active`) is a module singleton sized to one project.
+//!     window" button — a new *process*, because the `FsScope` guarding every
+//!     `fs_*` command is process-wide managed state (see `scope.rs`), so two
+//!     workspaces in one process would share one union of allowed roots;
+//!   - **naming the window** (`set_window_title`) and the **live-instance
+//!     registry** it feeds — who is running right now, which the per-project
+//!     locks cannot answer. Its one reader today is the macOS 「Window」 menu
+//!     (`windowmenu.rs`), the list AppKit cannot build here precisely because
+//!     each window is a separate process.
 //!
 //! Cross-process preference tolerance is the frontend's half — see
 //! `src/lib/prefs.ts` (`refreshPrefs` / `writePrefMerged`).
@@ -181,7 +187,7 @@ fn judge(existing: Option<LockInfo>, self_pid: u32, pid_alive: impl Fn(u32) -> b
 }
 
 #[cfg(unix)]
-fn pid_alive(pid: u32) -> bool {
+pub(crate) fn pid_alive(pid: u32) -> bool {
     // Signal 0: no signal delivered, just the existence check. Success means
     // alive. EPERM would also mean alive-but-not-ours, but the lock holder is
     // the same user's editor in practice, and misreading EPERM as dead only
@@ -190,7 +196,7 @@ fn pid_alive(pid: u32) -> bool {
 }
 
 #[cfg(windows)]
-fn pid_alive(pid: u32) -> bool {
+pub(crate) fn pid_alive(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
     let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
@@ -346,6 +352,173 @@ pub fn spawn_new_instance(project_path: Option<String>) -> Result<(), String> {
     // Spawn-and-forget: the child owns its own lifetime (closing this window
     // must not close the sibling), so the handle is deliberately dropped.
     cmd.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ── The live-instance registry ──────────────────────────────────────────────
+//
+// Who is running right now, so a window can list its siblings. The workspace
+// locks cannot answer that: they live inside each project (a window with no
+// project has none), and they answer "who holds this folder", not "who is
+// open". So each instance publishes one file under the app data dir, named by
+// its pid.
+//
+// Only the macOS window menu reads this today (`windowmenu.rs`), but the
+// writing half is cross-platform: `set_window_title` has to run everywhere for
+// the taskbar and ⌘-Tab anyway, and a registry that is only true on one
+// platform is a registry that will be wrong the day a second reader appears.
+
+/// Directory under the app data dir holding one file per live instance.
+const REGISTRY_DIR: &str = "instances";
+
+/// What an instance publishes about itself. Display data plus the port to
+/// reach it on; nothing another instance is trusted to act on beyond "raise
+/// the window listening there".
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct InstanceInfo {
+    pub pid: u32,
+    /// The focus-channel port (see the module doc). `None` when this instance
+    /// could not bind one — it is then listed but not switchable, which beats
+    /// hiding a window the author can plainly see.
+    pub port: Option<u16>,
+    /// Unix seconds when this instance first announced itself. The list's sort
+    /// key, so every instance renders it in the same order.
+    pub since: u64,
+    /// The label a sibling shows for this window — the project name, or the
+    /// app's own name while no project is open.
+    pub title: String,
+    /// The workspace this window holds, if any. Display-only: the *claim* on a
+    /// folder is the lock, never this.
+    pub workspace: Option<String>,
+}
+
+/// This instance's `since`, fixed at its first announcement — re-announcing on
+/// every project switch must not reshuffle the list under the author.
+static SINCE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
+fn registry_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Option<PathBuf> {
+    app.path().app_data_dir().ok().map(|d| d.join(REGISTRY_DIR))
+}
+
+fn entry_path(dir: &Path, pid: u32) -> PathBuf {
+    dir.join(format!("{pid}.json"))
+}
+
+/// Publish (or update) this instance's entry, then rebuild our own window menu
+/// so the window that just renamed itself is right immediately.
+///
+/// Best-effort throughout: a registry that cannot be written costs a menu
+/// entry, never the caller — `set_window_title` still sets the title, which is
+/// what the Dock, ⌘-Tab and Mission Control read.
+pub fn announce_instance<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    title: &str,
+    workspace: Option<&str>,
+) {
+    let Some(dir) = registry_dir(app) else { return };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let info = InstanceInfo {
+        pid: std::process::id(),
+        port: app.try_state::<FocusPort>().and_then(|p| p.0),
+        since: *SINCE.get_or_init(now_secs),
+        title: title.to_owned(),
+        workspace: workspace.map(str::to_owned),
+    };
+    let Ok(bytes) = serde_json::to_vec(&info) else {
+        return;
+    };
+    let _ = std::fs::write(entry_path(&dir, info.pid), bytes);
+    #[cfg(target_os = "macos")]
+    crate::windowmenu::refresh(app);
+}
+
+/// Drop this instance's entry — the `RunEvent::Exit` sweep, beside the locks.
+/// A crash skips it, which is what the liveness probe in `scan_instances` is
+/// for.
+pub fn retire_instance<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(dir) = registry_dir(app) {
+        let _ = std::fs::remove_file(entry_path(&dir, std::process::id()));
+    }
+}
+
+/// Every instance still running, oldest first. macOS-only because the window
+/// menu is its only reader; `scan_instances` below carries the logic and is
+/// tested everywhere.
+#[cfg(target_os = "macos")]
+pub fn live_instances<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<InstanceInfo> {
+    match registry_dir(app) {
+        Some(dir) => scan_instances(&dir, std::process::id(), pid_alive),
+        None => Vec::new(),
+    }
+}
+
+/// The registry read, with the pid probe injected so the decisions below are
+/// testable without real processes.
+///
+/// Dead instances' files are deleted on sight — this is the only sweep there
+/// is, since the owner of a file is by definition not around to remove it. A
+/// file that will not parse is judged by the pid in its *name*: a live owner's
+/// is left alone (it may be mid-write), a dead one's is deleted. That fallback
+/// is not fussiness — the content that would name the owner is precisely what
+/// is unreadable, so without it garbage could never leave the directory.
+///
+/// A recycled PID can keep an entry alive one moment too long. That is the
+/// same false positive the workspace lock accepts, and with less at stake:
+/// the click reaches a port that is gone (or someone else's, where a bare
+/// connection means nothing), and the failure rebuilds the menu without it.
+#[cfg(any(target_os = "macos", test))]
+fn scan_instances(dir: &Path, self_pid: u32, alive: impl Fn(u32) -> bool) -> Vec<InstanceInfo> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<InstanceInfo> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        let parsed = std::fs::read(&path)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<InstanceInfo>(&b).ok());
+        let named_pid = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.parse::<u32>().ok());
+        let pid = match (&parsed, named_pid) {
+            (Some(info), _) => info.pid,
+            (None, Some(pid)) => pid,
+            // Unreadable *and* unnamed: nothing to judge it by, so leave it.
+            (None, None) => continue,
+        };
+        if pid != self_pid && !alive(pid) {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        if let Some(info) = parsed {
+            out.push(info);
+        }
+    }
+    out.sort_by_key(|i| (i.since, i.pid));
+    out
+}
+
+/// Name this window — for the OS, and for every other instance's window menu.
+///
+/// One call site in the frontend (`useWindowTitle`) covers both, because they
+/// are the same fact: the title is what the Dock, ⌘-Tab and Mission Control
+/// read, and `windowmenu::announce` is what puts it in a sibling's 「Window」
+/// menu. `workspace` is display-only; the claim on a folder is the lock, not
+/// this.
+#[command]
+pub fn set_window_title(
+    window: tauri::WebviewWindow,
+    title: String,
+    workspace: Option<String>,
+) -> Result<(), String> {
+    window.set_title(&title).map_err(|e| e.to_string())?;
+    announce_instance(window.app_handle(), &title, workspace.as_deref());
     Ok(())
 }
 
@@ -515,5 +688,136 @@ mod tests {
         acquire_at(&root, std::process::id(), false, Some(45678)).unwrap();
         assert_eq!(read_lock(&root).unwrap().port, Some(45678));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ── The instance registry (real fs, scratch dirs) ────────────────────────
+
+    fn reg(tag: &str) -> PathBuf {
+        let dir = scratch(&format!("registry-{tag}"));
+        dir.join("instances")
+    }
+
+    fn instance(pid: u32, since: u64, title: &str) -> InstanceInfo {
+        InstanceInfo {
+            pid,
+            port: Some(4000 + pid as u16),
+            since,
+            title: title.to_owned(),
+            workspace: None,
+        }
+    }
+
+    fn put(dir: &Path, info: &InstanceInfo) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(entry_path(dir, info.pid), serde_json::to_vec(info).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn listed_oldest_first_regardless_of_pid() {
+        // The order is the whole reason `since` is stored: every instance has
+        // to render the same list in the same order, so the author's second
+        // window is in the same place in all of them.
+        let dir = reg("order");
+        put(&dir, &instance(300, 20, "later, lower pid"));
+        put(&dir, &instance(400, 10, "earlier, higher pid"));
+        let listed = scan_instances(&dir, 999, |_| true);
+        assert_eq!(
+            listed.iter().map(|i| i.pid).collect::<Vec<_>>(),
+            vec![400, 300]
+        );
+    }
+
+    #[test]
+    fn ties_on_since_break_by_pid() {
+        // Two windows opened in the same second still need *an* order, and it
+        // has to be the same one everywhere.
+        let dir = reg("tie");
+        put(&dir, &instance(500, 7, "b"));
+        put(&dir, &instance(200, 7, "a"));
+        let listed = scan_instances(&dir, 999, |_| true);
+        assert_eq!(
+            listed.iter().map(|i| i.pid).collect::<Vec<_>>(),
+            vec![200, 500]
+        );
+    }
+
+    #[test]
+    fn dead_instance_is_dropped_and_its_file_swept() {
+        // A crashed instance leaves its file behind; reading the list is the
+        // only sweep there is.
+        let dir = reg("dead");
+        put(&dir, &instance(100, 1, "alive"));
+        put(&dir, &instance(200, 2, "crashed"));
+        let listed = scan_instances(&dir, 999, |pid| pid == 100);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].pid, 100);
+        assert!(!entry_path(&dir, 200).exists());
+    }
+
+    #[test]
+    fn our_own_entry_is_never_probed() {
+        // The probe would say "alive" anyway, but a self-check that ever
+        // answered wrong would delete the current window from its own menu.
+        let dir = reg("self");
+        put(&dir, &instance(100, 1, "us"));
+        let listed = scan_instances(&dir, 100, |_| panic!("must not probe ourselves"));
+        assert_eq!(listed.len(), 1);
+    }
+
+    #[test]
+    fn unparsable_file_is_swept_by_the_pid_in_its_name() {
+        // The content that would name the owner is exactly what is unreadable,
+        // so without the filename fallback garbage could never leave.
+        let dir = reg("garbage-dead");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(entry_path(&dir, 200), b"{truncated").unwrap();
+        assert!(scan_instances(&dir, 999, |_| false).is_empty());
+        assert!(!entry_path(&dir, 200).exists());
+    }
+
+    #[test]
+    fn unparsable_file_of_a_live_owner_is_left_alone() {
+        // A half-written file is the normal case here: it is being announced
+        // right now. Deleting it would race the writer.
+        let dir = reg("garbage-live");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(entry_path(&dir, 200), b"{truncated").unwrap();
+        assert!(scan_instances(&dir, 999, |_| true).is_empty());
+        assert!(entry_path(&dir, 200).exists());
+    }
+
+    #[test]
+    fn unrelated_files_are_ignored() {
+        let dir = reg("noise");
+        put(&dir, &instance(100, 1, "us"));
+        std::fs::write(dir.join("notes.txt"), b"hello").unwrap();
+        std::fs::write(dir.join("cache.json.tmp"), b"hello").unwrap();
+        let listed = scan_instances(&dir, 999, |_| true);
+        assert_eq!(listed.len(), 1);
+        assert!(dir.join("notes.txt").exists());
+    }
+
+    #[test]
+    fn missing_registry_dir_lists_nothing() {
+        // First launch on a machine: the directory does not exist yet, and
+        // that must be an empty menu rather than a panic.
+        let dir = reg("absent").join("nope");
+        assert!(scan_instances(&dir, 999, |_| true).is_empty());
+    }
+
+    #[test]
+    fn round_trips_through_the_file() {
+        // The one thing another *version* of the app could break: an entry
+        // written by a build with more fields must still read here.
+        let dir = reg("roundtrip");
+        let info = InstanceInfo {
+            pid: 100,
+            port: Some(51234),
+            since: 42,
+            title: "第三卷".to_owned(),
+            workspace: Some("/tmp/book".to_owned()),
+        };
+        put(&dir, &info);
+        assert_eq!(scan_instances(&dir, 999, |_| true), vec![info]);
     }
 }
