@@ -1,10 +1,11 @@
 # 「文件」面板重做 —— 给 Claude Design 的任务书
 
-> 状态：`planned`（任务书已写，设计稿未出）。设计项目
+> 状态：`shipped`（设计稿 `17 文件面板 Files Panel` TURN 1 已实现，见文末**实现记录**）。设计项目
 > [`17a6a5ce-f60e-4996-8f94-5948958206d0`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0)
 > 现有到 `16 阅读模式 Reading`，本任务书请求新开 **`17 文件面板 Files Panel`**。
 > `---` 以上是写这份任务书时的**代码实况**（供实现时回查，设计师不必读）；
-> `---` 以下是**发给设计师的原文**，自包含。
+> `---` 以下是**发给设计师的原文**，自包含。**实现记录在文件最末尾**（设计稿回答了什么、
+落在哪些文件、以及十处出入）。
 > 关联：[file-tree-collapse-all-brief.md](file-tree-collapse-all-brief.md)（「全部折叠」的三条实现约束）·
 > [file-panel-pin-ui-brief.md](file-panel-pin-ui-brief.md)（同一面板的**未打开项目**态，已实现，本期不动）。
 
@@ -239,3 +240,68 @@ markdown，但原件通常还留在目录里）· `assets/<文档名>/`（某个
 文案请给**中英两套**：全部折叠、定位当前文档（若你决定要）、以及你新增的任何词。
 —— 词表规则：这个应用里「文档」是正文文件、「分组」是文件夹、「知识库/条目」是另一
 套东西，**不要**引入「章节」「设定」「词条」这些词。
+
+---
+
+# 实现记录（设计稿 17 TURN 1 → 代码）
+
+设计稿用一条主干决定回答了整份任务书：**把「选中」交给几何，把赭石留给唯一那一个**。
+行有三个互不占用的通道 —— 底色（悬停中性 / 当前打开赭石淡底，**全树唯一一块有色的
+底**）、左槽（3px 赭石＝在选区里，贴容器最左边缘，于是相邻的选中行连成一条不断的长
+条）、字重。组合因此不需要额外设计，叠加即可。顶部四层压成两层加一条 22px 脚线，第一
+行文件从 216px 上移到 62px。
+
+## 落点
+
+| 面 | 文件 |
+|---|---|
+| 项目行（项目名 + ▾ 菜单 + 放大镜） | 新增 [`components/layout/ProjectRow.tsx`](../../src/components/layout/ProjectRow.tsx) + `Sidebar.module.css` 的 `.projectRow*` |
+| 面板本体（工具行 / 树 / 脚线 / 三态 / 拖拽 / 剪贴板 / 内联输入 / 删除确认 / 空态 / 三种菜单） | [`components/layout/FileTree.tsx`](../../src/components/layout/FileTree.tsx) + `FileTree.module.css` |
+| 行的语义（六种图标、两级灰、右列一列两义、assets 失配） | 新增 [`lib/fs/rowMeta.ts`](../../src/lib/fs/rowMeta.ts)（纯函数 + `__tests__/rowMeta.test.ts`） |
+| 折叠 / 展开 / 定位（纯逻辑） | [`lib/fs/selection.ts`](../../src/lib/fs/selection.ts)：`collapseAllMap` / `expandAllMap` / `hasOpenDir` / `openDirCount` / `ancestorsOf` |
+| 状态 | `projectStore`：`collapseAllDirs` / `expandAllDirs` / `setExpandedDirs`（撤销要的是整张快照） |
+| 快捷键 | `lib/shortcuts.ts` 新增 11 条 `info` 档条目 + 两份 locale |
+
+## 与设计稿的十处出入
+
+1. **⇧⌘L → ⌥⌘L**（定位当前文档）。⇧⌘L 已经是「AI 润色」的 dispatch 绑定，而两个
+   dispatch 撞在一起是**静默**的：先注册的赢，另一个永远不响。
+2. **⇧⌘N 判给「新建分组」，不给「在新窗口打开」**。设计稿把同一个组合给了两处；树里
+   那个更常用，也与访达一致（⇧⌘N ＝ 新建文件夹）。新窗口因此不带快捷键标签 ——
+   菜单里写一个不响的组合比不写更糟。
+3. **「刷新」不带 ⌘R 标签**：⌘R 在 webview 里是重新加载，没有实现，所以标签也不给。
+4. **没有新增 `--color-danger` / `--color-danger-tint` / `--color-accent-tint-strong`**。
+   三个角色应用里都已经有了（`--color-danger-text` / `--color-danger-bg` 是既有 error
+   家族的别名，`--color-accent-tint-strong` 早就在 `tokens.css` 里）。为一个面板再开一
+   套红，是让同一个角色有两个名字。
+5. **「定位当前文档」只认「被折叠掉」，不认「滚出视野」**。设计稿的散文提到了后者，
+   但它自己给的判据是「行是否在渲染出的可见行集合里」—— 而滚动位置要按行测量，那正是
+   §3 的性能保证明确排除的事。按判据实现。
+6. **工具行的节标题用「文件」**（`sidebar.files`），不是应用词表里的
+   `terms.filesHeader`（「DOCUMENTS · 文档」）—— 设计稿画的就是「文件」，而那一行还要
+   容下四到六个按钮。
+7. **右键菜单没有「预览 / 导出为 PPTX / 转为文档」**（§1j 末尾那三项）。前两个在
+   `.html` 打开后本来就有，第三个「把树里已有的 .docx 转成文档」目前**没有入口**——
+   转换只发生在导入时。它们是功能而不是版式，留到单独一次。
+8. **三个计数下沉到文件面板的脚线，于是「大纲」标签页不再显示它们**。脚线说的三件事
+   （计数 / 剪贴板 / 定位当前文档）全是这棵树的事，把它做成侧栏级会让另外两件在大纲页
+   凭空出现。
+9. **⋯ 菜单靠一次 `clientWidth` 判断宽档**。「≥360px 时导入与刷新已升到工具栏，菜单里
+   就只剩两项」需要 JS 知道档位，而档位是容器查询 —— 所以在**打开菜单的那一刻**量一次
+   容器，一次测量，不是每行一次。
+10. **「全部展开」做了**。上一版设计（`file-tree-collapse-all-brief.md` §3）判断不做切
+    换态，理由是纯图标按钮里一图两义作者按下去前不知道会发生什么；设计稿推翻了它，而
+    且对：按钮按下后**留在实底赭石态**，那个持续存在的态本身就是「现在点会展开」的说
+    明，反向动作因此在同一个位置、同一个手指。
+
+## 实现时踩到的一条（写进了 CSS 文件头）
+
+**容器查询不改变特异性。** `@container` 里的 `.rightCol { display: none }` 与文件后面
+基础规则里的 `.rightCol { display: flex }` 打平，由**源码顺序**决定胜负 —— 密度档写在
+文件开头时，窄栏下右列照常显示，而同一个块里的 `.toolbarLabel` 却生效了（因为那条基础
+规则压根没写 `display`）。截图上看不出来，`getComputedStyle` 一量就现形。所有 `@container`
+块因此必须留在文件末尾。
+
+验证方式沿用 [[verifying-web-ui-headless-chrome-cdp]] 那条：headless Chrome + CDP，把
+真实的 CSS module 注入到跑着的 dev server 页面上，在 160/200/240/380/420 五个宽度、
+浅深两套主题下读回 `getComputedStyle` 与 `scrollWidth`。

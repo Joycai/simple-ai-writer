@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   allRows,
+  ancestorsOf,
   collapseAllMap,
   flattenVisible,
   hasOpenDir,
+  openDirCount,
   isDirOpen,
   pruneNested,
   pruneSelection,
@@ -216,5 +218,31 @@ describe("hasOpenDir", () => {
       [`${ROOT}/卷一/附录`]: true,
     };
     expect(hasOpenDir(TREE, collapsed)).toBe(false);
+  });
+});
+
+describe("openDirCount", () => {
+  it("counts the chevrons the author can actually see flip", () => {
+    // 卷一 and 卷二 are open by default; 附录 is a level down and closed.
+    expect(openDirCount(TREE, {})).toBe(2);
+    expect(openDirCount(TREE, { [`${ROOT}/卷一/附录`]: true })).toBe(3);
+  });
+
+  it("ignores what is open inside a collapsed folder", () => {
+    expect(openDirCount(TREE, { [`${ROOT}/卷一`]: false, [`${ROOT}/卷一/附录`]: true })).toBe(1);
+  });
+});
+
+describe("ancestorsOf", () => {
+  it("returns the folders to open, outermost first", () => {
+    expect(ancestorsOf(TREE, `${ROOT}/卷一/附录/设定.md`)).toEqual([
+      `${ROOT}/卷一`,
+      `${ROOT}/卷一/附录`,
+    ]);
+  });
+
+  it("returns nothing for a top-level row and for a path that is gone", () => {
+    expect(ancestorsOf(TREE, `${ROOT}/大纲.md`)).toEqual([]);
+    expect(ancestorsOf(TREE, `${ROOT}/删掉了.md`)).toEqual([]);
   });
 });

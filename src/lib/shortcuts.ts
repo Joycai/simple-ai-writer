@@ -144,6 +144,22 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },
+  // 文件面板自己的绑定（components/layout/FileTree.tsx + ProjectRow.tsx）。它们
+  // 只在「文件」标签页挂着时监听——动作说的是「这个面板里的东西」，而面板不在，
+  // 折叠什么、定位到哪里就都无从谈起。⌥⌘L 而不是设计稿写的 ⇧⌘L：后者已经是
+  // 「AI 润色」，两个 dispatch 撞在一起是静默的，先注册的赢。
+  { id: "filesCollapseAll", category: "file", combo: { mod: true, alt: true, key: "ArrowLeft" }, labelKey: "filesCollapseAll", scope: "info" },
+  { id: "filesRevealCurrent", category: "file", combo: { mod: true, alt: true, key: "l" }, labelKey: "filesRevealCurrent", scope: "info" },
+  { id: "filesSwitchProject", category: "file", combo: { mod: true, shift: true, key: "o" }, labelKey: "filesSwitchProject", scope: "info" },
+  { id: "filesCloseProject", category: "file", combo: { mod: true, shift: true, key: "w" }, labelKey: "filesCloseProject", scope: "info" },
+  // 树自己的键盘操作：焦点在文件树里时才生效（点过任意一行就有焦点）。
+  { id: "filesNewDoc", category: "file", combo: { mod: true, key: "n" }, labelKey: "filesNewDoc", scope: "info" },
+  { id: "filesNewGroup", category: "file", combo: { mod: true, shift: true, key: "n" }, labelKey: "filesNewGroup", scope: "info" },
+  { id: "filesCut", category: "file", combo: { mod: true, key: "x" }, labelKey: "filesCut", scope: "info" },
+  { id: "filesCopy", category: "file", combo: { mod: true, key: "c" }, labelKey: "filesCopy", scope: "info" },
+  { id: "filesPaste", category: "file", combo: { mod: true, key: "v" }, labelKey: "filesPaste", scope: "info" },
+  { id: "filesRename", category: "file", keysLabel: "Enter", labelKey: "filesRename", scope: "info" },
+  { id: "filesDelete", category: "file", keysLabel: IS_MAC ? "⌫" : "Delete", labelKey: "filesDelete", scope: "info" },
 
   // ─── AI ───────────────────────────────────────────────────────────────
   { id: "aiRewrite", category: "ai", combo: { mod: true, shift: true, key: "e" }, labelKey: "aiRewrite", scope: "dispatch" },

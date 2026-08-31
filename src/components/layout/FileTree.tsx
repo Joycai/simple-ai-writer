@@ -1,32 +1,39 @@
 import {
   useState, useRef, useEffect, useMemo, createContext, useContext, memo,
-  type DragEvent, type KeyboardEvent, type MouseEvent,
+  type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Folder, FolderOpen, FolderInput, FileText, File, FileCode, FileImage, ChevronRight,
-  FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
-  Scissors, Copy, ClipboardPaste, TextCursorInput, AppWindow, Sparkles,
+  Folder, FolderOpen, FileText, File, FileCode, FileImage, ChevronRight,
+  FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
+  Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
+  ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { classifyProjectFile, isHtmlPath, isImagePath, type ProjectFile } from "../../lib/fs/images";
+import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
-  allRows, flattenVisible, isDirOpen, pruneNested, pruneSelection, rangeBetween,
+  allRows, ancestorsOf, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
+  pruneNested, pruneSelection, rangeBetween,
 } from "../../lib/fs/selection";
+import {
+  extLabel, isSecondary, orphanedAssetGroups, rowKind, type RowKind,
+} from "../../lib/fs/rowMeta";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
-import { openInNewWindow } from "../../lib/instance";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
+import { comboLabel, matchesCombo } from "../../lib/shortcuts";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
 import { useComposerStore } from "../../stores/composerStore";
 import { useEditorStore } from "../../stores/editorStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useLoreStore } from "../../stores/loreStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
+import { loreEntityCount } from "../../lib/lore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./FileTree.module.css";
@@ -56,6 +63,19 @@ function isAdditiveClick(e: MouseEvent): boolean {
 /** How long a folder must be hovered mid-drag before it springs open. */
 const SPRING_OPEN_MS = 700;
 
+/** How long 「已折叠 N 个分组」 stays before it fades out on its own. */
+const NOTICE_MS = 4000;
+
+/** 工具行与右键菜单里共用的绑定 —— 标签与行为出自同一个常量。 */
+const COMBO_COLLAPSE_ALL = { mod: true, alt: true, key: "ArrowLeft" } as const;
+/**
+ * 设计稿写的是 ⇧⌘L，但那已经是「AI 润色」的全局绑定（lib/shortcuts.ts），而两个
+ * dispatch 级的绑定撞在一起是静默的：先注册的赢，另一个永远不响。⌥⌘L 空着。
+ */
+const COMBO_REVEAL_DOC = { mod: true, alt: true, key: "l" } as const;
+const COMBO_NEW_DOC = { mod: true, key: "n" } as const;
+const COMBO_NEW_GROUP = { mod: true, shift: true, key: "n" } as const;
+
 /**
  * Replace the drag ghost with a badge naming how many entries are travelling.
  * Without it a multi-entry drag looks exactly like a single-entry one — the
@@ -82,7 +102,6 @@ interface TreeCtx {
   onRowClick: (e: MouseEvent, node: FileNode) => void;
   creatingIn: string | null;
   creatingType: "file" | "folder";
-  startCreate: (parentPath: string, type: "file" | "folder") => void;
   cancelCreate: () => void;
   confirmCreate: (name: string) => Promise<void>;
   createError: string | null;
@@ -95,10 +114,18 @@ interface TreeCtx {
   draggingPaths: ReadonlySet<string>;
   /** Path of the folder row currently lit up as the drop target. */
   dragOverDir: string | null;
+  /** The folder counting down to a spring-open, so its chevron can fill. */
+  springPath: string | null;
   /** Paths waiting to be pasted by a cut, dimmed until then. */
   cutPaths: ReadonlySet<string>;
   /** Documents under each folder, at any depth — precomputed once per tree. */
   docCounts: ReadonlyMap<string, number>;
+  /** `assets/<组>` folders whose document is gone — one walk, not a lookup per row. */
+  orphanAssets: ReadonlySet<string>;
+  /** The delete confirmation, rendered under the last row it would remove. */
+  deleteAsk: { afterPath: string; text: string } | null;
+  confirmDelete: () => void;
+  cancelDelete: () => void;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -108,7 +135,111 @@ interface TreeCtx {
 
 const TreeCtx = createContext<TreeCtx>(null!);
 
-// ── Inline create input ───────────────────────────────────────────────────────
+/** `--depth` drives the row's indent in CSS — see FileTree.module.css `.node`. */
+function depthVar(depth: number): CSSProperties {
+  return { "--depth": depth } as CSSProperties;
+}
+
+// ── Row icon ──────────────────────────────────────────────────────────────────
+
+/**
+ * 六种图标，两级灰，一个颜色都不加（设计稿 17 §2g）：这个面板只有一个强调色，而
+ * 赭石已经被「当前打开」和「选区」占满 —— 再给文件种类分色，等于用色相说三件互不
+ * 相关的事。容器与叶子的区别交给**填充**：分组实心，文档描边。
+ */
+function RowIcon({ kind, open, orphan }: { kind: RowKind; open: boolean; orphan: boolean }) {
+  const cls = [
+    styles.nodeIcon,
+    kind === "folder" ? styles.filled : "",
+    isSecondary(kind) ? styles.secondary : "",
+  ].filter(Boolean).join(" ");
+  const icon = () => {
+    switch (kind) {
+      case "folder": return open ? <FolderOpen size={16} strokeWidth={1.6} /> : <Folder size={16} strokeWidth={1.6} />;
+      case "assets": return orphan ? <Link2 size={16} strokeWidth={1.5} /> : <Images size={16} strokeWidth={1.5} />;
+      case "doc": return <FileText size={16} strokeWidth={1.6} />;
+      case "deliverable": return <FileCode size={16} strokeWidth={1.6} />;
+      case "image": return <FileImage size={16} strokeWidth={1.5} />;
+      default: return <File size={16} strokeWidth={1.6} />;
+    }
+  };
+  return <span className={cls}>{icon()}</span>;
+}
+
+// ── Inline name input (create + rename share the row) ─────────────────────────
+
+/**
+ * 输入行不改变树的行数：新建时插入一行（在父级的**第一个**位置——作者刚点了「在
+ * 这里新建」，视线在那个分组的标题上），重命名时**替换**原行。任何情况下下面的行
+ * 都不移位超过 26px，而全量渲染的树里一次布局就是几百行。
+ */
+function NameInputRow({
+  depth, icon, initial, selectTo, placeholder, error, onSubmit, onCancel,
+}: {
+  depth: number;
+  icon: React.ReactNode;
+  initial: string;
+  /** How much of the name to pre-select; `undefined` = all of it. */
+  selectTo?: number;
+  placeholder?: string;
+  error: string | null;
+  onSubmit: (name: string) => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial);
+  const submittingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    input.setSelectionRange(0, selectTo ?? initial.length);
+    // Mount only: re-running would fight the author's own caret.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submit = async () => {
+    submittingRef.current = true;
+    await onSubmit(name.trim());
+    submittingRef.current = false;
+  };
+
+  // A Chinese name is committed with Enter too — that Enter belongs to the IME.
+  const ime = useImeGuard();
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (ime.isComposing(e)) return;
+    // The tree's own keymap must not see these: ⌫ deletes the selection there.
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); void submit(); }
+    if (e.key === "Escape") onCancel();
+  };
+
+  return (
+    <>
+      <div
+        className={`${styles.inputRow} ${error ? styles.invalid : ""}`}
+        style={depthVar(depth)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className={styles.chevron} />
+        {icon}
+        <input
+          ref={inputRef}
+          className={styles.nameInput}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={handleKeyDown}
+          {...ime.imeProps}
+          onBlur={() => { if (!submittingRef.current) onCancel(); }}
+          placeholder={placeholder}
+        />
+      </div>
+      {/* 出错只改颜色，不改几何：不抖、不清空、光标不动。 */}
+      {error && <div className={styles.inputError} style={depthVar(depth)}>{error}</div>}
+    </>
+  );
+}
 
 /**
  * `depth` is the depth of the row the new entry is being created *under* — so
@@ -118,116 +249,41 @@ const TreeCtx = createContext<TreeCtx>(null!);
 function CreateInput({ depth }: { depth: number }) {
   const { t } = useTranslation();
   const { cancelCreate, confirmCreate, createError, creatingType } = useContext(TreeCtx);
-  const [name, setName] = useState("");
-  const submittingRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const handleSubmit = async () => {
-    const raw = name.trim();
-    if (!raw) { cancelCreate(); return; }
-    submittingRef.current = true;
-    await confirmCreate(raw);
-    submittingRef.current = false;
-  };
-
-  // A Chinese name is committed with Enter too — that Enter belongs to the IME.
-  const ime = useImeGuard();
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (ime.isComposing(e)) return;
-    if (e.key === "Enter") { e.preventDefault(); void handleSubmit(); }
-    if (e.key === "Escape") cancelCreate();
-  };
-
-  const handleBlur = () => {
-    if (!submittingRef.current) cancelCreate();
-  };
-
   return (
-    <>
-      <div
-        className={styles.createInputRow}
-        style={{ paddingLeft: `${18 + (depth + 1) * 12}px` }}
-      >
-        <span className={styles.chevron} />
-        <span className={styles.nodeIcon}>
+    <NameInputRow
+      depth={depth + 1}
+      // 图标先于名字：「我正在造一个什么」不需要文案说明。
+      icon={
+        <span className={`${styles.nodeIcon} ${styles.creating} ${creatingType === "folder" ? styles.filled : ""}`}>
           {creatingType === "folder"
-            ? <Folder size={14} className={styles.folderIcon} />
-            : <FileText size={14} className={styles.fileIcon} />}
+            ? <Folder size={16} strokeWidth={1.6} />
+            : <FileText size={16} strokeWidth={1.6} />}
         </span>
-        <input
-          ref={inputRef}
-          className={styles.createInput}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          {...ime.imeProps}
-          onBlur={handleBlur}
-          placeholder={creatingType === "folder" ? t("fileTree.folderNamePlaceholder") : t("fileTree.fileNamePlaceholder")}
-        />
-      </div>
-      {createError && <div className={styles.createError}>{createError}</div>}
-    </>
-  );
-}
-
-// ── Inline rename input ───────────────────────────────────────────────────────
-
-function RenameInput({ node }: { node: FileNode }) {
-  const { cancelRename, confirmRename } = useContext(TreeCtx);
-  const [name, setName] = useState(node.name);
-  const submittingRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus();
-    // Pre-select the basename so typing replaces it but the extension survives.
-    const dot = node.is_dir ? -1 : node.name.lastIndexOf(".");
-    input.setSelectionRange(0, dot > 0 ? dot : node.name.length);
-  }, [node]);
-
-  const handleSubmit = async () => {
-    submittingRef.current = true;
-    await confirmRename(node, name);
-    submittingRef.current = false;
-  };
-
-  const ime = useImeGuard();
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (ime.isComposing(e)) return;
-    if (e.key === "Enter") { e.preventDefault(); void handleSubmit(); }
-    if (e.key === "Escape") cancelRename();
-  };
-
-  return (
-    <input
-      ref={inputRef}
-      className={styles.createInput}
-      value={name}
-      onChange={(e) => setName(e.target.value)}
-      onKeyDown={handleKeyDown}
-      {...ime.imeProps}
-      onBlur={() => { if (!submittingRef.current) cancelRename(); }}
-      onClick={(e) => e.stopPropagation()}
-      onDoubleClick={(e) => e.stopPropagation()}
+      }
+      initial=""
+      error={createError}
+      placeholder={creatingType === "folder" ? t("fileTree.folderNamePlaceholder") : t("fileTree.fileNamePlaceholder")}
+      onSubmit={(name) => (name ? confirmCreate(name) : cancelCreate())}
+      onCancel={cancelCreate}
     />
   );
 }
 
-// ── File icon by extension ────────────────────────────────────────────────────
-
-function FileIcon({ name }: { name: string }) {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["md", "txt", "markdown"].includes(ext))
-    return <FileText size={14} className={styles.fileIcon} />;
-  if (isImagePath(name))
-    return <FileImage size={14} className={styles.fileIcon} />;
-  if (isHtmlPath(name))
-    return <FileCode size={14} className={styles.fileIcon} />;
-  return <File size={14} className={styles.fileIcon} />;
+function RenameInput({ node, depth, kind, orphan }: { node: FileNode; depth: number; kind: RowKind; orphan: boolean }) {
+  const { cancelRename, confirmRename, renameError } = useContext(TreeCtx);
+  // Only the stem is offered for editing; the extension survives untouched.
+  const dot = node.is_dir ? -1 : node.name.lastIndexOf(".");
+  return (
+    <NameInputRow
+      depth={depth}
+      icon={<RowIcon kind={kind} open={false} orphan={orphan} />}
+      initial={node.name}
+      selectTo={dot > 0 ? dot : undefined}
+      error={renameError}
+      onSubmit={(name) => confirmRename(node, name)}
+      onCancel={cancelRename}
+    />
+  );
 }
 
 // ── Tree node ─────────────────────────────────────────────────────────────────
@@ -236,12 +292,14 @@ function FileIcon({ name }: { name: string }) {
 // off one context — memoizing keeps a FileTree-local state change that does
 // *not* feed the (memoized) context value, like opening the context menu,
 // from re-rendering every row in the project.
-const TreeNode = memo(function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
+const TreeNode = memo(function TreeNode({
+  node, depth, parentName,
+}: { node: FileNode; depth: number; parentName: string | null }) {
   const { t } = useTranslation();
   const {
-    activeFilePath, selected, onRowClick, creatingIn, startCreate,
-    renamingPath, renameError, openMenu,
-    draggingPaths, dragOverDir, cutPaths, docCounts,
+    activeFilePath, selected, onRowClick, creatingIn,
+    renamingPath, openMenu, deleteAsk, confirmDelete, cancelDelete,
+    draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
@@ -255,8 +313,11 @@ const TreeNode = memo(function TreeNode({ node, depth }: { node: FileNode; depth
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && isSamePath(activeFilePath, node.path);
   const isRenaming = renamingPath === node.path;
-  // 设计稿 01: 卷行右侧带章数 — the documents under this folder, at any depth.
+  const kind = rowKind(node.name, node.is_dir, parentName);
+  const orphan = orphanAssets.has(node.path);
+  // 一列两义：分组显示它下面任意深度的 .md 篇数，文档显示后缀标签。
   const docCount = node.is_dir ? (docCounts.get(node.path) ?? 0) : 0;
+  const ext = extLabel(node.name, kind);
 
   // Auto-expand when this folder becomes the target of an inline create
   // (context menu can trigger creates on collapsed folders).
@@ -280,90 +341,146 @@ const TreeNode = memo(function TreeNode({ node, depth }: { node: FileNode; depth
     styles.node,
     isActive ? styles.active : "",
     selected.has(node.path) ? styles.selected : "",
-    draggingPaths.has(node.path) ? styles.dragging : "",
+    draggingPaths.has(node.path) || cutPaths.has(node.path) ? styles.leaving : "",
     dragOverDir === node.path ? styles.dropTarget : "",
-    cutPaths.has(node.path) ? styles.cut : "",
   ].filter(Boolean).join(" ");
+
+  const rightCol = () => {
+    if (orphan) {
+      return (
+        <span className={styles.rightCol} title={t("fileTree.assetsOrphan")}>
+          <AlertTriangle size={10} strokeWidth={1.8} />
+        </span>
+      );
+    }
+    if (kind === "assets") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.assetsLabel")}</span>;
+    if (node.is_dir) {
+      return docCount > 0
+        ? <span className={styles.rightCol} title={t("fileTree.dirCount", { count: docCount })}>{docCount}</span>
+        : <span className={styles.rightCol} />;
+    }
+    return ext ? <span className={`${styles.rightCol} ${styles.ext}`}>{ext}</span> : <span className={styles.rightCol} />;
+  };
 
   return (
     <div>
-      <div
-        className={classes}
-        style={{ paddingLeft: `${18 + depth * 12}px` }}
-        onClick={handleClick}
-        onContextMenu={(e) => openMenu(e, node)}
-        // Renaming turns the label into a text input; a draggable ancestor
-        // would steal the pointer before a selection could be made.
-        draggable={!isRenaming}
-        onDragStart={(e) => onDragStart(e, node)}
-        onDragEnd={onDragEnd}
-        onDragOver={(e) => onDragOverDir(e, node)}
-        onDragLeave={(e) => onDragLeaveDir(e, node)}
-        onDrop={(e) => onDropInDir(e, node)}
-        role="button"
-        tabIndex={-1}
-      >
-        <span className={styles.chevron}>
-          {node.is_dir && (
-            <ChevronRight
-              size={12}
-              className={`${styles.chevronIcon} ${open ? styles.open : ""}`}
-            />
-          )}
-        </span>
-        <span className={styles.nodeIcon}>
-          {node.is_dir
-            ? open
-              ? <FolderOpen size={14} className={styles.folderIcon} />
-              : <Folder size={14} className={styles.folderIcon} />
-            : <FileIcon name={node.name} />}
-        </span>
-        {isRenaming
-          ? <RenameInput node={node} />
-          : (
-            <span className={styles.label}>
-              {node.is_dir ? node.name : node.name.replace(/\.md$/i, "")}
-            </span>
-          )}
-
-        {node.is_dir && !isRenaming && docCount > 0 && (
-          <span className={styles.dirCount}>{docCount}</span>
-        )}
-
-        {node.is_dir && !isRenaming && (
-          <span className={styles.nodeActions} onClick={(e) => e.stopPropagation()}>
-            <button
-              className={styles.nodeActionBtn}
-              title={t("fileTree.newFile")}
-              onClick={() => { setOpen(true); startCreate(node.path, "file"); }}
-            >
-              <FilePlus size={12} />
-            </button>
-            <button
-              className={styles.nodeActionBtn}
-              title={t("fileTree.newFolder")}
-              onClick={() => { setOpen(true); startCreate(node.path, "folder"); }}
-            >
-              <FolderPlus size={12} />
-            </button>
+      {isRenaming ? (
+        <RenameInput node={node} depth={depth} kind={kind} orphan={orphan} />
+      ) : (
+        <div
+          className={classes}
+          style={depthVar(depth)}
+          data-path={node.path}
+          onClick={handleClick}
+          onContextMenu={(e) => openMenu(e, node)}
+          draggable
+          onDragStart={(e) => onDragStart(e, node)}
+          onDragEnd={onDragEnd}
+          onDragOver={(e) => onDragOverDir(e, node)}
+          onDragLeave={(e) => onDragLeaveDir(e, node)}
+          onDrop={(e) => onDropInDir(e, node)}
+          role="button"
+          tabIndex={-1}
+        >
+          <span className={styles.chevron}>
+            {node.is_dir && (
+              <ChevronRight
+                size={14}
+                strokeWidth={2}
+                className={[
+                  styles.chevronIcon,
+                  open ? styles.open : "",
+                  springPath === node.path ? styles.springing : "",
+                ].filter(Boolean).join(" ")}
+              />
+            )}
           </span>
-        )}
-      </div>
-      {isRenaming && renameError && (
-        <div className={styles.createError}>{renameError}</div>
+          <RowIcon kind={kind} open={node.is_dir && open} orphan={orphan} />
+          <span
+            className={[
+              styles.label,
+              node.is_dir && kind === "folder" ? styles.group : "",
+              isSecondary(kind) ? styles.secondary : "",
+            ].filter(Boolean).join(" ")}
+          >
+            {node.is_dir ? node.name : node.name.replace(/\.md$/i, "")}
+          </span>
+          {rightCol()}
+        </div>
+      )}
+
+      {/* 删除确认长在**选区最后一行的下面**，而不是树顶：那里正是作者刚才操作的
+          地方，而上面那几条赭石竖条就是「删哪几个」的清单。 */}
+      {deleteAsk?.afterPath === node.path && (
+        <div className={styles.deleteAsk} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.deleteAskText}>{deleteAsk.text}</div>
+          <div className={styles.deleteAskRow}>
+            <button className={styles.deleteAskGo} onClick={confirmDelete}>{t("fileTree.delete")}</button>
+            <button className={styles.deleteAskCancel} onClick={cancelDelete}>{t("common.cancel")}</button>
+          </div>
+        </div>
       )}
 
       {node.is_dir && open && (
         <div>
           {creatingIn === node.path && <CreateInput depth={depth} />}
           {node.children?.map((child) => (
-            <TreeNode key={child.path} node={child} depth={depth + 1} />
+            <TreeNode key={child.path} node={child} depth={depth + 1} parentName={node.name} />
           ))}
         </div>
       )}
     </div>
   );
 });
+
+// ── Footer counters ───────────────────────────────────────────────────────────
+
+/**
+ * 三个计数，在自己的组件里 —— `wordCount` 每敲一个字就写一次，而订阅它的组件如果
+ * 是 FileTree 本身，整棵树就会跟着每个字符重渲一遍。
+ */
+/** 12,431 → 12.4k —— 窄栏里三个计数只剩两段，字数也跟着让出四个字符。 */
+function shortCount(n: number): string {
+  return n < 10000 ? n.toLocaleString() : `${(n / 1000).toFixed(1)}k`;
+}
+
+function FooterCounts() {
+  const { t } = useTranslation();
+  const wordCount = useProjectStore((s) => s.wordCount);
+  const fileTree = useProjectStore((s) => s.fileTree);
+  const loreCount = useLoreStore((s) => loreEntityCount(s.index));
+  const terms = useTerms();
+  const docCount = useMemo(() => {
+    const count = (nodes: FileNode[]): number =>
+      nodes.reduce(
+        (n, node) => n + (!node.is_dir && /\.md$/i.test(node.name) ? 1 : 0) + count(node.children ?? []),
+        0,
+      );
+    return count(fileTree);
+  }, [fileTree]);
+  // 容器查询换得了版式，换不了字：两种拼法都渲染，让 CSS 藏掉一种
+  // （design-system → Density tiers inside a resizable panel）。
+  return (
+    <>
+      <span className={`${styles.footerText} ${styles.wideOnly}`}>
+        {t("fileTree.footerCounts", {
+          words: wordCount.toLocaleString(),
+          docs: docCount,
+          docLabel: terms.docs,
+          entries: loreCount,
+          entryLabel: terms.entries,
+        })}
+      </span>
+      <span className={`${styles.footerText} ${styles.narrowOnly}`}>
+        {t("fileTree.footerCountsNarrow", {
+          words: shortCount(wordCount),
+          docs: docCount,
+          docLabel: terms.docs,
+        })}
+      </span>
+    </>
+  );
+}
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -382,8 +499,6 @@ export function FileTree() {
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
-  const openProject = useProjectStore((s) => s.openProject);
-  const closeProject = useProjectStore((s) => s.closeProject);
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);
   const copyEntry = useProjectStore((s) => s.copyEntry);
@@ -395,13 +510,17 @@ export function FileTree() {
   const [creatingType, setCreatingType] = useState<"file" | "folder">("file");
   const [createError, setCreateError] = useState<string | null>(null);
   const [menu, setMenu] = useState<CtxMenuState | null>(null);
+  const [overflowAt, setOverflowAt] = useState<{ x: number; y: number } | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [draggingPaths, setDraggingPaths] = useState<ReadonlySet<string>>(new Set());
   const [dragOverDir, setDragOverDir] = useState<string | null>(null);
+  const [springPath, setSpringPath] = useState<string | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
+  const [deleteAsk, setDeleteAsk] = useState<{ targets: TransferSource[]; afterPath: string; text: string } | null>(null);
   // Where a shift-range starts. Held separately from the selection because it
   // must survive the range being redrawn: dragging a shift-click up and down
   // has to grow and shrink one span, not chain new ones off the last row.
@@ -411,6 +530,8 @@ export function FileTree() {
   // so the validity check has to consult something synchronous.
   const dragRef = useRef<TransferSource[] | null>(null);
   const springTimer = useRef<{ path: string; id: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<HTMLDivElement>(null);
 
   // Every row of the tree, and the subset currently on screen. The first
   // answers "what does this selected path point at"; the second is what a
@@ -420,8 +541,9 @@ export function FileTree() {
     () => flattenVisible(fileTree, expandedDirs),
     [fileTree, expandedDirs],
   );
+  const visiblePaths = useMemo(() => new Set(visibleRows.map((r) => r.path)), [visibleRows]);
 
-  // 卷行右侧的章数, one walk for the whole tree. Each directory row counting
+  // 分组行右列的篇数, one walk for the whole tree. Each directory row counting
   // its own subtree on every render was O(nodes × depth) per tree render.
   const docCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -437,6 +559,8 @@ export function FileTree() {
     for (const node of fileTree) if (node.is_dir) walk(node);
     return counts;
   }, [fileTree]);
+
+  const orphanAssets = useMemo(() => orphanedAssetGroups(fileTree), [fileTree]);
 
   // A selection outlives the gesture that acted on it — a move rewrites every
   // selected path, a delete removes them — so anything no longer on disk has
@@ -457,6 +581,14 @@ export function FileTree() {
     setAnchor(activeFilePath);
   }, [activeFilePath]);
 
+  // 「已折叠 N 个分组」 says its piece and goes. No layout animation: it is the
+  // one thing on screen that must not move the tree it is describing.
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
   /** The selected rows, in tree order, as transfer sources. */
   const selectedSources = (): TransferSource[] =>
     everyRow.filter((r) => selected.has(r.path)).map((r) => ({ path: r.path, isDir: r.isDir }));
@@ -474,6 +606,7 @@ export function FileTree() {
   const cancelSpring = () => {
     if (springTimer.current) clearTimeout(springTimer.current.id);
     springTimer.current = null;
+    setSpringPath(null);
   };
 
   /** Open a collapsed folder that has been hovered long enough mid-drag. */
@@ -483,8 +616,11 @@ export function FileTree() {
     const id = window.setTimeout(() => {
       useProjectStore.getState().setDirExpanded(path, true);
       springTimer.current = null;
+      setSpringPath(null);
     }, SPRING_OPEN_MS);
     springTimer.current = { path, id };
+    // 正在计时 —— chevron 在这 700ms 里由描边渐变为实心，一个只占 14px 的进度条。
+    setSpringPath(path);
   };
 
   const endDrag = () => {
@@ -499,6 +635,7 @@ export function FileTree() {
   // ── Selection ───────────────────────────────────────────────────────────────
 
   const onRowClick = (e: MouseEvent, node: FileNode) => {
+    setNotice(null);
     if (e.shiftKey && anchor) {
       const range = rangeBetween(visibleRows, anchor, node.path);
       if (range.length > 0) {
@@ -523,6 +660,78 @@ export function FileTree() {
   const clearSelection = () => {
     setSelected(new Set());
     setAnchor(null);
+  };
+
+  // ── 全部折叠 / 全部展开 ─────────────────────────────────────────────────────
+
+  const anyOpenDir = useMemo(() => hasOpenDir(fileTree, expandedDirs), [fileTree, expandedDirs]);
+  const hasAnyFolder = useMemo(() => everyRow.some((r) => r.isDir), [everyRow]);
+
+  /**
+   * 反馈的主体是按钮，不是树（设计稿 17 §2c）。按钮翻成实底赭石就留在那里，所以
+   * 「再点一次＝全部展开」在同一个位置、同一个手指；这里第二重的确认条说的是**数
+   * 量**，那是树自己没法说的话。
+   *
+   * 选区收敛给的是半句话，不是动画：作者刚亲手按下一个「把东西藏起来」的按钮，选
+   * 区变小可以预期；但删除和移动都作用于选区，所以「现在只剩 2 项」必须在按下的同
+   * 一时刻、同一位置说清，否则下一次 ⌫ 就是一个惊喜。
+   */
+  const toggleCollapseAll = () => {
+    const { collapseAllDirs, expandAllDirs, setExpandedDirs } = useProjectStore.getState();
+    if (!anyOpenDir) {
+      expandAllDirs();
+      setNotice(null);
+      return;
+    }
+    const prevDirs = expandedDirs;
+    const prevSelected = selected;
+    const groups = openDirCount(fileTree, expandedDirs);
+    collapseAllDirs();
+    // Only the top-level rows survive a full collapse, so the selection that
+    // survives with them is exactly the part still on screen.
+    const top = new Set(fileTree.map((n) => n.path));
+    const kept = new Set([...selected].filter((p) => top.has(p)));
+    const shrank = kept.size !== selected.size;
+    if (shrank) setSelected(kept);
+    setNotice({
+      text: shrank
+        ? `${t("fileTree.collapsedGroups", { count: groups })} · ${t("fileTree.selectionShrank", { count: kept.size })}`
+        : t("fileTree.collapsedGroups", { count: groups }),
+      undo: () => {
+        setExpandedDirs(prevDirs);
+        setSelected(prevSelected);
+        setNotice(null);
+      },
+    });
+  };
+
+  /**
+   * 定位当前文档 —— 只在当前文档**不可见**时出现在脚线左端。
+   *
+   * 判据是「这一行在不在渲染出的可见行集合里」，也就是它是否被折叠掉了；滚出视野
+   * 不算，因为那要按行测量，而整稿的性能保证正是「不按行测量」。
+   */
+  const currentHidden = !!activeFilePath
+    && everyRow.some((r) => r.path === activeFilePath)
+    && !visiblePaths.has(activeFilePath);
+
+  const revealCurrent = () => {
+    if (!activeFilePath) return;
+    const { expandedDirs: dirs, setExpandedDirs } = useProjectStore.getState();
+    const chain = ancestorsOf(fileTree, activeFilePath);
+    if (chain.length > 0) {
+      const next = { ...dirs };
+      for (const dir of chain) next[dir] = true;
+      setExpandedDirs(next);
+    }
+    setSelected(new Set([activeFilePath]));
+    setAnchor(activeFilePath);
+    // After the expansion has rendered — the row does not exist before it.
+    window.requestAnimationFrame(() => {
+      treeRef.current
+        ?.querySelector(`[data-path="${CSS.escape(activeFilePath)}"]`)
+        ?.scrollIntoView({ block: "center" });
+    });
   };
 
   // ── Transfers ───────────────────────────────────────────────────────────────
@@ -610,9 +819,14 @@ export function FileTree() {
     e.dataTransfer.effectAllowed = "copyMove";
     // Some engines abort a drag that carries no payload at all.
     e.dataTransfer.setData("text/plain", sources.map((s) => s.path).join("\n"));
-    if (sources.length > 1) {
-      setMultiDragImage(e, t("fileTree.dragCount", { count: sources.length }));
-    }
+    // 徽标只说数量。⌥ 复制时前面加一个 ＋ —— 这是「移动 / 复制」唯一的区别，
+    // 别处不重复说。
+    setMultiDragImage(
+      e,
+      isCopyDrag(e)
+        ? t("fileTree.dragCountCopy", { count: sources.length })
+        : t("fileTree.dragCount", { count: sources.length }),
+    );
   };
 
   const onDragOverDir = (e: DragEvent, node: FileNode) => {
@@ -688,8 +902,7 @@ export function FileTree() {
     return node.is_dir ? node.path : parentDirOf(node.path);
   };
 
-  const handlePaste = async (node: FileNode | null) => {
-    const dest = pasteTargetOf(node);
+  const pasteInto = async (dest: string | null) => {
     if (!clipboard || !dest) return;
     await transferMany(clipboard.entries, dest, clipboard.mode);
     // A cut is spent once pasted; a copy stays, so it can be pasted again.
@@ -712,17 +925,34 @@ export function FileTree() {
       }
       if (outcome.failures.length > 0) {
         const lines = outcome.failures.map((f) => `${baseName(f.source)}: ${f.error}`);
-        window.alert(`${t("fileTree.importFailed")}\n${lines.join("\n")}`);
+        setTransferError(`${t("fileTree.importFailed")} ${lines.join(" · ")}`);
       }
     } finally {
       setImporting(false);
     }
   };
 
+  /**
+   * 工具栏的「新建」落在**当前选中的分组**（选中的是文档就落在它的分组里，什么都
+   * 没选就落在项目根）—— 行上那对 hover 按钮因此不是唯一入口，也不是最快入口，可以
+   * 整对删除，右列的篇数于是再也不用给它们让位。
+   */
+  const createTarget = (): string | null => {
+    const one = [...selected][selected.size - 1];
+    const row = one ? everyRow.find((r) => r.path === one) : null;
+    if (row) return row.isDir ? row.path : parentDirOf(row.path);
+    return projectPath;
+  };
+
   const startCreate = (parentPath: string, type: "file" | "folder") => {
     setCreatingIn(parentPath);
     setCreatingType(type);
     setCreateError(null);
+  };
+
+  const startCreateHere = (type: "file" | "folder") => {
+    const dest = createTarget();
+    if (dest) startCreate(dest, type);
   };
 
   const cancelCreate = () => {
@@ -766,23 +996,29 @@ export function FileTree() {
   };
 
   /**
-   * Delete every target behind one confirmation. Failures are logged rather
-   * than raised: a delete that fails partway through a selection should still
-   * remove the entries it can, and the tree refresh shows what survived.
+   * 删除：确认条就地展开在选区最后一行下面，不弹模态（应用惯例）。
    *
    * With `backup` — the sidebar offers no undo of its own, and the agent's
    * deletes have always been snapshotted; the author's own hand deserves at
-   * least the safety net the model gets. The confirm copy says where the
-   * snapshot goes, so 确认 is informed rather than a leap.
+   * least the safety net the model gets. The confirm copy says the snapshot is
+   * restorable, so 确认 is informed rather than a leap.
    */
-  const handleDelete = async (targets: readonly TransferSource[]) => {
+  const askDelete = (targets: readonly TransferSource[]) => {
     setMenu(null);
-    const ok = window.confirm(
-      targets.length > 1
-        ? t("fileTree.deleteManyConfirm", { count: targets.length })
-        : t(targets[0].isDir ? "fileTree.deleteFolderConfirm" : "fileTree.deleteConfirm"),
-    );
-    if (!ok) return;
+    if (targets.length === 0) return;
+    // Tree order, so the bar lands under the *last* row it would remove.
+    const ordered = everyRow.filter((r) => targets.some((tg) => tg.path === r.path));
+    const last = ordered[ordered.length - 1]?.path ?? targets[targets.length - 1].path;
+    const dirs = targets.filter((tg) => tg.isDir).length;
+    const text = targets.length > 1
+      ? t("fileTree.deleteManyAsk", { count: targets.length })
+      : t(dirs > 0 ? "fileTree.deleteFolderAsk" : "fileTree.deleteAsk", { name: baseNameOf(targets[0].path) });
+    setDeleteAsk({ targets: [...targets], afterPath: last, text });
+  };
+
+  const confirmDelete = async () => {
+    const targets = deleteAsk?.targets ?? [];
+    setDeleteAsk(null);
     for (const target of pruneNested(targets)) {
       try {
         await deleteEntry(target.path, target.isDir, { backup: true });
@@ -814,10 +1050,6 @@ export function FileTree() {
    * first and leave them to notice the duplicate later. (The editor's own
    * 插入图片… does copy, because there the file comes from outside the project
    * and a link to it would break the moment the folder moves machines.)
-   *
-   * Relative rather than absolute for the same reason as every other
-   * illustration link: it has to survive the project being synced, moved, or
-   * opened on another machine.
    */
   const insertImageIntoDoc = (node: FileNode) => {
     setMenu(null);
@@ -835,15 +1067,13 @@ export function FileTree() {
    *
    * 与 `@` 选择器同一条构造路（attachProjectFile）、同一份去重键——从树上送
    * 过去和在输入框里 @ 出来，得到的是同一种附件，也照 `@` 的约定在草稿里落
-   * 一个 `@[名字]`。图片不看当前模型是否读图：树不认识模型，作者发送前还可
-   * 能换模型，而 buildChatMessage 对读不了图的模型会点名附件并给出 vision
-   * 子代理的读法——降级是诚实的，不值得为它把 AI 配置耦合进文件树。
+   * 一个 `@[名字]`。
    */
   const sendToAssistant = async (file: ProjectFile) => {
     setMenu(null);
     const outcome = await attachProjectFile(file);
     if (!outcome.ok) {
-      window.alert(
+      setTransferError(
         outcome.reason === "too-large"
           ? t("ai.chat.imageTooLarge", { name: file.name, size: outcome.sizeMb, max: outcome.maxMb })
           : t("ai.chat.refUnreadable", { name: file.name }),
@@ -862,51 +1092,69 @@ export function FileTree() {
     useAppStore.getState().setShowAiDrawer(true, "chat");
   };
 
-  const buildMenuItems = (node: FileNode | null): ContextMenuEntry[] => {
-    const reveal = (path: string) => {
-      revealItemInDir(path).catch(() => { /* best-effort */ });
-    };
+  const reveal = (path: string) => {
+    revealItemInDir(path).catch(() => { /* best-effort */ });
+  };
 
-    /**
-     * The paste entry, or nothing when the clipboard is empty — an item that is
-     * always there but usually greyed out is noise in a menu this short.
-     */
+  const copyPath = (path: string) => {
+    void navigator.clipboard?.writeText(path).catch(() => { /* best-effort */ });
+  };
+
+  // ── Menus ───────────────────────────────────────────────────────────────────
+
+  /**
+   * 三条规则（设计稿 17 §1j）：**不成立的项不渲染，而不是禁用**（剪贴板空 → 没有
+   * 「粘贴」；多选 → 没有「重命名」）；顺序固定为**造 → 搬 → 查 → 毁**，三种菜单里
+   * 项的相对顺序永不变，只增删；删除永远在最后、永远隔一条线。
+   */
+  const buildMenuItems = (node: FileNode | null): ContextMenuEntry[] => {
     const pasteItem = (): ContextMenuEntry[] => {
       if (!clipboard) return [];
       const dest = pasteTargetOf(node);
       const blocked =
         !dest || clipboard.entries.every((entry) => !!dropRejection(entry.path, dest, clipboard.mode));
+      if (blocked) return [];
       return [{
         kind: "item",
         icon: <ClipboardPaste size={13} />,
-        label: clipboard.entries.length > 1
-          ? t("fileTree.pasteEntries", { count: clipboard.entries.length })
-          : t("fileTree.pasteEntry", { name: baseNameOf(clipboard.entries[0].path) }),
-        disabled: blocked,
-        action: () => void handlePaste(node),
+        label: node
+          ? t("fileTree.pasteHere", { count: clipboard.entries.length })
+          : clipboard.entries.length > 1
+            ? t("fileTree.pasteEntries", { count: clipboard.entries.length })
+            : t("fileTree.pasteEntry", { name: baseNameOf(clipboard.entries[0].path) }),
+        shortcut: comboLabel({ mod: true, key: "v" }),
+        action: () => void pasteInto(pasteTargetOf(node)),
       }];
     };
 
     if (!node) {
       return [
         { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFile"),
+          shortcut: comboLabel(COMBO_NEW_DOC),
           action: () => { if (projectPath) startCreate(projectPath, "file"); } },
         { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolder"),
+          shortcut: comboLabel(COMBO_NEW_GROUP),
           action: () => { if (projectPath) startCreate(projectPath, "folder"); } },
+        ...(clipboard ? [{ kind: "divider" } as ContextMenuEntry] : []),
+        ...pasteItem(),
+        { kind: "divider" },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => { if (projectPath) void handleImport(projectPath); } },
-        ...pasteItem(),
+        ...(hasAnyFolder ? [{
+          kind: "item", icon: <ChevronsDownUp size={13} />, label: t("fileTree.collapseAll"),
+          shortcut: comboLabel(COMBO_COLLAPSE_ALL), action: toggleCollapseAll,
+        } as ContextMenuEntry] : []),
+        { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
+          action: () => void refreshFileTree() },
         { kind: "divider" },
         { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
           action: () => { if (projectPath) reveal(projectPath); } },
-        { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
-          action: () => void refreshFileTree() },
       ];
     }
 
     // `openMenu` has already made sure the clicked row is in the selection, so
     // the menu can act on all of it. Everything that only makes sense for one
-    // entry — 打开, 重命名, 新建 — drops out when there are several.
+    // entry — 打开, 重命名, 复制路径 — drops out when there are several.
     const targets = selected.has(node.path) && selected.size > 1
       ? selectedSources()
       : [{ path: node.path, isDir: node.is_dir }];
@@ -914,26 +1162,37 @@ export function FileTree() {
 
     if (count > 1) {
       return [
+        // 第一行是不可点的选区抬头 —— 右键之后菜单盖住半棵树，抬头是「我到底选了
+        // 几个」唯一还看得见的答案。
+        { kind: "item", label: t("fileTree.selectedCount", { count }), disabled: true, action: () => {} },
+        { kind: "divider" },
         { kind: "item", icon: <Scissors size={13} />, label: t("fileTree.cutMany", { count }),
+          shortcut: comboLabel({ mod: true, key: "x" }),
           action: () => setClipboard({ entries: targets, mode: "move" }) },
         { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copyMany", { count }),
+          shortcut: comboLabel({ mod: true, key: "c" }),
           action: () => setClipboard({ entries: targets, mode: "copy" }) },
         ...pasteItem(),
         { kind: "divider" },
+        { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
+          action: () => reveal(node.path) },
+        { kind: "divider" },
         { kind: "item", icon: <Trash2 size={13} />, label: t("fileTree.deleteMany", { count }),
-          danger: true, action: () => void handleDelete(targets) },
+          danger: true, action: () => askDelete(targets) },
       ];
     }
 
     const items: ContextMenuEntry[] = [];
     if (node.is_dir) {
+      // 行上撤掉的那对按钮的落点。
       items.push(
-        { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFile"),
+        { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFileHere"),
           action: () => startCreate(node.path, "file") },
-        { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolder"),
+        { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolderHere"),
           action: () => startCreate(node.path, "folder") },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => void handleImport(node.path) },
+        { kind: "divider" },
       );
     } else {
       items.push(
@@ -964,27 +1223,114 @@ export function FileTree() {
           action: () => insertImageIntoDoc(node),
         });
       }
+      items.push({ kind: "divider" });
     }
     items.push(
-      { kind: "divider" },
+      { kind: "item", icon: <Pencil size={13} />, label: t("fileTree.rename"),
+        shortcut: "↩", action: () => startRename(node) },
       { kind: "item", icon: <Scissors size={13} />, label: t("fileTree.cut"),
+        shortcut: comboLabel({ mod: true, key: "x" }),
         action: () => setClipboard({ entries: targets, mode: "move" }) },
       { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copy"),
+        shortcut: comboLabel({ mod: true, key: "c" }),
         action: () => setClipboard({ entries: targets, mode: "copy" }) },
       ...pasteItem(),
       { kind: "divider" },
-      { kind: "item", icon: <Pencil size={13} />, label: t("fileTree.rename"),
-        action: () => startRename(node) },
+      { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copyPath"),
+        action: () => copyPath(node.path) },
       { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
         action: () => reveal(node.path) },
       { kind: "divider" },
       { kind: "item", icon: <Trash2 size={13} />, label: t("fileTree.delete"), danger: true,
-        action: () => void handleDelete(targets) },
+        shortcut: IS_MAC ? "⌫" : "Del",
+        action: () => askDelete(targets) },
     );
     return items;
   };
 
-  const projectName = baseName(projectPath ?? "").toUpperCase();
+  /**
+   * ⋯ 的内容随宽度变：≥360px 时「导入文件 / 刷新」已经升到工具栏上，菜单里就只剩
+   * 上面两项。档位是容器查询，JS 看不见它——所以在**打开菜单的这一刻**量一次容器，
+   * 一次测量，不是每行一次。
+   */
+  const overflowItems = (): ContextMenuEntry[] => {
+    const wide = (containerRef.current?.clientWidth ?? 240) >= 359;
+    const items: ContextMenuEntry[] = [
+      { kind: "item", icon: <Crosshair size={13} />, label: t("fileTree.revealCurrent"),
+        shortcut: comboLabel(COMBO_REVEAL_DOC),
+        disabled: !activeFilePath, action: revealCurrent },
+      { kind: "item", icon: <ChevronsUpDown size={13} />, label: t("fileTree.expandAll"),
+        disabled: !hasAnyFolder,
+        action: () => { useProjectStore.getState().expandAllDirs(); setNotice(null); } },
+    ];
+    if (!wide) {
+      items.push(
+        { kind: "divider" },
+        { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
+          action: () => { const d = createTarget(); if (d) void handleImport(d); } },
+        { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
+          action: () => void refreshFileTree() },
+      );
+    }
+    return items;
+  };
+
+  // ── Keyboard (scoped to the tree, which takes focus on click) ────────────────
+
+  const onTreeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const native = e.nativeEvent;
+    const targets = selectedSources();
+    if (matchesCombo(native, COMBO_NEW_GROUP)) {
+      e.preventDefault();
+      startCreateHere("folder");
+    } else if (matchesCombo(native, COMBO_NEW_DOC)) {
+      e.preventDefault();
+      startCreateHere("file");
+    } else if (matchesCombo(native, { mod: true, key: "x" }) && targets.length > 0) {
+      e.preventDefault();
+      setClipboard({ entries: targets, mode: "move" });
+    } else if (matchesCombo(native, { mod: true, key: "c" }) && targets.length > 0) {
+      e.preventDefault();
+      setClipboard({ entries: targets, mode: "copy" });
+    } else if (matchesCombo(native, { mod: true, key: "v" }) && clipboard) {
+      e.preventDefault();
+      // 落点与工具栏的「新建」同一条规则：选中的分组，否则选中文档所在的分组，
+      // 什么都没选就是项目根。
+      void pasteInto(createTarget());
+    } else if ((e.key === "Backspace" || e.key === "Delete") && targets.length > 0) {
+      e.preventDefault();
+      askDelete(targets);
+    } else if (e.key === "Enter" && selected.size === 1) {
+      const one = [...selected][0];
+      const row = everyRow.find((r) => r.path === one);
+      if (!row) return;
+      e.preventDefault();
+      startRename({ path: row.path, is_dir: row.isDir, name: baseNameOf(row.path) });
+    } else if (e.key === "Escape") {
+      // 剪贴板与折叠提示都在这里退场，和「点一下别处」是同一件事。
+      if (clipboard) setClipboard(null);
+      setNotice(null);
+    }
+  };
+
+  // 全部折叠 / 定位当前文档 —— 面板自己的两条绑定，只在「文件」标签页挂着的时候
+  // 生效（这个组件只在那时渲染）。注册在窗口上而不是树上：作者的手可能在正文里。
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (matchesCombo(e, COMBO_COLLAPSE_ALL)) {
+        if (!hasAnyFolder) return;
+        e.preventDefault();
+        toggleCollapseAll();
+      } else if (matchesCombo(e, COMBO_REVEAL_DOC)) {
+        if (!activeFilePath) return;
+        e.preventDefault();
+        revealCurrent();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   const creatingAtRoot = !!projectPath && creatingIn === projectPath;
 
   const cutPaths = useMemo<ReadonlySet<string>>(
@@ -1001,15 +1347,15 @@ export function FileTree() {
   // carries stable forwarders that read the current handlers through a ref
   // (updated in an effect; events only ever fire after effects have run).
   const handlers = {
-    onRowClick, startCreate, cancelCreate, confirmCreate, confirmRename,
+    onRowClick, cancelCreate, confirmCreate, confirmRename,
     cancelRename, openMenu, onDragStart, onDragEnd: endDrag,
-    onDragOverDir, onDragLeaveDir, onDropInDir,
+    onDragOverDir, onDragLeaveDir, onDropInDir, confirmDelete,
+    cancelDelete: () => setDeleteAsk(null),
   };
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; });
   const stableHandlers = useMemo<Pick<TreeCtx, keyof typeof handlers>>(() => ({
     onRowClick: (e, node) => handlersRef.current.onRowClick(e, node),
-    startCreate: (parentPath, type) => handlersRef.current.startCreate(parentPath, type),
     cancelCreate: () => handlersRef.current.cancelCreate(),
     confirmCreate: (name) => handlersRef.current.confirmCreate(name),
     confirmRename: (node, name) => handlersRef.current.confirmRename(node, name),
@@ -1020,6 +1366,8 @@ export function FileTree() {
     onDragOverDir: (e, node) => handlersRef.current.onDragOverDir(e, node),
     onDragLeaveDir: (e, node) => handlersRef.current.onDragLeaveDir(e, node),
     onDropInDir: (e, node) => handlersRef.current.onDropInDir(e, node),
+    confirmDelete: () => void handlersRef.current.confirmDelete(),
+    cancelDelete: () => handlersRef.current.cancelDelete(),
   }), []);
 
   const ctx = useMemo<TreeCtx>(() => ({
@@ -1032,88 +1380,129 @@ export function FileTree() {
     renameError,
     draggingPaths,
     dragOverDir,
+    springPath,
     cutPaths,
     docCounts,
+    orphanAssets,
+    deleteAsk: deleteAsk ? { afterPath: deleteAsk.afterPath, text: deleteAsk.text } : null,
     ...stableHandlers,
   }), [
     activeFilePath, selected, creatingIn, creatingType, createError,
-    renamingPath, renameError, draggingPaths, dragOverDir, cutPaths,
-    docCounts, stableHandlers,
+    renamingPath, renameError, draggingPaths, dragOverDir, springPath, cutPaths,
+    docCounts, orphanAssets, deleteAsk, stableHandlers,
   ]);
+
+  const footer = () => {
+    // 三件事共用这一行，永不叠加：剪贴板活着的时候，字数不是当下最重要的信息。
+    if (clipboard) {
+      const count = clipboard.entries.length;
+      const paste = comboLabel({ mod: true, key: "v" });
+      return (
+        <div className={`${styles.footer} ${styles.clip}`}>
+          <span className={styles.footerIcon}>
+            {clipboard.mode === "move" ? <Scissors size={11} strokeWidth={1.8} /> : <Copy size={11} strokeWidth={1.8} />}
+          </span>
+          <span className={styles.footerText}>
+            {t(clipboard.mode === "move" ? "fileTree.clipCut" : "fileTree.clipCopied", { count, paste })}
+          </span>
+          <button className={styles.footerAction} onClick={() => setClipboard(null)}>
+            {t("common.cancel")}
+          </button>
+        </div>
+      );
+    }
+    if (currentHidden) {
+      return (
+        <div className={`${styles.footer} ${styles.reveal}`} onClick={revealCurrent} title={t("fileTree.revealCurrent")}>
+          <span className={styles.footerIcon}><Crosshair size={11} strokeWidth={1.8} /></span>
+          <span className={styles.footerText}>{baseNameOf(activeFilePath ?? "").replace(/\.md$/i, "")}</span>
+        </div>
+      );
+    }
+    return <div className={styles.footer}><FooterCounts /></div>;
+  };
 
   return (
     <TreeCtx.Provider value={ctx}>
-      <div className={styles.container}>
-        {/* Toolbar with project name + actions */}
+      <div className={styles.container} ref={containerRef}>
+        {/* 节标题与工具栏本来就是同一行的左右两半（设计稿 17 §1f）。 */}
         <div className={styles.toolbar}>
-          <span className={styles.rootLabel}>{projectName}</span>
-          <span className={styles.toolbarActions}>
-            <button
-              className={styles.toolbarBtn}
-              title={t("project.switchProject")}
-              onClick={() => void openProject()}
-            >
-              <FolderInput size={14} />
-            </button>
-            {/* A second workspace side by side: a sibling *process* (the
-                stores are singletons sized to one project — see lib/instance),
-                started blank on purpose — handing it the current project
-                would just bounce: the sibling finds the folder held here,
-                focuses this window and closes itself. */}
-            <button
-              className={styles.toolbarBtn}
-              title={t("project.newWindow")}
-              onClick={() => void openInNewWindow().catch((e) => console.warn("[instance]", e))}
-            >
-              <AppWindow size={14} />
-            </button>
-            <button
-              className={styles.toolbarBtn}
-              title={t("project.closeProject")}
-              onClick={() => void closeProject()}
-            >
-              <LogOut size={14} />
-            </button>
-            <button
-              className={styles.toolbarBtn}
-              title={t("fileTree.newFileAtRoot")}
-              onClick={() => projectPath && startCreate(projectPath, "file")}
-            >
-              <FilePlus size={14} />
-            </button>
-            <button
-              className={styles.toolbarBtn}
-              title={t("fileTree.newFolderAtRoot")}
-              onClick={() => projectPath && startCreate(projectPath, "folder")}
-            >
-              <FolderPlus size={14} />
-            </button>
-            <button
-              className={styles.toolbarBtn}
-              title={t("fileTree.importDoc")}
-              disabled={importing}
-              onClick={() => projectPath && void handleImport(projectPath)}
-            >
-              <FileInput size={14} />
-            </button>
-            <button
-              className={styles.toolbarBtn}
-              title={t("fileTree.refresh")}
-              onClick={() => void refreshFileTree()}
-            >
-              <RotateCw size={13} />
-            </button>
-          </span>
+          <span className={styles.toolbarLabel}>{t("sidebar.files")}</span>
+          <span className={styles.toolbarSpacer} />
+          <button
+            className={styles.toolbarBtn}
+            title={t("fileTree.newFile")}
+            onClick={() => startCreateHere("file")}
+          >
+            <FilePlus size={14} strokeWidth={1.6} />
+          </button>
+          <button
+            className={styles.toolbarBtn}
+            title={t("fileTree.newFolder")}
+            onClick={() => startCreateHere("folder")}
+          >
+            <FolderPlus size={14} strokeWidth={1.6} />
+          </button>
+          {/* 导入组 —— 只在 ≥360px 的宽档从 ⋯ 里升上来。 */}
+          <span className={`${styles.toolbarDivider} ${styles.wide}`} />
+          <button
+            className={`${styles.toolbarBtn} ${styles.wide}`}
+            title={t("fileTree.importDoc")}
+            disabled={importing}
+            onClick={() => { const d = createTarget(); if (d) void handleImport(d); }}
+          >
+            <FileInput size={14} strokeWidth={1.6} />
+          </button>
+          <button
+            className={`${styles.toolbarBtn} ${styles.wide}`}
+            title={t("fileTree.refresh")}
+            onClick={() => void refreshFileTree()}
+          >
+            <RotateCw size={13} strokeWidth={1.6} />
+          </button>
+          {/* 视图组 */}
+          <span className={`${styles.toolbarDivider} ${styles.wide}`} />
+          <button
+            className={`${styles.toolbarBtn} ${!anyOpenDir && hasAnyFolder ? styles.armed : ""}`}
+            title={hasAnyFolder
+              ? `${t(anyOpenDir ? "fileTree.collapseAll" : "fileTree.expandAll")} · ${comboLabel(COMBO_COLLAPSE_ALL)}`
+              : undefined}
+            disabled={!hasAnyFolder}
+            onClick={toggleCollapseAll}
+          >
+            {anyOpenDir
+              ? <ChevronsDownUp size={14} strokeWidth={1.7} />
+              : <ChevronsUpDown size={14} strokeWidth={1.8} />}
+          </button>
+          <button
+            className={styles.toolbarBtn}
+            title={t("fileTree.more")}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setOverflowAt({ x: r.right - 4, y: r.bottom + 2 });
+            }}
+          >
+            <MoreHorizontal size={14} />
+          </button>
         </div>
+
+        {/* 就地展开的确认条，不弹模态。说的是**数量** —— 那是树自己没法说的话。 */}
+        {notice && (
+          <div className={styles.notice} role="status">
+            <span className={styles.noticeText}>{notice.text}</span>
+            {notice.undo && (
+              <button className={styles.noticeAction} onClick={notice.undo}>{t("common.undo")}</button>
+            )}
+          </div>
+        )}
 
         {/* Why the last move/copy could not happen. Click to dismiss. */}
         {transferError && (
-          <div
-            className={styles.transferError}
-            role="alert"
-            onClick={() => setTransferError(null)}
-          >
-            {transferError}
+          <div className={styles.transferError} role="alert">
+            <span className={styles.noticeText}>{transferError}</span>
+            <button className={styles.noticeAction} onClick={() => setTransferError(null)}>
+              {t("common.gotIt")}
+            </button>
           </div>
         )}
 
@@ -1123,31 +1512,51 @@ export function FileTree() {
             (the root has no row of its own — `readDirRecursive` returns the
             project's children, not the project). */}
         <div
+          ref={treeRef}
           className={`${styles.tree} ${dragOverDir === projectPath ? styles.rootDropTarget : ""}`}
+          tabIndex={0}
+          onKeyDown={onTreeKeyDown}
           onContextMenu={(e) => openMenu(e, null)}
-          onClick={(e) => { if (e.target === e.currentTarget) clearSelection(); }}
+          onClick={(e) => { if (e.target === e.currentTarget) { clearSelection(); setNotice(null); } }}
           onDragOver={onDragOverTree}
           onDragLeave={onDragLeaveTree}
           onDrop={onDropInTree}
         >
           {creatingAtRoot && <CreateInput depth={-1} />}
           {fileTree.length === 0 && !creatingAtRoot ? (
+            // 一句陈述、一个主行动、一个次行动，加一行 ⌘K 提示压在底部 —— 那是命令
+            // 面板唯一的教学位置，也是拆掉假搜索框之后的补偿。
             <div className={styles.emptyState}>
               <div className={styles.emptyText}>{t("project.emptyTree")}</div>
-              <button
-                className={styles.createBtn}
-                onClick={() => projectPath && startCreate(projectPath, "file")}
-              >
-                <FilePlus size={13} />
-                {t("fileTree.newFile")}
-              </button>
+              <div className={styles.emptyActions}>
+                <button className={styles.emptyPrimary} onClick={() => startCreateHere("file")}>
+                  {t("fileTree.newFile")}
+                </button>
+                <button
+                  className={styles.emptySecondary}
+                  onClick={() => { if (projectPath) void handleImport(projectPath); }}
+                >
+                  {t("fileTree.importDoc")}
+                </button>
+              </div>
+              <div className={styles.emptyHint}>
+                {t("fileTree.emptyPaletteHint", { key: comboLabel({ mod: true, key: "k" }) })}
+              </div>
             </div>
           ) : (
             fileTree.map((node) => (
-              <TreeNode key={node.path} node={node} depth={0} />
+              <TreeNode key={node.path} node={node} depth={0} parentName={null} />
             ))
           )}
+          {/* 说明只在拖拽悬停空白时出现。 */}
+          {dragOverDir === projectPath && projectPath && (
+            <div className={styles.rootDropHint}>
+              {t("fileTree.dropToRoot", { name: baseName(projectPath) })}
+            </div>
+          )}
         </div>
+
+        {footer()}
       </div>
       {menu && (
         <ContextMenu
@@ -1155,6 +1564,14 @@ export function FileTree() {
           y={menu.y}
           items={buildMenuItems(menu.node)}
           onClose={() => setMenu(null)}
+        />
+      )}
+      {overflowAt && (
+        <ContextMenu
+          x={overflowAt.x}
+          y={overflowAt.y}
+          items={overflowItems()}
+          onClose={() => setOverflowAt(null)}
         />
       )}
     </TreeCtx.Provider>

@@ -12,7 +12,9 @@
     "create": "新建",
     "save": "保存",
     "yes": "是",
-    "no": "否"
+    "no": "否",
+    "undo": "撤销",
+    "gotIt": "知道了"
   },
   "errorBoundary": {
     "appTitle": "界面出错了",
@@ -85,7 +87,8 @@
     "library": "文库",
     "settings": "设置",
     "project": "PROJECT",
-    "projectSearch": "搜索文稿与{{entries}}"
+    "projectSearch": "搜索文稿与{{entries}}",
+    "searchTooltip": "搜索文档与条目 · {{key}}"
   },
   "titleBar": {
     "modified": "已修改",
@@ -295,7 +298,18 @@
         "editorFind": "查找",
         "contextualCloseOverlay": "关闭右键菜单 / 弹窗",
         "contextualConfirmInput": "确认输入(重命名、新建条目等)",
-        "contextualPaletteNav": "在命令面板结果间移动"
+        "contextualPaletteNav": "在命令面板结果间移动",
+        "filesCollapseAll": "文件面板：全部折叠 / 全部展开",
+        "filesRevealCurrent": "文件面板：定位当前文档",
+        "filesSwitchProject": "切换项目",
+        "filesCloseProject": "关闭项目",
+        "filesNewDoc": "文件树：新建文档",
+        "filesNewGroup": "文件树：新建分组",
+        "filesCut": "文件树：剪切选中项",
+        "filesCopy": "文件树：复制选中项",
+        "filesPaste": "文件树：粘贴",
+        "filesRename": "文件树：重命名选中项",
+        "filesDelete": "文件树：删除选中项"
       },
       "paneSub": "所有操作也可以在命令面板（⌘K）中搜索执行。"
     },
@@ -558,7 +572,7 @@
     "openFolder": "打开文件夹",
     "noProjectTitle": "打开一个文件夹以开始写作",
     "noProjectDesc": "系统将自动初始化项目结构",
-    "emptyTree": "写作目录为空，创建 .md 文件开始吧",
+    "emptyTree": "这个文件夹里还没有文档。",
     "closeProject": "关闭项目",
     "switchProject": "切换项目",
     "newWindow": "新窗口",
@@ -582,7 +596,8 @@
     "lockHeldTitle": "项目已在其他窗口打开",
     "lockHeldBody": "「{{name}}」似乎正在另一个窗口中编辑（进程 {{pid}}）。两个窗口同时编辑同一项目会互相覆盖改动。仍要在此窗口打开吗？",
     "lockOpenAnyway": "仍要打开",
-    "lockCancel": "取消"
+    "lockCancel": "取消",
+    "revealProject": "在访达中显示项目"
   },
   "editor": {
     "placeholder": "开始写作…",
@@ -2555,19 +2570,17 @@
     }
   },
   "fileTree": {
-    "newFile": "新建文件",
+    "newFile": "新建文档",
     "open": "打开",
     "insertImage": "插入到当前位置",
     "sendToAssistant": "发送到助手",
     "rename": "重命名",
     "reveal": "在文件浏览器中显示",
     "delete": "删除",
-    "deleteConfirm": "确认删除此文件？（会先在 .ai-writer/backups 留下快照）",
-    "deleteFolderConfirm": "确认删除此文件夹及其全部内容？（会先移入 .ai-writer/backups 备份）",
-    "newFolder": "新建文件夹",
+    "newFolder": "新建分组",
     "refresh": "刷新",
-    "fileNamePlaceholder": "文件名.md",
-    "folderNamePlaceholder": "文件夹名称",
+    "fileNamePlaceholder": "文档名.md",
+    "folderNamePlaceholder": "分组名称",
     "importDoc": "导入文件",
     "importFilter": "文档与图片",
     "importFailed": "以下文件导入失败：",
@@ -2576,14 +2589,35 @@
     "pasteEntry": "粘贴「{{name}}」",
     "moveExists": "目标位置已有同名的「{{name}}」。",
     "moveIntoSelf": "不能把文件夹移到它自己里面。",
-    "newFileAtRoot": "在根目录新建文件",
-    "newFolderAtRoot": "在根目录新建文件夹",
     "pasteEntries": "粘贴 {{count}} 项",
     "cutMany": "剪切 {{count}} 项",
     "copyMany": "复制 {{count}} 项",
     "deleteMany": "删除 {{count}} 项",
-    "deleteManyConfirm": "确认删除选中的 {{count}} 项及其全部内容？（会先在 .ai-writer/backups 留下快照）",
-    "dragCount": "{{count}} 项"
+    "dragCount": "{{count}} 项",
+    "newFileHere": "在此新建文档",
+    "newFolderHere": "在此新建分组",
+    "collapseAll": "全部折叠",
+    "expandAll": "全部展开",
+    "collapsedGroups": "已折叠 {{count}} 个分组",
+    "selectionShrank": "选区缩为 {{count}} 项",
+    "revealCurrent": "定位当前文档",
+    "more": "更多",
+    "clipCut": "已剪切 {{count}} 项 · {{paste}} 粘贴",
+    "clipCopied": "已复制 {{count}} 项 · {{paste}} 粘贴",
+    "footerCounts": "{{words}} 字 · {{docs}} {{docLabel}} · {{entries}} {{entryLabel}}",
+    "dragCountCopy": "＋{{count}} 项",
+    "dropToRoot": "移到「{{name}}」根目录",
+    "assetsLabel": "插图",
+    "assetsOrphan": "没有同名文档，文档里的图片链接可能已断",
+    "dirCount": "这个分组下有 {{count}} 个文档",
+    "selectedCount": "已选 {{count}} 项",
+    "pasteHere": "粘贴到此",
+    "copyPath": "复制路径",
+    "deleteAsk": "删除「{{name}}」？可从备份恢复。",
+    "deleteFolderAsk": "删除分组「{{name}}」及其内容？可从备份恢复。",
+    "deleteManyAsk": "删除 {{count}} 项？可从备份恢复。",
+    "emptyPaletteHint": "{{key}} 可以搜索文档与知识库条目",
+    "footerCountsNarrow": "{{words}} 字 · {{docs}} {{docLabel}}"
   },
   "notify": {
     "approvalTitle": "等待你确认",
