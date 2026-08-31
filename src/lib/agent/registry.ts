@@ -741,6 +741,22 @@ export interface RegisteredTool {
   /** Deferred group this tool belongs to; absent = resident. See {@link ToolGroup}. */
   group?: ToolGroup;
   /**
+   * This tool touches nothing on disk, so it works with no folder open.
+   *
+   * The default — absent — is the fence: `executeRegisteredTool` refuses every
+   * other tool when `ctx.projectPath` is empty, the same rule the icon rail
+   * applies to the knowledge base and the library (`appStore.viewNeedsProject`).
+   * Containment is a prefix test and *every* absolute path is inside the empty
+   * prefix, so a run without a root doesn't fail closed on its own — it fails
+   * open, onto the whole disk (`readProjectImage` found this first).
+   *
+   * A new tool that forgets the flag is refused, which is the safe direction.
+   * Only the split collector carries it, and only because it writes to an
+   * in-memory sink — see splitTools.ts, and `lore/splitter.ts`, which is the
+   * one caller that deliberately runs the loop with no project at all.
+   */
+  projectFree?: true;
+  /**
    * Parameter names whose `enum` must be filled in from the *active profile's*
    * lore categories when the definition is handed to the model.
    *
@@ -2007,6 +2023,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   // Apply in the split modal is what reaches disk.
   split_core: {
     access: "read",
+    projectFree: true,
     definition: {
       type: "function",
       function: {
@@ -2031,6 +2048,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   split_facet: {
     access: "read",
+    projectFree: true,
     definition: {
       type: "function",
       function: {
@@ -3435,6 +3453,15 @@ export function isParallelSafeTool(name: string): boolean {
  */
 export const ALL_TOOL_IDS = Object.keys(REGISTRY) as ToolId[];
 
+/**
+ * Whether `id` is fenced behind an open folder — see
+ * {@link RegisteredTool.projectFree}. Exposed so the convention test can pin
+ * the exemption list, which is the half of this rule a reviewer can't check.
+ */
+export function toolNeedsProject(id: ToolId): boolean {
+  return !REGISTRY[id].projectFree;
+}
+
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
   return ids.map((id) => {
@@ -3460,6 +3487,16 @@ export async function executeRegisteredTool(
     (allowed as readonly string[]).includes(name);
   const tool = isAllowed(call.name) ? REGISTRY[call.name] : undefined;
   if (!tool) return { toolCallId: call.id, content: `Unknown tool: ${call.name}` };
+  // The fence (see RegisteredTool.projectFree). Here rather than in each
+  // handler because it has to hold for the forty-odd that never thought about
+  // it, and for the next one: this is the single door every model-requested
+  // call comes through, on every surface, including a subagent's and a pack's.
+  if (!tool.projectFree && !ctx.projectPath) {
+    return {
+      toolCallId: call.id,
+      content: `Error: no folder is open, so ${call.name} has nothing to read or write. Do not call any other tool either — tell the author to open a folder first.`,
+    };
+  }
   try {
     // A copy, not a mutation: ctx is shared across a round's calls. Handlers
     // that patch run state do it through the objects ctx points at (the lore

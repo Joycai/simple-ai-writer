@@ -83,6 +83,7 @@
     "search": "搜索",
     "searchComingSoon": "搜索 — 即将推出",
     "library": "文库",
+    "needsProject": "先打开一个文件夹",
     "settings": "设置",
     "project": "PROJECT",
     "projectSearch": "搜索文稿与{{entries}}"

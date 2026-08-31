@@ -2,8 +2,8 @@ import { useTranslation } from "react-i18next";
 import {
   FolderTree, ListTree, Search, LayoutGrid, Library, Settings,
 } from "lucide-react";
-import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
-import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
+import { useAppStore, viewNeedsProject, type SideTab, type MainView } from "../../stores/appStore";
+import { useDocModel, useMainView, useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { loreEntityCount } from "../../lib/lore";
@@ -66,6 +66,10 @@ export function IconRail({ onOpenSettings }: Props) {
   const { t } = useTranslation();
   const { ordered } = useDocModel();
   const terms = useTerms();
+  // The two view buttons are project data (see viewNeedsProject): before a
+  // folder is open they stay on the rail — so the app still says it has a
+  // knowledge base — but inert, with the tooltip saying what unlocks them.
+  const projectOpen = useProjectStore((s) => s.projectPath !== null);
   const {
     activeSideTab, setActiveSideTab,
     setMainView,
@@ -127,18 +131,26 @@ export function IconRail({ onOpenSettings }: Props) {
 
       {visibleViewItems(ordered).map((it) => {
         const active = mainView === it.id;
+        const gated = !projectOpen && viewNeedsProject(it.id);
+        const label = it.id === "lore-wall" ? terms.kb : t(it.labelKey);
         return (
           <button
             key={it.id}
             className={`${styles.item} ${active ? styles.itemActive : ""}`}
+            disabled={gated}
             onClick={() => handleViewClick(it.id)}
-            title={railTitle(it.id === "lore-wall" ? terms.kb : t(it.labelKey), it.keys)}
+            // No key hint while gated: ⌘3 / ⌘4 are gated too, and offering a
+            // shortcut for a button that does nothing is the wrong promise.
+            title={gated ? `${label} · ${t("sidebar.needsProject")}` : railTitle(label, it.keys)}
           >
             {it.icon}
-            {it.id === "lore-wall" && loreCount > 0 && (
+            {/* Both marks report on the open project — a count and a sync
+                verdict left over from the last one would be reporting on a
+                knowledge base that isn't loaded. */}
+            {!gated && it.id === "lore-wall" && loreCount > 0 && (
               <span className={styles.badge}>{loreCount}</span>
             )}
-            {it.id === "lore-wall" && syncAttention && <span className={styles.syncDot} />}
+            {!gated && it.id === "lore-wall" && syncAttention && <span className={styles.syncDot} />}
           </button>
         );
       })}

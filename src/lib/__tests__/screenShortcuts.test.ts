@@ -31,7 +31,13 @@ vi.hoisted(() => {
   };
 });
 
-import { useAppStore, type AppScreen } from "../../stores/appStore";
+import {
+  screenNeedsProject,
+  useAppStore,
+  viewNeedsProject,
+  type AppScreen,
+  type MainView,
+} from "../../stores/appStore";
 import { matchesCombo, SCREEN_COMBOS, SHORTCUTS, type Combo } from "../shortcuts";
 
 const go = (screen: AppScreen) => useAppStore.getState().showScreen(screen);
@@ -102,6 +108,26 @@ describe("showScreen", () => {
     go("settings");
     expect(state().showSettings).toBe(true);
     expect(state().mainView).toBe("lore-wall");
+  });
+});
+
+describe("the open-folder gate", () => {
+  // Applied by projectStore.useMainView (what renders), IconRail (the buttons)
+  // and useGlobalShortcuts (⌘3 / ⌘4) — none of which is reachable from a node
+  // test, so what is pinned here is the rule all three read.
+  it("covers the knowledge base and the library, and nothing else", () => {
+    const views: MainView[] = ["editor", "lore-wall", "library"];
+    expect(views.filter(viewNeedsProject)).toEqual(["lore-wall", "library"]);
+  });
+
+  it("says the same thing in the rail's other vocabulary", () => {
+    // The two screens that *are* main views must answer the way their view
+    // does; the other three are a sidebar panel or an overlay, and neither can
+    // need what a view needs.
+    const screens: AppScreen[] = ["files", "outline", "knowledge", "library", "settings"];
+    expect(screens.filter(screenNeedsProject)).toEqual(["knowledge", "library"]);
+    expect(screenNeedsProject("knowledge")).toBe(viewNeedsProject("lore-wall"));
+    expect(screenNeedsProject("library")).toBe(viewNeedsProject("library"));
   });
 });
 
