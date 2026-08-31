@@ -23,6 +23,7 @@ import type {
   CreateProposal,
   DeleteProposal,
   EditProposal,
+  InsertProposal,
   RewriteProposal,
   IllustrateProposal,
   PptxProposal,
@@ -42,6 +43,9 @@ import { baseName, dirName, projectRelative as projectRel, toPosixPath } from ".
 /** Above this, a new chapter's preview is clipped behind a toggle. */
 const CLIP_CHARS = 600;
 
+/** Insertion rows shown before the list collapses behind a toggle. */
+const INSERT_ROWS_CLIPPED = 12;
+
 /** Drop the project prefix — the author knows which project they are in. */
 function projectRelative(path: string): string {
   const root = useProjectStore.getState().projectPath;
@@ -58,6 +62,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleRewrite", words);
     case "append":
       return t("ai.approval.titleAppend", { ...words, defaultValue: "追加内容" });
+    case "insert":
+      return t("ai.approval.titleInsert", { ...words, defaultValue: "插入内容" });
     case "create":
       return proposal.isDir ? t("ai.approval.titleCreateFolder", words) : t("ai.approval.titleCreate", words);
     case "move":
@@ -94,6 +100,14 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // much and lost nothing — an append that reads as a replacement would be
       // the one thing worth catching here.
       return `${proposal.originalChars} → ${proposal.originalChars + proposal.content.length} ${chars}`;
+    case "insert":
+      // How many places, not how many characters: the stake here is the number
+      // of decisions the author is signing off in one click. Nothing existing
+      // changes, so a size delta would measure the wrong thing entirely.
+      return t("ai.approval.insertCount", {
+        n: proposal.insertions.length,
+        defaultValue: "{{n}} 处",
+      });
     case "create":
       return proposal.isDir ? "" : `${proposal.content.length} ${chars}`;
     case "move":
@@ -630,6 +644,63 @@ function AppendBody({ proposal }: { proposal: AppendProposal }) {
   );
 }
 
+/**
+ * What the author is actually being asked to approve here is a **structure** —
+ * a list of headings and breaks — so the card is that list, one row per
+ * insertion, and not a diff of the document.
+ *
+ * The temptation was to compose the result and show it as a rewrite: the apply
+ * path already exists and the author would see the finished file. It is the
+ * wrong unit of review. Forty insertions into a long document produce a card
+ * whose new text is 99% text the author already approved by writing it, and the
+ * decisions — is this the right heading, does it belong here — are buried in
+ * it. Each row instead carries only the inserted text and the line it lands
+ * before, with that line quoted so "here" means something without scrolling.
+ */
+function InsertBody({ proposal }: { proposal: InsertProposal }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const rows = expanded ? proposal.insertions : proposal.insertions.slice(0, INSERT_ROWS_CLIPPED);
+  const hidden = proposal.insertions.length - rows.length;
+
+  return (
+    <>
+      <div className={styles.insertList}>
+        {rows.map((ins, i) => (
+          <div key={i} className={styles.insertRow}>
+            <span className={styles.insertLine}>L{ins.line}</span>
+            <div className={styles.insertPiece}>
+              <pre className={styles.insertText}>{ins.text.replace(/\n+$/, "")}</pre>
+              {/* The line it lands in front of — what makes "before line 120"
+                  reviewable without opening the file. */}
+              {proposal.context[i]?.after && (
+                <div className={styles.insertContext}>{proposal.context[i].after}</div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {hidden > 0 && (
+        <button className={styles.originalToggle} onClick={() => setExpanded(true)}>
+          <ChevronRight size={10} />
+          {t("ai.approval.insertMore", { n: hidden, defaultValue: "还有 {{n}} 处" })}
+        </button>
+      )}
+      {expanded && proposal.insertions.length > INSERT_ROWS_CLIPPED && (
+        <button className={styles.originalToggle} onClick={() => setExpanded(false)}>
+          <ChevronDown size={10} />
+          {t("ai.approval.collapse")}
+        </button>
+      )}
+      <div className={styles.emptyNote}>
+        {t("ai.approval.insertNote", {
+          defaultValue: "只插入这些内容，文档里已有的一个字都不会改动。",
+        })}
+      </div>
+    </>
+  );
+}
+
 function ProposalBody({ proposal }: { proposal: Proposal }) {
   switch (proposal.kind) {
     case "edit":
@@ -638,6 +709,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <RewriteBody proposal={proposal} />;
     case "append":
       return <AppendBody proposal={proposal} />;
+    case "insert":
+      return <InsertBody proposal={proposal} />;
     case "create":
       return <CreateBody proposal={proposal} />;
     case "move":

@@ -92,6 +92,10 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "edit",
   "rewrite",
   "append",
+  // Adds lines, changes none: the narrowest write in the app, and the one whose
+  // pass shape (a document's structure, several cards' worth) is exactly what a
+  // grant is for.
+  "insert",
   "create",
   "move",
   // A deck is a deterministic re-rendering of a page the author already has:

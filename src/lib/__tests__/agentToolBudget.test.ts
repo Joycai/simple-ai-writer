@@ -195,8 +195,36 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../agent/packs";
  * `read_lore_entity` growing `file`/`start_line` (170 → 280, **+110**) — the
  * one read-side change §14 budgeted (~+90 estimated), bought to end "reading
  * an entry = paying for all of it" on large entries. Resident 9,996 → 10,106.
+ *
+ * **16,252** with `insert_lines` (docs/feature/agent/large-doc-formatting-plan.md
+ * §1), cap 16,000 → 16,400. This one is **+316 resident**, which by the rule
+ * two paragraphs up is the shape that owes an argument rather than a number.
+ * The argument:
+ *
+ * §5 was read first and does not fit, for the third time and the same reason as
+ * `export_xlsx` and `inspect_html`: what makes `lore_write` deferrable is a gate
+ * that makes those tools *fail* until it opens, so withholding them changes
+ * nothing about the model's path. `insert_lines` is callable from round one and
+ * its whole value is being reachable at the moment the model is looking at a
+ * document it has just read.
+ *
+ * What the 316 buys is measured on the other side of the ledger, where this
+ * file's own metric lives. Giving a long headingless document structure — the
+ * scenario that motivated it — was previously ~one `rewrite_lines` per section,
+ * each one re-emitting the prose it was keeping, on top of paging the whole file
+ * in at 4,000 characters a call. At ~16k of schema per round, one round is worth
+ * fifty of these tools. It also closes a correctness hole no round count shows:
+ * a `rewrite_lines` pass late in a long run re-types prose whose original read
+ * has already been folded away by compaction, and re-typing from memory is how a
+ * document quietly gets paraphrased under an author who is approving cards about
+ * headings.
+ *
+ * The 32k-local-model line from `contextForecast.test.ts` still holds and is
+ * still the reason the assistant preset is not where a small model should be
+ * doing this: the `write` tier is (4,175 → 4,491 with the same tool), and that
+ * is where `htmlArtifact` and any future formatting task run.
  */
-const AGENT_ASSIST_CAP = 16_000;
+const AGENT_ASSIST_CAP = 16_400;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
@@ -208,8 +236,15 @@ const AGENT_ASSIST_CAP = 16_000;
  * be, and the number to defend. A tool added here should have been asked for by
  * `ai.instructions.htmlArtifact` — if the instruction never names it, the run
  * pays for it every round and calls it never.
+ *
+ * **4,491** with `insert_lines` (+316; the tier had also drifted to 4,175 from
+ * the 4,065 recorded above, unmeasured at the time — record what you measure).
+ * It earns its place on this tier by that same rule: a page built section by
+ * section is exactly the file you later need to put something *between* two
+ * sections of, and the alternative on a long .html is re-emitting a region
+ * through `rewrite_lines` to change nothing in it.
  */
-const WRITE_CAP = 4_300;
+const WRITE_CAP = 4_600;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */

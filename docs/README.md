@@ -74,6 +74,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇 + 段的合计等于上限）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |
 | [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
 | [lore-category-visibility-plan.md](feature/agent/lore-category-visibility-plan.md) | `shipped` | Agent 建重复分类的修复：模型从未见过分类标签、空分类在列表里隐形、`create_lore_category` 不查重、指令文案陈旧——PR-A 读侧 id↔标签对照（description + 结果文本，常驻预算随之放宽到 12,000），PR-B 写侧幂等查重 + 文案纠偏；与 lore-category-manage-plan 分片 3 互补 |
+| [large-doc-formatting-plan.md](feature/agent/large-doc-formatting-plan.md) | `partial` | 大文档格式化（给无标题的巨型 md 加标题/区分段落）：现状轮数 O(文件)、正文两次过模型且有 paraphrase 风险——①`insert_lines` 插入清单（正文由运行时拼装，一轮一卡）②无标题文件的段落地图（零 schema，与标题索引同构）③指令层「分页读一轮多发」④确定性段落规范化做作者侧命令⑤实测复核 |
 
 ### feature/lore/ — the knowledge base
 
