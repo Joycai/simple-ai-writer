@@ -173,11 +173,6 @@ export const WINDOW_LOCAL_PREF_KEYS: readonly string[] = [
   "ai:imageModelId",
 ];
 
-/** Whether another window's value for `key` must not be adopted here. */
-export function isWindowLocalPref(key: string): boolean {
-  return WINDOW_LOCAL_PREF_KEYS.includes(key);
-}
-
 const TABLE = "prefs";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

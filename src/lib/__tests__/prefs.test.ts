@@ -551,13 +551,12 @@ describe("refreshPrefs", () => {
       expect(prefs.readPref("app:previewZoom")).toBe("1.5");
     });
 
-    it("is the same list `isWindowLocalPref` answers for", () => {
+    it("names only keys the app actually stores", () => {
+      // A typo here would be silent: the key simply never matches a row, and
+      // the window-local one it was meant to protect goes on being adopted.
       for (const key of prefs.WINDOW_LOCAL_PREF_KEYS) {
-        expect(prefs.isWindowLocalPref(key)).toBe(true);
-        // Every one of them is a real preference, not a typo nothing writes.
         expect(prefs.isPrefKey(key)).toBe(true);
       }
-      expect(prefs.isWindowLocalPref("app:theme")).toBe(false);
     });
   });
 });
