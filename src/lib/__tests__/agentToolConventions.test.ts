@@ -37,7 +37,15 @@ vi.mock("../fs/fileio", () => ({
 vi.mock("../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
 vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
-import { ALL_TOOL_IDS, getToolDefinitions, type ToolId } from "../agent/registry";
+import {
+  ALL_TOOL_IDS,
+  executeRegisteredTool,
+  getToolDefinitions,
+  toolNeedsProject,
+  type ToolContext,
+  type ToolId,
+} from "../agent/registry";
+import { createSplitSink } from "../agent/splitTools";
 
 /** Every tool in the registry, with its parameter names. */
 const allTools = (): { id: string; params: string[]; description: string }[] =>
@@ -160,5 +168,42 @@ describe("description conventions", () => {
       expect(description, `${id} does not say matching is case-insensitive`)
         .toMatch(/case-insensitive/i);
     }
+  });
+});
+
+describe("the open-folder fence", () => {
+  /**
+   * The same rule the icon rail applies to the knowledge base and the library
+   * (`appStore.viewNeedsProject`), on the AI side. It cannot be a per-handler
+   * check: containment is a prefix test and every absolute path is inside the
+   * empty prefix, so a tool that skipped it would not fail closed — it would
+   * reach the whole disk.
+   */
+  it("exempts only the tools that touch nothing on disk", () => {
+    const free = ALL_TOOL_IDS.filter((id) => !toolNeedsProject(id));
+    // The split collector appends to an in-memory sink the modal renders; its
+    // run (lib/lore/splitter) is the one caller that passes no project at all.
+    // Anything else added here needs a reason of that kind in its registry entry.
+    expect(free.sort()).toEqual(["split_core", "split_facet"]);
+  });
+
+  it("refuses a fenced tool with no folder open, before the handler runs", async () => {
+    const ctx = { projectPath: "", loreIndex: {}, multimodal: false } as ToolContext;
+    const call = { id: "c1", name: "list_lore_entities", arguments: "{}" };
+    const res = await executeRegisteredTool(call, ["list_lore_entities"], ctx);
+    expect(res.content).toMatch(/^Error: no folder is open/);
+    // Named, so the model can tell this from a tool that is merely absent.
+    expect(res.content).toContain("list_lore_entities");
+  });
+
+  it("lets the exempt tools through, so a facet split still runs", async () => {
+    // lib/lore/splitter's actual shape: no project, and the sink is the whole
+    // of what the run needs.
+    const sink = createSplitSink();
+    const ctx = { projectPath: "", loreIndex: {}, multimodal: false, splitSink: sink } as ToolContext;
+    const call = { id: "c2", name: "split_core", arguments: JSON.stringify({ content: "kept" }) };
+    const res = await executeRegisteredTool(call, ["split_core"], ctx);
+    expect(res.content).not.toMatch(/no folder is open/);
+    expect(sink.core).toBe("kept");
   });
 });

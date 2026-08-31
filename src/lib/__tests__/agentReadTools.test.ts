@@ -200,11 +200,13 @@ describe("list_files", () => {
   });
 
   it("rejects everything on a surface with no project", async () => {
-    // An empty projectPath would prefix-match any absolute path — the guard
-    // must refuse before the listing is attempted.
+    // An empty projectPath would prefix-match any absolute path — the refusal
+    // has to come before the listing is attempted. Since the fence moved to the
+    // registry's door (RegisteredTool.projectFree) that is where it comes from,
+    // and it now reads the same for every tool rather than per-handler.
     const out = await callFull("list_files", {}, { projectPath: "" });
 
-    expect(out.content).toContain("Error: Folder is outside the project");
+    expect(out.content).toContain("Error: no folder is open");
   });
 
   it("reports an empty manuscript", async () => {
@@ -455,7 +457,7 @@ describe("read_file", () => {
       { projectPath: "" },
     );
 
-    expect(out.content).toContain("Error: Path is outside the project");
+    expect(out.content).toContain("Error: no folder is open");
   });
 });
 
@@ -674,7 +676,9 @@ describe("read_image", () => {
 
   it("refuses outright on a surface with no project", async () => {
     // Containment is a prefix test, and every absolute path is inside the
-    // empty prefix — so this must be refused before it is reached.
+    // empty prefix — so this must be refused before it is reached. This tool is
+    // where that was first noticed; the registry's door now says it for all of
+    // them, and `readProjectImage` keeps its own guard behind it.
     fs.set("/etc/secret.png", "x");
 
     const out = await callFull(
@@ -683,7 +687,7 @@ describe("read_image", () => {
       { multimodal: true, projectPath: "" },
     );
 
-    expect(out.content).toContain("no project is open");
+    expect(out.content).toContain("Error: no folder is open");
     expect(out.imageDataUrls).toBeUndefined();
   });
 

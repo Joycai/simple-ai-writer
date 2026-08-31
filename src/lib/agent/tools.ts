@@ -525,6 +525,9 @@ export async function readProjectImage(
   // Containment is a prefix test, and every absolute path is inside the empty
   // prefix — so a surface that runs the loop without a project (the lore
   // generator passes "") would turn this into "read any image on the disk".
+  // The registry's door now refuses every non-`projectFree` tool for this same
+  // reason; this stays because the hazard it names is this function's own, and
+  // because it answers with what *this* tool should say.
   if (!projectPath) {
     return { toolCallId, content: "Error: no project is open — do not call this tool here." };
   }
