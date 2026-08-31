@@ -18,7 +18,7 @@ import {
   pruneNested, pruneSelection, rangeBetween,
 } from "../../lib/fs/selection";
 import {
-  extLabel, isSecondary, orphanedAssetGroups, rowKind, type RowKind,
+  extLabel, isSecondary, orphanedAssetGroups, relinkCandidates, rowKind, type RowKind,
 } from "../../lib/fs/rowMeta";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
@@ -126,6 +126,10 @@ interface TreeCtx {
   deleteAsk: { afterPath: string; text: string } | null;
   confirmDelete: () => void;
   cancelDelete: () => void;
+  /** 失配 `assets/<组>` 的修复选择器，长在那一行下面。 */
+  relinkAsk: { groupPath: string; candidates: readonly FileNode[] } | null;
+  confirmRelink: (docPath: string) => void;
+  cancelRelink: () => void;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -299,6 +303,7 @@ const TreeNode = memo(function TreeNode({
   const {
     activeFilePath, selected, onRowClick, creatingIn,
     renamingPath, openMenu, deleteAsk, confirmDelete, cancelDelete,
+    relinkAsk, confirmRelink, cancelRelink,
     draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
@@ -421,6 +426,33 @@ const TreeNode = memo(function TreeNode({
         </div>
       )}
 
+      {/* 修复选择器长在失配的那一行下面，和删除确认同一条规矩：手指刚才在哪，
+          问题就在哪问。语气是警告不是危险 —— 这是一次修补，不是一次销毁。 */}
+      {relinkAsk?.groupPath === node.path && (
+        <div className={styles.relinkAsk} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.deleteAskText}>
+            {t("fileTree.relinkAskText", { name: node.name })}
+          </div>
+          <div className={styles.relinkChips}>
+            {relinkAsk.candidates.map((doc) => (
+              <button
+                key={doc.path}
+                className={styles.relinkChip}
+                onClick={() => confirmRelink(doc.path)}
+                title={t("fileTree.relinkTo", { name: doc.name.replace(/\.md$/i, "") })}
+              >
+                {doc.name.replace(/\.md$/i, "")}
+              </button>
+            ))}
+          </div>
+          <div className={styles.deleteAskRow}>
+            <button className={styles.deleteAskCancel} onClick={cancelRelink}>
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {node.is_dir && open && (
         <div>
           {creatingIn === node.path && <CreateInput depth={depth} />}
@@ -501,6 +533,7 @@ export function FileTree() {
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);
+  const relinkAssets = useProjectStore((s) => s.relinkAssets);
   const copyEntry = useProjectStore((s) => s.copyEntry);
   const deleteEntry = useProjectStore((s) => s.deleteEntry);
   const clipboard = useProjectStore((s) => s.clipboard);
@@ -522,6 +555,7 @@ export function FileTree() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const [deleteAsk, setDeleteAsk] = useState<{ targets: TransferSource[]; afterPath: string; text: string } | null>(null);
+  const [relinkAsk, setRelinkAsk] = useState<{ groupPath: string; candidates: FileNode[] } | null>(null);
   // Where a shift-range starts. Held separately from the selection because it
   // must survive the range being redrawn: dragging a shift-click up and down
   // has to grow and shrink one span, not chain new ones off the last row.
@@ -709,12 +743,38 @@ export function FileTree() {
   /**
    * 定位当前文档 —— 只在当前文档**不可见**时出现在脚线左端。
    *
-   * 判据是「这一行在不在渲染出的可见行集合里」，也就是它是否被折叠掉了；滚出视野
-   * 不算，因为那要按行测量，而整稿的性能保证正是「不按行测量」。
+   * 「不可见」有两种，而它们的判据完全不同：
+   *
+   * 1. **被折叠掉**：行根本不在渲染出的可见行集合里。一次集合查询，下面这一行。
+   * 2. **滚出视野**：行在 DOM 里，但滚动区把它推出去了。
+   *
+   * 第二种曾经不做，理由是「要按行测量几何，而整稿的性能保证正是不按行测量」——
+   * 那个理由只对**遍历**成立。这里观察的是**一行**：当前文档那一行，一个
+   * IntersectionObserver，滚动时由浏览器自己回调，主线程一次布局都不多做。
    */
   const currentHidden = !!activeFilePath
     && everyRow.some((r) => r.path === activeFilePath)
     && !visiblePaths.has(activeFilePath);
+  const [currentOffscreen, setCurrentOffscreen] = useState(false);
+  const currentAway = currentHidden || currentOffscreen;
+
+  useEffect(() => {
+    setCurrentOffscreen(false);
+    // 折叠掉的那一支不进这里：行不存在，没有可观察的东西，而 currentHidden
+    // 已经答对了。重命名中的行也一样 —— 那一刻 [data-path] 被输入框顶掉了。
+    if (!activeFilePath || currentHidden) return;
+    const root = treeRef.current;
+    const row = root?.querySelector(`[data-path="${CSS.escape(activeFilePath)}"]`);
+    if (!root || !row) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setCurrentOffscreen(!entry.isIntersecting && entry.target.isConnected),
+      { root },
+    );
+    io.observe(row);
+    return () => io.disconnect();
+    // visiblePaths / renamingPath 变了就意味着那个 DOM 节点可能已经换人：
+    // 观察一个已经摘下来的节点会一直报「不相交」，而那正好是假的「滚出视野」。
+  }, [activeFilePath, currentHidden, visiblePaths, renamingPath]);
 
   const revealCurrent = () => {
     if (!activeFilePath) return;
@@ -1057,6 +1117,33 @@ export function FileTree() {
     clearSelection();
   };
 
+  /**
+   * 修好一个失配的 `assets/<组>`：把它重新关联到旁边的某一份文档。
+   *
+   * 候选清单是纯的（`relinkCandidates`），并且**已经把自己有图库的文档滤掉了** ——
+   * 合并两个图库需要逐文件处理冲突，还可能覆盖目标文档自己的图，所以那个选择干脆
+   * 不提供，而不是提供了再拒绝。
+   */
+  const askRelink = (node: FileNode) => {
+    setMenu(null);
+    const candidates = relinkCandidates(fileTree, node.path) as FileNode[];
+    if (candidates.length === 0) return;
+    setRelinkAsk({ groupPath: node.path, candidates });
+  };
+
+  const confirmRelink = async (docPath: string) => {
+    const groupPath = relinkAsk?.groupPath;
+    setRelinkAsk(null);
+    if (!groupPath) return;
+    try {
+      await relinkAssets(groupPath, docPath);
+      setNotice({ text: t("fileTree.relinked", { name: baseNameOf(docPath).replace(/\.md$/i, "") }) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.relinkFailed")} ${message}`);
+    }
+  };
+
   const openMenu = (e: MouseEvent, node: FileNode | null) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1220,8 +1307,16 @@ export function FileTree() {
           action: () => startCreate(node.path, "folder") },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => void handleImport(node.path) },
-        { kind: "divider" },
       );
+      // 只长在戴着 ⚠ 的那种分组上，而且只在真有可选的文档时 —— 一项点开发现
+      // 「没有候选」的菜单项，比没有这一项更糟。
+      if (orphanAssets.has(node.path) && relinkCandidates(fileTree, node.path).length > 0) {
+        items.push({
+          kind: "item", icon: <Link2 size={13} />, label: t("fileTree.relink"),
+          action: () => askRelink(node),
+        });
+      }
+      items.push({ kind: "divider" });
     } else {
       items.push(
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
@@ -1391,6 +1486,7 @@ export function FileTree() {
     cancelRename, openMenu, onDragStart, onDragEnd: endDrag,
     onDragOverDir, onDragLeaveDir, onDropInDir, confirmDelete,
     cancelDelete: () => setDeleteAsk(null),
+    confirmRelink, cancelRelink: () => setRelinkAsk(null),
   };
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; });
@@ -1408,6 +1504,8 @@ export function FileTree() {
     onDropInDir: (e, node) => handlersRef.current.onDropInDir(e, node),
     confirmDelete: () => void handlersRef.current.confirmDelete(),
     cancelDelete: () => handlersRef.current.cancelDelete(),
+    confirmRelink: (docPath) => void handlersRef.current.confirmRelink(docPath),
+    cancelRelink: () => handlersRef.current.cancelRelink(),
   }), []);
 
   const ctx = useMemo<TreeCtx>(() => ({
@@ -1425,11 +1523,12 @@ export function FileTree() {
     docCounts,
     orphanAssets,
     deleteAsk: deleteAsk ? { afterPath: deleteAsk.afterPath, text: deleteAsk.text } : null,
+    relinkAsk,
     ...stableHandlers,
   }), [
     activeFilePath, selected, creatingIn, creatingType, createError,
     renamingPath, renameError, draggingPaths, dragOverDir, springPath, cutPaths,
-    docCounts, orphanAssets, deleteAsk, stableHandlers,
+    docCounts, orphanAssets, deleteAsk, relinkAsk, stableHandlers,
   ]);
 
   const footer = () => {
@@ -1451,7 +1550,7 @@ export function FileTree() {
         </div>
       );
     }
-    if (currentHidden) {
+    if (currentAway) {
       return (
         <div className={`${styles.footer} ${styles.reveal}`} onClick={revealCurrent} title={t("fileTree.revealCurrent")}>
           <span className={styles.footerIcon}><Crosshair size={11} strokeWidth={1.8} /></span>

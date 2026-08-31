@@ -133,6 +133,42 @@ export function orphanedAssetGroups(nodes: readonly NamedNode[]): Set<string> {
   return orphans;
 }
 
+/**
+ * The documents an orphaned `assets/<group>/` could be re-attached to.
+ *
+ * Two filters, and the second one is the point: a candidate whose own group
+ * folder already sits in the same `assets/` is left out, so the repair can
+ * never be asked to merge two galleries — a refusal `relinkAssetGroup` would
+ * have to make anyway, made here instead by not offering the choice.
+ *
+ * Only `.md` files: those are what `ownsAssets` keeps illustrations for, so
+ * re-attaching to anything else would rename a folder and rewrite nothing.
+ * Same walk shape as {@link orphanedAssetGroups} — nothing reads the disk.
+ */
+export function relinkCandidates(
+  nodes: readonly NamedNode[],
+  groupPath: string,
+): NamedNode[] {
+  let found: NamedNode[] = [];
+  const walk = (list: readonly NamedNode[]) => {
+    for (const node of list) {
+      if (!node.is_dir) continue;
+      if (node.name === ASSETS_DIR && (node.children ?? []).some((g) => g.path === groupPath)) {
+        const taken = new Set((node.children ?? []).filter((g) => g.is_dir).map((g) => g.name));
+        found = list.filter((n) => {
+          if (n.is_dir || !/\.md$/i.test(n.name)) return false;
+          const dot = n.name.lastIndexOf(".");
+          return !taken.has(safeAssetName(dot > 0 ? n.name.slice(0, dot) : n.name));
+        });
+        return;
+      }
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return found;
+}
+
 /*
  * A row's left padding lives in CSS, not here — see FileTree.module.css's
  * `.node`. 设计稿 17 §2g: levels 1–4 step by the density tier's width and from

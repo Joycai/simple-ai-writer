@@ -47,7 +47,7 @@ import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, write
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { collapseAllMap, expandAllMap } from "../lib/fs/selection";
-import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
+import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets, relinkAssetGroup } from "../lib/image/assets";
 import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
@@ -236,6 +236,7 @@ interface ProjectState {
   ) => Promise<string>;
   /** Move or rename a file/folder, keeping the open document pointed at it. */
   moveEntry: (from: string, to: string) => Promise<void>;
+  relinkAssets: (groupPath: string, docPath: string) => Promise<void>;
   /**
    * Copy a file/folder into `destDir` and return the new path. Unlike a move,
    * a name collision is not an error — the copy is numbered (`稿 (1).md`), so
@@ -640,6 +641,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ activeFilePath: to + activeFilePath.slice(from.length) });
     }
     await get().refreshFileTree();
+  },
+
+  /**
+   * Re-attach a stray `assets/<group>/` to one of the documents beside it —
+   * the repair behind the file tree's ⚠ on an orphaned group.
+   *
+   * Lives here rather than in the component because of the editor: the repair
+   * rewrites the document **on disk** while the very same file may be open
+   * with unsaved edits, and a pending autosave would put the old links back
+   * two seconds later. Flush first, reload after — the same pair `moveEntry`
+   * makes, except that here the path does not change, so nothing else would
+   * cause the buffer to be re-read.
+   */
+  relinkAssets: async (groupPath, docPath) => {
+    const editor = useEditorStore.getState();
+    const open = isSamePath(editor.filePath, docPath);
+    if (open && editor.isDirty) await editor.saveNow();
+    try {
+      await relinkAssetGroup(groupPath, docPath);
+    } finally {
+      if (open) await editor.loadFile(docPath);
+      await get().refreshFileTree();
+    }
   },
 
   copyEntry: async (from, destDir, isDir, newName) => {

@@ -357,6 +357,40 @@
   cursor: pointer;
 }
 
+/* 失配 assets 的修复选择器。用警告色而不是危险色：这是一次修补，不是一次销毁 ——
+   同一套版式（缩进条 + 说明 + 一行操作），只换了那根竖条的颜色。 */
+.relinkAsk {
+  padding: 7px 10px 8px 12px;
+  background: var(--color-warning-bg);
+  box-shadow: inset 2px 0 0 var(--color-warning-text);
+  animation: noticeIn 160ms var(--ease-out);
+}
+/* 候选是「这个 assets/ 旁边的每一份文档」，一个分组里放五十篇稿子是常事 ——
+   所以这一片自己滚动，而不是把面板顶穿。不截断清单：被藏起来的那一个，正好
+   可能就是作者要找的那一个。 */
+.relinkChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.relinkChip {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-warning-text);
+  background: none;
+  border: 1px solid var(--color-warning);
+  padding: 4px 7px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.relinkChip:hover { background: var(--color-warning); color: var(--color-on-accent); }
+.relinkChip:active { transform: scale(0.96); }
+
 /* ── 空项目 ───────────────────────────────────────────────────────────── */
 
 .emptyState {
