@@ -217,7 +217,7 @@
 }
 .item:hover {
   background: var(--snip-row-hover);
-  transition: background 120ms var(--ease-out);
+  transition: background var(--transition-fast);
 }
 .itemActive {
   /* Inset so the 2px rule eats the extra left padding instead of shifting the

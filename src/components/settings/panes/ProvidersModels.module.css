@@ -314,8 +314,9 @@
 }
 
 /* 移动后该行底色闪一下再回常态，让眼睛跟得上换位。`from` only: the end
-   state is the row's own background, hover or not. */
-.groupFlash { animation: orderFlash 400ms var(--ease-out); }
+   state is the row's own background, hover or not. 320ms —— 与知识库阅读视图的
+   `sectFlash` 同一节奏（也正是 `--transition-slow`），全库的操作后染色提示一致。 */
+.groupFlash { animation: orderFlash 320ms var(--ease-out); }
 @keyframes orderFlash {
   from { background-color: var(--color-amber-soft); }
 }

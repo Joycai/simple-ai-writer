@@ -1074,19 +1074,27 @@
 .modeSwitch { display: flex; border: 1px solid var(--color-border); }
 .modeBtn {
   padding: 5px 13px;
+  /* 基态就占住选中态那 3px 竖条的位置（透明），否则选中时凭空多出 3px、
+     两个格子一起横跳——与方案 020 在 .railRowOn 抓到的是同一个失效模式。
+     不用 padding-left 补偿：020 的目检记录证明那条路会算错，而且是静默错的。 */
   border: none;
+  border-left: 3px solid transparent;
   background: none;
   font: 400 12px/1 var(--font-serif);
+  /* 字重也要占位：500 比 400 宽，只在选中态加粗会让格子变宽。用 text-shadow
+     仿粗、字重保持 400，几何因此完全不动。 */
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-left-color var(--transition-fast), transform var(--transition-fast);
 }
 .modeBtn:hover { background: var(--color-bg-hover); }
+.modeBtn:active { transform: scale(0.97); }
 .modeBtnActive {
   background: var(--color-accent-tint);
-  border-left: 3px solid var(--color-sienna);
+  border-left-color: var(--color-sienna);
   color: var(--color-text);
-  font-weight: 500;
+  text-shadow: 0 0 0.4px currentColor;
 }
 .modeBtnActive:hover { background: var(--color-accent-tint); }
 

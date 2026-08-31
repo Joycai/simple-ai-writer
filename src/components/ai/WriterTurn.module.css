@@ -387,12 +387,8 @@
   height: 5px;
   border-radius: var(--radius-round);
   background: var(--color-accent);
-  animation: writerPulse 1.4s infinite;
+  animation: pulseDeep 1.4s infinite;
   flex-shrink: 0;
-}
-@keyframes writerPulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
 }
 
 /* ── 首次引导 ─────────────────────────────────────────────────────── */

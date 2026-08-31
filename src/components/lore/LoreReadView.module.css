@@ -92,7 +92,14 @@
   object-fit: cover;
   border: 1px solid var(--color-border);
   cursor: zoom-in;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
 }
+/* zoom-in 光标原本是这个灯箱入口的全部提示：补一个边框加深的悬停与一次按压回执。
+   按压幅度取 0.99 而不是常用的 0.97/0.98——这是 150×88 的大图块，同样的比例
+   在大面积上读起来的位移量要大得多。不加 translateY：它嵌在一张"纸"里，浮起
+   会破坏纸面的平整感。 */
+.cover:hover { border-color: var(--color-border-strong); }
+.cover:active { transform: scale(0.99); }
 .heroRight { flex: 1; min-width: 0; padding-top: 2px; }
 .name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text); }
 .hitNote {
@@ -278,7 +285,11 @@
   object-fit: cover;
   border: 1px solid var(--color-border);
   background: var(--color-bg-surface);
+  transition: transform var(--transition-fast);
 }
+/* 按压挂在图片上而不是 <figure> 上：<figure> 还包着图注，整块缩放会让文字跟着抖。
+   幅度同 .cover 取 0.99——整格图面积大。 */
+.figure:active .figureImg { transform: scale(0.99); }
 /* 缩略图未就绪/读不到时的斜纹占位（设计稿 18 的占位卡语汇） */
 .figurePh {
   display: flex;
@@ -323,6 +334,9 @@
   font: 400 19px/1.3 var(--font-serif);
   color: var(--color-text);
   cursor: pointer;
+  /* 过渡挂在基态、逐属性列出（同文件 .sect / .editMark 的写法），否则翻页
+     入口的颜色是瞬切的。 */
+  transition: color var(--transition-fast);
 }
 .nextName:hover { color: var(--color-accent); }
 .nextArrow { font: 500 13px/1 var(--font-sans); color: var(--color-accent); }
@@ -378,7 +392,10 @@
   font: 400 11px/1.5 var(--font-mono);
   color: var(--color-text-muted);
   cursor: pointer;
+  transition: color var(--transition-fast);
 }
+/* 主项才是目录的主要跳转目标，悬停语汇与子项 .tocSub 同色同速。 */
+.tocItem:hover { color: var(--color-text-secondary); }
 .tocItemActive { color: var(--color-text); font-weight: 500; }
 .tocTick { width: 8px; height: 1px; background: var(--lore-flip-border); flex-shrink: 0; }
 .tocTickActive { width: 14px; height: 3px; background: var(--color-sienna); flex-shrink: 0; }
@@ -392,6 +409,7 @@
   font: 400 10px/1.5 var(--font-mono);
   color: var(--color-text-faint);
   cursor: pointer;
+  transition: color var(--transition-fast);
 }
 .tocSub:hover { color: var(--color-text-secondary); }
 

@@ -27,11 +27,9 @@ import { useProjectStore } from "../../stores/projectStore";
 import { openInNewWindow } from "../../lib/instance";
 import { isProjectPinned, openedAtKind, splitProjects } from "../../lib/recentProjects";
 import { baseName } from "../../lib/paths";
+import { EASE_OUT } from "../../lib/motion";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./RecentProjects.module.css";
-
-/** The `--ease-out` token, as Motion easing (same curve, two languages). */
-const EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 /** How long the undo stays offered after a 清空. */
 const UNDO_MS = 5000;
@@ -196,7 +194,7 @@ export function RecentProjects() {
       key={path}
       layout
       layoutId={path}
-      transition={{ duration: reduced ? 0 : 0.2, ease: EASE }}
+      transition={{ duration: reduced ? 0 : 0.2, ease: EASE_OUT }}
       className={styles.row}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -302,8 +300,8 @@ export function RecentProjects() {
             className={styles.confirm}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0, transition: { duration: reduced ? 0 : 0.16, ease: EASE } }}
-            transition={{ duration: reduced ? 0 : 0.24, ease: EASE }}
+            exit={{ height: 0, opacity: 0, transition: { duration: reduced ? 0 : 0.16, ease: EASE_OUT } }}
+            transition={{ duration: reduced ? 0 : 0.24, ease: EASE_OUT }}
           >
             <div className={styles.confirmInner}>
               <div className={styles.confirmText}>

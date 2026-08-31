@@ -566,3 +566,51 @@ transition 里仍带 width 的规则：只剩 RecentProjects / ResizeHandle 两�
 5. **035** 开系统「减弱动态效果」后，两个同步指示器仍在转（慢一半），
    不再冻成静止残环。
 6. **040** 1.6s 内**连按两次**「跳到结尾」，第二次也必须闪。
+
+## 第九批（041–043，基准 43b52e9 + PR #430）
+
+第八批把非 LOW 的十一条清完之后，作者要求继续处理 LOW 档。**不是新一轮审计**——
+这三份就是第八批「本批未立案的 LOW 档」那一节列出的内容，逐条回到 `file:line`
+复核仍然成立之后立的案（`033` 顺带删掉的那个死 reduced-motion 块已从清单移除）。
+
+| # | 方案 | 严重度 | 状态 |
+| --- | --- | --- | --- |
+| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | TODO |
+| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | TODO |
+| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | TODO |
+
+- **041** 体例同方案 022（005 的漏网之鱼），七处同一类修法：`--ease-out` 的控制点
+  手打了三份（`motion.ts:30` 是 `const` 而非 `export const`，所以
+  `RecentProjects.tsx:34` 只能再抄一遍）、全库仅有的四条裸 `ease`、两处把
+  `--transition-fast` 手工展开、`writerPulse` ≡ `pulseDeep`、`orderFlash` 400ms
+  超预算、`modalPop` 零消费者。
+- **042** `LoreReadView` 三处悬停变色无过渡、目录主项比子项少一个悬停态、
+  两个 `cursor: zoom-in` 入口零反馈。
+- **043** `.modeBtnActive` 的 `border-left: 3px` + `font-weight: 500` 都改变固有
+  宽度且都不在过渡列表里——背景礼貌地渐变，几何瞬间跳。**与方案 020 目检时在
+  `.railRowOn` 抓到的是同一个失效模式**（见上面「三处更正」第一条）。
+
+### 推荐执行顺序与依赖
+
+**042 → 043**（都动 `lore/` 下的界面，但文件不同；顺序只是为了目检时一起看）。
+**041 可与两者并行**——它是唯一动 TS 的一份，且改动文件与另两份零重叠。
+
+| 方案 | 触碰的文件 |
+|---|---|
+| 041 | `lib/motion.ts`、`layout/RecentProjects.tsx`、`settings/panes/DocFormat.module.css`、`ai/SnippetPicker.module.css`、`roleplay/RoleplayChat.module.css`、`ai/WriterTurn.module.css`、`settings/panes/ProvidersModels.module.css` |
+| 042 | `lore/LoreReadView.module.css` |
+| 043 | `lore/LoreDetail.module.css` |
+
+**041 是唯一会删关键帧的一份**（`writerPulse`），方案 019 的
+`cssKeyframeNames.test.ts` 是它的回归网。
+
+### 三条执行时最容易踩空的地方
+
+1. **041 的 `140ms` 不要改成 `120ms`。** DocFormat 那三条的时长不是任何令牌，
+   只换曲线（`140ms var(--ease-out)`）；只有 `:802` 的 `120ms ease` 恰好等于
+   `--transition-fast`，整条换令牌。混为一谈会顺手改掉三处控件的节奏。
+2. **041 不要删 `--ease-spring`。** 它确实零消费者，但它是 design-system.md
+   记载的设计词汇，删它是**设计决策**不是清理。这与删 `modalPop` 不同——
+   后者是一套与既有 CSS 模态语汇竞争的第二实现。
+3. **043 不要用 `padding-left` 补偿几何。** 方案 020 的目检记录（「三处更正」
+   第一条）证明那条路会算错，而且是**静默**错的。用基态透明边框占位。
