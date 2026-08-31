@@ -381,8 +381,16 @@ interface AppState {
    * preferences — without it the values are correct in the store and the
    * screen keeps showing what it computed at startup, which reads as "the
    * import didn't work".
+   *
+   * `changedKeys` narrows *which* of those repaints run — pass the key list
+   * `refreshPrefs` returned so a focus that only saw another window touch the
+   * recents list does not cross-dissolve the whole UI to the theme it already
+   * had. Omitting it means "everything moved", which is exactly true of an
+   * import. The store fields are always re-read either way: the window-local
+   * ones are pinned in the cache (see `WINDOW_LOCAL_PREF_KEYS`), so re-reading
+   * them is a no-op rather than a way to adopt another window's value.
    */
-  reloadFromPrefs: () => void;
+  reloadFromPrefs: (changedKeys?: readonly string[]) => void;
 
   setMainView: (v: MainView) => void;
   /**
@@ -691,13 +699,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ projectOpenedAt: next });
   },
 
-  reloadFromPrefs: () => {
+  reloadFromPrefs: (changedKeys) => {
+    const touched = (key: string) => !changedKeys || changedKeys.includes(key);
     const next = prefBackedState();
     set(next);
-    applyThemeAnimated(next.theme);
-    applyFontScheme(next.fontScheme);
-    applyMarkdownTheme(next.markdownTheme);
-    if (next.language !== i18n.language) i18n.changeLanguage(next.language);
+    if (touched(THEME_KEY)) applyThemeAnimated(next.theme);
+    if (touched(FONT_KEY)) applyFontScheme(next.fontScheme);
+    if (touched(MD_THEME_KEY)) applyMarkdownTheme(next.markdownTheme);
+    if (touched(LANG_KEY) && next.language !== i18n.language) i18n.changeLanguage(next.language);
   },
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
