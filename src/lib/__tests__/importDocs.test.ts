@@ -17,6 +17,7 @@ import {
 import { decodeText } from "../import/text";
 import {
   baseName,
+  convertExtOf,
   importMode,
   importedName,
   markdownName,
@@ -362,6 +363,22 @@ describe("naming and dispatch", () => {
     expect(importMode("old.xls")).toBeNull();
     expect(importMode("old.ppt")).toBeNull();
     expect(importMode("noext")).toBeNull();
+  });
+
+  it("names the format a convertible file converts through", () => {
+    // The file tree's 转换文档 asks this instead of `importMode`, and the
+    // converter dispatch switches on it — the two must never disagree about
+    // what CONVERT_EXTENSIONS contains.
+    expect(convertExtOf("标书.docx")).toBe("docx");
+    expect(convertExtOf("C:\\bids\\招标文件.PDF")).toBe("pdf");
+    expect(convertExtOf("路演.pptx")).toBe("pptx");
+    expect(convertExtOf("报价表.xlsx")).toBe("xlsx");
+    // Everything the app already opens has nothing to convert *to*: a menu
+    // item on a .md would produce a copy of itself.
+    expect(convertExtOf("readme.md")).toBeNull();
+    expect(convertExtOf("封面.png")).toBeNull();
+    expect(convertExtOf("old.doc")).toBeNull();
+    expect(convertExtOf("noext")).toBeNull();
   });
 
   it("takes the basename from either separator style", () => {

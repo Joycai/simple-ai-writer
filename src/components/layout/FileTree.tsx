@@ -7,7 +7,7 @@ import {
   Folder, FolderOpen, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
-  ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2,
+  ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
@@ -22,7 +22,7 @@ import {
 } from "../../lib/fs/rowMeta";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
-import { baseName, importDocumentsDialog } from "../../lib/import";
+import { baseName, convertExtOf, convertProjectFile, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
@@ -514,6 +514,7 @@ export function FileTree() {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [converting, setConverting] = useState<string | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [draggingPaths, setDraggingPaths] = useState<ReadonlySet<string>>(new Set());
   const [dragOverDir, setDragOverDir] = useState<string | null>(null);
@@ -933,6 +934,33 @@ export function FileTree() {
   };
 
   /**
+   * 把树里已有的 .docx / .xlsx / .pdf / .pptx 转成同目录下的 .md，**原件保留**
+   * （见 lib/import 的 `convertProjectFile`：转换是有损的，作者撤不回来）。
+   *
+   * 之前这件事只在**导入那一刻**发生，于是拖进来的、git 拉下来的、上个版本导入
+   * 时还没有转换器的那些文档，在应用里就是一个打不开的行。
+   *
+   * 单飞与导入同理：一份几十页的 pdf 要转好几秒，两次并发会往同一个
+   * `assets/<文档名>/` 里写。转完把新文档打开——作者点它就是为了读它。
+   */
+  const handleConvert = async (node: FileNode) => {
+    if (converting) return;
+    setConverting(node.path);
+    setTransferError(null);
+    try {
+      const target = await convertProjectFile(node.path);
+      await refreshFileTree();
+      setActiveFilePath(target);
+      setNotice({ text: t("fileTree.converted", { name: baseName(target) }) });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.convertFailed", { name: node.name })} ${message}`);
+    } finally {
+      setConverting(null);
+    }
+  };
+
+  /**
    * 工具栏的「新建」落在**当前选中的分组**（选中的是文档就落在它的分组里，什么都
    * 没选就落在项目根）—— 行上那对 hover 按钮因此不是唯一入口，也不是最快入口，可以
    * 整对删除，右列的篇数于是再也不用给它们让位。
@@ -1199,6 +1227,18 @@ export function FileTree() {
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
           action: () => setActiveFilePath(node.path) },
       );
+      // 这一格是「拿这个文件能做什么」，而它的两半互不重叠：能转换的四种格式
+      // 恰好是 `classifyProjectFile` 认不出的那些（模型收不下 zip 包），所以
+      // 一行文档上永远只出现「转换文档」和「发送到助手」中的一个。
+      if (convertExtOf(node.name)) {
+        items.push({
+          kind: "item",
+          icon: <FileOutput size={13} />,
+          label: t("fileTree.convertDoc"),
+          disabled: converting !== null,
+          action: () => void handleConvert(node),
+        });
+      }
       // Only on files the assistant can take (the `@` picker's own kinds) —
       // on a .docx the entry would be a promise the composer can't keep.
       const attachable = classifyProjectFile(node.name, node.path);
@@ -1486,8 +1526,16 @@ export function FileTree() {
           </button>
         </div>
 
-        {/* 就地展开的确认条，不弹模态。说的是**数量** —— 那是树自己没法说的话。 */}
-        {notice && (
+        {/* 就地展开的确认条，不弹模态。说的是**数量** —— 那是树自己没法说的话。
+            转换中的提示走同一条：它没有倒计时（一份几十页的 pdf 会转到 NOTICE_MS
+            之后），所以不能用 notice 本身来表达，否则条会在转换途中自己消失。 */}
+        {converting ? (
+          <div className={styles.notice} role="status">
+            <span className={styles.noticeText}>
+              {t("fileTree.converting", { name: baseNameOf(converting) })}
+            </span>
+          </div>
+        ) : notice && (
           <div className={styles.notice} role="status">
             <span className={styles.noticeText}>{notice.text}</span>
             {notice.undo && (
