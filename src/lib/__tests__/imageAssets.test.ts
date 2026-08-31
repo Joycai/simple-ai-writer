@@ -40,7 +40,7 @@ vi.mock("../fs/fileio", () => ({
 
 const {
   saveDocumentAsset, importDocumentAsset, imageMarkdown, assetDirFor, safeAssetName,
-  moveDocumentAssets, copyDocumentAssets, discardDocumentAssets,
+  moveDocumentAssets, copyDocumentAssets, discardDocumentAssets, relinkAssetBody, relinkAssetGroup,
 } = await import("../image/assets");
 
 beforeEach(() => {
@@ -278,5 +278,64 @@ describe("imageMarkdown", () => {
 
   it("drops brackets from the alt text so the link cannot be broken", () => {
     expect(imageMarkdown("assets/a.png", "a [knight]")).toContain("![a knight](");
+  });
+});
+
+describe("relinkAssetBody", () => {
+  it("repoints both spellings of the link", () => {
+    // `imageMarkdown` percent-encodes each segment; a link typed by hand (or
+    // by a model) carries the characters as they are. Missing either spelling
+    // leaves links that still render today and break at the next move.
+    const body = [
+      "![a](assets/%E6%97%A7/p1.png)",
+      "![b](assets/旧/p2.png)",
+    ].join("\n");
+    const out = relinkAssetBody(body, "旧", "新");
+    expect(out).toContain("assets/%E6%96%B0/p1.png");
+    expect(out).toContain("assets/新/p2.png");
+    expect(out).not.toContain("旧");
+  });
+
+  it("leaves a group whose name merely starts the same alone", () => {
+    const body = "![a](assets/第一章 醒来 旧/p.png)";
+    expect(relinkAssetBody(body, "第一章 醒来", "序章")).toBe(body);
+  });
+
+  it("is a no-op when the two names already agree", () => {
+    const body = "![a](assets/序章/p.png)";
+    expect(relinkAssetBody(body, "序章", "序章")).toBe(body);
+  });
+});
+
+describe("relinkAssetGroup", () => {
+  it("renames the folder AND rewrites the document in one go", async () => {
+    // 修复前图片其实还是好的——正文指着旧文件夹，旧文件夹还在。所以只改名
+    // 不改写，才是真正弄断它们的那一步：两半必须一起发生。
+    existing.add("/p/卷一/assets/旧名");
+    texts.set("/p/卷一/随笔.md", "![a](assets/旧名/p1.png)");
+    await relinkAssetGroup("/p/卷一/assets/旧名", "/p/卷一/随笔.md");
+    expect(renames).toEqual([{ from: "/p/卷一/assets/旧名", to: "/p/卷一/assets/随笔" }]);
+    expect(texts.get("/p/卷一/随笔.md")).toBe("![a](assets/随笔/p1.png)");
+  });
+
+  it("refuses when the document already has a gallery", async () => {
+    // 合并两个图库要逐文件处理冲突，还可能覆盖目标文档自己的图。
+    existing.add("/p/卷一/assets/旧名");
+    existing.add("/p/卷一/assets/随笔");
+    await expect(relinkAssetGroup("/p/卷一/assets/旧名", "/p/卷一/随笔.md")).rejects.toThrow();
+    expect(renames).toEqual([]);
+  });
+
+  it("refuses a folder that is not in the document's own assets/", async () => {
+    // 改写出来的相对链接会指到文档目录外面去。
+    existing.add("/p/别处/assets/旧名");
+    await expect(relinkAssetGroup("/p/别处/assets/旧名", "/p/卷一/随笔.md")).rejects.toThrow();
+    await expect(relinkAssetGroup("/p/卷一/旧名", "/p/卷一/随笔.md")).rejects.toThrow();
+    expect(renames).toEqual([]);
+  });
+
+  it("refuses a target that keeps no illustrations at all", async () => {
+    existing.add("/p/卷一/assets/旧名");
+    await expect(relinkAssetGroup("/p/卷一/assets/旧名", "/p/卷一/合同.pdf")).rejects.toThrow();
   });
 });

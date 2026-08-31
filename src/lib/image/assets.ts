@@ -303,18 +303,70 @@ export async function discardDocumentAssets(
   }
 }
 
+/**
+ * Repoint every `assets/<old>/…` link in a document body at `<new>`.
+ *
+ * Pure, and separate from the file IO around it because this is the half that
+ * can be wrong in a way nobody notices: a link that isn't rewritten still
+ * renders (the old folder is usually still there) right up until the next move,
+ * which is when it breaks — far from the operation that caused it.
+ */
+export function relinkAssetBody(body: string, oldGroup: string, newGroup: string): string {
+  if (oldGroup === newGroup) return body;
+  // Both spellings: `imageMarkdown` percent-encodes each segment, but a link
+  // typed by hand (or by a model) carries the characters as they are.
+  return body
+    .split(`${ASSETS_DIR}/${encodeURIComponent(oldGroup)}/`)
+    .join(`${ASSETS_DIR}/${encodeURIComponent(newGroup)}/`)
+    .split(`${ASSETS_DIR}/${oldGroup}/`)
+    .join(`${ASSETS_DIR}/${newGroup}/`);
+}
+
 /** Point a moved document's `assets/<old>/…` links at their new folder. */
 async function rewriteAssetLinks(docPath: string, fromStem: string, toStem: string): Promise<void> {
   const oldGroup = safeAssetName(fromStem);
   const newGroup = safeAssetName(toStem);
   if (oldGroup === newGroup) return;
   const raw = await readFile(docPath);
-  // Both spellings: `imageMarkdown` percent-encodes each segment, but a link
-  // typed by hand (or by a model) carries the characters as they are.
-  const rewritten = raw
-    .split(`${ASSETS_DIR}/${encodeURIComponent(oldGroup)}/`)
-    .join(`${ASSETS_DIR}/${encodeURIComponent(newGroup)}/`)
-    .split(`${ASSETS_DIR}/${oldGroup}/`)
-    .join(`${ASSETS_DIR}/${newGroup}/`);
+  const rewritten = relinkAssetBody(raw, oldGroup, newGroup);
+  if (rewritten !== raw) await writeFile(docPath, rewritten);
+}
+
+/**
+ * Re-attach a stray `assets/<group>/` folder to a document beside it: rename
+ * the folder to the name that document's own illustrations would use, and
+ * rewrite that document's links to match.
+ *
+ * The repair for the ⚠ the file tree puts on an orphaned group. A group is
+ * named after its document, so anything that renames one without the other —
+ * a rename in Finder, a `git pull`, the deliberate no-merge bail-out in
+ * {@link moveDocumentAssets} — leaves a folder no document claims.
+ *
+ * **Both halves or neither.** Renaming the folder alone is worse than doing
+ * nothing: the pictures still resolve *before* the repair (the body points at
+ * the old folder, which exists), so a rename with no rewrite is the edit that
+ * actually breaks them. That is why this throws instead of being best-effort
+ * like the move — here the repair *is* the operation the author asked for, and
+ * a half-done one has to be visible.
+ */
+export async function relinkAssetGroup(groupPath: string, docPath: string): Promise<void> {
+  if (!ownsAssets(docPath)) throw new Error(`Not a document: ${baseName(docPath)}`);
+  const oldGroup = baseName(groupPath);
+  const newGroup = safeAssetName(stemOf(docPath));
+  if (oldGroup === newGroup) return;
+  // The group must live in the document's *own* `assets/` folder — otherwise
+  // the rewritten relative links would point outside the document's directory.
+  if (dirOf(dirOf(groupPath)) !== dirOf(docPath) || baseName(dirOf(groupPath)) !== ASSETS_DIR) {
+    throw new Error(`${oldGroup} is not an illustration folder beside ${baseName(docPath)}`);
+  }
+  const target = assetDirFor(docPath);
+  // Merging two galleries would need per-file collision handling and could
+  // overwrite the document's own pictures — the same refusal the move makes.
+  if (await fileExists(target)) {
+    throw new Error(`${newGroup} already exists`);
+  }
+  await renamePath(groupPath, target);
+  const raw = await readFile(docPath);
+  const rewritten = relinkAssetBody(raw, oldGroup, newGroup);
   if (rewritten !== raw) await writeFile(docPath, rewritten);
 }

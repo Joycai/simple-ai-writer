@@ -4,6 +4,7 @@ import {
   extLabel,
   isSecondary,
   orphanedAssetGroups,
+  relinkCandidates,
   rowKind,
 } from "../fs/rowMeta";
 
@@ -84,5 +85,37 @@ describe("orphanedAssetGroups", () => {
     const moved = structuredClone(tree);
     moved[0].children![0].name = "序章.md";
     expect(orphanedAssetGroups(moved).size).toBe(2);
+  });
+});
+
+describe("relinkCandidates", () => {
+  const tree = [
+    { name: "第一卷", path: "/p/卷一", is_dir: true, children: [
+      { name: "第一章 醒来.md", path: "/p/卷一/第一章 醒来.md", is_dir: false },
+      { name: "序章.md", path: "/p/卷一/序章.md", is_dir: false },
+      { name: "合同.pdf", path: "/p/卷一/合同.pdf", is_dir: false },
+      { name: "assets", path: "/p/卷一/assets", is_dir: true, children: [
+        { name: "第一章 醒来", path: "/p/卷一/assets/第一章 醒来", is_dir: true },
+        { name: "第一章 醒来 旧", path: "/p/卷一/assets/第一章 醒来 旧", is_dir: true },
+      ] },
+    ] },
+  ];
+
+  it("offers only the documents that have no gallery of their own", () => {
+    // 第一章 醒来 已经有 assets/第一章 醒来/ —— 关联过去就是合并两个图库，
+    // 而那需要逐文件处理冲突。不提供，而不是提供了再拒绝。
+    const names = relinkCandidates(tree, "/p/卷一/assets/第一章 醒来 旧").map((n) => n.name);
+    expect(names).toEqual(["序章.md"]);
+  });
+
+  it("leaves out anything that is not a document", () => {
+    // 关联到一份 .pdf 会改掉文件夹名却改写不了任何链接（ownsAssets 只认 .md）。
+    const names = relinkCandidates(tree, "/p/卷一/assets/第一章 醒来 旧").map((n) => n.name);
+    expect(names).not.toContain("合同.pdf");
+  });
+
+  it("answers empty for a folder that is not in any assets/", () => {
+    expect(relinkCandidates(tree, "/p/卷一/第一章 醒来.md")).toEqual([]);
+    expect(relinkCandidates(tree, "/p/不存在")).toEqual([]);
   });
 });
