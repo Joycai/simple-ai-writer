@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   allRows,
+  collapseAllMap,
   flattenVisible,
+  hasOpenDir,
   isDirOpen,
   pruneNested,
   pruneSelection,
@@ -163,5 +165,56 @@ describe("pruneSelection", () => {
 describe("allRows", () => {
   it("reaches every entry regardless of expansion", () => {
     expect(allRows(TREE)).toHaveLength(7);
+  });
+});
+
+describe("collapseAllMap", () => {
+  it("writes an explicit false for top-level folders too", () => {
+    // The one that regresses: clearing `expandedDirs` looks tidier, but the
+    // default is `stored ?? depth === 0`, so 卷一/卷二 would spring back open.
+    const map = collapseAllMap(TREE);
+    expect(map[`${ROOT}/卷一`]).toBe(false);
+    expect(map[`${ROOT}/卷二`]).toBe(false);
+  });
+
+  it("reaches folders at any depth and gives files no key at all", () => {
+    const map = collapseAllMap(TREE);
+    expect(map[`${ROOT}/卷一/附录`]).toBe(false);
+    expect(Object.keys(map).sort()).toEqual(
+      [`${ROOT}/卷一`, `${ROOT}/卷一/附录`, `${ROOT}/卷二`].sort(),
+    );
+  });
+
+  it("leaves only the top-level rows visible", () => {
+    const rows = flattenVisible(TREE, collapseAllMap(TREE));
+    expect(rows.map((r) => r.path)).toEqual([
+      `${ROOT}/卷一`,
+      `${ROOT}/卷二`,
+      `${ROOT}/大纲.md`,
+    ]);
+  });
+});
+
+describe("hasOpenDir", () => {
+  it("is true on a freshly opened project, where no folder has an entry yet", () => {
+    expect(hasOpenDir(TREE, {})).toBe(true);
+  });
+
+  it("is false once everything is collapsed", () => {
+    expect(hasOpenDir(TREE, collapseAllMap(TREE))).toBe(false);
+  });
+
+  it("is false for a tree of files only", () => {
+    expect(hasOpenDir([file("大纲.md")], {})).toBe(false);
+  });
+
+  it("ignores a folder left open inside a collapsed ancestor", () => {
+    // Not on screen, so the button must not be live: its click would change
+    // nothing the author can see.
+    const collapsed = {
+      ...collapseAllMap(TREE),
+      [`${ROOT}/卷一/附录`]: true,
+    };
+    expect(hasOpenDir(TREE, collapsed)).toBe(false);
   });
 });

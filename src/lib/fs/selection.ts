@@ -120,3 +120,49 @@ export function allRows(nodes: readonly TreeNodeLike[]): TreeRow[] {
   }
   return rows;
 }
+
+/**
+ * Every folder in the tree, explicitly closed — what 「全部折叠」 has to write.
+ *
+ * It cannot be done by *clearing* `expandedDirs`: the default is
+ * `stored ?? depth === 0`, so clearing the table is "back to the default", and
+ * the default is not all-collapsed — every top-level folder would spring open
+ * again. The already-collapsed deep folders get a key too, which costs nothing
+ * and keeps the result independent of what was open when it was called.
+ */
+export function collapseAllMap(nodes: readonly TreeNodeLike[]): Record<string, boolean> {
+  const map: Record<string, boolean> = {};
+  const walk = (list: readonly TreeNodeLike[]) => {
+    for (const node of list) {
+      if (!node.is_dir) continue;
+      map[node.path] = false;
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return map;
+}
+
+/**
+ * Is any folder the author can currently see still open — i.e. does
+ * 「全部折叠」 have anything left to do.
+ *
+ * **Only the top level is examined, and that is not a shortcut.** A folder is
+ * on screen only if every ancestor is open, so whenever a visible open folder
+ * exists, its outermost ancestor is itself an open top-level folder — the two
+ * questions have the same answer. Walking deeper would additionally count a
+ * folder left open inside a collapsed ancestor, which is *not* on screen: the
+ * button would be live and its click would change nothing the author can see.
+ * That stale `true` is harmless — it becomes visible, and countable, the moment
+ * the ancestor is reopened.
+ *
+ * Goes through `isDirOpen` rather than reading the table: a top-level folder
+ * with no entry yet *is* open, and a check that missed that would leave the
+ * button disabled on a project that was just opened.
+ */
+export function hasOpenDir(
+  nodes: readonly TreeNodeLike[],
+  expandedDirs: Record<string, boolean>,
+): boolean {
+  return nodes.some((node) => node.is_dir && isDirOpen(expandedDirs[node.path], 0));
+}
