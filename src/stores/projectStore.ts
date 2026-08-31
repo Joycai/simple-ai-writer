@@ -51,7 +51,7 @@ import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
-import { useAppStore, type MainView } from "./appStore";
+import { useAppStore, viewNeedsProject, type MainView } from "./appStore";
 import { useComposerStore } from "./composerStore";
 
 /**
@@ -748,16 +748,25 @@ export function useSectionLabel(id: SectionId): string {
 /**
  * The main view to actually render, which is not always the stored one.
  *
- * `mainView` is persisted; the fallback used to matter when a profile could
- * turn the ordered spine off. The doc model is always all-on now, so this is
- * a pass-through that keeps the seam (and its consumers) intact.
+ * Two fallbacks live here. The **project gate** (`viewNeedsProject`) is the
+ * load-bearing one: the knowledge base and the library are a folder's data, so
+ * before one is open there is nothing for either to show and the editor — with
+ * its recents list — is the only place to be. It applies to every way a view
+ * can be reached, including the ones with no button behind them (a citation
+ * click, a step Back into a closed project). The **spine fallback** below it
+ * used to matter when a profile could turn the ordered spine off; the doc model
+ * is always all-on now, so it is a pass-through that keeps the seam intact.
  *
  * Every consumer must go through here, not `appStore.mainView`: App renders the
  * sidebar off the effective view while IconRail highlights off it, and the two
- * disagreeing shows up as a rendered panel whose rail icon isn't lit.
+ * disagreeing shows up as a rendered panel whose rail icon isn't lit. App also
+ * writes the effective view back, so a bounced view can't sit in the store
+ * waiting for the next folder to open onto it.
  */
 export function useMainView(): MainView {
   const mainView = useAppStore((s) => s.mainView);
+  const projectPath = useProjectStore((s) => s.projectPath);
   const { ordered } = useDocModel();
+  if (!projectPath && viewNeedsProject(mainView)) return "editor";
   return mainView === "library" && !ordered ? "editor" : mainView;
 }

@@ -243,6 +243,27 @@ export type SideTab = "files" | "outline" | "search";
  */
 export type AppScreen = "files" | "outline" | "knowledge" | "library" | "settings";
 
+/**
+ * Whether a view is one an open folder is a precondition for.
+ *
+ * The knowledge base and the library are both *project* data — the wall reads
+ * `.ai-writer/lore/`, the library the book spine — so with no folder open they
+ * have nothing to show and nowhere to write. The editor is the only view that
+ * stands on its own: it is where the recents list is offered.
+ *
+ * The rule itself is applied in three places, all of which come back here:
+ * `projectStore.useMainView` (what renders and what the rail lights),
+ * `IconRail` (the buttons), and `useGlobalShortcuts` (⌘3 / ⌘4).
+ */
+export function viewNeedsProject(view: MainView): boolean {
+  return view === "lore-wall" || view === "library";
+}
+
+/** The same gate in the rail's vocabulary — see AppScreen on why there are two. */
+export function screenNeedsProject(screen: AppScreen): boolean {
+  return screen === "knowledge" || screen === "library";
+}
+
 interface AppState {
   theme: ThemeMode;
   language: Language;

@@ -25,12 +25,20 @@
     transform var(--transition-fast);
 }
 
-.item:hover {
+.item:hover:not(:disabled) {
   color: var(--color-sienna);
 }
 
-.item:active {
+.item:active:not(:disabled) {
   transform: scale(0.95);
+}
+
+/* No folder open: the knowledge base and the library have nothing behind them
+   (see appStore.viewNeedsProject). Dimmed rather than removed — the rail is
+   also how the author learns the app has them. */
+.item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .itemActive {

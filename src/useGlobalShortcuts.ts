@@ -15,8 +15,9 @@ import {
   type Combo,
 } from "./lib/shortcuts";
 import { navBack, navForward } from "./stores/navStore";
-import { useAppStore } from "./stores/appStore";
+import { screenNeedsProject, useAppStore } from "./stores/appStore";
 import { useEditorStore } from "./stores/editorStore";
+import { useProjectStore } from "./stores/projectStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
 import { findTask } from "./lib/profile";
 import { insideAiSurface, insideSelectableSurface, dropEditorMarker, resolveCommit } from "./lib/editor/aiSelection";
@@ -74,6 +75,11 @@ export function useGlobalShortcuts() {
       for (const { screen, combo } of SCREEN_COMBOS) {
         if (!matchesCombo(e, combo)) continue;
         e.preventDefault();
+        // 知识库 / 文库 are a folder's data — before one is open there is
+        // nothing behind ⌘3 and ⌘4, and the rail's own buttons are disabled
+        // for the same reason (appStore.screenNeedsProject). Swallowed rather
+        // than let through: the digit is still this listener's.
+        if (screenNeedsProject(screen) && !useProjectStore.getState().projectPath) return;
         useAppStore.getState().showScreen(screen);
         return;
       }

@@ -83,6 +83,7 @@
     "search": "Search",
     "searchComingSoon": "Search — coming soon",
     "library": "Library",
+    "needsProject": "Open a folder first",
     "settings": "Settings",
     "project": "PROJECT",
     "projectSearch": "Search documents & {{entries}}"

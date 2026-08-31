@@ -32,6 +32,7 @@ export default function App() {
   const {
     sidebarWidth, setSidebarWidth,
     sidebarCollapsed,
+    mainView: storedView, setMainView,
     showSettings, settingsTab, openSettings, closeSettings,
   } = useAppStore();
 
@@ -74,9 +75,20 @@ export default function App() {
     dragWidth.current = null;
   };
   const { loadConfig } = useAiStore();
-  // Not `mainView` from the store — see useMainView: a persisted view the active
-  // profile has no UI for falls back to the editor.
+  // Not `mainView` from the store — see useMainView: a view whose precondition
+  // isn't met (no folder open, for the knowledge base and the library) falls
+  // back to the editor.
   const view = useMainView();
+
+  // ...and the store follows that fallback rather than keeping the view it was
+  // bounced off. Otherwise a view set while it was gated would still be sitting
+  // there when a folder opens, and the author would land somewhere they never
+  // asked to go. The rail and ⌘3/⌘4 already refuse; this catches the paths with
+  // no button behind them — a citation click, a step Back into a project that
+  // has since been closed.
+  useEffect(() => {
+    if (storedView !== view) setMainView(view);
+  }, [storedView, view, setMainView]);
 
   useEffect(() => {
     loadConfig();
