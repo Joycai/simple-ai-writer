@@ -136,7 +136,12 @@
   gap: 1px;
   padding: 6px 12px;
   cursor: pointer;
+  /* 打开项目是本面板最重最慢的动作（扫文件树 + 开库 + 扫知识库），点下去到
+     载入完成之间界面本来毫无回执。同文件的 .openBtn:44 / .pinBtn:205 都有按压，
+     偏偏最重要的这个没有。 */
+  transition: transform var(--transition-fast);
 }
+.open:active:not(:disabled) { transform: scale(0.98); }
 .open:disabled { opacity: 0.5; cursor: wait; }
 .name {
   font: 500 12.5px/1.4 var(--font-sans);

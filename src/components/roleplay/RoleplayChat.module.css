@@ -228,7 +228,7 @@
   color: var(--color-text-hint);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 120ms var(--ease-out), color 120ms var(--ease-out);
+  transition: opacity var(--transition-fast), color var(--transition-fast);
 }
 .authorTurn:hover .rewindBtn { opacity: 1; }
 .rewindBtn:focus-visible { opacity: 1; outline: none; color: var(--color-accent); }

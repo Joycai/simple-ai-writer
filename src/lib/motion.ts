@@ -27,7 +27,7 @@ import type { Transition, Variants } from "motion/react";
 
 /** The CSS `--ease-out` token (tokens.css) as a Motion easing, so both motion
  *  languages in the app speak the same curve. Keep in step with tokens.css. */
-const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1];
+export const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 /**
  * Reduced-motion gate for the presets in this file. When the OS asks for
@@ -133,11 +133,4 @@ export const springDrawer: Transition = {
   stiffness: 360,
   damping: 40,
   mass: 0.9,
-};
-
-/** Centered modal pop — scale + fade + slight rise. */
-export const modalPop: Variants = {
-  initial: { opacity: 0, transform: "translateY(8px) scale(0.96)" },
-  animate: { opacity: 1, transform: "translateY(0px) scale(1)" },
-  exit: { opacity: 0, transform: "translateY(4px) scale(0.97)" },
 };

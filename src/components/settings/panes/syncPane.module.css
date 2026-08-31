@@ -47,9 +47,16 @@
   height: 9px;
   border: 1.5px solid var(--stg-border-mid);
   border-top-color: var(--stg-accent);
-  animation: syncSpin 800ms linear infinite;
+  animation: spin 800ms linear infinite;
 }
-@keyframes syncSpin { to { transform: rotate(360deg); } }
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
+   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .dotSpin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
 
 /* 连接表单:三种态(填写 / 失败 / 管理)都在同一块上就地变化。 */
 .connForm {

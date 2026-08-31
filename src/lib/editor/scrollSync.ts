@@ -57,6 +57,13 @@ export interface LinkScrollOptions {
   /** Injectable timers so tests don't have to wait in real time. */
   setTimeout?: (fn: () => void, ms: number) => number;
   clearTimeout?: (handle: number) => void;
+  /**
+   * Injectable rAF — same reason as setTimeout/clearTimeout above: the unit
+   * tests run in the `node` environment and drive fakes synchronously, so a
+   * real frame would never arrive before the assertion.
+   */
+  requestAnimationFrame?: (fn: () => void) => number;
+  cancelAnimationFrame?: (handle: number) => void;
 }
 
 // ── Anchor interpolation ──────────────────────────────────────────────────────
@@ -166,7 +173,7 @@ export function offsetAtLine(anchors: Anchors, line: number): number | null {
 /**
  * Link two scrollers so each follows the other proportionally.
  * Returns a cleanup that detaches both listeners and cancels any pending
- * release — safe to call more than once.
+ * frame and release — safe to call more than once.
  */
 export function linkScrollers(
   a: Scrollable,
@@ -176,6 +183,8 @@ export function linkScrollers(
   const releaseMs = options.releaseMs ?? 80;
   const setT = options.setTimeout ?? ((fn, ms) => window.setTimeout(fn, ms));
   const clearT = options.clearTimeout ?? ((h) => window.clearTimeout(h));
+  const raf = options.requestAnimationFrame ?? ((fn: () => void) => window.requestAnimationFrame(fn));
+  const cancelRaf = options.cancelAnimationFrame ?? ((h: number) => window.cancelAnimationFrame(h));
 
   // Which side the user is currently driving. While it's set, the other side's
   // handler is ignored, so the programmatic write below can't bounce back.
@@ -183,51 +192,91 @@ export function linkScrollers(
   let release: number | null = null;
   let detached = false;
 
+  /**
+   * One direction's listener, plus a way to drop its pending frame.
+   *
+   * A macOS trackpad emits scroll events faster than the display refreshes, and
+   * every one of them used to measure both panes (`scrollHeight`/`clientHeight`
+   * plus the mapping's `getBoundingClientRect` probes) and then write
+   * `scrollTop` — a read/write interleave across two subtrees, i.e. a forced
+   * synchronous layout per event, when only the last write of a frame is ever
+   * visible. So the measuring and the write are deferred to the next frame and
+   * the earlier frame of the same batch is cancelled: the newest position is
+   * the only one worth mirroring.
+   *
+   * `driver` is claimed in the *listener*, not in `run()`: echo suppression has
+   * to take effect the moment the event arrives, or the opposite pane's event
+   * in the same frame is read as user-driven and the two panes fight.
+   */
   const follow = (
     from: Scrollable,
     to: Scrollable,
     fromMap: ScrollMapping | undefined,
     toMap: ScrollMapping | undefined,
-  ) => () => {
-    if (detached) return;
-    if (driver && driver !== from) return;
-    driver = from;
+  ) => {
+    let frame: number | null = null;
 
-    const fromMax = from.scrollHeight - from.clientHeight;
-    const toMax = to.scrollHeight - to.clientHeight;
-    // A pane with nothing to scroll has no position to mirror. Bail rather
-    // than dividing by zero and writing NaN into scrollTop.
-    if (fromMax > 0 && toMax > 0) {
-      if (from.scrollTop <= 0) {
-        // The extremes snap before any mapping runs: each pane's leading
-        // padding sits *outside* its line space, so mapping there would leave
-        // the follower shy of its own edge — and "I scrolled to the top and so
-        // did the other pane" is the one alignment the author can verify at a
-        // glance.
-        to.scrollTop = 0;
-      } else if (from.scrollTop >= fromMax - 1) {
-        // -1: scrollTop clamps to fractional px on scaled displays, so the
-        // driven extreme can sit just under its max forever.
-        to.scrollTop = toMax;
-      } else {
-        let mapped = false;
-        if (fromMap && toMap) {
-          const line = fromMap.lineAtTop();
-          if (line !== null) mapped = toMap.scrollToLine(line);
+    const run = () => {
+      frame = null;
+      if (detached) return;
+
+      const fromMax = from.scrollHeight - from.clientHeight;
+      const toMax = to.scrollHeight - to.clientHeight;
+      // A pane with nothing to scroll has no position to mirror. Bail rather
+      // than dividing by zero and writing NaN into scrollTop.
+      if (fromMax > 0 && toMax > 0) {
+        if (from.scrollTop <= 0) {
+          // The extremes snap before any mapping runs: each pane's leading
+          // padding sits *outside* its line space, so mapping there would leave
+          // the follower shy of its own edge — and "I scrolled to the top and so
+          // did the other pane" is the one alignment the author can verify at a
+          // glance.
+          to.scrollTop = 0;
+        } else if (from.scrollTop >= fromMax - 1) {
+          // -1: scrollTop clamps to fractional px on scaled displays, so the
+          // driven extreme can sit just under its max forever.
+          to.scrollTop = toMax;
+        } else {
+          let mapped = false;
+          if (fromMap && toMap) {
+            const line = fromMap.lineAtTop();
+            if (line !== null) mapped = toMap.scrollToLine(line);
+          }
+          if (!mapped) to.scrollTop = (from.scrollTop / fromMax) * toMax;
         }
-        if (!mapped) to.scrollTop = (from.scrollTop / fromMax) * toMax;
       }
-    }
 
-    if (release !== null) clearT(release);
-    release = setT(() => {
-      release = null;
-      driver = null;
-    }, releaseMs);
+      if (release !== null) clearT(release);
+      release = setT(() => {
+        release = null;
+        driver = null;
+      }, releaseMs);
+    };
+
+    const listener = () => {
+      if (detached) return;
+      if (driver && driver !== from) return;
+      driver = from;
+
+      // A later scroll event in the same frame supersedes this one: only the
+      // last position needs mirroring.
+      if (frame !== null) cancelRaf(frame);
+      frame = raf(run);
+    };
+
+    const cancel = () => {
+      if (frame === null) return;
+      cancelRaf(frame);
+      frame = null;
+    };
+
+    return { listener, cancel };
   };
 
-  const onA = follow(a, b, options.mapA, options.mapB);
-  const onB = follow(b, a, options.mapB, options.mapA);
+  const a2b = follow(a, b, options.mapA, options.mapB);
+  const b2a = follow(b, a, options.mapB, options.mapA);
+  const onA = a2b.listener;
+  const onB = b2a.listener;
   a.addEventListener("scroll", onA, { passive: true });
   b.addEventListener("scroll", onB, { passive: true });
 
@@ -236,6 +285,10 @@ export function linkScrollers(
     detached = true;
     a.removeEventListener("scroll", onA);
     b.removeEventListener("scroll", onB);
+    // A frame scheduled by the last event would otherwise measure a pane the
+    // view has already torn down.
+    a2b.cancel();
+    b2a.cancel();
     if (release !== null) {
       clearT(release);
       release = null;

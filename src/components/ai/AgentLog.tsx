@@ -346,7 +346,7 @@ function ToolStepRow({ step }: { step: ToolStep }) {
         <span className={styles.rowProgress} aria-hidden="true">
           <span
             className={styles.rowProgressFill}
-            style={{ width: `${Math.round(Math.min(1, Math.max(0, progress.ratio)) * 100)}%` }}
+            style={{ transform: `scaleX(${Math.min(1, Math.max(0, progress.ratio))})` }}
           />
         </span>
       )}

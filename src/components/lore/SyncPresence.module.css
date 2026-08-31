@@ -41,9 +41,16 @@
   height: 9px;
   border: 1.5px solid var(--color-border);
   border-top-color: var(--color-sienna);
-  animation: presenceSpin 800ms linear infinite;
+  animation: spin 800ms linear infinite;
 }
-@keyframes presenceSpin { to { transform: rotate(360deg); } }
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
+   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .dotSpin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
 
 .label { font: 500 12.5px/1 var(--font-serif); color: var(--color-text-primary); }
 .labelRisk { color: var(--sync-risk-text); }

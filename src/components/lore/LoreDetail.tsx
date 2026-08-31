@@ -185,7 +185,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const triggerFlash = (id: string) => {
     if (useLoreStore.getState().detailMode !== "read") return;
     if (flashTimer.current) clearTimeout(flashTimer.current);
-    setFlashId(id);
+    // 先置 null 再下一帧设回，否则连续两次保存同一节时 setFlashId 拿到相同值、
+    // React 跳过重渲染，.flash 类从未离开元素，sectFlash 不重播——第二次保存
+    // 静默无回执。同 ProvidersModelsPane.tsx:90 的既有处方。
+    setFlashId(null);
+    requestAnimationFrame(() => setFlashId(id));
     flashTimer.current = setTimeout(() => setFlashId(null), 1500);
   };
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
@@ -1162,6 +1166,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </div>
       ) : detailMode === "read" ? (
         <LoreReadView
+          // 换条目＝重新挂载：这既让入场淡入落在真正的内容替换上（不换 key 的话
+          // entity prop 变了但组件不重挂，整张纸一帧硬切），也顺带把 .wall 的
+          // scrollTop 归零——它自己就是滚动容器，否则翻到下一条会落在上一条的
+          // 滚动偏移上、正文中段。
+          key={entity.dirPath}
           entity={entity}
           indexBody={content}
           indexLoaded={contentLoaded}

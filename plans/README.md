@@ -429,3 +429,219 @@ reduced-motion 块也已确认按 (0,3,0) 发出（`animation: none` + 静态
 尤其是三条：空行结尾的文档能否看到整行色带（选 `Decoration.line` 的全部理由）、
 reduced-motion 下色带是否仍然出现、以及 **1.6s 的整行色带会不会太抢眼**——最后这条
 是方案里明写的、唯一允许调整的值（1.6s → 1s），由作者目检后定。
+
+## 第八批（031–040，基准 43b52e9）
+
+来源是一轮完整的 `improve-animations` 审计（recon → 四个只读子代理并行审 8 类 →
+逐条回到 `file:line` 复核）。前七批的结论依然成立：全库**零** `transition: all`、
+**零** `ease-in`、**零** `scale(0)`、**零** Motion `x/y/scale` 简写，
+`useMotionPreset()` 那条不变量在全部 6 个消费点都成立。**本批发现几乎全部落在
+`5f9d25a` 之后新增的代码上**——新文件没接上既有约定，而不是既有约定错了。
+与第五、六批是同一个模式。
+
+| # | 方案 | 严重度 | 状态 |
+| --- | --- | --- | --- |
+| 031 | [侧栏折叠不再过渡 width](031-sidebar-collapse-no-transition.md) | HIGH | DONE |
+| 032 | [「移到分类」浮层补入场与锚定](032-category-move-menu-entrance.md) | HIGH | DONE |
+| 033 | [阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器](033-lore-read-entrance-token-and-trigger.md) | HIGH | DONE |
+| 034 | [分屏滚动联动合并到 rAF](034-scrollsync-raf-coalesce.md) | MEDIUM | DONE |
+| 035 | [两个同步 spinner 补 reduced-motion 豁免](035-sync-spinners-reduced-motion.md) | MEDIUM | DONE |
+| 036 | [AgentLog 进度条改用 transform: scaleX](036-agentlog-progress-composite.md) | MEDIUM | DONE |
+| 037 | [删除分类确认框补入场与按压](037-category-delete-modal-entrance.md) | MEDIUM | DONE |
+| 038 | [扮演计时从 10Hz 降到 1Hz](038-roleplay-timer-rerender.md) | MEDIUM | DONE |
+| 039 | [最近项目行补按压反馈](039-recent-projects-row-press.md) | MEDIUM | DONE |
+| 040 | [两处一次性闪烁在重复触发时静默失效](040-one-shot-flash-retrigger.md) | LOW-MED | DONE |
+
+**031 单独审阅**：它删掉一个用户看得见的动效（侧栏折叠过渡），是**产品决策**
+而不只是代码，体例同方案 014，带一步 design-system.md 同步。
+
+**033 是两条发现的合并**：手写 `cubic-bezier` + `readIn` 克隆（内聚回归），
+与「入场挂错了触发器」（`R` 键重放整张纸滑入 / 换条目零动效且不重置滚动）。
+它们改的是同一段三行 CSS，拆开会互相推翻。
+
+### 推荐执行顺序与依赖
+
+1. **032**（2 行 CSS，零风险，015 的漏网之鱼）
+2. **031**（删 1 行 + 文档同步；杠杆最高，但含产品决策）
+3. **033**（3 行 CSS + 1 个 `key`；让 022 的 `cubic-bezier` 不变量回到零）
+4. **034**（**唯一有陷阱的一份**：`scrollSync.test.ts` 是同步断言的，
+   rAF 必须做成可注入，否则会打挂 8 条断言）
+5. **035 / 036 / 037 / 038 / 039**（互不依赖，可并行）
+6. **040**（**必须在 033 之后**——两者都改 `LoreDetail.tsx`）
+
+依赖关系：**033 → 040**（同一个 `LoreDetail.tsx`）。其余九份改动文件零重叠，
+可并行执行：
+
+| 方案 | 触碰的文件 |
+|---|---|
+| 031 | `layout/Sidebar.module.css`、`docs/reference/design-system.md` |
+| 032 | `lore/CategoryMoveMenu.module.css` |
+| 033 | `lore/LoreReadView.module.css`、`lore/LoreDetail.tsx` |
+| 034 | `lib/editor/scrollSync.ts`、`lib/__tests__/scrollSync.test.ts` |
+| 035 | `settings/panes/syncPane.module.css`、`lore/SyncPresence.module.css` |
+| 036 | `ai/AgentLog.module.css`、`ai/AgentLog.tsx` |
+| 037 | `lore/CategoryDeleteModal.module.css` |
+| 038 | `roleplay/RoleplayChat.tsx` |
+| 039 | `layout/RecentProjects.module.css` |
+| 040 | `lib/editor/caretFlash.ts`、`lore/LoreDetail.tsx` |
+
+**均不新增 `global.css` 的关键帧，也不新增 Motion 预设。** 各份复用的
+`fadeIn`、`scaleIn`、`dropIn`、`spin` 都已存在；任何一份若打算新增关键帧，
+都说明理解偏了，且会撞上方案 019 的 `cssKeyframeNames.test.ts`。
+033 与 035 是**净删除**关键帧（`readIn` / `syncSpin` / `presenceSpin`），
+019 的测试正好是它们的回归网。
+
+### 本批未立案的 LOW 档（有据可查，日后可捡）
+
+令牌与关键帧收敛批（`EASE_OUT` 手打三份且 `motion.ts:30` 未导出、
+`DocFormat.module.css` 4 处裸 `ease`、2 处手写展开 `120ms var(--ease-out)`、
+`writerPulse`≡`pulseDeep`、`modalPop` 与 `--ease-spring` 均零消费者、
+`orderFlash 400ms` 超预算）；`LoreReadView` 未过渡的三处 hover 与
+`.cover`/`.figure` 无按压；`.modeBtnActive` 的 3px 几何跳动；
+`LoreReadView.module.css:21` 的死 reduced-motion 块（已由 033 顺带删除）；
+`RecentProjects`/`ResizeHandle` 的 `width` 过渡。
+
+### 审计时明确**否掉**的候选（不要「顺手补上」）
+
+`@media (hover:hover)` 门（全库零处，但这是 Tauri 桌面应用，触摸假 hover 不是
+真实故障模式）；`RecentProjects` 的 `height: auto` 折叠（稀有 + 惯用写法，
+其 `initial={false}` 与 240/160 非对称都是对的）；**任何形式的错峰**
+（方案 025/027 已两次按实测撤回）；`collections.module.css:277` 的
+`border-left-color`（纯 paint，两态都是 3px，注释已说明）；
+`App.tsx:50-75` 的拖拽（已 rAF 合并 + 补尾帧 + 抑制过渡，教科书级）。
+
+### 审计路过发现的一处**非动效**缺陷（未立案，单独记录）
+
+`src/components/lore/LoreReadView.tsx:530-546` 引用了十个在
+`LoreReadView.module.css` 里**不存在**的类（`dictTable`、`dictHeadRow`、
+`dictColSrc`、`dictColDst`、`dictColNote`、`dictSrc`、`dictDst`、`dictNote`、
+`dictRow`、`dictRest`）。`grep` 确认全库只有 `.tsx` 侧的使用、没有任何定义，
+于是每个都解析成 `undefined`，`dict: true` 条目的词典表渲染成无样式的堆叠
+`<span>`。与动效无关，故不在本批范围内。
+
+### 执行记录（2026-08-31，基准 43b52e9）
+
+031–040 已全部落地。门禁：`pnpm exec tsc --noEmit` 无诊断 ·
+`pnpm test` **218 文件 / 3150 用例全绿**（含方案 019 的 `cssKeyframeNames.test.ts`
+——本批净删三个关键帧，它正是这次删除的回归网）· `pnpm build` 成功。
+
+按「阻断 A」的判据核验了构建产物（本仓库唯一能在不跑应用的情况下证明动画真的会播）：
+
+```
+被删关键帧 readIn / syncSpin / presenceSpin 在产物中          →  全部不存在
+带作用域后缀（_riseIn_<hash>_1 那种）的动画引用                →  0 处
+riseIn 引用 4 → 5（032）· dropIn 8 → 8（未变，如方案要求）
+spin 引用 +2（035 的两个 spinner 收敛回全局）
+animation-duration:1.6s !important 的本地豁免  9 → 11 个文件（035 的两个）
+transition 里仍带 width 的规则：只剩 RecentProjects / ResizeHandle 两处 LOW 档
+  （侧栏那条 --transition-slow 的 width 已消失，031 生效）
+.rowProgressFill → transform-origin:0; width:100%; transition:transform（036，
+  与范本 .progressFill 的产物形状完全一致）
+.menu（移到分类）→ animation:riseIn .14s var(--ease-out); transform-origin:0 100%
+```
+
+**一处方案自身的错误，执行时被发现并已更正（032）。** 初稿处方写的是
+`dropIn`，理由只考虑了「原点在下」而没查关键帧的方向语义。执行者照方案办事
+并在报告里提出疑问，经核实：`global.css:100` 的注释早就把规则定死了——
+「下挂用 dropIn（从触发器落下），上挂用 riseIn」——而本菜单的锚点恒为
+`above: true`（`LoreWall.tsx:1039` 是唯一调用点）。`dropIn` 会让菜单从 4px
+上方**掉下来**，与它实际生长的方向相反。方案与代码均已改为 `riseIn`，
+方案顶部留了修正记录。
+
+**一处执行判断已收敛（033）。** 方案 Step 3 说「删掉整个 `@media` 块换成注释」，
+而 Target 代码块画的是保留空壳、注释放在里面；执行者按 Target 办。最终采用
+**裸注释、不留空 `@media` 壳**——留着空壳恰恰会造成注释本身警告的那种误读
+（读者扫到一个媒体查询就以为此处已温和降级）。
+
+**目检仍待作者**（需真 Tauri 窗口）。每份方案的 Verification 一节都写了具体步骤，
+其中六条最关键的回归：
+
+1. **031** 长文档 + 分屏下反复折叠侧栏，正文**一次到位**不再连续重排折行；
+   Performance 面板该区间的 Layout 计数应从 ~19 降到个位数。
+2. **032** 「移到分类」菜单必须**升起**而不是落下——看到它先在上方 4px 再下沉，
+   说明有人改回了 `dropIn`。
+3. **033** 按 `R` 切模式不再有整张纸滑入；滚到正文中段点「下一条」，
+   新条目应**从顶部**开始并淡入。
+4. **034** 触控板惯性滚动分屏跟随不得抖动或来回弹跳（弹跳＝`driver` 归属被挪错帧）。
+5. **035** 开系统「减弱动态效果」后，两个同步指示器仍在转（慢一半），
+   不再冻成静止残环。
+6. **040** 1.6s 内**连按两次**「跳到结尾」，第二次也必须闪。
+
+## 第九批（041–043，基准 43b52e9 + PR #430）
+
+第八批把非 LOW 的十一条清完之后，作者要求继续处理 LOW 档。**不是新一轮审计**——
+这三份就是第八批「本批未立案的 LOW 档」那一节列出的内容，逐条回到 `file:line`
+复核仍然成立之后立的案（`033` 顺带删掉的那个死 reduced-motion 块已从清单移除）。
+
+| # | 方案 | 严重度 | 状态 |
+| --- | --- | --- | --- |
+| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
+| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
+| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
+
+- **041** 体例同方案 022（005 的漏网之鱼），七处同一类修法：`--ease-out` 的控制点
+  手打了三份（`motion.ts:30` 是 `const` 而非 `export const`，所以
+  `RecentProjects.tsx:34` 只能再抄一遍）、全库仅有的四条裸 `ease`、两处把
+  `--transition-fast` 手工展开、`writerPulse` ≡ `pulseDeep`、`orderFlash` 400ms
+  超预算、`modalPop` 零消费者。
+- **042** `LoreReadView` 三处悬停变色无过渡、目录主项比子项少一个悬停态、
+  两个 `cursor: zoom-in` 入口零反馈。
+- **043** `.modeBtnActive` 的 `border-left: 3px` + `font-weight: 500` 都改变固有
+  宽度且都不在过渡列表里——背景礼貌地渐变，几何瞬间跳。**与方案 020 目检时在
+  `.railRowOn` 抓到的是同一个失效模式**（见上面「三处更正」第一条）。
+
+### 推荐执行顺序与依赖
+
+**042 → 043**（都动 `lore/` 下的界面，但文件不同；顺序只是为了目检时一起看）。
+**041 可与两者并行**——它是唯一动 TS 的一份，且改动文件与另两份零重叠。
+
+| 方案 | 触碰的文件 |
+|---|---|
+| 041 | `lib/motion.ts`、`layout/RecentProjects.tsx`、`settings/panes/DocFormat.module.css`、`ai/SnippetPicker.module.css`、`roleplay/RoleplayChat.module.css`、`ai/WriterTurn.module.css`、`settings/panes/ProvidersModels.module.css` |
+| 042 | `lore/LoreReadView.module.css` |
+| 043 | `lore/LoreDetail.module.css` |
+
+**041 是唯一会删关键帧的一份**（`writerPulse`），方案 019 的
+`cssKeyframeNames.test.ts` 是它的回归网。
+
+### 三条执行时最容易踩空的地方
+
+1. **041 的 `140ms` 不要改成 `120ms`。** DocFormat 那三条的时长不是任何令牌，
+   只换曲线（`140ms var(--ease-out)`）；只有 `:802` 的 `120ms ease` 恰好等于
+   `--transition-fast`，整条换令牌。混为一谈会顺手改掉三处控件的节奏。
+2. **041 不要删 `--ease-spring`。** 它确实零消费者，但它是 design-system.md
+   记载的设计词汇，删它是**设计决策**不是清理。这与删 `modalPop` 不同——
+   后者是一套与既有 CSS 模态语汇竞争的第二实现。
+3. **043 不要用 `padding-left` 补偿几何。** 方案 020 的目检记录（「三处更正」
+   第一条）证明那条路会算错，而且是**静默**错的。用基态透明边框占位。
+
+### 执行记录（2026-08-31，基准 43b52e9 + PR #430）
+
+041–043 已全部落地。门禁：`pnpm exec tsc --noEmit` 无诊断 ·
+`pnpm test` 218 文件 / 3150 用例全绿（含 `cssKeyframeNames.test.ts`——041 删了
+`writerPulse`）· `pnpm build` 成功。产物核验：
+
+```
+writerPulse 在产物中已不存在 · pulseDeep 引用 3 → 4
+裸 ease（形如 "140ms ease"）                                 →  归零
+--ease-out 的控制点                                          →  只剩 tokens.css:47 与 motion.ts:30
+.modeBtn 基态  → border-left:3px solid #0000（占位，几何恒定）
+.modeBtnActive → 只换 border-left-color + text-shadow，font-weight 保持 400
+```
+
+**一处方案自身的抄录错误，执行时被发现并已更正（042）。** §B 引的 `.tocItem`
+代码块误抄成了 `.tocSub` 的值（`10px` / `--color-text-faint`，实际是 `11px` /
+`--color-text-muted`，且还有 `gap`/`padding`/`border` 三条）。**结论不受影响**
+——`.tocItem` 确实有基态规则、确实没有 `:hover`，而 Target 写的是「既有声明
+不变」的纯追加。执行者照方案办事、发现不符后按判断继续而非停下，是对的：
+方案 Boundaries 里「对不上就停」针对的是**处方所依赖的**代码发生漂移，
+而这里漂移的是引文本身。方案顶部已留更正记录。
+
+**目检待作者。** 043 的判据最明确、也最容易验出改坏：
+
+- 反复点切换器（或按 `R`），盯住两个格子的**文字左沿**——必须**完全不动**。
+  改动前每次切换都横跳几像素。可用 DevTools 对同一个 `.modeBtn` 读两态的
+  `getBoundingClientRect().width`，两次应相等。
+- 选中项的字仍应比未选中项重一点点。若看起来完全一样，把 `text-shadow` 的
+  模糊值 0.4px 调到 0.5px；若发糊，调到 0.3px。**不要**改回 `font-weight`。
+- 042：图库里按住一张图，只有**图片**缩、图注文字不动。
