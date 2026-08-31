@@ -8,10 +8,11 @@ import {
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
   ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
+  Monitor, Presentation,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
-import { fileExists } from "../../lib/fs/fileio";
+import { fileExists, previewHtmlWindow } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, ancestorsOf, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -24,6 +25,7 @@ import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, convertExtOf, convertProjectFile, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
+import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
 import { comboLabel, matchesCombo } from "../../lib/shortcuts";
@@ -547,7 +549,11 @@ export function FileTree() {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  const [converting, setConverting] = useState<string | null>(null);
+  /**
+   * 一次只做一件慢活。转换和导出都要把整份文档读进来跑上几秒，而且都会往目标目录
+   * 里写 —— 两个并发就是两串写入交织。文案随手做的事变，位置不变。
+   */
+  const [busy, setBusy] = useState<{ path: string; text: string } | null>(null);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [draggingPaths, setDraggingPaths] = useState<ReadonlySet<string>>(new Set());
   const [dragOverDir, setDragOverDir] = useState<string | null>(null);
@@ -1004,8 +1010,8 @@ export function FileTree() {
    * `assets/<文档名>/` 里写。转完把新文档打开——作者点它就是为了读它。
    */
   const handleConvert = async (node: FileNode) => {
-    if (converting) return;
-    setConverting(node.path);
+    if (busy) return;
+    setBusy({ path: node.path, text: t("fileTree.converting", { name: node.name }) });
     setTransferError(null);
     try {
       const target = await convertProjectFile(node.path);
@@ -1016,7 +1022,51 @@ export function FileTree() {
       const message = err instanceof Error ? err.message : String(err);
       setTransferError(`${t("fileTree.convertFailed", { name: node.name })} ${message}`);
     } finally {
-      setConverting(null);
+      setBusy(null);
+    }
+  };
+
+  /**
+   * `.html` 的两件事，和预览工具条上的那两个按钮是**同一段代码**（`previewHtmlWindow`
+   * / `exportHtmlToPptx`），只是从树上够得着 —— 一份交付稿不必先在编辑器里打开才能
+   * 预览或导出。
+   *
+   * 两者都先 flush 编辑器：它们都从**磁盘**读那份文件，而作者刚敲的字可能还在缓冲区
+   * 里，导出上一次自动保存的版本是一句悄悄话式的谎。
+   */
+  const flushIfOpen = async (path: string) => {
+    const editor = useEditorStore.getState();
+    if (isSamePath(editor.filePath, path) && editor.isDirty) await editor.saveNow();
+  };
+
+  const handlePreviewHtml = async (node: FileNode) => {
+    try {
+      await flushIfOpen(node.path);
+      await previewHtmlWindow(node.path);
+    } catch (err) {
+      console.error("[fileTree] preview failed:", err);
+      setTransferError(`${t("fileTree.previewFailed", { name: node.name })} ${err}`);
+    }
+  };
+
+  const handleExportPptx = async (node: FileNode) => {
+    if (busy) return;
+    setBusy({ path: node.path, text: t("fileTree.exportingPptx", { name: node.name }) });
+    setTransferError(null);
+    try {
+      await flushIfOpen(node.path);
+      // 懒加载：pptxgenjs 有自己的 chunk，没开这个 Beta 的项目不该为它付下载。
+      const { exportHtmlToPptx } = await import("../../lib/pptx");
+      const result = await exportHtmlToPptx(node.path);
+      await refreshFileTree();
+      setNotice({
+        text: t("fileTree.exportedPptx", { name: baseName(result.path), count: result.slides }),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.exportPptxFailed", { name: node.name })} ${message}`);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -1322,16 +1372,34 @@ export function FileTree() {
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
           action: () => setActiveFilePath(node.path) },
       );
-      // 这一格是「拿这个文件能做什么」，而它的两半互不重叠：能转换的四种格式
-      // 恰好是 `classifyProjectFile` 认不出的那些（模型收不下 zip 包），所以
-      // 一行文档上永远只出现「转换文档」和「发送到助手」中的一个。
+      // 「预览」指的是**另开的预览窗口**，不是编辑器右边那半 —— 打开这份文件本来
+      // 就会显示预览面板，菜单里再放一个同义的项没有意义。那个窗口有自己的自定义
+      // 协议、不在应用的 CSP 底下，是页面里的脚本**真正跑起来**的唯一地方。
+      if (rowKind(node.name, false, null) === "deliverable") {
+        items.push({
+          kind: "item", icon: <Monitor size={13} />, label: t("fileTree.previewHtml"),
+          action: () => void handlePreviewHtml(node),
+        });
+      }
+      // 这一格从上到下是三问：用它 / 拿它造一个新文件 / 把它交到别处去。中间这段
+      // 的两项互斥 —— 能转换的四种格式恰好是 `classifyProjectFile` 认不出的那些
+      // （模型收不下 zip 包），而导出成幻灯只发生在 `.html` 上。
       if (convertExtOf(node.name)) {
         items.push({
           kind: "item",
           icon: <FileOutput size={13} />,
           label: t("fileTree.convertDoc"),
-          disabled: converting !== null,
+          disabled: busy !== null,
           action: () => void handleConvert(node),
+        });
+      }
+      // Beta 关着时**不是禁用而是不存在**（与 `export_pptx` 工具同一条规矩）：
+      // 一个作者没打开的能力，不该在菜单里留一行灰字解释自己。
+      if (rowKind(node.name, false, null) === "deliverable" && isPptxExportEnabled()) {
+        items.push({
+          kind: "item", icon: <Presentation size={13} />, label: t("fileTree.exportPptx"),
+          disabled: busy !== null,
+          action: () => void handleExportPptx(node),
         });
       }
       // Only on files the assistant can take (the `@` picker's own kinds) —
@@ -1626,13 +1694,12 @@ export function FileTree() {
         </div>
 
         {/* 就地展开的确认条，不弹模态。说的是**数量** —— 那是树自己没法说的话。
-            转换中的提示走同一条：它没有倒计时（一份几十页的 pdf 会转到 NOTICE_MS
-            之后），所以不能用 notice 本身来表达，否则条会在转换途中自己消失。 */}
-        {converting ? (
+            慢活的提示走同一条：它没有倒计时（一份几十页的 pdf、一页要离屏渲染的
+            幻灯都会跑过 NOTICE_MS），所以不能用 notice 本身来表达，否则条会在事
+            情还没做完的时候自己消失。 */}
+        {busy ? (
           <div className={styles.notice} role="status">
-            <span className={styles.noticeText}>
-              {t("fileTree.converting", { name: baseNameOf(converting) })}
-            </span>
+            <span className={styles.noticeText}>{busy.text}</span>
           </div>
         ) : notice && (
           <div className={styles.notice} role="status">
