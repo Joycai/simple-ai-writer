@@ -158,10 +158,11 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
 export const WINDOW_LOCAL_PREF_KEYS: readonly string[] = [
   // The assistant drawer's tab (生成 / 聊天 / 一致性 / 扮演).
   "app:aiDrawerMode",
-  // Layout the author drags: both side panels and the preview's zoom.
+  // Layout the author drags: both side panels, preview zoom, and draft count.
   "app:sidebarWidth",
   "app:rightPanelWidth",
   "app:previewZoom",
+  "app:draftCount",
   // "What is selected right now" — the header model picker, the prompt, and
   // the two model picks made from a modal rather than from Settings. The
   // subagent bindings deliberately stay shared: those are configured once in
