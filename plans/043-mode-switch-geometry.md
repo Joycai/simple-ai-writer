@@ -1,6 +1,6 @@
 # 043 — 阅读/管理切换器：消除 3px 几何跳动，补按压
 
-- **Status**: TODO
+- **Status**: DONE（门禁已过，目检待作者）
 - **Commit**: 43b52e9（+ PR #430 的 031–040）
 - **Severity**: LOW
 - **Category**: 5 性能 / 8 该动而没动 / 3 物理性

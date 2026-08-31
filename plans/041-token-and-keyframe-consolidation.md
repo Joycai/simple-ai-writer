@@ -1,6 +1,6 @@
 # 041 — 令牌归位与关键帧去重（第八批的 LOW 收敛批）
 
-- **Status**: TODO
+- **Status**: DONE（门禁已过，目检待作者）
 - **Commit**: 43b52e9（+ PR #430 的 031–040）
 - **Severity**: LOW
 - **Category**: 7 内聚与令牌 / 2 缓动

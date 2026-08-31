@@ -575,9 +575,9 @@ transition 里仍带 width 的规则：只剩 RecentProjects / ResizeHandle 两�
 
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | TODO |
-| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | TODO |
-| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | TODO |
+| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
+| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
+| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
 
 - **041** 体例同方案 022（005 的漏网之鱼），七处同一类修法：`--ease-out` 的控制点
   手打了三份（`motion.ts:30` 是 `const` 而非 `export const`，所以
@@ -614,3 +614,34 @@ transition 里仍带 width 的规则：只剩 RecentProjects / ResizeHandle 两�
    后者是一套与既有 CSS 模态语汇竞争的第二实现。
 3. **043 不要用 `padding-left` 补偿几何。** 方案 020 的目检记录（「三处更正」
    第一条）证明那条路会算错，而且是**静默**错的。用基态透明边框占位。
+
+### 执行记录（2026-08-31，基准 43b52e9 + PR #430）
+
+041–043 已全部落地。门禁：`pnpm exec tsc --noEmit` 无诊断 ·
+`pnpm test` 218 文件 / 3150 用例全绿（含 `cssKeyframeNames.test.ts`——041 删了
+`writerPulse`）· `pnpm build` 成功。产物核验：
+
+```
+writerPulse 在产物中已不存在 · pulseDeep 引用 3 → 4
+裸 ease（形如 "140ms ease"）                                 →  归零
+--ease-out 的控制点                                          →  只剩 tokens.css:47 与 motion.ts:30
+.modeBtn 基态  → border-left:3px solid #0000（占位，几何恒定）
+.modeBtnActive → 只换 border-left-color + text-shadow，font-weight 保持 400
+```
+
+**一处方案自身的抄录错误，执行时被发现并已更正（042）。** §B 引的 `.tocItem`
+代码块误抄成了 `.tocSub` 的值（`10px` / `--color-text-faint`，实际是 `11px` /
+`--color-text-muted`，且还有 `gap`/`padding`/`border` 三条）。**结论不受影响**
+——`.tocItem` 确实有基态规则、确实没有 `:hover`，而 Target 写的是「既有声明
+不变」的纯追加。执行者照方案办事、发现不符后按判断继续而非停下，是对的：
+方案 Boundaries 里「对不上就停」针对的是**处方所依赖的**代码发生漂移，
+而这里漂移的是引文本身。方案顶部已留更正记录。
+
+**目检待作者。** 043 的判据最明确、也最容易验出改坏：
+
+- 反复点切换器（或按 `R`），盯住两个格子的**文字左沿**——必须**完全不动**。
+  改动前每次切换都横跳几像素。可用 DevTools 对同一个 `.modeBtn` 读两态的
+  `getBoundingClientRect().width`，两次应相等。
+- 选中项的字仍应比未选中项重一点点。若看起来完全一样，把 `text-shadow` 的
+  模糊值 0.4px 调到 0.5px；若发糊，调到 0.3px。**不要**改回 `font-weight`。
+- 042：图库里按住一张图，只有**图片**缩、图注文字不动。

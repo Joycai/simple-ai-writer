@@ -1,6 +1,6 @@
 # 042 — 阅读模式补齐悬停过渡与缩放入口的按压反馈
 
-- **Status**: TODO
+- **Status**: DONE（门禁已过，目检待作者）
 - **Commit**: 43b52e9（+ PR #430 的 031–040）
 - **Severity**: LOW
 - **Category**: 3 物理性 / 7 内聚
