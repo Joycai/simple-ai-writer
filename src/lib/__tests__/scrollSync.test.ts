@@ -55,6 +55,15 @@ function manualTimers() {
         return next++;
       },
       clearTimeout: (h: number) => void pending.delete(h),
+      // The frame runs inline, so the assertions below still read the result
+      // in the same turn as the write that caused it. What is being pinned
+      // here is the mapping, not the scheduling — `manualFrames` is what
+      // exercises the coalescing.
+      requestAnimationFrame: (fn: () => void) => {
+        fn();
+        return 0;
+      },
+      cancelAnimationFrame: () => {},
     },
     /** Fire everything currently scheduled. */
     flush() {
@@ -63,6 +72,36 @@ function manualTimers() {
         fn();
       }
     },
+    size: () => pending.size,
+  };
+}
+
+/**
+ * Frames we step manually, so a whole batch of scroll events can be delivered
+ * before anything is measured — which is exactly what a real frame does.
+ */
+function manualFrames() {
+  const pending = new Map<number, () => void>();
+  let next = 1;
+  let scheduled = 0;
+  return {
+    opts: {
+      requestAnimationFrame: (fn: () => void) => {
+        scheduled++;
+        pending.set(next, fn);
+        return next++;
+      },
+      cancelAnimationFrame: (h: number) => void pending.delete(h),
+    },
+    /** Run everything currently scheduled. */
+    flush() {
+      for (const [h, fn] of [...pending]) {
+        pending.delete(h);
+        fn();
+      }
+    },
+    /** How many frames were ever requested (cancelled ones included). */
+    scheduled: () => scheduled,
     size: () => pending.size,
   };
 }
@@ -144,6 +183,57 @@ describe("linkScrollers", () => {
     linkScrollers(a, b, manualTimers().opts);
     a.scrollTop = 0;
     expect(Number.isNaN(b.scrollTop)).toBe(false);
+    expect(b.scrollTop).toBe(0);
+  });
+
+  /**
+   * A trackpad emits scroll events faster than the display refreshes, and each
+   * one used to measure both panes and write scrollTop — a forced synchronous
+   * layout per event, when only the last write of the frame is ever seen. The
+   * batch below must therefore cost exactly one measurement, at the newest
+   * position.
+   */
+  it("coalesces a frame's worth of scroll events into a single measurement", () => {
+    const a = fakeScroller(2000, 500); // max 1500
+    const b = fakeScroller(5000, 500); // max 4500
+    const t = manualTimers();
+    const f = manualFrames();
+    linkScrollers(a, b, { ...t.opts, ...f.opts });
+
+    // Each write to b is one measure-and-mirror pass, so counting b's scroll
+    // events counts the passes.
+    let mirrored = 0;
+    b.addEventListener("scroll", () => mirrored++);
+
+    a.scrollTop = 300;
+    a.scrollTop = 600;
+    a.scrollTop = 900;
+
+    // Nothing measured yet: three events, one frame still pending.
+    expect(mirrored).toBe(0);
+    expect(b.scrollTop).toBe(0);
+    expect(f.scheduled()).toBe(3); // each event asked for a frame...
+    expect(f.size()).toBe(1); // ...and superseded the one before it
+
+    f.flush();
+    expect(mirrored).toBe(1); // the two earlier frames were cancelled, not run
+    expect(b.scrollTop).toBe(2700); // 900/1500 * 4500 — the last position, not the first
+    expect(f.size()).toBe(0);
+  });
+
+  it("cancels a pending frame on cleanup, so no measurement outlives the view", () => {
+    const a = fakeScroller(2000, 500);
+    const b = fakeScroller(5000, 500);
+    const t = manualTimers();
+    const f = manualFrames();
+    const stop = linkScrollers(a, b, { ...t.opts, ...f.opts });
+
+    a.scrollTop = 750;
+    expect(f.size()).toBe(1);
+
+    stop();
+    expect(f.size()).toBe(0);
+    f.flush();
     expect(b.scrollTop).toBe(0);
   });
 

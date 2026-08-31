@@ -12,15 +12,18 @@
     linear-gradient(90deg, var(--lore-wall-grid) 1px, transparent 1px);
   background-size: 36px 36px;
   container-type: inline-size;
-  animation: readIn 200ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* 入场只是一次淡入，不是位移：这块 .wall 由「进入阅读态」和「换条目」两件事
+     挂载，而前者的触发器是无修饰键的 R（LoreDetail.tsx:224），一整张 820px 的
+     纸每次都从右边滑进来属 AUDIT §1「大幅减弱」那一档。换成纯 opacity 之后，
+     两个方向也终于对称了——管理台那半本来就没有入场。 */
+  animation: fadeIn 120ms var(--ease-out);
 }
-@keyframes readIn {
-  from { opacity: 0; transform: translateX(24px); }
-  to   { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .wall { animation: fadeIn 120ms var(--ease-out); }
-}
+/* 这里**没有** prefers-reduced-motion 本地豁免，是故意的：全局 global.css:138
+   会用 !important 把 animation-duration 压到 0.001ms，一条不带 !important 的本地
+   规则压不过它。而这次动效是纯 opacity、不承载信息，瞬时呈现是可接受的降级。
+   （对比 AgentLog.module.css:377 那种**带 !important** 的豁免——那是给 spinner
+   用的，静止的残环与卡死无法区分。）不要在这里补一个空的 @media 壳：读者会以为
+   此处已经温和降级了。 */
 
 .stage {
   display: flex;

@@ -7,7 +7,12 @@
   flex-direction: column;
   overflow: hidden;
   flex-shrink: 0;
-  transition: width var(--transition-slow), border-right-width var(--transition-slow);
+  /* 折叠/展开不过渡：width 是布局属性，而侧栏是布局行里从不卸载的 flex 子元素
+     （App.tsx:152 只换类名），过渡期间每一帧都会让 flex:1 的内容列换宽度、
+     CodeMirror 重新测量折行并重渲视口——320ms 约 19 次全文档列回流。且触发器
+     是 IconRail 再点一次已激活标签（与 100+/天的切标签同一颗按钮），属 AUDIT
+     §1「永不动画」那一档。拖拽路径的 [data-resizing] 规则因此也不再是特例，
+     但保留它：它挡的是拖拽期间的 --sidebar-width 写入，与折叠是两回事。 */
 }
 
 .sidebar.collapsed {

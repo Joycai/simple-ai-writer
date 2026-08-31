@@ -63,7 +63,14 @@ export function caretFlashExtension(className: string): Extension {
 export function flashCaretLanding(view: EditorView, pos: number): void {
   const clamped = Math.max(0, Math.min(pos, view.state.doc.length));
   if (pending !== null) window.clearTimeout(pending);
-  view.dispatch({ effects: setCaretFlash.of(clamped) });
+  // 先摘掉再下一帧挂回：CSS 动画在类名已存在时不会重启，而「跳到结尾」总是
+  // 落在同一行（doc.length），CodeMirror 复用同一个 .cm-line 节点——不清一次
+  // 的话 1.6s 内的第二次跳转一帧都不闪，而这条色带是光标被搬走的唯一告知。
+  view.dispatch({ effects: setCaretFlash.of(null) });
+  window.requestAnimationFrame(() => {
+    if (!view.dom.isConnected) return;
+    view.dispatch({ effects: setCaretFlash.of(clamped) });
+  });
   pending = window.setTimeout(() => {
     pending = null;
     // The view may already be gone (file switch, project close) — check

@@ -172,9 +172,16 @@
 .bare .rowProgress { left: 0; right: 0; }
 .rowProgressFill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--color-sienna);
-  transition: width var(--transition-base);
+  /* scaleX 而不是 width：width 是布局属性，而这条线在长工具调用里每 ~150ms
+     就换一次值（PROGRESS_EVERY_MS，lib/agent/tools.ts:860），同一时刻日志本身
+     还在随流式分片重渲染。transform 走合成层。范本：AiPanel.module.css:411。
+     时长用 --transition-fast 而非 --base：200ms 比数据到达间隔（150ms）还长，
+     条会永远追一个已过期的目标。 */
+  transform-origin: left;
+  transition: transform var(--transition-fast);
 }
 .bare > .list > .row,
 .bare > .list > .rowGroup > .row { padding-left: 0; padding-right: 0; }

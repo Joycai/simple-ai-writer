@@ -462,11 +462,14 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       .map((file): MentionItem => ({ type: "file", file })),
   ], [loreIndex, fileTree, canSeeImages]);
 
-  // 生成中的计时，设计稿在名标旁边显示「生成中 · 4.2s」。
+  // 生成中的计时。1000ms 而不是 100ms：seconds 只有一个消费者（:985 的名标），
+  // 但本组件 1500+ 行且无 memo，每次 setSeconds 都会连整条 transcript 一起重渲——
+  // 而那正是流式追加正在进行的时刻。整秒与 AgentChat.tsx:457 / WriterStrip.tsx:41 /
+  // LoreRunProgress.tsx:28 三处计时器一致。
   useEffect(() => {
     if (!isRunning) { setSeconds(0); return; }
     const started = Date.now();
-    const id = window.setInterval(() => setSeconds((Date.now() - started) / 1000), 100);
+    const id = window.setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
     return () => window.clearInterval(id);
   }, [isRunning]);
 
@@ -982,7 +985,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 <span className={styles.agentLabel}>{agent.name}</span>
                 <span className={styles.streamDot} />
                 <span className={styles.streamTime}>
-                  {t("roleplay.generating", { s: seconds.toFixed(1), defaultValue: `生成中 · ${seconds.toFixed(1)}s` })}
+                  {t("roleplay.generating", { s: seconds, defaultValue: `生成中 · ${seconds}s` })}
                 </span>
               </div>
               <ScriptText text={session?.streaming ?? ""} caret />

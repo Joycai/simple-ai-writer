@@ -14,6 +14,13 @@
   display: flex;
   flex-direction: column;
   max-height: 70vh;
+  /* 上挂用 riseIn 而不是 dropIn——global.css:100 的注释就是这条规则：
+     「下挂用 dropIn（从触发器落下），上挂用 riseIn」。本菜单的锚点恒为
+     above: true（LoreWall.tsx:1039 是唯一调用点，浮层底边贴着按钮顶边），
+     用 dropIn 会让它从 4px 上方掉下来，方向与它实际生长的方向相反。
+     原点相应是 bottom left（左沿对齐同 ContextMenu，纵向从按钮那条边长出）。 */
+  animation: riseIn 140ms var(--ease-out);
+  transform-origin: bottom left;
 }
 
 .head {
