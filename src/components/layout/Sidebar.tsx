@@ -1,54 +1,14 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
-import { Search as SearchIcon } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useProjectStore, useTerms } from "../../stores/projectStore";
-import { useLoreStore } from "../../stores/loreStore";
+import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
+import { ProjectRow } from "./ProjectRow";
 import { RecentProjects } from "./RecentProjects";
 import { OutlinePanel } from "../editor/OutlinePanel";
-import { loreEntityCount } from "../../lib/lore";
-import { MOD_K_SPACED } from "../../lib/platform";
 import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
-import { baseName } from "../../lib/paths";
-
-function basename(p: string | null): string | null {
-  return p ? baseName(p) || null : null;
-}
-
-function countDocs(tree: { is_dir?: boolean; children?: any[]; name?: string }[]): number {
-  let count = 0;
-  for (const node of tree) {
-    if (!node.is_dir && node.name?.endsWith(".md")) count++;
-    if (node.children) count += countDocs(node.children);
-  }
-  return count;
-}
-
-/**
- * The project header's live counters, in their own component so their
- * subscriptions stay out of Sidebar itself: `wordCount` changes on every
- * keystroke, and a Sidebar that subscribed to it re-rendered the whole file
- * tree per character typed.
- */
-function ProjectStats() {
-  const { t } = useTranslation();
-  const wordCount = useProjectStore((s) => s.wordCount);
-  const fileTree = useProjectStore((s) => s.fileTree);
-  const loreCount = useLoreStore((s) => loreEntityCount(s.index));
-  const terms = useTerms();
-  const docCount = useMemo(() => countDocs(fileTree as any), [fileTree]);
-  return (
-    <div className={styles.projectStats}>
-      <span><strong>{wordCount.toLocaleString()}</strong>{t("statusBar.words")}</span>
-      <span><strong>{docCount}</strong>{terms.docs}</span>
-      <span><strong>{loreCount}</strong>{terms.entries}</span>
-    </div>
-  );
-}
 
 /**
  * Same idea for the outline tab: `headings` is a fresh array per keystroke
@@ -73,11 +33,8 @@ export function Sidebar() {
   const { t } = useTranslation();
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const activeSideTab = useAppStore((s) => s.activeSideTab);
-  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const projectPath = useProjectStore((s) => s.projectPath);
-  const terms = useTerms();
 
-  const projectName = basename(projectPath);
   const contentVariants = useMotionPreset(panelFade);
 
   const isTree = activeSideTab === "files";
@@ -85,34 +42,15 @@ export function Sidebar() {
 
   return (
     <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ""}`}>
-      {/* Project header — only when project is open */}
-      {projectPath && (
-        <div className={styles.projectHeader}>
-          <div className={styles.projectEyebrow}>{t("sidebar.project")}</div>
-          <div className={styles.projectName}>{projectName ?? t("titleBar.noProject")}</div>
-          <ProjectStats />
-        </div>
-      )}
+      {/* 项目名 + 项目菜单 + 搜索 —— 设计稿 17 把原来的四层压到这一层加一条脚线，
+          脚线（三个计数 / 剪贴板 / 定位当前文档）长在 FileTree 里，因为它说的三件
+          事全是这棵树的事。 */}
+      <ProjectRow />
 
-      {/* Search box → opens command palette */}
-      {projectPath && (
-        <button
-          className={styles.searchBox}
-          onClick={() => setShowCommandPalette(true)}
-        >
-          <SearchIcon size={11} strokeWidth={1.6} color="var(--color-text-muted)" />
-          <span className={styles.searchPlaceholder}>
-            {t("sidebar.projectSearch", { entries: terms.entries })}
-          </span>
-          <span className={styles.searchKey}>{MOD_K_SPACED}</span>
-        </button>
-      )}
-
-      {/* Section header label */}
-      {projectPath && (
-        <div className={styles.headerLabel}>
-          {activeSideTab === "files" ? terms.filesHeader : t(`sidebar.${activeSideTab}`)}
-        </div>
+      {/* 「文件」的节标题并进了 FileTree 的工具行（它们本来就是同一行的左右两半），
+          其余标签页还需要自己的标题。 */}
+      {projectPath && !isTree && (
+        <div className={styles.headerLabel}>{t(`sidebar.${activeSideTab}`)}</div>
       )}
 
       {/* Enter-only（照 AiPanel.tsx:1384 的注释与先例）：标签切换是直接操纵，

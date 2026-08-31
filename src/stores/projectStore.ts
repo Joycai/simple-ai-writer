@@ -46,6 +46,7 @@ import {
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
+import { collapseAllMap, expandAllMap } from "../lib/fs/selection";
 import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
 import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
@@ -259,6 +260,24 @@ interface ProjectState {
     entry: { entries: { path: string; isDir: boolean }[]; mode: TransferMode } | null,
   ) => void;
   setDirExpanded: (path: string, open: boolean) => void;
+  /**
+   * Close every folder in the tree — the sidebar's 「全部折叠」.
+   *
+   * One `set`, not a loop over `setDirExpanded`: each of those builds a fresh
+   * `expandedDirs`, and FileTree subscribes to the whole object, so N folders
+   * would be N re-renders of the entire tree. Why it has to write an explicit
+   * `false` for each folder rather than clear the table is in `collapseAllMap`.
+   */
+  collapseAllDirs: () => void;
+  /** Open every folder — the same button once everything is already closed. */
+  expandAllDirs: () => void;
+  /**
+   * Restore a whole expansion map, for the 折叠 confirmation bar's 撤销. Takes
+   * the snapshot wholesale rather than diffing: what the author wants back is
+   * the tree they were looking at, and a key that has since been touched by
+   * hand is part of that picture too.
+   */
+  setExpandedDirs: (dirs: Record<string, boolean>) => void;
   /**
    * Both counters in one `set()`: the caller (editorStore.setContent) runs on
    * every keystroke, and two separate writes meant every subscriber of this
@@ -697,6 +716,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setDirExpanded: (path, open) =>
     set((s) => ({ expandedDirs: { ...s.expandedDirs, [path]: open } })),
+
+  collapseAllDirs: () =>
+    set((s) => ({ expandedDirs: { ...s.expandedDirs, ...collapseAllMap(s.fileTree) } })),
+
+  expandAllDirs: () =>
+    set((s) => ({ expandedDirs: { ...s.expandedDirs, ...expandAllMap(s.fileTree) } })),
+
+  setExpandedDirs: (dirs) => set({ expandedDirs: dirs }),
   setDocCounts: (words, chars) =>
     set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
 }));

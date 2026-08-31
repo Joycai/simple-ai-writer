@@ -1,155 +1,225 @@
+/*
+ * 文件面板（设计稿 17）。
+ *
+ * 三条读得懂整份样式的规则：
+ * ① 行有**三个互不占用的通道** —— 底色（悬停中性 / 当前打开赭石淡底，全树唯一）、
+ *    左槽（3px 赭石＝在选区里，贴容器最左边缘，不受缩进影响）、字重（被点过 →
+ *    500 + strong）。组合不需要额外规则，叠加即可。
+ * ② 密度分档全部是**容器查询**而不是 JS 宽度：拖动手柄时 `appStore` 里是拖动前
+ *    的值，只有容器自己知道现在多宽。注意侧栏 1px 右边框算在它的宽度里
+ *    （border-box），所以 240px 的侧栏是 239px 的容器 —— 断点都减了 1。
+ * ③ 行里没有任何 hover 才出现的元素，hover 只改一个 background-color。几百行全量
+ *    渲染时这是唯一不触发重排的写法（设计稿 17 §2e）。
+ */
+
 .container {
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  /* 密度档的四个变量 —— 见文件头 ②。 */
+  container-type: inline-size;
+  --row-h: 28px;
+  --row-step: 12px;
+  --row-gap: 6px;
+  --row-name: 13px;
+  --tb-btn: 22px;
 }
 
-/* Toolbar — top thin strip with project actions (hidden, project name moved to Sidebar) */
+/* ── 工具行（节标题 + 对树的操作）─────────────────────────────────────── */
+
 .toolbar {
   display: flex;
   align-items: center;
-  padding: 0 22px;
-  height: 30px;
+  height: 28px;
+  padding: 0 6px 0 12px;
   flex-shrink: 0;
-  gap: 4px;
+  border-bottom: 1px solid var(--color-border-soft);
   font-family: var(--font-sans);
 }
 
-.rootLabel {
-  flex: 1;
-  font-size: 10px;
-  font-weight: 500;
+.toolbarLabel {
+  font: 500 10px/1 var(--font-sans);
   letter-spacing: var(--letter-label);
   color: var(--color-sienna);
   text-transform: uppercase;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  display: none; /* hidden — project name now in Sidebar header */
+  overflow: hidden;
 }
 
-.toolbarActions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
+.toolbarSpacer { flex: 1; }
+
+/* 一条竖细线把「新建组｜导入组｜视图组」分开，只在 ≥360px 的宽档出现。 */
+.toolbarDivider {
+  width: 1px;
+  height: 12px;
+  margin: 0 3px;
+  background: var(--color-border-soft);
+  flex-shrink: 0;
 }
 
 .toolbarBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  color: var(--color-text-muted);
+  width: var(--tb-btn);
+  height: var(--tb-btn);
+  flex-shrink: 0;
+  color: var(--color-text-faint);
   background: transparent;
-  border: 1px solid transparent;
+  border: none;
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast);
 }
+/* 静息 faint → 面板 hover 时整排走到 muted → 单个 hover 才转赭石。
+   不淡出到 0：作者每次要用都得先「唤醒」它，而 4 个按钮的位置记忆会被反复打断。 */
+.container:hover .toolbarBtn { color: var(--color-text-muted); }
 .toolbarBtn:hover {
   color: var(--color-sienna);
-  border-color: var(--color-border);
+  background: var(--color-bg-elevated);
+}
+.toolbarBtn:active { transform: scale(0.94); }
+.toolbarBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
+}
+.container:hover .toolbarBtn:disabled { color: var(--color-text-faint); }
+
+/* 「已全部折叠」＝下一次点是展开：实底赭石 + 图标翻转。这个态持续存在，
+   于是反向动作在同一个位置、同一个手指（设计稿 17 §2c）。 */
+.toolbarBtn.armed,
+.container:hover .toolbarBtn.armed {
+  color: var(--color-on-accent);
+  background: var(--color-sienna);
 }
 
-/* Tree — rows bleed edge to edge so the active highlight reaches the
-   container rim (设计稿 01); indentation lives on each row's padding.
-   The bottom padding is also the project root's drop zone: it has no row of
-   its own, so the empty strip after the last entry is what an author drags
-   onto to move something back up to the top level. */
+/* ── 就地确认条（折叠 / 传输失败）───────────────────────────────────── */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 5px 10px 5px 12px;
+  flex-shrink: 0;
+  background: var(--color-accent-tint);
+  box-shadow: inset 2px 0 0 var(--color-sienna);
+  font: 400 10.5px/1.45 var(--font-sans);
+  color: var(--color-accent-hover);
+  animation: noticeIn 160ms var(--ease-out);
+}
+.noticeText { flex: 1; }
+.noticeAction {
+  flex-shrink: 0;
+  font: 400 10.5px/1 var(--font-sans);
+  color: var(--color-sienna);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@keyframes noticeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* 唯一允许出现第二色相的两处之一 —— 移动/复制失败。 */
+.transferError {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 12px;
+  flex-shrink: 0;
+  background: var(--color-danger-bg);
+  box-shadow: inset 2px 0 0 var(--color-danger-text);
+  font: 400 10.5px/1.45 var(--font-sans);
+  color: var(--color-danger-text);
+  word-break: break-word;
+}
+.transferError .noticeAction { color: var(--color-danger-text); }
+
+/* ── 树 ───────────────────────────────────────────────────────────────── */
+
 .tree {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0 40px;
+  padding: 2px 0 32px;
 }
+/* 项目根也是放置目标：树的空白就是它。行与容器同一个写法，只是尺度不同。 */
 .tree.rootDropTarget {
   box-shadow: inset 0 0 0 1px var(--color-sienna);
 }
+.rootDropHint {
+  padding: 10px 12px 0;
+  font: 400 10.5px/1 var(--font-sans);
+  color: var(--color-sienna);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
 
-/* Node row */
 .node {
   display: flex;
   align-items: center;
-  height: 28px;
+  gap: var(--row-gap);
+  height: var(--row-h);
+  /* 缩进：1–4 层按档位，第 5 层起 4px 封顶 —— 理由在 lib/fs/rowMeta.ts 末尾。 */
+  padding-left: calc(
+    12px + min(var(--depth, 0), 4) * var(--row-step) + max(var(--depth, 0) - 4, 0) * 4px
+  );
+  padding-right: 10px;
   cursor: pointer;
   user-select: none;
-  margin: 0;
-  padding-right: 14px;
   position: relative;
-  gap: 2px;
   font-family: var(--font-serif);
+  transition: background-color 120ms var(--ease-out);
 }
-.node:hover {
-  background: var(--color-bg-elevated);
-}
-.node.active {
-  background: var(--color-bg-elevated);
-  position: relative;
-}
-.node.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--color-sienna);
-}
+
+/* 通道 A · 底色 */
+.node:hover { background: var(--color-bg-elevated); }
+.node.active { background: var(--color-accent-tint); }
+.node.active:hover { background: var(--color-accent-tint-strong); }
+
+/* 通道 B · 左槽。贴容器最左边缘，所以相邻的选中行连成一条不断的长条：
+   ⇧ 拉出的 12 行读作**一段范围**，⌘ 点出的碎选区在断开处告诉作者哪里没选上。 */
+.node.selected { box-shadow: inset 3px 0 0 var(--color-sienna); }
+
+/* 通道 C · 字重 */
+.node.selected .label,
 .node.active .label {
-  color: var(--color-text-primary);
   font-weight: 500;
-}
-
-/* Multi-selection. Fainter than .active on purpose: the open document keeps
-   the sienna rule at the left edge, and a selection of several rows must not
-   look like several open documents. */
-.node.selected {
-  background: var(--color-bg-elevated);
-}
-.node.selected .label {
   color: var(--color-text-primary);
 }
+.node.active .nodeIcon { color: var(--color-sienna); }
 
-/* Drag & drop — the rows being carried, and the folder they would land in. */
-.node.dragging {
-  opacity: 0.4;
+/* 正要离开 —— 拖拽源与「已剪切」共用这一个记号，因为它们是同一件事。
+   左槽保持满不透明：它是「这些是同一批」唯一的连续线索。 */
+.node.leaving .chevron,
+.node.leaving .nodeIcon,
+.node.leaving .label,
+.node.leaving .rightCol { opacity: 0.45; }
+
+/* 将要接收 */
+.node.dropTarget {
+  background: var(--color-accent-tint);
+  box-shadow: inset 0 0 0 1px var(--color-sienna);
 }
+.node.dropTarget .nodeIcon { color: var(--color-sienna); }
 
-/* Ghost shown under the cursor while several entries travel together. */
+/* 跟着光标 */
 .dragBadge {
   position: absolute;
   top: -1000px;
   left: -1000px;
-  padding: 4px 10px;
-  font: 500 11px/1.3 var(--font-sans);
-  color: var(--color-bg-base);
+  padding: 5px 7px;
+  font: 500 10.5px/1 var(--font-sans);
+  color: var(--color-on-accent);
   background: var(--color-sienna);
   white-space: nowrap;
   pointer-events: none;
-}
-.node.dropTarget {
-  background: var(--color-bg-elevated);
-  box-shadow: inset 0 0 0 1px var(--color-sienna);
-}
-.node.dropTarget .folderIcon {
-  color: var(--color-sienna);
-}
-/* Cut and waiting for a paste — same convention as a file manager. */
-.node.cut .label,
-.node.cut .nodeIcon {
-  opacity: 0.45;
-}
-
-.transferError {
-  margin: 0 14px 6px 18px;
-  padding: 5px 8px;
-  font: 400 11px/1.45 var(--font-sans);
-  color: var(--color-error);
-  background: var(--color-bg-elevated);
-  border-left: 2px solid var(--color-error);
-  cursor: pointer;
-  word-break: break-word;
+  box-shadow: var(--shadow-md);
 }
 
 .chevron {
@@ -161,12 +231,22 @@
   flex-shrink: 0;
   color: var(--color-text-muted);
 }
-.chevronIcon {
-  transition: transform var(--transition-fast);
-  opacity: 0.7;
+.chevronIcon { transition: transform var(--transition-fast); }
+.chevronIcon.open { transform: rotate(90deg); }
+
+/* 正在计时 —— 自动展开的进度条，只占 14px：chevron 在 700ms 里由描边渐变为实心。 */
+.chevronIcon.springing {
+  /* lucide 的 `fill="none"` 是表现属性，优先级最低，所以这里必须先把 fill 打开 ——
+     否则 fill-opacity 动到 .35 也什么都画不出来。 */
+  fill: currentColor;
+  animation: springFill var(--spring-open, 700ms) linear forwards;
 }
-.chevronIcon.open {
-  transform: rotate(90deg);
+@keyframes springFill {
+  from { fill-opacity: 0; }
+  to { fill-opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chevronIcon.springing { animation: none; fill-opacity: 0.35; }
 }
 
 .nodeIcon {
@@ -176,110 +256,235 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 6px;
+  color: var(--color-text-muted);
 }
-
-.folderIcon { color: var(--color-amber); }
-.fileIcon { color: var(--color-text-muted); }
-
-/* 卷行右侧章数 (mono, faint) */
-.dirCount {
-  flex-shrink: 0;
-  font: 500 10px/1 var(--font-mono);
-  color: var(--color-text-faint);
-  margin-left: 4px;
-}
-.node:hover .dirCount { display: none; } /* yields to the hover actions */
+/* 容器/叶子的区别交给填充，不交给色相：琥珀色文件夹取消，它是事实上的第二强调色。 */
+.nodeIcon svg { fill: currentColor; fill-opacity: 0; }
+.nodeIcon.filled svg { fill-opacity: 0.2; }
+/* 躺在目录里的东西 —— 导入原件 / 图片 / assets 组，退一格灰。 */
+.nodeIcon.secondary { color: var(--color-text-faint); }
 
 .label {
   flex: 1;
-  font: 400 13px/1.5 var(--font-serif);
+  min-width: 0;
+  font: 400 var(--row-name) / 1.4 var(--font-serif);
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.label.group { color: var(--color-text-primary); }
+.label.secondary { color: var(--color-text-muted); }
 
-/* Action buttons appear on hover */
-.nodeActions {
-  display: none;
-  align-items: center;
-  gap: 1px;
-  position: absolute;
-  right: 4px;
-  background: var(--color-bg-elevated);
-  padding: 0 2px;
-}
-.node:hover .nodeActions {
-  display: flex;
-}
-.nodeActionBtn {
+/* 一列两义：分组显示篇数，文档显示后缀标签。永远不在 hover 时消失。 */
+.rightCol {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color var(--transition-fast);
+  justify-content: flex-end;
 }
-.nodeActionBtn:hover {
-  color: var(--color-sienna);
-}
+.rightCol.ext { font-size: 9.5px; }
 
-/* Inline create input */
-.createInputRow {
+/* ── 内联输入（新建 / 重命名）───────────────────────────────────────── */
+
+.inputRow {
   display: flex;
   align-items: center;
+  gap: var(--row-gap);
   height: 26px;
-  gap: 0;
-  margin: 0;
+  padding-left: calc(
+    12px + min(var(--depth, 0), 4) * var(--row-step) + max(var(--depth, 0) - 4, 0) * 4px
+  );
+  padding-right: 10px;
 }
-.createInput {
+.nameInput {
   flex: 1;
+  min-width: 0;
   height: 22px;
-  background: var(--color-bg-base);
+  padding: 0 5px;
+  box-sizing: border-box;
+  background: var(--color-bg-surface);
   border: 1px solid var(--color-sienna);
   outline: none;
-  font: 400 13px/1.5 var(--font-serif);
+  font: 400 12.5px/1 var(--font-serif);
   color: var(--color-text-primary);
-  padding: 0 6px;
-  min-width: 0;
 }
-.createError {
-  font: 400 11px/1.4 var(--font-sans);
-  color: var(--color-error);
-  padding: 2px 14px 4px 30px;
+/* 出错只改颜色，不改几何：不抖、不清空、光标不动。 */
+.inputRow.invalid .nameInput { border-color: var(--color-danger-text); }
+.inputRow.invalid .nodeIcon { color: var(--color-danger-text); }
+.inputError {
+  padding: 1px 10px 5px
+    calc(12px + min(var(--depth, 0), 4) * var(--row-step) + max(var(--depth, 0) - 4, 0) * 4px + 42px);
+  font: 400 10.5px/1.45 var(--font-sans);
+  color: var(--color-danger-text);
   word-break: break-word;
 }
 
-/* Empty state */
+/* ── 删除确认（长在选区最后一行下面，不弹模态）──────────────────────── */
+
+.deleteAsk {
+  padding: 7px 10px 8px 12px;
+  background: var(--color-danger-bg);
+  box-shadow: inset 2px 0 0 var(--color-danger-text);
+  animation: noticeIn 160ms var(--ease-out);
+}
+.deleteAskText {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
+}
+.deleteAskRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 7px;
+}
+.deleteAskGo {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-on-accent);
+  background: var(--color-danger-text);
+  border: none;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.deleteAskGo:active { transform: scale(0.96); }
+.deleteAskCancel {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  padding: 5px 4px;
+  cursor: pointer;
+}
+
+/* ── 空项目 ───────────────────────────────────────────────────────────── */
+
 .emptyState {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 32px 22px;
-  text-align: center;
+  flex: 1;
+  padding: 14px 12px;
 }
 .emptyText {
-  font: italic 400 12px/1.5 var(--font-serif);
-  color: var(--color-text-muted);
+  font: 400 12.5px/1.7 var(--font-serif);
+  color: var(--color-text-secondary);
 }
-.createBtn {
+.emptyActions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
-  padding: 7px 14px;
+  margin-top: 12px;
+}
+.emptyPrimary {
   font: 500 12px/1 var(--font-sans);
-  color: var(--color-sienna);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
+  color: var(--color-on-accent);
+  background: var(--color-sienna);
+  border: none;
+  padding: 8px 11px;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.createBtn:hover {
-  background: var(--color-bg-elevated);
+.emptyPrimary:hover { background: var(--color-accent-hover); }
+.emptyPrimary:active { transform: scale(0.98); }
+.emptySecondary {
+  font: 400 11.5px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.emptySecondary:hover { color: var(--color-sienna); }
+.emptyHint {
+  margin-top: auto;
+  font: 400 10.5px/1.6 var(--font-sans);
+  color: var(--color-text-faint);
+}
+
+/* ── 脚线 · 三件事共用这一行，永不叠加 ──────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border-soft);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* 剪贴板活着的时候，字数不是当下最重要的信息。 */
+.footer.clip {
+  background: var(--color-accent-tint);
+  color: var(--color-sienna);
+}
+.footerText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 同一句话的两种拼法，见 FooterCounts。 */
+.narrowOnly { display: none; }
+.footerAction {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-sans);
+  color: var(--color-sienna);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* 只在「当前文档不可见」时出现（被折叠 / 滚出视野）· 整行可点。 */
+.footer.reveal {
+  cursor: pointer;
+  color: var(--color-sienna);
+}
+.footer.reveal:hover { background: var(--color-bg-elevated); }
+.footerIcon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--color-sienna);
+}
+
+/* ── 密度分档 ────────────────────────────────────────────────────────────
+   **必须留在文件末尾。** 容器查询不改变特异性，所以 `@container` 里的
+   `.rightCol { display: none }` 与后面基础规则里的 `.rightCol { display: flex }`
+   打平，由源码顺序决定胜负 —— 写在前面就会被静默地覆盖掉（实测过：窄档下右列
+   照常显示，而同一个块里的 `.toolbarLabel` 却生效了，因为那条基础规则压根没写
+   display）。断点减 1 的理由见文件头 ②。 */
+
+/* <220px 侧栏：缩进收窄，右列整列撤掉（牺牲次序见设计稿 17 §2e）。 */
+@container (max-width: 218px) {
+  .container { --row-step: 8px; }
+  .rightCol { display: none; }
+  .toolbarLabel { display: none; }
+  .wideOnly { display: none; }
+  .narrowOnly { display: block; }
+}
+/* <200px：行矮一档，工具栏按钮缩到 20。 */
+@container (max-width: 198px) {
+  .container { --row-h: 26px; --tb-btn: 20px; }
+}
+/* <180px：名字与行内间距各让一步，到此为止 —— 再窄该拖宽面板。 */
+@container (max-width: 178px) {
+  .container { --row-gap: 5px; --row-name: 12.5px; }
+}
+/* <360px：导入与刷新退回 ⋯ 菜单里（那个菜单在打开时自己量一次宽度，见 FileTree
+   的 overflowItems —— 一次测量，不是每行一次）。 */
+@container (max-width: 358px) {
+  .wide { display: none; }
+}
+/* ≥400px：缩进放大，层级更好读。 */
+@container (min-width: 399px) {
+  .container { --row-step: 16px; }
+  .rightCol { min-width: 40px; text-align: right; }
 }

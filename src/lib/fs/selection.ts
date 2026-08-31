@@ -109,6 +109,50 @@ export function pruneSelection(
 }
 
 /**
+ * How many folders the author can see are open — the number 「已折叠 N 个分组」
+ * reports.
+ *
+ * Counts what actually changes on screen, so it recurses only into folders that
+ * are themselves open (same reason as `hasOpenDir`): a folder left open inside
+ * a collapsed one flips no chevron the author is looking at, and counting it
+ * would make the sentence say more than happened.
+ */
+export function openDirCount(
+  nodes: readonly TreeNodeLike[],
+  expandedDirs: Record<string, boolean>,
+  depth = 0,
+): number {
+  let n = 0;
+  for (const node of nodes) {
+    if (!node.is_dir || !isDirOpen(expandedDirs[node.path], depth)) continue;
+    n += 1;
+    if (node.children) n += openDirCount(node.children, expandedDirs, depth + 1);
+  }
+  return n;
+}
+
+/**
+ * The folders on the way down to `path`, outermost first — what has to be
+ * opened for a row to become visible again (「定位当前文档」).
+ *
+ * Returns nothing when the path is not in the tree, so a stale active file
+ * cannot make the caller expand a chain that leads nowhere.
+ */
+export function ancestorsOf(nodes: readonly TreeNodeLike[], path: string): string[] {
+  const walk = (list: readonly TreeNodeLike[], trail: string[]): string[] | null => {
+    for (const node of list) {
+      if (node.path === path) return trail;
+      if (node.is_dir && node.children) {
+        const hit = walk(node.children, [...trail, node.path]);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+  return walk(nodes, []) ?? [];
+}
+
+/**
  * Every row of the tree, expanded or not — the lookup that turns a set of
  * selected paths back into `{path, isDir}` pairs a transfer can act on.
  */
@@ -119,4 +163,61 @@ export function allRows(nodes: readonly TreeNodeLike[]): TreeRow[] {
     if (node.children) rows.push(...allRows(node.children));
   }
   return rows;
+}
+
+/**
+ * Every folder in the tree, explicitly closed — what 「全部折叠」 has to write.
+ *
+ * It cannot be done by *clearing* `expandedDirs`: the default is
+ * `stored ?? depth === 0`, so clearing the table is "back to the default", and
+ * the default is not all-collapsed — every top-level folder would spring open
+ * again. The already-collapsed deep folders get a key too, which costs nothing
+ * and keeps the result independent of what was open when it was called.
+ */
+export function collapseAllMap(nodes: readonly TreeNodeLike[]): Record<string, boolean> {
+  const map: Record<string, boolean> = {};
+  const walk = (list: readonly TreeNodeLike[]) => {
+    for (const node of list) {
+      if (!node.is_dir) continue;
+      map[node.path] = false;
+      if (node.children) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return map;
+}
+
+/**
+ * Every folder in the tree, explicitly open — the reverse of `collapseAllMap`,
+ * and it cannot clear the table either: clearing would drop *deep* folders
+ * back to their closed default, which is the opposite of what was asked.
+ */
+export function expandAllMap(nodes: readonly TreeNodeLike[]): Record<string, boolean> {
+  const map = collapseAllMap(nodes);
+  for (const path of Object.keys(map)) map[path] = true;
+  return map;
+}
+
+/**
+ * Is any folder the author can currently see still open — i.e. does
+ * 「全部折叠」 have anything left to do.
+ *
+ * **Only the top level is examined, and that is not a shortcut.** A folder is
+ * on screen only if every ancestor is open, so whenever a visible open folder
+ * exists, its outermost ancestor is itself an open top-level folder — the two
+ * questions have the same answer. Walking deeper would additionally count a
+ * folder left open inside a collapsed ancestor, which is *not* on screen: the
+ * button would be live and its click would change nothing the author can see.
+ * That stale `true` is harmless — it becomes visible, and countable, the moment
+ * the ancestor is reopened.
+ *
+ * Goes through `isDirOpen` rather than reading the table: a top-level folder
+ * with no entry yet *is* open, and a check that missed that would leave the
+ * button disabled on a project that was just opened.
+ */
+export function hasOpenDir(
+  nodes: readonly TreeNodeLike[],
+  expandedDirs: Record<string, boolean>,
+): boolean {
+  return nodes.some((node) => node.is_dir && isDirOpen(expandedDirs[node.path], 0));
 }

@@ -12,7 +12,9 @@
     "create": "Create",
     "save": "Save",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "undo": "Undo",
+    "gotIt": "Got it"
   },
   "errorBoundary": {
     "appTitle": "Something went wrong",
@@ -86,7 +88,8 @@
     "needsProject": "Open a folder first",
     "settings": "Settings",
     "project": "PROJECT",
-    "projectSearch": "Search documents & {{entries}}"
+    "projectSearch": "Search documents & {{entries}}",
+    "searchTooltip": "Search documents and entries · {{key}}"
   },
   "titleBar": {
     "modified": "modified",
@@ -296,7 +299,18 @@
         "editorFind": "Find",
         "contextualCloseOverlay": "Close a context menu / dialog",
         "contextualConfirmInput": "Confirm an input (rename, new entry, etc.)",
-        "contextualPaletteNav": "Move between command palette results"
+        "contextualPaletteNav": "Move between command palette results",
+        "filesCollapseAll": "Files panel: collapse / expand all",
+        "filesRevealCurrent": "Files panel: reveal current document",
+        "filesSwitchProject": "Switch project",
+        "filesCloseProject": "Close project",
+        "filesNewDoc": "File tree: new document",
+        "filesNewGroup": "File tree: new group",
+        "filesCut": "File tree: cut selection",
+        "filesCopy": "File tree: copy selection",
+        "filesPaste": "File tree: paste",
+        "filesRename": "File tree: rename selection",
+        "filesDelete": "File tree: delete selection"
       },
       "paneSub": "Everything here can also be run from the command palette (⌘K)."
     },
@@ -559,7 +573,7 @@
     "openFolder": "Open Folder",
     "noProjectTitle": "Open a folder to start writing",
     "noProjectDesc": "The project structure will be initialized automatically",
-    "emptyTree": "Writing directory is empty, create a .md file to start",
+    "emptyTree": "No documents in this folder yet.",
     "closeProject": "Close Project",
     "switchProject": "Open Another Folder",
     "newWindow": "New Window",
@@ -583,7 +597,8 @@
     "lockHeldTitle": "Project open in another window",
     "lockHeldBody": "\"{{name}}\" appears to be open in another window (process {{pid}}). Editing the same project from two windows can overwrite each other's changes. Open it here anyway?",
     "lockOpenAnyway": "Open Anyway",
-    "lockCancel": "Cancel"
+    "lockCancel": "Cancel",
+    "revealProject": "Reveal project in file browser"
   },
   "editor": {
     "placeholder": "Start writing…",
@@ -2561,19 +2576,17 @@
     }
   },
   "fileTree": {
-    "newFile": "New File",
+    "newFile": "New document",
     "open": "Open",
     "insertImage": "Insert at cursor",
     "sendToAssistant": "Send to assistant",
     "rename": "Rename",
     "reveal": "Reveal in File Explorer",
     "delete": "Delete",
-    "deleteConfirm": "Delete this file? (A snapshot is kept in .ai-writer/backups first.)",
-    "deleteFolderConfirm": "Delete this folder and everything in it? (It is moved into .ai-writer/backups first.)",
-    "newFolder": "New Folder",
+    "newFolder": "New group",
     "refresh": "Refresh",
-    "fileNamePlaceholder": "filename.md",
-    "folderNamePlaceholder": "folder name",
+    "fileNamePlaceholder": "document.md",
+    "folderNamePlaceholder": "group name",
     "importDoc": "Import Files",
     "importFilter": "Documents and images",
     "importFailed": "These files failed to import:",
@@ -2582,14 +2595,35 @@
     "pasteEntry": "Paste \"{{name}}\"",
     "moveExists": "\"{{name}}\" already exists there.",
     "moveIntoSelf": "A folder cannot be moved inside itself.",
-    "newFileAtRoot": "New file in project root",
-    "newFolderAtRoot": "New folder in project root",
     "pasteEntries": "Paste {{count}} items",
     "cutMany": "Cut {{count}} items",
     "copyMany": "Copy {{count}} items",
     "deleteMany": "Delete {{count}} items",
-    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them? (Snapshots are kept in .ai-writer/backups first.)",
-    "dragCount": "{{count}} items"
+    "dragCount": "{{count}} items",
+    "newFileHere": "New document here",
+    "newFolderHere": "New group here",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "collapsedGroups": "{{count}} groups collapsed",
+    "selectionShrank": "selection now {{count}}",
+    "revealCurrent": "Reveal current document",
+    "more": "More",
+    "clipCut": "{{count}} cut · {{paste}} to paste",
+    "clipCopied": "{{count}} copied · {{paste}} to paste",
+    "footerCounts": "{{words}} words · {{docs}} {{docLabel}} · {{entries}} {{entryLabel}}",
+    "dragCountCopy": "+{{count}} items",
+    "dropToRoot": "Move to project root",
+    "assetsLabel": "Images",
+    "assetsOrphan": "No document with this name — image links may be broken",
+    "dirCount": "{{count}} documents in this group",
+    "selectedCount": "{{count}} selected",
+    "pasteHere": "Paste here",
+    "copyPath": "Copy path",
+    "deleteAsk": "Delete “{{name}}”? Restorable from backups.",
+    "deleteFolderAsk": "Delete the group “{{name}}” and everything in it? Restorable from backups.",
+    "deleteManyAsk": "Delete {{count}} items? Restorable from backups.",
+    "emptyPaletteHint": "{{key}} searches documents and knowledge entries",
+    "footerCountsNarrow": "{{words}} words · {{docs}} {{docLabel}}"
   },
   "notify": {
     "approvalTitle": "Waiting for you",

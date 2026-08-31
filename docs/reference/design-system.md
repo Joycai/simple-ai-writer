@@ -226,6 +226,56 @@ Rules of the road:
 - **footer 的让位顺序：斜体说明先换行 → 模型选择器再收窄 → 按钮永不动**。footer 是一条 flex 行：左组（选择器 + 说明）`flex:1 1 auto; min-width:0`，说明 `min-width:0` 吃掉全部压缩，`.picker` `flex-shrink:0`（所以选择器在合法窗口里始终是设计稿的 240 宽，`.triggerPaper` 的 `min-width:168px` 只是更窄宿主的地板），右组 `flex-shrink:0` + 每枚按钮 `white-space:nowrap`。**按钮不让**的理由很具体：中文标签一旦被压到字宽以下会*逐字折行*成「取 消 / 停 止」，那是这条 strip 唯一不能出的错。共用外壳 `.panel` 同时从 680 提到 **760**（`LoreMetaImproveModal`/`FacetAiAssistantModal` 借它；生成配图 inline 720 → 760）：实测 680 时说明要占三行、760 两行，按钮两种宽度下都完整。窗口 `minWidth` 是 900，760 的面板在任何合法尺寸下都放得下。同一条纪律也补给了 `FacetEditModal`（它的主按钮此前只挂 `btnPrimary`、丢了 `btn` 的基础皮，一并补上）。
 - **数据模型未接入、本轮有意不做的**：提取多候选与「并入已有条目」（屏 08 的三卡与置信度需要多候选管线）；更新条目的「整体 · 全部特征」目标与「当前文档/全部工作区文档」资料开关（跨文件 agent 写与检索范围开关）；主条目补全的**批量**形态（屏 12 是三条目队列，现实现仍是单条目）；特征助手的「检查互斥组」（单特征作用域拿不到组上下文）与 v2 的沉浸式聊天布局（picker 因此落在 footer 而非 composer 左侧）；屏 17 的**折叠条变体**（嵌在详情页顶部的后台运行需要 store 级运行态，模态内运行用不上）。接这些时样式词汇已就位。
 
+### 文件面板设计语言 (Files panel — `components/layout/FileTree*`, `ProjectRow`)
+
+设计稿 17。整块面板由**一条主干决定**推出来：**把「选中」交给几何，把赭石留给唯一那一个。**
+
+- **三个互不占用的通道，组合不需要额外规则**：**A 底色** —— 悬停 `--color-bg-elevated`（中性），
+  当前打开 `--color-accent-tint`，悬停在打开的那一行上 `--color-accent-tint-strong`；
+  **B 左槽** —— `box-shadow: inset 3px 0 0 var(--color-accent)` ＝在选区里；
+  **C 字重** —— 被点过（选中或打开）就是 500 + `--color-text-primary`。叠加即可，⑤⑦⑧ 三种组合不另写。
+- **这里推翻了「选中用赭石 tint」那一条**，而且只在这里推翻：这个面板的选区可以有 20 行，
+  「当前打开」只有 1 行 —— 把 tint 给 20 行，那 1 行就没有东西可用了。左槽贴容器**最左边缘**、
+  不受缩进影响，于是相邻的选中行连成一条不断的长条：⇧ 拉出的 12 行读作**一段范围**，
+  ⌘ 点出的碎选区在断开处告诉作者哪里没选上。整棵树永远只有**一块**有色的底。
+- **行里没有任何 hover 才出现的元素。** hover 只改一个 `background-color`：几百行全量渲染
+  （无虚拟滚动）下，这是唯一一次也不触发重排的写法。行上原来那对「新建文件/新建文件夹」
+  按钮整对删除，右列的篇数因此再也不用给它们让位。
+- **右列一列两义**：分组＝其下任意深度的 `.md` 篇数（10px mono），文档＝大写后缀标签
+  （9.5px，`.md` 除外——它的后缀已经从名字里吃掉了）。`assets/<组>` 显示「插图」，而它的文档
+  被改名后换成一枚 10px `alert-triangle`（`--color-text-muted`，**不是 danger**：没有东西正在坏
+  掉，只是链接指不到了）。判据全在 `lib/fs/rowMeta.ts`，一次树遍历，不读文件、不测量。
+- **文件种类不给颜色**，只给图标与两级灰：能写能读的（`.md/.txt/.html`）用 `--color-text-secondary`，
+  躺在目录里的（导入原件 / 图片 / `assets/`）用 `--color-text-muted`。分组图标**实心**
+  （`fill-opacity: .2` 的 currentColor）、文档描边 —— 容器与叶子的区别交给填充，不交给色相；
+  琥珀色文件夹取消，它是事实上的第二强调色。
+- **密度分档一律是 `@container`**，并且**必须写在 CSS 文件末尾**：容器查询不改变特异性，
+  `@container` 里的 `.x{display:none}` 与后面基础规则里的 `.x{display:flex}` 打平，由源码顺序
+  决定胜负（实测过：窄档右列照常显示，而同一个块里另一条却生效了，因为那条基础规则没写
+  `display`）。断点比侧栏宽度**减 1**：侧栏的 1px 右边框算在它自己的宽度里。
+  档位：<220 缩进 8px/级 + 撤掉右列与节标题 · <200 行高 26 + 按钮 20 · <180 名字 12.5 + gap 5 ·
+  <360 导入/刷新退回 ⋯ · ≥400 缩进 16px/级 + 右列固定 40px。**换得了版式换不了字**：
+  脚线的两种拼法都渲染，让 CSS 藏掉一种。
+- **缩进第 5 层起封顶 4px/级**（`calc` + `min()/max()` 吃一个 `--depth` 变量）：七层 ×12px ＝ 84px
+  会把名字挤没，而那个深度上缩进只需要说「比上一行更靠右」。
+- **一套记号语言，四条规则**：正要离开＝内容 `opacity .45`（拖拽源与「已剪切」**共用**，
+  它们是同一件事）**而左槽保持满不透明**，它是「这些是同一批」唯一的连续线索；将要接收＝
+  `inset 0 0 0 1px accent` + tint（行与整个树容器同一个写法，只是尺度不同）；跟着光标＝赭石实底
+  徽标「N 项」，⌥ 复制时前面加 ＋；正在计时＝目标分组的 chevron 在 700ms 里 `fill-opacity` 0→.35
+  （自动展开的进度条，只占 14px；reduced-motion 下直接实心）。**没有行间插入线，这是有意的**：
+  树的顺序是文件名排序，插入线会承诺一个放手后不成立的位置感。
+- **确认条就地展开，不弹模态**：折叠后的「已折叠 N 个分组 · 选区缩为 N 项」贴在工具行下方
+  （accent-tint + `inset 2px` 赭石左边线，4 秒或下一次点击树后消失，只有 opacity 过渡）；
+  删除的确认条长在**选区最后一行的下面**，那里正是作者刚操作的地方，而上面那几条赭石竖条
+  就是「删哪几个」的清单，文案因此只说数量。
+- **脚线 22px 常驻，三件事共用、永不叠加**：三个计数 / 剪贴板（赭石底，剪切与复制的唯一区别
+  是行变不变淡）/「定位当前文档」（只在当前文档被折叠掉时出现）。顶部省下的 154px 换这 22px。
+- **工具栏按钮不淡出，只降对比**：静息 `--color-text-faint` → 面板 hover 整排走到
+  `--color-text-muted` → 单个 hover 转赭石。淡出到 0 会让作者每次都要先「唤醒」它。
+  「全部折叠」按下后**留在实底赭石态**（图标翻成 `ChevronsUpDown`）—— 那个持续存在的态就是
+  「再点一次＝全部展开」的说明，反向动作因此在同一个位置、同一个手指。唯一的禁用条件是
+  「树里没有任何分组」（`opacity .4`、无 hover、**不给 tooltip**）。
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
