@@ -449,7 +449,7 @@ describe("merged writes", () => {
 });
 
 describe("refreshPrefs", () => {
-  it("adopts another instance's rows and reports the change", async () => {
+  it("adopts another instance's rows and reports which keys changed", async () => {
     h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
     await prefs.hydratePrefs();
 
@@ -457,7 +457,7 @@ describe("refreshPrefs", () => {
       { key: "app:theme", value: "light" },
       { key: "app:language", value: "en" },
     ]);
-    await expect(prefs.refreshPrefs()).resolves.toBe(true);
+    await expect(prefs.refreshPrefs()).resolves.toEqual(["app:theme", "app:language"]);
 
     expect(prefs.readPref("app:theme")).toBe("light");
     expect(prefs.readPref("app:language")).toBe("en");
@@ -471,7 +471,7 @@ describe("refreshPrefs", () => {
     await prefs.hydratePrefs();
 
     h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
-    await expect(prefs.refreshPrefs()).resolves.toBe(true);
+    await expect(prefs.refreshPrefs()).resolves.toEqual(["app:language"]);
 
     expect(prefs.readPref("app:language")).toBeNull();
   });
@@ -481,8 +481,8 @@ describe("refreshPrefs", () => {
     await prefs.hydratePrefs();
 
     h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
-    // False is what keeps a no-op focus from firing the animated repaint.
-    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    // Empty is what keeps a no-op focus from firing the animated repaint.
+    await expect(prefs.refreshPrefs()).resolves.toEqual([]);
     expect(prefs.readPref("app:theme")).toBe("dark");
   });
 
@@ -491,12 +491,72 @@ describe("refreshPrefs", () => {
     await prefs.hydratePrefs();
 
     h.select.mockRejectedValueOnce(new Error("locked"));
-    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    await expect(prefs.refreshPrefs()).resolves.toEqual([]);
     expect(prefs.readPref("app:theme")).toBe("dark");
   });
 
   it("is a no-op before hydration", async () => {
-    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    await expect(prefs.refreshPrefs()).resolves.toEqual([]);
     expect(h.select).not.toHaveBeenCalled();
+  });
+
+  // The window-local half. These keys are persisted like any other — they are
+  // how a window comes back where it was left — but another window's value for
+  // them must never arrive here, because they are what the author is holding
+  // while they work.
+  describe("window-local keys", () => {
+    it("keeps this window's value and does not report it as changed", async () => {
+      h.select.mockResolvedValueOnce([
+        { key: "app:aiDrawerMode", value: "generate" },
+        { key: "ai:activeModelId", value: "m-ours" },
+        { key: "app:theme", value: "dark" },
+      ]);
+      await prefs.hydratePrefs();
+
+      // The other window switched tabs, picked another model, and changed the
+      // theme. Only the theme is its to change.
+      h.select.mockResolvedValueOnce([
+        { key: "app:aiDrawerMode", value: "chat" },
+        { key: "ai:activeModelId", value: "m-theirs" },
+        { key: "app:theme", value: "light" },
+      ]);
+      await expect(prefs.refreshPrefs()).resolves.toEqual(["app:theme"]);
+
+      expect(prefs.readPref("app:aiDrawerMode")).toBe("generate");
+      expect(prefs.readPref("ai:activeModelId")).toBe("m-ours");
+      expect(prefs.readPref("app:theme")).toBe("light");
+    });
+
+    it("does not adopt a row this window never had", async () => {
+      h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+      await prefs.hydratePrefs();
+
+      h.select.mockResolvedValueOnce([
+        { key: "app:theme", value: "dark" },
+        { key: "app:sidebarWidth", value: "420" },
+      ]);
+      await expect(prefs.refreshPrefs()).resolves.toEqual([]);
+      expect(prefs.readPref("app:sidebarWidth")).toBeNull();
+    });
+
+    it("survives a refresh that changes nothing else", async () => {
+      h.select.mockResolvedValueOnce([{ key: "app:previewZoom", value: "1.5" }]);
+      await prefs.hydratePrefs();
+
+      // A refresh whose only news is our own row being different in the
+      // database must not clear the cache — the old code's wholesale
+      // clear-and-refill is what made this worth pinning down.
+      h.select.mockResolvedValueOnce([{ key: "app:previewZoom", value: "1" }]);
+      await expect(prefs.refreshPrefs()).resolves.toEqual([]);
+      expect(prefs.readPref("app:previewZoom")).toBe("1.5");
+    });
+
+    it("names only keys the app actually stores", () => {
+      // A typo here would be silent: the key simply never matches a row, and
+      // the window-local one it was meant to protect goes on being adopted.
+      for (const key of prefs.WINDOW_LOCAL_PREF_KEYS) {
+        expect(prefs.isPrefKey(key)).toBe(true);
+      }
+    });
   });
 });

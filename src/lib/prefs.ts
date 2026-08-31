@@ -132,6 +132,47 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "manuscript:onboarding-done",
 ];
 
+/**
+ * Preferences that describe *this window* rather than the installation.
+ *
+ * The second axis beside `MACHINE_LOCAL_PREF_KEYS`, and a different question:
+ * that one asks "may this travel to another computer", this one asks "may
+ * another window on this computer speak through it".
+ *
+ * Every key here is still persisted, and still read at startup — a window
+ * coming back on the tab and the model it was last left on is the whole point.
+ * What changes is that `refreshPrefs` will not adopt them: the row is where
+ * *this* window restores from, not a channel the other window talks over. The
+ * distinction is invisible in a single-instance app and load-bearing in
+ * several, because these are exactly the values the author is holding in their
+ * hands while they work — the assistant's tab, the model it will run, the
+ * width of the panel they just dragged. Letting a focus event pull them to
+ * another window's choice moves the UI out from under someone who is looking
+ * at it, which no amount of "but it is a preference" makes acceptable.
+ *
+ * The test of membership is not "is it UI state" but "would the author be
+ * surprised to find the other window had changed it": a theme is a taste and
+ * belongs to the installation, a font scheme likewise. A drawer tab is a place
+ * you are standing.
+ */
+export const WINDOW_LOCAL_PREF_KEYS: readonly string[] = [
+  // The assistant drawer's tab (生成 / 聊天 / 一致性 / 扮演).
+  "app:aiDrawerMode",
+  // Layout the author drags: both side panels and the preview's zoom.
+  "app:sidebarWidth",
+  "app:rightPanelWidth",
+  "app:previewZoom",
+  // "What is selected right now" — the header model picker, the prompt, and
+  // the two model picks made from a modal rather than from Settings. The
+  // subagent bindings deliberately stay shared: those are configured once in
+  // Settings → 子代理, which is installation configuration, not a place the
+  // author stands.
+  "ai:activeModelId",
+  "ai:activePromptId",
+  "ai:memoryModelId",
+  "ai:imageModelId",
+];
+
 const TABLE = "prefs";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -375,12 +416,22 @@ export async function flushPrefs(): Promise<void> {
  * restart. Window focus is the moment that gap becomes visible (the author
  * just came *from* the other window), so `usePrefsFocusSync` calls this
  * there, mirroring the file-tree's focus refresh. Own pending writes are
- * flushed first so re-reading cannot roll them back. Returns whether anything
- * changed, so callers repaint (an animated theme transition among them) only
- * when there is something to show.
+ * flushed first so re-reading cannot roll them back.
+ *
+ * `WINDOW_LOCAL_PREF_KEYS` are pinned to this window's own values rather than
+ * adopted, and so can never appear in the result. Pinning at the cache — not
+ * at the one caller that repaints — is deliberate: the cache is what every
+ * reader sees, including the ones that read a preference at call time and the
+ * stores that mirrored theirs at startup. Adopting the row and then declining
+ * to repaint would leave those two disagreeing about which model is selected,
+ * which is the same bug wearing a quieter shirt.
+ *
+ * Returns the keys whose value here actually changed — empty when nothing
+ * did, which is what keeps a no-op focus from firing the animated theme
+ * repaint, and what lets the caller apply only the parts that moved.
  */
-export async function refreshPrefs(): Promise<boolean> {
-  if (!hydrated) return false;
+export async function refreshPrefs(): Promise<string[]> {
+  if (!hydrated) return [];
   await flushPrefs();
   let rows: { key: string; value: string }[];
   try {
@@ -390,25 +441,30 @@ export async function refreshPrefs(): Promise<boolean> {
       )) ?? [];
   } catch (e) {
     console.warn("[prefs] could not re-read the preference store:", e);
-    return false;
+    return [];
   }
   const next = new Map<string, string>();
   for (const r of rows) {
     if (typeof r?.key === "string" && typeof r?.value === "string") next.set(r.key, r.value);
   }
-  let changed = next.size !== cache.size;
-  if (!changed) {
-    for (const [k, v] of next) {
-      if (cache.get(k) !== v) {
-        changed = true;
-        break;
-      }
-    }
+  // Our own value stands for the window-local ones — including its absence,
+  // so a row another window created cannot arrive here as a "change".
+  for (const key of WINDOW_LOCAL_PREF_KEYS) {
+    const mine = cache.get(key);
+    if (mine === undefined) next.delete(key);
+    else next.set(key, mine);
   }
-  if (!changed) return false;
+  const changed: string[] = [];
+  for (const [k, v] of next) {
+    if (cache.get(k) !== v) changed.push(k);
+  }
+  for (const k of cache.keys()) {
+    if (!next.has(k)) changed.push(k);
+  }
+  if (!changed.length) return [];
   cache.clear();
   for (const [k, v] of next) cache.set(k, v);
-  return true;
+  return changed;
 }
 
 // ─── Hydration ───────────────────────────────────────────────────────────────
