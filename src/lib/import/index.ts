@@ -21,6 +21,13 @@
  *   downstream — editor, agent, export — reads UTF-8 and mojibake looks
  *   exactly like a successful import.
  *
+ * There are **two ways in**, and only the first half differs: the picker above
+ * ({@link importDocumentsDialog}), and {@link convertProjectFile} for a
+ * document that is already in the workspace — dragged in, pulled from git, or
+ * imported before this app could convert it. Both end in the same
+ * `writeConversion`, so where the markdown and its pictures land does not
+ * depend on which door the file came through.
+ *
  * The dialog + fs flow follows the lore avatar/gallery pattern: paths picked
  * in the native dialog are auto-scoped for `tauri-plugin-fs` by the dialog
  * plugin (see src-tauri/src/scope.rs module docs), so no new Rust command is
@@ -96,6 +103,19 @@ export function importMode(name: string): ImportMode | null {
   if (COPY_TEXT_EXTENSIONS.includes(ext)) return "copy-text";
   if (COPY_BINARY_EXTENSIONS.includes(ext)) return "copy-binary";
   return null;
+}
+
+/**
+ * The convertible extension of a file name, or null when this importer would
+ * not convert it. The narrowing that {@link importMode} deliberately throws
+ * away: `"convert"` is the right answer for the import loop, but both the
+ * converter dispatch and the file tree's 转换文档 menu item need to know
+ * *which* format — and deriving it a second time with a cast is how one of the
+ * two ends up disagreeing with {@link CONVERT_EXTENSIONS}.
+ */
+export function convertExtOf(name: string): ConvertExt | null {
+  const ext = extensionOf(name);
+  return (CONVERT_EXTENSIONS as readonly string[]).includes(ext) ? (ext as ConvertExt) : null;
 }
 
 /** Basename of a picked path. Re-exported so importers need one import. */
@@ -188,6 +208,57 @@ export async function convertToMarkdown(
   }
 }
 
+/**
+ * Write one conversion's output: the markdown file, then the pictures it links
+ * to. Shared by the import dialog and {@link convertProjectFile} so a document
+ * converted from the tree lands byte-for-byte like an imported one — same
+ * `assets/<文档名>/` folder, same trailing newline, same failure ordering.
+ *
+ * Assets after the markdown on purpose: a failure here loses pictures, not the
+ * text, and the caller's error channel still reports it while the document
+ * itself stays on disk.
+ */
+async function writeConversion(target: string, ext: ConvertExt, data: Uint8Array): Promise<void> {
+  const relDir = assetRelDirFor(target);
+  const { markdown, assets } = await convertToMarkdown(ext, data, relDir);
+  await writeFile(target, markdown.length ? `${markdown}\n` : "");
+  if (assets.length > 0) {
+    const dir = `${dirName(target)}/${relDir}`;
+    await makeDir(dir);
+    for (const asset of assets) {
+      await writeBinaryFile(`${dir}/${asset.name}`, asset.bytes);
+    }
+  }
+}
+
+/**
+ * Convert a document **already in the workspace** to markdown beside itself,
+ * and resolve to the new file's path. The file tree's 转换文档 — a .docx that
+ * arrived by drag, by `git pull` or from an earlier version of this app has no
+ * other way in, because conversion used to happen only at import time.
+ *
+ * The original is **kept**. Conversion is lossy in ways the author cannot undo
+ * (vector drawings vanish, layout flattens, a spreadsheet's formulas become
+ * their last cached values), so the source document stays the record and the
+ * markdown is a derived working copy — the same contract as importing, which
+ * also never touches what it read. A name collision numbers the new file
+ * (`报价表-2.md`) rather than overwriting: the likeliest collision is a second
+ * conversion of the same source, i.e. exactly the case where silently
+ * replacing an edited markdown would destroy the edits.
+ */
+export async function convertProjectFile(source: string): Promise<string> {
+  const name = baseName(source);
+  const ext = convertExtOf(name);
+  if (!ext) throw new Error(`Cannot convert to markdown: ${name}`);
+  const data = await readBinaryFile(source);
+  if (data.byteLength > MAX_IMPORT_BYTES) {
+    throw new Error("File is too large to convert (max 64 MB)");
+  }
+  const target = await uniqueImportPath(dirName(source), markdownName(name));
+  await writeConversion(target, ext, data);
+  return target;
+}
+
 export interface ImportedDocument {
   /** Source path the author picked. */
   source: string;
@@ -236,23 +307,7 @@ export async function importDocumentsDialog(
       }
       const target = await uniqueImportPath(destDir, importedName(name, mode));
       if (mode === "convert") {
-        const relDir = assetRelDirFor(target);
-        const { markdown, assets } = await convertToMarkdown(
-          extensionOf(name) as ConvertExt,
-          data,
-          relDir,
-        );
-        await writeFile(target, markdown.length ? `${markdown}\n` : "");
-        // Assets after the markdown: a failure here loses pictures, not the
-        // text — it surfaces through the per-file failures channel below while
-        // the document itself stays imported.
-        if (assets.length > 0) {
-          const dir = `${dirName(target)}/${relDir}`;
-          await makeDir(dir);
-          for (const asset of assets) {
-            await writeBinaryFile(`${dir}/${asset.name}`, asset.bytes);
-          }
-        }
+        await writeConversion(target, convertExtOf(name)!, data);
       } else if (mode === "copy-text") {
         // Decoded, not copied byte-for-byte: see the module docs on encoding.
         // No `tidyMarkdown` — that is a repair for converter output, and
