@@ -39,15 +39,26 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border-soft);
 }
+/* 整块可点，且**看得出来可点**：项目级动作（切换 / 新窗口 / 关闭）从工具栏的三枚
+   常驻图标搬进了这个菜单，位置是对的（它们作用于项目，不是对树的操作），但第一版
+   只有 11px 的 ▾ 提示它是个菜单——实测有人因此以为这两个功能被删掉了。所以整行给
+   hover 底色、caret 常态就到 muted。 */
 .projectName {
   all: unset;
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  height: 22px;
+  padding: 0 5px;
+  margin-left: -5px;
+  box-sizing: border-box;
   cursor: pointer;
   color: var(--color-text-primary);
+  transition: background var(--transition-fast);
 }
+.projectName:hover { background: var(--color-bg-elevated); }
+.projectName:active { transform: scale(0.98); }
 .projectNameText {
   font: 500 14px/1.4 var(--font-serif);
   overflow: hidden;
@@ -56,7 +67,7 @@
 }
 .projectCaret {
   flex-shrink: 0;
-  color: var(--color-text-faint);
+  color: var(--color-text-muted);
   transition: color var(--transition-fast);
 }
 .projectName:hover .projectCaret { color: var(--color-sienna); }

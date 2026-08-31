@@ -576,7 +576,7 @@
     "emptyTree": "No documents in this folder yet.",
     "closeProject": "Close Project",
     "switchProject": "Open Another Folder",
-    "newWindow": "New Window",
+    "newWindow": "Open in new window",
     "openInNewWindow": "Open in new window",
     "recentTitle": "Recent",
     "recentTitleShort": "Recent",
@@ -598,7 +598,8 @@
     "lockHeldBody": "\"{{name}}\" appears to be open in another window (process {{pid}}). Editing the same project from two windows can overwrite each other's changes. Open it here anyway?",
     "lockOpenAnyway": "Open Anyway",
     "lockCancel": "Cancel",
-    "revealProject": "Reveal project in file browser"
+    "revealProject": "Reveal project in file browser",
+    "menuTooltip": "Project menu"
   },
   "editor": {
     "placeholder": "Start writing…",
