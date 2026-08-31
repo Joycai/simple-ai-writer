@@ -88,11 +88,21 @@ should cost the author their preferences syncing, not their app starting.
 
 The app runs as **several processes, each on its own workspace** (VS
 Code-style) — there is deliberately no single-instance plugin, and "new
-window" means a new *process*: every store (and `lib/profile/active`) is a
-module singleton sized to one project, so a second window inside one process
-has nowhere to put its state. What multi-open actually needs is four small
-pieces; everything project-scoped (`project.db`, the lore tree, the editor)
-was per-process already.
+window" means a new *process*.
+
+The reason is `FsScope`. It is `app.manage()`d state, i.e. **process-wide**
+(`lib.rs`), and it is the entire guard on the custom `fs_*` commands: two
+workspaces inside one process would share one union of allowed roots, so
+window A's webview could read and write window B's project. (The reason
+recorded here previously — that the Zustand stores and `lib/profile/active`
+are module singletons sized to one project — does **not** hold: each
+`WebviewWindow` runs its own page in its own JS realm, so those singletons are
+per-webview, not per-process. `FsScope` is the constraint that actually binds,
+along with everything else keyed on the PID: the workspace lock, the focus
+channel, the launch argument, the exit sweep.)
+
+What multi-open actually needs is five small pieces; everything project-scoped
+(`project.db`, the lore tree, the editor) was per-process already.
 
 - **The workspace lock** — `.ai-writer/window.lock` (`{pid, since, port}`),
   an *advisory* guard against the one dangerous case: two windows opening the
@@ -139,6 +149,66 @@ was per-process already.
   recents entry in the sidebar's empty state. macOS Dock/Finder still
   focuses the running instance (`open -n` from a shell works); the in-app
   buttons are the supported path there.
+- **The window menu** (macOS) — see below. Separate processes are exactly why
+  the native one cannot work, so the app builds its own.
+
+#### The 「Window」 menu (macOS — `src-tauri/src/windowmenu.rs`)
+
+macOS fills the Window menu from `NSApp.windowsMenu`, which AppKit populates
+from *that process's* `NSApp.windows`. Tauri already hands its default Window
+submenu to AppKit (`tauri::app::init_app_menu` calls
+`set_as_windows_menu_for_nsapp`), so the native mechanism is wired up and
+simply has one window to list — every sibling is a separate application as far
+as LaunchServices is concerned (two `type="Foreground"` ASNs under one bundle
+id, confirmed with `lsappinfo`). The list the author wants exists nowhere in
+AppKit's reach, so the app builds it:
+
+- **A registry of live instances** — `<app data>/instances/<pid>.json`, one per
+  process: `{pid, port, since, title, workspace}`. Written at startup and
+  rewritten whenever the window is renamed; removed in the `RunEvent::Exit`
+  sweep beside the locks. Staleness is the same PID probe the workspace lock
+  uses, run when the list is read; a dead instance's file is deleted on sight,
+  and a file too corrupt to parse is judged by the pid in its *name* (the only
+  way garbage can ever leave, since the content that would name its owner is
+  what is unreadable).
+- **A Window submenu the app owns** — with **its own id**, deliberately not
+  Tauri's `WINDOW_SUBMENU_ID`. Keeping that id would make AppKit append its own
+  list (this process's single window) after whatever we add, and there is no
+  API to take `windowsMenu` back. Owning the whole submenu means every instance
+  renders the **same list in the same order** (launch time, then pid) with the
+  current window checked, rather than each showing itself in a different place.
+  Nothing is lost: `windowsMenu`'s whole value is the automatic list, which is
+  precisely what cannot work here. Installing it means owning the rest of the
+  default menu too (app / File / Edit / View / Help), which `windowmenu::build`
+  reproduces from Tauri's `Menu::default`.
+- **Switching** — a menu item connects to the target's focus-channel port. That
+  is the channel `instance.rs` already opens, where *connecting is the whole
+  message*; no new protocol, and nothing granted that a local process did not
+  already have. A connection that fails means the entry was stale, and the
+  failure rebuilds the menu without it.
+- **Refreshing on focus is exact, not approximate** — a sibling cannot push "I
+  opened" to us without widening the focus channel past its one invariant. It
+  does not need to: **the menu bar belongs to the frontmost app**, so the
+  author must focus this window before its menu can be opened at all, and that
+  is where the rebuild happens. The window that spawned a sibling and the
+  window whose sibling just quit both regain focus on the way to their own
+  menu bar. Same argument as `usePrefsFocusSync`, but here it is a bound
+  rather than a heuristic.
+- **Naming the window** — `set_window_title` (one frontend call site,
+  `useWindowTitle`) sets the OS title *and* updates the registry, because they
+  are the same fact. Without it every entry would read "Simple AI Writer": the
+  app had never called `set_title` at all. The label is the **project**, not
+  the open file — a window *is* its workspace here, and following the file
+  would re-announce on every tab switch to say something the title bar already
+  shows.
+
+Two things it deliberately does not do. **⌘\`** (cycle windows) stays
+per-process: it is an AppKit behaviour over `NSApp.windows`, and the entries
+carry no accelerators, so nothing is taken from the webview's own shortcuts.
+And the menu is **macOS-only** — on Windows/Linux Tauri installs no menu at
+all, and drawing a menu bar inside this app's custom titlebar would be a
+regression, not a feature. The menu's own wording stays English (Tauri's
+default already was); only the window entries are author-facing text.
 
 ### The AI target (选区) and where a task acts
 

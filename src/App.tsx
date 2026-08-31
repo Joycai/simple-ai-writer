@@ -23,6 +23,7 @@ import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { useExternalFileRefresh } from "./useExternalFileRefresh";
 import { usePrefsFocusSync } from "./usePrefsFocusSync";
+import { useWindowTitle } from "./useWindowTitle";
 import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
@@ -132,6 +133,8 @@ export default function App() {
   useExternalFileRefresh();
   // Preferences another app instance changed appear on return, the same way.
   usePrefsFocusSync();
+  // …and this window names itself, so the other instances can list it.
+  useWindowTitle();
 
   const viewVariants = useMotionPreset(viewSlide);
 

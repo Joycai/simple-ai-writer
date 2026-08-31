@@ -86,11 +86,30 @@ export async function launchProjectPath(): Promise<string | null> {
 /**
  * Launch a sibling instance — with a path, straight onto that workspace; bare,
  * onto the picker/recents. A new *process* rather than a second window in this
- * one: the stores and `lib/profile/active` are module singletons sized to one
- * project. Errors surface to the caller — a button that silently does nothing
- * is worse than one that reports why.
+ * one, because the `FsScope` guarding every `fs_*` command is process-wide
+ * managed state: two workspaces in one process would share one union of
+ * allowed roots (see `docs/reference/architecture.md` → Multi-instance).
+ * Errors surface to the caller — a button that silently does nothing is worse
+ * than one that reports why.
  */
 export async function openInNewWindow(projectPath?: string): Promise<void> {
   if (!IS_TAURI) return;
   await invoke("spawn_new_instance", { projectPath: projectPath ?? null });
+}
+
+/**
+ * Name this window, for the OS and for every other instance's window menu.
+ *
+ * Both come off the same call because they are the same fact — see
+ * `set_window_title` in `src-tauri/src/instance.rs`. Best-effort like the rest
+ * of this module: a window that cannot be renamed still works, it just shows
+ * up under the app's own name in a sibling's 「窗口」 menu.
+ */
+export async function announceWindow(title: string, workspace: string | null): Promise<void> {
+  if (!IS_TAURI) return;
+  try {
+    await invoke("set_window_title", { title, workspace });
+  } catch (e) {
+    console.warn("[instance] could not name this window:", e);
+  }
 }

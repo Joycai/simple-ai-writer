@@ -10,6 +10,8 @@ mod scope;
 mod secrets;
 mod sqltx;
 mod transfer;
+#[cfg(target_os = "macos")]
+mod windowmenu;
 mod xlsx;
 mod xlsx_write;
 
@@ -49,6 +51,11 @@ pub fn run() {
             app.manage(instance::FocusPort(instance::start_focus_server(
                 app.handle(),
             )));
+            // The registry entry a sibling's 「Window」 menu lists. Here
+            // rather than in the menu builder because that runs before
+            // `setup` — the focus port would still be unknown. The frontend
+            // renames this window as soon as it knows the project.
+            instance::announce_instance(app.handle(), &app.package_info().name, None);
 
             // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
             if let Some(window) = app.get_webview_window("main") {
@@ -80,6 +87,7 @@ pub fn run() {
             instance::project_focus_existing,
             instance::launch_project_path,
             instance::spawn_new_instance,
+            instance::set_window_title,
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,
@@ -104,6 +112,24 @@ pub fn run() {
             preview::preview_html_window,
         ]);
 
+    // The window menu is macOS-only. There, replacing Tauri's default menu is
+    // the whole point — the Window submenu has to be one AppKit does not claim
+    // (see `windowmenu.rs`). On Windows/Linux Tauri installs no menu at all,
+    // and a menu bar drawn inside this app's custom titlebar would be a
+    // regression, not a feature.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(windowmenu::build)
+        .on_menu_event(|app, event| windowmenu::on_menu_event(app, &event))
+        .on_window_event(|window, event| {
+            // Focus is exactly when the window list can have gone stale, and
+            // exactly when the menu bar becomes reachable — see `windowmenu.rs`.
+            if let tauri::WindowEvent::Focused(true) = event {
+                use tauri::Manager;
+                windowmenu::refresh(window.app_handle());
+            }
+        });
+
     let builder = protocol::register_asset_protocol(builder);
     let builder = preview::register_preview_protocol(builder);
     print::register_print_protocol(builder)
@@ -115,6 +141,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 instance::release_all_locks(app);
+                instance::retire_instance(app);
             }
         });
 }
