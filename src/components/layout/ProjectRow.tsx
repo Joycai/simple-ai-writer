@@ -79,7 +79,7 @@ export function ProjectRow() {
             const r = rowRef.current?.getBoundingClientRect();
             setMenuAt({ x: (r?.left ?? 0) + 8, y: (r?.bottom ?? 0) + 2 });
           }}
-          title={projectPath}
+          title={`${t("project.menuTooltip")} · ${projectPath}`}
         >
           <span className={styles.projectNameText}>{name}</span>
           <ChevronDown size={11} strokeWidth={2} className={styles.projectCaret} />
