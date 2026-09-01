@@ -33,7 +33,7 @@ import {
   type Prompt,
   type Provider,
 } from "./configDb";
-import { parseReasoningEffort, parseThinkingDialect } from "./reasoning";
+import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
@@ -255,6 +255,8 @@ export function parseConfigBundle(
       // must degrade to "send nothing" rather than reach the wire.
       reasoningEffort: parseReasoningEffort(r.reasoningEffort),
       thinkingDialect: parseThinkingDialect(r.thinkingDialect),
+      thinkingCategory: parseThinkingCategory(r.thinkingCategory),
+      thinkingBudget: typeof r.thinkingBudget === "number" ? r.thinkingBudget : undefined,
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
       // Same reason as the reasoning fields above: an unknown format from a

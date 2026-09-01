@@ -14,29 +14,29 @@ import { supportsTemperature } from "../ai/reasoning";
 import type { ApiStandard } from "../ai/types";
 
 describe("supportsTemperature", () => {
-  it("is true for every non-Anthropic family, whatever the dialect", () => {
+  it("is true for every non-Anthropic family, whatever the category", () => {
     for (const s of ["openai", "openai_compat", "gemini", "gemini_compat"] as ApiStandard[]) {
       expect(supportsTemperature(s)).toBe(true);
-      expect(supportsTemperature(s, "switch")).toBe(true);
-      expect(supportsTemperature(s, "none")).toBe(true);
+      expect(supportsTemperature(s, "qwen-budget")).toBe(true);
+      expect(supportsTemperature(s, "off")).toBe(true);
     }
   });
 
   it("is false for an undeclared Anthropic model — the ordinary Claude case", () => {
-    // defaultDialect makes Anthropic `adaptive`, so "no declaration" means
+    // An unset category resolves to claude-adaptive, so "no declaration" means
     // thinking is on and the Messages API accepts only temperature 1.
     expect(supportsTemperature("anthropic")).toBe(false);
     expect(supportsTemperature("anthropic_compat")).toBe(false);
   });
 
-  it("is false for every Anthropic dialect that leaves thinking on", () => {
-    for (const d of ["adaptive", "extended", "switch"] as const) {
-      expect(supportsTemperature("anthropic", d)).toBe(false);
+  it("is false for every Anthropic category that leaves thinking on", () => {
+    for (const c of ["claude-adaptive", "claude-budget", "minimax"] as const) {
+      expect(supportsTemperature("anthropic", c)).toBe(false);
     }
   });
 
   it("is true only once the author declares the model doesn't think", () => {
-    expect(supportsTemperature("anthropic", "none")).toBe(true);
-    expect(supportsTemperature("anthropic_compat", "none")).toBe(true);
+    expect(supportsTemperature("anthropic", "off")).toBe(true);
+    expect(supportsTemperature("anthropic_compat", "off")).toBe(true);
   });
 });

@@ -64,6 +64,20 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 **怎么验**：手头每个 ① 族中继各跑一次，看响应 `delta` 里思维链在哪个键上。
 新发现的名字加进 `REASONING_CONTENT_FIELDS` 即可，一个字符串的事。
 
+### 1.4 ① 按类目的新 wire 形状（2026-09 新增，此前从未发送）
+
+**为什么重要**：思考参数改为「按厂商类目」后（[`reasoning-plan.md`](../api/reasoning-plan.md) §0），
+以下请求形状是**全新的**——单元测试只证明我们发对了字节，没人对真实端点验过对面认不认：
+
+- **DeepSeek `deepseek` 类目**：`off` 走 `extra_body.thinking:{type:"disabled"}` 停用思考
+  （不是 `reasoning_effort:"none"`）。验：DeepSeek V4 上选此类目、切「关闭」，看是否真的不思考。
+- **Qwen `qwen-effort` 类目**：`enable_thinking:true` 与 `reasoning_effort`（含 `xhigh`）**同发**。
+  验：DashScope 上 Qwen-Max 是否接受二者同发、`xhigh` 是否被识别。
+- **`qwen-budget` 类目**：`enable_thinking` + `thinking_budget:N`。验：预算是否被遵守。
+- **GLM `glm` 类目**：`reasoning_effort` + `thinking:{clear_thinking:false}`。验：GLM-5.3 是否接受该组合。
+- **Claude `claude-budget` 类目**：作者显式填的 `budget_tokens`（旧代 4.5-）。验：4.5- 上是否遵守；
+  4.7+ 应报错（届时应改用 `claude-adaptive`）。
+
 ---
 
 ## 2. ④ Anthropic

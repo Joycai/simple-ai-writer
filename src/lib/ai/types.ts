@@ -4,7 +4,7 @@
  * import types without pulling in the provider adapters.
  */
 
-import type { NativeReasoning, ReasoningEffort, ThinkingDialect } from "./reasoning";
+import type { NativeReasoning, ReasoningEffort, ThinkingCategoryId } from "./reasoning";
 
 /** Anthropic thinking blocks, tagged with the model that produced them. */
 export interface ThinkingBlockCarry {
@@ -403,10 +403,12 @@ export interface StreamOptions {
    */
   reasoningEffort?: ReasoningEffort;
   /**
-   * Which shape of thinking parameter this model accepts. Absent means the
-   * family's current generation — see `dialectFor` in `lib/ai/reasoning.ts`.
+   * Which thinking-parameter category this model uses. Absent means the
+   * family's default — see `resolveThinkingCategory` in `lib/ai/reasoning.ts`.
    */
-  thinkingDialect?: ThinkingDialect;
+  thinkingCategory?: ThinkingCategoryId;
+  /** Token budget for a budget-shape category (Claude extended, Qwen). */
+  thinkingBudget?: number;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

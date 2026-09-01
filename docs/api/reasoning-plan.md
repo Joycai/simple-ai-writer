@@ -1,12 +1,46 @@
 # 思考强度与思维链方案（reasoning effort / reasoning content）
 
-> **状态：OpenAI Chat Completions 族已完整实现** —— 写侧（强度）、读侧
-> （思维链 chunk）、回传合规、面板控件、以及结构化输出兜底路径的原生约束
-> （§8）。**未做**：Gemini / Anthropic 族的映射，以及思维链的展示 UI。
+> **状态：三族（OpenAI / Gemini / Anthropic）写侧、读侧、回传、面板控件均已实现。**
+> 2026-09 起写侧从"一套抽象六值词表 + 一个 dialect"升级为**按厂商的思考参数
+> 类目（thinking category）**，见 §0。**未做**：OpenAI Responses 族；对真实端点
+> 的逐一验证（见 [`../issues/thinking-verification.md`](../issues/thinking-verification.md)）。
 >
 > 本文是动手前的协议对比与取舍记录 —— 四家 API 在这件事上的分歧比表面看起来
 > 大得多，且大部分分歧无法在代码里"事后发现"，只能提前决定怎么取舍。
 > 实现推进时请回来更新每节的状态。
+
+---
+
+## 0. 更新（2026-09）：思考参数按类目
+
+**变更**：写侧的作者选择从「一个抽象六值 `reasoningEffort`（默认/关/低/中/高/最高，
+刻意删掉了 `minimal`/`xhigh`）＋一个 `thinkingDialect`（adaptive/extended/switch/none）」
+升级为**每个模型选一个「思考参数类目」**（`THINKING_CATEGORIES`，`lib/ai/reasoning.ts`）。
+
+**为什么**：一套抽象词表 + 一个 dialect 回答不了「**这个**模型接受哪些档位」。
+DeepSeek 与 Qwen-Max 同属 OpenAI 族，前者档位 `low/high/max`、后者却讲 `xhigh`；
+GLM-5.3 根本无法关闭思考。旧设计用「作者声明 + 端点 400 纠错」把差异抹平，代价是
+强度盘对每个模型长一样、且表达不了 `xhigh`、token 预算、开关等厂商专属能力。
+
+**做法**：`ReasoningEffort` 重新加回 `minimal`/`xhigh`（**本节推翻了旧 §2 里
+「刻意删掉这两档」的结论**——它们不再对每个模型都出现，而是**只在真支持的类目里
+出现**）。每个类目声明：所属协议族、底层 wire dialect（复用 `thinkingBody`）、
+形态（`levels`/`onoff`/`budget`/`none`）、精确的可选档位 `menu`、以及档位→wire 串。
+类目清单：`openai-generic` / `deepseek` / `qwen-budget` / `qwen-effort` / `glm` /
+`gemini3` / `claude-adaptive` / `claude-budget` / `minimax`，外加 `auto`（＝按族默认）
+与 `off`（＝什么都不发）。UI：模型抽屉里选类目（按族过滤）+ 预算类目多一个 token
+输入框；对话面的「思考强度」盘载入该类目的 `menu`（`ReasoningControls`）。
+
+**存储与迁移**：`Model` 新增 `thinkingCategory` + `thinkingBudget` 两列，保留
+`thinkingDialect` 仅供迁移读取。旧行在 `resolveThinkingCategory(model, standard)`
+里就地迁移（adaptive→claude-adaptive，extended→claude-budget，switch+anthropic→
+minimax，**switch+openai→qwen-budget 且预算留空**——只发 `enable_thinking`，与旧
+switch 逐字节一致，这条不变量由 `aiClient.test.ts` 钉住），作者下次保存该模型时
+才把类目落盘、`thinking_dialect` 清空。
+
+**新出现在 wire 上、此前从未发送**（列为待验证）：DeepSeek 的 `off`→
+`extra_body.thinking:disabled`、`qwen-effort` 的 `enable_thinking`+`reasoning_effort`
+同发、`glm` 的 `thinking.clear_thinking:false`、Qwen/Claude 的显式 token 预算。
 >
 > 目标：让作者能为**单个模型**配置思考强度，并（可选）看到模型的思维链；
 > 同时不破坏现有的 agent 工具循环与结构化输出路径。
