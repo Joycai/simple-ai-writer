@@ -7,8 +7,10 @@ import {
   formatTokenCount,
   formatUsd,
   loadUsage,
+  sortUsageBuckets,
   USAGE_WINDOWS,
   type UsageBucket,
+  type UsageSortKey,
   type UsageSummary,
   type UsageWindow,
 } from "../../../lib/ai/usage";
@@ -41,6 +43,12 @@ export function UsagePane() {
   const providers = useAiStore((s) => s.providers);
   const [window, setWindow] = useState<UsageWindow>("30d");
   const [dimension, setDimension] = useState<Dimension>("model");
+  // Cost-descending is the default the lib already ordered rows by, so the
+  // first render is unchanged until the author clicks a column.
+  const [sort, setSort] = useState<{ key: UsageSortKey; dir: "asc" | "desc" }>({
+    key: "cost",
+    dir: "desc",
+  });
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,9 +120,36 @@ export function UsagePane() {
   }
 
   const total = summary?.total;
-  const buckets = summary ? (dimension === "model" ? summary.byModel : summary.byTask) : [];
-  const maxCalls = Math.max(1, ...buckets.map((b) => b.calls));
+  const rawBuckets = summary ? (dimension === "model" ? summary.byModel : summary.byTask) : [];
   const label = dimension === "model" ? modelRow : taskRow;
+  const buckets = sortUsageBuckets(rawBuckets, sort.key, sort.dir, (k) => label(k).name);
+  const maxCalls = Math.max(1, ...buckets.map((b) => b.calls));
+
+  // A repeat click on the active column flips direction; a new column starts
+  // descending for the figures (largest first — the usual question) and
+  // ascending for the name (A→Z).
+  const onSort = (key: UsageSortKey) =>
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "name" ? "asc" : "desc" },
+    );
+
+  const headCell = (key: UsageSortKey, text: string, narrow = false) => (
+    <button
+      type="button"
+      className={`${ui.usageSortBtn}${sort.key === key ? ` ${ui.usageSortActive}` : ""}${narrow ? ` ${ui.hideNarrow}` : ""}`}
+      onClick={() => onSort(key)}
+      aria-label={t("systemSettings.usage.sortBy", { col: text })}
+    >
+      {text}
+      {sort.key === key && (
+        <span className={ui.usageSortArrow} aria-hidden="true">
+          {sort.dir === "asc" ? "▲" : "▼"}
+        </span>
+      )}
+    </button>
+  );
 
   const cards = total
     ? [
@@ -198,13 +233,13 @@ export function UsagePane() {
         ) : (
           <>
             <div className={`${ui.usageGrid} ${ui.usageHead}`}>
-              <span>{t("systemSettings.usage.colName")}</span>
-              <span>{t("systemSettings.usage.colCalls")}</span>
-              <span>{t("systemSettings.usage.colInput")}</span>
-              <span className={ui.hideNarrow}>{t("systemSettings.usage.colCached")}</span>
-              <span>{t("systemSettings.usage.colOutput")}</span>
-              <span className={ui.hideNarrow}>{t("systemSettings.usage.colHitRate")}</span>
-              <span>{t("systemSettings.usage.colCost")}</span>
+              {headCell("name", t("systemSettings.usage.colName"))}
+              {headCell("calls", t("systemSettings.usage.colCalls"))}
+              {headCell("input", t("systemSettings.usage.colInput"))}
+              {headCell("cached", t("systemSettings.usage.colCached"), true)}
+              {headCell("output", t("systemSettings.usage.colOutput"))}
+              {headCell("hitRate", t("systemSettings.usage.colHitRate"), true)}
+              {headCell("cost", t("systemSettings.usage.colCost"))}
             </div>
             {buckets.map((b) => {
               const { name, sub } = label(b.key);

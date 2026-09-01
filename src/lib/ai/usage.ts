@@ -15,9 +15,9 @@
 
 import { getDb } from "../project";
 
-export type UsageWindow = "7d" | "30d" | "all";
+export type UsageWindow = "today" | "7d" | "30d" | "all";
 
-export const USAGE_WINDOWS: UsageWindow[] = ["7d", "30d", "all"];
+export const USAGE_WINDOWS: UsageWindow[] = ["today", "7d", "30d", "all"];
 
 export interface UsageBucket {
   /** A model id, a task id, or `"total"` for the rollup. */
@@ -39,6 +39,7 @@ export interface UsageSummary {
 const DAY_SECONDS = 86_400;
 
 const WINDOW_DAYS: Record<UsageWindow, number | null> = {
+  today: 0,
   "7d": 7,
   "30d": 30,
   all: null,
@@ -52,10 +53,20 @@ const WINDOW_DAYS: Record<UsageWindow, number | null> = {
  * can use the same `created_at >= ?` predicate. Clamped at 0 because a system
  * clock set before 1970 would otherwise produce a negative cutoff, which reads
  * as "everything" anyway but only by accident.
+ *
+ * `today` is the one window that snaps to a calendar boundary rather than
+ * counting back a fixed span: the author means "since local midnight", not
+ * "the last 24 hours", so it is derived from the local day rather than
+ * subtracted from `nowMs`.
  */
 export function windowStartSeconds(window: UsageWindow, nowMs: number): number {
   const days = WINDOW_DAYS[window];
   if (days == null) return 0;
+  if (window === "today") {
+    const d = new Date(nowMs);
+    d.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor(d.getTime() / 1000));
+  }
   return Math.max(0, Math.floor(nowMs / 1000) - days * DAY_SECONDS);
 }
 
@@ -108,6 +119,80 @@ export function sortBuckets(buckets: UsageBucket[]): UsageBucket[] {
       b.completionTokens - a.completionTokens ||
       a.key.localeCompare(b.key),
   );
+}
+
+/** The detail table's sortable columns. `name` is the row label, the rest map
+ *  one-to-one onto the figures printed in that row. */
+export type UsageSortKey =
+  | "name"
+  | "calls"
+  | "input"
+  | "cached"
+  | "output"
+  | "hitRate"
+  | "cost";
+
+export type UsageSortDir = "asc" | "desc";
+
+/** Uncached ("fresh") input — `cachedTokens` is a subset of `promptTokens`,
+ *  so the input column is the difference, not the raw prompt figure. */
+function freshInput(b: UsageBucket): number {
+  return Math.max(0, b.promptTokens - b.cachedTokens);
+}
+
+/** A group with no prompt tokens has no meaningful hit rate; -1 sorts those
+ *  rows below every real ratio in descending order (where they read as "—"). */
+function cacheHitRatio(b: UsageBucket): number {
+  return b.promptTokens > 0 ? b.cachedTokens / b.promptTokens : -1;
+}
+
+/**
+ * Order the detail rows by a chosen column and direction.
+ *
+ * The `name` column sorts by the *resolved* display name — a model or task id
+ * means nothing to the reader — so the caller passes a resolver rather than
+ * this module reaching into the active profile. Cost ties break on output
+ * tokens: a provider whose pricing the author never filled in bills $0 for
+ * real traffic, and this keeps those rows in a useful order instead of
+ * collapsing them onto the id comparison. The final id comparison exists only
+ * to make the order total, so identical data always renders the same way
+ * regardless of direction.
+ */
+export function sortUsageBuckets(
+  buckets: UsageBucket[],
+  key: UsageSortKey,
+  dir: UsageSortDir,
+  nameOf: (bucketKey: string) => string,
+): UsageBucket[] {
+  const mul = dir === "asc" ? 1 : -1;
+  return [...buckets].sort((a, b) => {
+    let primary = 0;
+    switch (key) {
+      case "name":
+        primary = nameOf(a.key).localeCompare(nameOf(b.key));
+        break;
+      case "calls":
+        primary = a.calls - b.calls;
+        break;
+      case "input":
+        primary = freshInput(a) - freshInput(b);
+        break;
+      case "cached":
+        primary = a.cachedTokens - b.cachedTokens;
+        break;
+      case "output":
+        primary = a.completionTokens - b.completionTokens;
+        break;
+      case "hitRate":
+        primary = cacheHitRatio(a) - cacheHitRatio(b);
+        break;
+      case "cost":
+        primary = a.costUsd - b.costUsd || a.completionTokens - b.completionTokens;
+        break;
+    }
+    if (primary !== 0) return mul * primary;
+    return a.key.localeCompare(b.key);
+  });
 }
 
 // The grouped column is a literal in each statement, never interpolated: the

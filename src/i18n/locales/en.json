@@ -440,6 +440,7 @@
       "section": "Usage",
       "hint": "Tokens and cost recorded for every model call in this project. Cost is derived from the prices you entered for each model; models with no price contribute tokens only.",
       "windows": {
+        "today": "Today",
         "7d": "Last 7 days",
         "30d": "Last 30 days",
         "all": "All time"
@@ -473,6 +474,7 @@
       "colOutput": "Output",
       "colHitRate": "Hit rate",
       "colCost": "Cost",
+      "sortBy": "Sort by {{col}}",
       "cards": {
         "calls": "Calls",
         "input": "INPUT TOKENS",
