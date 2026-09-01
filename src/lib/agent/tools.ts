@@ -15,7 +15,7 @@ import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
-import { collectionViews, entityCollections, imageSlotChecklistText, isGalleryManifest, isPlainEntityFilename, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
+import { collectionViews, entityCollections, imageSlotChecklistText, isGalleryManifest, isPlainEntityFilename, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, UNGROUPED, type LoreEntity, type LoreIndex, type LoreScope } from "../lore";
 import { findCategory, loreCategories } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import {
@@ -57,14 +57,17 @@ export interface ToolResult {
  */
 export function formatLoreIndex(
   loreIndex: LoreIndex,
-  scope?: string | null,
+  scope?: LoreScope,
   declared?: readonly string[],
   isZh = false,
 ): string {
-  const scoped = scopeLoreIndex(loreIndex, scope ?? null);
-  const hidden = outOfScopeCount(loreIndex, scope ?? null);
-  const fence = scope
-    ? `\n\n(The author has narrowed the working set to the collection "${scope}". ` +
+  // Normalise away an empty array so `[]` never reads as an active fence.
+  const active = scope && scope.length > 0 ? scope : null;
+  const scoped = scopeLoreIndex(loreIndex, active);
+  const hidden = outOfScopeCount(loreIndex, active);
+  const where = active ? scopeWhere(active) : "";
+  const fence = active
+    ? `\n\n(The author has narrowed the working set to ${where}. ` +
       `${hidden} further ${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and left out of this list — ` +
       `you can still read one by name if the author asks for it, but do not go looking through them on your own.)`
     : "";
@@ -111,7 +114,7 @@ export function formatLoreIndex(
   // exactly the misread that makes the model propose creating a duplicate.
   // Suppressed under a 取材范围: a category emptied by the fence is not empty,
   // and the fence note already explains the narrowing.
-  const empty = scope
+  const empty = active
     ? []
     : loreCategories().filter((c) => !(scoped[c.id]?.length));
   const emptyNote = empty.length
@@ -126,10 +129,29 @@ export function formatLoreIndex(
     : "";
 
   if (lines.length === 0) {
-    if (scope) return `No lore entities in the collection "${scope}".${fence}`;
+    if (active) return `No lore entities in ${where}.${fence}`;
     return `No lore entities found in this project.${emptyNote}${labelHint}`;
   }
   return catalogue + lines.join("\n") + emptyNote + labelHint + fence;
+}
+
+/**
+ * The active 取材范围 as an English phrase for the fence note:
+ *   ["小说A"]                     → the collection "小说A"
+ *   ["小说A","共享设定"]           → the collections "小说A", "共享设定"
+ *   ["小说A", UNGROUPED]          → the collection "小说A" (plus entries not filed in any collection)
+ *   [UNGROUPED]                   → entries not filed in any collection
+ */
+function scopeWhere(scope: readonly string[]): string {
+  const named = scope.filter((s) => s !== UNGROUPED);
+  const unfiled = scope.includes(UNGROUPED);
+  const list = named.map((s) => `"${s}"`).join(", ");
+  const cols = named.length === 0
+    ? ""
+    : `the collection${named.length > 1 ? "s" : ""} ${list}`;
+  if (cols && unfiled) return `${cols} (plus entries not filed in any collection)`;
+  if (cols) return cols;
+  return "entries not filed in any collection";
 }
 
 /** Case-insensitive entity lookup by name or alias across all categories. */
@@ -857,7 +879,7 @@ function isSearchableFile(name: string): boolean {
  */
 function scopedLoreFiles(
   loreIndex: LoreIndex,
-  loreScope: string | null,
+  loreScope: LoreScope,
 ): { dirPath: string; name: string; filename: string }[] {
   const out: { dirPath: string; name: string; filename: string }[] = [];
   for (const entities of Object.values(scopeLoreIndex(loreIndex, loreScope))) {
@@ -981,7 +1003,7 @@ export interface SearchOptions {
   /** Narrow to one manuscript subtree — which also skips the knowledge base. */
   folder?: string;
   loreIndex?: LoreIndex;
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   /** `ToolContext.onProgress` — see `throttledProgress` for the rate. */
   onProgress?: (p: ToolProgress) => void;
 }
@@ -1060,8 +1082,8 @@ export async function searchWritingFiles(
 
   const hidden = scanLore ? outOfScopeCount(loreIndex!, loreScope ?? null) : 0;
   const fenceNote =
-    hidden > 0
-      ? `\n\n(The knowledge-base scan was limited to the collection "${loreScope}"; ${hidden} further ` +
+    hidden > 0 && loreScope
+      ? `\n\n(The knowledge-base scan was limited to ${scopeWhere(loreScope)}; ${hidden} further ` +
         `${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and were not searched. You can still ` +
         "read one by name with read_lore_entity if the author asks for it.)"
       : "";

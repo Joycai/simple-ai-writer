@@ -11,7 +11,7 @@
 
 import { connOptions, type AiConn } from "../ai/conn";
 import type { ContentPart, StreamMessage } from "../ai/types";
-import type { LoreIndex } from "../lore";
+import type { LoreIndex, LoreScope } from "../lore";
 import type { AgentEvent } from "./events";
 import type { TaskPreset } from "./presets";
 import type { ToolContext } from "./registry";
@@ -31,7 +31,7 @@ export interface LoreAgentTaskArgs extends AiConn {
    * 取材范围（见 lib/lore/collections）。这些模态也要认围栏：一次「改进条目」
    * 若把别的集合的材料织进本条，正是集合要解决的那个串味问题。
    */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   /** Called on every text chunk with the full accumulated text so far. */
   onText: (accumulated: string) => void;
   /** Structured progress for an execution-log display. */

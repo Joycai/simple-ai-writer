@@ -14,9 +14,13 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import {
+  UNGROUPED,
   collectionBreakdown,
   collectionViews,
+  concreteScopeCollections,
+  scopeHas,
   scopeLoreIndex,
+  toggleScope,
   ungroupedCount,
   loreEntityCount,
   type LoreIndex,
@@ -24,6 +28,30 @@ import {
 } from "../../../lib/lore";
 import { categoryLabel, findCategory } from "../../../lib/profile";
 import styles from "./collections.module.css";
+
+/**
+ * 取材范围的一句话摘要，供头部按钮与骑缝带显示「立在几摊上」。
+ *   null            → 全部
+ *   ["小说A"]        → 小说A
+ *   ["小说A","共享"] → 小说A ＋1（title 列全名）
+ *   含未归集         → 把「未归集」也算一份
+ */
+function useScopeSummary(scope: LoreScope): { label: string; title: string; multi: boolean } {
+  const { t } = useTranslation();
+  if (!scope || scope.length === 0) {
+    const all = t("lore.collections.all");
+    return { label: all, title: all, multi: false };
+  }
+  const parts = concreteScopeCollections(scope);
+  if (scopeHas(scope, UNGROUPED)) parts.push(t("lore.collections.ungrouped"));
+  const title = parts.join(" · ");
+  if (parts.length <= 1) return { label: parts[0] ?? title, title, multi: false };
+  return {
+    label: t("lore.collections.scope.summary", { first: parts[0], n: parts.length - 1 }),
+    title,
+    multi: true,
+  };
+}
 
 /** 超过这个数就折起，并显示过滤框——设计稿 26-C 的退化规则。 */
 const FOLD_AFTER = 8;
@@ -79,6 +107,14 @@ export function ScopeMenu({
   const rows = useCollectionRows(index, declared, isZh);
   const total = loreEntityCount(index);
   const unfiled = ungroupedCount(index);
+  // 并集：去重后真正的候选数，和「按归属计的各摊之和」不同——算式行就是把这差额说清楚。
+  const candidates = loreEntityCount(scopeLoreIndex(index, scope));
+  const pickedCount = scope?.length ?? 0;
+  const memberParts = [
+    ...rows.filter((r) => scopeHas(scope, r.name)).map((r) => r.count),
+    ...(scopeHas(scope, UNGROUPED) ? [unfiled] : []),
+  ];
+  const memberships = memberParts.reduce((a, b) => a + b, 0);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -119,7 +155,10 @@ export function ScopeMenu({
     };
   }, [onClose]);
 
-  const pick = (next: LoreScope) => { onPick(next); onClose(); };
+  // 多选：切一个成员的在/不在，**不关闭**弹层（作者要连勾好几个）；「全部」是复位。
+  // 关闭走点空白 / Esc。
+  const toggle = (name: string) => onPick(toggleScope(scope, name));
+  const setAll = () => onPick(null);
 
   return createPortal(
     <div
@@ -137,6 +176,11 @@ export function ScopeMenu({
         <div className={styles.menuHeadRow}>
           <span className={styles.bandEyebrow}>{t("lore.collections.scope.eyebrow")}</span>
           <span style={{ flex: 1 }} />
+          {scope !== null && (
+            <span className={styles.menuHeadCount}>
+              {t("lore.collections.scope.unionCount", { picked: pickedCount, n: candidates })}
+            </span>
+          )}
           {needsFilter && (
             <span className={styles.rowCount}>
               {t("lore.collections.scope.collectionCount", { n: rows.length })}
@@ -160,36 +204,32 @@ export function ScopeMenu({
       )}
 
       <div className={styles.menuList}>
+        {/* 「全部」不带勾选框：它是复位项，一个勾都没有＝它生效（设计稿 03 屏 26）。 */}
         <button
           type="button"
-          className={`${styles.row} ${narrow ? styles.rowNarrow : ""} ${scope === null ? styles.rowActive : ""}`}
-          onClick={() => pick(null)}
+          className={`${styles.row} ${styles.rowAll} ${narrow ? styles.rowNarrow : ""} ${scope === null ? styles.rowActive : ""}`}
+          onClick={setAll}
         >
-          <span className={`${styles.dot} ${scope === null ? styles.dotOn : ""}`} />
-          <div className={styles.rowMain}>
-            <span className={styles.rowName}>{t("lore.collections.all")}</span>
-          </div>
+          <span className={styles.rowAllName}>{t("lore.collections.all")}</span>
+          <span className={styles.rowHint}>{t("lore.collections.scope.allHint")}</span>
           <span style={{ flex: 1 }} />
-          <div className={styles.rowTail}>
-            <span className={styles.rowCount}>
-              {narrow ? total : t("lore.collections.entries", { n: total })}
-            </span>
-            {scope === null && (
-              <span className={styles.rowBadge}>{t("lore.collections.scope.active")}</span>
-            )}
-          </div>
+          <span className={styles.rowCount}>
+            {narrow ? total : t("lore.collections.entries", { n: total })}
+          </span>
         </button>
 
         {shown.map((row) => {
-          const active = scope !== null && row.name === scope;
+          const active = scopeHas(scope, row.name);
           return (
             <button
               type="button"
               key={row.name}
               className={`${styles.row} ${narrow ? styles.rowNarrow : ""} ${active ? styles.rowActive : ""}`}
-              onClick={() => pick(row.name)}
+              onClick={() => toggle(row.name)}
+              role="option"
+              aria-selected={active}
             >
-              <span className={`${styles.dot} ${active ? styles.dotOn : ""}`} />
+              <span className={`${styles.dot} ${active ? styles.dotOn : ""}`}>{active ? "✓" : ""}</span>
               <div className={styles.rowMain}>
                 <span className={styles.rowName} title={row.name}>{row.name}</span>
                 {!narrow && row.breakdown && (
@@ -197,40 +237,80 @@ export function ScopeMenu({
                 )}
               </div>
               <span style={{ flex: 1 }} />
-              <div className={styles.rowTail}>
-                {active && <span className={styles.rowBadge}>{t("lore.collections.scope.active")}</span>}
-                <span className={styles.rowCount}>
-                  {narrow ? row.count : t("lore.collections.entries", { n: row.count })}
-                </span>
-              </div>
+              <span className={styles.rowCount}>
+                {narrow ? row.count : t("lore.collections.entries", { n: row.count })}
+              </span>
             </button>
           );
         })}
 
-        {folded && filtered.length > FOLD_AFTER && (
-          <button type="button" className={styles.menuFold} onClick={() => setExpanded(true)}>
-            {t("lore.collections.scope.more", { n: filtered.length - FOLD_AFTER })}
-            <span style={{ flex: 1 }} />
-            <span className={styles.menuFoldNote}>{t("lore.collections.scope.moreOrder")}</span>
-          </button>
-        )}
+        {folded && filtered.length > FOLD_AFTER && (() => {
+          // 折起不丢勾：候选照算，只是展开才看得见。折行也报一下藏了几个已勾的。
+          const hiddenPicked = filtered.slice(FOLD_AFTER).filter((r) => scopeHas(scope, r.name)).length;
+          return (
+            <button type="button" className={styles.menuFold} onClick={() => setExpanded(true)}>
+              {t("lore.collections.scope.more", { n: filtered.length - FOLD_AFTER })}
+              {hiddenPicked > 0 && (
+                <span className={styles.menuFoldPicked}>
+                  {t("lore.collections.scope.morePicked", { n: hiddenPicked })}
+                </span>
+              )}
+              <span style={{ flex: 1 }} />
+              <span className={styles.menuFoldNote}>{t("lore.collections.scope.moreOrder")}</span>
+            </button>
+          );
+        })()}
 
-        {/* 未归集只是一档**筛选**，不是取材意图——所以它在墙的装订栏里可点，
-            在取材范围切换器里只作为一个数字出现，不可选。 */}
-        <div className={styles.menuDivider} />
-        <div className={`${styles.row} ${narrow ? styles.rowNarrow : ""}`} style={{ cursor: "default" }}>
-          <span className={`${styles.dot} ${styles.dotDashed}`} />
-          <div className={styles.rowMain}>
-            <span className={`${styles.rowName} ${styles.rowNameGhost}`}>
-              {t("lore.collections.ungrouped")}
+        {/* 未归集是并集的合法成员：多选之后「小说A ＋ 还没归类的散条目」是常态需求，
+            所以它在切换器里也可勾（单选时代它在这里只作为一个数字出现）。 */}
+        {(() => {
+          const active = scopeHas(scope, UNGROUPED);
+          return (
+            <>
+              <div className={styles.menuDivider} />
+              <button
+                type="button"
+                className={`${styles.row} ${narrow ? styles.rowNarrow : ""} ${active ? styles.rowActive : ""}`}
+                onClick={() => toggle(UNGROUPED)}
+                role="option"
+                aria-selected={active}
+              >
+                <span className={`${styles.dot} ${active ? styles.dotDashedOn : styles.dotDashed}`}>
+                  {active ? "✓" : ""}
+                </span>
+                <div className={styles.rowMain}>
+                  <span className={`${styles.rowName} ${styles.rowNameGhost}`}>
+                    {t("lore.collections.ungrouped")}
+                  </span>
+                  {!narrow && <span className={styles.rowHint}>{t("lore.collections.scope.ungroupedScopeHint")}</span>}
+                </div>
+                <span style={{ flex: 1 }} />
+                <span className={styles.rowCount}>
+                  {narrow ? unfiled : t("lore.collections.entries", { n: unfiled })}
+                </span>
+              </button>
+            </>
+          );
+        })()}
+
+        {/* 并集算式：各摊按归属计，之和会大于去重后的候选数——勾了 ≥2 摊时把这差额说清楚。 */}
+        {memberParts.length >= 2 && (
+          <div className={styles.menuUnion}>
+            <span className={styles.menuUnionSum}>
+              {t("lore.collections.scope.unionSum", {
+                sum: memberParts.join(" + "),
+                memberships,
+                candidates,
+              })}
             </span>
-            {!narrow && <span className={styles.rowHint}>{t("lore.collections.ungroupedHint")}</span>}
+            {memberships > candidates && (
+              <>
+                <span style={{ flex: 1 }} />
+                <span className={styles.menuUnionNote}>{t("lore.collections.scope.unionDedup")}</span>
+              </>
+            )}
           </div>
-          <span style={{ flex: 1 }} />
-          <span className={styles.rowCount}>
-            {narrow ? unfiled : t("lore.collections.entries", { n: unfiled })}
-          </span>
-        </div>
+        )}
       </div>
 
       {narrow ? (
@@ -257,15 +337,9 @@ export function ScopeMenu({
           </button>
         )}
         <span style={{ flex: 1 }} />
-        {scope !== null && (
-          <button
-            type="button"
-            className={`${styles.menuFootLink} ${styles.muted}`}
-            onClick={() => pick(null)}
-          >
-            {t("lore.collections.scope.reset")}
-          </button>
-        )}
+        {/* 复位就是点「全部」那一行——所以脚里不再放「退回全部」按钮，改放这条自动行为
+            的说明（勾任意一摊＝离开全部；取消到零＝回到全部）。设计稿 03 屏 26。 */}
+        <span className={styles.menuFootHint}>{t("lore.collections.scope.autoAll")}</span>
       </div>
     </div>,
     document.body,
@@ -281,6 +355,7 @@ export function ScopeButton({
   onOpen: (anchor: ScopeMenuAnchor) => void;
 }) {
   const { t } = useTranslation();
+  const summary = useScopeSummary(scope);
   return (
     <button
       type="button"
@@ -291,7 +366,7 @@ export function ScopeButton({
       }}
     >
       <span className={styles.scopeButtonLabel}>{t("lore.collections.scope.label")}</span>
-      <span className={styles.scopeButtonValue}>{scope ?? t("lore.collections.all")}</span>
+      <span className={styles.scopeButtonValue} title={summary.title}>{summary.label}</span>
       <span className={styles.scopeButtonCaret}>▾</span>
     </button>
   );
@@ -308,12 +383,13 @@ export function ScopeBand({
   onReset,
 }: {
   index: LoreIndex;
-  scope: string;
+  scope: LoreScope;
   variant?: "wall" | "narrow";
   onSwitch: (anchor: ScopeMenuAnchor) => void;
   onReset: () => void;
 }) {
   const { t } = useTranslation();
+  const summary = useScopeSummary(scope);
   const inScope = loreEntityCount(scopeLoreIndex(index, scope));
   const narrow = variant === "narrow";
 
@@ -329,7 +405,7 @@ export function ScopeBand({
         }}
       >
         <span className={styles.bandEyebrow}>{t("lore.collections.scope.label")}</span>
-        <span className={styles.bandName}>{scope}</span>
+        <span className={styles.bandName} title={summary.title}>{summary.label}</span>
         <span className={styles.bandCount}>{inScope}</span>
         <span style={{ flex: 1 }} />
         <span className={styles.scopeButtonCaret}>▾</span>
@@ -341,7 +417,7 @@ export function ScopeBand({
     <div className={styles.band}>
       <span className={styles.bandEyebrow}>{t("lore.collections.scope.eyebrow")}</span>
       <span className={styles.bandRule} />
-      <span className={styles.bandName}>{scope}</span>
+      <span className={styles.bandName} title={summary.title}>{summary.label}</span>
       <span className={styles.bandCount}>{t("lore.collections.scope.candidates", { n: inScope })}</span>
       <span className={styles.bandRule} />
       <div className={styles.bandExplain}>

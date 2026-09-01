@@ -16,7 +16,12 @@ import {
   type CategoryId,
   type LoreDetailMode,
 } from "../lib/lore";
-import type { LoreScope } from "../lib/lore";
+import {
+  concreteScopeCollections,
+  parseScopePref,
+  serializeScope,
+  type LoreScope,
+} from "../lib/lore";
 import { makeDir, renamePath } from "../lib/fs/fileio";
 import { deletePref, LORE_SCOPE_PREFIX, readPref, writePref } from "../lib/prefs";
 
@@ -59,16 +64,16 @@ interface LoreState {
    */
   pendingExtract: string | null;
   /**
-   * 生效中的**取材范围**：一个集合名，或 null ＝ 全部（见 lib/lore/collections）。
+   * 生效中的**取材范围**：一组集合名的并集，或 null ＝ 全部（见 lib/lore/collections）。
    *
-   * 按项目持久化（`lore:scope:<projectPath>`）。住在 loreStore 而不是 appStore，
-   * 因为它说的是知识库的一个子集是哪些；每个 AI 入口在组装上下文时读它，而不是
-   * 各自记一份。
+   * 按项目持久化（`lore:scope:<projectPath>`，存 JSON 数组）。住在 loreStore 而不是
+   * appStore，因为它说的是知识库的一个子集是哪些；每个 AI 入口在组装上下文时读它，
+   * 而不是各自记一份。
    */
   scope: LoreScope;
 
   scanProject: (projectPath: string) => Promise<void>;
-  /** 切换取材范围并记住（null ＝ 全部）。 */
+  /** 切换取材范围并记住（null 或空 ＝ 全部）。 */
   setScope: (projectPath: string | null, scope: LoreScope) => void;
   /** Ask the lore wall to open AI-extract seeded with this passage. */
   requestExtract: (text: string) => void;
@@ -172,8 +177,8 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       try {
         // 范围随索引一起装载：扫描是「换项目了」唯一必经的地方，而范围是按项目存的。
         // 反复扫描同一个项目读到的是同一个值（setScope 同时写盘与写 state），所以
-        // 这里不会把会话中途的切换覆盖掉。
-        const scope = readPref(`${LORE_SCOPE_PREFIX}${projectPath}`)?.trim() || null;
+        // 这里不会把会话中途的切换覆盖掉。`parseScopePref` 兼容旧的单集合裸字符串。
+        const scope = parseScopePref(readPref(`${LORE_SCOPE_PREFIX}${projectPath}`));
         set({ index: await scanLore(projectPath), scope });
       } finally {
         if (--activeScans === 0) set({ isLoading: false });
@@ -192,13 +197,14 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   setScope: (projectPath, scope) => {
-    const next = scope?.trim() ? scope.trim() : null;
+    const serialized = serializeScope(scope); // 归一化 + JSON；空/无效 → null
+    const next = serialized ? parseScopePref(serialized) : null;
     set({ scope: next });
     if (!projectPath) return;
     const key = `${LORE_SCOPE_PREFIX}${projectPath}`;
     // 「全部」写成删除这一行，而不是存一个空串：缺席本来就是默认值，留一行空的只会
     // 让项目被删掉之后的清理工作多认一种形态。
-    if (next) writePref(key, next);
+    if (serialized) writePref(key, serialized);
     else deletePref(key);
   },
 
@@ -274,10 +280,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   createNewEntity: async (projectPath, category, id, name) => {
-    // 归进当前取材范围：范围生效时新建的条目若落成「未归集」，它会立刻从作者刚刚
-    // 建它的那面墙上消失（agent 侧同理，见 writeTools 的 create_lore_entity）。
+    // 归进当前取材范围里的所有**实集合**：范围生效时新建的条目若落成「未归集」，
+    // 它会立刻从作者刚刚建它的那面墙上消失（agent 侧同理，见 writeTools 的
+    // create_lore_entity）。范围只含「未归集」或为 null 时归零 —— 那本来就在范围内。
     const { scope } = get();
-    await createEntity(projectPath, category, id, name, scope ? [scope] : []);
+    await createEntity(projectPath, category, id, name, concreteScopeCollections(scope));
     await get().scanProject(projectPath);
     const entity = get().index[category]?.find((e) => e.id === id);
     if (entity) get().selectEntity(entity);

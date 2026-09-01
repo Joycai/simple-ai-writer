@@ -10,6 +10,7 @@ import { useProjectStore, useTerms } from "../../stores/projectStore";
 import {
   applyLoreImport,
   cancelLoreImport,
+  concreteScopeCollections,
   entityCollections,
   exportLoreBundle,
   indexCategories,
@@ -19,6 +20,7 @@ import {
   pinnedEntityDirs,
   relocationTargets,
   savePinnedLore,
+  scopeHas,
   setEntityAvatar,
   slugifyEntityId,
   stageLoreImport,
@@ -246,6 +248,18 @@ export function LoreWall() {
 
   const unfiled = useMemo(() => ungroupedCount(index), [index]);
 
+  // 当前范围里的实集合，以及给作者看的一句话（含「未归集」这个成员时把它也写出来）。
+  const scopeConcrete = useMemo(() => concreteScopeCollections(scope), [scope]);
+  const scopeDisplay = useMemo(() => {
+    if (!scope) return "";
+    const parts = concreteScopeCollections(scope);
+    if (scopeHas(scope, UNGROUPED)) parts.push(t("lore.collections.ungrouped"));
+    return parts.join(" · ");
+  }, [scope, t]);
+  // 「把未归集归入当前范围」这颗按钮只在未归集真的**在围栏外**、且范围里有实集合可归时
+  // 才有意义：范围含「未归集」时那些条目本来就在内，没什么可归的。
+  const canFileUnfiled = scope !== null && !scopeHas(scope, UNGROUPED) && scopeConcrete.length > 0;
+
   /** 这一张卡此刻在围栏外吗？ */
   const isOut = (e: LoreEntity) =>
     scope !== null && !inScope(e, scope) && !pinnedDirs.has(e.dirPath);
@@ -355,10 +369,11 @@ export function LoreWall() {
 
   /** 墙底那颗「把未归集的都归进当前范围」——围栏生效时最常见的一次性收尾。 */
   const fileUnfiledIntoScope = async () => {
-    if (!scope) return;
+    if (scopeConcrete.length === 0) return;
     const targets = allEntities.filter((e) => entityCollections(e).length === 0);
     if (targets.length === 0) return;
-    await commitAssign(targets, [scope], []);
+    // 归进范围里的所有实集合，让它们在当前这面围起来的墙上都可见。
+    await commitAssign(targets, scopeConcrete, []);
   };
 
   /** 作者自建的分类才可以删——能力包带来的那些，删除的地方在工作台的包开关。 */
@@ -851,7 +866,7 @@ export function LoreWall() {
             // key 只跟取材范围走：换围栏是一次换幕（它同时改的是 AI 的视野），
             // 值得一次淡入；而搜索/分类筛选每次按键都会改 filtered，跟着重挂载
             // 就会变成在打字时闪烁。
-            <div key={scope ?? "all"} className={styles.grid}>
+            <div key={scope ? scope.join("│") : "all"} className={styles.grid}>
               {filtered.map((e, idx) => {
                 const featured = idx === 0 && filter === "all";
                 const rot = rotationFor(e.id);
@@ -1016,7 +1031,7 @@ export function LoreWall() {
             {scope !== null && (
               <div className={cs.pageEdge}>
                 <span className={cs.pageEdgeText}>
-                  {t("lore.collections.scope.fence", { name: scope })}
+                  {t("lore.collections.scope.fence", { name: scopeDisplay })}
                 </span>
               </div>
             )}
@@ -1068,13 +1083,13 @@ export function LoreWall() {
                 {t("lore.collections.scope.outNote", { n: outOfScopeVisible })}
               </span>
               <span style={{ flex: 1 }} />
-              {unfiled > 0 && (
+              {unfiled > 0 && canFileUnfiled && (
                 <>
                   <span className={cs.wallFootMono}>
                     {t("lore.collections.scope.ungroupedOut", { n: unfiled })}
                   </span>
                   <button type="button" className={cs.wallFootBtn} onClick={fileUnfiledIntoScope}>
-                    {t("lore.collections.scope.fileInto", { name: scope })}
+                    {t("lore.collections.scope.fileInto", { name: scopeConcrete.join(" · ") })}
                   </button>
                 </>
               )}

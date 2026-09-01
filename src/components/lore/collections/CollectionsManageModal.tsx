@@ -17,6 +17,7 @@ import {
   collectionViews,
   entityCollections,
   sameCollection,
+  scopeHas,
   type LoreIndex,
   type LoreScope,
 } from "../../../lib/lore";
@@ -248,7 +249,7 @@ export function CollectionsManageModal({
                     kept: impact.kept,
                   })}
                 </span>
-                {scope !== null && sameCollection(scope, confirming) && (
+                {scopeHas(scope, confirming) && (
                   <span className={styles.confirmAfterBody}>
                     {t("lore.collections.manage.deleteAfterScope")}
                   </span>

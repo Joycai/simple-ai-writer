@@ -714,11 +714,11 @@ describe("selectLore — 引用扩展", () => {
     const index = refIndex();
     index.characters[0].collections = ["卷一"];
     index.items[0].collections = ["卷二"];
-    const fenced = await selectLore("Aria walked in.", index, [], undefined, { scope: "卷一" });
+    const fenced = await selectLore("Aria walked in.", index, [], undefined, { scope: ["卷一"] });
     expect(fenced.text).not.toContain("变身时召唤的法杖");
     expect(fenced.report.refOutOfScope).toBe(1);
     // 围栏挡的是自动发现；作者亲手置顶的照进不误。
-    const pinned = await selectLore("Aria walked in.", index, [STAFF], undefined, { scope: "卷一" });
+    const pinned = await selectLore("Aria walked in.", index, [STAFF], undefined, { scope: ["卷一"] });
     expect(pinned.text).toContain("变身时召唤的法杖");
     expect(pinned.report.entities.find((e) => e.name === "星辉之杖")?.reason).toBe("pinned");
   });

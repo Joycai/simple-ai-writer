@@ -14,7 +14,7 @@
 
 import { runStructuredTask } from "../agent/structured";
 import { selectLore } from "../context/loreSelect";
-import type { LoreIndex } from "../lore";
+import type { LoreIndex, LoreScope } from "../lore";
 import type { DocMemory } from "../context/memory";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { ToolDefinition } from "../ai/types";
@@ -128,7 +128,7 @@ export interface ScanArgs extends ConnOptions {
    * 外的条目在这里被当成正文的矛盾报出来，等于把「另一本小说的设定」说成本篇的
    * 错误。
    */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   /** Entities the author pinned in the panel; always included. */
   pinnedLorePaths: string[];
   /** Lore category ids from the active profile — the `category` enum. */

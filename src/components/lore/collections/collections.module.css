@@ -146,19 +146,33 @@
   transition: background var(--transition-fast);
 }
 .row:hover { background: var(--lore-sub-bg); }
-.rowActive {
-  background: var(--color-bg-base);
-  border-top: 1px solid var(--color-border-soft);
-  border-bottom: 1px solid var(--color-border-soft);
-}
+/* 已勾的一行：只上一层赭色薄底，不描边——多选时好几行同时生效，逐行描边会成噪音
+   （设计稿 03 屏 26）。 */
+.rowActive { background: var(--color-bg-base); }
 .rowActive:hover { background: var(--color-bg-base); }
 .rowNarrow { padding: 9px 16px; gap: 9px; }
 
-/* 方点：实心＝生效中，空心＝可选，虚线＝未归集。刻意不是圆点——全局零圆角。 */
-.dot { width: 8px; height: 8px; border: 1px solid var(--lore-neutral-line); flex-shrink: 0; transition: background var(--transition-fast), border-color var(--transition-fast); }
-.dotOn { background: var(--color-accent); border-color: var(--color-accent); }
+/* 「全部」行：没有勾选框，名字＋斜体提示同排；muted 色，因为它是复位项而非一摊活。 */
+.rowAll { gap: 8px; }
+.rowAllName { font: 400 15px/1.2 var(--font-serif); color: var(--color-text-muted); flex-shrink: 0; }
+.rowNarrow.rowAll .rowAllName { font-size: 13px; }
+
+/* 勾选框：多选取并集。空心＝可勾；实心赭石＋白 ✓＝已勾；虚线赭石＋赭石 ✓＝未归集
+   已勾。刻意方形——全局零圆角（设计稿 03 屏 26：实心点 → 勾选框）。 */
+.dot {
+  width: 12px; height: 12px;
+  border: 1px solid var(--lore-neutral-line);
+  background: var(--color-bg-base);
+  display: flex; align-items: center; justify-content: center;
+  font: 500 8px/1 var(--font-sans);
+  color: transparent;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.dotOn { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-bg-raised); }
 .dotDashed { border-style: dashed; }
-.rowNarrow .dot { width: 7px; height: 7px; }
+.dotDashedOn { border-style: dashed; border-color: var(--color-accent); background: var(--color-bg-base); color: var(--color-accent); }
+.rowNarrow .dot { width: 11px; height: 11px; }
 
 .rowMain { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .rowName {
@@ -171,6 +185,8 @@
 .rowActive .rowName { font-weight: 500; }
 .rowNarrow .rowName { font-size: 13px; }
 .rowNameGhost { font-style: italic; color: var(--color-text-secondary); }
+/* 未归集勾中时也保持 italic 400（它不是一摊活，不跟着加粗）——设计稿 03 屏 26。 */
+.rowActive .rowNameGhost { font-weight: 400; }
 .rowBreakdown {
   font: 400 9px/1 var(--font-mono);
   letter-spacing: 0.04em;
@@ -209,6 +225,7 @@
   text-align: left;
 }
 .menuFoldNote { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+.menuFoldPicked { font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
 
 .menuNote {
   padding: 11px 16px;
@@ -221,6 +238,22 @@
 .menuNoteZh { font: 400 11px/1.6 var(--font-serif); color: var(--color-text-secondary); }
 .menuNoteEn { font: 400 9px/1.4 var(--font-mono); color: var(--color-text-faint); }
 .menuNoteMono { font: 400 10px/1.55 var(--font-mono); color: var(--color-text-faint); white-space: pre-line; }
+
+/* 并集算式行：勾了 ≥2 摊时，「7 + 4 + 3 ＝ 14 归属 · 去重后 13 条候选」。
+   计数按归属计，各摊之和会大于去重后的候选数——这一行就是把这件事说清楚。 */
+.menuUnion {
+  padding: 9px 16px 10px;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-raised);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.menuUnionSum { font: 400 10px/1.4 var(--font-mono); color: var(--color-text-muted); }
+.menuUnionNote { font: italic 400 10px/1.4 var(--font-serif); color: var(--color-text-faint); text-align: right; }
+
+/* 头部右上角：勾了范围时的「已勾 N · M 条候选」。 */
+.menuHeadCount { font: 400 11px/1 var(--font-mono); color: var(--color-accent); white-space: nowrap; }
 
 .menuFoot {
   padding: 10px 16px;
@@ -237,6 +270,7 @@
 }
 .menuFootLink.muted { color: var(--color-text-muted); }
 .menuFootLink.muted:hover { color: var(--color-accent); }
+.menuFootHint { font: 400 9px/1.5 var(--font-mono); color: var(--color-text-faint); text-align: right; white-space: pre-line; }
 
 /* ── 装订栏（墙左侧 212px） ──────────────────────────────────────────── */
 .rail {

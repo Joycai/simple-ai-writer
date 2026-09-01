@@ -12,16 +12,25 @@ import {
   addCollection,
   bindingLabel,
   collectionBreakdown,
+  concreteScopeCollections,
   passesFilter,
   collectionViews,
   inScope,
   MAX_COLLECTION_NAME,
   normalizeCollections,
+  normalizeScope,
   outOfScopeCount,
+  parseScopePref,
   removeCollection,
   renameCollection,
+  renameScope,
   sameCollection,
+  scopeHas,
   scopeLoreIndex,
+  scopeWith,
+  scopeWithout,
+  serializeScope,
+  toggleScope,
   ungroupedCount,
   type LoreEntity,
   type LoreIndex,
@@ -123,28 +132,109 @@ describe("取材范围", () => {
 
   it("多归属的条目在它每一个集合里都在范围内", () => {
     const cass = entity("Cass", ["小说A", "小说B"]);
-    expect(inScope(cass, "小说A")).toBe(true);
-    expect(inScope(cass, "小说B")).toBe(true);
-    expect(inScope(cass, "项目甲")).toBe(false);
+    expect(inScope(cass, ["小说A"])).toBe(true);
+    expect(inScope(cass, ["小说B"])).toBe(true);
+    expect(inScope(cass, ["项目甲"])).toBe(false);
+  });
+
+  it("并集：属于其中任意一个集合就在范围内", () => {
+    const aria = entity("Aria", ["小说A"]);
+    const bran = entity("Bran", ["小说B"]);
+    const dorn = entity("Dorn", []);
+    expect(inScope(aria, ["小说A", "小说B"])).toBe(true);
+    expect(inScope(bran, ["小说A", "小说B"])).toBe(true);
+    expect(inScope(dorn, ["小说A", "小说B"])).toBe(false);
+  });
+
+  it("空数组等同于 null（全部）", () => {
+    const index = makeIndex();
+    expect(inScope(entity("Dorn", []), [])).toBe(true);
+    expect(scopeLoreIndex(index, [])).toBe(index); // 空围栏＝恒等返回同一引用
+    expect(outOfScopeCount(index, [])).toBe(0);
+  });
+
+  it("未归集是并集的合法成员：范围含 UNGROUPED 时，未归集的条目在范围内", () => {
+    expect(inScope(entity("Dorn", []), [UNGROUPED])).toBe(true);
+    expect(inScope(entity("Aria", ["小说A"]), [UNGROUPED])).toBe(false);
+    // 「小说A ＋ 未归集」——两边都收
+    expect(inScope(entity("Aria", ["小说A"]), ["小说A", UNGROUPED])).toBe(true);
+    expect(inScope(entity("Dorn", []), ["小说A", UNGROUPED])).toBe(true);
+    expect(inScope(entity("Bran", ["小说B"]), ["小说A", UNGROUPED])).toBe(false);
   });
 
   it("未归集的条目不属于任何具体范围", () => {
-    expect(inScope(entity("Dorn", []), "小说A")).toBe(false);
+    expect(inScope(entity("Dorn", []), ["小说A"])).toBe(false);
   });
 
   it("过滤保留全部分类键——下游把键当分类清单用，空分类仍是一个筛选项", () => {
-    const scoped = scopeLoreIndex(makeIndex(), "小说A");
+    const scoped = scopeLoreIndex(makeIndex(), ["小说A"]);
     expect(Object.keys(scoped).sort()).toEqual(["characters", "world"]);
     expect(scoped.characters.map((e) => e.name)).toEqual(["Aria", "Cass"]);
     expect(scoped.world).toEqual([]);
   });
 
   it("如实数出被挡在外面的条目", () => {
-    expect(outOfScopeCount(makeIndex(), "小说A")).toBe(2); // Bran + Dorn
+    expect(outOfScopeCount(makeIndex(), ["小说A"])).toBe(2); // Bran + Dorn
   });
 
   it("数得出未归集的有几条", () => {
     expect(ungroupedCount(makeIndex())).toBe(1);
+  });
+});
+
+describe("多选取材范围的纯逻辑", () => {
+  it("normalizeScope：去空白 / 大小写去重 / 空归 null / 保留 UNGROUPED", () => {
+    expect(normalizeScope(null)).toBeNull();
+    expect(normalizeScope([])).toBeNull();
+    expect(normalizeScope(["  ", ""])).toBeNull();
+    expect(normalizeScope(["小说A", "小说a", " 小说A "])).toEqual(["小说A"]); // 大小写不敏感去重，保留首次写法
+    expect(normalizeScope(["小说A", UNGROUPED, UNGROUPED])).toEqual(["小说A", UNGROUPED]);
+    expect(normalizeScope("小说A")).toEqual(["小说A"]); // 裸字符串也吃
+  });
+
+  it("scopeHas：认集合名（大小写不敏感）与 UNGROUPED 哨兵", () => {
+    expect(scopeHas(["小说A"], "小说a")).toBe(true);
+    expect(scopeHas(["小说A"], "小说B")).toBe(false);
+    expect(scopeHas(null, "小说A")).toBe(false);
+    expect(scopeHas([UNGROUPED], UNGROUPED)).toBe(true);
+    expect(scopeHas(["小说A"], UNGROUPED)).toBe(false);
+  });
+
+  it("scopeWith / scopeWithout / toggleScope", () => {
+    expect(scopeWith(null, "小说A")).toEqual(["小说A"]);
+    expect(scopeWith(["小说A"], "小说B")).toEqual(["小说A", "小说B"]);
+    expect(scopeWith(["小说A"], "小说a")).toEqual(["小说A"]); // 已在其中，不重复
+    expect(scopeWithout(["小说A", "小说B"], "小说A")).toEqual(["小说B"]);
+    expect(scopeWithout(["小说A"], "小说A")).toBeNull(); // 去空回到全部
+    expect(toggleScope(["小说A"], "小说B")).toEqual(["小说A", "小说B"]);
+    expect(toggleScope(["小说A", "小说B"], "小说A")).toEqual(["小说B"]);
+    expect(toggleScope(null, UNGROUPED)).toEqual([UNGROUPED]);
+  });
+
+  it("concreteScopeCollections：滤掉 UNGROUPED 哨兵", () => {
+    expect(concreteScopeCollections(null)).toEqual([]);
+    expect(concreteScopeCollections([UNGROUPED])).toEqual([]);
+    expect(concreteScopeCollections(["小说A", UNGROUPED, "共享"])).toEqual(["小说A", "共享"]);
+  });
+
+  it("renameScope：范围里的成员跟着改名，位置不变，UNGROUPED 不受影响", () => {
+    expect(renameScope(["小说A", "共享"], "小说A", "小说甲")).toEqual(["小说甲", "共享"]);
+    expect(renameScope(["小说A", UNGROUPED], "小说A", "小说甲")).toEqual(["小说甲", UNGROUPED]);
+    expect(renameScope(null, "小说A", "小说甲")).toBeNull();
+    // 改成一个已存在的名字＝合并
+    expect(renameScope(["小说A", "小说甲"], "小说A", "小说甲")).toEqual(["小说甲"]);
+  });
+
+  it("serializeScope / parseScopePref 往返，且吃旧的裸字符串", () => {
+    expect(serializeScope(null)).toBeNull();
+    expect(serializeScope([])).toBeNull();
+    expect(serializeScope(["小说A", "共享"])).toBe(JSON.stringify(["小说A", "共享"]));
+    // 往返
+    expect(parseScopePref(serializeScope(["小说A", UNGROUPED]))).toEqual(["小说A", UNGROUPED]);
+    expect(parseScopePref(null)).toBeNull();
+    expect(parseScopePref("")).toBeNull();
+    // 旧格式：单集合裸字符串（单选时代存的），不能静默读丢成「全部」
+    expect(parseScopePref("小说A")).toEqual(["小说A"]);
   });
 });
 
@@ -194,13 +284,13 @@ describe("selectLore 的围栏语义", () => {
   });
 
   it("设了范围，自动匹配只在范围内命中", async () => {
-    const { report } = await selectLore(mention, index, [], undefined, { scope: "小说A" });
+    const { report } = await selectLore(mention, index, [], undefined, { scope: ["小说A"] });
     expect(report.entities.map((e) => e.name)).toEqual(["Aria"]);
   });
 
   it("置顶穿过围栏——显式指定是作者坚持，不是自动漂进来的", async () => {
     const bran = index.characters.find((e) => e.name === "Bran")!;
-    const { report } = await selectLore(mention, index, [bran.dirPath], undefined, { scope: "小说A" });
+    const { report } = await selectLore(mention, index, [bran.dirPath], undefined, { scope: ["小说A"] });
     const picked = report.entities.map((e) => [e.name, e.reason]);
     expect(picked).toContainEqual(["Bran", "pinned"]);
     expect(picked).toContainEqual(["Aria", "auto"]);
@@ -211,7 +301,7 @@ describe("selectLore 的围栏语义", () => {
   it("多归属的条目对两个范围都可见", async () => {
     const text = "Cass 出现了。";
     for (const scope of ["小说A", "小说B"]) {
-      const { report } = await selectLore(text, index, [], undefined, { scope });
+      const { report } = await selectLore(text, index, [], undefined, { scope: [scope] });
       expect(report.entities.map((e) => e.name)).toEqual(["Cass"]);
     }
   });
@@ -239,13 +329,14 @@ describe("bindingLabel", () => {
 });
 
 describe("墙上的筛选", () => {
-  it("未归集是筛选的一档，但不是取材范围的一档", () => {
+  it("未归集既是筛选的一档，也是取材范围的一档（多选之后）", () => {
     const filed = entity("Aria", ["小说A"]);
     const bare = entity("Dorn", []);
     expect(passesFilter(bare, UNGROUPED)).toBe(true);
     expect(passesFilter(filed, UNGROUPED)).toBe(false);
-    // 同一个值拿去当围栏是没有意义的：inScope 只认真正的集合名。
-    expect(inScope(bare, UNGROUPED)).toBe(false);
+    // 多选之后 UNGROUPED 也是一个合法的围栏成员：inScope 认它。
+    expect(inScope(bare, [UNGROUPED])).toBe(true);
+    expect(inScope(filed, [UNGROUPED])).toBe(false);
   });
 
   it("null 放行一切", () => {

@@ -55,6 +55,10 @@ vi.mock("../lore", () => ({
   // Called at store creation (detailMode's initial value).
   parseDetailMode: () => "read",
   LORE_DETAIL_MODE_PREF: "app:loreDetailMode",
+  // 取材范围的序列化 helpers（scanProject 的 walk 会调 parseScopePref）。
+  parseScopePref: () => null,
+  serializeScope: () => null,
+  concreteScopeCollections: () => [],
 }));
 vi.mock("../fs/fileio", () => ({ removeDir: vi.fn() }));
 

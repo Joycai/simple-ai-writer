@@ -17,7 +17,7 @@ import {
   collectionViews,
   entityCollections,
   inScope,
-  sameCollection,
+  scopeHas,
   categoryTypeName,
   facetSections,
   imageSections,
@@ -1290,7 +1290,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                     <div key={name} className={cs.detailItem}>
                       <span className={cs.detailItemName}>{name}</span>
                       <span style={{ flex: 1 }} />
-                      {scope !== null && sameCollection(name, scope) ? (
+                      {scopeHas(scope, name) ? (
                         <span className={cs.detailItemScope}>
                           {t("lore.collections.scope.current")}
                         </span>
