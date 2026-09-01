@@ -177,16 +177,40 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
   `);
 
   // Persisted 对话助手 sessions — one JSON blob per session, newest few kept
-  // (lib/agent/sessionDb owns the cap and all reads/writes).
+  // (lib/agent/sessionDb owns the cap and all reads/writes). `pinned` is the
+  // author's exemption from that cap.
   await db.execute(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       preview TEXT NOT NULL DEFAULT '',
       data TEXT NOT NULL,
+      pinned INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+  await addChatSessionPinned(db);
 
   await dropDeadTables(db);
+}
+
+/**
+ * `pinned` on an existing project's `chat_sessions`.
+ *
+ * The table shipped without it, so the CREATE above is a no-op in every
+ * project that already has one — the column only arrives through an ALTER.
+ * Mirrors lib/ai/configDb's `addColumn`, including why `duplicate column name`
+ * is success rather than failure: this runs on every `getDb`, and a second
+ * window opening the same project can win the race between the read and the
+ * write. Any other error propagates — a chat_sessions table without this
+ * column would let the cap prune a session the author pinned.
+ */
+async function addChatSessionPinned(db: Awaited<ReturnType<typeof Database.load>>) {
+  const columns = await db.select<{ name: string }[]>(`PRAGMA table_info(chat_sessions)`);
+  if (columns.some((c) => c.name === "pinned")) return;
+  try {
+    await db.execute(`ALTER TABLE chat_sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+  } catch (e) {
+    if (!/duplicate column name/i.test(String(e))) throw e;
+  }
 }

@@ -1521,6 +1521,10 @@
       "jumpToLatest": "Jump to latest",
       "history": "Session history",
       "untitledSession": "(empty session)",
+      "pinnedSessions": "Pinned",
+      "recentSessions": "Recent",
+      "pinSession": "Pin this session — it won't be pruned",
+      "unpinSession": "Unpin",
       "imagesNotSentDelegate": "(These images could not travel with this message directly, but a vision subagent is available — call delegate(kind:\"vision\", refs:[path]) to have it read them, then use its findings in your answer:\n{{list}})",
       "subagentChipsLabel": "Session subagent toggles",
       "subagentChip": {

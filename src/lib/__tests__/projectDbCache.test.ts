@@ -13,10 +13,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   // `execute` declares its `sql` parameter so a test can assert on the
-  // statements initSchema issues (see the initSchema block below).
+  // statements initSchema issues (see the initSchema block below). `select`
+  // answers the schema's `PRAGMA table_info` probe: an empty column list means
+  // "old database", which is the case the ALTER exists for.
   load: vi.fn(async (path: string) => ({
     path,
     execute: vi.fn(async (_sql: string) => {}),
+    select: vi.fn(async (_sql: string) => [] as { name: string }[]),
   })),
 }));
 
@@ -61,7 +64,11 @@ describe("getDb", () => {
     const newDb = await getDb("/new"); // resolves first
 
     // The stale /old load finally resolves — it must not overwrite /new's slot.
-    resolveOld!({ path: "/old", execute: vi.fn(async () => {}) });
+    resolveOld!({
+      path: "/old",
+      execute: vi.fn(async () => {}),
+      select: vi.fn(async () => []),
+    });
     await oldPromise;
 
     const newDbAgain = await getDb("/new");
@@ -114,6 +121,25 @@ describe("initSchema", () => {
     }
   });
 
+  it("adds chat_sessions.pinned to a database that predates it", async () => {
+    // The CREATE is a no-op wherever the table already exists, so a project
+    // opened before pinning shipped can only get the column this way — and
+    // without it the cap would prune sessions the author had pinned.
+    const sql = (await statements("/proj-a")).join("\n");
+    expect(sql).toMatch(/ALTER TABLE chat_sessions ADD COLUMN pinned\b/);
+  });
+
+  it("skips the ALTER when the column is already there", async () => {
+    h.load.mockImplementationOnce(async (path: string) => ({
+      path,
+      execute: vi.fn(async (_sql: string) => {}),
+      select: vi.fn(async (_sql: string) => [{ name: "id" }, { name: "pinned" }]),
+    }));
+
+    const sql = (await statements("/proj-current")).join("\n");
+    expect(sql).not.toMatch(/ALTER TABLE chat_sessions/);
+  });
+
   it("drops them from projects that already have them", async () => {
     const sql = await statements("/proj-a");
     for (const table of DEAD_PROJECT_TABLES) {
@@ -129,6 +155,7 @@ describe("initSchema", () => {
       execute: vi.fn(async (sql: string) => {
         if (sql.startsWith("DROP TABLE")) throw new Error("database is locked");
       }),
+      select: vi.fn(async (_sql: string) => [] as { name: string }[]),
     }));
 
     await expect(getDb("/proj-locked")).resolves.toBeTruthy();

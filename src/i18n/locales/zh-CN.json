@@ -1520,6 +1520,10 @@
       "jumpToLatest": "回到最新",
       "history": "历史会话",
       "untitledSession": "（空会话）",
+      "pinnedSessions": "已固定",
+      "recentSessions": "最近",
+      "pinSession": "固定这次会话，不会被清掉",
+      "unpinSession": "取消固定",
       "imagesNotSentDelegate": "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
       "subagentChipsLabel": "会话子代理开关",
       "subagentChip": {
