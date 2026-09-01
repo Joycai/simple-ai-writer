@@ -864,7 +864,7 @@ describe("formatLoreIndex", () => {
       characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[],
       world: [] as never[],
     };
-    expect(formatLoreIndex(index, "小说A")).not.toContain("Categories with no entries yet");
+    expect(formatLoreIndex(index, ["小说A"])).not.toContain("Categories with no entries yet");
   });
 
   /**
@@ -879,7 +879,7 @@ describe("formatLoreIndex", () => {
         { name: "Dorn", summary: "", collections: [] },
       ] as never[],
     };
-    const out = formatLoreIndex(index, "小说A");
+    const out = formatLoreIndex(index, ["小说A"]);
     expect(out).toContain("  - Aria [小说A]: 骑士");
     expect(out).not.toContain("Bran");
     expect(out).toContain('collection "小说A"');
@@ -912,7 +912,7 @@ describe("formatLoreIndex", () => {
 
   it("says so when the active collection is empty rather than looking like an empty project", () => {
     const index = { characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[] };
-    expect(formatLoreIndex(index, "小说B")).toContain('No lore entities in the collection "小说B"');
+    expect(formatLoreIndex(index, ["小说B"])).toContain('No lore entities in the collection "小说B"');
   });
 });
 
@@ -1028,7 +1028,7 @@ describe("search_text — 知识库这一侧", () => {
     const out = await callFull(
       "search_text",
       { query: "青铜钥匙" },
-      { loreIndex: { characters: [inScope, OTHER] } as never, loreScope: "小说A" },
+      { loreIndex: { characters: [inScope, OTHER] } as never, loreScope: ["小说A"] },
     ).then((r) => r.content);
 
     expect(out).toContain("云锦 · index.md");

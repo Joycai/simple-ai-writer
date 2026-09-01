@@ -2506,6 +2506,8 @@
         "eyebrow": "取材范围 Scope",
         "all": "全部",
         "active": "生效中",
+        "on": "已选",
+        "summary": "{{first}} ＋{{n}}",
         "candidates": "{{n}} 条候选",
         "explain": "自动匹配、agent 取材、一致性检查都只看这 {{n}} 条。围栏不改变你看到的条目，只改变 AI 看得见的条目。",
         "explainEn": "The fence hides nothing from you. It only narrows what the model can find.",

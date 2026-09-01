@@ -36,6 +36,7 @@ import type { MessageContent, StreamMessage } from "../ai/types";
 import { parsePins, selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { readEntityFile } from "../lore/entity";
 import type { LoreEntity, LoreIndex } from "../lore/model";
+import type { LoreScope } from "../lore/collections";
 import { renderMemoryBlock } from "./memory";
 import {
   RESTORE_REPLAY_CHAR_CAP,
@@ -498,7 +499,7 @@ export async function seedRoleplayHistory(opts: {
   primaryText: string;
   loreIndex: LoreIndex;
   /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   firstMessage: MessageContent;
   /** 检索用的纯文本（`firstMessage` 可能带图片 part，图片没有词可匹配）。 */
   matchText: string;

@@ -24,7 +24,7 @@ import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import i18n from "../../i18n";
-import { type LoreIndex } from "../lore";
+import { type LoreIndex, type LoreScope } from "../lore";
 import { loreCategories, loreCategoryIds } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import {
@@ -551,10 +551,10 @@ export interface ToolContext {
    * `findEntityByName` 一路不设防——作者点名要改范围外的某一条时，运行不该假装
    * 那条不存在。同一条规则在注入侧的样子是 `selectLore` 里 pin 豁免围栏。
    *
-   * 顺带也是新建条目的归属：范围生效时 `create_lore_entity` 把新条目直接归进这个
-   * 集合，否则模型刚建好的东西立刻从它自己看得见的那份清单里消失。
+   * 顺带也是新建条目的归属：范围生效时 `create_lore_entity` 把新条目直接归进范围里
+   * 的实集合，否则模型刚建好的东西立刻从它自己看得见的那份清单里消失。
    */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   /**
    * 重整知识库的能力：建/改名/删集合、把条目归入或移出、新建分类。
    *

@@ -23,6 +23,7 @@ import { selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { assembleTurnInjection } from "../context/rag";
 import { readEntityFile } from "../lore/entity";
 import type { LoreIndex } from "../lore/model";
+import type { LoreScope } from "../lore/collections";
 import { areaEntities, scanArea } from "./area";
 import {
   blockSizes, buildBoundContent, contextSignature, recordInlinedRefs, refreshMemoryBlock,
@@ -272,7 +273,7 @@ export async function prepareSeededHistory(opts: {
   persona: AuthorPersona;
   loreIndex: LoreIndex;
   /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   wire: MessageContent;
   matchText: string;
   /** `@` 引用已经把正文内联进 `wire` 的条目（dirPath），不再由检索送第二份。 */
@@ -369,7 +370,7 @@ export async function prepareContinuedHistory(opts: {
   agent: RoleplayAgent;
   loreIndex: LoreIndex;
   /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
-  loreScope?: string | null;
+  loreScope?: LoreScope;
   history: StreamMessage[];
   meta: RoleplaySessionMeta;
   wire: MessageContent;

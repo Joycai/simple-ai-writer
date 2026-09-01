@@ -30,6 +30,7 @@ import {
   RESERVED_ENTITY_FILES,
   addLoreImage,
   cloneLoreIndex,
+  concreteScopeCollections,
   createEntityWithContent,
   dropLoreImageEntry,
   facetFileName,
@@ -317,10 +318,11 @@ export async function createLoreEntityTool(
   const aliases = (args.aliases ?? []).map((a) => String(a).trim()).filter(Boolean);
   const summary = args.summary?.trim() ?? "";
   const entityId = await uniqueEntityId(ctx.projectPath, category, slugifyEntityId(name));
-  // Filed into the active 取材范围 when there is one: an entry created inside a
-  // narrowed working set that lands 未归集 would vanish from the very list the
-  // model just read (see ToolContext.loreScope).
-  const collections = ctx.loreScope ? [ctx.loreScope] : [];
+  // Filed into every real collection in the active 取材范围: an entry created
+  // inside a narrowed working set that lands 未归集 would vanish from the very
+  // list the model just read (see ToolContext.loreScope). A scope of only
+  // 未归集 (or none) files it nowhere — which is already in scope.
+  const collections = concreteScopeCollections(ctx.loreScope ?? null);
   const dirPath = await createEntityWithContent(
     ctx.projectPath, category, entityId, name, aliases, summary, content,
     { collections },

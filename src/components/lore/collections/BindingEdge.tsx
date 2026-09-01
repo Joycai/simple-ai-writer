@@ -10,7 +10,7 @@
  *      是这一轮新增的第三条竖带，本来就只讲归属，多选放这里不与任何旧手势抢位置。
  */
 import { useTranslation } from "react-i18next";
-import { bindingLabel, sameCollection, type LoreScope } from "../../../lib/lore";
+import { UNGROUPED, bindingLabel, scopeHas, type LoreScope } from "../../../lib/lore";
 import styles from "./collections.module.css";
 
 export function BindingEdge({
@@ -44,7 +44,12 @@ export function BindingEdge({
       </button>
 
       {empty ? (
-        <span className={`${styles.edgeMark} ${styles.edgeMarkGhost}`}>
+        // 未归集也可能正在围栏内（范围含「未归集」这个成员）——此时空边标成 in。
+        <span
+          className={`${styles.edgeMark} ${styles.edgeMarkGhost} ${
+            scopeHas(scope, UNGROUPED) ? styles.edgeMarkIn : ""
+          }`}
+        >
           {t("lore.collections.ungrouped")}
         </span>
       ) : (
@@ -55,7 +60,7 @@ export function BindingEdge({
               className={`${styles.edgeMark} ${
                 scope === null
                   ? ""
-                  : sameCollection(name, scope)
+                  : scopeHas(scope, name)
                     ? styles.edgeMarkIn
                     : styles.edgeMarkOut
               }`}

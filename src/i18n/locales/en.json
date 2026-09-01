@@ -2511,6 +2511,8 @@
         "eyebrow": "Scope",
         "all": "All",
         "active": "Active",
+        "on": "On",
+        "summary": "{{first}} +{{n}}",
         "candidates": "{{n}} candidates",
         "explain": "Auto-matching, agent lookups and the consistency check all see only these {{n}}. The fence never changes what you see — only what the model can find.",
         "explainEn": "The fence hides nothing from you. It only narrows what the model can find.",

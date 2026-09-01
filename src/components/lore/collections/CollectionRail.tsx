@@ -13,6 +13,8 @@ import {
   UNGROUPED,
   collectionViews,
   loreEntityCount,
+  scopeHas,
+  scopeWith,
   ungroupedCount,
   type CollectionFilter,
   type LoreIndex,
@@ -83,7 +85,7 @@ export function CollectionRail({
           </button>
 
           {views.map((v) => {
-            const scoped = scope !== null && v.name === scope;
+            const scoped = scopeHas(scope, v.name);
             return (
               <div key={v.name} className={styles.railRowWrap}>
                 <button
@@ -105,7 +107,8 @@ export function CollectionRail({
                     <button
                       type="button"
                       className={styles.railSetScopeLink}
-                      onClick={() => onScope(v.name)}
+                      // 多选：把这个集合**加入**当前范围（并集），而不是替换掉已立起的围栏。
+                      onClick={() => onScope(scopeWith(scope, v.name))}
                     >
                       {t("lore.collections.setScope")}
                     </button>

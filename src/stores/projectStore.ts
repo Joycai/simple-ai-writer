@@ -40,7 +40,10 @@ import {
   // action 体内读起来像递归调用自己，而它其实是那个纯函数。
   removeCollection as removeFromList,
   renameCollection as renameInList,
+  renameScope,
   sameCollection,
+  scopeHas,
+  scopeWithout,
   type LoreEntity,
 } from "../lib/lore";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
@@ -555,10 +558,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
     });
     set({ collections: next });
-    // 取材范围指着旧名字就一起跟过去——不跟的话围栏会指向一个不再存在的集合，
-    // 而那个状态下 AI 一条设定也看不见，且界面上没有任何地方说得出为什么。
-    if (loreStore.scope && sameCollection(loreStore.scope, from)) {
-      loreStore.setScope(projectPath, target);
+    // 取材范围里含旧名字就跟着改名，其余成员不动——不跟的话围栏会指向一个不再存在
+    // 的集合，而那个状态下这一摊 AI 一条设定也看不见，且界面上没有任何地方说得出为什么。
+    if (scopeHas(loreStore.scope, from)) {
+      loreStore.setScope(projectPath, renameScope(loreStore.scope, from, target));
     }
     await useLoreStore.getState().scanProject(projectPath);
   },
@@ -574,8 +577,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
     });
     set({ collections: next });
-    if (loreStore.scope && sameCollection(loreStore.scope, name)) {
-      loreStore.setScope(projectPath, null);
+    // 只把被删的这个成员移出范围，其余成员留着——删一摊不该把作者立着的整道围栏放平。
+    if (scopeHas(loreStore.scope, name)) {
+      loreStore.setScope(projectPath, scopeWithout(loreStore.scope, name));
     }
     await useLoreStore.getState().scanProject(projectPath);
   },

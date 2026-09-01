@@ -61,7 +61,7 @@ describe("tool packs", () => {
   const makeCtx = (overrides?: Partial<ToolContext>): ToolContext => ({
     projectPath: "/test-project",
     loreIndex: {} as never,
-    loreScope: "本传",
+    loreScope: ["本传"],
     multimodal: false,
     signal: new AbortController().signal,
     onNestedEvent: vi.fn(),
@@ -265,7 +265,7 @@ describe("tool packs", () => {
       expect(opts.toolContext.requestApproval).toBe(ctx.requestApproval);
       expect(opts.toolContext.lorePlan).toBe(ctx.lorePlan);
       // The fence and the material bus travel too.
-      expect(opts.toolContext.loreScope).toBe("本传");
+      expect(opts.toolContext.loreScope).toBe(ctx.loreScope);
       expect(opts.toolContext.taskWorkspace).toBe(ctx.taskWorkspace);
       expect(opts.toolContext.signal).toBe(ctx.signal);
       // The sub-run sizes its own window: schemas off the ceiling before it starts.

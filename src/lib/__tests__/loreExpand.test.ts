@@ -59,7 +59,7 @@ describe("expansionRoster", () => {
     const idx = index();
     idx.characters[0].collections = ["卷一"];
     idx.items[0].collections = ["卷二"];
-    expect(expansionRoster(idx, "卷一")).not.toContain("星辉之杖");
+    expect(expansionRoster(idx, ["卷一"])).not.toContain("星辉之杖");
   });
 
   it("去重且大小写不敏感", () => {
