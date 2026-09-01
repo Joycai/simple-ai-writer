@@ -1,0 +1,146 @@
+/* Full-screen image viewer with zoom + pan. A media viewer reads best on a
+   dark scrim regardless of the app theme, so the backdrop is a fixed dark
+   wash rather than the theme's overlay token. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(8, 8, 10, 0.9);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeIn 160ms var(--ease-out);
+}
+
+/* Captures wheel + drag over the whole viewport; the image is centred inside. */
+.stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+.stageZoomable { cursor: grab; }
+.stageGrabbing { cursor: grabbing; }
+
+.img {
+  max-width: 92vw;
+  max-height: 86vh;
+  object-fit: contain;
+  display: block;
+  will-change: transform;
+  /* A soft edge so a white image still separates from the dark scrim. */
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: var(--font-size-sm);
+}
+
+/* Spinner tinted for the dark scrim. `spin` is the shared global keyframe
+   (styles/global.css) — module keyframes share that namespace, so it is
+   referenced, never redefined here (see cssKeyframeNames.test.ts). */
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  animation: spin 720ms linear infinite;
+}
+
+/* Filename, top-left — a quiet label so the viewer knows what it is looking at. */
+.name {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  max-width: 60vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* Dismiss, top-right — mirrors the toolbar chrome. */
+.closeBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(30, 30, 34, 0.72);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.closeBtn:hover { background: rgba(52, 52, 58, 0.9); color: #fff; }
+
+/* Floating control cluster, bottom-centre. */
+.toolbar {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-pill);
+  background: rgba(24, 24, 28, 0.82);
+  box-shadow: var(--shadow-md);
+}
+
+.toolBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.toolBtn:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.toolBtn:disabled { opacity: 0.35; cursor: default; }
+.toolBtn:disabled:hover { background: transparent; color: rgba(255, 255, 255, 0.8); }
+
+/* Live zoom percentage; clicking it resets to fit. */
+.zoomLabel {
+  min-width: 48px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  cursor: pointer;
+}
+.zoomLabel:hover { color: #fff; }
+
+.sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: rgba(255, 255, 255, 0.14);
+}

@@ -14,7 +14,13 @@
     "yes": "Yes",
     "no": "No",
     "undo": "Undo",
-    "gotIt": "Got it"
+    "gotIt": "Got it",
+    "lightbox": {
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "reset": "Reset zoom",
+      "close": "Close preview"
+    }
   },
   "errorBoundary": {
     "appTitle": "Something went wrong",
@@ -1479,6 +1485,7 @@
       "removeRef": "Remove reference",
       "addRefHint": "Insert a reference (same as typing @)",
       "revealImage": "Show in folder",
+      "previewImage": "Click to preview",
       "refBlockLabel": "【Referenced material】",
       "imageRef": "Image",
       "imageBlockLabel": "【Attached images】",
