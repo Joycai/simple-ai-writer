@@ -490,7 +490,33 @@
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
 }
-.usageHead > span + span { text-align: right; }
+
+/* Sortable column header: a plain button that inherits the muted head text,
+   brightens on hover and goes primary + accent-arrow when it is the active
+   sort. The name column stays left, every figure column right. */
+.usageSortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: end;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.usageSortBtn:first-child { justify-self: start; }
+.usageSortBtn:hover { color: var(--color-text-secondary); }
+.usageSortActive { color: var(--color-text-primary); }
+.usageSortArrow {
+  font-size: 8px;
+  line-height: 1;
+  color: var(--color-accent);
+}
 
 .usageRow {
   padding: var(--space-3);

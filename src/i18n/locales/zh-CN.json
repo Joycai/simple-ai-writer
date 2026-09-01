@@ -440,6 +440,7 @@
       "section": "用量统计",
       "hint": "本项目每次调用模型时记录的 token 与费用。费用按你为模型填写的价格换算，价格没填的模型只统计 token。",
       "windows": {
+        "today": "今天",
         "7d": "近 7 天",
         "30d": "近 30 天",
         "all": "全部"
@@ -473,6 +474,7 @@
       "colOutput": "输出",
       "colHitRate": "命中率",
       "colCost": "成本",
+      "sortBy": "按{{col}}排序",
       "cards": {
         "calls": "调用次数",
         "input": "输入 TOKENS",

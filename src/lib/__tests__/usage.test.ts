@@ -17,6 +17,7 @@ import {
   formatUsd,
   rowToBucket,
   sortBuckets,
+  sortUsageBuckets,
   sumBuckets,
   windowStartSeconds,
   type UsageBucket,
@@ -44,6 +45,17 @@ describe("windowStartSeconds", () => {
 
   it("returns 0 for 'all', so both callers can use one `created_at >= ?`", () => {
     expect(windowStartSeconds("all", NOW_MS)).toBe(0);
+  });
+
+  it("snaps 'today' to local midnight rather than counting back 24 hours", () => {
+    const midnight = new Date(NOW_MS);
+    midnight.setHours(0, 0, 0, 0);
+    const start = windowStartSeconds("today", NOW_MS);
+    expect(start).toBe(Math.floor(midnight.getTime() / 1000));
+    // A run from earlier the same local day is inside the window; one from
+    // just before midnight is not.
+    expect(start).toBeLessThanOrEqual(Math.floor(NOW_MS / 1000));
+    expect(windowStartSeconds("today", midnight.getTime() - 1000)).toBeLessThan(start);
   });
 
   it("clamps rather than producing a negative cutoff on a badly set clock", () => {
@@ -125,6 +137,49 @@ describe("sortBuckets", () => {
   it("does not mutate its input", () => {
     const input = [bucket({ key: "a", costUsd: 1 }), bucket({ key: "b", costUsd: 2 })];
     sortBuckets(input);
+    expect(input.map((b) => b.key)).toEqual(["a", "b"]);
+  });
+});
+
+describe("sortUsageBuckets", () => {
+  const id = (k: string) => k;
+  const rows = [
+    bucket({ key: "a", calls: 5, promptTokens: 100, cachedTokens: 80, completionTokens: 10, costUsd: 0.1 }),
+    bucket({ key: "b", calls: 2, promptTokens: 200, cachedTokens: 20, completionTokens: 90, costUsd: 0.9 }),
+    bucket({ key: "c", calls: 9, promptTokens: 50, cachedTokens: 0, completionTokens: 40, costUsd: 0 }),
+  ];
+
+  it("sorts descending by a numeric column", () => {
+    expect(sortUsageBuckets(rows, "calls", "desc", id).map((b) => b.key)).toEqual(["c", "a", "b"]);
+    expect(sortUsageBuckets(rows, "output", "desc", id).map((b) => b.key)).toEqual(["b", "c", "a"]);
+    expect(sortUsageBuckets(rows, "cost", "desc", id).map((b) => b.key)).toEqual(["b", "a", "c"]);
+  });
+
+  it("reverses on ascending", () => {
+    expect(sortUsageBuckets(rows, "calls", "asc", id).map((b) => b.key)).toEqual(["b", "a", "c"]);
+  });
+
+  it("sorts input by the uncached difference, not raw prompt tokens", () => {
+    // fresh input: a=20, b=180, c=50 → desc is b, c, a
+    expect(sortUsageBuckets(rows, "input", "desc", id).map((b) => b.key)).toEqual(["b", "c", "a"]);
+  });
+
+  it("sorts name by the resolved label, not the raw id", () => {
+    const nameOf = (k: string) => ({ a: "Zeta", b: "Alpha", c: "Mu" })[k] ?? k;
+    expect(sortUsageBuckets(rows, "name", "asc", nameOf).map((b) => b.key)).toEqual(["b", "c", "a"]);
+  });
+
+  it("breaks cost ties on output tokens so unpriced rows still order", () => {
+    const unpriced = [
+      bucket({ key: "small", completionTokens: 10 }),
+      bucket({ key: "big", completionTokens: 9_000 }),
+    ];
+    expect(sortUsageBuckets(unpriced, "cost", "desc", id).map((b) => b.key)).toEqual(["big", "small"]);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [bucket({ key: "a", calls: 1 }), bucket({ key: "b", calls: 2 })];
+    sortUsageBuckets(input, "calls", "desc", id);
     expect(input.map((b) => b.key)).toEqual(["a", "b"]);
   });
 });
