@@ -15,7 +15,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, ChevronDown, ChevronRight, ChevronsDown, Image as ImageIcon, X } from "lucide-react";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { ImageLightbox } from "../common/ImageLightbox";
 import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
 import {
@@ -862,16 +862,18 @@ export function AgentChat() {
  * A turn's pictures, as a row of thumbnails. Shared by both turn kinds: the
  * assistant's are ones it drew, the author's are ones they attached, and there
  * is no reason for a picture in a conversation to look like two different
- * things depending on who put it there. Click reveals the file, as the gallery
- * does.
+ * things depending on who put it there. Click opens the full-resolution
+ * picture in a zoomable preview (reaching the file on disk lives in that
+ * preview's toolbar).
  */
 function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end" }) {
   const { t } = useTranslation();
   // Thumbnails, not full resolution — a generated picture can be several
   // megabytes (DashScope's wan models return up to 4096×4096), which both
   // wastes memory and can silently fail to render at all as an oversized
-  // `<img src="data:...">`. Clicking still reveals the full-resolution file.
+  // `<img src="data:...">`. The preview reads the file at full size on demand.
   const urls = useImageThumbnails(paths ?? []);
+  const [preview, setPreview] = useState<string | null>(null);
   if (!paths?.length) return null;
   return (
     <div className={styles.turnImages} style={align === "end" ? { justifyContent: "flex-end" } : undefined}>
@@ -879,12 +881,13 @@ function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end
         <button
           key={path}
           className={styles.turnImage}
-          onClick={() => void revealItemInDir(path)}
-          title={t("ai.chat.revealImage")}
+          onClick={() => setPreview(path)}
+          title={t("ai.chat.previewImage")}
         >
           {urls[path] ? <img src={urls[path]} alt="" /> : <span className={styles.turnImageLoading} />}
         </button>
       ))}
+      {preview && <ImageLightbox path={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

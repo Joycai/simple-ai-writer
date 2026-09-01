@@ -14,7 +14,13 @@
     "yes": "是",
     "no": "否",
     "undo": "撤销",
-    "gotIt": "知道了"
+    "gotIt": "知道了",
+    "lightbox": {
+      "zoomIn": "放大",
+      "zoomOut": "缩小",
+      "reset": "重置缩放",
+      "close": "关闭预览"
+    }
   },
   "errorBoundary": {
     "appTitle": "界面出错了",
@@ -1478,6 +1484,7 @@
       "removeRef": "移除引用",
       "addRefHint": "插入引用（等同于输入 @）",
       "revealImage": "在文件夹中显示",
+      "previewImage": "点击预览",
       "refBlockLabel": "【引用资料】",
       "imageRef": "图片",
       "imageBlockLabel": "【附图】",
