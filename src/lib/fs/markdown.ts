@@ -1,5 +1,5 @@
 import MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import type { Token } from "markdown-it";
 import katex from "katex";
 import katexImport from "@vscode/markdown-it-katex";
 // KaTeX emits `<span class="katex">` markup that is meaningless without this
@@ -58,7 +58,10 @@ md.inline.ruler.before("link", "lore_cite", (state, silent) => {
   if (!parsed) return false;
   if (!silent) {
     const token = state.push("lore_cite", "", 0);
-    token.meta = parsed;
+    // v15 types token.meta as Record<string, unknown>; ParsedCitation is a
+    // concrete interface (no index signature), so widen it explicitly. The
+    // renderer rule below narrows it back with the matching cast.
+    token.meta = parsed as unknown as Record<string, unknown>;
   }
   state.pos = close + 2;
   return true;

@@ -12,7 +12,7 @@
  */
 
 import { parseMarkdown } from "../fs/markdown";
-import type Token from "markdown-it/lib/token.mjs";
+import type { Token } from "markdown-it";
 
 export interface DocRun {
   text: string;
@@ -210,7 +210,7 @@ function inlineRuns(token: Token, deg: Degradations): { runs: DocRun[]; imageOnl
       case "em_close": italic--; break;
       case "s_open": strike++; break;
       case "s_close": strike--; break;
-      case "link_open": link = child.attrGet("href") ?? undefined; break;
+      case "link_open": link = child.attrGet("href")?.toString() ?? undefined; break;
       case "link_close": link = undefined; break;
       case "code_inline":
         nonImageText = true;
@@ -224,7 +224,7 @@ function inlineRuns(token: Token, deg: Degradations): { runs: DocRun[]; imageOnl
         break;
       case "image": {
         images++;
-        const src = child.attrGet("src") ?? "";
+        const src = child.attrGet("src")?.toString() ?? "";
         const alt = child.content || "";
         if (!firstImage) firstImage = { src, alt };
         break;
