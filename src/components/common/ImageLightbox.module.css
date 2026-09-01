@@ -44,7 +44,9 @@
   font-size: var(--font-size-sm);
 }
 
-/* Spinner reused from the app's loading idiom, tinted for the dark scrim. */
+/* Spinner tinted for the dark scrim. `spin` is the shared global keyframe
+   (styles/global.css) — module keyframes share that namespace, so it is
+   referenced, never redefined here (see cssKeyframeNames.test.ts). */
 .spinner {
   width: 28px;
   height: 28px;
@@ -53,7 +55,6 @@
   border-radius: 50%;
   animation: spin 720ms linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Filename, top-left — a quiet label so the viewer knows what it is looking at. */
 .name {
