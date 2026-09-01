@@ -107,6 +107,14 @@ export function ScopeMenu({
   const rows = useCollectionRows(index, declared, isZh);
   const total = loreEntityCount(index);
   const unfiled = ungroupedCount(index);
+  // 并集：去重后真正的候选数，和「按归属计的各摊之和」不同——算式行就是把这差额说清楚。
+  const candidates = loreEntityCount(scopeLoreIndex(index, scope));
+  const pickedCount = scope?.length ?? 0;
+  const memberParts = [
+    ...rows.filter((r) => scopeHas(scope, r.name)).map((r) => r.count),
+    ...(scopeHas(scope, UNGROUPED) ? [unfiled] : []),
+  ];
+  const memberships = memberParts.reduce((a, b) => a + b, 0);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -168,6 +176,11 @@ export function ScopeMenu({
         <div className={styles.menuHeadRow}>
           <span className={styles.bandEyebrow}>{t("lore.collections.scope.eyebrow")}</span>
           <span style={{ flex: 1 }} />
+          {scope !== null && (
+            <span className={styles.menuHeadCount}>
+              {t("lore.collections.scope.unionCount", { picked: pickedCount, n: candidates })}
+            </span>
+          )}
           {needsFilter && (
             <span className={styles.rowCount}>
               {t("lore.collections.scope.collectionCount", { n: rows.length })}
@@ -191,24 +204,18 @@ export function ScopeMenu({
       )}
 
       <div className={styles.menuList}>
+        {/* 「全部」不带勾选框：它是复位项，一个勾都没有＝它生效（设计稿 03 屏 26）。 */}
         <button
           type="button"
-          className={`${styles.row} ${narrow ? styles.rowNarrow : ""} ${scope === null ? styles.rowActive : ""}`}
+          className={`${styles.row} ${styles.rowAll} ${narrow ? styles.rowNarrow : ""} ${scope === null ? styles.rowActive : ""}`}
           onClick={setAll}
         >
-          <span className={`${styles.dot} ${scope === null ? styles.dotOn : ""}`} />
-          <div className={styles.rowMain}>
-            <span className={styles.rowName}>{t("lore.collections.all")}</span>
-          </div>
+          <span className={styles.rowAllName}>{t("lore.collections.all")}</span>
+          <span className={styles.rowHint}>{t("lore.collections.scope.allHint")}</span>
           <span style={{ flex: 1 }} />
-          <div className={styles.rowTail}>
-            <span className={styles.rowCount}>
-              {narrow ? total : t("lore.collections.entries", { n: total })}
-            </span>
-            {scope === null && (
-              <span className={styles.rowBadge}>{t("lore.collections.scope.active")}</span>
-            )}
-          </div>
+          <span className={styles.rowCount}>
+            {narrow ? total : t("lore.collections.entries", { n: total })}
+          </span>
         </button>
 
         {shown.map((row) => {
@@ -222,7 +229,7 @@ export function ScopeMenu({
               role="option"
               aria-selected={active}
             >
-              <span className={`${styles.dot} ${active ? styles.dotOn : ""}`} />
+              <span className={`${styles.dot} ${active ? styles.dotOn : ""}`}>{active ? "✓" : ""}</span>
               <div className={styles.rowMain}>
                 <span className={styles.rowName} title={row.name}>{row.name}</span>
                 {!narrow && row.breakdown && (
@@ -230,23 +237,29 @@ export function ScopeMenu({
                 )}
               </div>
               <span style={{ flex: 1 }} />
-              <div className={styles.rowTail}>
-                {active && <span className={styles.rowBadge}>{t("lore.collections.scope.on")}</span>}
-                <span className={styles.rowCount}>
-                  {narrow ? row.count : t("lore.collections.entries", { n: row.count })}
-                </span>
-              </div>
+              <span className={styles.rowCount}>
+                {narrow ? row.count : t("lore.collections.entries", { n: row.count })}
+              </span>
             </button>
           );
         })}
 
-        {folded && filtered.length > FOLD_AFTER && (
-          <button type="button" className={styles.menuFold} onClick={() => setExpanded(true)}>
-            {t("lore.collections.scope.more", { n: filtered.length - FOLD_AFTER })}
-            <span style={{ flex: 1 }} />
-            <span className={styles.menuFoldNote}>{t("lore.collections.scope.moreOrder")}</span>
-          </button>
-        )}
+        {folded && filtered.length > FOLD_AFTER && (() => {
+          // 折起不丢勾：候选照算，只是展开才看得见。折行也报一下藏了几个已勾的。
+          const hiddenPicked = filtered.slice(FOLD_AFTER).filter((r) => scopeHas(scope, r.name)).length;
+          return (
+            <button type="button" className={styles.menuFold} onClick={() => setExpanded(true)}>
+              {t("lore.collections.scope.more", { n: filtered.length - FOLD_AFTER })}
+              {hiddenPicked > 0 && (
+                <span className={styles.menuFoldPicked}>
+                  {t("lore.collections.scope.morePicked", { n: hiddenPicked })}
+                </span>
+              )}
+              <span style={{ flex: 1 }} />
+              <span className={styles.menuFoldNote}>{t("lore.collections.scope.moreOrder")}</span>
+            </button>
+          );
+        })()}
 
         {/* 未归集是并集的合法成员：多选之后「小说A ＋ 还没归类的散条目」是常态需求，
             所以它在切换器里也可勾（单选时代它在这里只作为一个数字出现）。 */}
@@ -262,24 +275,42 @@ export function ScopeMenu({
                 role="option"
                 aria-selected={active}
               >
-                <span className={`${styles.dot} ${active ? styles.dotOn : styles.dotDashed}`} />
+                <span className={`${styles.dot} ${active ? styles.dotDashedOn : styles.dotDashed}`}>
+                  {active ? "✓" : ""}
+                </span>
                 <div className={styles.rowMain}>
-                  <span className={`${styles.rowName} ${active ? "" : styles.rowNameGhost}`}>
+                  <span className={`${styles.rowName} ${styles.rowNameGhost}`}>
                     {t("lore.collections.ungrouped")}
                   </span>
-                  {!narrow && <span className={styles.rowHint}>{t("lore.collections.ungroupedHint")}</span>}
+                  {!narrow && <span className={styles.rowHint}>{t("lore.collections.scope.ungroupedScopeHint")}</span>}
                 </div>
                 <span style={{ flex: 1 }} />
-                <div className={styles.rowTail}>
-                  {active && <span className={styles.rowBadge}>{t("lore.collections.scope.on")}</span>}
-                  <span className={styles.rowCount}>
-                    {narrow ? unfiled : t("lore.collections.entries", { n: unfiled })}
-                  </span>
-                </div>
+                <span className={styles.rowCount}>
+                  {narrow ? unfiled : t("lore.collections.entries", { n: unfiled })}
+                </span>
               </button>
             </>
           );
         })()}
+
+        {/* 并集算式：各摊按归属计，之和会大于去重后的候选数——勾了 ≥2 摊时把这差额说清楚。 */}
+        {memberParts.length >= 2 && (
+          <div className={styles.menuUnion}>
+            <span className={styles.menuUnionSum}>
+              {t("lore.collections.scope.unionSum", {
+                sum: memberParts.join(" + "),
+                memberships,
+                candidates,
+              })}
+            </span>
+            {memberships > candidates && (
+              <>
+                <span style={{ flex: 1 }} />
+                <span className={styles.menuUnionNote}>{t("lore.collections.scope.unionDedup")}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {narrow ? (
@@ -306,15 +337,9 @@ export function ScopeMenu({
           </button>
         )}
         <span style={{ flex: 1 }} />
-        {scope !== null && (
-          <button
-            type="button"
-            className={`${styles.menuFootLink} ${styles.muted}`}
-            onClick={setAll}
-          >
-            {t("lore.collections.scope.reset")}
-          </button>
-        )}
+        {/* 复位就是点「全部」那一行——所以脚里不再放「退回全部」按钮，改放这条自动行为
+            的说明（勾任意一摊＝离开全部；取消到零＝回到全部）。设计稿 03 屏 26。 */}
+        <span className={styles.menuFootHint}>{t("lore.collections.scope.autoAll")}</span>
       </div>
     </div>,
     document.body,
