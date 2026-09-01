@@ -2,6 +2,12 @@
 
 > **状态：六刀全部实现。** 剩下的是 §7 那几条只能靠真实请求定论的验证。
 >
+> **2026-09 更新**：Anthropic 侧的 `adaptive`/`extended`/`switch` 三种 dialect 现在
+> 各自是一个具名**思考参数类目**——`claude-adaptive`（thinking:adaptive +
+> output_config.effort）、`claude-budget`（thinking:enabled + budget_tokens，可由作者
+> 填 token 预算）、`minimax`（thinking 开/关，强制单工具降级为 auto）。wire 形状与本文
+> 所述一致；类目模型与迁移见 [`reasoning-plan.md`](reasoning-plan.md) §0。
+>
 > 协议事实见 [`api/reasoning.md`](reasoning.md)、[`api/tools.md`](tools.md)、
 > [`api/landscape.md`](landscape.md) §5 —— 本文只写"我们现在是什么样、
 > 该怎么改、为什么"。分层裁决依据见

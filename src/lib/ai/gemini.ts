@@ -4,7 +4,7 @@
  */
 
 import { fetch } from "../http";
-import { reasoningBody } from "./reasoning";
+import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
 import { geminiUrl } from "./urls";
 import type {
@@ -207,7 +207,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Merged one level deep rather than assigned: `generationConfig` is shared
   // territory — JSON mode already puts `responseMimeType` there via extraBody,
   // and a plain assign in either direction would drop the other's field.
-  const thinking = reasoningBody(opts.standard, opts.reasoningEffort);
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const thinking = reasoningBody(category, opts.reasoningEffort);
   if (thinking) {
     body.generationConfig = {
       ...(body.generationConfig as Record<string, unknown> | undefined),

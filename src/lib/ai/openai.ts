@@ -4,7 +4,8 @@
 
 import { fetch } from "../http";
 import {
-  createThinkTagSplitter, readReasoningDelta, reasoningBody, type NativeReasoning,
+  createThinkTagSplitter, forcesToolChoiceAuto, readReasoningDelta, reasoningBody,
+  resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { openaiUrl } from "./urls";
@@ -67,19 +68,15 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
  * the config to warn us (DeepSeek V4) are learned from their own 400 instead;
  * see `lib/ai/toolChoice.ts`.
  */
-function toolChoiceFor(opts: StreamOptions): StreamOptions["toolChoice"] {
+function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";
   const forced = tc === "required" || typeof tc === "object";
-  const thinkingOn =
-    opts.thinkingDialect === "switch" &&
-    opts.reasoningEffort !== undefined &&
-    opts.reasoningEffort !== "default" &&
-    opts.reasoningEffort !== "off";
-  return forced && thinkingOn ? "auto" : tc;
+  return forced && forcesToolChoiceAuto(category, opts.reasoningEffort) ? "auto" : tc;
 }
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -105,7 +102,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // them is byte-identical to one from before they existed.
       ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
       ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
-      ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts) } : {}),
+      ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
       // A standing permission the author granted this model, spelled the way
       // this wire wants it (enable_search — see lib/ai/serverTools.ts). Empty
       // object for every model without the declaration, so their requests are
@@ -113,10 +110,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       ...openaiServerToolsBody(opts.standard, opts.serverTools),
       // Absent unless the author set an effort on this model — an unset model
       // must keep sending exactly what it sent before this existed, because a
-      // volunteered field is a field some relay can reject.
-      // Declared dialect only, no dialectFor(): absent means "this endpoint
-      // speaks the standard reasoning_effort", not a guessed generation.
-      ...reasoningBody(opts.standard, opts.reasoningEffort, opts.thinkingDialect),
+      // volunteered field is a field some relay can reject. The category carries
+      // the vendor spelling (reasoning_effort / enable_thinking / disable
+      // switch); the budget is read only by Qwen's budget category.
+      ...reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget),
       // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),

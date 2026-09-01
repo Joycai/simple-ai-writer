@@ -17,7 +17,8 @@
 import i18n from "../../i18n";
 import { fetch } from "../http";
 import {
-  dialectFor, reasoningBody, supportsTemperature, thinkingBody, type ThinkingDialect,
+  forcesToolChoiceAuto, reasoningBody, resolveThinkingCategory, supportsTemperature,
+  thinkingBody, type ThinkingCategory,
 } from "./reasoning";
 import {
   anthropicServerTools,
@@ -336,11 +337,15 @@ function resolveMaxTokens(opts: StreamOptions): number {
  */
 function thinkingFor(
   opts: StreamOptions,
-  dialect: ThinkingDialect,
+  category: ThinkingCategory,
   maxTokens: number,
 ): Record<string, unknown> | undefined {
-  const budget = Math.max(1024, Math.min(DEFAULT_THINKING_BUDGET, Math.floor(maxTokens / 2)));
-  return thinkingBody(dialect, budget, opts.reasoningEffort)?.thinking as
+  // The author's budget when set (a budget-shape category), else the app
+  // default; capped at half the reply ceiling either way so thinking can't
+  // starve the response (the API requires budget < max_tokens).
+  const requested = opts.thinkingBudget ?? DEFAULT_THINKING_BUDGET;
+  const budget = Math.max(1024, Math.min(requested, Math.floor(maxTokens / 2)));
+  return thinkingBody(category.dialect, budget, opts.reasoningEffort)?.thinking as
     | Record<string, unknown>
     | undefined;
 }
@@ -368,12 +373,12 @@ function thinkingFor(
  */
 function toolChoiceBody(
   opts: StreamOptions,
-  dialect: ThinkingDialect,
+  category: ThinkingCategory,
 ): { type: "auto" | "any" | "none" } | { type: "tool"; name: string } | undefined {
   const tc = opts.toolChoice;
   if (!tc || tc === "auto") return { type: "auto" };
   if (tc === "none") return { type: "none" };
-  if (dialect === "switch") return { type: "auto" };
+  if (forcesToolChoiceAuto(category, opts.reasoningEffort)) return { type: "auto" };
   if (tc === "required") return { type: "any" };
   return { type: "tool", name: tc.function.name };
 }
@@ -517,8 +522,8 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
 
   const system = extractSystem(opts.messages);
   const maxTokens = resolveMaxTokens(opts);
-  const dialect = dialectFor(opts.standard, opts.thinkingDialect);
-  const thinking = thinkingFor(opts, dialect, maxTokens);
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const thinking = thinkingFor(opts, category, maxTokens);
 
   const baseBody: Record<string, unknown> = {
     model: opts.modelId,
@@ -540,12 +545,12 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // request refuses everything but 1 — see `supportsTemperature`, which the
   // model editor reads too so it never renders a control this would drop.
   // 0 is a real value, hence the `!== undefined` test.
-  if (opts.temperature !== undefined && supportsTemperature(opts.standard, opts.thinkingDialect)) {
+  if (opts.temperature !== undefined && supportsTemperature(opts.standard, category.id)) {
     baseBody.temperature = Math.max(0, Math.min(1, opts.temperature));
   }
   // Absent unless the author set an effort on this model. Governs the whole
   // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
-  Object.assign(baseBody, reasoningBody(opts.standard, opts.reasoningEffort, dialect));
+  Object.assign(baseBody, reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget));
   // Server-side tools ride in the same array as ours: one list, two kinds of
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
@@ -573,7 +578,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     // calls, and a request whose only tool is the server's has nothing to
     // choose — `{type:"auto"}` there would be an opinion about a decision the
     // endpoint makes internally.
-    if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(opts, dialect);
+    if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(opts, category);
   }
   // `opts.extraBody` is deliberately NOT spread in. It carries OpenAI-shaped
   // fields (`response_format`) that the Messages API rejects outright with a

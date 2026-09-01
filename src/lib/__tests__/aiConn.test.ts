@@ -39,7 +39,8 @@ const model: Model = {
   contextSize: 128_000,
   maxOutput: 8_192,
   reasoningEffort: "high",
-  thinkingDialect: "adaptive",
+  thinkingCategory: "openai-generic",
+  thinkingBudget: 4000,
   serverTools: ["web_search"],
 };
 
@@ -58,7 +59,8 @@ describe("connOptions", () => {
       contextSize: 128_000,
       maxOutput: 8_192,
       reasoningEffort: "high",
-      thinkingDialect: "adaptive",
+      thinkingCategory: "openai-generic",
+      thinkingBudget: 4000,
       serverTools: ["web_search"],
     });
   });
@@ -84,7 +86,7 @@ describe("connOptions", () => {
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
       "modelId", "prefix", "reasoningEffort", "safetySettings", "serverTools",
-      "standard", "temperature", "thinkingDialect",
+      "standard", "temperature", "thinkingBudget", "thinkingCategory",
     ]);
   });
 });

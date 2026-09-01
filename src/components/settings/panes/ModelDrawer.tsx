@@ -10,8 +10,9 @@ import {
 } from "../../../lib/comfy/workflow";
 import { readFile } from "../../../lib/fs/fileio";
 import {
-  REASONING_EFFORTS, THINKING_DIALECTS, supportsTemperature, supportsThinkingLevel,
-  type ReasoningEffort, type ThinkingDialect,
+  categoriesForFamily, isOnOffCategory, onEffort, resolveThinkingCategory,
+  supportsTemperature, thinkingIsOn, THINKING_CATEGORIES,
+  type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
   SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
@@ -71,9 +72,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // from the standard `reasoning_effort` — the bare `enable_thinking` switch
   // (Qwen on DashScope). Offering the other shapes there would be controls
   // the adapter ignores.
-  const dialectChoices: ThinkingDialect[] | null =
-    family === "anthropic" ? THINKING_DIALECTS
-    : family === "openai" ? ["switch"]
+  // The thinking-parameter categories offered for this family (each a
+  // per-vendor preset with its own legal effort menu), plus the `auto` sentinel
+  // the drawer prepends. Null when there is no provider yet.
+  const categoryChoices: ThinkingCategoryId[] | null = family
+    ? categoriesForFamily(family)
     : null;
 
   const [form, setForm] = useState({
@@ -98,8 +101,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
     capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
-    // "" = 未声明，按协议族推导 —— 与存储上的 undefined 一一对应。
-    thinkingDialect: (existing?.thinkingDialect ?? "") as ThinkingDialect | "",
+    // "auto" ↔ stored undefined. A model configured before categories existed
+    // (a legacy dialect, no category) shows its migrated category so the author
+    // sees what it resolves to; a truly unset model shows "auto".
+    thinkingCategory: (existing?.thinkingCategory
+      ?? (existing?.thinkingDialect && provider
+        ? resolveThinkingCategory(existing, provider.apiStandard).id
+        : "auto")) as ThinkingCategoryId | "auto",
+    thinkingBudget: existing?.thinkingBudget != null ? String(existing.thinkingBudget) : "",
     // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
     translateFormat: (existing?.translateFormat ?? "") as TranslateFormat | "",
   });
@@ -107,8 +116,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // Reads the adapter's own predicate rather than re-deriving the rule, and
   // reads it off the *form* so flipping the dialect below updates the row
   // immediately, before anything is saved.
+  // The category the current form selection resolves to (auto → family
+  // default). The source of truth for the effort dial, the budget field, and
+  // temperature — read off the form so flipping the picker updates all three
+  // immediately, before anything is saved.
+  const formCategory = provider
+    ? resolveThinkingCategory(
+        { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory },
+        provider.apiStandard,
+      )
+    : undefined;
   const temperatureReaches = provider
-    ? supportsTemperature(provider.apiStandard, form.thinkingDialect || undefined)
+    ? supportsTemperature(provider.apiStandard, formCategory?.id)
     : true;
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
@@ -260,8 +279,25 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         probedAt,
         // "default" is stored as absent — one representation for "send
         // nothing", so a row never distinguishes never-set from set-to-default.
-        reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
-        thinkingDialect: form.thinkingDialect || undefined,
+        // A non-on/off budget category (Claude extended) has no effort dial and
+        // ignores the value on the wire, so a stale effort left behind by a
+        // migrated model is cleared rather than persisted.
+        reasoningEffort:
+          form.reasoningEffort === "default"
+          || (formCategory?.shape === "budget" && !isOnOffCategory(formCategory))
+            ? undefined
+            : form.reasoningEffort,
+        thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
+        // Legacy shape is superseded by the category; clear it so a resaved
+        // model stops carrying the field resolveThinkingCategory reads only for
+        // one-time migration.
+        thinkingDialect: undefined,
+        // Only meaningful for a budget-shape category; parsed, positive, else absent.
+        thinkingBudget: (() => {
+          if (formCategory?.shape !== "budget") return undefined;
+          const n = Math.round(Number(form.thinkingBudget));
+          return Number.isFinite(n) && n > 0 ? n : undefined;
+        })(),
         // Cleared for a protocol whose adapter would drop them, so switching a
         // model to another provider can't leave a permission that silently
         // does nothing behind. Empty stores as absent — one shape for "none".
@@ -569,35 +605,69 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               <div className={hub.fieldHint}>{t("aiConfig.models.maxOutputHint")}</div>
             </div>
 
-            {/* Which shape of thinking parameter this model takes. Within a
-                family the parameter changed between model generations (and
-                between compat vendors), and on a relay the model id is free
-                text, so the shape can't be derived — the author declares it.
-                The choice set is per-family: see dialectChoices above. */}
-            {provider && dialectChoices && (
+            {/* Which thinking-parameter category this model uses — a per-vendor
+                preset carrying its own legal effort menu. The parameter changed
+                between generations and between compat vendors, and on a relay
+                the model id is free text, so it can't be derived — the author
+                declares it. The choice set is per-family (categoriesForFamily);
+                `auto` resolves to the family default. */}
+            {provider && categoryChoices && (
               <div className={styles.fieldGroup}>
-                <label className={styles.label}>{t("aiConfig.models.thinkingDialectLabel")}</label>
+                <label className={styles.label}>{t("aiConfig.models.thinkingCatLabel")}</label>
                 <ChipRow>
-                  {["" as const, ...dialectChoices].map((d) => (
+                  {(["auto", ...categoryChoices] as (ThinkingCategoryId | "auto")[]).map((c) => (
                     <Chip
-                      key={d || "auto"}
-                      label={
-                        d === ""
-                          ? t("aiConfig.models.thinkingDialectAuto")
-                          : family === "openai"
-                            ? t("aiConfig.models.thinkingDialectSwitchOpenai")
-                            : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`)
-                      }
-                      active={form.thinkingDialect === d}
-                      onClick={() => setForm({ ...form, thinkingDialect: d })}
+                      key={c}
+                      label={c === "auto"
+                        ? t("aiConfig.models.thinkingCatAuto")
+                        : t(THINKING_CATEGORIES[c].labelKey)}
+                      active={form.thinkingCategory === c}
+                      onClick={() => setForm((f) => {
+                        // Coerce an effort the new category's menu doesn't offer
+                        // back to a safe value, so a stale `medium` can't survive
+                        // onto e.g. a GLM model (low/high/max only). The fallback
+                        // is the category's own default, else "default" (send
+                        // nothing → endpoint default) — never `menu[0]`, which is
+                        // "off" for most categories and would silently disable
+                        // thinking the moment the author switched category.
+                        const next = c === "auto" ? undefined : THINKING_CATEGORIES[c];
+                        const menu = next?.menu ?? [];
+                        const keep = f.reasoningEffort === "default" || menu.includes(f.reasoningEffort);
+                        return {
+                          ...f,
+                          thinkingCategory: c,
+                          reasoningEffort: keep
+                            ? f.reasoningEffort
+                            : (next?.defaultEffort ?? ("default" as ReasoningEffort)),
+                        };
+                      })}
                     />
                   ))}
                 </ChipRow>
                 <div className={hub.fieldHint}>
-                  {family === "openai"
-                    ? t("aiConfig.models.thinkingDialectHintOpenai")
-                    : t("aiConfig.models.thinkingDialectHint")}
+                  {form.thinkingCategory === "auto"
+                    ? t("aiConfig.models.thinkingCatAutoHint")
+                    : t(THINKING_CATEGORIES[form.thinkingCategory].hintKey)}
                 </div>
+              </div>
+            )}
+
+            {/* Token budget, only for a budget-shape category (Claude extended,
+                Qwen). Placeholder shows the default the adapter uses when blank. */}
+            {formCategory?.shape === "budget" && formCategory.budget && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.thinkingBudgetLabel")}</label>
+                <input
+                  className={styles.input}
+                  type="number"
+                  min={formCategory.budget.min}
+                  max={formCategory.budget.max}
+                  step="256"
+                  placeholder={String(formCategory.budget.default)}
+                  value={form.thinkingBudget}
+                  onChange={(e) => setForm({ ...form, thinkingBudget: e.target.value })}
+                />
+                <div className={hub.fieldHint}>{t("aiConfig.models.thinkingBudgetHint")}</div>
               </div>
             )}
 
@@ -727,23 +797,42 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               </div>
             )}
 
-            {/* Rendering this for a protocol whose adapter would ignore it
-                would offer a setting that silently does nothing — the same
-                reason defaultImageCaps refuses to promise an edit button.
-                Widen as each family's mapping lands. */}
-            {provider && supportsThinkingLevel(provider.apiStandard) && (
+            {/* The depth dial, rendered from the selected category's own menu:
+                level chips (its `menu`), or an on/off toggle for a switch-style
+                category. Budget-only categories (Claude extended) carry their
+                depth in the token field above, so they show no dial here. */}
+            {provider && formCategory
+              && (formCategory.shape === "levels" || isOnOffCategory(formCategory)) && (
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.reasoningEffortLabel")}</label>
-                <ChipRow>
-                  {REASONING_EFFORTS.map((e) => (
+                {isOnOffCategory(formCategory) ? (
+                  <ChipRow>
                     <Chip
-                      key={e}
-                      label={t(`aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`)}
-                      active={form.reasoningEffort === e}
-                      onClick={() => setForm({ ...form, reasoningEffort: e })}
+                      label={t("aiConfig.models.reasoningEffortOn")}
+                      active={thinkingIsOn(formCategory, form.reasoningEffort)}
+                      onClick={() => setForm({
+                        ...form,
+                        reasoningEffort: onEffort(formCategory) ?? ("default" as ReasoningEffort),
+                      })}
                     />
-                  ))}
-                </ChipRow>
+                    <Chip
+                      label={t("aiConfig.models.reasoningEffortOff")}
+                      active={form.reasoningEffort === "off"}
+                      onClick={() => setForm({ ...form, reasoningEffort: "off" })}
+                    />
+                  </ChipRow>
+                ) : (
+                  <ChipRow>
+                    {formCategory.menu.map((e) => (
+                      <Chip
+                        key={e}
+                        label={t(`aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`)}
+                        active={form.reasoningEffort === e}
+                        onClick={() => setForm({ ...form, reasoningEffort: e })}
+                      />
+                    ))}
+                  </ChipRow>
+                )}
                 <div className={hub.fieldHint}>{t("aiConfig.models.reasoningEffortHint")}</div>
               </div>
             )}

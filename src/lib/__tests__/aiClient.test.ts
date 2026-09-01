@@ -3,7 +3,7 @@ import {
   streamCompletion, ContextSizeError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
-import type { ReasoningEffort, ThinkingDialect } from "../ai/reasoning";
+import type { ReasoningEffort, ThinkingCategoryId } from "../ai/reasoning";
 import { __resetForcedToolChoiceMemo } from "../ai/toolChoice";
 import type { ServerToolId } from "../ai/serverTools";
 
@@ -41,7 +41,8 @@ async function collect(opts: {
   messages?: StreamMessage[];
   prefix?: string;
   reasoningEffort?: ReasoningEffort;
-  thinkingDialect?: ThinkingDialect;
+  thinkingCategory?: ThinkingCategoryId;
+  thinkingBudget?: number;
   serverTools?: ServerToolId[];
   temperature?: number;
   topP?: number;
@@ -58,7 +59,8 @@ async function collect(opts: {
     prefix: opts.prefix,
     maxOutput: opts.maxOutput,
     reasoningEffort: opts.reasoningEffort,
-    thinkingDialect: opts.thinkingDialect,
+    thinkingCategory: opts.thinkingCategory,
+    thinkingBudget: opts.thinkingBudget,
     serverTools: opts.serverTools,
     temperature: opts.temperature,
     topP: opts.topP,
@@ -544,9 +546,10 @@ describe("streamCompletion — reasoning effort", () => {
     expect(calls[0].body.reasoning_effort).toBe("low");
   });
 
-  it("stays off the wire for families whose translation isn't written yet", async () => {
-    // Gemini and Anthropic keep their pre-existing bodies until their own
-    // mapping lands — an untranslated level must not leak as an OpenAI field.
+  it("stays off the wire for families that spell effort their own way", async () => {
+    // `reasoning_effort` is the OpenAI-family spelling only — Gemini carries the
+    // level in thinkingConfig and Anthropic in output_config, so neither may
+    // leak the OpenAI field.
     const gemini = await collect({
       chunks: ['data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n'],
       standard: "gemini",
@@ -563,6 +566,61 @@ describe("streamCompletion — reasoning effort", () => {
   });
 });
 
+describe("streamCompletion — per-vendor OpenAI thinking categories", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("DeepSeek: tunes depth with reasoning_effort while on", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "deepseek", reasoningEffort: "high",
+    });
+    expect(calls[0].body.reasoning_effort).toBe("high");
+    expect(calls[0].body).not.toHaveProperty("extra_body");
+  });
+
+  it("DeepSeek: turns thinking off with the disable switch, not reasoning_effort", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "deepseek", reasoningEffort: "off",
+    });
+    // "off" is not reasoning_effort:"none" here — that field only tunes depth
+    // while on; the documented way to stop thinking is the disable switch.
+    expect(calls[0].body.extra_body).toEqual({ thinking: { type: "disabled" } });
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("Qwen effort: sends enable_thinking together with the level (incl. xhigh)", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "qwen-effort", reasoningEffort: "xhigh",
+    });
+    expect(calls[0].body.enable_thinking).toBe(true);
+    expect(calls[0].body.reasoning_effort).toBe("xhigh");
+  });
+
+  it("Qwen effort: off sends only the switch", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "qwen-effort", reasoningEffort: "off",
+    });
+    expect(calls[0].body.enable_thinking).toBe(false);
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("Qwen budget: sends the token budget beside the switch", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "qwen-budget",
+      reasoningEffort: "high", thinkingBudget: 8000,
+    });
+    expect(calls[0].body.enable_thinking).toBe(true);
+    expect(calls[0].body.thinking_budget).toBe(8000);
+  });
+
+  it("GLM: reasoning_effort with clear_thinking:false, and no off in its menu", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", thinkingCategory: "glm", reasoningEffort: "max",
+    });
+    expect(calls[0].body.reasoning_effort).toBe("max");
+    expect(calls[0].body.thinking).toEqual({ clear_thinking: false });
+  });
+});
+
 describe("streamCompletion — switch dialect on the OpenAI family", () => {
   const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
 
@@ -571,7 +629,7 @@ describe("streamCompletion — switch dialect on the OpenAI family", () => {
     // exactly the kind of volunteered field this whole layer exists to avoid.
     const { calls } = await collect({
       chunks: done, standard: "openai_compat",
-      reasoningEffort: "high", thinkingDialect: "switch",
+      reasoningEffort: "high", thinkingCategory: "qwen-budget",
     });
     expect(calls[0].body.enable_thinking).toBe(true);
     expect(calls[0].body).not.toHaveProperty("reasoning_effort");
@@ -580,7 +638,7 @@ describe("streamCompletion — switch dialect on the OpenAI family", () => {
   it('"off" is the one level the switch can express', async () => {
     const { calls } = await collect({
       chunks: done, standard: "openai_compat",
-      reasoningEffort: "off", thinkingDialect: "switch",
+      reasoningEffort: "off", thinkingCategory: "qwen-budget",
     });
     expect(calls[0].body.enable_thinking).toBe(false);
   });
@@ -590,7 +648,7 @@ describe("streamCompletion — switch dialect on the OpenAI family", () => {
     // anything should be volunteered — the endpoint's own default stays.
     const { calls } = await collect({
       chunks: done, standard: "openai_compat",
-      reasoningEffort: "default", thinkingDialect: "switch",
+      reasoningEffort: "default", thinkingCategory: "qwen-budget",
     });
     expect(calls[0].body).not.toHaveProperty("enable_thinking");
     expect(calls[0].body).not.toHaveProperty("reasoning_effort");
@@ -611,7 +669,7 @@ describe("streamCompletion — forced tool_choice under the OpenAI switch dialec
     // (agent/structured.ts) already treats "no call" as its fallback cue.
     const { calls } = await collect({
       chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
-      reasoningEffort: "high", thinkingDialect: "switch",
+      reasoningEffort: "high", thinkingCategory: "qwen-budget",
     });
     expect(calls[0].body.tool_choice).toBe("auto");
   });
@@ -619,7 +677,7 @@ describe("streamCompletion — forced tool_choice under the OpenAI switch dialec
   it('leaves forcing alone when thinking is explicitly off', async () => {
     const { calls } = await collect({
       chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
-      reasoningEffort: "off", thinkingDialect: "switch",
+      reasoningEffort: "off", thinkingCategory: "qwen-budget",
     });
     expect(calls[0].body.tool_choice).toEqual(forced);
   });
@@ -1435,7 +1493,7 @@ describe("streamCompletion — Anthropic SSE", () => {
       apiKey: "k",
       standard: "anthropic_compat",
       modelId: "relay-hosted-claude",
-      thinkingDialect: "extended",
+      thinkingCategory: "claude-budget",
       messages: [{ role: "user", content: "hi" }],
       onChunk: () => {},
     });
@@ -1454,7 +1512,7 @@ describe("streamCompletion — Anthropic SSE", () => {
       apiKey: "k",
       standard: "anthropic_compat",
       modelId: "m",
-      thinkingDialect: "none",
+      thinkingCategory: "off",
       messages: [{ role: "user", content: "hi" }],
       onChunk: () => {},
     });
@@ -1470,13 +1528,32 @@ describe("streamCompletion — Anthropic SSE", () => {
       apiKey: "k",
       standard: "anthropic",
       modelId: "m",
-      thinkingDialect: "extended",
+      thinkingCategory: "claude-budget",
       maxOutput: 4000,
       messages: [{ role: "user", content: "hi" }],
       onChunk: () => {},
     });
     const thinking = calls[0].body.thinking as { budget_tokens: number };
     expect(thinking.budget_tokens).toBe(2000);
+  });
+
+  it("honours an author-set thinking budget under the ceiling", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      thinkingCategory: "claude-budget",
+      thinkingBudget: 8000,
+      maxOutput: 40000,
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    const thinking = calls[0].body.thinking as { type: string; budget_tokens: number };
+    expect(thinking.type).toBe("enabled");
+    // Well under half the 40k ceiling, so the author's value passes through.
+    expect(thinking.budget_tokens).toBe(8000);
   });
 
   it("puts effort in output_config, governing the whole response", async () => {
@@ -1519,7 +1596,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const { calls } = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
     });
     // Explicit, because thinking defaults to *off* there — omitting the field
     // is how you get a model that never thinks.
@@ -1530,7 +1607,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const on = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       reasoningEffort: "high",
     });
     // There is no depth dial on this endpoint, so a level has nowhere to go.
@@ -1540,7 +1617,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const off = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       reasoningEffort: "off",
     });
     // "off" is honoured literally here, unlike on the official endpoint where it
@@ -1557,7 +1634,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const named = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       tools: [TOOL],
       toolChoice: { type: "function", function: { name: "get_weather" } },
     });
@@ -1566,7 +1643,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const required = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       tools: [TOOL],
       toolChoice: "required",
     });
@@ -1578,7 +1655,7 @@ describe("streamCompletion — Anthropic SSE", () => {
     const none = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       tools: [TOOL],
       toolChoice: "none",
     });
@@ -1769,7 +1846,7 @@ describe("streamCompletion — Anthropic SSE", () => {
       apiKey: "k",
       standard: "anthropic",
       modelId: "MiniMax-M3",
-      thinkingDialect: "switch",
+      thinkingCategory: "minimax",
       serverTools: ["web_search"],
       messages: [{ role: "user", content: "这些术语什么意思?" }],
       onChunk: (c) => received.push(c),
@@ -2403,7 +2480,7 @@ describe("streamCompletion — temperature", () => {
 
   it("clamps to 1 on a non-thinking Anthropic request — a lower ceiling than the other families'", async () => {
     const { calls } = await collect({
-      standard: "anthropic", chunks: ANTHROPIC_ONE, temperature: 1.8, thinkingDialect: "none",
+      standard: "anthropic", chunks: ANTHROPIC_ONE, temperature: 1.8, thinkingCategory: "off",
     });
     expect(calls[0].body.thinking).toBeUndefined();
     expect(calls[0].body.temperature).toBe(1);
@@ -2413,9 +2490,9 @@ describe("streamCompletion — temperature", () => {
     // The API accepts only temperature 1 while thinking is on, so a clamp would
     // send the opposite of what the author asked for and call it honoring them.
     //
-    // Note which request this is: `defaultDialect` makes Anthropic *adaptive*
-    // unless the author declares otherwise, so this — not the case above — is
-    // what an ordinary Claude model sends, and the setting is inert there by
+    // Note which request this is: an undeclared Anthropic model resolves to the
+    // `claude-adaptive` category (thinking on), so this — not the case above —
+    // is what an ordinary Claude model sends, and the setting is inert there by
     // protocol rather than by oversight. The model editor's hint says so.
     const { calls } = await collect({
       standard: "anthropic", chunks: ANTHROPIC_ONE, temperature: 0.2,

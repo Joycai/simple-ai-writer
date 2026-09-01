@@ -49,6 +49,17 @@
   color: var(--color-text-label);
 }
 
+/* Token-budget field (budget-shape categories: Claude extended, Qwen). */
+.budgetInput {
+  width: 8ch;
+  padding: 5px 8px;
+  font: 400 11px/1.6 var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-soft);
+}
+.budgetInput:focus-visible { border-color: var(--color-sienna); outline: none; }
+
 /* ── Compact variant: a dial that fits in a toolbar ────────────────────────── */
 
 .compactGroup {

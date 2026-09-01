@@ -15,7 +15,7 @@
  * undefined, which is exactly the behaviour they had before this file existed.
  */
 
-import { familyOf, type ApiStandard } from "./types";
+import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 
 /**
  * How hard the author wants this model to think.
@@ -25,11 +25,22 @@ import { familyOf, type ApiStandard } from "./types";
  * default. That is the only choice that is safe on every relay: any field this
  * app volunteers is a field some gateway can reject outright.
  */
-export type ReasoningEffort = "default" | "off" | "low" | "medium" | "high" | "max";
+export type ReasoningEffort =
+  "default" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
-/** Selectable values, in the order the settings drawer shows them. */
+/**
+ * Every legal *stored* value — the set `parseReasoningEffort` admits, not the
+ * dial's menu. What a given model actually offers is its category's `menu`
+ * (see `THINKING_CATEGORIES`); this superset exists only so a value stored
+ * under one category still parses when the model is later read under another.
+ *
+ * `minimal`/`xhigh` are back (they were dropped when one universal 6-chip dial
+ * served every model): now that the menu is per-category, they appear only on
+ * the categories that actually accept them — Gemini's `minimal`, Qwen-Max's
+ * `xhigh` — instead of on every model or none.
+ */
 export const REASONING_EFFORTS: ReasoningEffort[] = [
-  "default", "off", "low", "medium", "high", "max",
+  "default", "off", "minimal", "low", "medium", "high", "xhigh", "max",
 ];
 
 /** Narrow a stored string to the union — the DB column is free text. */
@@ -82,23 +93,292 @@ export function parseThinkingDialect(v: unknown): ThinkingDialect | undefined {
     : undefined;
 }
 
+// ─── Thinking categories (the author-facing choice) ───────────────────────────
+
 /**
- * The dialect to assume when the author hasn't declared one.
+ * How a category's depth is expressed in the UI and on the wire.
  *
- * Optimistic on purpose, and only for families whose current generation this app
- * declares support for: guessing `adaptive` on Anthropic is right for every
- * model in the supported range (4.6+), and wrong in exactly one recoverable way
- * — an older model answers with a 400 naming the problem, which is a far better
- * outcome than defaulting to "no thinking" and leaving the author wondering why
- * their reasoning model never reasons.
+ *   - `levels` — an ordered menu of effort chips (its `menu`).
+ *   - `onoff`  — a bare on/off toggle (MiniMax): "on" = adaptive, "off" = disabled.
+ *   - `budget` — an on/off plus a numeric token budget (Claude 4.5-, Qwen).
+ *   - `none`   — no control at all (`off`): send nothing.
  */
-export function defaultDialect(standard: ApiStandard): ThinkingDialect {
-  return familyOf(standard) === "anthropic" ? "adaptive" : "none";
+export type ThinkingShape = "levels" | "onoff" | "budget" | "none";
+
+/**
+ * A named thinking-parameter preset the author picks per model.
+ *
+ * The dialect axis (`ThinkingDialect`) was too coarse to answer "which levels
+ * does *this* model accept": DeepSeek and Qwen-Max are both OpenAI-family yet
+ * one tops out at `high`+`max` and the other speaks `xhigh`; GLM cannot turn
+ * thinking off at all. A category pins that per vendor/generation — each one
+ * carries its own legal `menu`, its wire `dialect`, and (for budget shapes) a
+ * token range — so the dial in the model editor and the one in chat render
+ * exactly what the endpoint will accept, not a lowest-common-denominator six.
+ *
+ * `auto` is not a category id — it is the UI sentinel for "unset", which
+ * `resolveThinkingCategory` turns into the family's default. `off` is a real
+ * category (send nothing) so it can sit in the picker beside the others.
+ */
+export type ThinkingCategoryId =
+  | "off"
+  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm"
+  | "gemini3"
+  | "claude-adaptive" | "claude-budget" | "minimax";
+
+export interface ThinkingBudgetSpec {
+  min: number;
+  max: number;
+  default: number;
 }
 
-/** The dialect in force for a request: the author's choice, else the default. */
-export function dialectFor(standard: ApiStandard, declared?: ThinkingDialect): ThinkingDialect {
-  return declared ?? defaultDialect(standard);
+export interface ThinkingCategory {
+  id: ThinkingCategoryId;
+  /** i18n key for the picker chip label. */
+  labelKey: string;
+  /** i18n key for the hint under the picker. */
+  hintKey: string;
+  /**
+   * Which protocol family this category is offered under, so the model editor
+   * only shows Anthropic categories for an Anthropic provider. `off` is
+   * family-agnostic and appended to every family's list regardless of this.
+   */
+  family: ProtocolFamily;
+  /** The underlying wire dialect — drives `thinkingBody` on the Anthropic path. */
+  dialect: ThinkingDialect;
+  shape: ThinkingShape;
+  /** Ordered legal effort levels for a `levels` dial; empty otherwise. */
+  menu: ReasoningEffort[];
+  /** The level a fresh model of this category should preselect (e.g. GLM → max). */
+  defaultEffort?: ReasoningEffort;
+  /** The level governs the *whole* response, not just thinking (Anthropic). */
+  governsWholeResponse?: boolean;
+  /** Token-budget bounds for a `budget`-shape category. */
+  budget?: ThinkingBudgetSpec;
+  /** Per-category override of the effort→wire string; falls back to the family map. */
+  effortWire?: Partial<Record<Exclude<ReasoningEffort, "default">, string>>;
+  /** A static fragment always merged into the request while this category is on. */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * The registry. One entry per vendor/generation the app knows how to spell.
+ *
+ * Adding support for another endpoint's thinking is one entry here plus its two
+ * i18n strings — deliberately, so it never grows back into a per-vendor branch
+ * in the adapters (`reasoningBody`/`forcesToolChoiceAuto` read these fields).
+ */
+export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> = {
+  // Family-agnostic; `family` is a placeholder (never used to filter — off is
+  // appended to every family's list) and never reaches a family branch because
+  // its `none` shape short-circuits `reasoningBody`/`thinkingBody`.
+  off: {
+    id: "off", labelKey: "aiConfig.models.thinkingCatOff", hintKey: "aiConfig.models.thinkingCatOffHint",
+    family: "openai", dialect: "none", shape: "none", menu: [],
+  },
+  "openai-generic": {
+    id: "openai-generic",
+    labelKey: "aiConfig.models.thinkingCatOpenaiGeneric",
+    hintKey: "aiConfig.models.thinkingCatOpenaiGenericHint",
+    family: "openai", dialect: "none", shape: "levels",
+    menu: ["off", "low", "medium", "high", "max"],
+  },
+  deepseek: {
+    id: "deepseek",
+    labelKey: "aiConfig.models.thinkingCatDeepseek",
+    hintKey: "aiConfig.models.thinkingCatDeepseekHint",
+    family: "openai", dialect: "none", shape: "levels",
+    // No `medium`: DeepSeek folds it into `high`, so offering it would be a chip
+    // that silently means another. `off` sends the disable switch (not
+    // reasoning_effort:"none") — see reasoningBody.
+    menu: ["off", "low", "high", "max"],
+  },
+  "qwen-budget": {
+    id: "qwen-budget",
+    labelKey: "aiConfig.models.thinkingCatQwenBudget",
+    hintKey: "aiConfig.models.thinkingCatQwenBudgetHint",
+    family: "openai", dialect: "switch", shape: "budget",
+    menu: [],
+    budget: { min: 1, max: 32768, default: 4000 },
+  },
+  "qwen-effort": {
+    id: "qwen-effort",
+    labelKey: "aiConfig.models.thinkingCatQwenEffort",
+    hintKey: "aiConfig.models.thinkingCatQwenEffortHint",
+    family: "openai", dialect: "none", shape: "levels",
+    // Qwen-Max tops out at `xhigh`, not `max`; `medium` between low and xhigh.
+    menu: ["off", "low", "medium", "xhigh"],
+  },
+  glm: {
+    id: "glm",
+    labelKey: "aiConfig.models.thinkingCatGlm",
+    hintKey: "aiConfig.models.thinkingCatGlmHint",
+    family: "openai", dialect: "none", shape: "levels",
+    // GLM-5.3 cannot disable thinking, so there is no `off`; it defaults to max.
+    menu: ["low", "high", "max"], defaultEffort: "max",
+    extra: { thinking: { clear_thinking: false } },
+  },
+  gemini3: {
+    id: "gemini3",
+    labelKey: "aiConfig.models.thinkingCatGemini3",
+    hintKey: "aiConfig.models.thinkingCatGemini3Hint",
+    family: "gemini", dialect: "none", shape: "levels",
+    // `off` maps to MINIMAL (this family has no true off) — see GEMINI_LEVEL.
+    menu: ["off", "low", "medium", "high"],
+  },
+  "claude-adaptive": {
+    id: "claude-adaptive",
+    labelKey: "aiConfig.models.thinkingCatClaudeAdaptive",
+    hintKey: "aiConfig.models.thinkingCatClaudeAdaptiveHint",
+    family: "anthropic", dialect: "adaptive", shape: "levels",
+    menu: ["off", "low", "medium", "high", "max"], governsWholeResponse: true,
+  },
+  "claude-budget": {
+    id: "claude-budget",
+    labelKey: "aiConfig.models.thinkingCatClaudeBudget",
+    hintKey: "aiConfig.models.thinkingCatClaudeBudgetHint",
+    family: "anthropic", dialect: "extended", shape: "budget",
+    menu: [],
+    budget: { min: 1024, max: 32768, default: 16384 },
+  },
+  minimax: {
+    id: "minimax",
+    labelKey: "aiConfig.models.thinkingCatMinimax",
+    hintKey: "aiConfig.models.thinkingCatMinimaxHint",
+    family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
+  },
+};
+
+/** Every category id, for narrowing a free-text DB column. */
+export const THINKING_CATEGORY_IDS = Object.keys(THINKING_CATEGORIES) as ThinkingCategoryId[];
+
+/** Narrow a stored string to a category id — the DB column is free text. */
+export function parseThinkingCategory(v: unknown): ThinkingCategoryId | undefined {
+  return typeof v === "string" && (THINKING_CATEGORY_IDS as string[]).includes(v)
+    ? (v as ThinkingCategoryId)
+    : undefined;
+}
+
+/** The category to assume when the author hasn't declared one (the `auto` state). */
+export function defaultCategoryId(standard: ApiStandard): ThinkingCategoryId {
+  switch (familyOf(standard)) {
+    case "anthropic": return "claude-adaptive";
+    case "gemini": return "gemini3";
+    default: return "openai-generic";
+  }
+}
+
+/**
+ * The category in force for a model: the author's declared one, else a
+ * migration of the legacy `thinkingDialect`, else the family default.
+ *
+ * This is the single seam where an old `thinking_dialect` row becomes a
+ * category — the model row carries no family, so the mapping can only happen
+ * where the provider's `standard` is known (conn / model editor / chat dial).
+ * Old rows are never rewritten until the author next saves the model.
+ */
+export function resolveThinkingCategory(
+  m: { thinkingCategory?: ThinkingCategoryId; thinkingDialect?: ThinkingDialect },
+  standard: ApiStandard,
+): ThinkingCategory {
+  if (m.thinkingCategory && THINKING_CATEGORIES[m.thinkingCategory]) {
+    return THINKING_CATEGORIES[m.thinkingCategory];
+  }
+  // Migrate a legacy dialect, but only to a category of the **same family**.
+  // The model row carries no family, and an imported / hand-edited bundle can
+  // pair an OpenAI model with an Anthropic-only dialect (`adaptive`/`extended`);
+  // without this guard that would resolve to a Claude category and emit
+  // Anthropic fields (`output_config`) onto an OpenAI request. A cross-family
+  // dialect falls through to the family's own default instead.
+  const family = familyOf(standard);
+  switch (m.thinkingDialect) {
+    case "adaptive":
+      if (family === "anthropic") return THINKING_CATEGORIES["claude-adaptive"];
+      break;
+    case "extended":
+      if (family === "anthropic") return THINKING_CATEGORIES["claude-budget"];
+      break;
+    // switch → the family's on/off category. openai keeps `thinkingBudget`
+    // unset so it emits only `enable_thinking`, byte-identical to old `switch`.
+    case "switch":
+      return family === "anthropic"
+        ? THINKING_CATEGORIES["minimax"]
+        : THINKING_CATEGORIES["qwen-budget"];
+    // `off` is family-agnostic (send nothing), safe on any family.
+    case "none":
+      return THINKING_CATEGORIES["off"];
+  }
+  return THINKING_CATEGORIES[defaultCategoryId(standard)];
+}
+
+/** Category ids offered in the model editor for a family, plus the always-present `off`. */
+export function categoriesForFamily(family: ProtocolFamily): ThinkingCategoryId[] {
+  const own = THINKING_CATEGORY_IDS.filter(
+    (id) => id !== "off" && THINKING_CATEGORIES[id].family === family,
+  );
+  return [...own, "off"];
+}
+
+/**
+ * On/off shapes store their state in `reasoningEffort`. The two helpers below
+ * are the one definition of that mapping, shared by the model editor and the
+ * chat dial so they can't drift.
+ *
+ * The asymmetry is real: MiniMax's thinking block is emitted *unconditionally*
+ * by `thinkingBody` (undefined effort already yields `adaptive`), so "on" needs
+ * no stored marker there. Qwen's switch rides `reasoningBody`, whose guard
+ * drops an unset effort to "send nothing", so "on" must be a concrete non-off
+ * value — the level itself is immaterial (only on-vs-off is read), so a fixed
+ * marker is used.
+ */
+export function onEffort(category: ThinkingCategory): ReasoningEffort | undefined {
+  return category.family === "openai" ? "high" : undefined;
+}
+
+/** Whether an on/off toggle should read as "on" for this stored effort. */
+export function thinkingIsOn(category: ThinkingCategory, effort: ReasoningEffort | undefined): boolean {
+  if (effort === "off") return false;
+  // Unset/default: MiniMax defaults on; Qwen's switch defaults to send-nothing.
+  if (effort === undefined || effort === "default") return category.family === "anthropic";
+  return true;
+}
+
+/** Whether this category's dial is an on/off toggle rather than a level menu. */
+export function isOnOffCategory(category: ThinkingCategory): boolean {
+  // The onoff shape (MiniMax), plus Qwen's budget category — its `enable_thinking`
+  // switch needs the same on/off control beside the token field.
+  return category.shape === "onoff"
+    || (category.shape === "budget" && category.dialect === "switch");
+}
+
+/** Whether this category exposes any dial at all (a level menu, on/off, or budget). */
+export function categoryHasControl(category: ThinkingCategory): boolean {
+  return category.shape !== "none";
+}
+
+/**
+ * Whether a forced `tool_choice` must be downgraded to `auto` for this category.
+ *
+ * Two endpoints refuse a forced choice while thinking is on: MiniMax's Messages
+ * implementation (always, its enum is `auto|none`) and Qwen on DashScope (only
+ * while `enable_thinking` is true). Both callers that force treat a declined
+ * call as their JSON-mode / handoff fallback cue, so downgrading only trades a
+ * guaranteed 400 for that fallback firing one turn earlier. Learned-from-400
+ * endpoints (DeepSeek V4) are handled separately in `lib/ai/toolChoice.ts`.
+ */
+export function forcesToolChoiceAuto(
+  category: ThinkingCategory,
+  effort: ReasoningEffort | undefined,
+): boolean {
+  const thinkingOn = effort !== undefined && effort !== "default" && effort !== "off";
+  switch (category.family) {
+    case "anthropic":
+      return category.dialect === "switch"; // MiniMax: forcing is always illegal
+    case "openai":
+      return (category.id === "qwen-budget" || category.id === "qwen-effort") && thinkingOn;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -122,50 +402,74 @@ export function dialectFor(standard: ApiStandard, declared?: ThinkingDialect): T
  */
 const OPENAI_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
   off: "none",
+  minimal: "minimal",
   low: "low",
   medium: "medium",
   high: "high",
+  xhigh: "xhigh",
   max: "max",
 };
 
 /**
- * The request-body fragment for this model's effort setting, or undefined to
+ * The request-body fragment for this model's category + effort, or undefined to
  * send nothing at all.
  *
- * Undefined is returned for `default`/absent **and** for every family whose
- * translation isn't written yet — both mean "leave the endpoint's own default
- * alone", which is the pre-existing behaviour in each case.
+ * Undefined is returned for the `off`/`none` category and for `default`/absent
+ * effort — both mean "leave the endpoint's own default alone". The `budget`
+ * argument is read only by budget-shape OpenAI categories (Qwen); the Anthropic
+ * budget travels through `thinkingBody` instead.
  */
 export function reasoningBody(
-  standard: ApiStandard,
+  category: ThinkingCategory,
   effort: ReasoningEffort | undefined,
-  dialect?: ThinkingDialect,
+  budget?: number,
 ): Record<string, unknown> | undefined {
+  // `off` and `auto→off` carry no control and send nothing.
+  if (category.shape === "none") return undefined;
+  // `default`/absent means send nothing, unchanged — the invariant every relay
+  // depends on. On budget/onoff categories this means the author must turn
+  // thinking on explicitly (pick a level, or flip the toggle to a non-off
+  // effort); until then the request is byte-identical to before this existed.
   if (!effort || effort === "default") return undefined;
-  switch (familyOf(standard)) {
+  const eff = effort as Exclude<ReasoningEffort, "default">;
+  const on = eff !== "off";
+
+  switch (category.family) {
     case "openai":
-      // The `switch` dialect is the statement that this endpoint's thinking
-      // vocabulary is a bare `enable_thinking` boolean (Qwen on DashScope
-      // compatible-mode) and that `reasoning_effort` is not welcome beside it.
-      // No depth dial exists there, so effort is spent on on/off alone —
-      // exactly the deal the same dialect strikes on the Anthropic family.
-      return dialect === "switch"
-        ? { enable_thinking: effort !== "off" }
-        : { reasoning_effort: OPENAI_EFFORT[effort] };
-    case "anthropic":
-      // The `switch` dialect *is* the statement that this endpoint has no
-      // `output_config` — depth there is expressible only as on/off, which
-      // `thinkingBody` already spent the effort setting on. Sending the field
-      // anyway would volunteer an unknown top-level argument to an endpoint
-      // whose documented request schema doesn't have one.
-      return dialect === "switch"
-        ? undefined
-        : { output_config: { effort: ANTHROPIC_EFFORT[effort] } };
+      switch (category.id) {
+        case "qwen-budget":
+          // A bare `enable_thinking` boolean (DashScope compatible-mode), plus
+          // the token budget when the author set one. Budget omitted while off
+          // or unset, so a migrated switch model stays byte-identical.
+          return {
+            enable_thinking: on,
+            ...(on && typeof budget === "number" ? { thinking_budget: budget } : {}),
+          };
+        case "qwen-effort":
+          // Qwen-Max: the switch and the level travel together (they are
+          // documented as mutually exclusive with the *budget*, not each other).
+          return on
+            ? { enable_thinking: true, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
+            : { enable_thinking: false };
+        case "deepseek":
+          // DeepSeek turns thinking off with the disable switch, not
+          // `reasoning_effort:"none"` — that field only tunes depth while on.
+          return on
+            ? { reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
+            : { extra_body: { thinking: { type: "disabled" } } };
+        default:
+          // openai-generic, glm — the standard top-level field, plus any static
+          // fragment the category always carries (GLM's clear_thinking:false).
+          return {
+            ...(category.extra ?? {}),
+            reasoning_effort: effortWire(category, eff, OPENAI_EFFORT),
+          };
+      }
     case "gemini":
       return {
         generationConfig: {
           thinkingConfig: {
-            thinkingLevel: GEMINI_LEVEL[effort],
+            thinkingLevel: effortWire(category, eff, GEMINI_LEVEL),
             // Paired with the level on purpose. Thinking runs either way and is
             // billed either way; this only decides whether the reasoning comes
             // back with the answer. Setting a depth while leaving it off would
@@ -174,9 +478,23 @@ export function reasoningBody(
           },
         },
       };
-    default:
-      return undefined;
+    case "anthropic":
+      // The `switch` (MiniMax) and `budget` (extended) categories have no
+      // `output_config` — depth there is carried by `thinking` alone
+      // (`thinkingBody`). Volunteering the field would be an unknown top-level
+      // argument on an endpoint whose schema doesn't have one.
+      if (category.dialect === "switch" || category.shape === "budget") return undefined;
+      return { output_config: { effort: effortWire(category, eff, ANTHROPIC_EFFORT) } };
   }
+}
+
+/** The wire string for an effort: the category's own override, else the family map. */
+function effortWire(
+  category: ThinkingCategory,
+  eff: Exclude<ReasoningEffort, "default">,
+  base: Record<Exclude<ReasoningEffort, "default">, string>,
+): string {
+  return category.effortWire?.[eff] ?? base[eff];
 }
 
 /**
@@ -197,9 +515,11 @@ export function reasoningBody(
  */
 const GEMINI_LEVEL: Record<Exclude<ReasoningEffort, "default">, string> = {
   off: "MINIMAL",
+  minimal: "MINIMAL",
   low: "LOW",
   medium: "MEDIUM",
   high: "HIGH",
+  xhigh: "HIGH",
   max: "HIGH",
 };
 
@@ -221,9 +541,11 @@ const GEMINI_LEVEL: Record<Exclude<ReasoningEffort, "default">, string> = {
  */
 const ANTHROPIC_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
   off: "low",
+  minimal: "low",
   low: "low",
   medium: "medium",
   high: "high",
+  xhigh: "xhigh",
   max: "max",
 };
 
@@ -297,23 +619,12 @@ export function supportsThinkingLevel(standard: ApiStandard): boolean {
  * the condition their own way: a control the request then drops is exactly
  * what the comment on `supportsThinkingLevel` says not to ship.
  */
-export function supportsTemperature(standard: ApiStandard, declared?: ThinkingDialect): boolean {
+export function supportsTemperature(standard: ApiStandard, category?: ThinkingCategoryId): boolean {
   if (familyOf(standard) !== "anthropic") return true;
-  return dialectFor(standard, declared) === "none";
-}
-
-/**
- * Whether this endpoint has a **separate** overall-effort dial, distinct from
- * the thinking level.
- *
- * Nothing does yet. Anthropic is the one that will: its `output_config.effort`
- * governs the whole response — prose, tool calls and thinking together — while
- * `thinking` governs only whether it thinks. On the OpenAI family the two
- * collapse into the single `reasoning_effort` field, so offering two dials
- * there would be two controls writing one value.
- */
-export function supportsSeparateEffort(standard: ApiStandard): boolean {
-  return familyOf(standard) === "anthropic";
+  // On Anthropic, temperature is unsendable whenever thinking is on. Only the
+  // `off` category (and an unset one that resolves to it) leaves it legal;
+  // absent resolves to the family default (claude-adaptive), i.e. thinking on.
+  return category === "off";
 }
 
 // ─── Reasoning content on the OpenAI-compatible wire ──────────────────────────

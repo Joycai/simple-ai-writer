@@ -11,8 +11,8 @@ import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
 import type { ImageDialect } from "./imageDialects";
 import {
-  parseReasoningEffort, parseThinkingDialect,
-  type ReasoningEffort, type ThinkingDialect,
+  parseReasoningEffort, parseThinkingCategory, parseThinkingDialect,
+  type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
 import { migrateLegacyStandard } from "./urls";
@@ -196,12 +196,21 @@ export interface Model {
    */
   reasoningEffort?: ReasoningEffort;
   /**
-   * Which shape of thinking parameter this model accepts.
-   *
-   * Declared rather than derived: within one protocol family the parameter
-   * changed between model generations, and on a relay the model id is free text
-   * the author typed, so the generation isn't recoverable from it. Absent means
-   * "assume the family's current generation" — see `dialectFor`.
+   * Which thinking-parameter **category** this model uses — the author-facing
+   * choice (a per-vendor preset carrying its own legal effort menu). Absent =
+   * the `auto` state, which `resolveThinkingCategory` turns into the family
+   * default. See `THINKING_CATEGORIES` in `lib/ai/reasoning.ts`.
+   */
+  thinkingCategory?: ThinkingCategoryId;
+  /**
+   * Token budget for a budget-shape category (Claude 4.5- `budget_tokens`,
+   * Qwen `thinking_budget`). Absent leaves the endpoint/adapter default.
+   */
+  thinkingBudget?: number;
+  /**
+   * Legacy: the coarse thinking *shape*, superseded by `thinkingCategory`. Kept
+   * only so `resolveThinkingCategory` can migrate a model configured before
+   * categories existed; new saves write `thinkingCategory` and null this out.
    */
   thinkingDialect?: ThinkingDialect;
   /**
@@ -440,6 +449,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "caps", "TEXT");
   await addColumn(db, modelCols, "models", "reasoning_effort", "TEXT");
   await addColumn(db, modelCols, "models", "thinking_dialect", "TEXT");
+  await addColumn(db, modelCols, "models", "thinking_category", "TEXT");
+  await addColumn(db, modelCols, "models", "thinking_budget", "INTEGER");
   await addColumn(db, modelCols, "models", "server_tools", "TEXT");
   await addColumn(db, modelCols, "models", "pdf_input", "INTEGER");
   await addColumn(db, modelCols, "models", "temperature", "REAL");
@@ -684,9 +695,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input, temperature, translate_format)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null],
   };
 }
 
@@ -767,6 +778,8 @@ function rowToModel(r: Record<string, unknown>): Model {
     caps: parseImageCaps(r.caps),
     reasoningEffort: parseReasoningEffort(r.reasoning_effort),
     thinkingDialect: parseThinkingDialect(r.thinking_dialect),
+    thinkingCategory: parseThinkingCategory(r.thinking_category),
+    thinkingBudget: typeof r.thinking_budget === "number" ? r.thinking_budget : undefined,
     serverTools: parseServerTools(r.server_tools),
     // Absent for anything but an explicit 1 — the column is free-typed like
     // the rest, and "no declaration" must stay one representation.

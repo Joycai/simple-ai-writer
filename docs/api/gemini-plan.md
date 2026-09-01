@@ -2,6 +2,10 @@
 
 > **状态：四刀全部实现。** 目标 **Gemini 3+**。剩下的是 §5 那几条只能靠真实请求定论的验证。
 >
+> **2026-09 更新**：Gemini 的思考映射现在是具名类目 `gemini3`（`thinkingLevel`
+> 大写枚举 minimal/low/medium/high + `includeThoughts`，`off`→`MINIMAL`）。wire 形状不变；
+> 类目模型见 [`reasoning-plan.md`](reasoning-plan.md) §0。
+>
 > 核对分两轮，第二轮（API 参考的 markdown 原文）纠正了第一轮的两个判断 ——
 > 指南页只讲 Interactions，但**参考页把经典 surface 的字段定义得很完整**。
 > 教训记在 §7。

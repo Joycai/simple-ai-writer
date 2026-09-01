@@ -21,7 +21,7 @@
 
 import i18n from "../../i18n";
 import type { Model, Provider } from "./configDb";
-import type { ReasoningEffort, ThinkingDialect } from "./reasoning";
+import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolId } from "./serverTools";
 import type { ApiStandard, AuthMode } from "./types";
@@ -73,8 +73,14 @@ export interface ConnOptions {
   temperature?: number;
   /** How hard to think, in this app's vocabulary — each adapter translates. */
   reasoningEffort?: ReasoningEffort;
-  /** Which shape of thinking parameter this model accepts. */
-  thinkingDialect?: ThinkingDialect;
+  /**
+   * The resolved thinking-parameter category. `connOptions()` always fills it
+   * (migrating any legacy dialect); optional only so hand-built option bags and
+   * task callers may omit it — the adapters re-resolve to the family default.
+   */
+  thinkingCategory?: ThinkingCategoryId;
+  /** Token budget for a budget-shape category (Claude extended, Qwen). */
+  thinkingBudget?: number;
   /** Endpoint-run tools this model may use on its own (web search). */
   serverTools?: ServerToolId[];
 }
@@ -104,7 +110,10 @@ export function connOptions(conn: AiConn): ConnOptions {
     maxOutput: effectiveMaxOutput(model, defaultMaxOutput()),
     temperature: model.temperature,
     reasoningEffort: model.reasoningEffort,
-    thinkingDialect: model.thinkingDialect,
+    // Resolved (and migrated from a legacy dialect) here, the one place with the
+    // provider's standard in hand — the model row alone can't name its family.
+    thinkingCategory: resolveThinkingCategory(model, provider.apiStandard).id,
+    thinkingBudget: model.thinkingBudget,
     serverTools: model.serverTools,
   };
 }
@@ -129,7 +138,8 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     maxOutput: o.maxOutput,
     temperature: o.temperature,
     reasoningEffort: o.reasoningEffort,
-    thinkingDialect: o.thinkingDialect,
+    thinkingCategory: o.thinkingCategory,
+    thinkingBudget: o.thinkingBudget,
     serverTools: o.serverTools,
   };
 }
