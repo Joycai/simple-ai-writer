@@ -54,7 +54,8 @@ import {
   deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
 } from "../lib/agent/chatSession";
 import {
-  listChatSessions, loadChatSession, upsertChatSession, type ChatSessionRow,
+  listChatSessions, loadChatSession, setChatSessionPinned, upsertChatSession,
+  type ChatSessionRow,
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
@@ -330,7 +331,12 @@ interface AgentState {
   chatTaskWorkspace: TaskWorkspaceHandle | null;
   /** DB row this session saves into; null until the first persist. */
   chatSessionId: number | null;
-  /** Recent sessions (newest first, ≤ MAX_CHAT_SESSIONS) for the history menu. */
+  /**
+   * Sessions for the history menu, newest first: the recent ones (≤
+   * MAX_CHAT_SESSIONS) plus every pinned one, which is why this list has no
+   * length bound of its own. Recency order, not pinned-first — the restore on
+   * project open reads element 0 as "where I left off".
+   */
   chatSessions: ChatSessionRow[];
   /** Subagents temporarily disabled for the live session (session-level override). */
   disabledSubAgents: SubAgentKind[];
@@ -438,6 +444,12 @@ interface AgentState {
   persistChat: () => Promise<void>;
   /** Load a session from the history menu, persisting the current one first. */
   switchChatSession: (id: number) => Promise<void>;
+  /**
+   * Pin / unpin one stored session. A pinned session is exempt from the
+   * five-session cap, so it stays reachable from the history menu until the
+   * author releases it.
+   */
+  toggleChatSessionPin: (id: number) => Promise<void>;
   /**
    * Project open/close hook (projectStore calls this): drop the previous
    * project's session from view, then restore the new project's newest one.
@@ -1960,6 +1972,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       });
     } catch (e) {
       console.warn("chat session load failed:", e);
+    }
+  },
+
+  toggleChatSessionPin: async (id) => {
+    const row = get().chatSessions.find((s) => s.id === id);
+    if (!row) return;
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+    try {
+      await setChatSessionPinned(projectPath, id, !row.pinned);
+      // Re-read rather than patch the flag in place: unpinning can put the row
+      // back over the cap, and the list is where that stops being offered.
+      set({ chatSessions: await listChatSessions(projectPath) });
+    } catch (e) {
+      // Same contract as persistChat: the conversation must keep working.
+      console.warn("chat session pin failed:", e);
     }
   },
 

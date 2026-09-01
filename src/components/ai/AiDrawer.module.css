@@ -112,24 +112,35 @@
   border: 1px solid var(--color-border-input);
   box-shadow: var(--shadow-lg);
   padding: var(--space-1) 0;
+  /* Pinned sessions are uncapped by design, so the menu has to run long. */
+  max-height: 320px;
+  overflow-y: auto;
   animation: dropIn 160ms var(--ease-out);
   transform-origin: top right;
 }
 
+/* Row = the conversation (flex: 1) + the pin toggle, so the pin is not nested
+   inside the button that opens the conversation. */
+.sessionRow {
+  display: flex;
+  align-items: stretch;
+  transition: background var(--transition-fast);
+}
+.sessionRow:hover { background: var(--color-bg-hover); }
+.sessionRowActive { background: var(--color-bg-accent-wash); }
+
 .sessionItem {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: var(--space-3);
-  padding: 6px var(--space-3);
+  padding: 6px var(--space-2) 6px var(--space-3);
   background: transparent;
   border: none;
   text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast);
 }
-.sessionItem:hover { background: var(--color-bg-hover); }
-.sessionItemActive { background: var(--color-bg-accent-wash); }
 
 .sessionPreview {
   flex: 1;
@@ -140,7 +151,39 @@
   font: 400 11px/1.6 var(--font-sans);
   color: var(--color-text-primary);
 }
-.sessionItemActive .sessionPreview { color: var(--color-sienna); }
+.sessionRowActive .sessionPreview { color: var(--color-sienna); }
+
+/* Section head, only drawn when both sections are on screen. */
+.sessionGroup {
+  padding: 6px var(--space-3) 3px;
+  font: 500 9.5px/1.4 var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+.sessionGroup + .sessionGroup,
+.sessionRow + .sessionGroup { margin-top: var(--space-1); }
+
+/* Rest state is the state it reports: invisible until the row is hovered,
+   permanently visible (and filled) once the session is pinned. */
+.sessionPin {
+  flex: none;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+.sessionRow:hover .sessionPin,
+.sessionPin:focus-visible,
+.sessionPinOn { opacity: 1; }
+.sessionPinOn { color: var(--color-sienna); }
+.sessionPin:hover { color: var(--color-sienna-hover); }
 
 .sessionTime {
   flex-shrink: 0;

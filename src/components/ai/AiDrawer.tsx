@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, CheckCircle2, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, Pin, Sparkles, X } from "lucide-react";
 import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
+import { splitChatSessions, type ChatSessionRow } from "../../lib/agent/sessionDb";
 import { AgentChat } from "./AgentChat";
 import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
@@ -47,6 +48,7 @@ export function AiDrawer() {
   const chatSessions = useAgentStore((s) => s.chatSessions);
   const resetChat = useAgentStore((s) => s.resetChat);
   const switchChatSession = useAgentStore((s) => s.switchChatSession);
+  const toggleChatSessionPin = useAgentStore((s) => s.toggleChatSessionPin);
   const chatEmpty = useAgentStore((s) => s.turns.length === 0 && !s.chatError);
 
   const close = () => setShowAiDrawer(false);
@@ -73,6 +75,48 @@ export function AiDrawer() {
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  // Pinned sessions live in their own section rather than wearing a badge in
+  // the recent list — same rule as the recents rail's pins (设计稿 15): the
+  // point of pinning is that the conversation stops rotating away, and a
+  // section is what says that without the author having to read an icon.
+  const { pinned: pinnedSessions, recent: recentSessions } = splitChatSessions(chatSessions);
+
+  const renderSessionRow = (s: ChatSessionRow) => (
+    <div
+      key={s.id}
+      className={`${styles.sessionRow} ${s.id === chatSessionId ? styles.sessionRowActive : ""}`}
+    >
+      <button
+        className={styles.sessionItem}
+        onClick={() => {
+          setShowSessions(false);
+          setShowTasks(false);
+          void switchChatSession(s.id);
+        }}
+      >
+        <span className={styles.sessionPreview}>
+          {s.preview || t("ai.chat.untitledSession", { defaultValue: "（空会话）" })}
+        </span>
+        <span className={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</span>
+      </button>
+      {/* Deliberately outside the open button: nesting it would be invalid, and
+          pinning must not also switch the conversation. */}
+      <button
+        className={`${styles.sessionPin} ${s.pinned ? styles.sessionPinOn : ""}`}
+        onClick={() => void toggleChatSessionPin(s.id)}
+        title={t(s.pinned ? "ai.chat.unpinSession" : "ai.chat.pinSession", {
+          defaultValue: s.pinned ? "取消固定" : "固定这次会话，不会被清掉",
+        })}
+        aria-label={t(s.pinned ? "ai.chat.unpinSession" : "ai.chat.pinSession", {
+          defaultValue: s.pinned ? "取消固定" : "固定这次会话，不会被清掉",
+        })}
+        aria-pressed={s.pinned}
+      >
+        <Pin size={12} strokeWidth={1.6} fill={s.pinned ? "currentColor" : "none"} />
+      </button>
+    </div>
+  );
 
   // 一个 Beta 开关，读一次就够：它只会在设置页被改，而改完抽屉会重挂。
   const roleplayOn = isRoleplayEnabled();
@@ -158,22 +202,21 @@ export function AiDrawer() {
                 </button>
                 {showSessions && (
                   <div className={styles.sessionMenu}>
-                    {chatSessions.map((s) => (
-                      <button
-                        key={s.id}
-                        className={`${styles.sessionItem} ${s.id === chatSessionId ? styles.sessionItemActive : ""}`}
-                        onClick={() => {
-                          setShowSessions(false);
-                          setShowTasks(false);
-                          void switchChatSession(s.id);
-                        }}
-                      >
-                        <span className={styles.sessionPreview}>
-                          {s.preview || t("ai.chat.untitledSession", { defaultValue: "（空会话）" })}
-                        </span>
-                        <span className={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</span>
-                      </button>
-                    ))}
+                    {/* Section heads only once both sections exist: with pins
+                        alone (or none at all) the list is unambiguous and a
+                        label would be noise. */}
+                    {pinnedSessions.length > 0 && recentSessions.length > 0 && (
+                      <div className={styles.sessionGroup}>
+                        {t("ai.chat.pinnedSessions", { defaultValue: "已固定" })}
+                      </div>
+                    )}
+                    {pinnedSessions.map(renderSessionRow)}
+                    {pinnedSessions.length > 0 && recentSessions.length > 0 && (
+                      <div className={styles.sessionGroup}>
+                        {t("ai.chat.recentSessions", { defaultValue: "最近" })}
+                      </div>
+                    )}
+                    {recentSessions.map(renderSessionRow)}
                   </div>
                 )}
               </div>
