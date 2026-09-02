@@ -99,7 +99,7 @@ PR1 明确不做（PR2 已兑现前两条）：`req.images`（参考图/图生�
 
 ## 3. Beta 开关
 
-`lib/comfy/flag.ts`（`app:comfyuiBeta`，默认关），设置 → 通用 → 实验功能。
+`lib/comfy/flag.ts`（`app:comfyuiBeta`，默认关），设置 → AI 配置 → 实验室。
 它管的事：**ModelDrawer 的路由下拉里 "ComfyUI（本地）" 这一项存不存在**。
 已配好的 comfyui 模型在开关关掉后仍然能用、编辑时仍显示该选项——开关管的
 是入口不是既有配置，与 translate 开关「关掉 = 工具不装载而不是调用被拒」
@@ -118,7 +118,7 @@ PR1 明确不做（PR2 已兑现前两条）：`req.images`（参考图/图生�
 ## 5. 分期
 
 ### PR1 · 生成链路（本文实现的部分）— ✅
-- `lib/comfy/flag.ts` + 设置 → 通用的 Beta 行
+- `lib/comfy/flag.ts` + 设置 → 实验室的 Beta 行
 - `lib/comfy/workflow.ts`：解析（含 UI 格式误导入的专门报错）、占位识别、
   注入——全部纯函数，`lib/comfy/__tests__/workflow.test.ts` 覆盖
 - `ImageRoute` += `"comfyui"`；`ImageCaps.comfy`；`ImageConn.comfy`；

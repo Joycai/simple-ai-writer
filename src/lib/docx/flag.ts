@@ -1,5 +1,5 @@
 /**
- * The Beta switch for Word export (Settings → 通用 → 实验功能).
+ * The Beta switch for Word export (Settings → AI 配置 → 实验室).
  *
  * Its own module rather than a field on a store, for the same three reasons
  * `lib/pptx/flag.ts` gives: it is read from the settings pane, from the

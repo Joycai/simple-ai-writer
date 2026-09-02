@@ -99,7 +99,7 @@
 
 | 阈值 | 默认 | 可调 | 理由 |
 | --- | --- | --- | --- |
-| 长边 `app:imageMaxLongEdge` | **4096 px** | 设置 → 通用 → 图片 | 保原分辨率是默认行为，4096 之上才动手。iPhone 主摄 4032×3024 恰好在线下，正常照片一像素不动 |
+| 长边 `app:imageMaxLongEdge` | **4096 px** | 设置 → AI 配置 → 上下文与记忆 | 保原分辨率是默认行为，4096 之上才动手。iPhone 主摄 4032×3024 恰好在线下，正常照片一像素不动 |
 | 字节 `MAX_IMAGE_BYTES` | 12 MB | 否 | 已有常量，语义见 §2.1 |
 
 `0` = 不限长边（只在超字节时才缩）。上界钳在 16384，照
@@ -357,7 +357,7 @@ export async function ingestImageFile(src: string): Promise<{ bytes: Uint8Array;
 
 | PR | 内容 | 状态 |
 | --- | --- | --- |
-| **A** | `imageSize.ts` + `downscalePlan.ts` + `normalize.ts` + `imageForModel`，改 §1.2 左列 10 处；`readImageBytes` 收走两个写盘点（§2.7）；四个选择器收回 `IMAGE_EXTENSIONS`（§1.3）；pref + 设置 → 通用 → 图片 + i18n；§2.6 的提示 | **已发** |
+| **A** | `imageSize.ts` + `downscalePlan.ts` + `normalize.ts` + `imageForModel`，改 §1.2 左列 10 处；`readImageBytes` 收走两个写盘点（§2.7）；四个选择器收回 `IMAGE_EXTENSIONS`（§1.3）；pref + 设置 → AI 配置 → 上下文与记忆 + i18n；§2.6 的提示 | **已发** |
 | **B** | `ingestImageFile` + `transcode` 处置 + `heic-decode` 懒加载 + 许可证声明 | **不做**（§3.0） |
 
 §1.3 原本排在 B，实现时提到了 A：它与 HEIC 无关，是一条独立成立的收敛。

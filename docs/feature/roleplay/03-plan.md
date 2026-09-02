@@ -21,7 +21,7 @@
 - `stores/roleplayStore.ts`：只有花名册的增删改查，没有对话
 - `AiDrawerMode` 加 `"roleplay"`；`AiDrawer` 第四个 tab（开关关时不渲染）
 - `RoleplayPanel` 骨架 + `AgentComposer`（能建 / 改 / 删 agent，能绑条目、选模型、写人设卡）
-- Settings → 通用 → 实验功能 的开关
+- Settings → AI 配置 → 实验室 的开关
 
 **验收**：开开关 → 建一个绑定了某人物的扮演 agent → 磁盘上出现正确的目录结构 → 重启应用后花名册还在、顺序不变 → 关开关，tab 消失、数据不动。**还不能对话。**
 
