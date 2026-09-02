@@ -276,7 +276,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     const filtered = exportPackTools();
     if (!filtered) {
       return fail(
-        "every export format is switched off (Settings → 通用 → 实验功能) — tell the author which Beta to enable instead of dispatching.",
+        "every export format is switched off (Settings → AI 配置 → 实验室) — tell the author which Beta to enable instead of dispatching.",
       );
     }
     tools = filtered;

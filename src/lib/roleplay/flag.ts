@@ -1,5 +1,5 @@
 /**
- * The Beta switch for 互动式角色扮演创作 (Settings → 通用 → 实验功能).
+ * The Beta switch for 互动式角色扮演创作 (Settings → AI 配置 → 实验室).
  *
  * Its own module rather than a field on a store, for the same reason
  * `lib/pptx/flag` is: it is read from three unrelated places — the settings

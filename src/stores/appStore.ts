@@ -227,6 +227,8 @@ export type SettingsTab =
   | "subagents"
   | "prompts"
   | "usage"
+  | "context-memory"
+  | "lab"
   | "shortcuts"
   | "about"
   | "sync";

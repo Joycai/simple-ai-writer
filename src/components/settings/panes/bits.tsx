@@ -76,22 +76,32 @@ export function Row({
   title,
   desc,
   warn,
+  foot,
+  top,
   last,
   children,
 }: {
   title?: string;
   desc?: string;
   warn?: string;
+  /** Anything that belongs under the description on the label side — a
+   *  second line of copy, a signpost (设计稿 18's 「接着去 … →」). */
+  foot?: ReactNode;
+  /** Pin the control to the row's first line instead of its vertical centre.
+   *  For rows whose label side can grow (a foot that comes and goes): the
+   *  toggle should not drift down when a line appears beneath it. */
+  top?: boolean;
   /** Drops the separator — use on the final row of a section. */
   last?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <div className={`${ui.row} ${last ? ui.rowLast : ""}`}>
+    <div className={`${ui.row} ${top ? ui.rowTop : ""} ${last ? ui.rowLast : ""}`}>
       <div className={ui.rowMain}>
         {title && <div className={ui.rowTitle}>{title}</div>}
         {desc && <div className={ui.rowDesc}>{desc}</div>}
         {warn && <div className={ui.rowWarn}>{warn}</div>}
+        {foot}
       </div>
       {children && <div className={ui.rowActions}>{children}</div>}
     </div>

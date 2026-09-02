@@ -1,5 +1,5 @@
 /**
- * The Beta switch for Excel export (Settings → 通用 → 实验功能).
+ * The Beta switch for Excel export (Settings → AI 配置 → 实验室).
  *
  * Its own module for the same reasons `lib/pptx/flag.ts` and `lib/docx/flag.ts`
  * give: it is read from the settings pane and from the agent's tool routing,

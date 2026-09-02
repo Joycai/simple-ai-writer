@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users,
-  RefreshCw, FileType,
+  RefreshCw, FileType, FlaskConical, Scroll,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
@@ -17,6 +17,8 @@ import { AboutPane } from "./panes/AboutPane";
 import { ProvidersModelsPane } from "./panes/ProvidersModelsPane";
 import { SubAgentsPane } from "./panes/SubAgentsPane";
 import { DocFormatPane } from "./panes/DocFormatPane";
+import { LabPane } from "./panes/LabPane";
+import { ContextMemoryPane } from "./panes/ContextMemoryPane";
 import { isDocxExportEnabled } from "../../lib/docx/flag";
 import styles from "./SettingsPage.module.css";
 
@@ -40,9 +42,24 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   // Beta off means the item is *absent*, not disabled — the nav below it moves
-  // up, nothing greys out. Read once per open: the switch lives two panes away
-  // and toggling it mid-session re-renders this page anyway.
-  const docxOn = isDocxExportEnabled();
+  // up, nothing greys out. State rather than a one-off read: the switch is on
+  // the 实验室 pane, and the author flipping it should see this item arrive
+  // (or leave) at once, not on the next open.
+  const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
+  // 设计稿 18: the frame the Word switch goes on, the item expands from zero
+  // height and its background is dyed accent-tint, fading out within ~500ms —
+  // "highlight for one beat" so the author sees *where* the switch acted.
+  // Off collapses in reverse with no flash.
+  const [docxFlash, setDocxFlash] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDocxToggled = useCallback((on: boolean) => {
+    setDocxOn(on);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    if (!on) { setDocxFlash(false); return; }
+    setDocxFlash(true);
+    flashTimer.current = setTimeout(() => setDocxFlash(false), 240);
+  }, []);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   // A pane with its own dismissable layer (the provider/model drawer) claims
   // Escape while it is up, so one press peels off one layer.
@@ -64,10 +81,10 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
 
   const pageVariants = useMotionPreset(panelFade);
 
-  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string) => (
+  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string, extra = "") => (
     <button
       key={id}
-      className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""}`}
+      className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""} ${extra}`}
       onClick={() => setActiveTab(id)}
     >
       <span className={styles.navIcon}>{icon}</span>
@@ -97,12 +114,24 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
         <nav className={styles.nav}>
           {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
           {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
-          {docxOn && navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat")}
+          {/* Always mounted so it can animate in and out; `inert` keeps the
+              collapsed button out of the tab order. */}
+          <div
+            className={`${styles.navCollapse} ${docxOn ? styles.navCollapseOpen : ""}`}
+            inert={!docxOn}
+          >
+            {navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat",
+              docxFlash ? styles.navItemFlash : "")}
+          </div>
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
+          {/* Scroll (设计稿 18): what a conversation reads into the model is
+              "one roll" — both the text being read and the thing remembered. */}
+          {navBtn("context-memory", <Scroll size={15} />, "systemSettings.tabs.contextMemory")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
+          {navBtn("lab", <FlaskConical size={15} />, "systemSettings.tabs.lab")}
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.dataGroup")}</div>
           {navBtn("sync", <RefreshCw size={15} />, "systemSettings.tabs.sync")}
           <div className={styles.navDivider} />
@@ -121,6 +150,8 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "usage" && <UsagePane />}
+            {activeTab === "context-memory" && <ContextMemoryPane />}
+            {activeTab === "lab" && <LabPane onDocxToggled={handleDocxToggled} onNavigate={setActiveTab} />}
             {activeTab === "sync" && <SyncPane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}
             {activeTab === "about" && <AboutPane />}

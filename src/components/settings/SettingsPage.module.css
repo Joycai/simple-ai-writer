@@ -148,6 +148,39 @@
 
 .navIcon { flex-shrink: 0; }
 
+/* ─── 排版格式: the one nav item a switch adds and removes (设计稿 18) ──────
+   Expands from zero height in 240ms on the same frame the Word switch goes
+   on — no translate, so the items below simply move down — and collapses in
+   reverse when it goes off. `inert` on the box (SettingsPage.tsx) is what
+   keeps the collapsed button out of the tab order and the accessibility
+   tree — no visibility juggling, which the CSS minifier reserialised into a
+   duration anyway. */
+.navCollapse {
+  /* The nav is a flex column: with overflow hidden this box would be the one
+     item allowed to shrink, and a tall nav squeezes it to nothing. */
+  flex: none;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition:
+    max-height 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.navCollapseOpen {
+  max-height: 48px;
+  opacity: 1;
+}
+/* The flash: the item arrives dyed accent-tint (no transition in), then the
+   class is dropped and this 500ms ease-out carries the tint back to paper. */
+.navCollapse .navItem {
+  transition: background 500ms ease-out, color var(--transition-fast),
+    transform var(--transition-fast);
+}
+.navItemFlash {
+  background: var(--color-accent-tint);
+  transition: none !important;
+}
+
 /* Every pane owns its own scrolling and content width (see settingsUi `.pane`),
    so the host only has to give them the box and a positioning context. */
 .paneHost {
