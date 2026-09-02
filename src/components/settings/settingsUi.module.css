@@ -114,6 +114,12 @@
   font-weight: 500;
   color: var(--color-text-primary);
 }
+/* Title + a tag on its baseline (Row's `titleExtra`). */
+.rowTitleLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
 
 .rowDesc {
   margin-top: var(--space-1);

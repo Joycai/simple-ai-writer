@@ -43,3 +43,109 @@
   line-height: 1.7;
   color: var(--stg-text-faint);
 }
+
+/* ── 对话归纳 (interim controls; the designed slider lands with 设计稿 19) ── */
+
+.slider {
+  width: 180px;
+  accent-color: var(--color-sienna);
+}
+.slider:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.readout {
+  width: 52px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+/* The worked example: one sentence about the rows above it. */
+.example {
+  width: 100%;
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.exampleOff { opacity: 0.55; }
+
+/* ── 对话归纳 (设计稿 20) ── */
+
+/* A slider row dims as one piece when the switch is off: the slider is truly
+   disabled (the thresholds trigger nothing while off), the value is kept. */
+.sliderRow { transition: opacity 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.sliderRowOff { opacity: 0.45; }
+.sliderRowOff .sliderCell { pointer-events: none; }
+
+.sliderCell {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+/* 生效中 / 无法计算: a 10.5px mono tag on the title's baseline. Accent for the
+   line that won; muted for the row that cannot compete. */
+.tag {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+  animation: tagIn 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tagMuted { color: var(--stg-text-faint); }
+@keyframes tagIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The worked example on its own sheet of paper. */
+.example {
+  margin-top: 14px;
+  padding: 13px 16px;
+  background: var(--color-bg-hover);
+}
+.exampleEyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--stg-text-faint);
+}
+.exampleText {
+  margin-top: 7px;
+  font-size: var(--font-size-md);
+  line-height: 1.75;
+  color: var(--color-text-secondary);
+}
+.exampleName { font-weight: 500; }
+.exampleMono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.exampleTrigger { color: var(--color-accent); }
+
+/* The one signpost that leaves settings (窗口占用 lives on the AI panel). Same
+   vocabulary as 实验室's 「接着去 … →」. */
+.go {
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  animation: tagIn 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.goLead { color: var(--stg-text-faint); }
+.goLink {
+  color: var(--color-accent);
+  font-weight: 500;
+  padding-bottom: 1px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.goLink:hover { color: var(--color-sienna-hover); border-bottom-color: currentColor; }
+.goHint { font-size: var(--font-size-xs); color: var(--color-text-faint); }

@@ -68,6 +68,24 @@ export const CONTEXT_UTILIZATION_MIN = 0.1;
 export const CONTEXT_UTILIZATION_MAX = 0.95;
 export const CONTEXT_UTILIZATION_DEFAULT = 0.5;
 
+/**
+ * Bounds of the two compaction-trigger sliders (设置 → 上下文与记忆 → 对话归纳;
+ * docs/feature/agent/compact-threshold-plan.md). The resolver that turns them
+ * into one line is `lib/agent/compact.compactTriggerFor`; the bounds live here
+ * beside the utilization ones because appStore clamps all three the same way.
+ *
+ * Defaults sit at the **top** of both ranges on purpose: neither slider can
+ * then undercut the classic line (`COMPACT_TRIGGER × message ceiling`), so a
+ * fresh install — and every existing one — behaves exactly as before the
+ * sliders existed until the author moves one.
+ */
+export const COMPACT_TRIGGER_TOKENS_MIN = 8_192;
+export const COMPACT_TRIGGER_TOKENS_MAX = 524_288;
+export const COMPACT_TRIGGER_TOKENS_DEFAULT = COMPACT_TRIGGER_TOKENS_MAX;
+export const COMPACT_TRIGGER_RATIO_MIN = 0.5;
+export const COMPACT_TRIGGER_RATIO_MAX = 0.8;
+export const COMPACT_TRIGGER_RATIO_DEFAULT = COMPACT_TRIGGER_RATIO_MAX;
+
 /** Static fallback for 【全书前情】 when the model declares no context size. */
 export const BOOK_PRIOR_BUDGET_CHARS = 5000;
 

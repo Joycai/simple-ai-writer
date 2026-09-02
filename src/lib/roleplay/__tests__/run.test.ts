@@ -53,7 +53,7 @@ vi.mock("../../lore/entity", () => ({
 
 import type { StreamMessage } from "../../ai/types";
 import { createRoleplayMeta } from "../context";
-import { conversationReader, injectAreaRecall, loadStaticContext } from "../run";
+import { conversationReader, injectAreaRecall, loadStaticContext, compactSceneNow } from "../run";
 import { recalledNames } from "../trace";
 import { renderTranscript } from "../transcript";
 import type { SceneTurn } from "../model";
@@ -564,5 +564,77 @@ describe("prepareContinuedHistory — 绑定粒度", () => {
       .not.toContain("塔在城北");
     // 记在问句上：那一轮折叠掉，它才会重新注入。
     expect(b.meta.injected.get(TOWER_DIR)?.coreCarrier).toBe(last);
+  });
+});
+
+describe("compactSceneNow（作者的「立即归纳」）", () => {
+  const MEMORY_MD = [
+    "<!-- roleplay-memory v1 agent=rp-abc-0001 next=2 -->",
+    "",
+    "## 约定 <!-- pact -->",
+    "",
+    "### [m1] 雪停了一起去塔下 · open · turn 3",
+    "他答应了。",
+    "",
+  ].join(String.fromCharCode(10));
+
+  async function longLive() {
+    seedFixture();
+    files.set("/p/.ai-writer/roleplay/rp-abc-0001/memory.md", MEMORY_MD);
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+    return { history, meta };
+  }
+
+  it("folds regardless of the trigger and runs the same after-step as the automatic path", async () => {
+    const { history, meta } = await longLive();
+    const memoryBlock = meta.memoryBlock;
+    const out = await compactSceneNow({
+      projectPath: "/p", agent: NO_AREA_AGENT, history, meta,
+      // A ceiling the automatic trigger would never reach — force ignores it.
+      ceilingTokens: 1_000_000,
+      summarize: async () => "到目前为止的摘要。",
+    });
+    expect(out.status).toBe("ok");
+    if (out.status !== "ok") return;
+    expect(out.history).not.toBe(history);
+    expect(out.summaryToSave).toBe("到目前为止的摘要。");
+    // 「压缩之后刷新记忆块」——手动路径不许漏掉这一步（漏掉的症状是沉默的）。
+    expect(out.memoryRecords.map((r) => r.id)).toEqual(["m1"]);
+    expect(String(memoryBlock?.content)).toContain("雪停了一起去塔下");
+    expect(out.history).toContain(memoryBlock!);
+  });
+
+  it("reports nothing to fold on a short history, and a failed summary as failed", async () => {
+    seedFixture();
+    const short = await liveHistory(NO_AREA_AGENT);
+    const nothing = await compactSceneNow({
+      projectPath: "/p", agent: NO_AREA_AGENT, history: short.history, meta: short.meta,
+      ceilingTokens: 1_000_000, summarize: async () => "x",
+    });
+    expect(nothing.status).toBe("nothing");
+
+    const { history, meta } = await longLive();
+    const before = history.length;
+    const failed = await compactSceneNow({
+      projectPath: "/p", agent: NO_AREA_AGENT, history, meta,
+      ceilingTokens: 1_000_000, summarize: async () => { throw new Error("model down"); },
+    });
+    expect(failed.status).toBe("failed");
+    expect(history.length).toBe(before); // 历史原样
+  });
+
+  it("autoCompact off skips the automatic fold on the continue path", async () => {
+    const { history, meta } = await longLive();
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      agent: NO_AREA_AGENT, ceilingTokens: 2000, autoCompact: false,
+    }));
+    expect(out.compactedEvent).toBeNull();
+    expect(out.summaryToSave).toBeNull();
   });
 });

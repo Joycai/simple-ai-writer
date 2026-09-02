@@ -46,9 +46,20 @@
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import {
-  COMPACT_TRIGGER, MIN_KEEP_TURNS, injectionCarriers, segmentHistory,
-  type ChatSessionMeta,
+  COMPACT_TRIGGER, MIN_KEEP_TURNS, compactTriggerFor, injectionCarriers, segmentHistory,
+  type ChatSessionMeta, type CompactTriggerBound,
 } from "./compact";
+
+/**
+ * The author's compaction settings (appStore), as the bar needs them. The bar
+ * hands them to {@link compactTriggerFor} with its *own* message ceiling, so
+ * the mark it draws and the fold the store runs are one computation, not two.
+ */
+export interface CompactPrefs {
+  autoCompact: boolean;
+  triggerTokens: number;
+  triggerRatio: number;
+}
 
 /**
  * Bar segments, in wire order. `system` folds the tool schemas in with the
@@ -132,6 +143,14 @@ export interface ContextBreakdown {
    * 「下一轮会归纳」 and 「压缩救不了这一轮」 are not the same news.
    */
   over: boolean;
+  /**
+   * Whether the app folds on its own past the mark, or only when the author
+   * presses 立即归纳. Off does not move the mark — it changes what the mark
+   * promises, and the bar's sentence has to say so.
+   */
+  autoCompact: boolean;
+  /** Which line placed the mark — see {@link compactTriggerFor}. */
+  compactBoundBy: CompactTriggerBound;
 }
 
 /**
@@ -233,6 +252,8 @@ export function computeContextBreakdown(
   toolTokens: number,
   ceilingTokens: number,
   contextSize: number,
+  /** Absent = the classic line and automatic folding (tests, older callers). */
+  compact?: CompactPrefs,
 ): ContextBreakdown {
   const totals: Record<Exclude<ContextSegmentKey, "free">, number> = {
     // A session that hasn't run yet still pays for the tool schemas the moment
@@ -284,7 +305,17 @@ export function computeContextBreakdown(
   // records the first half of that symptom; this is the other side of it.
   const messageTokens = Math.max(0, usedTokens - toolTokens);
   const messageCeiling = Math.max(0, ceiling - toolTokens);
-  const compactAtTokens = toolTokens + messageCeiling * COMPACT_TRIGGER;
+  //
+  // With the author's sliders in play the line is whichever of the three is
+  // lowest (compactTriggerFor) — still measured on the message side, so it
+  // still sits after the schemas on this axis.
+  const trigger = compact
+    ? compactTriggerFor({
+        contextSize, messageCeiling,
+        triggerTokens: compact.triggerTokens, triggerRatio: compact.triggerRatio,
+      })
+    : { tokens: messageCeiling * COMPACT_TRIGGER, boundBy: "ceiling" as const };
+  const compactAtTokens = toolTokens + trigger.tokens;
 
   // Can compaction fold anything at all? Both halves are `planFold`'s own
   // refusals, mirrored:
@@ -305,7 +336,7 @@ export function computeContextBreakdown(
   const canFold = messageCeiling > 0 && foldableTurns > 0;
 
   const over = usedTokens > ceiling;
-  const willCompact = canFold && messageTokens > messageCeiling * COMPACT_TRIGGER;
+  const willCompact = canFold && messageTokens > trigger.tokens;
 
   return {
     segments: [
@@ -323,5 +354,7 @@ export function computeContextBreakdown(
     compactMarkerPct: canFold ? Math.min(100, (compactAtTokens * 100) / span) : null,
     willCompact,
     over,
+    autoCompact: compact?.autoCompact ?? true,
+    compactBoundBy: trigger.boundBy,
   };
 }

@@ -164,6 +164,12 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
 | `SUMMARY_BUDGET_TOKENS` | ~1000 | 摘要软上限（提示词约束 + 超长再归纳） |
 | `FOLD_RESULT_CLIP` | 200 chars | 折叠渲染时单条 tool 结果的截断 |
 
+触发线自 2026-09 起**可被作者压低**（设置 → 上下文与记忆 → 对话归纳，两条滑块 +
+自动归纳开关）：`compactTriggerFor` 取「token 数 / 窗口比例 × 窗口 / 0.70 × 消息
+上限」三者最小，折叠目标随之按 `retainTargetFor`（0.45 / 0.70 的比例）缩放；开关
+关着时 §4 的自动压缩整个跳过，只剩 §10 的手动归纳。见
+[compact-threshold-plan.md](compact-threshold-plan.md)。
+
 `0.70 → 0.45` 的空档刻意留大：一轮多工具调用可能增长数千 token，阈值贴得
 太近会导致每轮都压、缓存每轮全废。
 

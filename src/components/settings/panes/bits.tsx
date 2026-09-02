@@ -79,9 +79,12 @@ export function Row({
   foot,
   top,
   last,
+  titleExtra,
   children,
 }: {
   title?: string;
+  /** Sits on the title's baseline, after it — a small tag (设计稿 20's 生效中). */
+  titleExtra?: ReactNode;
   desc?: string;
   warn?: string;
   /** Anything that belongs under the description on the label side — a
@@ -98,7 +101,11 @@ export function Row({
   return (
     <div className={`${ui.row} ${top ? ui.rowTop : ""} ${last ? ui.rowLast : ""}`}>
       <div className={ui.rowMain}>
-        {title && <div className={ui.rowTitle}>{title}</div>}
+        {title && (
+          titleExtra
+            ? <div className={ui.rowTitleLine}><span className={ui.rowTitle}>{title}</span>{titleExtra}</div>
+            : <div className={ui.rowTitle}>{title}</div>
+        )}
         {desc && <div className={ui.rowDesc}>{desc}</div>}
         {warn && <div className={ui.rowWarn}>{warn}</div>}
         {foot}

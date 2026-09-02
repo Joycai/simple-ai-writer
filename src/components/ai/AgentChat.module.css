@@ -734,3 +734,16 @@
     animation-iteration-count: infinite !important;
   }
 }
+
+/* The compaction line with 自动归纳 off (设计稿 20): same position, hung under
+   the bar as a 1×4px grey tick — a reference, not a promise. The wrapper is
+   the positioning context because the bar itself clips its overflow. */
+.ctx { position: relative; }
+.ctxMarkOff {
+  position: absolute;
+  top: 7px;
+  width: 1px;
+  height: 4px;
+  background: var(--color-text-faint);
+  pointer-events: none;
+}
