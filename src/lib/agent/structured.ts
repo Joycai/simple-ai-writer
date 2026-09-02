@@ -18,7 +18,7 @@
 
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
-import { jsonModeShaping } from "../ai/jsonMode";
+import { withJsonModeFallback } from "../ai/jsonMode";
 import { stripNulls } from "../ai/jsonSchemaStrict";
 import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
@@ -133,45 +133,48 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     return toolArgs;
   };
 
-  const runJson = async (): Promise<string> => {
-    let acc = "";
-    args.onText?.("");
-    const messages: StreamMessage[] = [
-      { role: "system", content: `${args.systemPrompt}\n${args.jsonInstruction}` },
-      { role: "user", content: args.userContent },
-    ];
-    // Native JSON enforcement on top of the prose instruction, not instead of
-    // it. This path exists because the model refused a forced tool choice —
-    // which is exactly what a *thinking* model does — so it used to be the one
-    // place structured output had no enforcement at all, on the models least
-    // likely to volunteer clean JSON. The output tool's parameters go along as
-    // the schema: on a model that takes strict `json_schema` mode, this path
-    // enforces the same shape the tool path would have.
-    const json = jsonModeShaping(
-      common,
-      `${args.systemPrompt}\n${args.jsonInstruction}\n${userText(args.userContent)}`,
-      args.outputTool.function,
-    );
-    if (json.cue) messages.push({ role: "user", content: json.cue });
-    await streamCompletion({
-      ...common,
-      messages,
-      extraBody: json.extraBody,
-      onChunk: (chunk) => {
-        if ("reasoning" in chunk) {
-          noteReasoning(chunk);
-        } else if ("text" in chunk) {
-          acc += chunk.text;
-          args.onText?.(acc);
-        }
-      },
-    });
-    const raw = extractJsonObject(acc);
-    // Strict mode made every optional field nullable so the schema could be
-    // sent at all; callers are written against *absent*, so take the nulls
-    // back out before they see it (see ai/jsonSchemaStrict.ts).
-    return json.mode === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
-  };
+  // Native JSON enforcement on top of the prose instruction, not instead of
+  // it. This path exists because the model refused a forced tool choice —
+  // which is exactly what a *thinking* model does — so it used to be the one
+  // place structured output had no enforcement at all, on the models least
+  // likely to volunteer clean JSON. The output tool's parameters go along as
+  // the schema: on a model that takes strict `json_schema` mode, this path
+  // enforces the same shape the tool path would have. An endpoint that rejects
+  // the mode says so with a 400 before generating; the runner steps down one
+  // mode and remembers (ai/jsonMode.ts), so the whole request is re-sent at
+  // most twice and never again for that endpoint this session.
+  const runJson = (): Promise<string> => withJsonModeFallback(
+    common,
+    `${args.systemPrompt}\n${args.jsonInstruction}\n${userText(args.userContent)}`,
+    args.outputTool.function,
+    async (json) => {
+      let acc = "";
+      args.onText?.("");
+      const messages: StreamMessage[] = [
+        { role: "system", content: `${args.systemPrompt}\n${args.jsonInstruction}` },
+        { role: "user", content: args.userContent },
+      ];
+      if (json.cue) messages.push({ role: "user", content: json.cue });
+      await streamCompletion({
+        ...common,
+        messages,
+        extraBody: json.extraBody,
+        onChunk: (chunk) => {
+          if ("reasoning" in chunk) {
+            noteReasoning(chunk);
+          } else if ("text" in chunk) {
+            acc += chunk.text;
+            args.onText?.(acc);
+          }
+        },
+      });
+      const raw = extractJsonObject(acc);
+      // Strict mode made every optional field nullable so the schema could be
+      // sent at all; callers are written against *absent*, so take the nulls
+      // back out before they see it (see ai/jsonSchemaStrict.ts).
+      return json.mode === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
+    },
+  );
 
   try {
     return await runTool();

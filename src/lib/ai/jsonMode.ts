@@ -90,6 +90,8 @@ export function knownJsonSchemaModel(modelId: string): boolean {
 export interface JsonModeTarget {
   standard: ApiStandard;
   modelId?: string;
+  /** The endpoint, for the session memo below; absent means "unknown endpoint". */
+  baseUrl?: string;
   /** The author's declaration on the model row; absent = auto. */
   structuredOutput?: StructuredOutputMode;
 }
@@ -171,7 +173,8 @@ export function jsonModeShaping(
   schema?: JsonSchemaSource,
 ): JsonModeShaping {
   const t: JsonModeTarget = typeof target === "string" ? { standard: target } : target;
-  const mode = resolveStructuredOutput(t);
+  // What the config says, capped by what this endpoint has already refused.
+  const mode = capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
 
   if (mode === "off") {
     // No native enforcement anywhere — the cue is the whole mechanism. On
@@ -217,5 +220,105 @@ export function jsonModeShaping(
         extraBody: { response_format: { type: "json_object" } },
         ...(mentionsJson(promptText) ? {} : { cue: JSON_ONLY_CUE }),
       };
+  }
+}
+
+// ─── The endpoints that refuse a mode, learned from their own 400 ─────────────
+
+/**
+ * Same shape as `toolChoice.ts`, for the same reason. Which models take strict
+ * `json_schema` — and which relays reject `response_format` outright — is not
+ * recoverable from the config, but the endpoint's 400 says so definitively,
+ * arrives before a single token is generated, and costs nothing to act on. So
+ * a refusal is remembered for the session, per endpoint+model, as a **ceiling**
+ * on the mode: `json_schema` refused → `json_object` from now on; `json_object`
+ * refused → `off` (the cue is the whole mechanism). The memo is in-memory and
+ * session-scoped on purpose: it is a fact about an endpoint, not about the
+ * author's config, and re-learning it costs one failed request.
+ *
+ * An author's explicit declaration is capped too (§5.4 of the plan): picking a
+ * mode the endpoint rejects should cost "that mode didn't take", not "lore
+ * generation is broken until I find the setting".
+ */
+
+/** Strength order: the memo only ever moves a mode *down* this list. */
+const MODE_RANK: Record<StructuredOutputMode, number> = { off: 0, json_object: 1, json_schema: 2 };
+
+/** The next weaker mode, or undefined when there is nothing weaker than `off`. */
+export function downgradeJsonMode(mode: StructuredOutputMode): StructuredOutputMode | undefined {
+  return mode === "json_schema" ? "json_object" : mode === "json_object" ? "off" : undefined;
+}
+
+function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode | undefined): StructuredOutputMode {
+  return ceiling && MODE_RANK[ceiling] < MODE_RANK[mode] ? ceiling : mode;
+}
+
+/**
+ * Whether this error is the endpoint rejecting the JSON-mode parameter itself.
+ *
+ * Narrow on purpose, like `isForcedToolChoiceRejection`: the parameter's own
+ * name has to appear. The messages this is written for all name it — OpenAI's
+ * `Invalid parameter: 'response_format' of type 'json_schema' is not supported
+ * with this model`, and the `'messages' must contain the word 'json' … to use
+ * 'response_format'` precondition error. A DashScope sample is still owed
+ * (`docs/api/structured-output-plan.md` §11.3); until it arrives this is the
+ * OpenAI spelling, which the compatible endpoints have so far reproduced.
+ */
+export function isJsonModeRejection(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return false;
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /response_format/i.test(msg);
+}
+
+/** One endpoint+model; the standard is in the key because one host can serve several families. */
+function endpointKey(t: JsonModeTarget): string {
+  return `${t.standard} ${t.baseUrl ?? ""} ${t.modelId ?? ""}`;
+}
+
+const ceilings = new Map<string, StructuredOutputMode>();
+
+/** The strongest mode this endpoint+model is still allowed, or undefined when nothing was refused. */
+export function jsonModeCeiling(t: JsonModeTarget): StructuredOutputMode | undefined {
+  return ceilings.get(endpointKey(t));
+}
+
+/** Remember that `refused` was rejected: from now on this endpoint gets the next weaker mode. */
+export function noteJsonModeRefused(t: JsonModeTarget, refused: StructuredOutputMode): void {
+  const next = downgradeJsonMode(refused);
+  if (!next) return;
+  const current = ceilings.get(endpointKey(t));
+  if (!current || MODE_RANK[next] < MODE_RANK[current]) ceilings.set(endpointKey(t), next);
+}
+
+/** Tests only — the memo outlives a single request by design. */
+export function __resetJsonModeMemo(): void {
+  ceilings.clear();
+}
+
+/**
+ * Run `attempt` under the strongest JSON mode this endpoint is known to take,
+ * downgrading once per refusal.
+ *
+ * The attempt receives the shaping (fields + cue) and builds its own request
+ * from it — the two callers assemble their messages differently, and the cue's
+ * position is part of that. On a 400 that names `response_format`, the refusal
+ * is recorded and the loop re-shapes one level down; a request in `off` mode
+ * carries no JSON parameter, so nothing there is retried and the loop ends.
+ * Every other error is the caller's, surfaced as-is.
+ */
+export async function withJsonModeFallback<T>(
+  target: JsonModeTarget,
+  promptText: string,
+  schema: JsonSchemaSource | undefined,
+  attempt: (shaping: JsonModeShaping) => Promise<T>,
+): Promise<T> {
+  for (;;) {
+    const shaping = jsonModeShaping(target, promptText, schema);
+    try {
+      return await attempt(shaping);
+    } catch (err) {
+      if (shaping.mode === "off" || !isJsonModeRejection(err)) throw err;
+      noteJsonModeRefused(target, shaping.mode);
+    }
   }
 }
