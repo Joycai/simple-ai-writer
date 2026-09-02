@@ -137,7 +137,8 @@ export function formatDeckReport(report: DeckReport, path: string, tier: string)
   if (report.empty.length) {
     lines.push(
       `Slide(s) ${report.empty.join(", ")} measured as EMPTY — nothing on them was painted. ` +
-        "Usually a wrong class name, a `display: none`, or a slide sized to nothing.",
+        "Usually a wrong class name or a slide sized to nothing. (A slide a slideshow " +
+        "script hides is shown before measuring, so `display: none` on the slide itself is not it.)",
     );
   }
 

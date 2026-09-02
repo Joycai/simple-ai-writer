@@ -534,6 +534,127 @@
     parent.postMessage(payload, "*");
   }
 
+  function hasBox(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  /** A slide that would be skipped or measure as nothing if harvested as-is. */
+  function needsReveal(el) {
+    return isHidden(el, getComputedStyle(el)) || !hasBox(el);
+  }
+
+  function classesOf(el) {
+    return (el.getAttribute("class") || "").split(/\s+/).filter(Boolean);
+  }
+
+  /**
+   * Snap every transition and animation under `roots` to its end state.
+   *
+   * Two reasons, one of which is the correctness of everything below: a class
+   * flip that starts a 400ms fade reports opacity 0 at the moment it is
+   * measured, so a slide revealed by class would still be dropped as hidden.
+   * The other is fidelity — an entrance animation on the *shown* slide is
+   * otherwise measured 32ms in, with the heading still 20px below where it
+   * ends up. Duration zero rather than `none`: a `forwards` animation keeps
+   * its end value, which is the page's final look, where `none` would fall
+   * back to the pre-animation style.
+   */
+  function snapMotion(roots) {
+    for (var i = 0; i < roots.length; i++) {
+      var els = [roots[i]].concat(Array.prototype.slice.call(roots[i].querySelectorAll("*")));
+      for (var j = 0; j < els.length; j++) {
+        var s = els[j].style;
+        if (!s) continue;
+        s.setProperty("transition-duration", "0s", "important");
+        s.setProperty("transition-delay", "0s", "important");
+        s.setProperty("animation-duration", "0s", "important");
+        s.setProperty("animation-delay", "0s", "important");
+      }
+    }
+  }
+
+  /**
+   * The page's own "current slide" marker: a class that, added on its own to a
+   * hidden slide, makes it visible. Found by trying each class the shown slides
+   * share on the first hidden one, so a class the shown slide merely happens to
+   * carry (`cover`) is not mistaken for the marker and copied onto every page.
+   */
+  function markerClasses(shown, hidden) {
+    if (!shown.length || !hidden.length) return [];
+    var probe = hidden[0];
+    var found = [];
+    var candidates = classesOf(shown[0]);
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      var everywhere = true;
+      for (var j = 1; j < shown.length && everywhere; j++) {
+        if (classesOf(shown[j]).indexOf(c) < 0) everywhere = false;
+      }
+      if (!everywhere || classesOf(probe).indexOf(c) >= 0) continue;
+      probe.classList.add(c);
+      if (!needsReveal(probe)) found.push(c);
+      probe.classList.remove(c);
+    }
+    return found;
+  }
+
+  /** Inline overrides for what no class explains — a `style.display = "none"` set by script. */
+  function forceShown(el, display, size) {
+    var style = getComputedStyle(el);
+    if (style.display === "none") el.style.setProperty("display", display, "important");
+    if (style.visibility === "hidden") el.style.setProperty("visibility", "visible", "important");
+    if (parseFloat(style.opacity || "1") === 0) el.style.setProperty("opacity", "1", "important");
+    if (hasBox(el)) return;
+    el.style.setProperty("transform", "none", "important");
+    if (hasBox(el) || !size) return;
+    // Collapsed to nothing (`height: 0; overflow: hidden`): give it the box
+    // the page gives the slide it does show.
+    el.style.setProperty("width", size.width + "px", "important");
+    el.style.setProperty("height", size.height + "px", "important");
+    el.style.setProperty("max-height", "none", "important");
+  }
+
+  /**
+   * Put every slide the page is hiding into the state it uses for the one it
+   * shows, so all of them can be measured.
+   *
+   * A generated deck very often arrives as a slideshow rather than a stack: one
+   * `<section>` visible and a prev/next script that flips a class
+   * (`.slide.active`) or an inline `display`. Harvested as-is, every slide but
+   * the current one is `display: none`, has no box, and exports as an empty
+   * page — a five-page deck whose .pptx has content on page one. The export is
+   * of the page's *content*, not of the state its script left it in.
+   *
+   * Two mechanisms, because pages hide slides two ways. The page's own marker
+   * class is preferred: adding it also runs the *descendant* rules —
+   * `.slide:not(.active) h1 { opacity: 0 }` — that a forced `display` on the
+   * root would leave in place, giving a visible slide with invisible text.
+   * Inline overrides then cover whatever is still hidden or sizeless, which is
+   * what a `style.display = "none"` set by script comes down to.
+   *
+   * A slide the author marked `data-pptx-skip` is left alone — hidden on
+   * purpose is a different thing from hidden by a slideshow.
+   */
+  function revealSlides(roots) {
+    if (roots.length < 2) return;
+    var shown = [];
+    var hidden = [];
+    for (var i = 0; i < roots.length; i++) {
+      if (roots[i].hasAttribute("data-pptx-skip")) continue;
+      (needsReveal(roots[i]) ? hidden : shown).push(roots[i]);
+    }
+    if (!hidden.length) return;
+
+    var marker = markerClasses(shown, hidden);
+    var display = shown.length ? getComputedStyle(shown[0]).display : "block";
+    var size = shown.length ? shown[0].getBoundingClientRect() : null;
+    for (var j = 0; j < hidden.length; j++) {
+      for (var k = 0; k < marker.length; k++) hidden[j].classList.add(marker[k]);
+      if (needsReveal(hidden[j])) forceShown(hidden[j], display, size);
+    }
+  }
+
   function run() {
     try {
       var roots = slideRoots();
@@ -541,6 +662,8 @@
         send({ ok: false, error: "no slides found in this page" });
         return;
       }
+      snapMotion(roots);
+      revealSlides(roots);
       var first = roots[0].getBoundingClientRect();
       if (first.width <= 0 || first.height <= 0) {
         send({ ok: false, error: "the first slide has no size" });
