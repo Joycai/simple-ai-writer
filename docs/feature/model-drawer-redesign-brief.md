@@ -15,7 +15,7 @@
 | 1n 实测标记 | 字段下方一行 mono：绿点「实测 2026-08-30 14:12」；作者一改这个值变成灰点「手填 · 覆盖 08-30 实测 131,072」——实测值不丢 | 数据层新增 `Model.probedContextSize` / `probedMaxOutput`（列 `probed_context_size` / `probed_max_output`，配置备份解析同步）；判定在 `lib/ai/modelSummary.isMeasured` |
 | 1n 两级提示 | 常驻一句话（本稿新写，已进 `aiConfig.models.brief*`）+「为什么」展开今天的 hint 全文；「全部说明」一键全开 | `Field` 的 `why` / `whyOpen` / `onWhy`；whyAll 态下关掉一条会退出全开并保留其余 |
 | 1n 联动过渡 | 节与字段都用 `grid-template-rows 0fr↔1fr` 200ms `cubic-bezier(.2,.8,.2,1)`、opacity 160ms；折起的内容 `visibility:hidden` 以免被 Tab 到 | `.fold` / `.foldOpen` / `.foldInner` |
-| 1n 能力声明 | 一列四行：联网搜索与 PDF 用 toggle，翻译格式与结构化输出用 chip 行；Sakura 的警告块选了才出现；结构化输出在 Anthropic 族只剩「自动 / 关闭」且解释常驻；「自动」下方一行 mono 显示解析结果，思考类目的「自动」同样补了一行 | `soChoices` / `soNote` / `noteCatAuto` |
+| 1n 能力声明 | 一列四行：联网搜索与 PDF 用 toggle，翻译格式与结构化输出用 chip 行；Sakura 的警告块选了才出现；结构化输出在 Anthropic 族只剩「自动 / 关闭」且解释常驻（Gemini 族原定三枚，`responseJsonSchema` 落地后也是四枚）；「自动」下方一行 mono 显示解析结果，思考类目的「自动」同样补了一行 | `soChoices` / `soNote` / `noteCatAuto` |
 | 1n 「将发送」 | 底部按钮条上方一行 mono，随表单实时变，**用适配器自己的 body 函数算**（`reasoningBody` / `thinkingBody` / `openaiServerToolsBody` / `resolveStructuredOutput`）；只在结构化任务发的字段标「· 结构化任务时」 | `lib/ai/modelSummary.wireSummary` + `aiModelSummary.test.ts` |
 | 19h | 左侧列表一行加最多 3 枚声明标记（思考 / 联网 / PDF / 译，超出 +n；只标明确声明，自动不标；图片模型不标）+ ctx 前的实测绿点 | `ProvidersModelsPane.tsx` + `modelSummary.declarationMarks` |
 | 类目换行（问题 7） | 「自动 · 关闭」固定行首，1px 竖线隔开，厂商预设在后自由换行 | `ChipDivider` |

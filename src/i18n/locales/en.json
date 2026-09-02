@@ -1912,7 +1912,7 @@
       "briefPdf": "Lets whole PDF files be handed to the model.",
       "briefTranslate": "Sakura is a dedicated JA→ZH model with its own prompt format.",
       "briefSoOpenai": "Auto = family default; known models are upgraded to JSON Schema.",
-      "briefSoGemini": "Auto = family default; Gemini v1 offers no JSON Schema.",
+      "briefSoGemini": "Auto = family default; Gemini 2.5 / 3 are upgraded to JSON Schema (responseJsonSchema).",
       "briefSoAnthropic": "This protocol family has no JSON-mode parameter; Auto = nothing sent, the app constrains format via prompt.",
       "briefTemp": "Empty = not sent, endpoint default; 0 is a real value meaning deterministic output.",
       "briefPrefix": "Injected as the first system instruction on every call to this model.",

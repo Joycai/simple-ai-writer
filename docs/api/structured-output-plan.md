@@ -10,8 +10,11 @@
 > 只有 `json_object` 可退时仍然试工具——`auto` 下模型多半还是会调，一次工具调用强于「合法 JSON，
 > 形状靠散文」；§5.4 的「本会话实测降级」在抽屉的结构化输出行下方一行 mono 显示，且「将发送」
 > 读的是 `effectiveStructuredOutput`（配置解析再按 memo 封顶，三处消费者一个答案）。
-> `unverified` 指 §11 的五条 DashScope 实测一条都没跑：本文对 DashScope 实际行为的陈述仍是文档
-> 转述，400 判据用的是 OpenAI 的报文拼写（`response_format` 字样），DashScope 的样本仍欠着。
+> Gemini 族的 `json_schema` 随后补上：`generationConfig.responseJsonSchema`（Gemini 2.5+），同一份
+> strictify 结果原样发，id 表加 `gemini-2.5` / `gemini-3`，抽屉里 Gemini 族也有四枚 chip。
+> `unverified` 指 §11 的五条实测一条都没跑：本文对 DashScope 与 Gemini 实际行为的陈述仍是文档
+> 转述，400 判据用的是 OpenAI 的报文拼写（`response_format`）加 Gemini 的字段名
+> （`responseJsonSchema`），两家的真实样本都欠着。
 > 前半是对现状的审计（§1–§3，结论：知识库相关功能**已经在用**协议级的结构化输出，
 > 但只用到 `json_object` 一档，且没有任何按模型关掉或升级它的开关），后半是方案（§4–§10）。
 > 协议事实见 [`structured.md`](structured.md)，千问平台的官方口径见 §2；
@@ -226,7 +229,7 @@ export function jsonModeShaping(
 | --- | --- | --- | --- |
 | `off` | 无 `extraBody`，**恒带 cue** | 同 | 同（今天的行为） |
 | `json_object` | `response_format:{type:"json_object"}` + 条件 cue | `generationConfig.responseMimeType` + 恒 cue | 视同 `off` |
-| `json_schema`（且给了 schema） | `response_format:{type:"json_schema", json_schema:{name, strict:true, schema: strictify(parameters)}}`，**无 cue**（文档明说不需要，那句 cue 省下来） | `generationConfig.responseMimeType` + `responseSchema`（Gemini 的 schema 方言略有出入——`additionalProperties` 不认，`nullable` 是字段而不是类型联合；第一片**不做 ③ 的 `json_schema`**，留在 `json_object`，见 §11） | 视同 `off` |
+| `json_schema`（且给了 schema） | `response_format:{type:"json_schema", json_schema:{name, strict:true, schema: strictify(parameters)}}`，**无 cue**（文档明说不需要，那句 cue 省下来） | `generationConfig.responseMimeType` + **`responseJsonSchema`**（Gemini 2.5+ 的新字段，接标准 JSON Schema——类型联合、`additionalProperties`、`anyOf` 都认，所以同一份 strictify 结果原样发；**不是**旧的 `responseSchema`，那是 OpenAPI 方言，要 `nullable: true` 且不认 `additionalProperties`，两者互斥），无 cue。自动档的 id 表加 `gemini-2.5` / `gemini-3` | 视同 `off` |
 | `json_schema` 但没给 schema | 退到 `json_object` 的行为 | 同 | 同 |
 
 `extraBody` 仍然是 adapter 里**最后展开**的那一项（`openai.ts` 的"outranks config"），
@@ -351,8 +354,9 @@ strictify(schema):
 4. 千问文档那句"非思考模式模型在思考模式下开 `json_object` 可能吐不出标准 JSON"：
    在 `qwen3-max` + `enable_thinking:true` 上复现一次，看 `extractJsonObject`
    够不够，不够再决定要不要做文档建议的两步纠正。
-5. Gemini 的 `responseSchema` 方言（`nullable` 字段、不认 `additionalProperties`）
-   ——决定 ③ 族的 `json_schema` 何时放出（§8）。
+5. Gemini 的 `responseJsonSchema`：strictify 出来的类型联合与 `additionalProperties:false`
+   是否被接受；一个不认这个字段的 gemini_compat 中继回的 400 报文是否含
+   `responseJsonSchema` 字样（`isJsonModeRejection` 靠它降级）。
 
 在这五条之前，本文所有关于 DashScope 实际行为的陈述都只是文档转述，状态 `unverified`。
 

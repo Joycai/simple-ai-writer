@@ -58,6 +58,9 @@ describe("wireSummary", () => {
     expect(wireSummary({ ...base, structuredOutput: "json_object" }, "gemini")).toEqual([
       { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" },
     ]);
+    expect(wireSummary({ ...base, modelId: "gemini-3-pro" }, "gemini")).toEqual([
+      { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" },
+    ]);
   });
 
   it("reports the mode the endpoint will actually get once it has refused a stronger one", () => {

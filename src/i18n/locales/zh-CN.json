@@ -1907,7 +1907,7 @@
       "briefPdf": "允许把 PDF 原件整份交给模型。",
       "briefTranslate": "Sakura 是专用日中翻译模型，走它自己的提示格式。",
       "briefSoOpenai": "自动 ＝ 按协议族默认，已知支持的模型自动升到 JSON Schema。",
-      "briefSoGemini": "自动 ＝ 按协议族默认；Gemini 第一版不提供 JSON Schema。",
+      "briefSoGemini": "自动 ＝ 按协议族默认；Gemini 2.5 / 3 系自动升到 JSON Schema（responseJsonSchema）。",
       "briefSoAnthropic": "该协议族没有 JSON 模式参数；「自动」＝ 不发，由应用用提示词约束格式。",
       "briefTemp": "空 ＝ 不发，用端点默认；0 是真实值，表示确定性输出。",
       "briefPrefix": "每次调用此模型时自动作为最前面的系统指令注入。",

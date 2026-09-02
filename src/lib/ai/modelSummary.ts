@@ -109,9 +109,11 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
 
   const so = effectiveStructuredOutput({ standard, baseUrl, modelId: m.modelId, structuredOutput: m.structuredOutput });
   if (so !== "off") {
-    out.push(family === "gemini"
-      ? { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
-      : { key: "response_format", value: so, scope: "structured" });
+    out.push(family !== "gemini"
+      ? { key: "response_format", value: so, scope: "structured" }
+      : so === "json_schema"
+        ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
+        : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
