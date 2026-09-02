@@ -133,6 +133,70 @@ describe("runStructuredTask", () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
 
+  it("enforces the output schema on the fallback when the model takes strict json_schema mode", async () => {
+    // The whole point of the per-model declaration: a thinking model that
+    // refuses forced tool_choice used to fall back to "valid JSON, shape in
+    // prose". With json_schema it falls back to the same schema the tool path
+    // would have enforced — and the nulls strict mode requires come back out.
+    mockStream.mockImplementationOnce(async () => {
+      throw new Error("Thinking mode does not support this tool_choice");
+    });
+    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+      opts.onChunk({ text: '{"name":"Ava","note":null}' });
+      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+    });
+
+    const tool: ToolDefinition = {
+      ...OUTPUT_TOOL,
+      function: {
+        ...OUTPUT_TOOL.function,
+        parameters: {
+          type: "object",
+          properties: { name: { type: "string" }, note: { type: "string" } },
+          required: ["name"],
+        },
+      },
+    };
+    const result = await runStructuredTask(makeArgs({ modelId: "qwen3.8-max", outputTool: tool }));
+
+    expect(JSON.parse(result)).toEqual({ name: "Ava" });
+    const second = mockStream.mock.calls[1][0];
+    expect(second.extraBody).toEqual({
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "emit_result",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: { name: { type: "string" }, note: { type: ["string", "null"] } },
+            required: ["name", "note"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    // Strict mode has no "json" precondition, so no cue turn is appended.
+    expect(second.messages).toHaveLength(2);
+  });
+
+  it("sends no JSON parameter on the fallback when the model's declaration is off", async () => {
+    mockStream.mockImplementationOnce(async () => {
+      throw new Error("Thinking mode does not support this tool_choice");
+    });
+    mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+      opts.onChunk({ text: '{"name":"Ava"}' });
+      opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+    });
+
+    await runStructuredTask(makeArgs({ modelId: "qwen3.8-max", structuredOutput: "off" }));
+
+    const second = mockStream.mock.calls[1][0];
+    expect(second.extraBody).toBeUndefined();
+    // The cue is the whole mechanism now, so it is always there.
+    expect(second.messages).toHaveLength(3);
+  });
+
   it("does not fall back on a genuine malformed-call error that happens to contain \"function call\"", async () => {
     mockStream.mockImplementationOnce(async () => {
       throw new Error("Invalid function call: missing required argument 'name'");

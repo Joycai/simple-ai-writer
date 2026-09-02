@@ -42,6 +42,7 @@ const model: Model = {
   thinkingCategory: "openai-generic",
   thinkingBudget: 4000,
   serverTools: ["web_search"],
+  structuredOutput: "json_schema",
 };
 
 const conn: AiConn = { provider, model, apiKey: "sk-test" };
@@ -62,6 +63,7 @@ describe("connOptions", () => {
       thinkingCategory: "openai-generic",
       thinkingBudget: 4000,
       serverTools: ["web_search"],
+      structuredOutput: "json_schema",
     });
   });
 
@@ -86,7 +88,7 @@ describe("connOptions", () => {
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
       "modelId", "prefix", "reasoningEffort", "safetySettings", "serverTools",
-      "standard", "temperature", "thinkingBudget", "thinkingCategory",
+      "standard", "structuredOutput", "temperature", "thinkingBudget", "thinkingCategory",
     ]);
   });
 });

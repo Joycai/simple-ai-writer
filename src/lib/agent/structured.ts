@@ -19,6 +19,7 @@
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { jsonModeShaping } from "../ai/jsonMode";
+import { stripNulls } from "../ai/jsonSchemaStrict";
 import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
 
@@ -143,10 +144,13 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     // it. This path exists because the model refused a forced tool choice —
     // which is exactly what a *thinking* model does — so it used to be the one
     // place structured output had no enforcement at all, on the models least
-    // likely to volunteer clean JSON.
+    // likely to volunteer clean JSON. The output tool's parameters go along as
+    // the schema: on a model that takes strict `json_schema` mode, this path
+    // enforces the same shape the tool path would have.
     const json = jsonModeShaping(
-      args.standard,
+      common,
       `${args.systemPrompt}\n${args.jsonInstruction}\n${userText(args.userContent)}`,
+      args.outputTool.function,
     );
     if (json.cue) messages.push({ role: "user", content: json.cue });
     await streamCompletion({
@@ -162,7 +166,11 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
         }
       },
     });
-    return extractJsonObject(acc);
+    const raw = extractJsonObject(acc);
+    // Strict mode made every optional field nullable so the schema could be
+    // sent at all; callers are written against *absent*, so take the nulls
+    // back out before they see it (see ai/jsonSchemaStrict.ts).
+    return json.mode === "json_schema" ? JSON.stringify(stripNulls(JSON.parse(raw))) : raw;
   };
 
   try {

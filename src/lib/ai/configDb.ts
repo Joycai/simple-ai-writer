@@ -15,6 +15,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
+import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
@@ -224,6 +225,19 @@ export interface Model {
    * configured before this setting existed sends.
    */
   serverTools?: ServerToolId[];
+  /**
+   * How this model is asked for JSON when a task needs a structured reply —
+   * `off` / `json_object` / `json_schema` (see `lib/ai/jsonMode.ts`).
+   *
+   * Declared rather than derived, same as `serverTools` above: within one
+   * family, and behind one base URL, some models take the strict `json_schema`
+   * mode, most take only `json_object`, and a relay may reject `response_format`
+   * altogether — none of which the protocol family can tell. Absent means
+   * **auto**: the family default, lifted to `json_schema` for model ids known
+   * to accept it — which for every model configured before this existed is
+   * byte-identical to what it sent before.
+   */
+  structuredOutput?: StructuredOutputMode;
   /**
    * Whether this endpoint accepts whole PDF files as message content (the
    * OpenAI `file` content part — today Qwen3.8-Max on DashScope
@@ -455,6 +469,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "pdf_input", "INTEGER");
   await addColumn(db, modelCols, "models", "temperature", "REAL");
   await addColumn(db, modelCols, "models", "translate_format", "TEXT");
+  await addColumn(db, modelCols, "models", "structured_output", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -695,9 +710,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null],
   };
 }
 
@@ -785,6 +800,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     // the rest, and "no declaration" must stay one representation.
     pdfInput: r.pdf_input === 1 ? true : undefined,
     translateFormat: parseTranslateFormat(r.translate_format),
+    structuredOutput: parseStructuredOutputMode(r.structured_output),
   };
 }
 

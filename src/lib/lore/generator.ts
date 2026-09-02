@@ -75,8 +75,12 @@ export async function generateLore(opts: ConnOptions & {
   // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
   // The system prompt is author-overridable, so it is passed in here rather
   // than assumed: on the OpenAI family the word "json" in it is a precondition,
-  // not a nicety.
-  const json = jsonModeShaping(opts.standard, `${opts.systemPrompt ?? ""}\n${promptText}`);
+  // not a nicety. The model's own declaration rides in on the conn options, so
+  // an author can switch this off for a relay that rejects `response_format`.
+  // No schema yet: the entity's shape lives in the prompt, so strict mode has
+  // nothing to enforce here and resolves to JSON mode
+  // (docs/api/structured-output-plan.md §7, 第二片).
+  const json = jsonModeShaping(pickConnOptions(opts), `${opts.systemPrompt ?? ""}\n${promptText}`);
   const extraBody = json.extraBody;
   if (json.cue) userParts.push({ type: "text", text: json.cue });
 

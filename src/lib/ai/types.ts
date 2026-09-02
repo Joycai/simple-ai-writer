@@ -5,6 +5,7 @@
  */
 
 import type { NativeReasoning, ReasoningEffort, ThinkingCategoryId } from "./reasoning";
+import type { StructuredOutputMode } from "./jsonMode";
 
 /** Anthropic thinking blocks, tagged with the model that produced them. */
 export interface ThinkingBlockCarry {
@@ -409,6 +410,13 @@ export interface StreamOptions {
   thinkingCategory?: ThinkingCategoryId;
   /** Token budget for a budget-shape category (Claude extended, Qwen). */
   thinkingBudget?: number;
+  /**
+   * How this model is asked for JSON on a structured task (`lib/ai/jsonMode.ts`).
+   * Carried so `ConnOptions` stays a structural subset of this type; no adapter
+   * reads it — the shaping happens where the request is built and arrives here
+   * as `extraBody`.
+   */
+  structuredOutput?: StructuredOutputMode;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */
