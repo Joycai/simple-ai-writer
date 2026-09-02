@@ -119,6 +119,8 @@ Docker，开机自启、后台常驻、日志都有归宿。Windows 一侧不是
 | `winreg` | Run 键读写 |
 | `open` | 用默认浏览器打开 `/admin` |
 | `tracing-appender` | tracing 落文件 |
+| `windows-sys` | 只为 `GetSystemMetrics(SM_CXSMICON)`——托盘图标该按什么尺寸取帧（与 tray-icon 同版本，零成本） |
+| `embed-resource`（build-dependency） | `build.rs` 把 `icons/*.ico` 和 VERSIONINFO 编进两个 exe（宿主门控） |
 
 ubuntu CI 一个都不会编译到；`Cargo.lock` 照常提交（CI 用 `--locked`）。
 
@@ -148,3 +150,25 @@ ubuntu CI 一个都不会编译到；`Cargo.lock` 照常提交（CI 用 `--locke
 钉在旧数据目录的 `tray.log` 上，日志位置要到下次启动托盘才跟过去（成功对话框
 里明说了这一点）。已有配置文件（`./data` 相对形式）不受影响——CWD 钉住的
 workaround 因此保留。
+
+2026-09-02 图标：原先托盘是代码里现画的一个赭石圆环（实心 = 运行），两个 exe
+本身没有图标。现在 `server/icons/` 里有一套真的图标，`build.py`（只依赖 Pillow）
+从设计数字生成全部产物，产物**提交进仓库**，编译时不需要 Python：
+
+- **设计**：主应用的标志是「从上往下看的一叠纸」——实心菱形顶面 + 下方一道
+  V 形层。服务端是**那叠东西存放的地方**，所以标志是同一叠、三层深（既是机柜，
+  也是摞起来的书），坐在墨色而不是纸色上——桌面那边的夜间孪生。同一种赭石、
+  同一个斜率，不用标签也看得出是一家，也不会认错成另一个。
+- **托盘两态仍然住在图形里而不是角标里**：运行 = 实心菱形（赭石），停止 = 空心
+  菱形（灰）——填充和颜色两个通道，深浅任务栏都能读。托盘字形是同一叠东西按
+  16 px 像素对齐过的（菱形 16×8、V 形各 2 px），`.ico` 里 16–64 每档单独渲染，
+  不是从 256 缩下来。
+- **加载方式**：`build.rs`（仅 Windows 目标、宿主门控的 `embed-resource`）把
+  `app.ico` 作为资源 1 编进两个 exe（id 最小的就是资源管理器显示的那个），托盘
+  exe 额外带 2 = 运行、3 = 停止；`tray.rs` 按 `SM_CXSMICON` 的尺寸
+  `Icon::from_resource`，所以取到的是为这个 DPI 画的那一帧，不是 shell 缩放的
+  32。顺带把 VERSIONINFO 也编进去了：任务管理器和属性页显示「Simple AI Writer
+  知识库服务端」而不是文件名。
+- **没有资源编译器的机器照样能编译**（build.rs 打 warning、exe 没图标），托盘
+  在资源缺席时退回一个纯色方块而不是崩掉——但这条路只有 MSVC 没装 Windows SDK
+  或 mingw 缺 `windres` 才走得到，正常工具链两者都自带。
