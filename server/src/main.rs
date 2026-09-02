@@ -25,6 +25,12 @@ async fn run() -> Result<(), String> {
         print_help();
         return Ok(());
     }
+    // Answered before Config::load on purpose: asking a binary which build it
+    // is must not create a config file (with fresh credentials) as a side effect.
+    if argv.iter().any(|a| a == "--version" || a == "-V") {
+        println!("aiw-kb-server {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
 
     // The configuration is read *before* logging is set up, because the log
     // filter is one of the things it carries.
@@ -78,7 +84,7 @@ async fn run() -> Result<(), String> {
 fn print_help() {
     println!(
         "aiw-kb-server {} — knowledge-base backup / sync server\n\n\
-         用法：aiw-kb-server [--config <路径>]\n\n\
+         用法：aiw-kb-server [--config <路径>] | --version | --help\n\n\
          配置全在一个 TOML 文件里；没有就会自动生成一个，并把生成的密码和 token 打在这里。\n\
          查找顺序：--config > AIW_KB_CONFIG > 可执行文件同目录的 aiw-kb.toml > 系统配置目录。\n\
          环境变量（AIW_KB_BIND / AIW_KB_DATA_DIR / AIW_KB_TOKENS / AIW_KB_ALLOW_ANONYMOUS /\n\

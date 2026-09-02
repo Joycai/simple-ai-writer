@@ -1,0 +1,206 @@
+name: Package server
+
+# Manually triggered: builds the knowledge-base sync server (server/) for each
+# platform it gets deployed on and uploads the packages as workflow artifacts —
+# optionally also as a GitHub Release tagged `server-v<version>`, a namespace
+# apart from the app's `v<version>` tags so the two release lines never collide.
+#
+# Nothing here is shared with release.yml (the app's installers): no Node, no
+# Tauri, no webkit — the server is a plain axum binary. See server/DEPLOY.md §1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp, MAJOR.MINOR.PATCH (e.g. 0.2.0). Blank = the version in server/Cargo.toml.'
+        required: false
+        type: string
+      publish:
+        description: 'Also create a GitHub Release (tag server-v<version>) holding the packages'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Determine version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          v="$INPUT_VERSION"
+          if [ -z "$v" ]; then
+            v=$(grep -m1 '^version = ' server/Cargo.toml | sed -E 's/^version = "([^"]+)".*/\1/')
+          fi
+          # Cargo accepts more, but the Windows VERSIONINFO block build.rs writes
+          # takes MAJOR,MINOR,PATCH numbers only — so require exactly x.y.z.
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be MAJOR.MINOR.PATCH, got '$v'"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "Packaging aiw-kb-server $v"
+
+  build:
+    name: Build (${{ matrix.target }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-22.04 on purpose: the binary links glibc dynamically, and one
+          # built against 22.04's glibc 2.35 runs on anything newer, whereas one
+          # built on 24.04 (glibc 2.39) refuses to start on a 2023-era NAS.
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          # Native arm64 runner (free for public repos), so no `cross` / docker.
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          # The only target that ships aiw-kb-tray.exe as well; build.rs embeds
+          # both exes' icons + VERSIONINFO here (rc.exe comes with the MSVC
+          # toolchain on the runner).
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './server -> target'
+          shared-key: package-${{ matrix.target }}
+
+      # Only when a version was typed in: it goes into `--version`, the Windows
+      # VERSIONINFO block and the package name. Cargo.lock carries the crate's
+      # own version too, so refresh that one entry (and nothing else) or the
+      # `--locked` build below refuses. perl rather than sed: BSD sed on macOS
+      # has no `0,/re/` first-match form.
+      - name: Stamp version
+        if: inputs.version != ''
+        working-directory: server
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          perl -0pi -e 's/^version = "[^"]*"/version = "$ENV{VERSION}"/m' Cargo.toml
+          cargo update --workspace
+          grep -m1 '^version = ' Cargo.toml
+
+      - name: Build
+        working-directory: server
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # build.rs degrades to a plain exe (with a cargo warning) when it finds no
+      # resource compiler. A warning is easy to miss in a log; a package without
+      # its icons is not what this workflow is for, so make it a failure.
+      - name: Check embedded version info (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          foreach ($exe in 'aiw-kb-server', 'aiw-kb-tray') {
+            $vi = (Get-Item "server/target/${{ matrix.target }}/release/$exe.exe").VersionInfo
+            if (-not $vi.FileDescription) {
+              throw "$exe.exe carries no VERSIONINFO — did build.rs find rc.exe?"
+            }
+            if ($vi.ProductVersion -ne $env:VERSION) {
+              throw "$exe.exe says version '$($vi.ProductVersion)', expected '$env:VERSION'"
+            }
+            Write-Host "$exe.exe: $($vi.FileDescription) $($vi.ProductVersion)"
+          }
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          bin=server/target/${{ matrix.target }}/release/aiw-kb-server
+          [ "$RUNNER_OS" = Windows ] && bin=$bin.exe
+          "$bin" --version
+
+      # One folder per package (binary + the two manuals), then tar.gz on unix
+      # (keeps the executable bit) and zip on Windows.
+      - name: Package
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          out=server/target/$TARGET/release
+          name=aiw-kb-server-$VERSION-$TARGET
+          mkdir -p dist/$name
+          cp server/README.md server/DEPLOY.md dist/$name/
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp $out/aiw-kb-server.exe $out/aiw-kb-tray.exe dist/$name/
+            (cd dist && 7z a -tzip -bso0 $name.zip $name)
+          else
+            cp $out/aiw-kb-server dist/$name/
+            tar -C dist -czf dist/$name.tar.gz $name
+          fi
+          rm -r dist/$name
+          ls -l dist
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiw-kb-server-${{ needs.version.outputs.version }}-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: inputs.publish
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: packages
+        run: |
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: server-v${{ needs.version.outputs.version }}
+          name: 'aiw-kb-server v${{ needs.version.outputs.version }}'
+          files: packages/*
+          body: |
+            Simple AI Writer 知识库服务端（`server/`）的预编译包。部署手册在包内的 `DEPLOY.md`。
+
+            | 平台 | 文件 | 内容 |
+            | --- | --- | --- |
+            | Linux x86_64 | `*-x86_64-unknown-linux-gnu.tar.gz` | `aiw-kb-server`（glibc ≥ 2.35） |
+            | Linux arm64（NAS / 树莓派） | `*-aarch64-unknown-linux-gnu.tar.gz` | `aiw-kb-server`（glibc ≥ 2.35） |
+            | Windows x64 | `*-x86_64-pc-windows-msvc.zip` | `aiw-kb-server.exe` + 托盘版 `aiw-kb-tray.exe` |
+            | macOS（Apple Silicon） | `*-aarch64-apple-darwin.tar.gz` | `aiw-kb-server` |
+
+            `SHA256SUMS` 里是每个包的校验和。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
