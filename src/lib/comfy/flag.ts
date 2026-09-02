@@ -1,5 +1,5 @@
 /**
- * 本地 ComfyUI 生图的 Beta 开关（设置 → 通用 → 实验功能）。
+ * 本地 ComfyUI 生图的 Beta 开关（设置 → AI 配置 → 实验室）。
  *
  * 独立模块而不是 store 上的一个字段，理由和 `lib/translate/flag` 一样：
  * 设置面板和 ModelDrawer 两个互不相干的地方读它。

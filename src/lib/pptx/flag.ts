@@ -1,5 +1,5 @@
 /**
- * The Beta switch for PPTX export (Settings → 通用 → 实验功能).
+ * The Beta switch for PPTX export (Settings → AI 配置 → 实验室).
  *
  * Its own module rather than a field on a store because it is read from three
  * unrelated places — the settings pane, the HTML preview toolbar, and the

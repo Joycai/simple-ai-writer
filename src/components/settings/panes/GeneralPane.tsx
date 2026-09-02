@@ -5,24 +5,13 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { useProjectStore } from "../../../stores/projectStore";
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
-import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
-import { isDocxExportEnabled, setDocxExportEnabled } from "../../../lib/docx/flag";
-import { isXlsxExportEnabled, setXlsxExportEnabled } from "../../../lib/xlsx/flag";
-import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
-import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
-import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
-import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
 } from "../../../lib/notify";
-import {
-  IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
-} from "../../../lib/image/downscalePlan";
 import { ResetAppDialog } from "../ResetAppDialog";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
-import common from "../settingsCommon.module.css";
 
 const THEMES: { value: ThemeMode; labelKey: string }[] = [
   { value: "dark", labelKey: "settings.dark" },
@@ -56,29 +45,11 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const markdownTheme = useAppStore((s) => s.markdownTheme);
   const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
-  const imageMaxLongEdge = useAppStore((s) => s.imageMaxLongEdge);
-  const setImageMaxLongEdge = useAppStore((s) => s.setImageMaxLongEdge);
-  const [edgeDraft, setEdgeDraft] = useState(imageMaxLongEdge ? String(imageMaxLongEdge) : "");
-  const commitEdge = () => {
-    const n = parseInt(edgeDraft, 10);
-    const next = Number.isFinite(n) && n > 0
-      ? Math.min(Math.max(n, IMAGE_LONG_EDGE_MIN), IMAGE_LONG_EDGE_MAX)
-      : 0;
-    setImageMaxLongEdge(next);
-    setEdgeDraft(next ? String(next) : "");
-  };
 
   const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
   const [notifyApproval, setNotifyApprovalOn] = useState(isNotifyKindEnabled("approval"));
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
-  const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
-  const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
-  const [xlsxOn, setXlsxOn] = useState(isXlsxExportEnabled());
-  const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
-  const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
-  const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
-  const [orchestratorOn, setOrchestratorOn] = useState(isOrchestratorEnabled());
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -130,31 +101,6 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
     } finally {
       setSweeping(false);
     }
-  };
-
-  const togglePptx = (enabled: boolean) => {
-    setPptxExportEnabled(enabled);
-    setPptxOn(enabled);
-  };
-
-  const toggleRoleplay = (enabled: boolean) => {
-    setRoleplayEnabled(enabled);
-    setRoleplayOn(enabled);
-  };
-
-  const toggleTranslate = (enabled: boolean) => {
-    setTranslateEnabled(enabled);
-    setTranslateOn(enabled);
-  };
-
-  const toggleComfy = (enabled: boolean) => {
-    setComfyUiEnabled(enabled);
-    setComfyOn(enabled);
-  };
-
-  const toggleOrchestrator = (enabled: boolean) => {
-    setOrchestratorEnabled(enabled);
-    setOrchestratorOn(enabled);
   };
 
   const toggleNotify = (enabled: boolean) => {
@@ -259,36 +205,6 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
         </Row>
       </Section>
 
-      {/* Sits before 通知 rather than in 实验功能: downscaling is not a feature
-          to switch on, it is what the app now does with every picture — this
-          field only moves where the line is. */}
-      <Section label={t("systemSettings.general.imageSection", { defaultValue: "图片" })}>
-        <Row
-          title={t("systemSettings.general.imageLongEdgeLabel", { defaultValue: "发送给模型的最大长边" })}
-          desc={t("systemSettings.general.imageLongEdgeHint", {
-            defaultValue:
-              "超过这个尺寸的图片会在发送前等比缩小，原文件不受影响。留空 / 0 = 原样发送。",
-          })}
-          last
-        >
-          <input
-            className={`${common.input} ${common.rowNumber}`}
-            type="number"
-            min={IMAGE_LONG_EDGE_MIN}
-            max={IMAGE_LONG_EDGE_MAX}
-            step={256}
-            placeholder={t("systemSettings.general.imageLongEdgeOff", { defaultValue: "不缩" })}
-            value={edgeDraft}
-            onChange={(e) => setEdgeDraft(e.target.value)}
-            // Committed on blur, not per keystroke: clamping as the author
-            // types means the first digit of "4096" becomes 256 and the rest
-            // has nowhere to go.
-            onBlur={commitEdge}
-            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-          />
-        </Row>
-      </Section>
-
       <Section label={t("systemSettings.general.notifySection")}>
         <Row
           title={t("systemSettings.general.notifyLabel")}
@@ -331,79 +247,6 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
             )}
           </>
         )}
-      </Section>
-
-      <Section label={t("systemSettings.general.betaSection")}>
-        <Row
-          title={t("systemSettings.general.pptxLabel")}
-          desc={t("systemSettings.general.pptxHint")}
-        >
-          <Toggle on={pptxOn} onChange={togglePptx} label={t("systemSettings.general.pptxLabel")} />
-        </Row>
-        <Row
-          title={t("systemSettings.general.docxLabel")}
-          desc={t("systemSettings.general.docxHint")}
-          warn={docxOn ? undefined : t("systemSettings.general.docxOffHint")}
-        >
-          <Toggle
-            on={docxOn}
-            onChange={(next) => { setDocxExportEnabled(next); setDocxOn(next); }}
-            label={t("systemSettings.general.docxLabel")}
-          />
-        </Row>
-        <Row
-          title={t("systemSettings.general.xlsxLabel")}
-          desc={t("systemSettings.general.xlsxHint")}
-        >
-          <Toggle
-            on={xlsxOn}
-            onChange={(next) => { setXlsxExportEnabled(next); setXlsxOn(next); }}
-            label={t("systemSettings.general.xlsxLabel")}
-          />
-        </Row>
-        <Row
-          title={t("systemSettings.general.roleplayLabel", { defaultValue: "互动式角色扮演创作" })}
-          desc={t("systemSettings.general.roleplayHint", {
-            defaultValue: "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。",
-          })}
-        >
-          <Toggle
-            on={roleplayOn}
-            onChange={toggleRoleplay}
-            label={t("systemSettings.general.roleplayLabel", { defaultValue: "互动式角色扮演创作" })}
-          />
-        </Row>
-        <Row
-          title={t("systemSettings.general.translateLabel")}
-          desc={t("systemSettings.general.translateHint")}
-        >
-          <Toggle
-            on={translateOn}
-            onChange={toggleTranslate}
-            label={t("systemSettings.general.translateLabel")}
-          />
-        </Row>
-        <Row
-          title={t("systemSettings.general.comfyuiLabel")}
-          desc={t("systemSettings.general.comfyuiHint")}
-        >
-          <Toggle
-            on={comfyOn}
-            onChange={toggleComfy}
-            label={t("systemSettings.general.comfyuiLabel")}
-          />
-        </Row>
-        <Row
-          title={t("systemSettings.general.toolPackLabel")}
-          desc={t("systemSettings.general.toolPackHint")}
-          last
-        >
-          <Toggle
-            on={orchestratorOn}
-            onChange={toggleOrchestrator}
-            label={t("systemSettings.general.toolPackLabel")}
-          />
-        </Row>
       </Section>
 
       <Section label={t("systemSettings.general.debugSection")}>

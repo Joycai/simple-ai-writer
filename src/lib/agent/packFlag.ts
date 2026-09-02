@@ -1,6 +1,6 @@
 /**
  * 助手工具包模式（orchestrator 档）的 Beta 开关 —— tool-pack-plan.md 分片 3
- * （设置 → 通用 → 实验功能）。
+ * （设置 → AI 配置 → 实验室）。
  *
  * 开着时 chat 换到 **orchestrator 档**：主控只带查/读/笔记/记忆的轻常驻，写入
  * 全部经 `run_pack` 派给执行代理（`ORCHESTRATOR_PRESET`，见 packs.ts）。Beta

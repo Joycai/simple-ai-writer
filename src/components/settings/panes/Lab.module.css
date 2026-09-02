@@ -1,0 +1,39 @@
+/* 设置 → AI 配置 → 实验室 (设计稿 18).
+
+   The one piece of vocabulary this pane adds: the signpost under a switch
+   that has a next step — 「接着去 ＋ 页面名 →」. Text, not a button: the
+   row's right edge belongs to the toggle, and seven rows keep one straight
+   line down the right. */
+
+.go {
+  margin-top: 9px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  animation: goIn 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.goLead { color: var(--stg-text-faint); }
+
+.goLink {
+  color: var(--color-accent);
+  font-weight: 500;
+  padding-bottom: 1px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.goLink:hover {
+  color: var(--color-sienna-hover);
+  border-bottom-color: currentColor;
+}
+
+.goHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+}
+
+@keyframes goIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
