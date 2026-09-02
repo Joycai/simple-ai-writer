@@ -13,10 +13,11 @@
  * 让位给原生文本，否则作者会对着一片透明打字。
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
+import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
 import { currentSceneNo } from "../../lib/roleplay/scene";
@@ -286,7 +287,22 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const refreshBinding = useRoleplayStore((s) => s.refreshBinding);
   const setAgentModel = useRoleplayStore((s) => s.setAgentModel);
 
-  const [draft, setDraft] = useState("");
+  // 输入框和附件住在 composerStore 而不是 useState：AI 抽屉一收起整个稿面就
+  // 卸载，未发出的那半段话不能跟着死掉（对话助手同一条规则）。按 agent id
+  // 分槽——这个组件按 agent 重挂，写给甲的一句话不能出现在乙的框里。
+  const draft = useComposerStore((s) => roleplayComposerOf(s, agent.id).draft);
+  const refs = useComposerStore((s) => roleplayComposerOf(s, agent.id).refs);
+  const setRoleplayDraft = useComposerStore((s) => s.setRoleplayDraft);
+  const setRoleplayRefs = useComposerStore((s) => s.setRoleplayRefs);
+  const clearComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  const setDraft = useCallback(
+    (update: string | ((prev: string) => string)) => setRoleplayDraft(agent.id, update),
+    [agent.id, setRoleplayDraft],
+  );
+  const setRefs = useCallback(
+    (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) => setRoleplayRefs(agent.id, update),
+    [agent.id, setRoleplayRefs],
+  );
   const [composing, setComposing] = useState(false);
   // 第一次进来默认展开：折起来之后它只剩四个符号，不认识的人不会去点「展开」。
   // 作者亲手收起过一次就记住，此后一直折着。
@@ -294,7 +310,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [openTrace, setOpenTrace] = useState<number | null>(null);
-  const [refs, setRefs] = useState<AttachedItem[]>([]);
   /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
   const [refError, setRefError] = useState<string | null>(null);
   /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
@@ -580,8 +595,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const doSend = () => {
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
-    setDraft("");
-    setRefs([]);
+    clearComposer(agent.id);
     setRefError(null);
     // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
     // 只做过一次的决定。想再带上，在编辑器里重新划一次。
