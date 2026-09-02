@@ -285,6 +285,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const promote = useRoleplayStore((s) => s.promote);
   const toggleSubAgent = useRoleplayStore((s) => s.toggleSubAgent);
   const refreshBinding = useRoleplayStore((s) => s.refreshBinding);
+  const compacting = useRoleplayStore((s) => s.compacting.includes(agent.id));
+  const compactNow = useRoleplayStore((s) => s.compactNow);
   const setAgentModel = useRoleplayStore((s) => s.setAgentModel);
 
   // 输入框和附件住在 composerStore 而不是 useState：AI 抽屉一收起整个稿面就
@@ -419,6 +421,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const autoCompact = useAppStore((s) => s.autoCompact);
+  const compactTriggerTokens = useAppStore((s) => s.compactTriggerTokens);
+  const compactTriggerRatio = useAppStore((s) => s.compactTriggerRatio);
   /**
    * 工具 schema 的开销。按**路由之后**的工具算（子代理会摘掉 read_image、补上
    * delegate），否则这一段会和它旁边那排芯片说的不是同一回事。
@@ -441,10 +446,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       toolTokens,
       inputCeilingFor(boundModel?.contextSize, contextUtilization),
       boundModel?.contextSize ?? 0,
+      { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
     ),
     // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization],
+    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization,
+      autoCompact, compactTriggerTokens, compactTriggerRatio],
   );
 
   /**
@@ -590,7 +597,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const jumpToTurn = (turn: number) => {
     document.getElementById(`rp-turn-${turn}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
-  const canSend = draft.trim().length > 0;
+  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。
+  const canSend = draft.trim().length > 0 && !compacting;
 
   const doSend = () => {
     if (!canSend) return;
@@ -1196,6 +1204,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
                没装配（见 12-context-trace-plan §4）。 */
             preflight={session?.history ? null : preflightBar}
+            /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
+               归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
+            onCompact={context.canFold && !isRunning && !compacting
+              ? () => void compactNow(agent.id)
+              : undefined}
+            compacting={compacting}
           />
 
           {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。

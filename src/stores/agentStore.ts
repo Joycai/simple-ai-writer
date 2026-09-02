@@ -47,7 +47,7 @@ import { applyFindReplace, applyInsertions } from "../lib/agent/editApply";
 import {
   coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, planFold,
   recordInjectionsFromReport,
-  type ChatSessionMeta,
+  type ChatSessionMeta, compactTriggerFor,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import {
@@ -1292,7 +1292,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       // ── History: seed on first turn, append afterwards ──
-      const { contextUtilization } = useAppStore.getState();
+      const {
+        contextUtilization, autoCompact, compactTriggerTokens, compactTriggerRatio,
+      } = useAppStore.getState();
       /**
        * The ceiling every **message-side** decision in this turn measures
        * against: compaction below, and the runtime's history trimming.
@@ -1458,12 +1460,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // proceeds on the uncompacted history (trimHistory still backstops
         // mid-turn); only an abort propagates. The event lands in this turn's
         // log so the author sees what was folded and can read the summary.
+        //
+        // 自动归纳 off (设置 → 上下文与记忆) skips this step entirely; 立即归纳
+        // (compactChatNow) is then the only fold, and trimHistory the only
+        // backstop. The trigger is the lowest of the author's two lines and
+        // the classic one — docs/feature/agent/compact-threshold-plan.md §B.0.
         const meta = get().chatMeta;
-        if (meta) {
+        if (meta && autoCompact) {
           const compacted = await compactChatHistory({
             history,
             meta,
             ceilingTokens: messageCeiling,
+            triggerTokens: compactTriggerFor({
+              contextSize: model.contextSize,
+              messageCeiling,
+              triggerTokens: compactTriggerTokens,
+              triggerRatio: compactTriggerRatio,
+            }).tokens,
             summarize: (input) =>
               summarizeForCompaction(
                 connOptions({ provider, model, apiKey }),

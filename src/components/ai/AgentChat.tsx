@@ -511,6 +511,9 @@ export function AgentChat() {
   const chatMeta = useAgentStore((s) => s.chatMeta);
   const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const autoCompact = useAppStore((s) => s.autoCompact);
+  const compactTriggerTokens = useAppStore((s) => s.compactTriggerTokens);
+  const compactTriggerRatio = useAppStore((s) => s.compactTriggerRatio);
   // Measured off the *routed* toolset — what sendChat actually puts on the wire
   // (agentStore routeTools with the session's sub-agent overrides), not the raw
   // preset: routing strips read_image/generate_image and appends delegate, and
@@ -538,11 +541,13 @@ export function AgentChat() {
         toolTokens,
         inputCeilingFor(activeModel?.contextSize, contextUtilization),
         activeModel?.contextSize ?? 0,
+        { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
       ),
     // `chatContextVersion` is the real trigger — the history array is mutated
     // in place, so its reference alone would never announce a change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization],
+    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization,
+      autoCompact, compactTriggerTokens, compactTriggerRatio],
   );
   // The 立即归纳 affordance appears only when a forced fold would actually fold
   // something. Read off the breakdown rather than re-derived here: this used to

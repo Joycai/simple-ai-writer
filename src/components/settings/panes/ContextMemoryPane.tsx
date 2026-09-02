@@ -1,27 +1,128 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../stores/appStore";
+import { useAiStore } from "../../../stores/aiStore";
 import { IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN } from "../../../lib/image/downscalePlan";
-import { Pane, PaneHeader, Section, Row } from "./bits";
+import {
+  ASSUMED_INPUT_CEILING_TOKENS,
+  COMPACT_TRIGGER_RATIO_MAX, COMPACT_TRIGGER_RATIO_MIN,
+  COMPACT_TRIGGER_TOKENS_MAX, COMPACT_TRIGGER_TOKENS_MIN,
+} from "../../../lib/context/budget";
+import { compactTriggerFor } from "../../../lib/agent/compact";
+import { messageCeilingFor } from "../../../lib/agent/toolCost";
+import { chatAgentPreset } from "../../../lib/agent/packs";
+import { Slider, type SliderTick } from "../../common/Slider";
+import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import common from "../settingsCommon.module.css";
 import styles from "./ContextMemory.module.css";
 
 const EDGE_STEP = 256;
 
+/** 128000 → "128k", 1048576 → "1M", 600 → "600". */
+function formatTokens(n: number): string {
+  if (n >= 1_048_576) return `${(n / 1_048_576).toFixed(n % 1_048_576 ? 1 : 0)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_024)}k`;
+  return String(n);
+}
+
+/**
+ * The token slider's ticks (设计稿 20): the four the author named plus both
+ * ends. 64k is the log midpoint and deliberately unmarked — "common" has to
+ * stay rare to mean anything.
+ */
+const TOKEN_TICKS: SliderTick[] = [8_192, 16_384, 32_768, 131_072, 262_144, 524_288]
+  .map((value) => ({ value, label: formatTokens(value) }));
+/** Under 64k the slider moves in 1k; above, in 4k. */
+const tokenStep = (v: number) => (v < 65_536 ? 1_024 : 4_096);
+const RATIO_TICKS: SliderTick[] = [50, 60, 70, 80].map((value) => ({ value, label: `${value}%` }));
+
 /**
  * 设置 → AI 配置 → 上下文与记忆: what a conversation puts in front of the
  * model, and how much of it.
  *
- * Today that is one section — the picture ceiling. It is named for what it
- * is meant to hold: the other "how much goes into the context" knobs still
- * live where they were first needed (知识库预算 / 利用率 in the AI panel's
- * toolbar, 默认最大输出 at the top of 供应商与模型, the recap model in the
- * library view); the note at the foot of the pane says so. Moving any of
- * them here is a separate decision — see
- * docs/feature/settings-ai-tabs-ui-brief.md §2.3 (设计稿 18 B1 / B2).
+ * Two sections. 对话归纳 (docs/feature/agent/compact-threshold-plan.md, 设计稿
+ * 20): the 自动归纳 switch, the two lines the trigger is the lowest of — an
+ * absolute token count and a share of the model's window — and a worked
+ * example for the active model that names which line actually won. The
+ * example exists because a *third* line the author set elsewhere (窗口占用,
+ * in the AI panel's toolbar) beats both sliders under its default, and a
+ * slider that never bites has to say so: the row that won carries a 生效中
+ * tag, and the hard cap gets a signpost out of settings altogether. 图片: the
+ * picture ceiling.
  */
 export function ContextMemoryPane() {
   const { t } = useTranslation();
+
+  // ── 对话归纳 ──
+  const autoCompact = useAppStore((s) => s.autoCompact);
+  const setAutoCompact = useAppStore((s) => s.setAutoCompact);
+  const triggerTokens = useAppStore((s) => s.compactTriggerTokens);
+  const setTriggerTokens = useAppStore((s) => s.setCompactTriggerTokens);
+  const triggerRatio = useAppStore((s) => s.compactTriggerRatio);
+  const setTriggerRatio = useAppStore((s) => s.setCompactTriggerRatio);
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const closeSettings = useAppStore((s) => s.closeSettings);
+  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const models = useAiStore((s) => s.models);
+  const subAgents = useAiStore((s) => s.subAgents);
+  const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId) ?? null);
+
+  // The worked example runs the same resolver the chat runs, fed the same
+  // ceiling (`messageCeilingFor` with the chat's toolset), so the line this
+  // sentence names is the line the bar will draw and the store will fold at.
+  const example = useMemo(() => {
+    if (!activeModel) return null;
+    const messageCeiling = messageCeilingFor(
+      activeModel.contextSize, contextUtilization, chatAgentPreset(), subAgents, models,
+      { handoff: true, packs: true },
+    );
+    return compactTriggerFor({
+      contextSize: activeModel.contextSize, messageCeiling, triggerTokens, triggerRatio,
+    });
+  }, [activeModel, contextUtilization, subAgents, models, triggerTokens, triggerRatio]);
+
+  const ratioPct = Math.round(triggerRatio * 100);
+  const hasWindow = !!activeModel?.contextSize;
+
+  // 生效中 sits on the row whose line won; the ratio row instead says why it
+  // cannot compete when the model declares no window. Neither when off.
+  const tokensTag = autoCompact && example?.boundBy === "tokens"
+    ? { text: t("systemSettings.contextMemory.tagActive"), muted: false } : null;
+  const ratioTag = !autoCompact ? null
+    : example?.boundBy === "ratio" ? { text: t("systemSettings.contextMemory.tagActive"), muted: false }
+    : activeModel && !hasWindow ? { text: t("systemSettings.contextMemory.tagNoWindow"), muted: true }
+    : null;
+
+  // Editable readouts: the value is the truth, the field mirrors it and can
+  // drive it back — committed on blur / Enter, clamped and stepped like the
+  // slider would.
+  const [tokDraft, setTokDraft] = useState<string | null>(null);
+  const [ratioDraft, setRatioDraft] = useState<string | null>(null);
+  const commitTok = () => {
+    if (tokDraft === null) return;
+    const n = parseFloat(tokDraft);
+    setTokDraft(null);
+    if (!Number.isFinite(n)) return;
+    const raw = Math.round(n * 1_024);
+    const s = tokenStep(raw);
+    setTriggerTokens(Math.round(raw / s) * s);
+  };
+  const commitRatio = () => {
+    if (ratioDraft === null) return;
+    const n = parseInt(ratioDraft, 10);
+    setRatioDraft(null);
+    if (!Number.isFinite(n)) return;
+    setTriggerRatio(n / 100);
+  };
+
+  const goToAiPanel = () => {
+    // 窗口占用 lives on the AI panel's toolbar, not in settings — the one
+    // signpost on this page that leaves the page.
+    closeSettings();
+    setShowAiDrawer(true, "generate");
+  };
+
+  // ── 图片 ──
   const imageMaxLongEdge = useAppStore((s) => s.imageMaxLongEdge);
   const setImageMaxLongEdge = useAppStore((s) => s.setImageMaxLongEdge);
   const [edgeDraft, setEdgeDraft] = useState(imageMaxLongEdge ? String(imageMaxLongEdge) : "");
@@ -34,12 +135,159 @@ export function ContextMemoryPane() {
     setEdgeDraft(next ? String(next) : "");
   };
 
+  const exampleBody = (() => {
+    if (!autoCompact) {
+      return <div className={styles.exampleText}>{t("systemSettings.contextMemory.exampleOff")}</div>;
+    }
+    if (!activeModel || !example) {
+      return <div className={styles.exampleText}>{t("systemSettings.contextMemory.exampleNoModel")}</div>;
+    }
+    const attribution = {
+      tokens: t("systemSettings.contextMemory.attrTokens", { tokens: formatTokens(triggerTokens) }),
+      ratio: t("systemSettings.contextMemory.attrRatio", { pct: ratioPct }),
+      ceiling: t("systemSettings.contextMemory.attrCeiling", { util: Math.round(contextUtilization * 100) }),
+      assumed: t("systemSettings.contextMemory.attrAssumed", { assumed: formatTokens(ASSUMED_INPUT_CEILING_TOKENS) }),
+    }[example.boundBy];
+    return (
+      <>
+        <div className={styles.exampleText}>
+          {t("systemSettings.contextMemory.exampleLead")}
+          <span className={styles.exampleName}>{activeModel.name}</span>
+          （<span className={styles.exampleMono}>
+            {hasWindow ? formatTokens(activeModel.contextSize!) : t("systemSettings.contextMemory.noWindow")}
+          </span>）
+          {t("systemSettings.contextMemory.exampleAt")}
+          <span className={`${styles.exampleMono} ${styles.exampleTrigger}`}>{formatTokens(example.tokens)}</span>
+          {t("systemSettings.contextMemory.exampleFold")}
+          {attribution}
+        </div>
+        {example.boundBy === "ceiling" && (
+          <div className={styles.go}>
+            <span className={styles.goLead}>{t("systemSettings.contextMemory.goCeilingLead")}</span>
+            <button type="button" className={styles.goLink} onClick={goToAiPanel}>
+              {t("systemSettings.contextMemory.goCeilingLink")} →
+            </button>
+            <span className={styles.goHint}>{t("systemSettings.contextMemory.goCeilingHint")}</span>
+          </div>
+        )}
+      </>
+    );
+  })();
+
   return (
     <Pane>
       <PaneHeader
         title={t("systemSettings.tabs.contextMemory")}
         sub={t("systemSettings.contextMemory.paneSub")}
       />
+
+      {/* 归纳 first: it shapes every long conversation; the picture ceiling
+          only touches requests that carry one. Row order 开关 → token → 比例
+          → 读数句: whether, then when, then the arithmetic. */}
+      <Section label={t("systemSettings.contextMemory.compactSection")}>
+        <Row
+          top
+          title={t("systemSettings.contextMemory.autoCompactLabel")}
+          desc={t("systemSettings.contextMemory.autoCompactHint")}
+        >
+          <Toggle
+            on={autoCompact}
+            onChange={setAutoCompact}
+            label={t("systemSettings.contextMemory.autoCompactLabel")}
+          />
+        </Row>
+
+        <div className={`${styles.sliderRow} ${autoCompact ? "" : styles.sliderRowOff}`}>
+          <Row
+            top
+            title={t("systemSettings.contextMemory.triggerTokensLabel")}
+            titleExtra={tokensTag && (
+              <span className={`${styles.tag} ${tokensTag.muted ? styles.tagMuted : ""}`}>{tokensTag.text}</span>
+            )}
+            desc={t("systemSettings.contextMemory.triggerTokensHint")}
+          >
+            <div className={styles.sliderCell}>
+              <Slider
+                value={triggerTokens}
+                min={COMPACT_TRIGGER_TOKENS_MIN}
+                max={COMPACT_TRIGGER_TOKENS_MAX}
+                onChange={setTriggerTokens}
+                scale="log2"
+                ticks={TOKEN_TICKS}
+                snapToTicks
+                step={tokenStep}
+                shiftMultiplier={8}
+                disabled={!autoCompact}
+                ariaLabel={t("systemSettings.contextMemory.triggerTokensLabel")}
+                valueText={formatTokens(triggerTokens)}
+              />
+              <div className={styles.fieldRow}>
+                <input
+                  className={`${common.input} ${common.rowNumber} ${styles.mono}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={tokDraft ?? String(Math.round(triggerTokens / 1_024))}
+                  disabled={!autoCompact}
+                  onChange={(e) => setTokDraft(e.target.value)}
+                  onBlur={commitTok}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  aria-label={t("systemSettings.contextMemory.triggerTokensLabel")}
+                />
+                <span className={styles.unit}>k</span>
+              </div>
+            </div>
+          </Row>
+        </div>
+
+        <div className={`${styles.sliderRow} ${autoCompact ? "" : styles.sliderRowOff}`}>
+          <Row
+            top
+            title={t("systemSettings.contextMemory.triggerRatioLabel")}
+            titleExtra={ratioTag && (
+              <span className={`${styles.tag} ${ratioTag.muted ? styles.tagMuted : ""}`}>{ratioTag.text}</span>
+            )}
+            desc={t("systemSettings.contextMemory.triggerRatioHint")}
+            last
+          >
+            <div className={styles.sliderCell}>
+              <Slider
+                value={ratioPct}
+                min={Math.round(COMPACT_TRIGGER_RATIO_MIN * 100)}
+                max={Math.round(COMPACT_TRIGGER_RATIO_MAX * 100)}
+                onChange={(v) => setTriggerRatio(v / 100)}
+                ticks={RATIO_TICKS}
+                step={1}
+                shiftMultiplier={5}
+                disabled={!autoCompact}
+                ariaLabel={t("systemSettings.contextMemory.triggerRatioLabel")}
+                valueText={`${ratioPct}%`}
+              />
+              <div className={styles.fieldRow}>
+                <input
+                  className={`${common.input} ${common.rowNumber} ${styles.mono}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={ratioDraft ?? String(ratioPct)}
+                  disabled={!autoCompact}
+                  onChange={(e) => setRatioDraft(e.target.value)}
+                  onBlur={commitRatio}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  aria-label={t("systemSettings.contextMemory.triggerRatioLabel")}
+                />
+                <span className={styles.unit}>%</span>
+              </div>
+            </div>
+          </Row>
+        </div>
+
+        {/* The worked example: a sentence about the three rows above it, on
+            its own paper so it reads as arithmetic shown, not as a fourth
+            setting. */}
+        <div className={styles.example}>
+          <div className={styles.exampleEyebrow}>{t("systemSettings.contextMemory.exampleEyebrow")}</div>
+          {exampleBody}
+        </div>
+      </Section>
 
       {/* Downscaling is not a feature to switch on, it is what the app does
           with every picture — this field only moves where the line is. */}

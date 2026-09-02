@@ -42,6 +42,10 @@ export const PREF_KEYS = [
   "app:pinHintDone",
   "app:loreBudgetTokens",
   "app:contextUtilization",
+  // 对话归纳：自动归纳开关 + 两条阈值滑块（lib/agent/compact → compactTriggerFor）。
+  "app:autoCompact",
+  "app:compactTriggerTokens",
+  "app:compactTriggerRatio",
   "app:aiDrawerMode",
   // 条目详情打开成哪种看法：阅读（书页）/ 管理（三栏台）。缺席＝阅读。
   // 常量与解析在 lib/lore/readView（LORE_DETAIL_MODE_PREF）。

@@ -24,6 +24,12 @@ import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
   CONTEXT_UTILIZATION_MIN,
+  COMPACT_TRIGGER_RATIO_DEFAULT,
+  COMPACT_TRIGGER_RATIO_MAX,
+  COMPACT_TRIGGER_RATIO_MIN,
+  COMPACT_TRIGGER_TOKENS_DEFAULT,
+  COMPACT_TRIGGER_TOKENS_MAX,
+  COMPACT_TRIGGER_TOKENS_MIN,
 } from "../lib/context/budget";
 import {
   PREVIEW_ZOOM_DEFAULT,
@@ -58,6 +64,9 @@ const OPENED_AT_KEY = "app:projectOpenedAt";
 const PIN_HINT_KEY = "app:pinHintDone";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
+const AUTO_COMPACT_KEY = "app:autoCompact";
+const COMPACT_TOKENS_KEY = "app:compactTriggerTokens";
+const COMPACT_RATIO_KEY = "app:compactTriggerRatio";
 const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
 const DRAFT_COUNT_KEY = "app:draftCount";
 
@@ -148,6 +157,19 @@ const storedContextUtilization = () =>
     parseFloat(readPref(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
     CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
   );
+// Absent = on: the switch was added after compaction shipped, and an install
+// that never saw it must keep folding the way it always has.
+const storedAutoCompact = () => readPref(AUTO_COMPACT_KEY) !== "0";
+const storedCompactTriggerTokens = () =>
+  clamp(
+    parseInt(readPref(COMPACT_TOKENS_KEY) ?? "", 10) || COMPACT_TRIGGER_TOKENS_DEFAULT,
+    COMPACT_TRIGGER_TOKENS_MIN, COMPACT_TRIGGER_TOKENS_MAX,
+  );
+const storedCompactTriggerRatio = () =>
+  clamp(
+    parseFloat(readPref(COMPACT_RATIO_KEY) ?? "") || COMPACT_TRIGGER_RATIO_DEFAULT,
+    COMPACT_TRIGGER_RATIO_MIN, COMPACT_TRIGGER_RATIO_MAX,
+  );
 const storedDraftCount = () => clamp(parseInt(readPref(DRAFT_COUNT_KEY) ?? "1", 10) || 1, 1, MAX_DRAFTS);
 /**
  * App-wide fallback for a model's per-reply output cap. 0 = no opinion, which
@@ -208,6 +230,9 @@ function prefBackedState() {
     pinHintDone: readPref(PIN_HINT_KEY) === "1",
     loreBudgetTokens: storedLoreBudget(),
     contextUtilization: storedContextUtilization(),
+    autoCompact: storedAutoCompact(),
+    compactTriggerTokens: storedCompactTriggerTokens(),
+    compactTriggerRatio: storedCompactTriggerRatio(),
     draftCount: storedDraftCount(),
     defaultMaxOutput: storedDefaultMaxOutput(),
     imageMaxLongEdge: storedImageMaxLongEdge(),
@@ -300,6 +325,15 @@ interface AppState {
   /** Share of the model's context window one request may occupy (0–1). */
   contextUtilization: number;
   /**
+   * 对话归纳 (docs/feature/agent/compact-threshold-plan.md): whether the chat
+   * and roleplay fold old turns on their own past the trigger, and the two
+   * author-set lines the trigger is the lowest of — an absolute token count
+   * and a share of the model's window. Resolved by `compactTriggerFor`.
+   */
+  autoCompact: boolean;
+  compactTriggerTokens: number;
+  compactTriggerRatio: number;
+  /**
    * Fallback per-reply output cap for models that declare none and aren't in
    * the built-in table (`lib/ai/modelLimits`). 0 = leave it to each protocol.
    */
@@ -353,6 +387,9 @@ interface AppState {
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
   setLoreBudgetTokens: (tokens: number) => void;
   setContextUtilization: (ratio: number) => void;
+  setAutoCompact: (on: boolean) => void;
+  setCompactTriggerTokens: (tokens: number) => void;
+  setCompactTriggerRatio: (ratio: number) => void;
   setDraftCount: (n: number) => void;
   setDefaultMaxOutput: (tokens: number) => void;
   setImageMaxLongEdge: (px: number) => void;
@@ -556,6 +593,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = clamp(ratio, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
     writePref(CONTEXT_UTILIZATION_KEY, String(clamped));
     set({ contextUtilization: clamped });
+  },
+
+  setAutoCompact: (on) => {
+    writePref(AUTO_COMPACT_KEY, on ? "1" : "0");
+    set({ autoCompact: on });
+  },
+
+  setCompactTriggerTokens: (tokens) => {
+    const clamped = clamp(Math.round(tokens), COMPACT_TRIGGER_TOKENS_MIN, COMPACT_TRIGGER_TOKENS_MAX);
+    writePref(COMPACT_TOKENS_KEY, String(clamped));
+    set({ compactTriggerTokens: clamped });
+  },
+
+  setCompactTriggerRatio: (ratio) => {
+    const clamped = clamp(ratio, COMPACT_TRIGGER_RATIO_MIN, COMPACT_TRIGGER_RATIO_MAX);
+    writePref(COMPACT_RATIO_KEY, String(clamped));
+    set({ compactTriggerRatio: clamped });
   },
 
   setDraftCount: (n) => {
