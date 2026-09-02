@@ -35,6 +35,7 @@ import {
 } from "./configDb";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
+import { parseStructuredOutputMode } from "./jsonMode";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
@@ -250,6 +251,8 @@ export function parseConfigBundle(
       maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
       temperature: typeof r.temperature === "number" ? r.temperature : undefined,
       probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
+      probedContextSize: typeof r.probedContextSize === "number" ? r.probedContextSize : undefined,
+      probedMaxOutput: typeof r.probedMaxOutput === "number" ? r.probedMaxOutput : undefined,
       // Parsed rather than cast: a backup written by a newer build (or edited by
       // hand) can carry a level this build doesn't know, and an unknown level
       // must degrade to "send nothing" rather than reach the wire.
@@ -263,6 +266,8 @@ export function parseConfigBundle(
       // newer build must degrade to "an ordinary model" rather than mark a
       // usable model translation-only and hide it from every picker.
       translateFormat: parseTranslateFormat(r.translateFormat),
+      // Unknown value → auto, which sends what an undeclared model always sent.
+      structuredOutput: parseStructuredOutputMode(r.structuredOutput),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });

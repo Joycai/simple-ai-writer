@@ -81,8 +81,11 @@ const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
  * `openai/gpt-4o`, `gpt-4o-2024-11-20`, `azure-gpt-4o`. The date suffix is left
  * alone — prefix matching steps over it — but the vendor prefix has to go or
  * nothing matches for OpenRouter-style ids.
+ *
+ * Exported for the other prefix table keyed by model id (`jsonMode.ts`'s
+ * strict-schema list), so the two agree on what a model is called.
  */
-function normalizeModelId(modelId: string): string {
+export function normalizeModelId(modelId: string): string {
   const id = modelId.trim().toLowerCase();
   const slash = id.lastIndexOf("/");
   return slash >= 0 ? id.slice(slash + 1) : id;

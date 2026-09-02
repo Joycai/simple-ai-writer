@@ -11,7 +11,7 @@ import i18n from "../../i18n";
 import type { AgentEvent } from "../agent/events";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
-import { jsonModeShaping } from "../ai/jsonMode";
+import { withJsonModeFallback, type JsonSchemaSource } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
@@ -22,6 +22,33 @@ export interface GeneratedLore {
   aliases: string[];
   summary: string;
   content: string;
+}
+
+/**
+ * The entity's shape as a strict schema — one definition with the prose in
+ * `ai.instructions.lore`, for the endpoints that enforce a schema natively.
+ *
+ * Every field is required so `strictify` (ai/jsonSchemaStrict.ts) has nothing
+ * to make nullable: an entity without aliases has an empty list, not a missing
+ * one, and the parser below already reads it that way. `category` is an enum
+ * of the categories that actually exist on disk right now — the one thing the
+ * prose can only ask for and a schema can guarantee.
+ */
+export function loreEntitySchema(categoryIds: string[]): JsonSchemaSource {
+  return {
+    name: "lore_entity",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The entity's primary, most formal name." },
+        category: { type: "string", enum: categoryIds },
+        aliases: { type: "array", items: { type: "string" }, description: "Every alias, nickname or transliteration." },
+        summary: { type: "string", description: "One sentence, ≤50 characters." },
+        content: { type: "string", description: "The full Markdown entry, organised with ## headings." },
+      },
+      required: ["name", "category", "aliases", "summary", "content"],
+    },
+  };
 }
 
 export async function generateLore(opts: ConnOptions & {
@@ -63,22 +90,13 @@ export async function generateLore(opts: ConnOptions & {
     promptText = cleanDesc || "请根据附图创建一个设定条目。";
   }
 
-  const userParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [
+  const baseUserParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [
     { type: "text", text: promptText },
     ...opts.images.map((img) => ({
       type: "image_url" as const,
       image_url: { url: img.dataUrl },
     })),
   ];
-
-  // JSON mode: native API enforcement where the protocol has it, plus a text
-  // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
-  // The system prompt is author-overridable, so it is passed in here rather
-  // than assumed: on the OpenAI family the word "json" in it is a precondition,
-  // not a nicety.
-  const json = jsonModeShaping(opts.standard, `${opts.systemPrompt ?? ""}\n${promptText}`);
-  const extraBody = json.extraBody;
-  if (json.cue) userParts.push({ type: "text", text: json.cue });
 
   // The extraction prompt — built-in or author-overridden — enumerates the
   // categories in its own prose, and under a non-novel profile that list is
@@ -92,27 +110,53 @@ export async function generateLore(opts: ConnOptions & {
   const allowed = (opts.allowedCategories ?? []).filter((c) => isKnownCategory(c));
   const categoryIds = allowed.length > 0 ? allowed : loreCategoryIds();
   const systemPrompt =
-    `${baseSystemPrompt}\n\n## Valid categories (authoritative)\n` +
+    `${baseSystemPrompt}
+
+## Valid categories (authoritative)
+` +
     `The "category" field MUST be exactly one of: ${categoryIds.join(", ")}.`;
 
+  // JSON mode: native API enforcement where the protocol has it, plus a text
+  // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
+  // The system prompt is author-overridable, so it is passed in here rather
+  // than assumed: on the OpenAI family the word "json" in it is a precondition,
+  // not a nicety. The model's own declaration rides in on the conn options, so
+  // an author can switch this off for a relay that rejects `response_format`.
+  // On a model that takes strict `json_schema`, the entity schema goes along —
+  // and its `category` enum is the authoritative list above, enforced by the
+  // endpoint rather than asked for in prose. A 400 naming `response_format`
+  // steps the mode down and is remembered for the session (ai/jsonMode.ts).
   let fullText = "";
-  await runAgent({
-    ...pickConnOptions(opts),
-    extraBody,
-    preset: LORE_GENERATE_PRESET,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userParts },
-    ],
-    // Single-shot preset — tools are empty, so the context is never consulted.
-    toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
-    signal: opts.signal ?? new AbortController().signal,
-    onEvent: opts.onEvent ?? (() => {}),
-    onOutputText: (text) => {
-      fullText = text;
-      opts.onProgress(text);
+  await withJsonModeFallback(
+    pickConnOptions(opts),
+    `${systemPrompt}
+${promptText}`,
+    loreEntitySchema(categoryIds),
+    async (json) => {
+      fullText = "";
+      const userParts = [
+        ...baseUserParts,
+        ...(json.cue ? [{ type: "text" as const, text: json.cue }] : []),
+      ];
+      await runAgent({
+        ...pickConnOptions(opts),
+        extraBody: json.extraBody,
+        preset: LORE_GENERATE_PRESET,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userParts },
+        ],
+        // Single-shot preset — tools are empty, so the context is never consulted.
+        toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
+        signal: opts.signal ?? new AbortController().signal,
+        onEvent: opts.onEvent ?? (() => {}),
+        onOutputText: (text) => {
+          fullText = text;
+          opts.onProgress(text);
+        },
+      });
     },
-  });
+  );
 
   // Extract JSON: markdown fences first, then outermost braces. Sliced to the
   // outermost braces even when the reply already starts with one — a model that

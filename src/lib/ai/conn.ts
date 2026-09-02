@@ -24,6 +24,7 @@ import type { Model, Provider } from "./configDb";
 import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolId } from "./serverTools";
+import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode } from "./types";
 import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
 
@@ -83,6 +84,12 @@ export interface ConnOptions {
   thinkingBudget?: number;
   /** Endpoint-run tools this model may use on its own (web search). */
   serverTools?: ServerToolId[];
+  /**
+   * How this model is asked for JSON on a structured task; absent = auto.
+   * Read by `jsonModeShaping`, not by the adapters — the shaping happens where
+   * the request is built and travels as `extraBody`.
+   */
+  structuredOutput?: StructuredOutputMode;
 }
 
 /**
@@ -115,6 +122,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     thinkingCategory: resolveThinkingCategory(model, provider.apiStandard).id,
     thinkingBudget: model.thinkingBudget,
     serverTools: model.serverTools,
+    structuredOutput: model.structuredOutput,
   };
 }
 
@@ -141,6 +149,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     thinkingCategory: o.thinkingCategory,
     thinkingBudget: o.thinkingBudget,
     serverTools: o.serverTools,
+    structuredOutput: o.structuredOutput,
   };
 }
 

@@ -369,9 +369,39 @@
 }
 
 .modelCtx {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+/* 设计稿 19h: the context figure was measured by the probe, not typed. The same
+   dot precedes the measured badge inside the editor. */
+.measDot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  background: var(--stg-ok);
+}
+
+/* Declaration marks — thinking / web / PDF / 译 — mono, hairline, at most
+   three before "+n". Only explicit declarations; auto is not a declaration. */
+.marks {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+.mark {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 

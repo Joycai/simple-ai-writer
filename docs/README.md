@@ -50,6 +50,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [anthropic-plan.md](api/anthropic-plan.md) | `shipped` `unverified` | The Anthropic family, incl. MiniMax-M3's dialect (§10). §7 needs live requests |
 | [gemini-plan.md](api/gemini-plan.md) | `shipped` `unverified` | The Gemini family. §5 needs live requests |
 | [reasoning-plan.md](api/reasoning-plan.md) | `partial` | Reasoning effort + chain-of-thought. OpenAI family done; Gemini/Anthropic mapping and the display UI are not |
+| [structured-output-plan.md](api/structured-output-plan.md) | `shipped` `unverified` | Per-model 结构化输出 declaration (自动 / 关闭 / JSON 模式 / JSON Schema). §1 audits what the lore features used before (`json_object` + forced tools, never `json_schema`); §5 the auto tier (family default → id table → learn from the 400, remembered per endpoint+model for the session). All built incl. the model-drawer row and the lore-entity schema; the five DashScope live checks in §11 are not run |
 
 ## feature/ — per-subsystem dossiers
 
@@ -121,6 +122,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [file-panel-redesign-brief.md](feature/file-panel-redesign-brief.md) | `shipped` | 「文件」面板重做 —— 给 Claude Design 的任务书（请求新开 `17 文件面板 Files Panel`）：顶部四层吃掉 216px · 工具栏 7 个图标在最窄档只有 116px 可用 · 悬停/多选/当前打开三态同底 · 一行 28px 里五样东西互相打架（章数一 hover 就消失）· 拖拽与剪贴板九种记号各自为政 · 「全部折叠」落在哪。含**数据边界**清单（节点只有 `{名字,路径,是否目录,子节点}`），防止设计出画不出来的东西。**文末是实现记录**：设计稿的主干决定（选中＝左槽 3px 赭石，赭石淡底只给「当前打开」）、落点表、与设计稿的十处出入，以及「容器查询不改变特异性，密度档必须写在文件末尾」那条实测 |
 | [file-tree-collapse-all-brief.md](feature/file-tree-collapse-all-brief.md) | `shipped` | 文件树工具栏加「全部折叠」：为什么**不能靠清空 `expandedDirs`**（默认值是 `stored ?? depth === 0`，清空会让顶层回弹成展开）· 为什么必须是一次 set · 折叠后选区要收敛到可见行（否则「删除 5 项」会出现在屏幕上只剩 1 项的时候）· 不做切换态 / 不做「全部展开」的理由。设计稿推翻了「不做切换态 / 不加快捷键」两条，都对（记在文首） |
 | [prompt-snippets-ui-brief.md](feature/prompt-snippets-ui-brief.md) | `shipped` | 提示词库（快捷片段）：右键存入、模型选择器同款的取用浮层、设置页重做，以及五件明确没做的事 |
+| [model-drawer-redesign-brief.md](feature/model-drawer-redesign-brief.md) | `shipped` | 「模型」编辑抽屉重做（设计稿 19 → `ModelDrawer.tsx` + `ModelDrawerBits.tsx`）：按「有没有值」折叠 · **虚线 ＝ 什么都不发** · 实测值 vs 手填值（新增 `probedContextSize` / `probedMaxOutput`）· 两级提示 · 「将发送」用适配器自己的 body 函数算 · 列表行的声明标记。含任务书原文（24 个参数的数据边界表）与七处出入——最要紧的一处：结构化输出「自动」在未识别的模型上是 JSON 模式而不是设计稿写的「关闭」，摘要按真实解析显示 |
 | [settings-ai-tabs-ui-brief.md](feature/settings-ai-tabs-ui-brief.md) | `shipped` | 设置页「AI 配置」分组新增「实验室」（七个 Beta 开关从通用搬来）与「上下文与记忆」（图片最大长边搬来，且是将来知识库预算 / 默认最大输出 / 前情提要模型的家）：给 Claude Design 的任务书（请求新开 `18 设置 · AI 配置`）+ 两片 PR 的实施计划，含「Word 开关翻动时导航里的排版格式要即时出现」那条现有漏洞 |
 | [path-spelling-plan.md](feature/path-spelling-plan.md) | `shipped` `unverified` | Normalise at the door, one spelling app-wide. §6 needs a real Windows machine |
 | [web-access-plan.md](feature/web-access-plan.md) | `research` `stale` | 局域网 Web 访问：桌面进程里嵌 axum、前端 transport 三态、绝对路径不上网线、API key 不下发浏览器。结论仍成立，但数字基于 v1.17.0——文首有复核表 |
