@@ -47,6 +47,28 @@ cargo build --release
 目标机器即可,不需要 Rust、不需要运行时。它动态链接 libc(所以 Docker 用
 `distroless/cc` 而不是 `distroless/static`),除此之外没有外部依赖。
 
+### 不想自己编译:用 GitHub Actions 打包
+
+仓库里有一个**手动触发**的 workflow
+[`Package server`](../.github/workflows/package-server.yml)(GitHub → Actions →
+Package server → Run workflow)。它在四个平台上各编一份并作为 artifact 上传:
+
+| 目标 | 包名 | 里面有什么 |
+| --- | --- | --- |
+| Linux x86_64 | `aiw-kb-server-<版本>-x86_64-unknown-linux-gnu.tar.gz` | `aiw-kb-server` |
+| Linux arm64(NAS / 树莓派) | `…-aarch64-unknown-linux-gnu.tar.gz` | `aiw-kb-server` |
+| Windows x64 | `…-x86_64-pc-windows-msvc.zip` | `aiw-kb-server.exe` + `aiw-kb-tray.exe`(带图标和版本信息,缺了会直接编译失败而不是静默放行) |
+| macOS(Apple Silicon) | `…-aarch64-apple-darwin.tar.gz` | `aiw-kb-server` |
+
+每个包里还附了这份手册和 `README.md`。两个输入都可选:**version** 留空就用
+`Cargo.toml` 里的版本,填了就以它为准(写进 `--version`、Windows 的文件属性和包名);
+勾上 **publish** 会额外发一个 GitHub Release,tag 是 `server-v<版本>`(app 自己的
+release 用 `v<版本>`,两条线不撞),并附 `SHA256SUMS`。
+
+Linux 包故意在 Ubuntu 22.04 上编:动态链接 glibc 的二进制向上兼容不向下兼容,
+22.04 的 glibc 2.35 是能跑在 2023 年前后的 NAS 固件上的下限;更老的系统仍需按下面
+的方式自己编。
+
 ### 交叉编译到 NAS / 树莓派
 
 ```bash

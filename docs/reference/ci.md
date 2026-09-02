@@ -7,6 +7,11 @@ The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request t
 > manually-triggered [`Release`](../../.github/workflows/release.yml) workflow — not by CI.
 > They are **not code-signed** today; [macos-signing.md](macos-signing.md) is the manual for
 > changing that on macOS, and says what it does and doesn't buy.
+>
+> The sync server's prebuilt binaries (Linux x86_64 / arm64, Windows with the tray exe, macOS)
+> come from a third, also manually-triggered workflow,
+> [`Package server`](../../.github/workflows/package-server.yml) — artifacts by default, a
+> `server-v<version>` GitHub Release on request. Usage: [`server/DEPLOY.md`](../../server/DEPLOY.md) §1.
 
 ## What it checks
 
