@@ -1,10 +1,41 @@
-# 「模型」编辑抽屉重做 —— 给 Claude Design 的任务书
+# 「模型」编辑抽屉重做 —— 设计任务书与落地记录
 
-> 状态：`planned`。任务书于 2026-09-02 写成，尚未发出、尚无设计稿。请求在 claude.ai/design 项目里新开 **`19 模型编辑 Model Editor`**，以 `18 设置 · AI 配置 Settings AI` 为左侧列表的基线、`04 系统设置 Settings` 为色系基线。
+> 状态：`shipped`（2026-09-02，真机验证待作者）。设计稿是 claude.ai/design 项目 `19 模型编辑 Model Editor.dc.html`（屏 19a–19h + 说明 1n），本文档下半部分（`---` 以后）是**发给设计师的任务书原文**，上半部分是落地后的口径与出入。
 >
-> 触发它的是 [`docs/api/structured-output-plan.md`](../api/structured-output-plan.md)：那份方案要往模型抽屉里再加一行「结构化输出」，而这个抽屉已经是 24 个参数竖着摞的 891 行 JSX。与其再加第 25 行，先把它重做一遍。
->
-> 设计稿回来后，本文下半部分补「落地口径与出入」，格式同 [`prompt-snippets-ui-brief.md`](prompt-snippets-ui-brief.md)。
+> 视觉口径同时记在 [`docs/reference/design-system.md`](../reference/design-system.md) → 模型编辑抽屉。
+> 触发它的 [`docs/api/structured-output-plan.md`](../api/structured-output-plan.md) 的 §8（结构化输出那一行）随本轮一起落地。
+
+## 落地了什么
+
+| 屏 | 内容 | 落点 |
+|---|---|---|
+| 19a–19f | 抽屉分六节：身份 → 计费 → 限额与实测 → 思考 → 能力声明 → 采样与前置提示词；图片模型把中间四节整块换成「出图」 | `settings/panes/ModelDrawer.tsx`（字段与保存逻辑）+ `ModelDrawerBits.tsx`（Fold / Section / Field / ToggleField / DashChip）+ `ModelDrawer.module.css` |
+| 1n 折叠规则 | 一节**有值**才展开，身份永不折，「添加模型」时计费额外打开；作者手动折 / 展只在本次抽屉里记住 | `initialOpen()` 按**打开时的行**算一次——不跟着表单实时算，否则作者清空一个字段的瞬间那一节就会合上 |
+| 1n 「未设置」 | **虚线 ＝ 什么都不发**：空输入框虚线边、选中的「自动 / 跟随默认 / 普通模型」是虚线空心 chip、关着的 toggle 虚线边、折起的空节前一枚 7px 虚线方块、「将发送」空着时同一枚方块；温度空 ＝ 虚线 + 「不发」，填 0 ＝ 实线 + 「确定性」mono 标签 | `.unset` / `.chipAuto` / `.toggleUnset` / `.dashMark`；`Toggle` 加了 `className` |
+| 1n 实测标记 | 字段下方一行 mono：绿点「实测 2026-08-30 14:12」；作者一改这个值变成灰点「手填 · 覆盖 08-30 实测 131,072」——实测值不丢 | 数据层新增 `Model.probedContextSize` / `probedMaxOutput`（列 `probed_context_size` / `probed_max_output`，配置备份解析同步）；判定在 `lib/ai/modelSummary.isMeasured` |
+| 1n 两级提示 | 常驻一句话（本稿新写，已进 `aiConfig.models.brief*`）+「为什么」展开今天的 hint 全文；「全部说明」一键全开 | `Field` 的 `why` / `whyOpen` / `onWhy`；whyAll 态下关掉一条会退出全开并保留其余 |
+| 1n 联动过渡 | 节与字段都用 `grid-template-rows 0fr↔1fr` 200ms `cubic-bezier(.2,.8,.2,1)`、opacity 160ms；折起的内容 `visibility:hidden` 以免被 Tab 到 | `.fold` / `.foldOpen` / `.foldInner` |
+| 1n 能力声明 | 一列四行：联网搜索与 PDF 用 toggle，翻译格式与结构化输出用 chip 行；Sakura 的警告块选了才出现；结构化输出在 Anthropic 族只剩「自动 / 关闭」且解释常驻；「自动」下方一行 mono 显示解析结果，思考类目的「自动」同样补了一行 | `soChoices` / `soNote` / `noteCatAuto` |
+| 1n 「将发送」 | 底部按钮条上方一行 mono，随表单实时变，**用适配器自己的 body 函数算**（`reasoningBody` / `thinkingBody` / `openaiServerToolsBody` / `resolveStructuredOutput`）；只在结构化任务发的字段标「· 结构化任务时」 | `lib/ai/modelSummary.wireSummary` + `aiModelSummary.test.ts` |
+| 19h | 左侧列表一行加最多 3 枚声明标记（思考 / 联网 / PDF / 译，超出 +n；只标明确声明，自动不标；图片模型不标）+ ctx 前的实测绿点 | `ProvidersModelsPane.tsx` + `modelSummary.declarationMarks` |
+| 类目换行（问题 7） | 「自动 · 关闭」固定行首，1px 竖线隔开，厂商预设在后自由换行 | `ChipDivider` |
+
+## 与设计稿的出入（都是有理由的）
+
+- **结构化输出「自动」在未识别的模型上是 JSON 模式，不是设计稿写的「关闭」。** 设计稿 1n 与 19b 的 note 写着「自动 → 关闭 · 未识别到支持，不发 response_format」，而 `lib/ai/jsonMode.ts` 的解析是族默认 `json_object`（这正是今天所有模型的行为）。note 与「将发送」都按真实解析显示——于是 **19b（GPT-5 官方）的「将发送」不是空的**：`response_format json_schema · 结构化任务时`（GPT-5 在 id 表里）。Anthropic 族则恒显示 `thinking.type adaptive`，因为那个适配器每次请求都发它。一行说真话的摘要比一行好看的空摘要值钱。
+- **上下文档位取现有 `CONTEXT_SIZE_STOPS`**（16k / 32k / 128k / 256k / 512k / 1M），不是设计稿的 32k / 64k / 128k / 200k / 256k / 1M——那张表另有消费者。设计稿没给「清空」路径，实现里**再点一次已选中的 chip 即清空**。
+- **探测面板整块沿用**（快速探测按钮 + 深度检测勾选 → 确认 → 进度 → 报告 → 应用），没有重画成两按钮条；它落在限额节里、带自己的一句话 hint。实测标记只有日期，没有「快速 / 深度」种类——面板的回执里没有这一项，加一列去存它不值。
+- **思考强度的开 / 关类目也放了一枚「跟随默认」虚线 chip。** 设计稿只画了开 / 关两枚，但「跟随默认 ＝ 不发」是这一屏自己的规则，两枚都不亮的状态需要一个名字。
+- **温度改成单个数字框**（照设计稿），原来的 0 / 0.3 / 0.7 / 1 chips 去掉了；「确定性」标签只在 0 时出现。
+- **19g 的联动演示台**（切类目的按钮条）不实现，它是设计稿的说明装置；联动本身在抽屉里可点。
+- **英文的一句话 hint** 与中文一起进了 `en.json`；「为什么」的英文仍是今天英文 hint 的原文。
+
+## 明确没做的
+
+- 抽屉宽度、进出动画、Esc、底部按钮条：全部沿用供应商抽屉，没动。
+- 结构化输出不上左侧列表（设计稿 19h 也这么定）：它不改变模型出现在哪些候选里。
+- 模型行的启用 / 禁用开关仍不暴露。
+- 设计稿 1n 提到的「协议族在供应商那边改回来时能力声明的行按同样方式增减」——今天抽屉是按供应商打开的，改协议族要关掉抽屉去改供应商，回来时是一次全新挂载，没有过渡可做。
 
 ---
 

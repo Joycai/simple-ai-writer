@@ -4,10 +4,12 @@
 > `Model.structuredOutput` 字段 + `structured_output` 列 + 配置备份解析、`ConnOptions`
 > 携带、`jsonMode.ts` 的三层解析（族默认 → id 前缀表 → 作者声明）与 `json_schema`
 > 形状、`jsonSchemaStrict.ts` 的 `strictify` / `stripNulls`、`structured.ts` 兜底路径
-> 带 schema、`generator.ts` 读模型声明。**没做的**：§8 的模型抽屉 UI（等
-> [`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)
-> 的设计稿一起做——今天字段只能从备份文件里写入）、§5.3 的 400 学习与 memo、
-> `generator.ts` 的 `LoreEntitySchema`（第 2 片）、§11 的五条实测（仍 `unverified`）。
+> 带 schema、`generator.ts` 读模型声明。同日随设计稿 19 落地了 §8 的模型抽屉那一行
+> （[`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)；
+> 与 §8 的一处出入：Anthropic 族只显示「自动 / 关闭」且解释常驻，Gemini 族暂无
+> JSON Schema 一枚，「自动」下方一行 mono 显示实际解析到的档）。**没做的**：
+> §5.3 的 400 学习与 memo、`generator.ts` 的 `LoreEntitySchema`（第 2 片）、
+> §11 的五条实测（仍 `unverified`）。
 > 前半是对现状的审计（§1–§3，结论：知识库相关功能**已经在用**协议级的结构化输出，
 > 但只用到 `json_object` 一档，且没有任何按模型关掉或升级它的开关），后半是方案（§4–§10）。
 > 协议事实见 [`structured.md`](structured.md)，千问平台的官方口径见 §2；

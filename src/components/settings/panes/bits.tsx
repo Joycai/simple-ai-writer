@@ -118,10 +118,18 @@ export function ChipRow({ children }: { children: ReactNode }) {
   return <div className={ui.chipRow}>{children}</div>;
 }
 
-export function Toggle({ on, onChange, label }: { on: boolean; onChange: (next: boolean) => void; label: string }) {
+export function Toggle({
+  on, onChange, label, className,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  /** Extra class on the track — the model editor dashes an off toggle's border. */
+  className?: string;
+}) {
   return (
     <button
-      className={`${ui.toggle} ${on ? ui.toggleOn : ""}`}
+      className={`${ui.toggle} ${on ? ui.toggleOn : ""} ${className ?? ""}`}
       role="switch"
       aria-checked={on}
       aria-label={label}

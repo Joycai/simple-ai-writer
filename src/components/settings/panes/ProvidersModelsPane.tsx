@@ -7,6 +7,7 @@ import {
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
 import type { Model, ModelType } from "../../../lib/ai/configDb";
+import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
 import type { ProviderMove } from "../../../lib/ai/providerOrder";
 import { MOD_KEY } from "../../../lib/platform";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
@@ -18,6 +19,9 @@ import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 
 const TYPE_FILTERS: (ModelType | "all")[] = ["all", "text", "multimodal", "image", "video"];
+
+/** Declaration marks shown on a model row before the rest fold into "+n" (设计稿 19h). */
+const MAX_MARKS = 3;
 
 /** Bucket for models whose provider is gone — a config import can leave those
  *  behind, and grouping by provider would otherwise hide them entirely. */
@@ -432,9 +436,29 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       <span className={hub.modelName}>{m.name}</span>
                       <span className={hub.modelId}>{m.modelId}</span>
                       {m.contextSize ? (
-                        <span className={hub.modelCtx}>{m.contextSize.toLocaleString()} ctx</span>
+                        <span className={hub.modelCtx}>
+                          {/* The green dot = this number was measured, not typed (设计稿 19). */}
+                          {isMeasured(m.contextSize, m.probedContextSize) && <span className={hub.measDot} />}
+                          {m.contextSize.toLocaleString()} ctx
+                        </span>
                       ) : null}
                       <span className={hub.groupSpacer} />
+                      {(() => {
+                        // Explicit declarations only — auto is never marked.
+                        const marks = declarationMarks(m);
+                        if (marks.length === 0) return null;
+                        const shown = marks.slice(0, MAX_MARKS);
+                        return (
+                          <span className={hub.marks}>
+                            {shown.map((k) => (
+                              <span key={k} className={hub.mark}>{t(`aiConfig.models.mark_${k}`)}</span>
+                            ))}
+                            {marks.length > MAX_MARKS && (
+                              <span className={hub.mark}>{t("aiConfig.models.markMore", { n: marks.length - MAX_MARKS })}</span>
+                            )}
+                          </span>
+                        );
+                      })()}
                       <span className={hub.modelType} data-type={m.type}>
                         {t(`aiConfig.modelTypes.${m.type}`)}
                       </span>

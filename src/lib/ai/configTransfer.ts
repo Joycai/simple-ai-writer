@@ -251,6 +251,8 @@ export function parseConfigBundle(
       maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
       temperature: typeof r.temperature === "number" ? r.temperature : undefined,
       probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
+      probedContextSize: typeof r.probedContextSize === "number" ? r.probedContextSize : undefined,
+      probedMaxOutput: typeof r.probedMaxOutput === "number" ? r.probedMaxOutput : undefined,
       // Parsed rather than cast: a backup written by a newer build (or edited by
       // hand) can carry a level this build doesn't know, and an unknown level
       // must degrade to "send nothing" rather than reach the wire.
