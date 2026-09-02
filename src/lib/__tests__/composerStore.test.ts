@@ -53,8 +53,28 @@ describe("composerStore", () => {
     ]);
   });
 
+  it("keeps a roleplay draft per agent until that agent's message is sent", () => {
+    s().setRoleplayDraft("lin", "*推门进来*");
+    s().setRoleplayRefs("lin", [loreRef("lin-shen")]);
+    s().setRoleplayDraft("wu", (prev) => `${prev}「你来了」`);
+
+    // Reopening the panel remounts the chat for the active agent — it reads
+    // its own slot back, and never another agent's.
+    expect(s().roleplay.lin).toEqual({ draft: "*推门进来*", refs: [loreRef("lin-shen")] });
+    expect(s().roleplay.wu).toEqual({ draft: "「你来了」", refs: [] });
+    expect(s().roleplay.nobody).toBeUndefined();
+
+    s().clearRoleplayComposer("lin");
+    expect(s().roleplay.lin).toBeUndefined();
+    expect(s().roleplay.wu?.draft).toBe("「你来了」");
+    // Clearing an agent that never typed is a no-op, not a new empty slot.
+    s().clearRoleplayComposer("nobody");
+    expect("nobody" in s().roleplay).toBe(false);
+  });
+
   it("drops everything on a project switch", () => {
     s().setChatDraft("给这本书的问题");
+    s().setRoleplayDraft("lin", "*推门进来*");
     s().setPanelOutline("大纲");
     s().setPanelKnowledge("补充设定");
     s().setPanelRequirement("要求");
@@ -67,5 +87,6 @@ describe("composerStore", () => {
     expect(s().panelKnowledge).toBe("");
     expect(s().panelRequirement).toBe("");
     expect(s().panelInstruction).toBe("");
+    expect(s().roleplay).toEqual({});
   });
 });

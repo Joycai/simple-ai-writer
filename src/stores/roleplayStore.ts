@@ -25,6 +25,7 @@
 
 import { create } from "zustand";
 import i18n from "../i18n";
+import { useComposerStore } from "./composerStore";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
@@ -1220,6 +1221,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     removeAgent: async (id) => {
       const { projectPath } = get();
       get().stop(id);
+      // 未发出的那句话是写给这个 agent 的，它没了，草稿也没有去处。
+      useComposerStore.getState().clearRoleplayComposer(id);
       set((st) => {
         const agents = { ...st.agents };
         delete agents[id];

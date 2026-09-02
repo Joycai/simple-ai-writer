@@ -43,9 +43,32 @@ interface ComposerState {
   setPanelRequirement: (update: Update<string>) => void;
   setPanelInstruction: (update: Update<string>) => void;
 
+  // ── 角色扮演 (RoleplayChat) ──
+  /**
+   * Keyed by agent id: the roleplay panel remounts its chat per agent (`key`),
+   * and a line written to one character must not appear under the next one.
+   * Absent = nothing typed, which is what a fresh mount reads as `""` / `[]`.
+   */
+  roleplay: Record<string, RoleplayComposer>;
+  setRoleplayDraft: (agentId: string, update: Update<string>) => void;
+  setRoleplayRefs: (agentId: string, update: Update<AttachedItem[]>) => void;
+  /** Message sent, or the agent removed — that composer starts empty again. */
+  clearRoleplayComposer: (agentId: string) => void;
+
   /** Project switch — an outline written for one book means nothing in the next. */
   resetAll: () => void;
 }
+
+export interface RoleplayComposer {
+  draft: string;
+  refs: AttachedItem[];
+}
+
+const EMPTY_ROLEPLAY: RoleplayComposer = { draft: "", refs: [] };
+
+/** Read side for a component: a stable empty value when the agent has nothing pending. */
+export const roleplayComposerOf = (s: ComposerState, agentId: string): RoleplayComposer =>
+  s.roleplay[agentId] ?? EMPTY_ROLEPLAY;
 
 export const useComposerStore = create<ComposerState>((set) => ({
   chatDraft: "",
@@ -63,8 +86,24 @@ export const useComposerStore = create<ComposerState>((set) => ({
   setPanelRequirement: (update) => set((s) => ({ panelRequirement: apply(update, s.panelRequirement) })),
   setPanelInstruction: (update) => set((s) => ({ panelInstruction: apply(update, s.panelInstruction) })),
 
+  roleplay: {},
+  setRoleplayDraft: (agentId, update) => set((s) => {
+    const prev = roleplayComposerOf(s, agentId);
+    return { roleplay: { ...s.roleplay, [agentId]: { ...prev, draft: apply(update, prev.draft) } } };
+  }),
+  setRoleplayRefs: (agentId, update) => set((s) => {
+    const prev = roleplayComposerOf(s, agentId);
+    return { roleplay: { ...s.roleplay, [agentId]: { ...prev, refs: apply(update, prev.refs) } } };
+  }),
+  clearRoleplayComposer: (agentId) => set((s) => {
+    if (!(agentId in s.roleplay)) return {};
+    const { [agentId]: _gone, ...rest } = s.roleplay;
+    return { roleplay: rest };
+  }),
+
   resetAll: () => set({
     chatDraft: "", chatRefs: [],
     panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
+    roleplay: {},
   }),
 }));
