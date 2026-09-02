@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users,
-  RefreshCw, FileType, FlaskConical, Brain,
+  RefreshCw, FileType, FlaskConical, Scroll,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
@@ -46,6 +46,20 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   // the 实验室 pane, and the author flipping it should see this item arrive
   // (or leave) at once, not on the next open.
   const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
+  // 设计稿 18: the frame the Word switch goes on, the item expands from zero
+  // height and its background is dyed accent-tint, fading out within ~500ms —
+  // "highlight for one beat" so the author sees *where* the switch acted.
+  // Off collapses in reverse with no flash.
+  const [docxFlash, setDocxFlash] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDocxToggled = useCallback((on: boolean) => {
+    setDocxOn(on);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    if (!on) { setDocxFlash(false); return; }
+    setDocxFlash(true);
+    flashTimer.current = setTimeout(() => setDocxFlash(false), 240);
+  }, []);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
   // A pane with its own dismissable layer (the provider/model drawer) claims
   // Escape while it is up, so one press peels off one layer.
@@ -67,10 +81,10 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
 
   const pageVariants = useMotionPreset(panelFade);
 
-  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string) => (
+  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string, extra = "") => (
     <button
       key={id}
-      className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""}`}
+      className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""} ${extra}`}
       onClick={() => setActiveTab(id)}
     >
       <span className={styles.navIcon}>{icon}</span>
@@ -100,14 +114,22 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
         <nav className={styles.nav}>
           {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
           {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
-          {docxOn && navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat")}
+          {/* Always mounted so it can animate in and out; `inert` keeps the
+              collapsed button out of the tab order. */}
+          <div
+            className={`${styles.navCollapse} ${docxOn ? styles.navCollapseOpen : ""}`}
+            inert={!docxOn}
+          >
+            {navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat",
+              docxFlash ? styles.navItemFlash : "")}
+          </div>
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
-          {/* Icons for the two new items are provisional until 设计稿 18 lands
-              (docs/feature/settings-ai-tabs-ui-brief.md §2.1). */}
-          {navBtn("context-memory", <Brain size={15} />, "systemSettings.tabs.contextMemory")}
+          {/* Scroll (设计稿 18): what a conversation reads into the model is
+              "one roll" — both the text being read and the thing remembered. */}
+          {navBtn("context-memory", <Scroll size={15} />, "systemSettings.tabs.contextMemory")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
           {navBtn("lab", <FlaskConical size={15} />, "systemSettings.tabs.lab")}
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.dataGroup")}</div>
@@ -129,7 +151,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "usage" && <UsagePane />}
             {activeTab === "context-memory" && <ContextMemoryPane />}
-            {activeTab === "lab" && <LabPane onDocxToggled={setDocxOn} />}
+            {activeTab === "lab" && <LabPane onDocxToggled={handleDocxToggled} onNavigate={setActiveTab} />}
             {activeTab === "sync" && <SyncPane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}
             {activeTab === "about" && <AboutPane />}

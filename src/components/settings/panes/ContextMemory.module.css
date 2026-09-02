@@ -1,0 +1,45 @@
+/* 设置 → AI 配置 → 上下文与记忆 (设计稿 18).
+
+   A number with its unit beside it and its range beneath, right edges
+   aligned — the same column every future row on this pane will share (B2:
+   110px field, fixed-width unit), so the page holds its shape as it fills. */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.unit {
+  width: 18px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.range {
+  padding-right: 26px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  color: var(--color-text-faint);
+}
+
+/* Where today's other context knobs live — a signpost, not a promise. */
+.elsewhere {
+  margin-top: var(--space-8);
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--stg-text-faint);
+}
