@@ -16,11 +16,12 @@
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
-        return;
-    }
+    // Host-gated (the build dependency only exists on a Windows host) and
+    // target-gated (cross-compiling *from* Windows to a NAS gets no resources).
     #[cfg(windows)]
-    windows::embed();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        windows::embed();
+    }
 }
 
 #[cfg(windows)]
