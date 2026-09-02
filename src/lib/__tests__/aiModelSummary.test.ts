@@ -3,8 +3,11 @@
  * derived from the adapters' own body functions, so a declared field shows up
  * spelled as the wire spells it, and an undeclared model shows nothing at all.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { __resetJsonModeMemo, noteJsonModeRefused } from "../ai/jsonMode";
 import { declarationMarks, isMeasured, wireSummary, type WireInput } from "../ai/modelSummary";
+
+afterEach(() => __resetJsonModeMemo());
 
 const base: WireInput = { type: "text", modelId: "some-model" };
 
@@ -55,6 +58,18 @@ describe("wireSummary", () => {
     expect(wireSummary({ ...base, structuredOutput: "json_object" }, "gemini")).toEqual([
       { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" },
     ]);
+  });
+
+  it("reports the mode the endpoint will actually get once it has refused a stronger one", () => {
+    const t = { standard: "openai_compat" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl))
+      .toContainEqual({ key: "response_format", value: "json_schema", scope: "structured" });
+    noteJsonModeRefused(t, "json_schema");
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl))
+      .toContainEqual({ key: "response_format", value: "json_object", scope: "structured" });
+    // Another endpoint serving the same model id is unaffected.
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, "https://other/v1"))
+      .toContainEqual({ key: "response_format", value: "json_schema", scope: "structured" });
   });
 
   it("shows the Anthropic thinking body and max_tokens, never response_format", () => {

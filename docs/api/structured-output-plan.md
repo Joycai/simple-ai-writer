@@ -1,13 +1,17 @@
 # 结构化输出开关：按模型声明 JSON 模式 / JSON Schema
 
-> **状态：`shipped` `unverified`** —— 2026-09-02 定案并全部落地：第 1 片（数据层、三层解析、
-> `json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行——随设计稿 19，见
-> [`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)）
-> 与第 2 片（§5.3 的 400 学习与 memo：`jsonMode.ts` 的 `withJsonModeFallback`，两处调用方都走它；
-> `generator.ts` 的 `loreEntitySchema`，`category` 用 enum 钉住）。第 3 片（可预测降级时跳过强制
-> 工具那一趟、模型行显示本会话降级）没做，见 §7 第 3 点。`unverified` 指 §11 的五条 DashScope
-> 实测一条都没跑：本文对 DashScope 实际行为的陈述仍是文档转述，400 判据用的是 OpenAI 的报文
-> 拼写（`response_format` 字样），DashScope 的样本仍欠着。
+> **状态：`shipped` `unverified`** —— 2026-09-02 定案，三片当天全部落地。第 1 片：数据层、
+> 三层解析、`json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行（随设计稿 19，
+> 见 [`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)）。
+> 第 2 片：§5.3 的 400 学习与 memo（`jsonMode.ts` 的 `withJsonModeFallback`，两处调用方都走它），
+> `generator.ts` 的 `loreEntitySchema`（`category` 用 enum 钉住）。第 3 片：§7 第 3 点——降级可预测
+> （`forcesToolChoiceAuto`，或 `toolChoice.ts` 的 memo 已记下端点拒绝强制）**且**实际生效的档是
+> `json_schema` 时，`structured.ts` 跳过强制工具那一趟直接走 JSON 路径（`forcedToolIsWasted`）；
+> 只有 `json_object` 可退时仍然试工具——`auto` 下模型多半还是会调，一次工具调用强于「合法 JSON，
+> 形状靠散文」；§5.4 的「本会话实测降级」在抽屉的结构化输出行下方一行 mono 显示，且「将发送」
+> 读的是 `effectiveStructuredOutput`（配置解析再按 memo 封顶，三处消费者一个答案）。
+> `unverified` 指 §11 的五条 DashScope 实测一条都没跑：本文对 DashScope 实际行为的陈述仍是文档
+> 转述，400 判据用的是 OpenAI 的报文拼写（`response_format` 字样），DashScope 的样本仍欠着。
 > 前半是对现状的审计（§1–§3，结论：知识库相关功能**已经在用**协议级的结构化输出，
 > 但只用到 `json_object` 一档，且没有任何按模型关掉或升级它的开关），后半是方案（§4–§10）。
 > 协议事实见 [`structured.md`](structured.md)，千问平台的官方口径见 §2；

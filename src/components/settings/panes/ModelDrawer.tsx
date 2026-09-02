@@ -41,7 +41,7 @@ import {
   SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import {
-  knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
+  jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, wireSummary } from "../../../lib/ai/modelSummary";
 import {
@@ -525,7 +525,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard)
+      }, provider.apiStandard, provider.baseUrl)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────
@@ -544,11 +544,25 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     : family === "gemini"
       ? t("aiConfig.models.briefSoGemini")
       : t("aiConfig.models.briefSoOpenai");
-  const soNote = form.structuredOutput !== "auto" || family === "anthropic"
-    ? undefined
-    : soAutoLifted
-      ? { note: t("aiConfig.models.noteSoSchema"), noteTone: "ok" as const }
-      : { note: t("aiConfig.models.noteSoJson"), noteTone: "muted" as const };
+  // What this endpoint has refused this session (lib/ai/jsonMode.ts memo): a
+  // measurement, so it outranks the resolved-config note — the author sees
+  // what is actually being sent, and that their pick did not take.
+  const soCeiling = provider
+    ? jsonModeCeiling({ standard: provider.apiStandard, baseUrl: provider.baseUrl, modelId: form.modelId })
+    : undefined;
+  const soNote = soCeiling
+    ? {
+        note: t("aiConfig.models.noteSoCeiling", {
+          refused: t(SO_LABEL_KEY[soCeiling === "off" ? "json_object" : "json_schema"]),
+          mode: t(SO_LABEL_KEY[soCeiling]),
+        }),
+        noteTone: "faint" as const,
+      }
+    : form.structuredOutput !== "auto" || family === "anthropic"
+      ? undefined
+      : soAutoLifted
+        ? { note: t("aiConfig.models.noteSoSchema"), noteTone: "ok" as const }
+        : { note: t("aiConfig.models.noteSoJson"), noteTone: "muted" as const };
 
   const inputCls = (unset: boolean, extra = "") => `${s.input} ${unset ? s.unset : ""} ${extra}`;
 

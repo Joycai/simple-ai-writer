@@ -50,7 +50,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [anthropic-plan.md](api/anthropic-plan.md) | `shipped` `unverified` | The Anthropic family, incl. MiniMax-M3's dialect (§10). §7 needs live requests |
 | [gemini-plan.md](api/gemini-plan.md) | `shipped` `unverified` | The Gemini family. §5 needs live requests |
 | [reasoning-plan.md](api/reasoning-plan.md) | `partial` | Reasoning effort + chain-of-thought. OpenAI family done; Gemini/Anthropic mapping and the display UI are not |
-| [structured-output-plan.md](api/structured-output-plan.md) | `shipped` `unverified` | Per-model 结构化输出 declaration (自动 / 关闭 / JSON 模式 / JSON Schema). §1 audits what the lore features used before (`json_object` + forced tools, never `json_schema`); §5 the auto tier (family default → id table → learn from the 400, remembered per endpoint+model for the session). All built incl. the model-drawer row and the lore-entity schema; the five DashScope live checks in §11 are not run |
+| [structured-output-plan.md](api/structured-output-plan.md) | `shipped` `unverified` | Per-model 结构化输出 declaration (自动 / 关闭 / JSON 模式 / JSON Schema). §1 audits what the lore features used before (`json_object` + forced tools, never `json_schema`); §5 the auto tier (family default → id table → learn from the 400, remembered per endpoint+model for the session). All three slices built — the model-drawer row, the lore-entity schema, and skipping the forced-tool attempt where the downgrade is predictable and strict schema is available; the five DashScope live checks in §11 are not run |
 
 ## feature/ — per-subsystem dossiers
 

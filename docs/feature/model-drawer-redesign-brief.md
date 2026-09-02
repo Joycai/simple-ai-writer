@@ -19,6 +19,7 @@
 | 1n 「将发送」 | 底部按钮条上方一行 mono，随表单实时变，**用适配器自己的 body 函数算**（`reasoningBody` / `thinkingBody` / `openaiServerToolsBody` / `resolveStructuredOutput`）；只在结构化任务发的字段标「· 结构化任务时」 | `lib/ai/modelSummary.wireSummary` + `aiModelSummary.test.ts` |
 | 19h | 左侧列表一行加最多 3 枚声明标记（思考 / 联网 / PDF / 译，超出 +n；只标明确声明，自动不标；图片模型不标）+ ctx 前的实测绿点 | `ProvidersModelsPane.tsx` + `modelSummary.declarationMarks` |
 | 类目换行（问题 7） | 「自动 · 关闭」固定行首，1px 竖线隔开，厂商预设在后自由换行 | `ChipDivider` |
+| 本会话实测降级（计划 §5.4） | 端点在本会话里拒绝过某一档结构化输出，chip 行下方一行灰点 mono「本会话实测 · 端点拒绝了 JSON Schema，已降为 JSON 模式」，盖过「自动 → …」那一行；「将发送」同步显示实际生效的档 | `jsonModeCeiling` / `effectiveStructuredOutput`；memo 只在内存，重启即忘，所以不入列表行 |
 
 ## 与设计稿的出入（都是有理由的）
 

@@ -1951,7 +1951,8 @@
       "mark_translate": "JA→ZH",
       "markMore": "+{{n}}",
       "sumEdit": "edit",
-      "translateLabel": "Translation model format"
+      "translateLabel": "Translation model format",
+      "noteSoCeiling": "this session · endpoint refused {{refused}}, now {{mode}}"
     },
     "probe": {
       "title": "Probe real limits",

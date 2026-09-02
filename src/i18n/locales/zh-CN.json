@@ -1946,7 +1946,8 @@
       "mark_translate": "译",
       "markMore": "+{{n}}",
       "sumEdit": "可修图",
-      "translateLabel": "翻译模型格式"
+      "translateLabel": "翻译模型格式",
+      "noteSoCeiling": "本会话实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}"
     },
     "probe": {
       "title": "探测真实上限",

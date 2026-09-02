@@ -61,18 +61,21 @@ export function isForcedToolChoiceRejection(err: unknown): boolean {
  * One endpoint+model. The standard is in the key because one host can serve
  * several protocol families and they don't have to agree.
  */
-function endpointKey(opts: StreamOptions): string {
+/** The three fields that name an endpoint+model — a `ConnOptions` bag qualifies too. */
+type Endpoint = Pick<StreamOptions, "standard" | "baseUrl" | "modelId">;
+
+function endpointKey(opts: Endpoint): string {
   return `${opts.standard} ${opts.baseUrl} ${opts.modelId}`;
 }
 
 const refused = new Set<string>();
 
 /** Has this endpoint+model already answered a forced choice with a 400? */
-export function forcedToolChoiceRefused(opts: StreamOptions): boolean {
+export function forcedToolChoiceRefused(opts: Endpoint): boolean {
   return refused.has(endpointKey(opts));
 }
 
-export function noteForcedToolChoiceRefused(opts: StreamOptions): void {
+export function noteForcedToolChoiceRefused(opts: Endpoint): void {
   refused.add(endpointKey(opts));
 }
 

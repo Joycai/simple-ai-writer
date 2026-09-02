@@ -173,8 +173,7 @@ export function jsonModeShaping(
   schema?: JsonSchemaSource,
 ): JsonModeShaping {
   const t: JsonModeTarget = typeof target === "string" ? { standard: target } : target;
-  // What the config says, capped by what this endpoint has already refused.
-  const mode = capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  const mode = effectiveStructuredOutput(t);
 
   if (mode === "off") {
     // No native enforcement anywhere — the cue is the whole mechanism. On
@@ -251,6 +250,16 @@ export function downgradeJsonMode(mode: StructuredOutputMode): StructuredOutputM
 
 function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode | undefined): StructuredOutputMode {
   return ceiling && MODE_RANK[ceiling] < MODE_RANK[mode] ? ceiling : mode;
+}
+
+/**
+ * The mode a request to this endpoint+model will actually use: what the config
+ * says (`resolveStructuredOutput`), capped by what the endpoint has refused this
+ * session. The one answer the shaping, the 「将发送」 line and the "is the forced
+ * tool attempt worth making" check all read — so they cannot disagree.
+ */
+export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMode {
+  return capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
 }
 
 /**

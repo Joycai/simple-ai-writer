@@ -13,7 +13,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  __resetJsonModeMemo, downgradeJsonMode, isJsonModeRejection, JSON_ONLY_CUE, jsonModeCeiling,
+  __resetJsonModeMemo, downgradeJsonMode, effectiveStructuredOutput, isJsonModeRejection, JSON_ONLY_CUE, jsonModeCeiling,
   jsonModeShaping, knownJsonSchemaModel, noteJsonModeRefused, parseStructuredOutputMode,
   resolveStructuredOutput, withJsonModeFallback,
 } from "../ai/jsonMode";
@@ -194,6 +194,13 @@ describe("json-mode refusal memo", () => {
     expect(jsonModeShaping(qwen, WITH, SCHEMA).mode).toBe("json_object");
     noteJsonModeRefused(qwen, "json_object");
     expect(jsonModeShaping(qwen, WITH, SCHEMA)).toEqual({ mode: "off", cue: JSON_ONLY_CUE });
+  });
+
+  it("is what effectiveStructuredOutput reads, so every consumer sees the same capped answer", () => {
+    expect(effectiveStructuredOutput(qwen)).toBe("json_schema");
+    noteJsonModeRefused(qwen, "json_schema");
+    expect(effectiveStructuredOutput(qwen)).toBe("json_object");
+    expect(effectiveStructuredOutput({ ...qwen, structuredOutput: "off" })).toBe("off");
   });
 
   it("caps an explicit declaration too — a wrong pick costs the mode, not the feature", () => {

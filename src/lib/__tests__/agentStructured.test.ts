@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamOptions, ToolDefinition } from "../ai/types";
 import { runStructuredTask, type StructuredTaskArgs } from "../agent/structured";
 import { __resetJsonModeMemo } from "../ai/jsonMode";
+import { __resetForcedToolChoiceMemo, noteForcedToolChoiceRefused } from "../ai/toolChoice";
 
 vi.mock("../ai", () => ({ streamCompletion: vi.fn() }));
 import { streamCompletion } from "../ai";
@@ -38,6 +39,7 @@ function makeArgs(overrides: Partial<StructuredTaskArgs> = {}): StructuredTaskAr
 beforeEach(() => {
   mockStream.mockReset();
   __resetJsonModeMemo();
+  __resetForcedToolChoiceMemo();
 });
 
 describe("runStructuredTask", () => {
@@ -241,5 +243,88 @@ describe("runStructuredTask", () => {
 
     await expect(runStructuredTask(makeArgs())).rejects.toThrow("Invalid function call");
     expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+
+  describe("skipping the forced-tool attempt", () => {
+    const qwenThinking = {
+      modelId: "qwen3.8-max", baseUrl: "https://relay/v1", standard: "openai_compat" as const,
+      thinkingCategory: "qwen-budget" as const, reasoningEffort: "high" as const,
+    };
+
+    it("goes straight to strict JSON when the downgrade is predictable and json_schema is available", async () => {
+      // Qwen with thinking on downgrades a forced tool_choice to `auto`
+      // (forcesToolChoiceAuto); with json_schema in hand the tool attempt buys
+      // nothing, so it is one request, not two.
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ text: '{"name":"Ava"}' });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+
+      expect(JSON.parse(await runStructuredTask(makeArgs(qwenThinking)))).toEqual({ name: "Ava" });
+      expect(mockStream).toHaveBeenCalledTimes(1);
+      const only = mockStream.mock.calls[0][0];
+      expect(only.tools).toBeUndefined();
+      expect(only.extraBody).toMatchObject({ response_format: { type: "json_schema" } });
+    });
+
+    it("still tries the tool when only json_object would be available", async () => {
+      // Under `auto` the model may well call the tool, and a tool call beats
+      // JSON mode's "valid JSON, shape in prose" — worth the attempt.
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      await runStructuredTask(makeArgs({ ...qwenThinking, modelId: "qwen-plus" }));
+      expect(mockStream).toHaveBeenCalledTimes(1);
+      expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);
+    });
+
+    it("still tries the tool when thinking is off, where forcing is legal", async () => {
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      await runStructuredTask(makeArgs({ ...qwenThinking, reasoningEffort: "off" }));
+      expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);
+    });
+
+    it("also skips once this endpoint has said with a 400 that forcing is illegal", async () => {
+      // DeepSeek V4's shape: nothing in the config predicts it, the memo does.
+      const ds = { modelId: "gpt-5", baseUrl: "https://relay/v1", standard: "openai_compat" as const };
+      noteForcedToolChoiceRefused(ds);
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ text: '{"name":"Ava"}' });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      await runStructuredTask(makeArgs(ds));
+      expect(mockStream).toHaveBeenCalledTimes(1);
+      expect(mockStream.mock.calls[0][0].tools).toBeUndefined();
+    });
+
+    it("stops skipping once the endpoint has also refused json_schema", async () => {
+      // Both memos say no: forcing is downgraded and strict mode is gone, so
+      // the tool attempt under `auto` is again the stronger bet.
+      mockStream.mockImplementationOnce(async () => {
+        throw new Error("Thinking mode does not support this tool_choice");
+      });
+      mockStream.mockImplementationOnce(async () => {
+        throw new Error("400 Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.");
+      });
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ text: '{"name":"Ava"}' });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      // A category that does not predict the downgrade, so the first run tries the tool.
+      const generic = { ...qwenThinking, thinkingCategory: "openai-generic" as const };
+      await runStructuredTask(makeArgs(generic));
+
+      mockStream.mockReset();
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ toolCalls: [{ index: 0, id: "c1", name: "emit_result", arguments: '{"name":"Ava"}' }] });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      await runStructuredTask(makeArgs(generic));
+      expect(mockStream.mock.calls[0][0].tools).toHaveLength(1);
+    });
   });
 });
