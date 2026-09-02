@@ -366,5 +366,8 @@ cargo test
 | `src/maint.rs` | 磁盘、备份打包、健康自检 |
 | `src/error.rs` | 唯一的失败通路:`ApiError` → JSON |
 | `admin/index.html` `admin/app.css` `admin/app.js` | 后台页面本体,`include_str!` 进二进制 |
+| `src/bin/tray.rs` | Windows 托盘启动器(`aiw-kb-tray`):同一个服务器在进程内跑在托盘图标后面 |
+| `build.rs` | 仅 Windows:把 `icons/*.ico` 和版本信息编进两个 exe(资源 1 = exe 图标,托盘另带 2 = 运行、3 = 停止) |
+| `icons/` | 图标本体:`build.py` 从设计数字生成 `app.ico` / `tray-*.ico` / `app.svg`,产物提交进仓库,编译时不需要 Python |
 
 改后台的页面只要重新 `cargo build` —— 三个文件是编译期嵌进去的,没有单独的前端构建。

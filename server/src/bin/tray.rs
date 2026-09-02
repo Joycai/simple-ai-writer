@@ -663,43 +663,28 @@ mod app {
             .show();
     }
 
+    /// The two tray glyphs live in the exe's own resources: `build.rs` embeds
+    /// `icons/tray-running.ico` as id 2 and `icons/tray-stopped.ico` as id 3
+    /// (id 1 is the exe icon Explorer shows), each with frames from 16 to
+    /// 64 px. Asking for the shell's small-icon size picks the frame drawn for
+    /// this DPI instead of letting the shell scale whatever it was handed.
+    /// State lives in the glyph (solid diamond = running, hollow = stopped),
+    /// not in a badge; the design is in `icons/build.py`.
     fn icon(running: bool) -> tray_icon::Icon {
-        let (rgba, size) = icon_rgba(running);
-        tray_icon::Icon::from_rgba(rgba, size, size).expect("tray icon rgba")
-    }
-
-    /// Drawn procedurally so the state can live in the icon (filled core =
-    /// running, ring only = stopped) without shipping image assets or a
-    /// decoder: a ring, plus a core disc when running, in the app's sienna.
-    fn icon_rgba(running: bool) -> (Vec<u8>, u32) {
-        const S: u32 = 32;
-        let mut buf = vec![0u8; (S * S * 4) as usize];
-        let c = (S as f32 - 1.0) / 2.0;
-        let (r, g, b) = (196u8, 116u8, 62u8);
-        for y in 0..S {
-            for x in 0..S {
-                let dx = x as f32 - c;
-                let dy = y as f32 - c;
-                let d = (dx * dx + dy * dy).sqrt();
-                let ring = coverage(d, 10.5, 14.5);
-                let core = if running { coverage(d, -1.0, 7.5) } else { 0.0 };
-                let a = (ring.max(core) * 255.0).round() as u8;
-                let i = ((y * S + x) * 4) as usize;
-                buf[i] = r;
-                buf[i + 1] = g;
-                buf[i + 2] = b;
-                buf[i + 3] = a;
-            }
-        }
-        (buf, S)
-    }
-
-    /// Pixel coverage of the annulus [lo, hi] at distance `d`, with a one-pixel
-    /// linear edge on both sides — cheap anti-aliasing.
-    fn coverage(d: f32, lo: f32, hi: f32) -> f32 {
-        let outer = (hi + 0.5 - d).clamp(0.0, 1.0);
-        let inner = (d - (lo - 0.5)).clamp(0.0, 1.0);
-        outer.min(inner)
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetSystemMetrics, SM_CXSMICON, SM_CYSMICON,
+        };
+        let (w, h) = unsafe { (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON)) };
+        let size = (w > 0 && h > 0).then_some((w as u32, h as u32));
+        tray_icon::Icon::from_resource(if running { 2 } else { 3 }, size).unwrap_or_else(|e| {
+            // Only reachable from a build that had no resource compiler (the
+            // build script warns about it): a flat sienna square keeps the
+            // tray usable rather than taking the server down with it.
+            tracing::warn!("tray icon resource missing ({e}); using a placeholder");
+            let alpha = if running { 255 } else { 96 };
+            let px = [201, 122, 71, alpha];
+            tray_icon::Icon::from_rgba(px.repeat(16 * 16), 16, 16).expect("placeholder icon")
+        })
     }
 
     /// Run-at-login via the per-user Run key: no elevation, follows the user's
@@ -746,16 +731,6 @@ mod app {
     #[cfg(test)]
     mod tests {
         use super::*;
-
-        #[test]
-        fn icon_buffer_is_a_full_rgba_square() {
-            let (on, s) = icon_rgba(true);
-            let (off, _) = icon_rgba(false);
-            assert_eq!(on.len(), (s * s * 4) as usize);
-            assert_eq!(off.len(), on.len());
-            // The two states must actually look different.
-            assert_ne!(on, off);
-        }
 
         #[test]
         fn copy_tree_copies_nested_files_and_leaves_the_source() {

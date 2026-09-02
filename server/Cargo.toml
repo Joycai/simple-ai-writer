@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Knowledge-base backup/sync server for Simple AI Writer"
 edition = "2021"
 publish = false
+build = "build.rs"
 
 [[bin]]
 name = "aiw-kb-server"
@@ -46,6 +47,15 @@ rfd = "0.15"
 winreg = "0.52"
 open = "5"
 tracing-appender = "0.2"
+# Only for `GetSystemMetrics(SM_CXSMICON)` — the size the shell draws a tray
+# icon at, so the glyph frame drawn for that DPI is the one that gets loaded.
+# Same version as tray-icon's own copy, so it costs nothing to compile.
+windows-sys = { version = "0.60", features = ["Win32_UI_WindowsAndMessaging"] }
+
+# build.rs only: embeds icons/*.ico and a VERSIONINFO block into the two exes.
+# Host-gated, so the ubuntu CI job never fetches or compiles it.
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3"
 
 [dev-dependencies]
 tempfile = "3"

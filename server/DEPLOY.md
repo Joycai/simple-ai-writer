@@ -353,6 +353,11 @@ cargo build --release
 # 得到 target\release\aiw-kb-tray.exe,放到哪个目录都行,双击运行
 ```
 
+两个 exe 都自带图标和版本信息(资源管理器里的图标、任务管理器里的「Simple AI
+Writer 知识库服务端」描述):`build.rs` 在 Windows 上把 `icons/*.ico` 编译进
+exe,用的是 Windows SDK 的 `rc.exe`(MSVC 工具链装好就有;mingw 用 `windres`)。
+找不到资源编译器时**照样能编译**,只是 exe 没有图标,cargo 会打一条 warning。
+
 - 双击即启动:图标进托盘(实心 = 运行中,空心 = 已停止),没有控制台窗口;
 - 首次启动生成配置文件时,管理密码和同步 token **弹在对话框里**(headless 版
   打印到终端的那份信息,换了一个观众);
