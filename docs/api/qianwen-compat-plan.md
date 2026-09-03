@@ -7,6 +7,10 @@
 > 5.5 / 5.6 的对照）。按 [`../reference/workflows.md`](../reference/workflows.md) 的惯例
 > 一片一个 PR，每片合并后停下来等真机测试。
 >
+> **2026-09-03 追加**：用作者给的 New API 中转站 key 打了 `[Pro]gpt-5.4 / 5.5 / 5.6-sol` 的
+> Responses 面约 90 次，§4.5 的 OpenAI 侧悬案大半定掉了；协议事实单独成页
+> [`responses.md`](responses.md)，中转站怪癖是 [`landscape.md`](landscape.md) §7 第八个样本。
+>
 > 实测工具：`src/lib/__tests__/live.qianwen.test.ts`——用仓库里**真实的 adapter**
 > （`streamOpenAI` / `streamAnthropic` / `streamCompletion` / `testProviderConnection`）
 > 直连端点，设 `QIANWEN_KEY` 环境变量才运行，没有 key 整组跳过。验证的是"我们实际发出的
@@ -122,7 +126,9 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
    （OpenAI「Migrate to Responses」指南，2026-09 版原话：*Starting with GPT-5.4, Chat
    Completions does not support tool calling with `reasoning_effort` values other than
    `none`*）。本项目的 agent 循环、结构化任务的强制工具、子代理，全靠工具；在 5.4 / 5.5 /
-   5.6 上要开思考就只剩 Responses。
+   5.6 上要开思考就只剩 Responses。**这条在中转站上验不了**：New API 把 ① 翻成 ② 再打
+   后端，所以 `[Pro]gpt-5.4` 在 `/chat/completions` 上思考+工具照样能用（还多出官方没有的
+   `reasoning_content`）；只有直连 api.openai.com 才能证实或证伪。
 2. **5.6 代的新东西只在 Responses 上**：`reasoning.mode: "pro"`（Sol 的深推理模式）、
    `reasoning.context: "all_turns"`（5.6 默认，把往轮推理渲染回下一轮）、`tool_search` /
    `apply_patch` / `hosted_shell` 等内置工具、`prompt_cache_options`。
@@ -138,11 +144,11 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 | 支持模型 | 5.4 / 5.5 / 5.6-sol / -terra / -luna 全部同时支持 Chat Completions 与 Responses；1.05M 上下文、128K 输出 | 文档列 Qwen 3.5–3.8、deepseek-v4、glm-5.2、kimi-k3；**MiniMax-M2.5 实测 400**（`'agent_api_metadata'`）；"非列表模型仅基础能力" |
 | `reasoning.effort` | `none/minimal/low/medium/high/xhigh/max`，**按模型裁剪**：5.4 到 xhigh（默认 none）、5.5 到 xhigh（默认 medium）、5.6 到 max（默认 medium） | 同一套 7 档词表，默认 `xhigh`；另收非标准 `enable_thinking` |
 | `reasoning.summary` | `auto/concise/detailed`，不发则无摘要；**原始思维链不可见** | 文档无此字段；`reasoning` 条目里 `summary[]` 直接就是思维链文本 |
-| `reasoning.mode` / `reasoning.context` | 5.6 独有：`standard/pro`、`auto/current_turn/all_turns` | 无 |
-| `text.format` / `text.verbosity` | `json_schema`（含 strict）、`json_object`（不推荐）；`verbosity low/medium/high` | **文档无 `text` 字段**——这个面上没有结构化输出，只能靠强制工具 |
-| `tools[]` | 扁平 `{type:"function",name,parameters,strict}`；**`strict` 缺省即尝试 strict**，schema 不兼容时自动退非 strict；另有 custom（CFG 语法）与 10 种内置工具 | 扁平同形；内置工具 `web_search` / `code_interpreter` / `web_extractor` / `web_search_image` / `image_search` / `file_search` / `mcp` |
-| `tool_choice` | `none/auto/required`、`{type:"function",name}`、`{type:"allowed_tools",mode,tools}`、内置工具型 | `auto/none/required` + `{type:"function",name}`；思考模式下的强制档是否被拒未验（Chat 面上分模型） |
-| 状态 | `store` **默认 true**；`previous_response_id` 或 `conversation`；`store:false` 时 `reasoning` 条目**默认带 `encrypted_content`**，回传即可无状态延续 | `store` 有；`previous_response_id`（7 天）与 `conversation`；**无 `encrypted_content`**，回传的是明文 `summary` |
+| `reasoning.mode` / `reasoning.context` | 5.6 独有：`standard/pro`、`auto/current_turn/all_turns`。**实测**：`context` 回显 5.4 `current_turn`、**5.5 与 5.6 都是 `all_turns`**；`mode:"pro"` 经中转站回显 `standard` | 无 |
+| `text.format` / `text.verbosity` | `json_schema`（含 strict）、`json_object`（不推荐）；`verbosity low/medium/high`。**实测**：省略 `strict` 端点自动升 strict 并回显 `true`；`["string","null"]` 被 strict 接受；`json_object` 缺 "json" 字样 400 | **文档无 `text` 字段**——这个面上没有结构化输出，只能靠强制工具 |
+| `tools[]` | 扁平 `{type:"function",name,parameters,strict}`；**`strict` 缺省即尝试 strict**（实测回显 `strict:true`，含 `["string","null"]` 的参数照样过），schema 不兼容时自动退非 strict；另有 custom（CFG 语法）与 10 种内置工具 | 扁平同形；内置工具 `web_search` / `code_interpreter` / `web_extractor` / `web_search_image` / `image_search` / `file_search` / `mcp` |
+| `tool_choice` | `none/auto/required`、`{type:"function",name}`、`{type:"allowed_tools",mode,tools}`、内置工具型。**实测**：`required` 与 `{type:"function"}` 在 effort `medium` 下都合法（5.5 / 5.6-sol），没有 ① 族那种"思考中禁止强制" | `auto/none/required` + `{type:"function",name}`；思考模式下的强制档是否被拒未验（Chat 面上分模型） |
+| 状态 | `store` **默认 true**；`previous_response_id` 或 `conversation`；`store:false` 时 `reasoning` 条目**默认带 `encrypted_content`**（实测 1.3–1.4KB，不用 `include`），回传即可无状态延续；**少回传不报错**（去掉 reasoning / 去掉 encrypted_content / 只回裸 function_call 都 200） | `store` 有；`previous_response_id`（7 天）与 `conversation`；**无 `encrypted_content`**，回传的是明文 `summary` |
 | `input` 条目 | `message`（user/assistant/system/developer，assistant 带 `phase: commentary/final_answer`，**5.3-codex 起要求回传**）、`function_call`、`function_call_output`、`reasoning`、`item_reference`、内置工具条目 | `message`、`function_call`、`function_call_output`、`reasoning`（`id`+`summary[]`）、`web_search_call`；无 `phase`、无 `item_reference` |
 | 图片 | `input_image` 收 URL 或 data URL，`detail: low/high/auto/original` | 文档只给纯文本 `content`；多模态是否走 `input_image` 未验 |
 | 其它 | `background`、`truncation:auto`、`context_management`（compaction）、`max_tool_calls`、`prompt_cache_key`、`service_tier`、`stream_options.include_obfuscation` | 明确**不支持 `background`**；其余未提及即忽略（文档原话：未列参数被忽略） |
@@ -151,7 +157,7 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 
 | | OpenAI | 千问 |
 | --- | --- | --- |
-| 流式事件 | 57 种；文本 `response.output_text.delta`，函数参数 **`response.function_call_arguments.delta/done`**，推理摘要 `response.reasoning_summary_text.delta`，原始推理 `response.reasoning_text.delta`（仅部分模型），结束 `response.completed` / `response.incomplete` / `response.failed`，另有裸 `error` 事件 | 文档事件表约 30 种：有 `response.output_text.delta`、`response.reasoning_text.delta`、`response.output_item.added/done`、`response.completed`；**没有 `response.function_call_arguments.delta`**（参数可能整块随 `output_item.done` 到达，未验） |
+| 流式事件 | 57 种；文本 `response.output_text.delta`，函数参数 **`response.function_call_arguments.delta/done`**（实测 9 片 delta + done 带完整串），推理摘要 `response.reasoning_summary_text.delta`（要发 `summary`，且模型真推理了才有），原始推理 `response.reasoning_text.delta`（三款上从未出现），结束 `response.completed` / `response.incomplete` / `response.failed`，另有裸 `error` 事件；delta 带 `obfuscation` 字段要无视。完整序列见 [`responses.md`](responses.md) §4 | 文档事件表约 30 种：有 `response.output_text.delta`、`response.reasoning_text.delta`、`response.output_item.added/done`、`response.completed`；**没有 `response.function_call_arguments.delta`**（参数可能整块随 `output_item.done` 到达，未验） |
 | usage | `response.completed` 的 `response.usage`：`input_tokens` / `output_tokens` / `output_tokens_details.reasoning_tokens` / `input_tokens_details.cached_tokens` | 同形（文档事件表里有 `response.usage.*` 字段路径） |
 | 错误 | HTTP 错误 `{error:{message,type,code}}`；流中 `error` 事件 `{code,message,param}` | ① 面同形的 `{error:{…}}`（MiniMax 那次就是）；流中形态未验 |
 
@@ -165,7 +171,11 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
    （现有的 `withJsonModeFallback` 学 400 就能覆盖，前提是千问对 `text.format` 是报错而不是
    忽略——**未验，接入前必测**）。
 3. **函数参数的流式**。adapter 得同时接受"delta 拼接"与"`output_item.done` 整块到达"，
-   不能只认前者。
+   不能只认前者。实测官方两者都有，且 `output_item.done` 的 `item` 就是回传用的完整条目
+   （含 `encrypted_content`）——**收集 `output_item.done` 即可，不必自己拼**。
+4. **中转站对 `text.format` 的 `strict:true` 会整个丢掉 `format`**（第八个样本），而
+   省略 `strict` 端点自动升 strict——所以 `json_schema` 一律**不发 `strict`**。工具定义
+   则相反：要非 strict 语义必须显式 `strict:false`，否则官方自动 strict。
 
 ### 4.3 本项目怎么落：第四个协议族
 
@@ -219,11 +229,15 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 
 - 千问：`text.format` 是报错还是忽略；函数参数到底怎么流；流中错误事件形状；
   `reasoning` 条目**不回传**是否报错（Chat 面上带不带都行，这个面未验）；
-  `input_image` 是否可用。
-- OpenAI：`phase` 不回传在 5.5 / 5.6 上的实际后果（文档说"性能下降"，无报错）；
-  `strict` 缺省的自动降级对本项目现有工具 schema（含 `["string","null"]`）的判定；
-  `stream_options.include_obfuscation:false` 是否该发（默认带 `obfuscation` 字段，
-  adapter 要忽略它）。
+  `input_image` 是否可用。**全部未验。**
+- OpenAI（2026-09-03 经中转站已定，见 [`responses.md`](responses.md)）：
+  - ✅ `strict` 缺省 → 自动 strict，`["string","null"]` 过；工具要非 strict 必须显式 `strict:false`。
+  - ✅ `include_obfuscation:false` 无效，adapter 无视 `obfuscation` 字段即可。
+  - ✅ 回传缺失（reasoning / encrypted_content / phase）都不报错——是"无现象"类，按官方推荐原样回传。
+  - ✅ `reasoning_text.delta` 三款上不出现，摘要走 `reasoning_summary_text.delta`，且需发 `summary`。
+  - ✅ `input_image` data URL 可用；`json_object` 需 "json" 字样。
+  - ❌ 仍未定：`phase` 缺失的真实代价（样本太小）；`mode:"pro"` 与官方 ① 族"5.4 起思考不能带工具"
+    （中转站翻译过，验不了）；5.6-sol 的多轮回传（中转站 502）。
 
 ## 5. 弃案
 

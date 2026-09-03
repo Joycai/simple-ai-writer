@@ -703,7 +703,35 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   Gemini 原生的 `thinkingConfig`）、工具调用流、`web_search_options`、
   Gemini image 系列在 chat 上的回包形态。
 
-### 兼容层文档的通用规律（七个样本的共同点）
+### 第八个样本：New API 中转站上的 ② 族（`[Pro]` 档 GPT-5.4 / 5.5 / 5.6-sol，2026-09-03 实测）
+
+协议事实本身在 [`responses.md`](responses.md)，这里只记**中转站自己干的事**。样本是
+`hk.chenmoai.com`，New API 软件，`[Pro]` 档＝ChatGPT Pro 账号背后的 Codex 后端；同一
+host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同名模型不同后端。
+目录 `GET /v1/models` 是 OpenAI 形态并带 `supported_endpoint_types`（与 OrcaRouter 同款，
+第七个样本）。
+
+- **不发 `instructions` 就注入 Codex 的系统提示**（"You are Codex, a coding agent based on
+  GPT-5…"，响应的 `instructions` 字段原样回显），一次请求输入 **4.4K–7.5K token**；发了
+  自己的 `instructions` 则只有自己的（15 token）。这是本目录里最贵的一条静默行为：
+  不报错、不影响输出、只影响账单和上下文。**规则：对这类中转站永远显式发 system。**
+- **`text.format` 显式 `strict: true` 时整个 `format` 被丢掉**（回显 `{type:"text"}`，
+  输出不按 schema）；省略 `strict` 则正常透传并被官方自动升成 strict。同一中转站上
+  ① 族的 `response_format: json_schema` strict 正常。
+- **`reasoning.mode: "pro"` 回显 `standard`**（5.6-sol）；是这一档不给 pro 还是中转站
+  吞了字段，分不清。
+- **`stream_options.include_obfuscation: false` 无效**，delta 里仍有 `obfuscation`。
+- **上游 60s 超时**：nginx 504 HTML 页，或 `{error:{message:"bad response status code 502"}}`；
+  约 90 次请求里 9 次，5.6-sol 最多（多轮回传两次都没跑成）。**HTML 404/504 不是 API
+  错误信封**，探测逻辑不能把它读成"端点在说话"。
+- **假模型名答 503**（`{error:{code:"model_not_found", type:"new_api_error"}}`，流式请求
+  也是 HTTP 503 + JSON），不是 404；坏 key 401 `Invalid token`。
+- **① 族是翻译出来的**：同一批模型打 `/chat/completions`，`delta.reasoning_content`
+  有内容（官方 ① 族没有这个字段）、思考开着也能带工具（官方文档说 5.4 起不行）——
+  中转站把 ① 翻成 ② 再打后端。**在这种中转站上验不了"官方 ① 族对 5.4+ 的限制"**。
+- 未知顶层键被忽略（与官方 ② 族一致）。
+
+### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。
