@@ -191,6 +191,13 @@ export type AgentEvent = AgentEventScope & (
       toTokens: number;
       /** The new rolling summary — shown by the log row's expanded detail. */
       summary: string;
+      /**
+       * Which machinery folded: absent/`"summary"` = the prose rolling summary;
+       * `"state"` = the 状态记忆 mode rewrote the structured execution state
+       * (lib/agent/skillState) and `summary` is its JSON. Same row shape, two
+       * labels — a persisted event from before the field reads as prose.
+       */
+      mode?: "summary" | "state";
       at: number;
     }
   | {

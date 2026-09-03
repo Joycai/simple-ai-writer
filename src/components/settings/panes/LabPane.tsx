@@ -8,6 +8,7 @@ import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/fla
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
+import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import styles from "./Lab.module.css";
@@ -46,6 +47,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const [xlsxOn, setXlsxOn] = useState(isXlsxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [orchestratorOn, setOrchestratorOn] = useState(isOrchestratorEnabled());
+  const [skillStateOn, setSkillStateOn] = useState(isSkillStateEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
 
@@ -108,11 +110,18 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             label={t("systemSettings.lab.roleplayLabel")}
           />
         </Row>
-        <Row top title={t("systemSettings.lab.toolPackLabel")} desc={t("systemSettings.lab.toolPackHint")} last>
+        <Row top title={t("systemSettings.lab.toolPackLabel")} desc={t("systemSettings.lab.toolPackHint")}>
           <Toggle
             on={orchestratorOn}
             onChange={(next) => { setOrchestratorEnabled(next); setOrchestratorOn(next); }}
             label={t("systemSettings.lab.toolPackLabel")}
+          />
+        </Row>
+        <Row top title={t("systemSettings.lab.skillStateLabel")} desc={t("systemSettings.lab.skillStateHint")} last>
+          <Toggle
+            on={skillStateOn}
+            onChange={(next) => { setSkillStateEnabled(next); setSkillStateOn(next); }}
+            label={t("systemSettings.lab.skillStateLabel")}
           />
         </Row>
       </Section>

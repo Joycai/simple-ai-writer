@@ -454,9 +454,14 @@ export function reasoningBody(
         case "deepseek":
           // DeepSeek turns thinking off with the disable switch, not
           // `reasoning_effort:"none"` — that field only tunes depth while on.
+          // The switch is a **top-level** `thinking` object on the wire. The
+          // vendor docs show it inside `extra_body`, but that is the Python
+          // SDK's pass-through bag, not a field: sent literally, the endpoint
+          // ignored the unknown key and kept thinking (verified 2026-09-03 on
+          // Qianwen's DeepSeek V4 — docs/api/qianwen-compat-plan.md P1).
           return on
             ? { reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
-            : { extra_body: { thinking: { type: "disabled" } } };
+            : { thinking: { type: "disabled" } };
         default:
           // openai-generic, glm — the standard top-level field, plus any static
           // fragment the category always carries (GLM's clear_thinking:false).

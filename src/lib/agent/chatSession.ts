@@ -22,6 +22,7 @@
 import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { createSessionMeta, type ChatSessionMeta } from "./compact";
+import { validateSkillState, type SkillState } from "./skillState";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { toPosixPath } from "../paths";
 
@@ -119,6 +120,16 @@ interface SerializedChat {
      * session was.
      */
     briefingTier?: "assist" | "orchestrator";
+    /**
+     * Additive — 状态记忆 (lib/agent/skillState). `stateMode` is whether this
+     * conversation runs on the structured execution state; `state` is that
+     * state as last committed. Older rows restore as off / null, which is what
+     * every session written before the mode existed was. `state` is
+     * re-validated on the way in — a blob that outlives the schema must not
+     * hand the model a shape the validator would refuse.
+     */
+    stateMode?: boolean;
+    state?: SkillState | null;
   };
   usage: PersistedUsage | null;
   /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
@@ -155,6 +166,8 @@ export function serializeChatSession(snap: ChatSnapshot): string {
       lastDocPath: snap.meta.lastDocPath,
       bodyDocPath: snap.meta.bodyDocPath,
       briefingTier: snap.meta.briefingTier,
+      ...(snap.meta.stateMode ? { stateMode: true } : {}),
+      ...(snap.meta.state ? { state: snap.meta.state } : {}),
     },
     usage: snap.usage,
     ...(snap.taskId ? { taskId: snap.taskId } : {}),
@@ -257,6 +270,11 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
   meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? toPosixPath(data.meta.lastDocPath) : null;
   meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? toPosixPath(data.meta.bodyDocPath) : null;
   meta.briefingTier = data.meta.briefingTier === "orchestrator" ? "orchestrator" : "assist";
+  meta.stateMode = data.meta.stateMode === true;
+  if (data.meta.state) {
+    const checked = validateSkillState(data.meta.state);
+    meta.state = checked.ok ? checked.state : null;
+  }
 
   return {
     turns: normalizeTurns(data.turns),
