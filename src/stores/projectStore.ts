@@ -8,6 +8,7 @@ import {
   resetDb,
   type FileNode,
 } from "../lib/project";
+import { ancestorsOf } from "../lib/fs/selection";
 import { useMemo } from "react";
 import {
   appTerms,
@@ -283,6 +284,15 @@ interface ProjectState {
    */
   setExpandedDirs: (dirs: Record<string, boolean>) => void;
   /**
+   * 定位一个文档（「定位当前文档」，也是树外打开即定位）：一次 `set` 展开它的祖先
+   * 链，并留一条请求让树把那一行滚进视野、选中。展开在这里做而滚动在树里做，是因为
+   * 展开改的是 store 的状态，树卸载着（侧栏在别的标签页）也该生效；滚动要 DOM，
+   * 只有树能做——它挂回来时按 `seq` 兑现卸载期间到达的那条。
+   */
+  revealPath: (path: string) => void;
+  /** 最近一次 `revealPath`；`seq` 单调递增，树按它判断「这条我处理过没有」。 */
+  revealRequest: { path: string; seq: number } | null;
+  /**
    * Both counters in one `set()`: the caller (editorStore.setContent) runs on
    * every keystroke, and two separate writes meant every subscriber of this
    * store got notified twice per character typed.
@@ -343,6 +353,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
+  revealRequest: null,
   clipboard: null,
   wordCount: 0,
   charCount: 0,
@@ -752,6 +763,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set((s) => ({ expandedDirs: { ...s.expandedDirs, ...expandAllMap(s.fileTree) } })),
 
   setExpandedDirs: (dirs) => set({ expandedDirs: dirs }),
+
+  revealPath: (path) =>
+    set((s) => {
+      const chain = ancestorsOf(s.fileTree, path);
+      const closed = chain.filter((dir) => s.expandedDirs[dir] !== true);
+      const seq = (s.revealRequest?.seq ?? 0) + 1;
+      if (closed.length === 0) return { revealRequest: { path, seq } };
+      const next = { ...s.expandedDirs };
+      for (const dir of closed) next[dir] = true;
+      return { expandedDirs: next, revealRequest: { path, seq } };
+    }),
   setDocCounts: (words, chars) =>
     set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
 }));

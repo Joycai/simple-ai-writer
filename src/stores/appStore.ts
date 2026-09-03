@@ -1,3 +1,4 @@
+import type { SearchScope } from "../lib/search/globalSearch";
 import { create } from "zustand";
 import i18n from "../i18n";
 import { deletePref, LORE_SCOPE_PREFIX, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
@@ -352,6 +353,11 @@ interface AppState {
   // Manuscript additions
   mainView: MainView;
   showCommandPalette: boolean;
+  /**
+   * 「以某个档打开」的请求（⌘P ＝ 打开并落到「文档」档）。带 seq 是因为面板已开着时
+   * 再按 ⌘P 也要切档——同一个值不会触发两次。null ＝ 沿用面板自己记的上次档位。
+   */
+  paletteScopeRequest: { scope: SearchScope; seq: number } | null;
   showAiDrawer: boolean;
   aiDrawerMode: AiDrawerMode;
   /**
@@ -441,6 +447,7 @@ interface AppState {
    */
   showScreen: (screen: AppScreen) => void;
   setShowCommandPalette: (v: boolean) => void;
+  openCommandPalette: (scope?: SearchScope) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
   /** Open the assistant header's model picker (see `modelPickerNonce`). */
   openModelPicker: () => void;
@@ -501,6 +508,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   mainView: "editor",
   showCommandPalette: false,
+  paletteScopeRequest: null,
   showAiDrawer: false,
   modelPickerNonce: 0,
   showOnboarding: false,
@@ -799,6 +807,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     s.setSidebarCollapsed(false);
   },
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  openCommandPalette: (scope) =>
+    set((s) => ({
+      showCommandPalette: true,
+      paletteScopeRequest: scope ? { scope, seq: (s.paletteScopeRequest?.seq ?? 0) + 1 } : s.paletteScopeRequest,
+    })),
   // Omitting `mode` means "just open it" — the drawer comes back on whichever
   // tab was last used. Only the mode-specific entry points (Ctrl+J/Ctrl+L, the
   // command palette, the inline bubble) name a tab, and naming one remembers it.

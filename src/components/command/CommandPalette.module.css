@@ -1,3 +1,6 @@
+/* ⌘K 全局搜索 —— 设计稿 21 屏 1a–1e。零动画（只有 80ms 遮罩淡入）、零圆角、零新颜色：
+   分类色来自知识库墙的 catColor，其余全是既有 token。 */
+
 .backdrop {
   position: fixed;
   inset: 0;
@@ -13,145 +16,290 @@
 .palette {
   width: 660px;
   max-width: 92vw;
-  max-height: 70vh;
+  max-height: 72vh;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
-  /* enter/exit handled by Motion (AnimatePresence) — see CommandPalette.tsx */
 }
 
-/* Input row */
+/* ── 输入行 52 ─────────────────────────────────────────────────────────── */
 .inputRow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 10px;
+  height: 52px;
+  padding: 0 18px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--color-border-soft);
-  background: var(--color-bg-base);
+  color: var(--color-text-muted);
 }
 .input {
   flex: 1;
+  min-width: 0;
   border: none;
   outline: none;
   background: transparent;
-  font: 400 16px/1 var(--font-serif);
+  font: 400 16px/1.3 var(--font-serif);
   color: var(--color-text-primary);
 }
 .input::placeholder {
   color: var(--color-text-faint);
-  font-style: italic;
 }
-.scopeChip {
-  padding: 3px 8px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  font: 500 10px/1 var(--font-sans);
-  color: var(--color-text-muted);
+
+/* 作用域 chip：应用里档位组的同一语法（idle dim/panel · hover elevated · 选中 accent-text/selected/赭石边）。 */
+.chips {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.chip {
+  font: 500 10.5px/1 var(--font-sans);
+  padding: 4px 7px;
+  color: var(--color-text-dim);
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip:hover { background: var(--color-bg-elevated); }
+.chipOn,
+.chipOn:hover {
+  color: var(--color-accent-text);
+  background: var(--color-bg-selected);
+  border-color: var(--color-sienna);
 }
 .escKey {
-  font: 500 10px/1 var(--font-mono);
+  flex-shrink: 0;
+  margin-left: 6px;
+  font: 400 10px/1 var(--font-mono);
   color: var(--color-text-faint);
 }
 
-/* Results body */
+/* ── 结果 ──────────────────────────────────────────────────────────────── */
 .results {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.group {
-  padding: 10px 0 6px;
+.group + .group {
+  margin-top: 6px;
   border-top: 1px solid var(--color-border-soft);
 }
-.group:first-child { border-top: none; }
+/* 组头 10/18/4：左端组名，右端目的地——对「↵ 会切到哪个视图」的预告。 */
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  padding: 10px 18px 4px;
+}
 .groupLabel {
-  padding: 0 18px 6px;
   font: 500 9px/1 var(--font-sans);
   letter-spacing: 0.2em;
   color: var(--color-text-muted);
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.groupDest {
+  margin-left: auto;
+  padding-left: 12px;
+  flex-shrink: 0;
+  font: 400 9.5px/1 var(--font-mono);
+  color: var(--color-text-faint);
 }
 
-.item {
+.row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 18px;
+  gap: 10px;
+  padding: 8px 18px;
   cursor: pointer;
-  transition: background var(--transition-fast);
 }
-.item:hover, .itemActive {
-  background: var(--color-bg-elevated);
+.row:hover, .rowActive { background: var(--color-bg-elevated); }
+.rowLore { padding: 7px 18px; }
+.rowText { padding: 6px 18px; align-items: baseline; }
+.rowAi { padding: 9px 18px; }
+/* 单行的行（根目录文档、没有副行的条目）退回 30 高。 */
+.rowSingle { padding-top: 6.5px; padding-bottom: 6.5px; }
+
+/* 左端形状：文档是 16px 描边图标，两级灰同文件面板（可写可读 secondary / 目录里的杂物 faint）。 */
+.icon16 {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--color-text-secondary);
+}
+.icon16.secondary { color: var(--color-text-faint); }
+.icon16.filled svg { fill: currentColor; fill-opacity: 0.2; }
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rowTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font: 500 13px/1.3 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.rowTitle > span:first-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowTitleMuted { color: var(--color-text-muted); }
+.rowPath {
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowSub {
+  font: italic 400 11px/1.3 var(--font-serif);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.itemIcon {
+/* 条目行的左端：知识库墙的条目头——有头像用图，没有则分类色 18% 底 + 1px 分类色边 + 首字。 */
+.catBlock {
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  background: var(--color-sienna);
-  color: var(--color-card);
+  font: 500 11px/1 var(--font-serif);
+  color: var(--cat);
+  background: color-mix(in srgb, var(--cat) 18%, transparent);
+  border: 1px solid var(--cat);
+  box-sizing: border-box;
+  overflow: hidden;
 }
-.itemIconLine {
-  font: 500 11px/1 var(--font-mono);
+.catBlock img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.catLabel {
+  flex-shrink: 0;
+  font: 500 10px/1 var(--font-sans);
+  color: var(--cat);
+}
+
+/* 正文行：行号右对齐在 24px 列（与文档图标同列宽），片段单行省略。 */
+.lineNo {
+  flex-shrink: 0;
+  width: 24px;
+  font: 500 10.5px/1.4 var(--font-mono);
   color: var(--color-sienna);
   text-align: right;
-  width: 24px;
-  flex-shrink: 0;
 }
-.itemMain {
+.snippet {
   flex: 1;
   min-width: 0;
-}
-.itemTitle {
-  font: 500 13px/1.2 var(--font-serif);
-  color: var(--color-text-primary);
-}
-.itemHl {
-  background: var(--color-mention-bg);
-  color: var(--color-sienna);
-  padding: 0 2px;
-}
-.itemSub {
-  font: italic 400 11px/1.4 var(--font-serif);
-  color: var(--color-text-muted);
+  font: 400 12.5px/1.4 var(--font-serif);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.itemAction {
-  font: 400 11px/1 var(--font-sans);
-  color: var(--color-sienna);
-}
-.itemKey {
-  font: 500 10px/1 var(--font-mono);
-  color: var(--color-text-faint);
 }
 
+/* 右列只放一样：后缀 / 已打开 / ⌘↵，当前项时被动作提示替换。 */
+.rightCol {
+  flex-shrink: 0;
+  font: 400 9.5px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+.action {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-sienna);
+}
+
+.hl {
+  background: var(--color-mention-bg);
+  color: var(--color-sienna);
+}
+
+/* AI 行：图标 14，标签 12.5 sans。 */
+.aiIcon { flex-shrink: 0; display: flex; color: var(--color-sienna); }
+.aiIcon.muted { color: var(--color-text-muted); }
+.aiLabel {
+  flex: 1;
+  min-width: 0;
+  font: 400 12.5px/1.3 var(--font-sans);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aiLabel.muted { color: var(--color-text-secondary); }
+.aiLabel .q { font-family: var(--font-serif); }
+
+/* 「还有 N 篇 · Tab 切到…」——不是结果项，↑↓ 跳过它；点它 = Tab 到该档。 */
+.trailer {
+  padding: 4px 18px 8px 44px;
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.tabKey { color: var(--color-sienna); }
+
+/* 无命中：空句居中；第二行只在别的档确有命中时出现，可点＝切档。 */
 .empty {
-  padding: 32px 24px;
+  padding: 22px 18px;
   text-align: center;
-  font: italic 400 13px/1.6 var(--font-serif);
+  font: italic 400 12.5px/1.6 var(--font-serif);
+  color: var(--color-text-muted);
+}
+.empty.withElsewhere { padding-bottom: 6px; }
+.elsewhere {
+  padding: 0 18px 20px;
+  text-align: center;
+  font: 400 10.5px/1.6 var(--font-mono);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+/* 刚打开项目、还没去过任何地方：左对齐到行内容起点（44px）。 */
+.recentEmpty {
+  padding: 14px 18px 20px 44px;
+  font: italic 400 12.5px/1.6 var(--font-serif);
   color: var(--color-text-muted);
 }
 
-/* Footer */
+/* ── 脚线 30 ───────────────────────────────────────────────────────────── */
 .footer {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 9px 18px;
+  height: 30px;
+  padding: 0 18px;
+  flex-shrink: 0;
   border-top: 1px solid var(--color-border-soft);
-  background: var(--color-bg-base);
   font: 400 10px/1 var(--font-sans);
   color: var(--color-text-muted);
+  white-space: nowrap;
 }
 .footerKey {
   font-family: var(--font-mono);
-  color: var(--color-text-secondary);
   margin-right: 4px;
+}
+.footerRight {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
