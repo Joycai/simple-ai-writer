@@ -409,35 +409,118 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 **由此得出一条可移植的规则：面向兼容层时，在"官方两种都收"的地方要选中继
 文档写的那一种。** 官方的宽容不是中继的宽容。
 
-### 第六个样本：阿里 DashScope 的 ① 族兼容层（截至 2026-08，未实测）
+### 第六个样本：阿里千问AI平台（百炼 / DashScope）（截至 2026-09-03，① ④ 两族已实测）
 
-千问（Qwen）的 OpenAI 兼容端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-（国际部署 `dashscope-intl.aliyuncs.com`，独立的 host 与 key），`Bearer` 鉴权，
-`/chat/completions` + 标准 SSE。响应侧扩展与 DeepSeek 同名：思维链在
-`delta.reasoning_content`，多轮工具调用要求把它回传。请求侧的差异集中在思考控制：
+一个 host（`dashscope.aliyuncs.com`）、一把 key，挂着**四种**接口面：
 
-- **思考开关是顶层 `enable_thinking: bool`，另有 `thinking_budget`（数值）。**
-  官方 SDK 示例写在 `extra_body` 里，但那只是 OpenAI SDK 的透传机制——落到
-  wire 上就是 body 顶层字段。
-- **新款模型（Qwen3.7+）同时接受标准 `reasoning_effort`**，且文档写明与
-  `thinking_budget` 互斥。也就是说同一个端点上，两代模型的思考控制字段不同。
-- **默认值按模型代分裂**：Qwen3.5+ / Qwen3.7+ 思考默认开，Qwen3-Max/Plus/Flash
-  等商业款默认关——后者不发开关就永远不思考。这是通用规律里"同一段代码在
-  两代模型上行为相反且都不报错"的又一例。
-- **部分开源模型的思考模式强制 `stream: true`**，非流式直接报错。
-- **`response_format: {type:"json_object"}` 要求 prompt 里出现 "JSON" 字样**，
-  否则 400（`'messages' must contain the word 'json'`）——这是 ① 族官方就有的
-  隐藏前置条件（见 [`structured.md`](structured.md)），DashScope 原样继承。
-  `json_schema` strict 仅新款（Qwen3.7-Max/Plus、3.8-Max）支持。
+| 面 | 路径 | 本项目 |
+| --- | --- | --- |
+| ① Chat Completions | `/compatible-mode/v1/chat/completions` | `openai_compat`，预设「通义千问 (DashScope)」 |
+| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | 未接（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4） |
+| ④ Anthropic Messages | `/apps/anthropic/v1/messages` | `anthropic_compat` 可直接用，尚无预设 |
+| DashScope 原生 | `/api/v1/services/aigc/{text,multimodal}-generation/generation` | 只用于出图（见下一小节） |
 
-工具调用与随请求跑的能力（2026-08-17 补，同样未实测）：
+目录只有 ① 面有：`GET /compatible-mode/v1/models` 返回 OpenAI 形态、249 条（2026-09-03），
+同一模型常有 `kimi-k3` / `kimi/kimi-k3`、`glm-5.2` / `ZHIPU/GLM-5.2` 两种 id——不带前缀的是
+「阿里云直供」，带前缀的是第三方直供，二者参数支持面不同。国际部署
+`dashscope-intl.aliyuncs.com` 是独立 host 与 key。
 
-- **思考开启时 `tool_choice` 枚举只剩 `auto` | `none`**——强制单个工具与
-  `required` 都不支持，发了就是 400。思考关闭时强制档合法。这与 MiniMax
-  `/anthropic` 端点砍档（第四个样本）是同一现象落在两个族上，差别在于千问的
-  砍档**随开关动态出现**，不是端点常态。思考模型的 `reasoning_content` 必须
-  在后续 assistant 消息里原样回传（DeepSeek 同款规则），否则报错。
-  `parallel_tool_calls` 默认关：不发则每轮最多回一个工具调用。
+实测方法：用仓库里的真实 adapter（`streamOpenAI` / `streamAnthropic` / `streamCompletion` /
+`testProviderConnection`）跑 `src/lib/__tests__/live.qianwen.test.ts`（设 `QIANWEN_KEY`
+才运行），外加 curl 矩阵。模型：qwen3.8-flash、qwen3.7-flash、deepseek-v4-pro-0813、
+kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
+
+#### ① 面：本项目现有 adapter 逐字节可用
+
+- **流式形状与 DeepSeek 同名**：思维链在 `delta.reasoning_content`，首块带
+  `role`+空 `content`+空 `reasoning_content`，usage 在末块（`stream_options.include_usage`
+  被尊重），`completion_tokens_details.reasoning_tokens` 有值。7 个模型全部如此，
+  `REASONING_CONTENT_FIELDS` 无需新增。
+- **默认思考按模型分裂**：除 qwen3-vl-plus 外 6 个模型**默认开**。这和文档里
+  「商业款默认关」的旧说法相反——3.7/3.8 代全部默认开。
+- **关闭思考有三种拼法，都被认**：`enable_thinking:false`、`reasoning_effort:"none"`、
+  以及**文档没写的顶层 `thinking:{type:"disabled"}`**（DeepSeek 拼法）。三种在 6 个
+  思考模型上都生效。例外 **MiniMax-M2.5：任何一种都 400**
+  （`The value of the enable_thinking parameter is restricted to True`）。
+- **`thinking_budget`**：kimi-k3 直接 400（`Parameter thinking_budget is not supported`），
+  两个面都是；其余模型接受。
+- **`reasoning_effort` 只有 3.8 代真的分档**（low/medium/xhigh）；3.7-flash 接受但
+  无视（low 仍思考 1000+ 字）。DeepSeek/GLM/Kimi 认 `high`/`max`，其余值被折叠。
+- **GLM 档的固定片段 `thinking:{clear_thinking:false}` 在非 GLM 模型上 400**
+  （`'type' must be in thinking`）——这个端点把顶层 `thinking` 解析成 DeepSeek 形状，
+  缺 `type` 就拒；glm-5.2 与 kimi-k3 接受（大概率忽略）。千问自己的 `clear_thinking`
+  是顶层布尔，不在 `thinking` 里。
+- **思考中强制 `tool_choice`**：qwen3.8-flash 与 MiniMax-M2.5 400
+  （`The tool_choice parameter does not support being set to required or object in thinking mode`），
+  **其余 5 个接受**——文档说的「思考模式不支持强制」并非全端点常态。报文含
+  `tool_choice` 字样，`streamCompletion` 的一次性重试（`lib/ai/toolChoice.ts`）能接住，
+  7 个模型的 forced 请求最终都拿到了工具调用。并行工具调用**默认就发生**
+  （不发 `parallel_tool_calls` 也回两个调用），与文档「默认关」不符。
+- **工具轮回传 `reasoning_content`**：带与不带都 200，6 个思考模型均如此——这里
+  没有 DeepSeek 官方那种 400。
+- **结构化输出**：`json_object` 与 `json_schema`（strict 与否）在 Qwen / DeepSeek /
+  Kimi / GLM 上都出合法 JSON，思考开着也照常分流。`json_object` 缺 "json" 字样的
+  400 只有 **Qwen 与 DeepSeek** 执行，Kimi / GLM / MiniMax 不检查。
+  **MiniMax-M2.5 对 `response_format` 基本无视**：同一请求两次分别回了带 ```` ```json ````
+  围栏的 JSON 和纯散文，只靠 prompt 里的 JSON 字样约束。
+- **图片**：`image_url` 收 `data:` URL；qwen3.8/3.7-flash、qwen3-vl-plus、kimi-k3 看得见；
+  deepseek 与 glm **不报错但无视图片**（答错颜色）；MiniMax 回「看不到图片」。
+  **小于 10px 的图 400**（`height:1 or width:1 must be larger than 10`）。
+- **错误信封是 OpenAI 形状**（`{error:{message,type,code}}` + 顶层 `request_id`），
+  探测模型 404 + `model_not_found`，坏 key 401，与连接测试的判据一致。
+- **`max_tokens` 的含义随模型不同**：DeepSeek V4 与 qwen3.8-max 上是正文+思维链之和，
+  glm-5.2 上取决于有没有发 `thinking_budget`，其余模型只算正文；`max_completion_tokens`
+  一律含思维链。本项目 ① 面不发上限，暂不受影响。
+
+#### ④ 面：`/apps/anthropic`，本项目 `anthropic_compat` 直接可用
+
+- **Base 是根地址** `https://dashscope.aliyuncs.com/apps/anthropic`（客户端补 `/v1/messages`），
+  正是 `anthropicUrl` 的约定。`x-api-key` 与 `Authorization: Bearer` 都收，
+  `anthropic-version` 可省。**没有 `/v1/models`**（404，文档明说），连接测试靠
+  `probeCompletionEndpoint` 降级：假模型名答 400 + `{"code":"InvalidParameter","message":…,"request_id":…}`
+  ——**不是 Anthropic 的 `{type:"error",error:{…}}` 信封**，`apiErrorMessage` 的裸
+  `message` 分支接住了它。坏 key 是 **403** `{"message":"invalid api-key","type":"authentication_error"}`。
+  流式错误走 `event:error` + 同样的裸 `{code,message}`。
+- **本项目发出的每种 `thinking` 形状都被接受**：`{type:"adaptive",display:"summarized"}`
+  （默认 `claude-adaptive` 档，文档枚举只有 enabled/disabled）、`{type:"enabled",budget_tokens}`
+  （kimi-k3 除外，400）、`{type:"disabled"}`（MiniMax-M2.5 除外，400）。`output_config.effort`
+  接受 low…max。**`budget_tokens` 必须小于 `max_tokens`**（报文写的是
+  `max_completion_tokens [N] must be greater than thinking_budget [M]`），与官方规则同向。
+- **thinking block 的 `signature` 恒为空串**；工具轮把上一轮 `content` 原样带回（含空签名
+  的 thinking block）或删掉 thinking block，两种都 200。关掉思考时响应里仍有一个
+  `{type:"thinking",thinking:"",signature:""}` 空块，adapter 已能容忍。
+- **事件序列**：`ping` 先于 `message_start`；`message_start.usage` 只有两个字段，完整
+  usage（含 `cache_*`，另塞了一个非标准的 `prompt_tokens_details`）在 `message_delta`。
+- **强制 `tool_choice`**：`{type:"tool"}` 在 qwen3.8-flash 与 MiniMax-M2.5 思考中 400，
+  `{type:"any"}` MiniMax 接受、qwen3.8-flash 仍拒；glm-5.2 都接受。报文同样含
+  `tool_choice`，重试逻辑通用。
+- **`output_config.format`（json_schema）**：Qwen / DeepSeek / Kimi 出 JSON，
+  MiniMax 出散文。本项目 ④ 族的结构化输出仍走强制工具，不用它。
+- **温度范围是 [0, 2)**，与 Anthropic 官方的 [0, 1] 不同；本项目 clamp 到 1，只是少了半段。
+
+#### ② 面：Responses（只探了一次，未接）
+
+`POST /compatible-mode/v1/responses` 对 qwen3.8-flash 可用：`output[]` 里是
+`reasoning`（`summary[{type:"summary_text",text}]`）+ `message`（`content[{type:"output_text"}]`），
+`reasoning.effort` 有 7 档。**MiniMax-M2.5 上 400（`<500> InternalError.Algo: 'agent_api_metadata'`）**
+——文档的支持面只列 Qwen / DeepSeek / GLM / Kimi。文档没有 `text.format`（无结构化输出），
+不支持 `background`，流式事件表里**没有 `response.function_call_arguments.delta`**
+（参数可能整块到达），有 `response.reasoning_text.delta`。接入评估见
+[`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4。
+
+#### 文档与实测不符之处（截至 2026-09-03）
+
+| 文档说 | 实测 |
+| --- | --- |
+| kimi-k3 `enable_thinking` 只能 `true` | `false` 与 `reasoning_effort:"none"` 都关得掉 |
+| `parallel_tool_calls` 默认 `false` | 不发也并行回两个调用 |
+| 思考模式不支持强制 `tool_choice` | 只有 qwen3.8-flash、MiniMax-M2.5 拒；其余 5 个接受 |
+| ④ 面 `thinking.type` 只有 enabled/disabled | `adaptive`（含 `display`）被接受 |
+| `json_object` 要求 "json" 字样 | 只有 Qwen / DeepSeek 执行 |
+| 3.7 代接受 `reasoning_effort` | 接受但无视，只认 `thinking_budget` |
+
+工具调用与随请求跑的能力（2026-08-17 补，**未实测**部分）：
+
 - **服务端联网搜索是顶层 `enable_search: true`**（可选 `search_options` 配
   `search_strategy: turbo|max|agent|agent_max` 等）。关键限制文档明载：
   **Chat Completions 模式不返回搜索来源、不支持角标引用**——搜索对客户端完全
@@ -450,6 +533,9 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
   300s；计费两段：抽取出的文本图片按输入 token + 处理费 ¥0.02/页。
   Responses API 暂不支持该能力。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
   输入）同形，是镜像而非私有发明。
+- **`preserve_thinking`**（qwen3.8-max 默认开）要求把历史 `reasoning_content`
+  **完整**回传；本项目只在工具轮回传上一轮的思维链，纯对话轮不回传——3.8-max
+  上是否因此报错未验。
 
 #### DashScope 的图片模型：不在兼容层上，走原生协议（截至 2026-08，未实测）
 
@@ -617,7 +703,35 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   Gemini 原生的 `thinkingConfig`）、工具调用流、`web_search_options`、
   Gemini image 系列在 chat 上的回包形态。
 
-### 兼容层文档的通用规律（七个样本的共同点）
+### 第八个样本：New API 中转站上的 ② 族（`[Pro]` 档 GPT-5.4 / 5.5 / 5.6-sol，2026-09-03 实测）
+
+协议事实本身在 [`responses.md`](responses.md)，这里只记**中转站自己干的事**。样本是
+`hk.chenmoai.com`，New API 软件，`[Pro]` 档＝ChatGPT Pro 账号背后的 Codex 后端；同一
+host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同名模型不同后端。
+目录 `GET /v1/models` 是 OpenAI 形态并带 `supported_endpoint_types`（与 OrcaRouter 同款，
+第七个样本）。
+
+- **不发 `instructions` 就注入 Codex 的系统提示**（"You are Codex, a coding agent based on
+  GPT-5…"，响应的 `instructions` 字段原样回显），一次请求输入 **4.4K–7.5K token**；发了
+  自己的 `instructions` 则只有自己的（15 token）。这是本目录里最贵的一条静默行为：
+  不报错、不影响输出、只影响账单和上下文。**规则：对这类中转站永远显式发 system。**
+- **`text.format` 显式 `strict: true` 时整个 `format` 被丢掉**（回显 `{type:"text"}`，
+  输出不按 schema）；省略 `strict` 则正常透传并被官方自动升成 strict。同一中转站上
+  ① 族的 `response_format: json_schema` strict 正常。
+- **`reasoning.mode: "pro"` 回显 `standard`**（5.6-sol）；是这一档不给 pro 还是中转站
+  吞了字段，分不清。
+- **`stream_options.include_obfuscation: false` 无效**，delta 里仍有 `obfuscation`。
+- **上游 60s 超时**：nginx 504 HTML 页，或 `{error:{message:"bad response status code 502"}}`；
+  约 90 次请求里 9 次，5.6-sol 最多（多轮回传两次都没跑成）。**HTML 404/504 不是 API
+  错误信封**，探测逻辑不能把它读成"端点在说话"。
+- **假模型名答 503**（`{error:{code:"model_not_found", type:"new_api_error"}}`，流式请求
+  也是 HTTP 503 + JSON），不是 404；坏 key 401 `Invalid token`。
+- **① 族是翻译出来的**：同一批模型打 `/chat/completions`，`delta.reasoning_content`
+  有内容（官方 ① 族没有这个字段）、思考开着也能带工具（官方文档说 5.4 起不行）——
+  中转站把 ① 翻成 ② 再打后端。**在这种中转站上验不了"官方 ① 族对 5.4+ 的限制"**。
+- 未知顶层键被忽略（与官方 ② 族一致）。
+
+### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

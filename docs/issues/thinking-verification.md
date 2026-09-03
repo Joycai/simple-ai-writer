@@ -177,6 +177,21 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 | 4.8 | DashScope：思考开 + forced `tool_choice` 的报错与降级条件是否精确 | 声明「开关式」、力度设「关闭」，跑一次结构化任务（forced pseudo-tool），确认思考关时 forced 真的合法 | 若「关闭」时也拒 forced，`toolChoiceFor` 的降级条件要放宽成"方言声明即降级"（与 anthropic 侧对齐） |
 | 4.9 | DashScope：`file` 内容块（base64 `file_data` + `filename`）是否被 qwen3.8-max 接受；一次多个 PDF 是否可行 | PDF 子代理绑 qwen3.8-max，delegate 一份小 PDF；再试 refs 传两份 | 文档只给了单文件示例；多文件被拒则 `MAX_PDF_FILES` 应降为 1 |
 
+**2026-09-03 千问AI平台实测**（`src/lib/__tests__/live.qianwen.test.ts`，结论在
+[`../api/qianwen-compat-plan.md`](../api/qianwen-compat-plan.md) §1，wire 细节在
+[`../api/landscape.md`](../api/landscape.md) §7 第六个样本）：
+
+- **4.2 已验（在千问的 DeepSeek 上）：「关闭」无效**——原因不是枚举，是我们把
+  `thinking:{type:"disabled"}` 包在字面量 `extra_body` 键里发了出去；顶层发则生效。修复见方案 §3 第 1 片。
+  DeepSeek 官方端点仍待验，但 wire 形状错误与端点无关。
+- **4.4 / 4.5 已验**：`enable_thinking` 开关两个方向都生效（6 个默认思考的模型关得掉，
+  qwen3-vl-plus 开得起来）；`thinking_budget` 除 kimi-k3（400）外被接受。MiniMax-M2.5 关不掉（400）。
+- **4.6 已验**：3.7 / 3.8 代都**接受**顶层 `reasoning_effort`，`none` 能关思考；但只有 3.8 代真的分档，
+  3.7-flash 无视档位。`openai-generic` 类目在千问上可用，hint 文案不必改。
+- **4.8 已验**：思考关掉后 forced 合法（7 个模型）；思考开着时只有 qwen3.8-flash 与 MiniMax-M2.5 拒，
+  其余 5 个接受——降级条件**不必放宽**，现有 `toolChoice.ts` 的 400 学习已够（7 个模型 forced 请求最终都拿到调用）。
+- **4.7、4.9 未验**（需要付费额度以外的前置：搜索按次计费、PDF 仅 qwen3.8-max）。
+
 ---
 
 ## 5. 验完之后

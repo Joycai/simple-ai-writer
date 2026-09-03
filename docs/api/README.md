@@ -64,6 +64,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | [`reasoning.md`](reasoning.md) | 思考强度、思维链取回、以及**回传义务**（唯一会让请求被拒的一件） | ✅ |
 | [`usage.md`](usage.md) | token 计数的两个口径陷阱、输出上限、上下文窗口为何只能靠探测 | ✅ |
 | [`structured.md`](structured.md) | JSON mode / schema / 强制 tool_choice 的四族做法，含 `json_object` 的隐藏前置条件 | ✅ |
+| [`responses.md`](responses.md) | ② 族的骨架、字段、流式事件序列、回传与错误——GPT-5.4 / 5.5 / 5.6 经中转站实测，可搬去别的项目 | ✅ |
 
 ## 接一个新协议族时，先看这三条
 
@@ -85,7 +86,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 `omitted`（拿不到文本却照全额计费）、Gemini 2.5 Pro 关不掉思考。**"省略字段
 = 用默认"从来不是一个统一的答案。**
 
-**③ 最后问"兼容层砍了什么"。** 七个样本（New API、MiniMax、DashScope、OrcaRouter）的共同
+**③ 最后问"兼容层砍了什么"。** 八个样本（New API、MiniMax、DashScope、OrcaRouter、New API 上的 ② 族）的共同
 规律见 [`landscape.md`](landscape.md) §7。最狠的一次是 MiniMax 的 ④ 族端点
 **砍掉了 `tool_choice` 的强制档**，直接让"强制工具调用"这个四族官方都有的
 手段失效。**兼容层文档不能当能力清单**：没列既可能是不支持，也可能只是没跟上。
@@ -113,7 +114,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 - [`../reasoning-plan.md`](reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
 - [`../anthropic-plan.md`](anthropic-plan.md) — ④ 族的审计与接入（已实现）
 - [`../gemini-plan.md`](gemini-plan.md) — ③ 族的盘点与接入（已实现）
-- [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（全部未验证）
+- [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（① 族的 DashScope 各条已于 2026-09 验掉大半）
+- [`../qianwen-compat-plan.md`](qianwen-compat-plan.md) — 千问AI平台的逐模型实测、修复切片，以及 ② 族（Responses）的接入评估（含与 GPT-5.4/5.5/5.6 官方的对照）
 
 ## 写作约定
 
