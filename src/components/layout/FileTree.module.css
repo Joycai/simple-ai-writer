@@ -94,6 +94,13 @@
   background: var(--color-sienna);
 }
 
+/* 「定位当前文档」按下时实底赭石一闪，松手即回（设计稿 21 §2b）：它没有反向动作，
+   所以不像「全部折叠」那样留住。 */
+.toolbarBtn.revealBtn:active:not(:disabled) {
+  color: var(--color-on-accent);
+  background: var(--color-sienna);
+}
+
 /* ── 就地确认条（折叠 / 传输失败）───────────────────────────────────── */
 
 .notice {

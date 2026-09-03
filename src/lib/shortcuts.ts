@@ -129,6 +129,7 @@ export interface ShortcutDef {
 export const SHORTCUTS: ShortcutDef[] = [
   // ─── Global ───────────────────────────────────────────────────────────
   { id: "commandPalette", category: "global", combo: { mod: true, key: "k" }, labelKey: "commandPalette", scope: "dispatch" },
+  { id: "commandPaletteDocs", category: "global", combo: { mod: true, key: "p" }, labelKey: "commandPaletteDocs", scope: "dispatch" },
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
   { id: "aiPanel", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiPanel", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },

@@ -27,6 +27,12 @@ interface EditorState {
   loadError: { path: string; message: string } | null;
 
   scrollToLine: ((line: number) => void) | null;
+  /**
+   * 一次还没兑现的跳行。⌘K 可以在知识库墙上按，那时 `scrollToLine` 是 null
+   * （CodeEditor 卸载时注销了它）；行号留在这里，`setScrollToLine` 注册的那一刻
+   * 冲掉它。1 基行号，和编辑器边栏印的一样。
+   */
+  pendingJump: number | null;
   /** Live CodeMirror view — used to read precise selection offsets. Null when
    *  no editor is mounted (e.g. preview-only mode). */
   editorView: EditorView | null;
@@ -44,6 +50,8 @@ interface EditorState {
   saveNow: () => Promise<void>;
   setViewMode: (mode: ViewMode) => void;
   setScrollToLine: (fn: ((line: number) => void) | null) => void;
+  /** 光标跳到第 `line` 行（1 基）并滚进视野；编辑器没挂着就先记下。 */
+  jumpToLine: (line: number) => void;
   setEditorView: (view: EditorView | null) => void;
   setAiTarget: (range: AiTargetRange | null) => void;
 }
@@ -56,6 +64,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isDirty: false,
   saveTimer: null,
   scrollToLine: null,
+  pendingJump: null,
   editorView: null,
   aiTarget: null,
   loadError: null,
@@ -120,7 +129,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setViewMode: (mode) => set({ viewMode: mode }),
 
-  setScrollToLine: (fn) => set({ scrollToLine: fn }),
+  setScrollToLine: (fn) => {
+    const { pendingJump } = get();
+    set({ scrollToLine: fn, pendingJump: fn ? null : pendingJump });
+    // `scrollToLine` 收的是 0 基行号（CodeEditor 里 `line + 1`）。
+    if (fn && pendingJump != null) fn(pendingJump - 1);
+  },
+
+  jumpToLine: (line) => {
+    const { scrollToLine } = get();
+    if (scrollToLine) scrollToLine(line - 1);
+    else set({ pendingJump: line });
+  },
 
   setEditorView: (view) => set({ editorView: view }),
 

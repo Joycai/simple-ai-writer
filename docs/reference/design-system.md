@@ -280,6 +280,25 @@ Rules of the road:
   「再点一次＝全部展开」的说明，反向动作因此在同一个位置、同一个手指。唯一的禁用条件是
   「树里没有任何分组」（`opacity .4`、无 hover、**不给 tooltip**）。
 
+### 全局搜索 (⌘K — `components/command/CommandPalette*`)
+
+设计稿 21。主干一句：**让组头先说「↵ 会把你带到哪」**——同一个词命中文档和条目时，不给两类不同的颜色
+（赭石已经给了当前项），靠三条既有通道叠加：① 组头右端 9.5 mono faint 写目的地（↵ 编辑器 / ↵ 知识库 /
+↵ 第 N 行）；② 行的左端形状——文档是 16px 描边图标 + 10.5 mono 路径（两级灰同文件面板），条目是 24px
+分类色块（有头像用图，否则分类色 18% 底 + 1px 边 + 首字，色来自 `catColor.ts`）+ 11 serif italic 副行；
+③ 当前项的动词（打开 / 前往条目 / 跳到第 N 行），脚线的 ↵ 那一格跟着变。
+
+- 面板 660 · 顶 14vh · `--color-bg-surface` + `--color-border-strong` + `--shadow-xl`，**零动画**（只有 80ms 遮罩淡入）。
+  输入行 52，组头 10/18/4，文档行 8/18、条目行 7/18、正文行 6/18、AI 行 9/18，脚线 30。
+- **作用域是 chip，不是前缀**：输入行右端四枚（全部 / 文档 / 条目 / 正文），Tab 轮换，档位组同一语法
+  （idle `--color-text-dim` + `--color-border-panel` · hover `--color-bg-elevated` · 选中 `--color-accent-text` /
+  `--color-bg-selected` / 赭石边）。AI 不占 chip——它不是可搜的集合，是对词的动作，两行永远压底。
+- 顺序 文档 → 条目 → 正文 → AI；正文只搜当前这一篇，所以放第三且组头点名篇名。「全部」档上限 6/5/4，
+  超出写一行 mono 事实「还有 N 篇 · Tab 切到「文档」」（Tab 赭石），不写「更多…」按钮；单档时组头消失（正文档例外）。
+- 右列只放一样：后缀 / 已打开 / ⌘↵，当前项时被动作提示替换。命中片段 `--color-mention-bg` 底 + 赭石字，名字与路径都可高亮。
+- 空查询 = 本会话「最近去过」混排 8 行，不标类型（行的形状已经说了）；没打开项目 = 最近项目选择器。
+  无命中的空句 12.5 serif italic 居中，单档时第二行报别的档里有多少、可点＝切档。
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.

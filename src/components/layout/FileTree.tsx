@@ -15,7 +15,7 @@ import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs
 import { fileExists, previewHtmlWindow } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
-  allRows, ancestorsOf, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
+  allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
   pruneNested, pruneSelection, rangeBetween,
 } from "../../lib/fs/selection";
 import {
@@ -75,6 +75,9 @@ const COMBO_COLLAPSE_ALL = { mod: true, alt: true, key: "ArrowLeft" } as const;
  * dispatch 级的绑定撞在一起是静默的：先注册的赢，另一个永远不响。⌥⌘L 空着。
  */
 const COMBO_REVEAL_DOC = { mod: true, alt: true, key: "l" } as const;
+
+/** 最后一条已兑现的 `projectStore.revealRequest.seq`——见 FileTree 里消费它的 effect。 */
+let consumedRevealSeq = 0;
 const COMBO_NEW_DOC = { mod: true, key: "n" } as const;
 const COMBO_NEW_GROUP = { mod: true, shift: true, key: "n" } as const;
 
@@ -533,6 +536,8 @@ export function FileTree() {
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  const revealPath = useProjectStore((s) => s.revealPath);
+  const revealRequest = useProjectStore((s) => s.revealRequest);
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);
   const relinkAssets = useProjectStore((s) => s.relinkAssets);
@@ -613,14 +618,19 @@ export function FileTree() {
     });
   }, [everyRow]);
 
-  // Opening a document from anywhere else (command palette, outline, a link)
-  // moves the selection with it, so the sidebar never shows one file open and
-  // a different one selected.
+  // Opening a document from anywhere else (command palette, outline, a link,
+  // back/forward) reveals it — 树外打开即定位: expand down to it, scroll it into
+  // view and move the selection with it, so the sidebar never shows one file
+  // open and a different one selected. The tree's own opens write the path to
+  // `treeOpenedRef` first and skip this: that row was just clicked, it is on
+  // screen already. The ref starts at the mounted value, so switching sidebar
+  // tabs does not re-centre the current document.
+  const treeOpenedRef = useRef<string | null>(activeFilePath);
   useEffect(() => {
     if (!activeFilePath) return;
-    setSelected((prev) => (prev.has(activeFilePath) ? prev : new Set([activeFilePath])));
-    setAnchor(activeFilePath);
-  }, [activeFilePath]);
+    if (treeOpenedRef.current === activeFilePath) return;
+    revealPath(activeFilePath);
+  }, [activeFilePath, revealPath]);
 
   // 「已折叠 N 个分组」 says its piece and goes. No layout animation: it is the
   // one thing on screen that must not move the tree it is describing.
@@ -695,7 +705,7 @@ export function FileTree() {
     }
     setSelected(new Set([node.path]));
     setAnchor(node.path);
-    if (!node.is_dir) setActiveFilePath(node.path);
+    if (!node.is_dir) { treeOpenedRef.current = node.path; setActiveFilePath(node.path); }
   };
 
   const clearSelection = () => {
@@ -783,23 +793,26 @@ export function FileTree() {
   }, [activeFilePath, currentHidden, visiblePaths, renamingPath]);
 
   const revealCurrent = () => {
-    if (!activeFilePath) return;
-    const { expandedDirs: dirs, setExpandedDirs } = useProjectStore.getState();
-    const chain = ancestorsOf(fileTree, activeFilePath);
-    if (chain.length > 0) {
-      const next = { ...dirs };
-      for (const dir of chain) next[dir] = true;
-      setExpandedDirs(next);
-    }
-    setSelected(new Set([activeFilePath]));
-    setAnchor(activeFilePath);
+    if (activeFilePath) revealPath(activeFilePath);
+  };
+
+  // 兑现定位请求：展开已经由 store 做完，这里只剩选中与滚动。`seq` 记在模块级而
+  // 不是 ref 里——树卸载（切到别的侧栏标签）再挂回来，同一条请求不该再居中一遍，
+  // 而卸载期间到达的那条又必须被兑现。
+  useEffect(() => {
+    if (!revealRequest || revealRequest.seq <= consumedRevealSeq) return;
+    consumedRevealSeq = revealRequest.seq;
+    const { path } = revealRequest;
+    setSelected(new Set([path]));
+    setAnchor(path);
     // After the expansion has rendered — the row does not exist before it.
-    window.requestAnimationFrame(() => {
+    const id = window.requestAnimationFrame(() => {
       treeRef.current
-        ?.querySelector(`[data-path="${CSS.escape(activeFilePath)}"]`)
+        ?.querySelector(`[data-path="${CSS.escape(path)}"]`)
         ?.scrollIntoView({ block: "center" });
     });
-  };
+    return () => window.cancelAnimationFrame(id);
+  }, [revealRequest]);
 
   // ── Transfers ───────────────────────────────────────────────────────────────
 
@@ -1370,7 +1383,7 @@ export function FileTree() {
     } else {
       items.push(
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
-          action: () => setActiveFilePath(node.path) },
+          action: () => { treeOpenedRef.current = node.path; setActiveFilePath(node.path); } },
       );
       // 「预览」指的是**另开的预览窗口**，不是编辑器右边那半 —— 打开这份文件本来
       // 就会显示预览面板，菜单里再放一个同义的项没有意义。那个窗口有自己的自定义
@@ -1453,15 +1466,12 @@ export function FileTree() {
 
   /**
    * ⋯ 的内容随宽度变：≥360px 时「导入文件 / 刷新」已经升到工具栏上，菜单里就只剩
-   * 上面两项。档位是容器查询，JS 看不见它——所以在**打开菜单的这一刻**量一次容器，
+   * 「全部展开」一项——「定位当前文档」已经是工具栏的常驻按钮（设计稿 21 §2a），菜单里再放一份是两个入口指同一个按钮。档位是容器查询，JS 看不见它——所以在**打开菜单的这一刻**量一次容器，
    * 一次测量，不是每行一次。
    */
   const overflowItems = (): ContextMenuEntry[] => {
     const wide = (containerRef.current?.clientWidth ?? 240) >= 359;
     const items: ContextMenuEntry[] = [
-      { kind: "item", icon: <Crosshair size={13} />, label: t("fileTree.revealCurrent"),
-        shortcut: comboLabel(COMBO_REVEAL_DOC),
-        disabled: !activeFilePath, action: revealCurrent },
       { kind: "item", icon: <ChevronsUpDown size={13} />, label: t("fileTree.expandAll"),
         disabled: !hasAnyFolder,
         action: () => { useProjectStore.getState().expandAllDirs(); setNotice(null); } },
@@ -1669,6 +1679,18 @@ export function FileTree() {
           </button>
           {/* 视图组 */}
           <span className={`${styles.toolbarDivider} ${styles.wide}`} />
+          {/* 定位当前文档：视图组第一枚（设计稿 21 §2a）。它作用于一个点、比「全部折叠」
+              更常按，且两者是一对反义动作——折叠完想回到当前文档时手不用动。禁用语法沿用
+              「全部折叠」（opacity .4、无 hover、无 tooltip）：唯一的禁用条件是没有打开的
+              文档。按钮是动词、脚线是状态，两个都留（§2c）。 */}
+          <button
+            className={`${styles.toolbarBtn} ${styles.revealBtn}`}
+            title={activeFilePath ? `${t("fileTree.revealCurrent")} ${comboLabel(COMBO_REVEAL_DOC)}` : undefined}
+            disabled={!activeFilePath}
+            onClick={revealCurrent}
+          >
+            <Crosshair size={14} strokeWidth={1.7} />
+          </button>
           <button
             className={`${styles.toolbarBtn} ${!anyOpenDir && hasAnyFolder ? styles.armed : ""}`}
             title={hasAnyFolder

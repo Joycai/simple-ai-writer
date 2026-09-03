@@ -42,6 +42,13 @@ export function useGlobalShortcuts() {
         setShowCommandPalette(!showCommandPalette);
         return;
       }
+      // ⌘P ＝ 打开面板并落到「文档」档（VS Code / IDEA 的「按文件名跳」）；面板已开着时
+      // 直接切档。它从不像 ⌘K 那样 toggle：肌肉记忆里 ⌘P 是「去找文件」，不是「关掉」。
+      if (matchesCombo(e, { mod: true, key: "p" })) {
+        e.preventDefault();
+        useAppStore.getState().openCommandPalette("files");
+        return;
+      }
       if (matchesCombo(e, { mod: true, key: "l" })) {
         e.preventDefault();
         if (showAiDrawer && aiDrawerMode === "chat") setShowAiDrawer(false);
