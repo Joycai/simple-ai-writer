@@ -116,17 +116,54 @@ describe("Responses adapter — request shape", () => {
     expect(input).toEqual([{ role: "user", content: "hi" }]);
   });
 
-  it("sends tools nowhere yet (slice E) and never invents a tools key", async () => {
+  it("sends tools flat with an explicit strict:false, and no tools key without them", async () => {
+    const without = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(without[0].url).toBe("https://api.openai.com/v1/responses");
+    expect(without[0].body).not.toHaveProperty("tools");
+    expect(without[0].body).not.toHaveProperty("tool_choice");
+
+    const params = { type: "object", properties: { path: { type: "string" } } };
     const calls = mockFetch([COMPLETED]);
     await streamCompletion({
       baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
       messages: [{ role: "user", content: "hi" }],
-      tools: [{ type: "function", function: { name: "f", description: "", parameters: {} } }],
+      tools: [{ type: "function", function: { name: "read_file", description: "Read", parameters: params } }],
       onChunk: () => {},
     });
-    expect(calls[0].url).toBe("https://api.openai.com/v1/responses");
-    expect(calls[0].body).not.toHaveProperty("tools");
-    expect(calls[0].body).not.toHaveProperty("tool_choice");
+    // Flat, not the Chat Completions `function: {…}` wrapper — and strict
+    // spelled out, because omitting it means "strict: true" on this wire
+    // (docs/api/responses.md §2.3) and every registry schema is non-strict.
+    expect(calls[0].body.tools).toEqual([
+      { type: "function", name: "read_file", description: "Read", parameters: params, strict: false },
+    ]);
+    expect(calls[0].body.tool_choice).toBe("auto");
+  });
+
+  it("spells a named tool_choice without the function wrapper, and passes the strings through", async () => {
+    const named = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ type: "function", function: { name: "f", description: "", parameters: {} } }],
+      toolChoice: { type: "function", function: { name: "f" } },
+      onChunk: () => {},
+    });
+    expect(named[0].body.tool_choice).toEqual({ type: "function", name: "f" });
+
+    const required = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [{ type: "function", function: { name: "f", description: "", parameters: {} } }],
+      toolChoice: "required",
+      onChunk: () => {},
+    });
+    expect(required[0].body.tool_choice).toBe("required");
   });
 
   it("carries temperature only when set, and lets extraBody win last", async () => {
@@ -288,5 +325,158 @@ describe("Responses adapter — stream", () => {
     });
     expect(calls[0].url).toBe("https://relay.example.com/v1/responses");
     expect(text(received)).toBe("ok");
+  });
+});
+
+/** The measured tool-round sequence, docs/api/responses.md §4. */
+const REASONING_ITEM = {
+  id: "rs_1", type: "reasoning",
+  summary: [{ type: "summary_text", text: "I should read the file." }],
+  encrypted_content: "gAAAAABo…opaque…",
+};
+const CALL_ITEM = {
+  id: "fc_1", type: "function_call", call_id: "call_1", name: "read_file",
+  arguments: '{"path":"a.md"}', status: "completed",
+};
+const TOOL_ROUND = [
+  ev("response.output_item.added", { output_index: 0, item: { id: "rs_1", type: "reasoning", summary: [] } }),
+  ev("response.reasoning_summary_text.delta", { output_index: 0, delta: "I should read the file." }),
+  ev("response.output_item.done", { output_index: 0, item: REASONING_ITEM }),
+  ev("response.output_item.added", { output_index: 1, item: { ...CALL_ITEM, arguments: "", status: "in_progress" } }),
+  ev("response.function_call_arguments.delta", { output_index: 1, delta: '{"pa' }),
+  ev("response.function_call_arguments.delta", { output_index: 1, delta: 'th":"a.md"}' }),
+  ev("response.function_call_arguments.done", { output_index: 1, arguments: '{"path":"a.md"}' }),
+  ev("response.output_item.done", { output_index: 1, item: CALL_ITEM }),
+  COMPLETED,
+];
+
+const TOOL = { type: "function" as const, function: { name: "read_file", description: "", parameters: {} } };
+
+describe("Responses adapter — tool calls", () => {
+  it("assembles a function call from the fragments and hands the turn's items back verbatim", async () => {
+    const calls = mockFetch(TOOL_ROUND);
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "gpt-5.5",
+      messages: [{ role: "user", content: "read a.md" }],
+      tools: [TOOL],
+      onChunk: (c) => received.push(c),
+    });
+    expect(calls).toHaveLength(1);
+    const chunk = received.find((c) => "toolCalls" in c) as Extract<StreamChunk, { toolCalls: unknown }>;
+    expect(chunk.toolCalls).toEqual([
+      { index: 1, id: "call_1", name: "read_file", arguments: '{"path":"a.md"}' },
+    ]);
+    // The echo: both items, in order, untouched — encrypted_content included.
+    expect(chunk._responseItems).toEqual({ modelId: "gpt-5.5", items: [REASONING_ITEM, CALL_ITEM] });
+    // Summary streamed for display, nothing of it in the text.
+    expect(received.filter((c) => "reasoning" in c)).toEqual([{ reasoning: "I should read the file." }]);
+    expect(text(received)).toBe("");
+    // Contract: the tool-call chunk precedes the one done.
+    const order = received.map((c) => ("toolCalls" in c ? "calls" : "done" in c ? "done" : "other"));
+    expect(order.indexOf("calls")).toBeLessThan(order.indexOf("done"));
+    expect(order.filter((o) => o === "done")).toHaveLength(1);
+  });
+
+  it("yields a complete call when only the whole item arrives (no argument deltas)", async () => {
+    const received: StreamChunk[] = [];
+    mockFetch([
+      ev("response.output_item.added", { output_index: 0, item: { type: "function_call", call_id: "call_9", name: "f", arguments: "" } }),
+      ev("response.output_item.done", { output_index: 0, item: { type: "function_call", call_id: "call_9", name: "f", arguments: '{"x":1}', status: "completed" } }),
+      COMPLETED,
+    ]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], tools: [TOOL],
+      onChunk: (c) => received.push(c),
+    });
+    const chunk = received.find((c) => "toolCalls" in c) as Extract<StreamChunk, { toolCalls: unknown }>;
+    expect(chunk.toolCalls).toEqual([{ index: 0, id: "call_9", name: "f", arguments: '{"x":1}' }]);
+  });
+
+  it("yields a complete call from deltas alone when the endpoint never sends the whole item", async () => {
+    const received: StreamChunk[] = [];
+    mockFetch([
+      ev("response.output_item.added", { output_index: 0, item: { type: "function_call", call_id: "call_2", name: "f", arguments: "" } }),
+      ev("response.function_call_arguments.delta", { output_index: 0, delta: '{"x":' }),
+      ev("response.function_call_arguments.delta", { output_index: 0, delta: "2}" }),
+      COMPLETED,
+    ]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], tools: [TOOL],
+      onChunk: (c) => received.push(c),
+    });
+    const chunk = received.find((c) => "toolCalls" in c) as Extract<StreamChunk, { toolCalls: unknown }>;
+    expect(chunk.toolCalls).toEqual([{ index: 0, id: "call_2", name: "f", arguments: '{"x":2}' }]);
+  });
+
+  it("orders parallel calls by output_index and reports one echo for the round", async () => {
+    const received: StreamChunk[] = [];
+    const a = { type: "function_call", call_id: "call_a", name: "f", arguments: "{}", status: "completed" };
+    const b = { type: "function_call", call_id: "call_b", name: "g", arguments: "{}", status: "completed" };
+    mockFetch([
+      ev("response.output_item.added", { output_index: 1, item: { ...b, arguments: "" } }),
+      ev("response.output_item.added", { output_index: 0, item: { ...a, arguments: "" } }),
+      ev("response.output_item.done", { output_index: 1, item: b }),
+      ev("response.output_item.done", { output_index: 0, item: a }),
+      COMPLETED,
+    ]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], tools: [TOOL],
+      onChunk: (c) => received.push(c),
+    });
+    const chunk = received.find((c) => "toolCalls" in c) as Extract<StreamChunk, { toolCalls: unknown }>;
+    expect(chunk.toolCalls.map((c) => c.id)).toEqual(["call_a", "call_b"]);
+    expect(received.filter((c) => "toolCalls" in c)).toHaveLength(1);
+  });
+
+  it("emits no tool-call chunk on a plain text turn", async () => {
+    const received: StreamChunk[] = [];
+    mockFetch([ev("response.output_text.delta", { delta: "just prose" }), COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], tools: [TOOL],
+      onChunk: (c) => received.push(c),
+    });
+    expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
+    expect(text(received)).toBe("just prose");
+  });
+});
+
+describe("Responses adapter — echoing a tool round", () => {
+  const history: StreamMessage[] = [
+    { role: "user", content: "read a.md" },
+    {
+      role: "assistant", content: null,
+      tool_calls: [{ id: "call_1", type: "function", function: { name: "read_file", arguments: '{"path":"a.md"}' } }],
+      _responseItems: { modelId: "gpt-5.5", items: [REASONING_ITEM, CALL_ITEM] },
+    },
+    { role: "tool", tool_call_id: "call_1", content: "# a" },
+  ];
+
+  it("puts the turn's own items into input, in place of the bare mapping, for the same model", async () => {
+    const calls = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "gpt-5.5",
+      messages: history, tools: [TOOL], onChunk: () => {},
+    });
+    expect(calls[0].body.input).toEqual([
+      { role: "user", content: "read a.md" },
+      REASONING_ITEM,
+      CALL_ITEM,
+      { type: "function_call_output", call_id: "call_1", output: "# a" },
+    ]);
+  });
+
+  it("falls back to the bare function_call when the items came from another model", () => {
+    const { input } = toResponsesInput(history, "gpt-5.4");
+    expect(input).toEqual([
+      { role: "user", content: "read a.md" },
+      { type: "function_call", call_id: "call_1", name: "read_file", arguments: '{"path":"a.md"}' },
+      { type: "function_call_output", call_id: "call_1", output: "# a" },
+    ]);
+    expect(JSON.stringify(input)).not.toContain("encrypted_content");
   });
 });
