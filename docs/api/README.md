@@ -113,7 +113,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 - [`../reasoning-plan.md`](reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
 - [`../anthropic-plan.md`](anthropic-plan.md) — ④ 族的审计与接入（已实现）
 - [`../gemini-plan.md`](gemini-plan.md) — ③ 族的盘点与接入（已实现）
-- [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（全部未验证）
+- [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（① 族的 DashScope 各条已于 2026-09 验掉大半）
+- [`../qianwen-compat-plan.md`](qianwen-compat-plan.md) — 千问AI平台的逐模型实测、修复切片，以及 ② 族（Responses）的接入评估（含与 GPT-5.4/5.5/5.6 官方的对照）
 
 ## 写作约定
 
