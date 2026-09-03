@@ -664,10 +664,15 @@ function AgentLogRow({ row, showTime, runStatus }: {
             <>
               <Marker state="done" />
               <span className={styles.rowName}>
-                {t("ai.agent.log.compacted", {
-                  defaultValue: "已归纳前 {{n}} 轮对话",
-                  n: event.foldedTurns,
-                })}
+                {event.mode === "state"
+                  ? t("ai.agent.log.stateUpdated", {
+                      defaultValue: "已把前 {{n}} 轮对话折进执行状态",
+                      n: event.foldedTurns,
+                    })
+                  : t("ai.agent.log.compacted", {
+                      defaultValue: "已归纳前 {{n}} 轮对话",
+                      n: event.foldedTurns,
+                    })}
               </span>
               <span className={styles.rowMetaRight}>
                 {formatTokenCount(event.fromTokens)} → {formatTokenCount(event.toTokens)} tk
@@ -677,7 +682,9 @@ function AgentLogRow({ row, showTime, runStatus }: {
           }
           detail={
             <DetailBlock
-              label={t("ai.agent.log.detailSummary", { defaultValue: "历史摘要" })}
+              label={event.mode === "state"
+                ? t("ai.agent.log.detailState", { defaultValue: "执行状态" })
+                : t("ai.agent.log.detailSummary", { defaultValue: "历史摘要" })}
               body={event.summary}
             />
           }
@@ -818,7 +825,9 @@ function useHeadline(model: AgentLogModel): string {
     case "context-trimmed":
       return t("ai.agent.log.trimmed", { count: current.count });
     case "context-compacted":
-      return t("ai.agent.log.compacted", { defaultValue: "已归纳前 {{n}} 轮对话", n: current.foldedTurns });
+      return current.mode === "state"
+        ? t("ai.agent.log.stateUpdated", { defaultValue: "已把前 {{n}} 轮对话折进执行状态", n: current.foldedTurns })
+        : t("ai.agent.log.compacted", { defaultValue: "已归纳前 {{n}} 轮对话", n: current.foldedTurns });
     case "turn-resumed":
       return t(current.final ? "ai.agent.log.turnResumedFinal" : "ai.agent.log.turnResumed", {
         leg: current.leg,
