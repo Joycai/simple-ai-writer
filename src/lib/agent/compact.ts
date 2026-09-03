@@ -363,9 +363,10 @@ export function excludeDirsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set
 /**
  * Drop every ledger entry whose carrier `keep` rejects, and forget any entity
  * left holding nothing. Both callers are "these messages are gone": compaction
- * folding turns away, and a block being rebuilt from scratch.
+ * folding turns away, a block being rebuilt from scratch, and a rewind cutting
+ * the history short (lib/agent/rewind).
  */
-function pruneLedger(meta: ChatSessionMeta, keep: (carrier: StreamMessage) => boolean): void {
+export function pruneLedger(meta: ChatSessionMeta, keep: (carrier: StreamMessage) => boolean): void {
   for (const [dir, rec] of meta.injected) {
     if (rec.coreCarrier && !keep(rec.coreCarrier)) rec.coreCarrier = null;
     for (const [file, carrier] of rec.facetCarriers) {

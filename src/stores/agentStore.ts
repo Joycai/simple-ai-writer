@@ -56,6 +56,7 @@ import { STATE_KEEP_TURNS } from "../lib/agent/skillState";
 import {
   deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
 } from "../lib/agent/chatSession";
+import { applyRewindCut, planRewind } from "../lib/agent/rewind";
 import {
   listChatSessions, loadChatSession, setChatSessionPinned, upsertChatSession,
   type ChatSessionRow,
@@ -462,6 +463,12 @@ interface AgentState {
    * author releases it.
    */
   toggleChatSessionPin: (id: number) => Promise<void>;
+  /**
+   * 回到这里重说: undo one of the author's questions and everything after it.
+   * Resolves with the question's text for the composer, or null when the turn
+   * cannot be rewound to (see lib/agent/rewind for which ones can).
+   */
+  rewindChat: (turnId: string) => Promise<string | null>;
   /**
    * Project open/close hook (projectStore calls this): drop the previous
    * project's session from view, then restore the new project's newest one.
@@ -2098,6 +2105,54 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // Same contract as persistChat: the conversation must keep working.
       console.warn("chat session pin failed:", e);
     }
+  },
+
+  /**
+   * 回到这里重说 (docs/feature/agent/chat-memory-plan.md §12).
+   *
+   * A cut, not a re-seed — the wire history is the conversation, so it is
+   * truncated at the target's question and the meta is brought back in step
+   * (lib/agent/rewind decides where and whether). Two things deliberately
+   * survive: the session's disk workspace, because a note the assistant filed
+   * is a file like any approved edit — rewinding the conversation does not
+   * un-write the manuscript either, and the confirm text says so — and the
+   * usage totals, because the tokens were spent.
+   *
+   * Rewinding to the first question empties the session: the history goes back
+   * to null so the next send seeds afresh against the new question, and the DB
+   * row keeps its id so that send overwrites it in place rather than leaving
+   * the un-rewound conversation behind as a second entry. Until then the row
+   * still holds the old turns (persistChat has nothing to write) — which is
+   * also what a restart would restore, and an accidental rewind is then
+   * recoverable rather than gone.
+   */
+  rewindChat: async (turnId) => {
+    if (get().chatRunning || get().chatCompacting) return null;
+    const { turns, chatHistory, chatMeta } = get();
+    const target = turns.find((tn) => tn.id === turnId);
+    const plan = planRewind(turns, chatHistory, chatMeta, turnId);
+    if (!plan || !target) return null;
+    if (plan.kind === "reseed") {
+      set((s) => ({
+        turns: [],
+        chatHistory: null,
+        chatMeta: null,
+        chatError: null,
+        chatContextVersion: s.chatContextVersion + 1,
+      }));
+    } else if (chatHistory && chatMeta) {
+      const history = applyRewindCut(chatHistory, chatMeta, plan.cutAt);
+      set((s) => ({
+        turns: plan.turns,
+        chatHistory: history,
+        chatError: null,
+        chatContextVersion: s.chatContextVersion + 1,
+      }));
+      // The history just changed shape — same rule as a fold: save now, the
+      // crash that loses a session never announces itself first.
+      void get().persistChat();
+    }
+    return target.text;
   },
 
   resumeTask: async (taskId: string) => {

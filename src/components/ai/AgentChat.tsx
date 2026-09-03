@@ -53,6 +53,7 @@ import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
+import { rewindableTurnIds } from "../../lib/agent/rewind";
 import { splitMentions } from "../../lib/agent/mentionText";
 import {
   computeContextBreakdown,
@@ -117,6 +118,10 @@ export function AgentChat() {
   const openModelPicker = useAppStore((s) => s.openModelPicker);
   const chatCompacting = useAgentStore((s) => s.chatCompacting);
   const compactChatNow = useAgentStore((s) => s.compactChatNow);
+  const rewindChat = useAgentStore((s) => s.rewindChat);
+  const chatMeta = useAgentStore((s) => s.chatMeta);
+  const chatSessionId = useAgentStore((s) => s.chatSessionId);
+  const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
   const stateMemory = useAgentStore((s) => s.stateMemory);
   // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
   // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
@@ -296,6 +301,45 @@ export function AgentChat() {
     () => turns.slice(0, foldAt).filter((t) => t.role === "user").length,
     [turns, foldAt],
   );
+
+  // ── 回到这里重说 (docs/feature/agent/chat-memory-plan.md §12) ──
+  // Which questions can be rewound to is a property of the wire history (a
+  // folded question cannot), and the meta is mutated in place — so this
+  // recomputes on chatContextVersion, the store's "the history changed shape"
+  // signal, not on the meta reference.
+  const rewindable = useMemo(
+    () => rewindableTurnIds(turns, chatMeta),
+    [turns, chatMeta, chatContextVersion],
+  );
+  /** The question the author is about to rewind to, awaiting confirmation. */
+  const [rewindTo, setRewindTo] = useState<string | null>(null);
+  const rewindBarRef = useRef<HTMLDivElement>(null);
+  // The question the author clicked may sit right at the viewport's bottom
+  // edge, with the confirm bar growing below the fold — `nearest` scrolls only
+  // when it is actually out of sight.
+  useEffect(() => {
+    if (rewindTo !== null) rewindBarRef.current?.scrollIntoView({ block: "nearest" });
+  }, [rewindTo]);
+  // A turn starting, or a switch to another session, withdraws the question:
+  // the id it names may not even exist any more.
+  useEffect(() => { setRewindTo(null); }, [chatRunning, chatSessionId]);
+  const firstQuestionAt = turns.findIndex((tn) => tn.role === "user");
+  const rewindIndex = rewindTo === null ? -1 : turns.findIndex((tn) => tn.id === rewindTo);
+  const rewindExchanges = rewindIndex < 0
+    ? 0
+    : turns.slice(rewindIndex).filter((tn) => tn.role === "user").length;
+  const canRewind = !chatRunning && !chatCompacting && rewindTo === null;
+  const askRewind = useCallback((id: string) => setRewindTo(id), []);
+  const confirmRewind = () => {
+    const id = rewindTo;
+    if (id === null) return;
+    setRewindTo(null);
+    void rewindChat(id).then((text) => {
+      if (text === null) return;
+      setDraft(text);
+      inputRef.current?.focus();
+    });
+  };
   // Toggling the fold adds or removes content *above* the viewport, which
   // would visually teleport the transcript. Compensate by the height delta —
   // before paint, so the reader never sees the jump.
@@ -511,8 +555,7 @@ export function AgentChat() {
   // afterwards. See lib/agent/contextBreakdown.ts for the other two corrections
   // (the ceiling as denominator, and counting the tool schemas).
   const chatHistory = useAgentStore((s) => s.chatHistory);
-  const chatMeta = useAgentStore((s) => s.chatMeta);
-  const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
+  // chatMeta / chatContextVersion: selected up top, shared with the rewind.
   const contextUtilization = useAppStore((s) => s.contextUtilization);
   const autoCompact = useAppStore((s) => s.autoCompact);
   const compactTriggerTokens = useAppStore((s) => s.compactTriggerTokens);
@@ -612,15 +655,46 @@ export function AgentChat() {
                   })}
             </button>
           )}
-          {turns.slice(foldAt).map((turn) =>
+          {turns.slice(foldAt).map((turn, i) =>
             turn.role === "user" ? (
-              <UserTurn key={turn.id} turn={turn} onCtx={snippetSave.onMessageContextMenu} />
+              <UserTurn
+                key={turn.id}
+                turn={turn}
+                onCtx={snippetSave.onMessageContextMenu}
+                onRewind={canRewind && rewindable.has(turn.id) ? askRewind : undefined}
+                doomed={rewindIndex >= 0 && foldAt + i > rewindIndex}
+                /* The confirm grows under the question it is about, not at the
+                   foot of the transcript: that question may be screens above,
+                   and a question asked where nobody is looking goes unanswered
+                   (the roleplay panel learned this the hard way). */
+                confirm={rewindTo === turn.id ? (
+                  <div className={styles.rewindBar} ref={rewindBarRef}>
+                    <span className={styles.rewindText}>
+                      {foldAt + i === firstQuestionAt
+                        ? t("ai.chat.rewindConfirmFirst", {
+                            defaultValue: "撤销整段对话，原文回到输入框；下一次发送会重新取材。已批准落盘的修改不会跟着撤销。",
+                          })
+                        : t("ai.chat.rewindConfirm", {
+                            n: rewindExchanges,
+                            defaultValue: `撤销这一问和它之后的对话（共 ${rewindExchanges} 轮），原文回到输入框。已批准落盘的修改不会跟着撤销。`,
+                          })}
+                    </span>
+                    <button type="button" className={styles.rewindCancel} onClick={() => setRewindTo(null)}>
+                      {t("common.cancel", { defaultValue: "取消" })}
+                    </button>
+                    <button type="button" className={styles.rewindGo} onClick={confirmRewind}>
+                      {t("ai.chat.rewindGo", { defaultValue: "回退" })}
+                    </button>
+                  </div>
+                ) : undefined}
+              />
             ) : (
               <AssistantTurn
                 key={turn.id}
                 text={turn.text}
                 log={turn.log}
                 images={turn.images}
+                doomed={rewindIndex >= 0 && foldAt + i > rewindIndex}
                 isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
                 onCtx={snippetSave.onMessageContextMenu}
                 handoffOpen={handoffs.byTurn.get(turn.id)?.open ?? null}
@@ -930,13 +1004,26 @@ function MentionText({ text }: { text: string }) {
  * every earlier turn keeps its identity, so memoized turns skip entirely and
  * a stream only ever re-renders the one turn it is writing into.
  */
-const UserTurn = memo(function UserTurn({ turn, onCtx }: {
+const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed }: {
   turn: ChatTurn;
   onCtx: SnippetSave["onMessageContextMenu"];
+  /**
+   * 回到这里重说 — given only for a question that can be rewound to, and only
+   * while nothing is running. Takes the id (rather than closing over it) so the
+   * same callback serves every turn and the memo above keeps holding.
+   */
+  onRewind?: (turnId: string) => void;
+  /** The rewind confirm, when this is the question being rewound to. */
+  confirm?: React.ReactNode;
+  /** This turn would go with the pending rewind: dimmed, so "N exchanges" is visible. */
+  doomed?: boolean;
 }) {
   const { t } = useTranslation();
   return (
-    <div className={styles.userBlock} onContextMenu={(e) => onCtx(e, turn.text)}>
+    <div
+      className={`${styles.userBlock} ${doomed ? styles.turnDoomed : ""}`}
+      onContextMenu={(e) => onCtx(e, turn.text)}
+    >
       {turn.quote && (
         <div className={styles.quote}>
           <div className={styles.quoteLabel}>
@@ -950,7 +1037,17 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
           prose is a caption for the image, here it is the instruction
           the image came with. */}
       <TurnImages paths={turn.images} align="end" />
-      <div className={styles.turnTime}>{formatTime(turn.at)}</div>
+      <div className={styles.turnFoot}>
+        {/* Hover-revealed: it is an undo, and an undo should not stand with
+            its hand up on every line of the transcript. */}
+        {onRewind && (
+          <button type="button" className={styles.rewindBtn} onClick={() => onRewind(turn.id)}>
+            {t("ai.chat.rewindHere", { defaultValue: "回到这里重说" })}
+          </button>
+        )}
+        <span className={styles.turnTime}>{formatTime(turn.at)}</span>
+      </div>
+      {confirm}
     </div>
   );
 });
@@ -966,13 +1063,15 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
  * callbacks being `useCallback`'d up there.
  */
 const AssistantTurn = memo(function AssistantTurn({
-  text, log, images, isLive, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
+  text, log, images, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
   onDisableWriter, onOpenSettings, onChangeModel,
 }: {
   text: string;
   log: AgentEvent[];
   images?: string[];
   isLive: boolean;
+  /** Would go with the pending rewind — see UserTurn. */
+  doomed?: boolean;
   onCtx: SnippetSave["onMessageContextMenu"];
   /** This turn's handoff events, when the writer produced its text. */
   handoffOpen: TurnHandoff["open"] | null;
@@ -1005,7 +1104,7 @@ const AssistantTurn = memo(function AssistantTurn({
     // Nested, one of those two would be indented — and the rule's whole claim is
     // that it measures the writer's text exactly.
     <div
-      className={`${styles.assistantTurn} ${handoff ? writer.turn : ""}`}
+      className={`${styles.assistantTurn} ${handoff ? writer.turn : ""} ${doomed ? styles.turnDoomed : ""}`}
       onContextMenu={(e) => onCtx(e, text)}
     >
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
