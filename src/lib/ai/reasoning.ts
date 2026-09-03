@@ -264,6 +264,11 @@ export function defaultCategoryId(standard: ApiStandard): ThinkingCategoryId {
   switch (familyOf(standard)) {
     case "anthropic": return "claude-adaptive";
     case "gemini": return "gemini3";
+    // No category speaks this family's `reasoning: {effort, summary}` yet
+    // (docs/api/qianwen-compat-plan.md §4.4 slice F adds `responses-effort`);
+    // `off` sends nothing, which is the only safe default until it does —
+    // `openai-generic` would put a Chat Completions field on this wire.
+    case "responses": return "off";
     default: return "openai-generic";
   }
 }

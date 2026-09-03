@@ -158,6 +158,8 @@ export interface StagedConfigImport extends ParsedConfigBundle {
 const API_STANDARDS: ApiStandard[] = [
   "openai",
   "openai_compat",
+  "openai_responses",
+  "openai_responses_compat",
   "gemini",
   "gemini_compat",
   "anthropic",

@@ -27,6 +27,9 @@ import hub from "./ProvidersModels.module.css";
 const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   openai: DEFAULT_OPENAI_BASE,
   openai_compat: "",
+  // Same host as Chat Completions; the adapter appends /responses below it.
+  openai_responses: DEFAULT_OPENAI_BASE,
+  openai_responses_compat: "",
   gemini: DEFAULT_GEMINI_BASE,
   gemini_compat: "",
   anthropic: DEFAULT_ANTHROPIC_BASE,
@@ -84,6 +87,12 @@ const ORCAROUTER_FREE_MODELS: StarterModel[] = [
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
+  // Same vendor, second protocol (`/responses`) — the one OpenAI's own docs
+  // now lead with, and the only one whose reasoning summaries and encrypted
+  // reasoning items come back. Slice D of docs/api/qianwen-compat-plan.md:
+  // text streaming today; tools, thinking and structured output follow in
+  // E/F/G, so a row on this preset gets prose answers until they land.
+  { name: "OpenAI (Responses)", apiStandard: "openai_responses", baseUrl: STANDARD_ENDPOINTS.openai_responses },
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
   // DashScope's OpenAI compatible-mode; the base already carries /v1, which
@@ -199,7 +208,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const apiStandardOptions = (
-    ["openai", "openai_compat", "gemini", "gemini_compat", "anthropic", "anthropic_compat"] as const
+    [
+      "openai", "openai_compat", "openai_responses", "openai_responses_compat",
+      "gemini", "gemini_compat", "anthropic", "anthropic_compat",
+    ] as const
   ).map((value) => ({ value: value as ApiStandard, label: t(`aiConfig.apiStandards.${value}`) }));
 
   // Local servers (Ollama, LM Studio) authenticate no requests, so the API key

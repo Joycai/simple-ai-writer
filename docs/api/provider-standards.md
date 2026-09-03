@@ -7,6 +7,12 @@
 > 本文隐含的分层（协议族 / 端点 / 模型）后来被显式写成
 > [`provider-layering.md`](provider-layering.md)。**新增字段该放哪一层，以那份
 > 为准**；本文只负责这次重构本身的来龙去脉。协议事实见 [`api/`](README.md)。
+>
+> 2026-09 起是 **4 个协议族 × official/compat = 8 个值**：② OpenAI Responses 按本文
+> 的契约加成 `openai_responses` / `openai_responses_compat`（`ProtocolFamily`
+> 加 `"responses"`），与 ① 族同 base、同 Bearer，只有 base 之下的路径不同——来龙去脉
+> 在 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4.3，协议事实在
+> [`responses.md`](responses.md)。下文的"三个协议族 / 六个值"是重构当时的口径，未改。
 
 > 目标：把 `ApiStandard` 从今天的 4 个值（其中一对是空壳）重构成
 > **3 个协议族 × official/compat = 6 个值**，让 official 有明确契约（地址锁定、

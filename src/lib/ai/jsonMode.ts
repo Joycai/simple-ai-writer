@@ -106,6 +106,12 @@ export interface JsonModeTarget {
 export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutputMode {
   const family = familyOf(target.standard);
   if (family === "anthropic") return "off";
+  // The Responses family spells this as `text.format`, not `response_format`
+  // — and it ignores unknown top-level keys, so sending the Chat Completions
+  // field would be silently nothing. Until that spelling lands
+  // (docs/api/qianwen-compat-plan.md §4.4 slice G) the cue is the whole
+  // mechanism here, same as on Anthropic.
+  if (family === "responses") return "off";
   if (target.structuredOutput) return target.structuredOutput;
   return family === "openai" && target.modelId && knownJsonSchemaModel(target.modelId)
     ? "json_schema"

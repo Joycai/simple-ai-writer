@@ -360,6 +360,37 @@ async function chatRequest(
       };
     }
 
+    if (familyOf(t.standard) === "responses") {
+      const res = await fetch(openaiUrl(t.baseUrl, "/responses"), {
+        method: "POST",
+        headers: authHeaders(t),
+        body: JSON.stringify({
+          model: t.modelId,
+          input: prompt,
+          // This family has one name for the cap, so the session's
+          // param-switching never applies here (see `outputParamFor`).
+          max_output_tokens: maxTokens,
+          store: false,
+          stream: false,
+        }),
+        signal,
+      });
+      if (!res.ok) return { ok: false, status: res.status, body: await res.text() };
+      const json = asObject(await readJson(res));
+      const usage = asObject(json?.usage);
+      return {
+        ok: true,
+        status: res.status,
+        body: "",
+        promptTokens: asCount(usage?.input_tokens),
+        completionTokens: asCount(usage?.output_tokens),
+        // `status` is "completed" or "incomplete"; the reason for the latter
+        // lives one level down and is what the output test wants to see.
+        finishReason:
+          asText(asObject(json?.incomplete_details)?.reason) ?? asText(json?.status),
+      };
+    }
+
     const url = openaiUrl(t.baseUrl, "/chat/completions");
     const res = await fetch(url, {
       method: "POST",
@@ -604,19 +635,26 @@ async function errorProbe(s: Session): Promise<void> {
     throwIfAborted(s.signal);
     const { ctrl, done } = requestSignal(s.signal, 60_000);
     try {
-      const res = await fetch(openaiUrl(s.target.baseUrl, "/chat/completions"), {
-        method: "POST",
-        headers: authHeaders(s.target),
-        body: JSON.stringify({
-          model: s.target.modelId,
-          messages: [{ role: "user", content: "hi" }],
-          [s.outputParam]: ABSURD,
-          // Streaming so an *accepted* probe can be cut at the first byte
-          // instead of billing for however much it decides to write.
-          stream: true,
-        }),
-        signal: ctrl.signal,
-      });
+      // Streaming either way, so an *accepted* probe can be cut at the first
+      // byte instead of billing for however much it decides to write.
+      const res = await fetch(
+        openaiUrl(s.target.baseUrl, family === "responses" ? "/responses" : "/chat/completions"),
+        {
+          method: "POST",
+          headers: authHeaders(s.target),
+          body: JSON.stringify(
+            family === "responses"
+              ? { model: s.target.modelId, input: "hi", max_output_tokens: ABSURD, store: false, stream: true }
+              : {
+                  model: s.target.modelId,
+                  messages: [{ role: "user", content: "hi" }],
+                  [s.outputParam]: ABSURD,
+                  stream: true,
+                },
+          ),
+          signal: ctrl.signal,
+        },
+      );
 
       if (res.ok) {
         ctrl.abort();
@@ -790,6 +828,16 @@ async function measureOutputLength(
 
 // ─── Orchestration ───────────────────────────────────────────────────────────
 
+/**
+ * The output-cap parameter this family starts with. Chat Completions has two
+ * names and the session switches when a model asks for the other; the
+ * Responses family has one, and naming it here keeps the `param-switched`
+ * warning and the `error.<param>` finding detail truthful for that family.
+ */
+function outputParamFor(standard: ApiStandard): string {
+  return familyOf(standard) === "responses" ? "max_output_tokens" : "max_tokens";
+}
+
 export async function probeEndpoint(opts: ProbeOptions): Promise<ProbeReport> {
   const s: Session = {
     target: opts,
@@ -797,7 +845,7 @@ export async function probeEndpoint(opts: ProbeOptions): Promise<ProbeReport> {
     onProgress: opts.onProgress,
     findings: [],
     warnings: [],
-    outputParam: "max_tokens",
+    outputParam: outputParamFor(opts.standard),
     inputTokens: 0,
     outputTokens: 0,
   };

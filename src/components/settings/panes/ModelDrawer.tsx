@@ -330,7 +330,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
 
   // The structured-output options this family can honour (lib/ai/jsonMode.ts).
-  const soChoices: StructuredOutputMode[] = family === "anthropic"
+  // Responses joins Anthropic on "off" until its `text.format` spelling lands
+  // (slice G of docs/api/qianwen-compat-plan.md).
+  const soChoices: StructuredOutputMode[] = family === "anthropic" || family === "responses"
     ? ["off"]
     : family === "gemini"
       ? STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema")

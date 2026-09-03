@@ -173,7 +173,9 @@ export async function testProviderConnection(
       return { ok: false, error: `API error ${res.status} (${url}): ${error}` };
     }
 
-    if (family !== "openai") {
+    // Gemini and Anthropic answered a one-item page; only the two OpenAI-shaped
+    // families (which share `/models`) return a list worth counting.
+    if (family === "gemini" || family === "anthropic") {
       return { ok: true, message: i18n.t("aiConfig.providers.testOk") };
     }
     const data = await res.json();
@@ -273,6 +275,15 @@ function completionProbeRequest(
       return {
         url: anthropicUrl(baseUrl, "/messages"),
         body: { model: PROBE_MODEL, max_tokens: 1, messages },
+      };
+    case "responses":
+      // A Responses-only relay need not serve /chat/completions, so the
+      // fallback has to speak this family's own shape. 16 is the documented
+      // minimum for max_output_tokens; the made-up model is refused before it
+      // matters. store:false for the same reason the adapter sends it.
+      return {
+        url: openaiUrl(baseUrl, "/responses"),
+        body: { model: PROBE_MODEL, input: "hi", max_output_tokens: 16, store: false, stream: false },
       };
     default:
       return {
