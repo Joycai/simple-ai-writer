@@ -747,3 +747,67 @@
   background: var(--color-text-faint);
   pointer-events: none;
 }
+
+/* ── 回到这里重说 ─────────────────────────────────────────────────── */
+/* The time line grows a left-hand slot for the rewind button. Right-aligned
+   like the block: the time keeps its place at the outer edge, the button sits
+   inboard of it. */
+.turnFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Hover-revealed, in the time line's own voice (mono hint). An undo should not
+   stand with its hand up on every line of the transcript. */
+.rewindBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: 400 11px/1 var(--font-sans);
+  letter-spacing: 0.04em;
+  color: var(--color-text-hint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+.userBlock:hover .rewindBtn { opacity: 1; }
+.rewindBtn:focus-visible { opacity: 1; outline: none; color: var(--color-accent-text); }
+.rewindBtn:hover { color: var(--color-accent-text); }
+
+/* The confirm grows under the question it is about — the block's own width,
+   so the question and what it asks stay one thing. */
+.rewindBar {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 9px 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-accent);
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-soft);
+  text-align: left;
+}
+.rewindText { flex: 1; min-width: 0; }
+.rewindCancel,
+.rewindGo {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: 400 12px/1.5 var(--font-sans);
+  cursor: pointer;
+}
+.rewindCancel { color: var(--color-text-dim); }
+.rewindCancel:hover { color: var(--color-text-primary); }
+.rewindGo { color: var(--color-accent-text); }
+.rewindGo:hover { text-decoration: underline; }
+
+/* Everything the pending rewind would discard. "N exchanges" is a number; the
+   dimming is what that number looks like on the page, before the author
+   commits to it. */
+.turnDoomed {
+  opacity: 0.34;
+  transition: opacity 140ms var(--ease-out);
+}
