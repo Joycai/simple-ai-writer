@@ -509,7 +509,115 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
 `ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
 方言算出该端点真正认识的字段。
 
-### 兼容层文档的通用规律（六个样本的共同点）
+### 第七个样本：OrcaRouter，一台主机上的三个族（截至 2026-09，探测与免费档已实测）
+
+[OrcaRouter](https://docs.orcarouter.ai/zh/introduction) 是与 New API 同类的
+中继，但它把 ①③④ 三族**都**挂在同一个主机、同一把 key、同一份目录上：
+
+| 族 | 端点 | 文档 |
+| --- | --- | --- |
+| ① | `POST https://api.orcarouter.ai/v1/chat/completions`（另有 `/v1/responses`） | [openai-compat](https://docs.orcarouter.ai/zh/native-formats/openai-compat) |
+| ④ | `POST https://api.orcarouter.ai/v1/messages` | [anthropic](https://docs.orcarouter.ai/zh/native-formats/anthropic) |
+| ③ | `POST https://api.orcarouter.ai/v1beta/models/{model}:generateContent` / `:streamGenerateContent` | [gemini](https://docs.orcarouter.ai/zh/native-formats/gemini) |
+
+对照本目录已有的样本，它的知识形态如下：
+
+- **body 三族都自称与官方逐字相同**，① 族是翻译层（任何模型都能从这里
+  调，跨族的请求由它翻成上游原生形态），③④ 是"直接透传"。这印证了
+  New API 一节的结论——兼容层不配拥有独立协议族——所以本项目**没有新增
+  `ApiStandard`**，只在 `PROVIDER_PRESETS` 加了三行（一族一行，与 MiniMax
+  相同）。
+- **鉴权统一 `Authorization: Bearer sk-orca-…`**，密钥页说"所有端点、所有 SDK"
+  都用这一种。`x-api-key` 只承诺在 Anthropic 形态的路径上识别、
+  `x-goog-api-key` 与 `?key=` 只承诺在 `/v1beta/…` 上识别——而 `/v1/models`
+  两者都不是。按第五个样本得出的规则（官方两种都收的地方选中继写的那种），
+  ③④ 两行 preset 的 `authMode` 都是 `bearer`；① 族本来就是 Bearer。
+- **模型 id 带厂商前缀**（`openai/gpt-4o-mini`、`anthropic/claude-sonnet-4.6`、
+  `google/gemini-2.5-flash`、`deepseek/…`、`grok/…`、`qwen/…`、`kimi/…`、
+  `minimax/…`、`z-ai/…`），裸名只在管理员配了别名时才可能有。`normalizeModelId`
+  剥前缀之后，输出上限表与 strict json_schema 名单照常命中。③ 族的路径因此
+  是 `/v1beta/models/google/gemini-2.5-flash:…`——id 里的斜杠**原样进路径**，
+  与它文档的 curl 一致，`geminiUrl` 不做编码。
+- **一份目录，三种形态，按鉴权头挑（实测）。** `GET /v1/models` 带 Bearer
+  返回 OpenAI 形态（191 条，每条带 `supported_endpoint_types`，如 Claude 是
+  `["openai","anthropic"]`、GPT 只有 `["openai","openai-response"]`），带
+  `x-api-key` 返回 **Anthropic 形态**（`display_name` / `created_at` /
+  `has_more`，**没有** `supported_endpoint_types`）；`?limit=1` 被忽略。
+  `GET /v1beta/models` **存在**——文档说 `generateContent` 之外的操作"目前不
+  通过本接口路由"，已过时——返回 Gemini 形态、同样 191 条、`name` 不带
+  `models/` 前缀、150 条带 `inputTokenLimit`/`outputTokenLimit`（Claude 全系
+  1M / 64K–128K），Bearer 与 `x-goog-api-key` 都收；但单条
+  `/v1beta/models/{id}` 404 `Invalid URL`。`/v1/models/{id}`（OpenAI 形态）
+  带 `context_length` / `max_completion_tokens` / `architecture` / `pricing`，
+  与 OpenRouter 同形，本项目的能力探测 Step-0 本来就读这两个键。
+  `fetchRemoteModels` 的 ④ 分支据 `supported_endpoint_types` 把不在本面上的
+  模型滤掉（缺省即保留），所以 Claude 格式那行**只在 `bearer` 模式下**拿到
+  过滤后的 20 条——这也是 preset 选 Bearer 的又一个理由。
+- **思考强度在 ① 族有统一语法**：`reasoning_effort`（`low`/`medium`/`high`，
+  部分模型多 `minimal`/`max`）或模型名后缀 `-high`，网关翻成各家原生字段
+  （Claude → `thinking.budget_tokens` 1280/2048/4096，`claude-opus-4.6` →
+  adaptive + `output_config.effort`；Gemini → `thinkingConfig`）。思维链在上游
+  给 `reasoning_content` 时透出到 chat-completion 响应上，与 DeepSeek 同名。
+- **结构化输出**：① 族 `json_object` 与 `json_schema` 都接（Gemini 翻成
+  `responseMimeType` + `responseSchema`，DeepSeek 的 `json_schema` 标为"请核对"），
+  Anthropic 模型两者都 ❌——与本项目 `resolveStructuredOutput` 对 ④ 族恒为
+  `off` 的处理一致，但注意这里是**① 族端点上的 Claude 模型**也不接，网关不
+  会替它翻成 tool_use。
+- **图片输入**：`image_url` 的 base64 data URL 只保证对 OpenAI 与 Gemini 目标
+  有效，**Claude 与 Grok 建议改用 https 托管图或原生格式**。本项目发的全部是
+  data URL，所以给 Claude 看图要走 Claude 格式那行——这是三行 preset 里
+  ④ 那行存在的最实际的理由。
+- **图片生成分两条路**，与 New API 相同：`/v1/images/generations` 收
+  gpt-image / Imagen / Grok Imagine，`/v1/images/edits` 只写了 `gpt-image-2`；
+  Gemini 的 image 系列（`google/gemini-2.5-flash-image` 等）**只能**走
+  `/v1/chat/completions`，回包形态文档自己都写"data URL 或 inline_data 块，
+  取决于 SDK"——需要实测再定 `ImageCaps.route`。
+- **服务端联网搜索**：① 族上 `web_search_options` 对 OpenAI search-preview
+  与 Claude 模型有效（后者翻成 Anthropic 的 `web_search` 服务端工具），Gemini
+  靠一个**保留函数名** `googleSearch`（还有 `codeExecution` / `urlContext`）
+  ——发一个没有 parameters 的 function 工具，网关换成原生内置工具。这三种都
+  是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具，目前**没有接**。
+- **错误信封是 OpenAI 形态**（`error.{message,type,code}`），`type` 区分网关
+  自身（`orcarouter_api_error`）与上游透传（`upstream_error` / `claude_error` /
+  `gemini_error`）。**流中错误**：① 族是 `data: {"error":…}` 后接 `[DONE]`，
+  ④ 族是 `event: error`——两种拼法本项目的 adapter 都已处理。403 有五种
+  互不相同的原因（周期花费上限 / 余额 / 单 key 额度 / 模型不在白名单 / 免费档
+  耗尽），文档建议按 `error.code` 加消息前缀匹配，消息会本地化。
+- **每个响应带 `X-Orca-Request-Id`**，回退链触发时另有 `X-Orca-Fallback-*`。
+  它刻意**不**暴露哪家上游承接了请求。
+
+**实测记录（2026-09-03，作者的 key，账户余额为零）：**
+
+- **§5 的降级探测三面全过**：`__connection_probe__` 在 `/v1/chat/completions`、
+  `/v1/messages`（Bearer 与 `x-api-key` 都行）、`/v1beta/…:generateContent`
+  上一律 **404 + `{"error":{"code":"model_not_found","message":…}}`**，
+  `apiErrorMessage` 读得出来，连接测试判为连通。坏 key 是 401。
+- **402 是余额闸**（文档的状态码表里没有）：账户没钱时任何真实模型的任何
+  一面都先答 `402 {"error":{"code":"insufficient_user_quota","message":"You're
+  out of credits — this request needs $0.000074…"}}`，先于模型解析。它带完整
+  的 JSON error，按 §5 原来的规则会被判成"连通、模型被拒"——于是
+  `probeCompletionEndpoint` 现在把 402 单独报成失败并原样转出那句话。
+- **免费档三个模型在 `/v1/chat/completions` 上真实出流**
+  （`deepseek/deepseek-v4-flash-free` 1M 上下文 / 384K 输出、
+  `qwen/qwen3.8-27b-free` 64K、`tencent/hy3-free` 262K；限流时 429，用量不扣
+  钱包）：思维链走 `delta.reasoning_content`（DeepSeek 与混元先出一段再出
+  正文），usage 在 `[DONE]` 前的末块、`completion_tokens_details.reasoning_tokens`
+  在；Qwen 由 vLLM 直接托管（`system_fingerprint: vllm-0.27.1`），usage 是一个
+  `choices: []` 的独立块——都是 ① 族 adapter 已经认识的形状。它们在目录里
+  `supported_endpoint_types` 为 **null**。这三条现在是 OrcaRouter preset 的
+  **starter models**：保存新供应商时顺带建行。
+- **跨面翻译是真的**：DeepSeek 免费模型打 `/v1/messages` 回来的是完整的
+  Anthropic message，**含 `thinking` block**（`signature` 就是 message id）；
+  Qwen 免费模型打 `/v1beta/…:generateContent` 回 Gemini 形态（40 个 token
+  全被思考吃掉，`parts: []` + `MAX_TOKENS`，`thoughtsTokenCount` 报 0）。
+  付费的 GPT 打 `/v1beta` 与 `/v1/messages` 都走到了余额闸并**算出了价格**，
+  说明路由已接受——`supported_endpoint_types` 看起来是建议而非硬限制，但没
+  有余额无法确证。
+- **未测**：付费模型的任何生成（含 Claude 原生的 thinking / `output_config`、
+  Gemini 原生的 `thinkingConfig`）、工具调用流、`web_search_options`、
+  Gemini image 系列在 chat 上的回包形态。
+
+### 兼容层文档的通用规律（七个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

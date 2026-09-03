@@ -1767,6 +1767,7 @@
       "apiKeyOptional": "本地服务可留空",
       "apiKeyLocalPlaceholder": "本地服务留空即可",
       "presetsLabel": "快速选择",
+      "presetStarterModels": "保存后会顺带添加 {{count}} 个免费模型：{{models}}",
       "testConnection": "测试连接",
       "testing": "测试中…",
       "testMissingFields": "请填写 Base URL 和 API Key",

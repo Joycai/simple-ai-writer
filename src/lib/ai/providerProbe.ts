@@ -63,10 +63,21 @@ export async function fetchRemoteModels(
     });
     if (!res.ok) throw modelsFetchError(res.status, standard, "Anthropic");
     const data = await res.json();
-    return (data.data ?? []).map((m: Record<string, string>) => ({
-      id: m.id,
-      name: m.display_name ?? m.id,
-    }));
+    return (data.data ?? [])
+      // A relay serving several protocols off one catalogue may say which of
+      // them each model answers on (OrcaRouter's `supported_endpoint_types`:
+      // `["anthropic", "openai"]` on a Claude, `["openai"]` alone on a GPT).
+      // A model listed without this surface would only 4xx at /messages, so it
+      // is left out; no declaration, or one of another shape, keeps the row —
+      // the official list carries no such field and must read as before.
+      .filter((m: Record<string, unknown>) => {
+        const surfaces = m.supported_endpoint_types;
+        return !Array.isArray(surfaces) || surfaces.includes("anthropic");
+      })
+      .map((m: Record<string, string>) => ({
+        id: m.id,
+        name: m.display_name ?? m.id,
+      }));
   }
   // OpenAI / compatible
   const res = await fetch(modelsUrl(standard, baseUrl), {
@@ -225,6 +236,14 @@ async function probeCompletionEndpoint(
     return { ok: false, error: i18n.t("aiConfig.providers.testAuthFailed", { status: res.status }) };
   }
   const apiMessage = apiErrorMessage(text);
+  // 402 is the relay's credit gate (OrcaRouter answers every completion call
+  // on an empty account with it, before looking at the model). The key is
+  // right and the endpoint spoke, but nothing will run until the author tops
+  // up — reporting that as "reachable" would send them looking for a bug in
+  // the model id instead. Its own message names the amount, so hand it over.
+  if (res.status === 402) {
+    return { ok: false, error: `HTTP 402: ${apiMessage?.slice(0, 300) || text.slice(0, 300)}` };
+  }
   if (apiMessage !== null) {
     return {
       ok: true,

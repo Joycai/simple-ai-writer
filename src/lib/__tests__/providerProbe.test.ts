@@ -71,6 +71,45 @@ describe("Anthropic probing", () => {
       testProviderConnection("https://api.anthropic.com/v1", "bad", "anthropic"),
     ).resolves.toMatchObject({ ok: false });
   });
+
+  it("reports a credit gate as failure, with the relay's own message", async () => {
+    // OrcaRouter on an empty account (verified live): /v1/models is fine, the
+    // completion answers 402 with an OpenAI-shaped error before reading the
+    // model. The endpoint spoke and the key is right, but nothing will run.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).endsWith("/models")
+          ? new Response("{}", { status: 404 })
+          : new Response(
+              JSON.stringify({ error: { message: "You're out of credits — this request needs $0.0006.", code: "insufficient_user_quota" } }),
+              { status: 402 },
+            ),
+      ),
+    );
+    const result = await testProviderConnection("https://relay.example", "k", "openai_compat");
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain("402");
+    expect((result as { error: string }).error).toContain("out of credits");
+  });
+
+  it("fetchRemoteModels keeps only the models a multi-protocol relay serves on this surface", async () => {
+    // OrcaRouter's one catalogue, reached through the Claude-format preset:
+    // bare host as the base (anthropicRoot appends /v1), Bearer as the key.
+    const calls = mockFetch({
+      data: [
+        { id: "anthropic/claude-sonnet-4.6", supported_endpoint_types: ["anthropic", "openai"] },
+        { id: "openai/gpt-4o", supported_endpoint_types: ["openai"] },
+        // No declaration — the official list has none — stays in.
+        { id: "undeclared" },
+      ],
+    });
+    const models = await fetchRemoteModels("https://api.orcarouter.ai", "sk-orca-x", "anthropic_compat", "bearer");
+    expect(calls[0].url).toBe("https://api.orcarouter.ai/v1/models");
+    expect(calls[0].headers.get("authorization")).toBe("Bearer sk-orca-x");
+    expect(calls[0].headers.get("x-api-key")).toBeNull();
+    expect(models.map((m) => m.id)).toEqual(["anthropic/claude-sonnet-4.6", "undeclared"]);
+  });
 });
 
 describe("OpenAI-compatible probing is unaffected", () => {
