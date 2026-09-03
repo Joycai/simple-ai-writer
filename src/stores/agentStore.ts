@@ -641,6 +641,27 @@ async function applyProposal(
         resultPath: await copyEntry(proposal.path, proposal.destDir, proposal.isDir, proposal.newName),
       };
 
+    case "convert": {
+      // The conversion already ran when the card was raised; this copies that
+      // exact entry out of the cache beside the source (lib/import/materialize).
+      const { materializeConversion } = await import("../lib/import/materialize");
+      const landed = await materializeConversion(proposal.sourcePath, proposal.cacheDir);
+      // Written with the raw file writer — the tree needs telling.
+      await useProjectStore.getState().refreshFileTree();
+      return {
+        resultPath: landed,
+        report: [
+          `Converted ${proposal.sourcePath} to ${landed} (${proposal.chars} characters; the original is untouched).`,
+          proposal.pictures > 0
+            ? `${proposal.pictures} picture(s) extracted to the document's assets/ folder, linked from the text.`
+            : "",
+          proposal.scanned
+            ? "NOTE: this PDF had no text layer (a scan), so the document holds page pictures and no text. Say so to the author."
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
+    }
+
     case "delete":
       // The backup is what makes an approved deletion recoverable, so it is
       // not optional. The entry — file or folder — is renamed into backups whole.

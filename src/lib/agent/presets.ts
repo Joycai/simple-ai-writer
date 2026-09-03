@@ -191,6 +191,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "export_docx",
     "export_xlsx",
     "read_doc_format",
+    "convert_document",
     "task_plan",
     "task_progress",
     "write_note",

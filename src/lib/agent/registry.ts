@@ -43,6 +43,8 @@ import { LORE_PLAN_ACTIONS, LORE_PLAN_TARGETS, type LorePlan, type PlanDecision,
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
 import { readDocumentFile } from "./documentTools";
+import { convertDocumentTool } from "./convertTools";
+import type { ConvertExt } from "../import";
 import { inspectHtmlTool } from "./htmlTools";
 import {
   createLoreCategoryTool,
@@ -457,6 +459,32 @@ export interface XlsxProposal extends ProposalBase {
 }
 
 /**
+ * Land a Word / Excel / PDF / PowerPoint file in the project as a markdown
+ * document beside it — the write half of `read_document`.
+ *
+ * The conversion has already run when the card is raised (through the same
+ * cache `read_document` reads from), so the card shows what will land and the
+ * apply step copies that entry out rather than converting again: what was
+ * approved and what lands are the same bytes even if the source moved on
+ * (lib/import/materialize). The source is never touched; a name collision
+ * numbers the new file. docs/feature/agent/document-read-plan.md §10.
+ */
+export interface ConvertProposal extends ProposalBase {
+  kind: "convert";
+  /** The office file. `path` is the intended `.md` beside it, before numbering. */
+  sourcePath: string;
+  ext: ConvertExt;
+  /** The cache entry holding the finished conversion. */
+  cacheDir: string;
+  chars: number;
+  pictures: number;
+  /** A PDF whose text layer came out empty — a scan. The card says so. */
+  scanned: boolean;
+  /** The opening of the converted text, for the card. */
+  excerpt: string;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -477,7 +505,8 @@ export type Proposal =
   | IllustrateProposal
   | PptxProposal
   | DocxProposal
-  | XlsxProposal;
+  | XlsxProposal
+  | ConvertProposal;
 
 export type ApprovalDecision =
   | {
@@ -831,6 +860,7 @@ export type ToolId =
   | "export_pptx"
   | "export_docx"
   | "export_xlsx"
+  | "convert_document"
   | "read_doc_format"
   | "generate_image"
   | "edit_image"
@@ -2677,6 +2707,30 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => exportXlsxTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  convert_document: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "convert_document",
+        description:
+          "Turn a Word (.docx), Excel (.xlsx), PDF or PowerPoint (.pptx) file in the project into a markdown document beside it, as a NEW file. Only for when the author wants an editable copy in the project — to read one, use read_document, which writes nothing. NOTHING is written until the author approves the card. The original is kept untouched, a name collision numbers the new file, and pictures inside it land in assets/ next to the document.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the file to convert" },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => convertDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   read_doc_format: {
     access: "read",
     definition: {
@@ -3389,7 +3443,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         name: "run_pack",
         description:
           "Dispatch one self-contained WRITE job to a specialist agent carrying a focused toolset for it. " +
-          "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html); " +
+          "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html), or convert an Office/PDF file into one; " +
           "'lore_edit' — create, update or reorganize knowledge-base entries, including their galleries (file an existing picture, retune or remove one); " +
           "'export' — convert documents to pptx/docx/xlsx. " +
           "The specialist cannot see this conversation: state the WHOLE job in 'task' — source paths, " +

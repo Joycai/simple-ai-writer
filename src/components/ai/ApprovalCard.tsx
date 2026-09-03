@@ -29,6 +29,7 @@ import type {
   PptxProposal,
   DocxProposal,
   XlsxProposal,
+  ConvertProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
@@ -82,6 +83,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleDocx");
     case "xlsx":
       return t("ai.approval.titleXlsx", { defaultValue: "导出 Excel" });
+    case "convert":
+      return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
   }
 }
 
@@ -138,6 +141,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
         n: proposal.summaries.length,
         defaultValue: "{{n}} 个工作表",
       });
+    case "convert":
+      // How much text came out — for a scan that is the number that says
+      // "nothing", which the body then explains.
+      return `${kilo(proposal.chars)} ${chars}`;
   }
 }
 
@@ -549,6 +556,47 @@ function CopyBody({ proposal }: { proposal: CopyProposal }) {
   );
 }
 
+/**
+ * 把项目里的 Office / PDF 文件转成旁边的一份 markdown。
+ *
+ * 转换在提卡片时就跑完了，所以卡上给作者看的是**真会落盘的那份**的开头，而不是
+ * 「将要转换」的承诺——一份转出来全是乱码或全是空白的文档，在这里就该看见。
+ * 扫描件单独说：字数为 0 不是转换失败，是原件没有文本层。
+ */
+function ConvertBody({ proposal }: { proposal: ConvertProposal }) {
+  const { t } = useTranslation();
+  const html = useMemo(
+    () => (proposal.excerpt.trim() ? renderMarkdown(proposal.excerpt) : ""),
+    [proposal.excerpt],
+  );
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+      {proposal.scanned ? (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.convertScanned", { defaultValue: "这份 PDF 没有文本层（扫描件）：转出来只有页面图片，没有文字。" })}
+        </div>
+      ) : html ? (
+        <div className={styles.previewBlockClipped} dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className={styles.emptyNote}>{t("ai.approval.convertEmpty", { defaultValue: "转换结果为空。" })}</div>
+      )}
+      {proposal.pictures > 0 && (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.convertPictures", { n: proposal.pictures, defaultValue: "抽出 {{n}} 张图片，落在文档旁的 assets/ 里。" })}
+        </div>
+      )}
+      <div className={styles.emptyNote}>
+        {t("ai.approval.convertNote", { defaultValue: "原件保留不动；重名时新文件自动编号，不会覆盖任何文件。" })}
+      </div>
+    </>
+  );
+}
+
 function DeleteBody({ proposal }: { proposal: DeleteProposal }) {
   const { t } = useTranslation();
   return (
@@ -727,6 +775,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <DocxBody proposal={proposal} />;
     case "xlsx":
       return <XlsxBody proposal={proposal} />;
+    case "convert":
+      return <ConvertBody proposal={proposal} />;
   }
 }
 

@@ -1311,6 +1311,7 @@
         "read_file": "Read File",
         "read_slides": "Read Slides",
         "read_document": "Read Document",
+        "convert_document": "Convert Document",
         "export_pptx": "Export PPTX",
         "search_text": "Search Text",
         "read_memory": "Read Memory",
@@ -1502,6 +1503,11 @@
       "xlsxDates": "dates {{n}}",
       "xlsxFormulas": "formulas {{n}}",
       "xlsxSkipped": "Not in the workbook: {{what}}",
+      "titleConvert": "Convert to Markdown",
+      "convertNote": "The original stays untouched; a name collision numbers the new file — nothing gets overwritten.",
+      "convertPictures": "{{n}} picture(s) extracted into the document's assets/ folder.",
+      "convertScanned": "This PDF has no text layer (a scan): the conversion holds page pictures and no text.",
+      "convertEmpty": "The conversion came out empty.",
       "imageNegative": "Avoid: {{text}}"
     },
     "autoApprove": {

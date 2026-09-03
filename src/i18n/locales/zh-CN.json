@@ -1311,6 +1311,7 @@
         "read_file": "读取文件",
         "read_slides": "读取幻灯片",
         "read_document": "读取文档",
+        "convert_document": "转换文档",
         "export_pptx": "导出 PPTX",
         "search_text": "检索正文",
         "read_memory": "读取记忆",
@@ -1502,6 +1503,11 @@
       "xlsxDates": "日期 {{n}}",
       "xlsxFormulas": "公式 {{n}}",
       "xlsxSkipped": "不会进工作簿：{{what}}",
+      "titleConvert": "转换为 Markdown",
+      "convertNote": "原件保留不动；重名时新文件自动编号，不会覆盖任何文件。",
+      "convertPictures": "抽出 {{n}} 张图片，落在文档旁的 assets/ 里。",
+      "convertScanned": "这份 PDF 没有文本层（扫描件）：转出来只有页面图片，没有文字。",
+      "convertEmpty": "转换结果为空。",
       "imageNegative": "不要出现：{{text}}"
     },
     "autoApprove": {

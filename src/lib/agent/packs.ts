@@ -93,6 +93,7 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "create_file",
       "create_directory",
       "move_chapter",
+      "convert_document",
       "copy_file",
       "delete_chapter",
       "delete_directory",
