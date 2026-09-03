@@ -59,7 +59,7 @@ function illustrateProposal(id: string): Proposal {
 
 describe("isAutoApprovable — the kind-level floor", () => {
   it("covers the text-moving kinds, copy included, and never delete/illustrate", () => {
-    for (const kind of ["edit", "rewrite", "create", "move", "copy"] as const) {
+    for (const kind of ["edit", "rewrite", "create", "move", "copy", "convert"] as const) {
       expect(isAutoApprovable(kind)).toBe(true);
     }
     // Green-to-red here means a prose grant started deleting files or

@@ -235,7 +235,18 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../agent/packs";
  * After it, the read is one call, cached, and leaves nothing behind
  * (docs/feature/agent/document-read-plan.md D2, D9).
  */
-const AGENT_ASSIST_CAP = 16_600;
+/**
+ * **16,669** with `convert_document` (+190; cap 16,600 → 16,800). The write half
+ * of the same feature, and gated the same way the export tools are — nothing
+ * defers it, so §5 does not apply. Its worth is the *other* half of the
+ * read_document argument: once the assistant can read a folder of Office
+ * files, "make me an editable copy of this one" is the next sentence, and
+ * without the tool the answer is again a manual 右键 → 转换文档 by the author,
+ * or — worse — the model re-typing 30 pages it just read through
+ * `create_file`, which is how a document gets paraphrased under a card that
+ * says "create".
+ */
+const AGENT_ASSIST_CAP = 16_800;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),

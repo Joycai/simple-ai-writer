@@ -77,7 +77,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
 | [lore-category-visibility-plan.md](feature/agent/lore-category-visibility-plan.md) | `shipped` | Agent 建重复分类的修复：模型从未见过分类标签、空分类在列表里隐形、`create_lore_category` 不查重、指令文案陈旧——PR-A 读侧 id↔标签对照（description + 结果文本，常驻预算随之放宽到 12,000），PR-B 写侧幂等查重 + 文案纠偏；与 lore-category-manage-plan 分片 3 互补 |
 | [large-doc-formatting-plan.md](feature/agent/large-doc-formatting-plan.md) | `partial` | 大文档格式化（给无标题的巨型 md 加标题/区分段落）：现状轮数 O(文件)、正文两次过模型且有 paraphrase 风险——①`insert_lines` 插入清单（正文由运行时拼装，一轮一卡）②无标题文件的段落地图（零 schema，与标题索引同构）③指令层「分页读一轮多发」④确定性段落规范化做作者侧命令⑤实测复核 |
-| [document-read-plan.md](feature/agent/document-read-plan.md) | `implemented` | Agent 直读 .docx / .xlsx / .pdf：新只读工具 `read_document`（与 `read_file` / `read_slides` 两两改口，不扩 `read_file`），转换结果按内容哈希缓存在 `.ai-writer/tmp/convert/` 而不落工作区，PDF 默认本地 pdfjs、扫描件由结果指向 pdf 子代理；写回工作区的 `convert_document` 因需要新审批卡而排除在外 |
+| [document-read-plan.md](feature/agent/document-read-plan.md) | `implemented` | Agent 直读 .docx / .xlsx / .pdf：新只读工具 `read_document`（与 `read_file` / `read_slides` 两两改口，不扩 `read_file`），转换结果按内容哈希缓存在 `.ai-writer/tmp/convert/` 而不落工作区，PDF 默认本地 pdfjs、扫描件由结果指向 pdf 子代理；写的一半 `convert_document`（§10）：提卡时就转好、批准后从缓存搬出、照导入器命名 |
 
 ### feature/lore/ — the knowledge base
 

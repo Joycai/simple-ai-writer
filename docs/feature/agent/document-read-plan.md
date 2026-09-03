@@ -1,6 +1,6 @@
 # Agent 直读 Office / PDF 文档（`read_document` + 转换缓存）
 
-> **Status: `implemented`** — 2026-09-03 起草并同日实现（一片 PR，未真机验证——见 §9）。**不含 UI 变动**：新增的只有一个 agent 只读工具、一层落在 `.ai-writer/tmp/` 下的转换缓存，以及执行日志里一条工具标签字符串（§5.3）。把转换结果写回工作区的那一半（`convert_document`）被明确排除在本轮之外，因为它需要一种新的审批卡——那才是 UI（D11）。
+> **Status: `implemented`** — 2026-09-03 起草并同日实现（读的一半 PR #463 已合并；写的一半 `convert_document` 随后补上，见 §10；两半都未真机验证——见 §9）。读的一半**不含 UI 变动**：新增的只有一个 agent 只读工具、一层落在 `.ai-writer/tmp/` 下的转换缓存，以及执行日志里一条工具标签字符串（§5.3）。写的一半是一张新审批卡（D11 预告的那个 UI），照 `export_xlsx` 的形状做。
 
 ## 1. 背景与现状
 
@@ -132,9 +132,9 @@ pptx-plan D6 的账原样成立：全文搜索每次都要遍历整个项目，�
 
 不在项目打开时扫：那一刻正忙着 `scanLore`、读文件树，多一次目录遍历是给每个作者加载时间，换来的只是没用过这个工具的项目多删几个空目录。不设总量上限：一个条目最大就是一份 64MB 文档转出来的 markdown 和图片，七天窗口里能堆多少取决于作者读了多少份，那是他自己的选择。
 
-### D11 写回工作区（`convert_document`）不在本轮——它是 UI
+### D11 写回工作区（`convert_document`）不在读的那一片里——它是 UI
 
-作者有时确实要那个 .md 成为项目文件（比如把招标书正文留在项目里以后反复引用）。那是 L2 写操作，走的应该是一张审批卡：「把 X.docx 转换为 X.md，放在旁边」。现有的卡种类（`propose_edit` 的 find/replace、`rewrite_*`、pptx/docx/xlsx 导出）都不是这个形状，得加一种 `EditProposal.kind`，就得有卡的组件——那就是 UI 变动，和这份「不动 UI」的方案分开做。今天的替代路径两条都能用：作者右键「转换文档」；或 agent 读完后用 `create_file` 交付它整理过的版本。
+作者有时确实要那个 .md 成为项目文件（比如把招标书正文留在项目里以后反复引用）。那是 L2 写操作，走的应该是一张审批卡：「把 X.docx 转换为 X.md，放在旁边」。现有的卡种类（`propose_edit` 的 find/replace、`rewrite_*`、pptx/docx/xlsx 导出）都不是这个形状，得加一种 `Proposal.kind`，就得有卡的组件——那就是 UI 变动，和「不动 UI」的读的那一片分开做。它随后作为第二片补上，设计在 §10。
 
 ### D12 并发写入：先写临时目录再 `rename`
 
@@ -224,4 +224,32 @@ read_document(path: string, start_line?: number)
 落地文件与 §5.1 一致，另有两处出入已记在 D4（行号保留）和 §8（扫描阈值 20）。单测：`convertCache.test.ts`（纯层 12 条）、`documentTools.test.ts`（路由 / 分页 / 扫描件 / 三个读工具互相改口，11 条）、`writePreset.test.ts` 与 `agentToolBudget.test.ts` 更新。
 
 **未做真机验证**：worktree 里没有 Tauri 运行环境，四种转换器本身有导入侧的既有测试与真机记录（`import-images-plan.md`），这里新增的是围绕它们的缓存与路由。§6 列的真机清单（带图 docx、多表 xlsx、30 页 PDF、扫描件、改名不重转、改内容重转、7 天清理）待跑。
+
+## 10. 写的一半：`convert_document`（第二片，2026-09-03）
+
+读的一半合并之后补上的。作者要的不只是「读懂」，还有「留一份可编辑的在项目里」；而没有这个工具，模型的替代路径是把它刚翻过的 30 页通过 `create_file` 重打一遍——那正是 edit-loop-plan 点名的「在一张写着 create 的卡下面把文档悄悄改写了」。
+
+### D13 转换在提卡时跑，落盘只是从缓存里搬出来
+
+照 `export_xlsx` 的规矩（xlsx-export-plan §3：工作簿在提案时就建好），不照 pptx 的（批准后才转，因为它非等 DOM 不可）。这里没有任何东西非等不可：`convert_document` 调的就是 `read_document` 那个 `convertCached`，提卡时缓存条目已经在了。于是——
+
+- 卡片上给作者看的是**真会落盘的那份**的开头（`excerpt`，600 字）、字数、抽了几张图、PDF 是不是扫描件。一份转出来全是乱码或全是空白的文档在这里就看得见，而不是批完打开才发现。
+- 批准后的 apply（`lib/import/materialize.ts`）从缓存条目**复制**出来：读 `document.md`、把图片链接从 `assets/` 改到 `assets/<文档名>/`（`relinkAssets`，纯函数）、`copyPath` 图片。不重新转换，所以作者批的和落下去的严格是同一份，中间源文件被改一笔也不影响。
+- 缓存条目在批准前被 7 天清理扫掉（几乎不可能：提卡刚刚碰过它）→ apply 抛一句可读的错，模型收到的是拒绝而不是假成功。
+
+### D14 落点和命名照导入器
+
+`<同目录>/<stem>.md`，重名走 `uniqueImportPath` 自动编号（`报价表-2.md`），原件不动——和 `convertProjectFile` 一字不差，理由也一样：最可能的重名就是上一次转换、作者已经改过的那份。链接编码用 `encodeURIComponent` 逐段，与三个转换器写链接的方式一致，应用端 `decodeLinkSegments` 解得开。
+
+### D15 进 `AUTO_APPROVABLE`
+
+和 `copy`、`pptx` 同一条理由：新文件、不改任何已有的、重名编号不覆盖。「本次都批准」的授权覆盖它不会多删一个字。
+
+### D16 进哪些 preset
+
+`AGENT_ASSIST_PRESET`（+190 token，上限 16,600 → 16,800，论证在测试常量旁）和 `file_write` 能力包（产物是一份文档；编排模式下 `run_pack` 的描述多了一句「或把 Office/PDF 转成一份」）。**不进** `write` 档和 `continue`：那两档要的是读，不是往项目里落一份新文件。`.pptx` 这里**收**（`convertProjectFile` 本来就收），和 `read_document` 拒绝 .pptx 不矛盾——读有 `read_slides` 分工，落盘没有第二个工具。
+
+### 文件
+
+`lib/import/materialize.ts`（`relinkAssets` / `conversionTargetFor` 纯层 + `materializeConversion` 落盘）、`lib/agent/convertTools.ts`（工具）、`registry.ts` 的 `ConvertProposal` + 工具条目、`agentStore.applyProposal` 的 `convert` 分支、`ApprovalCard.tsx` 的 `ConvertBody`（复用 moveBlock / previewBlockClipped / emptyNote，没有新样式）、`autoApprove.ts`、两份 i18n。测试：`materialize.test.ts`、`convertTool.test.ts`、`autoApprove.test.ts` 加一项。真机清单同 §9，另加：批准后文件树出现新文件、图片链接在预览里解得开、扫描件卡片显示说明。
 

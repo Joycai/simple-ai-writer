@@ -103,6 +103,9 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   // exporting the same file repeatedly.
   "pptx",
   "copy",
+  // A markdown copy of a file the author already has, beside it, numbered on
+  // collision: like copy, the only question is "should this exist twice".
+  "convert",
 ]);
 
 /** Whether this kind of proposal may skip its card under an active grant. */
