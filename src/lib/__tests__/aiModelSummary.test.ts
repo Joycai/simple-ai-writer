@@ -24,6 +24,13 @@ describe("wireSummary", () => {
       { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" },
     ]);
     expect(wireSummary(base, "anthropic")).toEqual([{ key: "thinking.type", value: "adaptive" }]);
+    // The Responses family's own spelling of the same knob.
+    expect(wireSummary(base, "openai_responses")).toEqual([
+      { key: "text.format", value: "json_object", scope: "structured" },
+    ]);
+    expect(wireSummary({ ...base, modelId: "gpt-5.5" }, "openai_responses")).toEqual([
+      { key: "text.format", value: "json_schema", scope: "structured" },
+    ]);
   });
 
   it("spells a Qwen thinking model the way the OpenAI adapter does", () => {

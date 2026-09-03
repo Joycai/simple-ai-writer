@@ -91,6 +91,13 @@ describe("resolveStructuredOutput", () => {
     expect(resolveStructuredOutput({ standard: "openai", modelId: "qwen-plus", structuredOutput: "json_schema" })).toBe("json_schema");
   });
 
+  it("treats the Responses family like OpenAI's first wire: same table, same lift", () => {
+    expect(resolveStructuredOutput({ standard: "openai_responses", modelId: "gpt-5.5" })).toBe("json_schema");
+    expect(resolveStructuredOutput({ standard: "openai_responses_compat", modelId: "[Pro]gpt-5.4" })).toBe("json_object");
+    expect(resolveStructuredOutput({ standard: "openai_responses", modelId: "some-relay-model" })).toBe("json_object");
+    expect(resolveStructuredOutput({ standard: "openai_responses", modelId: "gpt-5.5", structuredOutput: "off" })).toBe("off");
+  });
+
   it("resolves the Anthropic family to off whatever the row says", () => {
     // No JSON parameter exists there; a declaration that survived a provider
     // change to this family must not reach the wire.
@@ -180,6 +187,59 @@ describe("jsonModeShaping · per-model modes", () => {
   });
 });
 
+describe("jsonModeShaping · the Responses family", () => {
+  it("spells json_schema under text.format, strictified, with no strict key and no cue", () => {
+    const s = jsonModeShaping({ standard: "openai_responses", modelId: "gpt-5.5" }, WITHOUT, SCHEMA);
+    expect(s.mode).toBe("json_schema");
+    expect(s.cue).toBeUndefined();
+    expect(s.extraBody).toEqual({
+      text: {
+        format: {
+          type: "json_schema",
+          name: "emit_entry",
+          schema: {
+            type: "object",
+            properties: { name: { type: "string" }, note: { type: ["string", "null"] } },
+            required: ["name", "note"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    // Omitted on purpose: the endpoint upgrades to strict on its own, and an
+    // explicit true is what the relay drops the whole format for.
+    const format = (s.extraBody as { text: { format: Record<string, unknown> } }).text.format;
+    expect(format).not.toHaveProperty("strict");
+    expect(format).not.toHaveProperty("json_schema");
+    // Never the Chat Completions key.
+    expect(s.extraBody).not.toHaveProperty("response_format");
+  });
+
+  it("spells json_object under text.format with the same 'json' precondition cue", () => {
+    const cued = jsonModeShaping({ standard: "openai_responses", modelId: "x" }, WITHOUT);
+    expect(cued.extraBody).toEqual({ text: { format: { type: "json_object" } } });
+    expect(cued.cue).toBe(JSON_ONLY_CUE);
+    const uncued = jsonModeShaping({ standard: "openai_responses_compat", modelId: "x" }, WITH);
+    expect(uncued.cue).toBeUndefined();
+  });
+
+  it("degrades json_schema to JSON mode without a schema, and off to the bare cue", () => {
+    expect(jsonModeShaping({ standard: "openai_responses", modelId: "gpt-5.5" }, WITH).extraBody)
+      .toEqual({ text: { format: { type: "json_object" } } });
+    const off = jsonModeShaping({ standard: "openai_responses", modelId: "gpt-5.5", structuredOutput: "off" }, WITH, SCHEMA);
+    expect(off.extraBody).toBeUndefined();
+    expect(off.cue).toBe(JSON_ONLY_CUE);
+  });
+
+  it("steps down through the same ceiling memo, keyed by this family's standard", () => {
+    const t = { standard: "openai_responses_compat" as const, baseUrl: "https://relay.example.com/v1", modelId: "gpt-5.5" };
+    noteJsonModeRefused(t, "json_schema");
+    expect(jsonModeShaping(t, WITH, SCHEMA).extraBody).toEqual({ text: { format: { type: "json_object" } } });
+    // The Chat Completions half of the same host is a different endpoint.
+    expect(jsonModeCeiling({ ...t, standard: "openai_compat" })).toBeUndefined();
+  });
+});
+
 // ─── The session memo: refusals learned from the endpoint's 400 ──────────────
 
 describe("json-mode refusal memo", () => {
@@ -219,6 +279,10 @@ describe("json-mode refusal memo", () => {
       "400 Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.",
     ))).toBe(true);
     expect(isJsonModeRejection(new Error("'messages' must contain the word 'json' in some form to use 'response_format'"))).toBe(true);
+    // The Responses family's name for the same parameter (docs/api/responses.md §2.2).
+    expect(isJsonModeRejection(new Error(
+      "400 Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.",
+    ))).toBe(true);
     expect(isJsonModeRejection(new Error("400 This model does not support json output"))).toBe(false);
     expect(isJsonModeRejection(new Error("401 invalid api key"))).toBe(false);
     expect(isJsonModeRejection(new DOMException("Aborted", "AbortError"))).toBe(false);

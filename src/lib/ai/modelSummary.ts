@@ -105,7 +105,9 @@ export function wireSummary(m: WireInput, standard: ApiStandard): WireItem[] {
   if (so !== "off") {
     out.push(family === "gemini"
       ? { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
-      : { key: "response_format", value: so, scope: "structured" });
+      : family === "responses"
+        ? { key: "text.format", value: so, scope: "structured" }
+        : { key: "response_format", value: so, scope: "structured" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
