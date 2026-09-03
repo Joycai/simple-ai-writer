@@ -81,11 +81,11 @@ Responses 只探了一次（§4.2）。
 | # | 问题 | 现象 | 位置 | 处置 |
 | --- | --- | --- | --- | --- |
 | P1 | `deepseek` 档「关闭」发 `extra_body:{thinking:{type:"disabled"}}` | 思考照常、照常计费，**无报错**；DeepSeek 官方与千问都中招 | `reasoning.ts` `reasoningBody` deepseek 分支 + `aiClient.test.ts` | ✅ §3 第 1 片已修（顶层 `thinking`） |
-| P2 | 千问 ④ 面没有预设 | 作者得自己知道 base 是 `/apps/anthropic` 根地址、且不带 `/v1` | `ProviderDrawer.tsx` `PROVIDER_PRESETS` | §3 第 2 片 |
-| P3 | `glm` 档的 `thinking:{clear_thinking:false}` 在非 GLM 模型上 400 | 作者误选类目才会撞；报错明确 | `reasoning.ts` `glm.extra` | 不改代码，类目提示文案加一句「仅 GLM」（第 2 片顺带） |
+| P2 | 千问 ④ 面没有预设 | 作者得自己知道 base 是 `/apps/anthropic` 根地址、且不带 `/v1` | `ProviderDrawer.tsx` `PROVIDER_PRESETS` | ✅ §3 第 2 片已加 |
+| P3 | `glm` 档的 `thinking:{clear_thinking:false}` 在非 GLM 模型上 400 | 作者误选类目才会撞；报错明确 | `reasoning.ts` `glm.extra` | ✅ 不改代码，类目提示文案已加「仅 GLM」（第 2 片） |
 | P4 | kimi-k3 拒 `thinking_budget`、MiniMax-M2.5 拒关闭 | 400，报文明确 | 端点行为 | 不改代码；记入 landscape 供作者查 |
 | P5 | MiniMax-M2.5 无视 `response_format` | JSON 任务可能拿到散文，`extractJsonObject` 抓不到 → 该任务失败 | 端点行为 | 作者把该模型的结构化输出声明成「关」（现有 L3 开关够用） |
-| P6 | `KNOWN_OUTPUT_CAPS` / `modelLimits.ts` 的 Qwen 条目停在 qwen-max/plus/turbo 8K | 新模型无条目 → 不设上限，无害；但 3.7/3.8 代真实上限（131K，CoT 262K）作者得手填 | `modelLimits.ts` | 可选，第 2 片顺带补 3.7/3.8-flash/max、deepseek-v4、glm-5.2、kimi-k3、MiniMax-M2.5 |
+| P6 | `KNOWN_OUTPUT_CAPS` / `modelLimits.ts` 的 Qwen 条目停在 qwen-max/plus/turbo 8K | 新模型无条目 → 不设上限，无害；但 3.7/3.8 代真实上限（131K，CoT 262K）作者得手填 | `modelLimits.ts` | ✅ 第 2 片补了 3.7/3.8-flash、qwen3-vl-plus、deepseek-v4-pro、glm-5.2、kimi-k3、MiniMax-M2.5（max 系列没有模型页数据，未加） |
 | P7 | `KNOWN_JSON_SCHEMA` 只列 Qwen 与 GPT | DeepSeek V4 / GLM-5 / Kimi-K3 在千问上 strict 都过，但这是**千问的**能力，不是模型的；DeepSeek 官方无 `json_schema` | `jsonMode.ts` | **不加**（表是按模型 id 匹配、跨端点生效，加了会在官方端点上 400），维持作者手动声明 |
 
 ## 3. 修复切片
@@ -257,7 +257,7 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 | 序 | 片 | 改什么 | 验收 |
 | --- | --- | --- | --- |
 | A ✅ | §3 第 1 片 | `reasoningBody` deepseek `off` → 顶层 `thinking:{type:"disabled"}`；翻转 `aiClient.test.ts` 的断言；`reasoning-plan.md` §0 与 `thinking-verification.md` 4.2 收尾 | `QIANWEN_KEY=… vitest run live.qianwen.test.ts`：`deepseek category off` 一组 7 条全绿（现状 5 条红）；作者在 DeepSeek 官方端点上选 deepseek 档、关思考，API 日志里响应无 `reasoning_content` |
-| B | §3 第 2 片 | 预设「通义千问 (Claude 格式)」；`modelLimits.ts` 补 3.7/3.8 代等 7 条上限；`thinkingCatGlmHint` 加「仅 GLM」 | vite 预览点预设核对 name / standard / baseUrl / authMode；`localeParity.test.ts`；作者用千问 key 走「测试连接」→ 判通（无 `/v1/models` 的降级路径） |
+| B ✅ | §3 第 2 片 | 预设「通义千问 (Claude 格式)」；`modelLimits.ts` 补 3.7/3.8 代等 7 条上限；`thinkingCatGlmHint` 加「仅 GLM」 | vite 预览点预设核对 name / standard / baseUrl / authMode；`localeParity.test.ts`；作者用千问 key 走「测试连接」→ 判通（无 `/v1/models` 的降级路径） |
 | C ✅ | §4.4 第 1 片 | `landscape.md` §3 按 [`responses.md`](responses.md) 重写（现在是 2026-08 的 o 系列口径）；`streaming.md` / `tools.md` / `reasoning.md` 各加 ② 族一列 | 纯文档；审阅每条是否能对应 `responses.md` 里的一次请求 |
 | D | §4.4 第 2 片 | `openai_responses` / `openai_responses_compat` 两个值 + `responses` 族的全部水管（12 处 `familyOf` 调用点、两张 allowlist、i18n、`STANDARD_ENDPOINTS`、探测、`defaultImageCaps`）；adapter 只做纯文本流式，`store:false` 无条件发，**永远发 `instructions`** | `tsc`（`STANDARD_ENDPOINTS` 是 `Record<ApiStandard,…>`，漏一处就红）；`aiClient.test.ts` 新 describe：delta / usage / `incomplete` → truncated / `failed` 与 `error` 事件 → throw / 带 `obfuscation` 的 delta 不影响文本；作者在设置里选到该族、对话能出字 |
 | E | §4.4 第 3 片 | 工具：扁平 `tools` + 显式 `strict:false`；`function_call_arguments.delta` 与 `output_item.done` 两种到达都拼；`function_call_output` 回传；`_responseItems` 载体原样带回 `reasoning` / `function_call` / assistant `message`；强制 `tool_choice` 接 `toolChoice.ts` | 单测：一次含 reasoning + function_call 的流 → `toolCalls` 一条、`_responseItems` 三条且 `encrypted_content` 原样；作者跑一次续写 agent 模式，API 日志第二轮 `input` 里能看到上一轮三个条目 |

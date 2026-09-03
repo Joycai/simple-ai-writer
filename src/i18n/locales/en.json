@@ -2018,7 +2018,7 @@
       "thinkingCatQwenEffort": "Qwen · effort",
       "thinkingCatQwenEffortHint": "enable_thinking plus a reasoning_effort level (Qwen-Max supports xhigh); mutually exclusive with the budget mode.",
       "thinkingCatGlm": "GLM-5.3",
-      "thinkingCatGlmHint": "reasoning_effort as low/high/max, default max; this model cannot turn thinking off.",
+      "thinkingCatGlmHint": "reasoning_effort as low/high/max, default max; this model cannot turn thinking off. GLM models only: the thinking.clear_thinking fragment it sends is rejected (400) by other models.",
       "thinkingCatGemini3": "Gemini 3",
       "thinkingCatGemini3Hint": "A thinkingLevel (minimal/low/medium/high) plus thought summaries; \"Off\" maps to minimal (this family can't truly disable thinking).",
       "thinkingCatClaudeAdaptive": "Claude adaptive (4.6+)",
