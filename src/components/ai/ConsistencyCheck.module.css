@@ -1,3 +1,7 @@
+/* 一致性检查 · 设计稿 22。三种时刻：填表 → 看它查 → 读报告，每一种只有一样东西
+   是主角，其余退成一行。AI 面板的墨色方言：零圆角、背景深浅 + 发丝线分层、
+   衬线只给「给人读的话」、等宽给每一个数字。 */
+
 .root {
   display: flex;
   flex-direction: column;
@@ -5,8 +9,7 @@
   min-height: 0;
 }
 
-/* The drawer body no longer scrolls for us (generate/chat manage their own
-   scrollers), so this view owns its overflow. */
+/* The drawer body no longer scrolls for us; this view owns its overflow. */
 .wrap {
   flex: 1;
   min-height: 0;
@@ -14,33 +17,565 @@
   display: flex;
   flex-direction: column;
   padding: 18px 24px;
-  gap: 12px;
+  gap: 14px;
 }
 
-/* Run summary — the one line that says the scan had reach. */
+/* ── Section scaffolding (same vocabulary as AiPanel) ─────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+.sectionLabel {
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  white-space: nowrap;
+}
+.sectionRule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-hairline);
+}
+.sectionMeta {
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 跑前 · 文档那一行 ───────────────────────────────────────────── */
+.docLine {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.docName {
+  font: 500 14px/1.3 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.docMeta {
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+}
+
+/* ── Range: three-way segmented control ──────────────────────────── */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border-panel);
+}
+.segment {
+  padding: 5px 12px;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.segment + .segment { border-left: 1px solid var(--color-border-panel); }
+.segment:hover { color: var(--color-text-primary); background: var(--color-bg-hover); }
+.segmentActive {
+  color: var(--color-accent-text);
+  background: var(--color-bg-selected);
+  box-shadow: inset 0 -2px 0 var(--color-sienna);
+}
+.segment:disabled { cursor: default; opacity: 0.6; }
+
+.rangeBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hint {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.hint b { font-weight: 500; color: var(--color-text-soft); }
+.hintLink {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--color-sienna);
+  cursor: pointer;
+}
+.hintLink:hover { color: var(--color-sienna-hover); }
+
+/* Chip rows: collections picked / entries pinned. Chip taxonomy from the AI
+   dialect — active = accent wash + accent border; stale = dashed + hint. */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font: 400 11px/1.3 var(--font-sans);
+  color: var(--color-accent-text);
+  background: var(--color-bg-accent-wash);
+  border: 1px solid var(--color-border-accent);
+}
+.chipCount {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-dim);
+}
+.chipStale {
+  color: var(--color-text-hint);
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--color-border-muted);
+  text-decoration: line-through;
+}
+.chipX {
+  padding: 0;
+  margin-left: 2px;
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  display: flex;
+}
+.chipX:hover { opacity: 1; }
+.chipAdd {
+  padding: 4px 8px;
+  font: 400 11px/1.3 var(--font-sans);
+  color: var(--color-text-soft);
+  background: transparent;
+  border: 1px dashed var(--color-border-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.chipAdd:hover { color: var(--color-text-primary); border-color: var(--color-border-emphasis); }
+
+/* Stale line under the chips: count + a one-click purge. */
+.staleLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 11px/1.4 var(--font-sans);
+  color: var(--color-warning-text);
+}
+.staleLine b { font: 500 11px/1 var(--font-mono); }
+
+/* Entry picker — an input with a list under it, anchored inline. */
+.pickerWrap { position: relative; }
+.pickerInput {
+  width: 100%;
+  padding: 6px 10px;
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  outline: none;
+}
+.pickerInput:focus { border-color: var(--color-sienna); }
+.pickerList {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-panel);
+  box-shadow: var(--shadow-md);
+}
+.pickerItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  text-align: left;
+  font: 400 12px/1.3 var(--font-sans);
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.pickerItem:hover, .pickerItemActive { background: var(--color-bg-hover); }
+.pickerItem:disabled { color: var(--color-text-hint); cursor: default; }
+.pickerName { font-family: var(--font-serif); }
+.pickerFacet { color: var(--color-text-dim); }
+.pickerCat {
+  margin-left: auto;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-dim);
+}
+
+/* ── Focus ───────────────────────────────────────────────────────── */
+.focusInput {
+  width: 100%;
+  padding: 7px 10px;
+  font: 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-primary);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.focusInput:focus { border-color: var(--color-sienna); }
+.focusInput::placeholder { color: var(--color-text-hint); font-style: italic; }
+.focusOrigin {
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-accent-text);
+}
+
+/* ── Allocation bar (same trough as AiPanel's) ───────────────────── */
+.allocBar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+  overflow: hidden;
+}
+.allocSeg { display: block; min-width: 1px; }
+/* Same tokens as the generate tab's bar — the doc window is "this request's
+   material" (选区/附加), lore is 条目, recap is 前情. No new colours. */
+.allocSeg_system { background: var(--color-text-dim); }
+.allocSeg_input  { background: var(--color-border-accent); }
+.allocSeg_lore   { background: var(--color-success); }
+.allocSeg_memory { background: var(--color-accent-mid); }
+.allocSeg_free   { background: var(--color-bar-track); }
+.allocLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.allocLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+}
+.allocSwatch { width: 7px; height: 7px; flex-shrink: 0; }
+.allocSwatch.allocSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
+.allocLegendValue { color: var(--color-text-soft); font-variant-numeric: tabular-nums; }
+.allocNote {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.allocNote b { font: 500 11px/1 var(--font-mono); color: var(--color-text-soft); }
+
+/* ── Run footer (before) / bottom bar (during, after) ────────────── */
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--color-border-panel);
+  background: var(--color-bg-inset);
+}
+.footerHint {
+  flex: 1;
+  min-width: 0;
+  font: italic 400 11px/1.4 var(--font-serif);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.footerMeta {
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.footerMeta b { font-weight: 500; color: var(--color-text-primary); }
+.kbd {
+  margin-left: 8px;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-kbd);
+}
+
+/* Running: three 4px squares + mono clock, same as the composer's footer. */
+.runningPips { display: inline-flex; gap: 3px; margin-right: 8px; vertical-align: middle; }
+.runningPips span { width: 4px; height: 4px; display: block; }
+.runningPips span:nth-child(1) { background: var(--color-border-accent); }
+.runningPips span:nth-child(2) { background: var(--color-accent-mid); }
+.runningPips span:nth-child(3) { background: var(--color-sienna); }
+.runningNote {
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-accent-mid);
+}
+/* The ink square means stop. */
+.stopBtn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-accent);
+  cursor: pointer;
+}
+.stopBtn span { width: 11px; height: 11px; background: var(--color-sienna); display: block; }
+
+/* Buttons: solid sienna / outline emphasis / outline muted. */
+.btnPrimary {
+  padding: 7px 14px;
+  background: var(--color-sienna);
+  color: var(--color-on-accent);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.btnPrimary:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.btnPrimary:active:not(:disabled) { transform: scale(0.97); }
+.btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btnSecondary {
+  padding: 5px 11px;
+  background: transparent;
+  border: 1px solid var(--color-border-emphasis);
+  color: var(--color-text-primary);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+.btnSecondary:hover:not(:disabled) { border-color: var(--color-sienna); color: var(--color-sienna); }
+.btnSecondary:active:not(:disabled) { transform: scale(0.97); }
+.btnSecondary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btnGhost {
+  padding: 5px 11px;
+  background: transparent;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+.btnGhost:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-emphasis); }
+.btnGhost:active:not(:disabled) { transform: scale(0.97); }
+.btnGhost:disabled { opacity: 0.4; cursor: not-allowed; }
+.btnSmall { padding: 4px 9px; font-size: 11px; }
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-sienna);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.linkBtn:hover { color: var(--color-sienna-hover); }
+.linkBtn:disabled { color: var(--color-text-hint); cursor: default; }
+
+/* ── The settings line (跑中锁 / 跑后可点) ─────────────────────────── */
+.settingsLine {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+  text-align: left;
+}
+button.settingsLine { cursor: pointer; transition: background var(--transition-fast); }
+button.settingsLine:hover { background: var(--color-bg-hover); }
+.settingsItem {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font: 400 12px/1.3 var(--font-serif);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.settingsKey {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+.settingsPlus { font: 400 10px/1 var(--font-mono); color: var(--color-text-dim); }
+.settingsRight {
+  margin-left: auto;
+  font: 400 11px/1.3 var(--font-sans);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.settingsRightAction { color: var(--color-sienna); }
+
+/* Expanded over a report: the form again, plus a warning line and 重新核对. */
+.settingsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+}
+.settingsPanelHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settingsWarn {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-warning-text);
+}
+
+/* ── Findings stream / report ─────────────────────────────────────── */
+.count { font: 500 12px/1 var(--font-mono); color: var(--color-text-primary); }
+.countConflict { color: var(--color-error-text-strong); }
+.countWarning { color: var(--color-warning-text); }
+.countPass { color: var(--color-success); }
+.countMuted { color: var(--color-text-dim); }
+
 .stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  font: 400 12px/1.4 var(--font-mono);
+  color: var(--color-text-muted);
+}
+.statsNum { font-weight: 500; font-size: 14px; color: var(--color-text-primary); }
+.statsTail { color: var(--color-warning-text); }
+.statsSep { width: 1px; height: 11px; background: var(--color-border-panel); align-self: center; }
+
+.reportHead {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reportDoc {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+}
+.reportDoc b { font: 500 12px/1.3 var(--font-serif); color: var(--color-text-soft); }
+
+/* Coverage band: solid = checked, hatched = unchecked, square = failed. */
+.coverage {
+  display: flex;
+  gap: 1px;
+  height: 5px;
+  background: var(--color-bar-track);
+}
+.coverageSeg { display: block; min-width: 2px; }
+.coverage_done { background: var(--color-success); }
+.coverage_running { background: var(--color-accent-mid); }
+.coverage_pending { background: var(--color-border-muted); }
+.coverage_failed { background: var(--color-error-node); }
+.coverage_aborted,
+.coverage_unchecked {
+  background: repeating-linear-gradient(
+    115deg,
+    var(--color-text-ghost) 0 1px,
+    var(--color-bar-track) 1px 5px
+  );
+}
+.coverageLine {
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 400 11px/1 var(--font-mono);
-  color: var(--color-text-muted);
-}
-.statStrong { color: var(--color-text-primary); font-weight: 500; }
-.statConflict { color: var(--color-error-text-strong); }
-.statWarning { color: var(--color-warning-text); }
-.statPass { color: var(--color-success); }
-.statSep {
-  width: 1px;
-  height: 11px;
-  background: var(--color-border-panel);
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
 }
 
+/* 总评 — the one place the model speaks to the author. Serif, quiet. */
+.summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border-muted);
+}
+.summaryRow {
+  display: flex;
+  gap: 10px;
+  font: 400 13px/1.7 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.summaryTag {
+  flex-shrink: 0;
+  padding-top: 3px;
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+}
+
+/* Empty run — a sentence, not a report. */
+.emptyRun {
+  padding: 12px 14px;
+  border-left: 2px solid var(--color-warning);
+  background: var(--color-warning-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.emptyRunText { font: 400 13px/1.7 var(--font-serif); color: var(--color-warning-text); }
+.emptyRunText b { font-weight: 500; }
+.emptyRunActions { display: flex; gap: 8px; }
+
+/* A failed window's line in the report head. */
+.failedLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--color-error-node);
+  background: var(--color-error-surface);
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-error-body);
+}
+.failedLine b { font: 500 11px/1 var(--font-mono); }
+.failedLine .spacer { flex: 1; }
+
+/* The folded execution-log line after a run. */
+.logLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline);
+  text-align: left;
+  font: 400 11px/1.4 var(--font-sans);
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.logLine:hover { color: var(--color-text-primary); }
+.logLineMeta { margin-left: auto; font-family: var(--font-mono); }
+
+/* Filters */
 .filterTabs {
   display: flex;
   align-items: center;
   gap: 18px;
   border-bottom: 1px solid var(--color-border-soft);
-  padding-bottom: 6px;
 }
 .filterTab {
   padding: 6px 0;
@@ -56,26 +591,16 @@
   color: var(--color-text-primary);
   border-bottom-color: var(--color-sienna);
 }
-.filterTabBadge {
-  margin-left: 3px;
-  font-size: 11px;
-}
+.filterTabBadge { margin-left: 4px; font: 400 10px/1 var(--font-mono); }
+.spacer { flex: 1; }
 
+/* Cards */
 .issueList {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
-/* 扫描要跑好几秒，结果一次性砸下来太硬。逐张按自己的 mount 落位一次。
-   挂在直接子元素上（同 AgentChat.module.css:307，方案 016），IssueCard 因此
-   不必接 className 或 style。
-   **刻意不做错峰**：忽略一条发现会把它从 openIssues 里移除，其后每张卡的
-   nth-child 位次前移，任何基于位次的 animation-delay 都会让并未重挂载的卡片
-   集体重放——同方案 025 第 2 步的撤回理由。统一取值不随位次变化，无此问题。 */
-.issueList > * {
-  animation: slideUp 200ms var(--ease-out);
-}
+.issueList > * { animation: slideUp 200ms var(--ease-out); }
 
 .issue {
   background: var(--color-bg-surface);
@@ -84,191 +609,123 @@
      no-colored-left-border rule (docs/reference/design-system.md). */
   border-left: 3px solid var(--color-border-emphasis);
   padding: 12px 16px;
+  transition: opacity var(--transition-base);
 }
 .issueConflict { border-left-color: var(--color-error-node); }
 .issueWarning { border-left-color: var(--color-warning); }
-.issuePass { border-left-color: var(--color-success); }
+.issueGone { border-left-color: var(--color-border-muted); }
+.issueReadonly { opacity: 0.55; }
 
 .issueHead {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
   margin-bottom: 8px;
 }
-.severityChip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  font: 500 10px/1.4 var(--font-sans);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.sevConflict { background: var(--color-error-bg); color: var(--color-error-text-strong); }
-.sevWarning  { background: var(--color-warning-bg); color: var(--color-warning-text); }
-.issueTitle {
-  font: 500 13px/1.2 var(--font-serif);
-  color: var(--color-text-primary);
-}
-.issueMeta {
-  font: 400 11px/1 var(--font-sans);
-  color: var(--color-text-dim);
-}
-.spacer { flex: 1; }
-.linkBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font: italic 400 11px/1 var(--font-serif);
-  color: var(--color-sienna);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color var(--transition-fast), transform var(--transition-fast);
-}
-.linkBtn:hover { color: var(--color-sienna-hover); }
-.linkBtn:active { transform: scale(0.96); }
+/* Severity as the first word, coloured — no badge background. */
+.sev { font: 500 11px/1.3 var(--font-sans); letter-spacing: 0.08em; }
+.sevConflict { color: var(--color-error-text-strong); }
+.sevWarning { color: var(--color-warning-text); }
+.sevGone { color: var(--color-text-dim); }
+.issueTitle { font: 500 13px/1.3 var(--font-serif); color: var(--color-text-primary); }
+.issueMeta { font: 400 11px/1.3 var(--font-sans); color: var(--color-text-dim); }
+.issueMeta b { font-weight: 400; color: var(--color-text-soft); }
+.issueLine { margin-left: auto; font: 400 10px/1.3 var(--font-mono); color: var(--color-text-dim); white-space: nowrap; }
 
 .row {
   display: flex;
   gap: 14px;
   margin-bottom: 6px;
-  font: 400 13px/1.6 var(--font-serif);
-  color: var(--color-text-secondary);
 }
 .rowLabel {
   width: 54px;
   flex-shrink: 0;
-  padding-top: 2px;
+  padding-top: 3px;
   font: 500 10px/1.4 var(--font-sans);
   letter-spacing: 0.15em;
   color: var(--color-text-label);
   text-transform: uppercase;
 }
-.highlight {
-  background: var(--color-error-bg);
-  padding: 2px 5px;
-  color: var(--color-text-secondary);
-}
-.highlightWarn {
-  background: var(--color-warning-bg);
-  padding: 2px 5px;
-}
-/* The replacement, marked as the thing that would land in the manuscript. */
-.suggestion { color: var(--color-text-primary); }
-
-.staleNote {
-  margin-top: 8px;
+/* 本文 = serif, bright, quote ground. 知识库 = serif, grey, entry name a step
+   brighter. 建议 = sans (the model speaking), only the replacement back in serif. */
+.rowText { font: 400 13px/1.7 var(--font-serif); color: var(--color-text-primary); }
+.rowRef { font: 400 13px/1.7 var(--font-serif); color: var(--color-text-secondary); }
+.rowRef b { font-weight: 500; color: var(--color-text-primary); }
+.rowSuggest { font: 400 12px/1.7 var(--font-sans); color: var(--color-text-secondary); }
+.quoteMark { background: var(--color-error-bg); padding: 1px 4px; }
+.quoteMarkWarn { background: var(--color-warning-bg); padding: 1px 4px; }
+.quoteGone { text-decoration: line-through; color: var(--color-text-dim); }
+.replaceFrom { font-family: var(--font-serif); color: var(--color-diff-del-text); background: var(--color-diff-del-bg); padding: 0 3px; }
+.replaceTo { font-family: var(--font-serif); color: var(--color-diff-add-text); background: var(--color-diff-add-bg); padding: 0 3px; }
+.goneNote {
+  margin: 6px 0 2px;
   font: italic 400 11px/1.6 var(--font-serif);
   color: var(--color-text-muted);
 }
-
-/* The report belongs to another document — the list stays readable, but every
-   button that would touch the manuscript is gone. */
-.staleDoc {
-  padding: 9px 12px;
-  border-left: 2px solid var(--color-warning);
-  background: var(--color-warning-bg);
-  font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-warning-text);
-}
-
-.error {
-  padding: 10px 12px;
-  border-left: 2px solid var(--color-error-node);
-  background: var(--color-error-surface);
-  font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-error-body);
-  word-break: break-word;
-}
-
-/* Scanning — a stated wait, with the raw stream behind it as proof of life. */
-.scanning {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px 24px;
-  text-align: center;
-}
-.scanningText {
-  font: italic 400 13px/1.6 var(--font-serif);
-  color: var(--color-text-muted);
-}
-.scanningStream {
-  margin: 0;
-  max-width: 100%;
-  max-height: 120px;
-  overflow: hidden;
-  text-align: left;
-  font: 400 10px/1.6 var(--font-mono);
-  color: var(--color-text-hint);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.spinner {
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid var(--color-sienna);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
+.goneNote b { font-style: normal; font-weight: 400; color: var(--color-text-soft); }
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
-.actBtnPrimary {
-  padding: 5px 11px;
-  background: var(--color-sienna);
-  color: var(--color-on-accent);
-  border: none;
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.actBtnPrimary:hover:not(:disabled) { background: var(--color-sienna-hover); }
-.actBtnPrimary:active:not(:disabled) { transform: scale(0.97); }
-.actBtnSecondary {
-  padding: 5px 11px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-emphasis);
-  color: var(--color-sienna);
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-  transition: border-color var(--transition-fast), transform var(--transition-fast);
-}
-.actBtnSecondary:hover { border-color: var(--color-sienna); }
-.actBtnSecondary:active { transform: scale(0.97); }
-.actBtnGhost {
-  padding: 5px 11px;
-  background: transparent;
-  border: 1px solid var(--color-border-panel);
+.actions .spacer { flex: 1; }
+
+/* Pass rows in the live stream: one line each. */
+.passRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  font: 400 12px/1.4 var(--font-sans);
   color: var(--color-text-dim);
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast),
-    transform var(--transition-fast);
+  border-left: 3px solid var(--color-success);
+  background: var(--color-bg-surface);
 }
-.actBtnGhost:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-emphasis); }
-.actBtnGhost:active:not(:disabled) { transform: scale(0.97); }
-.actBtnPrimary:disabled,
-.actBtnGhost:disabled { opacity: 0.4; cursor: not-allowed; }
+.passRow b { font: 500 12px/1.4 var(--font-serif); color: var(--color-text-soft); }
 
-.actions { flex-wrap: wrap; }
+/* Read-only banner: the one explanation and the way back. */
+.readonlyBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--color-warning);
+  background: var(--color-warning-bg);
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-warning-text);
+}
+.readonlyBar b { font-family: var(--font-serif); font-weight: 500; }
 
+/* Resolved rows (ignored / applied) fold to the bottom, undo in the row. */
+.resolved {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.resolvedRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 12px;
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--color-text-dim);
+  background: var(--color-bg-inset);
+}
+.resolvedTag { font: 500 10px/1.3 var(--font-sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-text-label); }
+.resolvedTitle { font-family: var(--font-serif); color: var(--color-text-soft); }
+.resolvedRow .spacer { flex: 1; }
+
+/* 已通过 */
 .passSummary {
-  margin-top: auto;
   background: var(--color-bg-inset);
   border: 1px solid var(--color-border-panel);
 }
 .passToggle {
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 14px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -281,32 +738,40 @@
 }
 .passToggle:hover { background: var(--color-bg-tinted); }
 .passCheck { color: var(--color-success); display: flex; }
-.passLabel {
-  flex-shrink: 0;
-  font: 500 11px/1 var(--font-sans);
-  color: var(--color-text-secondary);
-}
+.passLabel { flex-shrink: 0; font: 500 11px/1 var(--font-sans); color: var(--color-text-secondary); }
 .passList {
   flex: 1;
   min-width: 0;
   text-align: left;
-  font: 400 11px/1 var(--font-sans);
+  font: 400 11px/1 var(--font-serif);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .passItems {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  padding: 0 16px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 16px;
+  padding: 0 14px 12px;
 }
 .passItem {
-  padding: 4px 9px;
-  border: 1px solid var(--color-border-panel);
-  font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-dim);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 400 12px/1.6 var(--font-serif);
+  color: var(--color-text-soft);
+}
+.passItem b { font-weight: 500; color: var(--color-text-primary); }
+.passItem .issueLine { margin-left: auto; }
+
+.error {
+  padding: 10px 12px;
+  border-left: 2px solid var(--color-error-node);
+  background: var(--color-error-surface);
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-error-body);
+  word-break: break-word;
 }
 
 .emptyState {
@@ -315,81 +780,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
   padding: 60px 24px;
   text-align: center;
 }
-.emptyTitle {
-  font: 300 22px/1.2 var(--font-serif);
-  color: var(--color-text-primary);
-  margin-bottom: 8px;
-}
-.emptyText {
-  font: italic 400 13px/1.6 var(--font-serif);
-  color: var(--color-text-muted);
-  max-width: 320px;
-  margin-bottom: 18px;
-}
-.emptyBtn {
-  padding: 9px 16px;
-  background: var(--color-sienna);
-  color: var(--color-on-accent);
-  border: none;
-  font: 500 12px/1 var(--font-sans);
-  cursor: pointer;
-}
+.emptyTitle { font: 300 20px/1.3 var(--font-serif); color: var(--color-text-primary); }
+.emptyText { font: italic 400 13px/1.6 var(--font-serif); color: var(--color-text-muted); max-width: 360px; }
 
-.footer {
-  padding: 12px 24px;
-  border-top: 1px solid var(--color-border-panel);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--color-bg-inset);
-}
-.footerHint {
-  flex: 1;
+.moreLine {
   font: italic 400 11px/1.4 var(--font-serif);
   color: var(--color-text-muted);
-}
-
-/* The thinking dial under the empty state's run button — the first scan is the
-   one worth tuning, and the toolbar that normally carries this dial only
-   exists once a report does. */
-.emptyDials {
-  margin-top: var(--space-4);
-  display: flex;
-  justify-content: center;
-}
-
-/* The model's reasoning for this scan. Same italic-serif treatment as the
-   execution log's: this is the model talking to itself, and it must not read
-   as one of the findings. */
-.reasoningToggle {
-  padding: 0;
-  background: none;
-  border: none;
-  font: inherit;
-  color: var(--color-sienna);
-  cursor: pointer;
-}
-.reasoningToggle:hover { color: var(--color-accent); }
-.reasoningBody {
-  margin: var(--space-2) 0 0;
-  padding-left: var(--space-3);
-  border-left: 1px solid var(--color-border-muted);
-  max-height: 220px;
-  overflow-y: auto;
-  font: italic 400 12px/1.75 var(--font-serif);
-  color: var(--color-text-dim);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
-   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 1.6s !important;
-    animation-iteration-count: infinite !important;
-  }
+  text-align: center;
 }

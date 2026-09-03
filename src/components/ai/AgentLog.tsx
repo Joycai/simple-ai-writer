@@ -1021,11 +1021,25 @@ function SubAgentCard({
 // ─── The card ─────────────────────────────────────────────────────────────────
 
 export function AgentLog({
-  log, isRunning, flat = false, compact = false,
-}: { log: AgentEvent[]; isRunning: boolean; flat?: boolean; compact?: boolean }) {
+  log, isRunning, flat = false, compact = false, headline: headlineOverride, subRunsLabel,
+}: {
+  log: AgentEvent[];
+  isRunning: boolean;
+  flat?: boolean;
+  compact?: boolean;
+  /**
+   * Replace the header's own sentence while the run is live. The consistency
+   * check's synthetic parent run has no rounds of its own — its "now" is
+   * 「2/4 段核对中 · 1 完成 · 1 等待」, which only the caller can say.
+   */
+  headline?: string;
+  /** The band ③ label, when the sub-runs are not subagents (段, not 子代理). */
+  subRunsLabel?: string;
+}) {
   const { t } = useTranslation();
   const model = useMemo(() => buildLogModel(log, isRunning), [log, isRunning]);
-  const headline = useHeadline(model);
+  const ownHeadline = useHeadline(model);
+  const headline = headlineOverride && model.summary.state === "running" ? headlineOverride : ownHeadline;
   // The live round's own start, not the run's: a run is long for honest reasons
   // (twelve rounds of real work), whereas one round that has been going for two
   // minutes is the thing worth noticing.
@@ -1210,7 +1224,7 @@ export function AgentLog({
       {model.subagents.length > 0 && (
         <>
           <div className={styles.sectionLabel}>
-            {t("ai.agent.log.subAgents", { defaultValue: "子代理" })}
+            {subRunsLabel ?? t("ai.agent.log.subAgents", { defaultValue: "子代理" })}
           </div>
           <ul className={styles.list}>
             {model.subagents.map((run) => (

@@ -110,6 +110,8 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [translate/00-sakura-feasibility.html](feature/translate/00-sakura-feasibility.html) | `research` | Can SakuraLLM (日→中) be integrated, and where it lands. Twelve live tests against a local LM Studio — chunk sizes, degeneration, the glossary's real behaviour |
 | [translate/01-execution-plan.md](feature/translate/01-execution-plan.md) | `shipped` (Beta flag) | The four PR slices, the six invariants, and why `top_p`/`frequency_penalty` belong to `StreamOptions` rather than `ConnOptions` |
 | [pptx-plan.md](feature/pptx-plan.md) | `shipped` (write side Beta) | Reading .pptx in Rust; HTML → PPTX without a model in the loop |
+| [consistency-review-plan.md](feature/consistency-review-plan.md) | `shipped` | 一致性检查重设计：核对搬到统一运行时（助手的循环减写工具 + 两个收集器，子代理照装）、范围三档（全部 / 集合 / 条目）、核对重点经检索子代理展开、按预算切段并行（切段归代码）、引文在工具里校验、分配条而不是构成条；§15 记实现与方案的出入 |
+| [consistency-review-ui-brief.md](feature/consistency-review-ui-brief.md) | `shipped` | 上面那份的 UI 任务书（设计稿 `22 一致性检查`）：四条张力——设置区在点开始那一刻折成一行、段条不画（段是日志里的工具行，结束后变成报告头的覆盖条）、停止住底栏、五张报告头靠统计行写法和覆盖条区分；文末记设计稿怎么答的与实现出入 |
 | [docx/00-feasibility.md](feature/docx/00-feasibility.md) | `proposal` | 为什么「难的是读 docx，不是写 docx」；RTF / HTML-塞进-.doc / pandoc sidecar / Rust `docx-rs` 四条弃用理由；严格格式规格（公文级）的实测表达力，以及「校对规格表而不是校对产出」（§7） |
 | [docx/01-agent-design.md](feature/docx/01-agent-design.md) | `shipped` | agent 产出 .docx（Beta）：四条不变量（模型只写 markdown · **格式是引用不是参数** · 三级来源纯函数解析 · Beta 关=工具缺席）、`export_docx` / `read_doc_format` 的工具形状、`DocxProposal` 卡为什么要显示格式来源、预设为什么落装机级 |
 | [docx/02-ui-brief.md](feature/docx/02-ui-brief.md) | `shipped` | 给 Claude Design 的 UI 任务书（自包含）。设计稿已回（TURN 1，1a–1n），实现出入记在 01 的 §11 |
