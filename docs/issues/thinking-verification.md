@@ -69,8 +69,9 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 **为什么重要**：思考参数改为「按厂商类目」后（[`reasoning-plan.md`](../api/reasoning-plan.md) §0），
 以下请求形状是**全新的**——单元测试只证明我们发对了字节，没人对真实端点验过对面认不认：
 
-- **DeepSeek `deepseek` 类目**：`off` 走 `extra_body.thinking:{type:"disabled"}` 停用思考
-  （不是 `reasoning_effort:"none"`）。验：DeepSeek V4 上选此类目、切「关闭」，看是否真的不思考。
+- **DeepSeek `deepseek` 类目**：`off` 走顶层 `thinking:{type:"disabled"}` 停用思考
+  （不是 `reasoning_effort:"none"`）。✅ 2026-09 在千问的 DeepSeek V4 上验过顶层形状生效
+  （原先写成 `extra_body.thinking`，被端点忽略，已修）；DeepSeek 官方端点待作者真机确认。
 - **Qwen `qwen-effort` 类目**：`enable_thinking:true` 与 `reasoning_effort`（含 `xhigh`）**同发**。
   验：DashScope 上 Qwen-Max 是否接受二者同发、`xhigh` 是否被识别。
 - **`qwen-budget` 类目**：`enable_thinking` + `thinking_budget:N`。验：预算是否被遵守。
@@ -182,7 +183,7 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 [`../api/landscape.md`](../api/landscape.md) §7 第六个样本）：
 
 - **4.2 已验（在千问的 DeepSeek 上）：「关闭」无效**——原因不是枚举，是我们把
-  `thinking:{type:"disabled"}` 包在字面量 `extra_body` 键里发了出去；顶层发则生效。修复见方案 §3 第 1 片。
+  `thinking:{type:"disabled"}` 包在字面量 `extra_body` 键里发了出去；顶层发则生效。**已修**（方案 §3 第 1 片）。
   DeepSeek 官方端点仍待验，但 wire 形状错误与端点无关。
 - **4.4 / 4.5 已验**：`enable_thinking` 开关两个方向都生效（6 个默认思考的模型关得掉，
   qwen3-vl-plus 开得起来）；`thinking_budget` 除 kimi-k3（400）外被接受。MiniMax-M2.5 关不掉（400）。
