@@ -13,6 +13,24 @@ export interface ThinkingBlockCarry {
   /** `thinking` / `redacted_thinking` blocks, verbatim and in original order. */
   blocks: unknown[];
 }
+
+/**
+ * The OpenAI Responses family's output items for one tool round, tagged with
+ * the model that produced them (see `lib/ai/responses.ts`).
+ *
+ * `reasoning` (with its `encrypted_content`), `function_call` and any
+ * `message` the model emitted before calling, verbatim and in order — the
+ * whole `output[]` of the turn, which is what the endpoint wants back on the
+ * next request (docs/api/responses.md §5). Model-bound for the same reason as
+ * `ThinkingBlockCarry`: encrypted reasoning is opaque to any other model, and
+ * an item list with ids from one model replayed to another is at best billed
+ * noise. When the model changed, the adapter falls back to the bare
+ * `function_call` spelling, which every model accepts.
+ */
+export interface ResponseItemCarry {
+  modelId: string;
+  items: unknown[];
+}
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolEvent, ServerToolId } from "./serverTools";
 import i18n from "../../i18n";
@@ -268,6 +286,8 @@ export type StreamChunk =
       _reasoning?: NativeReasoning;
       /** Anthropic's thinking blocks for this turn — see `StreamMessage`. */
       _thinkingBlocks?: ThinkingBlockCarry;
+      /** The Responses family's output items for this turn — see `StreamMessage`. */
+      _responseItems?: ResponseItemCarry;
     };
 
 /** All message variants accepted by the streaming API. */
@@ -309,6 +329,18 @@ export type StreamMessage =
        * them, it will silently ignore them — and still bill them as input.
        */
       _thinkingBlocks?: ThinkingBlockCarry;
+      /**
+       * The OpenAI Responses family's output items for this turn — reasoning
+       * (encrypted), function calls and any interim message, verbatim.
+       *
+       * Its own field for the same reason `_thinkingBlocks` is: the shape is an
+       * ordered item list the endpoint wants back whole, not a `{field, text}`
+       * pair. Unlike Anthropic's blocks, leaving them out is not an error on
+       * this family (docs/api/responses.md §5 — the bare `function_call` is
+       * accepted); the cost is quality, since a model whose reasoning context
+       * spans turns (`all_turns`) sees none of its past reasoning without them.
+       */
+      _responseItems?: ResponseItemCarry;
     }
   | { role: "tool"; tool_call_id: string; content: string };
 
