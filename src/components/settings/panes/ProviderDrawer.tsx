@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
+import type { Model } from "../../../lib/ai/configDb";
 import { authModesFor, familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "../../../lib/ai/types";
 import { DEFAULT_ANTHROPIC_BASE, DEFAULT_GEMINI_BASE, DEFAULT_OPENAI_BASE } from "../../../lib/ai/urls";
 import {
@@ -42,7 +43,44 @@ interface ProviderPreset {
    * field on this form is a formality for it — see the drawer's comfyMode.
    */
   comfy?: true;
+  /**
+   * The header the relay documents for the key, when it is not the protocol's
+   * own. Absent means `default`, and clicking a preset always writes the mode
+   * — otherwise a Bearer mode picked up from one preset would silently ride
+   * along into the next.
+   */
+  authMode?: AuthMode;
+  /**
+   * Model rows created alongside a *new* provider saved from this preset.
+   *
+   * For a relay with a 190-entry catalogue, "which of these can I even
+   * call?" is the first thing an author hits after saving, and the answer is
+   * not in the list. A preset that knows the relay can name its free tier and
+   * hand the author a working model before they have read anything. Only on
+   * creation — editing an existing provider never adds rows.
+   */
+  starterModels?: StarterModel[];
 }
+
+/** The fields a starter row declares; everything else takes the row default. */
+type StarterModel = Pick<Model, "modelId" | "name"> &
+  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory">>;
+
+/**
+ * OrcaRouter's free tier (2026-09): rate-limited, billed at $0, and — verified
+ * live — all three stream on `/v1/chat/completions` with reasoning arriving in
+ * `reasoning_content` and usage on the final chunk. Context sizes are the
+ * relay's own model pages; the DeepSeek row also names its output cap (384K).
+ * The DeepSeek page lists `thinking` among its accepted parameters, which is
+ * the `deepseek` category's dialect, so the author gets the on/off switch;
+ * the other two stay on the family default (`reasoning_effort`, which the
+ * relay translates per model).
+ */
+const ORCAROUTER_FREE_MODELS: StarterModel[] = [
+  { modelId: "deepseek/deepseek-v4-flash-free", name: "DeepSeek V4 Flash (Free)", contextSize: 1_000_000, maxOutput: 384_000, thinkingCategory: "deepseek" },
+  { modelId: "qwen/qwen3.8-27b-free", name: "Qwen3.8 27B (Free)", contextSize: 65_536 },
+  { modelId: "tencent/hy3-free", name: "Hunyuan Hy3 (Free)", contextSize: 262_144 },
+];
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
@@ -65,6 +103,24 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // prefix, which anthropicRoot leaves alone (it only trims a trailing
   // /v1 and /messages).
   { name: "MiniMax (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.minimaxi.com/anthropic" },
+  // OrcaRouter is a relay that serves all three protocols off one host and one
+  // catalogue, with every model id carrying its vendor as a prefix
+  // (`anthropic/claude-sonnet-4.6`, `google/gemini-2.5-flash`). One row per
+  // protocol, like MiniMax above. The OpenAI row reaches every model; the
+  // other two exist for what the OpenAI shape cannot carry — Anthropic
+  // content blocks and base64 images to Claude (its docs steer those to the
+  // native path), Gemini's own thinkingConfig and built-in tools.
+  //
+  // Its docs write `Authorization: Bearer` in every example and say it holds
+  // for all endpoints; `x-api-key` / `x-goog-api-key` are only promised on the
+  // Anthropic- and Gemini-shaped paths, and `/v1/models` — which the Claude
+  // row's model list hits — is not one of those. So the one header documented
+  // for both calls a provider makes is the one the presets pick. Bases follow
+  // each family's own convention: anthropicRoot appends /v1 itself, geminiUrl
+  // does not. See docs/api/landscape.md §7 第七个样本.
+  { name: "OrcaRouter", apiStandard: "openai_compat", baseUrl: "https://api.orcarouter.ai/v1", starterModels: ORCAROUTER_FREE_MODELS },
+  { name: "OrcaRouter (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.orcarouter.ai", authMode: "bearer" },
+  { name: "OrcaRouter (Gemini 格式)", apiStandard: "gemini_compat", baseUrl: "https://api.orcarouter.ai/v1beta", authMode: "bearer" },
   // Local render server, not an LLM endpoint. The standard is stored only
   // because the column is NOT NULL — dispatch reads the model's caps.route
   // (lib/ai/image.ts), never this. See docs/feature/comfyui-plan.md §7.
@@ -95,7 +151,7 @@ interface Props {
 
 export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
   const { t } = useTranslation();
-  const { providers, models, addProvider, updateProvider } = useAiStore();
+  const { providers, models, addProvider, updateProvider, addModel } = useAiStore();
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
   const [form, setForm] = useState({
@@ -122,6 +178,13 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
   const [comfyMode, setComfyMode] = useState(
     () => !!providerId && models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"),
   );
+  /**
+   * The rows the clicked preset promised — held apart from the form because
+   * they belong to the *preset*, not to any field the author can see: a name
+   * they retype is still the same relay, but a standard they switch is not,
+   * so the standard picker below drops them and the preset buttons reset them.
+   */
+  const [starterModels, setStarterModels] = useState<StarterModel[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -187,6 +250,24 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
           form.apiKey,
         );
+        // Sequential on purpose: addModel is also where the first model ever
+        // added becomes the active one, and two rows racing for that would
+        // leave the author with whichever resolved second.
+        for (const m of starterModels) {
+          await addModel({
+            providerId: newId,
+            modelId: m.modelId,
+            name: m.name,
+            type: "text",
+            priceIn: 0,
+            priceCachedIn: 0,
+            priceOut: 0,
+            enabled: true,
+            contextSize: m.contextSize,
+            maxOutput: m.maxOutput,
+            thinkingCategory: m.thinkingCategory,
+          });
+        }
         if (comfyMode && onComfyCreated) {
           onComfyCreated(newId);
           return;
@@ -232,14 +313,29 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
                   className={styles.btnSecondary}
                   onClick={() => {
                     setComfyMode(!!preset.comfy);
+                    setStarterModels(preset.starterModels ?? []);
                     setTestResult(null);
-                    setForm({ ...form, name: preset.name, apiStandard: preset.apiStandard, baseUrl: preset.baseUrl });
+                    setForm({
+                      ...form,
+                      name: preset.name,
+                      apiStandard: preset.apiStandard,
+                      baseUrl: preset.baseUrl,
+                      authMode: preset.authMode ?? "default",
+                    });
                   }}
                 >
                   {preset.name}
                 </button>
               ))}
             </div>
+            {starterModels.length > 0 && (
+              <div className={styles.hint}>
+                {t("aiConfig.providers.presetStarterModels", {
+                  count: starterModels.length,
+                  models: starterModels.map((m) => m.name).join(" · "),
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -256,6 +352,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
               ariaLabel={t("aiConfig.providers.apiStandardLabel")}
               onChange={(v) => {
                 const standard = v as ApiStandard;
+                // Starter rows are declared for the preset's own surface; a
+                // different protocol would take the same ids to a different
+                // endpoint, so the promise no longer holds.
+                if (standard !== form.apiStandard) setStarterModels([]);
                 setForm({
                   ...form,
                   apiStandard: standard,
