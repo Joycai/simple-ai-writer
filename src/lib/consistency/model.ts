@@ -12,6 +12,8 @@
  * resolved at scan time is stale by the third fix.
  */
 
+import type { ReviewScope } from "./scope";
+
 export type IssueSeverity = "conflict" | "warning";
 
 /** A resolved position in the document the report was made against. */
@@ -40,17 +42,71 @@ export interface ConsistencyIssue {
   entityName?: string;
   /** Where that entity lives, resolved against the lore index at scan time. */
   entityDirPath?: string;
+  /** Which window (0-based) of the checked document reported it. */
+  window?: number;
+  /**
+   * Where the quote sat when the checker verified it — an absolute range in
+   * the document as scanned. A *hint* for `locateIssue`, never the truth: the
+   * author edits after the scan, and the truth is whatever the live text says.
+   * What it buys is disambiguation — a quote that occurs twice in the document
+   * is still pointable when the scan knows which occurrence it meant.
+   */
+  anchor?: IssueRange;
+  /** 1-based line of `anchor.from` in the scanned text, for the card's `L118`. */
+  line?: number;
+}
+
+/** A fact the checker verified and found consistent. */
+export interface ConsistencyPass {
+  label: string;
+  entityName?: string;
+  entityDirPath?: string;
+  window?: number;
+  line?: number;
+}
+
+export type WindowStatus = "pending" | "running" | "done" | "failed" | "aborted";
+
+/** One window of the document, and how its check went. */
+export interface WindowOutcome {
+  index: number;
+  from: number;
+  to: number;
+  status: WindowStatus;
+  /** Findings + passes it recorded. */
+  recorded: number;
+  rounds: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** The checker's closing line — the 总评 for this window. */
+  summary: string;
+  /** Why it failed, when it did. */
+  error?: string;
+  /** True when the run ended with nothing recorded and no parseable output — "没查成". */
+  empty?: boolean;
 }
 
 export interface ConsistencyReport {
   issues: ConsistencyIssue[];
   /** Checks that came back clean — the collapsed 已通过 N 项 list. */
-  passed: string[];
+  passed: ConsistencyPass[];
   /** Total things the model reports having checked (issues + passes floor). */
   checkedCount: number;
   durationMs: number;
   /** The document this describes. A report is meaningless against another. */
   filePath: string | null;
+  /** Length of the text the report was made against. */
+  docChars: number;
+  /** What the yardstick was — the report head says so (calibration, like 已通过). */
+  scope: ReviewScope;
+  focus: string;
+  windows: WindowOutcome[];
+  /** Chars past the last window the cap left unchecked (0 = whole document). */
+  uncheckedFrom: number | null;
+  /** The author stopped it. Whatever was recorded is still here. */
+  aborted: boolean;
+  /** Every window ended empty: nothing recorded, nothing parseable. Not a green tick. */
+  emptyRun: boolean;
 }
 
 /**
@@ -99,6 +155,51 @@ export function locateQuote(doc: string, quote: string): IssueRange | null {
   return { from, to };
 }
 
+/**
+ * How far around the anchor the near-search looks, in chars — narrowest first.
+ * Each ring is searched with the uniqueness rule, so a quote the document
+ * repeats resolves at the ring where only the intended occurrence is in view.
+ */
+const ANCHOR_RINGS = [0, 200, 2_000];
+
+/**
+ * `locateQuote` with the scan-time anchor as a tie-breaker.
+ *
+ * Near first: the spot where the checker saw it, then widening rings around
+ * it, so a quote that the document repeats elsewhere still resolves to the
+ * occurrence the finding was about. Whole document last, for the author who
+ * has since moved the passage. Every ring keeps the uniqueness rule *within the
+ * region searched* — the anchor narrows the question, it never guesses.
+ */
+export function locateIssue(doc: string, issue: Pick<ConsistencyIssue, "quote" | "anchor">): IssueRange | null {
+  const hint = issue.anchor;
+  if (hint) {
+    for (const ring of ANCHOR_RINGS) {
+      const from = Math.max(0, hint.from - ring);
+      const to = Math.min(doc.length, hint.to + ring);
+      if (from >= to) continue;
+      const near = locateQuote(doc.slice(from, to), issue.quote);
+      if (near) return { from: near.from + from, to: near.to + from };
+    }
+  }
+  return locateQuote(doc, issue.quote);
+}
+
+/**
+ * The text now standing where the quote used to be — for the 「引文已找不到」
+ * card's "附近现在是「…」" line. The anchor's own span in the live document,
+ * trimmed to one line. Null without an anchor or when the document is shorter
+ * than it.
+ */
+export function textNearAnchor(doc: string, issue: Pick<ConsistencyIssue, "anchor">, maxChars = 24): string | null {
+  const hint = issue.anchor;
+  if (!hint || hint.from >= doc.length) return null;
+  const line = doc.slice(hint.from, Math.min(doc.length, hint.from + Math.max(maxChars, hint.to - hint.from)))
+    .split("\n")[0]
+    .trim();
+  return line ? line.slice(0, maxChars) : null;
+}
+
 /** Drop whitespace; fold the quote marks models normalise away. */
 function normalizeChar(ch: string): string {
   if (/\s/.test(ch)) return "";
@@ -121,7 +222,7 @@ export function applySuggestions(
 ): { text: string; applied: string[] } {
   const edits = issues
     .filter((i) => i.suggestion !== undefined && i.suggestion !== i.quote)
-    .map((issue) => ({ issue, range: locateQuote(doc, issue.quote) }))
+    .map((issue) => ({ issue, range: locateIssue(doc, issue) }))
     .filter((e): e is { issue: ConsistencyIssue; range: IssueRange } => e.range !== null)
     .sort((a, b) => b.range.from - a.range.from);
 
@@ -137,4 +238,19 @@ export function applySuggestions(
     lastFrom = range.from;
   }
   return { text, applied };
+}
+
+/**
+ * Put the quote back where its suggestion landed — the 撤销 on an applied card.
+ *
+ * Symmetric with `applySuggestions`: the suggestion is what is now in the text,
+ * so it is what gets located (near the anchor, uniquely), and the quote is what
+ * replaces it. Null when the suggestion can no longer be found — the author
+ * edited over it, and there is nothing honest to undo.
+ */
+export function revertSuggestion(doc: string, issue: ConsistencyIssue): string | null {
+  if (!issue.suggestion) return null;
+  const range = locateIssue(doc, { quote: issue.suggestion, anchor: issue.anchor });
+  if (!range) return null;
+  return doc.slice(0, range.from) + issue.quote + doc.slice(range.to);
 }

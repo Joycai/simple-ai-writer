@@ -350,7 +350,14 @@ export function CommandPalette() {
   };
 
   const runAction = (id: ActionRow["id"]) => {
-    if (id === "check") setShowAiDrawer(true, "consistency");
+    if (id === "check") {
+      // The term is the question: it prefills the check's focus, and narrows the
+      // range to the entry when it names one (设计稿 22 屏 1k).
+      setShowAiDrawer(true, "consistency");
+      void import("../../stores/consistencyStore").then((m) =>
+        m.useConsistencyStore.getState().prefillFromSearch(term),
+      );
+    }
     else if (id === "chat") setShowAiDrawer(true, "chat");
     else { setSelection(term); setShowAiDrawer(true, "generate"); }
   };

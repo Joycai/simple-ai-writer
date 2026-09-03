@@ -111,6 +111,7 @@ import {
   writeNoteTool,
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
+import { reportIssueCall, reportPassCall, type ReviewSink } from "../consistency/reviewTools";
 import { executeDelegate, type SubAgentKind } from "./subagent";
 import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
@@ -636,6 +637,12 @@ export interface ToolContext {
    * refuse rather than dropping the model's work on the floor.
    */
   splitSink?: SplitSink;
+  /**
+   * Collector for a 一致性检查 window (lib/consistency/reviewTools). Same
+   * contract as `splitSink`: nothing on disk, the panel reads the sink live.
+   * Absent means this surface is not a check, and report_* refuse.
+   */
+  reviewSink?: ReviewSink;
   /** Active on-disk task workspace (.ai-writer/tasks/<taskId>/). */
   taskWorkspace?: TaskWorkspaceHandle;
   /**
@@ -805,6 +812,8 @@ export type ToolId =
   | "update_memory"
   | "split_core"
   | "split_facet"
+  | "report_issue"
+  | "report_pass"
   | "propose_edit"
   | "rewrite_document"
   | "rewrite_lines"
@@ -2092,6 +2101,85 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: splitFacetCall,
+  },
+
+  // ── 一致性检查 collectors (lib/consistency/reviewTools) ──
+  // Same shape as the split collectors: "read" access, nothing on disk, the
+  // panel reads the sink live. projectFree for the same reason — the sink is
+  // in memory, and the tests run the handlers with no project at all.
+  report_issue: {
+    access: "read",
+    projectFree: true,
+    definition: {
+      type: "function",
+      function: {
+        name: "report_issue",
+        description:
+          "Record ONE inconsistency between the text you were given and the knowledge base (or the earlier text). Call it once per finding, as soon as you have verified it — never batch several into one call, and never list findings in prose instead. 'quote' must be copied VERBATIM from the segment and occur exactly once in it; the call is refused otherwise, so resend with a shorter or longer span. Categories in this project: {{categories}}; use 'timeline' for ordering/continuity.",
+        parameters: {
+          type: "object",
+          properties: {
+            severity: {
+              type: "string",
+              enum: ["conflict", "warning"],
+              description:
+                "conflict = the text contradicts established material; warning = it may be deliberate but is worth a look.",
+            },
+            category: {
+              type: "string",
+              description: "Which kind of material this is about — a category id from the list above, or 'timeline'.",
+            },
+            title: { type: "string", description: "Short label, ≤ 12 characters where possible, e.g. \"林辰惯用手\"." },
+            quote: {
+              type: "string",
+              description:
+                "The exact span from the segment, copied character-for-character including punctuation. One clause; must occur exactly once in the segment.",
+            },
+            reference: {
+              type: "string",
+              description: "What the knowledge base or the earlier text establishes instead, and where that comes from (entry · facet, or chapter).",
+            },
+            suggestion: {
+              type: "string",
+              description:
+                "A drop-in replacement for 'quote' that resolves the conflict — same length and register. Omit when no single local edit fixes it.",
+            },
+            entity: {
+              type: "string",
+              description: "Name of the knowledge-base entry involved, exactly as the material gives it. Omit for a pure ordering/continuity finding.",
+            },
+          },
+          required: ["severity", "title", "quote", "reference"],
+        },
+      },
+    },
+    execute: reportIssueCall,
+  },
+
+  report_pass: {
+    access: "read",
+    projectFree: true,
+    definition: {
+      type: "function",
+      function: {
+        name: "report_pass",
+        description:
+          "Record ONE fact you checked against the knowledge base and found consistent — e.g. a character's faction, a place name's spelling, a number that matches. This is how the author sees what the check actually covered: a check that only ever speaks up cannot be told apart from one that did not look. Call it once per verified fact.",
+        parameters: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Short label for the fact, e.g. \"林辰阵营\"." },
+            entity: { type: "string", description: "The knowledge-base entry it concerns, when there is one." },
+            quote: {
+              type: "string",
+              description: "Optional: the span in the segment where you checked it, verbatim — gives the pass a line number.",
+            },
+          },
+          required: ["label"],
+        },
+      },
+    },
+    execute: reportPassCall,
   },
 
   propose_edit: {
