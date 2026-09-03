@@ -3269,7 +3269,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         description:
           "Dispatch one self-contained WRITE job to a specialist agent carrying a focused toolset for it. " +
           "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html); " +
-          "'lore_edit' — create, update or reorganize knowledge-base entries; " +
+          "'lore_edit' — create, update or reorganize knowledge-base entries, including their galleries (file an existing picture, retune or remove one); " +
           "'export' — convert documents to pptx/docx/xlsx. " +
           "The specialist cannot see this conversation: state the WHOLE job in 'task' — source paths, " +
           "target file or entry names, and the exact changes wanted — and list material files or note " +
