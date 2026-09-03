@@ -17,7 +17,11 @@
 | **文本增量** | `delta.content` | `response.output_text.delta` | `candidates[0].content.parts[].text` | `content_block_delta` → `text_delta` |
 | **工具参数** | `delta.tool_calls[].function.arguments`，**按 `index` 分片拼接** | `response.function_call_arguments.delta` | **一次给全**，不分片 | `input_json_delta` 累积 |
 | **收尾** | `data: [DONE]` | `response.completed` | 流自然结束 | `message_stop` |
-| **usage 何时到** | 最后一个 chunk，**且须开 `stream_options.include_usage`** | 完成事件 | 每个 chunk 都带 `usageMetadata` | 分两次：`message_start` 给输入，`message_delta` 给输出 |
+| **usage 何时到** | 最后一个 chunk，**且须开 `stream_options.include_usage`** | `response.completed` 事件里的 `response.usage`（整个响应对象随事件回来） | 每个 chunk 都带 `usageMetadata` | 分两次：`message_start` 给输入，`message_delta` 给输出 |
+
+② 的完整实测序列（文本 / 推理摘要 / 函数调用三段）在 [`responses.md`](responses.md) §4；
+两条读侧细节：delta 事件带一个 `obfuscation` 随机串字段要无视；`response.output_item.done`
+的 `item` 就是回传用的完整条目，不必自己从 delta 拼。
 
 ### ③ 那一列容易读错
 
@@ -38,7 +42,7 @@ Gemini 的每个 chunk 是一个**完整的 `GenerateContentResponse`**，不是
 | | 正常 | 达到上限 | 被拦 | 工具调用 |
 | --- | --- | --- | --- | --- |
 | **①** | `finish_reason:"stop"` | `"length"` | `"content_filter"` | `"tool_calls"` |
-| **②** | `status:"completed"` | `incomplete_details.reason:"max_output_tokens"` | `…:"content_filter"` | — |
+| **②** | `status:"completed"` | `incomplete_details.reason:"max_output_tokens"` | `…:"content_filter"` | 仍是 `completed`，看 `output[]` 里有没有 `function_call` 条目 |
 | **③** | `finishReason:"STOP"` | `"MAX_TOKENS"` | `"SAFETY"` / `"RECITATION"` / `"PROHIBITED_CONTENT"` | — |
 | **④** | `stop_reason:"end_turn"` | `"max_tokens"` | `"refusal"` | `"tool_use"` |
 

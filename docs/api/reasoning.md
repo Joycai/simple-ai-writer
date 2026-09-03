@@ -18,7 +18,7 @@
 | 协议 | 参数位置 | 档位 | 默认 | 关闭 |
 | --- | --- | --- | --- | --- |
 | **①** | 顶层 `reasoning_effort` | `none/minimal/low/medium/high/xhigh/max`，**每个模型只支持子集** | 模型自定 | `reasoning_effort:"none"` |
-| **② Responses** | `reasoning:{effort, summary}` | 同上 | 同上 | 同上 |
+| **② Responses** | `reasoning:{effort, summary, context, mode}` | 同上，但**越界是 400 不是折叠**（gpt-5.4 收 `max` → `Unsupported value`）；5.4 到 `xhigh`，5.6 到 `max` | 按模型：5.4 `none`，5.5 / 5.6 `medium`（响应回显） | `effort:"none"`，此时无 `reasoning` 条目 |
 | **③ Gemini 3+** | `thinking_level`（Interactions）；经典 surface 上的位置**文档已不给**，见 §1.5 | `minimal/low/medium/high` | **按模型分三种**，见 §1.4 | **不可关**，`minimal` 也只是「最少」 |
 | **③ 2.5 代** | `generationConfig.thinkingConfig.thinkingBudget` | `-1` 动态 / `0` 关 / 具体 token 数 | `-1` | `0`，但 2.5 Pro 拒绝 |
 | **④ 新代**（4.6+/5） | `thinking:{type:"adaptive"}` 开关 + `output_config:{effort}` 深度 | `low/medium/high/xhigh/max` | 见 §1.3 —— **按模型不同，不是统一的** | `thinking:{type:"disabled"}`，**部分模型拒绝** |
@@ -146,7 +146,7 @@
 | --- | --- | --- |
 | **① OpenAI 官方** | **没有内容**，只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | 想看思维链，官方 Chat Completions 这条路是不通的 |
 | **① 兼容层扩展** | `delta.reasoning_content`（DeepSeek）/ `delta.reasoning`（OpenRouter 等）/ 部分中继内联 `<think>…</think>` | **字段名没有标准**，见 §2.1 |
-| **②** | `reasoning.summary`（需 opt-in `summary: auto/concise/detailed`）+ 无状态时的 `encrypted_content` | 是摘要不是原文 |
+| **②** | `reasoning` 条目的 `summary[]`（需 opt-in `summary: auto/concise/detailed`，流式走 `response.reasoning_summary_text.delta`）+ `store:false` 时默认自带的 `encrypted_content` | 是摘要不是原文；**模型没推理（`reasoning_tokens: 0`）时连条目都没有**，同一请求两次可能一有一无 |
 | **③** | 经典 surface：`part.thought === true` 的文本 part + `thoughtSignature`。Interactions：`steps[]` 里 `type:"thought"` 的 step，含 `signature` 与 `summary` | 摘要；Interactions 需 `thinking_summaries: "auto"` 开启 |
 | **④** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 摘要；**且默认可能一个字都不给**，见 §2.3 |
 
@@ -204,7 +204,7 @@
 | --- | --- | --- |
 | **① 官方** | 无（本来就没有内容） | — |
 | **① DeepSeek** | 两个 user 消息之间**如果模型进行了工具调用**，中间 assistant 的 `reasoning_content` 必须参与拼接，且"在后续所有 user 交互轮次中必须回传"；**没有**工具调用时无需回传（传了会被忽略） | 文档原文：**"若您的代码中未正确回传 `reasoning_content`，API 会返回 400 报错"** |
-| **②** | 无状态模式（`store:false`）下回传 reasoning item 的 `encrypted_content` | 丢失推理上下文 |
+| **②** | 无状态模式（`store:false`）下回传 reasoning item 的 `encrypted_content`（原样带回整个条目即可） | 丢失推理上下文；**不报错**（2026-09 实测去掉条目、去掉 `encrypted_content` 都 200），5.5 / 5.6 默认 `context:"all_turns"` 时往轮推理就渲染不回去了 |
 | **③** | 无状态模式下**必须**原样回传带签名的思考块；有状态模式（Interactions 的 `store`/`previous_interaction_id`）由服务端管 | 多轮推理连续性断裂 |
 | **④** | 工具轮必须原样带回该轮的 thinking block（含 `signature`）与 `redacted_thinking` block | **分两种，见 §3.3**：缺失 → 静默降级；改动 → 400 |
 

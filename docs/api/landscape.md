@@ -71,39 +71,50 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 
 ## 3. ② OpenAI Responses
 
+> 2026-09 按 GPT-5.4 / 5.5 / 5.6 的参考页与实测重写（此前是 o 系列时代的口径）。
+> 逐字段的实测记录在 [`responses.md`](responses.md)，这里只留骨架与分水岭。
+
 **世界观**：一条**条目（item）流**，而不是消息数组。推理、消息、工具调用是并列的
 item 类型；服务端可以替你存住上一轮。
 
 ```jsonc
 POST /v1/responses
 {
-  "model": "…",
-  "instructions": "…",                 // system 在这里，不在 input 里
+  "model": "gpt-5.6-sol",
+  "instructions": "…",                 // system 在这里，不在 input 里；不发则用端点默认
   "input": [
-    { "role": "user", "content": [{ "type": "input_text", "text": "…" }] },
+    { "role": "user", "content": [{ "type": "input_text", "text": "…" }, { "type": "input_image", "image_url": "data:…" }] },
     { "type": "function_call_output", "call_id": "call_1", "output": "…" }
   ],
-  "tools": [{ "type": "function", "name": "f", "parameters": { /* … */ } }],  // 扁平，无 function 包装
-  "reasoning": { "effort": "medium", "summary": "auto" },
-  "text": { "format": { "type": "json_schema", /* … */ } },
+  "tools": [{ "type": "function", "name": "f", "parameters": { /* … */ }, "strict": false }],  // 扁平；strict 省略＝自动 strict
+  "tool_choice": "auto" | "required" | { "type": "function", "name": "f" },
+  "reasoning": { "effort": "medium", "summary": "auto", "context": "auto", "mode": "standard" },
+  "text": { "format": { "type": "json_schema", "name": "x", "schema": { /* … */ } }, "verbosity": "medium" },
   "max_output_tokens": 4096,
-  "store": false,
-  "previous_response_id": "resp_…",
+  "store": false,                      // 默认 true
+  "previous_response_id": "resp_…",   // 或 conversation；二者互斥
   "stream": true
 }
 ```
 
-响应的 `output[]` 是 item 数组，常见类型：`reasoning`（含 `summary[]`，无状态模式下
-还有 `encrypted_content`）、`message`（`content[]` 里是 `output_text` 或 `refusal`）、
-`function_call`（带 `call_id`）。
+响应的 `output[]` 是 item 数组：`reasoning`（`summary[]`，`store:false` 时**默认带
+`encrypted_content`**）、`message`（`content[]` 里是 `output_text` 或 `refusal`，
+5.x 的助手消息带 `phase: "commentary"|"final_answer"`）、`function_call`（带 `call_id`）。
+
+**思考控制按模型裁剪**：`reasoning.effort` 的七档词表每款只认子集，越界是 400 而不是
+折叠（5.4 到 `xhigh`，5.6 到 `max`）；默认值也按模型（5.4 `none`，5.5 / 5.6 `medium`）。
+`summary` 不发就没有思维链事件；`context`（5.5 / 5.6 默认 `all_turns`）决定往轮推理
+渲不渲染回下一轮；`mode: "pro"` 是 5.6 独有的深推理档。
 
 流式是**类型化命名事件**（`response.output_text.delta`、
-`response.function_call_arguments.delta`、`response.completed` 等），
-不需要客户端猜哪个字段是增量——这是它相对 Chat Completions 的主要工程改善，
-也是两族无法合并的主要原因。
+`response.function_call_arguments.delta`、`response.reasoning_summary_text.delta`、
+`response.completed` 等），不需要客户端猜哪个字段是增量——这是它相对 Chat Completions
+的主要工程改善，也是两族无法合并的主要原因。`response.output_item.done` 带的就是
+回传用的完整条目。
 
-**有状态**是另一个分水岭：`store: true` + `previous_response_id` 让客户端不必
-回传完整历史。代价是历史存在服务端，且这条路径在任何第三方兼容层都不存在。
+**有状态**是另一个分水岭：`store: true`（默认）+ `previous_response_id` 让客户端不必
+回传完整历史。代价是历史存在服务端，且这条路径在任何第三方兼容层都不存在。无状态
+（`store:false`）下回传 `output[]` 原样即可；**少回传不报错**，代价只在质量上。
 
 ## 4. ③ Google GenAI
 
