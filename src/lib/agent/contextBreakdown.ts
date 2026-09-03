@@ -49,6 +49,7 @@ import {
   COMPACT_TRIGGER, MIN_KEEP_TURNS, compactTriggerFor, injectionCarriers, segmentHistory,
   type ChatSessionMeta, type CompactTriggerBound,
 } from "./compact";
+import { STATE_KEEP_TURNS } from "./skillState";
 
 /**
  * The author's compaction settings (appStore), as the bar needs them. The bar
@@ -59,6 +60,15 @@ export interface CompactPrefs {
   autoCompact: boolean;
   triggerTokens: number;
   triggerRatio: number;
+  /**
+   * 状态记忆 is on for this conversation (lib/agent/skillState): the fold is
+   * no longer a threshold event but happens every turn, keeping
+   * {@link STATE_KEEP_TURNS} verbatim. The bar then draws **no** trigger
+   * mark — the mark means "past here the next turn folds", and in this mode
+   * the next turn folds wherever the bar stands — and `canFold` counts against
+   * the mode's own keep, or the 立即归纳 button would hide one turn too early.
+   */
+  stateMode?: boolean;
 }
 
 /**
@@ -151,6 +161,8 @@ export interface ContextBreakdown {
   autoCompact: boolean;
   /** Which line placed the mark — see {@link compactTriggerFor}. */
   compactBoundBy: CompactTriggerBound;
+  /** See {@link CompactPrefs.stateMode}; the legend's sentence keys on it. */
+  stateMode: boolean;
 }
 
 /**
@@ -331,12 +343,16 @@ export function computeContextBreakdown(
   // to remove, arriving by a different route. A fresh session (`history` null,
   // zero turns) falls through the same gate, which is why it needs no case of
   // its own.
+  const stateMode = compact?.stateMode ?? false;
+  const keepTurns = stateMode ? STATE_KEEP_TURNS : MIN_KEEP_TURNS;
   const foldableTurns =
-    history && meta ? segmentHistory(history, meta).turns.length - MIN_KEEP_TURNS : 0;
+    history && meta ? segmentHistory(history, meta).turns.length - keepTurns : 0;
   const canFold = messageCeiling > 0 && foldableTurns > 0;
 
   const over = usedTokens > ceiling;
-  const willCompact = canFold && messageTokens > trigger.tokens;
+  // In state mode there is no line to cross: the fold is unconditional, so the
+  // mark would promise a threshold that plays no part.
+  const willCompact = !stateMode && canFold && messageTokens > trigger.tokens;
 
   return {
     segments: [
@@ -351,10 +367,11 @@ export function computeContextBreakdown(
     ceilingTokens: ceiling,
     contextSize,
     canFold,
-    compactMarkerPct: canFold ? Math.min(100, (compactAtTokens * 100) / span) : null,
+    compactMarkerPct: canFold && !stateMode ? Math.min(100, (compactAtTokens * 100) / span) : null,
     willCompact,
     over,
     autoCompact: compact?.autoCompact ?? true,
     compactBoundBy: trigger.boundBy,
+    stateMode,
   };
 }

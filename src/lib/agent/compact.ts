@@ -23,6 +23,7 @@ import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate"
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 import { facetKey, type LoreActivationReport } from "../context/loreSelect";
+import type { SkillState } from "./skillState";
 
 // ── Budget constants (docs/feature/agent/chat-memory-plan.md §6) ──────────────────
 
@@ -200,6 +201,19 @@ export interface ChatSessionMeta {
    * tier without parsing the prompt back out of the message.
    */
   briefingTier: "assist" | "orchestrator";
+  /**
+   * 状态记忆（SKILL.state 模式，lib/agent/skillState）开着没有。**会话的**属性
+   * 而不是芯片的临时状态：历史的形状（每轮折叠、只留上一轮）取决于它，所以它
+   * 随会话落盘、随会话恢复——不像 planMode 那样切换会话就归零。
+   */
+  stateMode: boolean;
+  /**
+   * 当前的执行状态 Σ——`summary` 那条消息在状态模式下装的就是它的渲染。null =
+   * 还没折叠过、或最近一次折叠是普通归纳（那时 `summaryText` 是散文）。两种
+   * 模式互相接得上：状态模式接手一段散文摘要时把它当输入，普通归纳接手一份
+   * 状态时把 `summaryText`（状态的 JSON）当【已有摘要】。
+   */
+  state: SkillState | null;
 }
 
 export function createSessionMeta(): ChatSessionMeta {
@@ -212,6 +226,8 @@ export function createSessionMeta(): ChatSessionMeta {
     lastDocPath: null,
     bodyDocPath: null,
     briefingTier: "assist",
+    stateMode: false,
+    state: null,
   };
 }
 
@@ -471,6 +487,13 @@ export function planFold(
      * post-fold target scales with it ({@link retainTargetFor}).
      */
     triggerTokens?: number;
+    /**
+     * Turns kept verbatim however far the fold goes. Absent = {@link MIN_KEEP_TURNS}.
+     * The state-memory mode (lib/agent/skillState) passes 1: its whole point is
+     * that the conversation does not accumulate, and the one turn it keeps is
+     * the paper's "latest observation".
+     */
+    keepTurns?: number;
   },
 ): FoldPlan | null {
   const force = opts?.force ?? false;
@@ -479,7 +502,8 @@ export function planFold(
   if (!force && estimateMessagesTokens(history) <= trigger) return null;
 
   const { prelude, turns } = segmentHistory(history, meta);
-  const foldable = turns.length - MIN_KEEP_TURNS;
+  const keepTurns = Math.max(1, opts?.keepTurns ?? MIN_KEEP_TURNS);
+  const foldable = turns.length - keepTurns;
   if (foldable <= 0) return null;
 
   // The rebuilt history's fixed parts: the prelude minus the dropped seed

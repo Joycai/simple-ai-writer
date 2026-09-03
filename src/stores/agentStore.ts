@@ -50,6 +50,9 @@ import {
   type ChatSessionMeta, compactTriggerFor,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
+import { requestStateUpdate, updateSkillState } from "../lib/agent/skillStateRun";
+import { isSkillStateEnabled } from "../lib/agent/stateFlag";
+import { STATE_KEEP_TURNS } from "../lib/agent/skillState";
 import {
   deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
 } from "../lib/agent/chatSession";
@@ -356,6 +359,15 @@ interface AgentState {
    * new one starts back at off.
    */
   planMode: boolean;
+  /**
+   * 状态记忆（SKILL.state 模式）for *this* conversation — the composer chip,
+   * shown only while the Beta is on. Unlike planMode it is a property of the
+   * session (the history's shape depends on it), so it mirrors
+   * `chatMeta.stateMode`: written through together, restored from the meta on
+   * a session switch, off for a fresh conversation.
+   */
+  stateMemory: boolean;
+  setStateMemory: (on: boolean) => void;
   setPlanMode: (on: boolean) => void;
 
   /**
@@ -900,6 +912,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatSessions: [],
   planMode: false,
   setPlanMode: (on) => set({ planMode: on }),
+  stateMemory: false,
+  setStateMemory: (on) => {
+    const meta = get().chatMeta;
+    if (meta) meta.stateMode = on;
+    set({ stateMemory: on });
+    // The mode is part of the saved session (chatSession.ts) — a flip with no
+    // turn after it would otherwise be lost with the window.
+    void get().persistChat();
+  },
   disabledSubAgents: [],
   toggleSubAgent: (kind) =>
     set((s) => ({
@@ -1417,6 +1438,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         meta.lastDocPath = activeFilePath ?? null;
         meta.bodyDocPath = wantsDocBody ? activeFilePath ?? null : null;
         meta.briefingTier = orchestrating ? "orchestrator" : "assist";
+        meta.stateMode = get().stateMemory;
         noteTurnStart(meta, seed.question);
         // The seeded lore goes in the injection ledger, carried by the seed
         // block — otherwise turn 2's retrieval would re-inject everything the
@@ -1487,7 +1509,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // backstop. The trigger is the lowest of the author's two lines and
         // the classic one — docs/feature/agent/compact-threshold-plan.md §B.0.
         const meta = get().chatMeta;
-        if (meta && autoCompact) {
+        // ── 状态记忆 (docs/feature/agent/skill-state-memory-plan.md) ──
+        // With the mode on for this conversation (and the Beta still on), the
+        // fold is not a threshold event: every turn before the last one is
+        // folded into the structured execution state, whatever the bar reads.
+        // Best-effort like compaction — a model that twice returns something
+        // the schema refuses leaves the history as it was, and the ordinary
+        // threshold fold below then still backstops it, so the conversation
+        // cannot grow without bound on a model that can't keep the state.
+        let stateFolded = false;
+        if (meta && meta.stateMode && isSkillStateEnabled()) {
+          const updated = await updateSkillState({
+            history,
+            meta,
+            ceilingTokens: messageCeiling,
+            update: (input) =>
+              requestStateUpdate(
+                connOptions({ provider, model, apiKey }),
+                input,
+                controller.signal,
+              ),
+          });
+          if (updated) {
+            stateFolded = true;
+            history = updated.history;
+            set({ chatHistory: history });
+            bumpContext();
+            patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, updated.event) }));
+          }
+        }
+        if (meta && autoCompact && !stateFolded) {
           const compacted = await compactChatHistory({
             history,
             meta,
@@ -1866,30 +1917,48 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Same repair sendChat does before touching an inherited history: a turn
     // that was stopped mid-tool-call leaves a pairing the fold must not build on.
     repairToolCallPairing(history);
+    // 状态记忆 on: the button rewrites the execution state now, keeping the
+    // mode's own one turn — the same fold sendChat would run before the next
+    // question, just earlier.
+    const stateMode = meta.stateMode && isSkillStateEnabled();
     // Foldability check up front, so a null from compactChatHistory below can
     // only mean the summarize request failed — the author pressed a button and
     // deserves an error over silence.
-    if (!planFold(history, meta, messageCeiling, { force: true })) return;
+    if (!planFold(history, meta, messageCeiling, {
+      force: true, keepTurns: stateMode ? STATE_KEEP_TURNS : undefined,
+    })) return;
 
     const controller = new AbortController();
     compactAbort = controller;
     set({ chatCompacting: true, chatError: null });
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
-      const compacted = await compactChatHistory({
-        history,
-        meta,
-        ceilingTokens: messageCeiling,
-        force: true,
-        summarize: (input) =>
-          summarizeForCompaction(
-            connOptions({ provider, model, apiKey }),
-            input,
-            controller.signal,
-          ),
-      });
+      const compacted = stateMode
+        ? await updateSkillState({
+            history,
+            meta,
+            ceilingTokens: messageCeiling,
+            update: (input) =>
+              requestStateUpdate(
+                connOptions({ provider, model, apiKey }),
+                input,
+                controller.signal,
+              ),
+          })
+        : await compactChatHistory({
+            history,
+            meta,
+            ceilingTokens: messageCeiling,
+            force: true,
+            summarize: (input) =>
+              summarizeForCompaction(
+                connOptions({ provider, model, apiKey }),
+                input,
+                controller.signal,
+              ),
+          });
       if (!compacted) {
-        set({ chatError: i18n.t("ai.chat.compactFailed") });
+        set({ chatError: i18n.t(stateMode ? "ai.chat.stateUpdateFailed" : "ai.chat.compactFailed") });
         return;
       }
       set((s) => {
@@ -1937,6 +2006,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // Same reasoning as the chips: 计划模式 is a switch on *this*
       // conversation, so a fresh one starts back at off.
       planMode: false,
+      // 状态记忆 too — it lives in the session's meta, and this is a new one.
+      stateMemory: false,
       // Same reasoning as the chips: the button said "this conversation", and
       // this is a different one.
       autoApprove: null,
@@ -1998,6 +2069,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // switch is not worth a format change (see resetChat).
         disabledSubAgents: [],
         planMode: false,
+        // Unlike the two above, 状态记忆 IS stored in the blob: the restored
+        // history's shape was made by it, so the chip must show what it is.
+        stateMemory: snap.meta.stateMode,
         // Auto-approve says the same words, and standing authorisation to
         // rewrite prose is the last thing that should follow the author into
         // another manuscript. Deliberately not persisted: reopening a
@@ -2098,6 +2172,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             chatUsage: snap.usage,
             chatSessionId: sessions[0].id,
             chatTaskWorkspace: await workspaceForSnapshot(projectPath, snap.taskId),
+            stateMemory: snap.meta.stateMode,
           });
         }
       }

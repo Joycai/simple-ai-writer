@@ -69,8 +69,10 @@ import {
 import { markWriterIntroSeen, WriterIntro, WriterStrip, writerIntroSeen } from "./WriterStrip";
 import writer from "./WriterTurn.module.css";
 import { ContextBar } from "./ContextBar";
+import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
+import { StateMemoryChip } from "./StateMemoryChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { CHAT_AUTO_APPROVE_KEY } from "../../lib/agent/autoApprove";
 import styles from "./AgentChat.module.css";
@@ -115,6 +117,7 @@ export function AgentChat() {
   const openModelPicker = useAppStore((s) => s.openModelPicker);
   const chatCompacting = useAgentStore((s) => s.chatCompacting);
   const compactChatNow = useAgentStore((s) => s.compactChatNow);
+  const stateMemory = useAgentStore((s) => s.stateMemory);
   // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
   // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
   // 规则与理由见 lib/agent/approvalRouting。
@@ -541,13 +544,18 @@ export function AgentChat() {
         toolTokens,
         inputCeilingFor(activeModel?.contextSize, contextUtilization),
         activeModel?.contextSize ?? 0,
-        { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
+        {
+          autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
+          // The mode as the *next* send will see it: the chip's value, gated on
+          // the Beta the same way sendChat gates it.
+          stateMode: stateMemory && isSkillStateEnabled(),
+        },
       ),
     // `chatContextVersion` is the real trigger — the history array is mutated
     // in place, so its reference alone would never announce a change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization,
-      autoCompact, compactTriggerTokens, compactTriggerRatio],
+      autoCompact, compactTriggerTokens, compactTriggerRatio, stateMemory],
   );
   // The 立即归纳 affordance appears only when a forced fold would actually fold
   // something. Read off the breakdown rather than re-derived here: this used to
@@ -783,6 +791,8 @@ export function AgentChat() {
           {/* Same family of session switch: how the assistant works, not what
               the message carries. */}
           <PlanModeChip />
+          {/* 状态记忆 — only while its Beta is on (lib/agent/stateFlag). */}
+          <StateMemoryChip />
           {/* Only while 本次对话都批准 is live — see AutoApproveChip. */}
           <AutoApproveChip owner={CHAT_AUTO_APPROVE_KEY} />
           {/* Trailing edge, past the `+ …` affordances: this one doesn't add

@@ -257,7 +257,9 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
   // the next turn brings), but the legend still explains what the line now
   // means — so the sentence keys on a wider condition than the colour.
   const warned = (context.willCompact && context.autoCompact) || context.over;
-  const explained = context.willCompact || context.over;
+  // 状态记忆 has no line to cross, but the legend still owes one sentence: the
+  // fold this bar is used to promising at a mark now happens every turn.
+  const explained = context.willCompact || context.over || context.stateMode;
 
   return (
     <div className={styles.ctx}>
@@ -342,12 +344,18 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
             className={styles.ctxCompactBtn}
             onClick={onCompact}
             disabled={compacting || !onCompact}
-            title={t("ai.chat.ctxCompactNowTitle", {
-              defaultValue: "现在就把较早的对话归纳成摘要，腾出上下文空间",
-            })}
+            title={context.stateMode
+              ? t("ai.chat.ctxStateNowTitle", {
+                  defaultValue: "现在就把上一轮之前的对话折进执行状态",
+                })
+              : t("ai.chat.ctxCompactNowTitle", {
+                  defaultValue: "现在就把较早的对话归纳成摘要，腾出上下文空间",
+                })}
           >
             {compacting
               ? t("ai.chat.ctxCompacting", { defaultValue: "归纳中…" })
+              : context.stateMode
+              ? t("ai.chat.ctxStateNow", { defaultValue: "更新状态" })
               : t("ai.chat.ctxCompactNow", { defaultValue: "立即归纳" })}
           </button>
         )}
@@ -382,7 +390,12 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           {/* Three sentences, not two: past the line with 自动归纳 off is its own
               news — the fold the line used to promise is now the author's to
               press for. */}
-          {context.willCompact && !context.autoCompact
+          {context.stateMode && !context.over
+            ? t("ai.chat.ctxStateExplain", {
+                defaultValue:
+                  "状态记忆已开启：每次发送前，上一轮之前的对话都折进一份结构化的执行状态（目标 / 决定 / 事实 / 进展 / 文件 / 待决），只有上一轮保留原文——执行日志里能看到每轮的状态。",
+              })
+            : context.willCompact && !context.autoCompact
             ? t("ai.chat.ctxCompactOffExplain", {
                 defaultValue:
                   "自动归纳已关：越过刻线不会再折叠对话，太长时只先裁掉旧的工具结果和图片——要归纳请点右边的「立即归纳」，或到 设置 → 上下文与记忆 打开。",
