@@ -1993,7 +1993,7 @@
       "thinkingCatQwenEffort": "千问 · 力度",
       "thinkingCatQwenEffortHint": "enable_thinking + reasoning_effort 档位（Qwen-Max 支持 xhigh）；与预算模式互斥。",
       "thinkingCatGlm": "GLM-5.3",
-      "thinkingCatGlmHint": "reasoning_effort 取 low/high/max，默认 max；该模型无法关闭思考。",
+      "thinkingCatGlmHint": "reasoning_effort 取 low/high/max，默认 max；该模型无法关闭思考。仅用于 GLM 模型：随请求发的 thinking.clear_thinking 片段在其它模型上会被拒（400）。",
       "thinkingCatGemini3": "Gemini 3",
       "thinkingCatGemini3Hint": "thinkingLevel 档位（minimal/low/medium/high）并返回思考摘要；「关闭」按 minimal 处理（该族无法真正关闭思考）。",
       "thinkingCatClaudeAdaptive": "Claude 自适应 (4.6+)",

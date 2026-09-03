@@ -92,6 +92,14 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // keys, same as MiniMax's two entries below.
   { name: "通义千问 (DashScope)", apiStandard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
   { name: "通义千问 (国际)", apiStandard: "openai_compat", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
+  // Same host, Anthropic Messages shape (docs/api/landscape.md §7 第六个样本).
+  // The base is the *root* — the adapter appends /v1/messages, and the
+  // platform's own FAQ warns against a trailing /v1. It has no /v1/models, so
+  // the connection test takes the completion-probe fallback; both x-api-key
+  // and Bearer are accepted, so authMode stays at the protocol default. Only
+  // the domestic host is listed: whether the international one serves
+  // /apps/anthropic is unverified.
+  { name: "通义千问 (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic" },
   { name: "Anthropic", apiStandard: "anthropic", baseUrl: STANDARD_ENDPOINTS.anthropic },
   { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
   // Self-hosted, so there is no address to prefill — the preset exists to
