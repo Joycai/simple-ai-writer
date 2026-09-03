@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { streamCompletion, type StreamChunk, type StreamMessage } from "../ai";
+import type { ReasoningEffort, ThinkingCategoryId } from "../ai/reasoning";
 import { toResponsesInput } from "../ai/responses";
 
 function sseResponse(chunks: string[], status = 200): Response {
@@ -478,5 +479,48 @@ describe("Responses adapter — echoing a tool round", () => {
       { type: "function_call_output", call_id: "call_1", output: "# a" },
     ]);
     expect(JSON.stringify(input)).not.toContain("encrypted_content");
+  });
+});
+
+describe("Responses adapter — reasoning effort", () => {
+  async function bodyFor(opts: { reasoningEffort?: ReasoningEffort; thinkingCategory?: ThinkingCategoryId }) {
+    const calls = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "gpt-5.5",
+      messages: [{ role: "user", content: "hi" }],
+      reasoningEffort: opts.reasoningEffort,
+      thinkingCategory: opts.thinkingCategory,
+      onChunk: () => {},
+    });
+    return calls[0].body;
+  }
+
+  it("sends nothing when no effort is set — each model's own default differs", async () => {
+    expect(await bodyFor({})).not.toHaveProperty("reasoning");
+    expect(await bodyFor({ reasoningEffort: "default" })).not.toHaveProperty("reasoning");
+    // And never the Chat Completions spelling.
+    expect(await bodyFor({ reasoningEffort: "high" })).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("spells a level as reasoning.effort with a summary requested alongside", async () => {
+    for (const [effort, wire] of [["low", "low"], ["medium", "medium"], ["high", "high"], ["xhigh", "xhigh"], ["max", "max"]] as const) {
+      expect((await bodyFor({ reasoningEffort: effort })).reasoning).toEqual({ effort: wire, summary: "auto" });
+    }
+  });
+
+  it("spells off as effort:none, with no summary to ask for", async () => {
+    expect((await bodyFor({ reasoningEffort: "off" })).reasoning).toEqual({ effort: "none" });
+  });
+
+  it("resolves a cross-family category to the family's own, not to Chat Completions fields", async () => {
+    // A model row imported with a Chat Completions category, now under a
+    // Responses provider: the wire must stay this family's.
+    const body = await bodyFor({ reasoningEffort: "high", thinkingCategory: "openai-generic" });
+    expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("the off category sends nothing at all", async () => {
+    expect(await bodyFor({ reasoningEffort: "high", thinkingCategory: "off" })).not.toHaveProperty("reasoning");
   });
 });
