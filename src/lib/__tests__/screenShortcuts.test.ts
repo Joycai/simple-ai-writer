@@ -61,6 +61,28 @@ beforeEach(() => {
     sidebarCollapsed: false,
     showSettings: false,
     showCommandPalette: false,
+    paletteScopeRequest: null,
+  });
+});
+
+describe("command palette scope requests", () => {
+  it("keeps Cmd+P scoped to documents only for that opening", () => {
+    state().openCommandPalette("files");
+    expect(state().showCommandPalette).toBe(true);
+    expect(state().paletteScopeRequest?.scope).toBe("files");
+
+    state().setShowCommandPalette(false);
+    expect(state().paletteScopeRequest).toBeNull();
+
+    state().setShowCommandPalette(true);
+    expect(state().paletteScopeRequest).toBeNull();
+  });
+
+  it("treats an unscoped programmatic open as an ordinary open", () => {
+    state().openCommandPalette("files");
+    state().openCommandPalette();
+    expect(state().showCommandPalette).toBe(true);
+    expect(state().paletteScopeRequest).toBeNull();
   });
 });
 

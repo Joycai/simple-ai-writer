@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  currentTextDocument,
   matchText,
   parseQuery,
   recentLocations,
@@ -16,6 +17,20 @@ import {
   windowAround,
   type FileNodeLike,
 } from "../search/globalSearch";
+
+describe("currentTextDocument", () => {
+  it("binds content only to the active file that actually loaded it", () => {
+    expect(currentTextDocument("/p/a.md", "/p/a.md", "A body")).toEqual({
+      path: "/p/a.md", content: "A body",
+    });
+    expect(currentTextDocument("/p/b.md", "/p/a.md", "A body")).toBeNull();
+  });
+
+  it("returns no document while loading or while an image leaves an old buffer behind", () => {
+    expect(currentTextDocument("/p/b.md", null, "")).toBeNull();
+    expect(currentTextDocument("/p/cover.png", "/p/a.md", "A body")).toBeNull();
+  });
+});
 
 describe("parseQuery", () => {
   it("reads a leading prefix as the scope and strips it from the term", () => {

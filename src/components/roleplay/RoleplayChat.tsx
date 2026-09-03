@@ -832,7 +832,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             {t("roleplay.stale.body", { defaultValue: "绑定内容被改过（条目、人设或身份），本次对话用的还是旧版本。" })}
           </span>
           <div className={styles.spacer} />
-          <button type="button" className={styles.staleBtn} onClick={() => void refreshBinding(agent.id)}>
+          <button
+            type="button"
+            className={styles.staleBtn}
+            onClick={() => void refreshBinding(agent.id)}
+            disabled={compacting}
+          >
             {t("roleplay.stale.refresh", { defaultValue: "刷新绑定" })}
           </button>
         </div>
@@ -974,7 +979,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               recalled={recalledNames(session.contextTrace[turn.index]?.area ?? null)}
               onOpenArea={() => setShowMemory(true)}
               onRewind={
-                rewindTo === null && turn.speaker === "author" && !isRunning && queuePos < 0
+                rewindTo === null && turn.speaker === "author" && !isRunning && !compacting && queuePos < 0
                   && turn.index < (session?.turns.length ?? 0)
                   ? () => setRewindTo(turn.index)
                   : undefined
@@ -1038,7 +1043,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {/* 按停之后这一问仍孤零零留在 transcript 里，却没有回复——和报错的后果
               一样，所以通向同一个 retry。用比错误带更轻的一行：它不是出了问题，
               是作者自己按的。 */}
-          {session?.stopped && !session.error && session.lastJob && !isRunning && queuePos < 0 && (
+          {session?.stopped && !session.error && session.lastJob && !isRunning && !compacting && queuePos < 0 && (
             <div className={styles.stoppedBar}>
               <span className={styles.stoppedText}>
                 {t("roleplay.stopped", { defaultValue: "已停止，这一问还没有回复" })}
@@ -1057,7 +1062,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {session?.error && (
             <div className={styles.errorBar}>
               <span className={styles.errorText}>{session.error}</span>
-              {session.lastJob && !isRunning && queuePos < 0 && (
+              {session.lastJob && !isRunning && !compacting && queuePos < 0 && (
                 <button
                   type="button"
                   className={styles.errorRetry}
@@ -1206,7 +1211,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             preflight={session?.history ? null : preflightBar}
             /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
                归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
-            onCompact={context.canFold && !isRunning && !compacting
+            onCompact={context.canFold && !isRunning && !compacting && queuePos < 0
               ? () => void compactNow(agent.id)
               : undefined}
             compacting={compacting}

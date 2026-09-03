@@ -33,6 +33,7 @@ import { comboLabel } from "../../lib/shortcuts";
 import { useImeGuard } from "../../lib/ime";
 import { baseName, dirName, isSamePath, pathKey, projectRelative } from "../../lib/paths";
 import {
+  currentTextDocument,
   matchText,
   recentLocations,
   searchFiles,
@@ -54,7 +55,7 @@ import styles from "./CommandPalette.module.css";
 
 interface FileRow { kind: "file"; hit: FileHit; current: boolean }
 interface LoreRow { kind: "lore"; hit: LoreHit<LoreEntity>; current: boolean }
-interface TextRow { kind: "text"; hit: LineHit }
+interface TextRow { kind: "text"; hit: LineHit; filePath: string }
 interface ActionRow { kind: "action"; id: "ask" | "check" | "chat" }
 interface ProjectRow { kind: "project"; path: string; ranges: MatchRange[] }
 interface OpenFolderRow { kind: "openFolder" }
@@ -142,6 +143,7 @@ export function CommandPalette() {
   // to the document — and to the navigation history — only while open keeps every
   // editor keystroke from re-rendering, and re-searching, a palette nobody can see.
   const content = useEditorStore((s) => (showCommandPalette ? s.content : ""));
+  const loadedFilePath = useEditorStore((s) => (showCommandPalette ? s.filePath : null));
   const navPast = useNavStore((s) => (showCommandPalette ? s.past : NO_PAST));
   const navCurrent = useNavStore((s) => s.current);
   const setSelection = useAiTaskStore((s) => s.setSelection);
@@ -172,6 +174,10 @@ export function CommandPalette() {
 
   const term = query.trim();
   const projectMode = !projectPath;
+  const textDocument = useMemo(
+    () => currentTextDocument(activeFilePath, loadedFilePath, content),
+    [activeFilePath, loadedFilePath, content],
+  );
 
   // ── 数据 ──────────────────────────────────────────────────────────────────
 
@@ -210,7 +216,9 @@ export function CommandPalette() {
     return m;
   }, [fileTree]);
 
-  const currentDocTitle = activeFilePath ? docTitle(baseName(activeFilePath)) : t("editor.untitled");
+  const currentDocTitle = textDocument
+    ? docTitle(baseName(textDocument.path))
+    : t("editor.untitled");
 
   const fileHitFor = (path: string): FileHit => {
     const rel = (projectPath ? projectRelative(projectPath, path) : null) ?? baseName(path);
@@ -223,9 +231,9 @@ export function CommandPalette() {
     return {
       files: searchFiles(fileTree, projectPath, term, 0).total,
       lore: searchLore(allLore, term, 0).total,
-      text: searchLines(content, term, 0).total,
+      text: searchLines(textDocument?.content ?? "", term, 0).total,
     };
-  }, [projectMode, term, fileTree, projectPath, allLore, content]);
+  }, [projectMode, term, fileTree, projectPath, allLore, textDocument]);
 
   const groups = useMemo<Group[]>(() => {
     const out: Group[] = [];
@@ -296,14 +304,14 @@ export function CommandPalette() {
       }
     }
     if (scope === "all" || scope === "text") {
-      const { hits, total } = searchLines(content, term, limit("text"));
-      if (hits.length > 0) {
+      const { hits, total } = searchLines(textDocument?.content ?? "", term, limit("text"));
+      if (textDocument && hits.length > 0) {
         out.push({
           // 正文档例外，组头留着：它要写篇名——正文只搜当前这一篇。
           key: "text",
           label: t("command.textGroup", { title: currentDocTitle, n: total }),
           dest: t("command.destLine"),
-          rows: hits.map((hit) => ({ kind: "text", hit })),
+          rows: hits.map((hit) => ({ kind: "text", hit, filePath: textDocument.path })),
           ...(total > hits.length ? { trailer: { text: t("command.moreText", { n: total - hits.length }), scope: "text" as const } } : {}),
         });
       }
@@ -311,7 +319,7 @@ export function CommandPalette() {
     out.push({ key: "ai", rows: [{ kind: "action", id: "ask" }, { kind: "action", id: "check" }] });
     return out;
   }, [projectMode, term, scope, recentProjects, pinnedProjects, navPast, navCurrent, treeFiles, loreByDir,
-    fileTree, projectPath, allLore, content, activeFilePath, currentDocTitle, terms, t]);  // eslint-disable-line react-hooks/exhaustive-deps
+    fileTree, projectPath, allLore, textDocument, activeFilePath, currentDocTitle, terms, t]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
   const hasResults = groups.some((g) => g.key !== "ai" && g.key !== "openFolder" && g.rows.length > 0);
@@ -351,7 +359,20 @@ export function CommandPalette() {
     switch (row.kind) {
       case "file": openDocument(row.hit.path); break;
       case "lore": openEntry(row.hit.entity.dirPath); break;
-      case "text": setMainView("editor"); useEditorStore.getState().jumpToLine(row.hit.line); break;
+      case "text": {
+        // Results carry the buffer identity they were computed from. If an
+        // asynchronous navigation replaced it while the palette was open, do
+        // not apply its line number to another document.
+        const editor = useEditorStore.getState();
+        const activePath = useProjectStore.getState().activeFilePath;
+        if (!isSamePath(row.filePath, editor.filePath) || !isSamePath(row.filePath, activePath)) break;
+        // Pure preview has no CodeMirror instance. Mount it first; jumpToLine's
+        // pending hand-off then focuses the requested line as it registers.
+        editor.setViewMode("editor");
+        setMainView("editor");
+        editor.jumpToLine(row.hit.line);
+        break;
+      }
       case "action": runAction(row.id); break;
       case "project": void openProject(row.path); break;
       case "openFolder": void openProject(); break;

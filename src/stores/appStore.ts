@@ -806,11 +806,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     s.setActiveSideTab(screen);
     s.setSidebarCollapsed(false);
   },
-  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  // A scoped request is one-shot. Every ordinary open/close path clears it so
+  // a past Cmd+P cannot override the palette's remembered tab on a later Cmd+K.
+  setShowCommandPalette: (v) => set({ showCommandPalette: v, paletteScopeRequest: null }),
   openCommandPalette: (scope) =>
     set((s) => ({
       showCommandPalette: true,
-      paletteScopeRequest: scope ? { scope, seq: (s.paletteScopeRequest?.seq ?? 0) + 1 } : s.paletteScopeRequest,
+      paletteScopeRequest: scope ? { scope, seq: (s.paletteScopeRequest?.seq ?? 0) + 1 } : null,
     })),
   // Omitting `mode` means "just open it" — the drawer comes back on whichever
   // tab was last used. Only the mode-specific entry points (Ctrl+J/Ctrl+L, the

@@ -84,6 +84,7 @@ import type {
   AreaNote, ArchiveInfo, SceneInfo, SceneReader, SceneSlice,
 } from "../lib/roleplay/sceneTools";
 import { currentSceneNo } from "../lib/roleplay/scene";
+import { hasQueuedJob, nextRunnableJobIndex } from "../lib/roleplay/scheduler";
 import {
   archiveDir, archiveSession, deleteAgentDir, listArchives, loadPersonaCard, loadRoster,
   loadSession, loadSummary, memoryPath, peekNextArchiveNo, saveRoster, savePersonaCard,
@@ -895,9 +896,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
   /** 信号量：有名额就拉起队首里第一个自己没在跑的作业。 */
   const pump = async () => {
     for (;;) {
-      const { running, queue } = get();
+      const { running, compacting, queue } = get();
       if (running.length >= MAX_CONCURRENT_RUNS) return;
-      const idx = queue.findIndex((j) => !running.includes(j.agentId));
+      const idx = nextRunnableJobIndex(queue, running, compacting);
       if (idx < 0) return;
       const job = queue[idx];
       set((st) => ({
@@ -1107,8 +1108,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[id];
       if (!projectPath || !agent) return;
-      // 跑着的时候不许开新场：正在写的那一轮会追加到一个已经被移走的文件上。
-      if (get().running.includes(id) || get().queue.some((j) => j.agentId === id)) return;
+      // 跑着或归纳时不许开新场：两边都会把结果写回一份已经被移走的会话。
+      if (
+        get().running.includes(id) ||
+        get().compacting.includes(id) ||
+        hasQueuedJob(get().queue, id)
+      ) return;
 
       const continuing = opts.mode === "continue" && !!opts.recap;
       /**
@@ -1416,34 +1421,40 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const agent = get().agents[agentId];
       const session = get().sessions[agentId];
       if (!projectPath || !agent || !session?.history || !session.meta) return;
-      if (get().running.includes(agentId) || get().compacting.includes(agentId)) return;
+      const state = get();
+      if (
+        state.running.includes(agentId) ||
+        state.compacting.includes(agentId) ||
+        hasQueuedJob(state.queue, agentId)
+      ) return;
 
-      const [{ useAiStore }, { useAppStore }] = await Promise.all([
-        import("./aiStore"), import("./appStore"),
-      ]);
-      const { models, providers, activeModelId, subAgents } = useAiStore.getState();
-      const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
-      if (!resolved.ok) {
-        patchSession(agentId, (s) => ({ ...s, error: resolved.error }));
-        return;
-      }
-      const { model, provider } = resolved;
-      // 同 runJob 的天花板，同一个函数算——手动折叠和自动折叠不能对预算各执一词。
-      const messageCeiling = messageCeilingFor(
-        model.contextSize,
-        useAppStore.getState().contextUtilization,
-        presetFor(agent.kind),
-        withSessionOverrides(subAgents, session.disabledSubAgents),
-        models,
-      );
-
-      // 放进 aborts：作者的「停止」按钮据此也能中止一次挂着的归纳请求。
+      // Reserve the agent before the first await. send/retry/pump all read this
+      // flag, so no generation can enter the async setup window beside us.
       const controller = new AbortController();
       set((st) => ({
         compacting: [...st.compacting, agentId],
         aborts: { ...st.aborts, [agentId]: controller },
       }));
       try {
+        const [{ useAiStore }, { useAppStore }] = await Promise.all([
+          import("./aiStore"), import("./appStore"),
+        ]);
+        const { models, providers, activeModelId, subAgents } = useAiStore.getState();
+        const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
+        if (!resolved.ok) {
+          patchSession(agentId, (s) => ({ ...s, error: resolved.error }));
+          return;
+        }
+        const { model, provider } = resolved;
+        // 同 runJob 的天花板，同一个函数算——手动折叠和自动折叠不能对预算各执一词。
+        const messageCeiling = messageCeilingFor(
+          model.contextSize,
+          useAppStore.getState().contextUtilization,
+          presetFor(agent.kind),
+          withSessionOverrides(subAgents, session.disabledSubAgents),
+          models,
+        );
+
         const apiKey = (await loadApiKey(provider.id)) ?? "";
         const out = await compactSceneNow({
           projectPath, agent,
@@ -1493,6 +1504,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           if (aborts[agentId] === controller) delete aborts[agentId];
           return { compacting: st.compacting.filter((x) => x !== agentId), aborts };
         });
+        // send() may have started its transcript write just before compaction
+        // reserved the agent and joined the queue while we were summarizing.
+        // pump skipped it while `compacting` was set; releasing the slot must
+        // wake that otherwise-stranded job.
+        void pump();
       }
     },
 
@@ -1519,8 +1535,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     retry: (agentId) => {
       const job = get().sessions[agentId]?.lastJob;
       if (!job) return;
-      const { running, queue } = get();
-      if (running.includes(agentId) || queue.some((j) => j.agentId === agentId)) return;
+      const { running, compacting, queue } = get();
+      if (
+        running.includes(agentId) ||
+        compacting.includes(agentId) ||
+        hasQueuedJob(queue, agentId)
+      ) return;
       patchSession(agentId, (s) => ({ ...s, error: null, stopped: false }));
       set((st) => ({ queue: [...st.queue, job] }));
       void pump();
@@ -1548,7 +1568,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       if (!projectPath || !agent) return null;
-      if (get().running.includes(agentId) || get().queue.some((j) => j.agentId === agentId)) return null;
+      const { running, compacting, queue } = get();
+      if (
+        running.includes(agentId) ||
+        compacting.includes(agentId) ||
+        hasQueuedJob(queue, agentId)
+      ) return null;
 
       const turns = get().sessions[agentId]?.turns ?? [];
       const target = turns.find((t) => t.index === turnIndex);
@@ -1627,6 +1652,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       if (!projectPath || !agent) return;
+      if (get().compacting.includes(agentId)) return;
 
       const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
@@ -1694,6 +1720,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     refreshMemory: async (agentId) => {
       const { projectPath } = get();
       if (!projectPath) return;
+      if (get().compacting.includes(agentId)) return;
       const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
       const session = get().sessions[agentId];
       // 没有活的历史就不用刷——下一次发送会重新播种，那时读的就是磁盘上的新内容。
