@@ -11,6 +11,7 @@
 import { isChapterFile, naturalCompare } from "../context/outline";
 import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
+import { convertExtOf } from "../import";
 import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
@@ -206,7 +207,7 @@ const ENTITY_MAX_CHARS = 10_000;
  * always taken even when it alone exceeds the budget — otherwise a file
  * written as one long paragraph per line would return nothing at all.
  */
-function pageLines(raw: string, from: number): {
+export function pageLines(raw: string, from: number): {
   body: string;
   from: number;
   to: number;
@@ -1296,6 +1297,18 @@ export async function readWritingFile(
       content: `Error: "${path}" is a PowerPoint presentation, not a text file. Use read_slides to read it.`,
     };
   }
+  // Same for the other office formats: a .docx/.xlsx is a zip and a PDF is
+  // binary, and the tool that converts them is read_document. Redirecting here
+  // costs the model nothing; letting the decode run costs it a round spent
+  // concluding the file is empty (document-read-plan.md D6).
+  const office = convertExtOf(path);
+  if (office) {
+    const kind = office === "docx" ? "Word document" : office === "xlsx" ? "Excel workbook" : "PDF document";
+    return {
+      toolCallId,
+      content: `Error: "${path}" is a ${kind}, not a text file. Use read_document to read it.`,
+    };
+  }
 
   let raw: string;
   try {
@@ -1401,7 +1414,7 @@ export async function readSlidesFile(
       toolCallId,
       content:
         `Error: "${path}" is neither a .pptx nor an .html file. read_slides reads presentations only — ` +
-        "use read_file for text documents. Legacy .ppt (PowerPoint 97-2003) cannot be " +
+        "use read_file for text documents and read_document for Word / Excel / PDF files. Legacy .ppt (PowerPoint 97-2003) cannot be " +
         "read at all; it has to be saved as .pptx first.",
     };
   }
