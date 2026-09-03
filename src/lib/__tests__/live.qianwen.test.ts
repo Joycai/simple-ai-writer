@@ -77,8 +77,8 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
     }, 90_000);
 
     it("deepseek category off: thinking:{type:disabled} must silence reasoning (MiniMax refuses)", async () => {
-      // Fails on the thinking models until reasoningBody sends the switch at
-      // top level instead of under a literal `extra_body` key (qianwen-compat-plan §3 第 1 片).
+      // The switch must ride at the top level; under a literal `extra_body` key
+      // (the shape before qianwen-compat-plan §3 第 1 片) it was ignored and this failed.
       const p = oa(m, { thinkingCategory: "deepseek", reasoningEffort: "off" });
       if (m === "MiniMax-M2.5") await expect(p).rejects.toThrow(/enable_thinking/);
       else expect((await p).reasoning).toBe("");

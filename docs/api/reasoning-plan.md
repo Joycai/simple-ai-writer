@@ -44,7 +44,7 @@ switch 逐字节一致，这条不变量由 `aiClient.test.ts` 钉住），作�
 
 > **2026-09-03 千问实测**（[`qianwen-compat-plan.md`](qianwen-compat-plan.md)）：第一条是**错的**——
 > `extra_body` 是 Python SDK 的透传机制，落到 wire 上必须是顶层 `thinking`（§2 表格写对了，代码写错了），
-> 现状发出去的字面量 `extra_body` 键被端点忽略，思考照常。修复是该方案的第 1 片。第二条与第四条在千问上
+> 当时发出去的字面量 `extra_body` 键被端点忽略，思考照常。**已修**（该方案第 1 片）：现在发顶层 `thinking:{type:"disabled"}`。第二条与第四条在千问上
 > 成立（kimi-k3 拒预算除外）；第三条只在 GLM 模型上成立，其它模型 400。
 >
 > 目标：让作者能为**单个模型**配置思考强度，并（可选）看到模型的思维链；

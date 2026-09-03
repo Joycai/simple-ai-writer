@@ -80,7 +80,7 @@ Responses 只探了一次（§4.2）。
 
 | # | 问题 | 现象 | 位置 | 处置 |
 | --- | --- | --- | --- | --- |
-| P1 | `deepseek` 档「关闭」发 `extra_body:{thinking:{type:"disabled"}}` | 思考照常、照常计费，**无报错**；DeepSeek 官方与千问都中招 | [`reasoning.ts:459`](../../src/lib/ai/reasoning.ts) + [`aiClient.test.ts:586`](../../src/lib/__tests__/aiClient.test.ts) | §3 第 1 片 |
+| P1 | `deepseek` 档「关闭」发 `extra_body:{thinking:{type:"disabled"}}` | 思考照常、照常计费，**无报错**；DeepSeek 官方与千问都中招 | `reasoning.ts` `reasoningBody` deepseek 分支 + `aiClient.test.ts` | ✅ §3 第 1 片已修（顶层 `thinking`） |
 | P2 | 千问 ④ 面没有预设 | 作者得自己知道 base 是 `/apps/anthropic` 根地址、且不带 `/v1` | `ProviderDrawer.tsx` `PROVIDER_PRESETS` | §3 第 2 片 |
 | P3 | `glm` 档的 `thinking:{clear_thinking:false}` 在非 GLM 模型上 400 | 作者误选类目才会撞；报错明确 | `reasoning.ts` `glm.extra` | 不改代码，类目提示文案加一句「仅 GLM」（第 2 片顺带） |
 | P4 | kimi-k3 拒 `thinking_budget`、MiniMax-M2.5 拒关闭 | 400，报文明确 | 端点行为 | 不改代码；记入 landscape 供作者查 |
@@ -256,7 +256,7 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 
 | 序 | 片 | 改什么 | 验收 |
 | --- | --- | --- | --- |
-| A | §3 第 1 片 | `reasoningBody` deepseek `off` → 顶层 `thinking:{type:"disabled"}`；翻转 `aiClient.test.ts:586`；`reasoning-plan.md` §0 与 `thinking-verification.md` 4.2 收尾 | `QIANWEN_KEY=… vitest run live.qianwen.test.ts`：`deepseek category off` 一组 7 条全绿（现状 5 条红）；作者在 DeepSeek 官方端点上选 deepseek 档、关思考，API 日志里响应无 `reasoning_content` |
+| A ✅ | §3 第 1 片 | `reasoningBody` deepseek `off` → 顶层 `thinking:{type:"disabled"}`；翻转 `aiClient.test.ts` 的断言；`reasoning-plan.md` §0 与 `thinking-verification.md` 4.2 收尾 | `QIANWEN_KEY=… vitest run live.qianwen.test.ts`：`deepseek category off` 一组 7 条全绿（现状 5 条红）；作者在 DeepSeek 官方端点上选 deepseek 档、关思考，API 日志里响应无 `reasoning_content` |
 | B | §3 第 2 片 | 预设「通义千问 (Claude 格式)」；`modelLimits.ts` 补 3.7/3.8 代等 7 条上限；`thinkingCatGlmHint` 加「仅 GLM」 | vite 预览点预设核对 name / standard / baseUrl / authMode；`localeParity.test.ts`；作者用千问 key 走「测试连接」→ 判通（无 `/v1/models` 的降级路径） |
 | C | §4.4 第 1 片 | `landscape.md` §3 按 [`responses.md`](responses.md) 重写（现在是 2026-08 的 o 系列口径）；`streaming.md` / `tools.md` / `reasoning.md` 各加 ② 族一列 | 纯文档；审阅每条是否能对应 `responses.md` 里的一次请求 |
 | D | §4.4 第 2 片 | `openai_responses` / `openai_responses_compat` 两个值 + `responses` 族的全部水管（12 处 `familyOf` 调用点、两张 allowlist、i18n、`STANDARD_ENDPOINTS`、探测、`defaultImageCaps`）；adapter 只做纯文本流式，`store:false` 无条件发，**永远发 `instructions`** | `tsc`（`STANDARD_ENDPOINTS` 是 `Record<ApiStandard,…>`，漏一处就红）；`aiClient.test.ts` 新 describe：delta / usage / `incomplete` → truncated / `failed` 与 `error` 事件 → throw / 带 `obfuscation` 的 delta 不影响文本；作者在设置里选到该族、对话能出字 |
