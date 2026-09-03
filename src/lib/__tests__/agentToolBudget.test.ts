@@ -224,7 +224,18 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../agent/packs";
  * doing this: the `write` tier is (4,175 → 4,491 with the same tool), and that
  * is where `htmlArtifact` and any future formatting task run.
  */
-const AGENT_ASSIST_CAP = 16_400;
+/**
+ * **16,479** with `read_document` (+226 resident; cap 16,400 → 16,600). §5
+ * again does not fit: nothing gates the tool, and its whole value is being
+ * reachable when `list_files` has just shown the model a folder of .docx and
+ * .pdf it was asked to sort. What the 226 buys is counted in author actions,
+ * not rounds: before it, every Word / Excel / PDF file in that folder was a
+ * manual 右键 → 转换文档 by the author *before* the assistant could start —
+ * and the converted copy then sat in the project as a file nobody asked for.
+ * After it, the read is one call, cached, and leaves nothing behind
+ * (docs/feature/agent/document-read-plan.md D2, D9).
+ */
+const AGENT_ASSIST_CAP = 16_600;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
@@ -244,8 +255,16 @@ const AGENT_ASSIST_CAP = 16_400;
  * sections of, and the alternative on a long .html is re-emitting a region
  * through `rewrite_lines` to change nothing in it.
  */
-const WRITE_CAP = 4_600;
-/** The read tier a 续写 carries. Measured 1,738. */
+/**
+ * **4,718** with `read_document` (+226; cap 4,600 → 4,800). It is asked for by
+ * the tasks on this tier, not by `htmlArtifact`: a 投标应答 (`bidRespond`)
+ * reads a tender that is almost always a .docx or a .pdf, and a deck or a
+ * report is assembled from whatever the author dropped into the project —
+ * which is Office files more often than markdown. Without it the tier's only
+ * route to those files is the author converting each by hand first.
+ */
+const WRITE_CAP = 4_800;
+/** The read tier a 续写 carries. Measured 1,738; 1,964 with `read_document`. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
 const NARRATOR_CAP = 7_000;

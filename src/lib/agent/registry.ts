@@ -42,6 +42,7 @@ import {
 import { LORE_PLAN_ACTIONS, LORE_PLAN_TARGETS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
+import { readDocumentFile } from "./documentTools";
 import { inspectHtmlTool } from "./htmlTools";
 import {
   createLoreCategoryTool,
@@ -777,6 +778,7 @@ export type ToolId =
   | "list_files"
   | "read_file"
   | "read_slides"
+  | "read_document"
   | "inspect_html"
   | "search_text"
   | "read_memory"
@@ -1065,6 +1067,37 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_slide?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
       return readSlidesFile(call.id, args.path, ctx.projectPath, args.start_slide);
+    },
+  },
+
+  read_document: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_document",
+        description:
+          "Read a Word (.docx), Excel (.xlsx) or PDF file in the project as text — read_file cannot open these. It is converted to markdown (headings, tables, one `## sheet` per worksheet, `<!-- page N -->` markers in a PDF) and paged like read_file: about 4000 characters per call, with the start_line to pass next. The conversion is cached outside the workspace; nothing is written to the project and the original is untouched. Pictures inside it are extracted and named in the result, for read_image. For a .pptx use read_slides.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path, built from a list_files folder line + \"/\" + filename",
+            },
+            start_line: {
+              type: "number",
+              description: "1-based line to start at — the start_line the previous call handed back. Omit for the top.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
+      if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
+      return readDocumentFile(call.id, args.path, ctx.projectPath, args.start_line);
     },
   },
 
