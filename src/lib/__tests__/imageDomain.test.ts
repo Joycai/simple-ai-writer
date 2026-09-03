@@ -59,6 +59,10 @@ describe("defaultImageCaps", () => {
     // Claude generates no images at all.
     expect(defaultImageCaps("anthropic").edit).toBe(false);
     expect(defaultImageCaps("anthropic_compat").edit).toBe(false);
+    // The Responses standard is the same host below the same base: the image
+    // endpoints don't care which chat protocol the provider was filed under.
+    expect(defaultImageCaps("openai_responses")).toEqual(defaultImageCaps("openai"));
+    expect(defaultImageCaps("openai_responses_compat").edit).toBe(false);
   });
 
   it("keeps the optimistic default for a Gemini relay, unlike an OpenAI one", () => {

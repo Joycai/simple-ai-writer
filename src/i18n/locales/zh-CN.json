@@ -2261,6 +2261,8 @@
     "apiStandards": {
       "openai": "OpenAI 官方",
       "openai_compat": "OpenAI 兼容",
+      "openai_responses": "OpenAI Responses 官方",
+      "openai_responses_compat": "OpenAI Responses 兼容",
       "gemini": "Google Gemini 官方",
       "gemini_compat": "Gemini 兼容",
       "anthropic": "Anthropic Claude 官方",

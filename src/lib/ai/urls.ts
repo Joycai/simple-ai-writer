@@ -1,13 +1,16 @@
 /**
- * Endpoint URLs for the three wire protocols — every base-URL default and every
+ * Endpoint URLs for the four wire protocols — every base-URL default and every
  * path built on it lives here.
  *
- * It exists because the three ecosystems disagree about what a "base URL" *is*,
+ * It exists because the ecosystems disagree about what a "base URL" *is*,
  * and that disagreement is invisible at a `${base}/path` call site:
  *
  *   - **OpenAI and Gemini** bases carry the version segment themselves
  *     (`https://api.openai.com/v1`, `.../v1beta`). That is what `OPENAI_BASE_URL`
- *     and every compatible relay publish, so the path is appended as-is.
+ *     and every compatible relay publish, so the path is appended as-is. The
+ *     Responses family is the same base with a different path below it
+ *     (`/responses` instead of `/chat/completions`), so it takes `openaiUrl`
+ *     and the OpenAI default unchanged — nothing here branches on it.
  *   - **Anthropic**'s `ANTHROPIC_BASE_URL` is the bare *root*. The official SDKs,
  *     Claude Code, and every third-party gateway's docs expect the client to
  *     append `/v1/messages` itself, so a base copied from those docs

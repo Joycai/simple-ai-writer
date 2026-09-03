@@ -106,6 +106,9 @@ describe("familyOf / isCompatStandard", () => {
     expect(familyOf("anthropic_compat")).toBe("anthropic");
     expect(familyOf("gemini_compat")).toBe("gemini");
     expect(familyOf("openai_compat")).toBe("openai");
+    // Its own family, not the OpenAI one: same host, different protocol.
+    expect(familyOf("openai_responses")).toBe("responses");
+    expect(familyOf("openai_responses_compat")).toBe("responses");
   });
 
   it("falls back to the OpenAI family for a value the union never had", () => {

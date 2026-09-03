@@ -96,6 +96,13 @@ describe("defaultCategoryId / categoriesForFamily", () => {
     expect(defaultCategoryId("anthropic")).toBe("claude-adaptive");
   });
 
+  it("sends nothing by default on the Responses family until it has a category of its own", () => {
+    // `openai-generic` would put Chat Completions' `reasoning_effort` on a
+    // wire that spells it `reasoning.effort` (qianwen-compat-plan.md slice F).
+    expect(defaultCategoryId("openai_responses")).toBe("off");
+    expect(categoriesForFamily("responses")).toEqual(["off"]);
+  });
+
   it("offers only the family's own categories, plus the always-present `off`", () => {
     const openai = categoriesForFamily("openai");
     expect(openai).toContain("openai-generic");

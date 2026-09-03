@@ -2266,6 +2266,8 @@
     "apiStandards": {
       "openai": "OpenAI (official)",
       "openai_compat": "OpenAI compatible",
+      "openai_responses": "OpenAI Responses (official)",
+      "openai_responses_compat": "OpenAI Responses compatible",
       "gemini": "Google Gemini (official)",
       "gemini_compat": "Gemini compatible",
       "anthropic": "Anthropic Claude (official)",

@@ -121,6 +121,43 @@ describe("OpenAI-compatible probing is unaffected", () => {
   });
 });
 
+describe("Responses-family probing", () => {
+  it("counts the shared /models list like the Chat Completions half", async () => {
+    const calls = mockFetch({ data: [{ id: "gpt-5.5" }, { id: "gpt-5.6-sol" }] });
+    const result = await testProviderConnection("", "secret-key", "openai_responses");
+    expect(result.ok).toBe(true);
+    expect(calls[0].url).toBe("https://api.openai.com/v1/models");
+    expect(calls[0].headers.get("Authorization")).toBe("Bearer secret-key");
+    expect(result.ok && result.message).toContain("2");
+  });
+
+  it("falls back to POST /responses on a relay without /models", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (u.includes("/models")) return new Response("<html>Not Found</html>", { status: 404 });
+        // A New API relay refuses a made-up model with 503 + its own JSON
+        // envelope (docs/api/responses.md §6) — the API spoke, so it counts.
+        return new Response(
+          JSON.stringify({ error: { code: "model_not_found", message: "No available channel for model __connection_probe__", type: "new_api_error" } }),
+          { status: 503 },
+        );
+      }),
+    );
+    const result = await testProviderConnection("https://relay.example.com/v1", "k", "openai_responses_compat");
+    expect(result.ok).toBe(true);
+    expect(calls[1].url).toBe("https://relay.example.com/v1/responses");
+    expect(calls[1].method).toBe("POST");
+    // This family's own shape, not a Chat Completions body — a Responses-only
+    // relay need not serve /chat/completions at all.
+    expect(calls[1].body).toMatchObject({ input: "hi", max_output_tokens: 16, store: false });
+    expect(calls[1].body).not.toHaveProperty("messages");
+  });
+});
+
 describe("compat endpoints without /models", () => {
   /** Answers the models URL with `absent`, and anything else with `then`. */
   function mockMissingModels(absent: number, then: { status: number; body: string }) {

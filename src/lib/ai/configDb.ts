@@ -83,6 +83,12 @@ export interface ImageCaps {
 export function defaultImageCaps(standard: ApiStandard): ImageCaps {
   switch (standard) {
     case "openai":
+    case "openai_responses":
+      // Same host, same `/images/generations` and `/images/edits` below the
+      // same base — which protocol the *chat* half speaks says nothing about
+      // the image endpoints, so the official Responses standard gets the
+      // official OpenAI answer. Its compat half lands in `default` with the
+      // other relays.
       return { edit: true, maxRefs: 16 };
     case "gemini":
     case "gemini_compat":
@@ -593,6 +599,8 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
 const API_STANDARDS: ApiStandard[] = [
   "openai",
   "openai_compat",
+  "openai_responses",
+  "openai_responses_compat",
   "gemini",
   "gemini_compat",
   "anthropic",

@@ -36,17 +36,27 @@ import i18n from "../../i18n";
 export type ApiStandard =
   | "openai"
   | "openai_compat"
+  /**
+   * OpenAI's second protocol (`POST /responses`), a family of its own rather
+   * than a flag on the first: body, stream events, tool shape and the echo
+   * obligation all differ (docs/api/landscape.md §3). Same base URL and same
+   * Bearer auth as the Chat Completions half — only the paths below it change.
+   */
+  | "openai_responses"
+  | "openai_responses_compat"
   | "gemini"
   | "gemini_compat"
   | "anthropic"
   | "anthropic_compat";
 
 /** The wire protocol itself — official and compat of a family speak the same one. */
-export type ProtocolFamily = "openai" | "gemini" | "anthropic";
+export type ProtocolFamily = "openai" | "responses" | "gemini" | "anthropic";
 
 const PROTOCOL_FAMILY: Record<ApiStandard, ProtocolFamily> = {
   openai: "openai",
   openai_compat: "openai",
+  openai_responses: "responses",
+  openai_responses_compat: "responses",
   gemini: "gemini",
   gemini_compat: "gemini",
   anthropic: "anthropic",
