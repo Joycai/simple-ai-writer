@@ -123,6 +123,7 @@ export type ThinkingShape = "levels" | "onoff" | "budget" | "none";
 export type ThinkingCategoryId =
   | "off"
   | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm"
+  | "responses-effort"
   | "gemini3"
   | "claude-adaptive" | "claude-budget" | "minimax";
 
@@ -218,6 +219,18 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     menu: ["low", "high", "max"], defaultEffort: "max",
     extra: { thinking: { clear_thinking: false } },
   },
+  "responses-effort": {
+    id: "responses-effort",
+    labelKey: "aiConfig.models.thinkingCatResponsesEffort",
+    hintKey: "aiConfig.models.thinkingCatResponsesEffortHint",
+    family: "responses", dialect: "none", shape: "levels",
+    // The family's full enum minus `minimal`. The top two are per model
+    // (GPT-5.4 stops at xhigh, 5.5/5.6 take max — docs/api/responses.md §2.1)
+    // and are deliberately *not* trimmed per model id: an out-of-range level
+    // is a 400 that names the legal values, which is the endpoint's own
+    // declaration and the same rule the Chat Completions categories follow.
+    menu: ["off", "low", "medium", "high", "xhigh", "max"],
+  },
   gemini3: {
     id: "gemini3",
     labelKey: "aiConfig.models.thinkingCatGemini3",
@@ -264,11 +277,7 @@ export function defaultCategoryId(standard: ApiStandard): ThinkingCategoryId {
   switch (familyOf(standard)) {
     case "anthropic": return "claude-adaptive";
     case "gemini": return "gemini3";
-    // No category speaks this family's `reasoning: {effort, summary}` yet
-    // (docs/api/qianwen-compat-plan.md §4.4 slice F adds `responses-effort`);
-    // `off` sends nothing, which is the only safe default until it does —
-    // `openai-generic` would put a Chat Completions field on this wire.
-    case "responses": return "off";
+    case "responses": return "responses-effort";
     default: return "openai-generic";
   }
 }
@@ -286,8 +295,17 @@ export function resolveThinkingCategory(
   m: { thinkingCategory?: ThinkingCategoryId; thinkingDialect?: ThinkingDialect },
   standard: ApiStandard,
 ): ThinkingCategory {
+  const family = familyOf(standard);
   if (m.thinkingCategory && THINKING_CATEGORIES[m.thinkingCategory]) {
-    return THINKING_CATEGORIES[m.thinkingCategory];
+    const declared = THINKING_CATEGORIES[m.thinkingCategory];
+    // Honoured only within its own family (`off` belongs to every family).
+    // The model editor offers same-family categories alone, so a mismatch
+    // arrives from the two paths the guard below already covers for dialects:
+    // an imported bundle, or a provider whose standard was switched under an
+    // existing model — e.g. a `openai-generic` row moved to a Responses
+    // provider, which would otherwise put `reasoning_effort` on a wire that
+    // spells it `reasoning.effort`. Same fallthrough as a cross-family dialect.
+    if (declared.shape === "none" || declared.family === family) return declared;
   }
   // Migrate a legacy dialect, but only to a category of the **same family**.
   // The model row carries no family, and an imported / hand-edited bundle can
@@ -295,7 +313,6 @@ export function resolveThinkingCategory(
   // without this guard that would resolve to a Claude category and emit
   // Anthropic fields (`output_config`) onto an OpenAI request. A cross-family
   // dialect falls through to the family's own default instead.
-  const family = familyOf(standard);
   switch (m.thinkingDialect) {
     case "adaptive":
       if (family === "anthropic") return THINKING_CATEGORIES["claude-adaptive"];
@@ -440,6 +457,18 @@ export function reasoningBody(
   const on = eff !== "off";
 
   switch (category.family) {
+    case "responses":
+      // One nested object instead of the top-level field: `effort` reuses the
+      // Chat Completions spelling (`off` → "none", which this family reads as
+      // "no reasoning items, reasoning_tokens 0"). `summary` rides along only
+      // while on — without it the stream carries no summary events at all,
+      // same as Gemini's includeThoughts; "auto" lets the endpoint pick the
+      // length (it echoes "detailed" — docs/api/responses.md §2.1).
+      return {
+        reasoning: on
+          ? { effort: effortWire(category, eff, OPENAI_EFFORT), summary: "auto" }
+          : { effort: OPENAI_EFFORT.off },
+      };
     case "openai":
       switch (category.id) {
         case "qwen-budget":

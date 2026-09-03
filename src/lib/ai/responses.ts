@@ -56,6 +56,7 @@
  */
 
 import { fetch } from "../http";
+import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -203,6 +204,17 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     ...(opts.tools
       ? { tools: toResponsesTools(opts.tools), tool_choice: toResponsesToolChoice(opts.toolChoice) }
       : {}),
+    // `reasoning: {effort, summary}` — absent unless the author set an effort
+    // on this model, for the same reason as every other adapter: an unset
+    // model must keep sending exactly what it sent before, and each model's
+    // default effort differs (5.4 none, 5.5/5.6 medium) so "unset" must not be
+    // spelled as any one of them. The category resolves to `responses-effort`
+    // for this family (lib/ai/reasoning.ts); a legacy or cross-family
+    // category reaches here as the family default too.
+    ...reasoningBody(
+      resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
+      opts.reasoningEffort,
+    ),
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
   };

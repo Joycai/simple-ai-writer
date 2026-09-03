@@ -2019,6 +2019,8 @@
       "thinkingCatQwenEffortHint": "enable_thinking plus a reasoning_effort level (Qwen-Max supports xhigh); mutually exclusive with the budget mode.",
       "thinkingCatGlm": "GLM-5.3",
       "thinkingCatGlmHint": "reasoning_effort as low/high/max, default max; this model cannot turn thinking off. GLM models only: the thinking.clear_thinking fragment it sends is rejected (400) by other models.",
+      "thinkingCatResponsesEffort": "OpenAI Responses (reasoning.effort)",
+      "thinkingCatResponsesEffortHint": "reasoning.effort levels (none/low/medium/high/xhigh/max), with a reasoning summary requested alongside (summary:auto) while on. The ceiling is per model: GPT-5.4 stops at xhigh, 5.5 / 5.6 take max; an out-of-range level is a 400 that lists the legal ones. \"Off\" sends effort:none.",
       "thinkingCatGemini3": "Gemini 3",
       "thinkingCatGemini3Hint": "A thinkingLevel (minimal/low/medium/high) plus thought summaries; \"Off\" maps to minimal (this family can't truly disable thinking).",
       "thinkingCatClaudeAdaptive": "Claude adaptive (4.6+)",

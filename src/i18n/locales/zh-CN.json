@@ -2014,6 +2014,8 @@
       "thinkingCatQwenEffortHint": "enable_thinking + reasoning_effort 档位（Qwen-Max 支持 xhigh）；与预算模式互斥。",
       "thinkingCatGlm": "GLM-5.3",
       "thinkingCatGlmHint": "reasoning_effort 取 low/high/max，默认 max；该模型无法关闭思考。仅用于 GLM 模型：随请求发的 thinking.clear_thinking 片段在其它模型上会被拒（400）。",
+      "thinkingCatResponsesEffort": "OpenAI Responses (reasoning.effort)",
+      "thinkingCatResponsesEffortHint": "reasoning.effort 档位（none/low/medium/high/xhigh/max）并随开启一起要求思考摘要（summary:auto）。上限按模型：GPT-5.4 到 xhigh，5.5 / 5.6 到 max；越界时端点会以 400 列出合法档位。「关闭」发 effort:none。",
       "thinkingCatGemini3": "Gemini 3",
       "thinkingCatGemini3Hint": "thinkingLevel 档位（minimal/low/medium/high）并返回思考摘要；「关闭」按 minimal 处理（该族无法真正关闭思考）。",
       "thinkingCatClaudeAdaptive": "Claude 自适应 (4.6+)",
