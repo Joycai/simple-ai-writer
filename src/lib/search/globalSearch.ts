@@ -19,6 +19,21 @@
  */
 import { dirName, pathKey, projectRelative } from "../paths";
 
+/**
+ * The text buffer is searchable only while it belongs to the file the project
+ * says is active. File loading is asynchronous, and images deliberately leave
+ * the previous text buffer in place, so either path on its own is insufficient.
+ */
+export function currentTextDocument(
+  activePath: string | null,
+  loadedPath: string | null,
+  content: string,
+): { path: string; content: string } | null {
+  return activePath && loadedPath && pathKey(activePath) === pathKey(loadedPath)
+    ? { path: loadedPath, content }
+    : null;
+}
+
 // ─── 作用域与前缀 ────────────────────────────────────────────────────────────
 
 export type SearchScope = "all" | "lore" | "files" | "text" | "ai";
