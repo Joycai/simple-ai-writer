@@ -115,6 +115,14 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "rewrite_lore_lines",
       "update_facet_meta",
       "delete_lore_file",
+      // The gallery tier. Without these, "add this picture to that entry" is
+      // a job the pack cannot do at all: the orchestrator holds no write
+      // tool by design, so nothing on either side can file an image. All
+      // three sit in the deferred lore_write group, so listing them costs
+      // the resident half nothing.
+      "add_lore_image",
+      "update_lore_image",
+      "delete_lore_image",
       "set_lore_avatar",
       "copy_lore_file",
       "move_lore_entity",
