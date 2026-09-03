@@ -1,6 +1,6 @@
 # 千问AI平台实测与后续两件事：修兼容问题、接 Responses 族
 
-> **状态：调研已落地，两项工作均未开工。** 2026-09-03 用作者的 key 对千问AI平台
+> **状态：调研已落地（PR #466），修复与接入均未开工；执行顺序见 §6。** 2026-09-03 用作者的 key 对千问AI平台
 > （百炼 / DashScope）的 ① Chat Completions 与 ④ Anthropic 两个面做了逐模型实测，
 > 协议事实已写进 [`landscape.md`](landscape.md) §7 第六个样本，本文只放**结论、问题清单
 > 与计划**。§3 是修复切片，§4 是 Responses 族的接入评估（含与 OpenAI 官方 GPT-5.4 /
@@ -249,3 +249,26 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
   砍掉的部分靠 400 学习与作者声明，和 ① 族的做法一致。
 - **给 kimi-k3 / MiniMax-M2.5 写 id 判断**：品牌在中继上不可见，报错足够明确，
   作者改类目即可（`provider-layering.md` §4）。
+
+## 6. 执行顺序与验收
+
+一片一个 PR，合并后停下来等作者真机；每片的验收写成"跑什么、看什么"，不写"应该没问题"。
+
+| 序 | 片 | 改什么 | 验收 |
+| --- | --- | --- | --- |
+| A | §3 第 1 片 | `reasoningBody` deepseek `off` → 顶层 `thinking:{type:"disabled"}`；翻转 `aiClient.test.ts:586`；`reasoning-plan.md` §0 与 `thinking-verification.md` 4.2 收尾 | `QIANWEN_KEY=… vitest run live.qianwen.test.ts`：`deepseek category off` 一组 7 条全绿（现状 5 条红）；作者在 DeepSeek 官方端点上选 deepseek 档、关思考，API 日志里响应无 `reasoning_content` |
+| B | §3 第 2 片 | 预设「通义千问 (Claude 格式)」；`modelLimits.ts` 补 3.7/3.8 代等 7 条上限；`thinkingCatGlmHint` 加「仅 GLM」 | vite 预览点预设核对 name / standard / baseUrl / authMode；`localeParity.test.ts`；作者用千问 key 走「测试连接」→ 判通（无 `/v1/models` 的降级路径） |
+| C | §4.4 第 1 片 | `landscape.md` §3 按 [`responses.md`](responses.md) 重写（现在是 2026-08 的 o 系列口径）；`streaming.md` / `tools.md` / `reasoning.md` 各加 ② 族一列 | 纯文档；审阅每条是否能对应 `responses.md` 里的一次请求 |
+| D | §4.4 第 2 片 | `openai_responses` / `openai_responses_compat` 两个值 + `responses` 族的全部水管（12 处 `familyOf` 调用点、两张 allowlist、i18n、`STANDARD_ENDPOINTS`、探测、`defaultImageCaps`）；adapter 只做纯文本流式，`store:false` 无条件发，**永远发 `instructions`** | `tsc`（`STANDARD_ENDPOINTS` 是 `Record<ApiStandard,…>`，漏一处就红）；`aiClient.test.ts` 新 describe：delta / usage / `incomplete` → truncated / `failed` 与 `error` 事件 → throw / 带 `obfuscation` 的 delta 不影响文本；作者在设置里选到该族、对话能出字 |
+| E | §4.4 第 3 片 | 工具：扁平 `tools` + 显式 `strict:false`；`function_call_arguments.delta` 与 `output_item.done` 两种到达都拼；`function_call_output` 回传；`_responseItems` 载体原样带回 `reasoning` / `function_call` / assistant `message`；强制 `tool_choice` 接 `toolChoice.ts` | 单测：一次含 reasoning + function_call 的流 → `toolCalls` 一条、`_responseItems` 三条且 `encrypted_content` 原样；作者跑一次续写 agent 模式，API 日志第二轮 `input` 里能看到上一轮三个条目 |
+| F | §4.4 第 4 片 | `responses-effort` 类目（`off/low/medium/high/xhigh/max`，`off` → `none`）；`reasoning:{effort,summary:"auto"}`；`reasoning_summary_text.delta` → `{reasoning}` | 单测：每档的 wire 串；作者在 gpt-5.4 上选 `max` 应得到端点 400（这是对的，5.4 到 `xhigh`）——**不做**按模型裁剪 menu，同 ① 族"端点 400 是声明"的做法 |
+| G | §4.4 第 5 片 | `jsonMode.ts` ② 族分支 → `text.format:{type:"json_schema",name,schema}`，**不发 `strict`**；千问上按 400 学习退回强制工具 | 单测：body 里 `text.format` 无 `strict` 键；作者跑一次条目生成 |
+| H | §4.4 第 6 片 | `image_url` → `input_image`（data URL 直传）、`file` → `input_file` | 作者发一张图 |
+| I | §4.4 第 7 片 | `live.openai-responses.test.ts`（`OPENAI_KEY` 或中转站 key）；结果回填 `responses.md` §9 与 `landscape.md` | 三款模型各一遍，含多轮回传；把 §4.5 剩下的三条定掉 |
+
+A、B 各自独立，可先行；C 独立；D→E→F→G→H→I 严格串行（每片都建立在上一片的 adapter 上）。
+A 合并前 `live.qianwen.test.ts` 里那条 `deepseek category off` 会红，这是故意的验收锚点。
+
+**不在计划里**：有状态模式、`reasoning.mode:"pro"`、内置工具（`tool_search` / `apply_patch` /
+`hosted_shell`）、Conversations API——等作者有明确场景再议（§5 弃案里写了为什么）。
+
