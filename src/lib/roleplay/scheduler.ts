@@ -1,11 +1,22 @@
-/** Pure scheduling decisions for roleplay's per-agent exclusive work. */
+/**
+ * Pure scheduling decisions for roleplay's per-agent exclusive work — the
+ * roleplay spelling of lib/agent/scheduler, which both this store and the chat
+ * assistant's open sessions share (one definition of "who may start next").
+ */
+
+import {
+  hasQueuedJob as hasQueuedJobBy,
+  nextRunnableJobIndex as nextRunnableJobIndexBy,
+} from "../agent/scheduler";
 
 export interface AgentJobLike {
   agentId: string;
 }
 
+const byAgent = (job: AgentJobLike) => job.agentId;
+
 export function hasQueuedJob(queue: readonly AgentJobLike[], agentId: string): boolean {
-  return queue.some((job) => job.agentId === agentId);
+  return hasQueuedJobBy(queue, agentId, byAgent);
 }
 
 /**
@@ -18,7 +29,5 @@ export function nextRunnableJobIndex(
   running: readonly string[],
   compacting: readonly string[],
 ): number {
-  return queue.findIndex(
-    (job) => !running.includes(job.agentId) && !compacting.includes(job.agentId),
-  );
+  return nextRunnableJobIndexBy(queue, running, compacting, byAgent);
 }

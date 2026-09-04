@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../stores/aiStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { useAppStore } from "../../stores/appStore";
 import { subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { readPref, writePref } from "../../lib/prefs";
@@ -51,7 +51,7 @@ export function WriterStrip({ composingSince }: {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  const disabled = useAgentStore((s) => s.disabledSubAgents);
+  const disabled = useActiveChat((c) => c.disabledSubAgents);
   const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
   const openSettings = useAppStore((s) => s.openSettings);
   const elapsed = useElapsed(composingSince);

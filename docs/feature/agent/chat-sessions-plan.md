@@ -1,7 +1,10 @@
 # 对话助手的会话：标题与改名 · 多个活会话并发
 
-> **状态：`proposal`** —— 设计已写完，未开工。两个功能一份稿，因为第二个决定了第一个
-> 的数据落点（标题挂在哪一层、什么时候能改），拆开写会各说各的。
+> **状态：`partial`** —— PR A（标题数据层）、B（`agentStore` 收敛成 `chats` 表）、C（并发：
+> 队列 / 信号量 / 卡片打标 / 未读）已落地（2026-09-04），实现出入记在 §10；**PR D（界面）
+> 等设计稿**——今天的界面仍只画当前那一段对话，标签条 / 改名入口 / 删除入口尚未出现，
+> 但 store 已经能同时跑几段。两个功能一份稿，因为第二个决定了第一个的数据落点（标题
+> 挂在哪一层、什么时候能改），拆开写会各说各的。
 > 给 Claude Design 的任务书在 [`chat-sessions-ui-brief.md`](chat-sessions-ui-brief.md)，
 > 自包含，可整段丢过去。
 >
@@ -413,3 +416,42 @@ A 可以独立发版；B 是无功能的重构 PR，评审时只看「有没有�
 - **共用扮演的三个名额**。§4.3。
 - **`title` 落成 `preview` 的覆盖**（同一列、作者改了就不再重算）。回退之后 preview 应该
   跟着对话变，而名字不该；一列装不下两种寿命。
+
+## 10. 实现出入（PR A–C，2026-09-04）
+
+按稿落地的不重复。以下是**和稿子不一样**、或稿子没说而实现时定下的：
+
+- **自动批准的 key 不是 controller，是 `chat:<key>`**（`lib/agent/autoApprove.ts`
+  `chatAutoApproveKey`）。§4.4 写的是照扮演改成 controller；实现时发现那会把「本次对话
+  都批准」缩成「本次运行」——controller 随一轮死，而这个按钮存在的理由就是跨轮。字面量
+  按会话拼，既不共用（A 的授权碰不到 B），又活到会话关闭（`endGrantFor`）。
+  `autoApproveScope()` 据前缀判 `session`。全局仍只有一个授权槽：B 里按下会顶掉 A 的——
+  那是今天「只有一个界面持有授权」的规则，跨标签沿用，作为已知限制记下。
+- **对话助手从「默认界面」变成具名界面。** 它的五种卡全部打 `surface: chat:<key>`，
+  `AgentChat` 按 `chatSurface(activeKey)` 过滤；`AiPanel` 继续读无标签的。
+  `approvalRouting.ts` 一个字没改。
+- **卡在等 = 未读。** `noteCardFor` 在五个 `request*` 入队点之后调用：卡片的 surface 指向
+  非当前会话就置 `unread`。扮演至今没有这一条（花名册只在跑完时亮）。
+- **`resumeTask` 开一段新会话**而不是清掉当前会话——按钮本来就写着「在新会话中继续」，
+  而当前那段可能正在跑。用 `newChat()`（复用空标签，否则新开）。
+- **同一会话内的排队**：store 层 `sendChatTo` 在运行中不再拒绝，作业按 key 串行；但
+  `AgentChat` 的组件级「Enter 排队、本轮结束后发送」保留，`canSend` 另加 `!queued`——
+  界面语义等设计稿定，store 已经能接。
+- **发送时就定下模型与消息**：`ChatJob` 带 `model` / `provider` / `focus` / 已拼好的
+  `wireMessage`——排队的问题跑在**问它时**的模型上、针对**问它时**打开的文档，
+  不是名额空出来那一刻头部选着的那个。
+- **`persistChat` 的 `keep`** 把刚写的那一行也算进去（`keepIds(…, justWritten)`），
+  所以 INSERT 出来的新行不需要先知道 id 再保护。
+- **`composerStore` 的 chat 草稿按 key**（`chat: Record<key, {draft, refs}>`，
+  `chatComposerOf`），与 `roleplay` 同构；文件树的「发送到助手」写进当前会话的槽。
+- **`scheduler` 搬到 `lib/agent/scheduler.ts`**（泛型，`ownerOf` 访问器），
+  `lib/roleplay/scheduler.ts` 变成薄包装，`MAX_CONCURRENT_RUNS` 从 `roleplay/model.ts`
+  re-export——扮演侧 import 路径不变。§4.3 说的「补上扮演没有的 scheduler 单测」在
+  `lib/agent/__tests__/scheduler.test.ts`。
+- **组件侧的缝**：`useActiveChat(selector)` / `activeChat(state)` / `chatSurface(key)` /
+  `isChatBusy` 等从 `stores/agentStore.ts` 导出；`AgentChat` 以 `key={activeChatKey}`
+  挂载（切标签即重挂，组件态天然归零）。`resetChat` 改名 `newChat`，
+  `switchChatSession` 语义变成「已打开就聚焦，否则装进空的当前标签，再否则新开」。
+- **不变量测试**：`lib/agent/__tests__/chatSessions.test.ts`（标签 / 运行 / 关闭 / 卡片归属 /
+  保存 / 换项目）、`chatSessionTitle.test.ts`（数据层）、`scheduler.test.ts`。§5 的第 9、10 条
+  （源码扫描）没写——`preview ||` 与 `s.chats[` 的约束目前靠评审。

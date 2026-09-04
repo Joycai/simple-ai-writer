@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Braces } from "lucide-react";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import styles from "./toggleChip.module.css";
 
@@ -24,7 +24,7 @@ import styles from "./toggleChip.module.css";
  */
 export function StateMemoryChip() {
   const { t } = useTranslation();
-  const on = useAgentStore((s) => s.stateMemory);
+  const on = useActiveChat((c) => c.stateMemory);
   const setStateMemory = useAgentStore((s) => s.setStateMemory);
 
   if (!isSkillStateEnabled()) return null;

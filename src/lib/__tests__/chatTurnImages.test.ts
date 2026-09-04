@@ -28,7 +28,7 @@ vi.mock("../../stores/loreStore", () => ({
   useLoreStore: { getState: () => ({ scanProject: vi.fn() }) },
 }));
 
-const { useAgentStore } = await import("../../stores/agentStore");
+const { useAgentStore, activeChat, emptyChat } = await import("../../stores/agentStore");
 
 function illustrate(id: string): IllustrateProposal {
   return {
@@ -42,21 +42,33 @@ function illustrate(id: string): IllustrateProposal {
 /** A chat session with one assistant turn waiting for content. */
 function seedChat(runId: unknown) {
   useAgentStore.setState({
-    turns: [
-      { id: "u1", role: "user", text: "画张立绘", log: [], at: 0 },
-      { id: "a1", role: "assistant", text: "", log: [], at: 0 },
-    ],
-    chatAbort: runId as AbortController,
+    chats: {
+      c0: {
+        ...emptyChat("c0"),
+        turns: [
+          { id: "u1", role: "user", text: "画张立绘", log: [], at: 0 },
+          { id: "a1", role: "assistant", text: "", log: [], at: 0 },
+        ],
+      },
+    },
+    chatOrder: ["c0"],
+    activeChatKey: "c0",
+    runningChats: ["c0"],
+    chatAborts: { c0: runId as AbortController },
     pending: [],
   });
 }
+const turnsNow = () => activeChat(useAgentStore.getState()).turns;
 
 /** What sendChat passes: the picture belongs to *this* turn, whatever happens later. */
 const toTurn = (turnId: string) => ({ turnId });
 
 beforeEach(() => {
   runIllustration.mockClear();
-  useAgentStore.setState({ turns: [], pending: [], chatAbort: null });
+  useAgentStore.setState({
+    chats: { c0: emptyChat("c0") }, chatOrder: ["c0"], activeChatKey: "c0",
+    pending: [], runningChats: [], chatAborts: {},
+  });
 });
 
 describe("approved illustrations in the transcript", () => {
@@ -67,7 +79,7 @@ describe("approved illustrations in the transcript", () => {
     await useAgentStore.getState().approve("i1");
 
     await expect(decision).resolves.toMatchObject({ approved: true });
-    const turn = useAgentStore.getState().turns.find((t) => t.id === "a1");
+    const turn = turnsNow().find((t) => t.id === "a1");
     expect(turn?.images).toEqual(["/proj/.ai-writer/lore/characters/elden/ai-1.png"]);
   });
 
@@ -80,11 +92,11 @@ describe("approved illustrations in the transcript", () => {
     seedChat(run);
     const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
     const applied = useAgentStore.getState().approve("i1");
-    useAgentStore.setState({ chatAbort: null, chatRunning: false });
+    useAgentStore.setState({ chatAborts: {}, runningChats: [] });
     await applied;
     await decision;
 
-    expect(useAgentStore.getState().turns.find((t) => t.id === "a1")?.images)
+    expect(turnsNow().find((t) => t.id === "a1")?.images)
       .toEqual(["/proj/.ai-writer/lore/characters/elden/ai-1.png"]);
   });
 
@@ -125,7 +137,7 @@ describe("approved illustrations in the transcript", () => {
     await useAgentStore.getState().approve("i2");
     await Promise.all([first, second]);
 
-    expect(useAgentStore.getState().turns.find((t) => t.id === "a1")?.images).toHaveLength(2);
+    expect(turnsNow().find((t) => t.id === "a1")?.images).toHaveLength(2);
   });
 
   it("leaves the transcript alone for another run's picture", async () => {
@@ -137,7 +149,7 @@ describe("approved illustrations in the transcript", () => {
     await useAgentStore.getState().approve("i1");
     await decision;
 
-    expect(useAgentStore.getState().turns.find((t) => t.id === "a1")?.images).toBeUndefined();
+    expect(turnsNow().find((t) => t.id === "a1")?.images).toBeUndefined();
   });
 
   it("adds nothing when the generation fails", async () => {
@@ -149,6 +161,6 @@ describe("approved illustrations in the transcript", () => {
 
     // A failed apply reports as a rejection, so the model knows nothing exists.
     await expect(decision).resolves.toMatchObject({ approved: false });
-    expect(useAgentStore.getState().turns.find((t) => t.id === "a1")?.images).toBeUndefined();
+    expect(turnsNow().find((t) => t.id === "a1")?.images).toBeUndefined();
   });
 });

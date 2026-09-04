@@ -31,7 +31,8 @@ import { IS_MAC } from "../../lib/platform";
 import { comboLabel, matchesCombo } from "../../lib/shortcuts";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
-import { useComposerStore } from "../../stores/composerStore";
+import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
+import { useAgentStore } from "../../stores/agentStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -1258,10 +1259,13 @@ export function FileTree() {
       );
       return;
     }
-    const { chatRefs, setChatRefs, setChatDraft } = useComposerStore.getState();
+    // Into the conversation on screen — the one the author will look at next.
+    const chatKey = useAgentStore.getState().activeChatKey;
+    const composer = useComposerStore.getState();
+    const chatRefs = chatComposerOf(composer, chatKey).refs;
     if (!chatRefs.some((r) => attachedKey(r) === attachedKey(outcome.item))) {
-      setChatRefs((prev) => [...prev, outcome.item]);
-      setChatDraft((prev) => {
+      composer.setChatRefs(chatKey, (prev) => [...prev, outcome.item]);
+      composer.setChatDraft(chatKey, (prev) => {
         const sep = prev && !/\s$/.test(prev) ? " " : "";
         return `${prev}${sep}@[${file.name}] `;
       });

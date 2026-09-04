@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { Bot, CheckCircle2, Pin, Sparkles, X } from "lucide-react";
 import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { sessionLabel, splitChatSessions, type ChatSessionRow } from "../../lib/agent/sessionDb";
 import { AgentChat } from "./AgentChat";
 import { ModelSelector } from "./ModelSelector";
@@ -43,13 +43,13 @@ export function AiDrawer() {
   // ModelSelector and all — on every streamed token of a background chat,
   // even while closed. `turns` is deliberately reduced to the one boolean the
   // header reads, so the per-token turn patches don't reach it either.
-  const chatRunning = useAgentStore((s) => s.chatRunning);
-  const chatSessionId = useAgentStore((s) => s.chatSessionId);
+  const activeChatKey = useAgentStore((s) => s.activeChatKey);
+  const chatSessionId = useActiveChat((c) => c.sessionId);
   const chatSessions = useAgentStore((s) => s.chatSessions);
-  const resetChat = useAgentStore((s) => s.resetChat);
+  const newChat = useAgentStore((s) => s.newChat);
   const switchChatSession = useAgentStore((s) => s.switchChatSession);
   const toggleChatSessionPin = useAgentStore((s) => s.toggleChatSessionPin);
-  const chatEmpty = useAgentStore((s) => s.turns.length === 0 && !s.chatError);
+  const chatEmpty = useActiveChat((c) => c.turns.length === 0 && !c.error);
 
   const close = () => setShowAiDrawer(false);
   const setMode = (m: Mode) => {
@@ -194,7 +194,6 @@ export function AiDrawer() {
                 <button
                   className={styles.headerBtn}
                   onClick={() => setShowSessions((v) => !v)}
-                  disabled={chatRunning}
                   aria-expanded={showSessions}
                   title={t("ai.chat.history", { defaultValue: "历史会话" })}
                 >
@@ -226,7 +225,7 @@ export function AiDrawer() {
                 className={`${styles.headerBtn} ${styles.headerBtnAccent}`}
                 onClick={() => {
                   setShowTasks(false);
-                  resetChat();
+                  newChat();
                 }}
                 disabled={chatEmpty}
               >
@@ -280,7 +279,9 @@ export function AiDrawer() {
           ) : aiDrawerMode === "generate" ? (
             <AiPanel />
           ) : aiDrawerMode === "chat" ? (
-            <AgentChat />
+            // Keyed by conversation: switching tabs remounts the chat, so
+            // per-mount state (scroll, folds, rewind pick) starts clean.
+            <AgentChat key={activeChatKey} />
           ) : aiDrawerMode === "roleplay" ? (
             <RoleplayPanel />
           ) : (
