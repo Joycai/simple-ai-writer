@@ -45,6 +45,10 @@ function mockJson(payload: unknown, status = 200) {
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** Base64 whose leading bytes carry a real signature — what mime sniffing keys on. */
+const PNG_B64 = btoa("\x89PNG\r\n\x1a\n" + "0".repeat(60));
+const JPEG_B64 = btoa("\xff\xd8\xff\xe0" + "0".repeat(60));
+
 describe("generateImage · OpenAI shape", () => {
   it("turns b64_json into a data URL and reports token usage", async () => {
     mockJson({
@@ -211,6 +215,14 @@ describe("generateImage · Gemini shape", () => {
     expect(res.usage).toEqual({ inputTokens: 7, outputTokens: 1290 });
   });
 
+  it("types inlineData by its bytes when the declared mime lies", async () => {
+    // hk.chenmoai.com `[R]gemini-3.1-flash-image-preview` (2026-09): mimeType
+    // says image/png over JPEG bytes — saved as .png the file lies about itself.
+    mockJson({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: JPEG_B64 } }] } }] });
+    const res = await generateImage(GEMINI, { prompt: "a cat" });
+    expect(res.images[0]).toEqual({ dataUrl: `data:image/jpeg;base64,${JPEG_B64}`, mime: "image/jpeg" });
+  });
+
   it("reports a blocked prompt as a safety refusal", async () => {
     mockJson({ promptFeedback: { blockReason: "SAFETY" } });
     await expect(generateImage(GEMINI, { prompt: "x" })).rejects.toThrow(/SAFETY/);
@@ -264,6 +276,64 @@ describe("generateImage · chat route", () => {
     mockJson({ choices: [{ message: { content: "I cannot generate images." } }] });
     await expect(generateImage(RELAY, { prompt: "x" }))
       .rejects.toThrow(/I cannot generate images/);
+  });
+
+  it("sends the prompt as a one-part array even without input images", async () => {
+    // hk.chenmoai.com `[R]gpt-image-2` (2026-09): a string `content` gets
+    // `400 images[0] must be an http/https URL or image data URI`; the array works.
+    const calls = mockJson({ choices: [{ message: { images: [{ b64_json: PNG_B64 }] } }] });
+    await generateImage(RELAY, { prompt: "a cat" });
+    const content = (calls[0].body.messages as { content: unknown }[])[0].content;
+    expect(content).toEqual([{ type: "text", text: "a cat" }]);
+  });
+
+  it("reads images[].b64_json, typing it by its bytes", async () => {
+    mockJson({ choices: [{ message: { images: [{ b64_json: JPEG_B64 }] } }] });
+    const res = await generateImage(RELAY, { prompt: "a cat" });
+    expect(res.images).toEqual([{ dataUrl: `data:image/jpeg;base64,${JPEG_B64}`, mime: "image/jpeg" }]);
+  });
+
+  it("dedupes one picture delivered in three fields at once", async () => {
+    // hk.chenmoai.com `[R]gpt-image-2`: `content`, `images[0].b64_json` and
+    // `image_b64_json` are the same bare base64 string.
+    mockJson({
+      choices: [{ message: { role: "assistant", content: PNG_B64, images: [{ b64_json: PNG_B64 }], image_b64_json: PNG_B64 } }],
+      usage: { prompt_tokens: 14, completion_tokens: 1756 },
+    });
+    const res = await generateImage(RELAY, { prompt: "a cat" });
+    expect(res.images).toHaveLength(1);
+    expect(res.images[0].mime).toBe("image/png");
+    // The base64 must not survive as "commentary".
+    expect(res.text).toBeUndefined();
+    expect(res.usage).toEqual({ inputTokens: 14, outputTokens: 1756 });
+  });
+
+  it("treats a bare link as the picture and downloads it", async () => {
+    // The same relay answers an *edit* with nothing but a signed S3 URL.
+    const link = "https://signed.example.com/images/abc?X-Amz-Expires=86400";
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      calls.push(String(url));
+      if (String(url).endsWith("/chat/completions")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: `${link}\n` } }] }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(Uint8Array.from(atob(JPEG_B64), (c) => c.charCodeAt(0)), {
+        status: 200, headers: { "content-type": "image/png" },
+      });
+    }));
+    const res = await generateImage(RELAY, { prompt: "make it green", images: ["data:image/png;base64,aGk="] });
+    expect(calls[1]).toBe(link);
+    expect(res.images).toHaveLength(1);
+    // The link's content-type said PNG; the bytes are JPEG, and the bytes win.
+    expect(res.images[0].mime).toBe("image/jpeg");
+    expect(res.text).toBeUndefined();
+  });
+
+  it("still quotes short prose rather than mistaking it for base64", async () => {
+    mockJson({ choices: [{ message: { content: "Done, here is your apple." } }] });
+    await expect(generateImage(RELAY, { prompt: "x" })).rejects.toThrow(/here is your apple/);
   });
 
   it("is only taken when declared — openai_compat defaults to the images API", async () => {

@@ -742,6 +742,55 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
   中转站把 ① 翻成 ② 再打后端。**在这种中转站上验不了"官方 ① 族对 5.4+ 的限制"**。
 - 未知顶层键被忽略（与官方 ② 族一致）。
 
+### 第九个样本：同一中转站上的两条生图路由（`[R]gpt-image-2` 经 ①、`[R]gemini-3.1-flash-image-preview` 经 ③，2026-09-04 实测）
+
+生图没有协议——① 族的 Chat Completions 根本没有图片字段，③ 族有（`inlineData`）但
+中转站照样各自发挥。实测工具是 `src/lib/__tests__/live.relay-image.test.ts`（驱动真实的
+`generateImage`，`RELAY_IMAGE_KEY` 才跑），每条用例一张图；结论已回填 `lib/ai/image.ts`
+与 `imageClient.test.ts`。样本仍是 `hk.chenmoai.com`（第八个样本那台）。
+
+**`[R]gpt-image-2` 走 `/chat/completions`（本项目的 `chat` 路由）：**
+
+- **同一个模型名背后不止一条渠道，回包形状随渠道变。** 第一小时：生成回包把**同一串裸
+  base64 放了三处**——`message.content`（不带 `data:` 前缀、不带 markdown）、
+  `message.images[0].b64_json`、`message.image_b64_json`；一小时后同一请求改答**一条裸的
+  S3 预签名 URL**（`X-Amz-Expires=86400`）当 `content`，别的字段都没有。本项目原先只认
+  `images[].image_url.url`、markdown `![](…)` 和 part 数组，这两种都解析成「模型只回了
+  文字」——NoImageError，还把 base64 当模型的原话截 200 字挂在错误里。现在四种都收，
+  且**按值去重**（三处同一张图只算一张）。
+- **字符串 `content` 会 400。** 同一条 curl，`content: "…"` 在 14:2x 返回 200，14:38 起
+  一律 `400 images[0] must be an http/https URL or image data URI`；换成一元 part 数组
+  `[{type:"text",text:"…"}]` 就 200。是中转站把这条 chat 翻成 images 请求时的 bug，
+  但没有别的办法绕：**`chat` 路由现在无论有没有输入图都发 part 数组**。
+- **`[R]` 之外的档位不走 chat**：`gpt-image-2` / `[C]gpt-image-2` / `[原生4k]gpt-image-2`
+  答 `400 This model is not supported on the Chat Completions endpoint`；`[codex]` 同 `[R]`
+  的 400。**`/v1/images/generations` 上 `[R]gpt-image-2` 正常**（`data[].url`，OpenAI 形状
+  的 usage 带 `output_tokens_details.image_tokens`），所以这台机器上 `openai_compat` 的
+  默认路由也能用；chat 路由的意义在别的中转站（newAPI 上 `/images` 只认 Imagen）。
+- **`n: 2` 撞 60s 上游超时**：nginx 504 HTML（第八个样本的同一堵墙）。一张 45–52s，
+  两张就超。本项目发 `n` 只在 > 1 时，界面已注明多数中转返回一张。
+- 参考图（两张 `image_url` data URL part）和图生图（一张）都 200；编辑回包是 URL 形。
+- 一次生成 1024×1024，`completion_tokens: 1756`，`prompt_tokens` 7–14。
+
+**`[R]gemini-3.1-flash-image-preview` 走 `/v1beta/models/{id}:generateContent`（`gemini` 路由）：**
+
+- **`inlineData.mimeType` 说谎**：写 `image/png`，字节是 JPEG（`/9j/`）。原先直接信
+  `mimeType`，存盘就是一个内容是 JPEG 的 `.png`。现在 `inlineData`、`b64_json`、data URL
+  和下载回来的字节**一律嗅探魔数**，声明的类型只作兜底（`sniffImageMime`）。
+- `x-goog-api-key` 与 `Authorization: Bearer` 都通（同第五个样本，但这台两种都收）。
+- `imageConfig.aspectRatio` / `imageSize` 接受不报错，比例被遵守（默认出 1408×768，`9:16`+`1K` 出 768×1376）；
+  `candidateCount: 2` 不报错但**只回一个候选**。
+- 图生图与两张参考图（`inlineData` part）都 200，14–19s 一张，`candidatesTokenCount`
+  1070–1176。
+- **`[C]` 档 503**：`{code:"model_not_found", type:"new_api_error", message:"No available
+  channel for model 「CS」gemini-3.1-flash-image-preview"}`——中转站把 `[C]` 前缀映射到
+  一个当时没有可用渠道的组，chat 与 gemini 两个端点上一样；`[K]` 档 60s 504。所以
+  同名模型换个前缀就是换后端，可用性要逐个前缀试。
+- 路径里的 `[R]` 不用编码，编码成 `%5BR%5D` 也认。
+
+**可移植的规则**：`chat` 路由的回包**没有**约定形状，只有"目前见过的形状"——每接一台
+新中转都要跑一遍 live 文件，而不是照文档写解析；生图的 mime 永远读字节。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
