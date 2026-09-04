@@ -1526,6 +1526,8 @@
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",
+      "chipAbsent": "Auto-approve —",
+      "absentHint": "Not auto-approving: every write asks first. 「Approve all this time」on a card turns it on",
       "chipRun": "Auto-approving this run",
       "off": "Click to review each change again",
       "chipAppend": "auto-appending to {{n}} file(s)",
@@ -1595,7 +1597,8 @@
       "imagesNotSent": "(These images could not travel with this message — the active model cannot read images:\n{{list}})",
       "imageTooLarge": "{{name}} is too large ({{size}}MB, limit {{max}}MB)",
       "refUnreadable": "Could not read {{name}}",
-      "noSelection": "No selection",
+      "selectionChipEmpty": "Selection",
+      "noSelectionHint": "Select a passage in the document and it travels with the message",
       "planMode": "Plan mode",
       "planModeOn": "Plan mode is on: the assistant lays out a checkable plan before it starts (click to turn off)",
       "planModeOff": "Plan mode is off: the assistant decides for itself whether to plan (click to turn on)",

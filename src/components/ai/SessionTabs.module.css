@@ -6,7 +6,11 @@
   align-items: stretch;
   height: 38px;
   padding: 0 26px;
-  background: var(--color-bg-stream);
+  /* Its own band, darker than the header above it (设计稿 23 屏 1a: #14100C
+     under a #17130F header): the current tab is the one patch of base colour
+     on it. bg-stream sat *between* header and body, and the slip had nothing
+     to stand out from. */
+  background: var(--color-bg-tabstrip);
   border-bottom: 1px solid var(--color-border-panel);
 }
 

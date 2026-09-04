@@ -235,7 +235,7 @@ export function SessionMenu({ onClose }: { onClose: () => void }) {
         <>
           <div className={`${styles.group} ${styles.groupOpen}`}>
             <span>{t("ai.chat.openSessions", { defaultValue: "已打开" })}</span>
-            <span className={styles.groupCount}>{open.length}</span>
+            <span className={styles.groupRule} /><span className={styles.groupCount}>{open.length}</span>
           </div>
           {open.map(renderRow)}
         </>
@@ -244,7 +244,7 @@ export function SessionMenu({ onClose }: { onClose: () => void }) {
         <>
           <div className={styles.group}>
             <span>{t("ai.chat.pinnedSessions", { defaultValue: "已固定" })}</span>
-            <span className={styles.groupCount}>{pinnedE.length}</span>
+            <span className={styles.groupRule} /><span className={styles.groupCount}>{pinnedE.length}</span>
           </div>
           {pinnedE.map(renderRow)}
         </>
@@ -253,7 +253,7 @@ export function SessionMenu({ onClose }: { onClose: () => void }) {
         <>
           <div className={styles.group}>
             <span>{t("ai.chat.recentSessions", { defaultValue: "最近" })}</span>
-            <span className={styles.groupCount}>{recentE.length}</span>
+            <span className={styles.groupRule} /><span className={styles.groupCount}>{recentE.length}</span>
           </div>
           {recentE.map(renderRow)}
           <div className={styles.footnote}>

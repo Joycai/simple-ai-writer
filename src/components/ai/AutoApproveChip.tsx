@@ -16,18 +16,34 @@ import { baseName } from "../../lib/paths";
  *
  * @param owner Which surface is asking. A chip only lights up for the grant it
  *              owns, so the panel does not advertise chat's authorisation.
+ * @param absent Render the dashed「自动批准 —」placeholder while no grant is
+ *              live — the chip row's "absent" vocabulary (设计稿 23 屏 1g), so
+ *              the slot is always there to read. Chat asks for it; the panel's
+ *              chip row (设计稿 02) has no such slot.
  */
-export function AutoApproveChip({ owner }: { owner: unknown }) {
+export function AutoApproveChip({ owner, absent = false }: { owner: unknown; absent?: boolean }) {
   const { t } = useTranslation();
-  const autoApprove = useAgentStore((s) => s.autoApprove);
+  const grant = useAgentStore((s) => s.autoApprove);
   const clearAutoApprove = useAgentStore((s) => s.clearAutoApprove);
 
-  if (!autoApprove || autoApprove.key !== owner) return null;
-
-  const blanket = autoApprove.proposals || autoApprove.plans;
-  const appendCount = autoApprove.appendPaths.length;
-  const illustrateLeft = autoApprove.illustrateLeft;
-  if (!blanket && appendCount === 0 && illustrateLeft === 0) return null;
+  const mine = grant && grant.key === owner ? grant : null;
+  const blanket = !!mine && (mine.proposals || mine.plans);
+  const appendCount = mine ? mine.appendPaths.length : 0;
+  const illustrateLeft = mine ? mine.illustrateLeft : 0;
+  if (!mine || (!blanket && appendCount === 0 && illustrateLeft === 0)) {
+    if (!absent) return null;
+    // Not a control: a grant is given on a card, never from here.
+    return (
+      <span
+        className={styles.absent}
+        aria-disabled
+        title={t("ai.autoApprove.absentHint", { defaultValue: "没有自动批准：每次写入都会先问你。确认卡上的「本次都批准」会把它打开" })}
+      >
+        {t("ai.autoApprove.chipAbsent", { defaultValue: "自动批准 —" })}
+      </span>
+    );
+  }
+  const autoApprove = mine;
 
   const scope = autoApproveScope(owner);
   // A per-file append grant is real authorisation and must be visible — but it

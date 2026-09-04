@@ -1526,6 +1526,8 @@
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
+      "chipAbsent": "自动批准 —",
+      "absentHint": "没有自动批准：每次写入都会先问你。确认卡上的「本次都批准」会把它打开",
       "chipRun": "本次任务自动批准中",
       "off": "点击恢复逐条审批",
       "chipAppend": "自动追加 {{n}} 个文件",
@@ -1594,7 +1596,8 @@
       "imagesNotSent": "（以下图片未能随本条消息发送——当前模型读不了图：\n{{list}}）",
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
-      "noSelection": "未选中正文",
+      "selectionChipEmpty": "选区",
+      "noSelectionHint": "先在正文里选中一段，它会作为选区附上",
       "planMode": "计划模式",
       "planModeOn": "计划模式已开启：模型会先立可勾选的步骤清单再动手（点击关闭）",
       "planModeOff": "计划模式已关闭：模型自行决定要不要立清单（点击开启）",
