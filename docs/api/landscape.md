@@ -597,7 +597,7 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
 - 图片 URL 在 `dashscope-*.oss-accelerate.aliyuncs.com`，`content-type: image/png`，
   字节确实是 PNG。
 
-#### 出图参数的三套方言（2026-08 对官方文档校准）
+#### 出图参数的四套方言（2026-08 对官方文档校准；Qwen-Image 3.0 于 2026-09-04 实测）
 
 同一件事——"这张图多大、什么画幅"——各家族用完全不同的参数说：
 
@@ -624,6 +624,15 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   且**输出画幅跟随最后一张输入图**——改图发档位而不是算出的 `宽*高`。
   同步/异步两个端点都在（wan2.7 文生图两者皆可，与 PR5 时"文生图仅异步"
   的口径已不同）。
+
+- **Qwen-Image 3.0（DashScope 原生，2026-09-04 实测）**：`parameters.size` **只收**
+  `宽*高`——发 `"1K"` 答 `400 InvalidParameter: Expected format: '<width>*<height>'`；
+  约束是**总像素**在 512²~2048² 之间而不是边长（2720*1536 被接受）；计费按**面积**分
+  `qima_output_1k` / `qima_output_2k` 两档（¥0.25 / ¥0.5），**省略 `size` 出 2048² 并按
+  2K 收费**；改图不发 size 时画幅跟随输入图但同样放大到 2K 面积（768×1376 输入出
+  1520×2736）。所以这套方言永远发尺寸、默认 1K 面积，改图在作者没点画幅时按输入图
+  自己的比例在所选档位重算（`ImageParamOptions.inputSize`，调用点从 data URL 头部
+  读尺寸）——「跟随输入」在这个端点上没有不花双倍钱的写法。
 
 本项目把这几套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
 `ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由

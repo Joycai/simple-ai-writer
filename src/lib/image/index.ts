@@ -5,7 +5,8 @@
  */
 
 import { imageCostFor, type ImageCaps, type Model } from "../ai/configDb";
-import { imageDialect, type ImageWireParams } from "../ai/imageDialects";
+import { imageDialect, type ImageParamOptions, type ImageWireParams } from "../ai/imageDialects";
+import { readImageHeader } from "./imageSize";
 import { getDb } from "../project";
 import type { ImageAspect } from "./promptGen";
 
@@ -25,7 +26,7 @@ export function imageRequestParams(
   caps: ImageCaps | undefined,
   sel: { aspect?: string; resolution?: string; quality?: string; size?: string },
   /** `edit` marks an image-conditioned call — see ImageDialectSpec.params. */
-  opts?: { edit?: boolean },
+  opts?: ImageParamOptions,
 ): ImageWireParams {
   const spec = imageDialect(caps?.dialect);
   if (spec) return spec.params(sel, opts);
@@ -33,6 +34,28 @@ export function imageRequestParams(
     aspect: sel.aspect,
     size: sel.size?.trim() || sizeForAspect(sel.aspect ?? "1:1", caps?.sizes),
   };
+}
+
+/**
+ * The pixel size of an input image, read off the head of its data URL — for
+ * `ImageParamOptions.inputSize`. Header-only: PNG/GIF/WebP answer in the first
+ * few dozen bytes and a JPEG within its leading segments, so only the first
+ * 64 KB of base64 is decoded. Undefined when the format isn't one this app
+ * accepts or the URL isn't a data URL.
+ */
+export function inputImageSize(dataUrl: string): { width: number; height: number } | undefined {
+  const comma = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || comma === -1) return undefined;
+  const head = dataUrl.slice(comma + 1, comma + 1 + 64 * 1024).replace(/[^A-Za-z0-9+/=]/g, "");
+  try {
+    const binary = atob(head.slice(0, head.length - (head.length % 4)));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const header = readImageHeader(bytes);
+    return header ? { width: header.width, height: header.height } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

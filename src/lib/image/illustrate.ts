@@ -17,7 +17,7 @@ import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
-import { imageRequestParams, recordImageUsage } from "./index";
+import { imageRequestParams, inputImageSize, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
 
 /** `m:ss`, the same clock the execution log's round timer shows. */
@@ -121,7 +121,6 @@ export async function runIllustration(
     : {};
   const progress = onProgress ? { onProgress: (p: ImageProgress) => onProgress(imageWaitProgress(p)) } : {};
   const req = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal, ...progress };
-  const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel, { edit: true }), signal, ...progress };
 
   // Input images: the picture being edited, plus any references a generation
   // leans on. Either kind makes the call image-conditioned, so both ride the
@@ -139,6 +138,13 @@ export async function runIllustration(
   if (inputPaths.length && model.caps?.edit !== false) {
     const images: string[] = [];
     for (const p of inputPaths) images.push((await imageForModel(p)).dataUrl);
+    // Resolved only now: the source image (first in `inputPaths`) is what a
+    // dialect keeps the framing of when the proposal named no aspect.
+    const editParams = imageRequestParams(model.caps, sel, {
+      edit: true,
+      ...(proposal.sourcePath ? { inputSize: inputImageSize(images[0]) } : {}),
+    });
+    const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress };
     try {
       result = await generateImage(conn, { ...editReq, images });
     } catch (err) {

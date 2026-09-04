@@ -88,6 +88,7 @@ const DIALECT_LABEL_KEY: Record<string, string> = {
   "nanobanana": "aiConfig.models.capsDialectNanobanana",
   "gpt-image-2": "aiConfig.models.capsDialectGptImage2",
   "wan2.7": "aiConfig.models.capsDialectWan27",
+  "qwen-image": "aiConfig.models.capsDialectQwenImage",
 };
 const ROUTE_LABEL_KEY: Record<string, string> = {
   "": "aiConfig.models.capsRouteAuto",
@@ -1039,6 +1040,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
                     { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
                     { value: "wan2.7", label: t("aiConfig.models.capsDialectWan27") },
+                    { value: "qwen-image", label: t("aiConfig.models.capsDialectQwenImage") },
                   ]}
                   ariaLabel={t("aiConfig.models.capsDialectLabel")}
                   onChange={(v) => {
