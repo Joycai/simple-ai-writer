@@ -548,7 +548,7 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
   **完整**回传；本项目只在工具轮回传上一轮的思维链，纯对话轮不回传——3.8-max
   上是否因此报错未验。
 
-#### DashScope 的图片模型：不在兼容层上，走原生协议（截至 2026-08，未实测）
+#### DashScope 的图片模型：不在兼容层上，走原生协议（2026-09-04 已实测 qwen-image-3.0-pro 与 wan2.7-image-pro）
 
 qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图走原生
 `/api/v1`（同 host、同 key，只是路径不同；本项目在 `lib/ai/image.ts` 的
@@ -573,6 +573,29 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
 - **错误是顶层 `{code, message}`**（任务失败时嵌在 `output` 里）：
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
+
+**2026-09-04 实测**（`src/lib/__tests__/live.dashscope-image.test.ts`，驱动真实的
+`generateImage`，`DASHSCOPE_IMAGE_KEY` 才跑；key 是千问AI平台的 `sk-ws-…` 工作空间 key，
+打的仍是 `dashscope.aliyuncs.com`）——本项目的 body **一个字节没改就通了**，上面的
+协议事实全部成立，另外几条文档没写的：
+
+- **qwen-image-3.0-pro 的 `size` 只收 `宽*高`**：发 `"1K"` 答 400
+  `InvalidParameter: Expected format: '<width>*<height>'`（0.2s，不计费）；
+  **省略 `size` 默认出 2048×2048，按 2K 计费（¥0.5，1K 是 ¥0.25）**。本项目对
+  qwen-image 没有方言，尺寸来自作者手填的框——不填就是双倍价，值得补一个方言。
+  wan2.7 两种写法都收（`"1K"` 与 `768*1376` 都实测通过）。
+- **输入图收 data URL**：qwen 改图与 wan 参考图都用 `data:image/png;base64,…`
+  直接过（wan 同一请求里混一张 https 也行）。wan 的参考图按 token 计入 `usage`
+  （两张 1024² 参考图 `input_tokens: 18790`），qwen 报 `input_image_count` 与
+  `input_image_type: qima_input_1k`。
+- **wan2.7-image-pro 同步与异步都在**：同步 `multimodal-generation` 14–20s 一张；
+  异步 `image-generation` + `X-DashScope-Async` 提交 0.16s 返回 `PENDING`，之后
+  `RUNNING` 约 24s 后 `SUCCEEDED`，**成功的任务也用 `output.choices[].message.content[].image`**
+  （不是 `results[].url`——本项目两种都认）。wan 的 part 多一个 `type:"image"` 键。
+- qwen-image-3.0-pro 一张 40s；`output.rewrite_status: "success"` 说明它改写了提示词，
+  但改写后的文本不回传。
+- 图片 URL 在 `dashscope-*.oss-accelerate.aliyuncs.com`，`content-type: image/png`，
+  字节确实是 PNG。
 
 #### 出图参数的三套方言（2026-08 对官方文档校准）
 
