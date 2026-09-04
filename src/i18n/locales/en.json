@@ -386,11 +386,13 @@
       "languageLabel": "Interface Language",
       "notifySection": "System notifications",
       "notifyLabel": "Enable system notifications",
-      "notifyHint": "Post an OS notification when the assistant needs your approval, or when a run ends. Silent while the app window has focus.",
+      "notifyHint": "Post an OS notification when the assistant needs your approval, finishes a reply, or fails mid-reply. Silent while the app window has focus.",
       "notifyApprovalLabel": "Notify when approval is needed",
       "notifyApprovalHint": "Edits, knowledge-base write plans, round limits, truncated output — every moment the run stops and waits for you. Bursts are coalesced into one ping.",
-      "notifyDoneLabel": "Notify when a run ends",
-      "notifyDoneHint": "One notification each when a chat reply, an AI panel task, or a batch run finishes — success or failure.",
+      "notifyDoneLabel": "Notify when a reply finishes",
+      "notifyDoneHint": "One notification each when a chat reply, an AI panel task, or a fully successful batch run finishes. A run you stopped yourself is not announced.",
+      "notifyErrorLabel": "Notify when a reply fails",
+      "notifyErrorHint": "One notification when a chat reply, an AI panel task or a roleplay reply dies mid-way, or a batch run has failed clauses. Carries the error only, never the text.",
       "notifyTest": "Send a test notification",
       "notifyTestOk": "Sent — check your notification centre.",
       "notifyTestDenied": "The system refused notification permission. Allow this app in your OS notification settings and try again.",
@@ -3602,7 +3604,8 @@
       "more": "{{n}} more…"
     },
     "notify": {
-      "replied": "{{name}} replied"
+      "replied": "{{name}} replied",
+      "failed": "{{name}}'s reply failed: {{error}}"
     },
     "errors": {
       "rosterRebuilt": "The roster was corrupt and has been rebuilt from the directories — bindings and model choices need to be filled in again.",

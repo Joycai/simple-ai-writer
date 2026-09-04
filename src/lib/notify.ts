@@ -1,7 +1,7 @@
 /**
- * 系统通知 — the OS-level ping for the two moments an author is likely to be
+ * 系统通知 — the OS-level ping for the three moments an author is likely to be
  * looking at another window: the run stopped and is waiting for an approval,
- * and the run finished.
+ * the run finished, and the run failed.
  *
  * ## Why this is a module, not a store
  *
@@ -14,8 +14,12 @@
  * 1. **The switch** (`app:notifyEnabled`, default off). Opt-in because the
  *    first notification is what registers the app with macOS's Notification
  *    Center — flipping the switch is the moment the author asked for that.
- * 2. **The kind** (`app:notifyApproval` / `app:notifyDone`, default on). An
- *    author who only wants to be summoned for approvals can drop the rest.
+ * 2. **The kind** (`app:notifyApproval` / `app:notifyDone` / `app:notifyError`,
+ *    default on). An author who only wants to be summoned for approvals can
+ *    drop the rest; one who trusts the run can keep only the failures. Success
+ *    and failure are two kinds rather than one "ended" because they are two
+ *    different reasons to come back — and an author who finds "finished"
+ *    noisy must still hear about a run that died halfway.
  * 3. **Focus.** A notification for something already on screen is noise, so a
  *    focused window is silence. `isFocused()` failing counts as focused: the
  *    failure mode of a notification framework should be quiet, not chatty.
@@ -44,24 +48,33 @@
 
 import { readPref, writePref } from "./prefs";
 
-/** The two moments worth interrupting for. */
-export type NotifyKind = "approval" | "done";
+/**
+ * The three moments worth interrupting for. `done` is a run that ended with
+ * its answer; `error` one that ended without it (a thrown model/network error,
+ * not an author's abort — a turn the author stopped is never announced).
+ */
+export type NotifyKind = "approval" | "done" | "error";
 
 const KEY_ENABLED = "app:notifyEnabled";
 const KIND_KEY: Record<NotifyKind, string> = {
   approval: "app:notifyApproval",
   done: "app:notifyDone",
+  error: "app:notifyError",
 };
 
 /**
  * Coalescing window per kind. Approvals arrive in bursts (one card per
  * proposed edit) and one ping is enough to bring the author back; a finished
- * run is a single event, so it never needs holding back.
+ * or failed run is a single event, so it never needs holding back.
  */
 const MIN_INTERVAL_MS: Record<NotifyKind, number> = {
   approval: 8000,
   done: 0,
+  error: 0,
 };
+
+/** The two ways a run ends — the kinds a batch driver speaks for. */
+const RUN_ENDED: ReadonlySet<NotifyKind> = new Set<NotifyKind>(["done", "error"]);
 
 const lastSentAt = new Map<NotifyKind, number>();
 
@@ -71,12 +84,17 @@ const lastSentAt = new Map<NotifyKind, number>();
  * The clause batch runs `aiTaskStore.runTask` once per clause and announces the
  * whole job itself; without this, a 40-clause tender would arrive as 40 "task
  * finished" notifications. Counted rather than a boolean so an early return or
- * a nested driver can never leave it stuck on, and scoped to "done" only —
- * a batch that stops for an approval still has to summon the author.
+ * a nested driver can never leave it stuck on, and scoped to the run-ended
+ * kinds (`done` and `error`) only — a batch that stops for an approval still
+ * has to summon the author.
  */
 let doneMuteDepth = 0;
 
-/** Mutes "run finished" until the returned function is called. Idempotent. */
+/**
+ * Mutes "run finished" and "run failed" until the returned function is
+ * called. Idempotent. A clause that fails is a line in the batch's summary,
+ * not a ping of its own.
+ */
 export function muteRunFinished(): () => void {
   doneMuteDepth++;
   let released = false;
@@ -181,7 +199,7 @@ async function post(title: string, body: string): Promise<void> {
  */
 export function notify(kind: NotifyKind, title: string, body: string): void {
   if (!isTauri) return;
-  if (kind === "done" && runFinishedMuted()) return;
+  if (RUN_ENDED.has(kind) && runFinishedMuted()) return;
   const enabled = isNotifyEnabled();
   const kindEnabled = isNotifyKindEnabled(kind);
   if (!enabled || !kindEnabled) return;

@@ -2730,7 +2730,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // says so until they look (activateChat clears it).
       if (get().activeChatKey !== key) patchChat(set, key, { unread: true });
       notify(
-        "done",
+        failure ? "error" : "done",
         i18n.t(failure ? "notify.failedTitle" : "notify.doneTitle"),
         failure
           ? i18n.t("notify.chatFailed", { error: failure })

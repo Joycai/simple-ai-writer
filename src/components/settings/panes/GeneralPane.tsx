@@ -49,6 +49,7 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
   const [notifyApproval, setNotifyApprovalOn] = useState(isNotifyKindEnabled("approval"));
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
+  const [notifyError, setNotifyErrorOn] = useState(isNotifyKindEnabled("error"));
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
@@ -235,6 +236,16 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
                 on={notifyDone}
                 onChange={(next) => { setNotifyKindEnabled("done", next); setNotifyDoneOn(next); }}
                 label={t("systemSettings.general.notifyDoneLabel")}
+              />
+            </Row>
+            <Row
+              title={t("systemSettings.general.notifyErrorLabel")}
+              desc={t("systemSettings.general.notifyErrorHint")}
+            >
+              <Toggle
+                on={notifyError}
+                onChange={(next) => { setNotifyKindEnabled("error", next); setNotifyErrorOn(next); }}
+                label={t("systemSettings.general.notifyErrorLabel")}
               />
             </Row>
             <Row desc={t("systemSettings.general.notifyPlatformHint")} last>
