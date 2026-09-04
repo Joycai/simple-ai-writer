@@ -5,6 +5,7 @@ import {
   assembleContext, bundleToMessages, profileSystemPrompt, resolveAppendAnchor,
   type TaskExtras,
 } from "../lib/context/rag";
+import { withCurrentTime } from "../lib/context/clock";
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { taskLabel } from "../lib/profile";
 import { notify } from "../lib/notify";
@@ -263,7 +264,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       task.tools,
       promptParams(i18n.language === "zh-CN", task.packId),
     );
-    const systemPrompt = briefing ? `${basePrompt}\n\n${briefing}` : basePrompt;
+    // Single-shot run: the clock closes the system layer (lib/context/clock).
+    const systemPrompt = withCurrentTime(briefing ? `${basePrompt}\n\n${briefing}` : basePrompt);
 
     // Snapshot the writing focus and the committed selection together, here —
     // before the keyring read below and every other await further down (memory

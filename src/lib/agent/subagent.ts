@@ -13,6 +13,7 @@ import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
+import { withCurrentTime } from "../context/clock";
 import { bytesToBase64 } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
 import { isWorkspacePath, resolveRelativePath } from "../paths";
@@ -439,7 +440,7 @@ export async function executeDelegate(
   }
 
   const messages: StreamMessage[] = [
-    { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`) },
+    { role: "system", content: withCurrentTime(i18n.t(`ai.instructions.subagent.${kind}`)) },
     { role: "user", content: userContent },
   ];
 

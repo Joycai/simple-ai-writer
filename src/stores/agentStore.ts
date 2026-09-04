@@ -116,6 +116,7 @@ import { parentDir } from "../lib/context/outline";
 import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
 } from "../lib/context/rag";
+import { currentTimeLine } from "../lib/context/clock";
 import { docModel, promptParams } from "../lib/profile/active";
 import type {
   AppendProposal, ApprovalDecision, AskAnswer, AskQuestion, EditProposal, InsertProposal, Proposal,
@@ -2102,9 +2103,13 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   // The system layer is the only one that survives intact, and this mode is
   // toggled mid-conversation — so a one-time announcement would be buried by
   // turn three, exactly when the model decides whether this job needs a plan.
+  // 当前时间 rides on the turn, never on history[0]: the system message is
+  // the cache prefix of every later send, and a clock in it would invalidate
+  // the whole conversation on each turn — see lib/context/clock.
+  const stamped = withDirective(composed, currentTimeLine());
   const wireContent = get().chats[key]?.planMode
-    ? withDirective(composed, i18n.t("ai.instructions.planMode"))
-    : composed;
+    ? withDirective(stamped, i18n.t("ai.instructions.planMode"))
+    : stamped;
 
   // ── Is this turn about the document the author has open? ──
   // The chat used to answer "always" and seed its tail window into every

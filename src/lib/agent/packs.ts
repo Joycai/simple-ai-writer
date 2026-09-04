@@ -34,6 +34,7 @@ import { costFor, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
+import { withCurrentTime } from "../context/clock";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
 import { applyExportFlags } from "./routing";
 import { isOrchestratorEnabled } from "./packFlag";
@@ -314,7 +315,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     : i18n.t("ai.instructions.subagentTask", { task });
 
   const messages: StreamMessage[] = [
-    { role: "system", content: i18n.t(`ai.instructions.pack.${pack}`) },
+    { role: "system", content: withCurrentTime(i18n.t(`ai.instructions.pack.${pack}`)) },
     { role: "user", content: userContent },
   ];
 
