@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../stores/appStore";
 import { useAiStore } from "../../../stores/aiStore";
@@ -7,6 +7,7 @@ import {
   ASSUMED_INPUT_CEILING_TOKENS,
   COMPACT_TRIGGER_RATIO_MAX, COMPACT_TRIGGER_RATIO_MIN,
   COMPACT_TRIGGER_TOKENS_MAX, COMPACT_TRIGGER_TOKENS_MIN,
+  CONTEXT_UTILIZATION_MAX, CONTEXT_UTILIZATION_MIN,
 } from "../../../lib/context/budget";
 import { compactTriggerFor } from "../../../lib/agent/compact";
 import { messageCeilingFor } from "../../../lib/agent/toolCost";
@@ -35,20 +36,25 @@ const TOKEN_TICKS: SliderTick[] = [8_192, 16_384, 32_768, 131_072, 262_144, 524_
 /** Under 64k the slider moves in 1k; above, in 4k. */
 const tokenStep = (v: number) => (v < 65_536 ? 1_024 : 4_096);
 const RATIO_TICKS: SliderTick[] = [50, 60, 70, 80].map((value) => ({ value, label: `${value}%` }));
+/** 窗口占用's ticks: both ends plus the tens between them, all equally usable. */
+const UTIL_TICKS: SliderTick[] = [50, 60, 70, 80, 90].map((value) => ({ value, label: `${value}%` }));
 
 /**
  * 设置 → AI 配置 → 上下文与记忆: what a conversation puts in front of the
  * model, and how much of it.
  *
- * Two sections. 对话归纳 (docs/feature/agent/compact-threshold-plan.md, 设计稿
- * 20): the 自动归纳 switch, the two lines the trigger is the lowest of — an
- * absolute token count and a share of the model's window — and a worked
- * example for the active model that names which line actually won. The
- * example exists because a *third* line the author set elsewhere (窗口占用,
- * in the AI panel's toolbar) beats both sliders under its default, and a
- * slider that never bites has to say so: the row that won carries a 生效中
- * tag, and the hard cap gets a signpost out of settings altogether. 图片: the
- * picture ceiling.
+ * Three sections, in the order one bounds the next. 窗口占用: the hard cap on
+ * a single request (input + reply) as a share of the model's declared window —
+ * it moved here from the AI panel's chip row on 2026-09-05, so the third line
+ * the compaction example has to attribute to now lives one section above it
+ * rather than on another screen. 对话归纳
+ * (docs/feature/agent/compact-threshold-plan.md, 设计稿 20): the 自动归纳
+ * switch, the two lines the trigger is the lowest of — an absolute token count
+ * and a share of the model's window — and a worked example for the active model
+ * that names which line actually won. That example exists because the cap above
+ * beats both sliders under its default, and a slider that never bites has to
+ * say so: the row that won carries a 生效中 tag, and the hard cap gets a
+ * signpost that now scrolls up this same page. 图片: the picture ceiling.
  */
 export function ContextMemoryPane() {
   const { t } = useTranslation();
@@ -61,8 +67,8 @@ export function ContextMemoryPane() {
   const triggerRatio = useAppStore((s) => s.compactTriggerRatio);
   const setTriggerRatio = useAppStore((s) => s.setCompactTriggerRatio);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
-  const closeSettings = useAppStore((s) => s.closeSettings);
-  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const setContextUtilization = useAppStore((s) => s.setContextUtilization);
+  const utilSectionRef = useRef<HTMLDivElement>(null);
   const models = useAiStore((s) => s.models);
   const subAgents = useAiStore((s) => s.subAgents);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId) ?? null);
@@ -82,6 +88,7 @@ export function ContextMemoryPane() {
   }, [activeModel, contextUtilization, subAgents, models, triggerTokens, triggerRatio]);
 
   const ratioPct = Math.round(triggerRatio * 100);
+  const utilPct = Math.round(contextUtilization * 100);
   const hasWindow = !!activeModel?.contextSize;
 
   // 生效中 sits on the row whose line won; the ratio row instead says why it
@@ -98,6 +105,7 @@ export function ContextMemoryPane() {
   // slider would.
   const [tokDraft, setTokDraft] = useState<string | null>(null);
   const [ratioDraft, setRatioDraft] = useState<string | null>(null);
+  const [utilDraft, setUtilDraft] = useState<string | null>(null);
   const commitTok = () => {
     if (tokDraft === null) return;
     const n = parseFloat(tokDraft);
@@ -114,13 +122,18 @@ export function ContextMemoryPane() {
     if (!Number.isFinite(n)) return;
     setTriggerRatio(n / 100);
   };
-
-  const goToAiPanel = () => {
-    // 窗口占用 lives on the AI panel's toolbar, not in settings — the one
-    // signpost on this page that leaves the page.
-    closeSettings();
-    setShowAiDrawer(true, "generate");
+  const commitUtil = () => {
+    if (utilDraft === null) return;
+    const n = parseInt(utilDraft, 10);
+    setUtilDraft(null);
+    if (!Number.isFinite(n)) return;
+    setContextUtilization(n / 100);
   };
+
+  // The hard cap is now the first section of this very page, so the signpost
+  // scrolls rather than navigates.
+  const goToUtilization = () =>
+    utilSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
   // ── 图片 ──
   const imageMaxLongEdge = useAppStore((s) => s.imageMaxLongEdge);
@@ -164,10 +177,9 @@ export function ContextMemoryPane() {
         {example.boundBy === "ceiling" && (
           <div className={styles.go}>
             <span className={styles.goLead}>{t("systemSettings.contextMemory.goCeilingLead")}</span>
-            <button type="button" className={styles.goLink} onClick={goToAiPanel}>
-              {t("systemSettings.contextMemory.goCeilingLink")} →
+            <button type="button" className={styles.goLink} onClick={goToUtilization}>
+              {t("systemSettings.contextMemory.goCeilingLink")} ↑
             </button>
-            <span className={styles.goHint}>{t("systemSettings.contextMemory.goCeilingHint")}</span>
           </div>
         )}
       </>
@@ -180,6 +192,66 @@ export function ContextMemoryPane() {
         title={t("systemSettings.tabs.contextMemory")}
         sub={t("systemSettings.contextMemory.paneSub")}
       />
+
+      {/* The cap first: it bounds every request, including the ones the
+          归纳 lines are about — a compaction threshold above it never fires
+          (that is what the worked example below has to keep explaining). */}
+      <div ref={utilSectionRef}>
+        <Section label={t("systemSettings.contextMemory.windowSection")}>
+          {/* The foot line shows what the percentage is *of*, for the model
+              actually selected — the same "show the arithmetic" move as the
+              归纳 example below, but one line: there is one number to derive. */}
+          <Row
+            top
+            last
+            title={t("systemSettings.contextMemory.utilizationLabel")}
+            desc={t("systemSettings.contextMemory.utilizationHint")}
+            foot={
+              <div className={styles.utilCeiling}>
+                {!activeModel
+                  ? t("systemSettings.contextMemory.utilizationNoModel")
+                  : !hasWindow
+                    ? t("systemSettings.contextMemory.utilizationNoWindow", {
+                        assumed: formatTokens(ASSUMED_INPUT_CEILING_TOKENS),
+                      })
+                    : t("systemSettings.contextMemory.utilizationCeiling", {
+                        name: activeModel.name,
+                        window: formatTokens(activeModel.contextSize!),
+                        tokens: formatTokens(Math.floor(activeModel.contextSize! * contextUtilization)),
+                      })}
+              </div>
+            }
+          >
+            <div className={styles.sliderCell}>
+              <Slider
+                value={utilPct}
+                min={Math.round(CONTEXT_UTILIZATION_MIN * 100)}
+                max={Math.round(CONTEXT_UTILIZATION_MAX * 100)}
+                onChange={(v) => setContextUtilization(v / 100)}
+                ticks={UTIL_TICKS}
+                snapToTicks
+                step={1}
+                shiftMultiplier={5}
+                ariaLabel={t("systemSettings.contextMemory.utilizationLabel")}
+                valueText={`${utilPct}%`}
+              />
+              <div className={styles.fieldRow}>
+                <input
+                  className={`${common.input} ${common.rowNumber} ${styles.mono}`}
+                  type="text"
+                  inputMode="numeric"
+                  value={utilDraft ?? String(utilPct)}
+                  onChange={(e) => setUtilDraft(e.target.value)}
+                  onBlur={commitUtil}
+                  onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  aria-label={t("systemSettings.contextMemory.utilizationLabel")}
+                />
+                <span className={styles.unit}>%</span>
+              </div>
+            </div>
+          </Row>
+        </Section>
+      </div>
 
       {/* 归纳 first: it shapes every long conversation; the picture ceiling
           only touches requests that carry one. Row order 开关 → token → 比例

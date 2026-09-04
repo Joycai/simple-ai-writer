@@ -413,6 +413,12 @@
       "imageLongEdgeHint": "A picture takes up context just like text. Pictures larger than this are scaled down before they are sent; the file on disk is untouched. Empty or 0 = send as-is.",
       "imageLongEdgeOff": "No limit",
       "paneSub": "How much a conversation puts in front of the model.",
+      "windowSection": "Window usage",
+      "utilizationLabel": "Most of the window one request may use",
+      "utilizationHint": "The share of the model's declared window a single request may occupy — what is sent, plus the room reserved for the reply. Anything past it is trimmed before sending: recaps and knowledge first, the manuscript last. Higher fits more and costs more, and a longer context measurably dilutes instruction-following. 50%–90%, shared by every project and every panel.",
+      "utilizationCeiling": "Current model {{name}} ({{window}}): at most {{tokens}} per request.",
+      "utilizationNoWindow": "The current model declares no context window, so this share cannot be computed — requests fall back to the assumed input ceiling of {{assumed}}.",
+      "utilizationNoModel": "No model selected. The share is saved and applies to the next request.",
       "imageUnit": "px",
       "imageRange": "{{min}} – {{max}} · step {{step}}",
       "elsewhereNote": "The knowledge-base budget is set in the AI panel's toolbar for now; the default max output sits at the top of Providers & Models.",
@@ -436,9 +442,8 @@
       "attrCeiling": "capped by Window usage {{util}}%",
       "attrAssumed": "capped by the assumed input ceiling of {{assumed}}; the model declares no window, so the share line cannot be computed",
       "exampleOff": "Automatic compaction is off. Neither threshold triggers anything; an over-long conversation first loses old tool results and pictures, never its text. To fold, press Compact now in the assistant or roleplay.",
-      "goCeilingLead": "Both thresholds sit above this hard cap and will not take effect yet. To change it, go to the",
-      "goCeilingLink": "AI panel · toolbar",
-      "goCeilingHint": "(not in settings)"
+      "goCeilingLead": "Both thresholds sit above this hard cap and will not take effect yet. To let them win, raise",
+      "goCeilingLink": "Window usage"
     },
     "lab": {
       "pptxLabel": "PPTX export (Beta)",
@@ -1121,7 +1126,9 @@
       "loreBudgetHint": "Max tokens the 【{{knowledge}}】 block may use ({{min}}–{{max}})",
       "replaceSelection": "Replace selection",
       "contextUtilization": "Window usage",
-      "contextUtilizationHint": "Share of the model's context window one request may occupy (~{{tokens}} tokens)",
+      "contextUtilizationGo": "Change in settings",
+      "contextUtilizationGoHint": "Set in Settings · Context & memory",
+      "contextUtilizationNoWindow": "no declared window",
       "contextUtilizationUnset": "This model has no declared context size — recap layers use fixed budgets",
       "loreBudgetStaticCap": "This model declares no context size — only {{cap}} tokens of {{entry}} content are injected",
       "loreReportTitle": "Injected {{entry}} content",
@@ -1205,7 +1212,7 @@
       "effortLabel": "Effort",
       "thinkingHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field and lets the server decide — the only choice safe on every relay. Not every model supports every level, and some (Gemini among them) cannot turn thinking off at all, so \"off\" means the lowest level they allow.",
       "effortHint": "This level governs the whole response — prose, tool calls and thinking together, not just thinking depth. \"Off\" means the lowest level on Claude rather than truly off: several models reject disabling thinking, and the vendor's own advice for spending less is to lower effort.",
-      "allocOver": "This request is estimated at {{used}} tk, past the {{ceiling}} tk ceiling — shrink the selection, raise Window usage, or pick a model with a larger context."
+      "allocOver": "This request is estimated at {{used}} tk, past the {{ceiling}} tk ceiling — shrink the selection, raise Window usage in settings, or pick a model with a larger context."
     },
     "bubble": {
       "drawer": "Drawer",
