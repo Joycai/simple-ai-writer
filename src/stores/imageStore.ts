@@ -20,7 +20,7 @@ import { nanoid } from "nanoid";
 import { generateImage, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageForModel } from "../lib/image/normalize";
-import { imageRequestParams, recordImageUsage } from "../lib/image";
+import { imageRequestParams, inputImageSize, recordImageUsage } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
 /** One calibration verdict attached to a turn (lib/image/calibrate.ts). */
@@ -296,7 +296,9 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       ...imageRequestParams(
         ctx.model.caps,
         { aspect: ctx.aspect, resolution: ctx.resolution, quality: ctx.quality, size: ctx.size },
-        { edit: images.length > 0 },
+        // The first input is the picture being edited; its size lets a
+        // dialect keep the framing at the requested tier (qwen-image).
+        { edit: images.length > 0, ...(images[0] ? { inputSize: inputImageSize(images[0]) } : {}) },
       ),
       signal: ctx.signal,
     },
