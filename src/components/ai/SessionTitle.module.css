@@ -1,0 +1,95 @@
+/* The conversation's name in the drawer header (设计稿 23 屏 1f). */
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: text;
+  font: 400 20px/1.1 var(--font-serif);
+  color: var(--color-text-primary);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  /* Hover: a grey line under the name says it can be edited here. */
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--transition-fast);
+}
+.title:hover .name { border-bottom-color: var(--color-border-muted); }
+
+/* No title yet: the chip language for "absent" — dashed, dimmer, upright 400. */
+.untitled {
+  color: var(--color-text-dim);
+  border-bottom: 1px dashed var(--color-border-emphasis);
+  padding-bottom: 2px;
+  margin-bottom: -3px;
+}
+
+.pencil {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-faint);
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+.title:hover .pencil,
+.title:focus-visible .pencil { opacity: 1; }
+.title:hover .pencil { color: var(--color-text-dim); }
+.pencilText {
+  font: 400 11px/1 var(--font-sans);
+  white-space: nowrap;
+}
+
+/* ── Editing ── */
+.editWrap { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+/* The text itself becomes the field: same font, same size, same place — the
+   1px sienna frame is the only thing that changed. */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  max-width: 560px;
+  padding: 2px 8px 2px 6px;
+  margin-left: -7px;
+  border: 1px solid var(--color-sienna);
+  background: var(--color-bg-base);
+}
+.fieldFull { border-color: var(--color-sienna-hover); }
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  font: 500 20px/1.1 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.input::placeholder { color: var(--color-text-hint); font-weight: 400; }
+
+.counter {
+  flex-shrink: 0;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  font-variant-numeric: tabular-nums;
+}
+.counterFull { color: var(--color-sienna); }
+
+.hint {
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-kbd);
+  white-space: nowrap;
+}

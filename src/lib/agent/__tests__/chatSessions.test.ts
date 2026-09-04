@@ -27,6 +27,8 @@ vi.mock("../sessionDb", () => ({
   setChatSessionTitle: db.setTitle,
   deleteChatSession: db.del,
   normalizeSessionTitle: (t: string) => t.replace(/\s+/g, " ").trim(),
+  sessionLabel: (row: { title?: string; preview?: string } | null, untitled: string) =>
+    row?.title || row?.preview || untitled,
   MAX_CHAT_SESSIONS: 5,
 }));
 vi.mock("../chatSession", () => ({
@@ -41,7 +43,8 @@ vi.mock("../chatSession", () => ({
 vi.mock("../../notify", () => ({ notify: vi.fn() }));
 
 import {
-  activeChat, chatSurface, emptyChat, isChatBusy, useAgentStore, type LiveChat,
+  activeChat, chatStateOf, chatSurface, chatWaitingSince, emptyChat, isChatBusy,
+  mostUrgentChatState, useAgentStore, type LiveChat,
 } from "../../../stores/agentStore";
 import { chatAutoApproveKey } from "../autoApprove";
 import type { Proposal } from "../registry";
@@ -181,11 +184,101 @@ describe("closing", () => {
     expect(state().autoApprove).toBeNull();
   });
 
-  it("never leaves zero tabs: closing the last one opens an empty conversation", async () => {
-    seed([withTurns("c0")]);
+  it("never leaves zero tabs: closing the last one opens an empty conversation that says where it went", async () => {
+    seed([{ ...withTurns("c0"), title: "第三章改稿" }]);
     await state().closeChat("c0");
     expect(state().chatOrder).toHaveLength(1);
     expect(activeChat(state()).turns).toEqual([]);
+    // 设计稿 23 屏 1j: 「刚关掉的「第三章改稿」在历史会话里。」
+    expect(state().lastClosedLabel).toBe("第三章改稿");
+    // ...until the author does something with the new one.
+    state().newChat();
+    expect(state().lastClosedLabel).toBeNull();
+  });
+});
+
+describe("queue", () => {
+  const job = (key: string, n: number) =>
+    ({ key, message: `q${n}`, userTurnId: `${key}-u${n}`, assistantTurnId: `${key}-a${n}` }) as never;
+
+  it("取消排队 hands the words back and drops both placeholder turns", () => {
+    seed([{ ...emptyChat("c0"), turns: [turn("c0-u1"), turn("c0-a1", "assistant")] }, withTurns("c1")]);
+    useAgentStore.setState({ runningChats: ["x", "y", "z"], chatQueue: [job("c1", 0), job("c0", 1)] });
+    expect(state().dequeueChat("c0")).toBe("q1");
+    expect(state().chatQueue.map((j) => j.key)).toEqual(["c1"]);
+    expect(chat("c0").turns).toEqual([]);
+    expect(state().dequeueChat("c0")).toBeNull();
+  });
+
+  it("插到最前 moves a conversation's jobs to the head without touching the runs", () => {
+    seed([withTurns("c0"), withTurns("c1"), withTurns("c2")]);
+    const a = new AbortController();
+    useAgentStore.setState({
+      runningChats: ["x", "y", "c2"], chatAborts: { c2: a },
+      chatQueue: [job("c0", 0), job("c1", 0), job("c0", 1)],
+    });
+    state().promoteChat("c1");
+    expect(state().chatQueue.map((j) => j.key)).toEqual(["c1", "c0", "c0"]);
+    expect(a.signal.aborted).toBe(false);
+    expect(state().runningChats).toEqual(["x", "y", "c2"]);
+  });
+});
+
+describe("换项目 while conversations are busy", () => {
+  it("asks nothing when every conversation is idle", async () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    await expect(state().confirmProjectSwitch("雪原书")).resolves.toBe(true);
+    expect(state().projectSwitchGuard).toBeNull();
+  });
+
+  it("asks once, and resolves with the author's answer", async () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    useAgentStore.setState({ runningChats: ["c1"], chatAborts: { c1: new AbortController() } });
+    const answer = state().confirmProjectSwitch("雪原书");
+    expect(state().projectSwitchGuard?.target).toBe("雪原书");
+    state().projectSwitchGuard!.resolve(false);
+    await expect(answer).resolves.toBe(false);
+    expect(state().projectSwitchGuard).toBeNull();
+  });
+
+  it("a card waiting on a background tab counts as busy", async () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    void state().requestQuestion({ question: "哪个？", options: ["a", "b"] }, {}, chatSurface("c1"));
+    const answer = state().confirmProjectSwitch(null);
+    expect(state().projectSwitchGuard).not.toBeNull();
+    state().projectSwitchGuard!.resolve(true);
+    await expect(answer).resolves.toBe(true);
+  });
+
+  it("a second ask answers the first with 留下 rather than stacking dialogs", async () => {
+    seed([withTurns("c0")]);
+    useAgentStore.setState({ runningChats: ["c0"], chatAborts: { c0: new AbortController() } });
+    const first = state().confirmProjectSwitch("A");
+    const second = state().confirmProjectSwitch("B");
+    await expect(first).resolves.toBe(false);
+    state().projectSwitchGuard!.resolve(true);
+    await expect(second).resolves.toBe(true);
+  });
+});
+
+describe("what a tab says (chatStateOf)", () => {
+  it("a waiting card outranks the run; the current tab still reports it", () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    useAgentStore.setState({ runningChats: ["c1"], chatAborts: { c1: new AbortController() } });
+    expect(chatStateOf(state(), "c1")).toBe("running");
+    void state().requestApproval(edit("e1"), {}, { surface: chatSurface("c1") });
+    expect(chatStateOf(state(), "c1")).toBe("waiting");
+    expect(chatWaitingSince(state(), "c1")).not.toBeNull();
+    // The mode tab shows the most urgent one across every conversation.
+    expect(mostUrgentChatState(state())).toBe("waiting");
+  });
+
+  it("a finished background run is unread; a failed one is error; the active one is neither on the mode tab's scale", () => {
+    seed([withTurns("c0"), { ...withTurns("c1"), unread: true }, { ...withTurns("c2"), unread: true, error: "429" }]);
+    expect(chatStateOf(state(), "c1")).toBe("unread");
+    expect(chatStateOf(state(), "c2")).toBe("error");
+    expect(chatStateOf(state(), "c0")).toBeNull();
+    expect(mostUrgentChatState(state())).toBe("error");
   });
 });
 

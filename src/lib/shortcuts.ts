@@ -167,6 +167,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "aiPolish", category: "ai", combo: { mod: true, shift: true, key: "l" }, labelKey: "aiPolish", scope: "dispatch" },
   { id: "aiSummary", category: "ai", combo: { mod: true, shift: true, key: "m" }, labelKey: "aiSummary", scope: "dispatch" },
   { id: "aiBubbleDismiss", category: "ai", combo: { key: "Escape" }, labelKey: "aiBubbleDismiss", scope: "info" },
+  // Bound by AiDrawer while it is open on 对话助手: ⌘N there is a new conversation
+  // (the file tree's ⌘N needs the tree focused, which the drawer never is).
+  { id: "aiNewChat", category: "ai", combo: { mod: true, key: "n" }, labelKey: "aiNewChat", scope: "info" },
 
   // ─── Editor (CodeMirror keymap — implemented in CodeEditor.tsx) ────────
   { id: "editorBold", category: "editor", combo: { mod: true, key: "b" }, labelKey: "editorBold", scope: "info" },

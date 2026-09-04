@@ -67,6 +67,8 @@ import {
 } from "../lib/agent/sessionDb";
 import type { ChatSnapshot } from "../lib/agent/chatSession";
 import { MAX_CONCURRENT_RUNS, nextRunnableJobIndex, ownerBusy } from "../lib/agent/scheduler";
+import { chatState, mostUrgent, type ChatState } from "../lib/agent/chatState";
+import { sessionLabel } from "../lib/agent/sessionDb";
 import type { WritingFocus } from "./editorStore";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
@@ -182,12 +184,15 @@ export interface PendingApproval extends ApprovalBinding {
   proposal: Proposal;
   resolve: (decision: ApprovalDecision) => void;
   runId: RunId;
+  /** When the card landed — the tab's 「等你 · mm:ss」 counts from here. */
+  at: number;
 }
 
 export interface PendingPlan extends SurfaceTagged {
   plan: LorePlan;
   resolve: (decision: PlanDecision) => void;
   runId: RunId;
+  at: number;
   /** Same meaning as on ApprovalBinding — plans carry their own grant flag. */
   autoApproveKey?: unknown;
 }
@@ -216,6 +221,7 @@ export interface PendingRoundLimit extends SurfaceTagged {
   canPause: boolean;
   resolve: (decision: RoundLimitDecision) => void;
   runId: RunId;
+  at: number;
 }
 
 /**
@@ -230,6 +236,7 @@ export interface PendingTruncation extends SurfaceTagged {
   recoveries: number;
   resolve: (decision: TruncationDecision) => void;
   runId: RunId;
+  at: number;
 }
 
 /**
@@ -245,6 +252,7 @@ export interface PendingQuestion extends SurfaceTagged {
   options: string[];
   resolve: (answer: AskAnswer) => void;
   runId: RunId;
+  at: number;
 }
 
 export interface ChatTurn {
@@ -361,8 +369,17 @@ export interface ChatJob {
   wireMessage: string;
   composed: MessageContent;
   imagePaths: string[];
+  /** The author's turn already on screen — what 取消排队 hands back to the composer. */
+  userTurnId: string;
   /** The empty assistant turn already on screen, where the answer streams into. */
   assistantTurnId: string;
+}
+
+/** 换项目 while conversations are busy: the question put to the author (设计稿 23 屏 1j). */
+export interface ProjectSwitchGuard {
+  /** Where the author is going — a folder name, or null for "closing the project". */
+  target: string | null;
+  resolve: (leave: boolean) => void;
 }
 
 interface AgentState {
@@ -395,6 +412,14 @@ interface AgentState {
   chatQueue: ChatJob[];
   /** The running turn's controller, per key — what 停止 and the card queues know a run by. */
   chatAborts: Record<string, AbortController>;
+  /**
+   * What the last closed tab was called, when closing it left an empty
+   * conversation behind (设计稿 23 屏 1j: the empty state says where it went).
+   * Cleared by the next send or new tab.
+   */
+  lastClosedLabel: string | null;
+  /** Non-null while 换项目 is waiting for the author's answer (设计稿 23 屏 1j). */
+  projectSwitchGuard: ProjectSwitchGuard | null;
   /**
    * Sessions for the history menu, newest first: the recent ones (≤
    * MAX_CHAT_SESSIONS) plus every pinned, named or open one, which is why this
@@ -484,6 +509,8 @@ interface AgentState {
   closeChat: (key: string) => Promise<boolean>;
   /** Name (or with `""` un-name) a conversation. Works with or without a row, running or not. */
   renameChat: (title: string, key?: string) => Promise<void>;
+  /** Name a *saved* conversation by row id — through renameChat if it is open, else straight to the row. */
+  renameSession: (id: number, title: string) => Promise<void>;
   /**
    * Delete a saved conversation for good — the caller confirms. Refuses (false)
    * while it is open and busy. An open idle one loses its tab as well.
@@ -509,6 +536,19 @@ interface AgentState {
   abortTask: (taskId: string) => Promise<void>;
   /** Stop one conversation's run (and drop its queued sends). Others keep going. */
   stopChat: (key?: string) => void;
+  /**
+   * 取消排队: drop a conversation's queued sends and hand the first one's text
+   * back (for the composer). The conversation itself stays.
+   */
+  dequeueChat: (key: string) => string | null;
+  /** 插到最前: this conversation's queued sends go to the head of the queue. */
+  promoteChat: (key: string) => void;
+  /**
+   * 换项目 / 关闭项目 with conversations generating, queued or waiting: put the
+   * question to the author once (设计稿 23 屏 1j) and resolve with their answer.
+   * Resolves true at once when everything is idle — nothing to ask.
+   */
+  confirmProjectSwitch: (target: string | null) => Promise<boolean>;
   /**
    * Author-requested compaction ("主动 compact"): fold the older turns into the
    * rolling summary right now, without waiting for the COMPACT_TRIGGER. Same
@@ -995,6 +1035,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   compactingChats: [],
   chatQueue: [],
   chatAborts: {},
+  lastClosedLabel: null,
+  projectSwitchGuard: null,
   chatSessions: [],
 
   enableAutoApprove: (key, what) =>
@@ -1052,7 +1094,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
-      const item: PendingApproval = { proposal, resolve, runId, ...binding };
+      const item: PendingApproval = { proposal, resolve, runId, at: Date.now(), ...binding };
       // Covered by a standing grant: apply now and never queue. Queuing first
       // and approving synchronously would flash the card for a frame.
       const covered =
@@ -1103,7 +1145,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set((s) => ({
         pendingRoundLimits: [
           ...s.pendingRoundLimits,
-          { id, roundsUsed, extension, canPause, resolve, runId, surface },
+          { id, roundsUsed, extension, canPause, resolve, runId, surface, at: Date.now() },
         ],
       }));
       noteCardFor(set, get, surface);
@@ -1114,7 +1156,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const id = `truncation-${++truncationCounter}`;
       set((s) => ({
         pendingTruncations: [
-          ...s.pendingTruncations, { id, recoveries, resolve, runId, surface },
+          ...s.pendingTruncations, { id, recoveries, resolve, runId, surface, at: Date.now() },
         ],
       }));
       noteCardFor(set, get, surface);
@@ -1140,7 +1182,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set((s) => ({
         pendingQuestions: [
           ...s.pendingQuestions,
-          { id, question: q.question, options: q.options, resolve, runId, surface },
+          { id, question: q.question, options: q.options, resolve, runId, surface, at: Date.now() },
         ],
       }));
       noteCardFor(set, get, surface);
@@ -1210,7 +1252,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         return;
       }
       set((s) => ({
-        pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey, surface }],
+        pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey, surface, at: Date.now() }],
       }));
       noteCardFor(set, get, surface);
       notifyApproval("notify.approvalPlan");
@@ -1276,6 +1318,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       chats: { ...st.chats, [key]: emptyChat(key) },
       chatOrder: empty ? st.chatOrder : [...st.chatOrder, key],
       activeChatKey: key,
+      lastClosedLabel: null,
     }));
     return key;
   },
@@ -1289,6 +1332,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // the author before doing so).
     if (ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue)) return false;
     await get().persistChat(key);
+    const label = sessionLabel(
+      { title: chat.title, preview: chat.turns.find((tn) => tn.role === "user")?.text ?? "" },
+      "",
+    );
     endGrantFor(set, get, key);
     void import("./composerStore").then((m) =>
       m.useComposerStore.getState().clearChatComposer(key),
@@ -1305,7 +1352,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       return { chats, chatOrder: order, activeChatKey: active };
     });
     // Never zero tabs: the composer must always have a conversation to send to.
-    if (get().chatOrder.length === 0) get().newChat();
+    // The empty one that takes its place says where the closed one went.
+    if (get().chatOrder.length === 0) {
+      get().newChat();
+      set({ lastClosedLabel: label || null });
+    }
     // A closed tab's row falls back under the ordinary cap — which the list
     // re-applies on read.
     void refreshSessionList(set, get);
@@ -1326,6 +1377,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (!projectPath) return;
     try {
       await setChatSessionTitle(projectPath, chat.sessionId, clean);
+      await refreshSessionList(set, get);
+    } catch (e) {
+      console.warn("chat session rename failed:", e);
+    }
+  },
+
+  renameSession: async (id, title) => {
+    const s = get();
+    const openKey = s.chatOrder.find((k) => s.chats[k]?.sessionId === id);
+    if (openKey) return get().renameChat(title, openKey);
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+    try {
+      await setChatSessionTitle(projectPath, id, normalizeSessionTitle(title));
       await refreshSessionList(set, get);
     } catch (e) {
       console.warn("chat session rename failed:", e);
@@ -1450,8 +1516,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       chatQueue: [...s.chatQueue, {
         key, projectPath, focus, message, quoted, refs, opts,
         model, provider, effectiveSubs, wireMessage, composed, imagePaths,
+        userTurnId: userTurn.id,
         assistantTurnId: assistantTurn.id,
       }],
+      lastClosedLabel: null,
     }));
     pump(set, get);
   },
@@ -1483,6 +1551,51 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       patchChat(set, k, (c) => ({ turns: c.turns.filter((tn) => !dropped.includes(tn.id)) }));
     }
     pump(set, get);
+  },
+
+  dequeueChat: (key) => {
+    const mine = get().chatQueue.filter((j) => j.key === key);
+    if (mine.length === 0) return null;
+    // Both placeholder turns go: the words go back to the composer, so leaving
+    // them in the transcript would show the question twice.
+    const gone = new Set(mine.flatMap((j) => [j.userTurnId, j.assistantTurnId]));
+    set((s) => ({ chatQueue: s.chatQueue.filter((j) => j.key !== key) }));
+    patchChat(set, key, (c) => ({ turns: c.turns.filter((tn) => !gone.has(tn.id)) }));
+    return mine[0].message;
+  },
+
+  promoteChat: (key) => {
+    set((s) => {
+      const mine = s.chatQueue.filter((j) => j.key === key);
+      if (mine.length === 0) return {};
+      return { chatQueue: [...mine, ...s.chatQueue.filter((j) => j.key !== key)] };
+    });
+    // Only the order changed — but a slot may be free and this one skipped
+    // for being behind a busy owner's job.
+    pump(set, get);
+  },
+
+  confirmProjectSwitch: (target) => {
+    const s = get();
+    const busy = s.chatOrder.some((k) => ownerBusy(k, s.runningChats, s.compactingChats, s.chatQueue))
+      || s.chatOrder.some((k) => chatStateOf(s, k) === "waiting");
+    // Idle everywhere: nothing the author could not know about, so no question
+    // — today's single-conversation behaviour.
+    if (!busy) return Promise.resolve(true);
+    // A second ask while one is open answers the first with "stay": two
+    // dialogs for one decision would be worse than a refused switch.
+    get().projectSwitchGuard?.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      set({
+        projectSwitchGuard: {
+          target,
+          resolve: (leave) => {
+            set({ projectSwitchGuard: null });
+            resolve(leave);
+          },
+        },
+      });
+    });
   },
 
   compactChatNow: async (key) => {
@@ -1804,6 +1917,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       compactingChats: [],
       chatQueue: [],
       chatAborts: {},
+      lastClosedLabel: null,
       chatSessions: [],
       autoApprove: isChatAutoApproveKey(get().autoApprove?.key) ? null : get().autoApprove,
     });
@@ -2728,6 +2842,48 @@ export function useActiveChat<T>(selector: (c: LiveChat) => T): T {
 export function chatSurface(key: string): string {
   return `chat:${key}`;
 }
+
+/** Whether a card is blocking this conversation's run (any of the five kinds). */
+export function chatWaiting(s: AgentState, key: string): boolean {
+  const surface = chatSurface(key);
+  return s.pending.some((p) => p.surface === surface)
+    || s.pendingPlans.some((p) => p.surface === surface)
+    || s.pendingQuestions.some((p) => p.surface === surface)
+    || s.pendingRoundLimits.some((p) => p.surface === surface)
+    || s.pendingTruncations.some((p) => p.surface === surface);
+}
+
+/** When the oldest card blocking this conversation landed, or null. */
+export function chatWaitingSince(s: AgentState, key: string): number | null {
+  const surface = chatSurface(key);
+  const ats = [
+    ...s.pending, ...s.pendingPlans, ...s.pendingQuestions,
+    ...s.pendingRoundLimits, ...s.pendingTruncations,
+  ].filter((p) => p.surface === surface).map((p) => p.at);
+  return ats.length ? Math.min(...ats) : null;
+}
+
+/** The one mark a conversation's tab wears (lib/agent/chatState). */
+export function chatStateOf(s: AgentState, key: string): ChatState | null {
+  const c = s.chats[key];
+  if (!c) return null;
+  return chatState({
+    running: s.runningChats.includes(key),
+    queued: s.chatQueue.some((j) => j.key === key),
+    waiting: chatWaiting(s, key),
+    unread: c.unread,
+    error: c.error !== null,
+  });
+}
+
+/** The one mark the mode tab wears for every conversation together. */
+export function mostUrgentChatState(s: AgentState): ChatState | null {
+  return mostUrgent(s.chatOrder.map((k) => chatStateOf(s, k)));
+}
+
+/** 0-based position in the queue, or -1. */
+export const chatQueuePosition = (s: AgentState, key: string) =>
+  s.chatQueue.findIndex((j) => j.key === key);
 
 export const isChatRunning = (s: AgentState, key: string) => s.runningChats.includes(key);
 export const isChatCompacting = (s: AgentState, key: string) => s.compactingChats.includes(key);

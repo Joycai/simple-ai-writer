@@ -1,11 +1,11 @@
 # 给 Claude Design 的 UI 设计任务书：对话助手的多个会话
 
-> **状态**：`proposal` —— 任务书写好，设计稿未请求。对应的设计方案是
-> [`chat-sessions-plan.md`](chat-sessions-plan.md)。
+> **状态**：`shipped` —— 设计稿已回（claude.ai/design 项目 `23 助手多会话 Assistant Sessions.dc.html`，
+> 屏 1a–1j），并已落地；设计稿怎么回答四个张力、以及实现时的出入，记在
+> [`chat-sessions-plan.md`](chat-sessions-plan.md) §11。下面保留原任务书正文，作为「问了什么」的记录。
 > 这份文件是**自包含的**——底下 `---` 以后的全部内容可以整段复制丢给 Claude Design，
-> 不需要它读代码库。请求时新开一页 `23 会话 Sessions`（编号接在 22 一致性检查之后）。
-> 设计稿回来之后，在文末补「设计稿回来之后」一节，并把视觉口径抄进
-> [`docs/reference/design-system.md`](../../reference/design-system.md) → AI 面板设计语言。
+> 不需要它读代码库。视觉口径已抄进
+> [`docs/reference/design-system.md`](../../reference/design-system.md) → AI 面板设计语言（多个会话）。
 
 ---
 

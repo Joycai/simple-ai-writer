@@ -811,3 +811,95 @@
   opacity: 0.34;
   transition: opacity 140ms var(--ease-out);
 }
+
+/* ── 多个会话 (设计稿 23) ─────────────────────────────────────────────────── */
+
+/* 1g/1j: the empty conversation — two lines of serif, nothing else. */
+.emptyState {
+  margin: auto;
+  max-width: 46ch;
+  text-align: center;
+}
+.emptyTitle {
+  font: 400 18px/1.4 var(--font-serif);
+  color: var(--color-text-soft);
+}
+.emptyBody {
+  margin-top: 8px;
+  font: 400 12.5px/1.8 var(--font-serif);
+  color: var(--color-text-dim);
+}
+
+/* 1i: stopped at a card — the transcript steps back so the card reads first. */
+.messagesDim { opacity: 0.55; transition: opacity 240ms var(--ease-out); }
+/* The card is the one thing in this conversation with a 2px sienna top line —
+   the same line as the current tab's. */
+.approvals > :first-child { box-shadow: inset 0 2px 0 var(--color-sienna); }
+
+/* 1h: 排队 — the roster's queue card, in this conversation's words. */
+.queueCard {
+  margin: 0 var(--space-6) var(--space-3) calc(var(--space-6) + 8px + var(--space-3));
+  padding: 10px 14px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: dropIn 200ms var(--ease-out);
+}
+.queueRow { display: flex; align-items: center; gap: 11px; }
+.queueText { font: 400 13px/1.5 var(--font-sans); color: var(--color-text-soft); }
+.queueHint { font: 400 11px/1 var(--font-mono); color: var(--color-text-hint); }
+.queueSpacer { flex: 1; }
+.queueBtn,
+.queueBtnAccent {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.queueBtn:hover { color: var(--color-text-primary); }
+.queueBtnAccent { color: var(--color-sienna); font-weight: 500; }
+.queueBtnAccent:hover { color: var(--color-sienna-hover); }
+.queueRunning {
+  display: flex;
+  gap: 6px;
+  padding-left: calc(5px + 11px);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-hint);
+}
+.queueRunningNames {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 1i: the composer's place while a card blocks the run — a sentence, not a
+   greyed field. Same frame as the input, so nothing jumps. */
+.waitingLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-input);
+  background: var(--color-bg-base);
+}
+.waitingText {
+  flex: 1;
+  min-width: 0;
+  font: 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-soft);
+}
+.waitingArrow {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-kbd);
+  white-space: nowrap;
+}

@@ -36,7 +36,12 @@ import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../li
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
-import { activeChat, chatSurface, useActiveChat, useAgentStore, type ChatTurn } from "../../stores/agentStore";
+import {
+  activeChat, chatQueuePosition, chatSurface, useActiveChat, useAgentStore, type ChatTurn,
+} from "../../stores/agentStore";
+import { MAX_CONCURRENT_RUNS } from "../../lib/agent/scheduler";
+import { liveLabel } from "../../lib/agent/chatLabel";
+import { ChatMark } from "./ChatMark";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
@@ -113,6 +118,19 @@ export function AgentChat() {
   // Waiting for a slot (three conversations already generating): busy like
   // running, drawn differently.
   const chatQueued = useAgentStore((s) => s.chatQueue.some((j) => j.key === s.activeChatKey));
+  const queuePos = useAgentStore((s) => chatQueuePosition(s, s.activeChatKey));
+  // Who holds the slots — names only, joined into one string so this is a
+  // primitive subscription. The one place conversations "see" each other, and
+  // what they see is a name (设计稿 23 屏 1h).
+  const runningLabels = useAgentStore((s) => s.runningChats
+    .map((k) => { const c = s.chats[k]; return c ? liveLabel(c).text : ""; })
+    .filter(Boolean)
+    .join(" · "));
+  const otherTabs = useAgentStore((s) => s.chatOrder.length - 1);
+  const lastClosedLabel = useAgentStore((s) => s.lastClosedLabel);
+  const hasHistory = useAgentStore((s) => s.chatSessions.length > 0);
+  const dequeueChat = useAgentStore((s) => s.dequeueChat);
+  const promoteChat = useAgentStore((s) => s.promoteChat);
   const chatError = useActiveChat((c) => c.error);
   const allPending = useAgentStore((s) => s.pending);
   const allPlans = useAgentStore((s) => s.pendingPlans);
@@ -140,6 +158,10 @@ export function AgentChat() {
   const pendingRoundLimits = cardsForSurface(allRoundLimits, surface);
   const pendingTruncations = cardsForSurface(allTruncations, surface);
   const pendingQuestions = cardsForSurface(allQuestions, surface);
+  // Stopped at a card (设计稿 23 屏 1i): the transcript steps back, the card is
+  // the one thing with a top line, and the composer becomes a sentence.
+  const waiting = pending.length + pendingPlans.length + pendingRoundLimits.length
+    + pendingTruncations.length + pendingQuestions.length > 0;
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const subAgents = useAiStore((s) => s.subAgents);
@@ -659,11 +681,32 @@ export function AgentChat() {
           belongs to the bottom of the *scroller*, and the chrome below it
           (approval cards, task band, composer) changes height constantly. */}
       <div className={styles.viewport}>
-        <div ref={messagesRef} className={styles.messages}>
+        <div ref={messagesRef} className={`${styles.messages} ${waiting ? styles.messagesDim : ""}`}>
           {turns.length === 0 && (
-            <div className={styles.emptyHint}>
-              {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
-            </div>
+            // 设计稿 23 屏 1g/1j: two lines, no sample prompts — the other tabs are
+            // still working, this one need not be loud. The one exception is the
+            // author's very first conversation, with nothing open or saved: then
+            // the old guidance is the only thing that says what this is.
+            otherTabs === 0 && !hasHistory && !lastClosedLabel ? (
+              <div className={styles.emptyHint}>
+                {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyTitle}>{t("ai.chat.emptyTitle", { defaultValue: "新的一段。" })}</div>
+                <div className={styles.emptyBody}>
+                  {otherTabs > 0 && (
+                    <>
+                      {t("ai.chat.emptyOthers", { n: otherTabs, defaultValue: `其余 ${otherTabs} 段照跑，回来时字都在。` })}
+                      <br />
+                    </>
+                  )}
+                  {lastClosedLabel
+                    ? t("ai.chat.emptyClosed", { name: lastClosedLabel, defaultValue: `刚关掉的「${lastClosedLabel}」在历史会话里。` })
+                    : t("ai.chat.emptyUnsaved", { defaultValue: "这一段还没存过；起个名或发第一句，它就留下了。" })}
+                </div>
+              </div>
+            )
           )}
           {foldableAt > 0 && (
             <button className={styles.foldBar} onClick={toggleFold} aria-expanded={showAll}>
@@ -742,6 +785,40 @@ export function AgentChat() {
           </button>
         )}
       </div>
+
+      {/* 排队 (设计稿 23 屏 1h): the same card as the roster's, in this
+          conversation's words, plus who holds the slots. The readout stays on the
+          tab strip — it is global, the card is this conversation's. */}
+      {chatQueued && (
+        <div className={styles.queueCard}>
+          <div className={styles.queueRow}>
+            <ChatMark state="queued" />
+            <span className={styles.queueText}>
+              {t("ai.chat.queueWaiting", { n: Math.max(0, queuePos), defaultValue: `排队中 · 前面还有 ${Math.max(0, queuePos)} 段` })}
+            </span>
+            <span className={styles.queueHint}>
+              {t("ai.chat.queueHint", { max: MAX_CONCURRENT_RUNS, defaultValue: `同时最多 ${MAX_CONCURRENT_RUNS} 段会话生成` })}
+            </span>
+            <span className={styles.queueSpacer} />
+            <button
+              type="button"
+              className={styles.queueBtn}
+              onClick={() => { const text = dequeueChat(activeKey); if (text) setDraft(text); }}
+            >
+              {t("ai.chat.queueCancel", { defaultValue: "取消排队" })}
+            </button>
+            <button type="button" className={styles.queueBtnAccent} onClick={() => promoteChat(activeKey)}>
+              {t("ai.chat.queuePromote", { defaultValue: "插到最前" })}
+            </button>
+          </div>
+          {runningLabels && (
+            <div className={styles.queueRunning}>
+              <span>{t("ai.chat.queueRunning", { defaultValue: "正在跑的：" })}</span>
+              <span className={styles.queueRunningNames}>{runningLabels}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {chatError && <div className={styles.error}>{chatError}</div>}
 
@@ -897,6 +974,19 @@ export function AgentChat() {
 
         {refError && <div className={styles.refError}>{refError}</div>}
 
+        {waiting ? (
+          // Not disabled (not grey): a statement of why it waits, with the same
+          // mark the tab and the card carry — three on one vertical line.
+          <div className={styles.waitingLine}>
+            <ChatMark state="waiting" />
+            <span className={styles.waitingText}>
+              {t("ai.chat.waitingLine", { defaultValue: "这段停在上面那张卡。批准或拒绝之后才能继续说话。" })}
+            </span>
+            <span className={styles.waitingArrow}>
+              {t("ai.chat.waitingArrow", { defaultValue: "↑ 卡就在输入框上方" })}
+            </span>
+          </div>
+        ) : (
         <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
           <textarea
             ref={inputRef}
@@ -960,6 +1050,7 @@ export function AgentChat() {
             )}
           </div>
         </div>
+        )}
       </div>
       {/* The right-click menu / naming popover for every surface in this panel. */}
       {snippetSave.node}
