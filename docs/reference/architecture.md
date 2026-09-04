@@ -409,6 +409,17 @@ Because the tools now *await* the rescan, `loreStore.scanProject` has to be wort
 
 A preset carrying lore *write* tools must supply `onLoreChanged`; it stays optional on `ToolContext` only because the read-only presets legitimately have nothing to write.
 
+### 当前时间 (`lib/context/clock.ts`)
+
+模型自己没有钟。system 提示是一段静态身份，briefing 是一张静态规则表，工具表里也没有一个「现在几点」——所以在这条线接上之前，助手答「今天几号」靠的是训练截止日，周报包的「上一期」按日期找文件时找的是去年。修法是**一行字，不是一个工具**：工具的 schema 每次请求都要发、模型还得决定调不调，而一行 `当前时间：2026-09-04 星期五 14:32（时区 Asia/Shanghai）` 只有 25 个 token、零轮次。时间按作者本机时区给（不是 UTC——作者写「今晚八点」写的是自己的时区，给 UTC 模型会反过来纠正作者），星期跟界面语言，数字强制拉丁。
+
+**这行字放在哪里由缓存决定，不由整洁决定。** Prompt cache 是前缀缓存（OpenAI 的自动缓存、Anthropic 的 block 断点都是）：命中的是和上一次请求完全相同的最长前缀。
+
+- **单次运行**（AiPanel 任务、批量、子代理、`run_pack` 子运行、写手交接）的 system 层每次运行只建一次，时间就挂在它**末尾**（`withCurrentTime`）：前面的静态文本照样命中，一个工具循环里的各轮共享同一个时间戳，后面没有任何东西依赖它。
+- **多轮对话**正相反。它的历史跨发送持续存在，第 N 轮的整份历史就是第 N+1 轮的缓存前缀；时间戳若放在 system 消息里，每次发送都变，等于为了 25 个 token 把它后面的全部——每一轮、每条工具结果、每张图——全部作废。所以聊天把时间戳打在**当前这一轮的用户消息**上（`currentTimeLine` 经 `withDirective`，和计划模式指令走同一条缝）：它接在最新一条消息后面、落在缓存前缀之外，而历史里每一轮都留着自己的发送时间——作者第二天早上接着聊时，模型本来就该看到这些。
+
+**刻意不打时间戳的**：角色扮演（人物活在故事的时间里，作者的挂钟正是那种会漏进正文的事实；旁白要真实时间戳时读的是 transcript 自带的那份）、一致性检查（对照的是知识库，日期不是它核的事实）、各种归纳器（压缩、文库摘要、故事记忆——把「今天」编进摘要是错的）、结构化一次性提取，以及 Sakura（它的 system 是训练时固定的模板）。`src/lib/__tests__/currentTime.test.ts` 的源码扫描把这两张名单钉死：任何新建 `role: "system"` 消息的文件都必须进 REQUIRED 或带着理由进 EXEMPT。
+
 ### Images in context (谁能看图，看多久)
 
 A picture reaches a model exactly one way: an `image_url` part on a `role: "user"` message (`ContentPart`, `lib/ai/types.ts`). Everything below is about who is allowed to create one and what happens to it afterwards.
