@@ -8,9 +8,11 @@
  * note. Everything idle: no dialog (agentStore.confirmProjectSwitch resolves at
  * once). Esc and the backdrop mean 留下.
  */
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  chatQueuePosition, chatStateOf, useAgentStore, type LiveChat,
+  chatQueuePosition, chatStateOf, useAgentStore, useChatStateInputs,
+  type ChatStateInputs, type LiveChat,
 } from "../../stores/agentStore";
 import { liveLabel, roundsOf } from "../../lib/agent/chatLabel";
 import type { ChatState } from "../../lib/agent/chatState";
@@ -27,20 +29,24 @@ interface BusyRow {
   queuePos: number;
 }
 
+function busyRows(s: ChatStateInputs): BusyRow[] {
+  return s.chatOrder.flatMap((key) => {
+    const chat = s.chats[key];
+    if (!chat) return [];
+    const state = chatStateOf(s, key);
+    const compacting = s.compactingChats.includes(key);
+    if (!compacting && state !== "running" && state !== "queued" && state !== "waiting") return [];
+    const last = [...chat.turns].reverse().find((tn) => tn.role === "assistant");
+    return [{ key, chat, state, compacting, rounds: last ? roundsOf(last.log) : 0, queuePos: chatQueuePosition(s, key) }];
+  });
+}
+
 export function ChatSwitchGuard() {
   const { t } = useTranslation();
   const guard = useAgentStore((s) => s.projectSwitchGuard);
-  const rows = useAgentStore((s): BusyRow[] =>
-    s.chatOrder.flatMap((key) => {
-      const chat = s.chats[key];
-      if (!chat) return [];
-      const state = chatStateOf(s, key);
-      const compacting = s.compactingChats.includes(key);
-      if (!compacting && state !== "running" && state !== "queued" && state !== "waiting") return [];
-      const last = [...chat.turns].reverse().find((tn) => tn.role === "assistant");
-      return [{ key, chat, state, compacting, rounds: last ? roundsOf(last.log) : 0, queuePos: chatQueuePosition(s, key) }];
-    }),
-  );
+  // Derived in a memo, never in the selector — see ChatStateInputs.
+  const inputs = useChatStateInputs();
+  const rows = useMemo<BusyRow[]>(() => (guard ? busyRows(inputs) : []), [guard, inputs]);
   if (!guard) return null;
 
   const queued = rows.filter((r) => r.state === "queued").length;

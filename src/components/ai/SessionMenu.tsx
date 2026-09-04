@@ -24,7 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pencil, Pin, Search, Trash2 } from "lucide-react";
 import {
-  chatQueuePosition, chatStateOf, chatWaitingSince, isChatBusy, useAgentStore, type LiveChat,
+  chatQueuePosition, chatStateOf, chatWaitingSince, isChatBusy, useAgentStore, useChatStateInputs,
+  type LiveChat,
 } from "../../stores/agentStore";
 import {
   MAX_SESSION_TITLE_CHARS, normalizeSessionTitle, splitChatSessions, type ChatSessionRow,
@@ -64,22 +65,23 @@ export function SessionMenu({ onClose }: { onClose: () => void }) {
   const rows = useAgentStore((s) => s.chatSessions);
   // One subscription for the open conversations' labels/states — the menu is
   // open briefly, so re-rendering it per token is acceptable here where it is
-  // not on the always-mounted strip.
-  const openEntries = useAgentStore((s): OpenEntry[] =>
-    s.chatOrder.map((key) => {
-      const c = s.chats[key];
-      const row = c?.sessionId != null ? s.chatSessions.find((r) => r.id === c.sessionId) : undefined;
+  // not on the always-mounted strip. The array itself is built in a memo, not
+  // in the selector (a fresh array per call is React #185 — see ChatStateInputs).
+  const inputs = useChatStateInputs();
+  const openEntries = useMemo<OpenEntry[]>(() =>
+    inputs.chatOrder.map((key) => {
+      const c = inputs.chats[key];
+      const row = c?.sessionId != null ? inputs.chatSessions.find((r) => r.id === c.sessionId) : undefined;
       return {
         kind: "open",
         key,
         sessionId: c?.sessionId ?? null,
         label: c ? liveLabel(c) : { text: "", kind: "none" },
         pinned: row?.pinned ?? false,
-        state: chatStateOf(s, key),
-        active: key === s.activeChatKey,
+        state: chatStateOf(inputs, key),
+        active: key === inputs.activeChatKey,
       };
-    }),
-  );
+    }), [inputs]);
   const activateChat = useAgentStore((s) => s.activateChat);
   const switchChatSession = useAgentStore((s) => s.switchChatSession);
   const toggleChatSessionPin = useAgentStore((s) => s.toggleChatSessionPin);

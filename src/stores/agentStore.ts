@@ -44,6 +44,7 @@
  */
 
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { applyFindReplace, applyInsertions } from "../lib/agent/editApply";
@@ -2838,13 +2839,41 @@ export function useActiveChat<T>(selector: (c: LiveChat) => T): T {
   return useAgentStore((s) => selector(activeChat(s)));
 }
 
+/**
+ * The slices every per-conversation state helper below reads. A component that
+ * derives an *array* over several conversations (the switch guard's rows, the
+ * history menu's 已打开 section) must not build it inside a `useAgentStore`
+ * selector: a selector returning a fresh array on every call never compares
+ * equal, and under useSyncExternalStore that is an infinite render loop (React
+ * #185, seen on first paint in the packaged app). Subscribe to these slices by
+ * reference through `useChatStateInputs` and compute in `useMemo` instead.
+ */
+export type ChatStateInputs = Pick<
+  AgentState,
+  | "chats" | "chatOrder" | "activeChatKey" | "chatSessions"
+  | "runningChats" | "compactingChats" | "chatQueue"
+  | "pending" | "pendingPlans" | "pendingQuestions" | "pendingRoundLimits" | "pendingTruncations"
+>;
+
+export const pickChatStateInputs = (s: AgentState): ChatStateInputs => ({
+  chats: s.chats, chatOrder: s.chatOrder, activeChatKey: s.activeChatKey, chatSessions: s.chatSessions,
+  runningChats: s.runningChats, compactingChats: s.compactingChats, chatQueue: s.chatQueue,
+  pending: s.pending, pendingPlans: s.pendingPlans, pendingQuestions: s.pendingQuestions,
+  pendingRoundLimits: s.pendingRoundLimits, pendingTruncations: s.pendingTruncations,
+});
+
+/** The slices above, shallow-compared so the subscription re-renders only when one of them moved. */
+export function useChatStateInputs(): ChatStateInputs {
+  return useAgentStore(useShallow(pickChatStateInputs));
+}
+
 /** The routing tag for one conversation's cards (lib/agent/approvalRouting). */
 export function chatSurface(key: string): string {
   return `chat:${key}`;
 }
 
 /** Whether a card is blocking this conversation's run (any of the five kinds). */
-export function chatWaiting(s: AgentState, key: string): boolean {
+export function chatWaiting(s: ChatStateInputs, key: string): boolean {
   const surface = chatSurface(key);
   return s.pending.some((p) => p.surface === surface)
     || s.pendingPlans.some((p) => p.surface === surface)
@@ -2854,7 +2883,7 @@ export function chatWaiting(s: AgentState, key: string): boolean {
 }
 
 /** When the oldest card blocking this conversation landed, or null. */
-export function chatWaitingSince(s: AgentState, key: string): number | null {
+export function chatWaitingSince(s: ChatStateInputs, key: string): number | null {
   const surface = chatSurface(key);
   const ats = [
     ...s.pending, ...s.pendingPlans, ...s.pendingQuestions,
@@ -2864,7 +2893,7 @@ export function chatWaitingSince(s: AgentState, key: string): number | null {
 }
 
 /** The one mark a conversation's tab wears (lib/agent/chatState). */
-export function chatStateOf(s: AgentState, key: string): ChatState | null {
+export function chatStateOf(s: ChatStateInputs, key: string): ChatState | null {
   const c = s.chats[key];
   if (!c) return null;
   return chatState({
@@ -2877,17 +2906,17 @@ export function chatStateOf(s: AgentState, key: string): ChatState | null {
 }
 
 /** The one mark the mode tab wears for every conversation together. */
-export function mostUrgentChatState(s: AgentState): ChatState | null {
+export function mostUrgentChatState(s: ChatStateInputs): ChatState | null {
   return mostUrgent(s.chatOrder.map((k) => chatStateOf(s, k)));
 }
 
 /** 0-based position in the queue, or -1. */
-export const chatQueuePosition = (s: AgentState, key: string) =>
+export const chatQueuePosition = (s: ChatStateInputs, key: string) =>
   s.chatQueue.findIndex((j) => j.key === key);
 
-export const isChatRunning = (s: AgentState, key: string) => s.runningChats.includes(key);
-export const isChatCompacting = (s: AgentState, key: string) => s.compactingChats.includes(key);
-export const isChatQueued = (s: AgentState, key: string) => s.chatQueue.some((j) => j.key === key);
+export const isChatRunning = (s: ChatStateInputs, key: string) => s.runningChats.includes(key);
+export const isChatCompacting = (s: ChatStateInputs, key: string) => s.compactingChats.includes(key);
+export const isChatQueued = (s: ChatStateInputs, key: string) => s.chatQueue.some((j) => j.key === key);
 /** Generating, folding or waiting for a slot — no new exclusive work may start. */
-export const isChatBusy = (s: AgentState, key: string) =>
+export const isChatBusy = (s: ChatStateInputs, key: string) =>
   ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue);
