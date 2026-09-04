@@ -140,10 +140,15 @@ export const useBatchStore = create<BatchState>((set, get) => ({
       useAiTaskStore.getState().clearSelectionFrom("commit");
       unmute();
       const finished = get().items;
-      notify("done", i18n.t("notify.doneTitle"), i18n.t("notify.batchDone", {
-        done: String(finished.filter((it) => it.status === "done").length),
-        failed: String(finished.filter((it) => it.status === "failed").length),
-      }));
+      const done = finished.filter((it) => it.status === "done").length;
+      const failed = finished.filter((it) => it.status === "failed").length;
+      // A batch with any failed clause goes out as a failure: the author who
+      // keeps only the "run failed" switch on still has a summary to read.
+      notify(
+        failed > 0 ? "error" : "done",
+        i18n.t(failed > 0 ? "notify.failedTitle" : "notify.doneTitle"),
+        i18n.t("notify.batchDone", { done: String(done), failed: String(failed) }),
+      );
       set({ running: false });
     }
   },

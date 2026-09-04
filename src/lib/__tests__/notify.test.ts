@@ -73,13 +73,16 @@ describe("switches", () => {
   it("defaults each kind to on, since the master switch is the opt-in", () => {
     expect(isNotifyKindEnabled("approval")).toBe(true);
     expect(isNotifyKindEnabled("done")).toBe(true);
+    expect(isNotifyKindEnabled("error")).toBe(true);
   });
 
-  it("round-trips both levels", () => {
+  it("round-trips both levels, one kind at a time", () => {
     setNotifyEnabled(true);
     setNotifyKindEnabled("done", false);
     expect(isNotifyEnabled()).toBe(true);
     expect(isNotifyKindEnabled("done")).toBe(false);
+    // A failure is its own switch: dropping "finished" must not silence it.
+    expect(isNotifyKindEnabled("error")).toBe(true);
     expect(isNotifyKindEnabled("approval")).toBe(true);
   });
 });

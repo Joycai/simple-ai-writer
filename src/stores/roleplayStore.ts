@@ -868,6 +868,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           liveLog: appendAgentEventTo(s.liveLog, { kind: "run-error", message: msg, at: Date.now() }),
         }));
         recordRunOutcome(model.id, msg);
+        // A reply that never came is worth a ping whichever agent is on screen —
+        // the focus gate in lib/notify is what keeps it quiet in the foreground.
+        notify("error", i18n.t("notify.failedTitle"), i18n.t("roleplay.notify.failed", {
+          name: agent.name, error: msg, defaultValue: `${agent.name} 的回复失败了：${msg}`,
+        }));
       }
     } finally {
       const { useAgentStore } = await import("./agentStore");

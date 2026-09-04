@@ -167,15 +167,15 @@ interface AiTaskState {
 }
 
 /**
- * The OS ping for "this task is over", sent once the run has actually let go
- * of the store. A clause batch drives this store once per clause and mutes
+ * The OS ping for "this task is over" — `done` or `error` by outcome — sent
+ * once the run has actually let go of the store. A clause batch drives this store once per clause and mutes
  * these for the duration, announcing the whole job itself (batchStore).
  */
 function notifyRunFinished(kind: TaskKind, failure: string | null): void {
   const def = findTask(kind);
   const label = def ? taskLabel(def, i18n.language === "zh-CN", (k) => i18n.t(k)) : kind;
   notify(
-    "done",
+    failure ? "error" : "done",
     i18n.t(failure ? "notify.failedTitle" : "notify.doneTitle"),
     failure
       ? i18n.t("notify.taskFailed", { task: label, error: failure })
