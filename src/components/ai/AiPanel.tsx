@@ -109,9 +109,6 @@ const DEFAULT_DETAIL_SPAN = RECENT_WINDOW_MIN_CHARS;
  * [LORE_BUDGET_MIN, LORE_BUDGET_MAX] for large-context models.
  */
 
-/** Context-window utilization presets (see lib/context/budget). */
-const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
-
 /** Compact token count: 1000000 → "1M", 32000 → "32k", 600 → "600".
  *  Shares contextLabel's scale so a window reads the same here and in the
  *  model picker's badge. */
@@ -173,12 +170,19 @@ function SectionHead({
 // that also held the *selected* task, and the tool-schema line read the wrong
 // one. See that file's header for what that cost.
 
-/** Stacked bar + legend + the 窗口占用 control that resizes the whole budget. */
+/**
+ * Stacked bar + legend + a readout of the 窗口占用 the bar is a share of.
+ *
+ * The chip row that used to set it moved to 设置 → 上下文与记忆 on 2026-09-05
+ * (one slider, 50–90%, instead of four chips duplicated across two surfaces).
+ * The number stays here because the bar is meaningless without it — this is
+ * the ceiling every segment is competing for — but changing it is one hop away.
+ */
 function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const { t } = useTranslation();
   const terms = useTerms();
   const contextUtilization = useAppStore((s) => s.contextUtilization);
-  const setContextUtilization = useAppStore((s) => s.setContextUtilization);
+  const openSettings = useAppStore((s) => s.openSettings);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const contextSize = activeModel?.contextSize ?? 0;
 
@@ -246,7 +250,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
         <div className={styles.allocOverNote}>
           {t("ai.panel.allocOver", {
             defaultValue:
-              "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、调高「窗口占用」，或换一个上下文更大的模型。",
+              "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、在设置里调高「窗口占用」，或换一个上下文更大的模型。",
             used: formatBudget(forecast.usedTokens),
             ceiling: formatBudget(forecast.ceilingTokens),
           })}
@@ -257,23 +261,20 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
         <span className={styles.controlLabel}>
           {t("ai.panel.contextUtilization", { defaultValue: "窗口占用" })}
         </span>
-        <div className={styles.chipGroup}>
-          {UTILIZATION_OPTIONS.map((r) => (
-            <button
-              key={r}
-              className={`${styles.chip} ${Math.abs(contextUtilization - r) < 0.001 ? styles.chipActive : ""}`}
-              onClick={() => setContextUtilization(r)}
-              disabled={contextSize <= 0}
-              title={contextSize > 0
-                ? t("ai.panel.contextUtilizationHint", {
-                    tokens: Math.floor(contextSize * r).toLocaleString(),
-                  })
-                : t("ai.panel.contextUtilizationUnset")}
-            >
-              {Math.round(r * 100)}%
-            </button>
-          ))}
-        </div>
+        <button
+          className={styles.linkBtn}
+          onClick={() => openSettings("context-memory")}
+          title={t("ai.panel.contextUtilizationGoHint", {
+            defaultValue: "在「设置 · 上下文与记忆」里调",
+          })}
+        >
+          {t("ai.panel.contextUtilizationGo", { defaultValue: "设置里调" })} →
+        </button>
+        <span className={styles.controlUnit}>
+          {contextSize > 0
+            ? `${Math.round(contextUtilization * 100)}%`
+            : t("ai.panel.contextUtilizationNoWindow", { defaultValue: "未声明窗口" })}
+        </span>
       </div>
 
       {/* Directly below 窗口占用: both answer "how much does this run cost me",

@@ -149,3 +149,14 @@
 }
 .goLink:hover { color: var(--color-sienna-hover); border-bottom-color: currentColor; }
 .goHint { font-size: var(--font-size-xs); color: var(--color-text-faint); }
+
+/* 窗口占用's derived line — what the percentage works out to on the model that
+   is actually selected. Mono like every other computed readout on this page;
+   it sits under the description, so it wraps and needs real leading. */
+.utilCeiling {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-text-faint);
+}

@@ -10,6 +10,7 @@ import {
   RECENT_WINDOW_MIN_CHARS,
   STATIC_LORE_BUDGET_MAX_TOKENS,
   CONTEXT_UTILIZATION_MAX,
+  CONTEXT_UTILIZATION_MIN,
   type ContextBudgetInput,
 } from "../context/budget";
 import { estimateTextTokens } from "../ai/tokenEstimate";
@@ -198,13 +199,17 @@ describe("planContextBudget — dynamic", () => {
   });
 
   it("trims lore rather than overflowing when the window can't hold it", () => {
-    // 16k × 0.95 = 15564, minus the 2k reserve = 13564 tokens of room; 1000 is
-    // fixed and 2400 is the verbatim floor, leaving far less than the 32k-token
-    // lore request — so lore is cut to fit instead of blowing the window.
+    // 16k at the highest utilization the app offers, minus the 2k reserve; 1000
+    // is fixed and 2400 is the verbatim floor, leaving far less than the
+    // 32k-token lore request — so lore is cut to fit instead of blowing the
+    // window.
     const plan = planContextBudget(
-      input({ contextSize: 16_384, utilization: 0.95, loreBudgetTokens: 32_000, fixedChars: 1_000 }),
+      input({
+        contextSize: 16_384, utilization: CONTEXT_UTILIZATION_MAX,
+        loreBudgetTokens: 32_000, fixedChars: 1_000,
+      }),
     );
-    const room = Math.floor(16_384 * 0.95) - 2_000 - 1_000 - RECENT_WINDOW_MIN_CHARS;
+    const room = Math.floor(16_384 * CONTEXT_UTILIZATION_MAX) - 2_000 - 1_000 - RECENT_WINDOW_MIN_CHARS;
     expect(plan.loreChars).toBe(room);
     expect(plan.memoryChars).toBe(0);
     expect(plan.bookPriorChars).toBe(0);
@@ -213,8 +218,12 @@ describe("planContextBudget — dynamic", () => {
   it("keeps the verbatim window ahead of lore when the window is tiny", () => {
     // Continuing without the text you're continuing *from* is useless, so the
     // recent-window floor outranks the lore block — and is itself trimmed to fit.
+    // 8k at the lowest utilization the app offers = a 4096-token ceiling.
     const plan = planContextBudget(
-      input({ contextSize: 16_384, utilization: 0.25, loreBudgetTokens: 32_000, fixedChars: 1_000 }),
+      input({
+        contextSize: 8_192, utilization: CONTEXT_UTILIZATION_MIN,
+        loreBudgetTokens: 32_000, fixedChars: 1_000,
+      }),
     );
     expect(plan.recentWindowChars).toBe(1_096);
     expect(plan.loreChars).toBe(0);

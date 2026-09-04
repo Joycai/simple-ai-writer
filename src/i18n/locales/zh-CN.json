@@ -413,6 +413,12 @@
       "imageLongEdgeHint": "图片和文字一样占上下文。超过这个尺寸的图片会在发送前等比缩小，原文件不受影响。留空或 0 表示原样发送。",
       "imageLongEdgeOff": "不缩",
       "paneSub": "决定一次对话往模型里装多少东西。",
+      "windowSection": "窗口占用",
+      "utilizationLabel": "一次请求最多用多少窗口",
+      "utilizationHint": "一次请求（发出去的内容 + 给回复留的位置）最多占模型声明窗口的这个比例，超出的部分在发送前就被裁掉——先裁前情和知识库，正文最后。调高装得更多，也更贵，而且上下文越长模型越容易走神。50%–90%，所有项目、所有面板共用。",
+      "utilizationCeiling": "当前模型 {{name}}（{{window}}）：一次请求最多 {{tokens}}。",
+      "utilizationNoWindow": "当前模型没有声明上下文窗口，这个比例无从计算——实际按假定输入上限 {{assumed}} 走。",
+      "utilizationNoModel": "还没有选中模型。这个比例已保存，下一次请求按它计算。",
       "imageUnit": "px",
       "imageRange": "{{min}} – {{max}} · 步进 {{step}}",
       "elsewhereNote": "知识库注入预算目前在 AI 面板的工具条里调；默认最大输出在「供应商与模型」页顶部。",
@@ -436,9 +442,8 @@
       "attrCeiling": "受「窗口占用 {{util}}%」限制",
       "attrAssumed": "受假定输入上限 {{assumed}} 限制；模型未声明窗口，比例那条无法计算",
       "exampleOff": "自动归纳已关。两条阈值不再触发任何事；对话过长时先裁掉旧的工具结果和图片，对话文本不动。要归纳，在 AI 助手或扮演页点「立即归纳」。",
-      "goCeilingLead": "两条阈值都在这条硬上限之上，先不会生效。要调它，去",
-      "goCeilingLink": "AI 面板 · 工具条",
-      "goCeilingHint": "（不在设置里）"
+      "goCeilingLead": "两条阈值都在这条硬上限之上，先不会生效。要让它们先到，调高本页的",
+      "goCeilingLink": "窗口占用"
     },
     "lab": {
       "pptxLabel": "PPTX 导出（Beta）",
@@ -1121,7 +1126,9 @@
       "loreBudgetHint": "【{{knowledge}}】最多占用的 token 数（{{min}}–{{max}}）",
       "replaceSelection": "替换选中内容",
       "contextUtilization": "窗口占用",
-      "contextUtilizationHint": "单次请求最多占用模型上下文窗口的比例（约 {{tokens}} tokens）",
+      "contextUtilizationGo": "设置里调",
+      "contextUtilizationGoHint": "在「设置 · 上下文与记忆」里调",
+      "contextUtilizationNoWindow": "未声明窗口",
       "contextUtilizationUnset": "当前模型未设置「上下文大小」，前情层使用固定预算",
       "loreBudgetStaticCap": "模型未设置「上下文大小」，本次仅注入 {{cap}} tokens {{entry}}",
       "loreReportTitle": "本次注入{{entry}}",
@@ -1205,7 +1212,7 @@
       "effortLabel": "力度",
       "thinkingHint": "推理模型的思考深度。「跟随默认」不发送任何字段，由服务端决定——这是对所有中转都安全的选择。并非每个模型都支持全部档位；部分模型（如 Gemini）无法真正关闭思考，此时「关闭」等于该模型允许的最低档。",
       "effortHint": "这一档控制整个回复花多少力气——正文、工具调用与思考都算在内，不只是思考深度。「关闭」在 Claude 上等于最低档而非真正关掉：部分模型不接受关闭思考，官方也建议用降低力度来省成本。",
-      "allocOver": "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、调高「窗口占用」，或换一个上下文更大的模型。"
+      "allocOver": "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、在设置里调高「窗口占用」，或换一个上下文更大的模型。"
     },
     "bubble": {
       "drawer": "抽屉",

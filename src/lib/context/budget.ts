@@ -63,9 +63,19 @@ export function measureCharsPerToken(sample: string): number {
  * Deliberately well under 1.0 by default: a window that *can* hold 1M tokens
  * still costs real money to fill on every keystroke-triggered task, and long
  * contexts measurably dilute instruction-following.
+ *
+ * The range narrowed to 50–90% when the control moved from the AI panel's chip
+ * row into 设置 → 上下文与记忆 (2026-09-05). Both ends were bounds nobody could
+ * defend: at 10% a declared window is mostly unusable, and 95% left less than
+ * the output reserve on a small model. 50% is also the floor that keeps this
+ * cap in a sane relationship with the compaction sliders — see
+ * `compactTriggerFor` and docs/feature/agent/compact-threshold-plan.md §2.3.
+ *
+ * Narrowing the range migrates: appStore clamps on read, so an install that
+ * had picked the retired 25% chip comes back at 50%.
  */
-export const CONTEXT_UTILIZATION_MIN = 0.1;
-export const CONTEXT_UTILIZATION_MAX = 0.95;
+export const CONTEXT_UTILIZATION_MIN = 0.5;
+export const CONTEXT_UTILIZATION_MAX = 0.9;
 export const CONTEXT_UTILIZATION_DEFAULT = 0.5;
 
 /**
