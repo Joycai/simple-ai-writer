@@ -57,7 +57,8 @@ describe("chat session pinning", () => {
     // subquery unfiltered and every unpinned session dies on the next save).
     expect(flat(sql)).toContain("DELETE FROM chat_sessions WHERE pinned = 0");
     expect(flat(sql)).toContain("SELECT id FROM chat_sessions WHERE pinned = 0");
-    expect(params).toEqual([MAX_CHAT_SESSIONS]);
+    // The row just saved is kept by construction — it is the open one.
+    expect(params).toEqual([MAX_CHAT_SESSIONS, 3]);
   });
 
   it("does not touch the pin when saving a session", async () => {
@@ -73,7 +74,7 @@ describe("chat session pinning", () => {
     ]);
     const rows = await listChatSessions("/p");
     const [sql, params] = mockSelect.mock.calls[0] as unknown as [string, unknown[]];
-    expect(flat(sql)).toContain("WHERE pinned = 1 OR id IN");
+    expect(flat(sql)).toContain("WHERE pinned = 1 OR title <> '' OR id IN");
     // The cap is re-applied on read, because unpinning does not delete.
     expect(params).toEqual([MAX_CHAT_SESSIONS]);
     // Recency order, pins and all: resetChatForProject restores row 0 as
@@ -96,7 +97,7 @@ describe("chat session pinning", () => {
 
   it("splits the menu into pinned and recent, preserving each one's order", () => {
     const row = (id: number, pinned: boolean, updatedAt: number): ChatSessionRow =>
-      ({ id, preview: `s${id}`, updatedAt, pinned });
+      ({ id, preview: `s${id}`, title: "", updatedAt, pinned });
     const { pinned, recent } = splitChatSessions([
       row(9, false, 300), row(8, true, 250), row(4, true, 100), row(2, false, 50),
     ]);

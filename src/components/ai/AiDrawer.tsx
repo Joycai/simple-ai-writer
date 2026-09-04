@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Bot, CheckCircle2, Pin, Sparkles, X } from "lucide-react";
 import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
-import { splitChatSessions, type ChatSessionRow } from "../../lib/agent/sessionDb";
+import { sessionLabel, splitChatSessions, type ChatSessionRow } from "../../lib/agent/sessionDb";
 import { AgentChat } from "./AgentChat";
 import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
@@ -96,7 +96,7 @@ export function AiDrawer() {
         }}
       >
         <span className={styles.sessionPreview}>
-          {s.preview || t("ai.chat.untitledSession", { defaultValue: "（空会话）" })}
+          {sessionLabel(s, t("ai.chat.untitledSession", { defaultValue: "（空会话）" }))}
         </span>
         <span className={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</span>
       </button>
