@@ -44,7 +44,7 @@ vi.mock("../../notify", () => ({ notify: vi.fn() }));
 
 import {
   activeChat, chatStateOf, chatSurface, chatWaitingSince, emptyChat, isChatBusy,
-  mostUrgentChatState, useAgentStore, type LiveChat,
+  mostUrgentChatState, pickChatStateInputs, useAgentStore, type LiveChat,
 } from "../../../stores/agentStore";
 import { chatAutoApproveKey } from "../autoApprove";
 import type { Proposal } from "../registry";
@@ -372,5 +372,29 @@ describe("project switch", () => {
     expect(state().chatQueue).toEqual([]);
     expect(state().chatOrder).toHaveLength(1);
     expect(activeChat(state()).turns).toEqual([]);
+  });
+});
+
+describe("what a component may subscribe to (React #185)", () => {
+  // A selector that returns a fresh array per call never compares equal, and
+  // under useSyncExternalStore that is an infinite render loop on first paint.
+  // The switch guard and the history menu therefore subscribe to these slices
+  // by reference and derive their rows in a memo; this pins the slice's shape.
+  it("pickChatStateInputs is shallow-stable across calls on the same state", () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    const a = pickChatStateInputs(state());
+    const b = pickChatStateInputs(state());
+    expect(a).not.toBe(b);
+    for (const k of Object.keys(a) as (keyof typeof a)[]) expect(a[k]).toBe(b[k]);
+  });
+
+  it("the slice is enough for every per-conversation state helper", () => {
+    seed([withTurns("c0"), withTurns("c1")]);
+    useAgentStore.setState({ runningChats: ["c1"] });
+    const inputs = pickChatStateInputs(state());
+    expect(chatStateOf(inputs, "c1")).toBe("running");
+    expect(isChatBusy(inputs, "c1")).toBe(true);
+    expect(chatWaitingSince(inputs, "c1")).toBeNull();
+    expect(mostUrgentChatState(inputs)).toBe("running");
   });
 });

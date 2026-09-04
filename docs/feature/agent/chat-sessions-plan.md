@@ -499,3 +499,11 @@ A 可以独立发版；B 是无功能的重构 PR，评审时只看「有没有�
   问一次，逐行列出并写清各自的去向（写到哪算哪 / 会按拒绝处理 / 退回草稿）；全部闲着直接
   切。第二次问会把第一次按「留下」答掉，不叠两个对话框。
 - **未做**：「让助手起名」（第一期隐藏）；标签条键盘切换 ⌃Tab；打开集合持久化（§7 可选）。
+- **合并后修的一处崩溃（React #185）**：`ChatSwitchGuard` 的行列表和 `SessionMenu` 的
+  「已打开」一节原本在 `useAgentStore` 的选择器里 `map`/`flatMap` 出一个新数组——每次调用
+  都不相等，`useSyncExternalStore` 就无限重渲染，打包后的应用首屏即白（守卫常驻挂在
+  `App.tsx`）。改法是 `agentStore` 导出 `ChatStateInputs` 切片 + `useChatStateInputs()`
+  （`useShallow` 按引用比较那十二个字段），组件在 `useMemo` 里算数组；`chatStateOf` 等
+  几个判定函数的参数类型收窄到这个切片。**规则：传给 `useAgentStore` 的选择器只返回
+  原始值或 store 里已有的引用，永不现造数组或对象**——`chatSessions.test.ts` 钉着切片的
+  形状。
