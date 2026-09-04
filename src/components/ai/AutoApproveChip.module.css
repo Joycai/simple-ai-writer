@@ -22,6 +22,20 @@
   border-color: var(--color-error-node);
 }
 
+/* No grant: the dashed ghost every other composer switch wears when off —
+   absence, not an error — but inert: it is not where a grant is given. */
+.absent {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 9px;
+  font: 400 11px/1 var(--font-sans);
+  border: 1px dashed var(--color-border-muted);
+  color: var(--color-text-hint);
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+}
+
 .icon {
   flex-shrink: 0;
 }

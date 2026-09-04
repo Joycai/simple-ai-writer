@@ -24,20 +24,20 @@
 }
 
 .title {
-  font: 500 15px/1.5 var(--font-serif);
+  font: 400 16px/1.4 var(--font-serif);
   color: var(--color-text-primary);
 }
 
 .rows {
-  margin-top: 14px;
-  border-top: 1px solid var(--color-hairline);
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 .row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 2px;
-  border-bottom: 1px solid var(--color-hairline);
 }
 .mark { width: 9px; display: flex; justify-content: center; flex-shrink: 0; }
 .label {
@@ -61,16 +61,18 @@
 .noteAccent { color: var(--color-accent-text); }
 
 .footnote {
-  margin-top: 12px;
-  font: 400 12px/1.7 var(--font-sans);
-  color: var(--color-text-soft);
+  margin-top: 14px;
+  font: 400 12.5px/1.6 var(--font-serif);
+  color: var(--color-text-dim);
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 18px;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-hairline);
 }
 .spacer { flex: 1; }
 .kbd { font: 400 10px/1 var(--font-mono); color: var(--color-text-kbd); }

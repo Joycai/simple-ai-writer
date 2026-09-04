@@ -791,8 +791,10 @@ export function AgentChat() {
           tab strip — it is global, the card is this conversation's. */}
       {chatQueued && (
         <div className={styles.queueCard}>
+          <div className={styles.queueGutter}><ChatMark state="queued" /></div>
+          <div className={styles.queueBox}>
           <div className={styles.queueRow}>
-            <ChatMark state="queued" />
+            <span className={styles.queueSpinner} aria-hidden />
             <span className={styles.queueText}>
               {t("ai.chat.queueWaiting", { n: Math.max(0, queuePos), defaultValue: `排队中 · 前面还有 ${Math.max(0, queuePos)} 段` })}
             </span>
@@ -817,6 +819,7 @@ export function AgentChat() {
               <span className={styles.queueRunningNames}>{runningLabels}</span>
             </div>
           )}
+          </div>
         </div>
       )}
 
@@ -892,9 +895,15 @@ export function AgentChat() {
               })}
             </button>
           ) : (
-            <span className={styles.attachEmpty}>
-              {t("ai.chat.noSelection", { defaultValue: "未选中正文" })}
-            </span>
+            // The slot's default, not a notice (设计稿 23 屏 1g): the chip stays
+            // where it will light up, disabled until there is something to attach.
+            <button
+              className={styles.attachChipGhost}
+              disabled
+              title={t("ai.chat.noSelectionHint", { defaultValue: "先在正文里选中一段，它会作为选区附上" })}
+            >
+              + {t("ai.chat.selectionChipEmpty", { defaultValue: "选区" })}
+            </button>
           )}
           {/* @ references, beside the selection chip: both are "material this
               message carries", and splitting them across two rows would read
@@ -966,7 +975,7 @@ export function AgentChat() {
           {/* 状态记忆 — only while its Beta is on (lib/agent/stateFlag). */}
           <StateMemoryChip />
           {/* Only while 本次对话都批准 is live — see AutoApproveChip. */}
-          <AutoApproveChip owner={chatAutoApproveKey(activeKey)} />
+          <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent />
           {/* Trailing edge, past the `+ …` affordances: this one doesn't add
               material to the message, it changes how the model answers it. */}
           <ReasoningControls variant="compact" />

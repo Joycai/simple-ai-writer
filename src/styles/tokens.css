@@ -187,6 +187,7 @@
      derived from the light inline-bubble / consistency-check screens. */
   --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
   --color-bg-stream:       #F4EEE0;   /* run-stream column, tool-call list bg */
+  --color-bg-tabstrip:     #F1ECE0;   /* 标签条 (设计稿 23): one step below the header, so the current tab (base) sits on it like a slip of paper */
   --color-bg-raised:       #FBF8F0;   /* user bubble, send button block */
   --color-bg-selected:     #F1E0BD;   /* selected segment / 档位 chip bg */
   --color-bg-accent-wash:  #F7EBD4;   /* active accent chips, current-step row */
@@ -464,6 +465,7 @@
      the dark rendition is the acceptance reference. */
   --color-bg-inset:        #17130F;
   --color-bg-stream:       #1B1712;
+  --color-bg-tabstrip:     #14100C;   /* 标签条 (设计稿 23): the drawer's darkest band — darker than the header, so the current tab (base) is the one bright slip */
   --color-bg-raised:       #2A241C;
   --color-bg-selected:     #2A211A;
   --color-bg-accent-wash:  #241C15;
