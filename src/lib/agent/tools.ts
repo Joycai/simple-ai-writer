@@ -508,7 +508,7 @@ function tooLargeError(label: string, bytes: number): string {
  * is one whose fine print may no longer be legible, and a model that reads a
  * blurred label confidently is worse than one that says it cannot.
  */
-function shrunkNote(downscaled: Downscaled | undefined): string {
+export function shrunkNote(downscaled: Downscaled | undefined): string {
   return downscaled ? ` Downscaled to fit the size limit (${downscaleNote(downscaled)}).` : "";
 }
 
@@ -521,6 +521,79 @@ function shrunkNote(downscaled: Downscaled | undefined): string {
  * filename may legitimately contain a `%`.
  */
 const decodeLinkPath = decodeLinkSegments;
+
+/** What `loadProjectImage` hands back for a picture that resolved and loaded. */
+export interface LoadedProjectImage {
+  /** `data:<mime>;base64,…`, already re-encoded smaller if the picture was over the ceilings. */
+  dataUrl: string;
+  /** Filename, for the caption the model reads. */
+  name: string;
+  /** The absolute path the picture was read from — the spelling that won. */
+  path: string;
+  downscaled: Downscaled | undefined;
+}
+
+/**
+ * Resolve a model-supplied image path against the project and read it for a
+ * model: the whole of `read_image` except the tool-result envelope, so that a
+ * caller which attaches a picture to a request *before* any tool round — the
+ * vision delegation — resolves paths by exactly the rules the tool would.
+ * Errors come back as the text the tool would answer with, `Error:` prefix
+ * included, since the delegation relays them to the same reader.
+ */
+export async function loadProjectImage(
+  projectPath: string,
+  rawPath: string,
+): Promise<LoadedProjectImage | { error: string }> {
+  // Containment is a prefix test, and every absolute path is inside the empty
+  // prefix — so a surface that runs the loop without a project (the lore
+  // generator passes "") would turn this into "read any image on the disk".
+  // The registry's door now refuses every non-`projectFree` tool for this same
+  // reason; this stays because the hazard it names is this function's own, and
+  // because it answers with what *this* tool should say.
+  if (!projectPath) {
+    return { error: "Error: no project is open — do not call this tool here." };
+  }
+  const wanted = rawPath.trim();
+  if (!wanted) return { error: "Error: 'path' argument is required." };
+
+  // Relative paths resolve against the project root — `resolveRelativePath`
+  // returns an absolute one unchanged, so both spellings go through one call.
+  const candidates = [...new Set([wanted, decodeLinkPath(wanted)])]
+    .map((p) => resolveRelativePath(projectPath, p));
+
+  if (!candidates.some(isImagePath)) {
+    return {
+      error: `Error: "${wanted}" is not an image (expected one of: ${IMAGE_EXT_LIST}). Text files are read with read_file.`,
+    };
+  }
+  const inside = candidates.filter((p) => isPathWithin(projectPath, p));
+  if (!inside.length) {
+    return { error: "Error: Path is outside the project folder." };
+  }
+
+  let path: string | null = null;
+  for (const p of inside) {
+    if (await fileExists(p)) { path = p; break; }
+  }
+  if (!path) {
+    return {
+      // Says how to build a correct path rather than just refusing: the two
+      // ways to reach an image differ, and a bare "not found" leaves the model
+      // retrying the same wrong spelling.
+      error: `Error: no image at "${inside[0]}". Absolute paths come from list_files (its folder line + "/" + the filename); a link written inside a document — ![](assets/…) — is relative to that document's own folder, so join the two.`,
+    };
+  }
+
+  try {
+    const { dataUrl, bytes, downscaled } = await imageForModel(path);
+    const name = baseName(path) || path;
+    if (bytes.length > MAX_IMAGE_BYTES) return { error: tooLargeError(name, bytes.length) };
+    return { dataUrl, name, path, downscaled };
+  } catch (e) {
+    return { error: `Error reading "${path}": ${String(e)}` };
+  }
+}
 
 /**
  * View any image in the project as visual input — the counterpart to
@@ -545,60 +618,13 @@ export async function readProjectImage(
   if (!multimodal) {
     return { toolCallId, content: "Error: the active model is text-only and cannot accept images." };
   }
-  // Containment is a prefix test, and every absolute path is inside the empty
-  // prefix — so a surface that runs the loop without a project (the lore
-  // generator passes "") would turn this into "read any image on the disk".
-  // The registry's door now refuses every non-`projectFree` tool for this same
-  // reason; this stays because the hazard it names is this function's own, and
-  // because it answers with what *this* tool should say.
-  if (!projectPath) {
-    return { toolCallId, content: "Error: no project is open — do not call this tool here." };
-  }
-  const wanted = rawPath.trim();
-  if (!wanted) return { toolCallId, content: "Error: 'path' argument is required." };
-
-  // Relative paths resolve against the project root — `resolveRelativePath`
-  // returns an absolute one unchanged, so both spellings go through one call.
-  const candidates = [...new Set([wanted, decodeLinkPath(wanted)])]
-    .map((p) => resolveRelativePath(projectPath, p));
-
-  if (!candidates.some(isImagePath)) {
-    return {
-      toolCallId,
-      content: `Error: "${wanted}" is not an image (expected one of: ${IMAGE_EXT_LIST}). Text files are read with read_file.`,
-    };
-  }
-  const inside = candidates.filter((p) => isPathWithin(projectPath, p));
-  if (!inside.length) {
-    return { toolCallId, content: "Error: Path is outside the project folder." };
-  }
-
-  let path: string | null = null;
-  for (const p of inside) {
-    if (await fileExists(p)) { path = p; break; }
-  }
-  if (!path) {
-    return {
-      toolCallId,
-      // Says how to build a correct path rather than just refusing: the two
-      // ways to reach an image differ, and a bare "not found" leaves the model
-      // retrying the same wrong spelling.
-      content: `Error: no image at "${inside[0]}". Absolute paths come from list_files (its folder line + "/" + the filename); a link written inside a document — ![](assets/…) — is relative to that document's own folder, so join the two.`,
-    };
-  }
-
-  try {
-    const { dataUrl, bytes, downscaled } = await imageForModel(path);
-    const name = baseName(path) || path;
-    if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(name, bytes.length) };
-    return {
-      toolCallId,
-      content: `Image "${name}" from ${path}.${shrunkNote(downscaled)}`,
-      imageDataUrls: [dataUrl],
-    };
-  } catch (e) {
-    return { toolCallId, content: `Error reading "${path}": ${String(e)}` };
-  }
+  const loaded = await loadProjectImage(projectPath, rawPath);
+  if ("error" in loaded) return { toolCallId, content: loaded.error };
+  return {
+    toolCallId,
+    content: `Image "${loaded.name}" from ${loaded.path}.${shrunkNote(loaded.downscaled)}`,
+    imageDataUrls: [loaded.dataUrl],
+  };
 }
 
 /** Ceiling on how many files one listing reports, before it starts omitting. */

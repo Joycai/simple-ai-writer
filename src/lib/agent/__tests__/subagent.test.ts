@@ -27,6 +27,12 @@ vi.mock("../../fs/fileio", () => ({
   readBinaryFile: (...args: unknown[]) => mockReadBinaryFile(...args),
 }));
 
+const mockImageForModel = vi.fn();
+vi.mock("../../image/normalize", () => ({
+  imageForModel: (...args: unknown[]) => mockImageForModel(...args),
+  downscaleNote: () => "",
+}));
+
 import {
   chainCanSeeImages,
   DELEGATE_KINDS,
@@ -481,6 +487,117 @@ describe("subagent", () => {
       // The instruction rides behind the files, matching the vendor's order.
       expect(userMsg.content[1].type).toBe("text");
       expect(userMsg.content[1].text).toContain("总结这份规格书");
+    });
+
+    it("attaches vision image refs as image parts ahead of the instruction", async () => {
+      // The bug this guards: the sub-run used to receive the picture as a
+      // *path* and a prompt saying "observe the reference pictures" — so a
+      // model that never inferred the read_image call answered that no image
+      // had been provided. The bytes now ride in the first message.
+      mockFileExists.mockResolvedValue(true);
+      mockImageForModel.mockResolvedValue({
+        dataUrl: "data:image/jpeg;base64,QUJD", ext: "jpg", bytes: new Uint8Array([65, 66, 67]),
+      });
+      mockRunAgent.mockImplementation(async (opts) => {
+        opts.onOutputText("三视图描述如下。");
+        return { rounds: 1, inputTokens: 10, outputTokens: 20, cachedTokens: 0, outcome: "success" };
+      });
+      mockWriteTaskNote.mockResolvedValueOnce({
+        slug: "vision-x", title: "x", path: ".ai-writer/tasks/task-123/notes/vision-x.md", size: 10,
+      });
+
+      const ctx = makeCtx();
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({
+          kind: "vision",
+          task: "描述这张角色三视图",
+          references: ["ref/arcana_shadow_combined.jpg", "notes/brief.md"],
+        }),
+      };
+
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain("vision-x.md");
+
+      // Resolved by read_image's own rules: relative to the project root.
+      expect(mockImageForModel).toHaveBeenCalledWith("/test-project/ref/arcana_shadow_combined.jpg");
+
+      const userMsg = mockRunAgent.mock.calls[0][0].messages[1];
+      expect(Array.isArray(userMsg.content)).toBe(true);
+      expect(userMsg.content[0]).toEqual({
+        type: "image_url",
+        image_url: { url: "data:image/jpeg;base64,QUJD" },
+      });
+      const text = userMsg.content[1];
+      expect(text.type).toBe("text");
+      expect(text.text).toContain("描述这张角色三视图");
+      // The picture is named beside its bytes, and the non-image ref is still
+      // listed — but only because there is one to list.
+      expect(text.text).toContain("arcana_shadow_combined.jpg");
+      expect(text.text).toContain("notes/brief.md");
+    });
+
+    it("lists no 参考资源 section for a vision job whose only refs are pictures", async () => {
+      mockFileExists.mockResolvedValue(true);
+      mockImageForModel.mockResolvedValue({
+        dataUrl: "data:image/png;base64,QUJD", ext: "png", bytes: new Uint8Array([65]),
+      });
+      mockRunAgent.mockImplementation(async (opts) => {
+        opts.onOutputText("看到了。");
+        return { rounds: 1, inputTokens: 1, outputTokens: 1, cachedTokens: 0, outcome: "success" };
+      });
+      mockWriteTaskNote.mockResolvedValueOnce({
+        slug: "vision-y", title: "y", path: ".ai-writer/tasks/task-123/notes/vision-y.md", size: 1,
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "vision", task: "看", refs: ["/test-project/a.png"] }),
+      };
+      await executeDelegate(call, makeCtx());
+      const text = mockRunAgent.mock.calls[0][0].messages[1].content[1].text as string;
+      expect(text).not.toContain("参考资源");
+      expect(text).not.toContain("References:");
+    });
+
+    it("fails a vision delegation up front when a named image does not exist", async () => {
+      mockFileExists.mockResolvedValue(false);
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "vision", task: "看图", refs: ["arcana_shadow_combined.jpg"] }),
+      };
+      const res = await executeDelegate(call, makeCtx());
+      expect(res.content).toMatch(/^Error: no image at/);
+      expect(res.content).toContain("list_files");
+      expect(mockRunAgent).not.toHaveBeenCalled();
+    });
+
+    it("refuses a vision image ref outside the project", async () => {
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "vision", task: "看图", refs: ["../elsewhere/x.jpg"] }),
+      };
+      const res = await executeDelegate(call, makeCtx());
+      expect(res.content).toContain("outside the project");
+      expect(mockRunAgent).not.toHaveBeenCalled();
+    });
+
+    it("still runs a vision job with no image refs, leaving the tools to fetch", async () => {
+      // A lore entity's gallery is reached by read_lore_image, not by path —
+      // so a delegation naming no file is not an error.
+      mockRunAgent.mockImplementation(async (opts) => {
+        opts.onOutputText("头像描述。");
+        return { rounds: 2, inputTokens: 1, outputTokens: 1, cachedTokens: 0, outcome: "success" };
+      });
+      mockWriteTaskNote.mockResolvedValueOnce({
+        slug: "vision-z", title: "z", path: ".ai-writer/tasks/task-123/notes/vision-z.md", size: 1,
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "vision", task: "看条目「艾拉」的头像" }),
+      };
+      const res = await executeDelegate(call, makeCtx());
+      expect(res.content).toContain("vision-z.md");
+      expect(typeof mockRunAgent.mock.calls[0][0].messages[1].content).toBe("string");
     });
 
     it("refuses a pdf ref that escapes the project or hides in .ai-writer", async () => {

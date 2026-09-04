@@ -3419,7 +3419,10 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             references: {
               type: "array",
               items: { type: "string" },
-              description: "Paths the subagent should work on (documents, images, or PDF files).",
+              description:
+                "Paths the subagent should work on (documents, images, or PDF files). " +
+                "For vision and pdf these are the payload: each image / .pdf path is read here and attached to the subagent's first message, " +
+                "so pass the full path from list_files (or the path a document's link resolves to) — a bare filename that matches no file fails the call.",
             },
           },
           required: ["kind", "task"],

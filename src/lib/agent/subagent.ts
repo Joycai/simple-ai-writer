@@ -14,13 +14,13 @@ import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/confi
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { withCurrentTime } from "../context/clock";
-import { bytesToBase64 } from "../fs/images";
+import { bytesToBase64, isImagePath } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
 import { isWorkspacePath, resolveRelativePath } from "../paths";
 import type { TaskPreset } from "./presets";
 import { runAgent, type AgentRunResult } from "./runtime";
 import type { ToolContext } from "./registry";
-import type { ToolCall, ToolResult } from "./tools";
+import { loadProjectImage, shrunkNote, type ToolCall, type ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
 
@@ -127,6 +127,13 @@ export const MAX_PDF_BYTES = 150 * 1024 * 1024;
  * that a refusal reads as "split the job", not as an arbitrary wall.
  */
 export const MAX_PDF_FILES = 3;
+
+/**
+ * How many pictures one vision delegation may carry in its first message.
+ * Each one is a full image payload on a request that is rebuilt every round,
+ * so a wide job is split rather than sent as one.
+ */
+export const MAX_VISION_IMAGES = 8;
 
 /**
  * Read one project PDF for a delegation, or say exactly why not.
@@ -437,6 +444,43 @@ export async function executeDelegate(
     }
     parts.push({ type: "text", text: i18n.t("ai.instructions.subagentTask", { task }) });
     userContent = parts;
+  }
+
+  // The vision kind's image refs are payload too — read here and attached as
+  // image parts ahead of the instruction, not left as paths for the sub-run to
+  // fetch with read_image. The path-only form was tried first and is the bug
+  // this replaces: the sub-run holds a filename and a tool, and its prompt says
+  // "observe the reference pictures" — so a model that does not infer the tool
+  // call answers, in good faith, that no image was provided. Handing over the
+  // bytes makes the first request the whole job, as the pdf kind already does;
+  // the tools stay for a lore entity's gallery and any follow-up look. A ref
+  // that names an image but resolves to none fails the delegation up front,
+  // with the tool's own error, rather than starting a run that cannot succeed.
+  if (kind === "vision") {
+    const imageRefs = refs.filter(isImagePath);
+    if (imageRefs.length > MAX_VISION_IMAGES) {
+      return fail(`too many images (${imageRefs.length}) — delegate at most ${MAX_VISION_IMAGES} per call, splitting the job if needed.`);
+    }
+    if (imageRefs.length) {
+      const parts: ContentPart[] = [];
+      const captions: string[] = [];
+      for (const ref of imageRefs) {
+        const loaded = await loadProjectImage(ctx.projectPath, ref);
+        if ("error" in loaded) return fail(loaded.error.replace(/^Error:\s*/, ""));
+        captions.push(`- ${loaded.name} — ${loaded.path}${shrunkNote(loaded.downscaled)}`);
+        parts.push({ type: "image_url", image_url: { url: loaded.dataUrl } });
+      }
+      // Same two-template rule as above: a 「参考资源」 heading appears only
+      // when there is something under it.
+      const otherRefs = refs.filter((r) => !isImagePath(r));
+      const text =
+        i18n.t("ai.instructions.subagentTaskWithImages", { task, images: captions.join("\n") }) +
+        (otherRefs.length
+          ? i18n.t("ai.instructions.subagentRefsList", { refs: otherRefs.map((r) => `- ${r}`).join("\n") })
+          : "");
+      parts.push({ type: "text", text });
+      userContent = parts;
+    }
   }
 
   const messages: StreamMessage[] = [

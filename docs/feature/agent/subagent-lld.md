@@ -23,6 +23,11 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
+**2026-09-04 · vision 的图片随第一条消息发出（§6.1.3 新增）。** 派单时只给路径、
+指望子代理自己 `read_image` 的做法，在不会主动推断工具调用的模型上得到的是一份
+诚实的「未接收到图像数据」；现在图片 refs 与 pdf 同样是载荷，在 `executeDelegate`
+里读好附上，解析规则从 `read_image` 抽成 `loadProjectImage` 共用。
+
 **2026-08-18 · 子代理设置页对齐设计稿 04（§7.4 改写）。** 原实现把每个 kind 摊成
 一个 section + 两行（启用 / 选择模型），读起来是五组互不相干的开关；但子代理从来
 是一个**对**——专家和跑它的模型，缺一半就等于零。改为一 kind 一张卡（`SubAgents.module.css`），
@@ -582,7 +587,7 @@ ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 | kind | 定位 | `tools` | `maxRounds` | `serverTools` 策略 | 产出 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `search` | 联网检索与查证 | `[]` | 2 | **`"always"`** | `notes/search-*.md`：结论 + 事实 + **原始 URL** |
-| `vision` | 图像理解 | `["read_image", "read_lore_image"]` | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
+| `vision` | 图像理解 | `["read_image", "read_lore_image"]`；refs 里的图片**在派单时就读进第一条消息**（§6.1.3） | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
 | `longread` | 长文精读提要 | `["read_file", "search_text", "list_files"]` | 4 | `"off"` | `notes/read-*.md`：大纲 + 关键细节 |
 | `pdf` | PDF 原件精读（2026-08-17 加） | `[]` | 1 | `"off"` | `notes/pdf-*.md`：结构 + 关键内容 |
 | `imagegen` | 图片生成（2026-08-17 加）| —（非会话型，见下） | — | — | 文档 `assets/` 或条目图库里的一张图 |
@@ -944,6 +949,37 @@ export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, S
 道歉改成指令：路径正是 `delegate(kind:"vision", refs:[...])` 要的东西
 （`buildChatMessage` 的 `visionDelegate` 选项）。只给文件名时，模型看得见缺了什么，
 却没有任何办法去取。
+
+### 6.1.3 vision 的 refs 是载荷，不是阅读清单（2026-09-04 定）
+
+第一版把 `delegate(kind:"vision", refs:[path])` 的图片当**路径文字**交给子代理，
+指望它自己调 `read_image` 取图——和 longread 拿到文档路径去 `read_file` 是一个
+模式。实机上它坏在一个很具体的地方：子代理的 system 提示说「观察和解析参考图片」，
+而它手里只有一个文件名和一个工具；一个不会主动推断「我得先调工具」的模型（Qwen
+一类）会**如实**回答「未接收到有效的图像数据，无法完成任务」——不是幻觉，是诚实地
+描述了它的上下文。作者看到的是一份写着「无法访问 `arcana_shadow_combined.jpg`」的
+笔记，而文件就在项目里。
+
+改法照 `pdf` 的先例：refs 里凡是图片路径（`isImagePath`）的，在 `executeDelegate`
+里经 `loadProjectImage` 读出来，作为 `image_url` part 放在指令**前面**，指令末尾按顺序
+列出每张图的文件名与路径（`subagentTaskWithImages`），非图片的 refs 仍走原来的
+「参考资源」段（`subagentRefsList`，且只在有东西可列时出现）。第一次请求就是整个活。
+
+三条边界：
+
+- **解析规则只有一份。** `loadProjectImage` 是从 `readProjectImage` 里抽出来的——
+  相对路径对项目根解析、`%` 编码的链接再试一次解码、包含性检查、`imageForModel`
+  的缩放和 12MB 上限——所以派单时能读到的图和工具能读到的图是严格同一批，报的
+  错也是同一句（「no image at … 路径来自 list_files」），只是把 `Error:` 前缀换成
+  `delegate` 自己的。
+- **点名了却不存在的图片让派单当场失败**，而不是发起一个注定失败的子运行——一个
+  只给文件名、文件其实在子目录里的调用，主模型拿到的是「按 list_files 的路径重发」，
+  不是一份「看不到图」的笔记。**不做**按文件名在整棵树里搜的兜底：那是把一个明确
+  的路径契约改成猜（同 `read_document` / `read_file` 互相拒绝而不是猜后缀的理由）。
+- **没有图片 refs 的派单照常运行。** 条目图库里的图走 `read_lore_image`（条目 + 文件名，
+  不是路径），所以 vision 的工具集不动；system 提示改为说明「图通常已附上，点名了
+  却没附的用工具取」——这句话现在描述的是真实情况。上限 `MAX_VISION_IMAGES = 8`，
+  超过让主模型拆单，同 `MAX_PDF_FILES`。
 
 ### 6.2 路由 = 改工具集，不是改提示词也不是改返回值
 
