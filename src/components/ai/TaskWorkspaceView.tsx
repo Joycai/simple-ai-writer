@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FileText } from "lucide-react";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { useProjectStore } from "../../stores/projectStore";
 import {
   clearCompletedTasks,
@@ -62,8 +62,8 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const projectPath = useProjectStore((s) => s.projectPath);
   const resumeTask = useAgentStore((s) => s.resumeTask);
   const abortTask = useAgentStore((s) => s.abortTask);
-  const chatRunning = useAgentStore((s) => s.chatRunning);
-  const chatTaskId = useAgentStore((s) => s.chatTaskWorkspace?.taskId ?? null);
+  // The task the conversation on screen is working on.
+  const chatTaskId = useActiveChat((c) => c.taskWorkspace?.taskId ?? null);
 
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -398,8 +398,9 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
         {selectedDoc && selectedId && canResume && (
           <button
             className={styles.resumeBtn}
+            // Resuming opens a conversation of its own (agentStore.resumeTask),
+            // so a run elsewhere is no reason to hold the button.
             onClick={() => handleResume(selectedId)}
-            disabled={chatRunning}
           >
             {t("ai.taskWorkspace.resume", { defaultValue: "在新会话中继续" })}
           </button>

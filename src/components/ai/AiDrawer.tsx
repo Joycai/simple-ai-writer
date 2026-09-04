@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, CheckCircle2, Pin, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, Sparkles, X } from "lucide-react";
 import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
-import { useAgentStore } from "../../stores/agentStore";
-import { splitChatSessions, type ChatSessionRow } from "../../lib/agent/sessionDb";
+import { mostUrgentChatState, useAgentStore } from "../../stores/agentStore";
+import { comboLabel, matchesCombo, type Combo } from "../../lib/shortcuts";
 import { AgentChat } from "./AgentChat";
+import { ChatMark } from "./ChatMark";
+import { SessionMenu } from "./SessionMenu";
+import { SessionTabs } from "./SessionTabs";
+import { SessionTitle } from "./SessionTitle";
 import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
@@ -32,6 +36,9 @@ const MODE_SHORTCUT: Record<Mode, string> = {
   roleplay: "J",
 };
 
+/** 新会话 — bound while the drawer is open on 对话助手 (设计稿 23 屏 1a). */
+const NEW_CHAT_COMBO: Combo = { mod: true, key: "n" };
+
 export function AiDrawer() {
   const { t } = useTranslation();
   const showAiDrawer = useAppStore((s) => s.showAiDrawer);
@@ -43,13 +50,11 @@ export function AiDrawer() {
   // ModelSelector and all — on every streamed token of a background chat,
   // even while closed. `turns` is deliberately reduced to the one boolean the
   // header reads, so the per-token turn patches don't reach it either.
-  const chatRunning = useAgentStore((s) => s.chatRunning);
-  const chatSessionId = useAgentStore((s) => s.chatSessionId);
-  const chatSessions = useAgentStore((s) => s.chatSessions);
-  const resetChat = useAgentStore((s) => s.resetChat);
-  const switchChatSession = useAgentStore((s) => s.switchChatSession);
-  const toggleChatSessionPin = useAgentStore((s) => s.toggleChatSessionPin);
-  const chatEmpty = useAgentStore((s) => s.turns.length === 0 && !s.chatError);
+  const activeChatKey = useAgentStore((s) => s.activeChatKey);
+  const newChat = useAgentStore((s) => s.newChat);
+  // The mode tab carries the one most urgent mark for every conversation while
+  // the author is on another mode (设计稿 23 屏 1d): 等作者 over 有结果 over 在跑.
+  const chatMark = useAgentStore((s) => (aiDrawerMode === "chat" ? null : mostUrgentChatState(s)));
 
   const close = () => setShowAiDrawer(false);
   const setMode = (m: Mode) => {
@@ -64,59 +69,38 @@ export function AiDrawer() {
   useEffect(() => {
     if (!showSessions) return;
     const onDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      // The menu's own right-click menu is portaled to <body>: a click on it is
+      // not "outside", or the action it carries would land on a closed menu.
+      if (target?.closest?.("[data-context-menu]")) return;
       if (!sessionsRef.current?.contains(e.target as Node)) setShowSessions(false);
     };
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [showSessions]);
 
-  const formatSessionTime = (unixSeconds: number) => {
-    const d = new Date(unixSeconds * 1000);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  // 新会话: always available. Landing on a tab that already existed (the idle
+  // empty one) flashes that tab's top line once instead of opening a second
+  // blank one (设计稿 23 屏 1g).
+  const [flash, setFlash] = useState<{ key: string; seq: number } | null>(null);
+  const openNewChat = () => {
+    setShowTasks(false);
+    setShowSessions(false);
+    const before = useAgentStore.getState().chatOrder;
+    const key = newChat();
+    if (before.includes(key)) setFlash((f) => ({ key, seq: (f?.seq ?? 0) + 1 }));
   };
-
-  // Pinned sessions live in their own section rather than wearing a badge in
-  // the recent list — same rule as the recents rail's pins (设计稿 15): the
-  // point of pinning is that the conversation stops rotating away, and a
-  // section is what says that without the author having to read an icon.
-  const { pinned: pinnedSessions, recent: recentSessions } = splitChatSessions(chatSessions);
-
-  const renderSessionRow = (s: ChatSessionRow) => (
-    <div
-      key={s.id}
-      className={`${styles.sessionRow} ${s.id === chatSessionId ? styles.sessionRowActive : ""}`}
-    >
-      <button
-        className={styles.sessionItem}
-        onClick={() => {
-          setShowSessions(false);
-          setShowTasks(false);
-          void switchChatSession(s.id);
-        }}
-      >
-        <span className={styles.sessionPreview}>
-          {s.preview || t("ai.chat.untitledSession", { defaultValue: "（空会话）" })}
-        </span>
-        <span className={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</span>
-      </button>
-      {/* Deliberately outside the open button: nesting it would be invalid, and
-          pinning must not also switch the conversation. */}
-      <button
-        className={`${styles.sessionPin} ${s.pinned ? styles.sessionPinOn : ""}`}
-        onClick={() => void toggleChatSessionPin(s.id)}
-        title={t(s.pinned ? "ai.chat.unpinSession" : "ai.chat.pinSession", {
-          defaultValue: s.pinned ? "取消固定" : "固定这次会话，不会被清掉",
-        })}
-        aria-label={t(s.pinned ? "ai.chat.unpinSession" : "ai.chat.pinSession", {
-          defaultValue: s.pinned ? "取消固定" : "固定这次会话，不会被清掉",
-        })}
-        aria-pressed={s.pinned}
-      >
-        <Pin size={12} strokeWidth={1.6} fill={s.pinned ? "currentColor" : "none"} />
-      </button>
-    </div>
-  );
+  useEffect(() => {
+    if (!showAiDrawer || aiDrawerMode !== "chat") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!matchesCombo(e, NEW_CHAT_COMBO)) return;
+      e.preventDefault();
+      openNewChat();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openNewChat reads the store directly
+  }, [showAiDrawer, aiDrawerMode]);
 
   // 一个 Beta 开关，读一次就够：它只会在设置页被改，而改完抽屉会重挂。
   const roleplayOn = isRoleplayEnabled();
@@ -173,7 +157,9 @@ export function AiDrawer() {
           </div>
 
           <div className={styles.titleBlock}>
-            <div className={styles.title}>{headerTitle}</div>
+            {/* 对话助手 mode: the conversation's *name* is the title — 「对话助手」is
+                already lit on the mode tab (设计稿 23 屏 1f). */}
+            {aiDrawerMode === "chat" ? <SessionTitle /> : <div className={styles.title}>{headerTitle}</div>}
             <div className={styles.subtitle}>
               <ModelSelector />
             </div>
@@ -189,48 +175,29 @@ export function AiDrawer() {
                 {t("ai.drawer.tasksAction", { defaultValue: "任务" })}
               </button>
             )}
-            {aiDrawerMode === "chat" && chatSessions.length > 0 && (
+            {aiDrawerMode === "chat" && (
               <div className={styles.sessionMenuWrap} ref={sessionsRef}>
                 <button
                   className={styles.headerBtn}
                   onClick={() => setShowSessions((v) => !v)}
-                  disabled={chatRunning}
                   aria-expanded={showSessions}
                   title={t("ai.chat.history", { defaultValue: "历史会话" })}
                 >
                   {t("ai.chat.history", { defaultValue: "历史会话" })}
                 </button>
-                {showSessions && (
-                  <div className={styles.sessionMenu}>
-                    {/* Section heads only once both sections exist: with pins
-                        alone (or none at all) the list is unambiguous and a
-                        label would be noise. */}
-                    {pinnedSessions.length > 0 && recentSessions.length > 0 && (
-                      <div className={styles.sessionGroup}>
-                        {t("ai.chat.pinnedSessions", { defaultValue: "已固定" })}
-                      </div>
-                    )}
-                    {pinnedSessions.map(renderSessionRow)}
-                    {pinnedSessions.length > 0 && recentSessions.length > 0 && (
-                      <div className={styles.sessionGroup}>
-                        {t("ai.chat.recentSessions", { defaultValue: "最近" })}
-                      </div>
-                    )}
-                    {recentSessions.map(renderSessionRow)}
-                  </div>
-                )}
+                {showSessions && <SessionMenu onClose={() => setShowSessions(false)} />}
               </div>
             )}
             {aiDrawerMode === "chat" && (
+              // Always live: on an empty tab it focuses that tab (flash) rather
+              // than adding a second empty one.
               <button
-                className={`${styles.headerBtn} ${styles.headerBtnAccent}`}
-                onClick={() => {
-                  setShowTasks(false);
-                  resetChat();
-                }}
-                disabled={chatEmpty}
+                className={`${styles.headerBtn} ${styles.headerBtnAccent} ${styles.newChatBtn}`}
+                onClick={openNewChat}
+                title={t("ai.chat.newSessionTitle", { defaultValue: "新开一段对话；已有一个空标签时是聚焦它" })}
               >
                 {t("ai.chat.newSession")}
+                <span className={styles.newChatKey}>{comboLabel(NEW_CHAT_COMBO)}</span>
               </button>
             )}
             <span className={styles.shortcutHint}>
@@ -254,6 +221,7 @@ export function AiDrawer() {
             onClick={() => setMode("chat")}
           >
             {t("ai.chat.title")}
+            {chatMark && <span className={styles.modeTabMark}><ChatMark state={chatMark} size="mode" /></span>}
           </button>
           <button
             className={`${styles.modeTab} ${aiDrawerMode === "consistency" ? styles.modeTabActive : ""}`}
@@ -274,13 +242,21 @@ export function AiDrawer() {
           )}
         </div>
 
+        {/* 标签条: the open conversations, between the mode tabs and the
+            conversation (设计稿 23 屏 1a). Only in 对话助手, never over the task view. */}
+        {aiDrawerMode === "chat" && !showTasks && (
+          <SessionTabs flash={flash} onOverflow={() => setShowSessions(true)} />
+        )}
+
         <div className={styles.body}>
           {showTasks ? (
             <TaskWorkspaceView onClose={() => setShowTasks(false)} />
           ) : aiDrawerMode === "generate" ? (
             <AiPanel />
           ) : aiDrawerMode === "chat" ? (
-            <AgentChat />
+            // Keyed by conversation: switching tabs remounts the chat, so
+            // per-mount state (scroll, folds, rewind pick) starts clean.
+            <AgentChat key={activeChatKey} />
           ) : aiDrawerMode === "roleplay" ? (
             <RoleplayPanel />
           ) : (

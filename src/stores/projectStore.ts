@@ -364,6 +364,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const target = typeof path === "string" ? path : await openProjectFolder();
     if (!target) return "cancelled";
 
+    // Conversations generating, queued or waiting in the project being left
+    // would be stopped by the switch. Single-conversation days never asked —
+    // the author could see the one run; with several on background tabs they
+    // may not remember, so ask once, listing them (设计稿 23 屏 1j). Idle
+    // everywhere resolves true without a dialog.
+    if (!isSamePath(get().projectPath, target)) {
+      const { useAgentStore } = await import("./agentStore");
+      const leave = await useAgentStore.getState().confirmProjectSwitch(baseName(target) || target);
+      if (!leave) return "cancelled";
+    }
+
     // Persist unsaved edits from the currently open project before switching away.
     await flushDirtyDocuments();
 
@@ -432,6 +443,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   closeProject: async () => {
     const closing = get().projectPath;
+    // Same question as openProject's, for the same reason.
+    {
+      const { useAgentStore } = await import("./agentStore");
+      if (!(await useAgentStore.getState().confirmProjectSwitch(null))) return;
+    }
     await flushDirtyDocuments();
     resetDocuments();
     const { useAgentStore } = await import("./agentStore");

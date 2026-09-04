@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
 import styles from "./toggleChip.module.css";
 
@@ -56,7 +56,7 @@ export function SubAgentChips({ disabled, onToggle }: {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  const chatDisabled = useAgentStore((s) => s.disabledSubAgents);
+  const chatDisabled = useActiveChat((c) => c.disabledSubAgents);
   const chatToggle = useAgentStore((s) => s.toggleSubAgent);
   const disabledSubAgents = disabled ?? chatDisabled;
   const toggleSubAgent = onToggle ?? chatToggle;

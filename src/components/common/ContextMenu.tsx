@@ -43,6 +43,7 @@ export function ContextMenu({
   return createPortal(
     <div
       className={styles.overlay}
+      data-context-menu
       onMouseDown={onClose}
       onContextMenu={(e) => { e.preventDefault(); onClose(); }}
     >

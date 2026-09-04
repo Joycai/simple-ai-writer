@@ -1,6 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-import { CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable } from "../autoApprove";
+import { chatAutoApproveKey, grants, grantsAppend, isAutoApprovable } from "../autoApprove";
+
+/** The active conversation's key in these tests — the store starts with one tab, `c0`. */
+const CHAT_AUTO_APPROVE_KEY = chatAutoApproveKey("c0");
 import type { Proposal } from "../registry";
 
 // Same shims as subagentChips.test: agentStore reaches projectStore lazily, and
@@ -33,7 +36,7 @@ vi.mock("../../fs/fileio", () => ({
 }));
 vi.mock("../backup", () => ({ backupFile: vi.fn(async () => "/p/.ai-writer/backups/x.md") }));
 
-import { useAgentStore } from "../../../stores/agentStore";
+import { activeChat, emptyChat, useAgentStore } from "../../../stores/agentStore";
 
 const RUN = {} as unknown; // stands in for a panel run's AbortController
 
@@ -72,7 +75,11 @@ describe("isAutoApprovable — the kind-level floor", () => {
 describe("本次都批准 grants", () => {
   beforeEach(() => {
     written.length = 0;
-    useAgentStore.setState({ pending: [], pendingPlans: [], autoApprove: null, turns: [] });
+    useAgentStore.setState({
+      pending: [], pendingPlans: [], autoApprove: null,
+      chats: { c0: emptyChat("c0") }, chatOrder: ["c0"], activeChatKey: "c0",
+      runningChats: [], compactingChats: [], chatQueue: [], chatAborts: {},
+    });
   });
 
   it("applies a covered proposal without ever queuing a card", async () => {
@@ -201,18 +208,33 @@ describe("本次都批准 grants", () => {
     useAgentStore.setState({
       autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0 },
     });
-    useAgentStore.getState().resetChat();
+    useAgentStore.getState().newChat();
     expect(useAgentStore.getState().autoApprove).toBeNull();
   });
 
-  it("ends chat's grant when switching to another saved conversation", async () => {
-    useAgentStore.setState({
+  it("does not carry chat's grant into another saved conversation", async () => {
+    useAgentStore.setState((st) => ({
       autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [], illustrateLeft: 0 },
-      chatSessionId: 1, chatRunning: false, turns: [],
-    });
+      chats: { c0: { ...activeChat(st), sessionId: 1 } },
+    }));
 
     await useAgentStore.getState().switchChatSession(2);
 
-    expect(useAgentStore.getState().autoApprove).toBeNull();
+    // Standing authorisation to rewrite prose is the last thing that should
+    // follow the author into another manuscript: whatever tab the saved
+    // conversation opened in, no grant covers it.
+    const st = useAgentStore.getState();
+    expect(activeChat(st).sessionId).toBe(2);
+    expect(grants(st.autoApprove, chatAutoApproveKey(st.activeChatKey), "proposals")).toBe(false);
+  });
+
+  it("keeps one conversation's grant off another open conversation", () => {
+    useAgentStore.setState({
+      autoApprove: { key: chatAutoApproveKey("c0"), proposals: true, plans: false, appendPaths: [], illustrateLeft: 0 },
+    });
+    // The literal "chat" key would have covered both; the per-conversation
+    // key covers exactly the one it was pressed in.
+    expect(grants(useAgentStore.getState().autoApprove, chatAutoApproveKey("c1"), "proposals")).toBe(false);
+    expect(grants(useAgentStore.getState().autoApprove, chatAutoApproveKey("c0"), "proposals")).toBe(true);
   });
 });

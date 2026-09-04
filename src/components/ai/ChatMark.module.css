@@ -1,0 +1,56 @@
+/* 三家记号 (设计稿 23 屏 1d). One colour — the shape family carries urgency. */
+
+.mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+/* 圆 = 在跑 */
+.running {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulseDeep 1.4s ease-in-out infinite;
+}
+.queued {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--color-accent);
+}
+
+/* 方 = 有结果 */
+.unread {
+  width: 7px;
+  height: 7px;
+  background: var(--color-accent);
+}
+.error {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--color-accent);
+}
+
+/* 两根竖条 = 停住等你 (the pause sign: it stopped itself, for you) */
+.waiting {
+  gap: 2px;
+  align-items: center;
+}
+.waiting span {
+  display: block;
+  width: 2px;
+  height: 9px;
+  background: var(--color-accent);
+}
+
+/* On the mode tab everything sits at the 6px square's scale. */
+.mode.unread,
+.mode.error { width: 6px; height: 6px; }
+.mode.waiting span { height: 7px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .running { animation: none; }
+}

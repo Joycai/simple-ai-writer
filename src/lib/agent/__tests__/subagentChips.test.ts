@@ -19,46 +19,53 @@ vi.mock("../chatSession", () => ({
   maxTurnId: () => 0,
 }));
 
-import { useAgentStore } from "../../../stores/agentStore";
+import { activeChat, emptyChat, useAgentStore } from "../../../stores/agentStore";
+
+const disabledNow = () => activeChat(useAgentStore.getState()).disabledSubAgents;
 
 describe("SubAgentChips store state", () => {
   beforeEach(() => {
-    useAgentStore.setState({ disabledSubAgents: [] });
+    useAgentStore.setState({
+      chats: { c0: emptyChat("c0") }, chatOrder: ["c0"], activeChatKey: "c0",
+      runningChats: [], compactingChats: [], chatQueue: [], chatAborts: {},
+    });
   });
 
   it("toggles subagent in and out of disabledSubAgents array", () => {
     const store = useAgentStore.getState();
-    expect(store.disabledSubAgents).toEqual([]);
+    expect(disabledNow()).toEqual([]);
 
     store.toggleSubAgent("search");
-    expect(useAgentStore.getState().disabledSubAgents).toEqual(["search"]);
+    expect(disabledNow()).toEqual(["search"]);
 
     store.toggleSubAgent("vision");
-    expect(useAgentStore.getState().disabledSubAgents).toEqual(["search", "vision"]);
+    expect(disabledNow()).toEqual(["search", "vision"]);
 
     store.toggleSubAgent("search");
-    expect(useAgentStore.getState().disabledSubAgents).toEqual(["vision"]);
+    expect(disabledNow()).toEqual(["vision"]);
 
     store.toggleSubAgent("vision");
-    expect(useAgentStore.getState().disabledSubAgents).toEqual([]);
+    expect(disabledNow()).toEqual([]);
   });
 
-  it("resets disabledSubAgents on resetChat", () => {
-    useAgentStore.setState({ disabledSubAgents: ["search", "longread"] });
-    useAgentStore.getState().resetChat();
-    expect(useAgentStore.getState().disabledSubAgents).toEqual([]);
+  it("resets disabledSubAgents on a new conversation", () => {
+    useAgentStore.setState((st) => ({
+      chats: { c0: { ...activeChat(st), disabledSubAgents: ["search", "longread"] } },
+    }));
+    useAgentStore.getState().newChat();
+    expect(disabledNow()).toEqual([]);
   });
   it("clears the override when switching to another saved conversation", async () => {
     // The chip says "this conversation". resetChat cleared it, but switching
     // sessions from the history menu did not — so a subagent switched off in
     // conversation A stayed off in conversation B.
-    useAgentStore.setState({
-      disabledSubAgents: ["search"], chatSessionId: 1, chatRunning: false, turns: [],
-    });
+    useAgentStore.setState((st) => ({
+      chats: { c0: { ...activeChat(st), disabledSubAgents: ["search"], sessionId: 1 } },
+    }));
 
     await useAgentStore.getState().switchChatSession(2);
 
-    expect(useAgentStore.getState().chatSessionId).toBe(2);
-    expect(useAgentStore.getState().disabledSubAgents).toEqual([]);
+    expect(activeChat(useAgentStore.getState()).sessionId).toBe(2);
+    expect(disabledNow()).toEqual([]);
   });
 });

@@ -39,7 +39,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import { baseName, isSamePath, projectRelative } from "../lib/paths";
 import { useAiStore } from "./aiStore";
-import { useAgentStore } from "./agentStore";
+import { activeChat, useAgentStore } from "./agentStore";
 import { useAppStore } from "./appStore";
 import { useEditorStore } from "./editorStore";
 import { useLoreStore } from "./loreStore";
@@ -138,7 +138,7 @@ export function reportMatchesOpenDocument(report: ConsistencyReport | null): boo
 export function forecastReview(docText: string, scope: ReviewScope): ReviewPlan {
   const { models, activeModelId, subAgents } = useAiStore.getState();
   const model = models.find((m) => m.id === activeModelId);
-  const subs = withSessionOverrides(subAgents, useAgentStore.getState().disabledSubAgents);
+  const subs = withSessionOverrides(subAgents, activeChat(useAgentStore.getState()).disabledSubAgents);
   const index = useLoreStore.getState().index;
   // Entries mode: the pins' own text is the knowledge-base segment. Their size
   // is not known without reading disk, so the forecast prices each at a
@@ -316,7 +316,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         : allWindows;
       const uncheckedFrom = plan.uncheckedChars > 0 ? allWindows[allWindows.length - 1].to : null;
 
-      const subs = withSessionOverrides(subAgents, useAgentStore.getState().disabledSubAgents);
+      const subs = withSessionOverrides(subAgents, activeChat(useAgentStore.getState()).disabledSubAgents);
       const allModels = useAiStore.getState().models;
       const allProviders = useAiStore.getState().providers;
 

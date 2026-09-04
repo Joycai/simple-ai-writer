@@ -185,11 +185,13 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
       preview TEXT NOT NULL DEFAULT '',
       data TEXT NOT NULL,
       pinned INTEGER NOT NULL DEFAULT 0,
+      title TEXT NOT NULL DEFAULT '',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
   await addChatSessionPinned(db);
+  await addChatSessionTitle(db);
 
   await dropDeadTables(db);
 }
@@ -206,10 +208,28 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
  * column would let the cap prune a session the author pinned.
  */
 async function addChatSessionPinned(db: Awaited<ReturnType<typeof Database.load>>) {
+  await addChatSessionColumn(db, "pinned", "INTEGER NOT NULL DEFAULT 0");
+}
+
+/**
+ * `title` on an existing project's `chat_sessions` — the author's own name for
+ * a conversation (docs/feature/agent/chat-sessions-plan.md §3). Same ALTER
+ * discipline as `pinned`, and the same stakes: without the column the cap
+ * would prune a session the author took the trouble to name.
+ */
+async function addChatSessionTitle(db: Awaited<ReturnType<typeof Database.load>>) {
+  await addChatSessionColumn(db, "title", "TEXT NOT NULL DEFAULT ''");
+}
+
+async function addChatSessionColumn(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  name: string,
+  decl: string,
+) {
   const columns = await db.select<{ name: string }[]>(`PRAGMA table_info(chat_sessions)`);
-  if (columns.some((c) => c.name === "pinned")) return;
+  if (columns.some((c) => c.name === name)) return;
   try {
-    await db.execute(`ALTER TABLE chat_sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+    await db.execute(`ALTER TABLE chat_sessions ADD COLUMN ${name} ${decl}`);
   } catch (e) {
     if (!/duplicate column name/i.test(String(e))) throw e;
   }

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { ListChecks } from "lucide-react";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import styles from "./toggleChip.module.css";
 
 /**
@@ -20,7 +20,7 @@ import styles from "./toggleChip.module.css";
  */
 export function PlanModeChip() {
   const { t } = useTranslation();
-  const planMode = useAgentStore((s) => s.planMode);
+  const planMode = useActiveChat((c) => c.planMode);
   const setPlanMode = useAgentStore((s) => s.setPlanMode);
 
   const label = t("ai.chat.planMode", { defaultValue: "计划模式" });

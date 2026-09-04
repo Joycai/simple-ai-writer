@@ -1,0 +1,153 @@
+/* 标签条 (设计稿 23 屏 1a). 38px between the mode tabs and the conversation. */
+
+.strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  height: 38px;
+  padding: 0 26px;
+  background: var(--color-bg-stream);
+  border-bottom: 1px solid var(--color-border-panel);
+}
+
+/* An index tab: 120–220px, the label eats the slack, the mark and the × never
+   shrink. Only a right hairline parts it from the next. */
+.tab {
+  position: relative;
+  flex: 0 1 220px;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border-right: 1px solid var(--color-border-panel);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.tab:hover { background: var(--color-bg-hover); }
+
+/* The current tab: the conversation's own background, a 2px sienna top line,
+   and it swallows the strip's bottom hairline — a slip of paper actually stuck
+   to the manuscript. It also gets a left hairline, since its neighbour's right
+   one is what used to part them. */
+.tabActive,
+.tabActive:hover {
+  background: var(--color-bg-base);
+  box-shadow: inset 0 2px 0 var(--color-sienna);
+  margin-bottom: -1px;
+  border-left: 1px solid var(--color-border-panel);
+}
+
+/* 新会话 pressed while an empty tab already existed: that tab flashes its top
+   line once (设计稿 23 屏 1g), 120ms, instead of a second blank tab appearing. */
+.tabFlash { animation: tabFlash 240ms var(--ease-out); }
+@keyframes tabFlash {
+  0% { box-shadow: inset 0 2px 0 var(--color-sienna); }
+  50% { box-shadow: inset 0 4px 0 var(--color-sienna-hover); }
+  100% { box-shadow: inset 0 2px 0 var(--color-sienna); }
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 13px/1 var(--font-serif);
+}
+/* 两种字: the author's name upright and bright; the first question dim,
+   behind an opening quote; nothing yet — faintest. */
+.label_title { font-weight: 500; color: var(--color-text-soft); }
+.tabActive .label_title { color: var(--color-text-primary); }
+.label_preview { color: var(--color-text-dim); }
+.tabActive .label_preview { color: var(--color-text-secondary); }
+.label_none { color: var(--color-text-hint); }
+.quote { color: var(--color-text-hint); margin-right: 1px; }
+
+.close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.tab:hover .close,
+.tabActive .close { color: var(--color-text-dim); }
+.close:hover { color: var(--color-sienna); }
+
+/* Two-step close, in place: the tab widens to hold the question. */
+.tabAsking {
+  flex: 0 0 auto;
+  min-width: 0;
+  gap: 10px;
+  cursor: default;
+  background: var(--color-bg-hover);
+  animation: fadeIn 160ms var(--ease-out);
+}
+.askText {
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-soft);
+  white-space: nowrap;
+}
+.askConfirm,
+.askKeep {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.askConfirm { color: var(--color-sienna); }
+.askConfirm:hover { color: var(--color-sienna-hover); }
+.askKeep { color: var(--color-text-dim); font-weight: 400; }
+.askKeep:hover { color: var(--color-text-primary); }
+
+/* 「+N」: the tabs that did not fit, folded into the history menu's 已打开. */
+.overflow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: none;
+  border-right: 1px solid var(--color-border-panel);
+  background: transparent;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.overflow:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+
+.spacer { flex: 1; }
+
+/* 并发 ▮▮▯ 2 / 3 · 排队 1 — the roster's readout, same mono, same bars. */
+.readout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  white-space: nowrap;
+}
+.readoutValue { color: var(--color-text-soft); font-variant-numeric: tabular-nums; }
+.readoutDot { color: var(--color-text-faint); }
+.slots { display: flex; gap: 3px; }
+.slotOn,
+.slotOff { width: 14px; height: 4px; box-sizing: border-box; }
+.slotOn { background: var(--color-accent); }
+.slotOff { border: 1px solid var(--color-border-muted); }
+
+@media (max-width: 1100px) {
+  .strip { padding: 0 20px; }
+}
+@media (max-width: 880px) {
+  .strip { padding: 0 16px; }
+  .readout span:first-child { display: none; }
+}

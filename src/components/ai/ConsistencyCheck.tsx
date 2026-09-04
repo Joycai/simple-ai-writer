@@ -30,7 +30,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Crosshair, X } from
 import { useTerms, useProjectStore } from "../../stores/projectStore";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat } from "../../stores/agentStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -280,7 +280,7 @@ function useReviewForecast(docText: string, scope: ReviewScope): ReviewPlan {
   const models = useAiStore((s) => s.models);
   const activeModelId = useAiStore((s) => s.activeModelId);
   const subAgents = useAiStore((s) => s.subAgents);
-  const disabled = useAgentStore((s) => s.disabledSubAgents);
+  const disabled = useActiveChat((c) => c.disabledSubAgents);
   const utilization = useAppStore((s) => s.contextUtilization);
   const memory = useMemoryStore((s) => s.memory);
   const index = useLoreStore((s) => s.index);

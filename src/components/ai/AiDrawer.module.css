@@ -98,98 +98,14 @@
 .headerBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 .headerBtnAccent { color: var(--color-sienna); }
 
-/* ── Session history menu ────────────────────────────────────────── */
+/* ── Session history menu (SessionMenu.tsx owns the dropdown itself) ── */
 .sessionMenuWrap { position: relative; }
 
-.sessionMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 10;
-  min-width: 240px;
-  max-width: 320px;
-  background: var(--color-bg-inset);
-  border: 1px solid var(--color-border-input);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1) 0;
-  /* Pinned sessions are uncapped by design, so the menu has to run long. */
-  max-height: 320px;
-  overflow-y: auto;
-  animation: dropIn 160ms var(--ease-out);
-  transform-origin: top right;
-}
-
-/* Row = the conversation (flex: 1) + the pin toggle, so the pin is not nested
-   inside the button that opens the conversation. */
-.sessionRow {
-  display: flex;
-  align-items: stretch;
-  transition: background var(--transition-fast);
-}
-.sessionRow:hover { background: var(--color-bg-hover); }
-.sessionRowActive { background: var(--color-bg-accent-wash); }
-
-.sessionItem {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  padding: 6px var(--space-2) 6px var(--space-3);
-  background: transparent;
-  border: none;
-  text-align: left;
-  cursor: pointer;
-}
-
-.sessionPreview {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: 400 11px/1.6 var(--font-sans);
-  color: var(--color-text-primary);
-}
-.sessionRowActive .sessionPreview { color: var(--color-sienna); }
-
-/* Section head, only drawn when both sections are on screen. */
-.sessionGroup {
-  padding: 6px var(--space-3) 3px;
-  font: 500 9.5px/1.4 var(--font-sans);
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--color-text-label);
-}
-.sessionGroup + .sessionGroup,
-.sessionRow + .sessionGroup { margin-top: var(--space-1); }
-
-/* Rest state is the state it reports: invisible until the row is hovered,
-   permanently visible (and filled) once the session is pinned. */
-.sessionPin {
-  flex: none;
-  width: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--color-text-muted);
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--transition-fast), color var(--transition-fast);
-}
-.sessionRow:hover .sessionPin,
-.sessionPin:focus-visible,
-.sessionPinOn { opacity: 1; }
-.sessionPinOn { color: var(--color-sienna); }
-.sessionPin:hover { color: var(--color-sienna-hover); }
-
-.sessionTime {
-  flex-shrink: 0;
-  font: 400 10px/1.6 var(--font-mono);
-  color: var(--color-text-faint);
-  font-variant-numeric: tabular-nums;
+/* 新会话 with its key beside it, mono like every kbd hint. */
+.newChatBtn { display: inline-flex; align-items: center; gap: 6px; }
+.newChatKey {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-border-accent);
 }
 
 .closeBtn {
@@ -230,6 +146,10 @@
   transition: color var(--transition-fast);
 }
 .modeTab:hover { color: var(--color-text-secondary); }
+
+/* 对话助手 tab: the one most urgent mark across every open conversation
+   (ChatMark, size="mode") — 等作者's bars, else a result square, else the pulse. */
+.modeTabMark { display: inline-flex; margin-left: 7px; vertical-align: 1px; }
 
 /* 未读/运行中的角标。方块而不是圆点：圆点在这个应用里已经是「运行中」了。 */
 .modeTabDot {

@@ -35,7 +35,7 @@ import type { Proposal } from "./registry";
 /**
  * Which surface is currently auto-approving, and what for.
  *
- * `key` identifies the owner: the string `"chat"` for the conversation, or a
+ * `key` identifies the owner: `chat:<key>` for one conversation, or a
  * panel run's own AbortController (the same object the approval queues use as
  * their runId). A proposal auto-approves only when its binding carries the
  * *same* key — so a grant made inside a panel task cannot leak into chat, or
@@ -84,8 +84,22 @@ export const ILLUSTRATE_GRANT_MAX = 5;
 /** What a grant can cover. One flag per card kind that offers the button. */
 export type AutoApproveKind = "proposals" | "plans";
 
-/** The key chat uses. A literal, since a conversation has no run object. */
-export const CHAT_AUTO_APPROVE_KEY = "chat";
+/**
+ * The key one chat conversation uses. Per conversation, not the old shared
+ * `"chat"` literal: with several conversations open at once
+ * (docs/feature/agent/chat-sessions-plan.md §4.4) one literal would let A's
+ * 本次都批准 silently cover B. A string rather than the run's controller because
+ * the grant is meant to outlive the turn it was pressed in — that is the whole
+ * point of the button — while a controller dies with its run.
+ */
+export function chatAutoApproveKey(chatKey: string): string {
+  return `chat:${chatKey}`;
+}
+
+/** Whether a key names a chat conversation (as opposed to a panel run). */
+export function isChatAutoApproveKey(key: unknown): key is string {
+  return typeof key === "string" && key.startsWith("chat:");
+}
 
 /** Proposal kinds a grant may cover — `delete` and `illustrate` never do. */
 const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
@@ -156,5 +170,5 @@ export function grantsAppend(
 
 /** How the button and the indicator chip should word themselves. */
 export function autoApproveScope(key: unknown): "session" | "run" {
-  return key === CHAT_AUTO_APPROVE_KEY ? "session" : "run";
+  return isChatAutoApproveKey(key) ? "session" : "run";
 }
