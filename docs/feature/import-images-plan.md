@@ -134,3 +134,12 @@ pptx 的转换器在 Rust（`src-tauri/src/pptx.rs`），图早就被**看见**�
 - rels 指向不存在的 media、或 media 为空字节：占位符兜底，不出资产（丢图不丢文，同 PDF 的 per-page try/catch 精神）。
 
 测试在 `pptx.rs` 内联（真 zip fixture）：抽取 + 链接位置、EMF 不抽占位保留、跨页复用一份资产多处链接、缺失 media 兜底、翻页路径不带字节。这台开发机 `cargo test` 起不来（见 CLAUDE 备忘），由 CI 跑。
+
+## 10. pdfjs 改走 legacy 构建（2026-09-05）
+
+一位 Windows 作者导入任何 PDF 都报 `n.toHex is not a function`。定位：pdfjs-dist 6.3 的 worker 在文档指纹 getter 里调 `Uint8Array.prototype.toHex()`（`pdf.worker.mjs` 的 `fingerprints`），每次 `getDocument` 都经过，所以与文件无关；这个 API 是 Chromium 140 / Safari 18.2 才有的（2025-09 才成为 Baseline），那台机器的 WebView2 停在更早的版本。同一份构建还用了 `Promise.withResolvers`（119）、迭代器助手（122）、`Float16Array`（135）、`toBase64`/`fromBase64`（140），`toHex` 只是最先撞上的。macOS 12（Safari ≤ 17.6）会以同一种方式失败。
+
+处置：`pdf.ts` 的两个 import 改成 `pdfjs-dist/legacy/build/pdf.mjs` + `legacy/build/pdf.worker.min.mjs?url`（vite 的 `optimizeDeps.include` 同步）。legacy 构建带 core-js polyfill，核对过上面每一项都在（`Float16Array` 走 `typeof` 回退），官方承诺 Chrome 125+ / Safari 18+，worker 体积 1.2M → 1.3M，类型是同一份（`legacy/build/pdf.d.mts` 只是 `export * from "pdfjs-dist"`）。**没有**选「应用自己补 polyfill」：worker 是独立线程，主线程的 polyfill 进不去，得注入 worker 脚本；也没有选「提示作者升级」：有现成补丁却让作者去升系统，是把我们的成本转嫁给他。应用自己的底线探测（这一次之后才有的 `lib/webviewCaps`）见 `docs/reference/architecture.md` → 渲染引擎的能力底线。
+
+扫描打包产物确认：除 pdfjs 这一个 chunk 外，mammoth / turndown / jszip / pptxgenjs 与应用自身代码都没有用到 2024 年后的内置 API——所以同一位作者报的 docx / xlsx 导入失败**不是**这个原因（xlsx 根本不在 webview 里跑），要等报错原文。
+

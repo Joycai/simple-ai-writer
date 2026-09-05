@@ -261,8 +261,18 @@ export async function pdfToMarkdown(
   data: Uint8Array,
   assetRelDir: string,
 ): Promise<ConvertResult> {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  // The *legacy* build, on purpose. pdfjs's modern build assumes the very
+  // latest engines: 6.3 calls `Uint8Array.prototype.toHex` / `toBase64`
+  // (Chromium 140, Safari 18.2), `Promise.withResolvers`, `Promise.try` and
+  // the iterator helpers — and a Tauri window is only as new as the machine's
+  // webview. A WebView2 runtime that stopped updating, or macOS 12 (Safari
+  // 17.6 at most), fails every PDF with `n.toHex is not a function` — hit on
+  // the document-fingerprint getter, so no PDF gets through, not just odd
+  // ones. The legacy build carries core-js polyfills for all of these and
+  // feature-tests `Float16Array`; it costs ~0.1 MB on the worker and nothing
+  // in behaviour. `lib/webviewCaps` is where the engine floor itself is probed.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const worker = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 
   // pdfjs transfers the buffer to its worker, so it gets its own copy.

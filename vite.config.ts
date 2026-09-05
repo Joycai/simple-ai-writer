@@ -57,7 +57,7 @@ export default defineConfig(async () => ({
       "mammoth",
       "turndown",
       "@joplin/turndown-plugin-gfm",
-      "pdfjs-dist",
+      "pdfjs-dist/legacy/build/pdf.mjs",
       "markdown-it",
       "@vscode/markdown-it-katex",
       "katex",
