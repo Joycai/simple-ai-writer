@@ -638,6 +638,27 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
 `ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
 方言算出该端点真正认识的字段。
 
+#### 输出格式能不能选（2026-09-05 查官方文档）
+
+四套方言里**只有 GPT-Image 系能选输出格式**；其余三家要么固定 PNG，要么参数只在
+另一个 surface 上生效。之前在中转站 ③ 路由上看到的 JPEG 字节（第九个样本）是那条
+渠道自己转的，不是模型的设置——这也是「mime 读字节、声明只作兜底」不能撤的原因。
+
+| 模型 | 能否选 | 参数 | 默认 | 备注 |
+| --- | --- | --- | --- | --- |
+| gpt-image-2（`/images/generations` 与 `/images/edits`） | **能** | `output_format` ∈ `png` / `jpeg` / `webp`；`output_compression` 0–100（仅 jpeg / webp）；`background: transparent` 仅 png / webp | png | 官方指南：「`jpeg` 比 `png` 快，在意延迟就优先 jpeg」。但 openai-node #1850（2026-04-28，未见回复）实测 gpt-image-2 **对 `webp` 静默忽略、返回 PNG 字节**，`jpeg` 正常。走 chat 路由时没有任何格式参数 |
+| Gemini 3.1 Flash Image（`generateContent`） | **开发者 API 不能** | SDK 类型里有 `imageConfig.outputMimeType` / `outputCompressionQuality` / `imageOutputOptions`，但 js-genai 文档逐条标注 "This field is not supported in Gemini API"，**只在 Vertex AI 上生效**（Google 自己的 3.1 Flash Image 笔记本用的就是 Vertex 的 `output_mime_type="image/png"`） | `inlineData.mimeType` 为 `image/png` | 新的 Interactions API 另有 `response_format.mime_type`（`image/jpeg` / `image/png`），是另一个 surface。顺带：js-genai #1461（2026-04，未解决）报 3.1-flash-image-preview **无视 `imageSize`，永远 1K** |
+| wan2.7-image / -pro（DashScope） | **不能** | `parameters` 只有 size / n / seed / watermark / thinking_mode / enable_sequential / color_palette / bbox_list | PNG | 文档原话：「生成图像的 URL，图像格式为PNG。链接有效期为24小时」；2026-09-04 实测字节确是 PNG |
+| qwen-image-3.0 / -pro（DashScope） | **不能** | prompt_extend / prompt_extend_mode / enable_thinking / n（1–6）/ size / negative_prompt / seed / watermark | PNG | 文档写「图像格式：png」，24 小时过期；输入图收 JPG / PNG / BMP / TIFF / WEBP / GIF |
+
+**推论**：GPT-Image 方言若要暴露输出格式，只给 png / jpeg 两档（webp 在官方端点上是假的）；
+Gemini 路由不加格式字段，加了在 Gemini API 上也不生效。
+
+来源：OpenAI 图像生成指南（developers.openai.com/api/docs/guides/image-generation）、
+openai/openai-node#1850、js-genai `ImageConfig` 接口文档与 googleapis/js-genai#1461、
+GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`、
+阿里云百炼「万相-图像生成与编辑2.7 API参考」与「Qwen-Image-3.0 文生图/图像编辑 API参考」。
+
 ### 第七个样本：OrcaRouter，一台主机上的三个族（截至 2026-09，探测与免费档已实测）
 
 [OrcaRouter](https://docs.orcarouter.ai/zh/introduction) 是与 New API 同类的
