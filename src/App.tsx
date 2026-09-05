@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
+import { WebviewCapsNotice } from "./components/common/WebviewCapsNotice";
 import { IconRail } from "./components/layout/IconRail";
 import { AiRail } from "./components/layout/AiRail";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -151,6 +152,9 @@ export default function App() {
       }}
     >
       <TitleBar />
+      {/* Under the TitleBar, above every view: the webview is older than the
+          build was made for, so some feature will break when reached. */}
+      <WebviewCapsNotice />
 
       {/* `position: relative` so the settings page can fill exactly this band —
           everything below the TitleBar, which stays put as the drag region. */}

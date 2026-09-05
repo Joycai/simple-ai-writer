@@ -368,7 +368,12 @@
       "versionLabel": "Version",
       "githubLabel": "GitHub Repository",
       "copyright": "© 2026 joycai. Released under the MIT License.",
-      "licenseLabel": "License"
+      "licenseLabel": "License",
+      "engineLabel": "Rendering engine",
+      "engineUnknown": "Unknown",
+      "capsLabel": "Engine capabilities",
+      "capsOk": "Complete (needs Chromium ≥ {{chromium}} / Safari ≥ {{webkit}})",
+      "capsMissing": "Missing {{caps}} (needs Chromium ≥ {{chromium}} / Safari ≥ {{webkit}})"
     },
     "general": {
       "appearance": "Appearance",
@@ -3888,5 +3893,15 @@
       "useOnce": "Use it once, don't save",
       "useOnceHint": "Lives in this session only; stays out of the preset list"
     }
+  },
+  "webviewCaps": {
+    "notice": {
+      "chromium": "The rendering engine {{engine}} lacks built-ins this app relies on: {{caps}}. Some features may not work. Update the WebView2 runtime (it normally updates with Microsoft Edge) and reopen the app.",
+      "webkit": "The rendering engine {{engine}} lacks built-ins this app relies on: {{caps}}. Some features may not work. Update the system (on macOS it ships with Safari updates) and reopen the app.",
+      "gecko": "The rendering engine {{engine}} lacks built-ins this app relies on: {{caps}}. Some features may not work. Update the browser engine and reopen the app.",
+      "unknown": "The rendering engine lacks built-ins this app relies on: {{caps}}. Some features may not work. Update the browser engine and reopen the app."
+    },
+    "details": "Details",
+    "dismiss": "Got it"
   }
 }

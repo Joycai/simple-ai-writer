@@ -368,7 +368,12 @@
       "versionLabel": "版本",
       "githubLabel": "GitHub 仓库",
       "copyright": "© 2026 joycai。基于 MIT 许可证发布。",
-      "licenseLabel": "许可证"
+      "licenseLabel": "许可证",
+      "engineLabel": "渲染引擎",
+      "engineUnknown": "未知",
+      "capsLabel": "引擎能力",
+      "capsOk": "齐全（需要 Chromium ≥ {{chromium}} / Safari ≥ {{webkit}}）",
+      "capsMissing": "缺少 {{caps}}（需要 Chromium ≥ {{chromium}} / Safari ≥ {{webkit}}）"
     },
     "general": {
       "appearance": "外观",
@@ -3883,5 +3888,15 @@
       "useOnce": "这次就用它，不保存",
       "useOnceHint": "只挂在本次会话里，不进预设列表"
     }
+  },
+  "webviewCaps": {
+    "notice": {
+      "chromium": "当前的渲染引擎 {{engine}} 缺少本应用需要的能力：{{caps}}。部分功能可能无法使用，请更新 WebView2 运行时（通常随 Microsoft Edge 一起更新）后重新打开应用。",
+      "webkit": "当前的渲染引擎 {{engine}} 缺少本应用需要的能力：{{caps}}。部分功能可能无法使用，请更新系统（macOS 上随 Safari 更新）后重新打开应用。",
+      "gecko": "当前的渲染引擎 {{engine}} 缺少本应用需要的能力：{{caps}}。部分功能可能无法使用，请更新浏览器引擎后重新打开应用。",
+      "unknown": "当前的渲染引擎缺少本应用需要的能力：{{caps}}。部分功能可能无法使用，请更新浏览器引擎后重新打开应用。"
+    },
+    "details": "详情",
+    "dismiss": "知道了"
   }
 }

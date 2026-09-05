@@ -726,6 +726,17 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Dev mode wears someone else's face** — under `tauri dev` the plugin deliberately posts as `com.apple.Terminal` on macOS and with no app id on Windows, so a dev-mode notification shows the terminal's / PowerShell's name and icon. Expected, not a misconfiguration.
 - **Permissions** — `notification:allow-is-permission-granted` / `allow-request-permission` / `allow-notify` in `capabilities/default.json`, rather than `notification:default` (the scheduling, channel and listener commands are unused). Focus reading needs nothing new: `core:window:default` already includes `allow-is-focused`.
 
+### 渲染引擎的能力底线（`src/lib/webviewCaps.ts`）
+
+Tauri 窗口只有机器上的 webview 那么新：Windows 是 WebView2（Chromium，常态下随 Edge 常青更新，但更新被策略挡住、或装的是 Fixed Version 运行时的机器会停在旧版本），macOS 是 WKWebView（那个 macOS 版本封顶的 Safari），Linux 是 WebKitGTK。构建目标是 Vite 默认的 `baseline-widely-available`（Chromium 107 / Safari 16），但那只决定哪些**语法**被转译——缺一个内置函数不会被转译掉，它在调用处直接抛，还带着压缩后的名字（2026-09 的实例：pdfjs 6.3 在 WebView2 < 140 上每个 PDF 都死于 `n.toHex is not a function`，`Uint8Array.prototype.toHex` 是 Chromium 140 / Safari 18.2 才有的）。
+
+两条规则：
+
+- **按特性判断，不按 OS 或版本号。** 同一个失败在 macOS 12（Safari 最高 17.6）和陈旧的 WebView2 上是一样的；按 OS 查表要维护一张表；而 macOS 上 WKWebView 的 UA **根本没有 `Version/` 字段**——所以版本号只做显示（`parseEngine` / `engineName`），`CAPS` 里的探测才是判定。每条探测必须在底线**以内**（`webviewCaps.test.ts` 钉着）：探到一个比底线还新的 API，报的就是构建本来就承诺不支持的东西。
+- **依赖有补丁就补，没有才提示。** pdfjs 自带 legacy 构建（core-js polyfill 了 `toHex` / `fromBase64` / `Promise.withResolvers` / `Promise.try` / 迭代器助手，`Float16Array` 走 `typeof` 回退），所以 `lib/import/pdf.ts` 加载的是 `pdfjs-dist/legacy/build/…`，作者永远不会听到 `toHex`；留在探测清单里的是应用自己站着的底线——没有人替我们 polyfill 的那些（`structuredClone`、`Array.prototype.at`、`AbortSignal.timeout`、容器查询……）。
+
+缺失只报一次**每个不同的集合**（`capsNoticeKey`，存 `app:webviewCapsNoticed`，机器级偏好——引擎是机器的），以 TitleBar 下一条警示（不是 danger：此刻没有东西在坏）出现，并常驻在设置 → 关于的「渲染引擎 / 引擎能力」两行——下一次跨机器的 bug 报告先要这两行。安装器帮不上忙：Tauri 的 Windows 安装包默认只在 WebView2 **缺失**时下载安装，对已装的旧运行时一概不动，也没有「最低 WebView2 版本」可声明，所以应用内探测是唯一的一道。已知仍在底线之外的第三方：mermaid 的 architecture 图用了 `Set.prototype.union`（Chromium 122 / Safari 17），只影响那一种图。
+
 ### Export
 
 - **Location** — `src/lib/fs/export.ts`

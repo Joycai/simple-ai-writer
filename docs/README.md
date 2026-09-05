@@ -120,7 +120,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [docx/02-ui-brief.md](feature/docx/02-ui-brief.md) | `shipped` | 给 Claude Design 的 UI 任务书（自包含）。设计稿已回（TURN 1，1a–1n），实现出入记在 01 的 §11 |
 | [xlsx-export-plan.md](feature/xlsx-export-plan.md) | `shipped` (Beta flag) | agent 产出 .xlsx（PR #394）：一张 markdown 表格 = 一个工作表，**数字必须是数字**（前导零 / 15 位以上 / 带单位一律留成文本，百分数存分数）；生成放 Rust 而 docx 放 TS 的同一条规则（方言不过界，D1）；工具预算 +274 与「为什么不走延迟装载」（§9） |
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
-| [import-images-plan.md](feature/import-images-plan.md) | `shipped` | 导入 PDF/docx/pptx 时抽取内嵌图片（PR #389/#390/#392）：`ConvertResult` 接缝、pdfjs opList 抽取 + y 坐标定位、落 `assets/<文档名>/`；去重/装饰过滤/扫描件三个决策，矢量图明确不做；实现出入（mammoth 双 key 输入等）在 §8，pptx 的 Rust 侧抽取在 §9 |
+| [import-images-plan.md](feature/import-images-plan.md) | `shipped` | 导入 PDF/docx/pptx 时抽取内嵌图片（PR #389/#390/#392）：`ConvertResult` 接缝、pdfjs opList 抽取 + y 坐标定位、落 `assets/<文档名>/`；去重/装饰过滤/扫描件三个决策，矢量图明确不做；实现出入（mammoth 双 key 输入等）在 §8，pptx 的 Rust 侧抽取在 §9，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10 |
 | [image-normalize-plan.md](feature/image-normalize-plan.md) | `partial` | 入模图片规范化：超 4096 长边的图在**发送前**降采样（已发），HEIC 转码**明确不做**（LGPL，§3.0）。为什么阈值是 4096 而不是 2048、为什么没有 per-provider 上限表，以及三个读图函数按去向分开的理由 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
