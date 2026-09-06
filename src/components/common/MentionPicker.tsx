@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { FileText, Image as ImageIcon } from "lucide-react";
+import { AudioLines, FileText, Image as ImageIcon } from "lucide-react";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import type { LoreEntity } from "../../lib/lore";
@@ -167,10 +167,10 @@ function FileThumb({ file }: { file: ProjectFile }) {
     return () => { cancelled = true; };
   }, [file.path, file.kind]);
 
-  if (file.kind === "text" || !url) {
+  if (file.kind !== "image" || !url) {
     return (
       <div className={styles.pickerThumbPlaceholder}>
-        {file.kind === "image" ? <ImageIcon size={12} /> : <FileText size={12} />}
+        {file.kind === "image" ? <ImageIcon size={12} /> : file.kind === "media" ? <AudioLines size={12} /> : <FileText size={12} />}
       </div>
     );
   }
@@ -289,6 +289,8 @@ export function MentionPicker({
                 ? item.entity.category
                 : item.file.kind === "image"
                   ? t("ai.mention.badgeImage", { defaultValue: "图片" })
+                : item.file.kind === "media"
+                  ? t("ai.mention.badgeMedia", { defaultValue: "音频" })
                   // HTML files are read as text like any other, but calling one
                   // 文档 in a list beside the chapters hides the one thing that
                   // distinguishes it — it is the page, not prose about it.

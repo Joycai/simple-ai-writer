@@ -130,6 +130,13 @@ interface Transcript {
 
 照 `convertTools.ts` 的六步，但**第 3 步换位**：提案时不转写，只读文件头（大小、能算出的时长、估价），批准后在 apply 阶段调 `transcribeFile`，进度走 `requestApproval(proposal, onApplyProgress)`。`ToolId` / `Proposal` 联合 / `ApprovalCard` 三臂 / `agentStore` apply / `autoApprove` 拒绝，五处。路由 `routing.ts:189` 旁边同款一行；`agentToolBudget.test.ts` 看不见追加，routed-set 测试里单独断言。`read_file` 对 `transcribeExtOf(path)` 非空的文件：工具在 `allowedTools` 里 → 点名 `transcribe_audio`；不在 → 「这是音频/视频文件，当前没有转写能力，请作者在实验室开启并绑定模型」。
 
+## 5.5 真机第一次跑之后的三处补（2026-09-06）
+
+1. **绑错模型的失败形状**：作者绑的是 `qwen3-asr-flash-2026-02-10`（同步接口的模型），文件接口对它答 400「url error, please check url」——错误码文档里这是「模型名称与 API 端点不匹配」，但那句话把人引去查文件路径。三层拦：`client.ts` 把这个 400 改口成「模型 id 不是 filetrans」；`conn.ts` 在**上传之前**按 id 拒绝（`looksLikeFiletransModel`，纯函数在 `formats.ts`）；子代理面板与模型抽屉在绑定 / 编辑时就提示。研究稿 §1.2 第 5 条记了实测。
+2. **导入收音视频**：`COPY_BINARY_EXTENSIONS` 加上 `lib/asr/formats` 的两张表，原样复制、不看 Beta——项目本来就可以放源录音。
+3. **`@` 引音频**：`ProjectFileKind` 加 `media`（`classifyProjectFile` 认 17 个扩展名），`AttachedMedia` 是一个**只带路径**的附件：`attachProjectFile` 不读文件，`chatRefs` 把它列成「音频 / 视频文件 · 路径」并按本次运行有没有 `transcribe_audio` 决定是点名工具还是让作者去开开关（tool-presence 的规矩）；`@` 候选只在 Beta 开且绑了模型时列出；知识库那几个附件框过滤掉它（那里读不了也转不了）。
+4. ASR 四步各进一行调试日志（`logAsrEvent`：policy / upload / submit / poll），下次再失败能看见是哪一步、哪个模型 id。
+
 ## 6. PR 4 — 热词（先测）
 
 用 §0 第 3 条的方法测；有效则 `AsrOptions.vocabulary` 从 `loreIndex` 取条目名 + 别名（权重 3），开关 `ai:asr:useLore` 默认关。

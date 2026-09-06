@@ -31,6 +31,17 @@ export function transcribeExtOf(path: string): string | null {
   return ALL.has(ext) ? ext : null;
 }
 
+/**
+ * 录音文件识别接口只认 `*-filetrans` 模型。实测（docs/api/qianwen-compat-plan.md
+ * §1.4）：对话模型、甚至同步版的 `qwen3-asr-flash` / `qwen-audio-3.0-asr-flash`，
+ * 取凭证和上传都成功，提交时一律 400「url error」——在上传之前拦下来，省一次上传，
+ * 也省作者去检查一个没错的文件路径。命名规则是 DashScope 的，不是我们的；哪天它
+ * 改了，改这里。住在这个纯模块里，设置面板和测试都能直接用。
+ */
+export function looksLikeFiletransModel(modelId: string): boolean {
+  return /filetrans/i.test(modelId);
+}
+
 /** 视频容器？（只影响确认卡上的措辞：「会抽取音轨」。） */
 export function isVideoExt(ext: string): boolean {
   return ASR_VIDEO_EXTENSIONS.includes(ext.toLowerCase());

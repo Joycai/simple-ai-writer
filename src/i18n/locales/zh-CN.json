@@ -705,6 +705,7 @@
       "asrDiarization": "说话人分离",
       "asrDiarizationHint": "说话人 N · 多约 2 秒 · 多一列",
       "warnNotAsr": "绑定的模型没有声明转写格式——去「供应商与模型」把它标成录音文件识别模型。",
+      "warnAsrNotFiletrans": "「{{id}}」不是录音文件识别模型：这个功能走文件转写接口，只认 *-filetrans 的 id（qwen3-asr-flash 系列是同步接口的模型）。去「供应商与模型」把 id 改成 qwen-audio-3.0-asr-flash-filetrans。",
       "searchReq": "需 web_search",
       "visionReq": "需多模态",
       "longreadReq": "大窗口优先",
@@ -1681,7 +1682,8 @@
       "membersMore": " 等 {{n}} 条"
     },
     "mention": {
-      "badgeImage": "图片"
+      "badgeImage": "图片",
+      "badgeMedia": "音频"
     },
     "chat": {
       "tab": "助手",
@@ -1706,6 +1708,8 @@
       "imageRef": "图片",
       "imageBlockLabel": "【附图】",
       "imagesNotSent": "（以下图片未能随本条消息发送——当前模型读不了图：\n{{list}}）",
+      "mediaRefs": "（以下是音频 / 视频文件，模型读不了它们的内容——需要时用 transcribe_audio 转写成文字稿（作者会先看到一张确认卡），再用 read_file 读文字稿：\n{{list}}）",
+      "mediaRefsNoTool": "（以下是音频 / 视频文件，模型读不了它们的内容，本次运行也没有转写工具——告诉作者需要在 实验室 开启「音频转写」并在 子代理 里绑定模型：\n{{list}}）",
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
       "selectionChipEmpty": "选区",
@@ -2228,6 +2232,7 @@
       "asrLabel": "转写模型格式",
       "briefAsr": "这是一个只会转写的模型，走它自己的文件接口。",
       "asrFormatHintOn": "声明为录音文件识别后，这个模型从主模型和所有子代理的候选里消失，只能绑给「音频转写」；抽屉里对话相关的段全部折起。",
+      "asrIdNotFiletrans": "「{{id}}」不是录音文件识别模型的 id——这个功能走文件转写接口，只认 *-filetrans（qwen3-asr-flash 系列是同步接口的模型，会被平台以「url error」拒绝）。改成 qwen-audio-3.0-asr-flash-filetrans。",
       "asrFormat_dashscope-filetrans": "DashScope 录音文件识别",
       "asrDefaultName": "千问 · 录音文件识别",
       "pricePerSecondLabel": "每秒单价",

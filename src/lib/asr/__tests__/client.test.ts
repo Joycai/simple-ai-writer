@@ -111,6 +111,14 @@ describe("submit", () => {
     responses.push(json({ code: "InvalidParameter", message: "bad", request_id: "r" }));
     await expect(submitTranscription(conn, "oss://k", { diarization: false })).rejects.toMatchObject({ code: "InvalidParameter" });
   });
+  it("400「url error」改口成「模型 id 不是 filetrans」——实测那句话指向一个没错的文件路径", async () => {
+    responses.push(json({ code: "InvalidParameter", message: "url error, please check url！ For details, see: https://help.aliyun.com/zh/model-studio/error-code#error-url" }, 400));
+    const err = await submitTranscription({ ...conn, modelId: "qwen3-asr-flash-2026-02-10" }, "oss://k", { diarization: false }).catch((e) => e);
+    expect(err).toBeInstanceOf(AsrHttpError);
+    expect((err as AsrHttpError).code).toBe("ModelNotFiletrans");
+    expect((err as AsrHttpError).message).toMatch(/qwen3-asr-flash-2026-02-10/);
+    expect((err as AsrHttpError).message).toMatch(/filetrans/);
+  });
 });
 
 describe("pollTask", () => {

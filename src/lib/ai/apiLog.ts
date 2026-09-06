@@ -123,6 +123,17 @@ const noopImageLogger: ImageCallLogger = { success() {}, error() {}, note() {} }
  * full (they are the author's own text); input images are counted, not
  * embedded.
  */
+/**
+ * One line per transcription step (lib/asr/client.ts): policy, upload, submit,
+ * poll. Bills per second and fails in a step the author cannot see — the
+ * first live run refused with a bare "400 url error" and nothing to say which
+ * step or which model id. Never the key; bodies are excerpts.
+ */
+export function logAsrEvent(step: string, data: Record<string, unknown>): void {
+  if (!isApiLogEnabled()) return;
+  writeEntry({ type: "asr", step, time: new Date().toISOString(), ...data });
+}
+
 export function beginImageApiLog(req: {
   standard: string;
   route: string;

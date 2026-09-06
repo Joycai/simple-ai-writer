@@ -96,6 +96,8 @@ import {
   resolveSubAgentConn, visionSubAgentModel, withSessionOverrides,
   type SubAgentConfig, type SubAgentKind,
 } from "../lib/agent/subagent";
+import { subAgentModel } from "../lib/agent/subagent";
+import { isAsrEnabled } from "../lib/asr/flag";
 import {
   repairToolCallPairing, runAgent,
   type RoundLimitDecision, type TruncationDecision,
@@ -1603,6 +1605,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         visionDelegate: visionSubAgentModel(
           useAiStore.getState().models, effectiveSubs,
         ) !== null,
+        // Same rule as routing.ts's append: Beta on AND an `asr` binding —
+        // a mentioned recording is pointed at the tool only when it is there.
+        transcribe: isAsrEnabled()
+          && subAgentModel("asr", useAiStore.getState().models, effectiveSubs) !== null,
       },
     );
 
