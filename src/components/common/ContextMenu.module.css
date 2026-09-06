@@ -39,6 +39,20 @@
   flex: 1;
   white-space: nowrap;
 }
+/* 带小字的项不再是定高 30px：标签一行 + mono 一行。 */
+.itemWithHint {
+  height: auto;
+  padding: 7px 10px 8px;
+  align-items: flex-start;
+}
+.itemWithHint svg { margin-top: 1px; }
+.hint {
+  display: block;
+  margin-top: 4px;
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
 .shortcut {
   flex-shrink: 0;
   margin-left: 18px;

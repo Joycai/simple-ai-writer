@@ -99,6 +99,7 @@ interface LoreState {
     projectPath: string,
     entities: readonly LoreEntity[],
     category: CategoryId,
+    onProgress?: (done: number, total: number) => void,
   ) => Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }>;
 }
 
@@ -303,8 +304,8 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     }
   },
 
-  moveToCategory: async (projectPath, entities, category) => {
-    const { moves, skipped, failed } = await moveEntitiesToCategory(projectPath, entities, category);
+  moveToCategory: async (projectPath, entities, category, onProgress) => {
+    const { moves, skipped, failed } = await moveEntitiesToCategory(projectPath, entities, category, onProgress);
     // 置顶跟着搬。顺序是「先重指、再重扫」：墙上的置顶记号是按 `index` 重算的
     // （LoreWall 的 pinnedDirs），扫描在后，作者就不会看见中间那一帧「置顶没了」。
     if (moves.length > 0) {

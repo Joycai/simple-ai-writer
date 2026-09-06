@@ -1,8 +1,9 @@
 /*
- * 「移到分类」的浮层。几何上和归集清单（collections.module.css 的 .assign*）是同一块
- * 板子——它们是同一条动作条上前后脚弹出的两个菜单，尺寸不一致只会显得是两个功能。
- * 不同的是**语汇**：这里是分类色点 + 单选，没有勾选框、没有三态、更没有装订双线
- * （3px double 归集合所有，见 design-system.md → 集合 · 装订语汇）。
+ * 「移到分类」的浮层（设计稿 03f 屏 1c）。几何上和归集清单（collections.module.css 的
+ * .assign*）是同一块板子——它们是同一条动作条上前后脚弹出的两个菜单，尺寸不一致只会
+ * 显得是两个功能。不同的是**语汇**：这里是分类色点 + 单选，没有勾选框、没有三态、更没
+ * 有装订双线（3px double 归集合所有，见 design-system.md → 集合 · 装订语汇）；页脚是
+ * 常驻脚注而不是「应用」键。
  */
 .menu {
   position: fixed;
@@ -16,35 +17,52 @@
   max-height: 70vh;
   /* 上挂用 riseIn 而不是 dropIn——global.css:100 的注释就是这条规则：
      「下挂用 dropIn（从触发器落下），上挂用 riseIn」。本菜单的锚点恒为
-     above: true（LoreWall.tsx:1039 是唯一调用点，浮层底边贴着按钮顶边），
+     above: true（LoreWall 是唯一调用点，浮层底边贴着按钮顶边），
      用 dropIn 会让它从 4px 上方掉下来，方向与它实际生长的方向相反。
      原点相应是 bottom left（左沿对齐同 ContextMenu，纵向从按钮那条边长出）。 */
   animation: riseIn 140ms var(--ease-out);
   transform-origin: bottom left;
 }
+.grow { flex: 1; }
 
+/* ── 头：名字 + 条数 + 「当前：人物 3 · 地点 2」 ─────────────────────────── */
 .head {
-  padding: 10px 14px;
+  padding: 11px 14px 10px;
   border-bottom: 1px solid var(--color-border-soft);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
 }
-.title {
-  font: 500 9px/1 var(--font-sans);
-  letter-spacing: 0.18em;
-  color: var(--color-accent);
-  text-transform: uppercase;
-}
-/* 影响面那一行是等宽的：它是个数字，作者会去数它。 */
-.breakdown { font: 400 10px/1.4 var(--font-mono); color: var(--color-text-faint); }
+.titleRow { display: flex; align-items: baseline; gap: 8px; }
+.titleWord { font: 500 12.5px/1 var(--font-sans); color: var(--color-sienna); }
+.titleCount { font: 400 11px/1 var(--font-mono); color: var(--color-text-label); }
+/* 影响面那一行是等宽的：它是个数字，作者会去数它。它在头部、紧贴标题——
+   必须在决定之前被看见（1z · B3）。 */
+.breakdown { margin-top: 7px; font: 400 10.5px/1.5 var(--font-mono); color: var(--color-text-label); }
 
-.list { padding: 4px 0; display: flex; flex-direction: column; overflow-y: auto; }
+/* 搬家中：头部换成转圈 + 「搬到「术语」…」 + 右侧 3/5。 */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-sienna);
+  border-radius: 50%;
+  align-self: center;
+  flex-shrink: 0;
+  animation: spin 900ms linear infinite;
+}
+.progress { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+@media (prefers-reduced-motion: reduce) {
+  /* 加载指示仍需转动——静止的残环与卡死无法区分。 */
+  .spinner { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
+}
+
+/* ── 行 ───────────────────────────────────────────────────────────────── */
+.list { padding: 3px 0; display: flex; flex-direction: column; overflow-y: auto; }
+/* 整个浮层禁手，行不再可点。 */
+.listBusy { pointer-events: none; opacity: 0.45; }
 .row {
-  padding: 9px 14px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   cursor: pointer;
   background: none;
   border: none;
@@ -52,13 +70,15 @@
   width: 100%;
   transition: background var(--transition-fast);
 }
-.row:hover { background: var(--lore-sub-bg); }
-/* 当前分类照常列出：「都在这儿了」本身就是一次有用的回答。 */
-.rowHere { cursor: default; opacity: 0.55; }
-.rowHere:hover { background: none; }
+.row:hover { background: var(--color-bg-tinted); }
+/* 当前分类照常列出：「都在这儿了」本身就是一次有用的回答。点和字一起退成淡色。 */
+.rowHere { cursor: default; background: var(--lore-sub-bg); }
+.rowHere:hover { background: var(--lore-sub-bg); }
+.rowHere .name { color: var(--color-text-faint); }
 
-/* 分类的唯一记号。6px，永远紧挨着标签——两个分类撞色是可以接受的（见 catColor）。 */
-.dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+/* 分类的唯一记号。8px，永远紧挨着标签——两个分类撞色是可以接受的（见 catColor）。 */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dotHere { background: var(--lore-neutral-line); }
 .name {
   font: 400 13px/1.2 var(--font-serif);
   color: var(--color-text-primary);
@@ -68,10 +88,37 @@
 }
 .count { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
 
+/* ── 没有别处可搬 ─────────────────────────────────────────────────────── */
+.emptyText { padding: 13px 14px 0; font: 400 12px/1.75 var(--font-serif); color: var(--color-text-secondary); }
+.newCat {
+  margin: 4px 0 12px;
+  padding: 6px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  font: 500 11.5px/1 var(--font-sans);
+  color: var(--color-sienna);
+  cursor: pointer;
+}
+.newCat:hover { color: var(--color-sienna-hover); }
+
+/* ── 脚 ───────────────────────────────────────────────────────────────── */
 .foot {
   padding: 10px 14px;
-  border-top: 1px solid var(--color-border-soft);
-  background: var(--color-bg-base);
+  border-top: 1px dashed var(--color-border);
 }
-/* 常驻脚注而不是弹窗：它每次都成立，而每次都弹的东西第三次就被无视了。 */
-.note { font: italic 400 10px/1.45 var(--font-serif); color: var(--color-text-muted); }
+/* 常驻脚注而不是弹窗：它每次都成立，而每次都弹的东西第三次就被无视了。
+   它讲的是机制，所以在脚、10px；头部那句讲的是数字。 */
+.note { font: 400 10px/1.65 var(--font-serif); color: var(--color-text-label); text-wrap: pretty; }
+.noteCode { font: 400 9.5px/1 var(--font-mono); color: var(--color-text-secondary); }
+/* 失败只写一行。 */
+.failLine { font: 400 10.5px/1.6 var(--font-mono); color: var(--color-text-secondary); }
+.retry {
+  background: none;
+  border: none;
+  padding: 0;
+  font: 500 10.5px/1 var(--font-sans);
+  color: var(--color-sienna);
+  cursor: pointer;
+}
+.retry:hover { color: var(--color-sienna-hover); }

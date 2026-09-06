@@ -346,11 +346,18 @@ export function LoreWall() {
    * 只有失败才弹窗。成功是墙上看得见的——卡片换了颜色、分类计数变了——而每次成功都
    * 弹一次的提示，第三次就变成了下意识点掉的东西。
    */
-  const moveSelectedToCategory = async (category: string) => {
-    if (!projectPath || selectedEntities.length === 0) return;
+  /**
+   * 搬多选的这一批到 `category`。进度和「N 条已搬，M 条未动 · 重试」都由 `CategoryMoveMenu`
+   * 自己画（设计稿 03f 屏 1c），这里只回数字——失败不再弹 alert。
+   */
+  const moveSelectedToCategory = async (
+    category: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ moved: number; failed: number }> => {
+    if (!projectPath || selectedEntities.length === 0) return { moved: 0, failed: 0 };
     const targets = selectedEntities;
     try {
-      const { moves, failed } = await moveToCategory(projectPath, targets, category);
+      const { moves, failed } = await moveToCategory(projectPath, targets, category, onProgress);
       if (moves.length > 0) {
         const byFrom = new Map(moves.map((m) => [m.from, m.to]));
         setSelected((cur) => new Set([...cur].map((p) => byFrom.get(p) ?? p)));
@@ -358,12 +365,11 @@ export function LoreWall() {
           ? (byFrom.get(anchorRef.current) ?? anchorRef.current)
           : null;
       }
-      if (failed.length > 0) {
-        window.alert(t("lore.categoryMove.failed", { list: failed.join("、") }));
-      }
+      if (failed.length > 0) console.warn("[lore] category move: not moved:", failed);
+      return { moved: moves.length, failed: failed.length };
     } catch (e) {
       console.warn("[lore] category move failed:", e);
-      window.alert(t("lore.categoryMove.failed", { list: targets.map((x) => x.name).join("、") }));
+      return { moved: 0, failed: targets.length };
     }
   };
 
@@ -419,7 +425,8 @@ export function LoreWall() {
     if (!isUserCategory(cat.id)) {
       // 藏掉菜单项会让作者以为自己点错了地方。留着、禁用、把理由写在标签上。
       return [
-        { kind: "item", label: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
+        { kind: "item", icon: <Trash2 size={13} />, label: t("lore.categoryDelete.menu"),
+          hint: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
       ];
     }
     return [
@@ -1145,7 +1152,8 @@ export function LoreWall() {
         <CategoryMoveMenu
           entities={selectedEntities}
           anchor={catMove}
-          onPick={(category) => void moveSelectedToCategory(category)}
+          onPick={moveSelectedToCategory}
+          onNewCategory={() => setShowNewCategory(true)}
           onClose={() => setCatMove(null)}
         />
       )}

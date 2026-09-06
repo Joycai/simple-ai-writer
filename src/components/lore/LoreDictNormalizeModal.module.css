@@ -1,0 +1,264 @@
+/*
+ * 词典标准化（设计稿 03f 屏 1d–1f）。外壳（overlay / panel / footer / 按钮）沿用
+ * LoreImproveModal.module.css；这里只放它自己的部件：
+ *
+ *   - 头部的「搬运 · 不生成」眉签——分工写在头部，不在页脚。不是横幅：没有通栏底色、
+ *     没有图标，宽度跟着正文走，靠 2px 赭石竖线站住。
+ *   - 结果态的两态：词表预览（03c 屏 1e 的三栏 190 / 150 / flex）和原文 textarea，
+ *     共用同一段草稿；点预览任意一行切到原文并把光标落在那一行。
+ *   - 「请核对」：一枚 mono 眉签 + 2px 赭黄竖线 + 同色浅底（--lore-check-*）。它和
+ *     「选中」的赭石分得开，也不是 error——待核是让作者看，不是让代码替他判断。
+ */
+
+/* ── 头 ──────────────────────────────────────────────────────────────── */
+.header {
+  padding: 18px 28px 16px;
+  border-bottom: 1px solid var(--color-border-soft);
+  flex-shrink: 0;
+}
+.headRow { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* 30px 方块、分类色底、首字——不是圆头像：这里没有人，只有一张词表。 */
+.avatar {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-accent);
+  font: 300 15px/1 var(--font-serif);
+  flex-shrink: 0;
+}
+.headText { min-width: 0; flex: 1; }
+.headName {
+  font: 300 22px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.headSub { margin-top: 3px; font: italic 400 11.5px/1.5 var(--font-serif); color: var(--color-text-muted); }
+.code { font: 400 11px/1 var(--font-mono); font-style: normal; color: var(--color-text-secondary); }
+.tag {
+  padding: 3px 8px;
+  background: var(--color-bg-inset);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+.grow { flex: 1; }
+.doneChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.doneDot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-success); }
+
+.eyebrowBlock {
+  margin-top: 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 13px;
+  background: var(--color-bg-tinted);
+  border-left: 2px solid var(--color-amber);
+}
+.eyebrow {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-sienna);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.eyebrowText { font: 400 12px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+
+/* ── 正文段 ──────────────────────────────────────────────────────────── */
+.sectionHead { display: flex; align-items: baseline; gap: 10px; }
+.sectionLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-text-label);
+  text-transform: uppercase;
+}
+/* 「可解析 0 条」不是错误——它是这个模态存在的理由，和 46 共用一个位置一种颜色。 */
+.num { font: 500 11px/1 var(--font-mono); color: var(--color-text-primary); }
+.numAccent { font: 500 11px/1 var(--font-mono); color: var(--color-sienna); }
+.meta { font: 400 10.5px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+
+.bodyPre {
+  margin: 0;
+  padding: 16px 18px;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+  font: 400 12px/1.95 var(--font-mono);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.caption { font: 400 11px/1.6 var(--font-serif); color: var(--color-text-muted); }
+
+/* 生成中「结果 · 边搬边出现」 */
+.livePre {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+  font: 400 12px/1.9 var(--font-mono);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* ── 结果态 ──────────────────────────────────────────────────────────── */
+.seg { display: flex; border: 1px solid var(--color-border); flex-shrink: 0; }
+.segBtn {
+  padding: 6px 12px;
+  background: var(--color-card);
+  border: none;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.segBtn:hover { color: var(--color-text-primary); }
+.segOn, .segOn:hover { background: var(--color-sienna); color: var(--color-on-accent); }
+
+.check {
+  padding: 11px 14px;
+  background: var(--lore-check-bg);
+  border-left: 2px solid var(--lore-check-line);
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.checkEyebrow {
+  font: 500 10px/1.5 var(--font-sans);
+  letter-spacing: 0.16em;
+  color: var(--lore-check-text);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.checkBody { flex: 1; min-width: 0; }
+.checkText { font: 400 12.5px/1.7 var(--font-serif); color: var(--lore-check-text); }
+.checkText .num { font: 400 11.5px/1 var(--font-mono); color: inherit; }
+.checkRows { margin-top: 4px; font: 400 10.5px/1.6 var(--font-mono); color: var(--lore-check-note); }
+.checkFilter {
+  background: none;
+  border: none;
+  padding: 0;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--lore-check-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  border-bottom: 1px solid transparent;
+}
+.checkFilter:hover { border-bottom-color: var(--lore-check-line); }
+
+/* 词表预览：03c 屏 1e 的三栏，前面多一列行号——点一行要能回到原文的那一行。 */
+.tbl { container-type: inline-size; }
+.tHead, .tRow {
+  display: grid;
+  grid-template-columns: 26px 190px 150px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: baseline;
+}
+.tHead {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--lore-neutral-line);
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--color-text-label);
+}
+.tRow {
+  width: 100%;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
+  cursor: text;
+  transition: background var(--transition-fast);
+}
+.tRow:hover { background: var(--lore-sub-bg); }
+/* 待核的行：同一块赭黄底 + 左侧 2px 线，行号也换色。 */
+.tRowOn, .tRowOn:hover { background: var(--lore-check-bg); box-shadow: inset 2px 0 0 var(--lore-check-line); }
+.tIdx { font: 400 10px/1.5 var(--font-mono); color: var(--lore-neutral-line); padding-left: 0; }
+.tRowOn .tIdx { color: var(--lore-check-line); padding-left: 8px; }
+.tSrc { font: 400 13px/1.5 var(--font-mono); color: var(--color-text-primary); min-width: 0; overflow-wrap: anywhere; }
+.tDst { font: 400 15px/1.5 var(--font-serif); color: var(--color-text-primary); min-width: 0; overflow-wrap: anywhere; }
+.tNoteCol { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tNote { font: italic 300 12px/1.6 var(--font-serif); color: var(--color-text-faint); min-width: 0; overflow-wrap: anywhere; }
+.tRowOn .tNote { color: var(--lore-check-note); }
+.tTag {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid var(--lore-check-line);
+  font: 500 9.5px/1.4 var(--font-sans);
+  color: var(--lore-check-text);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* 「只看这 2 条」时被略过的那一段 */
+.tGap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+.tGap::before, .tGap::after { content: ""; flex: 1; height: 1px; background: var(--color-border-soft); }
+.tEmpty { padding: 18px 0; font: italic 400 12px/1.6 var(--font-serif); color: var(--color-text-muted); }
+
+@container (max-width: 640px) {
+  .tHead, .tRow { grid-template-columns: 26px 150px minmax(0, 1fr); }
+  .tHead .tNoteCol { display: none; }
+  .tRow .tNoteCol { grid-column: 3; }
+  .tRow .tNoteCol:empty { display: none; }
+}
+
+/* 原文态：textarea 底下垫一张同字号同排版的镜子，只负责给待核那几行上底色。
+   两层用完全相同的字体 / 行高 / 内边距 / 折行规则，镜子也开纵向滚动条以对齐内容宽度。 */
+.srcWrap {
+  position: relative;
+  height: 360px;
+  border: 1px solid var(--color-border);
+  background: var(--lore-bg-input);
+  transition: border-color var(--transition-fast);
+}
+.srcWrap:focus-within { border-color: var(--color-sienna); }
+.srcMirror, .srcArea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  font: 400 13px/22px var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  tab-size: 4;
+}
+.srcMirror { color: transparent; pointer-events: none; user-select: none; }
+.srcLine { display: block; min-height: 22px; }
+.srcLineOn { display: block; min-height: 22px; background: var(--lore-check-bg); box-shadow: inset 2px 0 0 var(--lore-check-line); }
+.srcArea {
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--color-text-primary);
+  caret-color: var(--color-sienna);
+}
+.srcArea::selection { background: var(--color-sienna-tint, rgba(160, 82, 45, 0.18)); }
