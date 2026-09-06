@@ -14,7 +14,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, Check, ChevronDown, ChevronRight, ChevronsDown, FolderOpen, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { SnippetPicker } from "./SnippetPicker";
@@ -34,6 +34,7 @@ import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
+import { isAsrEnabled } from "../../lib/asr/flag";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -177,6 +178,10 @@ export function AgentChat() {
   // Whether the model chain (either the active model directly or via vision subagent)
   // can consume pictures for the live session.
   const canSeeImages = chainCanSeeImages(activeModel, effectiveSubs, models);
+  // A recording can be @-mentioned only when the run will hold transcribe_audio
+  // (Beta on + an `asr` binding, routing.ts's rule): offering it otherwise
+  // attaches a file the message can neither carry nor hand to a tool.
+  const canTranscribe = isAsrEnabled() && subAgentModel("asr", models, effectiveSubs) !== null;
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -254,9 +259,9 @@ export function AgentChat() {
     // carry — the author would see a chip and the assistant would answer as if
     // nothing were there.
     ...projectFiles
-      .filter((f) => f.kind === "text" || canSeeImages)
+      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages) || (f.kind === "media" && canTranscribe))
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, projectFiles, canSeeImages]);
+  ], [loreIndex, projectFiles, canSeeImages, canTranscribe]);
 
   const mentionItems = filterMentions(
     pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
@@ -934,6 +939,8 @@ export function AgentChat() {
                 {/* A picture is the one attachment whose cost the author can't
                     read off its name — mark it as what it is. */}
                 {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                {/* A recording travels as a path, not content — the mark says so. */}
+                {r.kind === "media" && <AudioLines size={10} strokeWidth={2} />}
                 @{label}
                 <X size={10} strokeWidth={2} />
               </button>

@@ -90,6 +90,7 @@ Responses 只探了一次（§4.2）。
 | 同上但**漏** resolve 头 | | **提交照样 200**；qwen3 轮询 2.2s 后 `FAILED / FILE_DOWNLOAD_FAILED`，qwen-audio-3.0 跑到 47s 才 `FAILED / SERVER_ERROR`（无 message）——错误只在轮询阶段出现 |
 | 分离 + 上下文（qwen-audio-3.0） | `parameters.diarization_enabled: true, speaker_count: 2, context: [{role:"user", content:[{type:"input_text", text:"…"}]}]` | 成功，多 2s；句对象多 `speaker_id` |
 | 上下文（qwen3） | `parameters.text: "人物：林小满（女）、陈伯…"` | 成功，但**没有**纠正它认错的「陈博」/「他」——同段 qwen-audio-3.0 不给上下文两处都对 |
+| 非 filetrans 的模型 id 提交到 `/services/audio/asr/transcription` | `model` = `qwen3.8-flash` / `deepseek-v4-flash` / `qwen3-asr-flash` / `qwen-audio-3.0-asr-flash`，`oss://` + resolve 头 | 取凭证、上传均 200；提交一律 **400 `InvalidParameter: url error, please check url！`**——错误码文档：「模型名称与 API 端点不匹配」。本地路径 / 空串 / `undefined` 作 URL 反而提交 200（之后才 FAILED）；不存在的 `oss://` 对象 403 `Resource.AccessDenied` |
 
 结果 JSON（`transcription_url`，**24 小时**有效）两代也不同：qwen3 是 `audio_info{format,sample_rate}` +
 句 `{sentence_id 从 0, begin_time, end_time, language, emotion, text, words?[]}`（词是单字，仅

@@ -22,6 +22,7 @@
 
 import { fetch } from "../http";
 import { dashscopeNativeBase } from "../ai/image";
+import { logAsrEvent } from "../ai/apiLog";
 import type { AsrRequestOptions } from "./cache";
 import { taskFailureOf, taskStatusOf, transcriptionUrlOf, type TaskOutput } from "./result";
 
@@ -102,6 +103,7 @@ export async function getUploadPolicy(conn: AsrConn, signal?: AbortSignal): Prom
   if (!d || required.some((k) => typeof d[k] !== "string" || !d[k])) {
     throw new AsrHttpError("Upload policy error", 200, JSON.stringify(json).slice(0, 400));
   }
+  logAsrEvent("policy", { model: conn.modelId, uploadHost: d.upload_host, uploadDir: d.upload_dir, maxFileSizeMb: d.max_file_size_mb });
   return d as UploadPolicy;
 }
 
@@ -146,7 +148,12 @@ export async function uploadTemp(
   for (const [k, v] of uploadFormFields(policy, key)) form.append(k, v);
   form.append("file", new Blob([bytes as BlobPart], { type: mime }), key.split("/").pop());
   const res = await fetch(policy.upload_host, { method: "POST", body: form, signal });
-  if (!res.ok) throw new AsrHttpError("Upload error", res.status, await res.text());
+  if (!res.ok) {
+    const body = await res.text();
+    logAsrEvent("upload", { status: res.status, key, bytes: bytes.byteLength, body: body.slice(0, 300) });
+    throw new AsrHttpError("Upload error", res.status, body);
+  }
+  logAsrEvent("upload", { status: res.status, key, bytes: bytes.byteLength });
   return `oss://${key}`;
 }
 
@@ -185,11 +192,34 @@ export async function submitTranscription(
     body: JSON.stringify(submitBody(conn.modelId, fileUrl, options)),
     signal,
   });
-  if (!res.ok) throw new AsrHttpError("Transcription submit error", res.status, await res.text());
+  if (!res.ok) {
+    const body = await res.text();
+    logAsrEvent("submit", { status: res.status, model: conn.modelId, fileUrl, body: body.slice(0, 300) });
+    // 实测（docs/api/qianwen-compat-plan.md §1.4）：凡是不带 `-filetrans` 的模型 id——
+    // 对话模型、甚至同步版的 qwen-audio-3.0-asr-flash——提交到这个接口都答同一句
+    // 「url error, please check url」，而取凭证和上传对任何模型名都成功。平台的错误码
+    // 文档把它列为「模型名称与 API 端点不匹配」。原话会把作者引去检查一个没错的
+    // 文件路径，所以这里改口说真正的原因。
+    if (res.status === 400 && /url error/i.test(body)) {
+      throw new AsrHttpError(
+        "Transcription submit error",
+        400,
+        JSON.stringify({
+          code: "ModelNotFiletrans",
+          message:
+            `the model id "${conn.modelId}" is not a file-transcription model — the endpoint answers "url error" ` +
+            `to a model/endpoint mismatch. The id must be a *-filetrans model (e.g. qwen-audio-3.0-asr-flash-filetrans); ` +
+            `fix the model row under 供应商与模型. The upload itself succeeded.`,
+        }),
+      );
+    }
+    throw new AsrHttpError("Transcription submit error", res.status, body);
+  }
   const json = (await readJson(res, "Transcription submit error")) as { code?: string; output?: TaskOutput };
   if (json.code) throw new AsrHttpError("Transcription submit error", 200, JSON.stringify(json));
   const taskId = json.output?.task_id;
   if (!taskId) throw new AsrHttpError("Transcription submit error", 200, JSON.stringify(json).slice(0, 400));
+  logAsrEvent("submit", { status: 200, model: conn.modelId, fileUrl, taskId, options });
   return taskId;
 }
 
@@ -262,11 +292,13 @@ export async function pollTask(
       continue;
     }
     if (status === "SUCCEEDED") {
+      logAsrEvent("poll", { taskId, status, polls, elapsedMs: now() - startedAt, usage: json.usage });
       const url = transcriptionUrlOf(json.output);
       if (!url) throw new AsrHttpError("Transcription task error", 200, JSON.stringify(json.output ?? json).slice(0, 400));
       const billed = json.usage?.duration ?? json.usage?.seconds;
       return { transcriptionUrl: url, billedSeconds: typeof billed === "number" ? billed : null };
     }
+    logAsrEvent("poll", { taskId, status, polls, elapsedMs: now() - startedAt, code: json.output?.code, message: json.output?.message });
     throw new AsrHttpError("Transcription failed", 200, JSON.stringify({ code: json.output?.code ?? status, message: taskFailureOf(json.output) }));
   }
 }

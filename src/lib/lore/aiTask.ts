@@ -30,7 +30,13 @@ export type AttachedImage = {
   downscaled?: Downscaled;
 };
 export type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
-export type AttachedItem  = AttachedLore | AttachedImage | AttachedText;
+/**
+ * A recording / video mentioned by path only: nothing is read here, because
+ * no model API takes the bytes. The chat message names it and points at
+ * `transcribe_audio` (lib/agent/chatRefs); the lore surfaces never offer it.
+ */
+export type AttachedMedia = { kind: "media"; file: ProjectFile };
+export type AttachedItem  = AttachedLore | AttachedImage | AttachedText | AttachedMedia;
 
 /** Stable identity for an attachment, used for dedupe and chip keys. */
 export function attachedKey(a: AttachedItem): string {
@@ -56,6 +62,9 @@ export type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
  * turned away.
  */
 export async function attachProjectFile(file: ProjectFile): Promise<AttachOutcome> {
+  // A mention, not a payload: the file stays on disk and the message carries
+  // its path. Reading a 2GB recording here would only be thrown away.
+  if (file.kind === "media") return { ok: true, item: { kind: "media", file } };
   if (file.kind === "image") {
     try {
       const { dataUrl, bytes, downscaled } = await imageForModel(file.path);

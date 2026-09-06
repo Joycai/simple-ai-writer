@@ -1005,7 +1005,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 the id and a per-second price. */}
             <Fold open={family === "openai" && !form.translateFormat}>
               <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
-                warn={form.asrFormat ? t("aiConfig.models.asrFormatHintOn") : undefined}>
+                warn={form.asrFormat
+                  ? /filetrans/i.test(form.modelId)
+                    ? t("aiConfig.models.asrFormatHintOn")
+                    // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
+                    // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
+                    : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })
+                  : undefined}>
                 <div className={s.chips}>
                   <DashChip
                     label={t("aiConfig.models.translateFormatNone")}

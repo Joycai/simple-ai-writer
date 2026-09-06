@@ -19,7 +19,7 @@
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent } from "../ai/types";
 import { readEntityFile } from "../lore/entity";
-import type { AttachedImage, AttachedItem, AttachedLore, AttachedText } from "../lore/aiTask";
+import type { AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText } from "../lore/aiTask";
 
 /**
  * Longest slice of one referenced file that is inlined. Generous enough for a
@@ -146,7 +146,12 @@ export async function buildChatMessage(
   message: string,
   quote?: string,
   refs: AttachedItem[] = [],
-  opts: { allowImages?: boolean; visionDelegate?: boolean } = {},
+  opts: {
+    allowImages?: boolean;
+    visionDelegate?: boolean;
+    /** Whether this run holds `transcribe_audio` — decides what a mentioned recording is told to do. */
+    transcribe?: boolean;
+  } = {},
 ): Promise<ChatMessagePayload> {
   const parts: string[] = [];
 
@@ -201,6 +206,27 @@ export async function buildChatMessage(
           })
         : i18n.t("ai.chat.imagesNotSent", {
             defaultValue: "（以下图片未能随本条消息发送——当前模型读不了图：\n{{list}}）",
+            list: listed,
+          }),
+    );
+  }
+
+  // Recordings: never a payload, always a pointer. The model is told the path
+  // and — only when this run actually holds the tool (tool-presence.md) —
+  // which tool turns it into text; otherwise what the author has to switch on.
+  const media = refs.filter((r): r is AttachedMedia => r.kind === "media");
+  if (media.length) {
+    const listed = media.map((a) => `- ${a.file.name} — ${a.file.path}`).join("\n");
+    parts.push(
+      opts.transcribe
+        ? i18n.t("ai.chat.mediaRefs", {
+            defaultValue:
+              "（以下是音频 / 视频文件，模型读不了它们的内容——需要时用 transcribe_audio 转写成文字稿（作者会先看到一张确认卡），再用 read_file 读文字稿：\n{{list}}）",
+            list: listed,
+          })
+        : i18n.t("ai.chat.mediaRefsNoTool", {
+            defaultValue:
+              "（以下是音频 / 视频文件，模型读不了它们的内容，本次运行也没有转写工具——告诉作者需要在 实验室 开启「音频转写」并在 子代理 里绑定模型：\n{{list}}）",
             list: listed,
           }),
     );

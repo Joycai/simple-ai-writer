@@ -707,6 +707,7 @@
       "asrDiarization": "Speaker diarization",
       "asrDiarizationHint": "Speaker N · ~2 s more · adds a column",
       "warnNotAsr": "The bound model declares no transcription format — mark it as a file-transcription model under Providers & models.",
+      "warnAsrNotFiletrans": "“{{id}}” is not a file-transcription model: this feature uses the file-transcription endpoint, which only accepts *-filetrans ids (the qwen3-asr-flash series is the synchronous endpoint's). Set the id to qwen-audio-3.0-asr-flash-filetrans under Providers & models.",
       "searchReq": "Needs web_search",
       "visionReq": "Needs multimodal",
       "longreadReq": "Large window preferred",
@@ -1684,7 +1685,8 @@
       "membersMore": " +{{n}} more"
     },
     "mention": {
-      "badgeImage": "image"
+      "badgeImage": "image",
+      "badgeMedia": "Audio"
     },
     "chat": {
       "tab": "Assistant",
@@ -1709,6 +1711,8 @@
       "imageRef": "Image",
       "imageBlockLabel": "【Attached images】",
       "imagesNotSent": "(These images could not travel with this message — the active model cannot read images:\n{{list}})",
+      "mediaRefs": "(The following are audio / video files the model cannot read — when needed, transcribe them with transcribe_audio (the author sees a confirmation card first), then read the transcript with read_file:\n{{list}})",
+      "mediaRefsNoTool": "(The following are audio / video files the model cannot read, and this run has no transcription tool — tell the author to enable Audio transcription under Labs and bind a model under Sub-agents:\n{{list}})",
       "imageTooLarge": "{{name}} is too large ({{size}}MB, limit {{max}}MB)",
       "refUnreadable": "Could not read {{name}}",
       "selectionChipEmpty": "Selection",
@@ -2235,6 +2239,7 @@
       "asrLabel": "Transcription model format",
       "briefAsr": "A transcription-only model on its own file endpoint.",
       "asrFormatHintOn": "Declared as file transcription, this model disappears from the main-model and every sub-agent list and can only be bound to “Audio transcription”; every chat-related section folds.",
+      "asrIdNotFiletrans": "“{{id}}” is not a file-transcription model id — this feature uses the file-transcription endpoint, which only accepts *-filetrans (the qwen3-asr-flash series belongs to the synchronous endpoint and is refused with “url error”). Use qwen-audio-3.0-asr-flash-filetrans.",
       "asrFormat_dashscope-filetrans": "DashScope file transcription",
       "asrDefaultName": "Qwen · file transcription",
       "pricePerSecondLabel": "Price per second",

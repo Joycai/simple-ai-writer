@@ -67,7 +67,9 @@ export function AttachmentTextarea({
 
   const candidates: MentionItem[] = [
     ...entities.map((entity): MentionItem => ({ type: "lore", entity })),
-    ...projectFiles.map((file): MentionItem => ({ type: "file", file })),
+    // No recordings on a lore surface: nothing here can read or transcribe
+    // one, and the fallback branch below would try to read it as text.
+    ...projectFiles.filter((f) => f.kind !== "media").map((file): MentionItem => ({ type: "file", file })),
   ];
   const items = filterMentions(candidates, mention.query);
   const attachedKeys = new Set(attached.map(attachedKey));

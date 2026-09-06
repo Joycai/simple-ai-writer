@@ -18,6 +18,7 @@ import {
   setAsrDiarizationDefault,
   setAsrTimestampsEnabled,
 } from "../../../lib/asr/flag";
+import { looksLikeFiletransModel } from "../../../lib/asr/formats";
 import { WRITER_PRESET } from "../../../lib/agent/presets";
 import {
   clampChunkLines,
@@ -121,6 +122,11 @@ export function SubAgentsPane() {
     }
     if (kind === "asr" && !isAsrOnly(model)) {
       return t("systemSettings.subagents.warnNotAsr");
+    }
+    // 实测：录音文件识别接口只认 *-filetrans 的 id，别的一律 400「url error」——
+    // 在这里就说，别等作者上传完一个文件再被平台拒（lib/asr/conn.ts）。
+    if (kind === "asr" && !looksLikeFiletransModel(model.modelId)) {
+      return t("systemSettings.subagents.warnAsrNotFiletrans", { id: model.modelId });
     }
     return undefined;
   };

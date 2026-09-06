@@ -44,6 +44,7 @@
 2. `POST {upload_host}`，`multipart/form-data`，字段顺序 `OSSAccessKeyId / Signature / policy / x-oss-object-acl / x-oss-forbid-overwrite / key / success_action_status=200 / file`（`file` 必须最后）。`key = upload_dir + "/" + 文件名`。成功 HTTP 200 空 body。
 3. 提交任务时 `file_url(s)` 填 `oss://<key>`，**并加头 `X-DashScope-OssResourceResolve: enable`**。漏这个头**提交照样 200**，任务在轮询里以 `FILE_DOWNLOAD_FAILED`（qwen3）或跑 45 秒后 `SERVER_ERROR`（qwen-audio-3.0）收场——错误只在轮询阶段出现，提交阶段无感。
 4. 文件 48 小时后自动清理；上传后不可查、不可删。凭证里 `max_file_size_mb` 是 1024，模型页说 2GB——以**凭证返回的数字**为准。
+5. **凭证对任何模型名都发**（`qwen3.8-flash`、`deepseek-v4-flash` 都拿得到并传得上），绑定关系不在这一步校验。真正的校验在提交：`model` 不是 `*-filetrans`——对话模型、甚至同步版的 `qwen3-asr-flash` / `qwen-audio-3.0-asr-flash`——一律 400 `InvalidParameter: url error, please check url！`，平台错误码文档把它列为「模型名称与 API 端点不匹配」（2026-09-06 真机第一次跑就撞上：作者绑的是 `qwen3-asr-flash-2026-02-10`）。这句话会把人引去检查一个没错的文件路径，所以 `client.ts` 把它改口成「模型 id 不是 filetrans」，`conn.ts` / 子代理面板 / 模型抽屉三处在上传之前就按 id 提示。
 
 平台文档反复说临时存储「请勿用于生产环境」——指的是 100 QPS 限流和 48 小时有效期。对一个单作者桌面应用，一次转写一个上传，这两条都碰不到；但要**写进设置页的说明**，而且以后若做「一键转写整个目录」要串行。
 

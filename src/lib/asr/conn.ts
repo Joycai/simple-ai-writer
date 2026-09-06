@@ -9,6 +9,7 @@ import type { Model, Provider } from "../ai/configDb";
 import { loadApiKey } from "../keyStore";
 import { subAgentModel } from "../agent/subagent";
 import type { AsrConn } from "./client";
+import { looksLikeFiletransModel } from "./formats";
 
 export interface ResolvedAsr extends AsrConn {
   provider: Provider;
@@ -19,7 +20,10 @@ export interface ResolvedAsr extends AsrConn {
 export type AsrUnavailable =
   | { reason: "unbound"; error: string }
   | { reason: "provider-gone"; error: string }
-  | { reason: "no-key"; error: string };
+  | { reason: "no-key"; error: string }
+  | { reason: "not-filetrans"; error: string };
+
+export { looksLikeFiletransModel };
 
 export async function resolveAsrConn(): Promise<ResolvedAsr | AsrUnavailable> {
   const { useAiStore } = await import("../../stores/aiStore");
@@ -32,6 +36,15 @@ export async function resolveAsrConn(): Promise<ResolvedAsr | AsrUnavailable> {
       error:
         "the transcription subagent is not usable. Tell the author to enable it in Settings → 子代理 " +
         "and bind a model whose 转写模型格式 is set (Settings → 供应商与模型).",
+    };
+  }
+  if (!looksLikeFiletransModel(model.modelId)) {
+    return {
+      reason: "not-filetrans",
+      error:
+        `the bound transcription model's id "${model.modelId}" is not a *-filetrans model, and the file-transcription ` +
+        `endpoint rejects every other id. Tell the author to set the model row's id to e.g. qwen-audio-3.0-asr-flash-filetrans ` +
+        `(Settings → 供应商与模型).`,
     };
   }
   const provider = providers.find((p) => p.id === model.providerId);
