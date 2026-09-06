@@ -3903,6 +3903,7 @@
       "previewLive": "改一个字段就重画",
       "regionLine": "版心 {{w}} × {{h}}{{grid}}",
       "saveHint": "保存后对以后的导出生效 · 已有的 .docx 不动",
+      "saveBlockedNumbering": "{{levels}} 的编号会排成「一.1」· 改好才能保存",
       "discardAsk": "有未保存的改动，放弃吗？",
       "keepEditing": "继续编辑",
       "discard": "放弃改动",

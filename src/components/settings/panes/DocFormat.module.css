@@ -915,6 +915,8 @@
 }
 
 .footHint { font-size: 11.5px; color: var(--stg-text-desc); }
+/* 保存被编号组合拦住时的脚注：和表里、面板里那几处同一种暖色。 */
+.footHintWarm { color: var(--stg-text-warm); }
 
 .primaryBtn,
 .ghostBtn,
