@@ -213,6 +213,8 @@
   --writer-tick:           #C08A5E;   /* 13px 横刻度 · 交接点 */
   --writer-rule:           #D8B48F;   /* 1px 竖线 · 作者边界 */
   --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
+  --color-btn-neutral:       #5C5346;   /* 深中性确认键（删除分类 / 删除排版格式）：有分量、不诱导；字用 --color-on-accent。设计稿 03f 1z */
+  --color-btn-neutral-hover: #2A2520;
   --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
   --color-text-soft:       #5C5346;   /* secondary UI text */
   --color-text-dim:        #736A5C;   /* meta, mono counts */
@@ -362,6 +364,10 @@
   --lore-edge-inner:      #EBD9BC;   /* 页边围栏标注的内侧线（骑缝的第二道） */
   --lore-sub-bg:          #FDFBF5;   /* 比卡面再亮半步：悬停行、菜单脚注 */
   --lore-neutral-line:    #C9BFA8;   /* 中性线：未勾的勾选框、虚线控件边、空装订标 */
+  --lore-check-bg:        #F8F2E2;   /* 「请核对」：赭黄——和选中的赭石分得开，也不是 error（设计稿 03f 屏 1f） */
+  --lore-check-line:      #B08A3C;
+  --lore-check-text:      #8A6B2E;
+  --lore-check-note:      #A08A5C;   /* 待核行里的备注与行号 */
 
   --lore-density-0:       #F1E8D5;
   --lore-density-1:       #F1E0BD;
@@ -493,6 +499,8 @@
   --writer-tick:           #8E6540;
   --writer-rule:           #6B4B2E;
   --color-on-accent:       #17130F;
+  --color-btn-neutral:       #9A8E7A;
+  --color-btn-neutral-hover: #C0B49E;
   --color-text-prose:      #D9CFC0;
   --color-text-soft:       #B3A794;
   --color-text-dim:        #8E8271;
@@ -620,6 +628,10 @@
   --lore-edge-inner:      #4A3826;
   --lore-sub-bg:          #2F2820;
   --lore-neutral-line:    #4A4136;
+  --lore-check-bg:        #2C2517;
+  --lore-check-line:      #C9A24A;
+  --lore-check-text:      #C9A24A;
+  --lore-check-note:      #B0975A;
 
   --lore-density-0:       #241F19;
   --lore-density-1:       #2A211A;

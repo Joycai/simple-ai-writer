@@ -60,6 +60,7 @@ import cs from "./collections/collections.module.css";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { LoreDictNormalizeModal } from "./LoreDictNormalizeModal";
+import { parseDictBody } from "../../lib/translate/glossary";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
@@ -837,6 +838,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           entityName={entity.name}
           imageGenReady={imageGenReady}
           dictEntry={entity.dict === true}
+          dictStats={entity.dict === true
+            ? { parsed: parseDictBody(content).length, lines: content.split("\n").filter((l) => l.trim()).length }
+            : undefined}
           onClose={() => setShowAiHub(false)}
           onPick={(task) => {
             setShowAiHub(false);

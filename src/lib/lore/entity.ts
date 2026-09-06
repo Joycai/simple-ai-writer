@@ -532,14 +532,18 @@ export async function moveEntitiesToCategory(
   projectPath: string,
   entities: readonly LoreEntity[],
   category: CategoryId,
+  /** 每处理完一条（搬了 / 跳过 / 失败都算）报一次进度——「移到分类」浮层上那个 3/5。 */
+  onProgress?: (done: number, total: number) => void,
 ): Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }> {
   const moves: CategoryMove[] = [];
   const failed: string[] = [];
   let skipped = 0;
+  let done = 0;
 
   for (const entity of entities) {
     if (entity.category === category) {
       skipped++;
+      onProgress?.(++done, entities.length);
       continue;
     }
     try {
@@ -570,6 +574,7 @@ export async function moveEntitiesToCategory(
       console.warn(`[lore] could not move ${entity.dirPath} to ${category}:`, e);
       failed.push(entity.name);
     }
+    onProgress?.(++done, entities.length);
   }
   return { moves, skipped, failed };
 }
