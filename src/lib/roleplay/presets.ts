@@ -56,7 +56,10 @@ export const NARRATOR_PRESET: TaskPreset = {
     "read_image",
     "list_files",
     "read_file",
-    "read_slides",
+    // 这里**没有** read_slides / read_document：旁白读的是稿子和知识库，不是幻灯片
+    // 或 Word 文件——把这一场对话写进正文，用不着翻一份 .pptx。两个工具一起缺
+    // 是有意的：只留一个会更糟，`read_file` 撞上 .docx 时写死了「用 read_document」
+    // 而那是一个这里没有的工具。缺全套时它至少是一句让模型停手的拒绝，不是死循环。
     "search_text",
     "read_memory",
     "list_scenes",
