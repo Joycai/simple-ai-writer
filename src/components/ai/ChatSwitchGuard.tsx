@@ -1,5 +1,5 @@
 /**
- * 换项目 while conversations are still working (设计稿 23 屏 1j).
+ * 换项目 while conversations are still working (设计稿 02b 屏 1j).
  *
  * The single-conversation drawer never asked: the author could see the one
  * run. With several on background tabs they may not remember, so when any is

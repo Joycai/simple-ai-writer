@@ -1,6 +1,6 @@
 /**
  * The drawer header's title in 对话助手 mode — the conversation's *name*, not the
- * product's (设计稿 23 屏 1f). 「对话助手」is already lit on the mode tab; writing
+ * product's (设计稿 02b 屏 1f). 「对话助手」is already lit on the mode tab; writing
  * it twice said nothing, and the name is what the author reaches for when they
  * want to rename.
  *

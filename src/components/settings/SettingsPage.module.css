@@ -11,7 +11,7 @@
   overflow: hidden;
   background: var(--color-bg-base);
 
-  /* ── 设置页色系接入 (设计稿 04) ──
+  /* ── 设置页色系接入 (设计稿 05a) ──
      The settings surface keeps its own warm-paper family, one step lighter
      than the workspace, and reads in Source Serif 4 / Noto Serif SC. Every
      pane, drawer and dialog under this subtree consumes the same --color-*
@@ -148,7 +148,7 @@
 
 .navIcon { flex-shrink: 0; }
 
-/* ─── 排版格式: the one nav item a switch adds and removes (设计稿 18) ──────
+/* ─── 排版格式: the one nav item a switch adds and removes (设计稿 05b) ──────
    Expands from zero height in 240ms on the same frame the Word switch goes
    on — no translate, so the items below simply move down — and collapses in
    reverse when it goes off. `inert` on the box (SettingsPage.tsx) is what

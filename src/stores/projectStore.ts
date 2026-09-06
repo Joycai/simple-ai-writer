@@ -367,7 +367,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Conversations generating, queued or waiting in the project being left
     // would be stopped by the switch. Single-conversation days never asked —
     // the author could see the one run; with several on background tabs they
-    // may not remember, so ask once, listing them (设计稿 23 屏 1j). Idle
+    // may not remember, so ask once, listing them (设计稿 02b 屏 1j). Idle
     // everywhere resolves true without a dialog.
     if (!isSamePath(get().projectPath, target)) {
       const { useAgentStore } = await import("./agentStore");

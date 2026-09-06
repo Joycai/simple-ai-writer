@@ -1346,7 +1346,7 @@ export function AiPanel() {
   return (
     <div className={styles.panel} onKeyDown={handlePanelKeyDown}>
       {/* 取材范围的骑缝带。任务面板和对话共用同一个控件与同一份状态——两处各存一份
-          会让作者在一处切了范围、另一处仍按旧范围跑（设计稿 03 屏 26-B）。 */}
+          会让作者在一处切了范围、另一处仍按旧范围跑（设计稿 03b 屏 26-B）。 */}
       {loreScope !== null && (
         <ScopeBand
           index={loreIndex}

@@ -74,7 +74,7 @@ interface ConsistencyState {
   ignored: Set<string>;
   /** Issues whose suggestion was written into the document — undoable. */
   applied: Map<string, AppliedRecord>;
-  /** The settings block re-opened over a finished report (设计稿 22 屏 1h-C). */
+  /** The settings block re-opened over a finished report (设计稿 02d 屏 1h-C). */
   settingsOpen: boolean;
   abortController: AbortController | null;
 
@@ -208,7 +208,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   prefillFromSearch: (term) => {
     const q = term.trim();
     if (!q) return;
-    // A term that names an entry narrows the range to it (设计稿 22 屏 1k);
+    // A term that names an entry narrows the range to it (设计稿 02d 屏 1k);
     // anything else is only a focus.
     const lower = q.toLowerCase();
     const hit = Object.values(useLoreStore.getState().index)

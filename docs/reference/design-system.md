@@ -24,7 +24,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 ### 令牌速查 (Token reference — `tokens.css`)
 - **Easing**: `--ease-out` (enter/expand, default), `--ease-spring` (brief pop accents only), `--ease-in-out` (symmetric size/position).
 - **Transitions**: `--transition-fast` (120ms, hover/press), `--transition-base` (200ms), `--transition-slow` (320ms, panels/drawers). All pre-bound to `--ease-out`. **侧栏折叠 is a decision change from this**: `.sidebar` (`Sidebar.module.css`) animates *nothing* when it collapses. `width` is a layout property on a flex child that never unmounts (`App.tsx` only swaps the class), so every frame of a 320ms collapse hands the `flex: 1` content column a new width and makes CodeMirror re-measure wrapping — ~19 forced relayouts of the whole document column per toggle — and the trigger is re-clicking an already-active IconRail tab, i.e. the same button as a 100+/day tab switch. It is deliberately zero-transition (`plans/031-sidebar-collapse-no-transition.md`); don't "fix" it back, and don't shorten it to 120ms instead — there is no compositor-only way to collapse a flex sibling. The token itself is unchanged and still right for drawers and panels.
-- **Radius**: **all zero** (设计稿 01/04 收紧为全局无圆角 — the manuscript reads as cut paper, not rounded cards). The whole `--radius-*` scale is 0 in `tokens.css`; modules keep reading the tokens so a future turn of the dial is still one edit. The only sanctioned circles are dot indicators, spinners and radio marks — `border-radius: 50%` or `--radius-round`. Switch knobs are **square** (设计稿 04 draws the settings toggle as a flat square block — see 设置页色系 below). Never write any other literal radius, and don't "fix" a square control back to round.
+- **Radius**: **all zero** (设计稿 01a/05a 收紧为全局无圆角 — the manuscript reads as cut paper, not rounded cards). The whole `--radius-*` scale is 0 in `tokens.css`; modules keep reading the tokens so a future turn of the dial is still one edit. The only sanctioned circles are dot indicators, spinners and radio marks — `border-radius: 50%` or `--radius-round`. Switch knobs are **square** (设计稿 05a draws the settings toggle as a flat square block — see 设置页色系 below). Never write any other literal radius, and don't "fix" a square control back to round.
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
 - **Tags**: `--color-tag-bg` / `--color-tag-text` for the neutral badge. Model-type tags get one hue each — `--color-type-{text,multimodal,image,video}-{bg,fg}` — so a model list is scannable without reading the labels.
@@ -82,16 +82,16 @@ Rules of the road:
 
 ### 设置页色系 (Settings surface — `src/components/settings/**`)
 
-设计稿 04 gives the settings page its **own warm-paper family** — same hues as the workspace but one step lighter (page `#FBF7EE`, inputs `#FFFDF6`, its own sienna `#A9512B`) — and its own heading serif (Source Serif 4 / Noto Serif SC via `--font-serif-settings`). Implementation decisions:
+设计稿 05a gives the settings page its **own warm-paper family** — same hues as the workspace but one step lighter (page `#FBF7EE`, inputs `#FFFDF6`, its own sienna `#A9512B`) — and its own heading serif (Source Serif 4 / Noto Serif SC via `--font-serif-settings`). Implementation decisions:
 
 - **Tokens**: the palette lives in `tokens.css` as `--stg-*`, defined per theme. The mockup only specifies light; the night block maps each `--stg-*` role onto the existing night ramp so dark mode follows without a second design pass.
 - **One remap, not eighteen restyles**: every settings module consumes the same `--color-*` vocabulary as the rest of the app, so `SettingsPage.module.css` re-points those roles at `--stg-*` **once on `.page`** (custom properties resolve at use time, so the whole subtree — panes, drawers, probe panel — follows). Element-level exceptions that the mapping can't express (kbd 键帽, stat cards `#F7F1E2`, usage bar `#C68B5A`, hint blocks `#F8F2E3`) read their `--stg-*` token directly.
 - **Portals escape the remap** on purpose: `ConfirmDialog` renders through `ModalShell`'s portal and keeps the app-wide manuscript palette — a modal is app chrome, not settings furniture.
-- **Toggle switch** (`settingsUi.module.css .toggle`, the app's only switch): 42×22 track with a 1px border and a flat 14×14 **square** knob — no radius, no shadow, per 设计稿 04. OFF is a paper inset (`--stg-card-head` / `--stg-border-menu`, knob `--stg-knob`), ON dyes track+border `--stg-accent` with a `--stg-bg-input` knob. `--stg-knob` is the one palette entry the mockup adds for it (`#A99C7F`; night `#8E8271`, picked from the same warm-gray step as `--stg-text-faint` since the mockup is light-only). Native checkboxes in settings get `accent-color: var(--color-sienna)` to match.
+- **Toggle switch** (`settingsUi.module.css .toggle`, the app's only switch): 42×22 track with a 1px border and a flat 14×14 **square** knob — no radius, no shadow, per 设计稿 05a. OFF is a paper inset (`--stg-card-head` / `--stg-border-menu`, knob `--stg-knob`), ON dyes track+border `--stg-accent` with a `--stg-bg-input` knob. `--stg-knob` is the one palette entry the mockup adds for it (`#A99C7F`; night `#8E8271`, picked from the same warm-gray step as `--stg-text-faint` since the mockup is light-only). Native checkboxes in settings get `accent-color: var(--color-sienna)` to match.
 
 ### 知识库设计语言 (Lore surfaces — `src/components/lore/**`)
 
-设计稿 03（claude.ai/design 项目 → `03 设定集 Lore`）给知识库一套**索引卡**语汇：网格纸墙上的微旋转硬阴影卡片、六色分类系统、880×760 的成对模态。实现为 `tokens.css` 里的 `--lore-*` 族（per theme；夜间是把每个角色映射到既有夜色阶的推导，设计稿只给了纸色）。
+设计稿 03a（claude.ai/design 项目 → `03a 设定集 · 条目与类型 Lore A` / `03b 设定集 · 集合 Lore B`）给知识库一套**索引卡**语汇：网格纸墙上的微旋转硬阴影卡片、六色分类系统、880×760 的成对模态。实现为 `tokens.css` 里的 `--lore-*` 族（per theme；夜间是把每个角色映射到既有夜色阶的推导，设计稿只给了纸色）。
 
 - **分类六色** `--lore-cat-{character,location,item,event,faction,concept}`：分类圆点、实体头像底、候选徽标共用。映射入口是 `src/components/lore/catColor.ts`（墙与详情共用；未知分类 id 哈希进同一调色板，保证跨会话稳定）。**不要**在组件里再写分类→颜色的字典。
 - **卡片墙**：墙底 `--lore-wall-bg` + 36px 网格线 `--lore-wall-grid`；索引卡硬阴影三档 `--lore-card-shadow{,-lg,-hover}`（硬偏移阴影是索引卡的"纸感"，不是海拔——不要换成模糊阴影）。卡片微旋转 ±0.4deg 由实体 id 哈希得出，悬停回正。
@@ -114,7 +114,7 @@ Rules of the road:
 - **墙上的卡片**（屏 14，`LoreWall`）：标签行是**特征名**（`◈` 前缀），不再是别名的第二次复读（别名已经在名字下面那行）；卡片底部虚线上一条 `N 特征 · M 配图`。头像在 v2 稿里是方块——全局零圆角，`cardFeatured` 上遗留的三处 `border-radius:50%` 一并去掉。
 - **术语**：UI 一律 **特征**（不是"分面"）。i18n 里 `lore.facet.*` 的 key 名保留（磁盘 frontmatter 字段仍叫 `facet`），只有文案改了；三种模式的中文是 自动 / 常驻 / 手动。
 
-#### v3 · 条目阅读模式（设计稿 16 屏 1a–1f，`LoreReadView`）
+#### v3 · 条目阅读模式（设计稿 03c 屏 1a–1f，`LoreReadView`）
 
 条目详情的第二种看法（与三栏管理台并列，crumbBar 两态 segmented `阅读 | 管理`，快捷键 R，
 全局偏好 `app:loreDetailMode` 缺席即阅读；编辑表单压在两种看法之上）。核心一句：**卡片放大成
@@ -228,7 +228,7 @@ Rules of the road:
 
 ### 文件面板设计语言 (Files panel — `components/layout/FileTree*`, `ProjectRow`)
 
-设计稿 17。整块面板由**一条主干决定**推出来：**把「选中」交给几何，把赭石留给唯一那一个。**
+设计稿 01b。整块面板由**一条主干决定**推出来：**把「选中」交给几何，把赭石留给唯一那一个。**
 
 - **三个互不占用的通道，组合不需要额外规则**：**A 底色** —— 悬停 `--color-bg-elevated`（中性），
   当前打开 `--color-accent-tint`，悬停在打开的那一行上 `--color-accent-tint-strong`；
@@ -282,7 +282,7 @@ Rules of the road:
 
 ### 全局搜索 (⌘K — `components/command/CommandPalette*`)
 
-设计稿 21。主干一句：**让组头先说「↵ 会把你带到哪」**——同一个词命中文档和条目时，不给两类不同的颜色
+设计稿 01d。主干一句：**让组头先说「↵ 会把你带到哪」**——同一个词命中文档和条目时，不给两类不同的颜色
 （赭石已经给了当前项），靠三条既有通道叠加：① 组头右端 9.5 mono faint 写目的地（↵ 编辑器 / ↵ 知识库 /
 ↵ 第 N 行）；② 行的左端形状——文档是 16px 描边图标 + 10.5 mono 路径（两级灰同文件面板），条目是 24px
 分类色块（有头像用图，否则分类色 18% 底 + 1px 边 + 首字，色来自 `catColor.ts`）+ 11 serif italic 副行；
@@ -305,7 +305,7 @@ The AI drawer and every surface it spawns (panels, cards, modals, the inline bub
 
 **Why a dialect**: the panel used to stack card-in-card-in-input (three nested borders); the redesign expresses hierarchy with **background depth + 1px hairlines** instead, so the drawer reads as part of the manuscript rather than as a foreign toolbox.
 
-- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. (The AI panel pioneered this; 设计稿 01/04 later made zero radius the global rule — see 令牌速查 above.)
+- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. (The AI panel pioneered this; 设计稿 01a/05a later made zero radius the global rule — see 令牌速查 above.)
 - **Surface ladder** (per theme): `--color-bg-stream` (run column, tool lists) → `--color-bg-inset` (headers, footers, inputs, card interiors) → `--color-bg-base` (drawer body) → `--color-bg-raised` (user bubble, send stamp) → `--color-bg-selected` / `--color-bg-accent-wash` (selected 档位 / active chips).
 - **Composer send/stop slot (1b/2d 输入框两态)**: one 34px block, three looks — ready = solid `--color-sienna` + `--color-on-accent` ↑ arrow (14px, stroke 2.2); empty = the same block muted (`--color-bg-raised` + `--color-text-hint` arrow, 置灰 not hidden); running = the raised block framed in `--color-border-accent` holding the 11px sienna square — **the ink square means stop, not send** (2d reversed the original TURN-1 stamp-as-send). While running: the composer frame also turns `--color-border-accent` (outranking focus sienna), the footer leads with three 4px squares (`--color-border-accent`/`--color-accent-mid`/`--color-sienna`) + mono `正在生成 · mm:ss` in `--color-accent-mid`, the kbd hint becomes `Esc 停止`, and Enter queues the draft to send when the run settles (manual stop clears the queue). Muted states keep a `--color-border-input` hairline the mockup doesn't show: on paper `--color-bg-raised` is nearly the composer's own bg, and a frameless block vanishes.
 - **Ochre ramp** (accent steps, light→deep): `--color-accent-text` → `--color-sienna` → `--color-accent-mid` → `--color-accent-deep` → `--color-border-accent`. `--color-accent-mid` (#B3764A) is the mockup's shared mid tone — 注入条目/摘要 bar segments, the 正在生成 note — and is **the same hex in both themes** on purpose: on paper it lands within 2 units of the exact midpoint of `--color-sienna`↔`--color-border-accent`, so it is already the middle step there. Mind that in the light theme `--color-accent-deep` collapses onto `--color-sienna` (both #A0522D), so it cannot serve as a *distinct step* from sienna — reach for `--color-accent-mid` when a ramp has to stay legible as steps in both themes.

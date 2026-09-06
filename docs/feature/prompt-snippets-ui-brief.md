@@ -1,6 +1,6 @@
 # 提示词库（快捷片段）—— 设计任务书与落地记录
 
-> 状态：`shipped`。设计稿是 claude.ai/design 项目 `10 提示词库 Snippets.dc.html`（TURN 1，屏 1a–1l），本文档下半部分是**发给设计师的任务书原文**，上半部分是落地后的口径与出入。
+> 状态：`shipped`。设计稿是 claude.ai/design 项目 `02c 提示词库 Snippets.dc.html`（TURN 1，屏 1a–1l），本文档下半部分是**发给设计师的任务书原文**，上半部分是落地后的口径与出入。
 >
 > 视觉口径同时记在 [`docs/reference/design-system.md`](../reference/design-system.md) → 提示词库。
 

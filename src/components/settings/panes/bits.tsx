@@ -83,12 +83,12 @@ export function Row({
   children,
 }: {
   title?: string;
-  /** Sits on the title's baseline, after it — a small tag (设计稿 20's 生效中). */
+  /** Sits on the title's baseline, after it — a small tag (设计稿 02e's 生效中). */
   titleExtra?: ReactNode;
   desc?: string;
   warn?: string;
   /** Anything that belongs under the description on the label side — a
-   *  second line of copy, a signpost (设计稿 18's 「接着去 … →」). */
+   *  second line of copy, a signpost (设计稿 05b's 「接着去 … →」). */
   foot?: ReactNode;
   /** Pin the control to the row's first line instead of its vertical centre.
    *  For rows whose label side can grow (a foot that comes and goes): the

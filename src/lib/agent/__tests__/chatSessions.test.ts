@@ -189,7 +189,7 @@ describe("closing", () => {
     await state().closeChat("c0");
     expect(state().chatOrder).toHaveLength(1);
     expect(activeChat(state()).turns).toEqual([]);
-    // 设计稿 23 屏 1j: 「刚关掉的「第三章改稿」在历史会话里。」
+    // 设计稿 02b 屏 1j: 「刚关掉的「第三章改稿」在历史会话里。」
     expect(state().lastClosedLabel).toBe("第三章改稿");
     // ...until the author does something with the new one.
     state().newChat();

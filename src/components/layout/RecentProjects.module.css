@@ -1,5 +1,5 @@
 /*
- * 文件面板 · 未打开项目时的两节列表（设计稿 15「固定最近项目」）。
+ * 文件面板 · 未打开项目时的两节列表（设计稿 01a「固定最近项目」）。
  *
  * 两条规则解释了这个文件里几乎所有别扭的地方：
  *
@@ -45,7 +45,7 @@
 .openBtn:disabled { opacity: 0.5; cursor: wait; }
 
 /* Only shown when both sections are empty — with rows on screen the rail's
-   job is the list, not the explanation (设计稿 15 屏 1a vs 1d①). */
+   job is the list, not the explanation (设计稿 01a 屏 1a vs 1d①). */
 .blurb {
   margin: 14px 12px 0;
   font: 400 11.5px/1.7 var(--font-sans);

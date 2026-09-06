@@ -1,6 +1,6 @@
 # 给 Claude Design 的 UI 设计任务书：对话助手的多个会话
 
-> **状态**：`shipped` —— 设计稿已回（claude.ai/design 项目 `23 助手多会话 Assistant Sessions.dc.html`，
+> **状态**：`shipped` —— 设计稿已回（claude.ai/design 项目 `02b 助手多会话 Assistant Sessions.dc.html`，
 > 屏 1a–1j），并已落地；设计稿怎么回答四个张力、以及实现时的出入，记在
 > [`chat-sessions-plan.md`](chat-sessions-plan.md) §11。下面保留原任务书正文，作为「问了什么」的记录。
 > 这份文件是**自包含的**——底下 `---` 以后的全部内容可以整段复制丢给 Claude Design，

@@ -104,7 +104,7 @@ export const CAPS: readonly Cap[] = [
   { id: "Object.hasOwn", chromium: 93, webkit: "15.4", probe: (g) => fn(g.Object?.hasOwn) },
   // The sync server's health check.
   { id: "AbortSignal.timeout", chromium: 103, webkit: "16", probe: (g) => fn(g.AbortSignal?.timeout) },
-  // The file panel's row tiers (设计稿 17) are container queries.
+  // The file panel's row tiers (设计稿 01b) are container queries.
   {
     id: "CSS container queries",
     chromium: 105,

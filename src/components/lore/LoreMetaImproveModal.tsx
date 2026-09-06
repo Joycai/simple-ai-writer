@@ -249,7 +249,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
   const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
 
-  // 语义步骤 (设计稿 17): 读取 → 生成建议 → 交给作者确认。
+  // 语义步骤 (设计稿 03a 屏 17): 读取 → 生成建议 → 交给作者确认。
   const metaSteps: RunStep[] = [
     {
       label: t("lore.meta.stepRead", { defaultValue: "读取主条目与配图" }),
@@ -339,7 +339,7 @@ summary: ${entity.summary}
             />
           </div>
 
-          {/* 运行进度: 状态行 + 步骤列 + 思考过程 (设计稿 17) */}
+          {/* 运行进度: 状态行 + 步骤列 + 思考过程 (设计稿 03a 屏 17) */}
           {phase === "generating" && (
             <div className={styles.section}>
               <div className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>

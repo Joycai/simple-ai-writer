@@ -1,5 +1,5 @@
 /**
- * Two read-only views of a model row for the settings surfaces — 设计稿 19.
+ * Two read-only views of a model row for the settings surfaces — 设计稿 05c.
  *
  * `wireSummary` is the editor's 「将发送」 line: which request-body fields this
  * row's declarations actually put on the wire, spelled the way the wire spells

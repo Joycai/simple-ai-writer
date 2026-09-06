@@ -36,7 +36,7 @@ const MODE_SHORTCUT: Record<Mode, string> = {
   roleplay: "J",
 };
 
-/** 新会话 — bound while the drawer is open on 对话助手 (设计稿 23 屏 1a). */
+/** 新会话 — bound while the drawer is open on 对话助手 (设计稿 02b 屏 1a). */
 const NEW_CHAT_COMBO: Combo = { mod: true, key: "n" };
 
 export function AiDrawer() {
@@ -53,7 +53,7 @@ export function AiDrawer() {
   const activeChatKey = useAgentStore((s) => s.activeChatKey);
   const newChat = useAgentStore((s) => s.newChat);
   // The mode tab carries the one most urgent mark for every conversation while
-  // the author is on another mode (设计稿 23 屏 1d): 等作者 over 有结果 over 在跑.
+  // the author is on another mode (设计稿 02b 屏 1d): 等作者 over 有结果 over 在跑.
   const chatMark = useAgentStore((s) => (aiDrawerMode === "chat" ? null : mostUrgentChatState(s)));
 
   const close = () => setShowAiDrawer(false);
@@ -81,7 +81,7 @@ export function AiDrawer() {
 
   // 新会话: always available. Landing on a tab that already existed (the idle
   // empty one) flashes that tab's top line once instead of opening a second
-  // blank one (设计稿 23 屏 1g).
+  // blank one (设计稿 02b 屏 1g).
   const [flash, setFlash] = useState<{ key: string; seq: number } | null>(null);
   const openNewChat = () => {
     setShowTasks(false);
@@ -158,7 +158,7 @@ export function AiDrawer() {
 
           <div className={styles.titleBlock}>
             {/* 对话助手 mode: the conversation's *name* is the title — 「对话助手」is
-                already lit on the mode tab (设计稿 23 屏 1f). */}
+                already lit on the mode tab (设计稿 02b 屏 1f). */}
             {aiDrawerMode === "chat" ? <SessionTitle /> : <div className={styles.title}>{headerTitle}</div>}
             <div className={styles.subtitle}>
               <ModelSelector />
@@ -230,7 +230,7 @@ export function AiDrawer() {
             {t("ai.drawer.consistencyTitle", { defaultValue: "一致性检查" })}
           </button>
           {/* 扮演永远是一个平级 tab，不折进「更多」——它是一种模式，不是一个
-              工具，而作者切进切出的频率最高（设计稿 08 屏 1i）。 */}
+              工具，而作者切进切出的频率最高（设计稿 04a 屏 1i）。 */}
           {roleplayOn && (
             <button
               className={`${styles.modeTab} ${aiDrawerMode === "roleplay" ? styles.modeTabActive : ""}`}
@@ -243,7 +243,7 @@ export function AiDrawer() {
         </div>
 
         {/* 标签条: the open conversations, between the mode tabs and the
-            conversation (设计稿 23 屏 1a). Only in 对话助手, never over the task view. */}
+            conversation (设计稿 02b 屏 1a). Only in 对话助手, never over the task view. */}
         {aiDrawerMode === "chat" && !showTasks && (
           <SessionTabs flash={flash} onOverflow={() => setShowSessions(true)} />
         )}

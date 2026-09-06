@@ -20,7 +20,7 @@ import hub from "./ProvidersModels.module.css";
 
 const TYPE_FILTERS: (ModelType | "all")[] = ["all", "text", "multimodal", "image", "video"];
 
-/** Declaration marks shown on a model row before the rest fold into "+n" (设计稿 19h). */
+/** Declaration marks shown on a model row before the rest fold into "+n" (设计稿 05c 屏 1h). */
 const MAX_MARKS = 3;
 
 /** Bucket for models whose provider is gone — a config import can leave those
@@ -437,7 +437,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       <span className={hub.modelId}>{m.modelId}</span>
                       {m.contextSize ? (
                         <span className={hub.modelCtx}>
-                          {/* The green dot = this number was measured, not typed (设计稿 19). */}
+                          {/* The green dot = this number was measured, not typed (设计稿 05c). */}
                           {isMeasured(m.contextSize, m.probedContextSize) && <span className={hub.measDot} />}
                           {m.contextSize.toLocaleString()} ctx
                         </span>

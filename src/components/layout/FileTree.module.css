@@ -1,5 +1,5 @@
 /*
- * 文件面板（设计稿 17）。
+ * 文件面板（设计稿 01b）。
  *
  * 三条读得懂整份样式的规则：
  * ① 行有**三个互不占用的通道** —— 底色（悬停中性 / 当前打开赭石淡底，全树唯一）、
@@ -9,7 +9,7 @@
  *    的值，只有容器自己知道现在多宽。注意侧栏 1px 右边框算在它的宽度里
  *    （border-box），所以 240px 的侧栏是 239px 的容器 —— 断点都减了 1。
  * ③ 行里没有任何 hover 才出现的元素，hover 只改一个 background-color。几百行全量
- *    渲染时这是唯一不触发重排的写法（设计稿 17 §2e）。
+ *    渲染时这是唯一不触发重排的写法（设计稿 01b §2e）。
  */
 
 .container {
@@ -87,14 +87,14 @@
 .container:hover .toolbarBtn:disabled { color: var(--color-text-faint); }
 
 /* 「已全部折叠」＝下一次点是展开：实底赭石 + 图标翻转。这个态持续存在，
-   于是反向动作在同一个位置、同一个手指（设计稿 17 §2c）。 */
+   于是反向动作在同一个位置、同一个手指（设计稿 01b §2c）。 */
 .toolbarBtn.armed,
 .container:hover .toolbarBtn.armed {
   color: var(--color-on-accent);
   background: var(--color-sienna);
 }
 
-/* 「定位当前文档」按下时实底赭石一闪，松手即回（设计稿 21 §2b）：它没有反向动作，
+/* 「定位当前文档」按下时实底赭石一闪，松手即回（设计稿 01d §2b）：它没有反向动作，
    所以不像「全部折叠」那样留住。 */
 .toolbarBtn.revealBtn:active:not(:disabled) {
   color: var(--color-on-accent);
@@ -503,7 +503,7 @@
    照常显示，而同一个块里的 `.toolbarLabel` 却生效了，因为那条基础规则压根没写
    display）。断点减 1 的理由见文件头 ②。 */
 
-/* <220px 侧栏：缩进收窄，右列整列撤掉（牺牲次序见设计稿 17 §2e）。 */
+/* <220px 侧栏：缩进收窄，右列整列撤掉（牺牲次序见设计稿 01b §2e）。 */
 @container (max-width: 218px) {
   .container { --row-step: 8px; }
   .rightCol { display: none; }

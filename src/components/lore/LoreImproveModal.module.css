@@ -1,4 +1,4 @@
-/* 设定模态共用外壳 (设计稿 03) — LoreImproveModal 之外还被 LoreMetaImproveModal /
+/* 设定模态共用外壳 (设计稿 03a) — LoreImproveModal 之外还被 LoreMetaImproveModal /
    EntityAiHubModal / LoreImageGenModal / FacetAiAssistantModal 借用：
    #FBF8F0 面板 + #E5DCC9 边框 + 0 12px 48px 影，#F1E8D5 footer 条，按钮三级。
    improve 专属的两栏/对照 diff 类在文件末尾。 */
@@ -396,7 +396,7 @@
   gap: 5px;
 }
 
-/* 写入目标列表 (设计稿 09): 主词条 / 各特征 / + 生成新特征 */
+/* 写入目标列表 (设计稿 03a 屏 09): 主词条 / 各特征 / + 生成新特征 */
 .targetItem {
   padding: 9px 11px;
   background: var(--color-card);
@@ -525,7 +525,7 @@
   color: var(--lore-add-text);
 }
 
-/* ── 新特征草稿条 (设计稿 17 「草稿 · 边生成边出现」) ── */
+/* ── 新特征草稿条 (设计稿 03a 屏 17 「草稿 · 边生成边出现」) ── */
 
 .draftStrip {
   display: flex;

@@ -1,6 +1,6 @@
 # 全局搜索（⌘K 升级）+ 文件树「定位当前文档」按钮 —— 给 Claude Design 的任务书
 
-> 状态：`shipped`。设计稿是 claude.ai/design 项目的 **`21 全局搜索 Global Search.dc.html`**（TURN 1，屏 1a–1e + 2a–2c）。两片都已实现；实现记录在「实施计划」之下。
+> 状态：`shipped`。设计稿是 claude.ai/design 项目的 **`01d 全局搜索 Global Search.dc.html`**（TURN 1，屏 1a–1e + 2a–2c）。两片都已实现；实现记录在「实施计划」之下。
 > 本文档两段：`---` 之前是**需求梳理 + 代码实况 + 数据边界**（给实现回查）；
 > `---` 之后是**发给设计师的任务书原文**，自包含，不需要它读代码库。
 
@@ -27,7 +27,7 @@
 
 | 入口 | 落点 | 何时可见 |
 |---|---|---|
-| 脚线（22px 常驻条的第三种用途） | [`FileTree.tsx:1623`](../../src/components/layout/FileTree.tsx:1623)，`Crosshair` + 当前文档名，赭石字 | **只在当前文档看不见时**：被折叠掉（可见行集合查询）或滚出视野（只给那一行挂 `IntersectionObserver`）。设计稿 17 的决定 |
+| 脚线（22px 常驻条的第三种用途） | [`FileTree.tsx:1623`](../../src/components/layout/FileTree.tsx:1623)，`Crosshair` + 当前文档名，赭石字 | **只在当前文档看不见时**：被折叠掉（可见行集合查询）或滚出视野（只给那一行挂 `IntersectionObserver`）。设计稿 01b 的决定 |
 | ⋯ 溢出菜单第一项 | [`FileTree.tsx:1462`](../../src/components/layout/FileTree.tsx:1462) | 恒在，无打开文档时禁用 |
 | 快捷键 ⌥⌘L | `COMBO_REVEAL_DOC`，登记在 `lib/shortcuts.ts`（`filesRevealCurrent`，info 级） | 「文件」标签挂着时 |
 
@@ -104,7 +104,7 @@ vite 预览里灌假数据实测过：文档按名字 / 分组路径命中并排
 **没在浏览器里验到的**：正文 ↵ 跳行（要一个真挂着的 CodeMirror，浏览器里文件读不出来）
 和 `pendingJump` 那条（从知识库墙按 ⌘K 跳正文）——留给真机。
 
-### 第二片 · 照设计稿 21（2026-09-03 实装）
+### 第二片 · 照设计稿 01d（2026-09-03 实装）
 
 设计稿定下来的主干：**让组头先说「↵ 会把你带到哪」**——不给两类不同的颜色（赭石已经给了当前项），
 而是三条既有通道叠加：组头右端的目的地（↵ 编辑器 / ↵ 知识库 / ↵ 第 N 行）、行的左端形状（文档 16px

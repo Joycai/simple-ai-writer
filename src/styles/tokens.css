@@ -30,12 +30,12 @@
   --font-size-2xl: 32px;
   --font-size-3xl: 44px;
 
-  /* Radius — manuscript is square-cornered (设计稿 01/04: 全局无圆角).
+  /* Radius — manuscript is square-cornered (设计稿 01a/05a: 全局无圆角).
      Every module reads var(--radius-*), so zeroing the scale here squares the
      whole app at once. The only sanctioned circles are dot indicators,
      spinners and radio marks — those read --radius-round (or
      border-radius: 50%) explicitly, never the scale. Switch knobs are
-     square too (设计稿 04). */
+     square too (设计稿 05a). */
   --radius-sm: 0;
   --radius-md: 0;
   --radius-lg: 0;
@@ -70,7 +70,7 @@
   --letter-handle: 0.45em;      /* collapsed AI handle vertical text */
   --letter-ornament: 0.7em;     /* "— · —" chapter separator ornaments */
 
-  /* Settings page heading serif (设计稿 04 — the settings surface reads in
+  /* Settings page heading serif (设计稿 05a — the settings surface reads in
      Source Serif 4 / Noto Serif SC rather than Spectral). */
   --font-serif-settings: "Source Serif 4", "Noto Serif SC", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
 }
@@ -187,7 +187,7 @@
      derived from the light inline-bubble / consistency-check screens. */
   --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
   --color-bg-stream:       #F4EEE0;   /* run-stream column, tool-call list bg */
-  --color-bg-tabstrip:     #F1ECE0;   /* 标签条 (设计稿 23): one step below the header, so the current tab (base) sits on it like a slip of paper */
+  --color-bg-tabstrip:     #F1ECE0;   /* 标签条 (设计稿 02b): one step below the header, so the current tab (base) sits on it like a slip of paper */
   --color-bg-raised:       #FBF8F0;   /* user bubble, send button block */
   --color-bg-selected:     #F1E0BD;   /* selected segment / 档位 chip bg */
   --color-bg-accent-wash:  #F7EBD4;   /* active accent chips, current-step row */
@@ -204,7 +204,7 @@
   --color-accent-mid:      #B3764A;   /* ochre ramp mid step — see dark block */
   --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
 
-  /* 写手署名（设计稿 12 · 写手 Writer）。一段回复是不是写手写的，答案不在回复
+  /* 写手署名（设计稿 04d · 写手 Writer）。一段回复是不是写手写的，答案不在回复
      上，在回复左边那条槽里：13px 横刻度起头，1px 竖线的长度**正好等于**写手写
      的那段字。所以这两个值必须比正文暗、比 hairline 亮——它要可量，但眼睛读小说
      时不会经过它。悬停时两者都换成 --color-accent，这是赭石唯一参与的时刻。
@@ -240,10 +240,10 @@
   --color-danger-bg:       var(--color-error-bg);
   --color-danger-text:     var(--color-error);
 
-  /* Chrome details (设计稿 01) */
+  /* Chrome details (设计稿 01a) */
   --color-traffic:         #D9C7A5;   /* titlebar traffic-light dots */
 
-  /* ── 提示词库 (设计稿 10 提示词库) ──
+  /* ── 提示词库 (设计稿 02c 提示词库) ──
      The snippet picker floats over the AI drawer, so it lives in the main
      token space rather than --stg-*. Light is not dark with a swapped ground:
      the selected rule warms to #A9512B, the preview drops two tiers so it
@@ -256,7 +256,7 @@
   --snip-shadow:          0 -8px 30px rgba(120, 80, 40, 0.10);
   --snip-menu-shadow:     0 6px 24px rgba(60, 40, 20, 0.14);
 
-  /* ── 设置页色系 (设计稿 04) ──
+  /* ── 设置页色系 (设计稿 05a) ──
      The settings surface keeps its own warm-paper family — same hues as the
      workspace but one step lighter, with its own sienna. Components under
      src/components/settings/ read --stg-* only. */
@@ -296,7 +296,7 @@
   --stg-overlay:          rgba(72, 63, 48, 0.30);
   --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
 
-  /* Knowledge-base sync (设计稿 06). Roles the settings palette has no word
+  /* Knowledge-base sync (设计稿 03c). Roles the settings palette has no word
      for — a sync screen has to say "this side gets overwritten" and "this row
      loses something" in a palette with exactly one accent, so the distinctions
      are carried by surface and rail rather than by hue. Consumed only by
@@ -322,7 +322,7 @@
   --sync-arrow:           #C9BFA8;
   --sync-foot-shadow:     0 -4px 12px rgba(60, 40, 20, 0.05);
 
-  /* ── 设定集色系 (设计稿 03) ──
+  /* ── 设定集色系 (设计稿 03a) ──
      The lore surfaces (card wall, entity detail, extract/improve/facet/split/
      meta modals) read these on top of the shared manuscript palette.
      Components under src/components/lore/ may read --lore-* directly. */
@@ -338,7 +338,7 @@
   --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05); /* index-card hard shadow */
   --lore-card-shadow-lg:  3px 4px 0 rgba(60, 40, 20, 0.05); /* featured 2x2 card */
   --lore-card-shadow-hover: 4px 6px 0 rgba(60, 40, 20, 0.08);
-  --lore-card-shadow-xl:  6px 8px 0 rgba(60, 40, 20, 0.06); /* 阅读模式的纸（设计稿 16）——lg 之上一档，仍是纸感不是海拔 */
+  --lore-card-shadow-xl:  6px 8px 0 rgba(60, 40, 20, 0.06); /* 阅读模式的纸（设计稿 03c）——lg 之上一档，仍是纸感不是海拔 */
   --lore-bg-input:        #FFFDF6;   /* textareas / editors inside lore modals */
   --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
 
@@ -350,7 +350,7 @@
   --lore-split-b:         #E4E9F0;   /* split: new entry B */
 
   /* Appearance-density timeline, 4 steps + current chapter */
-  /* ── 集合（设计稿 03 屏 24–31）：分类用颜色，集合用**装订** ──
+  /* ── 集合（设计稿 03b 屏 24–31）：分类用颜色，集合用**装订** ──
      集合这根轴刻意不引入第二套彩色——分类六色已经占满了墙面，还兼着头像底色。
      所以归属由装订边、翻面和骑缝线来说，全部是中性色阶。 */
   --lore-bind-bg:         #F8F3E6;   /* 装订栏与卡片装订边：比卡面暗半步＝凹进去 */
@@ -370,7 +370,7 @@
   --lore-density-now:     #2A2520;
 
   /* ── 扮演面板 (docs/feature/roleplay) ──
-     设计稿 08 的取色。凡是与既有 token 同值的一律走别名，只有设计稿给出而
+     设计稿 04a 的取色。凡是与既有 token 同值的一律走别名，只有设计稿给出而
      调色板里确实没有的四个值才写死 hex——见 design-system.md「令牌优先」。 */
   --rp-canvas:            var(--color-bg-surface);  /* 640px 稿面 */
   --rp-rail:              var(--color-bg-base);     /* 花名册 / composer 条 */
@@ -465,7 +465,7 @@
      the dark rendition is the acceptance reference. */
   --color-bg-inset:        #17130F;
   --color-bg-stream:       #1B1712;
-  --color-bg-tabstrip:     #14100C;   /* 标签条 (设计稿 23): the drawer's darkest band — darker than the header, so the current tab (base) is the one bright slip */
+  --color-bg-tabstrip:     #14100C;   /* 标签条 (设计稿 02b): the drawer's darkest band — darker than the header, so the current tab (base) is the one bright slip */
   --color-bg-raised:       #2A241C;
   --color-bg-selected:     #2A211A;
   --color-bg-accent-wash:  #241C15;
@@ -518,7 +518,7 @@
   --color-danger-bg:       var(--color-error-bg);
   --color-danger-text:     var(--color-error);
 
-  /* Chrome details (设计稿 01) */
+  /* Chrome details (设计稿 01a) */
   --color-traffic:         #5A4F3D;
 
   /* ── 设置页色系 · night ── The mockup only specifies the light settings
@@ -560,7 +560,7 @@
   --stg-overlay:          rgba(0, 0, 0, 0.55);
   --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
 
-  /* Sync roles on the night ramp (设计稿 06 · 画板 5a). Same structure, not a
+  /* Sync roles on the night ramp (设计稿 03c · 画板 5a). Same structure, not a
      dimmed copy: the risk fill stays a warm brown so an accent rail still
      reads against it, and 删除 inverts the other way (light chip on dark). */
   --sync-target-bg:       #2A2014;
@@ -584,7 +584,7 @@
   --sync-arrow:           #5A5142;
   --sync-foot-shadow:     0 -4px 12px rgba(0, 0, 0, 0.28);
 
-  /* ── 设定集色系 · night ── 设计稿 03 only specifies paper; night maps each
+  /* ── 设定集色系 · night ── 设计稿 03a only specifies paper; night maps each
      role onto the existing night ramp (category hues lightened for contrast). */
   --lore-cat-character:   #D9925B;
   --lore-cat-location:    #8DA876;
@@ -627,7 +627,7 @@
   --lore-density-3:       #D9925B;
   --lore-density-now:     #E8DFD0;
 
-  /* ── 提示词库 (设计稿 10 提示词库) —— dark rendition is the reference ── */
+  /* ── 提示词库 (设计稿 02c 提示词库) —— dark rendition is the reference ── */
   --snip-rule:            #D9925B;
   --snip-row-hover:       #241F19;
   --snip-hit-bg:          #3A2A1C;
@@ -635,7 +635,7 @@
   --snip-shadow:          0 -8px 30px rgba(0, 0, 0, 0.45);
   --snip-menu-shadow:     0 6px 24px rgba(0, 0, 0, 0.45);
 
-  /* ── 扮演面板 ── 设计稿 08 的深色取色，binding。 */
+  /* ── 扮演面板 ── 设计稿 04a 的深色取色，binding。 */
   --rp-canvas:            var(--color-bg-base);
   --rp-rail:              var(--color-bg-inset);
   --rp-input:             #14100C;

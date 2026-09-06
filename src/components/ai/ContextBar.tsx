@@ -1,6 +1,6 @@
 /**
  * 输入框上方的记忆条：下一次请求的上下文由什么构成，离压缩折叠最早的对话还有
- * 多远。设计稿 02 屏 2c。
+ * 多远。设计稿 02a 屏 2c。
  *
  * 从 `AgentChat` 里抽出来给扮演面板共用，**样式仍然借 `AgentChat.module.css`**
  * ——把 `ctx*` 那十几条规则搬家只会给一个正在用的界面凭空加一次回归风险，而
@@ -307,7 +307,7 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           />
         )}
       </button>
-      {/* 设计稿 20: with 自动归纳 off the line stays where it was but drops
+      {/* 设计稿 02e: with 自动归纳 off the line stays where it was but drops
           from a promise to a reference — a 1×4px grey tick hung *under* the
           bar rather than through it (the bar clips its overflow, so it sits
           beside the bar in the wrapper). Dotted and doubled lines already

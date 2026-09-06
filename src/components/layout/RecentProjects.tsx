@@ -1,5 +1,5 @@
 /**
- * 文件面板 · 未打开项目时的那块（设计稿 15「固定最近项目 Pin Recents」）。
+ * 文件面板 · 未打开项目时的那块（设计稿 01a「固定最近项目 Pin Recents」）。
  *
  * 三个决定连成一条线，改这个文件之前先读懂它们：
  *
@@ -241,7 +241,7 @@ export function RecentProjects() {
           {isLoading ? "…" : t("project.openFolder")}
         </button>
         {/* Only when there is nothing to list — with rows on screen the rail's
-            job is the list, not the explanation (设计稿 15 屏 1a vs 1d①). */}
+            job is the list, not the explanation (设计稿 01a 屏 1a vs 1d①). */}
         {pinned.length === 0 && recent.length === 0 && (
           <div className={styles.blurb}>{t("project.noProjectDesc")}</div>
         )}

@@ -33,7 +33,7 @@ import type { FacetMeta, LoreEntity, LoreFacet, LoreImage } from "./model";
  * Null when no *enabled* pack declares the category: a user-defined category,
  * the `custom` bucket, or an orphan. An orphan's type still has a name, but only
  * a disabled pack can supply it — that lookup is `packsDeclaringCategory`, and
- * it belongs to the surface that also says the pack is off (设计稿 03 屏 23).
+ * it belongs to the surface that also says the pack is off (设计稿 03a 屏 23).
  */
 export function categoryTypeName(category: string, isZh: boolean): string | null {
   const resolved = findCategory(category);
@@ -86,7 +86,7 @@ export function unslottedFacets(entity: LoreEntity): LoreFacet[] {
  *
  * `missing` marks a section the author is *invited* to fill — declared
  * `expected`, currently empty. It is a nudge, so nothing about it blocks or
- * warns: 设计稿 03 屏 20 draws it as a dashed row, not an error.
+ * warns: 设计稿 03a 屏 20 draws it as a dashed row, not an error.
  */
 export interface FacetSection {
   slot: FacetSlot | null;

@@ -1,5 +1,5 @@
 /**
- * 一致性检查 — the document read back against the knowledge base. 设计稿 22.
+ * 一致性检查 — the document read back against the knowledge base. 设计稿 02d.
  *
  * Three moments, one protagonist each: fill the form → watch it check → read
  * the report. Everything else retreats to a line.

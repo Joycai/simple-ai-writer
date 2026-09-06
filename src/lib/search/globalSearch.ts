@@ -3,7 +3,7 @@
  *
  * 面板本身只做接线——把 `projectStore.fileTree` / `loreStore.index` /
  * `editorStore.content` / `navStore.past` 递进来，把命中递给渲染。匹配与排序全在
- * 这里，所以它能在 node 下跑测试，而面板换样子（设计稿 21）时一个字都不用动。
+ * 这里，所以它能在 node 下跑测试，而面板换样子（设计稿 01d）时一个字都不用动。
  *
  * 三条决定：
  *

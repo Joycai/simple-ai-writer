@@ -47,7 +47,7 @@ const ICONS: Record<ChipKind, LucideIcon> = {
  * and the wait of every turn. A seventh identical box would file the most
  * consequential switch in the row under the least consequential shape. It gets
  * the composer's own separator line instead — see WriterStrip
- * (设计稿 12 · 屏 5a「写手不是第七个芯片」).
+ * (设计稿 04d · 屏 5a「写手不是第七个芯片」).
  */
 export function SubAgentChips({ disabled, onToggle }: {
   disabled?: readonly SubAgentKind[];

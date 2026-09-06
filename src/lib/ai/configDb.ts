@@ -196,7 +196,7 @@ export interface Model {
    * `maxOutput` rather than replacing them: the author may overwrite a
    * measured value by hand, and the editor then says so ("手填 · 覆盖 08-30
    * 实测 131,072") instead of presenting the typed number as a measurement.
-   * A field the probe did not resolve stays absent. See 设计稿 19 · 实测值的
+   * A field the probe did not resolve stays absent. See 设计稿 05c · 实测值的
    * 标记规则.
    */
   probedContextSize?: number;

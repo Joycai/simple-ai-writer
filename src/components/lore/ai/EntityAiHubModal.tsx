@@ -1,5 +1,5 @@
 /**
- * Entity-level AI task chooser (设计稿 03 · 实体 AI 中心) — the single
+ * Entity-level AI task chooser (设计稿 03a · 实体 AI 中心) — the single
  * "AI 编辑助手" entry on the entity hero. A 2×2 action grid; picking a cell
  * hands the choice back to LoreDetail, which opens the matching flow
  * (improve / meta improve / image gen / split). Deliberately dumb: no AI

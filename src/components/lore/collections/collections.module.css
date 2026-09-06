@@ -1,5 +1,5 @@
 /*
- * 集合的视觉语汇（设计稿 03 屏 24–31）。
+ * 集合的视觉语汇（设计稿 03b 屏 24–31）。
  *
  * 一句话：**分类用颜色，集合用装订**。分类六色已经占满了墙面（还兼着头像底色与
  * 候选徽标），集合再引入一套彩色，两套颜色会在同一张卡片上互相打架。所以归属由
@@ -147,7 +147,7 @@
 }
 .row:hover { background: var(--lore-sub-bg); }
 /* 已勾的一行：只上一层赭色薄底，不描边——多选时好几行同时生效，逐行描边会成噪音
-   （设计稿 03 屏 26）。 */
+   （设计稿 03b 屏 26）。 */
 .rowActive { background: var(--color-bg-base); }
 .rowActive:hover { background: var(--color-bg-base); }
 .rowNarrow { padding: 9px 16px; gap: 9px; }
@@ -158,7 +158,7 @@
 .rowNarrow.rowAll .rowAllName { font-size: 13px; }
 
 /* 勾选框：多选取并集。空心＝可勾；实心赭石＋白 ✓＝已勾；虚线赭石＋赭石 ✓＝未归集
-   已勾。刻意方形——全局零圆角（设计稿 03 屏 26：实心点 → 勾选框）。 */
+   已勾。刻意方形——全局零圆角（设计稿 03b 屏 26：实心点 → 勾选框）。 */
 .dot {
   width: 12px; height: 12px;
   border: 1px solid var(--lore-neutral-line);
@@ -185,7 +185,7 @@
 .rowActive .rowName { font-weight: 500; }
 .rowNarrow .rowName { font-size: 13px; }
 .rowNameGhost { font-style: italic; color: var(--color-text-secondary); }
-/* 未归集勾中时也保持 italic 400（它不是一摊活，不跟着加粗）——设计稿 03 屏 26。 */
+/* 未归集勾中时也保持 italic 400（它不是一摊活，不跟着加粗）——设计稿 03b 屏 26。 */
 .rowActive .rowNameGhost { font-weight: 400; }
 .rowBreakdown {
   font: 400 9px/1 var(--font-mono);

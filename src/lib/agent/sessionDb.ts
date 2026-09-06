@@ -222,7 +222,7 @@ export function sessionLabel(
 /**
  * The two sections the history menu draws, out of one recency-ordered list.
  * Pure, and the only place that decides pinned sessions are shown as a
- * *section* rather than as a badge on a row (设计稿 15's rule for the recents
+ * *section* rather than as a badge on a row (设计稿 01a's rule for the recents
  * list, which this feature is the second instance of). A title is not a
  * section: named-but-unpinned rows stay under 最近.
  */

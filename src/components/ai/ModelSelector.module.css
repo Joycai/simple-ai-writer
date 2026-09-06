@@ -141,7 +141,7 @@
   transform-origin: top left;
 }
 
-/* footer 里的实例向上展开 (设计稿 03 v4 屏 10 的上拉菜单) */
+/* footer 里的实例向上展开 (设计稿 03a 屏 10 的上拉菜单) */
 .popoverUp {
   top: auto;
   bottom: calc(100% + 6px);

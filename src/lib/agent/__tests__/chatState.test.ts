@@ -1,5 +1,5 @@
 /**
- * 三家记号 (设计稿 23 屏 1d): which mark a conversation wears, and which one the
+ * 三家记号 (设计稿 02b 屏 1d): which mark a conversation wears, and which one the
  * mode tab wears for all of them.
  */
 import { describe, expect, it } from "vitest";

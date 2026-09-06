@@ -671,7 +671,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       if (isProjectPinned(state.pinnedProjects, path)) return {};
       // Appended, not prepended: a new pin lands at the end of 「已固定」 so the
-      // rows already there do not shift under the author's cursor (设计稿 15
+      // rows already there do not shift under the author's cursor (设计稿 01a
       // 屏 1b: the row slides to the section's last place).
       const pinnedProjects = [...state.pinnedProjects, path];
       writePrefMerged(PINNED_PROJECTS_KEY, JSON.stringify(pinnedProjects), mergePinnedProjects);

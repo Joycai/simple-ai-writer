@@ -79,9 +79,9 @@ export function IconRail({ onOpenSettings }: Props) {
   // The *effective* view, matching what App renders — highlighting off the raw
   // stored value would leave the sidebar showing with no rail icon lit.
   const mainView = useMainView();
-  // 设计稿 01: the knowledge-base icon carries an entity-count badge.
+  // 设计稿 01a: the knowledge-base icon carries an entity-count badge.
   const loreCount = useLoreStore((s) => loreEntityCount(s.index));
-  // 设计稿 14 屏 1k:同步只在「两边都有改动」时才配得上写作时的余光——
+  // 设计稿 03d 屏 1k:同步只在「两边都有改动」时才配得上写作时的余光——
   // 一枚 5px 点,其余四档什么都不画。点开知识库墙,状态件在那里说全。
   const syncAttention = useSyncStore((s) => s.freshness?.verdict === "diverged");
 
