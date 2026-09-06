@@ -135,7 +135,7 @@ token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，�
 
 ### 3.2 写手（handoff）—— 查下来**不是** bug，故意不修
 
-`handoff.ts:408` 确实同样转发，但它的 `parentStep` 是 `handoff-<round>`，一个**合成 id**：那次工具调用在 `runtime.ts:857` 就被截走了，从来没有 tool-step 事件。所以结构规则天然够不着它 —— 而这正合设计：设计稿 12 · 屏 3a 写的是「执行日志里不再有工单卡」，交接渲染在**回合本身**上（`WriterTurn`），`handoff-done` 带着字数、耗时、token 和费用。
+`handoff.ts:408` 确实同样转发，但它的 `parentStep` 是 `handoff-<round>`，一个**合成 id**：那次工具调用在 `runtime.ts:857` 就被截走了，从来没有 tool-step 事件。所以结构规则天然够不着它 —— 而这正合设计：设计稿 04d · 屏 3a 写的是「执行日志里不再有工单卡」，交接渲染在**回合本身**上（`WriterTurn`），`handoff-done` 带着字数、耗时、token 和费用。
 
 改前的判断（「按 §3.1 会顺带修好」）是错的，在此更正：写手少的是内部轮次那一层细节，而它的状态和账都在作者看得见的地方。
 

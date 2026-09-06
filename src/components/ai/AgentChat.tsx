@@ -121,7 +121,7 @@ export function AgentChat() {
   const queuePos = useAgentStore((s) => chatQueuePosition(s, s.activeChatKey));
   // Who holds the slots — names only, joined into one string so this is a
   // primitive subscription. The one place conversations "see" each other, and
-  // what they see is a name (设计稿 23 屏 1h).
+  // what they see is a name (设计稿 02b 屏 1h).
   const runningLabels = useAgentStore((s) => s.runningChats
     .map((k) => { const c = s.chats[k]; return c ? liveLabel(c).text : ""; })
     .filter(Boolean)
@@ -158,7 +158,7 @@ export function AgentChat() {
   const pendingRoundLimits = cardsForSurface(allRoundLimits, surface);
   const pendingTruncations = cardsForSurface(allTruncations, surface);
   const pendingQuestions = cardsForSurface(allQuestions, surface);
-  // Stopped at a card (设计稿 23 屏 1i): the transcript steps back, the card is
+  // Stopped at a card (设计稿 02b 屏 1i): the transcript steps back, the card is
   // the one thing with a top line, and the composer becomes a sentence.
   const waiting = pending.length + pendingPlans.length + pendingRoundLimits.length
     + pendingTruncations.length + pendingQuestions.length > 0;
@@ -653,7 +653,7 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
-      {/* 取材范围的骑缝带（设计稿 03 屏 26-B）。围栏在**运行发生的地方**必须看得见
+      {/* 取材范围的骑缝带（设计稿 03b 屏 26-B）。围栏在**运行发生的地方**必须看得见
           ——知识库墙上写着一遍不够，作者写作时看的是这一栏。同一个控件的窄栏形态：
           省掉分类分布，只留条目数。 */}
       {loreScope !== null && (
@@ -683,7 +683,7 @@ export function AgentChat() {
       <div className={styles.viewport}>
         <div ref={messagesRef} className={`${styles.messages} ${waiting ? styles.messagesDim : ""}`}>
           {turns.length === 0 && (
-            // 设计稿 23 屏 1g/1j: two lines, no sample prompts — the other tabs are
+            // 设计稿 02b 屏 1g/1j: two lines, no sample prompts — the other tabs are
             // still working, this one need not be loud. The one exception is the
             // author's very first conversation, with nothing open or saved: then
             // the old guidance is the only thing that says what this is.
@@ -786,7 +786,7 @@ export function AgentChat() {
         )}
       </div>
 
-      {/* 排队 (设计稿 23 屏 1h): the same card as the roster's, in this
+      {/* 排队 (设计稿 02b 屏 1h): the same card as the roster's, in this
           conversation's words, plus who holds the slots. The readout stays on the
           tab strip — it is global, the card is this conversation's. */}
       {chatQueued && (
@@ -895,7 +895,7 @@ export function AgentChat() {
               })}
             </button>
           ) : (
-            // The slot's default, not a notice (设计稿 23 屏 1g): the chip stays
+            // The slot's default, not a notice (设计稿 02b 屏 1g): the chip stays
             // where it will light up, disabled until there is something to attach.
             <button
               className={styles.attachChipGhost}

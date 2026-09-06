@@ -257,7 +257,7 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 
 ## 11. 实现与设计稿的出入（TURN 1）
 
-设计稿：`11 Word 排版格式 Word Format.dc.html`（1a–1n）。照着做了 1a/1b/1c/1d/1e 的
+设计稿：`05e Word 排版格式（一）Word Format A.dc.html` / `05f Word 排版格式（二）Word Format B.dc.html`（1a–1n）。照着做了 1a/1b/1c/1d/1e 的
 呈现部分、1j 的四种格式来源、1n 的开关行。三处有意的出入：
 
 1. **内置预设的数值取了设计稿的，不是我自己那版。** 手稿改成思源宋体 1.75 倍、素雅
@@ -280,6 +280,8 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 和 `export_pptx` 同一条路），`agentToolBudget.test.ts` 的棘轮相应从 8,600 抬到 8,950。
 省下来的 138 token 来自把 `overrides` 六个属性各自的描述合并成一句——完整的 `DocFormat`
 从头到尾没有进过任何 schema（I2）。
+
+2026-09-06：设计稿重编号为 `05e` / `05f` 并按实现回填，稿与码同口径。
 
 
 ## 12. 二期实现记（TURN 1 设计稿 1f–1i）

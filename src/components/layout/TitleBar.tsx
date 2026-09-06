@@ -70,7 +70,7 @@ export function TitleBar() {
     >
       {/* Left edge, one of three chromes:
           mac in Tauri  — blank inset under the native traffic lights (Overlay);
-          browser (dev) — the decorative dots of 设计稿 01;
+          browser (dev) — the decorative dots of 设计稿 01a;
           undecorated   — nothing, caption buttons live on the right instead. */}
       {chrome.macInset ? (
         <div className={styles.macInset} data-tauri-drag-region />

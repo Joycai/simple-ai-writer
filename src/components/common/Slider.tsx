@@ -1,5 +1,5 @@
 /**
- * The app's slider (设计稿 20, 滑块 anatomy) — first used by 设置 → 上下文与记忆
+ * The app's slider (设计稿 02e, 滑块 anatomy) — first used by 设置 → 上下文与记忆
  * → 对话归纳, built to be reused.
  *
  * It borrows everything from controls that already exist: the thumb is the

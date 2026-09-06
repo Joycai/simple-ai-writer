@@ -46,7 +46,7 @@ interface Props {
   /** Orphan category whose pack is disabled → neutral colours + one mono note. */
   degraded: boolean;
   /**
-   * 「改完那节」的一次性淡染目标：`facet-<file>` 或 `index`（设计稿 16 屏 1d）。
+   * 「改完那节」的一次性淡染目标：`facet-<file>` 或 `index`（设计稿 03c 屏 1d）。
    * 由 LoreDetail 在保存回调里点名，超时自清。
    */
   flashId?: string | null;
@@ -58,7 +58,7 @@ type Anchor = { id: string; label: string; subs: { id: string; label: string }[]
 const SCROLL_MARGIN = 120;
 
 /**
- * 阅读模式（设计稿 16）：格纸墙上摊开的一张纸——主条目 + 特征全文 + 配图一次
+ * 阅读模式（设计稿 03c）：格纸墙上摊开的一张纸——主条目 + 特征全文 + 配图一次
  * 排开，注入语义退到节头短线与 mono 边注。分组复用管理台那套
  * （facetSections / buildFacetBlocks / imageSections），只换渲染。
  *

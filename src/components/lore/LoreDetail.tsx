@@ -122,7 +122,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [facetModal, setFacetModal] = useState<{ file: string | null; slot?: string | null } | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   // The hero's ⋯ button opens the secondary actions (open in editor / reveal /
-  // delete) as a menu instead of a button row — 设计稿 03's three-button hero.
+  // delete) as a menu instead of a button row — 设计稿 03a's three-button hero.
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Previous/next entity in wall order, for the breadcrumb's pager. Uses the
@@ -177,7 +177,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // entity.images), or null when the lightbox is closed.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
-  // 阅读模式「改完那节」的一次性淡染（设计稿 16 屏 1d）：保存回调点名要闪的
+  // 阅读模式「改完那节」的一次性淡染（设计稿 03c 屏 1d）：保存回调点名要闪的
   // 锚点，动画由 CSS 播一次，超时清掉以免模式切换回来时重播。管理台没有这个
   // 记号，所以只在阅读态点亮。
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -217,7 +217,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     return () => window.removeEventListener("keydown", onKey);
   }, [previewIndex, entity.images.length]);
 
-  // R 在阅读/管理两态间来回（设计稿 16 屏 1d）。编辑表单、任何模态/菜单开着、
+  // R 在阅读/管理两态间来回（设计稿 03c 屏 1d）。编辑表单、任何模态/菜单开着、
   // 或焦点在输入框里时不生效——一个字母键必须让位于正在打字的人。
   const anyOverlayOpen =
     showAiHub || showImprove || showMetaImprove || showDictNormalize ||
@@ -314,7 +314,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     [loreIndex, collections],
   );
 
-  // ── The category's type schema, as this entry sees it (设计稿 03 屏 19–23) ──
+  // ── The category's type schema, as this entry sees it (设计稿 03a 屏 19–23) ──
   // Facets grouped per slot, gallery grouped per image slot, and the coverage
   // note. All three are empty for a category with no schema — a user-defined
   // one, the `custom` bucket, or one whose pack is disabled — and then every
@@ -466,7 +466,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (projectPath) await scanProject(projectPath);
   };
 
-  // 设为 / 取消档案头图（设计稿 16 屏 1z/1f 的建议入口，落在 lightbox——
+  // 设为 / 取消档案头图（设计稿 03c 屏 1z/1f 的建议入口，落在 lightbox——
   // 两种看法都从这里放大图片，一个入口两处可达）。同一张再点一次即取消。
   const handleSetCover = async (file: string) => {
     if (!projectPath || busy) return;
@@ -1001,7 +1001,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           <>
             <span className={styles.crumbId}>id: {entity.id}</span>
             <span className={styles.crumbDivider} />
-            {/* 两态写字不用图标：一个扭转的图标要靠记忆（设计稿 16 屏 1d）。
+            {/* 两态写字不用图标：一个扭转的图标要靠记忆（设计稿 03c 屏 1d）。
                 快捷键 R 来回；hover 未选那格是中性底，绝不赭石。 */}
             <div
               className={styles.modeSwitch}
@@ -1207,7 +1207,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </div>
       )}
 
-      {/* 设计稿 03 · 屏 15 — 三段结构直接对应数据模型:
+      {/* 设计稿 03a · 屏 15 — 三段结构直接对应数据模型:
           主条目 index.md | 特征 *.md | 配图 images.md */}
       <div className={styles.cols}>
 
@@ -1261,7 +1261,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               </button>
             </div>
             {/* 集合落在元信息区，**不做面包屑**：多归属没有单一路径，把两条归属
-                串成一行面包屑会读成一条层级，而它们是并列的（设计稿 03 屏 30）。 */}
+                串成一行面包屑会读成一条层级，而它们是并列的（设计稿 03b 屏 30）。 */}
             <div className={cs.detailBlock}>
               <div className={cs.detailHead}>
                 <span className={cs.detailLabel}>

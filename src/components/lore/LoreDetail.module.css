@@ -7,7 +7,7 @@
   background: var(--color-bg-surface);
 }
 
-/* Breadcrumb bar (设计稿 03 · 实体详情): 42px paper strip — 设定库 / ●分类 / 名称,
+/* Breadcrumb bar (设计稿 03a · 实体详情): 42px paper strip — 设定库 / ●分类 / 名称,
    mono id + prev/next pager on the right. */
 .crumbBar {
   min-height: 42px;
@@ -83,7 +83,7 @@
   color: var(--color-sienna);
   border-color: var(--color-sienna);
 }
-/* ── 三段结构 (设计稿 03 · 屏 15): 主词条 index.md | 特征 | 配图 images.md ──
+/* ── 三段结构 (设计稿 03a · 屏 15): 主词条 index.md | 特征 | 配图 images.md ──
    替代旧的 人物志/关系/出场 三栏——关系与出场是无数据的空态结构，v2 稿把它们
    移出了详情页。 */
 .cols {
@@ -879,7 +879,7 @@
   color: #fff;
 }
 
-/* ── 类型系统 (设计稿 03 · 屏 19/20/22/23) ─────────────────────────────────
+/* ── 类型系统 (设计稿 03a · 屏 19/20/22/23) ─────────────────────────────────
    槽位分段、缺口邀请、类型行与降级条。全部只是归类与提示的表达：注入语义仍写在
    每条特征自己的 frontmatter 上，所以这里没有任何一处颜色表示"错误"。 */
 
@@ -1069,7 +1069,7 @@
   cursor: default;
 }
 
-/* ── 阅读|管理 两态 segmented（设计稿 16 屏 1d） ─────────────────────────
+/* ── 阅读|管理 两态 segmented（设计稿 03c 屏 1d） ─────────────────────────
    选中＝accent tint + 3px 赭石左边；hover 未选＝中性底，绝不赭石。 */
 .modeSwitch { display: flex; border: 1px solid var(--color-border); }
 .modeBtn {
@@ -1098,7 +1098,7 @@
 }
 .modeBtnActive:hover { background: var(--color-accent-tint); }
 
-/* lightbox 里的「设为档案头图」（设计稿 16 · cover 指定入口） */
+/* lightbox 里的「设为档案头图」（设计稿 03c · cover 指定入口） */
 .lightboxCoverBtn {
   margin-left: 14px;
   padding: 0 0 1px;

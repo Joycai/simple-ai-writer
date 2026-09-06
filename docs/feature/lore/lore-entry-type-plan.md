@@ -315,11 +315,11 @@ mode: auto
 
 ## 8. UI 设计稿 prompt（第 4 期用）
 
-设计稿在 claude.ai/design 项目「Simple AI Writer UI redesign」→ 文件 `03 设定集 Lore`
+设计稿在 claude.ai/design 项目「Simple AI Writer UI redesign」→ 文件 `03a 设定集 · 条目与类型 Lore A` / `03b 设定集 · 集合 Lore B`
 （现有屏号到 18，v2/v3/v4 三轮）。下面这段整段贴给 Claude Design 用来加新屏：
 
 ```text
-在项目「Simple AI Writer UI redesign」的 `03 设定集 Lore` 文件里，接着现有屏号往后加
+在项目「Simple AI Writer UI redesign」的 `03a 设定集 · 条目与类型 Lore A` / `03b 设定集 · 集合 Lore B` 文件里，接着现有屏号往后加
 19–23 五屏，主题是「条目类型系统」。沿用该文件 v2/v3/v4 已确立的全部语汇，不要另起一套：
 条目 = 主条目 + 特征 + 配图（屏 14/15/16）；详情页三栏 `主条目 320 | 特征 flex | 配图 300`，
 三栏各自滚动、栏首齐平、落款钉底；互斥组画成虚线盒（组内按优先级降序）；注入语义写在每行上

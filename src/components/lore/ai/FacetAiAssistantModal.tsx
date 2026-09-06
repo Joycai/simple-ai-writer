@@ -233,7 +233,7 @@ export function FacetAiAssistantModal({
 
         {/* Body */}
         <div className={styles.body}>
-          {/* 快捷动作 chips (设计稿 10) — 说明挪到 title 悬浮提示 */}
+          {/* 快捷动作 chips (设计稿 03a 屏 10) — 说明挪到 title 悬浮提示 */}
           <div className={task.tasks}>
             {TASK_META.map((tm) => (
               <button
@@ -298,7 +298,7 @@ export function FacetAiAssistantModal({
                   model={phase === "generating" ? models.find((m) => m.id === modelId)?.name : undefined}
                 />
               </label>
-              {/* 建议触发词预览 (设计稿 10): 新词 diff 绿 */}
+              {/* 建议触发词预览 (设计稿 03a 屏 10): 新词 diff 绿 */}
               {kind === "keys" && phase === "result" && output.trim() && (
                 <div className={task.keysPreview}>
                   {parseKeywords(output).map((k) => (
@@ -323,7 +323,7 @@ export function FacetAiAssistantModal({
           )}
         </div>
 
-        {/* Footer — 模型选择贴在发送动作旁 (设计稿 10 的下拉位) */}
+        {/* Footer — 模型选择贴在发送动作旁 (设计稿 03a 屏 10 的下拉位) */}
         <div className={styles.footer}>
           <div className={styles.footerLeft}>
             <ModelPicker

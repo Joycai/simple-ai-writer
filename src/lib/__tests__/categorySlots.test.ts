@@ -276,7 +276,7 @@ describe("active accessors — and what a disabled pack degrades to", () => {
 
 /**
  * `packsDeclaringCategory` — who would give an orphan category its type back
- * (设计稿 03 屏 23's banner and its one button).
+ * (设计稿 03a 屏 23's banner and its one button).
  */
 describe("packsDeclaringCategory", () => {
   it("finds the disabled pack that declares a category", () => {

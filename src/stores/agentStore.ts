@@ -377,7 +377,7 @@ export interface ChatJob {
   assistantTurnId: string;
 }
 
-/** 换项目 while conversations are busy: the question put to the author (设计稿 23 屏 1j). */
+/** 换项目 while conversations are busy: the question put to the author (设计稿 02b 屏 1j). */
 export interface ProjectSwitchGuard {
   /** Where the author is going — a folder name, or null for "closing the project". */
   target: string | null;
@@ -416,11 +416,11 @@ interface AgentState {
   chatAborts: Record<string, AbortController>;
   /**
    * What the last closed tab was called, when closing it left an empty
-   * conversation behind (设计稿 23 屏 1j: the empty state says where it went).
+   * conversation behind (设计稿 02b 屏 1j: the empty state says where it went).
    * Cleared by the next send or new tab.
    */
   lastClosedLabel: string | null;
-  /** Non-null while 换项目 is waiting for the author's answer (设计稿 23 屏 1j). */
+  /** Non-null while 换项目 is waiting for the author's answer (设计稿 02b 屏 1j). */
   projectSwitchGuard: ProjectSwitchGuard | null;
   /**
    * Sessions for the history menu, newest first: the recent ones (≤
@@ -547,7 +547,7 @@ interface AgentState {
   promoteChat: (key: string) => void;
   /**
    * 换项目 / 关闭项目 with conversations generating, queued or waiting: put the
-   * question to the author once (设计稿 23 屏 1j) and resolve with their answer.
+   * question to the author once (设计稿 02b 屏 1j) and resolve with their answer.
    * Resolves true at once when everything is idle — nothing to ask.
    */
   confirmProjectSwitch: (target: string | null) => Promise<boolean>;

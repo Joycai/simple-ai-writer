@@ -1,4 +1,4 @@
-/* LoreSplitModal (设计稿 03 · 条目拆分): 880×760 — 头部「拆分条目 · 名」+ mono
+/* LoreSplitModal (设计稿 03a · 条目拆分): 880×760 — 头部「拆分条目 · 名」+ mono
    徽标 + 斜体理由；保留/新条目用 --lore-split-* 色块对应；#F1E8D5 footer 条。
    Flow unchanged: input → generating → review. */
 
@@ -204,7 +204,7 @@
   flex-shrink: 0;
 }
 
-/* 注入方式徽标 (设计稿 11): 拆出的特征默认「自动」— 描边 amber 小签 */
+/* 注入方式徽标 (设计稿 03a 屏 11): 拆出的特征默认「自动」— 描边 amber 小签 */
 .modeBadge {
   padding: 2px 7px;
   border: 1px solid var(--color-border-strong);

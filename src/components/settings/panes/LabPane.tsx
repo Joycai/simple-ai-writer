@@ -34,7 +34,7 @@ interface Props {
  * for all of them, and off means absent: the tool is not in the model's
  * toolset, the entry point is not drawn. Nothing on disk is deleted.
  *
- * 设计稿 18 groups them by what switching one on costs the author — 导出格式
+ * 设计稿 05b groups them by what switching one on costs the author — 导出格式
  * (nothing: one more file type) · 工作方式 (changes how the assistant and the
  * author interact) · 本地服务 (another program has to be running first) — and
  * gives the three with a next step a signpost that appears only once the

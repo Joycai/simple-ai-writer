@@ -51,7 +51,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState(initialDescription ?? "");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
-  // 分类范围 (设计稿 08): which categories the extraction may file into.
+  // 分类范围 (设计稿 03a 屏 08): which categories the extraction may file into.
   // All enabled by default; at least one must stay on.
   const [selCats, setSelCats] = useState<CategoryId[]>(() => loreCategories().map((c) => c.id));
   const projectFiles = useProjectFiles();
@@ -81,7 +81,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
       : [...prev, id]);
   };
 
-  // 语义步骤 (设计稿 17): 读取 → 提取 → 交给作者确认。
+  // 语义步骤 (设计稿 03a 屏 17): 读取 → 提取 → 交给作者确认。
   const refCount = attached.length;
   const genSteps: RunStep[] = [
     {
@@ -149,7 +149,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
         textAttachments: [...loreRefs, ...fileRefs],
         ...connOptions({ provider, model, apiKey }),
         onProgress: () => {}, // raw JSON stays hidden — the progress card speaks instead
-        onEvent: onRunEvent,  // reasoning stream + token totals (设计稿 17)
+        onEvent: onRunEvent,  // reasoning stream + token totals (设计稿 03a 屏 17)
         signal: ctrl.signal,
         systemPrompt: loreScenePrompt?.content,
         allowedCategories: selCats,
@@ -294,7 +294,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           {/* Error */}
           {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
-          {/* ── Generating: 步骤列 + 思考过程 (设计稿 17) ── */}
+          {/* ── Generating: 步骤列 + 思考过程 (设计稿 03a 屏 17) ── */}
           {phase === "generating" && (
             <>
               <div className={styles.statusRow}>

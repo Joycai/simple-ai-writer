@@ -61,7 +61,7 @@ export async function generateLore(opts: ConnOptions & {
   onEvent?: (event: AgentEvent) => void;
   signal?: AbortSignal;
   systemPrompt?: string;
-  /** Restrict the category the model may pick (设计稿 08 · 分类范围). */
+  /** Restrict the category the model may pick (设计稿 03a 屏 08 · 分类范围). */
   allowedCategories?: CategoryId[];
 }): Promise<GeneratedLore> {
   // Strip @[filename] visual placeholders from the user description — they're UI labels only.

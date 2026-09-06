@@ -1,7 +1,7 @@
 # 结构化输出开关：按模型声明 JSON 模式 / JSON Schema
 
 > **状态：`shipped` `unverified`** —— 2026-09-02 定案并全部落地：第 1 片（数据层、三层解析、
-> `json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行——随设计稿 19，见
+> `json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行——随设计稿 05c，见
 > [`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)）
 > 与第 2 片（§5.3 的 400 学习与 memo：`jsonMode.ts` 的 `withJsonModeFallback`，两处调用方都走它；
 > `generator.ts` 的 `loreEntitySchema`，`category` 用 enum 钉住）。第 3 片（可预测降级时跳过强制

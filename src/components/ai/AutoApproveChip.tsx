@@ -17,9 +17,9 @@ import { baseName } from "../../lib/paths";
  * @param owner Which surface is asking. A chip only lights up for the grant it
  *              owns, so the panel does not advertise chat's authorisation.
  * @param absent Render the dashed「自动批准 —」placeholder while no grant is
- *              live — the chip row's "absent" vocabulary (设计稿 23 屏 1g), so
+ *              live — the chip row's "absent" vocabulary (设计稿 02b 屏 1g), so
  *              the slot is always there to read. Chat asks for it; the panel's
- *              chip row (设计稿 02) has no such slot.
+ *              chip row (设计稿 02a) has no such slot.
  */
 export function AutoApproveChip({ owner, absent = false }: { owner: unknown; absent?: boolean }) {
   const { t } = useTranslation();

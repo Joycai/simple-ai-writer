@@ -92,7 +92,7 @@
 .rowLast { border-bottom: none; }
 
 /* Control on the first line, not the vertical centre — for rows whose label
-   side grows and shrinks (设计稿 18: the 实验室 signpost appears under the
+   side grows and shrinks (设计稿 05b: the 实验室 signpost appears under the
    description when the switch is on; the switch itself must not move). */
 .rowTop { align-items: flex-start; }
 .rowTop .rowActions { margin-top: 1px; }
@@ -178,7 +178,7 @@
 
 /* ─── Toggle switch ──────────────────────────────────────────────────────── */
 
-/* 设计稿 04: bordered square track, flat square knob. Reads --stg-* directly —
+/* 设计稿 05a: bordered square track, flat square knob. Reads --stg-* directly —
    the off-border and knob tones have no generic --color-* role. */
 .toggle {
   flex: none;

@@ -1,5 +1,5 @@
 /**
- * The mark a conversation wears — 设计稿 23 屏 1d, "三家记号".
+ * The mark a conversation wears — 设计稿 02b 屏 1d, "三家记号".
  *
  * One accent colour; the shape's family says how urgent it is:
  *   圆 (running solid pulsing · queued hollow ring)   — it's working, leave it

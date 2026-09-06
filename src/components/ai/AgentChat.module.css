@@ -368,7 +368,7 @@
 }
 .attachChipGhost:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
 /* Nothing to add yet (no selection, no candidates): the chip stays — it is
-   the slot's default (设计稿 23 屏 1g) — but it does not invite. */
+   the slot's default (设计稿 02b 屏 1g) — but it does not invite. */
 .attachChipGhost:disabled { color: var(--color-text-hint); cursor: default; }
 .attachChipGhost:disabled:hover { color: var(--color-text-hint); border-color: var(--color-border-muted); }
 
@@ -427,7 +427,7 @@
 .ctxSeg_free         { background: transparent; }
 .ctxSwatch.ctxSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
 
-/* ── 预估态（设计稿 13 · 2h）──
+/* ── 预估态（设计稿 04c · 2h）──
    同一根条、同样的高度，只换三样：读数的动词、右侧轨道的纹样、以及撤掉折叠竖线。
    前三段和实测态用同一批 token（系统+工具 / 绑定 / 记忆），因为它们就是同一批
    东西；只有第四段是新的。 */
@@ -735,7 +735,7 @@
   }
 }
 
-/* The compaction line with 自动归纳 off (设计稿 20): same position, hung under
+/* The compaction line with 自动归纳 off (设计稿 02e): same position, hung under
    the bar as a 1×4px grey tick — a reference, not a promise. The wrapper is
    the positioning context because the bar itself clips its overflow. */
 .ctx { position: relative; }
@@ -812,7 +812,7 @@
   transition: opacity 140ms var(--ease-out);
 }
 
-/* ── 多个会话 (设计稿 23) ─────────────────────────────────────────────────── */
+/* ── 多个会话 (设计稿 02b) ─────────────────────────────────────────────────── */
 
 /* 1g/1j: the empty conversation — two lines of serif, nothing else. */
 .emptyState {

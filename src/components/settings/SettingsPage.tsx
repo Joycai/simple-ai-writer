@@ -46,7 +46,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   // the 实验室 pane, and the author flipping it should see this item arrive
   // (or leave) at once, not on the next open.
   const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
-  // 设计稿 18: the frame the Word switch goes on, the item expands from zero
+  // 设计稿 05b: the frame the Word switch goes on, the item expands from zero
   // height and its background is dyed accent-tint, fading out within ~500ms —
   // "highlight for one beat" so the author sees *where* the switch acted.
   // Off collapses in reverse with no flash.
@@ -127,7 +127,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
-          {/* Scroll (设计稿 18): what a conversation reads into the model is
+          {/* Scroll (设计稿 05b): what a conversation reads into the model is
               "one roll" — both the text being read and the thing remembered. */}
           {navBtn("context-memory", <Scroll size={15} />, "systemSettings.tabs.contextMemory")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}

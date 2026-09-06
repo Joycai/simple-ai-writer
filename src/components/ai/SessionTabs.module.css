@@ -1,4 +1,4 @@
-/* 标签条 (设计稿 23 屏 1a). 38px between the mode tabs and the conversation. */
+/* 标签条 (设计稿 02b 屏 1a). 38px between the mode tabs and the conversation. */
 
 .strip {
   flex-shrink: 0;
@@ -6,7 +6,7 @@
   align-items: stretch;
   height: 38px;
   padding: 0 26px;
-  /* Its own band, darker than the header above it (设计稿 23 屏 1a: #14100C
+  /* Its own band, darker than the header above it (设计稿 02b 屏 1a: #14100C
      under a #17130F header): the current tab is the one patch of base colour
      on it. bg-stream sat *between* header and body, and the slip had nothing
      to stand out from. */
@@ -44,7 +44,7 @@
 }
 
 /* 新会话 pressed while an empty tab already existed: that tab flashes its top
-   line once (设计稿 23 屏 1g), 120ms, instead of a second blank tab appearing. */
+   line once (设计稿 02b 屏 1g), 120ms, instead of a second blank tab appearing. */
 .tabFlash { animation: tabFlash 240ms var(--ease-out); }
 @keyframes tabFlash {
   0% { box-shadow: inset 0 2px 0 var(--color-sienna); }

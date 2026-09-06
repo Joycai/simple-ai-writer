@@ -1,5 +1,5 @@
 /**
- * 转场。设计稿 08 TURN 2 屏 2a / 2b；功能设计见
+ * 转场。设计稿 04b 屏 2a / 2b；功能设计见
  * `docs/feature/roleplay/06-scene-and-memory-area.md` §5。
  *
  * **就地向上展开，不是弹层。** 第一版做成了 560px 居中卡片，稿子否掉了：转场是

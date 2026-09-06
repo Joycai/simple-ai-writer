@@ -966,7 +966,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // the whole署名 design forbids — a paragraph in the reading column that
         // nobody's model wrote. The reason travels on `handoff-done` instead,
         // and the surface renders it as an app notice outside the prose
-        // (设计稿 12 · 屏 1a 轮 4).
+        // (设计稿 04d · 屏 1a 轮 4).
         const finalText =
           res.text.trim() || (degraded && roundText.trim() ? roundText : "");
 

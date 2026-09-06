@@ -1,5 +1,5 @@
 /**
- * 知识库 AI 运行的统一进度词汇 (设计稿 03 · 屏 17「AI 执行进度 · 思维链」)。
+ * 知识库 AI 运行的统一进度词汇 (设计稿 03a · 屏 17「AI 执行进度 · 思维链」)。
  *
  * 三个可独立取用的积木，六个 lore AI 流共用：
  *   - RunStatusLine  — 状态行：旋转圈/绿点 + 「生成中/完成」 + `Ns · X tok` 等宽计数
@@ -94,7 +94,7 @@ export function RunStatusLine({ state, label, elapsedSec = null, tokens = null, 
   label?: string;
   elapsedSec?: number | null;
   tokens?: number | null;
-  /** 本次任务使用的模型名 — 渲染成小灰签 (设计稿 17 运行头)。 */
+  /** 本次任务使用的模型名 — 渲染成小灰签 (设计稿 03a 屏 17 运行头)。 */
   model?: string;
   /** Renders a 停止 button on the right while running. */
   onStop?: () => void;

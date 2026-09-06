@@ -1,5 +1,5 @@
 /**
- * 知识库同步 · 预览 / 执行 / 结果（设计稿 06）。
+ * 知识库同步 · 预览 / 执行 / 结果（设计稿 03c）。
  *
  * One modal, four phases, because they are one decision the author is walking
  * through: what will happen → it is happening → what happened. Splitting them

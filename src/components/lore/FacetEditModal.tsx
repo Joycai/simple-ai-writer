@@ -1,5 +1,5 @@
 /**
- * Create / edit / convert-to-facet form (设计稿 03 · 屏 16 「特征编辑 · 基础
+ * Create / edit / convert-to-facet form (设计稿 03a · 屏 16 「特征编辑 · 基础
  * 单元的全部字段」).
  *
  * One modal, three entries:
@@ -52,7 +52,7 @@ interface Props {
   /**
    * Fires after a successful save (with the saved/created file name), before
    * the modal closes — the read mode uses it to flash the edited section
-   * (设计稿 16 屏 1d). Cancel/close never fires it.
+   * (设计稿 03c 屏 1d). Cancel/close never fires it.
    */
   onSaved?: (file: string) => void;
 }

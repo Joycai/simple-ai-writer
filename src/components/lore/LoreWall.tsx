@@ -533,7 +533,7 @@ export function LoreWall() {
   const buildMenuItems = (m: { entity: LoreEntity | null; header?: boolean }): ContextMenuEntry[] => {
     const e = m.entity;
     if (m.header) {
-      // AI 提取从第一行下沉到这里(设计稿 14 屏 1k):它是每周一次的动作,
+      // AI 提取从第一行下沉到这里(设计稿 03d 屏 1k):它是每周一次的动作,
       // 不是每天,腾出的位置给同步状态件。未绑定时,绑定入口也只在这里留一项
       // ——工具带上不放「去绑定」的常驻广告。
       const items: ContextMenuEntry[] = [
@@ -743,7 +743,7 @@ export function LoreWall() {
             {t("lore.panel.newEntry")}
           </button>
           {/* 一根 1px 竖线把「操作这面墙的内容」与「这面墙和服务器的关系」切开;
-              状态件只在项目绑定后存在(设计稿 14 屏 1i/1k)。 */}
+              状态件只在项目绑定后存在(设计稿 03d 屏 1i/1k)。 */}
           <span className={styles.headDivider} />
           <SyncPresence />
           <button
@@ -765,7 +765,7 @@ export function LoreWall() {
 
       {/* 两根轴的分工写在布局里：**装订栏在左**（集合＝这条属于哪一摊活），
           **分类 chips 在右上**（分类＝这条是什么）。墙本身从不按集合分区——
-          一个条目属于几个集合，墙上都只出现一次（设计稿 03 屏 24 的 Q1）。 */}
+          一个条目属于几个集合，墙上都只出现一次（设计稿 03b 屏 24 的 Q1）。 */}
       <div className={styles.body}>
         <CollectionRail
           index={index}
@@ -800,7 +800,7 @@ export function LoreWall() {
                   }}
                   // Orphans look like any other chip on purpose: their entries are
                   // intact, so an alarming treatment would misreport the state. The
-                  // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
+                  // dedicated presentation is 设计稿 03a 屏 23 (plan phase 4).
                   title={cat.orphan
                     ? (isZh
                         ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建 · 右键可把条目搬走"
@@ -878,7 +878,7 @@ export function LoreWall() {
 
                 // 围栏外的条目**翻面**而不是消失：作者仍然看得见、点得开、搜得到，
                 // 只是这次运行 AI 不会自己找到它。筛选让卡片消失，围栏让卡片翻面
-                // ——两者永远不长成一个样子（设计稿 03 屏 25 的 Q2）。
+                // ——两者永远不长成一个样子（设计稿 03b 屏 25 的 Q2）。
                 if (out) {
                   return (
                     <div

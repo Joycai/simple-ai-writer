@@ -1,4 +1,4 @@
-/* 子代理 pane (设计稿 04). A subagent is a bound pair — a specialist and the
+/* 子代理 pane (设计稿 05a). A subagent is a bound pair — a specialist and the
    model that runs it — so each one is a card that says in one glance whether
    that pair works: status dot, requirement, switch, binding, and the caution
    it has earned. The generic row/section vocabulary can't carry that. */
@@ -197,7 +197,7 @@ input.chunkInput {
   .meta { flex-basis: 100%; text-align: left; }
 }
 
-/* ─── 第三组「收尾成文」（设计稿 12 · 屏 6a） ─────────────────────────────── */
+/* ─── 第三组「收尾成文」（设计稿 04d · 屏 6a） ─────────────────────────────── */
 
 /* 上两组是「一堆能力」，用普通组头 + 双列网格。这一组只有一位成员——套同样的
    组头会显得很空，所以改成一条贯通的刻度线：13px 横刻度起头、标题嵌在线上、

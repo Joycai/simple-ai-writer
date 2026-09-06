@@ -54,8 +54,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { index, scanProject } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
-  // Write target (设计稿 09 · 写入目标): "__index__" = the entity's index.md,
-  // "__new__" = draft a brand-new facet (设计稿 17), else a facet filename.
+  // Write target (设计稿 03a 屏 09 · 写入目标): "__index__" = the entity's index.md,
+  // "__new__" = draft a brand-new facet (设计稿 03a 屏 17), else a facet filename.
   const INDEX = "__index__";
   const NEW = "__new__";
   const [target, setTarget] = useState<string>(INDEX);
@@ -77,7 +77,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const [draftKeysText, setDraftKeysText] = useState("");
   const [draftMode, setDraftMode] = useState<FacetMode>("auto");
   // Which slot of the category's type schema the drafted facet fills. No control
-  // for it yet (设计稿 03 屏 21, plan phase 4) — the model picks it from the
+  // for it yet (设计稿 03a 屏 21, plan phase 4) — the model picks it from the
   // checklist and it rides through to the file.
   const [draftSlot, setDraftSlot] = useState<string | null>(null);
   const [structReasoning, setStructReasoning] = useState("");
@@ -118,7 +118,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     ? t("lore.improve.targetNewShort", { defaultValue: "新特征" })
     : isFacet ? target : "index.md";
 
-  // 新特征起草的语义步骤 (设计稿 17)。
+  // 新特征起草的语义步骤 (设计稿 03a 屏 17)。
   const newFacetSteps: RunStep[] = [
     {
       label: t("lore.improve.stepCompare", { defaultValue: "读取条目，比对现有特征" }),
@@ -131,7 +131,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
   // Added-line detection for the before/after view: a trimmed output line the
   // current content doesn't contain reads as new. Line containment, not a real
-  // diff — good enough to tint additions green (设计稿 03 diff 语汇).
+  // diff — good enough to tint additions green (设计稿 03a diff 语汇).
   const diff = useMemo(() => {
     const cur = new Set(currentContent.split("\n").map((l) => l.trim()).filter(Boolean));
     const lines = output.split("\n");
@@ -159,7 +159,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
       const supportsImages = model.type === "multimodal";
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 
-      // 新特征 (设计稿 17): one structured pass drafting title + trigger keys +
+      // 新特征 (设计稿 03a 屏 17): one structured pass drafting title + trigger keys +
       // injection mode + body. Structured output can't browse (see structured.ts),
       // so the index body and facet inventory ride in as context instead.
       if (isNewFacet) {
@@ -382,7 +382,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         <div className={styles.improveCols}>
 
           <div className={styles.goalRail}>
-            {/* 写入目标 (设计稿 09): 主条目 / 各特征 / + 生成新特征 */}
+            {/* 写入目标 (设计稿 03a 屏 09): 主条目 / 各特征 / + 生成新特征 */}
             <div>
               <div className={styles.label} style={{ marginBottom: 10 }}>
                 {t("lore.improve.targetLabel", { defaultValue: "写入目标" })}
@@ -489,7 +489,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 </div>
               )}
 
-              {/* 新特征: 步骤列 + 思考过程 + 草稿条 (设计稿 17) */}
+              {/* 新特征: 步骤列 + 思考过程 + 草稿条 (设计稿 03a 屏 17) */}
               {isNewFacet && phase === "generating" && (
                 <>
                   <LoreRunSteps steps={newFacetSteps} />

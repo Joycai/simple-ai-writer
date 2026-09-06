@@ -1,6 +1,6 @@
 /**
  * 取材范围（scope）的三个部件：常驻的骑缝带、头部的按钮、以及两者共用的切换器弹层。
- * 设计稿 03 屏 25/26。
+ * 设计稿 03b 屏 25/26。
  *
  * 这一组件存在的理由是**围栏必须一直看得见**。范围指向一个空集合、或者作者忘了自己
  * 上次切过——这两种情况下 AI 一条设定也找不到，而唯一的止损就是界面上始终写着当前
@@ -53,7 +53,7 @@ function useScopeSummary(scope: LoreScope): { label: string; title: string; mult
   };
 }
 
-/** 超过这个数就折起，并显示过滤框——设计稿 26-C 的退化规则。 */
+/** 超过这个数就折起，并显示过滤框——设计稿 03b 屏 26-C 的退化规则。 */
 const FOLD_AFTER = 8;
 
 export interface ScopeMenuAnchor {
@@ -204,7 +204,7 @@ export function ScopeMenu({
       )}
 
       <div className={styles.menuList}>
-        {/* 「全部」不带勾选框：它是复位项，一个勾都没有＝它生效（设计稿 03 屏 26）。 */}
+        {/* 「全部」不带勾选框：它是复位项，一个勾都没有＝它生效（设计稿 03b 屏 26）。 */}
         <button
           type="button"
           className={`${styles.row} ${styles.rowAll} ${narrow ? styles.rowNarrow : ""} ${scope === null ? styles.rowActive : ""}`}
@@ -338,7 +338,7 @@ export function ScopeMenu({
         )}
         <span style={{ flex: 1 }} />
         {/* 复位就是点「全部」那一行——所以脚里不再放「退回全部」按钮，改放这条自动行为
-            的说明（勾任意一摊＝离开全部；取消到零＝回到全部）。设计稿 03 屏 26。 */}
+            的说明（勾任意一摊＝离开全部；取消到零＝回到全部）。设计稿 03b 屏 26。 */}
         <span className={styles.menuFootHint}>{t("lore.collections.scope.autoAll")}</span>
       </div>
     </div>,

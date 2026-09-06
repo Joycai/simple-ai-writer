@@ -1,5 +1,5 @@
 /**
- * The model editor — 设计稿 19 · 模型编辑.
+ * The model editor — 设计稿 05c · 模型编辑.
  *
  * One drawer serves three authors: the one on an official endpoint who fills an
  * id and a name and leaves; the one on a relay or a local server, for whom this
@@ -764,7 +764,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 between generations and between compat vendors, and on a relay
                 the model id is free text, so it can't be derived — the author
                 declares it. 自动 · 关闭 are pinned first, then the family's
-                presets wrap freely (设计稿 19 · 问题 7). */}
+                presets wrap freely (设计稿 05c · 问题 7). */}
             {provider && categoryChoices && formCategory && (
               <Field label={t("aiConfig.models.catLabel")} hint={t("aiConfig.models.briefCat")}
                 {...whyProps("cat", form.thinkingCategory === "auto"

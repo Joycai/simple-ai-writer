@@ -1,4 +1,4 @@
-/* 设置 → AI 配置 → 上下文与记忆 (设计稿 18).
+/* 设置 → AI 配置 → 上下文与记忆 (设计稿 05b).
 
    A number with its unit beside it and its range beneath, right edges
    aligned — the same column every future row on this pane will share (B2:
@@ -44,7 +44,7 @@
   color: var(--stg-text-faint);
 }
 
-/* ── 对话归纳 (interim controls; the designed slider lands with 设计稿 19) ── */
+/* ── 对话归纳 (interim controls; the designed slider lands with 设计稿 05c) ── */
 
 .slider {
   width: 180px;
@@ -72,7 +72,7 @@
 }
 .exampleOff { opacity: 0.55; }
 
-/* ── 对话归纳 (设计稿 20) ── */
+/* ── 对话归纳 (设计稿 02e) ── */
 
 /* A slider row dims as one piece when the switch is off: the slider is truly
    disabled (the thresholds trigger nothing while off), the value is kept. */

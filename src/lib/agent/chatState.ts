@@ -1,6 +1,6 @@
 /**
  * What a conversation's tab (or list row, or the mode tab) says about it —
- * 设计稿 23 屏 1d, "三家记号": one accent colour, the family of the shape
+ * 设计稿 02b 屏 1d, "三家记号": one accent colour, the family of the shape
  * decides how urgent it is.
  *
  *   圆 = 在跑      running (solid, pulsing) · queued (hollow ring)  — leave it

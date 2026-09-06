@@ -155,7 +155,7 @@
 }
 .aiBtn:hover { background: var(--color-bg-elevated); }
 
-/* Borderless text controls (导出 / 主题 / 语言) — 设计稿 01 keeps these as
+/* Borderless text controls (导出 / 主题 / 语言) — 设计稿 01a keeps these as
    plain words in the meta row, not boxed buttons. */
 .ctrl {
   display: flex;

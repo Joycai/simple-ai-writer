@@ -1,5 +1,5 @@
 /**
- * 一个 agent 的对话区（设计稿 08 屏 1a / 1b / 1e / 1h）。
+ * 一个 agent 的对话区（设计稿 04a 屏 1a / 1b / 1e / 1h）。
  *
  * 稿面而不是聊天：一栏 640px 居中、与编辑器正文同宽，作者的回合只用一条 2px
  * 赭石左规 + 一个小号名标区分，角色的回合直接落在纸上。没有气泡、没有左右
@@ -138,7 +138,7 @@ function ComposerMirror({ text, innerRef }: {
  * 回复末尾那两本账：取材条 + 执行日志。
  *
  * 并排一行、都用三角，是因为它们是同一类东西——**事件用箭头，账目用三角**
- * （设计稿 13 · 1a）。「← 想起了」「→ 记下了」是这一轮发生的事，方向就是它们
+ * （设计稿 04c · 1a）。「← 想起了」「→ 记下了」是这一轮发生的事，方向就是它们
  * 和这一轮的关系；这两条不是事件，是事后可以查的账。
  *
  * 取材条**恒在**（哪怕这一轮零命中，甚至没有记录），执行日志只在有步骤时出现：
@@ -188,7 +188,7 @@ function TurnLedger({
 
 function TurnBlock({ turn, ledger, memories, recalled, onOpenArea, onRewind, confirm, doomed }: {
   turn: SceneTurn;
-  /** 回复末尾那两本可以查的账：取材条 + 执行日志（设计稿 13 · 1a）。 */
+  /** 回复末尾那两本可以查的账：取材条 + 执行日志（设计稿 04c · 1a）。 */
   ledger?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
@@ -993,7 +993,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               ledger={turn.speaker === "agent" ? (
                 <TurnLedger
                   /* 取材条和执行日志是同一类东西——都不是一次性事件，是可以查
-                     的账，所以并排在回复末尾、都用三角（设计稿 13 · 1a：事件用
+                     的账，所以并排在回复末尾、都用三角（设计稿 04c · 1a：事件用
                      箭头，账目用三角）。 */
                   trace={session.contextTrace[turn.index]}
                   log={session.log[turn.index]}

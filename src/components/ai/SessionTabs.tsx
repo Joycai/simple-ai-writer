@@ -1,5 +1,5 @@
 /**
- * 标签条 — the open conversations, one index tab each (设计稿 23 屏 1a/1d/1g).
+ * 标签条 — the open conversations, one index tab each (设计稿 02b 屏 1a/1d/1g).
  *
  * 38px, between the mode tabs and the conversation. A conversation has no
  * face, so a tab tells it apart by two things only: what it is *called*
@@ -148,7 +148,7 @@ function SessionTab({ chatKey, active, flashSeq }: {
   const closeChat = useAgentStore((s) => s.closeChat);
   const stopChat = useAgentStore((s) => s.stopChat);
 
-  // Two-step close, in place (设计稿 23 屏 1d last row).
+  // Two-step close, in place (设计稿 02b 屏 1d last row).
   const [asking, setAsking] = useState(false);
   useEffect(() => {
     if (!asking) return;

@@ -1,4 +1,4 @@
-/* 历史会话 dropdown (设计稿 23 屏 1e). */
+/* 历史会话 dropdown (设计稿 02b 屏 1e). */
 
 .menu {
   position: absolute;
@@ -80,7 +80,7 @@
 }
 .row:hover { background: var(--color-bg-hover); }
 /* The current conversation: a 2px sienna bar at the left edge on the selected
-   background, and the name stays in its own bright type (设计稿 23 屏 1e) —
+   background, and the name stays in its own bright type (设计稿 02b 屏 1e) —
    colouring the name sienna made it read as a link, not as "this one". */
 .rowActive {
   background: var(--color-bg-selected);

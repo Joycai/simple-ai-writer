@@ -1,5 +1,5 @@
 /**
- * 历史会话 — the drawer header's dropdown (设计稿 23 屏 1e).
+ * 历史会话 — the drawer header's dropdown (设计稿 02b 屏 1e).
  *
  * Three sections, and a conversation appears in exactly one of them:
  *   已打开   the tabs, with their live marks — the only section whose label is

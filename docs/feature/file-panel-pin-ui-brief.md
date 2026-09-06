@@ -1,6 +1,6 @@
 # 「文件」面板 · 最近打开加固定（pin）—— 给 Claude Design 的任务书
 
-> 状态：`shipped`。设计稿是 claude.ai/design 项目的 **`15 固定最近项目 Pin Recents.dc.html`**（TURN 1，屏 1a–1f）。
+> 状态：`shipped`。设计稿是 claude.ai/design 项目的 **`01a 工作区 · 编辑器 · 最近项目 Workspace.dc.html`**（TURN 1，屏 1a–1f）。
 > 本文档三段：**实现记录**（设计稿 → 代码，含七处出入）· **数据层** · `---` 之后是**发给设计师的任务书原文**。
 > `---` 以下是**发给设计师的原文**，自包含，不需要它读代码库；以上是写这份任务书时的代码实况，供实现时回查。
 
@@ -19,7 +19,7 @@
 （理由写在 `recentProjects.ts` 的 `mergeRecentProjects` 注释里）。固定名单无论是
 单独一行偏好还是并进现有那行，这条约束照样成立：**「取消固定」必须是覆盖写**。
 
-## 实现记录（设计稿 15 → 代码）
+## 实现记录（设计稿 01a → 代码）
 
 落点：[`components/layout/RecentProjects.tsx`](../../src/components/layout/RecentProjects.tsx)
 + `RecentProjects.module.css`（Sidebar 的 `!projectPath` 分支整块搬了过去）。

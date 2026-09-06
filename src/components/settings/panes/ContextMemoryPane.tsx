@@ -27,7 +27,7 @@ function formatTokens(n: number): string {
 }
 
 /**
- * The token slider's ticks (设计稿 20): the four the author named plus both
+ * The token slider's ticks (设计稿 02e): the four the author named plus both
  * ends. 64k is the log midpoint and deliberately unmarked — "common" has to
  * stay rare to mean anything.
  */
@@ -48,7 +48,7 @@ const UTIL_TICKS: SliderTick[] = [50, 60, 70, 80, 90].map((value) => ({ value, l
  * it moved here from the AI panel's chip row on 2026-09-05, so the third line
  * the compaction example has to attribute to now lives one section above it
  * rather than on another screen. 对话归纳
- * (docs/feature/agent/compact-threshold-plan.md, 设计稿 20): the 自动归纳
+ * (docs/feature/agent/compact-threshold-plan.md, 设计稿 02e): the 自动归纳
  * switch, the two lines the trigger is the lowest of — an absolute token count
  * and a share of the model's window — and a worked example for the active model
  * that names which line actually won. That example exists because the cap above

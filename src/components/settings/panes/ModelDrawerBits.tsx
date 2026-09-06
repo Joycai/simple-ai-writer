@@ -1,5 +1,5 @@
 /**
- * The model editor's building blocks — 设计稿 19. Kept apart from the drawer so
+ * The model editor's building blocks — 设计稿 05c. Kept apart from the drawer so
  * that file reads as *which* fields exist, not as how a field is drawn.
  *
  *   - `Fold`        the one animation: grid rows 0fr ↔ 1fr, both directions the

@@ -194,7 +194,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     }
   };
 
-  // 语义步骤 (设计稿 17): 读取 → 拆解分组 → 交给作者确认。
+  // 语义步骤 (设计稿 03a 屏 17): 读取 → 拆解分组 → 交给作者确认。
   const splitSteps: RunStep[] = [
     {
       label: t("lore.split.stepRead", { defaultValue: "读取条目正文与特征" }),

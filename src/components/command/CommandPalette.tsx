@@ -1,5 +1,5 @@
 /**
- * ⌘K —— 全局搜索（设计稿 21）。
+ * ⌘K —— 全局搜索（设计稿 01d）。
  *
  * 一个输入框，三个去处：**文档**（项目里所有文件，按名字 + 分组路径）→ 编辑器打开并让
  * 文件树定位到它；**条目**（知识库全部分类）→ 切到知识库墙打开那张条目；**正文**（只搜
@@ -352,7 +352,7 @@ export function CommandPalette() {
   const runAction = (id: ActionRow["id"]) => {
     if (id === "check") {
       // The term is the question: it prefills the check's focus, and narrows the
-      // range to the entry when it names one (设计稿 22 屏 1k).
+      // range to the entry when it names one (设计稿 02d 屏 1k).
       setShowAiDrawer(true, "consistency");
       void import("../../stores/consistencyStore").then((m) =>
         m.useConsistencyStore.getState().prefillFromSearch(term),

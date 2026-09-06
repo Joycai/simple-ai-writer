@@ -142,7 +142,7 @@ export function visibleTaskGroups(workspace: ResolvedWorkspace): PackTaskGroup[]
 /**
  * Which of `packs` declare a knowledge-base category — used to explain an
  * **orphan** category: "this entry's type comes from a pack that isn't enabled"
- * (设计稿 03 屏 23), and to offer the one button that fixes it.
+ * (设计稿 03a 屏 23), and to offer the one button that fixes it.
  *
  * Deliberately not part of the merge, and deliberately not what labels an orphan
  * category: borrowing a disabled pack's label would present the category as if

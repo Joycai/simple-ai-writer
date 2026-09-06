@@ -1,5 +1,5 @@
 /**
- * What a conversation is *called* on a tab or a list row — 设计稿 23's "两种字":
+ * What a conversation is *called* on a tab or a list row — 设计稿 02b's "两种字":
  * the author's own title is set upright and bright; the first question stands
  * in for it in a dimmer weight, led by an opening quote mark that says "this is
  * what it said first, not its name"; a conversation with neither is 未命名, in

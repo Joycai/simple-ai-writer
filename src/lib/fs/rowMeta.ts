@@ -1,7 +1,7 @@
 /**
- * What one file-tree row *is* — the pure half of 设计稿 17's row anatomy.
+ * What one file-tree row *is* — the pure half of 设计稿 01b's row anatomy.
  *
- * The panel has a single accent colour, and 设计稿 17 spends it on "the open
+ * The panel has a single accent colour, and 设计稿 01b spends it on "the open
  * document" and "the selection". File kinds therefore get no colour of their
  * own: they are told apart by an icon and by the right-hand column, and by two
  * levels of grey — things the author writes (`.md` `.txt` `.html`) against
@@ -12,7 +12,7 @@
 
 import { ASSETS_DIR, safeAssetName } from "../image/assets";
 
-/** The six row kinds 设计稿 17 draws. */
+/** The six row kinds 设计稿 01b draws. */
 export type RowKind =
   /** A folder the author made. */
   | "folder"
@@ -67,7 +67,7 @@ export function isSecondary(kind: RowKind): boolean {
  * the name, so printing MD would put it back).
  *
  * One column, two meanings: folders show their document count instead. Neither
- * is ever hidden — 设计稿 17 §2e removed the hover buttons precisely so this
+ * is ever hidden — 设计稿 01b §2e removed the hover buttons precisely so this
  * column never has to yield.
  */
 export function extLabel(name: string, kind: RowKind): string | null {
@@ -171,7 +171,7 @@ export function relinkCandidates(
 
 /*
  * A row's left padding lives in CSS, not here — see FileTree.module.css's
- * `.node`. 设计稿 17 §2g: levels 1–4 step by the density tier's width and from
+ * `.node`. 设计稿 01b §2g: levels 1–4 step by the density tier's width and from
  * level 5 the step drops to 4px for good (seven levels at 12px would spend
  * 84px on indentation alone, and at that depth indentation only has to say
  * "further right than the line above"). The step *is* the tier, and the tier
