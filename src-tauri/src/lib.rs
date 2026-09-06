@@ -78,6 +78,7 @@ pub fn run() {
             commands::fs_write_binary_file,
             commands::fs_write_text_file,
             commands::fs_read_text_file,
+            commands::fs_read_head,
             commands::fs_append_text_file,
             commands::fs_copy,
             commands::fs_create_dir,

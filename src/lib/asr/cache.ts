@@ -5,14 +5,25 @@
  *
  * 为什么要缓存：一小时的音频 ¥0.8，而平台的结果链接 24 小时就失效。同一份
  * 文件同一组参数第二次转写（助手重问、作者换个输出偏好重写）直接命中，不付
- * 第二次。键是**内容哈希 + 参数**：改名 / 搬家不重跑，改了分离开关要重跑
- * （结果真的不一样——多一列说话人）。
+ * 第二次。键是**内容哈希 + 模型 + 参数**：改名 / 搬家不重跑，改了分离开关要重跑
+ * （结果真的不一样——多一列说话人），**换了模型也要重跑**。
+ *
+ * 模型进键而不是「命中时比一下 meta.model 不同就重跑」，是因为两种模型各留一份
+ * 缓存：作者拿两个模型对比同一段录音时，来回切不会每切一次付一次钱。而 meta 里
+ * 那份 `model` 仍然要在命中时核对（`isUsableMeta`）——目录名是**清洗过**的模型
+ * id，理论上两个不同的 id 能洗成同一个字符串，而那一次错的代价是一份张冠李戴的
+ * 文字稿：它会被写进项目，抬头还盖着另一个模型的名字。
  */
 
 export const ASR_CACHE_DIR = ".ai-writer/tmp/asr";
 
-/** 结果 JSON 的解析或渲染规则变了就 +1，整批作废。 */
-export const ASR_CACHE_VERSION = 1;
+/**
+ * 结果 JSON 的解析或渲染规则变了就 +1，整批作废。目录名的算法变了也算——旧格式
+ * 的条目再也不会被命中，留着只是等 TTL 到期的垃圾。
+ *
+ * 2：模型 id 进了目录名。
+ */
+export const ASR_CACHE_VERSION = 2;
 
 /** 没被用过这么久的条目下次清扫丢掉。 */
 export const ASR_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -55,9 +66,19 @@ export function optionsTag(o: AsrRequestOptions): string {
   return parts.join("-");
 }
 
-/** 目录名：内容哈希前 16 位 + 参数标签。 */
-export function cacheKeyOf(sha256: string, options: AsrRequestOptions): string {
-  return `${sha256.slice(0, 16)}-${optionsTag(options)}`;
+/**
+ * 模型 id 的目录名写法：小写，非 `[a-z0-9]` 一律成 `-`，收尾去掉多余的连字符。
+ * 截断到 40 位——`qwen-audio-3.0-asr-flash-filetrans` 这一类名字已经够长，而目录
+ * 名不是给人读完的，命中与否由它和哈希一起判定，真正的模型 id 记在 meta 里。
+ */
+export function modelTag(modelId: string): string {
+  const tag = modelId.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  return tag || "model";
+}
+
+/** 目录名：内容哈希前 16 位 + 模型标签 + 参数标签。 */
+export function cacheKeyOf(sha256: string, modelId: string, options: AsrRequestOptions): string {
+  return `${sha256.slice(0, 16)}-${modelTag(modelId)}-${optionsTag(options)}`;
 }
 
 export function cacheRootFor(projectPath: string): string {
@@ -102,6 +123,17 @@ export function parseCacheMeta(text: string): AsrCacheMeta | null {
 
 export function isCurrentMeta(meta: AsrCacheMeta | null): meta is AsrCacheMeta {
   return meta !== null && meta.version === ASR_CACHE_VERSION;
+}
+
+/**
+ * 这一条缓存能不能给**这次**用——版本对上，而且确实是这个模型转的。
+ *
+ * 目录名已经带了模型，所以第二个条件平时永远为真；它防的是 `modelTag` 把两个
+ * 不同的 id 洗成同一个字符串那一次。清扫（`planSweep`）不看这一条：它只按版本和
+ * TTL 丢，别的模型的缓存是别人的资产，不是垃圾。
+ */
+export function isUsableMeta(meta: AsrCacheMeta | null, modelId: string): meta is AsrCacheMeta {
+  return isCurrentMeta(meta) && meta.model === modelId;
 }
 
 export interface SweepEntry {

@@ -30,7 +30,7 @@ import {
   cacheDirFor,
   cacheKeyOf,
   cacheRootFor,
-  isCurrentMeta,
+  isUsableMeta,
   parseCacheMeta,
   planSweep,
   sha256Hex,
@@ -168,12 +168,12 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
       `file is ${(bytes.byteLength / 1024 / 1024).toFixed(0)}MB — over the ${MAX_TRANSCRIBE_BYTES / 1024 / 1024}MB transcription limit`,
     );
   }
-  const key = cacheKeyOf(await sha256Hex(bytes), options);
+  const key = cacheKeyOf(await sha256Hex(bytes), conn.modelId, options);
   const dir = cacheDirFor(projectPath, key);
   await sweepOnce(projectPath, key);
 
   const existing = await readMeta(dir);
-  if (isCurrentMeta(existing)) {
+  if (isUsableMeta(existing, conn.modelId)) {
     try {
       const transcript = parseTranscript(await readFile(`${dir}/${ASR_RESULT_NAME}`));
       void writeMeta(dir, { ...existing, lastUsedAt: Date.now() }).catch(() => {});

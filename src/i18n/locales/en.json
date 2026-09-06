@@ -391,6 +391,7 @@
         "uiSchemeMedia": "Out of bounds · polarity comes from --theme-scheme, not the system",
         "uiAtRule": "Out of bounds · an appearance theme is token declarations only",
         "mdSelector": "Out of bounds · only inside .md-body",
+        "mdCombinator": "Out of bounds · ~ and + reach outside .md-body · use a descendant or > instead",
         "mdRoot": "Out of bounds · :root holds --theme-* metadata only · colours go in .md-body",
         "mdAtRule": "Out of bounds · only @media / @supports / @container / @font-face / @keyframes",
         "mdUrl": "Out of bounds · url() takes a relative path or data: only",

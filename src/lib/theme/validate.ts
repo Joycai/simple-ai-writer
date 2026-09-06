@@ -7,7 +7,8 @@
  *   set custom properties the app declares, on the one selector that carries
  *   a theme. Everything else is dropped.
  * - A **markdown theme is a stylesheet fenced inside `.md-body`** (Typora's
- *   `#write`): any rule whose every selector starts there, `@media` /
+ *   `#write`): any rule whose every selector starts there **and stays there**
+ *   (no sibling combinator walking back out), `@media` /
  *   `@supports` / `@container` recursing to the same test, `@font-face` and
  *   `@keyframes` as they are. `url()` only relative or `data:` — a remote
  *   `url()` is the half of a CSS keylogger the CSP would block anyway, and
@@ -96,6 +97,7 @@ export const REASON = {
   schemeMedia: "uiSchemeMedia",
   atRule: "uiAtRule",
   mdSelector: "mdSelector",
+  mdCombinator: "mdCombinator",
   mdRoot: "mdRoot",
   mdAtRule: "mdAtRule",
   mdUrl: "mdUrl",
@@ -274,8 +276,42 @@ export function splitSelectors(selectorText: string): string[] {
 
 const MD_ROOT_RE = new RegExp(`^${MD_ROOT.replace(".", "\\.")}(?![\\w-])`);
 
-export function isMdSelector(selector: string): boolean {
+/** Does it *start* at `.md-body` — the first half of the fence. */
+export function startsAtMdRoot(selector: string): boolean {
   return MD_ROOT_RE.test(selector.trim());
+}
+
+/**
+ * Does it also **stay** inside — the other half, and the one a regex anchored
+ * at the head cannot see.
+ *
+ * `.md-body ~ *` and `.md-body + .toolbar` both start at `.md-body` and then
+ * walk sideways out of it: they select the preview container's *siblings*,
+ * which is app chrome (the lore read view puts its mono meta line right next
+ * to the rendered body; the editor puts its toolbar there). `!important` is
+ * kept on the way out, so a theme file could blank half the window — and a
+ * theme file is not always the author's own: a project's `.ai-writer/themes/`
+ * may carry typography themes, and one of those overrides a user theme of the
+ * same id (`registry.ts`), so a cloned repository can get its CSS installed by
+ * being opened. Descendant and `>` stay inside the subtree and are fine.
+ *
+ * Only combinators at depth 0 count: the `+` in `:nth-child(2n+1)` and the
+ * `~=` in an attribute selector are not combinators, and `.md-body:has(+ .x)`
+ * still has `.md-body` as its subject.
+ */
+export function staysInsideMdRoot(selector: string): boolean {
+  let depth = 0;
+  for (const ch of selector) {
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (depth === 0 && (ch === "~" || ch === "+")) return false;
+  }
+  return true;
+}
+
+export function isMdSelector(selector: string): boolean {
+  const sel = selector.trim();
+  return startsAtMdRoot(sel) && staysInsideMdRoot(sel);
 }
 
 const FONT_PROPS = /^(font|font-family|--md-font-[\w-]+)$/;
@@ -354,9 +390,20 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
       if (rule.type === STYLE_RULE) {
         const selector = rule.selectorText ?? "";
         const isRoot = selector.trim() === ":root";
-        if (!isRoot && !splitSelectors(selector).every(isMdSelector)) {
-          problems.push({ rule: n, selector, reason: REASON.mdSelector });
-          continue;
+        if (!isRoot) {
+          const parts = splitSelectors(selector);
+          // Two different mistakes, two different sentences: one is "this rule
+          // is not about the rendered document at all", the other is "it starts
+          // there and then steps out sideways" — and only the second reads as a
+          // fence the author did not know was there.
+          if (!parts.every(startsAtMdRoot)) {
+            problems.push({ rule: n, selector, reason: REASON.mdSelector });
+            continue;
+          }
+          if (!parts.every(staysInsideMdRoot)) {
+            problems.push({ rule: n, selector, reason: REASON.mdCombinator });
+            continue;
+          }
         }
         const decls = rule.style ? declarations(rule.style, selector, n, { root: isRoot }) : "";
         if (!decls) continue;

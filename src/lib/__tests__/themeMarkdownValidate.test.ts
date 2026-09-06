@@ -39,6 +39,28 @@ describe("selector fence", () => {
     }
   });
 
+  // 回归：围栏有两半，「从 .md-body 开始」只是第一半。`~` / `+` 从它开始却往旁边
+  // 走，选中的是预览容器的**兄弟**——那是应用界面；而排版主题可以由项目目录提供，
+  // 并按 id 顶掉用户自己的同名主题，所以这不只是作者自找的。
+  it("refuses sibling combinators that walk back out of .md-body", () => {
+    for (const bad of [".md-body ~ *", ".md-body + .toolbar", ".md-body~div", ".md-body h1 + .chrome"]) {
+      expect(isMdSelector(bad)).toBe(false);
+    }
+    // 括号 / 方括号里的 + 和 ~ 不是组合器。
+    for (const ok of [".md-body li:nth-child(2n+1)", ".md-body [rel~='tag']", ".md-body:has(+ .x)"]) {
+      expect(isMdSelector(ok)).toBe(true);
+    }
+  });
+
+  it("names the combinator refusal separately from the out-of-bounds one", () => {
+    const out = validateMarkdownRules([
+      rule(".md-body ~ *", { display: "none" }),
+      rule(".editor", { display: "none" }),
+    ]);
+    expect(out.css).toBe("");
+    expect(out.problems.map((p) => p.reason)).toEqual(["mdCombinator", "mdSelector"]);
+  });
+
   it("splits a selector list on top-level commas only", () => {
     expect(splitSelectors(".md-body h1, .md-body :is(h2, h3), .md-body [title='a,b']"))
       .toEqual([".md-body h1", ".md-body :is(h2, h3)", ".md-body [title='a,b']"]);

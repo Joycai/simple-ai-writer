@@ -37,7 +37,7 @@ export interface ThemeMeta {
  */
 export type ThemeReasonCode =
   | "uiSelector" | "uiProperty" | "uiScale" | "uiUnknown" | "uiSchemeMedia" | "uiAtRule"
-  | "mdSelector" | "mdRoot" | "mdAtRule" | "mdUrl"
+  | "mdSelector" | "mdCombinator" | "mdRoot" | "mdAtRule" | "mdUrl"
   | "missingMeta" | "badKind" | "badExtendsUi" | "badExtendsMd"
   | "unreadableFile" | "reservedUiId" | "reservedMdId" | "uiInProject";
 

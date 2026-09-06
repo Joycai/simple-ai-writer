@@ -91,6 +91,20 @@ describe("buildRegistry — typography", () => {
     expect(hits[0]).toMatchObject({ source: "project", name: "项目宋楷" });
   });
 
+  // 回归：项目里的 ui 文件被拒绝之后仍要出一张卡，出卡就要改标成 markdown 落进
+  // 那一格——但那次改标不能顺带取得「顶掉同名用户主题」的资格，否则作者自己那份
+  // 能用的排版主题会在打开该项目时静默消失、排版退回默认。
+  it("a refused project ui file does not shadow the author's typography theme of that id", () => {
+    const brand = md("brand.css", { "--theme-name": "品牌" }, ".md-body { --md-line: 2; }");
+    const projectUi = ui("brand.css", { "--theme-name": "项目外观", "--theme-scheme": "light" }, { "--color-bg-base": "#fff" }, [], DIRS.project);
+    const { markdown } = buildRegistry([brand], [projectUi], { ...both, markdown: "brand" }, DIRS);
+    const mine = markdown.find((e) => e.source === "user" && e.id === "brand");
+    expect(mine).toMatchObject({ usable: true, name: "品牌" });
+    expect(markdown.find((e) => e.source === "project" && e.id === "brand")?.problems[0].reason).toBe("uiInProject");
+    // 作者选的就是它，所以解析必须仍然落在自己那一份上。
+    expect(resolveMarkdownTheme(markdown, "brand")).toBe(mine);
+  });
+
   it("refuses a file named like a built-in and keeps its card", () => {
     const { markdown } = buildRegistry([md("clean.css", { "--theme-name": "x" })], [], both, DIRS);
     expect(markdown.filter((e) => e.id === "clean")).toHaveLength(2);

@@ -26,14 +26,15 @@
 
 ## 1. 不变量
 
-下面六条任何一条被破坏都算 bug，不算权衡。
+下面七条任何一条被破坏都算 bug，不算权衡。
 
 1. **转写模型绝不进对话候选。** `isAsrOnly(m)` 是这条不变量的名字，`conversationalModels` 无条件排除它；`asr` 档位只收 `isAsrOnly` 的模型，`writer` 等其余档位拒收它。绑错的症状和翻译模型一样是**静默的**：它没有对话能力，`/services/audio/asr/transcription` 收到一段文字只会报错，但作为主模型它会让整个对话在第一轮就死掉。
 2. **凭证的 `model` 和提交的 `model` 是同一个变量。** 临时文件与模型名绑定；写成两处字面量，错的症状是轮询阶段的 `FILE_DOWNLOAD_FAILED`，和漏头一模一样，排查不出来。
 3. **`X-DashScope-OssResourceResolve: enable` 只跟着 `oss://` 走**，加在提交请求上，不加在 getPolicy 上。
-4. **付费之前必须有人点头。** 右键路径是确认卡，助手路径是审批卡；`autoApprove` 永不放行 `transcribe_audio`。转写结果先进缓存再写产物，同一文件同一参数不付第二次。
+4. **付费之前必须有人点头。** 右键路径是确认卡，助手路径是审批卡；`autoApprove` 永不放行 `transcribe_audio`。转写结果先进缓存再写产物，同一文件同一参数**同一模型**不付第二次——键里带模型（`cacheKeyOf`），换绑模型是换一份缓存而不是命中旧的：结果真的不一样，而产物的抬头写的是**这次**绑的那个模型名，拿回上一个模型的稿子等于把一份张冠李戴的文字稿写进项目。
 5. **两代结果形状都认，且结果 JSON 拿到就落盘。** `transcriptionUrlOf` 同时找 `output.result` 和 `output.output`；链接 24 小时失效，缓存里存的是结果本体不是链接。
 6. **Beta 关着＝入口不存在。** 菜单项不渲染、工具不装载（`allowedTools` 里没有），而不是渲染成禁用 / 调用被拒。Beta 开着但没绑模型，菜单项**禁用并指路**（作者能自己修好），工具仍不装载（`isAsrEnabled() && live("asr")`）。
+7. **批准之前不读整个文件，也不越过大小上限。** 提案 / 确认卡要的只有两个数——大小和（WAV 的）时长，`readFileHead` 一次往返给回真实大小和前 64KB。`readBinaryFile` 会把一份 1.5GB 的录音整个搬过 IPC 进 webview 堆，而 `MAX_TRANSCRIBE_BYTES` 那道闸在 `transcribeFile` 里、也就是在**批准之后**才关：两个入口都要在读之前先拦。传给 `wavDurationSeconds` 的必须是**真实大小**而不是手里那段前缀——流式写出的 WAV 把 data 长度写成哨兵值，时长只能由「data 块一直到文件末尾」反推，拿前缀反推会把一小时的录音报成半秒，而那个数字随后就印在付费确认卡上。
 
 ---
 

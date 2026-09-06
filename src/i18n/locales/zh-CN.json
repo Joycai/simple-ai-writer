@@ -391,6 +391,7 @@
         "uiSchemeMedia": "越界 · 明暗由 --theme-scheme 决定，不由系统决定",
         "uiAtRule": "越界 · 外观主题只有令牌声明",
         "mdSelector": "越界 · 只作用于 .md-body 之内",
+        "mdCombinator": "越界 · ~ 和 + 指向 .md-body 外面 · 改用后代或 >",
         "mdRoot": "越界 · :root 里只读 --theme-* 元数据 · 颜色写在 .md-body 里",
         "mdAtRule": "越界 · 只接受 @media / @supports / @container / @font-face / @keyframes",
         "mdUrl": "越界 · url() 只接受相对路径或 data:",
