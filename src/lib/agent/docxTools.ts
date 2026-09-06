@@ -19,8 +19,9 @@ import { docxPathFor, outlineMarkdown } from "../docx";
 import { eastAsiaFontsOf, formatSpecRows, formatSummary } from "../docx/format";
 import { missingFonts } from "../docx/fontCheck";
 import { readDocFormat } from "../docx/read";
-import { describeOrigin, FormatResolveError, resolveFormat, type DocFormatOverrides } from "../docx/resolve";
-import { currentFormats, imitatedIdFor, useDocFormatStore } from "../../stores/docFormatStore";
+import { originName, FormatResolveError, resolveFormat, type DocFormatOverrides, type FormatOrigin } from "../docx/resolve";
+import type { DocFormatPreset } from "../docx/format";
+import { currentFormats, imitatedIdFor, isSessionImitated, useDocFormatStore } from "../../stores/docFormatStore";
 import type { DocxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -110,8 +111,9 @@ export async function exportDocxTool(
     sourcePath: source,
     format,
     originKind: origin.kind,
-    originLabel: describeOrigin(origin),
-    originNote: originNote(origin, presets.length),
+    originLabel: originName(origin),
+    originNote: originNote(origin, presets),
+    originFootnote: originFootnote(origin, presets),
     changed: origin.kind === "overridden" ? origin.changed : undefined,
     spec: formatSpecRows(format),
     missingFonts: missingFonts(eastAsiaFontsOf(format)),
@@ -132,20 +134,39 @@ export async function exportDocxTool(
   return { toolCallId, content: decision.backupPath ?? `Exported to ${target}.` };
 }
 
-/** 格式来源右边那句安静的话。 */
-function originNote(origin: ReturnType<typeof resolveFormat>["origin"], _total: number): string | undefined {
+/**
+ * 格式来源右边那句安静的话（设计稿 05f 屏 1j 的第三格）。
+ *
+ * 它回答的永远是「这一套是**哪来的**」，不是「这一套叫什么」——名字已经在左边
+ * 那一格里。所以默认那套写它的名字（左边只写「默认格式」），点名的预设写内置还
+ * 是自建，模仿来的写它有没有被存下来；而**改过的一律不写**：右边那枚「改了 N
+ * 项」徽标此刻正说着相反的话，再挂一句「未改动」就是自相矛盾。
+ */
+function originNote(origin: FormatOrigin, presets: readonly DocFormatPreset[]): string | undefined {
   switch (origin.kind) {
     case "default":
       return origin.presetLabel;
     case "preset":
-      return undefined;
+      return presets.find((p) => p.id === origin.presetId)?.builtin ? "内置 · 未改动" : "自建 · 未改动";
     case "imitated":
-      return undefined;
+      return isSessionImitated(origin.presetId) ? "未存为预设" : "自建 · 未改动";
     case "overridden":
-      return origin.base.kind === "default" || origin.base.kind === "preset"
-        ? origin.base.presetLabel
-        : undefined;
+      return undefined;
   }
+}
+
+/**
+ * 模仿来的格式底下那一行括注：这一套里有几项**不是**那份文件写死的。
+ *
+ * 只有还挂在会话里的那种才有——存成预设之后 `filledDefaults` 就不再跟着走，而
+ * 那正是对的：那时它已经是作者自己核对过、留下来的一套格式，不再是一次「照着
+ * 读」的结果。
+ */
+function originFootnote(origin: FormatOrigin, presets: readonly DocFormatPreset[]): string | undefined {
+  if (origin.kind === "overridden") return originFootnote(origin.base, presets);
+  if (origin.kind !== "imitated") return undefined;
+  const filled = presets.find((p) => p.id === origin.presetId)?.filledDefaults ?? 0;
+  return filled > 0 ? `未在文件里出现的项按 Word 默认值补（${filled} 项）` : undefined;
 }
 
 
@@ -210,6 +231,8 @@ export async function readDocFormatTool(
     label: file,
     builtin: false,
     imitatedFrom: file,
+    // 审批卡③底下那行括注要的数：这份文件**没**写死的项。
+    filledDefaults: result.rows.filter((r) => r.source === "default" || r.source === "absent").length,
     format: result.format,
   });
 

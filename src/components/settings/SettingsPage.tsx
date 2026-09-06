@@ -81,7 +81,15 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
 
   const pageVariants = useMotionPreset(panelFade);
 
-  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string, extra = "") => (
+  const navBtn = (
+    id: SettingsTab,
+    icon: React.ReactNode,
+    labelKey: string,
+    extra = "",
+    // 行尾的成色小标。今天只有排版格式挂着它（设计稿 05e 屏 1a / 05f 屏 1n）——
+    // 那一项本身就是一个开关开出来的，导航里不说，作者只能在页内标题上才看见。
+    badge?: string,
+  ) => (
     <button
       key={id}
       className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""} ${extra}`}
@@ -89,6 +97,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
     >
       <span className={styles.navIcon}>{icon}</span>
       {t(labelKey)}
+      {badge && <span className={styles.navBadge}>{badge}</span>}
     </button>
   );
 
@@ -121,7 +130,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             inert={!docxOn}
           >
             {navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat",
-              docxFlash ? styles.navItemFlash : "")}
+              docxFlash ? styles.navItemFlash : "", "BETA")}
           </div>
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}

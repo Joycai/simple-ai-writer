@@ -408,6 +408,15 @@
   margin-left: auto;
 }
 
+/* 来源带底下那一行括注（设计稿 05f 屏 1j ③）。中性灰、无标记：它陈述这套格式
+   的成色，不指控任何东西。 */
+.docxOriginFoot {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-text-hint);
+}
+
 .docxChangedChip {
   font-family: var(--font-mono);
   font-size: 10px;

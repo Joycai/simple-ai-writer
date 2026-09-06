@@ -1584,7 +1584,7 @@
       "docxOrigin": "格式来源",
       "docxChanged": "改了 {{count}} 项",
       "docxChangeMark": "改",
-      "docxFontMissing": "{{fonts}} 本机未装（不影响导出：文件里写的就是它，在装了这个字体的机器上会正常排版）",
+      "docxFontMissing": "{{fonts}} 本机未装（不影响导出）",
       "docxBlocks": "{{n}} 块",
       "docxHeadings": "标题 {{n}}",
       "docxTables": "表格 {{n}}",
@@ -1816,7 +1816,16 @@
       "preResident": "含 {{name}} 人设",
       "preUnexpanded": "{{n}} 条只进了标题",
       "preFloorTitle": "下界：至少到这里，检索还会往右加",
-      "preWas": "刚才预估 ≥ {{n}}"
+      "preWas": "刚才预估 ≥ {{n}}",
+      "export": {
+        "title": "已导出",
+        "meta": "{{n}} 块 · {{s}} s",
+        "reveal": "在文件夹中显示",
+        "format": "格式：{{line}}",
+        "clean": "全部内容都按预设落地",
+        "degradedHead": "有 {{n}} 类内容退到了更简单的形式",
+        "degradedNote": "这些东西 Word 里没有对等物。文档其余部分完全按预设落地——降级不影响排版核对。"
+      }
     },
     "drawer": {
       "tabGenerate": "生成",
@@ -3852,7 +3861,8 @@
     "listHint": "{{count}} 套预设 · 圆点标的那一套 AI 会自动用",
     "groupBuiltin": "内置 · 不可删",
     "groupCustom": "自建",
-    "customEmpty": "这里还空着。内置那五套改不了，但可以「复制一份」再改；或者把甲方给的模板丢进来，直接读出一整套。",
+    "customEmptyTitle": "这里还空着。",
+    "customEmpty": "内置那五套改不了，但可以「复制一份」再改；或者把甲方给的模板丢进来，直接读出一整套。",
     "defaultChip": "默认",
     "makeDefault": "设为默认：{{name}}",
     "readFrom": "读自 {{file}}",
@@ -3895,6 +3905,7 @@
     "edit": "编辑",
     "duplicate": "复制一份",
     "delete": "删除",
+    "rowActions": "「{{name}}」的操作",
     "deleteAsk": "删掉这套预设？",
     "deleteDefaultAsk": "这是默认的一套，删掉后默认会落回「手稿」。",
     "deleteConfirm": "删除",
@@ -3916,7 +3927,7 @@
       "groupBody": "正文",
       "fontEastAsia": "中文字体",
       "fontAscii": "西文与数字",
-      "fontMissingNote": "{{font}} 本机未安装，预览与编辑器里会用替代字体显示。导出的 .docx 写的仍是它。",
+      "fontMissingNote": "本机没装 {{font}}。导出的 .docx 里写的仍是它，在装了这个字体的机器上排版合规；纸样只画灰条，所以这台机器上看不出差别。",
       "size": "字号",
       "customSize": "自定义",
       "echoPt": "{{pt}} 磅",

@@ -70,6 +70,10 @@
   line-height: 1.7;
   color: var(--stg-text-desc);
 }
+.emptyCustomTitle {
+  color: var(--stg-text);
+  margin-bottom: 2px;
+}
 .emptyCustomActions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
 .row {
@@ -993,6 +997,22 @@
 .rowAction:hover { color: var(--stg-accent); }
 .rowActionStrong { color: var(--stg-accent); }
 
+/* 那个点按钮只在 ≤720 出现（见文末的媒体查询）——宽屏有悬停，一排写着字的动作
+   比一个要先点开才知道装了什么的按钮好。 */
+.rowMenu { display: none; flex: none; }
+.rowMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.rowMenuBtn:hover { color: var(--stg-accent); background: var(--color-bg-hover); }
+
 .headActions { display: flex; gap: 10px; flex: none; }
 
 .outlineBtn {
@@ -1229,7 +1249,7 @@
 .previewBar { display: none; }
 
 /* 720px 以下（设计稿 05f 屏 1m）：纸样收成一行可展开的条，下面挂一行等宽摘要；列表摘要折两行；
-   悬停动作常显——触屏没有悬停（稿上是收成一个点按钮，这里先让它们一直在）。 */
+   那排靠悬停出现的动作换成一个点按钮 + 菜单——这个宽度多半是触屏，而触屏没有悬停。 */
 @media (max-width: 720px) {
   .previewCol { position: static; max-width: none; }
   .previewToggle {
@@ -1255,5 +1275,6 @@
   .previewCollapsed .previewBody { display: none; }
   .rowSummaryRest { display: block; }
   .rowSummaryRest::before { content: none; }
-  .rowActions { opacity: 1; }
+  .rowActions { display: none; }
+  .rowMenu { display: block; }
 }

@@ -16,7 +16,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, FileDown, Plus } from "lucide-react";
+import { ChevronDown, FileDown, MoreHorizontal, Plus } from "lucide-react";
+import { ContextMenu, type ContextMenuEntry } from "../../common/ContextMenu";
 import { Pane, PaneHeader } from "./bits";
 import { PaperPreview } from "./PaperPreview";
 import { DocFormatDrawer } from "./DocFormatDrawer";
@@ -106,7 +107,15 @@ export function DocFormatPane({
                 // read_doc_format 从模型那边读来的走同一条路。
                 const preset: DocFormatPreset = save
                   ? { id: nextCustomId(presets), label: name, builtin: false, imitatedFrom: file, format: result.format }
-                  : { id: imitatedIdFor(path), label: file, builtin: false, imitatedFrom: file, format: result.format };
+                  : {
+                      id: imitatedIdFor(path),
+                      label: file,
+                      builtin: false,
+                      imitatedFrom: file,
+                      // 审批卡③底下那行括注要的数——只跟着会话里这一套走，存下来的没有。
+                      filledDefaults: result.rows.filter((r) => r.source === "default" || r.source === "absent").length,
+                      format: result.format,
+                    };
                 if (save) await saveFormat(preset);
                 else addImitated(preset);
                 if (makeDefault) setDefault(preset.id);
@@ -176,6 +185,9 @@ export function DocFormatPane({
               // 空态放在「自建」分组里而不是整页居中（设计稿 05f 屏 1l）：内置的五套一直在，
               // 页面从来不是空的，空的只是这一段——两个入口就近再给一次。
               <div className={styles.emptyCustom}>
+                {/* 两行，不是一句：第一行陈述状态，第二行才是出路。挤成一段时
+                    「这里还空着」会被读成那句长解释的开头（设计稿 05f 屏 1l）。 */}
+                <div className={styles.emptyCustomTitle}>{t("docxFormat.customEmptyTitle")}</div>
                 <div>{t("docxFormat.customEmpty")}</div>
                 <div className={styles.emptyCustomActions}>
                   <button className={styles.outlineBtn} onClick={() => setImporting(true)}>
@@ -258,6 +270,16 @@ function PresetRow({
   // 每次渲染都问一遍不值当，但预设列表短、字体探测是同步的一次 check——放
   // memo 里是为了别在滚动时重复问，不是为了性能悬崖。
   const missing = useMemo(() => missingFonts(eastAsiaFontsOf(preset.format)), [preset]);
+  // ≤720 那个点按钮弹出来的菜单（设计稿 05f 屏 1m）。宽屏下这个按钮根本不显示，
+  // 所以这段状态在那边永远是 null。
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const menuItems: ContextMenuEntry[] = [
+    ...(onEdit ? [{ kind: "item" as const, label: t("docxFormat.edit"), action: onEdit }] : []),
+    ...(onDuplicate ? [{ kind: "item" as const, label: t("docxFormat.duplicate"), action: onDuplicate }] : []),
+    ...(onDelete
+      ? [{ kind: "divider" as const }, { kind: "item" as const, label: t("docxFormat.delete"), danger: true, action: onDelete }]
+      : []),
+  ];
 
   return (
     <div
@@ -316,6 +338,25 @@ function PresetRow({
           </button>
         )}
       </div>
+      {/* ≤720 换成这一个点按钮，上面那排收起来（设计稿 05f 屏 1m）：那个宽度多半是
+          触屏，而触屏没有悬停——一排靠 hover 才出现的动作在那里等于不存在。 */}
+      {menuItems.length > 0 && (
+        // 菜单和它的按钮共用这一层的 stopPropagation：portal 出去的菜单项在 React
+        // 树上仍然是这里的孩子，点一项会一路冒到行的 onClick 上。
+        <div className={styles.rowMenu} onClick={(e) => e.stopPropagation()}>
+          <button
+            className={styles.rowMenuBtn}
+            aria-label={t("docxFormat.rowActions", { name: preset.label })}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuAt({ x: r.right - 180, y: r.bottom + 4 });
+            }}
+          >
+            <MoreHorizontal size={15} />
+          </button>
+          {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} items={menuItems} onClose={() => setMenuAt(null)} />}
+        </div>
+      )}
     </div>
   );
 }
