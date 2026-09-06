@@ -349,36 +349,48 @@ export function SubAgentsPane() {
                         的偏好而不是能力开关，所以住这一行而不是实验室；它们是每张
                         确认卡的默认值，卡上改的只管那一次。两处开关长得一样是对的——
                         控制的是同一件事，层级靠标签说清。 */}
-                    {kind === "asr" && (<>
-                      <div className={css.prefHead}>
-                        <span className={css.prefLabel}>{t("systemSettings.subagents.asrPrefs")}</span>
-                        <span className={css.meta}>{t("systemSettings.subagents.asrPrefsHint")}</span>
+                    {kind === "asr" && (
+                      <div className={css.prefs}>
+                        <div className={css.prefHead}>
+                          <span className={css.prefLabel}>{t("systemSettings.subagents.asrPrefs")}</span>
+                          <span className={css.prefHint}>{t("systemSettings.subagents.asrPrefsHint")}</span>
+                        </div>
+                        {/* 两格一行、开关比启用开关小一号（36 vs 42）：两处开关长得一样是对的，
+                            层级靠标签和尺寸说清，不靠长得不一样（设计稿 02f 1z 张力 4）。 */}
+                        <div className={css.prefGrid}>
+                          <div className={css.prefItem}>
+                            <div className={css.prefBody}>
+                              <div className={css.prefTitle}>
+                                {t("systemSettings.subagents.asrTimestamps")}
+                                <span className={css.prefMono}>[03:12]</span>
+                              </div>
+                              <div className={css.prefDesc}>{t("systemSettings.subagents.asrTimestampsHint")}</div>
+                            </div>
+                            <Toggle
+                              className={css.toggleSmall}
+                              on={asrTimestamps}
+                              onChange={(next) => { setAsrTimestampsEnabled(next); setAsrTimestamps(next); }}
+                              label={t("systemSettings.subagents.asrTimestamps")}
+                            />
+                          </div>
+                          <div className={css.prefItem}>
+                            <div className={css.prefBody}>
+                              <div className={css.prefTitle}>
+                                {t("systemSettings.subagents.asrDiarization")}
+                                <span className={css.prefMono}>{t("systemSettings.subagents.asrDiarizationMono")}</span>
+                              </div>
+                              <div className={css.prefDesc}>{t("systemSettings.subagents.asrDiarizationHint")}</div>
+                            </div>
+                            <Toggle
+                              className={css.toggleSmall}
+                              on={asrDiarization}
+                              onChange={(next) => { setAsrDiarizationDefault(next); setAsrDiarization(next); }}
+                              label={t("systemSettings.subagents.asrDiarization")}
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <label className={css.bind}>
-                        <input
-                          type="checkbox"
-                          checked={asrTimestamps}
-                          onChange={(e) => {
-                            setAsrTimestampsEnabled(e.target.checked);
-                            setAsrTimestamps(e.target.checked);
-                          }}
-                        />
-                        <span className={css.desc}>{t("systemSettings.subagents.asrTimestamps")}</span>
-                        <span className={css.meta}>[03:12]</span>
-                      </label>
-                      <label className={css.bind}>
-                        <input
-                          type="checkbox"
-                          checked={asrDiarization}
-                          onChange={(e) => {
-                            setAsrDiarizationDefault(e.target.checked);
-                            setAsrDiarization(e.target.checked);
-                          }}
-                        />
-                        <span className={css.desc}>{t("systemSettings.subagents.asrDiarization")}</span>
-                        <span className={css.meta}>{t("systemSettings.subagents.asrDiarizationHint")}</span>
-                      </label>
-                    </>)}
+                    )}
                   </div>
 
                   {/* 写手绑空时给一条**行动**条而不是纯警告：这里有一步到位的

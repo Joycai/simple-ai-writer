@@ -315,20 +315,80 @@ input.chunkInput {
 }
 .unboundAction:hover { color: var(--stg-accent-hover); }
 
-/* 转写卡的「产物偏好」小节头（设计稿 02f 屏 1a）：eyebrow + 一句 mono 说明，
-   下面两行复用 .bind 的复选框行。 */
+/* 转写卡的「产物偏好」（设计稿 02f 屏 1a）：卡内一段，顶线 + 与绑定行同一条左缘
+   （36px），eyebrow + 一句说明，下面两格一行；每格 = 标题（带 mono 尾注）+ 一行说明
+   + 一枚小一号的开关（36×20，启用开关是 42×22）。两处开关长得一样是对的——控制
+   的是同一件事，层级靠标签和尺寸说清。 */
+.prefs {
+  border-top: 1px solid var(--stg-line-row);
+  padding: 11px var(--space-4) 12px 36px;
+}
+
 .prefHead {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--stg-line-row);
+  gap: 10px;
 }
 
 .prefLabel {
-  font: 500 10px/1.4 var(--font-sans);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--stg-text-desc);
+}
+
+.prefHint {
+  font-size: 11px;
   color: var(--color-text-hint);
+}
+
+.prefGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  margin-top: 9px;
+}
+
+.prefItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.prefBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.prefTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--stg-text-warm);
+}
+
+.prefMono {
+  margin-left: 4px;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+.prefDesc {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--stg-text-desc);
+}
+
+/* 小一号的开关：轨 36×20、钮 12px；开的位移 = 36 − 2 边 − 12 钮 − 3 起点 − 3 终点 = 16px。
+   钮是 settingsUi 里的哈希类，这里用「唯一子元素」和 aria-checked 选，不引它的名字。 */
+.toggleSmall {
+  width: 36px;
+  height: 20px;
+  margin-top: 1px;
+}
+.toggleSmall > :first-child {
+  width: 12px;
+  height: 12px;
+}
+.toggleSmall[aria-checked="true"] > :first-child {
+  transform: translateX(16px);
 }
