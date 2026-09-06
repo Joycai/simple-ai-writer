@@ -34,6 +34,7 @@ Two axes, encoded differently on purpose.
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
 | [terminology.md](reference/terminology.md) | `living` (词表) · `planned` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. Also holds the six-batch plan for the 78 一词多译 / 49 一译多词 found in the 2026-08 sweep |
+| [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——三种失败形状、判据取哪个变量、九条先例 |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
 | [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
 
