@@ -22,12 +22,30 @@ import type { ColorScheme } from "./scheme";
 
 /**
  * Font stacks for a file read on a machine without the app's bundled faces:
- * every stack ends in system fallbacks. Kept apart from `tokens.css`'s own,
- * which name the bundled fonts first.
+ * every stack ends in system fallbacks. This is the 手稿 scheme with CJK
+ * fallbacks added to the sans stack; the other schemes' stacks come from
+ * `tokens.css` itself (`contract.fontSchemes`) — they name system faces
+ * first, so they travel as they are.
  */
 export const EXPORT_FONT_CSS = `  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
   --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;`;
+
+/**
+ * The font block for `fontScheme` (the `data-font` axis): the scheme's own
+ * serif / sans stacks over the export's mono, or the default block for the
+ * 手稿 scheme and anything unknown.
+ */
+export function exportFontCss(contract: TokenContract, fontScheme?: string): string {
+  const stacks = fontScheme && fontScheme !== "manuscript" ? contract.fontSchemes[fontScheme] : undefined;
+  if (!stacks) return EXPORT_FONT_CSS;
+  return EXPORT_FONT_CSS.split("\n")
+    .map((line) => {
+      const m = /^\s*(--font-(?:serif|sans)):/.exec(line);
+      return m && stacks[m[1]] ? `  ${m[1]}: ${stacks[m[1]]};` : line;
+    })
+    .join("\n");
+}
 
 /** Custom-property names `css` references through `var()`. */
 export function referencedTokens(css: string): Set<string> {
@@ -101,12 +119,14 @@ export function exportPaletteCss(
   mdCss: string,
   contract: TokenContract,
   only?: ColorScheme,
+  fontScheme?: string,
 ): string {
+  const fonts = exportFontCss(contract, fontScheme);
   if (only) {
     const entry = only === "light" ? light : dark;
     return `:root {
   color-scheme: ${only};
-${EXPORT_FONT_CSS}
+${fonts}
 ${paletteBlock(entry, only, tokensToEmit(mdCss, contract, entry, only), contract)}
 }`;
   }
@@ -114,7 +134,7 @@ ${paletteBlock(entry, only, tokensToEmit(mdCss, contract, entry, only), contract
   const darkNames = tokensToEmit(mdCss, contract, dark, "dark");
   return `:root {
   color-scheme: light dark;
-${EXPORT_FONT_CSS}
+${fonts}
 ${paletteBlock(light, "light", lightNames, contract)}
 }
 @media (prefers-color-scheme: dark) {

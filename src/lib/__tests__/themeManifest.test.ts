@@ -48,13 +48,13 @@ describe("readThemeMeta", () => {
     expect(readThemeMeta({ "--theme-name": "x" }).meta).toBeUndefined();
     expect(readThemeMeta({ "--theme-name": "x", "--theme-scheme": "blue" }).meta).toBeUndefined();
     const r = readThemeMeta({});
-    expect(r.problems).toEqual([{ rule: 1, selector: ":root", reason: "缺 --theme-name / --theme-scheme" }]);
+    expect(r.problems).toEqual([{ rule: 1, selector: ":root", reason: "missingMeta", params: { fields: "--theme-name / --theme-scheme" } }]);
   });
 
   it("corrects an extends of the other polarity and says so", () => {
     const r = readThemeMeta({ "--theme-name": "x", "--theme-scheme": "light", "--theme-extends": "night" });
     expect(r.meta?.extends).toBe("paper");
-    expect(r.problems.map((p) => p.selector)).toEqual(["--theme-extends"]);
+    expect(r.problems).toEqual([{ rule: 1, selector: "--theme-extends", reason: "badExtendsUi", params: { base: "paper" } }]);
   });
 
   it("reads a markdown theme without a scheme", () => {
@@ -65,6 +65,6 @@ describe("readThemeMeta", () => {
   it("treats an unknown kind as ui and notes it", () => {
     const r = readThemeMeta({ "--theme-name": "x", "--theme-kind": "skin", "--theme-scheme": "dark" });
     expect(r.meta?.kind).toBe("ui");
-    expect(r.problems).toHaveLength(1);
+    expect(r.problems).toEqual([{ rule: 1, selector: "--theme-kind", reason: "badKind", params: { kind: "skin" } }]);
   });
 });

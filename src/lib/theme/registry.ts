@@ -144,7 +144,7 @@ export function buildRegistry(
       // Shown, so the author learns why the file did nothing — but never usable.
       projectMd.push({
         ...e, kind: "markdown", scheme: undefined, tokens: undefined, usable: false,
-        problems: [{ rule: 0, selector: f.fileName, reason: "外观主题只能放在装机级的主题文件夹 · 项目里只接受排版主题" }, ...e.problems],
+        problems: [{ rule: 0, selector: f.fileName, reason: "uiInProject" }, ...e.problems],
       });
     } else projectMd.push(e);
   }
@@ -184,7 +184,7 @@ function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "projec
   if (!f.validation) {
     return {
       ...base, kind: "ui", name: f.fileName, scheme: "light", extends: "paper", kept: 0, usable: false,
-      problems: [{ rule: 0, reason: f.error ? `读不出文件 · ${f.error}` : "读不出文件" }],
+      problems: [{ rule: 0, reason: "unreadableFile", params: { error: f.error ?? "" } }],
     };
   }
   const v = f.validation;
@@ -210,7 +210,7 @@ function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "projec
     if (isBuiltinUiId(id)) {
       return {
         ...named, kind: "ui", scheme, usable: false,
-        problems: [{ rule: 0, selector: f.fileName, reason: `「${id}」是内置主题的名字 · 换个文件名` }, ...allProblems],
+        problems: [{ rule: 0, selector: f.fileName, reason: "reservedUiId", params: { id } }, ...allProblems],
       };
     }
     return { ...named, kind: "ui", scheme, problems: allProblems, usable: true, tokens: v.tokens };
@@ -218,7 +218,7 @@ function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "projec
   if (isBuiltinMarkdownId(id)) {
     return {
       ...named, kind: "markdown", usable: false,
-      problems: [{ rule: 0, selector: f.fileName, reason: `「${id}」是内置排版的名字 · 换个文件名` }, ...allProblems],
+      problems: [{ rule: 0, selector: f.fileName, reason: "reservedMdId", params: { id } }, ...allProblems],
     };
   }
   return {

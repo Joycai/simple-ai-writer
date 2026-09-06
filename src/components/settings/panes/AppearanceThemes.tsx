@@ -18,6 +18,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "../../../stores/appStore";
 import { useThemeStore } from "../../../stores/themeStore";
@@ -30,11 +31,18 @@ import { TOKEN_CONTRACT } from "../../../lib/theme/contractData";
 import { inlinedMarkdownCss } from "../../../lib/theme/install";
 import { sampleDocument } from "../../../lib/theme/sample";
 import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
+import type { ThemeProblem } from "../../../lib/theme/manifest";
 import { openWithDefaultApp } from "../../../lib/fs/fileio";
 import ui from "../settingsUi.module.css";
 import s from "./ThemeCards.module.css";
 
 const SAMPLE = { zh: "第三章 · 渡口", en: "Chapter Three" };
+
+/** A problem's reason in the interface's language — the code is what the file carries. */
+function reasonText(p: ThemeProblem, t: TFunction): string {
+  const key = p.reason === "unreadableFile" && p.params?.error ? "unreadableFileError" : p.reason;
+  return t(`systemSettings.general.reason.${key}`, { ...p.params, defaultValue: p.reason });
+}
 
 /** `…/themes/宣纸.css` / `.ai-writer/themes/brand.css` — the folder and the file (1z A2). */
 function shortPath(entry: ThemeEntry): string {
@@ -106,6 +114,7 @@ export function MarkdownThemeGrid() {
   const setMarkdownTheme = useAppStore((st) => st.setMarkdownTheme);
   const themeLight = useAppStore((st) => st.themeLight);
   const themeDark = useAppStore((st) => st.themeDark);
+  const fontScheme = useAppStore((st) => st.fontScheme);
   const entries = useThemeStore((st) => st.markdown);
   const uiEntries = useThemeStore((st) => st.ui);
   const load = useThemeStore((st) => st.load);
@@ -132,7 +141,7 @@ export function MarkdownThemeGrid() {
             active={resolved.id === entry.id}
             isZh={isZh}
             onPick={() => setMarkdownTheme(entry.id)}
-            sample={<MdSample entry={entry} appearance={appearance} scheme={scheme} isZh={isZh} />}
+            sample={<MdSample entry={entry} appearance={appearance} scheme={scheme} fontScheme={fontScheme} isZh={isZh} />}
           />
         ))}
       </div>
@@ -187,9 +196,9 @@ function ThemeCard({
 
   const problems = entry.problems;
   const noteHead = unreadable
-    ? (problems[0]?.reason ?? "")
+    ? (problems[0] ? reasonText(problems[0], t) : "")
     : problems.length
-      ? `${t("systemSettings.general.ignoredNote", { count: problems.length })} · ${problemHint(problems[0])}`
+      ? `${t("systemSettings.general.ignoredNote", { count: problems.length })} · ${problemHint(problems[0], t)}`
       : "";
 
   const body: ReactNode = absent ? (
@@ -273,8 +282,8 @@ function baseOf(entry: ThemeEntry): { name: ThemeEntry["name"] } {
 }
 
 /** 「body 越界」 — the first problem's selector and the head of its reason. */
-function problemHint(p: { selector?: string; reason: string }): string {
-  const head = p.reason.split(" · ")[0];
+function problemHint(p: ThemeProblem, t: TFunction): string {
+  const head = reasonText(p, t).split(" · ")[0];
   const sel = (p.selector ?? "").split(" ").pop() ?? "";
   return sel ? `${sel} ${head}` : head;
 }
@@ -314,11 +323,12 @@ function Swatch({ entry, isZh }: { entry: ThemeEntry; isZh: boolean }) {
  * frame is a picture: `pointer-events: none`, out of the tab order.
  */
 function MdSample({
-  entry, appearance, scheme, isZh,
+  entry, appearance, scheme, fontScheme, isZh,
 }: {
   entry: ThemeEntry;
   appearance: ThemeEntry;
   scheme: ColorScheme;
+  fontScheme: string;
   isZh: boolean;
 }) {
   const [userCss, setUserCss] = useState<string>("");
@@ -329,8 +339,8 @@ function MdSample({
     return () => { cancelled = true; };
   }, [entry]);
   const doc = useMemo(
-    () => sampleDocument(entry, userCss, appearance, scheme, isZh),
-    [entry, userCss, appearance, scheme, isZh],
+    () => sampleDocument(entry, userCss, appearance, scheme, isZh, fontScheme),
+    [entry, userCss, appearance, scheme, isZh, fontScheme],
   );
   return (
     <iframe
@@ -362,7 +372,7 @@ function ProblemTable({ entry }: { entry: ThemeEntry }) {
             <tr key={i}>
               <td>{p.rule || ""}</td>
               <td>{p.selector ?? ""}</td>
-              <td>{p.reason}</td>
+              <td>{reasonText(p, t)}</td>
             </tr>
           ))}
         </tbody>
@@ -406,6 +416,7 @@ export function ThemeActions() {
   const reload = useThemeStore((st) => st.reload);
   const loading = useThemeStore((st) => st.loading);
   const ensureDir = useThemeStore((st) => st.ensureDir);
+  const autoReload = useThemeStore((st) => st.autoReload);
   const entries = useThemeStore((st) => st.ui);
   const themeLight = useAppStore((st) => st.themeLight);
   const themeDark = useAppStore((st) => st.themeDark);
@@ -433,6 +444,41 @@ export function ThemeActions() {
     setTrace(next);
   };
 
+  /** What one reload found, as the trace line says it. */
+  const diffLine = (diff: { uiCount: number; mdCount: number; added: { kind: ThemeEntry["kind"]; name: string }[]; removed: { kind: ThemeEntry["kind"]; name: string }[] }, auto: boolean) => {
+    const unit = (kind: ThemeEntry["kind"]) =>
+      t(kind === "ui" ? "systemSettings.general.uiThemeUnit" : "systemSettings.general.mdThemeUnit");
+    const parts = [
+      ...diff.added.map((d) => `+1 ${unit(d.kind)} · ${d.name}`),
+      ...diff.removed.map((d) => `−1 ${unit(d.kind)} · ${d.name}`),
+    ];
+    const vars = { ui: diff.uiCount, md: diff.mdCount, diff: parts.join(" · ") };
+    if (auto) return t("systemSettings.general.autoReloaded", { ...vars, diff: parts.length ? vars.diff : t("systemSettings.general.noChange") });
+    return parts.length
+      ? t("systemSettings.general.reloadedChanged", vars)
+      : t("systemSettings.general.reloadedNoChange", vars);
+  };
+
+  // The watcher's reloads leave the same trace the button does — unless the
+  // export's sticky trace is up: its 「打开文件夹」 must not vanish under the
+  // very reload that export just caused.
+  const lastAuto = useRef(0);
+  useEffect(() => {
+    if (!autoReload || autoReload.seq === lastAuto.current) return;
+    lastAuto.current = autoReload.seq;
+    setTrace((cur) => {
+      if (cur?.kind === "exported") return cur;
+      clearTimers();
+      setLeaving(false);
+      timers.current.push(
+        window.setTimeout(() => setLeaving(true), 1600),
+        window.setTimeout(() => { setTrace(null); setLeaving(false); }, 1760),
+      );
+      return { kind: "reloaded", text: diffLine(autoReload.diff, true) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoReload]);
+
   const openFolder = async () => {
     try {
       await revealItemInDir(await ensureDir());
@@ -444,18 +490,7 @@ export function ThemeActions() {
   const doReload = async () => {
     try {
       const diff = await reload(isZh);
-      const unit = (kind: ThemeEntry["kind"]) =>
-        t(kind === "ui" ? "systemSettings.general.uiThemeUnit" : "systemSettings.general.mdThemeUnit");
-      const parts = [
-        ...diff.added.map((d) => `+1 ${unit(d.kind)} · ${d.name}`),
-        ...diff.removed.map((d) => `−1 ${unit(d.kind)} · ${d.name}`),
-      ];
-      showFading({
-        kind: "reloaded",
-        text: parts.length
-          ? t("systemSettings.general.reloadedChanged", { ui: diff.uiCount, md: diff.mdCount, diff: parts.join(" · ") })
-          : t("systemSettings.general.reloadedNoChange", { ui: diff.uiCount, md: diff.mdCount }),
-      });
+      showFading({ kind: "reloaded", text: diffLine(diff, false) });
     } catch (e) {
       showSticky({ kind: "error", text: String(e) });
     }

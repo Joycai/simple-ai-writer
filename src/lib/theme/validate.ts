@@ -28,7 +28,7 @@
  * the kept rules. The file on disk is never rewritten — the card's footer
  * promises the author that in so many words.
  */
-import { THEME_META_PREFIX, type ThemeKind, type ThemeProblem } from "./manifest";
+import { THEME_META_PREFIX, type ThemeKind, type ThemeProblem, type ThemeReasonCode } from "./manifest";
 import { tokenTier, type TokenContract } from "./contract";
 
 // CSSRule.type constants — numeric, and the same in every engine. Newer
@@ -44,6 +44,15 @@ export interface StyleLike {
   item(index: number): string;
   getPropertyValue(name: string): string;
   getPropertyPriority?(name: string): string;
+  /**
+   * The block serialised by the engine, and the way to take a declaration
+   * out of it. The CSSOM enumerates `background: #fff` as eight longhands,
+   * but serialises the block back with the shorthand restored — so the
+   * walker judges declaration by declaration, removes what it refused, and
+   * emits `cssText` rather than re-joining the longhands itself.
+   */
+  cssText?: string;
+  removeProperty?(name: string): string;
 }
 
 export interface RuleLike {
@@ -78,19 +87,19 @@ export const MD_ROOT = ".md-body";
  */
 export const MD_SCOPE_PREFIX = "html[data-md-theme]";
 
-/** Wording lives here so the tests and the card cannot drift apart. */
+/** The codes this walker emits; the locale files carry the sentences. */
 export const REASON = {
-  selector: "越界 · 只读 :root 里的令牌声明",
-  property: "越界 · 布局与字号不由外观主题决定",
-  scale: "越界 · 间距、圆角、字体是刻度，不由外观主题决定",
-  unknown: "未知令牌 · 应用没有这个令牌",
-  schemeMedia: "越界 · 明暗由 --theme-scheme 决定，不由系统决定",
-  atRule: "越界 · 外观主题只有令牌声明",
-  mdSelector: `越界 · 只作用于 ${MD_ROOT} 之内`,
-  mdRoot: `越界 · :root 里只读 --theme-* 元数据 · 颜色写在 ${MD_ROOT} 里`,
-  mdAtRule: "越界 · 只接受 @media / @supports / @container / @font-face / @keyframes",
-  mdUrl: "越界 · url() 只接受相对路径或 data:",
-} as const;
+  selector: "uiSelector",
+  property: "uiProperty",
+  scale: "uiScale",
+  unknown: "uiUnknown",
+  schemeMedia: "uiSchemeMedia",
+  atRule: "uiAtRule",
+  mdSelector: "mdSelector",
+  mdRoot: "mdRoot",
+  mdAtRule: "mdAtRule",
+  mdUrl: "mdUrl",
+} as const satisfies Record<string, ThemeReasonCode>;
 
 // ─── The metadata pre-pass ───────────────────────────────────────────────────
 
@@ -290,22 +299,35 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
   let ownColors = false;
   let kept = 0;
 
-  const declarations = (style: StyleLike, selector: string, n: number, opts: { root?: boolean }): string[] => {
-    const out: string[] = [];
-    for (let d = 0; d < style.length; d++) {
-      const name = style.item(d);
+  /**
+   * The declarations of one block, judged one by one, returned as the block
+   * text the engine serialises after the refused ones are removed — which
+   * is how `background: #fff` comes back as one declaration and not eight.
+   * Falls back to re-joining the kept longhands where the engine offers no
+   * `cssText` (the tests' plain objects). Empty string = nothing kept.
+   */
+  const declarations = (style: StyleLike, selector: string, n: number, opts: { root?: boolean }): string => {
+    const kept: string[] = [];
+    const dropped: string[] = [];
+    // Snapshot first: removing while iterating shifts the indices.
+    const names: string[] = [];
+    for (let d = 0; d < style.length; d++) names.push(style.item(d));
+    for (const name of names) {
       const value = style.getPropertyValue(name).trim();
       if (name.startsWith(THEME_META_PREFIX)) {
         meta[name] = value;
+        dropped.push(name);
         continue;
       }
       if (opts.root) {
         problems.push({ rule: n, selector: `${selector} ${name}`, reason: REASON.mdRoot });
+        dropped.push(name);
         continue;
       }
       const urls = urlsIn(value);
       if (urls.some((u) => !isAllowedUrl(u))) {
         problems.push({ rule: n, selector: `${selector} ${name}`, reason: REASON.mdUrl });
+        dropped.push(name);
         continue;
       }
       for (const u of urls) if (!/^data:/i.test(u)) assets.add(u);
@@ -313,9 +335,14 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
       if (literal && FONT_PROPS.test(name)) ownFonts = true;
       if (literal && COLOR_PROPS.test(name)) ownColors = true;
       const priority = style.getPropertyPriority?.(name);
-      out.push(`  ${name}: ${value}${priority === "important" ? " !important" : ""};`);
+      kept.push(`${name}: ${value}${priority === "important" ? " !important" : ""};`);
     }
-    return out;
+    if (!kept.length) return "";
+    if (style.removeProperty && typeof style.cssText === "string") {
+      for (const name of dropped) style.removeProperty(name);
+      return style.cssText.trim();
+    }
+    return kept.join(" ");
   };
 
   const walk = (list: ArrayLike<RuleLike>, topLevel: boolean, parentN: number): string[] => {
@@ -331,18 +358,18 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
           problems.push({ rule: n, selector, reason: REASON.mdSelector });
           continue;
         }
-        const decls = rule.style ? declarations(rule.style, selector, n, { root: isRoot }) : [];
-        if (!decls.length) continue;
+        const decls = rule.style ? declarations(rule.style, selector, n, { root: isRoot }) : "";
+        if (!decls) continue;
         const scoped = splitSelectors(selector).map((sel) => `${MD_SCOPE_PREFIX} ${sel}`).join(", ");
-        out.push(`${scoped} {\n${decls.join("\n")}\n}`);
+        out.push(`${scoped} { ${decls} }`);
         if (topLevel) kept++;
       } else if (rule.type === FONT_FACE_RULE) {
         ownFonts = true;
-        const decls = rule.style ? declarations(rule.style, "@font-face", n, {}) : [];
+        const decls = rule.style ? declarations(rule.style, "@font-face", n, {}) : "";
         // A face whose `src` was refused (a remote or absolute url) is no face
         // at all; the problem is already recorded, the rule goes with it.
-        if (!decls.some((d) => d.startsWith("  src:"))) continue;
-        out.push(`@font-face {\n${decls.join("\n")}\n}`);
+        if (!/(^|\s)src:/.test(decls)) continue;
+        out.push(`@font-face { ${decls} }`);
         if (topLevel) kept++;
       } else if (rule.type === KEYFRAMES_RULE) {
         if (rule.cssText) out.push(rule.cssText);

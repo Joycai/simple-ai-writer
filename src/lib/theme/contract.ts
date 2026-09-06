@@ -36,6 +36,8 @@ export interface TokenContract {
   deriveDefaults: { root: Record<string, string> } & Record<ColorSchemeName, Record<string, string>>;
   /** The built-in themes' hand-tuned derived values (`tokens.theme`), by theme id. */
   handTuned: Record<string, Record<string, string>>;
+  /** The `[data-font="…"]` blocks — each font scheme's `--font-*` stacks. */
+  fontSchemes: Record<string, Record<string, string>>;
 }
 
 export interface CssBlock {
@@ -104,6 +106,11 @@ export function parseTokenContract(css: string): TokenContract {
     if (!m) continue;
     handTuned[m[1]] = { ...(handTuned[m[1]] ?? {}), ...declaredValues(b.body) };
   }
+  const fontSchemes: Record<string, Record<string, string>> = {};
+  for (const b of inLayer(all, "tokens.scale")) {
+    const m = /^\[data-font="([^"]+)"\]$/.exec(b.path[b.path.length - 1] ?? "");
+    if (m) fontSchemes[m[1]] = { ...(fontSchemes[m[1]] ?? {}), ...declaredValues(b.body) };
+  }
   const derived = new Set<string>([
     ...Object.keys(deriveRoot),
     ...Object.keys(deriveLight),
@@ -117,6 +124,7 @@ export function parseTokenContract(css: string): TokenContract {
     coreValues: { light: coreLight, dark: coreDark },
     deriveDefaults: { root: deriveRoot, light: deriveLight, dark: deriveDark },
     handTuned,
+    fontSchemes,
   };
 }
 

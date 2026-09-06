@@ -97,7 +97,12 @@ export async function exportMarkdown(source: string): Promise<void> {
 async function documentCss(): Promise<string> {
   const md = markdownThemeCss(currentMarkdownThemeId(), "body");
   const user = await inlinedMarkdownCss(resolvedMarkdownTheme());
-  const palette = exportPaletteCss(resolvedTheme("light"), resolvedTheme("dark"), `${md}\n${user}`, TOKEN_CONTRACT);
+  // The font scheme is the `data-font` axis on <html>; the stacks the file
+  // carries are the scheme's own, which name system faces first.
+  const fontScheme = document.documentElement.getAttribute("data-font") ?? undefined;
+  const palette = exportPaletteCss(
+    resolvedTheme("light"), resolvedTheme("dark"), `${md}\n${user}`, TOKEN_CONTRACT, undefined, fontScheme,
+  );
   return `${palette}
 body {
   background: var(--color-bg-base);
