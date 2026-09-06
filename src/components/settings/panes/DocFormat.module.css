@@ -443,6 +443,22 @@
   border-bottom: 1px solid var(--stg-line-section);
 }
 
+/* ≤720 才出现（见文末的媒体查询）——那个宽度下抽屉铺满整屏，出口在左上。 */
+.backBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.backBtn:hover { color: var(--stg-accent); }
+
 .drawerHeadMain { flex: 1; min-width: 0; }
 
 .drawerEyebrow {
@@ -1277,4 +1293,9 @@
   .rowSummaryRest::before { content: none; }
   .rowActions { display: none; }
   .rowMenu { display: block; }
+  /* 抽屉铺满整屏：没有左边那条界线、不投影——它不是浮在别的东西上面的一层，
+     而是这一屏本身。出口从右上的 × 换成左上的返回箭头。 */
+  .drawer { border-left: none; box-shadow: none; }
+  .backBtn { display: inline-flex; }
+  .drawerHead .iconBtn { display: none; }
 }
