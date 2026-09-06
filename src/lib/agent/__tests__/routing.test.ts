@@ -645,3 +645,44 @@ describe("routeTools for a roleplay character", () => {
     expect(res.tools).toContain("delegate");
   });
 });
+
+/**
+ * 「谁来读图」只判一次——摘掉 `read_image` 的同一处，也把答案交出去。消费者是
+ * `ToolContext.visionDelegate`：一份**清单**要说出真正走得通的那条路，而
+ * `multimodal` 在识图子代理开着时，是错的那个模型的属性。
+ */
+describe("routeTools.visionDelegate", () => {
+  const off: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+  };
+
+  it("is false with no vision subagent", () => {
+    expect(routeTools(AGENT_ASSIST_PRESET, off, WS, MODELS).visionDelegate).toBe(false);
+  });
+
+  it("is true exactly when the image tools were stripped", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, {
+      ...off,
+      vision: { kind: "vision", modelId: "m-vision", enabled: true },
+    }, WS, MODELS);
+    expect(res.visionDelegate).toBe(true);
+    expect(res.tools).not.toContain("read_lore_image");
+  });
+
+  // 开着但绑的模型读不了图 —— 工具没被摘，就不该说有人接手了。
+  it("is false for an enabled vision subagent bound to a text-only model", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, {
+      ...off,
+      vision: { kind: "vision", modelId: "m-long", enabled: true },
+    }, WS, MODELS);
+    expect(res.visionDelegate).toBe(false);
+    expect(res.tools).toContain("read_lore_image");
+  });
+});

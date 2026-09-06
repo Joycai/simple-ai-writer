@@ -634,6 +634,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             loreScope,
             organize: loreOrganizer(),
             multimodal: model.type === "multimodal",
+            // 同 agentStore：读图的是谁，只在 routeTools 判一次。
+            visionDelegate: routed.visionDelegate,
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).
             // Awaited, and returns the fresh index, so the run's own snapshot

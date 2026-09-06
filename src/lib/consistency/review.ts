@@ -331,6 +331,7 @@ async function runWindow(
       loreIndex: args.loreIndex,
       loreScope,
       multimodal: args.conn.model.type === "multimodal",
+      visionDelegate: routed.visionDelegate,
       reviewSink: sink,
       taskWorkspace: workspace,
       resolveSubAgent: args.resolveSubAgent,

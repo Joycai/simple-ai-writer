@@ -279,11 +279,25 @@ function loreGutterNote(canRewrite: boolean): string {
   );
 }
 
+/**
+ * Who can open one of the gallery's pictures on this run: this model with
+ * `read_lore_image`, the vision subagent through `delegate`, or nobody.
+ *
+ * A three-way instead of the `multimodal` boolean it replaces, because with a
+ * vision subagent live that boolean is **the wrong model's** property — and
+ * both of its answers were then wrong in the same run: it strips
+ * `read_lore_image`, so "call read_lore_image" names a tool that is gone, and
+ * a text-only main model behind it printed "text descriptions only" about
+ * pictures that were, in fact, readable. Decided by `galleryViewer` in the
+ * registry, where `allowedTools` is.
+ */
+export type GalleryViewer = "here" | "delegate" | "none";
+
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
-  multimodal: boolean,
+  imageViewer: GalleryViewer,
   file?: string,
   startLine?: number,
   canRewrite = false,
@@ -381,9 +395,18 @@ export async function readLoreEntity(
     // resolves to nothing and renders as an empty box. Once in the header, not
     // once per line — they are all files in the same directory.
     const where = `they are files in ${found.dirPath}, and embedding one in a reply needs that full path`;
-    const header = multimodal
-      ? `=== images === (descriptions; call read_lore_image(entity: "${name}", file: ...) to view one; ${where})`
-      : `=== images === (text descriptions only — current model is text-only; ${where})`;
+    // Three viewers, one sentence each. The delegate arm spells the whole call
+    // out because its argument is the one thing this listing does not otherwise
+    // hand over in usable form: `references` wants a full path, and the lines
+    // below are bare filenames.
+    const how =
+      imageViewer === "here"
+        ? `descriptions; call read_lore_image(entity: "${name}", file: ...) to view one`
+        : imageViewer === "delegate"
+        ? "descriptions; the vision subagent reads pictures on this run — "
+          + `delegate(kind: "vision", references: ["${found.dirPath}/<filename>"]) to have one described`
+        : "text descriptions only — nothing on this run can view a picture";
+    const header = `=== images === (${how}; ${where})`;
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 

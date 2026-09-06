@@ -720,6 +720,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreIndex,
           loreScope: useLoreStore.getState().scope,
           multimodal: model.type === "multimodal",
+          visionDelegate: routed.visionDelegate,
           taskWorkspace: workspace,
           signal: controller.signal,
           // 只有旁白拿得到这个通道，所以扮演 agent 的 scene 工具即使被硬塞
