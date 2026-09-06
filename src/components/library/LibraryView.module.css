@@ -136,7 +136,7 @@
 .column:hover .volDeleteBtn { opacity: 1; }
 .volBtn:hover:not(:disabled) { color: var(--color-sienna); background: var(--color-card); }
 .volBtn:disabled { opacity: 0.2; cursor: default; }
-.volDeleteBtn:hover { color: var(--color-danger, #c0522d); background: var(--color-card); }
+.volDeleteBtn:hover { color: var(--color-danger-text); background: var(--color-card); }
 .volTitleInput {
   margin-top: 3px;
   width: 100%;
@@ -281,7 +281,7 @@
 .digestError {
   margin-top: 6px;
   font: 400 10px/1.4 var(--font-sans);
-  color: var(--color-danger, #c0522d);
+  color: var(--color-danger-text);
   word-break: break-all;
 }
 .digestBody,
@@ -440,7 +440,7 @@
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.memoCancel:hover { color: var(--color-danger, var(--color-sienna)); }
+.memoCancel:hover { color: var(--color-danger-text); }
 
 /* Reorder controls — faint until the row is hovered. */
 .moveControls {
