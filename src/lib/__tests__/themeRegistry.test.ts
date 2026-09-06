@@ -35,12 +35,12 @@ describe("buildRegistry — appearance", () => {
     const e = entries.find((x) => x.id === "半调");
     expect(e).toMatchObject({ usable: false, name: "半调.css" });
     expect(e?.missing).toBeUndefined();
-    expect(e?.problems[0].reason).toBe("缺 --theme-name");
+    expect(e?.problems[0]).toEqual({ rule: 1, selector: ":root", reason: "missingMeta", params: { fields: "--theme-name" } });
   });
 
   it("keeps a file that could not be read at all", () => {
     const { ui: entries } = buildRegistry([{ fileName: "x.css", path: `${DIRS.user}/x.css`, error: "EACCES" }], [], both, DIRS);
-    expect(entries.find((e) => e.id === "x")).toMatchObject({ usable: false, problems: [{ rule: 0, reason: "读不出文件 · EACCES" }] });
+    expect(entries.find((e) => e.id === "x")).toMatchObject({ usable: false, problems: [{ rule: 0, reason: "unreadableFile", params: { error: "EACCES" } }] });
   });
 
   it("refuses a file named like a built-in", () => {
@@ -48,7 +48,7 @@ describe("buildRegistry — appearance", () => {
     const papers = entries.filter((e) => e.id === "paper");
     expect(papers).toHaveLength(2);
     expect(papers[1].usable).toBe(false);
-    expect(papers[1].problems[0].reason).toContain("内置");
+    expect(papers[1].problems[0]).toMatchObject({ reason: "reservedUiId", params: { id: "paper" } });
   });
 
   it("stands a missing card where a selected file would be, preference untouched", () => {
@@ -59,7 +59,7 @@ describe("buildRegistry — appearance", () => {
 
   it("carries the dropped rules and the kept count onto the card", () => {
     const f = ui("冷灰.css", { "--theme-name": "冷灰", "--theme-scheme": "light" }, { "--color-sienna": "#555" }, [
-      { rule: 2, selector: "body", reason: "越界" },
+      { rule: 2, selector: "body", reason: "uiSelector" },
     ]);
     const { ui: entries } = buildRegistry([f], [], both, DIRS);
     expect(entries.find((e) => e.id === "冷灰")).toMatchObject({ usable: true, kept: 1, problems: [{ rule: 2 }] });
@@ -70,7 +70,7 @@ describe("buildRegistry — appearance", () => {
     expect(entries.map((e) => e.id)).toEqual(["paper", "night"]);
     const shown = markdown.find((e) => e.id === "evil");
     expect(shown).toMatchObject({ source: "project", usable: false });
-    expect(shown?.problems[0].reason).toContain("外观主题只能放在装机级");
+    expect(shown?.problems[0].reason).toBe("uiInProject");
   });
 });
 
@@ -106,7 +106,7 @@ describe("buildRegistry — typography", () => {
     const { markdown } = buildRegistry([md("x.css", { "--theme-name": "x", "--theme-extends": "paper" })], [], both, DIRS);
     const e = markdown.find((x) => x.id === "x");
     expect(e).toMatchObject({ usable: true, extends: "manuscript" });
-    expect(e?.problems[0].selector).toBe("--theme-extends");
+    expect(e?.problems[0]).toMatchObject({ selector: "--theme-extends", reason: "badExtendsMd", params: { base: "manuscript" } });
   });
 });
 

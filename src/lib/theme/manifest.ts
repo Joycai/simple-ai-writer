@@ -29,12 +29,26 @@ export interface ThemeMeta {
   author?: string;
 }
 
+/**
+ * Why a rule, a declaration or a whole file was refused. A *code*, not a
+ * sentence: the card translates it (`systemSettings.general.reason.<code>`
+ * in the locale files) with `params` filled in, so an English interface
+ * never shows a Chinese reason and the tests pin codes rather than prose.
+ */
+export type ThemeReasonCode =
+  | "uiSelector" | "uiProperty" | "uiScale" | "uiUnknown" | "uiSchemeMedia" | "uiAtRule"
+  | "mdSelector" | "mdRoot" | "mdAtRule" | "mdUrl"
+  | "missingMeta" | "badKind" | "badExtendsUi" | "badExtendsMd"
+  | "unreadableFile" | "reservedUiId" | "reservedMdId" | "uiInProject";
+
 /** One dropped rule or declaration — what the card's 详情 table shows. */
 export interface ThemeProblem {
-  /** 1-based index of the top-level rule in the file. */
+  /** 1-based index of the top-level rule in the file; 0 = the file as a whole. */
   rule: number;
   selector?: string;
-  reason: string;
+  reason: ThemeReasonCode;
+  /** Interpolated into the translated reason. */
+  params?: Record<string, string>;
 }
 
 export const THEME_META_PREFIX = "--theme-";
@@ -90,7 +104,7 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
   const kindRaw = get("kind");
   const kind: ThemeKind = kindRaw === "markdown" ? "markdown" : "ui";
   if (kindRaw !== undefined && kindRaw !== "ui" && kindRaw !== "markdown") {
-    problems.push({ rule, selector: `${THEME_META_PREFIX}kind`, reason: `未知的 kind「${kindRaw}」· 按 ui 读` });
+    problems.push({ rule, selector: `${THEME_META_PREFIX}kind`, reason: "badKind", params: { kind: kindRaw } });
   }
 
   const schemeRaw = get("scheme");
@@ -101,7 +115,7 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
   if (!name) missing.push(`${THEME_META_PREFIX}name`);
   if (kind === "ui" && !scheme) missing.push(`${THEME_META_PREFIX}scheme`);
   if (missing.length) {
-    problems.push({ rule, selector: ":root", reason: `缺 ${missing.join(" / ")}` });
+    problems.push({ rule, selector: ":root", reason: "missingMeta", params: { fields: missing.join(" / ") } });
     return { problems };
   }
 
@@ -109,11 +123,7 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
   if (kind === "ui") {
     const expected = BUILTIN_THEME_FOR_SCHEME[scheme as ColorScheme];
     if (ext !== undefined && ext !== expected) {
-      problems.push({
-        rule,
-        selector: `${THEME_META_PREFIX}extends`,
-        reason: `叠底只能是同极性的内置 · 已按 ${expected}`,
-      });
+      problems.push({ rule, selector: `${THEME_META_PREFIX}extends`, reason: "badExtendsUi", params: { base: expected } });
     }
     ext = expected;
   } else if (!ext || !BUILTIN_MARKDOWN_IDS.includes(ext)) {
@@ -121,7 +131,8 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
       problems.push({
         rule,
         selector: `${THEME_META_PREFIX}extends`,
-        reason: `叠底只能是内置排版（${BUILTIN_MARKDOWN_IDS.join(" / ")}）· 已按 ${BUILTIN_MARKDOWN_IDS[0]}`,
+        reason: "badExtendsMd",
+        params: { list: BUILTIN_MARKDOWN_IDS.join(" / "), base: BUILTIN_MARKDOWN_IDS[0] },
       });
     }
     ext = BUILTIN_MARKDOWN_IDS[0];

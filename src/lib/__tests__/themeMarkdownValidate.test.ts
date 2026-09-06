@@ -72,7 +72,7 @@ describe("validateMarkdownRules", () => {
       rule(".md-body h1, .md-body h2", { "font-weight": "300" }, ["font-weight"]),
     ]);
     expect(r.meta).toEqual({ "--theme-name": "宋楷", "--theme-kind": "markdown" });
-    expect(r.css).toBe(`${P} .md-body {\n  --md-line: 1.9;\n  --md-font-body: var(--font-serif);\n}\n\n${P} .md-body h1, ${P} .md-body h2 {\n  font-weight: 300 !important;\n}`);
+    expect(r.css).toBe(`${P} .md-body { --md-line: 1.9; --md-font-body: var(--font-serif); }\n\n${P} .md-body h1, ${P} .md-body h2 { font-weight: 300 !important; }`);
     expect(r.kept).toBe(2);
     expect(r.problems).toEqual([]);
     expect(r.ownFonts).toBe(false);
@@ -91,7 +91,7 @@ describe("validateMarkdownRules", () => {
       { rule: 2, selector: "body", reason: REASON.mdSelector },
       { rule: 3, selector: ".md-body p, h1", reason: REASON.mdSelector },
     ]);
-    expect(r.css).toBe(`${P} .md-body {\n  color: #222;\n}`);
+    expect(r.css).toBe(`${P} .md-body { color: #222; }`);
     expect(r.ownColors).toBe(true);
   });
 
@@ -102,7 +102,7 @@ describe("validateMarkdownRules", () => {
       { type: 0, cssText: "@container (min-width: 400px) { }", cssRules: [rule(".md-body h1", { "font-size": "2em" })] },
     ]);
     expect(r.css).toBe(
-      `@media (max-width: 600px) {\n${P} .md-body {\n  --md-scale: 0.9;\n}\n}\n\n@container (min-width: 400px) {\n${P} .md-body h1 {\n  font-size: 2em;\n}\n}`,
+      `@media (max-width: 600px) {\n${P} .md-body { --md-scale: 0.9; }\n}\n\n@container (min-width: 400px) {\n${P} .md-body h1 { font-size: 2em; }\n}`,
     );
     expect(r.kept).toBe(2);
     expect(r.problems).toEqual([
@@ -120,7 +120,7 @@ describe("validateMarkdownRules", () => {
     expect(r.ownFonts).toBe(true);
     expect(r.ownColors).toBe(true);
     expect(r.assets).toEqual(["宋楷/kai.woff2", "宋楷/paper.png"]);
-    expect(r.css).toContain('@font-face {\n  font-family: Kai;\n  src: url("宋楷/kai.woff2") format("woff2");\n}');
+    expect(r.css).toContain('@font-face { font-family: Kai; src: url("宋楷/kai.woff2") format("woff2"); }');
     expect(r.css).toContain(keyframes.cssText);
     expect(r.kept).toBe(3);
   });
@@ -130,7 +130,7 @@ describe("validateMarkdownRules", () => {
       rule(".md-body", { background: "url(https://evil.example/tex.png)", color: "#111" }),
       fontFace({ "font-family": "X", src: "url(/etc/passwd)" }),
     ]);
-    expect(r.css).toBe(`${P} .md-body {\n  color: #111;\n}`);
+    expect(r.css).toBe(`${P} .md-body { color: #111; }`);
     expect(r.problems).toEqual([
       { rule: 1, selector: ".md-body background", reason: REASON.mdUrl },
       { rule: 2, selector: "@font-face src", reason: REASON.mdUrl },
@@ -148,6 +148,28 @@ describe("validateMarkdownRules", () => {
     // file's `.md-body` (0,1,0) whatever the source order.
     const r = validateMarkdownRules([rule(".md-body, .md-body > p", { "--md-line": "1.9" })]);
     expect(r.css.startsWith(`${P} .md-body, ${P} .md-body > p {`)).toBe(true);
+  });
+
+  it("emits the engine's own serialisation when the style offers it — shorthands restored, refused declarations gone", () => {
+    // The CSSOM enumerates `background: #fff` as eight longhands but
+    // serialises the block back with the shorthand; the walker judges per
+    // longhand, removes what it refused, and emits `cssText`.
+    const decls: Record<string, string> = {
+      "--theme-name": "x", "background-color": "#fff", "background-image": "url(https://x/y.png)", color: "#111",
+    };
+    const engineStyle: RuleLike["style"] = {
+      get length() { return Object.keys(decls).length; },
+      item: (i) => Object.keys(decls)[i],
+      getPropertyValue: (n) => decls[n] ?? "",
+      getPropertyPriority: () => "",
+      removeProperty: (n) => { const v = decls[n]; delete decls[n]; return v; },
+      get cssText() { return "background: #fff; color: #111;"; },
+    };
+    const r = validateMarkdownRules([{ type: 1, selectorText: ".md-body", style: engineStyle }]);
+    expect(r.css).toBe(`${P} .md-body { background: #fff; color: #111; }`);
+    expect(r.meta).toEqual({ "--theme-name": "x" });
+    expect(Object.keys(decls)).toEqual(["background-color", "color"]);
+    expect(r.problems).toEqual([{ rule: 1, selector: ".md-body background-image", reason: REASON.mdUrl }]);
   });
 
   it("does not count a var()-based font or colour as the theme's own", () => {

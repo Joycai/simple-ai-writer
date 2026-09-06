@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TOKEN_CONTRACT } from "../theme/contractData";
-import { exportPaletteCss, referencedTokens, resolveTokenValue } from "../theme/export";
+import { exportFontCss, exportPaletteCss, referencedTokens, resolveTokenValue } from "../theme/export";
 import { LEAD_TOKENS, themeFileText } from "../theme/exportFile";
 import { BUILTIN_MARKDOWN_THEMES, BUILTIN_UI_THEMES, buildRegistry, type ThemeEntry } from "../theme/registry";
 import { sampleDocument } from "../theme/sample";
@@ -88,6 +88,15 @@ describe("exportPaletteCss", () => {
     expect(one).not.toContain(`--color-bg-base: ${TOKEN_CONTRACT.coreValues.light["--color-bg-base"]};`);
   });
 
+  it("carries the font scheme's own stacks, and the default block for 手稿 or an unknown scheme", () => {
+    expect(exportFontCss(TOKEN_CONTRACT, "song")).toContain(`--font-serif: ${TOKEN_CONTRACT.fontSchemes.song["--font-serif"]};`);
+    expect(exportFontCss(TOKEN_CONTRACT, "song")).toContain("--font-mono:");
+    expect(exportFontCss(TOKEN_CONTRACT, "manuscript")).toBe(exportFontCss(TOKEN_CONTRACT));
+    expect(exportFontCss(TOKEN_CONTRACT, "nope")).toBe(exportFontCss(TOKEN_CONTRACT));
+    expect(Object.keys(TOKEN_CONTRACT.fontSchemes).sort()).toEqual(["hei", "kai", "manuscript", "song"]);
+    expect(exportPaletteCss(paper, night, md, TOKEN_CONTRACT, "light", "kai")).toContain(TOKEN_CONTRACT.fontSchemes.kai["--font-serif"]);
+  });
+
   it("has retired the hand-copied palette for good", () => {
     const offenders = walk("src").filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("__tests__") && read(f).includes("EXPORT_TOKEN_CSS"));
     expect(offenders).toEqual([]);
@@ -145,8 +154,9 @@ describe("sampleDocument — the typography card's frame", () => {
     expect(doc).toContain("<blockquote>");
   });
 
-  it("gives a built-in its own base and no user sheet", () => {
-    const doc = sampleDocument(manuscript, "", paper, "light", false);
+  it("gives a built-in its own base and no user sheet, in the font scheme asked for", () => {
+    const doc = sampleDocument(manuscript, "", paper, "light", false, "hei");
+    expect(doc).toContain(TOKEN_CONTRACT.fontSchemes.hei["--font-sans"]);
     expect(doc).toContain("--md-para-indent: 2em");
     expect(doc).toContain("<h2>Chapter Three</h2>");
   });

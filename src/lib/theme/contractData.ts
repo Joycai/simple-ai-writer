@@ -863,5 +863,23 @@ export const TOKEN_CONTRACT: TokenContract = {
       "--rp-name-selected": "#F0E7D9",
       "--rp-meta-rule": "var(--color-border-emphasis)"
     }
+  },
+  "fontSchemes": {
+    "manuscript": {
+      "--font-serif": "\"Spectral\", Georgia, \"Songti SC\", \"Noto Serif CJK SC\", serif",
+      "--font-sans": "\"Inter Tight\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+    },
+    "song": {
+      "--font-serif": "Georgia, Cambria, \"Source Han Serif SC\", \"Noto Serif CJK SC\", \"Songti SC\", STSong, SimSun, serif",
+      "--font-sans": "\"Inter Tight\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+    },
+    "hei": {
+      "--font-serif": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif",
+      "--font-sans": "-apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif"
+    },
+    "kai": {
+      "--font-serif": "\"Iowan Old Style\", Georgia, \"Kaiti SC\", STKaiti, KaiTi, \"Noto Serif CJK SC\", serif",
+      "--font-sans": "\"Inter Tight\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+    }
   }
 };

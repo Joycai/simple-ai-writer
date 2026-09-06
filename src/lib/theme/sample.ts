@@ -13,7 +13,12 @@
  *
  * The palette is pinned to the app's current scheme rather than left to the
  * frame's `prefers-color-scheme`, which is the OS's, not the author's mode;
- * a theme that brings its own colours keeps them either way (1e).
+ * a theme that brings its own colours keeps them either way (1e). The font
+ * scheme (`data-font`) reaches the frame as its `--font-*` stacks — an
+ * opaque origin cannot load the app's bundled faces (`font-src 'self'` does
+ * not apply to it), so the 手稿 scheme's Spectral falls to its Georgia /
+ * Songti fallbacks here, while 宋 / 黑 / 楷 name system faces and show as
+ * they are.
  */
 import { TOKEN_CONTRACT } from "./contractData";
 import { exportPaletteCss } from "./export";
@@ -38,10 +43,11 @@ export function sampleDocument(
   appearance: ThemeEntry,
   scheme: ColorScheme,
   isZh: boolean,
+  fontScheme?: string,
 ): string {
   const baseId = (entry.source === "builtin" ? entry.id : entry.extends) as MarkdownThemeId;
   const md = markdownThemeCss(baseId, "body");
-  const palette = exportPaletteCss(appearance, appearance, `${md}\n${userCss}`, TOKEN_CONTRACT, scheme);
+  const palette = exportPaletteCss(appearance, appearance, `${md}\n${userCss}`, TOKEN_CONTRACT, scheme, fontScheme);
   const t = isZh ? SAMPLE_TEXT.zh : SAMPLE_TEXT.en;
   return `<!DOCTYPE html><html data-md-theme="${baseId}"><head><meta charset="utf-8"><style>
 ${palette}
