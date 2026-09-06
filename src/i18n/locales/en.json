@@ -3908,6 +3908,7 @@
       "previewLive": "redrawn on every change",
       "regionLine": "text area {{w}} × {{h}}{{grid}}",
       "saveHint": "Applies to future exports · existing .docx files are untouched",
+      "saveBlockedNumbering": "{{levels}} would number as “一.1” · fix it before saving",
       "discardAsk": "Discard unsaved changes?",
       "keepEditing": "Keep editing",
       "discard": "Discard",

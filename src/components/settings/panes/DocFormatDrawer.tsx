@@ -546,14 +546,22 @@ export function DocFormatDrawer({
         </div>
 
         <div className={styles.drawerFoot}>
-          <span className={styles.footHint}>{t("docxFormat.drawer.saveHint")}</span>
+          {/* 坏的编号组合（含上级之上是中文计数）到这里就存不进去了：下拉拦得住选，老预设
+              带进来的值只能在这一步拦。脚注说的是哪几级、后果是什么，保存键跟着禁用。 */}
+          {numConflicts.length > 0 ? (
+            <span className={`${styles.footHint} ${styles.footHintWarm}`}>
+              {t("docxFormat.drawer.saveBlockedNumbering", { levels: numConflicts.map((i) => `H${i + 1}`).join(" / ") })}
+            </span>
+          ) : (
+            <span className={styles.footHint}>{t("docxFormat.drawer.saveHint")}</span>
+          )}
           <span className={styles.grow} />
           <button className={styles.ghostBtn} onClick={() => (dirty ? setConfirmDiscard(true) : onClose())}>
             {t("common.cancel", { defaultValue: "取消" })}
           </button>
           <button
             className={styles.primaryBtn}
-            disabled={!label.trim()}
+            disabled={!label.trim() || numConflicts.length > 0}
             onClick={() => onSave({ ...preset, label: label.trim(), builtin: false, format })}
           >
             {t("common.save", { defaultValue: "保存" })}
