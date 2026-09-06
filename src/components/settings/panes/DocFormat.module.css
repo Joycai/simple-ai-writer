@@ -209,6 +209,9 @@
   --doc-region-edge: var(--stg-accent-soft);
   --doc-bar-heading: var(--stg-text-secondary);
   --doc-bar-body: var(--stg-text-placeholder);
+  /* 页码与页眉横线（05h 屏 1c）：页码借「引线与刻度」那一类的等宽字，横线借「灰条」的家族。 */
+  --doc-pagenum: var(--stg-text-secondary);
+  --doc-header-rule: var(--stg-text-warm);
 }
 
 .previewStage { position: relative; margin: 0 auto; }
@@ -277,6 +280,20 @@
 
 .barHeading { position: absolute; background: var(--doc-bar-heading); }
 .barBody { position: absolute; background: var(--doc-bar-body); }
+
+.headerRule { position: absolute; height: 1px; background: var(--doc-header-rule); }
+/* 全图唯一真的写字的地方：真实的字符串一律 mono。 */
+.pageNum {
+  position: absolute;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--doc-pagenum);
+  white-space: nowrap;
+}
+.pageNumCompact { font-size: 7px; }
 
 /* 行号刻度与「N 字位」：8px 等宽、最淡一档——它们是格子的编号，不是尺寸标注。 */
 .rowNums { position: absolute; width: 12px; }
@@ -514,6 +531,8 @@
   font-size: 12px;
   color: var(--stg-text-secondary);
 }
+/* 前提没满足的依赖字段：标签退到次级色，开关虚线——未设是虚线，不是不见。 */
+.fieldLabelDim { color: var(--stg-text-faint); }
 
 .fieldBody {
   display: flex;
@@ -692,6 +711,13 @@
 }
 
 .switchOn { background: var(--stg-accent); border-color: var(--stg-accent); }
+.switchDashed,
+.switchDashed:disabled {
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+.switchDashed .switchKnob { background: var(--stg-line-section); transform: none; }
 
 .switchKnob {
   width: 10px;
@@ -741,7 +767,9 @@
 .headRowHead,
 .headRow {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px 46px 62px 38px;
+  /* 七列到此为止：「字体 · 字号」在 760px 抽屉里从 190px 缩到约 162px，楷体_GB2312 三号（16）
+     还放得下，再加第八列就放不下了——后面要加字段只能进展开面板（05h 屏 1d）。 */
+  grid-template-columns: 34px minmax(0, 1fr) 30px 42px 58px 38px 52px;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -776,6 +804,56 @@
 
 .headRow > span,
 .headRowHead > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 表头「编号」列开着时点一下赭石；关着时整列同一种灰的 —。 */
+.headRowHead .colOn { color: var(--stg-accent); }
+.cellDim { color: var(--stg-text-placeholder); }
+.tableFoot {
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--stg-text-faint);
+}
+
+/* 「开着的时候」——一块常驻说明 + 一行真实后果。中性灰、无红、无 ⚠（05h 1z · A3）。 */
+.onBlock {
+  margin-top: 12px;
+  padding: 13px 15px 15px;
+  background: var(--stg-hint);
+  border-left: 2px solid var(--stg-border-warn);
+}
+.onBlockHead { display: flex; align-items: center; gap: 9px; }
+.onBlockMark { flex: none; width: 8px; height: 8px; border: 1.5px solid var(--stg-text-warm); box-sizing: border-box; }
+.onBlockTitle {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--stg-text-faint);
+  text-transform: uppercase;
+}
+.onBlockText { margin-top: 9px; font-size: 11.5px; line-height: 1.75; color: var(--stg-text-secondary); text-wrap: pretty; }
+.onBlockText strong { font-weight: 500; color: var(--stg-text); }
+.onBlockExample {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--stg-text);
+}
+.onBlockExLabel { font-family: var(--font-sans); font-size: 11px; color: var(--stg-text-faint); }
+.onBlockArrow { color: var(--stg-text-faint); }
+.onBlockDup { background: var(--color-amber-soft); color: inherit; }
+.onBlockFoot { margin-top: 9px; font-size: 10.5px; line-height: 1.6; color: var(--stg-text-faint); }
+
+/* 页码那一格：下拉 + 对齐段一行，奇偶互换的回显在段下一行 mono。 */
+.stack { display: flex; flex-direction: column; gap: 7px; min-width: 0; flex: 1; }
+.stackRow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.oddEvenEcho { font-family: var(--font-mono); font-size: 10.5px; color: var(--stg-text-secondary); }
+.oddEvenCenter { margin-left: 8px; color: var(--stg-text-faint); }
 
 .levelPanel {
   border: 1px solid var(--stg-border);
@@ -802,15 +880,6 @@
 
 .levelPanel .field { grid-template-columns: 84px minmax(0, 1fr); }
 .levelPanel .field:last-of-type { border-bottom: none; }
-
-.laterNote {
-  padding: 12px 14px;
-  background: var(--stg-hint);
-  border-left: 2px solid var(--stg-border-warn);
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--stg-text-secondary);
-}
 
 /* 抽屉右栏的小纸样 */
 
@@ -1055,6 +1124,22 @@
 
 .sourceDeclared { color: var(--stg-accent); }
 .sourceDefault { color: var(--stg-text-placeholder); }
+/* 「没读」是来源列的合法值：这一版不去看，不是文件里没有。斜纹＝「这块不适用」。 */
+.sourceUnread {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: right;
+  color: var(--stg-text-secondary);
+}
+.readRowUnread {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--stg-border) 45%, var(--stg-card)) 0 4px,
+    var(--stg-card) 4px 9px
+  );
+}
+.readRowUnread .readValue { color: var(--stg-text-secondary); }
+.adoptNote { margin-bottom: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--stg-text-faint); }
 
 .modalNote {
   margin-top: 12px;

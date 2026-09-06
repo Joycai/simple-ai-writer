@@ -27,7 +27,7 @@ import {
   bodyRegionMm,
   eastAsiaFontsOf,
   formatLineSpacing,
-  formatOneLine,
+  formatOneLineFull,
   formatSize,
   paperMm,
   type DocFormatPreset,
@@ -372,7 +372,7 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 /** 列表摘要的两半：中西文字体 / 其余三项——窄屏各占一行，宽屏用「 · 」接回一行。 */
 function summaryParts(preset: DocFormatPreset): { fonts: string; rest: string } {
-  const [fonts, ...rest] = formatOneLine(preset.format).split(" · ");
+  const [fonts, ...rest] = formatOneLineFull(preset.format).split(" · ");
   return { fonts, rest: rest.join(" · ") };
 }
 
@@ -422,7 +422,7 @@ function DeleteFormatModal({
           </div>
         </div>
         <div className={styles.modalBody}>
-          <div className={styles.rowSummary}>{formatOneLine(preset.format)}</div>
+          <div className={styles.rowSummary}>{formatOneLineFull(preset.format)}</div>
           {isDefault && (
             <div className={styles.handoff}>
               <span className={styles.handoffLabel}>{t("docxFormat.handoffLabel")}</span>

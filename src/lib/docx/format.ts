@@ -471,6 +471,9 @@ export function formatSummary(f: DocFormat): string[] {
   if (f.page.grid) {
     lines.push(`文档网格 每页 ${f.page.grid.linesPerPage} 行 · 每行 ${f.page.grid.charsPerLine} 字`);
   }
+  const x = formatExtras(f);
+  if (x.pageNumber) lines.push(`页码 ${x.pageNumber}`);
+  if (x.numbering) lines.push(`标题编号 ${x.numbering}`);
   return lines;
 }
 
@@ -502,9 +505,68 @@ export function formatOneLine(f: DocFormat): string {
   ].join(" · ");
 }
 
+/**
+ * 页码写法的样例：`1` / `— 1 —` / `1 / 12`。它就是写进文件的那个字符串，所以三处摘要
+ * 和纸样上都直接用它，不另起一个名字。
+ */
+export function pageNumberSample(style: PageNumberStyle): string {
+  switch (style) {
+    case "plain": return "1";
+    case "dashed": return "— 1 —";
+    case "ofTotal": return "1 / 12";
+    default: return "";
+  }
+}
+
+/** 「一、」「（一）」「1.1」——写法名认不出来，样子一眼就认得。`none` 写 —。 */
+export function headingNumberSample(kind: HeadingNumberFormat, level: number): string {
+  switch (kind) {
+    case "chinese": return "一、";
+    case "chineseParen": return "（一）";
+    case "decimal": return "1.";
+    case "decimalParen": return "（1）";
+    case "decimalDotted": return Array.from({ length: level + 1 }, () => "1").join(".");
+    default: return "—";
+  }
+}
+
+/** 四级样例连成一串：`一、（一）1.（1）` / `1. 1.1 1.1.1 1.1.1.1`——数字挨着数字才加空格。 */
+export function headingNumberingLine(n: HeadingNumbering): string {
+  let out = "";
+  n.levels.forEach((k, i) => {
+    const sample = headingNumberSample(k, i);
+    if (out && /[0-9.]$/.test(out) && /^[0-9]/.test(sample)) out += " ";
+    out += sample;
+  });
+  return out;
+}
+
+const ALIGN_SHORT: Record<Align, string> = { left: "左", center: "中", right: "右", justify: "两端" };
+
+/**
+ * 三处摘要（预设列表 / 读取模态 / 审批卡）末尾追加的那一段，**有值才有**：
+ * `— 1 — 右` 和 `编号 一、（一）1.（1）`。「不写页码 · 编号关」是噪声，不进摘要——
+ * 五套内置里两套追不出东西，那两行就该和原来一样长（设计稿 05h 屏 1e）。
+ */
+export function formatExtras(f: DocFormat): { pageNumber: string | null; numbering: string | null } {
+  const hf = f.headerFooter;
+  const num = f.headingNumbering;
+  return {
+    pageNumber: hf.pageNumber === "none" ? null : `${pageNumberSample(hf.pageNumber)} ${ALIGN_SHORT[hf.pageNumberAlign]}`,
+    numbering: num.enabled && num.levels.some((l) => l !== "none") ? headingNumberingLine(num) : null,
+  };
+}
+
+/** 列表行 / 读取模态用的整句：`formatOneLine` + 有值才追加的页码与编号。 */
+export function formatOneLineFull(f: DocFormat): string {
+  const x = formatExtras(f);
+  const tail = [x.pageNumber, x.numbering ? `编号 ${x.numbering}` : null].filter(Boolean);
+  return tail.length ? `${formatOneLine(f)} · ${tail.join(" · ")}` : formatOneLine(f);
+}
+
 /** 规格表的一行。`key` 让调用方能标出「这一行这次被改过」。 */
 export interface SpecRow {
-  key: "font" | "size" | "line" | "indent" | "page";
+  key: "font" | "size" | "line" | "indent" | "page" | "extras";
   label: string;
   value: string;
 }
@@ -530,6 +592,12 @@ export function formatSpecRows(f: DocFormat): SpecRow[] {
       label: "纸张 / 边距",
       value: `${f.page.size}（${trimNum(widthMm)}×${trimNum(heightMm)}mm）· 上${trimNum(m.top)} 右${trimNum(m.right)} 下${trimNum(m.bottom)} 左${trimNum(m.left)} mm`,
     },
+    // 第 6 行，上限就是 6 行：两组合成一行「页码 / 编号」，有值才出现（05h 屏 1e）。
+    ...(() => {
+      const x = formatExtras(f);
+      const value = [x.pageNumber, x.numbering].filter(Boolean).join(" · ");
+      return value ? [{ key: "extras" as const, label: "页码 / 编号", value }] : [];
+    })(),
   ];
 }
 

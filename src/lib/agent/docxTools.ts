@@ -226,6 +226,8 @@ export async function readDocFormatTool(
             .map((r) => `${r.label} ${r.value}`)
             .join("; ")}.`
         : "NOTE: that file pins down nothing — every value above is a Word default we filled in, not a requirement it states. Say so before the author treats it as a template.",
+      // 工具在场性：读不到的东西要说出来，否则模型会替这份文件承诺一个它没读过的页码。
+      "NOTE: header/footer and heading numbering are NOT read from a file — the imitated preset carries none (no page number, numbering off). The author sets those in Settings → 排版格式 after saving it as a preset.",
       ...result.notes.map((n) => `NOTE: ${n}`),
       `Use it with export_docx format_id="${id}". It lives for this session only until the author saves it as a preset.`,
     ].join("\n"),

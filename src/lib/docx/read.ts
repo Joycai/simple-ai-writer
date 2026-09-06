@@ -79,7 +79,12 @@ export interface DocxLayout {
 export interface ReadRow {
   label: string;
   value: string;
-  source: "declared" | "default" | "absent";
+  /**
+   * `unread` 是来源列的合法值（设计稿 05h 屏 1f）：页眉页脚和标题编号这一版**不去看**——
+   * 和 `absent`（文件里没出现）不同，文件里可能真写了页眉。作者点「存为预设」之前必须
+   * 知道这两组会是空的。
+   */
+  source: "declared" | "default" | "absent" | "unread";
 }
 
 export interface ReadResult {
@@ -248,6 +253,11 @@ export function layoutToFormat(layout: DocxLayout, base: DocFormat = BUILTIN_FOR
       declaredHere ? "declared" : "absent",
     );
   });
+
+  // 这两组这一版不读：来源写「没读」，不是「未出现」。存成预设后按底座的值落地。
+  const UNREAD = "这一版不从文件里读 · 存为预设后到抽屉里设";
+  row("页眉页脚", UNREAD, "unread");
+  row("标题编号", UNREAD, "unread");
 
   return {
     format: { ...base, page, body, headings },
