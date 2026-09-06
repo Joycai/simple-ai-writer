@@ -76,6 +76,10 @@ const deriveLight = union(named(inLayer("tokens.derive"), '[data-scheme="light"]
 const deriveDark = union(named(inLayer("tokens.derive"), '[data-scheme="dark"]'));
 const paper = union(named(inLayer("tokens.theme"), '[data-theme="paper"]'));
 const night = union(named(inLayer("tokens.theme"), '[data-theme="night"]'));
+// 石 / 墨 sit in the same layer but are the opposite kind of block: a built-in
+// that is not a base writes the *core* there and nothing else.
+const stone = union(named(inLayer("tokens.theme"), '[data-theme="stone"]'));
+const ink = union(named(inLayer("tokens.theme"), '[data-theme="ink"]'));
 
 const diff = (a: Set<string>, b: Set<string>) => [...a].filter((t) => !b.has(t)).sort();
 
@@ -124,7 +128,7 @@ describe("contractData.ts is the current parse of tokens.css", () => {
     expect(TOKEN_CONTRACT.scale).toContain("--radius-md");
     expect(TOKEN_CONTRACT.derived).toContain("--stg-accent");
     expect(TOKEN_CONTRACT.core.filter((n) => TOKEN_CONTRACT.derived.includes(n))).toEqual([]);
-    expect(Object.keys(TOKEN_CONTRACT.handTuned).sort()).toEqual(["night", "paper"]);
+    expect(Object.keys(TOKEN_CONTRACT.handTuned).sort()).toEqual(["ink", "night", "paper", "stone"]);
   });
 });
 
@@ -152,6 +156,20 @@ describe("built-in hand-tunes (tokens.theme)", () => {
 
   it("never touch a scale token", () => {
     expect([...paper].filter((t) => scale.has(t))).toEqual([]);
+  });
+
+  /**
+   * 石 / 墨 are the proof that `tokens.derive` stands on its own: they declare
+   * the core contract and **not one** derived token, so every surface the app
+   * paints under them comes out of a formula. A hand-tune sneaked in here
+   * would make the pair look right while the theme files it stands in for
+   * still look wrong — the exact bug this pair exists to catch.
+   */
+  it("give the non-base built-ins the core contract, and nothing else", () => {
+    for (const [name, set] of [["stone", stone], ["ink", ink]] as const) {
+      expect({ [name]: diff(set, coreLight) }).toEqual({ [name]: [] });
+      expect({ [name]: diff(coreLight, set) }).toEqual({ [name]: [] });
+    }
   });
 
   it("give the two themes different snippet values", () => {
