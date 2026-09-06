@@ -25,8 +25,17 @@ const songkai = md("宋楷.css", { "--theme-name": "宋楷", "--theme-extends": 
 describe("buildRegistry — appearance", () => {
   it("lists built-ins first, then the folder's files by name", () => {
     const { ui: entries } = buildRegistry([mo, xuanzhi], [], both, DIRS);
-    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "墨", "宣纸"]);
-    expect(entries[2]).toMatchObject({ source: "user", scheme: "dark", extends: "night", usable: true, path: `${DIRS.user}/墨.css` });
+    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink", "墨", "宣纸"]);
+    expect(entries.find((e) => e.id === "墨"))
+      .toMatchObject({ source: "user", scheme: "dark", extends: "night", usable: true, path: `${DIRS.user}/墨.css` });
+  });
+
+  it("carries the second built-in pair, one per polarity", () => {
+    const { ui: entries } = buildRegistry([], [], both, DIRS);
+    expect(entries.find((e) => e.id === "stone")).toMatchObject({ source: "builtin", scheme: "light", usable: true });
+    expect(entries.find((e) => e.id === "ink")).toMatchObject({ source: "builtin", scheme: "dark", usable: true });
+    // 石 / 墨 paint from tokens.css like 纸 / 夜 — nothing is installed for them.
+    expect(installableEntries(entries)).toEqual([]);
   });
 
   it("keeps an unreadable file as an unusable card named by its file", () => {
@@ -67,7 +76,7 @@ describe("buildRegistry — appearance", () => {
 
   it("never lets a ui theme in from the project folder", () => {
     const { ui: entries, markdown } = buildRegistry([], [ui("evil.css", { "--theme-name": "x", "--theme-scheme": "dark" }, {}, [], DIRS.project)], both, DIRS);
-    expect(entries.map((e) => e.id)).toEqual(["paper", "night"]);
+    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink"]);
     const shown = markdown.find((e) => e.id === "evil");
     expect(shown).toMatchObject({ source: "project", usable: false });
     expect(shown?.problems[0].reason).toBe("uiInProject");
@@ -150,7 +159,7 @@ describe("helpers", () => {
 
   it("counts usable cards, built-ins included", () => {
     const { ui: entries, markdown } = buildRegistry([mo, ui("半调.css", {})], [], { ...both, light: "gone" }, DIRS);
-    expect(usableCount(entries)).toBe(3);
+    expect(usableCount(entries)).toBe(5);   // 纸 夜 石 墨 + 墨.css
     expect(usableCount(markdown)).toBe(5);
   });
 
@@ -158,7 +167,8 @@ describe("helpers", () => {
     const { ui: entries, markdown } = buildRegistry([xuanzhi], [], both, DIRS);
     expect(displayThemeName(entries[0], true)).toBe("纸");
     expect(displayThemeName(entries[0], false)).toBe("Paper");
-    expect(displayThemeName(entries[2], false)).toBe("宣纸");
+    expect(displayThemeName(entries.find((e) => e.id === "宣纸")!, false)).toBe("宣纸");
+    expect(displayThemeName(entries.find((e) => e.id === "stone")!, true)).toBe("石");
     expect(displayThemeName(markdown[0], true)).toBe("手稿");
   });
 });

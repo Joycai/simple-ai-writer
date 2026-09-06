@@ -117,6 +117,14 @@ export function parseTokenContract(css: string): TokenContract {
     ...Object.keys(deriveDark),
     ...Object.values(handTuned).flatMap((t) => Object.keys(t)),
   ]);
+  // 纸 / 夜 are the two bases, so their `tokens.theme` blocks hold derived
+  // tokens only. A built-in that is *not* a base (石 / 墨) has nowhere else to
+  // put its core — the base layer is keyed by polarity, not by theme — so it
+  // writes the core contract in this layer too. Core stays core: the tier is
+  // decided by `tokens.scheme`, and a name declared there is never derived,
+  // or a theme file writing `--color-bg-base` would be validated against the
+  // wrong tier and the export would resolve it in the wrong order.
+  for (const name of Object.keys(coreLight)) derived.delete(name);
   return {
     scale: Object.keys(scale).sort(),
     core: Object.keys(coreLight).sort(),

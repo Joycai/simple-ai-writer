@@ -52,6 +52,17 @@ export interface ThemeEntry {
   ownColors?: boolean;
 }
 
+/**
+ * The built-in appearance themes, 内置 → the grid's first cards, in this order.
+ *
+ * 纸 / 夜 are the two **bases**: their core lives in `tokens.scheme`, keyed by
+ * polarity, and `resolveUiTheme` falls back to them. 石 / 墨 (设计稿 05j
+ * 「石墨 Graphite」) are the second pair — a cold-grey ground with a 青黛
+ * accent — and they are *not* bases: they write the 37 core tokens in
+ * `tokens.theme` and take every derived token from `tokens.derive`, exactly
+ * as a theme file does. That is deliberate (theme-system-plan.md §4): the
+ * derive layer had never been seen without a hand-tune under it.
+ */
 export const BUILTIN_UI_THEMES: readonly ThemeEntry[] = [
   {
     id: "paper", kind: "ui", name: { zh: "纸", en: "Paper" }, scheme: "light", extends: "paper",
@@ -59,6 +70,14 @@ export const BUILTIN_UI_THEMES: readonly ThemeEntry[] = [
   },
   {
     id: "night", kind: "ui", name: { zh: "夜", en: "Night" }, scheme: "dark", extends: "night",
+    source: "builtin", problems: [], kept: 0, usable: true,
+  },
+  {
+    id: "stone", kind: "ui", name: { zh: "石", en: "Stone" }, scheme: "light", extends: "paper",
+    source: "builtin", problems: [], kept: 0, usable: true,
+  },
+  {
+    id: "ink", kind: "ui", name: { zh: "墨", en: "Ink" }, scheme: "dark", extends: "night",
     source: "builtin", problems: [], kept: 0, usable: true,
   },
 ];
@@ -254,7 +273,8 @@ export function findEntry(entries: readonly ThemeEntry[], id: string): ThemeEntr
 export function resolveUiTheme(entries: readonly ThemeEntry[], scheme: ColorScheme, id: string): ThemeEntry {
   const entry = findEntry(entries, id);
   if (entry && entry.usable && !entry.missing && entry.scheme === scheme) return entry;
-  return findEntry(entries, BUILTIN_THEME_FOR_SCHEME[scheme]) ?? BUILTIN_UI_THEMES[scheme === "light" ? 0 : 1];
+  const base = BUILTIN_THEME_FOR_SCHEME[scheme];
+  return findEntry(entries, base) ?? findEntry(BUILTIN_UI_THEMES, base) ?? BUILTIN_UI_THEMES[0];
 }
 
 /** The markdown theme that applies for `id`; the default built-in when it cannot. */

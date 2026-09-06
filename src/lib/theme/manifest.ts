@@ -55,7 +55,7 @@ export const THEME_META_PREFIX = "--theme-";
 export const THEME_FILE_EXT = ".css";
 
 /** The built-in ids — reserved; a file with one of these names cannot install. */
-export const BUILTIN_UI_IDS: readonly string[] = ["paper", "night"];
+export const BUILTIN_UI_IDS: readonly string[] = ["paper", "night", "stone", "ink"];
 export const BUILTIN_MARKDOWN_IDS: readonly string[] = ["manuscript", "clean", "magazine", "wechat", "typewriter"];
 
 /**

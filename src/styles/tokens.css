@@ -979,4 +979,110 @@
     --rp-name-selected:     #F0E7D9;
     --rp-meta-rule:         var(--color-border-emphasis);
   }
+
+  /* ───────── 石 · Stone ───────── 设计稿 05j「石墨 Graphite」的浅色一半。
+     纸 / 夜 是 tokens.scheme 里的两套**基底**，核心令牌住在那里；石 / 墨不是
+     基底，所以它们的**核心**写在这一层——基底之后、用户主题之前。写的正好是
+     37 个核心、一个手调都没有：推导层能不能把一套冷灰撑成整张应用，正是这一
+     对主题要回答的问题（theme-system-plan.md §4「注掉手调层看一眼」）。 */
+  [data-theme="stone"] {
+    --color-bg-base:        #EEF0F2;   /* 冷灰的纸 */
+    --color-bg-surface:     #F6F7F8;
+    --color-bg-elevated:    #E3E6EA;
+    --color-bg-hover:       #D8DCE1;
+    --color-bg-tinted:      #EEF0F2;
+    --color-bg-overlay:     rgba(24, 28, 33, 0.30);
+
+    --color-text-primary:   #1E2327;
+    --color-text-secondary: #4E555C;
+    --color-text-muted:     #7A828B;
+    --color-text-faint:     #A6ADB5;
+    --color-text-ghost:     #BFC6CD;
+
+    /* 青黛：唯一强调色。1px 线、填底、焦点环三用，所以在 base 上 5.10:1。 */
+    --color-sienna:         #2F6F6A;
+    --color-sienna-hover:   #245955;
+    --color-amber:          #A08556;   /* 黄铜 */
+    --color-amber-soft:     #E7E1D2;
+
+    --color-border:         #DCE0E5;
+    --color-border-soft:    #E5E9ED;
+    --color-border-strong:  #A08556;
+
+    --color-success:        #6F9B62;
+    --color-warning:        #B08A3E;
+    --color-error:          #B0524A;
+
+    /* 四个色相压到冷灰纸上；每个 fg 在自己的 bg 上 ≥ 4.5:1。 */
+    --color-type-text-bg:        #E5E8D3;
+    --color-type-text-fg:        #63692D;
+    --color-type-multimodal-bg:  #F0DFD2;
+    --color-type-multimodal-fg:  #98512E;
+    --color-type-image-bg:       #E9DCEA;
+    --color-type-image-fg:       #7C5083;
+    --color-type-video-bg:       #DBE3EE;
+    --color-type-video-fg:       #4E6390;
+
+    /* 影子是冷的：石墨没有暖褐可掺，用正文色的近黑。 */
+    --shadow-sm:    0 1px 3px rgba(24, 28, 33, 0.07);
+    --shadow-md:    0 2px 16px rgba(24, 28, 33, 0.11);
+    --shadow-lg:    0 4px 24px rgba(24, 28, 33, 0.11);
+    --shadow-xl:    0 16px 56px rgba(24, 28, 33, 0.24);
+    --shadow-drawer: -28px 0 56px rgba(24, 28, 33, 0.18);
+
+    --glass-bg:             rgba(246, 247, 248, 0.85);
+    --glass-bg-strong:      rgba(246, 247, 248, 0.72);
+    --glass-border:         1px solid rgba(24, 28, 33, 0.09);
+  }
+
+  /* ───────── 墨 · Ink ───────── 石墨的深色一半。底是蓝灰的近黑而不是纯黑，
+     和夜的暖褐拉开距离；强调色沿用青黛，只是在暗底上提亮。 */
+  [data-theme="ink"] {
+    --color-bg-base:        #181B1F;
+    --color-bg-surface:     #13161A;
+    --color-bg-elevated:    #232730;
+    --color-bg-hover:       #2C313A;
+    --color-bg-tinted:      #232730;
+    --color-bg-overlay:     rgba(0, 0, 0, 0.55);
+
+    --color-text-primary:   #E3E7EB;
+    --color-text-secondary: #B4BCC5;
+    --color-text-muted:     #8A939D;
+    --color-text-faint:     #59616B;
+    --color-text-ghost:     #39404A;
+
+    /* 深底上「按下去了」＝更亮，与纸相反（夜也是这个方向）。 */
+    --color-sienna:         #6FB3AC;
+    --color-sienna-hover:   #95CFC8;
+    --color-amber:          #B89C6A;
+    --color-amber-soft:     rgba(184, 156, 106, 0.28);
+
+    --color-border:         #262B33;
+    --color-border-soft:    #262B33;
+    --color-border-strong:  #59616B;
+
+    --color-success:        #8CB57E;
+    --color-warning:        #C9A45A;
+    --color-error:          #D4756B;
+
+    /* 同四个色相，作为压在暗底上的半透明水洗。 */
+    --color-type-text-bg:        rgba(199, 206, 138, 0.18);
+    --color-type-text-fg:        #C8CE8A;
+    --color-type-multimodal-bg:  rgba(224, 150, 110, 0.18);
+    --color-type-multimodal-fg:  #E29A72;
+    --color-type-image-bg:       rgba(196, 150, 200, 0.18);
+    --color-type-image-fg:       #CBA6D3;
+    --color-type-video-bg:       rgba(156, 174, 220, 0.18);
+    --color-type-video-fg:       #9CAEDC;
+
+    --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
+    --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.50);
+    --shadow-xl:    0 16px 56px rgba(0, 0, 0, 0.60);
+    --shadow-drawer: -28px 0 56px rgba(0, 0, 0, 0.55);
+
+    --glass-bg:             rgba(19, 22, 26, 0.80);
+    --glass-bg-strong:      rgba(19, 22, 26, 0.62);
+    --glass-border:         1px solid rgba(190, 214, 255, 0.07);
+  }
 }
