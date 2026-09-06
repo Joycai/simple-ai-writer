@@ -74,6 +74,7 @@ export function DocxImportModal({
   };
 
   const clean = BUILTIN_FORMATS.find((p) => p.id === "clean")!;
+  const unreadCount = state.phase === "read" ? state.result.rows.filter((r) => r.source === "unread").length : 0;
 
   return (
     <>
@@ -138,7 +139,11 @@ export function DocxImportModal({
               <div className={styles.readHead}>
                 <span className={styles.readHeadLabel}>{t("docxFormat.import.readSpec")}</span>
                 <span className={styles.echo}>
-                  {t("docxFormat.import.declaredCount", { n: state.result.declaredCount, total: state.result.rows.length })}
+                  {t("docxFormat.import.declaredCount", {
+                    n: state.result.declaredCount,
+                    total: state.result.rows.filter((r) => r.source !== "unread").length,
+                  })}
+                  {unreadCount > 0 && ` · ${t("docxFormat.import.unreadCount", { n: unreadCount })}`}
                 </span>
               </div>
               <div className={styles.readTable}>
@@ -147,16 +152,27 @@ export function DocxImportModal({
                   <span>{t("docxFormat.import.colValue")}</span>
                   <span>{t("docxFormat.import.colSource")}</span>
                 </div>
+                {/* 「没读」的两行进表、带斜纹底（借 1j 「格式是外来 / 不适用」那块纹）——表是作者一定
+                    会读的东西，表底的灰字是他可能跳过的东西（设计稿 05h 屏 1f）。 */}
                 {state.result.rows.map((r) => (
-                  <div key={r.label} className={styles.readRow}>
+                  <div key={r.label} className={`${styles.readRow} ${r.source === "unread" ? styles.readRowUnread : ""}`}>
                     <span className={styles.readLabel}>{r.label}</span>
                     <span className={styles.readValue}>{r.value}</span>
-                    <span className={r.source === "declared" ? styles.sourceDeclared : styles.sourceDefault}>
+                    <span className={
+                      r.source === "declared" ? styles.sourceDeclared
+                      : r.source === "unread" ? styles.sourceUnread
+                      : styles.sourceDefault
+                    }>
                       {t(`docxFormat.import.source_${r.source}`)}
                     </span>
                   </div>
                 ))}
               </div>
+              {unreadCount > 0 && (
+                <div className={styles.warnBlock}>
+                  <div className={styles.warnText}>{t("docxFormat.import.unreadNote")}</div>
+                </div>
+              )}
 
               {state.result.notes.map((n) => (
                 <div key={n} className={styles.modalNote}>{n}</div>
@@ -190,6 +206,7 @@ export function DocxImportModal({
                   </>
                 ) : (
                 <>
+                {unreadCount > 0 && <div className={styles.adoptNote}>{t("docxFormat.import.unreadSaveHint")}</div>}
                 <div className={styles.adoptRow}>
                   <input
                     className={styles.textInput}

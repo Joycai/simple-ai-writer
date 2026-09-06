@@ -17,6 +17,7 @@
 import { useTranslation } from "react-i18next";
 import {
   bodyRegionMm,
+  pageNumberSample,
   paperMm,
   type BlockStyle,
   type DocFormat,
@@ -70,12 +71,18 @@ function layout(f: DocFormat): { bars: Bar[]; indentCell: Bar | null; marks: Mar
   let indentAt: { y: number } | undefined;
   let y = 0;
 
-  const heading = (s: BlockStyle, widthRatio: number, label: string) => {
+  // 自动编号开着且这一级有写法时，标题条前多一小截同色同高的条、隔一个字位——它只说
+  // 「这里会多占一段宽度」，不写字：写了就等于承诺我们知道 Word 会排出几个字符宽（05h 屏 1c）。
+  const heading = (s: BlockStyle, widthRatio: number, label: string, levelIdx: number) => {
     y += s.spaceBeforePt * MM_PER_PT;
     const h = s.sizePt * MM_PER_PT;
     const w = region.widthMm * widthRatio;
-    const x = s.align === "center" ? (region.widthMm - w) / 2 : 0;
-    bars.push({ x, y, w, h, heading: true });
+    const numbered = f.headingNumbering.enabled && f.headingNumbering.levels[levelIdx] !== "none";
+    const stub = numbered ? h * 1.6 : 0;
+    const gap = numbered ? h * 0.8 : 0;
+    const x0 = s.align === "center" ? (region.widthMm - (stub + gap + w)) / 2 : 0;
+    if (numbered) bars.push({ x: x0, y, w: stub, h, heading: true });
+    bars.push({ x: x0 + stub + gap, y, w, h, heading: true });
     marks.push({ y: y + h / 2, label });
     y += h + s.spaceAfterPt * MM_PER_PT;
   };
@@ -96,11 +103,11 @@ function layout(f: DocFormat): { bars: Bar[]; indentCell: Bar | null; marks: Mar
     y += f.body.spaceAfterPt * MM_PER_PT;
   };
 
-  heading(f.headings[0], 0.45, "h1");
+  heading(f.headings[0], 0.45, "h1", 0);
   paragraph(6, 0.62, true);
-  heading(f.headings[1], 0.3, "h2");
+  heading(f.headings[1], 0.3, "h2", 1);
   paragraph(5, 0.8, false);
-  heading(f.headings[2], 0.22, "h3");
+  heading(f.headings[2], 0.22, "h3", 2);
   paragraph(3, 0.53, false);
 
   const cell: Bar | null =
@@ -249,6 +256,30 @@ export function PaperPreview({ format, compact = false }: { format: DocFormat; c
                 {t("docxFormat.preview.charCols", { n: format.page.grid.charsPerLine })}
               </span>
             </>
+          )}
+          {/* 页眉横线：版心上边线之上一个行位处、长度＝版心宽的 1px 实线。它在文件里也确实是一根线，
+              不是一行字，所以不用灰条；虚线仍然只表示「算出来的边」（05h 屏 1c）。 */}
+          {format.headerFooter.headerRule && (
+            <div
+              className={styles.headerRule}
+              style={{ left: px(m.left), top: px(Math.max(m.top - pitch, m.top / 2)), width: px(region.widthMm) }}
+            />
+          )}
+          {/* 页码是斜纹里唯一的住户：等宽小字、按对齐落在版心的左 / 中 / 右。它是全图唯一真的写出字符
+              的地方——它写的就是那个字符串，不是一段会被替换字体的正文。奇偶 / 首页 / 每章重来不画：
+              纸样只有「默认那一页」，不翻页、不画第二张纸。 */}
+          {format.headerFooter.pageNumber !== "none" && (
+            <div
+              className={`${styles.pageNum} ${compact ? styles.pageNumCompact : ""}`}
+              style={{
+                left: px(m.left),
+                width: px(region.widthMm),
+                top: px(m.top + region.heightMm + m.bottom / 2),
+                textAlign: format.headerFooter.pageNumberAlign === "justify" ? "center" : format.headerFooter.pageNumberAlign,
+              }}
+            >
+              {pageNumberSample(format.headerFooter.pageNumber)}
+            </div>
           )}
           <span className={styles.schematic}>SCHEMATIC</span>
         </div>

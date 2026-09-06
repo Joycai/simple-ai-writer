@@ -372,7 +372,8 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
  */
 function DocxBody({ proposal }: { proposal: DocxProposal }) {
   const { t } = useTranslation();
-  const changedKeys = new Set((proposal.changed ?? []).map((c) => c.key));
+  // 「页码 / 编号」那一行永远不会被改过：overrides 只有六项，不含这两组（05h 1z · C3）。
+  const changedKeys = new Set<string>((proposal.changed ?? []).map((c) => c.key));
   const quiet = proposal.originKind === "default";
 
   return (
