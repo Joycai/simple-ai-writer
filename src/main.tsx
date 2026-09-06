@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/fonts";
-import { hydratePrefs } from "./lib/prefs";
+import { hydratePrefs, readPref } from "./lib/prefs";
+import { preloadSelectedThemes } from "./lib/theme/install";
 import { installMarkdownThemeStyles } from "./lib/theme/markdownThemes";
 
 // Markdown typography themes are generated (the same generator feeds exported
@@ -37,6 +38,20 @@ async function boot() {
     await hydratePrefs();
   } catch (e) {
     console.warn("[boot] preferences unavailable; continuing with defaults:", e);
+  }
+
+  // The author's appearance theme files, if the preferences name any: read
+  // and installed inside the same await, so `appStore`'s first paint is the
+  // right theme rather than the built-in for a frame. Only the selected one
+  // or two files are read here; the folder is scanned when Settings opens.
+  // No I/O at all when both selections are built-ins (the default).
+  try {
+    await preloadSelectedThemes({
+      light: readPref("app:themeLight")?.trim() || "paper",
+      dark: readPref("app:themeDark")?.trim() || "night",
+    });
+  } catch (e) {
+    console.warn("[boot] theme files unavailable; using the built-in themes:", e);
   }
 
   await import("./i18n");

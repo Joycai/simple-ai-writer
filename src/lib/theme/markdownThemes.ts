@@ -11,8 +11,9 @@
  * Shape of a theme: a set of `--md-*` custom properties consumed by the shared
  * base rules, plus an optional `rules` string for its signature touches (the
  * magazine drop cap, the 公众号 heading bar). Colours stay in design tokens, so
- * every theme follows light/dark automatically; `EXPORT_TOKEN_CSS` re-declares
- * the light values for documents that leave the app.
+ * every theme follows light/dark automatically; for documents that leave the
+ * app the palette is generated from the author's appearance themes
+ * (`lib/theme/export`).
  */
 
 export type MarkdownThemeId = "manuscript" | "clean" | "magazine" | "wechat" | "typewriter";
@@ -408,29 +409,6 @@ export function markdownThemesCss(): string {
     .join("\n\n");
   return `${base}\n\n${inherited}\n\n${pinned}`;
 }
-
-/**
- * Light-mode design tokens for documents that leave the app. Exported HTML has
- * no `tokens.css`, so the themes' `var(--color-*)` references are declared here
- * instead — same CSS text, self-supplied palette. Bundled webfonts don't travel
- * with the file; every stack falls back to system faces.
- */
-export const EXPORT_TOKEN_CSS = `:root {
-  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
-  --color-text-primary: #2A2520;
-  --color-text-secondary: #5C5346;
-  --color-text-muted: #8B7E6A;
-  --color-text-ghost: #C0B49E;
-  --color-sienna: #A0522D;
-  --color-bg-base: #F7F2E8;
-  --color-bg-surface: #FBF8F0;
-  --color-bg-elevated: #F1E8D5;
-  --color-border: #E5DCC9;
-  --color-border-soft: #ECE2CE;
-  --color-accent-tint: rgba(160, 82, 45, 0.10);
-}`;
 
 let installed: HTMLStyleElement | null = null;
 

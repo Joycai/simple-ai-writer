@@ -26,11 +26,20 @@ export const BUILTIN_THEME_FOR_SCHEME: Record<ColorScheme, string> = {
   dark: "night",
 };
 
+/**
+ * Write both attributes: `id` is the cascade key (a built-in or a theme
+ * file's id), `scheme` the polarity the theme's manifest declared. The only
+ * writer — `lib/theme/install.ts` resolves which id, then comes here.
+ */
+export function applyThemeId(id: string, scheme: ColorScheme): void {
+  const root = document.documentElement;
+  root.setAttribute(THEME_ATTR, id);
+  root.setAttribute(SCHEME_ATTR, scheme);
+}
+
 /** Write both attributes for a built-in theme of the given polarity. */
 export function applyScheme(scheme: ColorScheme): void {
-  const root = document.documentElement;
-  root.setAttribute(THEME_ATTR, BUILTIN_THEME_FOR_SCHEME[scheme]);
-  root.setAttribute(SCHEME_ATTR, scheme);
+  applyThemeId(BUILTIN_THEME_FOR_SCHEME[scheme], scheme);
 }
 
 /** The polarity currently on `<html>`; dark until something has applied one. */
