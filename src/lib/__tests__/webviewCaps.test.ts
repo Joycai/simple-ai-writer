@@ -25,6 +25,7 @@ function fullGlobal(): ProbeGlobal {
     Object: { hasOwn: () => false },
     AbortSignal: { timeout: () => undefined },
     CSS: { supports: (q: string) => q === "container-type: inline-size" },
+    CSSLayerBlockRule: function CSSLayerBlockRule() {},
   };
 }
 
@@ -66,9 +67,9 @@ describe("CAPS", () => {
 
   it("passes on a complete engine — and on the one running the tests", () => {
     expect(missingCaps(fullGlobal())).toEqual([]);
-    // Node 22 lacks `CSS`; everything else is there.
+    // Node 22 lacks `CSS` and the CSSOM classes; everything else is there.
     const here = missingCaps().map((c) => c.id);
-    expect(here.filter((id) => id !== "CSS container queries")).toEqual([]);
+    expect(here.filter((id) => !id.startsWith("CSS "))).toEqual([]);
   });
 
   it("reports each missing built-in by name and treats a throwing probe as missing", () => {

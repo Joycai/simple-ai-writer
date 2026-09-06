@@ -87,6 +87,7 @@ export interface ProbeGlobal {
   Object?: Record<string, unknown>;
   AbortSignal?: Record<string, unknown>;
   CSS?: { supports?: (q: string) => boolean };
+  CSSLayerBlockRule?: unknown;
 }
 
 const fn = (v: unknown) => typeof v === "function";
@@ -111,6 +112,10 @@ export const CAPS: readonly Cap[] = [
     webkit: "16",
     probe: (g) => g.CSS?.supports?.("container-type: inline-size") === true,
   },
+  // tokens.css orders its five token layers with @layer; without it the
+  // built-in themes still resolve by source order, but a user theme file
+  // (installed as a constructed sheet) would lose to the built-in hand-tunes.
+  { id: "CSS cascade layers", chromium: 99, webkit: "15.4", probe: (g) => fn(g.CSSLayerBlockRule) },
 ];
 
 /** The caps this engine lacks. A probe that throws counts as missing. */

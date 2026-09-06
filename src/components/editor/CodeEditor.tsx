@@ -16,7 +16,8 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { themedSearch } from "./searchPanel";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { syntaxHighlighting } from "@codemirror/language";
+import { manuscriptHighlight } from "../../lib/editor/highlight";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { EditorContextMenu } from "./EditorContextMenu";
@@ -182,7 +183,9 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
           base: markdownLanguage,
           codeLanguages: languages,
         }),
-        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        // Class names only; the colours are the `.tok-*` rules in the module
+        // stylesheet, so they follow the tokens like everything else.
+        syntaxHighlighting(manuscriptHighlight, { fallback: true }),
         EditorView.lineWrapping,
         EditorView.theme({
           "&": { background: "transparent" },

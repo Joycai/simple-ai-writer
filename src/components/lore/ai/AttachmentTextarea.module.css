@@ -95,8 +95,8 @@
 }
 
 .chipImage {
-  background: rgba(168, 85, 247, 0.12);
-  color: #c084fc;
+  background: var(--color-type-image-bg);
+  color: var(--color-type-image-fg);
 }
 
 .chipRemove {

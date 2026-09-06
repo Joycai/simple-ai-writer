@@ -216,7 +216,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(20, 16, 12, 0.42);
+  background: var(--color-bg-overlay);
   color: #fff;
   opacity: 0;
   transition: opacity var(--transition-fast);

@@ -246,7 +246,7 @@
   /* lucide 的 `fill="none"` 是表现属性，优先级最低，所以这里必须先把 fill 打开 ——
      否则 fill-opacity 动到 .35 也什么都画不出来。 */
   fill: currentColor;
-  animation: springFill var(--spring-open, 700ms) linear forwards;
+  animation: springFill 700ms linear forwards;
 }
 @keyframes springFill {
   from { fill-opacity: 0; }

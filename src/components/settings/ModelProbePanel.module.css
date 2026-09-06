@@ -162,8 +162,8 @@
 }
 
 .verdictOk {
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
   color: var(--color-text-secondary);
 }
 
@@ -174,8 +174,8 @@
 }
 
 .verdictBad {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
   color: var(--color-error);
 }
 
