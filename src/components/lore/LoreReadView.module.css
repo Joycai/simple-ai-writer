@@ -101,7 +101,7 @@
 .cover:hover { border-color: var(--color-border-strong); }
 .cover:active { transform: scale(0.99); }
 .heroRight { flex: 1; min-width: 0; padding-top: 2px; }
-.name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text); }
+.name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text-primary); }
 .hitNote {
   margin-top: 12px;
   font: 400 10px/1 var(--font-mono);
@@ -116,7 +116,7 @@
   background: var(--color-tag-bg);
   border-bottom: 2px solid var(--color-sienna);
   font: 400 14px/1.3 var(--font-serif);
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 
 /* ── 元信息行 / 降级注 ──────────────────────────────────────────────── */
@@ -204,7 +204,7 @@
 /* ── 概要 = 导语 ────────────────────────────────────────────────────── */
 
 .lede { margin-top: 26px; padding-left: 20px; border-left: 3px solid var(--color-sienna); }
-.ledeText { font: italic 300 20px/1.75 var(--font-serif); color: var(--color-text); }
+.ledeText { font: italic 300 20px/1.75 var(--font-serif); color: var(--color-text-primary); }
 .ledeNote { margin-top: 8px; font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
 
 /* ── 节头基线与注入记号 ─────────────────────────────────────────────── */
@@ -212,7 +212,7 @@
 .topSect { margin-top: 34px; }
 .faceHead { margin-top: 44px; display: flex; align-items: baseline; gap: 12px; }
 .topSect .faceHead { margin-top: 0; }
-.faceName { font: 400 22px/1.3 var(--font-serif); color: var(--color-text); }
+.faceName { font: 400 22px/1.3 var(--font-serif); color: var(--color-text-primary); }
 .faceTag {
   font: 400 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
@@ -229,7 +229,7 @@
 .facetSect { margin-top: 30px; }
 .faceHead + .facetSect, .faceHead + .groupWrap { margin-top: 26px; }
 .facetTitleRow { margin-top: 12px; display: flex; align-items: baseline; gap: 10px; }
-.facetTitle { font: 500 19px/1.4 var(--font-serif); color: var(--color-text); }
+.facetTitle { font: 500 19px/1.4 var(--font-serif); color: var(--color-text-primary); }
 .prioActive { font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
 .prioPlain { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
 .metaLine { margin-top: 6px; font: 400 11px/1.6 var(--font-mono); color: var(--color-text-muted); }
@@ -367,7 +367,7 @@
   border: none;
   background: none;
   font: 400 19px/1.3 var(--font-serif);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   cursor: pointer;
   /* 过渡挂在基态、逐属性列出（同文件 .sect / .editMark 的写法），否则翻页
      入口的颜色是瞬切的。 */
@@ -431,7 +431,7 @@
 }
 /* 主项才是目录的主要跳转目标，悬停语汇与子项 .tocSub 同色同速。 */
 .tocItem:hover { color: var(--color-text-secondary); }
-.tocItemActive { color: var(--color-text); font-weight: 500; }
+.tocItemActive { color: var(--color-text-primary); font-weight: 500; }
 .tocTick { width: 8px; height: 1px; background: var(--lore-flip-border); flex-shrink: 0; }
 .tocTickActive { width: 14px; height: 3px; background: var(--color-sienna); flex-shrink: 0; }
 .tocSub {
