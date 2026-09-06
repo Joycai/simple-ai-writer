@@ -623,6 +623,22 @@ export interface SceneReader {
 
 对策：**每个 roleplay agent 都要有 workspace handle**，v1 直接懒创建标准的 task workspace（`createTaskWorkspace(projectPath, modelId)`，`taskWorkspace.ts:810`），`taskId` 存进花名册。
 
+**但这条对策必须配一份白名单，否则它自己就是第三条规则。** `routeTools` 里那句是
+`DELEGATE_KINDS.some(live)`——**四选一**，不是按 kind 给。上面的论证从头到尾只讲
+vision，可 workspace 一建，作者为对话助手开的 longread 或 search 就一并把 `delegate`
+交到了扮演角色手上；而 longread 子代理的工具集正是 `read_file` / `search_text` /
+`list_files`，也就是 `ROLEPLAY_PRESET` 开头写明一个角色不该做的那件事，隔了一层间接
+又回来了。`translate` 那句 push 同理，它连 kind 都不看。
+
+所以扮演角色的 subs 要先过 `subAgentsFor`（`lib/roleplay/presets.ts`）：**白名单，
+只有 vision**。它是白名单而不是黑名单，因为这个 bug 的形状就是「新加一种子代理，
+从一个 `some()` 里漏进来」，而下一种不该需要有人记得回来改一行；实现走的是入参
+自己的键，所以一个还没写进 `SUBAGENT_KINDS` 的 kind 也是默认关的。
+
+过这一层的必须是**每一处**拿 subs 的地方——`routeTools`、`messageCeilingFor` /
+`plannedToolTokens`、`resolveSubAgent`——否则工具集、schema 预算和真正放行的 kind
+三个数会各说各的。旁白原样返回：读稿子、翻资料、联网查证本来就是它的活。
+
 代价与取舍：
 
 - 任务列表里会出现扮演产生的条目。可接受——它们确实是任务，且旁白的调研笔记本来就该在那里能翻到。

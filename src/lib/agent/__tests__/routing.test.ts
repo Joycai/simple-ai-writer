@@ -46,6 +46,7 @@ const MODELS = [
 /** Stand-in handle: routeTools only tests it for presence. */
 const WS: TaskWorkspaceHandle = { taskId: null, ensure: async () => ({ taskId: "t", dir: "/d" }) };
 import { AGENT_ASSIST_PRESET } from "../presets";
+import { ROLEPLAY_PRESET, subAgentsFor } from "../../roleplay/presets";
 import { withSessionOverrides, type SubAgentConfig, type SubAgentKind } from "../subagent";
 
 describe("routeTools", () => {
@@ -569,5 +570,78 @@ describe("routeTools — run_pack", () => {
     } finally {
       orchestratorBeta.on = false;
     }
+  });
+});
+
+/**
+ * The roleplay character's allowlist, end to end through `routeTools`.
+ *
+ * Its own unit test lives beside the preset; this one is here because the leak
+ * it guards against was a property of THIS function — `DELEGATE_KINDS.some(live)`
+ * is four-of-a-kind, so a longread subagent the author turned on for the chat
+ * assistant handed a roleplay character `delegate`, whose longread sub-preset is
+ * `read_file` / `search_text` / `list_files`: the one thing that preset's own
+ * comment says a character must never do, one level of indirection down.
+ */
+describe("routeTools for a roleplay character", () => {
+  const off: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+  };
+  const routeCharacter = (subs: Record<SubAgentKind, SubAgentConfig>) =>
+    routeTools(ROLEPLAY_PRESET, subAgentsFor("character", subs), WS, MODELS);
+
+  it("gets no delegate from a longread or search subagent", () => {
+    const res = routeCharacter({
+      ...off,
+      longread: { kind: "longread", modelId: "m-long", enabled: true },
+      search: { kind: "search", modelId: "m-search", enabled: true },
+    });
+    expect(res.tools).not.toContain("delegate");
+    // The main model keeps its own browsing: nothing took it over.
+    expect(res.serverTools).toBe("off");
+  });
+
+  /**
+   * Vision is the one kind on the allowlist, and this is why it is there:
+   * 02-design §8 — vision live strips `read_image`, so without `delegate` the
+   * character's ability to look at a picture would vanish rather than move.
+   */
+  it("still gets delegate from vision — the whole reason the allowlist has one entry", () => {
+    const res = routeCharacter({
+      ...off,
+      vision: { kind: "vision", modelId: "m-vision", enabled: true },
+    });
+    expect(res.tools).toContain("delegate");
+    expect(res.tools).not.toContain("read_image");
+  });
+
+  it("is never handed the translate tool", () => {
+    translateBeta.on = true;
+    try {
+      const res = routeCharacter({
+        ...off,
+        translate: { kind: "translate", modelId: "m-sakura", enabled: true },
+      });
+      expect(res.tools).not.toContain("translate");
+    } finally {
+      translateBeta.on = false;
+    }
+  });
+
+  // The narrator is the control: reading and researching is its job.
+  it("leaves the narrator's own delegate alone", () => {
+    const subs = {
+      ...off,
+      longread: { kind: "longread" as const, modelId: "m-long", enabled: true },
+    };
+    const res = routeTools(ROLEPLAY_PRESET, subAgentsFor("narrator", subs), WS, MODELS);
+    expect(res.tools).toContain("delegate");
   });
 });

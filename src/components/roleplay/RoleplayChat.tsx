@@ -38,7 +38,7 @@ import {
 } from "../../lib/agent/contextBreakdown";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
-import { presetFor } from "../../lib/roleplay/presets";
+import { presetFor, subAgentsFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
 import { recalledNames, type TurnContextTrace } from "../../lib/roleplay/trace";
 import { TraceBody, TraceToggle } from "./TurnTrace";
@@ -394,9 +394,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     [models, agent.modelId, activeModelId],
   );
   const disabledSubs = session?.disabledSubAgents ?? EMPTY_SUBS;
+  // 过 `subAgentsFor`：下面两个消费者都必须和 `roleplayStore` 跑时看到的是
+  // 同一份 subs——`canSeeImages` 决定附件候选，`toolTokens` 画的是折叠线。
   const effectiveSubs = useMemo(
-    () => withSessionOverrides(subAgents, disabledSubs),
-    [subAgents, disabledSubs],
+    () => subAgentsFor(agent.kind, withSessionOverrides(subAgents, disabledSubs)),
+    [agent.kind, subAgents, disabledSubs],
   );
   /**
    * 这条链看不看得见图片：本模型是多模态，或者识图子代理还开着。看不见就不把
