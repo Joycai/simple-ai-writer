@@ -58,10 +58,12 @@ export interface ThemeEntry {
  * 纸 / 夜 are the two **bases**: their core lives in `tokens.scheme`, keyed by
  * polarity, and `resolveUiTheme` falls back to them. 石 / 墨 (设计稿 05j
  * 「石墨 Graphite」) are the second pair — a cold-grey ground with a 青黛
- * accent — and they are *not* bases: they write the 37 core tokens in
- * `tokens.theme` and take every derived token from `tokens.derive`, exactly
- * as a theme file does. That is deliberate (theme-system-plan.md §4): the
- * derive layer had never been seen without a hand-tune under it.
+ * accent — and 霜 / 靛 (the same 稿's 「靛 Indigo」) the third, an indigo-ink
+ * dark whose light half is its daytime. Neither pair is a base: they write
+ * the 37 core tokens in `tokens.theme` and take every derived token from
+ * `tokens.derive`, exactly as a theme file does. That is deliberate
+ * (theme-system-plan.md §4): the derive layer had never been seen without a
+ * hand-tune under it.
  */
 export const BUILTIN_UI_THEMES: readonly ThemeEntry[] = [
   {
@@ -78,6 +80,14 @@ export const BUILTIN_UI_THEMES: readonly ThemeEntry[] = [
   },
   {
     id: "ink", kind: "ui", name: { zh: "墨", en: "Ink" }, scheme: "dark", extends: "night",
+    source: "builtin", problems: [], kept: 0, usable: true,
+  },
+  {
+    id: "frost", kind: "ui", name: { zh: "霜", en: "Frost" }, scheme: "light", extends: "paper",
+    source: "builtin", problems: [], kept: 0, usable: true,
+  },
+  {
+    id: "indigo", kind: "ui", name: { zh: "靛", en: "Indigo" }, scheme: "dark", extends: "night",
     source: "builtin", problems: [], kept: 0, usable: true,
   },
 ];

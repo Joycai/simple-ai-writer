@@ -1085,4 +1085,107 @@
     --glass-bg-strong:      rgba(19, 22, 26, 0.62);
     --glass-border:         1px solid rgba(190, 214, 255, 0.07);
   }
+  /* ───────── 霜 · Frost ───────── 靛的浅色一半，设计稿 05j 的 1c「靛 Indigo」。
+     深色那张才是主角：这张是同一套色相调亮后的白天，底是掺了靛的冷白。
+     和石 / 墨一样只写这 37 个核心，其余 176 个全部交给 tokens.derive。 */
+  [data-theme="frost"] {
+    --color-bg-base:        #ECEDF4;   /* 掺靛的冷白 */
+    --color-bg-surface:     #F5F5FA;
+    --color-bg-elevated:    #DFE1EE;
+    --color-bg-hover:       #D3D6E7;
+    --color-bg-tinted:      #ECEDF4;
+    --color-bg-overlay:     rgba(28, 30, 47, 0.30);
+
+    --color-text-primary:   #1C1E2F;
+    --color-text-secondary: #4B4F68;
+    --color-text-muted:     #777B94;
+    --color-text-faint:     #A4A7BA;
+    --color-text-ghost:     #B7B9C9;
+
+    /* 靛青：唯一强调色，压过饱和度。1px 线、填底、焦点环三用，base 上 5.73:1。 */
+    --color-sienna:         #4A55A6;
+    --color-sienna-hover:   #383F8A;
+    --color-amber:          #B4915A;   /* 金褐 */
+    --color-amber-soft:     #E2DCD8;
+
+    --color-border:         #D8DAE4;
+    --color-border-soft:    #E1E2EB;
+    --color-border-strong:  #B4915A;
+
+    --color-success:        #6E9A6A;
+    --color-warning:        #B98B3E;
+    --color-error:          #B4514E;
+
+    /* 四个色相压在冷白上：L 与彩度照石，色相各自保住；fg 在自己的 bg 上 ≥ 4.5:1。 */
+    --color-type-text-bg:        #E5E5D0;
+    --color-type-text-fg:        #6A6723;
+    --color-type-multimodal-bg:  #F0DCD2;
+    --color-type-multimodal-fg:  #9F491B;
+    --color-type-image-bg:       #E9D9E5;
+    --color-type-image-fg:       #854E7B;
+    --color-type-video-bg:       #D4E3E8;
+    --color-type-video-fg:       #2F6A7A;
+
+    /* 影子取正文色的近黑，蓝调的，和纸的暖褐相反。 */
+    --shadow-sm:    0 1px 3px rgba(28, 30, 47, 0.07);
+    --shadow-md:    0 2px 16px rgba(28, 30, 47, 0.11);
+    --shadow-lg:    0 4px 24px rgba(28, 30, 47, 0.11);
+    --shadow-xl:    0 16px 56px rgba(28, 30, 47, 0.24);
+    --shadow-drawer: -28px 0 56px rgba(28, 30, 47, 0.18);
+
+    --glass-bg:             rgba(245, 245, 250, 0.85);
+    --glass-bg-strong:      rgba(245, 245, 250, 0.72);
+    --glass-border:         1px solid rgba(28, 30, 47, 0.09);
+  }
+
+  /* ───────── 靛 · Indigo ───────── 这一对的主角：底是靛墨而不是黑，长夜写作
+     时屏幕像一块蓝黑砚台。强调色沿用靛青，在暗底上提亮。 */
+  [data-theme="indigo"] {
+    --color-bg-base:        #151827;   /* 靛墨 */
+    --color-bg-surface:     #10121E;
+    --color-bg-elevated:    #1F2338;
+    --color-bg-hover:       #292E48;
+    --color-bg-tinted:      #1F2338;
+    --color-bg-overlay:     rgba(0, 0, 0, 0.55);
+
+    --color-text-primary:   #E4E5F0;
+    --color-text-secondary: #B3B7CE;
+    --color-text-muted:     #8A8FA9;
+    --color-text-faint:     #51566B;
+    --color-text-ghost:     #323648;
+
+    /* 深底上「按下去了」＝更亮，与浅色相反（夜 / 墨 也是这个方向）。 */
+    --color-sienna:         #909BE6;
+    --color-sienna-hover:   #B4BCF2;
+    --color-amber:          #C9A66A;
+    --color-amber-soft:     rgba(201, 166, 106, 0.28);
+
+    --color-border:         #212435;
+    --color-border-soft:    #212435;
+    --color-border-strong:  #51566B;
+
+    --color-success:        #8DB889;
+    --color-warning:        #D0A75A;
+    --color-error:          #DE7A72;
+
+    /* 同四个色相，作为压在靛墨上的半透明水洗。 */
+    --color-type-text-bg:        rgba(199, 206, 138, 0.18);
+    --color-type-text-fg:        #C7CE8A;
+    --color-type-multimodal-bg:  rgba(224, 150, 110, 0.18);
+    --color-type-multimodal-fg:  #E0966E;
+    --color-type-image-bg:       rgba(196, 150, 200, 0.18);
+    --color-type-image-fg:       #C496C8;
+    --color-type-video-bg:       rgba(134, 192, 207, 0.18);
+    --color-type-video-fg:       #86C0CF;
+
+    --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
+    --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.50);
+    --shadow-xl:    0 16px 56px rgba(0, 0, 0, 0.60);
+    --shadow-drawer: -28px 0 56px rgba(0, 0, 0, 0.55);
+
+    --glass-bg:             rgba(16, 18, 30, 0.80);
+    --glass-bg-strong:      rgba(16, 18, 30, 0.62);
+    --glass-border:         1px solid rgba(200, 206, 255, 0.07);
+  }
 }
