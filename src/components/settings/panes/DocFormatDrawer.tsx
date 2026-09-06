@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { PaperPreview } from "./PaperPreview";
 import { isFontInstalled } from "../../../lib/docx/fontCheck";
 import {
@@ -534,27 +534,82 @@ function FontField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-/** 号数下拉 + 磅数回显。作者手上的规格用哪种写法都有可能，所以两种都要在。 */
+/** 一个数值用哪种写法显示：有号数就显示号数，没有就显示磅。 */
+function sizeDisplay(pt: number): string {
+  const named = CN_SIZES.find(([, p]) => p === pt);
+  return named ? named[0] : String(pt);
+}
+
+/**
+ * 字号：一个框，两种写法（设计稿 05e 屏 1e）。输入框接受号数也接受磅值——甲方要求写
+ * 「三号」还是写「16」都能直接照抄；另一种写法永远在框内右侧回显（灰色、不可编辑）。
+ * 没有对应号数的磅值是允许的，不是错（回显「磅 · 无对应号数」）。号数表折在框尾的
+ * 小箭头后面，两种写法并列、等宽对齐。
+ */
 function SizePicker({ value, onChange }: { value: number; onChange: (pt: number) => void }) {
   const { t } = useTranslation();
-  const named = CN_SIZES.find(([, pt]) => pt === value);
+  const [draft, setDraft] = useState(sizeDisplay(value));
+  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (!editing) setDraft(sizeDisplay(value)); }, [value, editing]);
+
+  const parsed = parseSize(draft);
+  const typedName = CN_SIZES.some(([name]) => name === draft.trim());
+  const named = parsed !== null ? CN_SIZES.find(([, pt]) => pt === parsed) : undefined;
+  const echo = parsed === null
+    ? ""
+    : typedName
+      ? t("docxFormat.drawer.echoPt", { pt: parsed })
+      : named
+        ? t("docxFormat.drawer.echoName", { name: named[0] })
+        : t("docxFormat.drawer.echoNoName");
+
+  const commit = () => {
+    setEditing(false);
+    // 解析失败退回原值，不静默取默认——同 format.ts 那条纪律。
+    if (parsed === null) { setDraft(sizeDisplay(value)); return; }
+    if (parsed !== value) onChange(parsed);
+  };
+
   return (
-    <>
-      <select
-        className={styles.select}
-        value={named ? named[0] : "__custom"}
-        onChange={(e) => {
-          const pt = parseSize(e.target.value);
-          if (pt !== null) onChange(pt);
-        }}
+    <span className={styles.sizeWrap}>
+      <input
+        className={styles.sizeInput}
+        value={draft}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setOpen(false); }}
+        aria-label={t("docxFormat.drawer.size")}
+      />
+      <span className={styles.sizeEcho}>{echo}</span>
+      <button
+        type="button"
+        className={styles.sizeToggle}
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t("docxFormat.drawer.sizeTable")}
+        aria-expanded={open}
       >
-        {!named && <option value="__custom">{t("docxFormat.drawer.customSize")}</option>}
-        {CN_SIZES.map(([name, pt]) => (
-          <option key={name} value={name}>{`${name}（${pt} 磅）`}</option>
-        ))}
-      </select>
-      <Num value={value} unit={t("docxFormat.drawer.pt")} min={1} max={200} step={0.5} onChange={onChange} />
-    </>
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div className={styles.sizeTable} role="listbox">
+          {CN_SIZES.map(([name, pt]) => (
+            <button
+              key={name}
+              type="button"
+              role="option"
+              aria-selected={pt === value}
+              className={`${styles.sizeRow} ${pt === value ? styles.sizeRowOn : ""}`}
+              onClick={() => { onChange(pt); setOpen(false); }}
+            >
+              <span>{name}</span>
+              <span className={styles.sizeRowPt}>{`${pt} ${t("docxFormat.drawer.pt")}`}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 

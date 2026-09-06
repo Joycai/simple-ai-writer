@@ -18,6 +18,18 @@ import { readPickedDocFormat, type ReadResult } from "../../../lib/docx/read";
 import { baseName } from "../../../lib/paths";
 import styles from "./DocFormat.module.css";
 
+/** 「2.4 MB · 读取 0.4 s」——文件芯片上的两个数（设计稿 05f 屏 1h）。页数读不到，不编。 */
+function fileMeta(r: ReadResult, t: (k: string, o?: Record<string, unknown>) => string): string {
+  const parts: string[] = [];
+  if (r.fileBytes !== undefined) {
+    parts.push(r.fileBytes >= 1_048_576
+      ? `${(r.fileBytes / 1_048_576).toFixed(1)} MB`
+      : `${Math.max(1, Math.round(r.fileBytes / 1024))} KB`);
+  }
+  if (r.readMs !== undefined) parts.push(t("docxFormat.import.readTook", { s: (r.readMs / 1000).toFixed(1) }));
+  return parts.join(" · ");
+}
+
 type State =
   | { phase: "idle" }
   | { phase: "reading"; file: string }
@@ -27,10 +39,13 @@ type State =
 export function DocxImportModal({
   onClose,
   onAdopt,
+  onUseBuiltin,
 }: {
   onClose: () => void;
   /** `save` 为真＝存成预设并留在列表里；否则只挂进本次会话。 */
   onAdopt: (args: { file: string; path: string; result: ReadResult; name: string; save: boolean; makeDefault: boolean }) => void;
+  /** 读到的全是 Word 出厂值时的出路（设计稿 05f 屏 1i）：不建预设，改用那套内置的。 */
+  onUseBuiltin: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [state, setState] = useState<State>({ phase: "idle" });
@@ -108,6 +123,7 @@ export function DocxImportModal({
               <div className={styles.fileChip}>
                 <FileText size={13} />
                 <span className={styles.fileName}>{state.file}</span>
+                <span className={styles.echo}>{fileMeta(state.result, t)}</span>
                 <span className={styles.grow} />
                 <button className={styles.rowAction} onClick={() => void pick()}>{t("docxFormat.import.another")}</button>
               </div>
@@ -148,6 +164,32 @@ export function DocxImportModal({
 
               <div className={styles.adopt}>
                 <div className={styles.adoptLabel}>{t("docxFormat.import.next")}</div>
+                {state.result.declaredCount === 0 ? (
+                  /* 全是 Word 默认值（屏 1i）：存成预设也可以，但它等于出厂设置——主动作是改用
+                     内置的那一套，「仍要存为预设」退到次位。 */
+                  <>
+                    <div className={styles.modalNote}>
+                      {t("docxFormat.import.defaultsOnlyNext", { name: clean.label })}
+                    </div>
+                    <div className={styles.adoptRow}>
+                      <button className={styles.primaryBtn} onClick={() => onUseBuiltin(clean.id)}>
+                        {t("docxFormat.import.useBuiltin", { name: clean.label })}
+                      </button>
+                      <button
+                        className={styles.ghostBtn}
+                        onClick={() => onAdopt({
+                          file: state.file, path: state.path, result: state.result,
+                          name: name.trim() || state.file.replace(/\.(docx|dotx)$/i, ""), save: true, makeDefault: false,
+                        })}
+                      >
+                        {t("docxFormat.import.stillSave")}
+                      </button>
+                      <span className={styles.grow} />
+                      <button className={styles.ghostBtn} onClick={onClose}>{t("common.cancel")}</button>
+                    </div>
+                  </>
+                ) : (
+                <>
                 <div className={styles.adoptRow}>
                   <input
                     className={styles.textInput}
@@ -179,6 +221,8 @@ export function DocxImportModal({
                   <span className={styles.grow} />
                   <button className={styles.ghostBtn} onClick={onClose}>{t("common.cancel")}</button>
                 </div>
+                </>
+                )}
               </div>
             </>
           )}

@@ -90,6 +90,12 @@ export interface ReadResult {
   declaredCount: number;
   /** 认不出纸张这类要说给作者听的事。 */
   notes: string[];
+  /**
+   * 文件大小（字节）与读取耗时（毫秒）——读取模态文件芯片上的两个数（设计稿 05f
+   * 屏 1h）。`layoutToFormat` 不填它们：纯函数看不见文件，也不该计时。
+   */
+  fileBytes?: number;
+  readMs?: number;
 }
 
 const mm = (twip: number): number => Math.round((twip / TWIP_PER_MM) * 10) / 10;
@@ -266,8 +272,13 @@ export async function readDocFormat(path: string, base?: DocFormat): Promise<Rea
  * `FsScope` 不会为它背书，授权来自对话框本身。同 `pptxToMarkdown` 的分工。
  */
 export async function readPickedDocFormat(path: string, base?: DocFormat): Promise<ReadResult> {
+  const started = performance.now();
   const { readFile } = await import("@tauri-apps/plugin-fs");
   const bytes = await readFile(path);
   const layout = await invoke<DocxLayout>("docx_layout_from_bytes", { data: toBase64(bytes) });
-  return layoutToFormat(layout, base);
+  return {
+    ...layoutToFormat(layout, base),
+    fileBytes: bytes.byteLength,
+    readMs: Math.round(performance.now() - started),
+  };
 }

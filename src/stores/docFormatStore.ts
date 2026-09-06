@@ -36,8 +36,13 @@ interface DocFormatState {
   select: (id: string) => void;
   /** 新建或改写一套自建预设，落盘。 */
   saveFormat: (preset: DocFormatPreset) => Promise<void>;
-  /** 删一套自建预设。内置的删不掉——调用方不该给它们删按钮。 */
-  removeFormat: (id: string) => Promise<void>;
+  /**
+   * 删一套自建预设。内置的删不掉——调用方不该给它们删按钮。
+   *
+   * 删的正好是默认那套时，`handoffTo` 是作者点名接手的那一套（设计稿 05f 屏 1l：
+   * 允许删，但必须转交）。没点名就落回内置的第一套——「没有默认」这个状态永远不存在。
+   */
+  removeFormat: (id: string, handoffTo?: string) => Promise<void>;
   /** 「复制一份」：任何一套（含内置）都能复制成一套可改的自建预设，返回新 id。 */
   duplicate: (id: string) => Promise<string | null>;
   /** 把 `read_doc_format` 读到的格式挂进本次会话。 */
@@ -127,11 +132,14 @@ export const useDocFormatStore = create<DocFormatState>((set, get) => ({
     });
   },
 
-  removeFormat: async (id) => {
+  removeFormat: async (id, handoffTo) => {
     await deleteCustomFormat(id);
     set((s) => {
       const presets = s.presets.filter((p) => p.id !== id);
-      const defaultId = reconcile(presets, s.defaultId);
+      // 删掉的正好是默认——作者点名的那一套接手；没点名（或点了一个已经不在的）
+      // 就落回内置的第一套。
+      const wanted = s.defaultId === id && handoffTo ? handoffTo : s.defaultId;
+      const defaultId = reconcile(presets, wanted);
       // 删掉的正好是默认——默认必须落回一个真实存在的预设，并且**写回偏好**，
       // 否则下次启动读到的还是那个死 id。
       if (defaultId !== s.defaultId) writePref(PREF_KEY, defaultId);

@@ -24,6 +24,7 @@
   .previewCol { max-width: 500px; }
 }
 
+
 /* ── 预设列表 ───────────────────────────────────────────────────────────── */
 
 .listCol { min-width: 0; }
@@ -69,6 +70,7 @@
   line-height: 1.7;
   color: var(--stg-text-desc);
 }
+.emptyCustomActions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
 .row {
   display: flex;
@@ -161,6 +163,8 @@
   margin-top: 7px;
   overflow-wrap: anywhere;
 }
+/* 宽屏一行：字体 · 字号 · 行距 · 缩进；≤720 后半段自成一行（见文末的媒体查询）。 */
+.rowSummaryRest::before { content: " · "; }
 
 /* ── 纸样预览 ───────────────────────────────────────────────────────────── */
 
@@ -273,6 +277,27 @@
 
 .barHeading { position: absolute; background: var(--doc-bar-heading); }
 .barBody { position: absolute; background: var(--doc-bar-body); }
+
+/* 行号刻度与「N 字位」：8px 等宽、最淡一档——它们是格子的编号，不是尺寸标注。 */
+.rowNums { position: absolute; width: 12px; }
+.rowNum {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1;
+  color: var(--stg-text-placeholder);
+}
+.charColsTag {
+  position: absolute;
+  transform: translateY(calc(-100% - 3px));
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1;
+  color: var(--stg-text-placeholder);
+  white-space: nowrap;
+}
 
 .schematic {
   position: absolute;
@@ -556,6 +581,77 @@
   white-space: nowrap;
 }
 
+/* 字号：一个框，两种写法（设计稿 05e 屏 1e）。框里是输入 + 灰色回显 + 号数表的小箭头。 */
+.sizeWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+}
+.sizeWrap:focus-within { border-color: var(--stg-accent); box-shadow: var(--shadow-focus); }
+.sizeInput {
+  width: 64px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--stg-text);
+  background: transparent;
+  border: none;
+  padding: 6px 4px 6px 8px;
+  outline: none;
+}
+.sizeEcho {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--stg-text-faint);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.sizeToggle {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border: none;
+  border-left: 1px solid var(--stg-line-row);
+  background: transparent;
+  color: var(--stg-text-faint);
+  cursor: pointer;
+}
+.sizeToggle:hover { color: var(--stg-text); }
+.sizeTable {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 7;
+  min-width: 220px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border-mid);
+  box-shadow: var(--shadow-lg);
+}
+.sizeRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--stg-text);
+  text-align: left;
+  cursor: pointer;
+}
+.sizeRow:hover { background: var(--color-bg-hover); }
+.sizeRowOn,
+.sizeRowOn:hover {
+  background: color-mix(in srgb, var(--stg-accent) 9%, var(--stg-bg));
+  box-shadow: inset 2px 0 0 var(--stg-accent);
+}
+.sizeRowPt { color: var(--stg-text-desc); }
+
 .seg {
   display: inline-flex;
   border: 1px solid var(--stg-border-mid);
@@ -756,6 +852,9 @@
 }
 
 .primaryBtn { background: var(--stg-accent); color: var(--color-on-accent); }
+/* 删除确认键：深中性填色——赭石是「这是你要的那个」，不能用来确认删除；红这套语言里没有。 */
+.neutralBtn { background: var(--stg-text); color: var(--stg-bg); }
+.neutralBtn:hover { background: var(--stg-text-secondary); }
 .primaryBtn:hover { background: var(--stg-accent-hover); }
 .primaryBtn:disabled { opacity: 0.5; cursor: default; }
 
@@ -851,6 +950,12 @@
   display: flex;
   flex-direction: column;
 }
+
+.modalNarrow { width: min(520px, calc(100% - 48px)); }
+
+/* 「默认交给 ▾」：删的正好是默认那套时的转交行。 */
+.handoff { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.handoffLabel { font-size: 12px; color: var(--stg-text-secondary); }
 
 .modalHead {
   display: flex;
@@ -1023,4 +1128,40 @@
   padding-top: 14px;
   border-top: 1px solid var(--stg-line-row);
   flex-wrap: wrap;
+}
+
+/* ── 720px 以下的规则放在文件末尾：它们要压过上面 .rowActions / .rowSummaryRest / .previewCol
+   的基态，同一特异性下靠的是次序。 ── */
+/* 宽屏下这三样不存在：展开钮、收起后的一行摘要、折行的摘要后半段 */
+.previewToggle { display: none; }
+.previewBar { display: none; }
+
+/* 720px 以下（设计稿 05f 屏 1m）：纸样收成一行可展开的条，下面挂一行等宽摘要；列表摘要折两行；
+   悬停动作常显——触屏没有悬停（稿上是收成一个点按钮，这里先让它们一直在）。 */
+@media (max-width: 720px) {
+  .previewCol { position: static; max-width: none; }
+  .previewToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 11.5px;
+    color: var(--stg-accent);
+    cursor: pointer;
+  }
+  .previewChevronOpen { transform: rotate(180deg); }
+  .previewBar {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--stg-text-desc);
+    padding-bottom: 10px;
+  }
+  .previewCollapsed .previewBody { display: none; }
+  .rowSummaryRest { display: block; }
+  .rowSummaryRest::before { content: none; }
+  .rowActions { opacity: 1; }
 }
