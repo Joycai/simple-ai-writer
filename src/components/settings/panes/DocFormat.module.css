@@ -74,7 +74,6 @@
   color: var(--stg-text);
   margin-bottom: 2px;
 }
-.emptyCustomActions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
 .row {
   display: flex;

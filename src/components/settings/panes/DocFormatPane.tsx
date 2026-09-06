@@ -10,8 +10,8 @@
  * - 「我现在在看哪一个」＝ 选中，一片淡染 + 左侧一条竖线。
  * 把选中也画成强调色实心，作者就会以为自己刚刚改了默认。
  *
- * 一期只有内置预设和「设为默认」。新建 / 编辑 / 从 Word 文件读取格式在二期，
- * 所以这一页现在**不摆那两个按钮**——一个点了没反应的按钮比没有更糟。
+ * 「从 Word 文件读取格式」和「+ 新建预设」**只在页头有一份**。它们是这一页的两个
+ * 入口，页头常驻、任何宽度下都在；自建分组的空态只写字，不再摆一份同样的按钮。
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -183,22 +183,17 @@ export function DocFormatPane({
             <div className={styles.groupLabel}>{t("docxFormat.groupCustom")}</div>
             {custom.length === 0 ? (
               // 空态放在「自建」分组里而不是整页居中（设计稿 05f 屏 1l）：内置的五套一直在，
-              // 页面从来不是空的，空的只是这一段——两个入口就近再给一次。
+              // 页面从来不是空的，空的只是这一段。
+              //
+              // **不在这里重复那两个按钮。** 稿上 1l 是列表区的裁切，没有画页头，所以稿里
+              // 那一对和页头那一对从来没有同屏出现过；照着叠上去，一台新机器上「从 Word 文件
+              // 读取格式」「+ 新建预设」就一屏两份。留下的是这两行字——它说的正是那两个按钮
+              // 该怎么用，而按钮本身在页头常驻，任何宽度下都在。
               <div className={styles.emptyCustom}>
                 {/* 两行，不是一句：第一行陈述状态，第二行才是出路。挤成一段时
                     「这里还空着」会被读成那句长解释的开头（设计稿 05f 屏 1l）。 */}
                 <div className={styles.emptyCustomTitle}>{t("docxFormat.customEmptyTitle")}</div>
                 <div>{t("docxFormat.customEmpty")}</div>
-                <div className={styles.emptyCustomActions}>
-                  <button className={styles.outlineBtn} onClick={() => setImporting(true)}>
-                    <FileDown size={13} />
-                    {t("docxFormat.readDocx")}
-                  </button>
-                  <button className={styles.primaryBtn} onClick={create}>
-                    <Plus size={13} />
-                    {t("docxFormat.newPreset")}
-                  </button>
-                </div>
               </div>
             ) : (
               custom.map((p) => (
