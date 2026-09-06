@@ -232,6 +232,24 @@ export function PaperPreview({ format, compact = false }: { format: DocFormat; c
               />
             ))}
           </div>
+          {/* 行号刻度 1 / 5 / 10 / … / 末行，与顶边的「N 字位」（设计稿 05e 屏 1c）：网格
+              开着时才有——它们标的是格子，不是尺寸。紧凑模式不画。 */}
+          {format.page.grid && !compact && (
+            <>
+              <div className={styles.rowNums} style={{ left: `calc(${px(m.left)} - 16px)`, top: px(m.top) }} aria-hidden>
+                {gridRowMarks(format.page.grid.linesPerPage).map((n) => (
+                  <span key={n} className={styles.rowNum} style={{ top: px((n - 0.5) * pitch) }}>{n}</span>
+                ))}
+              </div>
+              <span
+                className={styles.charColsTag}
+                style={{ right: px(m.right), top: px(m.top) }}
+                aria-hidden
+              >
+                {t("docxFormat.preview.charCols", { n: format.page.grid.charsPerLine })}
+              </span>
+            </>
+          )}
           <span className={styles.schematic}>SCHEMATIC</span>
         </div>
 
@@ -259,6 +277,14 @@ export function PaperPreview({ format, compact = false }: { format: DocFormat; c
       )}
     </div>
   );
+}
+
+/** 1 / 5 / 10 / 15 / … 加末行——点出第几行，不是每行都标。 */
+function gridRowMarks(lines: number): number[] {
+  const marks = [1];
+  for (let n = 5; n < lines; n += 5) marks.push(n);
+  if (lines > 1) marks.push(lines);
+  return marks;
 }
 
 /** 25.4 → "25.4"，26 → "26"。尺上的数字不该带无意义的小数点。 */
