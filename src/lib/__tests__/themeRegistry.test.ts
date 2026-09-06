@@ -25,16 +25,19 @@ const songkai = md("宋楷.css", { "--theme-name": "宋楷", "--theme-extends": 
 describe("buildRegistry — appearance", () => {
   it("lists built-ins first, then the folder's files by name", () => {
     const { ui: entries } = buildRegistry([mo, xuanzhi], [], both, DIRS);
-    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink", "墨", "宣纸"]);
+    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink", "frost", "indigo", "墨", "宣纸"]);
     expect(entries.find((e) => e.id === "墨"))
       .toMatchObject({ source: "user", scheme: "dark", extends: "night", usable: true, path: `${DIRS.user}/墨.css` });
   });
 
-  it("carries the second built-in pair, one per polarity", () => {
+  it("carries the non-base built-in pairs, one card per polarity", () => {
     const { ui: entries } = buildRegistry([], [], both, DIRS);
-    expect(entries.find((e) => e.id === "stone")).toMatchObject({ source: "builtin", scheme: "light", usable: true });
-    expect(entries.find((e) => e.id === "ink")).toMatchObject({ source: "builtin", scheme: "dark", usable: true });
-    // 石 / 墨 paint from tokens.css like 纸 / 夜 — nothing is installed for them.
+    for (const [id, scheme] of [["stone", "light"], ["ink", "dark"],
+                                ["frost", "light"], ["indigo", "dark"]] as const) {
+      expect({ [id]: entries.find((e) => e.id === id) })
+        .toMatchObject({ [id]: { source: "builtin", scheme, usable: true } });
+    }
+    // They paint from tokens.css like 纸 / 夜 — nothing is installed for them.
     expect(installableEntries(entries)).toEqual([]);
   });
 
@@ -76,7 +79,7 @@ describe("buildRegistry — appearance", () => {
 
   it("never lets a ui theme in from the project folder", () => {
     const { ui: entries, markdown } = buildRegistry([], [ui("evil.css", { "--theme-name": "x", "--theme-scheme": "dark" }, {}, [], DIRS.project)], both, DIRS);
-    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink"]);
+    expect(entries.map((e) => e.id)).toEqual(["paper", "night", "stone", "ink", "frost", "indigo"]);
     const shown = markdown.find((e) => e.id === "evil");
     expect(shown).toMatchObject({ source: "project", usable: false });
     expect(shown?.problems[0].reason).toBe("uiInProject");
@@ -159,7 +162,7 @@ describe("helpers", () => {
 
   it("counts usable cards, built-ins included", () => {
     const { ui: entries, markdown } = buildRegistry([mo, ui("半调.css", {})], [], { ...both, light: "gone" }, DIRS);
-    expect(usableCount(entries)).toBe(5);   // 纸 夜 石 墨 + 墨.css
+    expect(usableCount(entries)).toBe(7);   // 纸 夜 石 墨 霜 靛 + 墨.css
     expect(usableCount(markdown)).toBe(5);
   });
 
@@ -169,6 +172,7 @@ describe("helpers", () => {
     expect(displayThemeName(entries[0], false)).toBe("Paper");
     expect(displayThemeName(entries.find((e) => e.id === "宣纸")!, false)).toBe("宣纸");
     expect(displayThemeName(entries.find((e) => e.id === "stone")!, true)).toBe("石");
+    expect(displayThemeName(entries.find((e) => e.id === "indigo")!, true)).toBe("靛");
     expect(displayThemeName(markdown[0], true)).toBe("手稿");
   });
 });
