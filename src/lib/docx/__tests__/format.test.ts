@@ -7,6 +7,8 @@ import {
   gridToDocx,
   lineSpacingToTwip,
   mmToTwip,
+  numberingConflicts,
+  numberingPickBlocked,
   parseLineSpacing,
   parseSize,
   ptToHalfPt,
@@ -115,5 +117,37 @@ describe("内置预设", () => {
   it("每个预设的 id 唯一", () => {
     const ids = BUILTIN_FORMATS.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("编号组合：含上级的写法之上不能是中文计数", () => {
+  const L = (...ks: string[]) => ks as unknown as Parameters<typeof numberingConflicts>[0];
+
+  it("上面有「一、」就选不了 1.1；下面已经是 1.1 就选不了「一、」", () => {
+    const thesisOld = L("chinese", "decimalDotted", "decimalDotted", "decimalDotted");
+    expect(numberingPickBlocked(thesisOld, 1, "decimalDotted")).toBe("upperChinese");
+    expect(numberingPickBlocked(thesisOld, 0, "chinese")).toBe("lowerDotted");
+    expect(numberingPickBlocked(thesisOld, 0, "chineseParen")).toBe("lowerDotted");
+    // 换成阿拉伯数字就通了；H1 本身选 1.1 没有上级，永远可选。
+    expect(numberingPickBlocked(thesisOld, 0, "decimal")).toBeNull();
+    expect(numberingPickBlocked(thesisOld, 0, "decimalDotted")).toBeNull();
+  });
+
+  it("只看含上级那一串：中文计数在 1.1 之下、或夹着「不编号」都不拦", () => {
+    // 公文：一、（一）1.（1）——没有含上级的写法，中文随便选。
+    const gongwen = L("chinese", "chineseParen", "decimal", "decimalParen");
+    for (let i = 0; i < 4; i++) expect(numberingPickBlocked(gongwen, i, "chinese")).toBeNull();
+    // 1.1 之下再用中文：下级不把序号带上去，不拦。
+    expect(numberingPickBlocked(L("decimal", "decimalDotted", "chinese", "none"), 2, "chinese")).toBeNull();
+    // 中间那级不编号，不改变上级是中文这个事实。
+    expect(numberingPickBlocked(L("chinese", "none", "decimalDotted", "none"), 2, "decimalDotted")).toBe("upperChinese");
+  });
+
+  it("numberingConflicts 指出已存下的坏组合，内置预设一个都没有", () => {
+    expect(numberingConflicts(L("chinese", "decimalDotted", "decimalDotted", "decimalDotted"))).toEqual([1, 2, 3]);
+    expect(numberingConflicts(L("decimal", "decimalDotted", "chineseParen", "decimalDotted"))).toEqual([3]);
+    for (const { id, format } of BUILTIN_FORMATS) {
+      expect(numberingConflicts(format.headingNumbering.levels), id).toEqual([]);
+    }
   });
 });
