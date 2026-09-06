@@ -6,7 +6,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { NARRATOR_PRESET, ROLEPLAY_PRESET, presetFor } from "../presets";
+import { NARRATOR_PRESET, ROLEPLAY_PRESET, presetFor, subAgentsFor } from "../presets";
+import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagent";
 
 const SCENE_TOOLS = [
   "list_scenes", "read_scene", "search_scenes", "read_scene_summary", "read_scene_memory",
@@ -91,5 +92,47 @@ describe("presetFor", () => {
   it("maps each kind to its own preset", () => {
     expect(presetFor("character")).toBe(ROLEPLAY_PRESET);
     expect(presetFor("narrator")).toBe(NARRATOR_PRESET);
+  });
+});
+
+/**
+ * 白名单的回归测试，和上面那些同一个理由：将来有人加一种子代理的那一刻。
+ *
+ * 这条不变量曾经漏过一次——`routeTools` 里 `DELEGATE_KINDS.some(live)` 是四选
+ * 一，于是作者开着 longread 时，扮演角色一并拿到了 `delegate`，而那个子代理
+ * 的工具集正是 `read_file` / `search_text` / `list_files`。上面「cannot read
+ * the manuscript」那条断言当时是绿的：被绕过去的路径隔了一层间接。
+ */
+describe("subAgentsFor", () => {
+  const allLive: Record<SubAgentKind, SubAgentConfig> = Object.fromEntries(
+    SUBAGENT_KINDS.map((k) => [k, { kind: k, modelId: `m-${k}`, enabled: true }]),
+  ) as Record<SubAgentKind, SubAgentConfig>;
+
+  it("leaves a character only vision, whatever the author has switched on", () => {
+    const out = subAgentsFor("character", allLive);
+    expect(out.vision.enabled).toBe(true);
+    for (const kind of SUBAGENT_KINDS) {
+      if (kind === "vision") continue;
+      expect(out[kind].enabled).toBe(false);
+    }
+  });
+
+  /**
+   * 白名单而不是黑名单：下一种子代理不该需要有人记得回来改一行才不会漏进去。
+   * 这条断言看的是**新增的 kind 默认是关的**，而不是今天这份名单的内容。
+   */
+  it("is an allowlist — an unknown new kind arrives disabled", () => {
+    const withNewKind = {
+      ...allLive,
+      // 假装明天多了一种子代理——而且是还没写进 `SUBAGENT_KINDS` 的那一刻。
+      newfangled: { kind: "newfangled", modelId: "m-x", enabled: true },
+    } as unknown as Record<SubAgentKind, SubAgentConfig>;
+    const out = subAgentsFor("character", withNewKind);
+    expect((out as Record<string, SubAgentConfig>).newfangled.enabled).toBe(false);
+  });
+
+  // 旁白读稿子、翻资料、联网查证本来就是它的活，一个都不该被摘掉。
+  it("hands the narrator its subagents untouched", () => {
+    expect(subAgentsFor("narrator", allLive)).toBe(allLive);
   });
 });

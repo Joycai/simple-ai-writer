@@ -31,7 +31,7 @@ import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { summarizeForCompaction } from "../lib/agent/compactRun";
 import { compactTriggerFor } from "../lib/agent/compact";
-import { presetFor } from "../lib/roleplay/presets";
+import { presetFor, subAgentsFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
 import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/taskWorkspace";
@@ -541,7 +541,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       model.contextSize,
       contextUtilization,
       presetFor(agent.kind),
-      withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
+      subAgentsFor(
+        agent.kind,
+        withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
+      ),
       models,
     );
 
@@ -700,9 +703,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       }
 
       const preset = presetFor(agent.kind);
-      const effectiveSubs = withSessionOverrides(
-      subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
-    );
+      // 白名单在这里，不在 routeTools 里：`delegate` 该不该出现、`translate`
+      // 该不该追加、`resolveSubAgent` 放行哪些 kind，三件事读的都是这一份。
+      const effectiveSubs = subAgentsFor(agent.kind, withSessionOverrides(
+        subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
+      ));
       const routed = routeTools(preset, effectiveSubs, workspace, models);
 
       const result = await runAgent({
@@ -1391,9 +1396,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { useAiStore } = await import("./aiStore");
       const { models, activeModelId, subAgents } = useAiStore.getState();
       const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));
-      const subs = withSessionOverrides(
+      const subs = subAgentsFor(agent.kind, withSessionOverrides(
         subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
-      );
+      ));
       const { visionSubAgentModel } = await import("../lib/agent/subagent");
       // 正文已经常驻在上下文里的条目**不再内联第二份**：绑定块（或 system 层）
       // 一份、【引用资料】一份，是同一段文字在同一次请求里出现两遍，而且会一直
@@ -1456,7 +1461,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           model.contextSize,
           useAppStore.getState().contextUtilization,
           presetFor(agent.kind),
-          withSessionOverrides(subAgents, session.disabledSubAgents),
+          subAgentsFor(agent.kind, withSessionOverrides(subAgents, session.disabledSubAgents)),
           models,
         );
 

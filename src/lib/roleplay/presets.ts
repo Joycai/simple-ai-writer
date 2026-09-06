@@ -20,6 +20,7 @@
  */
 
 import type { TaskPreset } from "../agent/presets";
+import type { SubAgentConfig, SubAgentKind } from "../agent/subagent";
 
 export const ROLEPLAY_PRESET: TaskPreset = {
   id: "roleplay-character",
@@ -84,4 +85,49 @@ export const NARRATOR_PRESET: TaskPreset = {
 
 export function presetFor(kind: "character" | "narrator"): TaskPreset {
   return kind === "narrator" ? NARRATOR_PRESET : ROLEPLAY_PRESET;
+}
+
+/**
+ * 扮演角色认得的子代理——**白名单，只有 vision**。
+ *
+ * 这是不变量三的第二处落地，和「preset 里没有 scene 工具」同一条理由：隔离
+ * 是结构性的。02-design §8 建 workspace 的论证从头到尾只讲一件事——作者开了
+ * vision 子代理之后，`routeTools` 会把 `read_image` 摘掉，角色既不能自己看图
+ * 也不能委派给会看图的，看图能力凭空消失。对策本身是对的，但 `routeTools` 里
+ * 那句 `DELEGATE_KINDS.some(live)` 是**四选一**：只要 search / longread / pdf
+ * 里任何一个开着，扮演角色就一并拿到 `delegate`，而 longread 子代理的工具集
+ * 正是 `read_file` / `search_text` / `list_files`——这个 preset 开头刚说过一个
+ * 角色不该做的那件事，隔了一层间接又回来了。`translate` 那句 push 同理。
+ *
+ * 所以这里是白名单而不是黑名单：这个 bug 的形状就是「新加一种子代理，从一个
+ * `some()` 里漏进来」，而下一种子代理不该需要有人记得回来改这一行。
+ *
+ * 一并关掉的几种今天都不改变任何东西——`imagegen` 只让 `routeTools` 摘掉三个
+ * 这个 preset 本来就没有的画图工具，`writer` 要 `RouteOptions.handoff` 而
+ * roleplay 一次都没传过。关掉它们是为了让这份清单说的就是全部，而不是「今天
+ * 恰好等价」。
+ *
+ * 旁白**原样返回**：读稿子、翻资料、联网查证本来就是它的活。
+ *
+ * 每一处拿 subs 去算工具、算预算、或者解析子代理连接的地方都要过这一层，否则
+ * 三个数会各说各的：`routeTools` 给的工具集、`plannedToolTokens` 估的 schema
+ * 开销、`resolveSubAgent` 真正放行的 kind。
+ */
+export const CHARACTER_SUBAGENT_KINDS: readonly SubAgentKind[] = ["vision"];
+
+export function subAgentsFor(
+  kind: "character" | "narrator",
+  subs: Record<SubAgentKind, SubAgentConfig>,
+): Record<SubAgentKind, SubAgentConfig> {
+  if (kind === "narrator") return subs;
+  // 走**入参自己的键**而不是 `SUBAGENT_KINDS`：那样才真的是白名单。绕开
+  // `withSessionOverrides`（它要的是一份「关掉这些」的清单）也是为了这个——
+  // 从常量表推出来的关闭清单，对一个还没进那张表的 kind 是不设防的，而
+  // 「新加一种子代理」正是这条不变量唯一会被打破的场合。
+  const out = { ...subs };
+  for (const k of Object.keys(out) as SubAgentKind[]) {
+    if (CHARACTER_SUBAGENT_KINDS.includes(k)) continue;
+    if (out[k]) out[k] = { ...out[k], enabled: false };
+  }
+  return out;
 }
