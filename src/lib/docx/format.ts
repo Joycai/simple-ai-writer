@@ -412,7 +412,9 @@ const THESIS: DocFormat = {
     headerRule: true,
     differentFirstPage: true,
   },
-  headingNumbering: { enabled: true, levels: ["chinese", "decimalDotted", "decimalDotted", "decimalDotted"] },
+  // 1. 1.1 1.1.1 1.1.1.1——H1 必须是阿拉伯数字：含上级的写法把 %1 原样带进来，%1 按
+  // 第一级的格式渲染，第一级若是中文计数，Word 会把 H2 排成「一.1」。
+  headingNumbering: { enabled: true, levels: ["decimal", "decimalDotted", "decimalDotted", "decimalDotted"] },
 };
 
 /** 投标：仿宋四号，行距固定 24 磅，标题不分页（评标要连续翻）。 */
