@@ -253,6 +253,8 @@
   color: var(--color-text-dim);
 }
 .chipGhost { border-style: dashed; color: var(--color-text-kbd); }
+/* 截断用虚线边框加一行原字数，不用颜色（设计稿 04c 屏 2b）。 */
+.chipTruncated { border-style: dashed; }
 
 /* 位置词 / 「特征」/「全文」——比层芯片再小一档：它们说的是「它是什么」，
    而层芯片说的是「它带了多少」。 */
@@ -383,7 +385,13 @@
 
 /* ── 记忆区 ──
    斜体：这是他的口径，和稿面上的旁白同一个字形。底色再沉一格＝另一张纸上抄来的。 */
-.area { padding-top: 2px; }
+/* 三件事一起做才够重（设计稿 04c 屏 2d）：线断开、字改斜体、底色沉一格＝另一张纸上
+   抄来的。底色用 --color-bg-inset：浅色比稿上的 #F7F2E8 再深半步、深色正是稿上
+   TURN 1 的 #17130F——要的是「比 .body 的 surface 沉下去」这个方向，两套主题都对。 */
+.area {
+  padding: 8px 10px 10px 17px;
+  background: var(--color-bg-inset);
+}
 .areaRow { margin-top: 10px; }
 
 .areaName {
@@ -402,7 +410,31 @@
 
 /* ── 你 @ 的 ── */
 
-.refRow { display: flex; align-items: baseline; gap: 8px; margin-top: 9px; }
+.refRow { margin-top: 9px; }
+/* 引用的落点：refs 只有 name 与 dirPath，所以这一段不出现字数，出现的是它在知识库里的位置。 */
+.refPath {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-text-kbd);
+  word-break: break-all;
+}
+
+/* 行内动作（解除绑定 / 另选条目 / 改成绑定某条特征 / 看原因）：与「提高预算」同一形制。 */
+.actRow { display: flex; gap: 12px; margin-top: 5px; }
+.actLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-accent);
+  cursor: pointer;
+}
+.actLink:hover { border-bottom-color: var(--color-accent); }
 
 /* ── 没进去 ──
    整组只有原因芯片是有边框的，条目名反而降一档：落选组里「为什么」比「谁」重要。 */
@@ -525,4 +557,39 @@
   .facetTk { display: none; }
   .body { padding: 12px 12px 14px; }
   .facets { padding-left: 8px; }
+}
+
+/* ── 320px 的面板（容器 300）：常驻收成名单，「没进去」先给数（设计稿 04c 屏 2i）──
+   两份都渲染、显隐交给容器：名单是同一份数据的另一种排法，不是另一份数据。 */
+.residentList {
+  display: none;
+  margin-top: 8px;
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--color-text-primary);
+}
+.residentListSep { margin: 0 4px; color: var(--color-text-kbd); }
+.residentListKind {
+  margin: 0 6px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-text-kbd);
+}
+.dropsCompact { display: none; }
+/* 「已在上下文」不带框：它不是失败，画成芯片就成了第五种失败。 */
+.compactResident {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-text-soft);
+  border-bottom: 1px dotted var(--color-border-input);
+}
+
+@container rp-trace (max-width: 300px) {
+  .residentRows { display: none; }
+  .residentList { display: block; }
+  .dropsCompact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 10px; }
+  .drops:not(.dropsForced) .dropsFull { display: none; }
+  .dropsForced .dropsCompact { display: none; }
 }

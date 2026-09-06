@@ -19,7 +19,7 @@ import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "luci
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
+import { listArchives, loadPersonaCard, type ArchivedScene } from "../../lib/roleplay/store";
 import { currentSceneNo } from "../../lib/roleplay/scene";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
@@ -146,6 +146,7 @@ function ComposerMirror({ text, innerRef }: {
  */
 function TurnLedger({
   trace, log, traceOpen, logOpen, onToggleTrace, onToggleLog, onRaiseBudget, onOpenArea,
+  onUnbind, onEditBindings,
 }: {
   trace: TurnContextTrace | undefined;
   log: AgentEvent[] | undefined;
@@ -155,6 +156,8 @@ function TurnLedger({
   onToggleLog: () => void;
   onRaiseBudget: () => void;
   onOpenArea: () => void;
+  onUnbind: (path: string) => void;
+  onEditBindings: () => void;
 }) {
   const { t } = useTranslation();
   const steps = log?.filter((e) => e.kind === "tool-step").length ?? 0;
@@ -177,7 +180,13 @@ function TurnLedger({
         )}
       </div>
       {traceOpen && trace && (
-        <TraceBody trace={trace} onRaiseBudget={onRaiseBudget} onOpenArea={onOpenArea} />
+        <TraceBody
+          trace={trace}
+          onRaiseBudget={onRaiseBudget}
+          onOpenArea={onOpenArea}
+          onUnbind={onUnbind}
+          onEditBindings={onEditBindings}
+        />
       )}
       {logOpen && log && (
         <div className={styles.logBody}><AgentLog log={log} isRunning={false} compact /></div>
@@ -282,6 +291,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const retry = useRoleplayStore((s) => s.retry);
   const rewind = useRoleplayStore((s) => s.rewind);
   const dequeue = useRoleplayStore((s) => s.dequeue);
+  const updateAgent = useRoleplayStore((s) => s.updateAgent);
   const promote = useRoleplayStore((s) => s.promote);
   const toggleSubAgent = useRoleplayStore((s) => s.toggleSubAgent);
   const refreshBinding = useRoleplayStore((s) => s.refreshBinding);
@@ -384,6 +394,21 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const loreIndex = useLoreStore((s) => s.index);
   const fileTree = useProjectStore((s) => s.fileTree);
   const projectPath = useProjectStore((s) => s.projectPath);
+
+  /* 取材条上失效绑定那一行的「解除绑定」：摘掉这一条路径。扮演指令住在人设卡里而
+     不在 agent 上，而 updateAgent 的 draft 要它——读回来原样写回，别的字段照抄。 */
+  const unbindPath = useCallback(async (path: string) => {
+    if (!projectPath) return;
+    const instruction = await loadPersonaCard(projectPath, agent.id);
+    await updateAgent(agent.id, {
+      kind: agent.kind,
+      name: agent.name,
+      primaryDirPath: agent.primaryDirPath,
+      boundPaths: agent.boundPaths.filter((p) => p !== path),
+      modelId: agent.modelId,
+      instruction,
+    });
+  }, [projectPath, agent, updateAgent]);
   const mention = useMentionState();
 
   const models = useAiStore((s) => s.models);
@@ -1003,6 +1028,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                   onToggleLog={() => setOpenLog(openLog === turn.index ? null : turn.index)}
                   onRaiseBudget={raiseLoreBudget}
                   onOpenArea={() => setShowMemory(true)}
+                  onUnbind={(path) => void unbindPath(path)}
+                  onEditBindings={onEdit}
                 />
               ) : undefined}
             />
