@@ -731,3 +731,37 @@ export const PAGE_NUMBER_STYLES: readonly PageNumberStyle[] = ["none", "plain", 
 export const HEADING_NUMBER_FORMATS: readonly HeadingNumberFormat[] = [
   "none", "chinese", "chineseParen", "decimal", "decimalParen", "decimalDotted",
 ];
+
+/** 中文计数的两种写法——含上级的 `%1` 落在它们身上，Word 会排出「一.1」。 */
+export function isChineseNumbering(k: HeadingNumberFormat): boolean {
+  return k === "chinese" || k === "chineseParen";
+}
+
+/** 抽屉里一个下拉项为什么选不了。 */
+export type NumberingBlock = "upperChinese" | "lowerDotted";
+
+/**
+ * 这一级能不能选这种写法——抽屉里下拉项禁用的依据。
+ *
+ * 含上级的写法（1.1）把上面每一级的序号按**那一级的格式**带进来（lvlText `%1.%2`，
+ * `%1` 按第一级的 numFmt 渲染），所以中文计数不能出现在它之上：上面有「一、」就
+ * 不能选 1.1（`upperChinese`）；下面已经是 1.1，这里就不能选「一、」（`lowerDotted`）。
+ * null ＝ 可选。夹在中间的「不编号」不算数——它不参与那串 `%`。
+ */
+export function numberingPickBlocked(
+  levels: readonly HeadingNumberFormat[],
+  level: number,
+  kind: HeadingNumberFormat,
+): NumberingBlock | null {
+  if (kind === "decimalDotted" && levels.slice(0, level).some(isChineseNumbering)) return "upperChinese";
+  if (isChineseNumbering(kind) && levels.slice(level + 1).includes("decimalDotted")) return "lowerDotted";
+  return null;
+}
+
+/**
+ * 已经存下的坏组合（#505 之前复制出去的论文预设、手改过的 JSON）：下拉拦得住**选**，
+ * 拦不住存过的值，只能指出来。回含上级写法、且上面有中文计数的那些级（0 起）。
+ */
+export function numberingConflicts(levels: readonly HeadingNumberFormat[]): number[] {
+  return levels.flatMap((k, i) => (numberingPickBlocked(levels, i, k) === "upperChinese" ? [i] : []));
+}

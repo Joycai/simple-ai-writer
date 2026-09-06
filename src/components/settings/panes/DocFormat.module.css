@@ -547,6 +547,8 @@
   font-size: 10.5px;
   color: var(--stg-text-faint);
 }
+/* 这一级的编号组合已经坏了（含上级之上是中文计数）：暖色而不是红，指出来、不吓人。 */
+.echoWarm { color: var(--stg-text-warm); }
 
 .times { color: var(--stg-text-faint); font-size: 12px; }
 
@@ -813,6 +815,9 @@
   font-size: 10px;
   color: var(--stg-text-faint);
 }
+.tableFootNote { margin-top: 3px; color: var(--stg-text-warm); }
+/* 表里坏了的那一格：和面板里的回显同一种暖色。 */
+.cellConflict { color: var(--stg-text-warm); }
 
 /* 「开着的时候」——一块常驻说明 + 一行真实后果。中性灰、无红、无 ⚠（05h 1z · A3）。 */
 .onBlock {

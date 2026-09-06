@@ -36,6 +36,9 @@ import {
   PAGE_NUMBER_STYLES,
   headingNumberSample,
   headingNumberingLine,
+  isChineseNumbering,
+  numberingConflicts,
+  numberingPickBlocked,
   type HeadingNumberFormat,
   type PageNumberStyle,
 } from "../../../lib/docx/format";
@@ -87,6 +90,18 @@ export function DocFormatDrawer({
   const paper = paperMm(format.page);
   const indentMm = format.body.firstLineChars * format.body.sizePt * MM_PER_PT;
   const numberingOn = format.headingNumbering.enabled;
+  const numLevels = format.headingNumbering.levels;
+  // 已存下的坏组合（#505 之前复制出去的论文预设）：下拉拦得住选、拦不住存过的值，只能指出来。
+  const numConflicts = numberingOn ? numberingConflicts(numLevels) : [];
+  // 编号下拉旁那行 mono：这一级此刻要么已经坏了（warm），要么有项被拦要说一声为什么，要么就是「样例即选项」。
+  const numEcho = (lv: number): { text: string; warm: boolean } => {
+    const here = numberingPickBlocked(numLevels, lv, numLevels[lv]);
+    if (here === "upperChinese") return { text: t("docxFormat.drawer.numberingConflictDotted"), warm: true };
+    if (here === "lowerDotted") return { text: t("docxFormat.drawer.numberingConflictChinese"), warm: true };
+    if (numLevels.slice(lv + 1).includes("decimalDotted")) return { text: t("docxFormat.drawer.numberingNoChinese"), warm: false };
+    if (numLevels.slice(0, lv).some(isChineseNumbering)) return { text: t("docxFormat.drawer.numberingNoDotted"), warm: false };
+    return { text: t("docxFormat.drawer.numberingPick"), warm: false };
+  };
   const hasPn = format.headerFooter.pageNumber !== "none";
   const hasAny = hasPn || !!format.headerFooter.headerText.trim() || format.headerFooter.headerRule;
   const hfEmpty = !hasAny;
@@ -285,13 +300,18 @@ export function DocFormatDrawer({
                   {i === 0 && format.headerFooter.restartEachChapter && format.headerFooter.pageNumber !== "none"
                     ? <span className={styles.cellDim}>{t("docxFormat.drawer.sectioned")}</span>
                     : <span>{h.pageBreakBefore ? t("common.yes", { defaultValue: "是" }) : t("common.no", { defaultValue: "否" })}</span>}
-                  <span className={!numberingOn || format.headingNumbering.levels[i] === "none" ? styles.cellDim : undefined}>
-                    {numberingOn ? headingNumberSample(format.headingNumbering.levels[i], i) : "—"}
+                  <span className={!numberingOn || numLevels[i] === "none" ? styles.cellDim : numConflicts.includes(i) ? styles.cellConflict : undefined}>
+                    {numberingOn ? headingNumberSample(numLevels[i], i) : "—"}
                   </span>
                 </button>
               ))}
             </div>
             <div className={styles.tableFoot}>{t("docxFormat.drawer.numberingFoot")}</div>
+            {numConflicts.length > 0 && (
+              <div className={`${styles.tableFoot} ${styles.tableFootNote}`}>
+                {t("docxFormat.drawer.numberingConflictFoot", { levels: numConflicts.map((i) => `H${i + 1}`).join(" / ") })}
+              </div>
+            )}
             {/* 「不要手写序号」给一个反例：比回显重（一块常驻说明 + 一行真实后果），比警告轻（中性灰、
                 无红、无 ⚠）。这里不做检测，也不替作者删——码里确实没有，稿子不许暗示有（05h 1z · A3）。 */}
             {numberingOn && (
@@ -361,11 +381,14 @@ export function DocFormatDrawer({
                       patch({ headingNumbering: { ...format.headingNumbering, levels } });
                     }}
                   >
+                    {/* 含上级的写法和它之上的中文计数互斥：选不了的项灰掉，旁边的 mono 说为什么。 */}
                     {HEADING_NUMBER_FORMATS.map((k) => (
-                      <option key={k} value={k}>{headingNumberSample(k, level)}</option>
+                      <option key={k} value={k} disabled={numberingPickBlocked(numLevels, level, k) !== null}>
+                        {headingNumberSample(k, level)}
+                      </option>
                     ))}
                   </select>
-                  <span className={styles.echo}>{t("docxFormat.drawer.numberingPick")}</span>
+                  <span className={`${styles.echo} ${numEcho(level).warm ? styles.echoWarm : ""}`}>{numEcho(level).text}</span>
                 </Field>
               )}
             </div>
