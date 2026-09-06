@@ -804,6 +804,57 @@ async function applyProposal(
       };
     }
 
+    case "transcribe": {
+      // The opposite of `convert`: nothing has run yet. Approval *is* the
+      // paid step — upload, submit, poll, write — and the three stages report
+      // through `onProgress` so the tool row shows where the wait is
+      // (docs/feature/asr/01-execution-plan.md §5).
+      const asr = await import("../lib/asr");
+      const conn = await asr.resolveAsrConn();
+      if (asr.isAsrUnavailable(conn)) throw new Error(conn.error);
+      const { formatBytes, formatClock } = asr;
+      const label = (p: import("../lib/asr").TranscribeProgress): string => {
+        switch (p.phase) {
+          case "reading": return "读取中";
+          case "uploading": return `上传中 · ${formatBytes(proposal.bytes)}`;
+          case "queued": return "排队中";
+          case "running": return p.polls ? `识别中 · 第 ${p.polls} 次查询` : "识别中";
+          case "downloading": return "取回结果";
+        }
+      };
+      const outcome = await asr.transcribeFile({
+        projectPath: useProjectStore.getState().projectPath ?? "",
+        sourcePath: proposal.sourcePath,
+        conn,
+        options: {
+          diarization: proposal.diarization,
+          ...(proposal.speakerCount ? { speakerCount: proposal.speakerCount } : {}),
+          ...(proposal.languageHints?.length ? { languageHints: proposal.languageHints } : {}),
+        },
+        onProgress: (p) => onProgress?.({ label: label(p) }),
+        signal,
+      });
+      const { isAsrTimestampsEnabled } = asr;
+      const landed = await asr.writeTranscript(proposal.sourcePath, outcome.transcript, {
+        modelId: conn.modelId,
+        timestamps: isAsrTimestampsEnabled(),
+        speakers: proposal.diarization,
+      });
+      await useProjectStore.getState().refreshFileTree();
+      {
+        const projectPath = useProjectStore.getState().projectPath;
+        if (projectPath) await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
+      }
+      const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
+      return {
+        resultPath: landed,
+        report: [
+          `Transcribed ${proposal.sourcePath} to ${landed} (${formatClock(outcome.transcript.durationMs)}, ${outcome.transcript.sentences.length} sentences${outcome.transcript.speakers ? ", speakers labelled" : ""}). Read it with read_file.`,
+          outcome.cached ? "Served from the transcription cache — the file had been transcribed before with the same settings, so nothing was billed." : `Billed ${seconds} seconds of audio.`,
+        ].join("\n"),
+      };
+    }
+
     case "delete":
       // The backup is what makes an approved deletion recoverable, so it is
       // not optional. The entry — file or folder — is renamed into backups whole.

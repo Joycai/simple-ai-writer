@@ -34,6 +34,8 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
+import type { TranscribeProposal } from "../../lib/agent/registry";
+import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -85,6 +87,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleXlsx", { defaultValue: "导出 Excel" });
     case "convert":
       return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
+    case "transcribe":
+      return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
   }
 }
 
@@ -145,6 +149,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // How much text came out — for a scan that is the number that says
       // "nothing", which the body then explains.
       return `${kilo(proposal.chars)} ${chars}`;
+    case "transcribe":
+      // The size of what is about to be uploaded — the only number known
+      // before the paid step (设计稿 02f 屏 1e: mono right column "2.4 MB").
+      return formatBytes(proposal.bytes);
   }
 }
 
@@ -783,7 +791,96 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <XlsxBody proposal={proposal} />;
     case "convert":
       return <ConvertBody proposal={proposal} />;
+    case "transcribe":
+      return <TranscribeBody proposal={proposal} />;
   }
+}
+
+/**
+ * 「要不要花这笔钱」——和 `convert` 那张「已经转好了，看一眼再落盘」相反，这张卡
+ * 出现时什么都还没跑（设计稿 02f 屏 1e）。四行按「是什么 → 花多少 → 去哪里 →
+ * 落在哪」排；估价只有 WAV 算得出时长且模型行填了单价时才有数，否则虚线 + 一句
+ * 「转写完成后按实际秒数计」。「去处」那句是隐私事实，陈述句、不加色、不进 tooltip。
+ *
+ * 说话人分离是**本次**的值：默认来自子代理里的偏好，作者在卡上改的只管这一次。
+ * 直接写回 `proposal.diarization`——apply 读的就是这个对象，而不是这张卡的 state。
+ */
+function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
+  const { t } = useTranslation();
+  const [dia, setDia] = useState(proposal.diarization);
+  const video = isVideoExt(proposal.ext);
+  const sizeLine = proposal.seconds !== null
+    ? `${formatBytes(proposal.bytes)} · ${formatClock(proposal.seconds * 1000)}`
+    : t("ai.approval.transcribeNoLength", { size: formatBytes(proposal.bytes), ext: proposal.ext, defaultValue: "{{size}} · {{ext}} 上传前算不出时长" });
+  const estimate = proposal.estimate !== null && proposal.seconds !== null
+    ? {
+        v: `¥ ${proposal.estimate.toFixed(2)}`,
+        sub: t("ai.approval.transcribeEstimateSub", {
+          s: Math.round(proposal.seconds).toLocaleString(),
+          p: proposal.pricePerSecond,
+          defaultValue: "{{s}} 秒 × ¥{{p}} / 秒",
+        }),
+        dash: false,
+      }
+    : {
+        v: t("ai.approval.transcribeEstimateUnknown", { defaultValue: "转写完成后按实际秒数计" }),
+        sub: proposal.pricePerSecond === undefined
+          ? t("ai.approval.transcribeNoPrice", { defaultValue: "模型行没填每秒单价 · 用量页记不了这笔钱" })
+          : t("ai.approval.transcribeRate", { defaultValue: "约 ¥0.8 / 小时" }),
+        dash: true,
+      };
+  const rows: { k: string; v: string; sub?: string; dash?: boolean }[] = [
+    { k: t("ai.approval.transcribeFile", { defaultValue: "文件" }), v: proposal.sourceLabel, sub: sizeLine },
+    { k: t("ai.approval.transcribeEstimate", { defaultValue: "估价" }), ...estimate },
+    {
+      k: t("ai.approval.transcribeGoesTo", { defaultValue: "去处" }),
+      v: video
+        ? t("ai.approval.transcribeGoesToVideo", { defaultValue: "上传到阿里云临时存储（会抽取音轨），48 小时后自动清理。由千问录音文件识别模型处理。" })
+        : t("ai.approval.transcribeGoesToText", { defaultValue: "上传到阿里云临时存储，48 小时后自动清理。由千问录音文件识别模型处理。" }),
+    },
+    {
+      k: t("ai.approval.transcribeWrites", { defaultValue: "写到" }),
+      v: projectRelative(proposal.path),
+      sub: t("ai.approval.transcribeWritesSub", { defaultValue: "已有同名则加序号" }),
+    },
+  ];
+  return (
+    <>
+      <div className={styles.emptyNote}>
+        {t("ai.approval.transcribeLead", { defaultValue: "这一步会上传文件并按秒计费；任务提交后不能取消。" })}
+      </div>
+      <div className={styles.specRows}>
+        {rows.map((r) => (
+          <div key={r.k} className={styles.specRow}>
+            <span className={styles.specKey}>{r.k}</span>
+            <span className={styles.specBody}>
+              <span className={r.dash ? styles.specValDash : styles.specVal}>{r.v}</span>
+              {r.sub && <span className={styles.specSub}>{r.sub}</span>}
+            </span>
+          </div>
+        ))}
+        <label className={styles.specRow}>
+          <span className={styles.specKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
+          <span className={styles.specBody}>
+            <span className={styles.specToggleLine}>
+              <input
+                type="checkbox"
+                checked={dia}
+                onChange={(e) => {
+                  proposal.diarization = e.target.checked;
+                  setDia(e.target.checked);
+                }}
+              />
+              <span className={styles.specVal}>{t("ai.approval.transcribeDiarization", { defaultValue: "说话人分离" })}</span>
+            </span>
+            <span className={styles.specSub}>
+              {t("ai.approval.transcribeDiarizationSrc", { defaultValue: "默认来自 子代理 → 音频转写 · 只改这一次 · 开了多约 2 秒，多一列「说话人 N」" })}
+            </span>
+          </span>
+        </label>
+      </div>
+    </>
+  );
 }
 
 export function ApprovalCard({ item }: { item: PendingApproval }) {
@@ -910,7 +1007,9 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           onClick={() => { setDeciding(true); void approve(proposal.id); }}
           disabled={deciding}
         >
-          {t("ai.approval.approve")}
+          {proposal.kind === "transcribe"
+            ? t("ai.approval.approveTranscribe", { defaultValue: "批准并转写" })
+            : t("ai.approval.approve")}
         </button>
       </div>
     </div>

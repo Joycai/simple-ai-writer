@@ -10,7 +10,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
-import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
+import { costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { withCurrentTime } from "../context/clock";
@@ -26,10 +26,10 @@ import { baseName } from "../paths";
 
 export type SubAgentKind =
   | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer"
-  | "retrieval";
+  | "retrieval" | "asr";
 
 export const SUBAGENT_KINDS: readonly SubAgentKind[] =
-  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer", "retrieval"];
+  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer", "retrieval", "asr"];
 
 /**
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
@@ -64,9 +64,15 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * fed back through the ordinary substring matcher — deliberately, because that
  * keeps the injection report saying 「由「星辉之杖」命中」 instead of a score the
  * author cannot act on. See docs/feature/lore/lore-retrieval-plan.md §5.
+ *
+ * `asr` is excluded on imagegen's grounds: a transcription model's endpoint
+ * takes an audio URL, not messages — there is no conversation to delegate.
+ * The assistant's interface to it is the `transcribe_audio` tool (a proposal
+ * card *before* the paid call, docs/feature/asr/01-execution-plan.md §5), and
+ * the file tree's 右键 reaches the same `lib/asr/run` directly.
  */
 export type DelegateKind =
-  Exclude<SubAgentKind, "imagegen" | "translate" | "writer" | "retrieval">;
+  Exclude<SubAgentKind, "imagegen" | "translate" | "writer" | "retrieval" | "asr">;
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
@@ -223,14 +229,20 @@ export function subAgentModel(
   // plausible; nothing errors, and the author reads a worse translation as the
   // feature working.
   if (kind === "translate" && !isTranslateOnly(model)) return null;
+  // Same shape as translate: only a model *declared* a transcription model
+  // may be bound here. The failure is loud rather than silent this time (the
+  // ASR endpoint 400s on a chat model's id), but the declaration is still the
+  // one place the author says "this row is the transcriber".
+  if (kind === "asr" && !isAsrOnly(model)) return null;
   // The writer is the one kind with no capability to test for — any text model
   // can write — so the check runs the other way, excluding what cannot: an
   // image/video model has no prose to give, and a translation-only model is the
   // silent failure of the set. Sakura bound here reports no error at all; it
   // just returns the work order back, translated. That is a worse outcome than
-  // an unset switch, so it is refused rather than warned about.
+  // an unset switch, so it is refused rather than warned about. A
+  // transcription-only model has no prose to give either.
   if (kind === "writer" && (model.type === "image" || model.type === "video")) return null;
-  if (kind === "writer" && isTranslateOnly(model)) return null;
+  if (kind === "writer" && (isTranslateOnly(model) || isAsrOnly(model))) return null;
   return model;
 }
 

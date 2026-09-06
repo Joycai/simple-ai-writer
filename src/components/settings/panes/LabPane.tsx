@@ -7,6 +7,7 @@ import { isXlsxExportEnabled, setXlsxExportEnabled } from "../../../lib/xlsx/fla
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
+import { isAsrEnabled, setAsrEnabled } from "../../../lib/asr/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
 import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
@@ -50,6 +51,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const [skillStateOn, setSkillStateOn] = useState(isSkillStateEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
+  const [asrOn, setAsrOn] = useState(isAsrEnabled());
 
   const toggleDocx = (enabled: boolean) => {
     setDocxExportEnabled(enabled);
@@ -148,12 +150,30 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
           foot={comfyOn
             ? goNext("providers-models", "systemSettings.tabs.providersModels", "systemSettings.lab.goComfyHint")
             : undefined}
-          last
         >
           <Toggle
             on={comfyOn}
             onChange={(next) => { setComfyUiEnabled(next); setComfyOn(next); }}
             label={t("systemSettings.lab.comfyuiLabel")}
+          />
+        </Row>
+        {/* 音频转写（设计稿 02f 屏 1a）：住在日中翻译旁边——同样是一个 Beta 开关
+            + 一个只会干一件事的专用模型 + 子代理里的绑定。区别是它不在本机跑、
+            不免费，所以说明里把「上传到阿里云临时存储 · 按秒计费」写成陈述句。
+            关着时的补充句说的是入口**不存在**（不是禁用）。 */}
+        <Row
+          top
+          title={t("systemSettings.lab.asrLabel")}
+          desc={t("systemSettings.lab.asrHint")}
+          foot={asrOn
+            ? goNext("subagents", "systemSettings.tabs.subagents", "systemSettings.lab.goAsrHint")
+            : <div className={ui.rowDesc}>{t("systemSettings.lab.asrOffHint")}</div>}
+          last
+        >
+          <Toggle
+            on={asrOn}
+            onChange={(next) => { setAsrEnabled(next); setAsrOn(next); }}
+            label={t("systemSettings.lab.asrLabel")}
           />
         </Row>
       </Section>

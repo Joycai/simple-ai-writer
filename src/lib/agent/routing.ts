@@ -20,6 +20,7 @@ import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
+import { isAsrEnabled } from "../asr/flag";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
@@ -188,6 +189,11 @@ function route(
   // see it, which is why that file gains its own assertion on the routed set.
   if (isTranslateEnabled() && live("translate") && !tools.includes("translate")) {
     tools.push("translate");
+  }
+  // Same shape as translate: a Beta flag and a bound `asr` model, both
+  // unknowable at preset time; off means absent, never a tool that refuses.
+  if (isAsrEnabled() && live("asr") && !tools.includes("transcribe_audio")) {
+    tools.push("transcribe_audio");
   }
 
   // Appended for the surfaces that can render the question card (chat, the

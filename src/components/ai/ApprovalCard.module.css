@@ -591,3 +591,60 @@
   color: var(--color-text-hint);
   white-space: nowrap;
 }
+
+/* 转写卡的四行（设计稿 02f 屏 1e）：eyebrow 小字 + 值 + 一行 mono 副注。估价算不出
+   时值用虚线记号——「什么都没发」的同一枚记号，文字说明为什么（05c 的规矩）。 */
+.specRows {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  row-gap: 10px;
+  column-gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0 var(--space-1);
+}
+
+.specKey {
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-hint);
+}
+
+.specBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.specVal {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.specValDash {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  border-bottom: 1px dashed var(--color-border-strong);
+  align-self: flex-start;
+}
+
+.specSub {
+  font: 400 10.5px/1.4 var(--font-mono);
+  color: var(--color-text-hint);
+  overflow-wrap: anywhere;
+}
+
+.specToggleLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.specToggleLine input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}

@@ -125,6 +125,9 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
 | [import-images-plan.md](feature/import-images-plan.md) | `shipped` | 导入 PDF/docx/pptx 时抽取内嵌图片（PR #389/#390/#392）：`ConvertResult` 接缝、pdfjs opList 抽取 + y 坐标定位、落 `assets/<文档名>/`；去重/装饰过滤/扫描件三个决策，矢量图明确不做；实现出入（mammoth 双 key 输入等）在 §8，pptx 的 Rust 侧抽取在 §9，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10 |
 | [image-normalize-plan.md](feature/image-normalize-plan.md) | `partial` | 入模图片规范化：超 4096 长边的图在**发送前**降采样（已发），HEIC 转码**明确不做**（LGPL，§3.0）。为什么阈值是 4096 而不是 2048、为什么没有 per-provider 上限表，以及三个读图函数按去向分开的理由 |
+| [asr/00-research.md](feature/asr/00-research.md) | `research` | 音频转写（千问 / DashScope 录音文件识别）：临时上传 → 异步任务 → 轮询 → 结果 JSON 四步实测走通；两代 filetrans 模型请求 / 结果形状的差异表；落点照翻译 Beta（专用模型不进对话候选、`asr` 子代理档位、右键 + L2 工具两个入口）；探测脚本在同目录，真实结果夹具在 `src/lib/asr/__tests__/fixtures/` |
+| [asr/01-execution-plan.md](feature/asr/01-execution-plan.md) | `shipped` (Beta flag, PR #514) | 五个开放问题的默认落定（只做异步、右键先确认、热词先测、默认 qwen-audio-3.0、时间戳开 / 分离关）、六条不变量、四片分片（PR 4 热词未做）；为什么**不**从 `image.ts` 抽轮询循环 |
+| [asr/02-ui-brief.md](feature/asr/02-ui-brief.md) | `shipped` (设计稿 `02f`) | 任务书原文 + 设计稿的答复（五个张力、货币开放问题）+ 实现出入：确认条就地长在行下而不是浮卡、busy 走面板级条、审批卡批准后不在卡内变进度 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
 | [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |
@@ -147,6 +150,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [thinking-verification.md](issues/thinking-verification.md) | `open` | Thinking support is implemented and unit-tested across three families, but unit tests prove *what we sent*, not *what the endpoint did*. MiniMax-M3 cleared part of §2.6; the rest stands |
 | [css-modules-global-keyframes.md](issues/css-modules-global-keyframes.md) | `fixed` | CSS Modules 哈希化 animation-name、global.css 的 keyframes 悬空 —— 40+ 处入场/spinner 动画从未播过。已切 LightningCSS（`cssModules.animation: false`）修复；待一轮真机目检 |
 | [motion-enter-only-hidden-tab.md](issues/motion-enter-only-hidden-tab.md) | `clarified` | 「enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`」是**测量产物**：预览面板标签页 `visibilityState === 'hidden'`，rAF 不派发。代码无缺陷，实测读数与正确的验动画方法记在文内 |
+| [asr-currency.md](issues/asr-currency.md) | `open` | 转写按人民币计费，却写进了 `cost_usd` 列：用量页合计是两种货币的和。两条出路（用量表记货币 / 设置里定汇率），作者定为不急的待办 |
 | [tiered-pricing.md](issues/tiered-pricing.md) | `open` | 千问按输入长度分档计价（顶档 3×），平价 `priceIn/Out` 表达不了；显式缓存写入价同缺。只失真成本统计，典型任务不跨 256K 门槛，故仅留档 + 设计草案 |
 
 ---

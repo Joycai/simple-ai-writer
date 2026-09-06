@@ -37,6 +37,7 @@ beforeEach(() => {
       translate: { kind: "translate", modelId: null, enabled: false },
       writer: { kind: "writer", modelId: null, enabled: false },
       retrieval: { kind: "retrieval", modelId: null, enabled: false },
+      asr: { kind: "asr", modelId: null, enabled: false },
     },
   });
 });
@@ -92,6 +93,7 @@ describe("aiStore.removeProvider", () => {
       translate: { kind: "translate", modelId: null, enabled: false },
       writer: { kind: "writer", modelId: null, enabled: false },
       retrieval: { kind: "retrieval", modelId: null, enabled: false },
+      asr: { kind: "asr", modelId: null, enabled: false },
       },
     });
 

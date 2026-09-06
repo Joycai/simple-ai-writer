@@ -26,6 +26,7 @@ import {
   listProviders,
   modelUpsert,
   parseTranslateFormat,
+  parseAsrFormat,
   promptUpsert,
   providerUpsert,
   type Model,
@@ -268,6 +269,9 @@ export function parseConfigBundle(
       // newer build must degrade to "an ordinary model" rather than mark a
       // usable model translation-only and hide it from every picker.
       translateFormat: parseTranslateFormat(r.translateFormat),
+      // Same degradation for a transcription format this build doesn't know.
+      asrFormat: parseAsrFormat(r.asrFormat),
+      pricePerSecond: typeof r.pricePerSecond === "number" ? r.pricePerSecond : undefined,
       // Unknown value → auto, which sends what an undeclared model always sent.
       structuredOutput: parseStructuredOutputMode(r.structuredOutput),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
