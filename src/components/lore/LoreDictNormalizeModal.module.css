@@ -261,4 +261,4 @@
   color: var(--color-text-primary);
   caret-color: var(--color-sienna);
 }
-.srcArea::selection { background: var(--color-sienna-tint, rgba(160, 82, 45, 0.18)); }
+.srcArea::selection { background: var(--color-accent-tint-strong); }

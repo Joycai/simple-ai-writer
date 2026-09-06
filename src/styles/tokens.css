@@ -1,667 +1,982 @@
-/* Design tokens — Manuscript theme. All UI reads from these vars, never raw values. */
+/* Design tokens — Manuscript theme. All UI reads from these vars, never raw values.
 
-:root {
-  /* Spacing */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 56px;
+   ── Five cascade layers, declared once ─────────────────────────────────────
+   The order below is the whole theme system's contract; nothing after it
+   depends on which stylesheet was injected when (docs/feature/theme-system-plan.md §4):
 
-  /* Typography */
-  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
-  --font-size-xs: 11px;
-  --font-size-sm: 12px;
-  --font-size-md: 13px;
-  /* Settings rows, nav items — the reading size between chrome (13) and a
-     heading (17). Added for the settings page; reuse it, don't inline 14px. */
-  --font-size-base: 14px;
-  /* Generated/agent prose in the AI surfaces — Spectral at reading size,
-     between base (14) and lg (17). Pairs with line-height 1.85. */
-  --font-size-reading: 15px;
-  --font-size-lg: 17px;
-  --font-size-xl: 22px;
-  --font-size-2xl: 32px;
-  --font-size-3xl: 44px;
+     tokens.scale   L0 · theme-independent scales — spacing, radius, fonts,
+                    easing, layout. A theme file may not touch these.
+     tokens.derive  the DEFAULT of every derived token, written as var() /
+                    color-mix() over the core. This is what a user theme that
+                    only wrote twelve lines stands on.
+     tokens.scheme  the two built-in bases, keyed by [data-scheme]: the CORE
+                    contract (37 tokens) every theme is expected to write.
+     tokens.theme   the built-in themes' hand-tuned values for derived tokens,
+                    keyed by [data-theme="paper" | "night"]. A user theme sets a
+                    different data-theme, so none of these reach it — its
+                    derived tokens fall back to tokens.derive, which is why a
+                    blue accent recolours the settings switches and the sync
+                    risk rails instead of leaving them sienna.
+     tokens.user    reserved for a theme file installed at runtime (S2).
 
-  /* Radius — manuscript is square-cornered (设计稿 01a/05a: 全局无圆角).
-     Every module reads var(--radius-*), so zeroing the scale here squares the
-     whole app at once. The only sanctioned circles are dot indicators,
-     spinners and radio marks — those read --radius-round (or
-     border-radius: 50%) explicitly, never the scale. Switch knobs are
-     square too (设计稿 05a). */
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
-  --radius-pill: 0;
-  --radius-round: 999px; /* knobs, dots, circular icon badges only */
+   Which tokens are hand-tuned and which are derive-only is mechanical, not
+   taste: a derived token is derive-only when its formula reproduces today's
+   value *exactly* in both schemes (pure var() aliases); every other one keeps
+   its literal in tokens.theme so the built-ins do not move by a pixel.
+   `src/lib/__tests__/themeContract.test.ts` pins the structure. */
+@layer tokens.scale, tokens.derive, tokens.scheme, tokens.theme, tokens.user;
 
-  /* Easing */
-  --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+/* ═══════════════════════ L0 · SCALES (theme-independent) ═══════════════════ */
+@layer tokens.scale {
+  :root {
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 40px;
+    --space-9: 56px;
 
-  /* Transitions */
-  --transition-fast: 120ms var(--ease-out);
-  --transition-base: 200ms var(--ease-out);
-  --transition-slow: 320ms var(--ease-out);
+    /* Typography */
+    --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-md: 13px;
+    /* Settings rows, nav items — the reading size between chrome (13) and a
+       heading (17). Added for the settings page; reuse it, don't inline 14px. */
+    --font-size-base: 14px;
+    /* Generated/agent prose in the AI surfaces — Spectral at reading size,
+       between base (14) and lg (17). Pairs with line-height 1.85. */
+    --font-size-reading: 15px;
+    --font-size-lg: 17px;
+    --font-size-xl: 22px;
+    --font-size-2xl: 32px;
+    --font-size-3xl: 44px;
 
-  /* Layout */
-  --titlebar-height: 48px;
-  --icon-rail-width: 56px;
-  --ai-rail-width: 48px;
-  --sidebar-width: 280px;
-  --right-panel-width: 280px;  /* legacy alias retained */
-  --tab-bar-width: 56px;       /* legacy alias retained */
-  --status-bar-height: 34px;   /* editor bottom strip */
-  --editor-max-width: 680px;
+    /* Radius — manuscript is square-cornered (设计稿 01a/05a: 全局无圆角).
+       Every module reads var(--radius-*), so zeroing the scale here squares the
+       whole app at once. The only sanctioned circles are dot indicators,
+       spinners and radio marks — those read --radius-round (or
+       border-radius: 50%) explicitly, never the scale. Switch knobs are
+       square too (设计稿 05a). */
+    --radius-sm: 0;
+    --radius-md: 0;
+    --radius-lg: 0;
+    --radius-xl: 0;
+    --radius-pill: 0;
+    --radius-round: 999px; /* knobs, dots, circular icon badges only */
 
-  /* Letter spacing */
-  --letter-label: 0.22em;       /* uppercase Inter Tight labels */
-  --letter-eyebrow: 0.4em;      /* chapter eyebrow */
-  --letter-tracked: 0.34em;     /* dramatic centered serif lines */
-  --letter-handle: 0.45em;      /* collapsed AI handle vertical text */
-  --letter-ornament: 0.7em;     /* "— · —" chapter separator ornaments */
+    /* Easing */
+    --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
-  /* Settings page heading serif (设计稿 05a — the settings surface reads in
-     Source Serif 4 / Noto Serif SC rather than Spectral). */
-  --font-serif-settings: "Source Serif 4", "Noto Serif SC", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    /* Transitions */
+    --transition-fast: 120ms var(--ease-out);
+    --transition-base: 200ms var(--ease-out);
+    --transition-slow: 320ms var(--ease-out);
+
+    /* Layout */
+    --titlebar-height: 48px;
+    --icon-rail-width: 56px;
+    --ai-rail-width: 48px;
+    --sidebar-width: 280px;
+    --right-panel-width: 280px;  /* legacy alias retained */
+    --tab-bar-width: 56px;       /* legacy alias retained */
+    --status-bar-height: 34px;   /* editor bottom strip */
+    --editor-max-width: 680px;
+
+    /* Letter spacing */
+    --letter-label: 0.22em;       /* uppercase Inter Tight labels */
+    --letter-eyebrow: 0.4em;      /* chapter eyebrow */
+    --letter-tracked: 0.34em;     /* dramatic centered serif lines */
+    --letter-handle: 0.45em;      /* collapsed AI handle vertical text */
+    --letter-ornament: 0.7em;     /* "— · —" chapter separator ornaments */
+
+    /* Settings page heading serif (设计稿 05a — the settings surface reads in
+       Source Serif 4 / Noto Serif SC rather than Spectral). */
+    --font-serif-settings: "Source Serif 4", "Noto Serif SC", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+
+    /* Glass blur is the same in both schemes — a scale, not a colour. */
+    --glass-blur: blur(16px);
+  }
+
+  /* ───────── Font schemes (CJK × Western pairings) ─────────
+     Selected via `<html data-font="…">`. Each overrides the serif
+     (body/editor) and sans (UI) stacks. System fonts only — nothing
+     is bundled, so every stack degrades gracefully across OSes. These
+     blocks follow :root in the same layer, so equal-specificity rules win
+     by source order. */
+
+  /* 1 · Manuscript (default) — Spectral serif + Inter Tight UI */
+  [data-font="manuscript"] {
+    --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* 2 · Song / book — classic Western serif + CJK Song/Ming for the body */
+  [data-font="song"] {
+    --font-serif: Georgia, Cambria, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, SimSun, serif;
+    --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* 3 · Hei / modern — whole app in sans; editor body uses CJK Hei + Western sans */
+  [data-font="hei"] {
+    --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  }
+
+  /* 4 · Kai / manuscript hand — old-style Western serif + CJK Kai */
+  [data-font="kai"] {
+    --font-serif: "Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif;
+    --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
 }
 
-/* ───────── Font schemes (CJK × Western pairings) ─────────
-   Selected via `<html data-font="…">`. Each overrides the serif
-   (body/editor) and sans (UI) stacks. System fonts only — nothing
-   is bundled, so every stack degrades gracefully across OSes. These
-   blocks follow :root, so equal-specificity rules win by source order. */
+/* ══════════════════ DERIVED · defaults over the core ═══════════════════════
+   Every token below is what a theme file gets when it did not write it. The
+   built-in themes override most of these in tokens.theme with the designer's
+   exact values; the formulas here are for themes that never had a designer.
 
-/* 1 · Manuscript (default) — Spectral serif + Inter Tight UI */
-[data-font="manuscript"] {
-  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+   Two ways to say "one step": mixing a ground toward `--color-text-primary`
+   moves toward the foreground in either scheme (darker on paper, lighter at
+   night), so those formulas are scheme-neutral. A step *away* from the
+   foreground (a lighter card on paper, a darker input at night) has no
+   neutral spelling, so those live in the two [data-scheme] blocks below. */
+@layer tokens.derive {
+  :root {
+    /* Legacy aliases */
+    --color-ink:            var(--color-text-primary);
+    --color-paper:          var(--color-bg-base);
+    --color-card:           var(--color-bg-surface);
+    --color-accent:         var(--color-sienna);
+    --color-accent-hover:   var(--color-sienna-hover);
+    --color-accent-start:   var(--color-sienna);
+    --color-accent-end:     var(--color-amber);
+    --color-accent-ring:    color-mix(in srgb, var(--color-sienna) 32%, transparent);
+    --color-accent-tint:    color-mix(in srgb, var(--color-sienna) 12%, transparent);
+    --color-accent-tint-strong: color-mix(in srgb, var(--color-sienna) 23%, transparent);
+    --shadow-focus:         0 0 0 2px var(--color-accent-ring);
+
+    /* Status washes */
+    --color-success-bg:     color-mix(in srgb, var(--color-success) 16%, transparent);
+    --color-warning-bg:     color-mix(in srgb, var(--color-warning) 18%, transparent);
+    --color-warning-text:   color-mix(in oklab, var(--color-warning), var(--color-text-primary) 40%);
+    --color-error-bg:       color-mix(in srgb, var(--color-error) 16%, transparent);
+    --color-mention-bg:     var(--color-amber-soft);
+    --color-tag-bg:         var(--color-amber-soft);
+    --color-tag-text:       color-mix(in oklab, var(--color-sienna), var(--color-text-primary) 45%);
+
+    /* AI 面板设计语言 */
+    --color-bg-inset:        var(--color-bg-elevated);
+    --color-bg-stream:       color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
+    --color-bg-tabstrip:     color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 60%);
+    --color-bg-selected:     var(--color-amber-soft);
+    --color-bg-accent-wash:  color-mix(in srgb, var(--color-sienna) 10%, var(--color-bg-base));
+    --color-bg-active:       var(--color-bg-accent-wash);
+    --color-hairline:        color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 60%);
+    --color-border-panel:    var(--color-border);
+    --color-border-input:    var(--color-border);
+    --color-border-muted:    var(--color-border);
+    --color-border-emphasis: var(--color-border-strong);
+    --color-border-accent:   var(--color-border-strong);
+    --color-accent-text:     var(--color-sienna);
+    --color-accent-mid:      color-mix(in oklab, var(--color-sienna), var(--color-amber) 50%);
+    --color-on-accent:       var(--color-bg-surface);
+    --color-text-prose:      var(--color-text-primary);
+    --color-text-soft:       var(--color-text-secondary);
+    --color-text-dim:        color-mix(in oklab, var(--color-text-secondary), var(--color-text-muted) 50%);
+    --color-text-label:      var(--color-text-muted);
+    --color-text-hint:       var(--color-text-muted);
+    --color-text-kbd:        var(--color-text-faint);
+    --color-success-text:    var(--color-success);
+    --color-success-border:  color-mix(in srgb, var(--color-success) 35%, var(--color-bg-base));
+    --color-success-bar:     var(--color-success);
+    --color-error-node:      var(--color-error);
+    --color-error-text-strong: var(--color-error);
+    --color-error-surface:   var(--color-error-bg);
+    --color-error-body:      var(--color-text-secondary);
+    --color-diff-del-text:   var(--color-error);
+    --color-diff-del-bg:     var(--color-error-bg);
+    --color-diff-add-text:   color-mix(in oklab, var(--color-success), var(--color-text-primary) 35%);
+    --color-diff-add-bg:     color-mix(in srgb, var(--color-success) 18%, transparent);
+    --color-bar-track:       var(--color-border);
+    --color-info-bg:         var(--color-type-video-bg);
+    --color-info-text:       var(--color-type-video-fg);
+    --color-danger-bg:       var(--color-error-bg);
+    --color-danger-text:     var(--color-error);
+
+    /* 提示词库 */
+    --snip-rule:            var(--color-sienna);
+    --snip-row-hover:       color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
+    --snip-hit-bg:          var(--color-amber-soft);
+    --snip-preview:         var(--color-text-faint);
+    --snip-shadow:          var(--shadow-lg);
+    --snip-menu-shadow:     var(--shadow-md);
+
+    /* 设置页色系 — the scheme-neutral half; the "one step lighter than the
+       workspace" grounds are in the [data-scheme] blocks. */
+    --stg-card-head:        var(--color-bg-elevated);
+    --stg-stat:             var(--color-bg-elevated);
+    --stg-warn-bg:          color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-base));
+    --stg-accent:           var(--color-sienna);
+    --stg-accent-hover:     var(--color-sienna-hover);
+    --stg-accent-soft:      var(--color-accent-mid);
+    --stg-badge-bg:         var(--color-tag-bg);
+    --stg-badge-text:       var(--color-tag-text);
+    --stg-text:             var(--color-text-primary);
+    --stg-text-secondary:   var(--color-text-soft);
+    --stg-text-desc:        var(--color-text-muted);
+    --stg-border:           var(--color-border-panel);
+    --stg-border-soft:      var(--color-border-soft);
+    --stg-border-menu:      var(--color-border-emphasis);
+    --stg-border-warn:      color-mix(in oklab, var(--color-warning), var(--color-bg-base) 40%);
+    --stg-warn-line:        color-mix(in oklab, var(--color-warning), var(--color-bg-base) 70%);
+    --stg-line-row:         var(--color-hairline);
+    --stg-line-section:     var(--color-border-panel);
+    --stg-bar:              var(--color-accent-mid);
+    --stg-focus-ring:       var(--color-accent-ring);
+    --stg-overlay:          var(--color-bg-overlay);
+    --stg-shadow-menu:      var(--shadow-lg);
+
+    /* 知识库同步 */
+    --sync-target-bg:       color-mix(in srgb, var(--color-sienna) 10%, var(--color-bg-base));
+    --sync-target-ring:     color-mix(in srgb, var(--color-sienna) 35%, var(--color-bg-base));
+    --sync-risk-bg:         color-mix(in srgb, var(--color-warning) 18%, var(--color-bg-base));
+    --sync-risk-line:       color-mix(in srgb, var(--color-warning) 30%, var(--color-bg-base));
+    --sync-caution-text:    var(--color-sienna);
+    --sync-badge-ow-bg:     var(--color-bg-elevated);
+    --sync-badge-ow-fg:     var(--color-text-secondary);
+    --sync-badge-del-bg:    var(--color-text-primary);   /* the one inverted badge */
+    --sync-badge-del-fg:    var(--color-bg-base);
+    --sync-chip-on-bg:      var(--color-accent-tint);
+    --sync-chip-on-fg:      var(--color-sienna);
+    --sync-chip-on-border:  var(--color-border-accent);
+    --sync-body:            var(--color-text-secondary);
+    --sync-disabled:        color-mix(in oklab, var(--color-sienna), var(--color-bg-base) 60%);
+    --sync-track:           var(--color-bar-track);
+    --sync-neutral-block:   var(--color-bg-surface);
+    --sync-arrow:           var(--color-text-ghost);
+    --sync-foot-shadow:     var(--shadow-sm);
+
+    /* 设定集色系 */
+    --lore-cat-character:   var(--color-sienna);
+    --lore-cat-location:    var(--color-success);
+    --lore-cat-item:        var(--color-amber);
+    --lore-cat-event:       color-mix(in oklab, var(--color-sienna), var(--color-amber) 60%);
+    --lore-cat-faction:     var(--color-text-secondary);
+    --lore-cat-concept:     var(--color-type-video-fg);
+    --lore-wall-bg:         color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
+    --lore-wall-grid:       color-mix(in srgb, var(--color-text-primary) 3%, transparent);
+    --lore-bg-input:        var(--stg-bg-input);
+    --lore-add-bg:          color-mix(in srgb, var(--color-success) 22%, var(--color-bg-surface));
+    --lore-add-text:        var(--color-diff-add-text);
+    --lore-split-keep:      color-mix(in srgb, var(--color-amber) 25%, var(--color-bg-surface));
+    --lore-split-a:         var(--lore-add-bg);
+    --lore-split-b:         color-mix(in srgb, var(--color-type-video-fg) 18%, var(--color-bg-surface));
+    --lore-bind-bg:         color-mix(in oklab, var(--color-bg-surface), var(--color-bg-elevated) 30%);
+    --lore-bind-line:       color-mix(in oklab, var(--color-border), var(--color-text-faint) 25%);
+    --lore-flip-bg:         color-mix(in oklab, var(--lore-wall-bg), var(--color-bg-elevated) 40%);
+    --lore-flip-border:     color-mix(in oklab, var(--color-border), var(--color-text-faint) 35%);
+    --lore-flip-text:       var(--color-text-muted);
+    --lore-edge-inner:      color-mix(in oklab, var(--color-amber), var(--color-bg-base) 55%);
+    --lore-neutral-line:    var(--color-text-ghost);
+    --lore-check-bg:        color-mix(in srgb, var(--color-warning) 12%, var(--color-bg-surface));
+    --lore-check-line:      var(--color-warning-text);
+    --lore-check-text:      var(--color-warning-text);
+    --lore-check-note:      color-mix(in oklab, var(--color-warning-text), var(--color-text-muted) 50%);
+    --lore-density-0:       var(--color-bg-elevated);
+    --lore-density-1:       var(--color-amber-soft);
+    --lore-density-3:       var(--color-sienna);
+    --lore-density-now:     var(--color-text-primary);
+  }
+
+  /* Derivations whose direction depends on the scheme. */
+  [data-scheme="light"] {
+    --color-bg-raised:       var(--color-bg-surface);
+    --color-accent-deep:     var(--color-sienna);
+    --color-btn-neutral:     var(--color-text-secondary);
+    --color-btn-neutral-hover: var(--color-text-primary);
+    --color-traffic:         color-mix(in oklab, var(--color-amber-soft), var(--color-text-muted) 35%);
+    --writer-tick:           var(--color-amber);
+    --writer-rule:           color-mix(in oklab, var(--color-amber), var(--color-bg-base) 35%);
+
+    --stg-bg:               color-mix(in oklab, var(--color-bg-base), white 45%);
+    --stg-bg-input:         color-mix(in oklab, var(--color-bg-surface), white 60%);
+    --stg-card:             color-mix(in oklab, var(--color-bg-surface), white 40%);
+    --stg-hint:             color-mix(in oklab, var(--color-bg-base), white 30%);
+    --stg-ok:               var(--color-type-text-fg);
+    --stg-text-warm:        color-mix(in oklab, var(--color-text-secondary), var(--color-amber) 30%);
+    --stg-text-faint:       var(--color-text-faint);
+    --stg-text-whisper:     var(--color-text-ghost);
+    --stg-text-mono-dim:    var(--color-text-faint);
+    --stg-text-placeholder: var(--color-text-faint);
+    --stg-border-mid:       var(--color-border);
+    --stg-kbd-border:       var(--color-border);
+    --stg-knob:             color-mix(in oklab, var(--color-text-faint), var(--color-text-muted) 50%);
+
+    --sync-risk-text:       var(--color-sienna-hover);
+    --sync-caution-rail:    var(--color-amber);
+
+    /* Index-card hard shadows are the paper's backside, never light — a
+       constant per scheme, not a mix of the theme's colours. */
+    --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05);
+    --lore-card-shadow-lg:  3px 4px 0 rgba(60, 40, 20, 0.05);
+    --lore-card-shadow-hover: 4px 6px 0 rgba(60, 40, 20, 0.08);
+    --lore-card-shadow-xl:  6px 8px 0 rgba(60, 40, 20, 0.06);
+    --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
+    --lore-bind-mark:       var(--color-text-dim);
+    --lore-sub-bg:          color-mix(in oklab, var(--color-bg-surface), white 40%);
+    --lore-density-2:       color-mix(in oklab, var(--color-amber), var(--color-amber-soft) 40%);
+
+    --rp-canvas:            var(--color-bg-surface);
+    --rp-rail:              var(--color-bg-base);
+    --rp-input:             color-mix(in oklab, var(--color-bg-surface), white 40%);
+    --rp-row-selected:      var(--color-bg-inset);
+    --rp-row-hover:         color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
+    --rp-name-selected:     var(--color-text-prose);
+    --rp-avatar-bg:         var(--color-border-panel);
+    --rp-avatar-fg:         var(--color-text-soft);
+    --rp-avatar-bg-active:  var(--color-accent-text);
+    --rp-avatar-fg-active:  var(--color-on-accent);
+    --rp-speech:            var(--color-text-prose);
+    --rp-action:            var(--color-text-label);
+    --rp-scene:             var(--color-text-soft);
+    --rp-quote:             var(--color-text-kbd);
+    --rp-meta-bg:           var(--color-bg-base);
+    --rp-meta-rule:         var(--color-text-ghost);
+  }
+
+  [data-scheme="dark"] {
+    --color-bg-raised:       var(--color-bg-elevated);
+    --color-accent-deep:     color-mix(in oklab, var(--color-sienna), var(--color-bg-base) 40%);
+    --color-btn-neutral:     var(--color-text-muted);
+    --color-btn-neutral-hover: var(--color-text-secondary);
+    --color-traffic:         var(--color-text-faint);
+    --writer-tick:           var(--color-accent-deep);
+    --writer-rule:           var(--color-border-accent);
+
+    --stg-bg:               var(--color-bg-base);
+    --stg-bg-input:         var(--color-bg-surface);
+    --stg-card:             color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
+    --stg-hint:             var(--color-bg-accent-wash);
+    --stg-ok:               color-mix(in oklab, var(--color-success), var(--color-type-text-fg) 50%);
+    --stg-text-warm:        var(--color-text-secondary);
+    --stg-text-faint:       var(--color-text-dim);
+    --stg-text-whisper:     color-mix(in oklab, var(--color-text-muted), var(--color-bg-base) 25%);
+    --stg-text-mono-dim:    var(--color-text-label);
+    --stg-text-placeholder: var(--color-text-hint);
+    --stg-border-mid:       var(--color-border-input);
+    --stg-kbd-border:       var(--color-border-input);
+    --stg-knob:             var(--color-text-dim);
+
+    --sync-risk-text:       var(--color-accent-text);
+    --sync-caution-rail:    var(--color-border-accent);
+
+    --lore-card-shadow:     2px 3px 0 rgba(0, 0, 0, 0.35);
+    --lore-card-shadow-lg:  3px 4px 0 rgba(0, 0, 0, 0.35);
+    --lore-card-shadow-hover: 4px 6px 0 rgba(0, 0, 0, 0.45);
+    --lore-card-shadow-xl:  6px 8px 0 rgba(0, 0, 0, 0.28);
+    --lore-shadow-modal:    0 12px 48px rgba(0, 0, 0, 0.60);
+    --lore-bind-mark:       var(--color-text-muted);
+    --lore-sub-bg:          var(--color-bg-hover);
+    --lore-density-2:       var(--color-border-accent);
+
+    --rp-canvas:            var(--color-bg-base);
+    --rp-rail:              var(--color-bg-inset);
+    --rp-input:             var(--color-bg-tabstrip);
+    --rp-row-selected:      var(--color-bg-selected);
+    --rp-row-hover:         var(--color-hairline);
+    --rp-name-selected:     color-mix(in oklab, var(--color-text-primary), white 20%);
+    --rp-avatar-bg:         var(--color-border-input);
+    --rp-avatar-fg:         var(--color-text-soft);
+    --rp-avatar-bg-active:  var(--color-border-accent);
+    --rp-avatar-fg-active:  var(--color-text-primary);
+    --rp-speech:            var(--color-text-primary);
+    --rp-action:            var(--color-text-muted);
+    --rp-scene:             var(--color-text-dim);
+    --rp-quote:             var(--color-text-dim);
+    --rp-meta-bg:           var(--color-bg-inset);
+    --rp-meta-rule:         var(--color-border-emphasis);
+  }
+
+  /* Engines without color-mix() (WebKit < 16.2; probed in lib/webviewCaps)
+     get plain aliases for the mixed tokens. The built-in themes never reach
+     this block — their hand-tuned literals win in tokens.theme — so it only
+     shapes a user theme on an old engine, where "flat" beats "invalid". */
+  @supports not (color: color-mix(in oklab, red, blue)) {
+    :root {
+      --color-accent-ring:    var(--color-border-strong);
+      --color-accent-tint:    var(--color-amber-soft);
+      --color-accent-tint-strong: var(--color-amber-soft);
+      --color-success-bg:     var(--color-bg-elevated);
+      --color-warning-bg:     var(--color-amber-soft);
+      --color-warning-text:   var(--color-text-secondary);
+      --color-error-bg:       var(--color-bg-elevated);
+      --color-tag-text:       var(--color-text-secondary);
+      --color-bg-stream:      var(--color-bg-base);
+      --color-bg-tabstrip:    var(--color-bg-elevated);
+      --color-bg-accent-wash: var(--color-amber-soft);
+      --color-hairline:       var(--color-bg-elevated);
+      --color-accent-mid:     var(--color-amber);
+      --color-text-dim:       var(--color-text-secondary);
+      --color-success-border: var(--color-success);
+      --color-diff-add-text:  var(--color-success);
+      --color-diff-add-bg:    var(--color-bg-elevated);
+      --snip-row-hover:       var(--color-bg-hover);
+      --stg-warn-bg:          var(--color-amber-soft);
+      --stg-border-warn:      var(--color-warning);
+      --stg-warn-line:        var(--color-border);
+      --sync-target-bg:       var(--color-bg-elevated);
+      --sync-target-ring:     var(--color-border-strong);
+      --sync-risk-bg:         var(--color-amber-soft);
+      --sync-risk-line:       var(--color-border-strong);
+      --sync-disabled:        var(--color-amber);
+      --lore-cat-event:       var(--color-amber);
+      --lore-wall-bg:         var(--color-bg-base);
+      --lore-wall-grid:       transparent;
+      --lore-add-bg:          var(--color-bg-elevated);
+      --lore-split-keep:      var(--color-amber-soft);
+      --lore-split-b:         var(--color-type-video-bg);
+      --lore-bind-bg:         var(--color-bg-surface);
+      --lore-bind-line:       var(--color-border);
+      --lore-flip-bg:         var(--color-bg-elevated);
+      --lore-flip-border:     var(--color-border-strong);
+      --lore-edge-inner:      var(--color-amber-soft);
+      --lore-check-bg:        var(--color-amber-soft);
+      --lore-check-note:      var(--color-text-muted);
+    }
+    [data-scheme="light"] {
+      --color-traffic:        var(--color-text-ghost);
+      --writer-rule:          var(--color-amber-soft);
+      --stg-bg:               var(--color-bg-surface);
+      --stg-bg-input:         var(--color-bg-surface);
+      --stg-card:             var(--color-bg-surface);
+      --stg-hint:             var(--color-bg-surface);
+      --stg-text-warm:        var(--color-text-secondary);
+      --stg-knob:             var(--color-text-faint);
+      --lore-sub-bg:          var(--color-bg-surface);
+      --lore-density-2:       var(--color-amber);
+      --rp-input:             var(--color-bg-surface);
+      --rp-row-hover:         var(--color-bg-elevated);
+    }
+    [data-scheme="dark"] {
+      --color-accent-deep:    var(--color-border-strong);
+      --stg-card:             var(--color-bg-elevated);
+      --stg-ok:               var(--color-success);
+      --stg-text-whisper:     var(--color-text-faint);
+      --rp-name-selected:     var(--color-text-primary);
+    }
+  }
 }
 
-/* 2 · Song / book — classic Western serif + CJK Song/Ming for the body */
-[data-font="song"] {
-  --font-serif: Georgia, Cambria, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, SimSun, serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+/* ═══════════════════ L1 · CORE (the theme contract, per scheme) ════════════
+   Everything a theme file is expected to write. Both built-in bases define
+   the whole set; `color-scheme` rides along so native scrollbars and form
+   controls follow the polarity. Consumers never read `data-theme`'s value —
+   the scheme attribute is the only thing that says light or dark. */
+@layer tokens.scheme {
+  /* ───────── LIGHT · Paper ───────── */
+  [data-scheme="light"] {
+    color-scheme: light;
+
+    --color-bg-base:        #F7F2E8;   /* paper */
+    --color-bg-surface:     #FBF8F0;   /* card */
+    --color-bg-elevated:    #F1E8D5;   /* highlight */
+    --color-bg-hover:       #EDE2CB;   /* elevated, one step darker — neutral row hover */
+    --color-bg-tinted:      #F7F2E8;
+    --color-bg-overlay:     rgba(60, 40, 20, 0.30);
+
+    --color-text-primary:   #2A2520;   /* ink */
+    --color-text-secondary: #5C5346;
+    --color-text-muted:     #8B7E6A;
+    --color-text-faint:     #B5A99A;
+    --color-text-ghost:     #C0B49E;
+
+    /* Manuscript accents */
+    --color-sienna:         #A0522D;   /* primary */
+    --color-sienna-hover:   #8B4523;
+    --color-amber:          #C9966A;
+    --color-amber-soft:     #F1E0BD;
+
+    --color-border:         #E5DCC9;
+    --color-border-soft:    #ECE2CE;
+    --color-border-strong:  #C9966A;
+
+    --color-success:        #8DA876;
+    --color-warning:        #C9966A;
+    --color-error:          #A85D44;
+
+    /* Model-type tags — one hue per capability so a list of models is scannable
+       without reading the labels. Muted enough to sit inside a paper row. */
+    --color-type-text-bg:        #E9E6CC;
+    --color-type-text-fg:        #75722E;
+    --color-type-multimodal-bg:  #F2DFCC;
+    --color-type-multimodal-fg:  #B05A2C;
+    --color-type-image-bg:       #EBDDE8;
+    --color-type-image-fg:       #8A5380;
+    --color-type-video-bg:       #DCE4E8;
+    --color-type-video-fg:       #4A6472;
+
+    /* Elevation — warm, subtle */
+    --shadow-sm:    0 1px 3px rgba(60, 40, 20, 0.06);
+    --shadow-md:    0 2px 16px rgba(60, 40, 20, 0.10);
+    --shadow-lg:    0 4px 24px rgba(60, 40, 20, 0.10);
+    --shadow-xl:    0 16px 56px rgba(60, 40, 20, 0.22);
+    --shadow-drawer: -28px 0 56px rgba(60, 40, 20, 0.16);
+
+    /* Glass */
+    --glass-bg:             rgba(251, 248, 240, 0.85);
+    --glass-bg-strong:      rgba(251, 248, 240, 0.72);
+    --glass-border:         1px solid rgba(60, 40, 20, 0.08);
+  }
+
+  /* ───────── DARK · Night ───────── */
+  [data-scheme="dark"] {
+    color-scheme: dark;
+
+    --color-bg-base:        #1F1B16;
+    --color-bg-surface:     #18140F;
+    --color-bg-elevated:    #28231D;
+    --color-bg-hover:       #332C24;
+    --color-bg-tinted:      #28231D;
+    --color-bg-overlay:     rgba(0, 0, 0, 0.55);
+
+    --color-text-primary:   #E8DFD0;
+    --color-text-secondary: #C0B49E;
+    --color-text-muted:     #9A8E7A;
+    --color-text-faint:     #5A4F3D;
+    --color-text-ghost:     #3A3128;
+
+    --color-sienna:         #D9925B;
+    --color-sienna-hover:   #F4C28A;
+    --color-amber:          #C9966A;
+    --color-amber-soft:     rgba(217, 146, 91, 0.32);
+
+    --color-border:         #2A241C;
+    --color-border-soft:    #2A241C;
+    --color-border-strong:  #5A4F3D;
+
+    --color-success:        #8DA876;
+    --color-warning:        #C9966A;
+    --color-error:          #C57158;
+
+    /* Same four hues as light, as translucent washes over night paper. */
+    --color-type-text-bg:        rgba(203, 199, 130, 0.18);
+    --color-type-text-fg:        #CFCA8B;
+    --color-type-multimodal-bg:  rgba(217, 146, 91, 0.20);
+    --color-type-multimodal-fg:  #E3A472;
+    --color-type-image-bg:       rgba(196, 140, 188, 0.18);
+    --color-type-image-fg:       #D3A0CB;
+    --color-type-video-bg:       rgba(140, 173, 191, 0.18);
+    --color-type-video-fg:       #9BBACB;
+
+    --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
+    --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
+    --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.50);
+    --shadow-xl:    0 16px 56px rgba(0, 0, 0, 0.60);
+    --shadow-drawer: -28px 0 56px rgba(0, 0, 0, 0.55);
+
+    --glass-bg:             rgba(24, 20, 15, 0.80);
+    --glass-bg-strong:      rgba(24, 20, 15, 0.62);
+    --glass-border:         1px solid rgba(255, 220, 180, 0.06);
+  }
 }
 
-/* 3 · Hei / modern — whole app in sans; editor body uses CJK Hei + Western sans */
-[data-font="hei"] {
-  --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
-}
+/* ═══════════════ BUILT-IN THEMES · hand-tuned derived tokens ═══════════════
+   The designer's exact values from 设计稿 01a–05h, one block per built-in
+   theme. Only derived tokens appear here (the core lives in tokens.scheme);
+   a token whose formula already reproduces these literals exactly is absent
+   on purpose — see the file header. */
+@layer tokens.theme {
+  /* ───────── 纸 · Paper ───────── */
+  [data-theme="paper"] {
+    --color-accent-ring:    rgba(160, 82, 45, 0.30);
+    --color-accent-tint:    rgba(160, 82, 45, 0.10);
+    --color-accent-tint-strong: rgba(160, 82, 45, 0.20);
 
-/* 4 · Kai / manuscript hand — old-style Western serif + CJK Kai */
-[data-font="kai"] {
-  --font-serif: "Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-}
+    --color-success-bg:     rgba(141, 168, 118, 0.14);
+    --color-warning-bg:     #F7EBD4;
+    --color-warning-text:   #8B6420;
+    --color-error-bg:       #FDEAE2;
 
-/* ───────── LIGHT · Paper ───────── */
-[data-theme="light"] {
-  --color-bg-base:        #F7F2E8;   /* paper */
-  --color-bg-surface:     #FBF8F0;   /* card */
-  --color-bg-elevated:    #F1E8D5;   /* highlight */
-  --color-bg-hover:       #EDE2CB;   /* elevated, one step darker — neutral row hover */
-  --color-bg-tinted:      #F7F2E8;
-  --color-bg-overlay:     rgba(60, 40, 20, 0.30);
+    /* Lore mention highlight (text bottom band) */
+    --color-mention-bg:     #F1E0BD;
 
-  --color-text-primary:   #2A2520;   /* ink */
-  --color-text-secondary: #5C5346;
-  --color-text-muted:     #8B7E6A;
-  --color-text-faint:     #B5A99A;
-  --color-text-ghost:     #C0B49E;
+    /* Tag chips */
+    --color-tag-bg:         #F1E0BD;
+    --color-tag-text:       #5C4023;
 
-  /* Manuscript accents */
-  --color-sienna:         #A0522D;   /* primary */
-  --color-sienna-hover:   #8B4523;
-  --color-amber:          #C9966A;
-  --color-amber-soft:     #F1E0BD;
-  --color-ink:            #2A2520;
-  --color-paper:          #F7F2E8;
-  --color-card:           #FBF8F0;
+    /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
+       The dark values are the binding mockup; these are the paper equivalents,
+       derived from the light inline-bubble / consistency-check screens. */
+    --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
+    --color-bg-stream:       #F4EEE0;   /* run-stream column, tool-call list bg */
+    --color-bg-tabstrip:     #F1ECE0;   /* 标签条 (设计稿 02b): one step below the header, so the current tab (base) sits on it like a slip of paper */
+    --color-bg-raised:       #FBF8F0;   /* user bubble, send button block */
+    --color-bg-selected:     #F1E0BD;   /* selected segment / 档位 chip bg */
+    --color-bg-accent-wash:  #F7EBD4;   /* active accent chips, current-step row */
 
-  /* Accent aliases (legacy compat — kept so existing components keep rendering) */
-  --color-accent:         var(--color-sienna);
-  --color-accent-hover:   var(--color-sienna-hover);
-  --color-accent-start:   var(--color-sienna);
-  --color-accent-end:     var(--color-amber);
-  --color-accent-ring:    rgba(160, 82, 45, 0.30);
-  --color-accent-tint:    rgba(160, 82, 45, 0.10);
-  --color-accent-tint-strong: rgba(160, 82, 45, 0.20);
+    --color-hairline:        #F1E8D5;   /* row separators inside lists/groups */
+    --color-border-panel:    #E5DCC9;   /* component frames, one per component max */
+    --color-border-input:    #E5DCC9;   /* textarea/composer/popover borders */
+    --color-border-muted:    #E5DCC9;   /* tertiary buttons, dashed excluded chips */
+    --color-border-emphasis: #C9966A;   /* secondary buttons, unchecked checkboxes */
+    --color-border-accent:   #C9966A;   /* accent-outline chips, icon box, approvals */
 
-  --color-border:         #E5DCC9;
-  --color-border-soft:    #ECE2CE;
-  --color-border-strong:  #C9966A;
+    --color-accent-text:     #A0522D;   /* text on selected segments/chips */
+    --color-accent-mid:      #B3764A;   /* ochre ramp mid step — see night */
+    --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
 
-  --color-success:        #8DA876;
-  --color-success-bg:     rgba(141, 168, 118, 0.14);
-  --color-warning:        #C9966A;
-  --color-warning-bg:     #F7EBD4;
-  --color-warning-text:   #8B6420;
-  --color-error:          #A85D44;
-  --color-error-bg:       #FDEAE2;
+    /* 写手署名（设计稿 04d · 写手 Writer）。一段回复是不是写手写的，答案不在回复
+       上，在回复左边那条槽里：13px 横刻度起头，1px 竖线的长度**正好等于**写手写
+       的那段字。所以这两个值必须比正文暗、比 hairline 亮——它要可量，但眼睛读小说
+       时不会经过它。悬停时两者都换成 --color-accent，这是赭石唯一参与的时刻。
+       不能复用 --color-border-accent：那是控件边框的语义，改一次控件就会连带改掉
+       署名的可读性，而这条线是内容的一部分。 */
+    --writer-tick:           #C08A5E;   /* 13px 横刻度 · 交接点 */
+    --writer-rule:           #D8B48F;   /* 1px 竖线 · 作者边界 */
+    --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
+    --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
+    --color-text-soft:       #5C5346;   /* secondary UI text */
+    --color-text-dim:        #736A5C;   /* meta, mono counts */
+    --color-text-label:      #8B7E6A;   /* 10px uppercase section headers */
+    --color-text-hint:       #8B7E6A;   /* placeholders, empty states */
+    --color-text-kbd:        #B5A99A;   /* kbd hints, |/／ separators, ghost stamps */
 
-  /* Lore mention highlight (text bottom band) */
-  --color-mention-bg:     #F1E0BD;
+    --color-success-border:  #C9D6BB;
+    --color-success-bar:     #8DA876;
+    --color-error-node:      #A85D44;   /* timeline failure node */
+    --color-error-text-strong: #A85D44;
+    --color-error-surface:   #FDEAE2;
+    --color-error-body:      #5C5346;
+    --color-diff-del-text:   #A85D44;
+    --color-diff-del-bg:     #FDEAE2;
+    --color-diff-add-text:   #55663F;
+    --color-diff-add-bg:     rgba(141, 168, 118, 0.18);
+    --color-bar-track:       #E5DCC9;   /* progress/alloc track */
 
-  /* Tag chips */
-  --color-tag-bg:         #F1E0BD;
-  --color-tag-text:       #5C4023;
+    /* Chrome details (设计稿 01a) */
+    --color-traffic:         #D9C7A5;   /* titlebar traffic-light dots */
 
-  /* Model-type tags — one hue per capability so a list of models is scannable
-     without reading the labels. Muted enough to sit inside a paper row. */
-  --color-type-text-bg:        #E9E6CC;
-  --color-type-text-fg:        #75722E;
-  --color-type-multimodal-bg:  #F2DFCC;
-  --color-type-multimodal-fg:  #B05A2C;
-  --color-type-image-bg:       #EBDDE8;
-  --color-type-image-fg:       #8A5380;
-  --color-type-video-bg:       #DCE4E8;
-  --color-type-video-fg:       #4A6472;
+    /* ── 提示词库 (设计稿 02c 提示词库) ──
+       The snippet picker floats over the AI drawer, so it lives in the main
+       token space rather than --stg-*. Light is not dark with a swapped ground:
+       the selected rule warms to #A9512B, the preview drops two tiers so it
+       cannot compete with the name, and the popover's shadow points *up* in
+       warm brown instead of black. */
+    --snip-rule:            #A9512B;   /* 2px left rule on the selected row */
+    --snip-row-hover:       #F3EBD9;   /* neutral hover — never the accent */
+    --snip-hit-bg:          #F0E2CC;   /* search-match wash, name and preview */
+    --snip-preview:         #A79D88;   /* the one preview line */
+    --snip-shadow:          0 -8px 30px rgba(120, 80, 40, 0.10);
+    --snip-menu-shadow:     0 6px 24px rgba(60, 40, 20, 0.14);
 
-  /* Elevation — warm, subtle */
-  --shadow-sm:    0 1px 3px rgba(60, 40, 20, 0.06);
-  --shadow-md:    0 2px 16px rgba(60, 40, 20, 0.10);
-  --shadow-lg:    0 4px 24px rgba(60, 40, 20, 0.10);
-  --shadow-xl:    0 16px 56px rgba(60, 40, 20, 0.22);
-  --shadow-drawer: -28px 0 56px rgba(60, 40, 20, 0.16);
-  --shadow-focus: 0 0 0 2px var(--color-accent-ring);
+    /* ── 设置页色系 (设计稿 05a) ──
+       The settings surface keeps its own warm-paper family — same hues as the
+       workspace but one step lighter, with its own sienna. Components under
+       src/components/settings/ read --stg-* only. */
+    --stg-bg:               #FBF7EE;   /* page ground */
+    --stg-bg-input:         #FFFDF6;   /* inputs, unselected chips */
+    --stg-card:             #FDFAF1;   /* group cards */
+    --stg-card-head:        #F3EBD9;   /* card headers */
+    --stg-stat:             #F7F1E2;   /* stat cards, drawer footer, kbd bg */
+    --stg-hint:             #F8F2E3;   /* soft hint blocks (probe panel) */
+    --stg-warn-bg:          #F9F0DC;   /* caution strip inside a card */
+    --stg-accent:           #A9512B;
+    --stg-accent-hover:     #93431F;
+    --stg-accent-soft:      #B4713D;   /* range accent, secondary brown */
+    --stg-ok:               #75722E;   /* "ready" olive — status dots and labels */
+    --stg-badge-bg:         #EFE0CB;
+    --stg-badge-text:       #A0703F;
+    --stg-text:             #3B352C;
+    --stg-text-secondary:   #7C7466;
+    --stg-text-warm:        #7A6A4C;   /* warm secondary (subtitles) */
+    --stg-text-desc:        #98907F;   /* row descriptions */
+    --stg-text-faint:       #A79D88;   /* section titles, weak labels */
+    --stg-text-whisper:     #C0B49A;   /* the faintest tier: inline group hints */
+    --stg-text-mono-dim:    #ACA28C;   /* dimmed mono (URLs) */
+    --stg-text-placeholder: #B5AC98;
+    --stg-border:           #E3D8BF;   /* card borders */
+    --stg-border-mid:       #DDD2BA;   /* chip/control borders */
+    --stg-border-soft:      #EAE1CC;   /* shell header border */
+    --stg-border-menu:      #CBBB97;   /* dropdown menu border */
+    --stg-border-warn:      #D9B48F;   /* frame of a card that needs attention */
+    --stg-warn-line:        #EAD9BF;   /* rule above a caution strip */
+    --stg-line-row:         #F1E9D6;   /* row separators */
+    --stg-line-section:     #E7DCC4;   /* section-title rules */
+    --stg-kbd-border:       #DFD3B8;
+    --stg-knob:             #A99C7F;   /* switch off-knob */
+    --stg-bar:              #C68B5A;   /* usage share bars */
+    --stg-focus-ring:       rgba(169, 81, 43, 0.3);
+    --stg-overlay:          rgba(72, 63, 48, 0.30);
+    --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
 
-  /* Glass */
-  --glass-bg:             rgba(251, 248, 240, 0.85);
-  --glass-bg-strong:      rgba(251, 248, 240, 0.72);
-  --glass-blur:           blur(16px);
-  --glass-border:         1px solid rgba(60, 40, 20, 0.08);
+    /* Knowledge-base sync (设计稿 03c). Roles the settings palette has no word
+       for — a sync screen has to say "this side gets overwritten" and "this row
+       loses something" in a palette with exactly one accent, so the distinctions
+       are carried by surface and rail rather than by hue. Consumed only by
+       src/components/sync/ and the sync settings pane. */
+    --sync-target-bg:       #F6ECDF;   /* the side about to become a mirror */
+    --sync-target-ring:     #E4C6A6;
+    --sync-risk-bg:         #F5E7D3;   /* row where BOTH sides changed */
+    --sync-risk-text:       #93431F;
+    --sync-risk-line:       #EBD9BE;
+    --sync-caution-rail:    #DCAE83;   /* one-sided loss: rail only, no fill */
+    --sync-caution-text:    #A9512B;
+    --sync-badge-ow-bg:     #EFE6D2;   /* 覆盖 */
+    --sync-badge-ow-fg:     #7A6A4C;
+    --sync-badge-del-bg:    #4A4438;   /* 删除 — the one inverted badge */
+    --sync-badge-del-fg:    #FBF7EE;
+    --sync-chip-on-bg:      #F3E3D3;
+    --sync-chip-on-fg:      #93431F;
+    --sync-chip-on-border:  #DCAE83;
+    --sync-body:            #6B6355;   /* running copy inside the modal */
+    --sync-disabled:        #D8C4AE;   /* primary button before acknowledgement */
+    --sync-track:           #EDE4CF;   /* progress groove */
+    --sync-neutral-block:   #F7F3E7;   /* the non-conflict failure group */
+    --sync-arrow:           #C9BFA8;
+    --sync-foot-shadow:     0 -4px 12px rgba(60, 40, 20, 0.05);
 
-  /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
-     The dark values are the binding mockup; these are the paper equivalents,
-     derived from the light inline-bubble / consistency-check screens. */
-  --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
-  --color-bg-stream:       #F4EEE0;   /* run-stream column, tool-call list bg */
-  --color-bg-tabstrip:     #F1ECE0;   /* 标签条 (设计稿 02b): one step below the header, so the current tab (base) sits on it like a slip of paper */
-  --color-bg-raised:       #FBF8F0;   /* user bubble, send button block */
-  --color-bg-selected:     #F1E0BD;   /* selected segment / 档位 chip bg */
-  --color-bg-accent-wash:  #F7EBD4;   /* active accent chips, current-step row */
-  --color-bg-active:       var(--color-bg-accent-wash);
+    /* ── 设定集色系 (设计稿 03a) ──
+       The lore surfaces (card wall, entity detail, extract/improve/facet/split/
+       meta modals) read these on top of the shared manuscript palette.
+       Components under src/components/lore/ may read --lore-* directly. */
+    --lore-cat-character:   #A0522D;   /* 角色 */
+    --lore-cat-location:    #8DA876;   /* 地点 */
+    --lore-cat-item:        #C9966A;   /* 物品 */
+    --lore-cat-event:       #B57F4A;   /* 事件 */
+    --lore-cat-faction:     #5C5346;   /* 势力 */
+    --lore-cat-concept:     #7BA8A6;   /* 概念 */
 
-  --color-hairline:        #F1E8D5;   /* row separators inside lists/groups */
-  --color-border-panel:    #E5DCC9;   /* component frames, one per component max */
-  --color-border-input:    #E5DCC9;   /* textarea/composer/popover borders */
-  --color-border-muted:    #E5DCC9;   /* tertiary buttons, dashed excluded chips */
-  --color-border-emphasis: #C9966A;   /* secondary buttons, unchecked checkboxes */
-  --color-border-accent:   #C9966A;   /* accent-outline chips, icon box, approvals */
+    --lore-wall-bg:         #F3EDDD;   /* card-wall ground */
+    --lore-wall-grid:       rgba(60, 40, 20, 0.022); /* 36px grid lines */
 
-  --color-accent-text:     #A0522D;   /* text on selected segments/chips */
-  --color-accent-mid:      #B3764A;   /* ochre ramp mid step — see dark block */
-  --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
+    --lore-add-bg:          #E8F0E0;   /* diff additions, new tags, 已存在 wash */
+    --lore-add-text:        #5C7548;
 
-  /* 写手署名（设计稿 04d · 写手 Writer）。一段回复是不是写手写的，答案不在回复
-     上，在回复左边那条槽里：13px 横刻度起头，1px 竖线的长度**正好等于**写手写
-     的那段字。所以这两个值必须比正文暗、比 hairline 亮——它要可量，但眼睛读小说
-     时不会经过它。悬停时两者都换成 --color-accent，这是赭石唯一参与的时刻。
-     不能复用 --color-border-accent：那是控件边框的语义，改一次控件就会连带改掉
-     署名的可读性，而这条线是内容的一部分。 */
-  --writer-tick:           #C08A5E;   /* 13px 横刻度 · 交接点 */
-  --writer-rule:           #D8B48F;   /* 1px 竖线 · 作者边界 */
-  --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
-  --color-btn-neutral:       #5C5346;   /* 深中性确认键（删除分类 / 删除排版格式）：有分量、不诱导；字用 --color-on-accent。设计稿 03f 1z */
-  --color-btn-neutral-hover: #2A2520;
-  --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
-  --color-text-soft:       #5C5346;   /* secondary UI text */
-  --color-text-dim:        #736A5C;   /* meta, mono counts */
-  --color-text-label:      #8B7E6A;   /* 10px uppercase section headers */
-  --color-text-hint:       #8B7E6A;   /* placeholders, empty states */
-  --color-text-kbd:        #B5A99A;   /* kbd hints, |/／ separators, ghost stamps */
+    --lore-split-keep:      #F0E4D2;   /* split: paragraphs kept in the source */
+    --lore-split-a:         #E8F0E0;   /* split: new entry A */
+    --lore-split-b:         #E4E9F0;   /* split: new entry B */
 
-  --color-success-text:    #8DA876;
-  --color-success-border:  #C9D6BB;
-  --color-success-bar:     #8DA876;
-  --color-error-node:      #A85D44;   /* timeline failure node */
-  --color-error-text-strong: #A85D44;
-  --color-error-surface:   #FDEAE2;
-  --color-error-body:      #5C5346;
-  --color-diff-del-text:   #A85D44;
-  --color-diff-del-bg:     #FDEAE2;
-  --color-diff-add-text:   #55663F;
-  --color-diff-add-bg:     rgba(141, 168, 118, 0.18);
-  --color-bar-track:       #E5DCC9;   /* progress/alloc track */
+    /* ── 集合（设计稿 03b 屏 24–31）：分类用颜色，集合用**装订** ──
+       集合这根轴刻意不引入第二套彩色——分类六色已经占满了墙面，还兼着头像底色。
+       所以归属由装订边、翻面和骑缝线来说，全部是中性色阶。 */
+    --lore-bind-bg:         #F8F3E6;   /* 装订栏与卡片装订边：比卡面暗半步＝凹进去 */
+    --lore-bind-line:       #DFD5BE;   /* 装订边的虚线 */
+    --lore-flip-bg:         #F0E9D7;   /* 翻面卡片：比墙底再暗一点，退进墙里 */
+    --lore-flip-border:     #D9CFB8;
+    --lore-flip-text:       #9A8F7D;
+    --lore-edge-inner:      #EBD9BC;   /* 页边围栏标注的内侧线（骑缝的第二道） */
+    --lore-sub-bg:          #FDFBF5;   /* 比卡面再亮半步：悬停行、菜单脚注 */
+    --lore-neutral-line:    #C9BFA8;   /* 中性线：未勾的勾选框、虚线控件边、空装订标 */
+    --lore-check-bg:        #F8F2E2;   /* 「请核对」：赭黄——和选中的赭石分得开，也不是 error（设计稿 03f 屏 1f） */
+    --lore-check-line:      #B08A3C;
+    --lore-check-text:      #8A6B2E;
+    --lore-check-note:      #A08A5C;   /* 待核行里的备注与行号 */
 
-  /* Previously referenced but never defined — real definitions so the
-     TaskWorkspaceView status badges stop rendering unstyled. */
-  --color-info-bg:         var(--color-type-video-bg);
-  --color-info-text:       var(--color-type-video-fg);
-  --color-danger-bg:       var(--color-error-bg);
-  --color-danger-text:     var(--color-error);
+    /* Appearance-density timeline, 4 steps + current chapter */
+    --lore-density-0:       #F1E8D5;
+    --lore-density-1:       #F1E0BD;
+    --lore-density-2:       #D9B589;
 
-  /* Chrome details (设计稿 01a) */
-  --color-traffic:         #D9C7A5;   /* titlebar traffic-light dots */
+    /* ── 扮演面板 (docs/feature/roleplay) ──
+       设计稿 04a 的取色。凡是与既有 token 同值的一律走别名（那些现在住在
+       tokens.derive 的 light 块里），只有设计稿给出而调色板里确实没有的值才写死。 */
+    --rp-input:             #FDFBF5;                  /* 输入框内，比稿面再亮一级 */
+    --rp-row-hover:         #F3EDE0;                  /* 中性灰悬停，绝不用赭石淡染 */
+    --rp-name-selected:     var(--color-text-prose);
+    --rp-meta-rule:         #C4B9A6;                  /* 元指令块的虚线左规 */
+  }
 
-  /* ── 提示词库 (设计稿 02c 提示词库) ──
-     The snippet picker floats over the AI drawer, so it lives in the main
-     token space rather than --stg-*. Light is not dark with a swapped ground:
-     the selected rule warms to #A9512B, the preview drops two tiers so it
-     cannot compete with the name, and the popover's shadow points *up* in
-     warm brown instead of black. */
-  --snip-rule:            #A9512B;   /* 2px left rule on the selected row */
-  --snip-row-hover:       #F3EBD9;   /* neutral hover — never the accent */
-  --snip-hit-bg:          #F0E2CC;   /* search-match wash, name and preview */
-  --snip-preview:         #A79D88;   /* the one preview line */
-  --snip-shadow:          0 -8px 30px rgba(120, 80, 40, 0.10);
-  --snip-menu-shadow:     0 6px 24px rgba(60, 40, 20, 0.14);
+  /* ───────── 夜 · Night ───────── */
+  [data-theme="night"] {
+    --color-accent-ring:    rgba(217, 146, 91, 0.35);
+    --color-accent-tint:    rgba(217, 146, 91, 0.14);
+    --color-accent-tint-strong: rgba(217, 146, 91, 0.26);
 
-  /* ── 设置页色系 (设计稿 05a) ──
-     The settings surface keeps its own warm-paper family — same hues as the
-     workspace but one step lighter, with its own sienna. Components under
-     src/components/settings/ read --stg-* only. */
-  --stg-bg:               #FBF7EE;   /* page ground */
-  --stg-bg-input:         #FFFDF6;   /* inputs, unselected chips */
-  --stg-card:             #FDFAF1;   /* group cards */
-  --stg-card-head:        #F3EBD9;   /* card headers */
-  --stg-stat:             #F7F1E2;   /* stat cards, drawer footer, kbd bg */
-  --stg-hint:             #F8F2E3;   /* soft hint blocks (probe panel) */
-  --stg-warn-bg:          #F9F0DC;   /* caution strip inside a card */
-  --stg-accent:           #A9512B;
-  --stg-accent-hover:     #93431F;
-  --stg-accent-soft:      #B4713D;   /* range accent, secondary brown */
-  --stg-ok:               #75722E;   /* "ready" olive — status dots and labels */
-  --stg-badge-bg:         #EFE0CB;
-  --stg-badge-text:       #A0703F;
-  --stg-text:             #3B352C;
-  --stg-text-secondary:   #7C7466;
-  --stg-text-warm:        #7A6A4C;   /* warm secondary (subtitles) */
-  --stg-text-desc:        #98907F;   /* row descriptions */
-  --stg-text-faint:       #A79D88;   /* section titles, weak labels */
-  --stg-text-whisper:     #C0B49A;   /* the faintest tier: inline group hints */
-  --stg-text-mono-dim:    #ACA28C;   /* dimmed mono (URLs) */
-  --stg-text-placeholder: #B5AC98;
-  --stg-border:           #E3D8BF;   /* card borders */
-  --stg-border-mid:       #DDD2BA;   /* chip/control borders */
-  --stg-border-soft:      #EAE1CC;   /* shell header border */
-  --stg-border-menu:      #CBBB97;   /* dropdown menu border */
-  --stg-border-warn:      #D9B48F;   /* frame of a card that needs attention */
-  --stg-warn-line:        #EAD9BF;   /* rule above a caution strip */
-  --stg-line-row:         #F1E9D6;   /* row separators */
-  --stg-line-section:     #E7DCC4;   /* section-title rules */
-  --stg-kbd-border:       #DFD3B8;
-  --stg-knob:             #A99C7F;   /* switch off-knob */
-  --stg-bar:              #C68B5A;   /* usage share bars */
-  --stg-focus-ring:       rgba(169, 81, 43, 0.3);
-  --stg-overlay:          rgba(72, 63, 48, 0.30);
-  --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
+    --color-success-bg:     rgba(141, 168, 118, 0.18);
+    --color-warning-bg:     rgba(201, 150, 106, 0.18);
+    --color-warning-text:   #E0BC8A;
+    --color-error-bg:       rgba(168, 93, 68, 0.18);
 
-  /* Knowledge-base sync (设计稿 03c). Roles the settings palette has no word
-     for — a sync screen has to say "this side gets overwritten" and "this row
-     loses something" in a palette with exactly one accent, so the distinctions
-     are carried by surface and rail rather than by hue. Consumed only by
-     src/components/sync/ and the sync settings pane. */
-  --sync-target-bg:       #F6ECDF;   /* the side about to become a mirror */
-  --sync-target-ring:     #E4C6A6;
-  --sync-risk-bg:         #F5E7D3;   /* row where BOTH sides changed */
-  --sync-risk-text:       #93431F;
-  --sync-risk-line:       #EBD9BE;
-  --sync-caution-rail:    #DCAE83;   /* one-sided loss: rail only, no fill */
-  --sync-caution-text:    #A9512B;
-  --sync-badge-ow-bg:     #EFE6D2;   /* 覆盖 */
-  --sync-badge-ow-fg:     #7A6A4C;
-  --sync-badge-del-bg:    #4A4438;   /* 删除 — the one inverted badge */
-  --sync-badge-del-fg:    #FBF7EE;
-  --sync-chip-on-bg:      #F3E3D3;
-  --sync-chip-on-fg:      #93431F;
-  --sync-chip-on-border:  #DCAE83;
-  --sync-body:            #6B6355;   /* running copy inside the modal */
-  --sync-disabled:        #D8C4AE;   /* primary button before acknowledgement */
-  --sync-track:           #EDE4CF;   /* progress groove */
-  --sync-neutral-block:   #F7F3E7;   /* the non-conflict failure group */
-  --sync-arrow:           #C9BFA8;
-  --sync-foot-shadow:     0 -4px 12px rgba(60, 40, 20, 0.05);
+    --color-mention-bg:     rgba(217, 146, 91, 0.32);
 
-  /* ── 设定集色系 (设计稿 03a) ──
-     The lore surfaces (card wall, entity detail, extract/improve/facet/split/
-     meta modals) read these on top of the shared manuscript palette.
-     Components under src/components/lore/ may read --lore-* directly. */
-  --lore-cat-character:   #A0522D;   /* 角色 */
-  --lore-cat-location:    #8DA876;   /* 地点 */
-  --lore-cat-item:        #C9966A;   /* 物品 */
-  --lore-cat-event:       #B57F4A;   /* 事件 */
-  --lore-cat-faction:     #5C5346;   /* 势力 */
-  --lore-cat-concept:     #7BA8A6;   /* 概念 */
+    --color-tag-bg:         rgba(217, 146, 91, 0.18);
+    --color-tag-text:       #E0BC8A;
 
-  --lore-wall-bg:         #F3EDDD;   /* card-wall ground */
-  --lore-wall-grid:       rgba(60, 40, 20, 0.022); /* 36px grid lines */
-  --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05); /* index-card hard shadow */
-  --lore-card-shadow-lg:  3px 4px 0 rgba(60, 40, 20, 0.05); /* featured 2x2 card */
-  --lore-card-shadow-hover: 4px 6px 0 rgba(60, 40, 20, 0.08);
-  --lore-card-shadow-xl:  6px 8px 0 rgba(60, 40, 20, 0.06); /* 阅读模式的纸（设计稿 03c）——lg 之上一档，仍是纸感不是海拔 */
-  --lore-bg-input:        #FFFDF6;   /* textareas / editors inside lore modals */
-  --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
+    /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
+       Values transcribed from the AI-panel mockup (design project, 02 AI 面板);
+       the dark rendition is the acceptance reference. */
+    --color-bg-inset:        #17130F;
+    --color-bg-stream:       #1B1712;
+    --color-bg-tabstrip:     #14100C;   /* 标签条 (设计稿 02b): the drawer's darkest band — darker than the header, so the current tab (base) is the one bright slip */
+    --color-bg-raised:       #2A241C;
+    --color-bg-selected:     #2A211A;
+    --color-bg-accent-wash:  #241C15;
 
-  --lore-add-bg:          #E8F0E0;   /* diff additions, new tags, 已存在 wash */
-  --lore-add-text:        #5C7548;
+    --color-hairline:        #241F19;
+    --color-border-panel:    #2E2820;
+    --color-border-input:    #3A332A;
+    --color-border-muted:    #332C24;
+    --color-border-emphasis: #4A4238;
+    --color-border-accent:   #6B4B2E;
 
-  --lore-split-keep:      #F0E4D2;   /* split: paragraphs kept in the source */
-  --lore-split-a:         #E8F0E0;   /* split: new entry A */
-  --lore-split-b:         #E4E9F0;   /* split: new entry B */
+    --color-accent-text:     #E8B183;
+    /* The ochre ramp's mid step, between sienna and accent-deep. Shared by the
+       mockup's 设定/摘要 bar segments and the 正在生成 note. Deliberately the
+       same hex in both themes: on paper it lands within 2 units of the exact
+       midpoint of #A0522D↔#C9966A, so it reads as the middle step there too —
+       lightening it for the light theme would only flatten it toward the
+       border tone. (Precedent: --color-success-text is likewise shared.) */
+    --color-accent-mid:      #B3764A;
+    --color-accent-deep:     #8E6540;
 
-  /* Appearance-density timeline, 4 steps + current chapter */
-  /* ── 集合（设计稿 03b 屏 24–31）：分类用颜色，集合用**装订** ──
-     集合这根轴刻意不引入第二套彩色——分类六色已经占满了墙面，还兼着头像底色。
-     所以归属由装订边、翻面和骑缝线来说，全部是中性色阶。 */
-  --lore-bind-bg:         #F8F3E6;   /* 装订栏与卡片装订边：比卡面暗半步＝凹进去 */
-  --lore-bind-line:       #DFD5BE;   /* 装订边的虚线 */
-  --lore-bind-mark:       #736A5C;   /* 装订边上的竖排集合名 */
-  --lore-flip-bg:         #F0E9D7;   /* 翻面卡片：比墙底再暗一点，退进墙里 */
-  --lore-flip-border:     #D9CFB8;
-  --lore-flip-text:       #9A8F7D;
-  --lore-edge-inner:      #EBD9BC;   /* 页边围栏标注的内侧线（骑缝的第二道） */
-  --lore-sub-bg:          #FDFBF5;   /* 比卡面再亮半步：悬停行、菜单脚注 */
-  --lore-neutral-line:    #C9BFA8;   /* 中性线：未勾的勾选框、虚线控件边、空装订标 */
-  --lore-check-bg:        #F8F2E2;   /* 「请核对」：赭黄——和选中的赭石分得开，也不是 error（设计稿 03f 屏 1f） */
-  --lore-check-line:      #B08A3C;
-  --lore-check-text:      #8A6B2E;
-  --lore-check-note:      #A08A5C;   /* 待核行里的备注与行号 */
+    /* 见纸的说明。暗色下刻度落在 accent-deep 上、竖线落在 border-accent 上，
+       纸面则各降一档——守的是「线比正文暗、比分隔线亮」这条关系，不是 hex。 */
+    --writer-tick:           #8E6540;
+    --writer-rule:           #6B4B2E;
+    --color-on-accent:       #17130F;
+    --color-text-prose:      #D9CFC0;
+    --color-text-soft:       #B3A794;
+    --color-text-dim:        #8E8271;
+    --color-text-label:      #6E6455;
+    --color-text-hint:       #5E564A;
+    --color-text-kbd:        #4A4238;
 
-  --lore-density-0:       #F1E8D5;
-  --lore-density-1:       #F1E0BD;
-  --lore-density-2:       #D9B589;
-  --lore-density-3:       #A0522D;
-  --lore-density-now:     #2A2520;
+    --color-success-border:  #3A4634;
+    --color-success-bar:     #6B7A57;
+    --color-error-node:      #C4614A;
+    --color-error-text-strong: #D98878;
+    --color-error-surface:   #231613;
+    --color-error-body:      #C9A79C;
+    --color-diff-del-text:   #B0705B;
+    --color-diff-del-bg:     rgba(138, 75, 59, 0.14);
+    --color-diff-add-text:   #9AB080;
+    --color-diff-add-bg:     rgba(76, 92, 63, 0.16);
+    --color-bar-track:       #241F19;
 
-  /* ── 扮演面板 (docs/feature/roleplay) ──
-     设计稿 04a 的取色。凡是与既有 token 同值的一律走别名，只有设计稿给出而
-     调色板里确实没有的四个值才写死 hex——见 design-system.md「令牌优先」。 */
-  --rp-canvas:            var(--color-bg-surface);  /* 640px 稿面 */
-  --rp-rail:              var(--color-bg-base);     /* 花名册 / composer 条 */
-  --rp-input:             #FDFBF5;                  /* 输入框内，比稿面再亮一级 */
-  --rp-row-selected:      var(--color-bg-inset);
-  --rp-row-hover:         #F3EDE0;                  /* 中性灰悬停，绝不用赭石淡染 */
-  --rp-name-selected:     var(--color-text-prose);
-  --rp-avatar-bg:         var(--color-border-panel);
-  --rp-avatar-fg:         var(--color-text-soft);
-  --rp-avatar-bg-active:  var(--color-accent-text);
-  --rp-avatar-fg-active:  var(--color-on-accent);
-  --rp-speech:            var(--color-text-prose);
-  --rp-action:            var(--color-text-label);
-  --rp-scene:             var(--color-text-soft);
-  --rp-quote:             var(--color-text-kbd);
-  --rp-meta-bg:           var(--color-bg-base);
-  --rp-meta-rule:         #C4B9A6;                  /* 元指令块的虚线左规 */
-}
+    /* Chrome details (设计稿 01a) */
+    --color-traffic:         #5A4F3D;
 
-/* ───────── DARK · Night ───────── */
-[data-theme="dark"] {
-  --color-bg-base:        #1F1B16;
-  --color-bg-surface:     #18140F;
-  --color-bg-elevated:    #28231D;
-  --color-bg-hover:       #332C24;
-  --color-bg-tinted:      #28231D;
-  --color-bg-overlay:     rgba(0, 0, 0, 0.55);
+    /* ── 提示词库 (设计稿 02c 提示词库) —— dark rendition is the reference ── */
+    --snip-rule:            #D9925B;
+    --snip-row-hover:       #241F19;
+    --snip-hit-bg:          #3A2A1C;
+    --snip-preview:         #5E564A;
+    --snip-shadow:          0 -8px 30px rgba(0, 0, 0, 0.45);
+    --snip-menu-shadow:     0 6px 24px rgba(0, 0, 0, 0.45);
 
-  --color-text-primary:   #E8DFD0;
-  --color-text-secondary: #C0B49E;
-  --color-text-muted:     #9A8E7A;
-  --color-text-faint:     #5A4F3D;
-  --color-text-ghost:     #3A3128;
+    /* ── 设置页色系 · night ── The mockup only specifies the light settings
+       palette; night maps each --stg-* role onto the existing night ramp so the
+       settings surface follows the theme without a second design pass. */
+    --stg-bg:               #1F1B16;
+    --stg-bg-input:         #18140F;
+    --stg-card:             #241F19;
+    --stg-card-head:        #28231D;
+    --stg-stat:             #28231D;
+    --stg-hint:             #241C15;
+    --stg-warn-bg:          #2A2114;
+    --stg-accent:           #D9925B;
+    --stg-accent-hover:     #F4C28A;
+    --stg-accent-soft:      #B3764A;
+    --stg-ok:               #A7AC63;
+    --stg-badge-bg:         rgba(217, 146, 91, 0.18);
+    --stg-badge-text:       #E0BC8A;
+    --stg-text:             #E8DFD0;
+    --stg-text-secondary:   #B3A794;
+    --stg-text-warm:        #C0B49E;
+    --stg-text-desc:        #9A8E7A;
+    --stg-text-faint:       #8E8271;
+    --stg-text-whisper:     #7A6F5F;
+    --stg-text-mono-dim:    #6E6455;
+    --stg-text-placeholder: #5E564A;
+    --stg-border:           #2E2820;
+    --stg-border-mid:       #3A332A;
+    --stg-border-soft:      #2A241C;
+    --stg-border-menu:      #4A4238;
+    --stg-border-warn:      #5C4630;
+    --stg-warn-line:        #3E3323;
+    --stg-line-row:         #241F19;
+    --stg-line-section:     #2E2820;
+    --stg-kbd-border:       #3A332A;
+    --stg-knob:             #8E8271;
+    --stg-bar:              #B3764A;
+    --stg-focus-ring:       rgba(217, 146, 91, 0.35);
+    --stg-overlay:          rgba(0, 0, 0, 0.55);
+    --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
 
-  --color-sienna:         #D9925B;
-  --color-sienna-hover:   #F4C28A;
-  --color-amber:          #C9966A;
-  --color-amber-soft:     rgba(217, 146, 91, 0.32);
-  --color-ink:            #E8DFD0;
-  --color-paper:          #1F1B16;
-  --color-card:           #18140F;
+    /* Sync roles on the night ramp (设计稿 03c · 画板 5a). Same structure, not a
+       dimmed copy: the risk fill stays a warm brown so an accent rail still
+       reads against it, and 删除 inverts the other way (light chip on dark). */
+    --sync-target-bg:       #2A2014;
+    --sync-target-ring:     #55402A;
+    --sync-risk-bg:         #2E2013;
+    --sync-risk-text:       #E8A56F;
+    --sync-risk-line:       #3B2C19;
+    --sync-caution-rail:    #6E4E33;
+    --sync-caution-text:    #C98A55;
+    --sync-badge-ow-bg:     #3A342A;
+    --sync-badge-ow-fg:     #C9BFA8;
+    --sync-badge-del-bg:    #C9BFA8;
+    --sync-badge-del-fg:    #1F1B16;
+    --sync-chip-on-bg:      #3A2A1A;
+    --sync-chip-on-fg:      #E8A56F;
+    --sync-chip-on-border:  #6E4E33;
+    --sync-body:            #B3A794;
+    --sync-disabled:        #4A3E30;
+    --sync-track:           #2E2820;
+    --sync-neutral-block:   #2A241C;
+    --sync-arrow:           #5A5142;
+    --sync-foot-shadow:     0 -4px 12px rgba(0, 0, 0, 0.28);
 
-  --color-accent:         var(--color-sienna);
-  --color-accent-hover:   var(--color-sienna-hover);
-  --color-accent-start:   var(--color-sienna);
-  --color-accent-end:     var(--color-amber);
-  --color-accent-ring:    rgba(217, 146, 91, 0.35);
-  --color-accent-tint:    rgba(217, 146, 91, 0.14);
-  --color-accent-tint-strong: rgba(217, 146, 91, 0.26);
+    /* ── 设定集色系 · night ── 设计稿 03a only specifies paper; night maps each
+       role onto the existing night ramp (category hues lightened for contrast). */
+    --lore-cat-character:   #D9925B;
+    --lore-cat-location:    #8DA876;
+    --lore-cat-item:        #C9966A;
+    --lore-cat-event:       #C98F55;
+    --lore-cat-faction:     #C0B49E;
+    --lore-cat-concept:     #8FBCBA;
 
-  --color-border:         #2A241C;
-  --color-border-soft:    #2A241C;
-  --color-border-strong:  #5A4F3D;
+    --lore-wall-bg:         #1B1712;
+    --lore-wall-grid:       rgba(255, 220, 180, 0.028);
 
-  --color-success:        #8DA876;
-  --color-success-bg:     rgba(141, 168, 118, 0.18);
-  --color-warning:        #C9966A;
-  --color-warning-bg:     rgba(201, 150, 106, 0.18);
-  --color-warning-text:   #E0BC8A;
-  --color-error:          #C57158;
-  --color-error-bg:       rgba(168, 93, 68, 0.18);
+    --lore-add-bg:          rgba(76, 92, 63, 0.22);
+    --lore-add-text:        #9AB080;
 
-  --color-mention-bg:     rgba(217, 146, 91, 0.32);
+    --lore-split-keep:      rgba(201, 150, 106, 0.14);
+    --lore-split-a:         rgba(76, 92, 63, 0.22);
+    --lore-split-b:         rgba(140, 173, 191, 0.16);
 
-  --color-tag-bg:         rgba(217, 146, 91, 0.18);
-  --color-tag-text:       #E0BC8A;
+    /* 集合 · 夜间：同样是「装订＝中性」，只是明暗方向反过来推导——装订边仍要比
+       卡面暗（凹进去），翻面卡仍要比墙底亮一点点（退后但没消失）。 */
+    --lore-bind-bg:         #221D17;
+    --lore-bind-line:       #3A3128;
+    --lore-flip-bg:         #201B15;
+    --lore-flip-border:     #352D24;
+    --lore-flip-text:       #6E6355;
+    --lore-edge-inner:      #4A3826;
+    --lore-sub-bg:          #2F2820;
+    --lore-neutral-line:    #4A4136;
+    --lore-check-bg:        #2C2517;
+    --lore-check-line:      #C9A24A;
+    --lore-check-text:      #C9A24A;
+    --lore-check-note:      #B0975A;
 
-  /* Same four hues as light, as translucent washes over night paper. */
-  --color-type-text-bg:        rgba(203, 199, 130, 0.18);
-  --color-type-text-fg:        #CFCA8B;
-  --color-type-multimodal-bg:  rgba(217, 146, 91, 0.20);
-  --color-type-multimodal-fg:  #E3A472;
-  --color-type-image-bg:       rgba(196, 140, 188, 0.18);
-  --color-type-image-fg:       #D3A0CB;
-  --color-type-video-bg:       rgba(140, 173, 191, 0.18);
-  --color-type-video-fg:       #9BBACB;
+    --lore-density-0:       #241F19;
+    --lore-density-1:       #2A211A;
+    --lore-density-2:       #6B4B2E;
 
-  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
-  --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
-  --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.50);
-  --shadow-xl:    0 16px 56px rgba(0, 0, 0, 0.60);
-  --shadow-drawer: -28px 0 56px rgba(0, 0, 0, 0.55);
-  --shadow-focus: 0 0 0 2px var(--color-accent-ring);
-
-  --glass-bg:             rgba(24, 20, 15, 0.80);
-  --glass-bg-strong:      rgba(24, 20, 15, 0.62);
-  --glass-blur:           blur(16px);
-  --glass-border:         1px solid rgba(255, 220, 180, 0.06);
-
-  /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
-     Values transcribed from the AI-panel mockup (design project, 02 AI 面板);
-     the dark rendition is the acceptance reference. */
-  --color-bg-inset:        #17130F;
-  --color-bg-stream:       #1B1712;
-  --color-bg-tabstrip:     #14100C;   /* 标签条 (设计稿 02b): the drawer's darkest band — darker than the header, so the current tab (base) is the one bright slip */
-  --color-bg-raised:       #2A241C;
-  --color-bg-selected:     #2A211A;
-  --color-bg-accent-wash:  #241C15;
-  --color-bg-active:       var(--color-bg-accent-wash);
-
-  --color-hairline:        #241F19;
-  --color-border-panel:    #2E2820;
-  --color-border-input:    #3A332A;
-  --color-border-muted:    #332C24;
-  --color-border-emphasis: #4A4238;
-  --color-border-accent:   #6B4B2E;
-
-  --color-accent-text:     #E8B183;
-  /* The ochre ramp's mid step, between sienna and accent-deep. Shared by the
-     mockup's 设定/摘要 bar segments and the 正在生成 note. Deliberately the
-     same hex in both themes: on paper it lands within 2 units of the exact
-     midpoint of #A0522D↔#C9966A, so it reads as the middle step there too —
-     lightening it for the light theme would only flatten it toward the
-     border tone. (Precedent: --color-success-text is likewise shared.) */
-  --color-accent-mid:      #B3764A;
-  --color-accent-deep:     #8E6540;
-
-  /* 见浅色块的说明。暗色下刻度落在 accent-deep 上、竖线落在 border-accent 上，
-     纸面则各降一档——守的是「线比正文暗、比分隔线亮」这条关系，不是 hex。 */
-  --writer-tick:           #8E6540;
-  --writer-rule:           #6B4B2E;
-  --color-on-accent:       #17130F;
-  --color-btn-neutral:       #9A8E7A;
-  --color-btn-neutral-hover: #C0B49E;
-  --color-text-prose:      #D9CFC0;
-  --color-text-soft:       #B3A794;
-  --color-text-dim:        #8E8271;
-  --color-text-label:      #6E6455;
-  --color-text-hint:       #5E564A;
-  --color-text-kbd:        #4A4238;
-
-  --color-success-text:    #8DA876;
-  --color-success-border:  #3A4634;
-  --color-success-bar:     #6B7A57;
-  --color-error-node:      #C4614A;
-  --color-error-text-strong: #D98878;
-  --color-error-surface:   #231613;
-  --color-error-body:      #C9A79C;
-  --color-diff-del-text:   #B0705B;
-  --color-diff-del-bg:     rgba(138, 75, 59, 0.14);
-  --color-diff-add-text:   #9AB080;
-  --color-diff-add-bg:     rgba(76, 92, 63, 0.16);
-  --color-bar-track:       #241F19;
-
-  --color-info-bg:         var(--color-type-video-bg);
-  --color-info-text:       var(--color-type-video-fg);
-  --color-danger-bg:       var(--color-error-bg);
-  --color-danger-text:     var(--color-error);
-
-  /* Chrome details (设计稿 01a) */
-  --color-traffic:         #5A4F3D;
-
-  /* ── 设置页色系 · night ── The mockup only specifies the light settings
-     palette; night maps each --stg-* role onto the existing night ramp so the
-     settings surface follows the theme without a second design pass. */
-  --stg-bg:               #1F1B16;
-  --stg-bg-input:         #18140F;
-  --stg-card:             #241F19;
-  --stg-card-head:        #28231D;
-  --stg-stat:             #28231D;
-  --stg-hint:             #241C15;
-  --stg-warn-bg:          #2A2114;
-  --stg-accent:           #D9925B;
-  --stg-accent-hover:     #F4C28A;
-  --stg-accent-soft:      #B3764A;
-  --stg-ok:               #A7AC63;
-  --stg-badge-bg:         rgba(217, 146, 91, 0.18);
-  --stg-badge-text:       #E0BC8A;
-  --stg-text:             #E8DFD0;
-  --stg-text-secondary:   #B3A794;
-  --stg-text-warm:        #C0B49E;
-  --stg-text-desc:        #9A8E7A;
-  --stg-text-faint:       #8E8271;
-  --stg-text-whisper:     #7A6F5F;
-  --stg-text-mono-dim:    #6E6455;
-  --stg-text-placeholder: #5E564A;
-  --stg-border:           #2E2820;
-  --stg-border-mid:       #3A332A;
-  --stg-border-soft:      #2A241C;
-  --stg-border-menu:      #4A4238;
-  --stg-border-warn:      #5C4630;
-  --stg-warn-line:        #3E3323;
-  --stg-line-row:         #241F19;
-  --stg-line-section:     #2E2820;
-  --stg-kbd-border:       #3A332A;
-  --stg-knob:             #8E8271;
-  --stg-bar:              #B3764A;
-  --stg-focus-ring:       rgba(217, 146, 91, 0.35);
-  --stg-overlay:          rgba(0, 0, 0, 0.55);
-  --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
-
-  /* Sync roles on the night ramp (设计稿 03c · 画板 5a). Same structure, not a
-     dimmed copy: the risk fill stays a warm brown so an accent rail still
-     reads against it, and 删除 inverts the other way (light chip on dark). */
-  --sync-target-bg:       #2A2014;
-  --sync-target-ring:     #55402A;
-  --sync-risk-bg:         #2E2013;
-  --sync-risk-text:       #E8A56F;
-  --sync-risk-line:       #3B2C19;
-  --sync-caution-rail:    #6E4E33;
-  --sync-caution-text:    #C98A55;
-  --sync-badge-ow-bg:     #3A342A;
-  --sync-badge-ow-fg:     #C9BFA8;
-  --sync-badge-del-bg:    #C9BFA8;
-  --sync-badge-del-fg:    #1F1B16;
-  --sync-chip-on-bg:      #3A2A1A;
-  --sync-chip-on-fg:      #E8A56F;
-  --sync-chip-on-border:  #6E4E33;
-  --sync-body:            #B3A794;
-  --sync-disabled:        #4A3E30;
-  --sync-track:           #2E2820;
-  --sync-neutral-block:   #2A241C;
-  --sync-arrow:           #5A5142;
-  --sync-foot-shadow:     0 -4px 12px rgba(0, 0, 0, 0.28);
-
-  /* ── 设定集色系 · night ── 设计稿 03a only specifies paper; night maps each
-     role onto the existing night ramp (category hues lightened for contrast). */
-  --lore-cat-character:   #D9925B;
-  --lore-cat-location:    #8DA876;
-  --lore-cat-item:        #C9966A;
-  --lore-cat-event:       #C98F55;
-  --lore-cat-faction:     #C0B49E;
-  --lore-cat-concept:     #8FBCBA;
-
-  --lore-wall-bg:         #1B1712;
-  --lore-wall-grid:       rgba(255, 220, 180, 0.028);
-  --lore-card-shadow:     2px 3px 0 rgba(0, 0, 0, 0.35);
-  --lore-card-shadow-lg:  3px 4px 0 rgba(0, 0, 0, 0.35);
-  --lore-card-shadow-hover: 4px 6px 0 rgba(0, 0, 0, 0.45);
-  --lore-card-shadow-xl:  6px 8px 0 rgba(0, 0, 0, 0.28); /* 阴影永远是纸的背面而不是光——赭石不参与 */
-  --lore-bg-input:        #18140F;
-  --lore-shadow-modal:    0 12px 48px rgba(0, 0, 0, 0.60);
-
-  --lore-add-bg:          rgba(76, 92, 63, 0.22);
-  --lore-add-text:        #9AB080;
-
-  --lore-split-keep:      rgba(201, 150, 106, 0.14);
-  --lore-split-a:         rgba(76, 92, 63, 0.22);
-  --lore-split-b:         rgba(140, 173, 191, 0.16);
-
-  /* 集合 · 夜间：同样是「装订＝中性」，只是明暗方向反过来推导——装订边仍要比
-     卡面暗（凹进去），翻面卡仍要比墙底亮一点点（退后但没消失）。 */
-  --lore-bind-bg:         #221D17;
-  --lore-bind-line:       #3A3128;
-  --lore-bind-mark:       #9A8E7A;
-  --lore-flip-bg:         #201B15;
-  --lore-flip-border:     #352D24;
-  --lore-flip-text:       #6E6355;
-  --lore-edge-inner:      #4A3826;
-  --lore-sub-bg:          #2F2820;
-  --lore-neutral-line:    #4A4136;
-  --lore-check-bg:        #2C2517;
-  --lore-check-line:      #C9A24A;
-  --lore-check-text:      #C9A24A;
-  --lore-check-note:      #B0975A;
-
-  --lore-density-0:       #241F19;
-  --lore-density-1:       #2A211A;
-  --lore-density-2:       #6B4B2E;
-  --lore-density-3:       #D9925B;
-  --lore-density-now:     #E8DFD0;
-
-  /* ── 提示词库 (设计稿 02c 提示词库) —— dark rendition is the reference ── */
-  --snip-rule:            #D9925B;
-  --snip-row-hover:       #241F19;
-  --snip-hit-bg:          #3A2A1C;
-  --snip-preview:         #5E564A;
-  --snip-shadow:          0 -8px 30px rgba(0, 0, 0, 0.45);
-  --snip-menu-shadow:     0 6px 24px rgba(0, 0, 0, 0.45);
-
-  /* ── 扮演面板 ── 设计稿 04a 的深色取色，binding。 */
-  --rp-canvas:            var(--color-bg-base);
-  --rp-rail:              var(--color-bg-inset);
-  --rp-input:             #14100C;
-  --rp-row-selected:      var(--color-bg-selected);
-  --rp-row-hover:         var(--color-hairline);
-  --rp-name-selected:     #F0E7D9;
-  --rp-avatar-bg:         var(--color-border-input);
-  --rp-avatar-fg:         var(--color-text-soft);
-  --rp-avatar-bg-active:  var(--color-border-accent);
-  --rp-avatar-fg-active:  var(--color-text-primary);
-  --rp-speech:            var(--color-text-primary);
-  --rp-action:            var(--color-text-muted);
-  --rp-scene:             var(--color-text-dim);
-  --rp-quote:             var(--color-text-dim);
-  --rp-meta-bg:           var(--color-bg-inset);
-  --rp-meta-rule:         var(--color-border-emphasis);
+    /* ── 扮演面板 ── 设计稿 04a 的深色取色，binding；别名部分住在 tokens.derive。 */
+    --rp-input:             #14100C;
+    --rp-row-hover:         var(--color-hairline);
+    --rp-name-selected:     #F0E7D9;
+    --rp-meta-rule:         var(--color-border-emphasis);
+  }
 }

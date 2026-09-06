@@ -14,6 +14,7 @@ import { resolveLinkPath } from "../../lib/paths";
 import { annotateCitations } from "../../lib/lore/citations";
 import { useLoreStore } from "../../stores/loreStore";
 import { MD_BODY_CLASS } from "../../lib/theme/markdownThemes";
+import { useScheme } from "../../lib/theme/scheme";
 import styles from "./Preview.module.css";
 
 interface Props {
@@ -39,6 +40,9 @@ export function Preview({ source, basePath }: Props) {
   const zoom = useAppStore((s) => s.previewZoom);
   const setZoom = useAppStore((s) => s.setPreviewZoom);
   const stepZoom = useAppStore((s) => s.stepPreviewZoom);
+  // Mermaid bakes a palette into each rendered SVG, so a theme switch has to
+  // rebuild the diagrams; the rest of the page follows the tokens on its own.
+  const scheme = useScheme();
 
   // ⌘/Ctrl + wheel over the page, the gesture every reader already knows.
   //
@@ -147,12 +151,12 @@ export function Preview({ source, basePath }: Props) {
     if (mermaidBlocks.length === 0) return;
 
     import("mermaid").then(({ default: mermaid }) => {
-      // Follow the app theme so diagrams aren't dark-on-white in light mode.
-      const isLight = document.documentElement.getAttribute("data-theme") === "light";
+      // Follow the app's polarity so diagrams aren't dark-on-white in light
+      // mode — the scheme, never the theme id (lib/theme/scheme).
       // securityLevel must stay "strict": "loose" permits raw HTML/click
       // handlers inside diagram labels, letting a malicious markdown file
       // inject script into the app webview.
-      mermaid.initialize({ startOnLoad: false, theme: isLight ? "default" : "dark", securityLevel: "strict" });
+      mermaid.initialize({ startOnLoad: false, theme: scheme === "light" ? "default" : "dark", securityLevel: "strict" });
       mermaidBlocks.forEach((block, i) => {
         const pre = block.parentElement;
         if (!pre) return;
@@ -169,7 +173,7 @@ export function Preview({ source, basePath }: Props) {
     // `basePath` belongs here too: two documents in different folders can hold
     // identical text (a template, a duplicated draft), and without it the
     // second one would render the first one's pictures — or none at all.
-  }, [shown, basePath]);
+  }, [shown, basePath, scheme]);
 
   // data-preview-scroller marks the element that actually scrolls (the one
   // carrying `overflow-y: auto` — no longer this component's root since the

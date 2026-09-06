@@ -45,6 +45,7 @@ import {
   MD_THEME_ATTR,
   type MarkdownThemeId,
 } from "../lib/theme/markdownThemes";
+import { applyScheme } from "../lib/theme/scheme";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -465,8 +466,13 @@ function resolveTheme(mode: ThemeMode): "dark" | "light" {
   return mode;
 }
 
+/**
+ * Writes `data-theme` (the built-in theme for the resolved polarity) and
+ * `data-scheme` (the polarity itself) — see lib/theme/scheme for why there are
+ * two attributes and why nothing else reads the first one's value.
+ */
 function applyTheme(mode: ThemeMode) {
-  document.documentElement.setAttribute("data-theme", resolveTheme(mode));
+  applyScheme(resolveTheme(mode));
 }
 
 /**

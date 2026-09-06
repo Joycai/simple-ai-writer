@@ -1279,7 +1279,7 @@ function NewCategoryModal({
             autoFocus
           />
           {error && (
-            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-red, #b91c1c)" }}>
+            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-error)" }}>
               {error}
             </div>
           )}

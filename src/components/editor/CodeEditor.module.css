@@ -130,7 +130,36 @@
   padding: 0 4px;
 }
 
-.wrap :global(.tok-processingInstruction) { color: var(--color-text-muted); }
+.wrap :global(.tok-heading4),
+.wrap :global(.tok-heading5),
+.wrap :global(.tok-heading6) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.wrap :global(.tok-strikethrough) {
+  text-decoration: line-through;
+  color: var(--color-text-faint);
+}
+
+/* The markers — `#`, `*`, `>`, list bullets, fences, `---` — recede so the
+   prose reads through them. Every colour here is a token: lib/editor/highlight
+   hands out these class names and nothing else, which is what lets a theme
+   recolour the editor. */
+.wrap :global(.tok-processingInstruction),
+.wrap :global(.tok-meta),
+.wrap :global(.tok-list),
+.wrap :global(.tok-separator) { color: var(--color-text-muted); }
+
+/* Fenced code, in whatever language the fence names. Restrained on purpose:
+   a manuscript editor, not an IDE — one accent, one dim, no rainbow. */
+.wrap :global(.tok-keyword) { color: var(--color-sienna); }
+.wrap :global(.tok-comment) { color: var(--color-text-muted); font-style: italic; }
+.wrap :global(.tok-string) { color: var(--color-diff-add-text); }
+.wrap :global(.tok-type) { color: var(--color-type-video-fg); }
+.wrap :global(.tok-tag) { color: var(--color-accent-deep); }
+.wrap :global(.tok-name) { color: var(--color-text-primary); }
+.wrap :global(.tok-invalid) { color: var(--color-error); }
 
 /* AI target range — the passage marked for the assistant to act on.
    A bottom band, not a fill: .cm-selectionBackground above is already a sienna
@@ -227,7 +256,7 @@
 
 /* Active line — barely-there warm tint, easy on the eyes */
 .wrap :global(.cm-activeLine) {
-  background: rgba(160, 82, 45, 0.04);
+  background: color-mix(in srgb, var(--color-sienna) 4%, transparent);
 }
 .wrap :global(.cm-activeLineGutter) {
   background: transparent;
