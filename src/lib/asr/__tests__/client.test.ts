@@ -85,9 +85,9 @@ describe("upload form", () => {
 });
 
 describe("submit", () => {
-  it("body：file_urls 数组 + channel_id [0]；分离与语言提示按需加", () => {
+  it("body：file_url 与 file_urls 两种拼法都发（qwen3 只读单数，只发数组任务会 MalformedURL）+ channel_id [0]；分离与语言提示按需加", () => {
     expect(submitBody("m", "oss://k", { diarization: false })).toEqual({
-      model: "m", input: { file_urls: ["oss://k"] }, parameters: { channel_id: [0] },
+      model: "m", input: { file_url: "oss://k", file_urls: ["oss://k"] }, parameters: { channel_id: [0] },
     });
     const b = submitBody("m", "oss://k", { diarization: true, speakerCount: 3, languageHints: ["zh", "en", "ja", "ko", "fr"] });
     expect(b.parameters).toEqual({ channel_id: [0], language_hints: ["zh", "en", "ja", "ko"], diarization_enabled: true, speaker_count: 3 });

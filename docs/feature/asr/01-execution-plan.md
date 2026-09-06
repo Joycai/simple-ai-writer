@@ -136,6 +136,7 @@ interface Transcript {
 2. **导入收音视频**：`COPY_BINARY_EXTENSIONS` 加上 `lib/asr/formats` 的两张表，原样复制、不看 Beta——项目本来就可以放源录音。
 3. **`@` 引音频**：`ProjectFileKind` 加 `media`（`classifyProjectFile` 认 17 个扩展名），`AttachedMedia` 是一个**只带路径**的附件：`attachProjectFile` 不读文件，`chatRefs` 把它列成「音频 / 视频文件 · 路径」并按本次运行有没有 `transcribe_audio` 决定是点名工具还是让作者去开开关（tool-presence 的规矩）；`@` 候选只在 Beta 开且绑了模型时列出；知识库那几个附件框过滤掉它（那里读不了也转不了）。
 4. ASR 四步各进一行调试日志（`logAsrEvent`：policy / upload / submit / poll），下次再失败能看见是哪一步、哪个模型 id。
+5. **第二次失败，日志抓到的**：作者换成 `qwen3-asr-flash-filetrans` 后，凭证 / 上传 / 提交全 200，任务 `FAILED · InvalidParameter.MalformedURL`。研究稿 §1.1 的表早写着这代读 `file_url` 单数、qwen-audio-3.0 读 `file_urls` 数组，PR #514 却只发了数组（实测时 qwen3 恰好只用单数试过）。修法：`submitBody` **两个字段一起发**，实测两代都成功、各自忽略不读的那个。教训记在研究稿 §1.1：形状差异表里的每一格都要在**同一份请求**上验过，不是各验各的。
 
 ## 6. PR 4 — 热词（先测）
 

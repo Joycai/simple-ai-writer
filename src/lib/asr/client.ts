@@ -159,7 +159,7 @@ export async function uploadTemp(
 
 // ─── 提交 ────────────────────────────────────────────────────────────────────
 
-/** 提交请求的 body——按默认模型 qwen-audio-3.0 的拼法；qwen3 一代也收（实测）。 */
+/** 提交请求的 body——两代 filetrans 模型各读一种 URL 字段，所以两种都发（见函数末尾）。 */
 export function submitBody(modelId: string, fileUrl: string, options: AsrRequestOptions): Record<string, unknown> {
   const parameters: Record<string, unknown> = { channel_id: [0] };
   if (options.languageHints?.length) parameters.language_hints = options.languageHints.slice(0, 4);
@@ -167,7 +167,13 @@ export function submitBody(modelId: string, fileUrl: string, options: AsrRequest
     parameters.diarization_enabled = true;
     if (options.speakerCount && options.speakerCount >= 2) parameters.speaker_count = Math.min(100, Math.floor(options.speakerCount));
   }
-  return { model: modelId, input: { file_urls: [fileUrl] }, parameters };
+  // BOTH spellings, every time. The two filetrans generations read different
+  // fields — qwen-audio-3.0 documents `file_urls[]`, qwen3 reads `file_url` and
+  // ignores the array: sent only the array it accepts the submit (200) and
+  // then fails the task with `InvalidParameter.MalformedURL: A valid file URL
+  // is required` (真机 2026-09-06). Each ignores the one it does not read, so
+  // sending both is the one body that works on either (docs/api/qianwen-compat-plan.md §1.4).
+  return { model: modelId, input: { file_url: fileUrl, file_urls: [fileUrl] }, parameters };
 }
 
 /** 提交请求的头：异步标记恒有，resolve 头**只跟着 `oss://` 走**。 */
