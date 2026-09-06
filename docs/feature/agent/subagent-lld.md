@@ -23,6 +23,14 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
+**2026-09-06 · 图集清单说出真正走得通的那条路（§6.1.4 新增）。** `read_lore_entity`
+的图集抬头原来只看 `ToolContext.multimodal`，识图子代理一开就两头说错：多模态主模型
+上点名一个刚被摘掉的 `read_lore_image`（一轮 Unknown tool），纯文本主模型上说「本模型
+读不了图」而图其实读得到——后者是**能力静默消失**，作者打开的开关没有任何效果。现在
+`routeTools` 交出 `visionDelegate`，registry 的 `galleryViewer` 定 here / delegate /
+none 三档，两条臂都查 `allowedTools`（`WRITER_PRESET` 本来就没有 `read_lore_image`，
+这个错与子代理无关）。
+
 **2026-09-04 · vision 的图片随第一条消息发出（§6.1.3 新增）。** 派单时只给路径、
 指望子代理自己 `read_image` 的做法，在不会主动推断工具调用的模型上得到的是一份
 诚实的「未接收到图像数据」；现在图片 refs 与 pdf 同样是载荷，在 `executeDelegate`
@@ -980,6 +988,50 @@ export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, S
   不是路径），所以 vision 的工具集不动；system 提示改为说明「图通常已附上，点名了
   却没附的用工具取」——这句话现在描述的是真实情况。上限 `MAX_VISION_IMAGES = 8`，
   超过让主模型拆单，同 `MAX_PDF_FILES`。
+
+### 6.1.4 清单要说出真正走得通的那条路（2026-09-06 定）
+
+§6.1 说 `ToolContext.multimodal` 的语义一个字不改，那是对的——但**它不该是清单
+末尾那句话的依据**。`read_lore_entity` 的图集清单原来只看这个布尔值：
+
+```
+=== images === (descriptions; call read_lore_image(entity: "X", file: ...) to view one; …)
+=== images === (text descriptions only — current model is text-only; …)
+```
+
+识图子代理一开，两句同时说错，而且是反着错的：
+
+- **多模态主模型 + 识图子代理**：`routeTools` 刚把 `read_lore_image` 摘掉（§6.2），
+  清单还在教模型调它——一轮 Unknown tool。
+- **纯文本主模型 + 识图子代理**：清单说「本模型是纯文本」，于是那次运行**再也没去
+  要那张图**。而图是读得到的，只是要换一条路。这一条更贵：作者打开了一个开关，
+  得到的效果是能力消失，且没有任何报错。
+
+第二种是这一节存在的理由。`multimodal` 在这种运行里是**错的那个模型**的属性，而
+清单说的是「你能不能打开我列出的这些」——那是运行的属性，不是当前模型的。
+
+改法：`routeTools` 把 `live("vision")` 一并交出去（`RoutedTools.visionDelegate`），
+四个 surface 原样塞进 `ToolContext.visionDelegate`，registry 的 `galleryViewer(ctx)`
+定三档——`here` / `delegate` / `none`，`readLoreEntity` 收的是这个三态而不再是布尔。
+判定在**摘工具的同一处**算，理由同 `resolveVisionConn` 的注释：「谁在这里读图」
+只该有一个答案。
+
+三条值得记下来的：
+
+- **两条臂都查 `allowedTools`，这才是修复本身，不是保险。** `WRITER_PRESET` 带
+  `read_lore_entity` 却不带 `read_lore_image`——多模态模型上，它从来就在被教着调
+  一个不存在的工具，和识图子代理无关。同 `rewrite_lore_lines` 那条行号提示的写法。
+- **`delegate` 那一档把整句调用连全路径一起拼出来**（`references: ["<dirPath>/<文件名>"]`）。
+  §6.1.3 刚说过 refs 是**载荷**不是阅读清单——派单时就把图读进第一条消息，比指望子
+  运行自己去调 `read_lore_image` 可靠；而 `references` 要全路径，清单下面那几行却是
+  光秃秃的文件名，所以这个参数必须由抬头给出。`loadProjectImage` 的包含性检查覆盖
+  整个项目、**`.ai-writer` 在内**（见 `tools.ts` 那段注释），所以条目图库的路径本来
+  就通得过。子代理自己的 `read_lore_image` 仍在，作为跟进再看一眼的路。
+- **工具 schema 那句话跟着一起改了。** `read_lore_entity` 的描述原来写着「Call
+  read_lore_image afterwards」——静态字符串，八个 preset 上都不成立。改成让它指向
+  清单本身（「the listing says whether anything on this run can open one, and how」），
+  规则就在它生效的那一刻到达，而不是几千 token 之前。注意 `agentToolBudget.test.ts`
+  的棘轮量的就是这些描述：这句话必须**不比它替换掉的那句长**。
 
 ### 6.2 路由 = 改工具集，不是改提示词也不是改返回值
 

@@ -2565,6 +2565,9 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         loreScope: useLoreStore.getState().scope,
         organize: loreOrganizer(),
         multimodal: model.type === "multimodal",
+        // 谁来读图，由 routeTools 一处判定（它同时也是摘掉 read_lore_image
+        // 的那一处）。图集清单据此说出真正走得通的那条路。
+        visionDelegate: routed.visionDelegate,
         onLoreChanged: async () => {
           await useLoreStore.getState().scanProject(projectPath);
           // Re-read rather than returning scanProject's own result: if a

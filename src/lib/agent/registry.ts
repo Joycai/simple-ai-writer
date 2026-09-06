@@ -31,6 +31,7 @@ import {
   formatLoreIndex,
   listWritingFiles,
   readLoreEntity,
+  type GalleryViewer,
   readLoreImage,
   readProjectImage,
   readSlidesFile,
@@ -601,6 +602,18 @@ export interface ToolContext {
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
+   * Whether a usable vision subagent reads pictures for this run — from
+   * `routeTools`, which is also what stripped `read_image` / `read_lore_image`
+   * from the toolset.
+   *
+   * Read tools use it to keep a *listing* honest about who can open what it
+   * lists. `multimodal` alone cannot: with vision live it is the wrong model's
+   * property — a text-only main model behind a multimodal vision subagent said
+   * "text descriptions only", and the run then never asked for the picture the
+   * author had switched a subagent on to read.
+   */
+  visionDelegate?: boolean;
+  /**
    * The tools this run may actually call — filled in by `executeRegisteredTool`
    * from its own `allowed` list, never by callers. Read-side handlers use it to
    * keep their result trailers honest: `read_lore_entity`'s gutter note names
@@ -896,6 +909,26 @@ function parseArgs<T>(raw: string): T {
  */
 const CATEGORY_PLACEHOLDER = "{{categories}}";
 
+/**
+ * Who, on this run, can actually open one of the pictures `read_lore_entity`
+ * lists — the gallery listing's trailer names it, and naming the wrong one
+ * costs a round at best and a capability at worst.
+ *
+ * Both arms are checked against `allowedTools` rather than against the flags
+ * alone, and that is the fix rather than an extra safety belt: the listing used
+ * to say "call read_lore_image" whenever the model was multimodal, on presets
+ * that do not carry that tool (`WRITER_PRESET` does not) and on every run where
+ * a live vision subagent had just had it stripped. Same failure as the gutter
+ * note that names `rewrite_lore_lines` — an unknown-tool round — which is why
+ * it is answered the same way.
+ */
+function galleryViewer(ctx: ToolContext): GalleryViewer {
+  const has = (t: ToolId) => ctx.allowedTools?.includes(t) ?? false;
+  if (ctx.multimodal && has("read_lore_image")) return "here";
+  if (ctx.visionDelegate && has("delegate")) return "delegate";
+  return "none";
+}
+
 const REGISTRY: Record<ToolId, RegisteredTool> = {
   list_lore_entities: {
     access: "read",
@@ -921,7 +954,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_lore_entity",
         description:
-          "Read a lore entity: its index.md and supplementary .md files, with per-file line numbers. A very large entry comes back as index.md plus a table of its other files — pass 'file' to read one of those (paged; 'start_line' continues). The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
+          "Read a lore entity: its index.md and supplementary .md files, with per-file line numbers. A very large entry comes back as index.md plus a table of its other files — pass 'file' to read one of those (paged; 'start_line' continues). The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. The listing says whether anything on this run can open one, and how. Call list_lore_entities first to get the exact entity names.",
         parameters: {
           type: "object",
           properties: {
@@ -950,7 +983,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const entity = args.entity ?? args.name;
       if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
       return readLoreEntity(
-        call.id, entity, ctx.loreIndex, ctx.multimodal, args.file, args.start_line,
+        call.id, entity, ctx.loreIndex, galleryViewer(ctx), args.file, args.start_line,
         ctx.allowedTools?.includes("rewrite_lore_lines") ?? false,
       );
     },

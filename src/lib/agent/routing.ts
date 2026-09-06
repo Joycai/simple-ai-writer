@@ -34,6 +34,18 @@ export interface RoutedTools {
    * the main model writing.
    */
   finishPolicy: FinishPolicy;
+  /**
+   * Whether a usable vision subagent took reading pictures over from the main
+   * model — i.e. exactly the condition that stripped `read_image` /
+   * `read_lore_image` above.
+   *
+   * Returned rather than re-derived at each surface for the reason
+   * `resolveVisionConn` states: there should be **one** answer to "who reads
+   * images here", and it should be computed where the strip decision is. Pass
+   * it into `ToolContext.visionDelegate`; a read tool whose result names a
+   * viewer has no other way to know which one is real.
+   */
+  visionDelegate: boolean;
 }
 
 /**
@@ -218,5 +230,6 @@ function route(
     tools,
     serverTools: serverToolsPolicy,
     finishPolicy,
+    visionDelegate: live("vision"),
   };
 }
