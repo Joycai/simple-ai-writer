@@ -43,10 +43,10 @@ import {
 import {
   knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
-import { isMeasured, wireSummary } from "../../../lib/ai/modelSummary";
+import { isMeasured, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import {
-  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, TRANSLATE_FORMATS,
-  type Model, type ModelType, type TranslateFormat,
+  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, TRANSLATE_FORMATS, ASR_FORMATS,
+  type Model, type ModelType, type TranslateFormat, type AsrFormat,
 } from "../../../lib/ai/configDb";
 import type { ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
@@ -116,10 +116,10 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
   const m = existing;
   const caps = m?.caps;
   return {
-    price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage)),
+    price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage || m.pricePerSecond)),
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
-    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.translateFormat || m?.structuredOutput),
+    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim())),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
   };
@@ -192,6 +192,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     thinkingBudget: existing?.thinkingBudget != null ? String(existing.thinkingBudget) : "",
     // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
     translateFormat: (existing?.translateFormat ?? "") as TranslateFormat | "",
+    // Same "" ↔ undefined rule. A transcription model is billed per second of
+    // audio, so it carries its own price cell and the token prices mean nothing.
+    asrFormat: (existing?.asrFormat ?? "") as AsrFormat | "",
+    pricePerSecond: existing?.pricePerSecond !== undefined ? String(existing.pricePerSecond) : "",
     // "auto" ↔ stored undefined, like the category (lib/ai/jsonMode.ts).
     structuredOutput: (existing?.structuredOutput ?? "auto") as StructuredOutputMode | "auto",
   });
@@ -311,6 +315,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   // ── Derived facts the sections, the summaries and the wire line share ──────
   const isImageModel = form.type === "image";
+  // A transcription-only row: 限额 / 思考 / 采样 fold to 「不适用」, 计费 becomes
+  // one per-second cell, and 「将发送」 lists the file endpoint (设计稿 02f 屏 1b).
+  const isAsrModel = form.asrFormat !== "";
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
   const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
@@ -354,6 +361,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         return;
       }
       const parsedPerImage = parseFloat(form.pricePerImage);
+      const parsedPerSecond = Number(form.pricePerSecond) || 0;
       const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
       // comfyui: input-image support is a fact of the imported workflow — the
       // LoadImage count — not a declaration. Derived here instead of a
@@ -436,6 +444,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // "auto" stores as absent, like the category. An image model has no
         // structured tasks, so nothing is kept there either.
         structuredOutput: isImageModel ? undefined : structuredOutput,
+        // Cleared on the translate rule: it removes the row from every other
+        // picker, so it must not outlive the protocol it was declared on.
+        asrFormat: family === "openai" && !isImageModel && form.asrFormat ? form.asrFormat : undefined,
+        pricePerSecond: form.asrFormat && parsedPerSecond > 0 ? parsedPerSecond : undefined,
         pricePerImage,
         caps,
       };
@@ -453,10 +465,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   };
 
   // ── Section summaries (what a folded header says) ──────────────────────────
-  const priceHas = isSet(form.priceIn) || isSet(form.priceCachedIn) || isSet(form.priceOut)
-    || (isImageModel && isSet(form.pricePerImage));
-  const priceSum = `$${form.priceIn || "0"} / ${form.priceCachedIn || "0"} / ${form.priceOut || "0"}`
-    + (isImageModel && isSet(form.pricePerImage) ? ` · ${form.pricePerImage}/img` : "");
+  const priceHas = isAsrModel
+    ? isSet(form.pricePerSecond)
+    : isSet(form.priceIn) || isSet(form.priceCachedIn) || isSet(form.priceOut)
+      || (isImageModel && isSet(form.pricePerImage));
+  const priceSum = isAsrModel
+    ? `¥${form.pricePerSecond || "0"} / s`
+    : `$${form.priceIn || "0"} / ${form.priceCachedIn || "0"} / ${form.priceOut || "0"}`
+      + (isImageModel && isSet(form.pricePerImage) ? ` · ${form.pricePerImage}/img` : "");
 
   const limitsHas = parsedCtx > 0 || parsedOut > 0;
   const limitsSum = [
@@ -480,6 +496,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     serverToolsOn && t("aiConfig.models.mark_web"),
     family === "openai" && pdfInput && "PDF",
     family === "openai" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
+    family === "openai" && form.asrFormat && t(`aiConfig.models.asrFormat_${form.asrFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
 
@@ -506,7 +523,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   ].filter(Boolean).length;
 
   // ── 「将发送」 ─────────────────────────────────────────────────────────────
-  const wire = provider
+  // A transcription row never reaches the chat wire; what it sends is the file
+  // endpoint's four parameters (lib/asr/client.ts submitBody), spelled out here
+  // rather than through wireSummary, whose vocabulary is the chat request's.
+  const asrWire: WireItem[] = [
+    { key: "POST", value: "/services/audio/asr/transcription" },
+    { key: "model", value: form.modelId || "…" },
+    { key: "file_urls[]", value: "(oss, 48h)" },
+    { key: "diarization_enabled", value: "per run" },
+  ];
+  const wire = isAsrModel
+    ? asrWire
+    : provider
     ? wireSummary({
         type: form.type,
         modelId: form.modelId,
@@ -650,6 +678,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           summary={priceHas ? priceSum : t("aiConfig.models.secPricingUnset")}
           unset={!priceHas}
         >
+          <Fold open={!isAsrModel}>
           <Field label={t("aiConfig.models.priceLabel")} sub={t("aiConfig.models.unitUsdPerM")}
             hint={t("aiConfig.models.briefPrice")} {...whyProps("price", t("aiConfig.models.whyPrice"))}>
             <div className={s.triple}>
@@ -667,6 +696,22 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ))}
             </div>
           </Field>
+          </Fold>
+          {/* Billed by the second of audio (设计稿 02f 屏 1b): one cell, in the
+              currency DashScope bills in. Dashed = empty = the usage page cannot
+              price a run and the confirmation card's estimate stays dashed. */}
+          <Fold open={isAsrModel}>
+            <Field label={t("aiConfig.models.pricePerSecondLabel")} sub={t("aiConfig.models.unitYuanPerSecond")}
+              hint={t("aiConfig.models.briefPricePerSecond")}>
+              <div className={s.numRow}>
+                <input className={inputCls(!isSet(form.pricePerSecond), s.num)} type="number" min="0" step="0.00001"
+                  placeholder="0.00022"
+                  value={form.pricePerSecond}
+                  onChange={(e) => setForm({ ...form, pricePerSecond: e.target.value })} />
+                <span className={s.unit}>¥ / s</span>
+              </div>
+            </Field>
+          </Fold>
           <Fold open={isImageModel}>
             <Field label={t("aiConfig.models.pricePerImageLabel")} hint={t("aiConfig.models.briefPricePerImage")}>
               <div className={s.numRow}>
@@ -684,10 +729,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         <Fold open={!isImageModel}>
           <Section
             label={t("aiConfig.models.secLimits")}
-            open={open.limits}
-            onToggle={() => toggleSection("limits")}
-            summary={limitsHas ? limitsSum : t("aiConfig.models.secLimitsUnset")}
-            unset={!limitsHas}
+            open={!isAsrModel && open.limits}
+            onToggle={isAsrModel ? undefined : () => toggleSection("limits")}
+            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : limitsHas ? limitsSum : t("aiConfig.models.secLimitsUnset")}
+            unset={isAsrModel || !limitsHas}
           >
             <Field label={t("aiConfig.models.ctxLabel")} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefCtx")} {...whyProps("ctx", t("aiConfig.models.contextSizeHint"))}
@@ -754,10 +799,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
           <Section
             label={t("aiConfig.models.secThinking")}
-            open={open.think}
-            onToggle={() => toggleSection("think")}
-            summary={thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
-            unset={!thinkHas}
+            open={!isAsrModel && open.think}
+            onToggle={isAsrModel ? undefined : () => toggleSection("think")}
+            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
+            unset={isAsrModel || !thinkHas}
           >
             {/* Which thinking-parameter category this model uses — a per-vendor
                 preset carrying its own legal effort menu. The parameter changed
@@ -930,7 +975,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 model or as any other subagent's model. The warning has to say
                 so — an author who ticks it and then cannot find their model in
                 the chat picker would otherwise read that as a bug. */}
-            <Fold open={family === "openai"}>
+            <Fold open={family === "openai" && !form.asrFormat}>
               <Field label={t("aiConfig.models.translateLabel")} hint={t("aiConfig.models.briefTranslate")}
                 warn={form.translateFormat ? t("aiConfig.models.translateFormatHintOn") : undefined}>
                 <div className={s.chips}>
@@ -946,6 +991,39 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                       label={t(`aiConfig.models.translateFormat_${f}`)}
                       active={form.translateFormat === f}
                       onClick={() => setForm({ ...form, translateFormat: f })}
+                    />
+                  ))}
+                </div>
+              </Field>
+            </Fold>
+
+            {/* Dedicated transcription models (设计稿 02f 屏 1b). Translate's twin,
+                and it takes the same capability away: a row declared here leaves
+                every chat picker and can only be bound to 音频转写. Picking it
+                pre-fills the default DashScope model id and a display name when
+                the identity fields are still empty — the drawer then keeps only
+                the id and a per-second price. */}
+            <Fold open={family === "openai" && !form.translateFormat}>
+              <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
+                warn={form.asrFormat ? t("aiConfig.models.asrFormatHintOn") : undefined}>
+                <div className={s.chips}>
+                  <DashChip
+                    label={t("aiConfig.models.translateFormatNone")}
+                    active={form.asrFormat === ""}
+                    auto
+                    onClick={() => setForm({ ...form, asrFormat: "" })}
+                  />
+                  {ASR_FORMATS.map((f) => (
+                    <DashChip
+                      key={f}
+                      label={t(`aiConfig.models.asrFormat_${f}`)}
+                      active={form.asrFormat === f}
+                      onClick={() => setForm({
+                        ...form,
+                        asrFormat: f,
+                        modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
+                        name: form.name || t("aiConfig.models.asrDefaultName"),
+                      })}
                     />
                   ))}
                 </div>
@@ -980,10 +1058,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
           <Section
             label={t("aiConfig.models.secSampling")}
-            open={open.samp}
-            onToggle={() => toggleSection("samp")}
-            summary={sampHas ? sampSum : t("aiConfig.models.secSamplingUnset")}
-            unset={!sampHas}
+            open={!isAsrModel && open.samp}
+            onToggle={isAsrModel ? undefined : () => toggleSection("samp")}
+            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : sampHas ? sampSum : t("aiConfig.models.secSamplingUnset")}
+            unset={isAsrModel || !sampHas}
           >
             {/* Sampling temperature — shown only where the adapter can actually
                 send it: the Messages API accepts temperature 1 alone while

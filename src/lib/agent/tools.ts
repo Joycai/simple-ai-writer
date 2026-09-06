@@ -12,6 +12,7 @@ import { isChapterFile, naturalCompare } from "../context/outline";
 import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { convertExtOf } from "../import";
+import { transcribeExtOf } from "../asr/formats";
 import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
@@ -1326,6 +1327,8 @@ export async function readWritingFile(
   rawPath: string,
   projectPath: string,
   startLine?: number,
+  /** This run's tool set, so a refusal can point at a tool only when it is there. */
+  allowedTools?: readonly string[],
 ): Promise<ToolResult> {
   // The path argument is model-controlled. A plain startsWith check would
   // accept `../` traversal (`/project/../etc/x`) and prefix siblings
@@ -1356,6 +1359,19 @@ export async function readWritingFile(
     return {
       toolCallId,
       content: `Error: "${path}" is a ${kind}, not a text file. Use read_document to read it.`,
+    };
+  }
+  // A recording: no reader here at all. Name transcribe_audio only when this
+  // run actually has it (docs/reference/tool-presence.md — a pointer to a tool
+  // the model cannot call is worse than none); otherwise say what the author
+  // would have to switch on.
+  if (transcribeExtOf(path)) {
+    const has = allowedTools?.includes("transcribe_audio") ?? false;
+    return {
+      toolCallId,
+      content: has
+        ? `Error: "${path}" is an audio/video file, not a text file. Use transcribe_audio to turn it into a transcript, then read that.`
+        : `Error: "${path}" is an audio/video file, and this run has no transcription tool. Tell the author it needs 实验室 → 音频转写 switched on and a model bound under 子代理.`,
     };
   }
 

@@ -20,6 +20,10 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
 
+/** Same, for the transcription Beta. */
+const asrBeta = { on: false };
+vi.mock("../../asr/flag", () => ({ isAsrEnabled: () => asrBeta.on }));
+
 /** Same, for the 助手工具包模式 (orchestrator) Beta. */
 const orchestratorBeta = { on: false };
 vi.mock("../packFlag", () => ({
@@ -41,6 +45,8 @@ const MODELS = [
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
   { id: "m-sakura", providerId: "p", modelId: "sakura", name: "Sakura", type: "text",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, translateFormat: "sakura" },
+  { id: "m-asr", providerId: "p", modelId: "qwen-audio-3.0-asr-flash-filetrans", name: "ASR", type: "text",
+    priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, asrFormat: "dashscope-filetrans" },
 ] as never;
 
 /** Stand-in handle: routeTools only tests it for presence. */
@@ -694,5 +700,59 @@ describe("routeTools.visionDelegate", () => {
     }, WS, MODELS);
     expect(res.visionDelegate).toBe(false);
     expect(res.tools).toContain("read_lore_image");
+  });
+});
+
+/**
+ * `transcribe_audio` is appended on translate's rule — a Beta flag AND a bound
+ * `asr` model — and, like translate, the raw preset never lists it, so the
+ * routed set is the only place a test can see it (routing.ts).
+ */
+describe("routeTools — transcribe_audio (audio transcription Beta)", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+  const bound: Record<SubAgentKind, SubAgentConfig> = {
+    ...allDisabled,
+    asr: { kind: "asr", modelId: "m-asr", enabled: true },
+  };
+  const withBeta = (on: boolean, run: () => void) => {
+    asrBeta.on = on;
+    try { run(); } finally { asrBeta.on = false; }
+  };
+
+  it("needs BOTH the Beta switch and a binding", () => {
+    withBeta(false, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("transcribe_audio");
+    });
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("transcribe_audio");
+    });
+  });
+
+  it("offers it when both are in place, to the planner too", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).toContain("transcribe_audio");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, bound, MODELS).tools).toContain("transcribe_audio");
+    });
+  });
+
+  it("ignores a binding to an ordinary model, and never adds delegate for asr alone", () => {
+    withBeta(true, () => {
+      const subs: Record<SubAgentKind, SubAgentConfig> = {
+        ...allDisabled,
+        asr: { kind: "asr", modelId: "m-long", enabled: true },
+      };
+      expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS).tools).not.toContain("transcribe_audio");
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("delegate");
+    });
   });
 });

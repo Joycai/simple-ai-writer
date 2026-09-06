@@ -45,6 +45,7 @@ import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTo
 import { exportPptxTool } from "./pptxTools";
 import { readDocumentFile } from "./documentTools";
 import { convertDocumentTool } from "./convertTools";
+import { transcribeAudioTool } from "../asr/tool";
 import type { ConvertExt } from "../import";
 import { inspectHtmlTool } from "./htmlTools";
 import {
@@ -486,6 +487,38 @@ export interface ConvertProposal extends ProposalBase {
 }
 
 /**
+ * Transcribe an audio / video file in the project into a timestamped markdown
+ * transcript beside it (lib/asr). The one proposal whose card comes *before*
+ * the expensive step rather than after it: the transcription is the paid,
+ * uploading, uncancellable action, so nothing has run when the card is raised
+ * — the card carries only what the file header gives (size, a WAV's duration,
+ * an estimate when the model row has a price). Approval runs upload → submit
+ * → poll → write in the apply step, reporting the three stages through
+ * `onApplyProgress`. docs/feature/asr/01-execution-plan.md §1 不变量 4.
+ */
+export interface TranscribeProposal extends ProposalBase {
+  kind: "transcribe";
+  /** The audio / video file. `path` is the intended `.md` beside it, after numbering. */
+  sourcePath: string;
+  /** Project-relative spelling of `sourcePath`, for the card. */
+  sourceLabel: string;
+  ext: string;
+  bytes: number;
+  /** Known before upload only for WAV; null means "billed by actual seconds once done". */
+  seconds: number | null;
+  /** The model row's per-second price; undefined = the usage page cannot price the run. */
+  pricePerSecond: number | undefined;
+  /** `seconds × pricePerSecond` when both exist. */
+  estimate: number | null;
+  /** This run's speaker diarization — the card's own switch may flip it before approval. */
+  diarization: boolean;
+  speakerCount?: number;
+  languageHints?: string[];
+  /** The bound model's display name. */
+  modelName: string;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -507,7 +540,8 @@ export type Proposal =
   | PptxProposal
   | DocxProposal
   | XlsxProposal
-  | ConvertProposal;
+  | ConvertProposal
+  | TranscribeProposal;
 
 export type ApprovalDecision =
   | {
@@ -895,7 +929,8 @@ export type ToolId =
   | "recall"
   | "delegate"
   | "run_pack"
-  | "translate";
+  | "translate"
+  | "transcribe_audio";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -1106,7 +1141,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-      return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line);
+      return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line, ctx.allowedTools);
     },
   },
 
@@ -2762,6 +2797,40 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => convertDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  transcribe_audio: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "transcribe_audio",
+        description:
+          "Transcribe an audio or video file in the project (mp3, wav, m4a, flac, ogg, mp4, mkv, mov…) into a timestamped markdown transcript written as a NEW .md file beside it. This is the ONLY way to read a recording — read_file cannot open audio. It uploads the file to the transcription service and is billed per second of audio, so the author reviews a card FIRST and nothing runs until they approve; after approval the transcript lands on disk and you read it with read_file. Do not call it for a file that already has a transcript beside it.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the audio or video file" },
+            diarization: {
+              type: "boolean",
+              description: "Label speakers (说话人 1 / 2 …). Only useful for a conversation; omit to use the author's default",
+            },
+            speaker_count: { type: "integer", description: "Expected number of speakers (2–100), only with diarization" },
+            language_hints: {
+              type: "array",
+              items: { type: "string" },
+              description: "Language codes the audio is in, e.g. [\"zh\"] or [\"zh\", \"en\"]; omit to auto-detect",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => transcribeAudioTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   read_doc_format: {
