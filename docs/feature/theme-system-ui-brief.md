@@ -1,6 +1,6 @@
 # 主题系统 —— 设置页「外观」的设计任务书
 
-> 状态：`shipped`（设计稿）· 实现 `partial`（S2 已落地，S3 未开始）。方案本体在 [`theme-system-plan.md`](theme-system-plan.md)；本文 `---` 以下是**发给 Claude Design 的任务书原文**。设计稿 `05i 主题 Themes.dc.html` 已回（TURN 1，屏 1a / 1b / 1a 深 / 1a EN / 1c / 1d / 1e / 1f / 1z），下面是它怎么答的、它改了方案的哪两处，以及实现落到了哪一片。
+> 状态：`shipped`（设计稿）· 实现 `shipped`（S2、S3 已落地）。方案本体在 [`theme-system-plan.md`](theme-system-plan.md)；本文 `---` 以下是**发给 Claude Design 的任务书原文**。设计稿 `05i 主题 Themes.dc.html` 已回（TURN 1，屏 1a / 1b / 1a 深 / 1a EN / 1c / 1d / 1e / 1f / 1z），下面是它怎么答的、它改了方案的哪两处，以及实现落到了哪一片。
 
 ## 设计稿怎么答的（1z 决策注记，判断依据比像素要紧）
 
@@ -25,7 +25,7 @@
 
 - **S1 令牌分层（已落地，本 PR）**：`tokens.css` 五层；`data-scheme` + `color-scheme`；核心 37 / 推导 176 / 手调 139，内置零像素变化（脚本 + 浏览器计算值双重核对）；`lib/theme/scheme.ts`；编辑器高亮改令牌类名；Mermaid 读明暗并在切换时重渲染；`themeContract.test.ts` 含悬空引用守卫——首次运行就抓到 `--color-bg-panel`、`--color-red`、`--spring-open` 三处，一并修了。
 - **S2 外观主题文件 + 本屏的设置 UI（已落地 2026-09-06）**：`components/settings/panes/AppearanceThemes.tsx` + `ThemeCards.module.css`，`stores/themeStore.ts`。A1 两条带（模式＝浅 / 深时只留当前那条，带头仍在）；A2 卡脚 mono 来源（`内置` / `…/themes/宣纸.css · 叠在 纸 上`），排序 内置 → 我的、组内按文件名（`localeCompare("zh-Hans-CN")`）；A4 三种坏卡——缺席虚线边 + 虚线样张位、读不出实线边 + 斜纹位 + 次级色文件名、忽略几条正常卡 + 赭石偏暗的边注；B1 缺席卡只有「把文件放回文件夹 · 重新载入」；B2 回退句写在卡上、基底卡带赭石边（选中态跟**生效**的那张走，不跟偏好走）；B3「详情」就地展开占两列，三列 mono `第 / 选择器 / 原因`，表脚「其余 N 条已生效 · 文件没有被改写 · 在编辑器里打开」；B4 样张＝六令牌迷你窗口，元素自己带 `data-theme` / `data-scheme`；C1 三档动作（中性边 × 2 左组 / 赭石描边导出推到右端 + mono 说明）；C2 导出直接写进主题文件夹、重名加序号、痕迹三件事，重新载入痕迹 1.6s 后淡出、有变化写 `+1 个外观 · 宣纸`；C3 外观卡 `minmax(238px,1fr)`、样张 104px。**未照做的**：选中态沿用 05a 已落地的写法（赭石边 + 赭石淡底）而不是 2px 边 + 左上角方块——同一页上的字体卡 / 排版卡都是那一种，本屏不另起一套；「第」列填的是第几条顶层规则而不是行号（CSSOM 不给行号）。
-- **S3 排版主题文件 + iframe 样张**：未开始。
+- **S3 排版主题文件 + iframe 样张（已落地 2026-09-06）**：同一个 `ThemeCard` 长出排版卡（`MarkdownThemeGrid`）。样张＝`<iframe sandbox="" srcdoc>`（`lib/theme/sample.ts`），文档＝当前外观在当前明暗下的一套调色板 + 叠底内置的基底 + 文件自己的 CSS + 「第三章 · 渡口」三件样文——夜间是深的（1e）；「自带字体」/「自带颜色」同一个 mono 小框 + 后果句，借色的卡不写；来源第三种 `.ai-writer/themes/brand.css · 本项目`；网格 `minmax(206px,1fr)`、样张 88px；坏卡三种与外观卡同一套；重新载入的痕迹「3 个外观 · 7 个排版」。**未照做的**：样张里没有应用打包的字体（沙箱不透明源读不到 `'self'` 的字体），退到系统字体。
 
 ---
 

@@ -11,6 +11,7 @@
  *   --theme-kind     ui | markdown (absent = ui)
  *   --theme-scheme   light | dark  (ui: required — which band it belongs to)
  *   --theme-extends  paper | night (ui: the same-polarity built-in, and only that)
+ *                    manuscript | clean | … (markdown: the built-in it sits on)
  *   --theme-version, --theme-author   optional, read but not drawn
  */
 import type { ColorScheme } from "./scheme";
@@ -115,7 +116,14 @@ export function readThemeMeta(pairs: Record<string, string>, rule = 1): MetaRead
       });
     }
     ext = expected;
-  } else if (!ext) {
+  } else if (!ext || !BUILTIN_MARKDOWN_IDS.includes(ext)) {
+    if (ext) {
+      problems.push({
+        rule,
+        selector: `${THEME_META_PREFIX}extends`,
+        reason: `叠底只能是内置排版（${BUILTIN_MARKDOWN_IDS.join(" / ")}）· 已按 ${BUILTIN_MARKDOWN_IDS[0]}`,
+      });
+    }
     ext = BUILTIN_MARKDOWN_IDS[0];
   }
 

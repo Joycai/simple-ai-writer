@@ -21,7 +21,7 @@ import { IS_MAC } from "../platform";
 import { currentMarkdownThemeId, markdownThemeCss } from "../theme/markdownThemes";
 import { exportPaletteCss } from "../theme/export";
 import { TOKEN_CONTRACT } from "../theme/contractData";
-import { resolvedTheme } from "../theme/install";
+import { inlinedMarkdownCss, resolvedMarkdownTheme, resolvedTheme } from "../theme/install";
 import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
@@ -89,10 +89,15 @@ export async function exportMarkdown(source: string): Promise<void> {
  * themes — light on `:root`, dark under `prefers-color-scheme`. Read off the
  * theme registry the way `currentMarkdownThemeId` reads the DOM: the export
  * is a lib-layer call with no React around it.
+ *
+ * A typography theme *file* rides along as its validated CSS after the
+ * built-in base it extends, assets inlined — the exported `<body>` carries
+ * the `md-body` class so the file's `.md-body …` rules land on it unchanged.
  */
-function documentCss(): string {
+async function documentCss(): Promise<string> {
   const md = markdownThemeCss(currentMarkdownThemeId(), "body");
-  const palette = exportPaletteCss(resolvedTheme("light"), resolvedTheme("dark"), md, TOKEN_CONTRACT);
+  const user = await inlinedMarkdownCss(resolvedMarkdownTheme());
+  const palette = exportPaletteCss(resolvedTheme("light"), resolvedTheme("dark"), `${md}\n${user}`, TOKEN_CONTRACT);
   return `${palette}
 body {
   background: var(--color-bg-base);
@@ -101,7 +106,8 @@ body {
   margin: 48px auto;
   padding: 0 24px 80px;
 }
-${md}`;
+${md}
+${user}`;
 }
 
 /**
@@ -119,14 +125,14 @@ export async function exportHtml(
 ): Promise<string | null> {
   const body = await inlineImages(renderMarkdown(source), baseDir);
   const html = `<!DOCTYPE html>
-<html lang="${docLang()}">
+<html lang="${docLang()}" data-md-theme="${currentMarkdownThemeId()}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>${documentCss()}</style>
+<style>${await documentCss()}</style>
 </head>
-<body>
+<body class="md-body">
 ${body}
 </body>
 </html>`;
@@ -145,12 +151,12 @@ export async function exportPdf(source: string, title: string, baseDir?: string)
     ? `<div class="pdf-export-hint">${escapeHtml(i18n.t("editor.exportPdfHint"))}</div>`
     : "";
   const html = `<!DOCTYPE html>
-<html lang="${docLang()}">
+<html lang="${docLang()}" data-md-theme="${currentMarkdownThemeId()}">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-${documentCss()}
+${await documentCss()}
 /* Print sheet: white paper, no page margin of our own — the paper margins
    come from the print system (NSPrintInfo on macOS, the dialog elsewhere),
    so the body's screen padding is zeroed too rather than stacking on top. */

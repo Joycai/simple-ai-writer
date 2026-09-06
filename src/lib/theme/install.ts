@@ -1,71 +1,87 @@
 /**
- * Loading and installing appearance themes — the DOM side of the registry.
+ * Loading and installing themes — the DOM side of the registry.
  *
- * Two entry points, one state:
+ * Entry points, one state:
  *
- * - `preloadSelectedThemes(selected)` at boot: reads only the one or two
- *   files the preferences name, so the first frame is already the author's
- *   theme (docs/feature/theme-system-plan.md §7.2). The rest of the folder
- *   is not read until the settings page asks.
- * - `reloadThemes(selected)` from the settings page: the whole folder.
+ * - `preloadSelectedThemes(selected)` at boot: reads only the files the
+ *   preferences name (an appearance theme per polarity, the typography
+ *   theme), so the first frame is already the author's (docs/feature/
+ *   theme-system-plan.md §7.2). The folder is not scanned until asked.
+ * - `reloadThemes(selected)` from the settings page: both folders in full.
+ * - `setProjectDir(path)` when a project opens or closes: the project's
+ *   `.ai-writer/themes/` joins or leaves the registry.
  *
- * Both validate through `validate.ts`, build a registry through `registry.ts`,
- * write **every** usable user theme into one `<style>` in `tokens.user` — so
- * switching between them is an attribute flip, never a file read — and keep
- * the registry here for the export palette and the switcher. The validated
- * files are kept too, so a selection change rebuilds the registry (its
- * `missing` markers depend on the selection) without touching the disk.
+ * Every path validates through `validate.ts`, builds a registry through
+ * `registry.ts`, and installs: **every** usable appearance theme into one
+ * `<style>` in `tokens.user` — so switching between them is an attribute
+ * flip, never a file read — and the **selected** typography theme into a
+ * second `<style>` after the generator's (`installMarkdownThemeStyles`), its
+ * assets inlined as `data:` (assets.ts). One typography theme at a time is
+ * Typora's semantics; the settings samples do not need more, they are
+ * sandboxed frames of their own (`sample.ts`).
  *
- * A `<style>` element rather than `document.adoptedStyleSheets`: constructed
- * sheets arrived in WebKit 16.4, above the floor the build targets. The layer
- * makes the injection point irrelevant — `tokens.user` wins over the built-in
- * hand-tunes wherever the element sits.
+ * `<style>` elements rather than `document.adoptedStyleSheets`: constructed
+ * sheets arrived in WebKit 16.4, above the floor the build targets. The
+ * layer makes the ui injection point irrelevant; the markdown sheet must
+ * simply come after the generator's, which appending guarantees.
  */
 import { TOKEN_CONTRACT } from "./contractData";
 import {
-  BUILTIN_UI_THEMES, buildUiRegistry, installableEntries, isBuiltinUiId, resolveUiTheme,
-  type ScannedThemeFile, type ThemeEntry, type UiRegistry,
+  BUILTIN_MARKDOWN_THEMES, BUILTIN_UI_THEMES, buildRegistry, installableEntries, isBuiltinMarkdownId, isBuiltinUiId,
+  resolveMarkdownTheme, resolveUiTheme, type Registry, type ScannedThemeFile, type SelectedThemes, type ThemeEntry,
 } from "./registry";
-import { readThemeById, scanThemeFiles, themesDir, type ThemeFileText } from "./scan";
+import { projectThemesDir, readThemeById, scanThemeFiles, themeBaseDir, themesDir, type ThemeFileText } from "./scan";
 import { themeIdFromFileName } from "./manifest";
+import { MD_THEME_ATTR } from "./markdownThemes";
 import { applyThemeId, type ColorScheme } from "./scheme";
-import { uiThemeCss, validateUiThemeText } from "./validate";
+import { inlineAssets } from "./assets";
+import { uiThemeCss, validateThemeText } from "./validate";
 
-const STYLE_ID = "theme-user";
+export type { SelectedThemes };
 
-export type SelectedThemes = Record<ColorScheme, string>;
+const UI_STYLE_ID = "theme-user";
+const MD_STYLE_ID = "theme-markdown-user";
 
-let current: UiRegistry = { entries: [...BUILTIN_UI_THEMES], markdownFiles: 0 };
-/** The validated files behind `current` — the whole folder once `scanned`. */
-let files: ScannedThemeFile[] = [];
-let dirPath = "";
+let current: Registry = { ui: [...BUILTIN_UI_THEMES], markdown: [...BUILTIN_MARKDOWN_THEMES] };
+/** The validated files behind `current` — the whole folders once `scanned`. */
+let userFiles: ScannedThemeFile[] = [];
+let projectFiles: ScannedThemeFile[] = [];
+let userDir = "";
+let projectDir: string | undefined;
 let scanned = false;
-let selection: SelectedThemes = { light: "paper", dark: "night" };
+let selection: SelectedThemes = { light: "paper", dark: "night", markdown: "manuscript" };
 const listeners = new Set<() => void>();
+/** Inlined CSS by file path + text, so a rebuild never re-reads a font. */
+const inlined = new Map<string, { css: string; out: string }>();
 
-export function currentRegistry(): UiRegistry {
+export function currentRegistry(): Registry {
   return current;
 }
 
 /**
- * Be told whenever the registry is rebuilt — a scan, or a selection change
- * that moved a `missing` marker. `stores/themeStore` mirrors it into React
- * from here rather than after each call it happens to make itself, so the
- * settings grid cannot show a missing card the registry no longer holds.
+ * Be told whenever the registry is rebuilt — a scan, a project change, or a
+ * selection change that moved a `missing` marker. `stores/themeStore` mirrors
+ * it into React from here rather than after each call it happens to make
+ * itself, so the grid cannot show a missing card the registry no longer holds.
  */
 export function subscribeRegistry(fn: () => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
 }
 
-/** The ids the preferences named at the last rebuild — what the export palette resolves. */
+/** The ids the preferences named at the last rebuild. */
 export function currentSelection(): SelectedThemes {
   return selection;
 }
 
-/** The theme the export should carry for `scheme` — the author's, or the built-in it fell back to. */
+/** The appearance theme that applies for `scheme` — the author's, or the built-in it fell back to. */
 export function resolvedTheme(scheme: ColorScheme): ThemeEntry {
-  return resolveUiTheme(current.entries, scheme, selection[scheme]);
+  return resolveUiTheme(current.ui, scheme, selection[scheme]);
+}
+
+/** The typography theme that applies — the author's, or the default it fell back to. */
+export function resolvedMarkdownTheme(): ThemeEntry {
+  return resolveMarkdownTheme(current.markdown, selection.markdown);
 }
 
 export function registryScanned(): boolean {
@@ -77,89 +93,160 @@ const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 function validateFile(f: ThemeFileText): ScannedThemeFile {
   if (f.text === undefined) return { fileName: f.fileName, path: f.path, error: f.error };
   const id = themeIdFromFileName(f.fileName) ?? f.fileName;
-  return { fileName: f.fileName, path: f.path, validation: validateUiThemeText(f.text, id, TOKEN_CONTRACT) };
+  return { fileName: f.fileName, path: f.path, validation: validateThemeText(f.text, id, TOKEN_CONTRACT) };
 }
 
-/** Rebuild the registry and the installed sheet from `files` under `selected`. */
-export function rebuildRegistry(selected: SelectedThemes): UiRegistry {
+/** Rebuild the registry and the installed sheets from the files under `selected`. */
+export function rebuildRegistry(selected: SelectedThemes): Registry {
   selection = selected;
-  current = buildUiRegistry(files, selected, dirPath);
-  setUserThemeCss(
-    installableEntries(current.entries)
-      .map((e) => uiThemeCss(e.id, e.tokens as Record<string, string>))
-      .join("\n\n"),
+  current = buildRegistry(userFiles, projectFiles, selected, { user: userDir, project: projectDir });
+  setStyle(
+    UI_STYLE_ID,
+    wrapLayer(installableEntries(current.ui).map((e) => uiThemeCss(e.id, e.tokens as Record<string, string>)).join("\n\n")),
   );
+  void installMarkdownSheet();
   for (const fn of listeners) fn();
   return current;
 }
 
-/**
- * Validate and install theme files handed in as text — what both readers
- * above go through, and the seam a caller with the bytes in hand (a test in
- * a real browser, a future watcher) uses directly. `replace` swaps the whole
- * set; otherwise files the registry does not have yet are added.
- */
-export function loadThemeFiles(
-  texts: ThemeFileText[],
-  selected: SelectedThemes,
-  opts: { replace?: boolean; dir?: string } = {},
-): UiRegistry {
-  if (opts.dir !== undefined) dirPath = opts.dir;
-  const fresh = texts.map(validateFile);
-  files = opts.replace ? fresh : [...files, ...fresh.filter((f) => !files.some((k) => k.fileName === f.fileName))];
-  return rebuildRegistry(selected);
-}
+const wrapLayer = (css: string) => (css ? `@layer tokens.user {\n${css}\n}` : "");
 
-/** Write the user themes' sheet, replacing whatever was there. */
-export function setUserThemeCss(css: string): void {
-  if (typeof document === "undefined") return;
-  let el = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+function setStyle(id: string, css: string): void {
+  // Several store tests stand in a bare `{ documentElement }` for `document`.
+  if (typeof document === "undefined" || typeof document.getElementById !== "function") return;
+  let el = document.getElementById(id) as HTMLStyleElement | null;
   if (!css) {
     el?.remove();
     return;
   }
   if (!el) {
     el = document.createElement("style");
-    el.id = STYLE_ID;
+    el.id = id;
     document.head.appendChild(el);
   }
-  el.textContent = `@layer tokens.user {\n${css}\n}`;
+  if (el.textContent !== css) el.textContent = css;
+}
+
+/** Write the user appearance sheet, replacing whatever was there. Test seam. */
+export function setUserThemeCss(css: string): void {
+  setStyle(UI_STYLE_ID, wrapLayer(css));
 }
 
 /**
- * Boot: read the selected files only. Outside Tauri, or when nothing but
- * built-ins is selected, this does no I/O at all.
+ * The selected typography theme's CSS with its assets inlined — read once
+ * per file text, then served from memory. Built-ins have no sheet of their
+ * own (the generator installed all five at startup).
  */
-export async function preloadSelectedThemes(selected: SelectedThemes): Promise<void> {
-  const ids = [...new Set(Object.values(selected))].filter((id) => !isBuiltinUiId(id));
-  if (!isTauri || !ids.length) return;
-  const dir = await themesDir();
-  const texts: ThemeFileText[] = [];
-  for (const id of ids) {
-    if (files.some((f) => themeIdFromFileName(f.fileName) === id)) continue;
-    const f = await readThemeById(id);
-    if (f) texts.push(f);
-  }
-  loadThemeFiles(texts, selected, { dir });
+export async function inlinedMarkdownCss(entry: ThemeEntry): Promise<string> {
+  if (entry.source === "builtin" || !entry.css) return "";
+  const key = entry.path ?? entry.id;
+  const hit = inlined.get(key);
+  if (hit && hit.css === entry.css) return hit.out;
+  const out = entry.assets?.length && entry.path && isTauri
+    ? await inlineAssets(entry.css, themeBaseDir(entry.path), entry.assets)
+    : entry.css;
+  inlined.set(key, { css: entry.css, out });
+  return out;
 }
 
-/** The settings page's 重新载入, and the first open of the page: the whole folder. */
-export async function reloadThemes(selected: SelectedThemes): Promise<UiRegistry> {
+let mdInstallSeq = 0;
+
+/**
+ * Install the selected typography theme: `data-md-theme` names the built-in
+ * base it sits on (the generator's variables and rules), and the file's own
+ * CSS goes into the second sheet. A built-in selection clears that sheet.
+ */
+async function installMarkdownSheet(): Promise<void> {
+  const seq = ++mdInstallSeq;
+  const entry = resolvedMarkdownTheme();
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute(MD_THEME_ATTR, entry.source === "builtin" ? entry.id : entry.extends);
+  }
+  const css = await inlinedMarkdownCss(entry);
+  if (seq !== mdInstallSeq) return; // a later selection already superseded this one
+  setStyle(MD_STYLE_ID, css);
+}
+
+/**
+ * Validate and install theme files handed in as text — what every reader
+ * above goes through, and the seam a caller with the bytes in hand (a test
+ * in a real browser, a future watcher) uses directly. `replace` swaps the
+ * whole set of that folder; otherwise files not yet known are added.
+ */
+export function loadThemeFiles(
+  texts: ThemeFileText[],
+  selected: SelectedThemes,
+  opts: { replace?: boolean; dir?: string; project?: boolean } = {},
+): Registry {
+  const fresh = texts.map(validateFile);
+  if (opts.project) {
+    if (opts.dir !== undefined) projectDir = opts.dir;
+    projectFiles = opts.replace ? fresh : merge(projectFiles, fresh);
+  } else {
+    if (opts.dir !== undefined) userDir = opts.dir;
+    userFiles = opts.replace ? fresh : merge(userFiles, fresh);
+  }
+  return rebuildRegistry(selected);
+}
+
+const merge = (have: ScannedThemeFile[], add: ScannedThemeFile[]) =>
+  [...have, ...add.filter((f) => !have.some((k) => k.fileName === f.fileName))];
+
+/**
+ * Boot: read the selected files only, from the installation folder. Outside
+ * Tauri, or when nothing but built-ins is selected, this does no I/O at all.
+ * A project theme cannot be selected here — no project is open at boot; it
+ * installs when `setProjectDir` runs.
+ */
+export async function preloadSelectedThemes(selected: SelectedThemes): Promise<void> {
+  const ids = [...new Set([selected.light, selected.dark, selected.markdown])]
+    .filter((id) => !isBuiltinUiId(id) && !isBuiltinMarkdownId(id));
+  if (!isTauri || !ids.length) return;
+  const dir = await themesDir();
+  const known = new Set(userFiles.map((f) => themeIdFromFileName(f.fileName)));
+  const texts: ThemeFileText[] = [];
+  for (const id of ids) {
+    if (known.has(id)) continue;
+    const f = await readThemeById(dir, id);
+    if (f) texts.push(f);
+  }
+  // Read the selected typography theme's assets before the first paint too.
+  loadThemeFiles(texts, selected, { dir });
+  await inlinedMarkdownCss(resolvedMarkdownTheme());
+}
+
+/** The settings page's 重新载入, and the first open of the page: both folders. */
+export async function reloadThemes(selected: SelectedThemes): Promise<Registry> {
   scanned = true;
   // Outside Tauri there is no folder to scan: whatever `loadThemeFiles` was
   // handed stays, and a reload is a rebuild.
   if (!isTauri) return rebuildRegistry(selected);
-  return loadThemeFiles(await scanThemeFiles(), selected, { replace: true, dir: await themesDir() });
+  userDir = await themesDir();
+  userFiles = (await scanThemeFiles(userDir)).map(validateFile);
+  projectFiles = projectDir ? (await scanThemeFiles(projectDir)).map(validateFile) : [];
+  return rebuildRegistry(selected);
 }
 
 /**
- * Make sure the two selected ids are loaded, reading only what the registry
- * does not know yet — the path a preference change takes when the settings
- * page has not opened (a config import, a focus refresh from another window).
+ * A project opened (or closed, `null`): its `.ai-writer/themes/` replaces the
+ * previous project's in the registry. Read in full — a project's brand
+ * typography is what the author opened it to see.
+ */
+export async function setProjectDir(projectPath: string | null, selected: SelectedThemes): Promise<Registry> {
+  projectDir = projectPath ? projectThemesDir(projectPath) : undefined;
+  projectFiles = projectDir && isTauri ? (await scanThemeFiles(projectDir)).map(validateFile) : [];
+  return rebuildRegistry(selected);
+}
+
+/**
+ * Make sure the selected ids are loaded, reading only what the registry does
+ * not know yet — the path a preference change takes when the settings page
+ * has not opened (a config import, a focus refresh from another window).
  */
 export async function ensureSelectedLoaded(selected: SelectedThemes): Promise<void> {
-  const known = new Set(files.map((f) => themeIdFromFileName(f.fileName)));
-  const wanted = Object.values(selected).filter((id) => !known.has(id) && !isBuiltinUiId(id));
+  const known = new Set([...userFiles, ...projectFiles].map((f) => themeIdFromFileName(f.fileName)));
+  const wanted = [selected.light, selected.dark, selected.markdown]
+    .filter((id) => !known.has(id) && !isBuiltinUiId(id) && !isBuiltinMarkdownId(id));
   if (wanted.length && scanned) {
     await reloadThemes(selected);
     return;
@@ -171,18 +258,31 @@ export async function ensureSelectedLoaded(selected: SelectedThemes): Promise<vo
   rebuildRegistry(selected);
 }
 
-/** Apply the theme that resolves for `scheme` under the current selection. */
+/** Apply the appearance theme that resolves for `scheme` under the current selection. */
 export function applyResolvedTheme(scheme: ColorScheme, selectedId: string): ThemeEntry {
-  const entry = resolveUiTheme(current.entries, scheme, selectedId);
+  const entry = resolveUiTheme(current.ui, scheme, selectedId);
   applyThemeId(entry.id, scheme);
   return entry;
 }
 
+/**
+ * Apply the typography theme for `id`: the registry is rebuilt if the
+ * selection moved (a `missing` marker may follow), and the sheet installed.
+ */
+export function applyResolvedMarkdownTheme(id: string): ThemeEntry {
+  if (selection.markdown !== id) rebuildRegistry({ ...selection, markdown: id });
+  else void installMarkdownSheet();
+  return resolvedMarkdownTheme();
+}
+
 /** Test seam. */
 export function resetThemesForTest(): void {
-  current = { entries: [...BUILTIN_UI_THEMES], markdownFiles: 0 };
-  files = [];
-  dirPath = "";
+  current = { ui: [...BUILTIN_UI_THEMES], markdown: [...BUILTIN_MARKDOWN_THEMES] };
+  userFiles = [];
+  projectFiles = [];
+  userDir = "";
+  projectDir = undefined;
   scanned = false;
-  selection = { light: "paper", dark: "night" };
+  selection = { light: "paper", dark: "night", markdown: "manuscript" };
+  inlined.clear();
 }
