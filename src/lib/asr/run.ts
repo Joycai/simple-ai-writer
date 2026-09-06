@@ -267,3 +267,24 @@ export async function writeTranscript(
   await writeFile(target, markdown);
   return target;
 }
+
+/**
+ * 把一次转写记进 `token_usage`：按秒 × 模型行的每秒单价，token 两列为 0，任务名
+ * `asr`。命中缓存的那次没付钱，不记；没填单价记不了，返回 null——用量页那一列
+ * 就少这一笔，确认卡上的估价格已经提前说过这件事。
+ *
+ * 两个入口（右键 / `transcribe_audio` 的 apply）都走这里，账才只有一种算法。
+ * 已知的账目不一致：这一列叫 `cost_usd`，而 DashScope 按人民币计——记进去的
+ * 是 ¥ 数（02-ui-brief.md「设计稿改了方案的三处」第 2 条）。
+ */
+export async function recordTranscriptionUsage(
+  projectPath: string,
+  model: { id: string; pricePerSecond?: number },
+  outcome: TranscribeOutcome,
+): Promise<number | null> {
+  if (outcome.cached || outcome.billedSeconds === null || model.pricePerSecond === undefined) return null;
+  const cost = outcome.billedSeconds * model.pricePerSecond;
+  const { persistUsage } = await import("../ai/usage");
+  await persistUsage(projectPath, model.id, 0, 0, cost, "asr");
+  return cost;
+}

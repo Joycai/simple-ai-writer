@@ -17,6 +17,7 @@ export {
   transcribeFile,
   transcriptTargetFor,
   writeTranscript,
+  recordTranscriptionUsage,
   pollDeadlineMs,
   MAX_TRANSCRIBE_BYTES,
   type TranscribePhase,

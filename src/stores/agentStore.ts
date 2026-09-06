@@ -829,14 +829,9 @@ async function applyProposal(
         speakers: proposal.diarization,
       });
       await useProjectStore.getState().refreshFileTree();
-      // Billed by the second, not the token: the cost column takes seconds ×
-      // the row's price and the token columns stay 0. A cache hit paid nothing.
-      if (!outcome.cached && outcome.billedSeconds !== null && conn.model.pricePerSecond !== undefined) {
+      {
         const projectPath = useProjectStore.getState().projectPath;
-        if (projectPath) {
-          const { persistUsage } = await import("../lib/ai/usage");
-          await persistUsage(projectPath, conn.model.id, 0, 0, outcome.billedSeconds * conn.model.pricePerSecond, "asr");
-        }
+        if (projectPath) await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
       }
       const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
       return {

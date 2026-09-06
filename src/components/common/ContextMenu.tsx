@@ -10,6 +10,8 @@ export type ContextMenuEntry =
       /** 标签下的一行 mono 小字——禁用项写「为什么禁用、去哪儿解」（设计稿 03f 屏 1b ④）。 */
       hint?: string;
       shortcut?: string;
+      /** 标签右侧的 mono 小标（`Beta`）——这项在实验室里的记号（设计稿 02f 屏 1c）。 */
+      badge?: string;
       danger?: boolean;
       disabled?: boolean;
       action: () => void;
@@ -70,6 +72,7 @@ export function ContextMenu({
               {it.icon}
               <span className={styles.label}>
                 {it.label}
+                {it.badge && <span className={styles.badge}>{it.badge}</span>}
                 {it.hint && <span className={styles.hint}>{it.hint}</span>}
               </span>
               {it.shortcut && <span className={styles.shortcut}>{it.shortcut}</span>}

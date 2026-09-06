@@ -68,6 +68,7 @@
 | `aiTaskStore` / `agentStore` 的两份清单 | 工作流卡与 docx 格式表跟着 `read_workflow` / `export_docx` 走，不跟档位走 |
 | `roleplay/presets.ts` `subAgentsFor` | 扮演角色的子代理白名单，只有 vision（见 [02-design §8](../feature/roleplay/02-design.md)） |
 | `roleplay/presets.ts` 旁白工具集 | `read_slides` 与 `read_document` **一起**缺席——只留一个会让 `read_file` 的改口指向不存在的工具 |
+| `routing.ts` `transcribe_audio` · `tools.ts` 音频改口 | 追加规则同 `translate`（Beta 开 **且** `asr` 档位绑了 `isAsrOnly` 的模型）；`read_file` 遇到音视频文件时按 `allowedTools` 判：有就点名 `transcribe_audio`，没有就说要作者去实验室开开关并绑模型——不点一个本次运行没有的工具 |
 
 ## 一个例外：跨工具改口
 

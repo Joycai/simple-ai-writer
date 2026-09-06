@@ -1,6 +1,6 @@
 # 音频转写 · 执行方案
 
-> 状态：`partial` · PR 1（地基）实现中 · 前置阅读：[`00-research.md`](00-research.md)（协议事实 + 实测记录）· UI 任务书：[`02-ui-brief.md`](02-ui-brief.md)
+> 状态：`shipped`（Beta 开关后）· PR 1–3 合在 [#514](https://github.com/Joycai/simple-ai-writer/pull/514) 的三次提交里（地基 / 工具与审批卡 + 设置三处 / 文件树入口）· PR 4（热词）未做 · 前置阅读：[`00-research.md`](00-research.md)（协议事实 + 实测记录）· UI 任务书与实现出入：[`02-ui-brief.md`](02-ui-brief.md)
 >
 > 研究稿回答"能不能做、落在哪"，这一份回答"按什么顺序做、每片交付什么、怎么算做完"。
 

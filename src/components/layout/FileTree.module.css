@@ -529,3 +529,66 @@
   .container { --row-step: 16px; }
   .rightCol { min-width: 40px; text-align: right; }
 }
+
+/* 转写前的确认条（设计稿 02f 屏 1c），长在那一行下面，和删除确认 / 修复选择器
+   同一套版式。语气是「不免费」而不是危险或警告：竖条和底色用面板通知的赭石，
+   不用红、不用 ⚠。四行按「是什么 → 花多少 → 去哪里 → 落在哪」排；估价算不出
+   时值带虚线底——「什么都没发」的同一枚记号。 */
+.transcribeAsk {
+  padding: 7px 10px 8px 12px;
+  background: var(--color-accent-tint);
+  box-shadow: inset 2px 0 0 var(--color-sienna);
+  animation: noticeIn 160ms var(--ease-out);
+}
+.transcribeAskRows {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 6px;
+  margin-top: 6px;
+  align-items: baseline;
+}
+.transcribeAskKey {
+  font: 500 9px/1.5 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.transcribeAskVal {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+.transcribeAskValDash {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-secondary);
+  border-bottom: 1px dashed var(--color-border-strong);
+  display: inline;
+}
+.transcribeAskSub {
+  display: block;
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+.transcribeAskToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.transcribeAskToggle input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-sienna);
+}
+.transcribeAskGo {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-on-accent);
+  background: var(--color-sienna);
+  border: none;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.transcribeAskGo:active { transform: scale(0.96); }

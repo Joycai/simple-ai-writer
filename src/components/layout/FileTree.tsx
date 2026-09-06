@@ -1,9 +1,9 @@
-import {
+import { Fragment,
   useState, useRef, useEffect, useMemo, createContext, useContext, memo,
   type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
+import { AudioLines,
   Folder, FolderOpen, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
-import { fileExists, previewHtmlWindow } from "../../lib/fs/fileio";
+import { fileExists, previewHtmlWindow, readBinaryFile } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -26,6 +26,12 @@ import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, convertExtOf, convertProjectFile, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
+import { isAsrEnabled, isAsrDiarizationDefault, isAsrTimestampsEnabled } from "../../lib/asr/flag";
+import { isVideoExt, transcribeExtOf } from "../../lib/asr/formats";
+import { estimateCost, formatBytes, wavDurationSeconds } from "../../lib/asr/cost";
+import { formatClock } from "../../lib/asr/render";
+import { subAgentModel } from "../../lib/agent/subagent";
+import { useAiStore } from "../../stores/aiStore";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
 import { comboLabel, matchesCombo } from "../../lib/shortcuts";
@@ -40,6 +46,23 @@ import { loreEntityCount } from "../../lib/lore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./FileTree.module.css";
+
+/**
+ * 转写前的确认条（设计稿 02f 屏 1c）要说的四件事，在打开它之前算好：文件多大、
+ * WAV 能从文件头算出的时长、模型行有单价时的估价、会写到哪。`diarization` 是
+ * 这一次的初值（子代理里的默认），作者在条上改的只管这一次。
+ */
+interface TranscribeAskState {
+  path: string;
+  name: string;
+  ext: string;
+  bytes: number;
+  seconds: number | null;
+  pricePerSecond: number | undefined;
+  estimate: number | null;
+  target: string;
+  diarization: boolean;
+}
 
 /** A dragged or clipboarded entry — the pair every transfer needs. */
 interface TransferSource { path: string; isDir: boolean }
@@ -136,6 +159,10 @@ interface TreeCtx {
   relinkAsk: { groupPath: string; candidates: readonly FileNode[] } | null;
   confirmRelink: (docPath: string) => void;
   cancelRelink: () => void;
+  /** 转写前的确认条，长在那一行下面（设计稿 02f 屏 1c）。 */
+  transcribeAsk: TranscribeAskState | null;
+  confirmTranscribe: (diarization: boolean) => void;
+  cancelTranscribe: () => void;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -302,6 +329,62 @@ function RenameInput({ node, depth, kind, orphan }: { node: FileNode; depth: num
 // off one context — memoizing keeps a FileTree-local state change that does
 // *not* feed the (memoized) context value, like opening the context menu,
 // from re-rendering every row in the project.
+/**
+ * 转写前的确认条本体（设计稿 02f 屏 1c）。四行按「是什么 → 花多少 → 去哪里 → 落在哪」
+ * 排；估价只有算得出时长且填了单价时才有数，否则虚线 + 「按实际秒数计」；「去处」
+ * 那句是隐私事实，陈述句、不加色、不进 tooltip。按钮写动作：「上传并转写」。
+ */
+function TranscribeAskBar({
+  ask, onConfirm, onCancel,
+}: { ask: TranscribeAskState; onConfirm: (diarization: boolean) => void; onCancel: () => void }) {
+  const { t } = useTranslation();
+  const [dia, setDia] = useState(ask.diarization);
+  const sizeLine = ask.seconds !== null
+    ? `${formatBytes(ask.bytes)} · ${formatClock(ask.seconds * 1000)}`
+    : `${formatBytes(ask.bytes)} · ${t("fileTree.transcribeAskNoLength", { ext: ask.ext })}`;
+  const estimate = ask.estimate !== null && ask.seconds !== null
+    ? { v: `¥ ${ask.estimate.toFixed(2)}`, sub: t("fileTree.transcribeAskEstimateSub", { s: Math.round(ask.seconds).toLocaleString(), p: ask.pricePerSecond }), dash: false }
+    : {
+        v: t("fileTree.transcribeAskEstimateUnknown"),
+        sub: ask.pricePerSecond === undefined ? t("fileTree.transcribeAskNoPrice") : t("fileTree.transcribeAskRate"),
+        dash: true,
+      };
+  const rows: { k: string; v: string; sub?: string; dash?: boolean }[] = [
+    { k: t("fileTree.transcribeAskFile"), v: ask.name, sub: sizeLine },
+    { k: t("fileTree.transcribeAskEstimate"), ...estimate },
+    { k: t("fileTree.transcribeAskGoesTo"), v: t(isVideoExt(ask.ext) ? "fileTree.transcribeAskGoesToVideo" : "fileTree.transcribeAskGoesToText") },
+    { k: t("fileTree.transcribeAskWrites"), v: baseName(ask.target), sub: t("fileTree.transcribeAskWritesSub") },
+  ];
+  return (
+    <div className={styles.transcribeAsk} onClick={(e) => e.stopPropagation()}>
+      <div className={styles.deleteAskText}>{t("fileTree.transcribeAskLead")}</div>
+      <div className={styles.transcribeAskRows}>
+        {rows.map((r) => (
+          <Fragment key={r.k}>
+            <span className={styles.transcribeAskKey}>{r.k}</span>
+            <span>
+              <span className={r.dash ? styles.transcribeAskValDash : styles.transcribeAskVal}>{r.v}</span>
+              {r.sub && <span className={styles.transcribeAskSub}>{r.sub}</span>}
+            </span>
+          </Fragment>
+        ))}
+        <span className={styles.transcribeAskKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
+        <span>
+          <label className={styles.transcribeAskToggle}>
+            <input type="checkbox" checked={dia} onChange={(e) => setDia(e.target.checked)} />
+            {t("fileTree.transcribeAskDiarization")}
+          </label>
+          <span className={styles.transcribeAskSub}>{t("fileTree.transcribeAskDiarizationSrc")}</span>
+        </span>
+      </div>
+      <div className={styles.deleteAskRow}>
+        <button className={styles.transcribeAskGo} onClick={() => onConfirm(dia)}>{t("fileTree.transcribeAskGo")}</button>
+        <button className={styles.deleteAskCancel} onClick={onCancel}>{t("common.cancel")}</button>
+      </div>
+    </div>
+  );
+}
+
 const TreeNode = memo(function TreeNode({
   node, depth, parentName,
 }: { node: FileNode; depth: number; parentName: string | null }) {
@@ -310,6 +393,7 @@ const TreeNode = memo(function TreeNode({
     activeFilePath, selected, onRowClick, creatingIn,
     renamingPath, openMenu, deleteAsk, confirmDelete, cancelDelete,
     relinkAsk, confirmRelink, cancelRelink,
+    transcribeAsk, confirmTranscribe, cancelTranscribe,
     draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
@@ -459,6 +543,12 @@ const TreeNode = memo(function TreeNode({
         </div>
       )}
 
+      {/* 转写确认条：同一条规矩，手指在哪就在哪问。它是这组「对文件做一件事」里
+          唯一一个上传 + 付费的，所以点下去不直接跑（设计稿 02f 屏 1c）。 */}
+      {transcribeAsk?.path === node.path && (
+        <TranscribeAskBar ask={transcribeAsk} onConfirm={confirmTranscribe} onCancel={cancelTranscribe} />
+      )}
+
       {node.is_dir && open && (
         <div>
           {creatingIn === node.path && <CreateInput depth={depth} />}
@@ -568,6 +658,12 @@ export function FileTree() {
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const [deleteAsk, setDeleteAsk] = useState<{ targets: TransferSource[]; afterPath: string; text: string } | null>(null);
   const [relinkAsk, setRelinkAsk] = useState<{ groupPath: string; candidates: FileNode[] } | null>(null);
+  const [transcribeAsk, setTranscribeAsk] = useState<TranscribeAskState | null>(null);
+  // 转写的入口是否可用：Beta 开着且子代理里绑了一个转写模型。Beta 关 = 菜单项不存在；
+  // Beta 开但没绑 = 禁用并指路（设计稿 02f 屏 1c ②）。
+  const aiModels = useAiStore((st) => st.models);
+  const subAgents = useAiStore((st) => st.subAgents);
+  const asrModel = subAgentModel("asr", aiModels, subAgents);
   // Where a shift-range starts. Held separately from the selection because it
   // must survive the range being redrawn: dragging a shift-click up and down
   // has to grow and shrink one span, not chain new ones off the last row.
@@ -1041,6 +1137,91 @@ export function FileTree() {
   };
 
   /**
+   * 转写前先出确认条（设计稿 02f 屏 1c）：这是右键这一组里唯一一个上传 + 付费的。
+   * 条上要说的数在这里算好——大小、WAV 的时长、有单价时的估价、落点。整个文件
+   * 读一遍只为了大小和文件头：`FileNode` 没有 size，而转写本身还会再读一次。
+   */
+  const askTranscribe = async (node: FileNode) => {
+    if (busy) return;
+    const ext = transcribeExtOf(node.name);
+    if (!ext) return;
+    try {
+      const { transcriptTargetFor } = await import("../../lib/asr");
+      const bytes = await readBinaryFile(node.path);
+      const seconds = ext === "wav" ? wavDurationSeconds(bytes.subarray(0, Math.min(bytes.byteLength, 64 * 1024))) : null;
+      const pricePerSecond = asrModel?.pricePerSecond;
+      setTranscribeAsk({
+        path: node.path,
+        name: node.name,
+        ext,
+        bytes: bytes.byteLength,
+        seconds,
+        pricePerSecond,
+        estimate: seconds === null ? null : estimateCost(seconds, pricePerSecond),
+        target: await transcriptTargetFor(node.path),
+        diarization: isAsrDiarizationDefault(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.transcribeFailed", { name: node.name })} ${message}`);
+    }
+  };
+
+  /**
+   * 确认之后才上传、提交、轮询、写盘。busy 条借「转换文档」那一条，标签随阶段变
+   * （上传中 · 2.4MB → 排队中 → 识别中 · 第 n 次查询），没有进度条——我们拿不到
+   * 百分比（设计稿 02f 屏 1d）。完成开新文件、发一句痕迹；失败把原因留在错误条上。
+   */
+  const handleTranscribe = async (diarization: boolean) => {
+    const ask = transcribeAsk;
+    setTranscribeAsk(null);
+    if (!ask || busy || !projectPath) return;
+    setBusy({ path: ask.path, text: t("fileTree.transcribeReading", { name: ask.name }) });
+    setTransferError(null);
+    try {
+      const asr = await import("../../lib/asr");
+      const conn = await asr.resolveAsrConn();
+      if (asr.isAsrUnavailable(conn)) throw new Error(conn.error);
+      const outcome = await asr.transcribeFile({
+        projectPath,
+        sourcePath: ask.path,
+        conn,
+        options: { diarization },
+        onProgress: (p) => {
+          const text = p.phase === "uploading" ? t("fileTree.transcribeUploading", { size: formatBytes(ask.bytes) })
+            : p.phase === "queued" ? t("fileTree.transcribeQueued")
+            : p.phase === "running" ? t("fileTree.transcribeRunning", { n: p.polls ?? 1 })
+            : p.phase === "downloading" ? t("fileTree.transcribeDownloading")
+            : t("fileTree.transcribeReading", { name: ask.name });
+          setBusy({ path: ask.path, text });
+        },
+      });
+      const target = await asr.writeTranscript(ask.path, outcome.transcript, {
+        modelId: conn.modelId,
+        timestamps: isAsrTimestampsEnabled(),
+        speakers: diarization,
+      });
+      const cost = await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
+      await refreshFileTree();
+      setActiveFilePath(target);
+      const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
+      const name = baseName(target);
+      setNotice({
+        text: outcome.cached
+          ? t("fileTree.transcribedCached", { seconds, name })
+          : cost !== null
+            ? t("fileTree.transcribedCost", { seconds, cost: cost.toFixed(2), name })
+            : t("fileTree.transcribed", { seconds, name }),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.transcribeFailed", { name: ask.name })} ${message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
    * `.html` 的两件事，和预览工具条上的那两个按钮是**同一段代码**（`previewHtmlWindow`
    * / `exportHtmlToPptx`），只是从树上够得着 —— 一份交付稿不必先在编辑器里打开才能
    * 预览或导出。
@@ -1419,6 +1600,18 @@ export function FileTree() {
           action: () => void handleExportPptx(node),
         });
       }
+      // 转写（设计稿 02f 屏 1c）：Beta 关着**不存在**；开着但没绑模型则禁用并指路——
+      // 作者刚在实验室开了开关，看不到入口会以为开关没生效。BETA 小标是这项在实验室
+      // 里的记号。
+      if (transcribeExtOf(node.name) && isAsrEnabled()) {
+        items.push({
+          kind: "item", icon: <AudioLines size={13} />, label: t("fileTree.transcribe"),
+          badge: t("fileTree.transcribeBadge"),
+          disabled: busy !== null || !asrModel,
+          hint: asrModel ? undefined : t("fileTree.transcribeUnbound"),
+          action: () => void askTranscribe(node),
+        });
+      }
       // Only on files the assistant can take (the `@` picker's own kinds) —
       // on a .docx the entry would be a promise the composer can't keep.
       const attachable = classifyProjectFile(node.name, node.path);
@@ -1569,6 +1762,8 @@ export function FileTree() {
     onDragOverDir, onDragLeaveDir, onDropInDir, confirmDelete,
     cancelDelete: () => setDeleteAsk(null),
     confirmRelink, cancelRelink: () => setRelinkAsk(null),
+    confirmTranscribe: (diarization: boolean) => void handleTranscribe(diarization),
+    cancelTranscribe: () => setTranscribeAsk(null),
   };
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; });
@@ -1586,6 +1781,8 @@ export function FileTree() {
     onDropInDir: (e, node) => handlersRef.current.onDropInDir(e, node),
     confirmDelete: () => void handlersRef.current.confirmDelete(),
     cancelDelete: () => handlersRef.current.cancelDelete(),
+    confirmTranscribe: (diarization) => handlersRef.current.confirmTranscribe(diarization),
+    cancelTranscribe: () => handlersRef.current.cancelTranscribe(),
     confirmRelink: (docPath) => void handlersRef.current.confirmRelink(docPath),
     cancelRelink: () => handlersRef.current.cancelRelink(),
   }), []);
@@ -1606,11 +1803,12 @@ export function FileTree() {
     orphanAssets,
     deleteAsk: deleteAsk ? { afterPath: deleteAsk.afterPath, text: deleteAsk.text } : null,
     relinkAsk,
+    transcribeAsk,
     ...stableHandlers,
   }), [
     activeFilePath, selected, creatingIn, creatingType, createError,
     renamingPath, renameError, draggingPaths, dragOverDir, springPath, cutPaths,
-    docCounts, orphanAssets, deleteAsk, relinkAsk, stableHandlers,
+    docCounts, orphanAssets, deleteAsk, relinkAsk, transcribeAsk, stableHandlers,
   ]);
 
   const footer = () => {
