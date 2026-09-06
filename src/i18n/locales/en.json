@@ -429,6 +429,7 @@
       "absentText": "{{file}} not found — back on {{base}}.",
       "absentAction": "Put the file back in the folder",
       "unreadableText": "Theme name or scheme unreadable; this file was not loaded.",
+      "ignoredNote": "{{count}} rules ignored",
       "ignoredNote_one": "1 rule ignored",
       "ignoredNote_other": "{{count}} rules ignored",
       "details": "Details",
