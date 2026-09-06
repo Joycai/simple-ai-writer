@@ -26,7 +26,7 @@
 
 | | `qwen3-asr-flash-filetrans` | `qwen-audio-3.0-asr-flash-filetrans` |
 |---|---|---|
-| 请求 `input` | `{ file_url: "…" }` | `{ file_urls: ["…"] }`（单次仍只能 1 个；实测 `file_url` 单数也被接受） |
+| 请求 `input` | `{ file_url: "…" }`——**只读单数**：只发 `file_urls` 数组时提交 200，任务 `FAILED · InvalidParameter.MalformedURL: A valid file URL is required`（真机 2026-09-06，PR #514 只发了数组） | `{ file_urls: ["…"] }`（单次仍只能 1 个；`file_url` 单数也被接受）。**两个字段一起发两代都成功**，各自忽略不读的那个——`client.ts` 就这么发 |
 | 请求 `parameters` | `language` · `enable_itn` · `enable_words` · `text` · `channel_id` | `language_hints[]`（≤4） · `diarization_enabled` · `speaker_count` · `vocabulary` · `vocabulary_id` · `context[]` · `special_word_filter` · `channel_id` |
 | 轮询成功时结果 URL 在 | `output.result.transcription_url` | `output.output.transcription_url`（同时 `output.output.results[0].transcription_url`，带 `subtask_status`） |
 | `usage` | `{ seconds }` | `{ duration }` |
