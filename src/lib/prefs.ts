@@ -83,6 +83,9 @@ export const PREF_KEYS = [
   // project one — several projects share one server. Its token lives in the OS
   // keyring instead (see lib/sync/config).
   "app:kbServerUrl",
+  // When this machine last reached that server — the 「上次连通」 clause on the
+  // anchor card's offline strip (设计稿 03d 屏 1g). Installation-level like the URL.
+  "app:kbLastConnectedAt",
   "manuscript:onboarding-done",
   "ai:activeModelId",
   "ai:activePromptId",
