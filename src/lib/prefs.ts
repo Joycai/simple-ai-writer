@@ -30,6 +30,11 @@ import { isSamePath } from "./paths";
 
 export const PREF_KEYS = [
   "app:theme",
+  // Which appearance theme each polarity uses — a theme file's id, or the
+  // built-in (`paper` / `night`). The mode above resolves the polarity, the
+  // polarity picks one of these: 「跟随系统」 is a pair (lib/theme/install).
+  "app:themeLight",
+  "app:themeDark",
   "app:language",
   "app:fontScheme",
   "app:markdownTheme",

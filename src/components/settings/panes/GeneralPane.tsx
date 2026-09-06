@@ -11,6 +11,7 @@ import {
 } from "../../../lib/notify";
 import { ResetAppDialog } from "../ResetAppDialog";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
+import { AppearanceThemeGrid, ThemeActions } from "./AppearanceThemes";
 import ui from "../settingsUi.module.css";
 
 const THEMES: { value: ThemeMode; labelKey: string }[] = [
@@ -155,6 +156,9 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
           </ChipRow>
         </Row>
 
+        {/* 外观主题：模式解出明暗、明暗选出一张主题文件（设计稿 05i）。 */}
+        <AppearanceThemeGrid />
+
         <div className={ui.rowStacked}>
           <div className={ui.rowTitle}>{t("systemSettings.general.fontLabel")}</div>
           <div className={ui.rowDesc}>{t("systemSettings.general.fontHint")}</div>
@@ -193,6 +197,8 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
               </button>
             ))}
           </div>
+          {/* 作者入口，长在整节的网格底下：两种主题文件住同一个文件夹。 */}
+          <ThemeActions />
         </div>
       </Section>
 

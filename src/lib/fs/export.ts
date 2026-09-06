@@ -7,8 +7,9 @@
  *
  * Typography follows the markdown theme the author is reading in the app — the
  * same generator feeds the preview pane, so what they exported is what they
- * saw. The palette is re-declared here because the exported file has no
- * tokens.css around it.
+ * saw. The palette is generated into the file because it has no tokens.css
+ * around it: the author's light and dark appearance themes, the second under
+ * `prefers-color-scheme: dark` (lib/theme/export).
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -17,11 +18,10 @@ import { saveTextFileDialog } from "./transfer";
 import { imageToDataUrl } from "./images";
 import { resolveLinkPath } from "../paths";
 import { IS_MAC } from "../platform";
-import {
-  EXPORT_TOKEN_CSS,
-  currentMarkdownThemeId,
-  markdownThemeCss,
-} from "../theme/markdownThemes";
+import { currentMarkdownThemeId, markdownThemeCss } from "../theme/markdownThemes";
+import { exportPaletteCss } from "../theme/export";
+import { TOKEN_CONTRACT } from "../theme/contractData";
+import { resolvedTheme } from "../theme/install";
 import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
@@ -84,16 +84,24 @@ export async function exportMarkdown(source: string): Promise<void> {
 
 // ─── HTML ─────────────────────────────────────────────────────────────────────
 
-/** Page frame + the active markdown theme, resolved against the light palette. */
+/**
+ * Page frame + the active markdown theme over the author's two appearance
+ * themes — light on `:root`, dark under `prefers-color-scheme`. Read off the
+ * theme registry the way `currentMarkdownThemeId` reads the DOM: the export
+ * is a lib-layer call with no React around it.
+ */
 function documentCss(): string {
-  return `${EXPORT_TOKEN_CSS}
+  const md = markdownThemeCss(currentMarkdownThemeId(), "body");
+  const palette = exportPaletteCss(resolvedTheme("light"), resolvedTheme("dark"), md, TOKEN_CONTRACT);
+  return `${palette}
 body {
   background: var(--color-bg-base);
+  color: var(--color-text-primary);
   max-width: 760px;
   margin: 48px auto;
   padding: 0 24px 80px;
 }
-${markdownThemeCss(currentMarkdownThemeId(), "body")}`;
+${md}`;
 }
 
 /**

@@ -29,6 +29,8 @@
  * test, and it is also the list a theme file will be validated against.
  */
 import { describe, expect, it } from "vitest";
+import { cssBlocks, declaredNames, parseTokenContract, stripCssComments, type CssBlock } from "../theme/contract";
+import { TOKEN_CONTRACT } from "../theme/contractData";
 
 /**
  * Stylesheets are read from disk rather than imported: vitest stubs the CSS
@@ -54,42 +56,17 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-
-/** Custom-property names declared directly in `body` (nested blocks removed). */
-function declared(body: string): Set<string> {
-  const direct = body.replace(/[^{};]*\{[^{}]*\}/g, "");
-  return new Set([...direct.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-}
-
-interface Block { path: string[]; body: string }
-
-/** Every rule block with the preludes enclosing it — enough to tell a layer apart. */
-function blocks(css: string): Block[] {
-  const s = stripComments(css);
-  const out: Block[] = [];
-  const stack: { prelude: string; start: number }[] = [];
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (c === "{") {
-      let j = i - 1;
-      while (j >= 0 && !"{};".includes(s[j])) j--;
-      stack.push({ prelude: s.slice(j + 1, i).trim(), start: i + 1 });
-    } else if (c === "}") {
-      const top = stack.pop();
-      if (!top) throw new Error("unbalanced braces in tokens.css");
-      out.push({ path: [...stack.map((f) => f.prelude), top.prelude], body: s.slice(top.start, i) });
-    }
-  }
-  return out;
-}
+// The parser is the runtime's own (lib/theme/contract) — one parse of the
+// file, shared by this test, the validator and the export palette.
+const stripComments = stripCssComments;
+const declared = declaredNames;
 
 const tokens = read("src/styles/tokens.css");
-const all = blocks(tokens);
+const all = cssBlocks(tokens);
 const inLayer = (name: string) => all.filter((b) => b.path[0] === `@layer ${name}`);
-const named = (bs: Block[], selector: string) =>
+const named = (bs: CssBlock[], selector: string) =>
   bs.filter((b) => b.path[b.path.length - 1] === selector && !b.path.some((p) => p.startsWith("@supports")));
-const union = (bs: Block[]) => new Set(bs.flatMap((b) => [...declared(b.body)]));
+const union = (bs: CssBlock[]) => new Set(bs.flatMap((b) => [...declared(b.body)]));
 
 const scale = union(named(inLayer("tokens.scale"), ":root"));
 const coreLight = union(named(inLayer("tokens.scheme"), '[data-scheme="light"]'));
@@ -127,6 +104,27 @@ describe("tokens.css layer structure", () => {
     for (const s of [scale, coreLight, coreDark, deriveRoot, deriveLight, deriveDark, paper, night]) {
       expect(s.size).toBeGreaterThan(0);
     }
+  });
+});
+
+/**
+ * The runtime cannot read the stylesheet (vitest stubs every `.css` import,
+ * `?raw` included, and the modules that need the contract sit under
+ * `appStore`), so `contractData.ts` is the parse frozen into a constant.
+ * This is what keeps the frozen copy honest.
+ */
+describe("contractData.ts is the current parse of tokens.css", () => {
+  it("matches — otherwise run: node scripts/gen-theme-contract.ts", () => {
+    expect(TOKEN_CONTRACT).toEqual(parseTokenContract(tokens));
+  });
+
+  it("carries the three tiers the validator needs", () => {
+    expect(TOKEN_CONTRACT.core.length).toBe(37);
+    expect(TOKEN_CONTRACT.core).toContain("--color-bg-base");
+    expect(TOKEN_CONTRACT.scale).toContain("--radius-md");
+    expect(TOKEN_CONTRACT.derived).toContain("--stg-accent");
+    expect(TOKEN_CONTRACT.core.filter((n) => TOKEN_CONTRACT.derived.includes(n))).toEqual([]);
+    expect(Object.keys(TOKEN_CONTRACT.handTuned).sort()).toEqual(["night", "paper"]);
   });
 });
 

@@ -45,7 +45,8 @@ import {
   MD_THEME_ATTR,
   type MarkdownThemeId,
 } from "../lib/theme/markdownThemes";
-import { applyScheme } from "../lib/theme/scheme";
+import { BUILTIN_THEME_FOR_SCHEME, type ColorScheme } from "../lib/theme/scheme";
+import { applyResolvedTheme, ensureSelectedLoaded, type SelectedThemes } from "../lib/theme/install";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -54,6 +55,8 @@ export type FontScheme = "manuscript" | "song" | "hei" | "kai";
 const FONT_SCHEMES: FontScheme[] = ["manuscript", "song", "hei", "kai"];
 
 const THEME_KEY = "app:theme";
+const THEME_LIGHT_KEY = "app:themeLight";
+const THEME_DARK_KEY = "app:themeDark";
 const LANG_KEY = "app:language";
 const FONT_KEY = "app:fontScheme";
 const MD_THEME_KEY = "app:markdownTheme";
@@ -100,6 +103,16 @@ export const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000] as const;
  */
 function storedTheme(): ThemeMode {
   return (readPref(THEME_KEY) as ThemeMode | null) ?? "dark";
+}
+/**
+ * The theme id for one polarity — a theme file's id or the built-in. Not
+ * validated here: whether the file exists and parses is the registry's call
+ * (`lib/theme/install`), and an id it cannot honour falls back to the
+ * built-in at apply time while the preference stays as the author set it.
+ */
+function storedThemeFor(scheme: ColorScheme): string {
+  const raw = readPref(scheme === "light" ? THEME_LIGHT_KEY : THEME_DARK_KEY)?.trim();
+  return raw || BUILTIN_THEME_FOR_SCHEME[scheme];
 }
 function storedLang(): Language {
   return (readPref(LANG_KEY) as Language | null) ?? "zh-CN";
@@ -220,6 +233,8 @@ function prefBackedState() {
   const pinnedProjects = loadPinnedProjects();
   return {
     theme: storedTheme(),
+    themeLight: storedThemeFor("light"),
+    themeDark: storedThemeFor("dark"),
     language: storedLang(),
     fontScheme: storedFontScheme(),
     markdownTheme: storedMarkdownTheme(),
@@ -295,6 +310,9 @@ export function screenNeedsProject(screen: AppScreen): boolean {
 
 interface AppState {
   theme: ThemeMode;
+  /** The appearance theme each polarity uses (`lib/theme/install`): 跟随系统 is a pair. */
+  themeLight: string;
+  themeDark: string;
   language: Language;
   fontScheme: FontScheme;
   markdownTheme: MarkdownThemeId;
@@ -379,6 +397,10 @@ interface AppState {
   settingsTab: SettingsTab;
 
   setTheme: (theme: ThemeMode) => void;
+  /** Pick the appearance theme for one polarity. */
+  setThemeFor: (scheme: ColorScheme, id: string) => void;
+  /** Re-apply the resolved theme — after the registry reloaded (设置 → 重新载入). */
+  applyCurrentTheme: (animated?: boolean) => void;
   setLanguage: (lang: Language) => void;
   setFontScheme: (scheme: FontScheme) => void;
   setMarkdownTheme: (id: MarkdownThemeId) => void;
@@ -466,13 +488,18 @@ function resolveTheme(mode: ThemeMode): "dark" | "light" {
   return mode;
 }
 
+const selectedThemes = (s: { themeLight: string; themeDark: string }): SelectedThemes =>
+  ({ light: s.themeLight, dark: s.themeDark });
+
 /**
- * Writes `data-theme` (the built-in theme for the resolved polarity) and
- * `data-scheme` (the polarity itself) — see lib/theme/scheme for why there are
- * two attributes and why nothing else reads the first one's value.
+ * Writes `data-theme` (the theme the registry resolves for the polarity —
+ * the author's file, or the built-in when that file is absent or unusable)
+ * and `data-scheme` (the polarity itself) — see lib/theme/scheme for why
+ * there are two attributes and why nothing else reads the first one's value.
  */
-function applyTheme(mode: ThemeMode) {
-  applyScheme(resolveTheme(mode));
+function applyTheme(mode: ThemeMode, selected: SelectedThemes) {
+  const scheme = resolveTheme(mode);
+  applyResolvedTheme(scheme, selected[scheme]);
 }
 
 /**
@@ -483,15 +510,15 @@ function applyTheme(mode: ThemeMode) {
  * API is unavailable (older webviews) or the user prefers reduced motion.
  * Used for user/system-driven changes only; the initial load stays instant.
  */
-function applyThemeAnimated(mode: ThemeMode) {
+function applyThemeAnimated(mode: ThemeMode, selected: SelectedThemes) {
   const doc = document as Document & {
     startViewTransition?: (cb: () => void) => unknown;
   };
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (typeof doc.startViewTransition === "function" && !reduced) {
-    doc.startViewTransition(() => applyTheme(mode));
+    doc.startViewTransition(() => applyTheme(mode, selected));
   } else {
-    applyTheme(mode);
+    applyTheme(mode, selected);
   }
 }
 
@@ -524,7 +551,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => {
     writePref(THEME_KEY, theme);
     set({ theme });
-    applyThemeAnimated(theme);
+    applyThemeAnimated(theme, selectedThemes(get()));
 
     if (systemThemeListener) {
       window.matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", systemThemeListener);
@@ -532,9 +559,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      systemThemeListener = () => applyThemeAnimated(get().theme);
+      systemThemeListener = () => applyThemeAnimated(get().theme, selectedThemes(get()));
       mq.addEventListener("change", systemThemeListener);
     }
+  },
+
+  setThemeFor: (scheme, id) => {
+    writePref(scheme === "light" ? THEME_LIGHT_KEY : THEME_DARK_KEY, id);
+    set(scheme === "light" ? { themeLight: id } : { themeDark: id });
+    // The settings grid only offers ids the registry holds, so this is a
+    // rebuild without I/O; a caller naming an unknown id gets its file read.
+    const selected = selectedThemes(get());
+    void ensureSelectedLoaded(selected).then(() => applyThemeAnimated(get().theme, selected));
+  },
+
+  applyCurrentTheme: (animated = true) => {
+    const selected = selectedThemes(get());
+    if (animated) applyThemeAnimated(get().theme, selected);
+    else applyTheme(get().theme, selected);
   },
 
   setLanguage: (language) => {
@@ -773,7 +815,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const touched = (key: string) => !changedKeys || changedKeys.includes(key);
     const next = prefBackedState();
     set(next);
-    if (touched(THEME_KEY)) applyThemeAnimated(next.theme);
+    if (touched(THEME_KEY) || touched(THEME_LIGHT_KEY) || touched(THEME_DARK_KEY)) {
+      // An imported preference may name a file this machine does not have;
+      // the registry marks it missing and the built-in applies instead.
+      const selected = selectedThemes(next);
+      void ensureSelectedLoaded(selected).then(() => applyThemeAnimated(next.theme, selected));
+    }
     if (touched(FONT_KEY)) applyFontScheme(next.fontScheme);
     if (touched(MD_THEME_KEY)) applyMarkdownTheme(next.markdownTheme);
     if (touched(LANG_KEY) && next.language !== i18n.language) i18n.changeLanguage(next.language);
@@ -840,7 +887,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 // disagree.
 {
   const s = useAppStore.getState();
-  applyTheme(s.theme);
+  // The selected theme files were read in main.tsx's boot(), before this
+  // module was imported, so the first frame is already the author's theme.
+  applyTheme(s.theme, selectedThemes(s));
   applyFontScheme(s.fontScheme);
   applyMarkdownTheme(s.markdownTheme);
 }
