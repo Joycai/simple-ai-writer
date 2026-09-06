@@ -100,7 +100,7 @@
 .targetOn { border-color: var(--color-sienna); color: var(--color-text-primary); }
 .targetDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
-.error { font: 400 12px/1.5 var(--font-sans); color: var(--color-red, #b91c1c); }
+.error { font: 400 12px/1.5 var(--font-sans); color: var(--color-danger-text); }
 
 .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .btnSecondary {
@@ -115,17 +115,19 @@
 }
 .btnSecondary:hover { background: var(--color-bg-hover); }
 .btnSecondary:active { transform: scale(0.98); }
-/* 删除是不可逆那一侧，所以按钮不是 sienna 而是红——全应用只有这一类动作用它。 */
+/* 删除是不可逆那一侧，所以按钮不是 sienna——赭石是「这是你要的那个」，不能用来确认
+   删除；而这套语言里没有红（原来那个 --color-red 从未定义过，一直在吃字面 fallback）。
+   用**深中性填色**：墨色底 + 纸色字，有分量、不诱导——与 05f 屏 1l 的删除确认同一形制。 */
 .btnDanger {
   padding: 8px 14px;
-  background: var(--color-red, #b91c1c);
-  color: var(--color-card);
+  background: var(--color-text-primary);
+  color: var(--color-bg-surface);
   border: none;
   font: 500 12px/1 var(--font-sans);
   cursor: pointer;
-  transition: filter var(--transition-fast), transform var(--transition-fast),
+  transition: background var(--transition-fast), transform var(--transition-fast),
     box-shadow var(--transition-fast);
 }
-.btnDanger:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btnDanger:hover:not(:disabled) { background: var(--color-text-secondary); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .btnDanger:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
 .btnDanger:disabled, .btnSecondary:disabled { opacity: 0.5; cursor: not-allowed; }
