@@ -11,7 +11,7 @@
  * 「写这份文字稿」，不只是「花这笔钱」。
  */
 
-import { fileExists, readBinaryFile } from "../fs/fileio";
+import { fileExists, readFileHead } from "../fs/fileio";
 import { baseName, projectRelative, resolveWorkspacePath } from "../paths";
 import type { ToolContext, TranscribeProposal } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
@@ -19,7 +19,7 @@ import { estimateCost, wavDurationSeconds } from "./cost";
 import { isAsrDiarizationDefault } from "./flag";
 import { transcribeExtOf, ASR_EXT_LIST } from "./formats";
 import { isAsrUnavailable, resolveAsrConn } from "./conn";
-import { transcriptTargetFor } from "./run";
+import { MAX_TRANSCRIBE_BYTES, transcriptTargetFor } from "./run";
 
 let proposalCounter = 0;
 
@@ -70,16 +70,29 @@ export async function transcribeAudioTool(
     return { toolCallId, content: `Error: ${conn.error}` };
   }
 
-  // 大小 + 能算出的时长 + 估价。整个文件不读——批准之前一个字节都不该为它花。
+  // 大小 + 能算出的时长 + 估价。整个文件**不读**：`readFileHead` 一次往返带回真实
+  // 大小和前 64KB，一份 1.5GB 的视频不会为了画一张卡就整个穿过 IPC 进 webview 堆。
+  // 上限也在这里拦——`transcribeFile` 里那道闸在批准**之后**，那时钱已经要花了。
   let bytes = 0;
   let seconds: number | null = null;
   try {
-    const head = await readBinaryFile(source);
-    bytes = head.byteLength;
-    if (ext === "wav") seconds = wavDurationSeconds(head.subarray(0, Math.min(head.byteLength, HEADER_BYTES)));
+    const head = await readFileHead(source, HEADER_BYTES);
+    bytes = head.size;
+    if (ext === "wav") seconds = wavDurationSeconds(head.head, head.size);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { toolCallId, content: `Error reading "${source}": ${msg}.` };
+  }
+  if (bytes === 0) {
+    return { toolCallId, content: `Error: "${source}" is empty — there is nothing to transcribe.` };
+  }
+  if (bytes > MAX_TRANSCRIBE_BYTES) {
+    return {
+      toolCallId,
+      content:
+        `Error: "${source}" is ${(bytes / 1024 / 1024).toFixed(0)}MB, over the ` +
+        `${MAX_TRANSCRIBE_BYTES / 1024 / 1024}MB transcription limit. Ask the author to split or re-encode it.`,
+    };
   }
   const price = conn.model.pricePerSecond;
   const hints = (args.language_hints ?? []).filter((h): h is string => typeof h === "string" && !!h).slice(0, 4);

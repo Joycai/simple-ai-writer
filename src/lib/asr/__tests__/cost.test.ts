@@ -28,6 +28,29 @@ describe("wavDurationSeconds", () => {
     expect(wavDurationSeconds(wav({ byteRate: 32_000, dataBytes: 64_000, dataSizeField: 0 }))).toBe(2);
     expect(wavDurationSeconds(wav({ byteRate: 32_000, dataBytes: 64_000, dataSizeField: 0xffffffff }))).toBe(2);
   });
+  // 回归：调用方只拿得到前 64KB，而流式写出的 WAV 的时长只能由「data 块一直到
+  // 文件末尾」反推。拿前缀去反推，一小时的录音会算成半秒，而那个数字随后印在一张
+  // 付费确认卡上。
+  it("只给文件头时，流式 data 长度要按真实文件大小算，不是按手里这段前缀", () => {
+    const whole = wav({ byteRate: 176_400, dataBytes: 176_400 * 3600, dataSizeField: 0 });
+    const head = whole.subarray(0, 64 * 1024);
+    expect(wavDurationSeconds(head, whole.byteLength)).toBeCloseTo(3600, 0);
+    // 没告诉它真实大小时只能量到前缀——所以调用方必须传。
+    expect(wavDurationSeconds(head)).toBeLessThan(1);
+  });
+  it("data 长度字段可信时，前缀与整份文件给出同一个答案", () => {
+    const whole = wav({ byteRate: 32_000, dataBytes: 96_000 });
+    expect(wavDurationSeconds(whole.subarray(0, 64), whole.byteLength)).toBe(3);
+  });
+  // 回归：byteRate 在块内第 8 字节起的 4 个字节，读得到它要到 offset+20；
+  // 判据写成 +16 时缓冲区正好断在这 4 个字节里会让 getUint32 抛 RangeError。
+  it("缓冲区断在 fmt 的 byteRate 中间 → null，不抛", () => {
+    const whole = wav({ byteRate: 44_100, dataBytes: 88_200 });
+    for (let cut = 44; cut >= 20; cut--) {
+      expect(() => wavDurationSeconds(whole.subarray(0, cut))).not.toThrow();
+    }
+    expect(wavDurationSeconds(whole.subarray(0, 30))).toBeNull();
+  });
   it("不是 WAV / 太短 / byteRate 为 0 → null", () => {
     expect(wavDurationSeconds(new Uint8Array([0xff, 0xfb, 0x90]))).toBeNull();
     expect(wavDurationSeconds(new Uint8Array(10))).toBeNull();

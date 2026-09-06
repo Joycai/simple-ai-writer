@@ -12,7 +12,7 @@ import { AudioLines,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
-import { fileExists, previewHtmlWindow, readBinaryFile } from "../../lib/fs/fileio";
+import { fileExists, previewHtmlWindow, readFileHead } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -1138,8 +1138,9 @@ export function FileTree() {
 
   /**
    * 转写前先出确认条（设计稿 02f 屏 1c）：这是右键这一组里唯一一个上传 + 付费的。
-   * 条上要说的数在这里算好——大小、WAV 的时长、有单价时的估价、落点。整个文件
-   * 读一遍只为了大小和文件头：`FileNode` 没有 size，而转写本身还会再读一次。
+   * 条上要说的数在这里算好——大小、WAV 的时长、有单价时的估价、落点。`FileNode`
+   * 没有 size，所以问一次磁盘：`readFileHead` 一次往返给回真实大小和前 64KB，
+   * 而不是把一份几百 MB 的录音整个读进来只为了看它的头四个字节。
    */
   const askTranscribe = async (node: FileNode) => {
     if (busy) return;
@@ -1147,14 +1148,15 @@ export function FileTree() {
     if (!ext) return;
     try {
       const { transcriptTargetFor } = await import("../../lib/asr");
-      const bytes = await readBinaryFile(node.path);
-      const seconds = ext === "wav" ? wavDurationSeconds(bytes.subarray(0, Math.min(bytes.byteLength, 64 * 1024))) : null;
+      const head = await readFileHead(node.path, 64 * 1024);
+      // 真实大小传给它：流式写出的 WAV 的时长只能由「data 块到文件末尾」反推。
+      const seconds = ext === "wav" ? wavDurationSeconds(head.head, head.size) : null;
       const pricePerSecond = asrModel?.pricePerSecond;
       setTranscribeAsk({
         path: node.path,
         name: node.name,
         ext,
-        bytes: bytes.byteLength,
+        bytes: head.size,
         seconds,
         pricePerSecond,
         estimate: seconds === null ? null : estimateCost(seconds, pricePerSecond),

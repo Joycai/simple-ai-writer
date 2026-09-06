@@ -130,6 +130,19 @@ export function buildRegistry(
   const ui: ThemeEntry[] = [];
   const userMd: ThemeEntry[] = [];
   const projectMd: ThemeEntry[] = [];
+  /**
+   * The project ids that actually **override** a user theme — only the files
+   * that are genuinely typography themes.
+   *
+   * A ui file found in the project folder is refused, but still shown (below)
+   * so the author learns why it did nothing, and showing it means relabelling
+   * it `kind: "markdown"` so it lands in that grid. That relabelling must not
+   * leak into the override rule: a project shipping an appearance theme named
+   * `brand.css` would otherwise knock the author's own working typography
+   * theme `brand` out of the registry, and their typography would silently
+   * revert to the default on opening that project.
+   */
+  const overrideIds = new Set<string>();
   for (const f of userFiles) {
     const id = themeIdFromFileName(f.fileName);
     if (!id) continue;
@@ -141,18 +154,20 @@ export function buildRegistry(
     if (!id) continue;
     const e = entryFromFile(id, f, "project");
     if (e.kind === "ui") {
-      // Shown, so the author learns why the file did nothing — but never usable.
+      // Shown, so the author learns why the file did nothing — but never usable,
+      // and never an override (see `overrideIds`).
       projectMd.push({
         ...e, kind: "markdown", scheme: undefined, tokens: undefined, usable: false,
         problems: [{ rule: 0, selector: f.fileName, reason: "uiInProject" }, ...e.problems],
       });
-    } else projectMd.push(e);
+    } else {
+      projectMd.push(e);
+      overrideIds.add(e.id);
+    }
   }
   ui.sort(byFileName);
   userMd.sort(byFileName);
   projectMd.sort(byFileName);
-  const projectIds = new Set(projectMd.map((e) => e.id));
-
   const uiAll: ThemeEntry[] = [...BUILTIN_UI_THEMES, ...ui];
   for (const scheme of ["light", "dark"] as const) {
     const id = selected[scheme];
@@ -166,7 +181,7 @@ export function buildRegistry(
 
   const mdAll: ThemeEntry[] = [
     ...BUILTIN_MARKDOWN_THEMES,
-    ...userMd.filter((e) => !projectIds.has(e.id)),
+    ...userMd.filter((e) => !overrideIds.has(e.id)),
     ...projectMd,
   ];
   if (!mdAll.some((e) => e.id === selected.markdown)) {

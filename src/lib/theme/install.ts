@@ -193,14 +193,33 @@ const merge = (have: ScannedThemeFile[], add: ScannedThemeFile[]) =>
   [...have, ...add.filter((f) => !have.some((k) => k.fileName === f.fileName))];
 
 /**
+ * Which of the three selected ids name a **file** rather than a built-in.
+ *
+ * The two namespaces are separate and the test has to be too: `paper` and
+ * `night` are reserved for appearance themes, `manuscript` / `clean` /
+ * `magazine` / `wechat` / `typewriter` for typography themes, and nothing
+ * reserves one against the other. Testing every id against both lists — which
+ * is what this replaced — meant an appearance theme the author had named
+ * `clean.css` was silently never read at boot: it installs and applies while
+ * Settings is open (the folder has been scanned by then), and then falls back
+ * to the built-in on every launch after, because the preload dropped its id as
+ * "a built-in markdown theme". `registry.ts` only reserves ids within a kind,
+ * so this must match it.
+ */
+export function fileBackedIds(selected: SelectedThemes): string[] {
+  const ui = [selected.light, selected.dark].filter((id) => !isBuiltinUiId(id));
+  const md = isBuiltinMarkdownId(selected.markdown) ? [] : [selected.markdown];
+  return [...new Set([...ui, ...md])];
+}
+
+/**
  * Boot: read the selected files only, from the installation folder. Outside
  * Tauri, or when nothing but built-ins is selected, this does no I/O at all.
  * A project theme cannot be selected here — no project is open at boot; it
  * installs when `setProjectDir` runs.
  */
 export async function preloadSelectedThemes(selected: SelectedThemes): Promise<void> {
-  const ids = [...new Set([selected.light, selected.dark, selected.markdown])]
-    .filter((id) => !isBuiltinUiId(id) && !isBuiltinMarkdownId(id));
+  const ids = fileBackedIds(selected);
   if (!isTauri || !ids.length) return;
   const dir = await themesDir();
   const known = new Set(userFiles.map((f) => themeIdFromFileName(f.fileName)));
@@ -245,8 +264,7 @@ export async function setProjectDir(projectPath: string | null, selected: Select
  */
 export async function ensureSelectedLoaded(selected: SelectedThemes): Promise<void> {
   const known = new Set([...userFiles, ...projectFiles].map((f) => themeIdFromFileName(f.fileName)));
-  const wanted = [selected.light, selected.dark, selected.markdown]
-    .filter((id) => !known.has(id) && !isBuiltinUiId(id) && !isBuiltinMarkdownId(id));
+  const wanted = fileBackedIds(selected).filter((id) => !known.has(id));
   if (wanted.length && scanned) {
     await reloadThemes(selected);
     return;

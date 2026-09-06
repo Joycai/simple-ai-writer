@@ -171,6 +171,63 @@ fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
     }
 }
 
+/// The size of a file plus its first `max_bytes` bytes, in one round trip.
+///
+/// The one reader that answers "how big is it?" without paying for the whole
+/// file. Audio and video are the reason: a transcription proposal needs the
+/// size (to quote it, and to refuse a file over the limit) and, for a WAV,
+/// only the header — reading a 1.5 GB recording into the webview heap to
+/// learn two numbers is not a cost the author agreed to, and the refusal has
+/// to happen before the read, not after it.
+///
+/// `size` is the file's real length even when `head` is a prefix, which is
+/// what lets `wavDurationSeconds` compute a streamed WAV's duration (its data
+/// chunk runs to EOF and its length field is a sentinel) instead of measuring
+/// the prefix it was handed. Base64 out for the same reason
+/// [`fs_write_binary_file`] takes it in.
+#[derive(Serialize)]
+pub struct FileHead {
+    pub size: u64,
+    /// Base64 of the first `max_bytes` bytes — fewer when the file is smaller.
+    pub head: String,
+}
+
+/// The scope-free half, so a test can reach it: the file's length and its
+/// first `max_bytes` bytes.
+fn read_head_bytes(path: &Path, max_bytes: u64) -> std::io::Result<(u64, Vec<u8>)> {
+    use std::io::Read;
+    let size = fs::metadata(path)?.len();
+    let mut file = fs::File::open(path)?;
+    // `usize` on a 32-bit target cannot hold what a 64-bit length can; the
+    // caller's ceiling is kilobytes, so clamping is the honest conversion.
+    let want = usize::try_from(max_bytes.min(size)).unwrap_or(usize::MAX);
+    let mut buf = vec![0u8; want];
+    let mut filled = 0;
+    while filled < want {
+        match file.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) => return Err(e),
+        }
+    }
+    buf.truncate(filled);
+    Ok((size, buf))
+}
+
+#[command]
+pub fn fs_read_head(
+    path: String,
+    max_bytes: u64,
+    scope: State<'_, FsScope>,
+) -> Result<FileHead, String> {
+    scope.check(&path)?;
+    let (size, buf) = read_head_bytes(Path::new(&path), max_bytes).map_err(|e| e.to_string())?;
+    Ok(FileHead {
+        size,
+        head: BASE64.encode(&buf),
+    })
+}
+
 /// Read text from a file, guessing the encoding when it isn't UTF-8 —
 /// see [`decode_text`].
 #[command]
@@ -412,8 +469,48 @@ pub fn open_with_default_app(
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_text, is_within, valid_category};
+    use super::{decode_text, is_within, read_head_bytes, valid_category};
     use std::path::Path;
+
+    /// The whole point of this reader: `size` is the file's real length even
+    /// when the bytes handed back are a prefix. A streamed WAV writes a
+    /// sentinel where its data length belongs, so that number is the only way
+    /// to recover its duration — measuring the prefix instead reports an hour
+    /// of audio as half a second, on a card quoting what it will cost.
+    #[test]
+    fn read_head_reports_the_whole_size_with_a_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.wav");
+        std::fs::write(&path, vec![7u8; 5000]).unwrap();
+
+        let (size, head) = read_head_bytes(&path, 100).unwrap();
+        assert_eq!(size, 5000);
+        assert_eq!(head.len(), 100);
+        assert!(head.iter().all(|b| *b == 7));
+    }
+
+    #[test]
+    fn read_head_stops_at_the_end_of_a_short_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("b.bin");
+        std::fs::write(&path, b"abc").unwrap();
+
+        let (size, head) = read_head_bytes(&path, 64 * 1024).unwrap();
+        assert_eq!(size, 3);
+        assert_eq!(head, b"abc");
+
+        // An empty file is a real answer, not an error — the caller refuses it
+        // with a sentence of its own.
+        let empty = dir.path().join("c.bin");
+        std::fs::write(&empty, b"").unwrap();
+        assert_eq!(read_head_bytes(&empty, 64 * 1024).unwrap(), (0, vec![]));
+    }
+
+    #[test]
+    fn read_head_fails_on_a_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(read_head_bytes(&dir.path().join("nope.wav"), 16).is_err());
+    }
 
     #[test]
     fn utf8_passes_through_unchanged() {

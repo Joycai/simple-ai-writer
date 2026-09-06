@@ -130,7 +130,7 @@
 
 **排版主题（`@kind markdown`）的规则**：
 
-- 顶层选择器必须以 `.md-body` 开头（Typora：`#write`）。`@media` / `@supports` / `@container` 容器里的规则递归检查同一条。`@font-face` / `@keyframes` 接受。
+- 顶层选择器必须以 `.md-body` 开头（Typora：`#write`）**并且留在里面**：后代与 `>` 可以，`~` / `+` 不行——它们从 `.md-body` 起步却往旁边走，选中的是预览容器的**兄弟**，那是应用外壳（知识库阅读模式的 mono 边注就紧挨着正文，编辑器那边是工具条），而 `!important` 是照收的。只看深度 0 的组合器：`:nth-child(2n+1)` 里的 `+`、属性选择器里的 `~=` 都不是组合器，`.md-body:has(+ .x)` 的主体仍是 `.md-body`。两种拒绝各有各的话（`mdSelector` / `mdCombinator`）。`@media` / `@supports` / `@container` 容器里的规则递归检查同一条。`@font-face` / `@keyframes` 接受。
 - 不接受 `:root`、`html`、`body`——想改颜色就在 `.md-body { --md-color-accent: … }` 里改。
 - `url()` 只接受相对路径（相对本 css 文件，解析进同名文件夹）、`data:`；其它一律丢弃。相对路径安装时改写成 `ai-writer-asset:` 协议 URL，导出时内联成 `data:`（§9）。
 
@@ -241,7 +241,7 @@ interface ThemeEntry {
 - **CSS 键盘记录器**（属性选择器逐字符匹配 `value` + 远程 `url()` 回传）是主题文件的经典攻击。它的前提是远程加载。CSP 的 `img-src` / `font-src` 今天没有任何远程主机，本方案只加 `ai-writer-asset:` 到 `font-src`；**永远不为了主题给这两项开 `https:`**。`@import` 远程同理被 `style-src 'self'` 拦住。
 - 构造样式表（`adoptedStyleSheets`）不受 `style-src` 约束（CSSOM 操作按规范免检），这与今天 `'unsafe-inline'` 的现状等价，没有放宽。
 - UI 主题只能写 `--` 属性，改不了任何元素的 `display` / `position` / `content`，所以它不能遮住批准卡、不能把「删除」按钮画成「取消」。排版主题只到 `.md-body` 之内，同理够不到应用外壳。
-- 主题文件来自作者自己的磁盘或项目仓库。项目级排版主题是**唯一**能从别人那里带进来的一份，它的能力被 `.md-body` 围住，且不能远程加载——一个恶意仓库最多把预览画得难看。
+- 主题文件来自作者自己的磁盘或项目仓库。项目级排版主题是**唯一**能从别人那里带进来的一份，它的能力被 `.md-body` 围住，且不能远程加载——一个恶意仓库最多把预览画得难看。围住这件事有两半，而第二半曾经漏掉：`.md-body ~ *` 从围栏里起步、一步跨到外面，够得着应用外壳；`staysInsideMdRoot` 补上了它（§5）。项目文件按 id 顶掉装机级同名主题这条路，也让「顶掉」成为一种能力：所以被拒绝的项目文件（放错格的外观主题）**不参与**顶替，否则一个 `brand.css` 就能让作者自己那份能用的 `brand` 排版主题在打开该项目时静默消失。
 - 装机级 `themes/` 是 `scope.rs` 里新登记的根，只读；写入只有 §10 那个「导出为文件」，写进同一目录。
 
 ## 12. 测试与不变量
