@@ -1586,7 +1586,7 @@
       "docxOrigin": "Format from",
       "docxChanged": "{{count}} changed",
       "docxChangeMark": "≠",
-      "docxFontMissing": "{{fonts}} is not installed here (the export is unaffected — the file names that font and will lay out correctly wherever it exists)",
+      "docxFontMissing": "{{fonts}} not installed here (the export is unaffected)",
       "docxBlocks": "{{n}} blocks",
       "docxHeadings": "{{n}} headings",
       "docxTables": "{{n}} tables",
@@ -1819,7 +1819,16 @@
       "preResident": "includes {{name}}'s sheet",
       "preUnexpanded": "{{n}} title-only",
       "preFloorTitle": "Lower bound: at least this far; retrieval adds to the right",
-      "preWas": "was estimated ≥ {{n}}"
+      "preWas": "was estimated ≥ {{n}}",
+      "export": {
+        "title": "Exported",
+        "meta": "{{n}} blocks · {{s}} s",
+        "reveal": "Show in folder",
+        "format": "Format: {{line}}",
+        "clean": "everything landed as the preset says",
+        "degradedHead": "{{n}} kind(s) of content fell back to a simpler form",
+        "degradedNote": "Word has no equivalent for these. The rest of the document follows the preset exactly — nothing here affects the layout you are checking against."
+      }
     },
     "drawer": {
       "tabGenerate": "Generate",
@@ -3859,7 +3868,8 @@
     "listHint": "{{count}} presets · the one with the dot is what the assistant uses",
     "groupBuiltin": "Built-in · cannot be deleted",
     "groupCustom": "Your own",
-    "customEmpty": "Still empty here. The five built-ins can't be edited, but “Duplicate” gives you a copy to change — or drop in the client's template and read a whole set out of it.",
+    "customEmptyTitle": "Still empty here.",
+    "customEmpty": "The five built-ins can’t be edited, but “Duplicate” gives you a copy to change — or drop in the client’s template and read a whole set out of it.",
     "defaultChip": "default",
     "makeDefault": "Make {{name}} the default",
     "readFrom": "read from {{file}}",
@@ -3902,6 +3912,7 @@
     "edit": "Edit",
     "duplicate": "Duplicate",
     "delete": "Delete",
+    "rowActions": "Actions for {{name}}",
     "deleteAsk": "Delete this preset?",
     "deleteDefaultAsk": "This is the default; deleting it falls back to Manuscript.",
     "deleteConfirm": "Delete",
@@ -3923,7 +3934,7 @@
       "groupBody": "Body",
       "fontEastAsia": "CJK font",
       "fontAscii": "Latin & digits",
-      "fontMissingNote": "{{font}} is not installed here, so previews substitute another face. The exported .docx still names it.",
+      "fontMissingNote": "{{font}} is not installed here. The exported .docx still names it and lays out correctly wherever it does exist; the schematic draws grey bars, so nothing on this machine shows the difference.",
       "size": "Size",
       "customSize": "Custom",
       "echoPt": "{{pt}} pt",

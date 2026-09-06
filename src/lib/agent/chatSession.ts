@@ -54,6 +54,29 @@ function withoutImageData(history: StreamMessage[]): StreamMessage[] {
   );
 }
 
+/**
+ * One finished export, recorded on the turn that produced it (设计稿 05f 屏 1k).
+ *
+ * Filled by the approval, not by the model — same reason `images` is: the app
+ * knows exactly what landed and what fell back to a simpler form, and asking
+ * the assistant to restate it produced turns that either omitted a degradation
+ * or invented one. What the author needs after a Word export is not prose but
+ * four facts: it is on disk, here, laid out by that, and these bits could not
+ * carry across.
+ */
+export interface TurnExport {
+  /** Absolute path of the file written. */
+  path: string;
+  /** How many markdown blocks were converted — page count needs Word's layout. */
+  blocks: number;
+  /** Wall-clock of the conversion itself, ms. */
+  ms: number;
+  /** 「默认格式（手稿）」/「预设：公文（改了 2 项）」 — already composed. */
+  formatLine: string;
+  /** What fell back to a simpler form. Facts, not errors — never styled as one. */
+  degraded: string[];
+}
+
 /** Structural mirror of agentStore's ChatTurn (lib must not import stores). */
 export interface PersistedTurn {
   id: string;
@@ -63,6 +86,7 @@ export interface PersistedTurn {
   at: number;
   quote?: string;
   images?: string[];
+  exports?: TurnExport[];
 }
 
 export interface PersistedUsage {

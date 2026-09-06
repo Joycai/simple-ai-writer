@@ -14,7 +14,8 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, ChevronDown, ChevronRight, ChevronsDown, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, ChevronsDown, FolderOpen, Image as ImageIcon, X } from "lucide-react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
@@ -57,6 +58,8 @@ import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
+import type { TurnExport } from "../../lib/agent/chatSession";
+import { projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { rewindableTurnIds } from "../../lib/agent/rewind";
 import { splitMentions } from "../../lib/agent/mentionText";
@@ -758,6 +761,7 @@ export function AgentChat() {
                 text={turn.text}
                 log={turn.log}
                 images={turn.images}
+                exports={turn.exports}
                 doomed={rewindIndex >= 0 && foldAt + i > rewindIndex}
                 isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
                 onCtx={snippetSave.onMessageContextMenu}
@@ -1103,6 +1107,67 @@ function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end
 }
 
 /**
+ * 一次导出的回执（设计稿 05f 屏 1k）。
+ *
+ * 它答的是四件事：落盘了、落在哪、按哪套格式排的、有没有东西没能原样带过去。
+ * 前三件助手也会在正文里说一遍，但第四件它历来说不准——降级是转换器数出来的，
+ * 不是模型看出来的，所以这张卡由**批准那一步**填，和图片同一条约定。
+ *
+ * 语气全在这里：绿勾和降级清单同处一张卡而不互相否定。没有红色、没有感叹号、
+ * 没有「警告」——文件是对的，只是有几处东西换了形式，作者需要知道但不需要被拦住。
+ */
+function TurnExports({ items }: { items?: TurnExport[] }) {
+  const { t } = useTranslation();
+  const projectPath = useProjectStore((s) => s.projectPath);
+  if (!items?.length) return null;
+  return (
+    <>
+      {items.map((x, i) => (
+        <div key={`${x.path}-${i}`} className={styles.exportCard}>
+          <div className={styles.exportHead}>
+            <Check size={13} className={styles.exportTick} />
+            <span className={styles.exportTitle}>{t("ai.chat.export.title")}</span>
+            <span className={styles.exportMeta}>
+              {t("ai.chat.export.meta", { n: x.blocks, s: (x.ms / 1000).toFixed(1) })}
+            </span>
+          </div>
+          <div className={styles.exportPathRow}>
+            <span className={styles.exportPath}>
+              {(projectPath ? projectRel(projectPath, x.path) : null) ?? toPosixPath(x.path)}
+            </span>
+            <button
+              className={styles.exportReveal}
+              onClick={() => { void revealItemInDir(x.path).catch(() => { /* best-effort */ }); }}
+            >
+              <FolderOpen size={11} />
+              {t("ai.chat.export.reveal")}
+            </button>
+          </div>
+          <div className={styles.exportFormat}>
+            {t("ai.chat.export.format", { line: x.formatLine })}
+            {x.degraded.length === 0 && ` · ${t("ai.chat.export.clean")}`}
+          </div>
+          {x.degraded.length > 0 && (
+            <div className={styles.exportDegraded}>
+              <div className={styles.exportDegradedHead}>
+                {t("ai.chat.export.degradedHead", { n: x.degraded.length })}
+              </div>
+              {x.degraded.map((d) => (
+                <div key={d} className={styles.exportDegradedItem}>
+                  <span className={styles.exportDegradedMark} />
+                  {d}
+                </div>
+              ))}
+              <div className={styles.exportDegradedNote}>{t("ai.chat.export.degradedNote")}</div>
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
  * A sent message's text with its `@[名称]` references in the accent color —
  * the same amber the ref chips wore before sending, so the bubble reads as the
  * record of that composition. Plain spans keep `.userTurn`'s pre-wrap intact.
@@ -1184,12 +1249,14 @@ const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed
  * callbacks being `useCallback`'d up there.
  */
 const AssistantTurn = memo(function AssistantTurn({
-  text, log, images, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
+  text, log, images, exports, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
   onDisableWriter, onOpenSettings, onChangeModel,
 }: {
   text: string;
   log: AgentEvent[];
   images?: string[];
+  /** Files this turn exported. Written by the approval, like `images`. */
+  exports?: TurnExport[];
   isLive: boolean;
   /** Would go with the pending rewind — see UserTurn. */
   doomed?: boolean;
@@ -1247,6 +1314,9 @@ const AssistantTurn = memo(function AssistantTurn({
             </div>
           )
         ))}
+        {/* 导出回执在正文**之后**：助手先说它做了什么，回执确认它落在哪、有没有
+            折损。图片反过来（正文是图的说明），所以两者不共用位置。 */}
+        <TurnExports items={exports} />
         {/* The writer could not run: an app notice, not a reply. It gets no
             gutter and no rule — nothing was authored, so there is no boundary
             to mark. See lib/agent/runtime, which deliberately leaves the turn's

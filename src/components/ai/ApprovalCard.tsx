@@ -452,6 +452,11 @@ function DocxBody({ proposal }: { proposal: DocxProposal }) {
             ))}
           </div>
         )}
+        {/* 「未在文件里出现的项按 Word 默认值补（2 项）」——只有照文件模仿时才有话可说。
+            它在带子里面、贴着底边：说的是这条来源本身的成色，不是导出的结果。 */}
+        {proposal.originFootnote && (
+          <div className={styles.docxOriginFoot}>{proposal.originFootnote}</div>
+        )}
       </div>
 
       <div className={styles.docxSpec}>

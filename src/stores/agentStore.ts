@@ -66,7 +66,7 @@ import {
   normalizeSessionTitle, setChatSessionPinned, setChatSessionTitle, upsertChatSession,
   type ChatSessionRow,
 } from "../lib/agent/sessionDb";
-import type { ChatSnapshot } from "../lib/agent/chatSession";
+import type { ChatSnapshot, TurnExport } from "../lib/agent/chatSession";
 import { MAX_CONCURRENT_RUNS, nextRunnableJobIndex, ownerBusy } from "../lib/agent/scheduler";
 import { chatState, mostUrgent, type ChatState } from "../lib/agent/chatState";
 import { sessionLabel } from "../lib/agent/sessionDb";
@@ -275,6 +275,11 @@ export interface ChatTurn {
    * apologised for being unable to show the image it had just saved.
    */
   images?: string[];
+  /**
+   * Assistant turns: files this turn exported (Word today). Same contract as
+   * `images` — written by the approval, never by the model.
+   */
+  exports?: TurnExport[];
 }
 
 /** Extras for a programmatically composed turn (today: resuming a task). */
@@ -725,6 +730,13 @@ interface ApplyOutcome {
   imagePath?: string;
   /** Where a copy actually landed (collision auto-numbering decides at apply time). */
   resultPath?: string;
+  /**
+   * An export that finished, for the turn to keep (设计稿 05f 屏 1k). Carried
+   * separately from `report` for the same reason `imagePath` is: that prose is
+   * addressed to the model, and reparsing it would break the author's card the
+   * next time it is reworded.
+   */
+  exportSummary?: TurnExport;
 }
 
 /**
@@ -866,15 +878,40 @@ async function applyProposal(
       // does not have — here it is a 1 MB library that must stay out of the
       // startup bundle, and a binary write.
       const { exportMarkdownToDocx } = await import("../lib/docx");
+      // Measured around the conversion alone — the card reports how long *this*
+      // took, and the author's decision time is not part of that.
+      const startedAt = performance.now();
       const outcome = await exportMarkdownToDocx(proposal.sourcePath, proposal.format, proposal.path);
+      const ms = Math.round(performance.now() - startedAt);
       // Written with the raw byte writer, which the file tree knows nothing
       // about — without this the new file is invisible until something else
       // refreshes.
       await useProjectStore.getState().refreshFileTree();
       return {
         resultPath: outcome.path,
+        exportSummary: {
+          path: outcome.path,
+          blocks: outcome.blocks,
+          ms,
+          // 「默认格式（手稿）」/「预设：公文（改了 2 项）」。默认那一套要带上它
+          // 的名字——「默认格式」四个字不说是哪一套；点名的预设名字已经在里面了，
+          // 再挂一句「内置 · 未改动」只是噪音（设计稿 05f 屏 1k）。
+          formatLine: proposal.originLabel
+            + (proposal.originKind === "default" && proposal.originNote ? `（${proposal.originNote}）` : "")
+            + (proposal.changed?.length ? `（改了 ${proposal.changed.length} 项）` : ""),
+          degraded: outcome.degraded,
+        },
         report: [
-          `Exported ${outcome.blocks} block(s) to ${outcome.path}, laid out by ${proposal.originLabel}.`,
+          // The card's origin line is deliberately short — the preset name and
+          // the override count sit beside it as a note and a chip. The model
+          // has neither, so the sentence it gets says all three.
+          `Exported ${outcome.blocks} block(s) to ${outcome.path}, laid out by ${proposal.originLabel}`
+            + (proposal.originNote ? ` (${proposal.originNote})` : "")
+            + (proposal.changed?.length
+              ? `, with ${proposal.changed.length} field(s) changed just for this run: `
+                + proposal.changed.map((c) => `${c.label} ${c.from} → ${c.to}`).join("; ")
+              : "")
+            + ".",
           outcome.degraded.length
             ? `These fell back to a simpler form — state them plainly to the author, they are facts rather than errors:\n- ${outcome.degraded.join("\n- ")}`
             : "Nothing degraded.",
@@ -940,7 +977,7 @@ async function settleApproval(
   auto: boolean,
 ): Promise<void> {
   try {
-    const { report, imagePath, resultPath } = await applyProposal(
+    const { report, imagePath, resultPath, exportSummary } = await applyProposal(
       item.proposal, item.signal, item.onApplyProgress,
     );
     // A picture goes into the transcript as well as onto disk — into the turn
@@ -961,6 +998,30 @@ async function settleApproval(
               ...chat,
               turns: chat.turns.map((tn) =>
                 tn.id === item.turnId ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
+            },
+          },
+        };
+      });
+    }
+    // An export lands in the transcript on the same terms a picture does: the
+    // turn that asked for it keeps the receipt, and a run that binds no turn
+    // (the task panel) keeps none — there the model's own sentence is all there
+    // is, and inventing a card with nowhere to live would be worse.
+    if (exportSummary && item.turnId) {
+      set((s) => {
+        const key = Object.keys(s.chats).find((k) =>
+          s.chats[k].turns.some((tn) => tn.id === item.turnId));
+        if (!key) return {};
+        const chat = s.chats[key];
+        return {
+          chats: {
+            ...s.chats,
+            [key]: {
+              ...chat,
+              turns: chat.turns.map((tn) =>
+                tn.id === item.turnId
+                  ? { ...tn, exports: [...(tn.exports ?? []), exportSummary] }
+                  : tn),
             },
           },
         };

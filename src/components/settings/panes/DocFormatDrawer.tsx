@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import { PaperPreview } from "./PaperPreview";
 import { isFontInstalled } from "../../../lib/docx/fontCheck";
 import {
@@ -117,6 +117,17 @@ export function DocFormatDrawer({
       <div className={styles.scrim} />
       <div className={styles.drawer} role="dialog" aria-label={t("docxFormat.drawer.title")}>
         <div className={styles.drawerHead}>
+          {/* ≤720 抽屉铺满整屏，于是它不再是「旁边滑出来的一层」而是「推进去的一屏」，
+              出口也就该是左上角那支返回箭头（设计稿 05f 屏 1m）。两个按钮都渲染、
+              各自在自己的宽度下显示：宽度是 CSS 知道的事，让 JS 去量它只会多一个
+              会和媒体查询对不上的真值。 */}
+          <button
+            className={styles.backBtn}
+            onClick={() => (dirty ? setConfirmDiscard(true) : onClose())}
+            aria-label={t("common.back", { defaultValue: "返回" })}
+          >
+            <ArrowLeft size={16} />
+          </button>
           <div className={styles.drawerHeadMain}>
             <div className={styles.drawerEyebrow}>{t("docxFormat.drawer.title")}</div>
             <input

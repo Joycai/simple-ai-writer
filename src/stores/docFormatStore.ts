@@ -84,8 +84,21 @@ export function nextCustomId(presets: readonly DocFormatPreset[]): string {
  * 从一份 .docx 读来的格式在本次会话里的 id。用路径而不是内容哈希：同一份文件
  * 再读一次应该覆盖上一次的结果，而不是攒出两条。
  */
+const IMITATED_PREFIX = "imitated:";
+
 export function imitatedIdFor(path: string): string {
-  return `imitated:${path}`;
+  return `${IMITATED_PREFIX}${path}`;
+}
+
+/**
+ * 这套格式还只挂在本次会话里吗——即「照一份 .docx 模仿，但没存成预设」。
+ *
+ * 用 id 前缀而不是 `imitatedFrom`：作者点「存为预设」存下来的那一套**也**带着
+ * `imitatedFrom`（列表里的「读自 甲方模板.docx」就是它），而那一套已经是作者
+ * 自己的资产了，审批卡上不该再写「未存为预设」。
+ */
+export function isSessionImitated(id: string): boolean {
+  return id.startsWith(IMITATED_PREFIX);
 }
 
 export const useDocFormatStore = create<DocFormatState>((set, get) => ({

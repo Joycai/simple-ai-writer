@@ -418,11 +418,18 @@ export interface DocxProposal extends ProposalBase {
   sourcePath: string;
   /** Exactly what will be applied. Resolved once, at proposal time. */
   format: DocFormat;
-  /** Where that format came from — the card's headline, see `describeOrigin`. */
+  /**
+   * Where that format came from — the card's headline, see `originName`. It is
+   * deliberately the *short* name: the preset's own name and the override count
+   * ride in `originNote` and the 改了 N 项 chip beside it, and repeating either
+   * here reads as two different facts (设计稿 05f 屏 1j).
+   */
   originKind: FormatOrigin["kind"];
   originLabel: string;
   /** The quiet right-hand note: 内置 · 未改动 / 未存为预设 / the preset's name. */
   originNote?: string;
+  /** One parenthetical under the band — today only "N items Word defaulted". */
+  originFootnote?: string;
   /** Only when the preset was overridden this once: which fields, from → to. */
   changed?: FormatChange[];
   /** The five-row spec table, already in final values. */
