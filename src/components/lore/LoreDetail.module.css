@@ -1093,7 +1093,7 @@
 .modeBtnActive {
   background: var(--color-accent-tint);
   border-left-color: var(--color-sienna);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   text-shadow: 0 0 0.4px currentColor;
 }
 .modeBtnActive:hover { background: var(--color-accent-tint); }
