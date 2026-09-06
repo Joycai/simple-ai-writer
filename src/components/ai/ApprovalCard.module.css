@@ -595,12 +595,20 @@
 /* 转写卡的四行（设计稿 02f 屏 1e）：eyebrow 小字 + 值 + 一行 mono 副注。估价算不出
    时值用虚线记号——「什么都没发」的同一枚记号，文字说明为什么（05c 的规矩）。 */
 .specRows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--space-3) 0 var(--space-1);
+}
+
+/* 一行 = 键 + 值两列。网格画在**行**上而不是容器上：容器若是两列网格，每一行
+   本身就成了一个格子，四行会两两并排、复选框那行被挤进 56px 的键列——2026-09-06
+   真机上就是这样走形的。 */
+.specRow {
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
-  row-gap: 10px;
   column-gap: var(--space-3);
   align-items: baseline;
-  padding: var(--space-3) 0 var(--space-1);
 }
 
 .specKey {
