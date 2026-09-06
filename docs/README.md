@@ -125,6 +125,9 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
 | [import-images-plan.md](feature/import-images-plan.md) | `shipped` | 导入 PDF/docx/pptx 时抽取内嵌图片（PR #389/#390/#392）：`ConvertResult` 接缝、pdfjs opList 抽取 + y 坐标定位、落 `assets/<文档名>/`；去重/装饰过滤/扫描件三个决策，矢量图明确不做；实现出入（mammoth 双 key 输入等）在 §8，pptx 的 Rust 侧抽取在 §9，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10，pdfjs 为什么改走 legacy 构建（WebView2 < 140 的 `toHex`）在 §10 |
 | [image-normalize-plan.md](feature/image-normalize-plan.md) | `partial` | 入模图片规范化：超 4096 长边的图在**发送前**降采样（已发），HEIC 转码**明确不做**（LGPL，§3.0）。为什么阈值是 4096 而不是 2048、为什么没有 per-provider 上限表，以及三个读图函数按去向分开的理由 |
+| [asr/00-research.md](feature/asr/00-research.md) | `research` | 音频转写（千问 / DashScope 录音文件识别）：临时上传 → 异步任务 → 轮询 → 结果 JSON 四步实测走通；两代 filetrans 模型请求 / 结果形状的差异表；落点照翻译 Beta（专用模型不进对话候选、`asr` 子代理档位、右键 + L2 工具两个入口）；探测脚本在同目录，真实结果夹具在 `src/lib/asr/__tests__/fixtures/` |
+| [asr/01-execution-plan.md](feature/asr/01-execution-plan.md) | `partial` (PR 1) | 五个开放问题的默认落定（只做异步、右键先确认、热词先测、默认 qwen-audio-3.0、时间戳开 / 分离关）、六条不变量、四片分片；为什么**不**从 `image.ts` 抽轮询循环 |
+| [asr/02-ui-brief.md](feature/asr/02-ui-brief.md) | `proposal` | 给 Claude Design 的任务书（`02f`）：实验室 / 子代理两行、模型抽屉的「转写模型格式」段、右键确认卡与三阶段进度、助手侧「花钱之前」的审批卡 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
 | [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |

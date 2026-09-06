@@ -59,6 +59,7 @@ describe("routeTools", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
@@ -269,6 +270,7 @@ describe("the PPTX export Beta gate", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("withholds export_pptx entirely while the switch is off", () => {
@@ -353,6 +355,7 @@ describe("the translation gate", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
@@ -425,11 +428,13 @@ describe("routeTools — writer handoff", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
     writer: { kind: "writer", modelId: "m-long", enabled: true },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("keeps the preset's own ending when the surface has not opted in", () => {
@@ -457,6 +462,7 @@ describe("routeTools — writer handoff", () => {
         ...allDisabled,
         writer: { kind: "writer", modelId, enabled: true },
         retrieval: { kind: "retrieval", modelId: null, enabled: false },
+        asr: { kind: "asr", modelId: null, enabled: false },
       };
       expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS, { handoff: true }).finishPolicy)
         .toBe("force-text");
@@ -497,6 +503,7 @@ describe("routeTools — ask_author", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("is absent unless the surface says it can render the question card", () => {
@@ -530,6 +537,7 @@ describe("routeTools — run_pack", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("is absent while the Beta is off, even for an opted-in surface", () => {
@@ -593,6 +601,7 @@ describe("routeTools for a roleplay character", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   const routeCharacter = (subs: Record<SubAgentKind, SubAgentConfig>) =>
     routeTools(ROLEPLAY_PRESET, subAgentsFor("character", subs), WS, MODELS);
@@ -661,6 +670,7 @@ describe("routeTools.visionDelegate", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("is false with no vision subagent", () => {

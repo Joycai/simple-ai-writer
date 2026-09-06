@@ -74,6 +74,35 @@ wire 层的细节（首块形状、错误信封、文档不符处）见 [`landsc
 （[`structured-output-plan.md`](structured-output-plan.md) §11 第 1 条）、国际站。
 Responses 只探了一次（§4.2）。
 
+### 1.4 原生面 `/api/v1`：录音文件识别 + 临时上传（2026-09-06）
+
+千问的语音识别不在 ①④ 两面上——它是 DashScope **原生**协议（`{model, input, parameters}`，
+和 qwen-image / 万相同一族），端点在 `dashscope.aliyuncs.com/api/v1`。本项目的落点在
+[`../feature/asr/00-research.md`](../feature/asr/00-research.md)；这里只记 wire 层的事实。
+样例：文档自带的 `welcome.mp3`（1.7s）+ TTS 合成的 48 秒中文 WAV（2.4MB，16-bit PCM）。
+
+| 路径 | 请求 | 结果 |
+| --- | --- | --- |
+| 同步 `qwen3-asr-flash` | `POST /services/aigc/multimodal-generation/generation`，`input.messages[].content[].audio` = 公网 URL **或** `data:audio/wav;base64,…` | 均 200；1.7s 音频 0.3s，48s 音频 base64（3.2MB 请求体）2.0s；`usage.audio_tokens` 按 25 tok/秒 |
+| 异步 `qwen3-asr-flash-filetrans` | `POST /services/audio/asr/transcription` + 头 `X-DashScope-Async: enable`，`input.file_url` | 提交 0.18s 返 `output.task_id` / `PENDING`；`GET /tasks/{id}` 两次（~2.3s）到 `SUCCEEDED`；结果链接在 **`output.result.transcription_url`**；`usage: {seconds}` |
+| 异步 `qwen-audio-3.0-asr-flash-filetrans` | 同端点，`input.file_urls: [url]`（文档写法；`file_url` 单数**也收**） | 同上节奏；结果链接在 **`output.output.transcription_url`**（另有 `output.output.results[0]` 带 `subtask_status`）；`usage: {duration}` |
+| 临时上传 → `oss://` | `GET /uploads?action=getPolicy&model=<id>` → 表单 `POST {upload_host}`（字段序 `OSSAccessKeyId / Signature / policy / x-oss-object-acl / x-oss-forbid-overwrite / key / success_action_status / file`，`file` 最后）→ 提交时 `file_url(s)` = `oss://<upload_dir>/<name>` **并加头 `X-DashScope-OssResourceResolve: enable`** | 凭证 0.1s（`expire_in_seconds: 300`、`max_file_size_mb: 1024`，**与模型名绑定**）；上传 2.4MB 0.5s；两代模型全程 3.1–5.2s |
+| 同上但**漏** resolve 头 | | **提交照样 200**；qwen3 轮询 2.2s 后 `FAILED / FILE_DOWNLOAD_FAILED`，qwen-audio-3.0 跑到 47s 才 `FAILED / SERVER_ERROR`（无 message）——错误只在轮询阶段出现 |
+| 分离 + 上下文（qwen-audio-3.0） | `parameters.diarization_enabled: true, speaker_count: 2, context: [{role:"user", content:[{type:"input_text", text:"…"}]}]` | 成功，多 2s；句对象多 `speaker_id` |
+| 上下文（qwen3） | `parameters.text: "人物：林小满（女）、陈伯…"` | 成功，但**没有**纠正它认错的「陈博」/「他」——同段 qwen-audio-3.0 不给上下文两处都对 |
+
+结果 JSON（`transcription_url`，**24 小时**有效）两代也不同：qwen3 是 `audio_info{format,sample_rate}` +
+句 `{sentence_id 从 0, begin_time, end_time, language, emotion, text, words?[]}`（词是单字，仅
+`enable_words` 时给）；qwen-audio-3.0 是 Fun-ASR 格式 `properties{audio_format, channels,
+original_sampling_rate, original_duration_in_milliseconds}` + 句 `{sentence_id 从 1, begin_time,
+end_time, text, speaker_id?, words[]}`（词恒有、带 `confidence`，无 language / emotion）。
+
+其余事实（模型页）：filetrans 两代 12 小时 / 2GB，`qwen3-asr-flash` 5 分钟 / 10MB；格式
+`aac amr avi flac flv m4a mkv mov mp3 mp4 mpeg ogg opus wav webm wma wmv`（视频容器直接吃）；
+`pcm` 必须 16 kHz、其余服务端重采样；`qwen-audio-3.0-asr-flash-filetrans` ¥0.00022 / 秒、RPM 600。
+**没测**：小时级文件的轮询时长、视频容器、`vocabulary` 即时热词的纠错效果、国际站有没有 `/uploads`、
+任务能否取消（文档无取消接口）。
+
 ## 2. 问题清单
 
 按"作者会撞上的概率 × 有没有现象"排：

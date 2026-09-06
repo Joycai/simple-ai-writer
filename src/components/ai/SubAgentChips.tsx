@@ -14,8 +14,11 @@ import styles from "./toggleChip.module.css";
  * takes effect on the *next* turn does not belong in a row of "for this turn"
  * toggles. It lives in Settings alone.
  */
-type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval">;
-const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval"];
+// `asr` is off the row too: transcription is an explicit act (a right-click,
+// or a tool whose card the author approves), never something the model picks
+// up mid-turn, so a "for this turn" toggle has nothing to switch off.
+type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval" | "asr">;
+const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval", "asr"];
 const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
 
 const ICONS: Record<ChipKind, LucideIcon> = {

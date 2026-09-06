@@ -32,6 +32,17 @@ export type ModelType = "text" | "multimodal" | "image" | "video";
 export type TranslateFormat = "sakura";
 
 /**
+ * The transcription protocol a dedicated speech-to-text model speaks.
+ *
+ * Same shape as `TranslateFormat`, for the same reason: the format *is* the
+ * identity. `dashscope-filetrans` is DashScope's async 录音文件识别 —
+ * upload to temporary storage, submit, poll, download (lib/asr/client.ts).
+ * A second entry (a local Whisper server, say) would arrive as a second
+ * client in `lib/asr/`, not as a branch elsewhere.
+ */
+export type AsrFormat = "dashscope-filetrans";
+
+/**
  * What an image model's endpoint can actually do. Declared rather than probed:
  * a capability probe against an image endpoint costs a real generation, so the
  * author states it once (defaults guessed from the API standard) and the
@@ -286,6 +297,25 @@ export interface Model {
    */
   translateFormat?: TranslateFormat;
   /**
+   * Which transcription protocol this model speaks, if it is a dedicated
+   * speech-to-text model rather than a general one.
+   *
+   * The same narrowing as `translateFormat`: a model carrying this cannot
+   * hold a conversation — the endpoint takes an audio URL, not messages — so
+   * it must never appear as a candidate for the main model or for any
+   * subagent other than `asr`. See docs/feature/asr/01-execution-plan.md §1
+   * 不变量 1. Absent means "an ordinary model".
+   */
+  asrFormat?: AsrFormat;
+  /**
+   * Price per second of audio, in the same currency column as everything
+   * else (`token_usage.cost_usd`). Transcription bills by duration, not by
+   * token, so the token prices above mean nothing for such a row; this is
+   * what `lib/asr` multiplies the billed seconds by. Absent = unknown, and
+   * the usage page cannot account for the run.
+   */
+  pricePerSecond?: number;
+  /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
    * that bill image generation as tokens. See `imageCostFor`.
@@ -307,6 +337,14 @@ export function isTranslateOnly(m: Model): boolean {
 }
 
 /**
+ * 这个模型是不是一个只会转写的模型（docs/feature/asr/01-execution-plan.md §1
+ * 不变量 1）。同 `isTranslateOnly`：一个有名字的判据，不是散在各处的 `!m.asrFormat`。
+ */
+export function isAsrOnly(m: Model): boolean {
+  return m.asrFormat !== undefined;
+}
+
+/**
  * 能拿来对话的模型 —— 任何"选一个模型来干活"的列表都该走这里。
  *
  * 翻译模型被排除掉，而且**排除是无条件的**：Sakura 问它「你是什么模型」会把
@@ -317,7 +355,9 @@ export function isTranslateOnly(m: Model): boolean {
  * 要，选择器里不要），而这个函数只回答"它能不能对话"这一个问题。
  */
 export function conversationalModels(models: readonly Model[]): Model[] {
-  return models.filter((m) => !isTranslateOnly(m));
+  // 转写模型同样无条件排除：它的端点收的是一个音频 URL，不是 messages，作为
+  // 主模型会让对话在第一轮就死掉（asr 执行方案 §1 不变量 1）。
+  return models.filter((m) => !isTranslateOnly(m) && !isAsrOnly(m));
 }
 
 /**
@@ -486,6 +526,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "temperature", "REAL");
   await addColumn(db, modelCols, "models", "translate_format", "TEXT");
   await addColumn(db, modelCols, "models", "structured_output", "TEXT");
+  await addColumn(db, modelCols, "models", "asr_format", "TEXT");
+  await addColumn(db, modelCols, "models", "price_per_second", "REAL");
   await addColumn(db, modelCols, "models", "probed_context_size", "INTEGER");
   await addColumn(db, modelCols, "models", "probed_max_output", "INTEGER");
 
@@ -730,9 +772,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null],
   };
 }
 
@@ -823,6 +865,8 @@ function rowToModel(r: Record<string, unknown>): Model {
     pdfInput: r.pdf_input === 1 ? true : undefined,
     translateFormat: parseTranslateFormat(r.translate_format),
     structuredOutput: parseStructuredOutputMode(r.structured_output),
+    asrFormat: parseAsrFormat(r.asr_format),
+    pricePerSecond: typeof r.price_per_second === "number" ? r.price_per_second : undefined,
   };
 }
 
@@ -850,6 +894,18 @@ export const TRANSLATE_FORMATS: readonly TranslateFormat[] = ["sakura"];
  */
 export function parseTranslateFormat(raw: unknown): TranslateFormat | undefined {
   return TRANSLATE_FORMATS.includes(raw as TranslateFormat) ? (raw as TranslateFormat) : undefined;
+}
+
+/** Every declared transcription format, for the settings drawer to render. */
+export const ASR_FORMATS: readonly AsrFormat[] = ["dashscope-filetrans"];
+
+/**
+ * Same direction as `parseTranslateFormat`: an unrecognised value must read as
+ * "not a transcription model" — wrong that way it becomes a usable ordinary
+ * model, wrong the other way it vanishes from every picker.
+ */
+export function parseAsrFormat(raw: unknown): AsrFormat | undefined {
+  return ASR_FORMATS.includes(raw as AsrFormat) ? (raw as AsrFormat) : undefined;
 }
 
 function parseImageCaps(raw: unknown): ImageCaps | undefined {

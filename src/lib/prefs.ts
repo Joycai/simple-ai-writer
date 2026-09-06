@@ -112,6 +112,12 @@ export const PREF_KEYS = [
   "ai:subagent:translate:enabled",
   "ai:subagent:writer:modelId",
   "ai:subagent:writer:enabled",
+  "ai:subagent:asr:modelId",
+  "ai:subagent:asr:enabled",
+  // 音频转写（Beta）— lib/asr/flag：开关，以及两个产物偏好（时间戳缺席＝开，分离缺席＝关）。
+  "app:asrBeta",
+  "ai:asr:timestamps",
+  "ai:asr:diarization",
   // 写手的一次性说明看过没有。设置卡上的「再看一次说明」清掉它。
   "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
