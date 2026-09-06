@@ -308,6 +308,41 @@
 .figureCaption { margin-top: 8px; font: 400 13px/1.6 var(--font-serif); color: var(--color-text-secondary); }
 .figureCaptionMono { margin-top: 8px; font: 400 10px/1.6 var(--font-mono); color: var(--color-text-faint); }
 
+/* ── 词表（dict 条目，设计稿 03c 屏 1e）─────────────────────────────────
+   三栏 190 / 150 / flex · gap 16。原文列 mono，因为它是要被**照抄**的字串；
+   译文正体不加粗；备注 italic 最淡一档。译文列 150 按 4–6 汉字定，超长译名
+   换行、行高随之，不截断。词表整体仍是一节：节头 3px 赭石线 + mono 边注在
+   TSX 里——正文＝常驻，词表只是它的渲染方式，不是新的注入单位。
+   色值全是稿上那三枚：#B5A99A ＝ --color-text-faint · #ECE2CE ＝
+   --color-border-soft · #C9BFA8 ＝ --lore-neutral-line。 */
+
+.dictTable { margin-top: 14px; }
+.dictHeadRow,
+.dictRow {
+  display: grid;
+  grid-template-columns: 190px 150px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: baseline;
+}
+.dictHeadRow {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--lore-neutral-line);
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--color-text-faint);
+}
+.dictRow {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.dictColSrc, .dictColDst, .dictColNote { min-width: 0; overflow-wrap: anywhere; }
+.dictSrc { font: 400 13px/1.6 var(--font-mono); color: var(--color-text-primary); }
+.dictDst { font: 400 15px/1.6 var(--font-serif); color: var(--color-text-primary); }
+/* 备注为空则第三栏留白，不写占位——空 span 本来就不占字 */
+.dictNote { font: italic 300 12px/1.6 var(--font-serif); color: var(--color-text-faint); }
+/* 解析失败的行按原样 markdown 段落落在词表下方，不吞掉内容 */
+.dictRest { margin-top: 16px; }
+
 /* ── 落款与过渡行 ───────────────────────────────────────────────────── */
 
 .colophon {
@@ -453,4 +488,11 @@
   .nextRow { padding: 16px 28px; }
   /* -38 的页边记号在贴满的纸上无处可挂 */
   .editMark { display: none; }
+  /* 词表三栏压成两栏：备注移到译文下一行、缩进对齐译文列，仍 12px italic。
+     原文列不动——它是这张表的检索键。栏头的「备注」随之收掉。 */
+  .dictHeadRow,
+  .dictRow { grid-template-columns: 190px minmax(0, 1fr); }
+  .dictHeadRow .dictColNote { display: none; }
+  .dictRow .dictColNote { grid-column: 2; }
+  .dictRow .dictColNote:empty { display: none; }
 }
