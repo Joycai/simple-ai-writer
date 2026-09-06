@@ -39,14 +39,11 @@ import {
   snapPreviewZoom,
   stepPreviewZoom,
 } from "../lib/editor/previewZoom";
-import {
-  DEFAULT_MARKDOWN_THEME,
-  MARKDOWN_THEME_IDS,
-  MD_THEME_ATTR,
-  type MarkdownThemeId,
-} from "../lib/theme/markdownThemes";
+import { DEFAULT_MARKDOWN_THEME } from "../lib/theme/markdownThemes";
 import { BUILTIN_THEME_FOR_SCHEME, type ColorScheme } from "../lib/theme/scheme";
-import { applyResolvedTheme, ensureSelectedLoaded, type SelectedThemes } from "../lib/theme/install";
+import {
+  applyResolvedMarkdownTheme, applyResolvedTheme, ensureSelectedLoaded, type SelectedThemes,
+} from "../lib/theme/install";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -121,9 +118,13 @@ function storedFontScheme(): FontScheme {
   const raw = readPref(FONT_KEY) as FontScheme | null;
   return raw && FONT_SCHEMES.includes(raw) ? raw : "manuscript";
 }
-function storedMarkdownTheme(): MarkdownThemeId {
-  const raw = readPref(MD_THEME_KEY) as MarkdownThemeId | null;
-  return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
+/**
+ * A built-in id or a typography theme file's id. Like the appearance ids,
+ * not validated here: the registry decides whether the file exists and
+ * parses, and falls back to the default at apply time without rewriting it.
+ */
+function storedMarkdownTheme(): string {
+  return readPref(MD_THEME_KEY)?.trim() || DEFAULT_MARKDOWN_THEME;
 }
 function storedPreviewZoom(): number {
   const raw = parseFloat(readPref(PREVIEW_ZOOM_KEY) ?? "");
@@ -315,7 +316,7 @@ interface AppState {
   themeDark: string;
   language: Language;
   fontScheme: FontScheme;
-  markdownTheme: MarkdownThemeId;
+  markdownTheme: string;
   /**
    * How large the rendered preview draws, as a factor on the ladder in
    * `lib/editor/previewZoom`. An appearance preference like the markdown
@@ -403,7 +404,7 @@ interface AppState {
   applyCurrentTheme: (animated?: boolean) => void;
   setLanguage: (lang: Language) => void;
   setFontScheme: (scheme: FontScheme) => void;
-  setMarkdownTheme: (id: MarkdownThemeId) => void;
+  setMarkdownTheme: (id: string) => void;
   /** Set the preview zoom, snapped to the ladder. */
   setPreviewZoom: (zoom: number) => void;
   /** Step one rung in (+1) or out (-1); no-op at the ends. */
@@ -488,8 +489,8 @@ function resolveTheme(mode: ThemeMode): "dark" | "light" {
   return mode;
 }
 
-const selectedThemes = (s: { themeLight: string; themeDark: string }): SelectedThemes =>
-  ({ light: s.themeLight, dark: s.themeDark });
+const selectedThemes = (s: { themeLight: string; themeDark: string; markdownTheme: string }): SelectedThemes =>
+  ({ light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme });
 
 /**
  * Writes `data-theme` (the theme the registry resolves for the polarity —
@@ -526,9 +527,13 @@ function applyFontScheme(scheme: FontScheme) {
   document.documentElement.setAttribute("data-font", scheme);
 }
 
-/** Every `.md-body` container reads its look off this attribute. */
-function applyMarkdownTheme(id: MarkdownThemeId) {
-  document.documentElement.setAttribute(MD_THEME_ATTR, id);
+/**
+ * Every `.md-body` container reads its look off `data-md-theme` — the
+ * built-in, or the built-in a theme file extends with the file's own sheet
+ * installed after it (lib/theme/install).
+ */
+function applyMarkdownTheme(id: string) {
+  applyResolvedMarkdownTheme(id);
 }
 
 let systemThemeListener: (() => void) | null = null;
@@ -822,7 +827,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       void ensureSelectedLoaded(selected).then(() => applyThemeAnimated(next.theme, selected));
     }
     if (touched(FONT_KEY)) applyFontScheme(next.fontScheme);
-    if (touched(MD_THEME_KEY)) applyMarkdownTheme(next.markdownTheme);
+    if (touched(MD_THEME_KEY)) {
+      const selected = selectedThemes(next);
+      void ensureSelectedLoaded(selected).then(() => applyMarkdownTheme(next.markdownTheme));
+    }
     if (touched(LANG_KEY) && next.language !== i18n.language) i18n.changeLanguage(next.language);
   },
 

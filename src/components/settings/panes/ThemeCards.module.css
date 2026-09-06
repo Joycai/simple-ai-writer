@@ -29,6 +29,8 @@
   gap: var(--space-3);
   margin-top: var(--space-3);
 }
+/* 排版卡窄一档：640–720px 里三列（1z C3）。 */
+.gridMd { grid-template-columns: repeat(auto-fill, minmax(206px, 1fr)); }
 
 /* ── 卡 ────────────────────────────────────────────────────────────────── */
 
@@ -114,6 +116,41 @@
   padding: 8px 7px;
 }
 
+/* 排版样张：一个隔离的小窗，演的是文档容器。它是画：不可点、不进 tab 序。 */
+.mdSample {
+  display: block;
+  width: 100%;
+  height: 88px;
+  border: 1px solid var(--color-border-soft);
+  background: var(--color-bg-base);
+  pointer-events: none;
+}
+.desc {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+/* 「自带字体」/「自带颜色」：同一个 mono 小框，后面跟一句后果。 */
+.badges {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--stg-text-faint);
+}
+.badge {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  border: 1px solid var(--stg-border-mid);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
 /* 缺席的样张位：虚线框 + 一句话；读不出：斜纹底。 */
 .slot {
   height: 104px;
@@ -124,6 +161,7 @@
   line-height: 1.6;
   color: var(--color-text-muted);
 }
+.slotMd { height: 88px; }
 .slotAbsent { border: 1px dashed var(--color-border); }
 .slotUnreadable {
   border: 1px solid var(--color-border-soft);

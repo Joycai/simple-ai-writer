@@ -40,15 +40,17 @@ async function boot() {
     console.warn("[boot] preferences unavailable; continuing with defaults:", e);
   }
 
-  // The author's appearance theme files, if the preferences name any: read
-  // and installed inside the same await, so `appStore`'s first paint is the
-  // right theme rather than the built-in for a frame. Only the selected one
-  // or two files are read here; the folder is scanned when Settings opens.
-  // No I/O at all when both selections are built-ins (the default).
+  // The author's theme files, if the preferences name any: read and installed
+  // inside the same await, so `appStore`'s first paint is the right theme
+  // rather than the built-in for a frame. Only the selected files are read
+  // here (an appearance theme per polarity, the typography theme); the
+  // folders are scanned when Settings opens or a project opens. No I/O at
+  // all when every selection is a built-in (the default).
   try {
     await preloadSelectedThemes({
       light: readPref("app:themeLight")?.trim() || "paper",
       dark: readPref("app:themeDark")?.trim() || "night",
+      markdown: readPref("app:markdownTheme")?.trim() || "manuscript",
     });
   } catch (e) {
     console.warn("[boot] theme files unavailable; using the built-in themes:", e);

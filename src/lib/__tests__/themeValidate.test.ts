@@ -41,6 +41,7 @@ describe("validateUiRules", () => {
       "宣纸",
       contract,
     );
+    expect(r.kind).toBe("ui");
     expect(r.meta).toEqual({ "--theme-name": "宣纸", "--theme-scheme": "light" });
     expect(r.tokens).toEqual({ "--color-bg-base": "#F3EEE3", "--color-accent": "var(--color-sienna)" });
     expect(r.kept).toBe(2);

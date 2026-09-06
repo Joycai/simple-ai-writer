@@ -90,13 +90,26 @@ function paletteBlock(entry: ThemeEntry, scheme: ColorScheme, names: string[], c
 /**
  * The `<style>` prelude for an exported document, ahead of the markdown
  * theme's own CSS (`mdCss`, which decides which derived tokens are needed).
+ *
+ * `only` pins one polarity with no media block — the settings samples are
+ * drawn under the *app's* current scheme, and a sandboxed frame would
+ * otherwise follow the OS's `prefers-color-scheme` instead.
  */
 export function exportPaletteCss(
   light: ThemeEntry,
   dark: ThemeEntry,
   mdCss: string,
   contract: TokenContract,
+  only?: ColorScheme,
 ): string {
+  if (only) {
+    const entry = only === "light" ? light : dark;
+    return `:root {
+  color-scheme: ${only};
+${EXPORT_FONT_CSS}
+${paletteBlock(entry, only, tokensToEmit(mdCss, contract, entry, only), contract)}
+}`;
+  }
   const lightNames = tokensToEmit(mdCss, contract, light, "light");
   const darkNames = tokensToEmit(mdCss, contract, dark, "dark");
   return `:root {

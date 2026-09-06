@@ -1,10 +1,12 @@
 /**
- * 设置 → 通用 → 外观 → 外观主题 (设计稿 05i 屏 1a–1f).
+ * 设置 → 通用 → 外观 → 外观主题 / Markdown 排版主题 (设计稿 05i 屏 1a–1f).
  *
- * Two pieces, both reading `themeStore`: the theme grid — one band per
- * polarity the mode needs (1z A1: 跟随系统 is a pair, so two bands; a fixed
- * mode shows one, its band head still standing as the section's colophon) —
- * and the action row the whole 外观 section ends on (打开主题文件夹 · 重新载入 ·
+ * Three pieces, all reading `themeStore`: the appearance grid — one band
+ * per polarity the mode needs (1z A1: 跟随系统 is a pair, so two bands; a
+ * fixed mode shows one, its band head still standing as the section's
+ * colophon) — the typography grid, whose samples are sandboxed frames each
+ * carrying the export's own stylesheet (`lib/theme/sample`), and the action
+ * row the whole 外观 section ends on (打开主题文件夹 · 重新载入 ·
  * 把当前主题导出为文件).
  *
  * Every card is a real `ThemeEntry`; the three ways a file can be bad each
@@ -14,28 +16,33 @@
  * be selected; an absent file is a dashed card with no 「移除」 — putting the
  * file back is what revives it, and clicking another card is how one moves on.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "../../../stores/appStore";
 import { useThemeStore } from "../../../stores/themeStore";
-import { displayThemeName, resolveUiTheme, usableCount, type ThemeEntry } from "../../../lib/theme/registry";
-import { SCHEME_ATTR, THEME_ATTR, type ColorScheme } from "../../../lib/theme/scheme";
-import { useScheme } from "../../../lib/theme/scheme";
+import {
+  displayThemeName, resolveMarkdownTheme, resolveUiTheme, usableCount, type ThemeEntry,
+} from "../../../lib/theme/registry";
+import { SCHEME_ATTR, THEME_ATTR, useScheme, type ColorScheme } from "../../../lib/theme/scheme";
 import { exportThemeToFolder } from "../../../lib/theme/exportFile";
 import { TOKEN_CONTRACT } from "../../../lib/theme/contractData";
+import { inlinedMarkdownCss } from "../../../lib/theme/install";
+import { sampleDocument } from "../../../lib/theme/sample";
+import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
 import { openWithDefaultApp } from "../../../lib/fs/fileio";
 import ui from "../settingsUi.module.css";
 import s from "./ThemeCards.module.css";
 
 const SAMPLE = { zh: "第三章 · 渡口", en: "Chapter Three" };
 
-/** `~/…/themes/宣纸.css` — the only informative parts are the folder and the file (1z A2). */
+/** `…/themes/宣纸.css` / `.ai-writer/themes/brand.css` — the folder and the file (1z A2). */
 function shortPath(entry: ThemeEntry): string {
-  return `…/themes/${entry.fileName ?? `${entry.id}.css`}`;
+  const file = entry.fileName ?? `${entry.id}.css`;
+  return entry.source === "project" ? `${PROJECT_THEMES_DIR}/${file}` : `…/themes/${file}`;
 }
 
-// ─── The grid ────────────────────────────────────────────────────────────────
+// ─── The appearance grid ─────────────────────────────────────────────────────
 
 export function AppearanceThemeGrid() {
   const { t, i18n } = useTranslation();
@@ -44,7 +51,7 @@ export function AppearanceThemeGrid() {
   const themeLight = useAppStore((st) => st.themeLight);
   const themeDark = useAppStore((st) => st.themeDark);
   const setThemeFor = useAppStore((st) => st.setThemeFor);
-  const entries = useThemeStore((st) => st.entries);
+  const entries = useThemeStore((st) => st.ui);
   const load = useThemeStore((st) => st.load);
   const current = useScheme();
 
@@ -79,6 +86,7 @@ export function AppearanceThemeGrid() {
                   active={resolved.id === entry.id}
                   isZh={isZh}
                   onPick={() => setThemeFor(scheme, entry.id)}
+                  sample={<Swatch entry={entry} isZh={isZh} />}
                 />
               ))}
             </div>
@@ -89,29 +97,78 @@ export function AppearanceThemeGrid() {
   );
 }
 
+// ─── The typography grid ─────────────────────────────────────────────────────
+
+export function MarkdownThemeGrid() {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
+  const markdownTheme = useAppStore((st) => st.markdownTheme);
+  const setMarkdownTheme = useAppStore((st) => st.setMarkdownTheme);
+  const themeLight = useAppStore((st) => st.themeLight);
+  const themeDark = useAppStore((st) => st.themeDark);
+  const entries = useThemeStore((st) => st.markdown);
+  const uiEntries = useThemeStore((st) => st.ui);
+  const load = useThemeStore((st) => st.load);
+  const scheme = useScheme();
+
+  useEffect(() => { void load(); }, [load]);
+
+  const resolved = resolveMarkdownTheme(entries, markdownTheme);
+  // The samples follow the appearance in force (1e): night paints them dark.
+  const appearance = resolveUiTheme(uiEntries, scheme, scheme === "light" ? themeLight : themeDark);
+
+  return (
+    <div className={`${ui.rowStacked} ${ui.rowLast}`}>
+      <div className={ui.rowTitleLine}>
+        <span className={ui.rowTitle}>{t("systemSettings.general.mdThemeLabel")}</span>
+        <span className={s.tag}>{t("systemSettings.general.mdThemeCount", { count: usableCount(entries) })}</span>
+      </div>
+      <div className={ui.rowDesc}>{t("systemSettings.general.mdThemeHint")}</div>
+      <div className={`${s.grid} ${s.gridMd}`}>
+        {entries.map((entry) => (
+          <ThemeCard
+            key={`${entry.source}:${entry.id}`}
+            entry={entry}
+            active={resolved.id === entry.id}
+            isZh={isZh}
+            onPick={() => setMarkdownTheme(entry.id)}
+            sample={<MdSample entry={entry} appearance={appearance} scheme={scheme} isZh={isZh} />}
+          />
+        ))}
+      </div>
+      <ThemeActions />
+    </div>
+  );
+}
+
 // ─── One card ────────────────────────────────────────────────────────────────
 
 function ThemeCard({
-  entry, active, isZh, onPick,
+  entry, active, isZh, onPick, sample,
 }: {
   entry: ThemeEntry;
   active: boolean;
   isZh: boolean;
   onPick: () => void;
+  sample: ReactNode;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const name = displayThemeName(entry, isZh);
-  const schemeTag = t(entry.scheme === "light" ? "systemSettings.general.schemeLight" : "systemSettings.general.schemeDark");
-  const base = entry.extends === "paper"
-    ? t("systemSettings.general.builtinPaper")
-    : t("systemSettings.general.builtinNight");
+  const md = entry.kind === "markdown";
+  const schemeTag = md
+    ? ""
+    : t(entry.scheme === "light" ? "systemSettings.general.schemeLight" : "systemSettings.general.schemeDark");
+  const base = md
+    ? displayThemeName(entry.missing ? { name: { zh: "手稿", en: "Manuscript" } } : baseOf(entry), isZh)
+    : t(entry.extends === "paper" ? "systemSettings.general.builtinPaper" : "systemSettings.general.builtinNight");
 
   const absent = !!entry.missing;
   const unreadable = !entry.usable && !absent;
   const selectable = entry.usable && !absent;
   const cls = [
     s.card,
+    md ? s.cardMd : "",
     active ? s.cardActive : "",
     absent ? s.cardAbsent : "",
     unreadable ? s.cardUnreadable : "",
@@ -122,7 +179,11 @@ function ThemeCard({
     ? t("systemSettings.general.sourceBuiltin")
     : absent || unreadable
       ? shortPath(entry)
-      : `${shortPath(entry)} · ${t("systemSettings.general.sourceOn", { base })}`;
+      : entry.source === "project"
+        ? `${shortPath(entry)} · ${t("systemSettings.general.sourceProject")}`
+        : md
+          ? shortPath(entry)
+          : `${shortPath(entry)} · ${t("systemSettings.general.sourceOn", { base })}`;
 
   const problems = entry.problems;
   const noteHead = unreadable
@@ -132,13 +193,13 @@ function ThemeCard({
       : "";
 
   const body: ReactNode = absent ? (
-    <div className={`${s.slot} ${s.slotAbsent}`}>
+    <div className={`${s.slot} ${md ? s.slotMd : ""} ${s.slotAbsent}`}>
       {t("systemSettings.general.absentText", { file: entry.fileName, base })}
     </div>
   ) : unreadable ? (
-    <div className={`${s.slot} ${s.slotUnreadable}`}>{t("systemSettings.general.unreadableText")}</div>
+    <div className={`${s.slot} ${md ? s.slotMd : ""} ${s.slotUnreadable}`}>{t("systemSettings.general.unreadableText")}</div>
   ) : (
-    <Swatch entry={entry} isZh={isZh} />
+    sample
   );
 
   const content = (
@@ -147,10 +208,24 @@ function ThemeCard({
         {body}
         <div className={s.nameRow}>
           <span className={s.name}>{name}</span>
-          <span className={`${s.tag} ${absent ? s.tagAbsent : ""}`}>
-            {unreadable ? "—" : absent ? `${schemeTag} · ${t("systemSettings.general.absentTag")}` : schemeTag}
-          </span>
+          {!md && (
+            <span className={`${s.tag} ${absent ? s.tagAbsent : ""}`}>
+              {unreadable ? "—" : absent ? `${schemeTag} · ${t("systemSettings.general.absentTag")}` : schemeTag}
+            </span>
+          )}
+          {md && absent && <span className={`${s.tag} ${s.tagAbsent}`}>{t("systemSettings.general.absentTag")}</span>}
         </div>
+        {md && entry.desc && <div className={s.desc}>{isZh ? entry.desc.zh : entry.desc.en}</div>}
+        {md && (entry.ownFonts || entry.ownColors) && (
+          <div className={s.badges}>
+            {entry.ownFonts && (
+              <span><b className={s.badge}>{t("systemSettings.general.ownFonts")}</b> {t("systemSettings.general.ownFontsNote")}</span>
+            )}
+            {entry.ownColors && (
+              <span><b className={s.badge}>{t("systemSettings.general.ownColors")}</b> {t("systemSettings.general.ownColorsNote")}</span>
+            )}
+          </div>
+        )}
         <div className={s.foot} title={entry.path}>{foot}</div>
         {absent && (
           <div className={`${s.note} ${s.absentActions}`}>
@@ -191,6 +266,12 @@ function ThemeCard({
   );
 }
 
+/** The built-in a typography file extends, as a nameable thing. */
+function baseOf(entry: ThemeEntry): { name: ThemeEntry["name"] } {
+  const hit = useThemeStore.getState().markdown.find((e) => e.source === "builtin" && e.id === entry.extends);
+  return { name: hit?.name ?? entry.extends };
+}
+
 /** 「body 越界」 — the first problem's selector and the head of its reason. */
 function problemHint(p: { selector?: string; reason: string }): string {
   const head = p.reason.split(" · ")[0];
@@ -199,11 +280,11 @@ function problemHint(p: { selector?: string; reason: string }): string {
 }
 
 /**
- * The swatch is drawn from the theme's own tokens, not from the page's: the
- * element carries `data-theme` / `data-scheme` itself, so `tokens.scheme`
- * and `tokens.user` declare the six core tokens *on it*, beating what the
- * settings page's remap would otherwise pass down. Built-ins and user
- * themes are drawn by the same rule (1z B4).
+ * The appearance swatch is drawn from the theme's own tokens, not from the
+ * page's: the element carries `data-theme` / `data-scheme` itself, so
+ * `tokens.scheme` and `tokens.user` declare the six core tokens *on it*,
+ * beating what the settings page's remap would otherwise pass down.
+ * Built-ins and user themes are drawn by the same rule (1z B4).
  */
 function Swatch({ entry, isZh }: { entry: ThemeEntry; isZh: boolean }) {
   return (
@@ -224,6 +305,43 @@ function Swatch({ entry, isZh }: { entry: ThemeEntry; isZh: boolean }) {
         <div className={s.swatchBar} />
       </div>
     </div>
+  );
+}
+
+/**
+ * A typography sample: a sandboxed frame with the export's stylesheet and a
+ * page of real text. `sandbox=""` — no scripts, no same-origin, ever. The
+ * frame is a picture: `pointer-events: none`, out of the tab order.
+ */
+function MdSample({
+  entry, appearance, scheme, isZh,
+}: {
+  entry: ThemeEntry;
+  appearance: ThemeEntry;
+  scheme: ColorScheme;
+  isZh: boolean;
+}) {
+  const [userCss, setUserCss] = useState<string>("");
+  useEffect(() => {
+    let cancelled = false;
+    if (entry.source === "builtin" || !entry.css) { setUserCss(""); return; }
+    void inlinedMarkdownCss(entry).then((css) => { if (!cancelled) setUserCss(css); });
+    return () => { cancelled = true; };
+  }, [entry]);
+  const doc = useMemo(
+    () => sampleDocument(entry, userCss, appearance, scheme, isZh),
+    [entry, userCss, appearance, scheme, isZh],
+  );
+  return (
+    <iframe
+      className={s.mdSample}
+      title={displayThemeName(entry, isZh)}
+      sandbox=""
+      srcDoc={doc}
+      tabIndex={-1}
+      aria-hidden
+      loading="lazy"
+    />
   );
 }
 
@@ -288,7 +406,7 @@ export function ThemeActions() {
   const reload = useThemeStore((st) => st.reload);
   const loading = useThemeStore((st) => st.loading);
   const ensureDir = useThemeStore((st) => st.ensureDir);
-  const entries = useThemeStore((st) => st.entries);
+  const entries = useThemeStore((st) => st.ui);
   const themeLight = useAppStore((st) => st.themeLight);
   const themeDark = useAppStore((st) => st.themeDark);
   const scheme = useScheme();
@@ -326,15 +444,17 @@ export function ThemeActions() {
   const doReload = async () => {
     try {
       const diff = await reload(isZh);
+      const unit = (kind: ThemeEntry["kind"]) =>
+        t(kind === "ui" ? "systemSettings.general.uiThemeUnit" : "systemSettings.general.mdThemeUnit");
       const parts = [
-        ...diff.added.map((n) => `+1 ${t("systemSettings.general.uiThemeUnit")} · ${n}`),
-        ...diff.removed.map((n) => `−1 ${t("systemSettings.general.uiThemeUnit")} · ${n}`),
+        ...diff.added.map((d) => `+1 ${unit(d.kind)} · ${d.name}`),
+        ...diff.removed.map((d) => `−1 ${unit(d.kind)} · ${d.name}`),
       ];
       showFading({
         kind: "reloaded",
         text: parts.length
-          ? t("systemSettings.general.reloadedChanged", { ui: diff.uiCount, diff: parts.join(" · ") })
-          : t("systemSettings.general.reloadedNoChange", { ui: diff.uiCount }),
+          ? t("systemSettings.general.reloadedChanged", { ui: diff.uiCount, md: diff.mdCount, diff: parts.join(" · ") })
+          : t("systemSettings.general.reloadedNoChange", { ui: diff.uiCount, md: diff.mdCount }),
       });
     } catch (e) {
       showSticky({ kind: "error", text: String(e) });

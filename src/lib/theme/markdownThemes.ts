@@ -196,8 +196,10 @@ export function findMarkdownTheme(id: string | null | undefined): MarkdownTheme 
 }
 
 /**
- * The theme currently applied to the app. Read off the DOM rather than the
- * store so lib-layer callers (export) don't have to reach into React state.
+ * The built-in theme currently applied to the app — for a theme file, the
+ * one it extends. Read off the DOM rather than the store so lib-layer
+ * callers don't have to reach into React state; the file itself is
+ * `lib/theme/install`'s `resolvedMarkdownTheme()`.
  */
 export function currentMarkdownThemeId(): MarkdownThemeId {
   const raw = document.documentElement.getAttribute(MD_THEME_ATTR);
@@ -392,22 +394,19 @@ export function markdownThemeCss(id: MarkdownThemeId, scope: string): string {
 }
 
 /**
- * Every theme at once. Normally the `data-md-theme` attribute sits on `<html>`
- * and applies to every `.md-body` below it; a container may also carry the
- * attribute itself to pin one theme regardless of the app setting (the settings
- * picker's samples do this). Both selectors have the same specificity, so the
- * self-scoped pass is emitted last — later wins, and a pinned container is
- * never overridden by whichever theme happens to come later in the list.
+ * Every built-in theme at once. The `data-md-theme` attribute sits on `<html>`
+ * and applies to every `.md-body` below it. For a theme *file* the attribute
+ * names the built-in it extends and the file's own CSS is installed after
+ * this sheet (`lib/theme/install`); the settings samples are sandboxed
+ * frames with a sheet each (`lib/theme/sample`), so nothing pins a theme to
+ * one container any more.
  */
 export function markdownThemesCss(): string {
   const base = baseCss(`.${MD_BODY_CLASS}`);
   const inherited = MARKDOWN_THEMES
     .map((t) => themeBlock(t, `[${MD_THEME_ATTR}="${t.id}"] .${MD_BODY_CLASS}`))
     .join("\n\n");
-  const pinned = MARKDOWN_THEMES
-    .map((t) => themeBlock(t, `.${MD_BODY_CLASS}[${MD_THEME_ATTR}="${t.id}"]`))
-    .join("\n\n");
-  return `${base}\n\n${inherited}\n\n${pinned}`;
+  return `${base}\n\n${inherited}`;
 }
 
 let installed: HTMLStyleElement | null = null;

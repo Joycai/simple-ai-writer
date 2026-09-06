@@ -71,7 +71,8 @@ export const COPY_SUFFIX = { zh: "副本", en: "copy" } as const;
 export function themeFileText(entry: ThemeEntry, contract: TokenContract, isZh: boolean): string {
   const name = `${displayThemeName(entry, isZh)}-${isZh ? COPY_SUFFIX.zh : COPY_SUFFIX.en}`;
   const t = (zh: string, en: string) => (isZh ? zh : en);
-  const value = (n: string) => resolveTokenValue(entry, entry.scheme, n, contract) ?? "";
+  const scheme = entry.scheme ?? "light";
+  const value = (n: string) => resolveTokenValue(entry, scheme, n, contract) ?? "";
   const line = (n: string, role: string) => `  ${n}: ${value(n)};`.padEnd(46) + `/* ${role} */`;
   const lead = LEAD_TOKENS.map((l) => line(l.name, t(l.zh, l.en)));
   const leadNames = new Set(LEAD_TOKENS.map((l) => l.name));
@@ -82,7 +83,7 @@ export function themeFileText(entry: ThemeEntry, contract: TokenContract, isZh: 
    ${t(`叠在内置的 ${entry.extends} 之上：没写到的令牌从它取，删掉一行就是回到它的值。`, `Sits on the built-in ${entry.extends}: any token left out comes from there; delete a line to fall back.`)} */
 :root {
   --theme-name: ${name};${" ".repeat(Math.max(1, 30 - name.length))}/* ${t("网格里显示的名字", "the name the grid shows")} */
-  --theme-scheme: ${entry.scheme};${" ".repeat(Math.max(1, 30 - entry.scheme.length))}/* ${t("light | dark，决定它属于哪一头", "light | dark — which band it belongs to")} */
+  --theme-scheme: ${scheme};${" ".repeat(Math.max(1, 30 - scheme.length))}/* ${t("light | dark，决定它属于哪一头", "light | dark — which band it belongs to")} */
   --theme-extends: ${entry.extends};${" ".repeat(Math.max(1, 29 - entry.extends.length))}/* ${t("没写到的令牌从这套内置取", "tokens left out come from this built-in")} */
 
 ${lead.join("\n")}

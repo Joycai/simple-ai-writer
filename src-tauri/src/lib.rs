@@ -33,6 +33,13 @@ pub fn run() {
             let fs_scope = scope::FsScope::new();
             if let Ok(dir) = app.path().app_data_dir() {
                 fs_scope.allow(&dir);
+                // Theme files live in `themes/` under it and may carry fonts
+                // and textures, which the frontend reads as bytes through
+                // `tauri-plugin-fs` (lib/theme/assets) — that plugin keeps a
+                // scope of its own, seeded only with project roots, so the
+                // folder is granted there too. Read-only in practice: the
+                // only write into it is the app's own `fs_write_text_file`.
+                fs_scope.allow_for_plugin_fs(app.handle(), &dir.join("themes"));
             }
             if let Ok(dir) = app.path().app_log_dir() {
                 fs_scope.allow(&dir);

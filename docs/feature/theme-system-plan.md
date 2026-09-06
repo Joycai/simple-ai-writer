@@ -1,6 +1,6 @@
 # 主题系统 —— 令牌化的外观主题 + 插件式的 Markdown 排版主题
 
-> 状态：`partial`。2026-09-06 起草，同日对着 `main` 3f16add（v1.48.0）复核；**S1 令牌分层、S2 外观主题文件已落地**（§13 记实现与方案的出入），S3–S4 未开始。设计稿 `05i 主题 Themes` 已回，它怎么答的与对方案的两处改动记在 [`theme-system-ui-brief.md`](theme-system-ui-brief.md) 文首——其中「元数据改成 `--theme-*` 自定义属性」已采纳进 §5。
+> 状态：`partial`。2026-09-06 起草，同日对着 `main` 3f16add（v1.48.0）复核；**S1 令牌分层、S2 外观主题文件、S3 排版主题文件已落地**（§13 记实现与方案的出入），S4 未开始。设计稿 `05i 主题 Themes` 已回，它怎么答的与对方案的两处改动记在 [`theme-system-ui-brief.md`](theme-system-ui-brief.md) 文首——其中「元数据改成 `--theme-*` 自定义属性」已采纳进 §5。
 >
 > 本文是**设计**，不是现状记录：§1 是从代码里读出来的今天，§3 起是要做成的样子。落地后把出入记回本文末尾，视觉口径再收进 `docs/reference/design-system.md` → Theming。
 
@@ -161,10 +161,12 @@ src/lib/theme/
   validate.ts     校验器：走 CSSRuleList 的形状（RuleLike）、丢弃并计数、problems[]；parseCssRules 是 DOM 侧唯一入口
   registry.ts     内置 + 扫描出来的主题的合并视图（ThemeEntry[]），排序、id 保留字、missing
   scan.ts         唯一碰盘处：appDataDir/themes 的读取（照 workflow/scan.ts）
-  install.ts      <style id="theme-user"> 的装卸、注册表的运行时状态、订阅；data-theme / data-scheme 经 scheme.ts 写入
+  install.ts      两个 <style> 的装卸（外观全部装、排版只装选中的那份）、注册表的运行时状态、订阅、项目目录的进出；data-theme / data-scheme 经 scheme.ts 写入
+  assets.ts       排版主题的资产：相对 url() 读成 data: URL（装载与导出同一个变换）
+  sample.ts       设置页排版卡的样张文档：沙箱 iframe 的 srcdoc（当前外观的一套调色板 + 基底 + 文件自己的 CSS + 一页样文）
   export.ts       导出的调色板：浅深两套核心 + 排版 CSS 引用到的推导令牌，从注册表生成
   exportFile.ts   「把当前主题导出为文件」：每个令牌带角色注释的 .css，写进主题文件夹
-  markdownThemes.ts  保留：内置排版主题 + 基底生成器；EXPORT_TOKEN_CSS 已删除（§9）
+  markdownThemes.ts  保留：内置排版主题 + 基底生成器；EXPORT_TOKEN_CSS 与「钉住」块都已删除（§9、§7.3）
 ```
 
 `contractData.ts` 是**生成物**而不是第二份手抄：vitest 把每一个 `.css` 导入都 stub 成空（`?raw` 也不例外），而要读契约的模块（校验、导出）在 `appStore` 之下、半个测试套件都会导入——所以运行时不能 `import tokens.css?raw`。`themeContract.test.ts` 用同一个解析器跑一遍文件、和常量 `toEqual`，漂了就报出重新生成的命令。
@@ -189,7 +191,7 @@ interface ThemeEntry {
 ### 7.2 切换与启动
 
 - `appStore.setTheme(mode)` 语义不变。新增 `setThemeFor(scheme, id)`。三者任一变化 → 解出 `(id, scheme)` → `install.applyResolvedTheme(scheme, id)`：注册表解出真正生效的那张（文件缺席 / 读不出 / 极性不对就是内置基底）、经 `scheme.applyThemeId` 写 `data-theme` / `data-scheme`（`color-scheme` 由 `tokens.scheme` 跟着 `data-scheme` 走）。仍包在 `startViewTransition` 里，交叉淡化照旧。**每一份可用的用户主题都装在同一个 `<style>` 里**（`@layer tokens.user { [data-theme="id"] {…} … }`），切换只是换属性，不读文件。用 `<style>` 而不是 `adoptedStyleSheets`：构造样式表 WebKit 16.4 才有，在地板之上；层让注入位置无关紧要。
-- `setMarkdownTheme(id)` 同理走 `install.applyMarkdown(entry)`：用户主题装一份，内置只写属性（生成器已经把五套都装上了）。
+- `setMarkdownTheme(id)` 同理走 `install.applyResolvedMarkdownTheme(id)`：`data-md-theme` 写的是**它叠的那套内置**（文件是内置就是它自己），文件自己的 CSS 装进第二个 `<style>`（`theme-markdown-user`，排在生成器那份之后），资产已内联；选内置就清空这份。一次只装选中的那一份——Typora 的语义；样张不需要更多，它们各有各的沙箱。校验器发出的每个选择器前面都带 `html[data-md-theme]`：叠底那套内置的规则是 `[data-md-theme="x"] .md-body …`，比文件里的 `.md-body …` 多一个属性选择器，不加前缀的话文件写的 `--md-line: 1.9` 会输给基底的 `1.78`，源码顺序救不了。
 - **启动无闪**：`main.tsx` 今天已经 `await hydratePrefs()` 之后才 import 应用；把「读被选中主题文件并校验」放进同一个 await——多一次文件读取，换来首帧就是对的主题。文件不在：写基底、把 entry 标 `missing`，设置页的那张卡说「找不到 xxx.css，已回到 paper」，偏好**不**自动改写（作者把文件放回来就好）。
 - `reloadFromPrefs()`（配置导入后重绘）也走同一条：偏好里的主题 id 可能指向这台机器没有的文件，处理同上。
 
@@ -259,8 +261,8 @@ interface ThemeEntry {
 |---|---|---|
 | **S1 令牌分层** — **已落地 2026-09-06** | `@layer` 五层；`data-scheme` + `color-scheme`（`lib/theme/scheme.ts`：`applyScheme` / `currentScheme` / `useScheme`）；核心 37 / 推导 176 / 手调 139；`[data-theme="light"]` → `paper` / `night`；Preview 的 Mermaid 读 scheme 并在切换时重渲染；CodeMirror 高亮改成 `lib/editor/highlight.ts`——只发 `.tok-*` 类名，颜色在模块 CSS 里读令牌（原来的 `.tok-*` 规则一直是死代码：`defaultHighlightStyle` 生成的是哈希类名）；16 处主题盲的字面色换令牌（图片灯箱那一族的白字黑底是刻意的，保留）；`themeContract.test.ts` 替换奇偶测试并带悬空引用守卫（首轮抓到 `--color-bg-panel` / `--color-red` / `--spring-open` 三处）；`webviewCaps` 加 `@layer` 探针 | 内置主题**零像素变化**（脚本 + 浏览器双重核对）；夜间编辑器高亮、原生控件 / 滚动条、Mermaid 跟主题了 |
 | **S2 外观主题文件** — **已落地 2026-09-06** | `manifest / contract(+contractData) / validate / registry / scan / install / export / exportFile`；`app:themeLight/Dark` + `setThemeFor`；`main.tsx boot()` 只预读被选中的文件；设置页两条带 + 六令牌样张卡 + 三种坏卡 + 就地「详情」+ 作者三动作与两处痕迹；导出调色板改从注册表生成（`EXPORT_TOKEN_CSS` 删除，棘轮测试守着）。**与方案的出入**：① Rust 侧**没有改动**——`appDataDir` 本来就在 `scope.rs` 的根里，`themes/` 是它的子目录；② 装载用 `<style>` 不用 `adoptedStyleSheets`（§7.2）；③ `problems[].rule` 是文件里**第几条顶层规则**而不是行号——CSSOM 不给行号，设计稿的「第」列照这个填；④ 外观卡的样张不读值：卡上的迷你窗口自己带 `data-theme` / `data-scheme`，`tokens.scheme` 与 `tokens.user` 在**它身上**声明那六个核心令牌，压过设置页 `--stg-*` 重映射的继承值，内置与用户主题同一种画法；⑤ 校验器遍历的是 `CSSRuleList` 的**形状**（`RuleLike`），单测喂普通对象——node 里没有 CSSOM；⑥ 「重新载入」的痕迹只数外观（排版文件计数已收进 `UiRegistry.markdownFiles`，S3 接）。实机之外的核对：dev server 里把四份真实 CSS 文本喂进真的浏览器解析器——`"冷灰"` 引号剥掉、`--radius-md` / `--color-danger` / `body` / `.editor` / `@media (prefers-color-scheme)` 五条各带各的理由被丢、缺元数据的文件不可选、偏好指着不存在的文件时虚线卡站在原位、选中用户主题后 `--stg-accent` 跟着它的 `--color-sienna` 变 | 作者能装自己的外观主题；导出带作者调色板（浅色在 `:root`，深色在 `prefers-color-scheme: dark` 下） |
-| **S3 排版主题文件** | `@kind markdown` 校验规则；项目级目录；iframe 样张（内置一并迁过去，钉住块退役）；`font-src` 加协议；`url()` 改写与导出内联 | 作者能装 Typora 式排版主题，导出一致 |
-| **S4 打磨** | 「重新载入」之外的文件监听（若 Rust 侧已有 notify）；坏主题的措辞与 i18n；`design-system.md` Theming 一节重写、`localStorage` 那句删除 | — |
+| **S3 排版主题文件** — **已落地 2026-09-06** | `--theme-kind: markdown` 的校验（`validateMarkdownRules`：每个选择器以 `.md-body` 起、`@media / @supports / @container` 递归、`@font-face / @keyframes` 照收、`url()` 只收相对路径与 `data:`、`:root` 只读 `--theme-*` 元数据）；项目级 `.ai-writer/themes/`（同 id 整份覆盖装机级，随 `projectStore.projectPath` 进出注册表；外观主题放进去会被拒并说明）；样张改成 `<iframe sandbox="" srcdoc>`（内置一并迁过去，生成器的「钉住」块删除）；`自带字体` / `自带颜色` 两个 mono 小框；重新载入的痕迹数两种；导出带文件自己的 CSS。**与方案的出入**：① 资产**不走 `ai-writer-asset:`**，装载和导出都内联成 `data:` URL——应用自己的图片早已弃用那个协议（WebView2 对盘符路径的解析不可靠，`useImageDataUrl.ts` / `protocol.rs` 记着），一个变换喂两处也让样张、应用、导出三处不会对一个字体各说各话；因此 `font-src` **没有**加协议，CSP 一字未动；② Rust 侧一行：`themes/` 目录再登记进 `tauri-plugin-fs` 自己的 scope（读字体字节走的是那个插件，它的 scope 只种了项目根）；③ 校验器发出的选择器带 `html[data-md-theme]` 前缀（§7.2 说了为什么），导出的 `<html>` 与样张的 `<html>` 因此也带这个属性；④ `problems[].rule` 在嵌套块里记的是**顶层**规则号；⑤ 样张里没有应用打包的字体（沙箱是不透明源，`font-src 'self'` 对它不成立），退到系统字体——字体方案那根轴不进样张；⑥ `background` 这类简写经 CSSOM 展开成长属性再发出，正确但啰嗦。实机之外的核对：dev server 里把三份真实排版 CSS 喂进真的浏览器解析器——`body { … }` 被丢、`@media` 递归保留、`半调.css` 缺名不可选、`brand.css` 标成「本项目 · 自带字体 · 自带颜色」、选中 `宋楷` 后 `data-md-theme=manuscript`、第二个 `<style>` 里是它的规则、探针元素上 `--md-line` 读到 `1.9` | 作者能装 Typora 式排版主题，导出一致 |
+| **S4 打磨** | 「重新载入」之外的文件监听（若 Rust 侧已有 notify）；`problems[].reason` 的 i18n；`background` 简写的回收；样张里的字体方案 | — |
 
 S1 是最大也最值钱的一片：它本身就是对今天「176 个只在两套内置里有值的令牌」的一次偿债，即便 S2–S4 永远不做，应用也已经能被一份 37 行的令牌文件整体换色——S2 要做的只是把那份文件读进来。S4 里「`design-system.md` Theming 一节重写、`localStorage` 那句删除」两项已随 S1 做掉；「坏主题的措辞与 i18n」一半随 S2 做了——卡上的固定句子（缺席 / 读不出 / 已忽略 N 条）走 i18n，`problems[].reason` 里的理由仍是中文常量（`validate.ts` 的 `REASON`），S4 再收。
 
@@ -281,5 +283,5 @@ S1 是最大也最值钱的一片：它本身就是对今天「176 个只在两�
 1. **文件监听**：Rust 侧目前没有 `notify` 依赖。S4 是否值得加一个 watcher 只为主题热重载？作者写主题时确实会反复保存——Typora 的「改一行重启一次」是它被抱怨最多的地方之一。倾向：加，但限于 `themes/` 目录，且只在设置页开着时监听。
 2. **`color-mix()` 探针失败时的降级质量**：`@supports not (color: color-mix(in oklab, red, blue))` 分支里 L2 只能是别名，不如推导；那台机器上用户主题的设置页会「平」一些。是否可接受，S1 实机看。
 3. **导出的深色块要不要**：收件人的系统是深色时，公众号排版带品牌色 + 作者的夜间调色板可能不好看。备选：导出只带浅色（今天的行为），深色块作为导出对话框的一个开关。倾向：默认带，开关可关。
-4. **排版主题自带字体与 `data-font` 的关系**：排版主题 `.md-body { font-family: … }` 会压过字体方案（后者只改 `--font-serif`）。这是预期（Typora 的主题就是带字体的），但设置页应在排版主题卡上标一句「自带字体」。
+4. **排版主题自带字体与 `data-font` 的关系**：排版主题 `.md-body { font-family: … }` 会压过字体方案（后者只改 `--font-serif`）。这是预期（Typora 的主题就是带字体的），设置页在卡上标「自带字体 · 不随字体方案变」——S3 已做；判定是「值里没有 `var(`」，引用 `var(--font-serif)` 的不算自带。
 5. **旧偏好值**：`app:theme` 从未存过 `paper`/`night`（它是模式），无迁移；`app:markdownTheme` 存的五个 id 全部保留为内置保留字，无迁移。唯一要动的是把 `design-system.md` 里那句 `localStorage` 改掉。

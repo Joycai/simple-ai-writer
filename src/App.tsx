@@ -19,6 +19,10 @@ import { SyncPreviewModal } from "./components/sync/SyncPreviewModal";
 import { ConfigRestoreModal } from "./components/sync/ConfigRestoreModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { clampSidebarWidth, useAppStore } from "./stores/appStore";
+// Side-effect import: the theme store subscribes to project changes at
+// module scope, so a project's `.ai-writer/themes/` joins the registry
+// whether or not Settings has ever been opened.
+import "./stores/themeStore";
 import { useAiStore } from "./stores/aiStore";
 import { useMainView, useProjectStore } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
