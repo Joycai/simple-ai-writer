@@ -200,6 +200,28 @@ export function allEntityNames(loreIndex: LoreIndex): string {
 const ENTITY_MAX_CHARS = 10_000;
 
 /**
+ * Denominator of a cursor's fractional part: `57.0002` is line 57 from its
+ * third page. Four decimals addresses 40 MB of one line, which is far past
+ * anything the file reader hands back whole.
+ */
+const PART_SCALE = 10_000;
+
+/**
+ * The exact literal a caller passes back as `start_line`.
+ *
+ * Always produced here and copied back by the model, never composed by it —
+ * the same contract `start_line=21` has had all along.
+ */
+export function pageCursor(line: number, part: number): string {
+  return part === 0 ? String(line) : `${line}.${String(part).padStart(4, "0")}`;
+}
+
+/** How many pages one line occupies. */
+function partsOf(len: number): number {
+  return Math.max(1, Math.ceil(len / READ_MAX_CHARS));
+}
+
+/**
  * Page `raw` by whole lines from `from`, under `READ_MAX_CHARS` — THE paging
  * implementation, not a copy of one: `read_file` (readWritingFile) and the
  * lore paths both run this loop, so "read the rest with start_line=N" means
@@ -207,6 +229,31 @@ const ENTITY_MAX_CHARS = 10_000;
  * rule or the trailer wording cannot fork between tools. The first line is
  * always taken even when it alone exceeds the budget — otherwise a file
  * written as one long paragraph per line would return nothing at all.
+ *
+ * **A line longer than the budget is paged too**, by the fractional part of
+ * `from`: `57.0001` is line 57 continuing from its 4001st character. Before
+ * this, an over-long line was cut and the model was told only *that* it had
+ * been cut — no coordinate to continue from, and the whole-line continuation
+ * note was gated on there being a further line at all. So the tail of a long
+ * line was unreachable, and a file that is ONE long line (a minified page, a
+ * saved web page, an exported report) could not be read past its first 4000
+ * characters. The model would then `rewrite_lines` a line it had only half
+ * read, which is silent truncation of the rest.
+ *
+ * The cursor rides in `start_line` rather than in a new parameter because the
+ * schema is re-sent every round and the read tier has 28 tokens of headroom
+ * (`agentToolBudget.test.ts`); `start_line` is already `type: number` and
+ * every call site passes the model's value straight through, so one change
+ * here reaches all four readers and costs nothing per round. Full account,
+ * including the rejected `start_char` parameter:
+ * `docs/feature/agent/html-read-edit-plan.md` §6 / D5.
+ *
+ * The gutter is untouched (`numberLines`): a long line's tail carries no
+ * newline, so it occupies exactly one numbered row — its own — and whole
+ * lines packed after it number on from there. Today's *first* page of a long
+ * line is already such a fragment, so a continuation page that looked
+ * different would be the odd one out. "This is not the whole line" is said in
+ * the notes, which is the last thing read before anything is quoted back.
  */
 export function pageLines(raw: string, from: number): {
   body: string;
@@ -215,46 +262,103 @@ export function pageLines(raw: string, from: number): {
   total: number;
   /** start === 1 && to === total && nothing cut — callers skip their maps on it. */
   whole: boolean;
+  /** The literal for the next call, or null at the end of the file. */
+  next: string | null;
+  /** This page begins and/or ends inside a line rather than on its boundaries. */
+  partial: boolean;
   notes: string[];
 } | { error: string } {
   const lines = raw.split(/\r?\n/);
-  const start = Math.max(1, Math.floor(from));
+  const cursor = Number.isFinite(from) ? from : 1;
+  const start = Math.max(1, Math.floor(cursor));
   if (start > lines.length) {
     return { error: `start_line ${start} is past the end of the file, which has ${lines.length} line(s).` };
   }
-  let taken = 0;
-  let chars = 0;
-  for (let i = start - 1; i < lines.length; i++) {
-    const cost = lines[i].length + 1;
-    if (taken > 0 && chars + cost > READ_MAX_CHARS) break;
-    chars += cost;
-    taken++;
+
+  const first = lines[start - 1];
+  const part = cursor > start ? Math.round((cursor - start) * PART_SCALE) : 0;
+  const skip = part * READ_MAX_CHARS;
+  if (part > 0 && skip >= first.length) {
+    // An invented cursor is answered with the right one. Naming the literal
+    // rather than the rule is this file's house style for a refusal — the
+    // model's next call lands, instead of spending a round on a second guess.
+    const parts = partsOf(first.length);
+    const fix =
+      parts === 1
+        ? `Line ${start} fits in one page — pass start_line=${start}.`
+        : `Its last page is start_line=${pageCursor(start, parts - 1)}.`;
+    return {
+      error:
+        `start_line ${from} is past the end of line ${start}, which is ${first.length} character(s) long` +
+        `${parts === 1 ? "" : ` (${parts} pages)`}. ${fix}`,
+    };
   }
-  const to = start + taken - 1;
-  let body = lines.slice(start - 1, to).join("\n");
-  const cutMidLine = body.length > READ_MAX_CHARS;
-  if (cutMidLine) body = body.slice(0, READ_MAX_CHARS);
-  const whole = start === 1 && to === lines.length && !cutMidLine;
+
+  const remaining = first.length - skip;
+  const cutMidLine = remaining > READ_MAX_CHARS;
+
+  let body: string;
+  let to = start;
+  if (cutMidLine) {
+    body = first.slice(skip, skip + READ_MAX_CHARS);
+  } else {
+    // The rest of the starting line fits; whole lines are packed after it
+    // under what is left of the budget. With part === 0 this is byte for byte
+    // the loop that was here before.
+    let taken = 1;
+    let chars = remaining + 1;
+    for (let i = start; i < lines.length; i++) {
+      const cost = lines[i].length + 1;
+      if (chars + cost > READ_MAX_CHARS) break;
+      chars += cost;
+      taken++;
+    }
+    to = start + taken - 1;
+    body = [first.slice(skip), ...lines.slice(start, to)].join("\n");
+  }
+
+  const partial = part > 0 || cutMidLine;
+  const whole = part === 0 && start === 1 && to === lines.length && !cutMidLine;
+  const shownOfFirst = cutMidLine ? READ_MAX_CHARS : remaining;
   const notes = [
     whole
       ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
-      : `lines ${start}-${to} of ${lines.length} shown`,
+      : `lines ${start}-${to} of ${lines.length} shown` +
+        (partial
+          ? ` (line ${start}, characters ${skip + 1}-${skip + shownOfFirst} of ${first.length})`
+          : ""),
   ];
-  if (cutMidLine) notes.push(`line ${start} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`);
-  // The "in one round" half is the expensive one to leave unsaid. Paging reads
-  // as a sequence, so a model treats page N+1 as waiting on page N and spends a
-  // round — and the whole tool schema — on each one; reading a long document
-  // through therefore costs more in schema than the document is worth. They are
-  // in fact independent calls the runtime runs concurrently
-  // (`partitionParallelSegments`). Said here rather than only in the system
-  // instruction because this is where it applies, and by the time the model is
-  // reading this trailer the instruction is thousands of tokens upstream (D1).
-  if (to < lines.length) {
+
+  let next: string | null;
+  if (cutMidLine) {
+    const parts = partsOf(first.length);
+    next = part + 1 < PART_SCALE ? pageCursor(start, part + 1) : null;
     notes.push(
-      `pass start_line=${to + 1} to continue — several pages can be requested in the same round, they do not wait on each other`,
+      next === null
+        ? `line ${start} was cut mid-line and is too long to address further`
+        : `cut mid-line — pass start_line=${next} to continue INSIDE line ${start}: the digits ` +
+          `after the dot are a position within that line, not a line number. ${parts - part - 1} ` +
+          `more page(s) finish it (${next} … ${pageCursor(start, parts - 1)}), and they can all ` +
+          "be requested in the same round",
     );
+  } else {
+    next = to < lines.length ? String(to + 1) : null;
+    // The "in one round" half is the expensive one to leave unsaid. Paging reads
+    // as a sequence, so a model treats page N+1 as waiting on page N and spends a
+    // round — and the whole tool schema — on each one; reading a long document
+    // through therefore costs more in schema than the document is worth. They are
+    // in fact independent calls the runtime runs concurrently
+    // (`partitionParallelSegments`). Said here rather than only in the system
+    // instruction because this is where it applies, and by the time the model is
+    // reading this trailer the instruction is thousands of tokens upstream (D1).
+    if (next !== null) {
+      notes.push(
+        `pass start_line=${next} to continue — several pages can be requested in the same round, they do not wait on each other`,
+      );
+    }
   }
-  return { body: numberLines(body, start), from: start, to, total: lines.length, whole, notes };
+
+  return { body: numberLines(body, start), from: start, to, total: lines.length, whole, next, partial, notes };
 }
 
 /**
@@ -851,6 +955,28 @@ function scanText(
 }
 
 /**
+ * A hit's coordinate — and, on a line too long to read in one page, the cursor
+ * that lands on it.
+ *
+ * `L1` is a complete answer for prose, where a line is a sentence or two. It
+ * is nearly useless on a minified page, where line 1 *is* the document: the
+ * model knows the match is somewhere in 200,000 characters and has no way to
+ * ask for that part. The cursor closes it — one search, then one read that
+ * lands on the match instead of on the top of the file.
+ *
+ * Safe to name `start_line` here: no preset carries `search_text` without
+ * `read_file` (docs/reference/tool-presence.md).
+ */
+function hitLabel(line: string, hit: HitAt): string {
+  const at = `L${hit.line + 1}`;
+  if (line.length <= READ_MAX_CHARS) return at;
+  return (
+    `${at} (character ${hit.col + 1} of ${line.length}; read from it with ` +
+    `start_line=${pageCursor(hit.line + 1, Math.floor(hit.col / READ_MAX_CHARS))})`
+  );
+}
+
+/**
  * Render one section's blocks.
  *
  * The context decision is taken **per section** rather than over the search as
@@ -868,7 +994,10 @@ function renderSection(
     const body = withContext
       ? file.at.map((h) => hitWithContext(file.lines, h, needleLen)).join("\n  ⋮\n")
       : file.at
-          .map((h) => `  L${h.line + 1}: ${snippetAround(file.lines[h.line], h.col, needleLen)}`)
+          .map(
+            (h) =>
+              `  ${hitLabel(file.lines[h.line], h)}: ${snippetAround(file.lines[h.line], h.col, needleLen)}`,
+          )
           .join("\n");
     return (
       `${file.path}\n${body}` +
@@ -905,7 +1034,9 @@ function hitWithContext(lines: string[], hit: HitAt, needleLen: number): string 
       : i === hit.line
         ? snippetAround(line, hit.col, needleLen)
         : `${line.slice(0, SNIPPET_MAX)}…`;
-    out.push(`${i === hit.line ? ">" : " "} L${i + 1}: ${text}`);
+    out.push(
+      i === hit.line ? `> ${hitLabel(line, hit)}: ${text}` : `  L${i + 1}: ${text}`,
+    );
   }
   return out.join("\n");
 }
@@ -1430,6 +1561,19 @@ export async function readWritingFile(
   // placed than a sentence in four tool descriptions would be (plan §D1).
   const notes = [...page.notes];
   notes.splice(1, 0, "the number before each tab is the line number, not file content — never copy it into an edit");
+
+  // A line longer than one page is the case where naming its range is a trap:
+  // a range rewrite replaces the whole line, and a model that has read only
+  // part of it would drop the rest — silently, because nothing errors. Said
+  // only where it applies, and only when this run actually holds the tool it
+  // recommends (docs/reference/tool-presence.md).
+  if (page.partial && (allowedTools?.includes("propose_edit") ?? false)) {
+    notes.push(
+      "this line is longer than one page — to change part of it, quote a distinctive fragment " +
+        "into propose_edit's 'find'; rewriting the range would replace the whole line, including " +
+        "the part not shown here",
+    );
+  }
 
   // The map goes in front of the page, and only when there is more file than
   // the page carries — a response holding the whole file needs no map of it.

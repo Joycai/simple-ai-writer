@@ -59,6 +59,25 @@ describe("echoRegion", () => {
     expect(out.split("\n").length).toBeLessThan(ECHO_MAX_LINES);
   });
 
+  // ECHO_MAX_LINES is the whole budget for prose, where a line is a sentence.
+  // It is no budget at all for the files that arrive as one enormous line — a
+  // minified page, an SVG path — where a one-line rewrite's receipt would echo
+  // the whole 130,000 characters back, several times the round this exists to
+  // save (docs/feature/agent/html-read-edit-plan.md §6).
+  it("cuts a single line long enough to be a budget on its own", () => {
+    const out = echoRegion(`短\n${"长".repeat(9000)}\n短`, 2, 2);
+
+    expect(out).toContain("     2\t长长长");
+    expect(out).toContain("8500 more character(s) on this line, not echoed");
+    // Visibly not quotable, and the numbering is untouched by the marker.
+    expect(out.split("\n")).toHaveLength(3);
+    expect(out.length).toBeLessThan(1200);
+  });
+
+  it("leaves an ordinary line exactly as it was", () => {
+    expect(echoRegion(FILE, 5, 5)).not.toContain("not echoed");
+  });
+
   // A deletion leaves `to` below `from`; the surrounding lines still have to
   // come back, because they are what the next range is named against.
   it("survives a region that no longer exists", () => {

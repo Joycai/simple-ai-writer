@@ -1,6 +1,6 @@
 # agent 侧 HTML 读写：入口、坐标与超长行
 
-> 状态：`planned`（五片都未实施；片 5 只交测量，不改生产代码）
+> 状态：`partial`（片 A / B / C 已实施；片 D、E 未做。片 5 只交测量，不改生产代码）
 > 起因：2026-09-07 以「改某一部分时会不会退化成 read-all」为尺子，审阅了 app 对 `.html` 的读写支持。写的一侧是对的，读的一侧在**幻灯片形状**的页面上也已经不 read-all（[`pptx-plan.md`](../pptx-plan.md) 那半 + `read_slides` 吃 `.html`）。断的地方在四处：模型走 `read_file` 进来时**没人把它引到那份目录上**、`inspect_html` 的发现没有坐标、超长单行读不全、非幻灯片页面没有结构坐标。第五处是 IPC 量级，先量后改。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约与 `inspect_html` 的由来，§5.1 就是本文片 1 补的那句话）、[`large-doc-formatting-plan.md`](large-doc-formatting-plan.md)（段落地图，与本文的地标索引同构）、[`../html-artifact-plan.md`](../html-artifact-plan.md)（HTML 交付物的由来）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（schema 成本账）、[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（指路只能指向这次运行真有的工具）
 
@@ -127,7 +127,18 @@ partial: boolean;
 
 **写工具不需要改**：`rewrite_lines` 与 `rewrite_lore_lines` 都做 `Math.floor(Number(...))`，游标漏进写工具只会退化成整行，不会写坏东西。修复留在读的一侧。
 
-**唯一的不确定**是小模型会不会把 `57.0001` 抄成 `57`——代价是白费一轮（拿到同一页和同一条纠正提示），不是数据损坏。落地前用仓里已有的 `scripts/prompt-ab.ts` 台架在本地 12B 上过一遍；也顺手在 registry 里把 `args.start_line` 改成 `Number(args.start_line)`，模型把它字符串化也还能用（三行，零成本）。
+**唯一的不确定**是小模型会不会把 `57.0001` 抄成 `57`——代价是白费一轮（拿到同一页和同一条纠正提示），不是数据损坏。**已实测，结论是站得住**（2026-09-07，LM Studio 本地端点，真的 `read_file` schema + 真的首页结果，各 6 次）：
+
+| 模型 | `start_line=1.0001` | 没调工具 | 抄错的游标 |
+|---|---|---|---|
+| `gemma4-26b-a4b` | **6 / 6** | 0 | 0 |
+| `qwen3.8-27b` | **5 / 6**（其中 4 次同一轮并发发了 1.0001 / 1.0002 / 1.0003） | 1 | 0 |
+
+12 次里 11 次拿到正确游标，**一次抄错的都没有**。qwen 的思考过程原文：「The file has only 1 line, and that line is long (13815 characters). … I need to continue reading within the same line: pass start_line=1.0001 to continue inside line 1.」——它连「几页可以同一轮一起要」那半句也照做了，这正是那句话加进 trailer 的理由。唯一那次「没调工具」是探针自己 `max_tokens` 太小把思考截断了，不是模型的问题。
+
+（这里没用 `scripts/prompt-ab.ts`：那个台架量的是**选哪个工具**，这里要量的是**参数抄得对不对**，两件事。探针是一次性的，没进仓。）
+
+顺手在 registry 里把 `args.start_line` 过一道 `Number(...)`，模型把它字符串化也还能用（`cursorArg`，零 schema 成本）。
 
 **同片顺带的两个防护**（都在读/回执一侧，不动协议）
 
