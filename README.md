@@ -392,7 +392,7 @@ Please file bugs or feature requests at [GitHub Issues](https://github.com/youru
 - [ ] Image generation from text prompts
 - [ ] Prompt auto-optimization
 - [ ] Multi-provider request routing
-- [ ] Custom CSS themes
+- [x] Custom CSS themes — appearance and typography theme files; downloadable examples and the format guide in [`themes/`](themes/README.md)
 - [ ] Collaborative editing (optional sync backend)
 - [ ] More language support
 
