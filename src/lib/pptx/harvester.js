@@ -235,6 +235,34 @@
    * put it: the box is widened leftwards by the marker's measured width, so
    * nothing else on the slide shifts.
    */
+  /** How far above a text node its list item may sit. */
+  var MAX_MARKER_ANCESTORS = 4;
+
+  /**
+   * The list item whose marker belongs in front of this text, or null.
+   *
+   * The marker is drawn by the browser on the *item*, but the text carrying it
+   * is often a level down — `<li><span>…</span></li>` is what a generated deck
+   * writes about half the time. Asking the span whether it is a list item
+   * answered no, so that one bullet went missing while its siblings kept
+   * theirs, and the line lost the marker's width of indent with it.
+   *
+   * Claimed once per item, so a two-paragraph `<li>` gets one bullet.
+   */
+  function listItemFor(el) {
+    var node = el;
+    for (var i = 0; node && node.nodeType === 1 && i < MAX_MARKER_ANCESTORS; i++) {
+      var style = getComputedStyle(node);
+      if (style.display.indexOf("list-item") >= 0) {
+        if (node.sawListMarked) return null;
+        node.sawListMarked = true;
+        return { el: node, style: style };
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function markerFor(el, style) {
     if (style.display.indexOf("list-item") < 0) return null;
     if (style.listStyleType === "none") return null;
@@ -272,8 +300,31 @@
    * as bold text in one PowerPoint paragraph instead of becoming a second text
    * box positioned next to the first.
    */
+  /** Display values that start their own line. `inline-block` and friends do not. */
+  var BLOCK_DISPLAYS = [
+    "block", "flow-root", "list-item", "flex", "grid",
+    "table", "table-row", "table-cell", "table-caption",
+  ];
+
+  function isBlockLevel(style) {
+    return BLOCK_DISPLAYS.indexOf(style.display) >= 0;
+  }
+
   function collectRuns(el) {
     var runs = [];
+
+    /**
+     * End the current line.
+     *
+     * A `<br>` used to become a space, and a block-level child contributed no
+     * break at all — so a two-line heading arrived as one long line, and a
+     * `<div class="stat">92<span>%</span><div>增长</div></div>` arrived as
+     * `92%增长` in a single box with three font sizes in it.
+     */
+    function breakLine() {
+      if (runs.length) runs[runs.length - 1].breakAfter = true;
+    }
+
     (function walk(node) {
       for (var i = 0; i < node.childNodes.length; i++) {
         var child = node.childNodes[i];
@@ -281,14 +332,17 @@
           var raw = child.nodeValue.replace(/\s+/g, " ");
           if (!raw.trim()) {
             // Whitespace between inline elements is real spacing, but leading
-            // and trailing whitespace is just source formatting.
-            if (runs.length && raw === " ") runs[runs.length - 1].text += " ";
+            // and trailing whitespace is just source formatting — and a space
+            // after a line has ended is neither.
+            var last = runs.length ? runs[runs.length - 1] : null;
+            if (last && !last.breakAfter && raw === " ") last.text += " ";
             continue;
           }
           var parent = child.parentElement || el;
           var style = getComputedStyle(parent);
           var size = parseFloat(style.fontSize) || 0;
           if (size < MIN_FONT_PX) continue;
+          var spacing = parseFloat(style.letterSpacing);
           runs.push({
             text: transformText(raw, style),
             bold: parseInt(style.fontWeight, 10) >= 600,
@@ -296,19 +350,28 @@
             underline: (style.textDecorationLine || style.textDecoration || "").indexOf("underline") >= 0,
             color: paintedColor(parent, style),
             sizePx: size,
+            // The box was measured *with* the tracking, so leaving it behind
+            // draws the words narrower than the box they were measured into.
+            spacingPx: isFinite(spacing) && spacing ? spacing : undefined,
             font: firstFamily(style.fontFamily),
           });
         } else if (child.nodeType === 1) {
           var childStyle = getComputedStyle(child);
           if (isHidden(child, childStyle)) continue;
           if (child.tagName === "BR") {
-            if (runs.length) runs[runs.length - 1].text += " ";
+            breakLine();
             continue;
           }
+          var block = isBlockLevel(childStyle);
+          if (block) breakLine();
           walk(child);
+          if (block) breakLine();
         }
       }
     })(el);
+
+    // A break on the last run is a blank line at the end of the shape.
+    if (runs.length) runs[runs.length - 1].breakAfter = undefined;
     return runs;
   }
 
@@ -531,11 +594,64 @@
     });
   }
 
+  /**
+   * The clockwise angle of a transform that is *only* a rotation, else 0.
+   *
+   * Only a pure rotation, because the fix below measures the element with its
+   * transform switched off: for a rotation that is exactly right (transforms
+   * do not affect layout, so the untransformed rect is the element's real
+   * box), while for a `translate(-50%, -50%)` it would report the element
+   * somewhere the page never drew it. A scale or a skew is left alone for the
+   * same reason — the old bounding-box behaviour is wrong, but wrong in a way
+   * that at least covers the right area.
+   */
+  function pureRotation(style) {
+    var matrix = String(style.transform || "");
+    var inside = matrix.match(/^matrix\(([^)]+)\)$/);
+    if (!inside) return 0;
+    var n = inside[1].split(",");
+    var a = parseFloat(n[0]), b = parseFloat(n[1]), c = parseFloat(n[2]), d = parseFloat(n[3]);
+    var e = parseFloat(n[4]), f = parseFloat(n[5]);
+    if (Math.abs(e) > 0.5 || Math.abs(f) > 0.5) return 0;
+    if (Math.abs(Math.sqrt(a * a + b * b) - 1) > 0.01) return 0;
+    if (Math.abs(a - d) > 0.01 || Math.abs(b + c) > 0.01) return 0;
+    var degrees = (Math.atan2(b, a) * 180) / Math.PI;
+    if (Math.abs(degrees) < 0.1) return 0;
+    return (degrees % 360 + 360) % 360;
+  }
+
+  /**
+   * Rotate the blocks a rotated subtree produced, about the point the page
+   * rotated them about.
+   *
+   * PowerPoint turns each shape about its own centre, so reproducing a rotated
+   * group means moving every shape's centre to where the rotation put it and
+   * then turning it in place — which composes to exactly the same picture.
+   * Innermost span first, so a rotation inside a rotation still lands right.
+   */
+  function applyRotations(blocks, spans) {
+    for (var i = spans.length - 1; i >= 0; i--) {
+      var span = spans[i];
+      var radians = (span.angle * Math.PI) / 180;
+      var cos = Math.cos(radians), sin = Math.sin(radians);
+      for (var j = span.from; j < span.to; j++) {
+        var block = blocks[j];
+        if (!block) continue;
+        var dx = block.x + block.w / 2 - span.cx;
+        var dy = block.y + block.h / 2 - span.cy;
+        block.x = span.cx + dx * cos - dy * sin - block.w / 2;
+        block.y = span.cy + dx * sin + dy * cos - block.h / 2;
+        block.rotate = ((block.rotate || 0) + span.angle) % 360;
+      }
+    }
+  }
+
   function harvestSlide(root) {
     var origin = root.getBoundingClientRect();
     var blocks = [];
     var degraded = [];
     var pending = [];
+    var rotations = [];
 
     /**
      * Hold a place in paint order for a block that is not ready yet.
@@ -564,9 +680,44 @@
       place(reserve(), block, rect);
     }
 
-    (function walk(el, insideText) {
+    /**
+     * Measure a rotated element the way it was laid out, then rotate the
+     * result back.
+     *
+     * `getBoundingClientRect` on a rotated element is the *axis-aligned box
+     * around* it: wider and taller than the element, and with the angle gone.
+     * A rotated badge therefore exported upright inside an oversized pill.
+     * Switching the transform off restores the layout box exactly — transforms
+     * never affected layout — so the subtree measures normally and every block
+     * it produced is turned afterwards, about the page's own transform-origin.
+     */
+    function walk(el, insideText) {
       var style = getComputedStyle(el);
       if (isHidden(el, style)) return;
+      var angle = pureRotation(style);
+      if (!angle) {
+        measure(el, style, insideText);
+        return;
+      }
+      var inline = el.style.getPropertyValue("transform");
+      var priority = el.style.getPropertyPriority("transform");
+      el.style.setProperty("transform", "none", "important");
+      var flat = el.getBoundingClientRect();
+      var pivot = String(style.transformOrigin || "").split(" ");
+      var from = blocks.length;
+      measure(el, style, insideText);
+      rotations.push({
+        from: from,
+        to: blocks.length,
+        angle: angle,
+        cx: flat.left - origin.left + (parseFloat(pivot[0]) || flat.width / 2),
+        cy: flat.top - origin.top + (parseFloat(pivot[1]) || flat.height / 2),
+      });
+      if (inline) el.style.setProperty("transform", inline, priority);
+      else el.style.removeProperty("transform");
+    }
+
+    function measure(el, style, insideText) {
       var rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
@@ -660,7 +811,8 @@
         var runs = collectRuns(el);
         if (runs.length && measured.box.width > 0) {
           var box = measured.box;
-          var marker = markerFor(el, style);
+          var item = listItemFor(el);
+          var marker = item ? markerFor(item.el, item.style) : null;
           if (marker && runs.length) {
             runs[0] = {
               text: marker.text + runs[0].text,
@@ -669,6 +821,8 @@
               underline: runs[0].underline,
               color: runs[0].color,
               sizePx: runs[0].sizePx,
+              spacingPx: runs[0].spacingPx,
+              breakAfter: runs[0].breakAfter,
               font: runs[0].font,
             };
             box = {
@@ -678,12 +832,19 @@
               height: box.height,
             };
           }
+          // `normal` has no number to read, so the browser's own answer —
+          // the height it actually used per line — stands in for it.
+          var lineHeight = parseFloat(style.lineHeight);
           push(
             {
               kind: "text",
               runs: runs,
               align: normalizeAlign(style.textAlign, style.direction),
               lines: measured.lines,
+              lineHeightPx:
+                isFinite(lineHeight) && lineHeight > 0
+                  ? lineHeight
+                  : measured.box.height / measured.lines,
             },
             box,
           );
@@ -693,9 +854,14 @@
       for (var i = 0; i < el.children.length; i++) {
         walk(el.children[i], insideText || ownText);
       }
-    })(root, false);
+    }
+
+    walk(root, false);
 
     return Promise.all(pending).then(function () {
+      // Before the nulls are dropped: the spans are index ranges into this
+      // array, and a picture that failed still occupies its slot.
+      applyRotations(blocks, rotations);
       // Slots whose picture never arrived stay null; they were reported as
       // degraded when that happened.
       return {

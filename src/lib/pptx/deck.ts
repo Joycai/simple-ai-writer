@@ -27,6 +27,10 @@ export interface TextRun {
   color?: string;
   /** Rendered font size in CSS px. */
   sizePx: number;
+  /** `letter-spacing` in CSS px, when the page set one. */
+  spacingPx?: number;
+  /** The line ends after this run — a `<br>`, or a block-level child. */
+  breakAfter?: boolean;
   /** First family of the computed stack — PowerPoint takes one name. */
   font?: string;
 }
@@ -36,6 +40,14 @@ interface BoxPx {
   y: number;
   w: number;
   h: number;
+  /**
+   * Clockwise degrees, when the page rotated this.
+   *
+   * The box is the **unrotated** one, already moved so its centre sits where
+   * the rotation put it — which is what PowerPoint needs, because it turns
+   * every shape about its own centre.
+   */
+  rotate?: number;
 }
 
 /** A painted box: background, border, or both. */
@@ -54,6 +66,8 @@ export interface TextBlock extends BoxPx {
   align: "left" | "center" | "right" | "justify";
   /** How many line boxes the browser used — what the shrink guard is sized on. */
   lines: number;
+  /** The height of one of those line boxes, in CSS px. */
+  lineHeightPx?: number;
 }
 
 /** A picture, already a data URL (the zip has no other way to carry it). */
@@ -235,6 +249,8 @@ export type Shape =
       x: number; y: number; w: number; h: number;
       fill?: PptxColor;
       line?: { color: PptxColor; ptWidth: number };
+      /** Clockwise degrees; PowerPoint turns the shape about its own centre. */
+      rotate?: number;
       /**
        * Corner radius **in inches**, which is the unit pptxgenjs's
        * `rectRadius` is in — it divides by the shape's shorter side itself to
@@ -246,12 +262,27 @@ export type Shape =
   | {
       kind: "text";
       x: number; y: number; w: number; h: number;
-      runs: { text: string; bold?: boolean; italic?: boolean; underline?: boolean; color?: string; ptSize: number; font?: string }[];
+      runs: {
+        text: string;
+        bold?: boolean;
+        italic?: boolean;
+        underline?: boolean;
+        color?: string;
+        ptSize: number;
+        /** Tracking in points, absent when the page set none. */
+        ptSpacing?: number;
+        /** End the line after this run. */
+        breakLine?: boolean;
+        font?: string;
+      }[];
       align: TextBlock["align"];
       /** Whether PowerPoint may shrink the type to keep it inside the box. */
       shrink: boolean;
+      /** Exact line spacing in points, or absent to leave PowerPoint's own. */
+      lineSpacing?: number;
+      rotate?: number;
     }
-  | { kind: "image"; x: number; y: number; w: number; h: number; data: string };
+  | { kind: "image"; x: number; y: number; w: number; h: number; data: string; rotate?: number };
 
 /**
  * Slack added around a measured text box, as a fraction of its size.
@@ -271,6 +302,32 @@ function needsShrink(block: TextBlock): boolean {
   return block.lines > 1;
 }
 
+/**
+ * The exact line spacing to hand PowerPoint, or undefined to leave its own.
+ *
+ * The browser's line box is not PowerPoint's. A `line-height: 1.7` paragraph
+ * stands a third taller on the page than the ~1.2 PowerPoint uses by default,
+ * so a three-line paragraph arrived visibly compressed against everything
+ * measured beside it — 112px of page in 79px of slide.
+ *
+ * Only where one number can be right, which is why this is a decision and not
+ * a passthrough:
+ *
+ * - **A single line** is centred in its box either way, and pinning its
+ *   spacing only risks clipping it.
+ * - **Runs of different sizes** are not one paragraph the page ever laid out —
+ *   a big number above a small caption arrives as one block (they share a
+ *   container that owns the text), and one exact spacing would set both lines
+ *   the same distance apart, which is further from the page than PowerPoint's
+ *   own per-line default.
+ */
+function lineSpacingPt(block: TextBlock, scale: number): number | undefined {
+  if (block.lines < 2 || !block.lineHeightPx) return undefined;
+  const size = block.runs[0]?.sizePx;
+  if (!block.runs.every((run) => run.sizePx === size)) return undefined;
+  return pt(block.lineHeightPx * scale);
+}
+
 /** Map one slide's blocks into positioned shapes. */
 export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
   const slide = deck.slides[slideIndex];
@@ -284,9 +341,11 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
     const y = round(block.y * scale);
     const w = round(block.w * scale);
     const h = round(block.h * scale);
+    // Rotation is an angle, not a length: it survives the scale untouched.
+    const rotate = block.rotate ? round(block.rotate) : undefined;
 
     if (block.kind === "image") {
-      shapes.push({ kind: "image", x, y, w, h, data: block.data });
+      shapes.push({ kind: "image", x, y, w, h, data: block.data, rotate });
       continue;
     }
 
@@ -302,7 +361,7 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
       const radius = block.radiusPx
         ? Math.min(round(block.radiusPx * scale), round(Math.min(w, h) / 2))
         : 0;
-      shapes.push({ kind: "rect", x, y, w, h, fill, line, radius });
+      shapes.push({ kind: "rect", x, y, w, h, fill, line, radius, rotate });
       continue;
     }
 
@@ -316,6 +375,8 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
       h: round(h + padY),
       align: block.align,
       shrink: needsShrink(block),
+      lineSpacing: lineSpacingPt(block, scale),
+      rotate,
       runs: block.runs.map((run) => ({
         text: run.text,
         bold: run.bold,
@@ -323,6 +384,8 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
         underline: run.underline,
         color: cssColor(run.color)?.hex,
         ptSize: pt(run.sizePx * scale),
+        ptSpacing: run.spacingPx ? pt(run.spacingPx * scale) : undefined,
+        breakLine: run.breakAfter,
         font: run.font,
       })),
     });

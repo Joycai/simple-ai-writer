@@ -54,6 +54,35 @@ describe("the harvester's fidelity rules", () => {
     expect(HARVESTER_SOURCE).not.toContain("color: style.color,");
   });
 
+  it("ends a line at a <br> and around a block-level child", () => {
+    // A `<br>` used to become a space and a block-level child contributed
+    // nothing, so a two-line heading arrived as one long line and a stat block
+    // arrived as `92%增长` in a single box with three font sizes in it.
+    expect(HARVESTER_SOURCE).toContain("function isBlockLevel(");
+    expect(HARVESTER_SOURCE).toContain("breakAfter = true");
+    expect(HARVESTER_SOURCE).not.toMatch(/BR"\) \{\s*\n\s*if \(runs\.length\) runs\[runs\.length - 1\]\.text \+= " ";/);
+  });
+
+  it("finds a list item's marker from the text that sits inside it", () => {
+    // `<li><span>…</span></li>` is what a generated deck writes about half the
+    // time. Asking the span whether it is a list item answered no, so that one
+    // bullet went missing while its siblings kept theirs.
+    expect(HARVESTER_SOURCE).toContain("function listItemFor(");
+    expect(HARVESTER_SOURCE).toContain("markerFor(item.el, item.style)");
+  });
+
+  it("measures a rotated element flat and turns the result back", () => {
+    // `getBoundingClientRect` on a rotated element is the axis-aligned box
+    // *around* it — bigger than the element, with the angle gone — so a
+    // rotated badge exported upright inside an oversized pill.
+    expect(HARVESTER_SOURCE).toContain("function pureRotation(");
+    expect(HARVESTER_SOURCE).toContain("function applyRotations(");
+    // Before the nulls are dropped: the spans are index ranges into the array.
+    expect(HARVESTER_SOURCE).toMatch(
+      /applyRotations\(blocks, rotations\);[\s\S]{0,200}blocks\.filter\(/,
+    );
+  });
+
   it("honours object-fit before taking the cheap data-URL path", () => {
     // The shortcut hands the original bytes straight to PowerPoint, which is
     // right only when the page draws the whole picture stretched to the box.
