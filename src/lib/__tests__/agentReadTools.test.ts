@@ -605,18 +605,37 @@ describe("read_file", () => {
     });
 
     // A page the selectors could not divide is one slide the size of the whole
-    // page; "this deck has 1 slide" maps nothing. It falls through to the
-    // existing behaviour until the landmark index lands (§7).
-    it("leaves a page with no slide sections to the old fallbacks", async () => {
+    // page; "this deck has 1 slide" maps nothing. It is mapped by its markup
+    // instead, so that "rewrite the 三个季度 section" arrives as a range.
+    it("maps a page with no slide sections by its landmarks", async () => {
       fs.set(
         `${PROJECT}/落地页.html`,
-        `<!DOCTYPE html>\n<html>\n<body>\n<div>${"长文".repeat(3000)}</div>\n</body>\n</html>`,
+        `<!DOCTYPE html>\n<html>\n<body>\n<main>\n<div id="hero">\n<h1>产品发布计划</h1>\n` +
+          `<p>${"内容".repeat(1500)}</p>\n</div>\n<div id="quarters">\n<h2>三个季度</h2>\n` +
+          `<p>${"细节".repeat(1500)}</p>\n</div>\n</main>\n</body>\n</html>`,
       );
 
       const out = await read({ path: `${PROJECT}/落地页.html` });
 
+      expect(out).toContain("This page has no slide sections");
+      expect(out).toContain('<div id="quarters"> 三个季度 (lines 9-12)');
+      // It is a deck index's alternative, not an addition to it.
       expect(out).not.toContain("This deck has");
       expect(out).not.toContain("read_slides");
+      // And it goes in front of the page, like every other map here.
+      expect(out.indexOf("This page has no slide")).toBeLessThan(out.indexOf("     1\t"));
+    });
+
+    it("falls back to the paragraph map when a page has no landmarks either", async () => {
+      fs.set(
+        `${PROJECT}/无结构.html`,
+        `<!DOCTYPE html>\n<html>\n<body>\n<div>${"长文".repeat(3000)}</div>\n</body>\n</html>`,
+      );
+
+      const out = await read({ path: `${PROJECT}/无结构.html` });
+
+      expect(out).not.toContain("This page has no slide sections");
+      expect(out).not.toContain("This deck has");
     });
 
     it("does not map a deck the response carries whole", async () => {

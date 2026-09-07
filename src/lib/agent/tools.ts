@@ -13,7 +13,7 @@ import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { convertExtOf } from "../import";
 import { transcribeExtOf } from "../asr/formats";
-import { readHtmlSlideRange, slideIndex, splitHtmlDeck, splitHtmlSlides, WHOLE_PAGE_TIER } from "../pptx/htmlSlides";
+import { landmarkIndex, readHtmlSlideRange, slideIndex, splitHtmlDeck, splitHtmlSlides, WHOLE_PAGE_TIER } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
@@ -1466,14 +1466,15 @@ export function paragraphIndex(text: string): string {
  * A map rather than a parameter, for the reason every other index here is one
  * (edit-loop-plan §D2) — a map you have to ask for costs the round it saves.
  *
- * Only a deck gets one. A page the selectors could not divide is one slide the
- * size of the whole page, and "this deck has 1 slide" is not a map of
- * anything; that page falls through to the paragraph index, and gets its own
- * treatment in a later slice.
+ * A page the selectors could not divide is one slide the size of the whole
+ * page, and "this deck has 1 slide" maps nothing — so that page is mapped by
+ * its markup instead (`landmarkIndex`): headings, `id`s, and the tags that are
+ * a place on their own. Between the two, every `.html` now arrives with some
+ * map of itself, which is what neither index gave before.
  */
 function htmlIndex(raw: string, canReadSlides: boolean): string {
   const deck = splitHtmlDeck(raw);
-  if (deck.tier === WHOLE_PAGE_TIER || deck.slides.length < 2) return "";
+  if (deck.tier === WHOLE_PAGE_TIER || deck.slides.length < 2) return landmarkIndex(raw);
   const index = slideIndex(deck.slides);
   // The pointer is gated on the running toolset, not on the registry
   // (docs/reference/tool-presence.md). `WRITER_PRESET` and `NARRATOR_PRESET`

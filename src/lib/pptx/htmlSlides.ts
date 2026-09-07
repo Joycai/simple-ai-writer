@@ -1,12 +1,19 @@
 /**
- * Reading an `.html` deck **by slide** — the counterpart to `read_slides`'s
- * .pptx path, in pure text.
+ * Reading an `.html` file **by structure** — by slide when it is a deck
+ * (`read_slides`' HTML path, the counterpart to its .pptx one), by landmark
+ * when it is not (`landmarkIndex`, the map `read_file` puts in front of a
+ * page the selectors cannot divide). Pure text either way.
  *
  * Why this exists: the model writes decks as HTML (see `./index.ts`), but the
  * only way to read one back was `read_file`, which pages by 4000 characters of
  * source. Finding slide 7 of a 60k-character deck therefore meant a dozen
  * blind reads before any edit could start — and once found, a targeted
  * `propose_edit` still needs the *exact* source of that one slide to quote.
+ * The same argument reaches the pages that are not decks at all: a long
+ * landing page or report had no map of any kind, because the markdown indexes
+ * find nothing in markup. Both halves live here because both need the one tag
+ * scanner and the one offset-to-line map — see
+ * `docs/feature/agent/html-read-edit-plan.md` D4.
  *
  * **The slide convention is shared with `harvester.js`, deliberately.** That
  * file's `SLIDE_SELECTORS` is what the exporter treats as a slide; if this
@@ -359,11 +366,26 @@ export function readHtmlSlideRange(
     // could not divide (so "slide 1" is the entire body). Returning it whole
     // would spend the run's context on one call, so it is cut here and handed
     // to read_file, which is the tool for reading a long file in order.
+    //
+    // The hand-off names the line the cut fell ON, not the slide's first line:
+    // `start_line=${slide.startLine}` sent the model back to the top of the
+    // very thing it had just been shown, so following the instruction re-read
+    // the same 4000 characters. A whole-page slide opens at `<body>`, which
+    // made that the entire journey wasted.
+    //
+    // A line number rather than read_file's mid-line cursor: the fraction's
+    // denominator is that tool's page budget, and this module must not import
+    // the agent layer to learn it — the dependency runs the other way. When
+    // the cut lands inside one enormous line, `start_line=N` re-reads that
+    // line's first page and read_file's own trailer carries on from there:
+    // one page of overlap, and no dead end.
     if (n === from && slide.html.length > maxChars) {
+      const cutOffset = slide.start + maxChars;
+      const cutAt = lineMapFor(html, [cutOffset]).get(cutOffset) ?? slide.startLine;
       parts.push(
         `${head}${slide.html.slice(0, maxChars)}\n` +
           `[... slide ${slide.index} is ${slide.html.length} chars and was cut at ${maxChars}; ` +
-          `read the rest with read_file (start_line=${slide.startLine}) ...]`,
+          `read the rest with read_file (start_line=${cutAt}) — that is the line this cut falls on ...]`,
       );
       chars += maxChars;
       break;
@@ -417,4 +439,141 @@ export function slideIndex(slides: readonly HtmlSlide[]): string {
       : `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
     ...rows,
   ].join("\n");
+}
+
+/**
+ * Elements that are a place on a page even without an `id` — the ones an
+ * author would name when they say "the nav" or "the pricing table".
+ *
+ * `section` / `article` are in the list although a page with either would have
+ * been split into slides before reaching here: a page with exactly ONE of them
+ * is not a deck (`slideIndex` needs two to be a map of anything) and still
+ * wants its one landmark listed.
+ */
+const LANDMARK_TAGS = new Set([
+  "header", "nav", "main", "footer", "aside", "section", "article", "figure", "table", "form",
+]);
+
+/**
+ * Tags that are never a landmark, however they are decorated. An `id` on a
+ * `<style>` is a stylesheet's name, not a place in the document.
+ */
+const NEVER_LANDMARK = new Set([
+  "html", "head", "body", "script", "style", "link", "meta", "title", "br", "hr", "base",
+]);
+
+/** Longest element prefix scanned for a landmark's label. */
+const LABEL_SCAN_CHARS = 2_000;
+
+/** Landmarks a page needs before an index of them earns its tokens. */
+const LANDMARK_MIN = 2;
+
+/**
+ * An element's `id`, quoted or bare — the same shape `hasClass` reads, and a
+ * literal pattern for the same reason: a built one has to survive two levels
+ * of escaping to say `\s`, and when it does not it silently matches the letter
+ * "s" instead and every id in the page disappears.
+ */
+function idOf(attrs: string): string | null {
+  const m = /(^|\s)id\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+  if (!m) return null;
+  const value = m[3] ?? m[4] ?? m[5] ?? "";
+  return value.trim() || null;
+}
+
+/** One place on a page, with where it sits in the source. */
+interface Landmark {
+  /** How the row names it: `<h2>` or `<section id="hero">`. */
+  what: string;
+  /** Whether this is a heading — headings survive the row cap first. */
+  heading: boolean;
+  start: number;
+  end: number;
+  label: string;
+}
+
+/**
+ * The map a page with no slide sections gets — its landmarks, and the lines
+ * each one occupies.
+ *
+ * This is the other half of the `read_file` gap `htmlIndex` closes. A deck
+ * gets `slideIndex`; a long landing page or report gets nothing at all today,
+ * because `headingIndex` matches markdown ATX headings (never present in HTML)
+ * and `paragraphIndex` rarely clears its two-paragraph floor on markup. So the
+ * one shape of `.html` the splitter cannot divide was also the one with no map
+ * — and "rewrite the 三个季度 section" began by paging 4000 characters at a
+ * time until that section went past.
+ *
+ * The structure that IS there is the markup, so that is what gets offered:
+ * every heading, every element carrying an `id` (the anchors an author names),
+ * and the handful of tags that are a place on their own. Same appearance rule
+ * as every other index here — only when the response could not carry the whole
+ * file — and no parameter, for the reason edit-loop-plan.md §D2 gives.
+ */
+export function landmarkIndex(html: string): string {
+  const tags = scanTags(html);
+  const found: Landmark[] = [];
+
+  for (let i = 0; i < tags.length; i++) {
+    const tag = tags[i];
+    if (tag.closing || NEVER_LANDMARK.has(tag.name)) continue;
+
+    const heading = /^h[1-6]$/.test(tag.name);
+    const id = idOf(tag.attrs);
+    if (!heading && id === null && !LANDMARK_TAGS.has(tag.name)) continue;
+
+    const end = elementEnd(html, tags, i);
+    found.push({
+      what: id ? `<${tag.name} id="${id}">` : `<${tag.name}>`,
+      heading,
+      start: tag.start,
+      end,
+      // Bounded: the label is 40 characters and the first text of an element
+      // is at its front, so scanning a 200 KB <main> to the end would be work
+      // thrown away — and there can be sixty of them.
+      label: slideTitle(html.slice(tag.start, Math.min(end, tag.start + LABEL_SCAN_CHARS))),
+    });
+  }
+
+  // One landmark is not a map of anything; fall through to whatever the caller
+  // has next (the paragraph map).
+  if (found.length < LANDMARK_MIN) return "";
+
+  // Headings first when the cap bites, then the rest in source order. Not
+  // every-Nth sampling the way paragraphIndex does it: paragraphs are
+  // interchangeable and headings are not, so dropping half the headings to
+  // make room for `<div id="...">`s would throw away the good rows to keep the
+  // weak ones.
+  let shown = found;
+  let omitted = 0;
+  if (found.length > INDEX_MAX_ROWS) {
+    const headings = found.filter((f) => f.heading);
+    const rest = found.filter((f) => !f.heading);
+    const kept = new Set(
+      [...headings.slice(0, INDEX_MAX_ROWS), ...rest].slice(0, INDEX_MAX_ROWS),
+    );
+    shown = found.filter((f) => kept.has(f));
+    omitted = found.length - shown.length;
+  }
+
+  const lines = lineMapFor(
+    html,
+    shown.flatMap((f) => [f.start, Math.max(f.start, f.end - 1)]),
+  );
+  const rows = shown.map(
+    (f, n) =>
+      `${n + 1}. ${f.what} ${f.label} (lines ${lines.get(f.start) ?? 1}-${
+        lines.get(Math.max(f.start, f.end - 1)) ?? 1
+      })`,
+  );
+
+  return [
+    "This page has no slide sections. Its landmarks and the lines they occupy — " +
+      "the line ranges are what rewrite_lines takes, so a part of it can be named " +
+      "without paging to it:",
+    ...rows,
+    omitted > 0 ? `[... ${omitted} more landmark(s) not listed ...]` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
