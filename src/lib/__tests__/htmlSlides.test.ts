@@ -15,6 +15,7 @@ import {
   WHOLE_PAGE_TIER,
   readHtmlSlideRange,
   slideTitle,
+  landmarkIndex,
   splitHtmlDeck,
   splitHtmlSlides,
 } from "../pptx/htmlSlides";
@@ -254,5 +255,106 @@ describe("readHtmlSlideRange", () => {
     expect(range.markdown).toContain("read_file (start_line=");
     // The cut must not pretend the slide was fully delivered.
     expect(range.markdown.length).toBeLessThan(400);
+  });
+
+  // The hand-off used to name the slide's FIRST line, which sent the model
+  // back to the top of the very thing it had just been shown — and a
+  // whole-page slide opens at <body>, so following it re-read from the top of
+  // the document (docs/feature/agent/html-read-edit-plan.md §7).
+  it("hands off at the line the cut falls on, not the slide's first line", () => {
+    const body = Array.from({ length: 60 }, (_, i) => `<p>第 ${i + 1} 段${"字".repeat(40)}</p>`).join("\n");
+    const html = page(`<section>\n${body}\n</section>`);
+
+    const range = readHtmlSlideRange(html, 1, 600);
+    const at = Number(range.markdown.match(/read_file \(start_line=(\d+)\)/)![1]);
+
+    // The section opens on line 4; the cut is 600 characters in, well past it.
+    expect(splitHtmlSlides(html)[0].startLine).toBe(4);
+    expect(at).toBeGreaterThan(4);
+    // And it is a real line of the file, not past its end.
+    expect(at).toBeLessThanOrEqual(html.split("\n").length);
+    expect(range.markdown).toContain("that is the line this cut falls on");
+  });
+});
+
+// The other half of read_file's .html map. A deck gets slideIndex; a page the
+// selectors cannot divide got nothing at all — headingIndex matches markdown
+// ATX headings (never present in HTML) and paragraphIndex rarely clears its
+// two-paragraph floor on markup. So the one shape of .html with no map was
+// also the one that most needed one.
+describe("landmarkIndex", () => {
+  const PAGE = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<style id="theme">body { margin: 0 }</style>
+</head>
+<body>
+<header id="top">
+  <nav>首页</nav>
+</header>
+<main>
+  <div id="hero" class="band">
+    <h1>产品发布计划</h1>
+    <p>让每一次发布都可预期。</p>
+  </div>
+  <div id="quarters" class="band">
+    <h2>三个季度</h2>
+    <table><tr><td>Q1</td></tr></table>
+  </div>
+  <div class="band"><h2>风险</h2></div>
+</main>
+<footer id="foot">2026</footer>
+</body>
+</html>`;
+
+  it("lists headings, ids and the tags that are a place on their own", () => {
+    const index = landmarkIndex(PAGE);
+
+    expect(index).toContain("This page has no slide sections");
+    expect(index).toContain('<div id="quarters"> 三个季度 (lines 15-18)');
+    expect(index).toContain("<h1> 产品发布计划");
+    expect(index).toContain('<header id="top">');
+    expect(index).toContain("<table>");
+    // A heading with no id is still a landmark — that is most of them.
+    expect(index).toContain("<h2> 风险");
+  });
+
+  // "把「三个季度」那一节重写" has to arrive as a range, not as a search.
+  it("gives a range that actually spans the named section", () => {
+    const at = landmarkIndex(PAGE).match(/<div id="quarters">[^(]*\(lines (\d+)-(\d+)\)/)!;
+    const lines = PAGE.split("\n");
+
+    expect(lines[Number(at[1]) - 1]).toContain('id="quarters"');
+    expect(lines[Number(at[2]) - 1]).toContain("</div>");
+  });
+
+  // An id on a <style> names a stylesheet, not a place in the document.
+  it("never treats head furniture as a landmark", () => {
+    const index = landmarkIndex(PAGE);
+    expect(index).not.toContain("<style");
+    expect(index).not.toContain("<html");
+    expect(index).not.toContain("<body");
+  });
+
+  it("says nothing about a page with no structure to report", () => {
+    expect(landmarkIndex(page(`<div>${"长文".repeat(200)}</div>`))).toBe("");
+  });
+
+  // Headings survive the cap first: paragraphs are interchangeable and
+  // headings are not, so every-Nth sampling would throw away the good rows to
+  // keep the weak ones.
+  it("keeps the headings when there are more landmarks than the cap", () => {
+    const body =
+      Array.from({ length: 30 }, (_, i) => `<h2>标题 ${i + 1}</h2>`).join("\n") +
+      "\n" +
+      Array.from({ length: 100 }, (_, i) => `<div id="b${i + 1}">块</div>`).join("\n");
+
+    const index = landmarkIndex(page(body));
+    const rows = index.split("\n").filter((l) => /^\d+\. </.test(l));
+
+    expect(rows.length).toBeLessThanOrEqual(60);
+    expect(index).toContain("<h2> 标题 1");
+    expect(index).toContain("<h2> 标题 30");
+    expect(index).toContain("more landmark(s) not listed");
   });
 });

@@ -1,6 +1,6 @@
 # agent 侧 HTML 读写：入口、坐标与超长行
 
-> 状态：`partial`（片 A / B / C 已实施；片 D、E 未做。片 5 只交测量，不改生产代码）
+> 状态：`partial`（片 A / B / C / D 已实施；片 E 未做，且只交测量、不改生产代码）
 > 起因：2026-09-07 以「改某一部分时会不会退化成 read-all」为尺子，审阅了 app 对 `.html` 的读写支持。写的一侧是对的，读的一侧在**幻灯片形状**的页面上也已经不 read-all（[`pptx-plan.md`](../pptx-plan.md) 那半 + `read_slides` 吃 `.html`）。断的地方在四处：模型走 `read_file` 进来时**没人把它引到那份目录上**、`inspect_html` 的发现没有坐标、超长单行读不全、非幻灯片页面没有结构坐标。第五处是 IPC 量级，先量后改。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约与 `inspect_html` 的由来，§5.1 就是本文片 1 补的那句话）、[`large-doc-formatting-plan.md`](large-doc-formatting-plan.md)（段落地图，与本文的地标索引同构）、[`../html-artifact-plan.md`](../html-artifact-plan.md)（HTML 交付物的由来）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（schema 成本账）、[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（指路只能指向这次运行真有的工具）
 
