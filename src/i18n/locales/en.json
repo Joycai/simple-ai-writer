@@ -3779,9 +3779,6 @@
       "selectionChip": "selection · {{n}} chars",
       "detachSelection": "Don't attach the selection",
       "catAll": "All",
-      "addLore": "entry",
-      "addDoc": "doc",
-      "addImage": "image",
       "removeRef": "Remove this reference",
       "imageTooLarge": "{{name}} is too large ({{size}}MB, max {{max}}MB)",
       "refUnreadable": "Can't read {{name}}",
@@ -3818,7 +3815,8 @@
       "create": "Create",
       "narratorHint": "A narrator has no character entry; everything else is the same",
       "deleteHint": "Deleting moves the transcript into .ai-writer/backups — recoverable",
-      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
+      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})",
+      "addRef": "Reference"
     },
     "empty": {
       "title": "Talk to the people you wrote, in first person.",

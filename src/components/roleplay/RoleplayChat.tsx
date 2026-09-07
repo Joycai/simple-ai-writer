@@ -651,7 +651,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
    * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
    */
-  const openMentionFor = (kind: PickKind) => {
+  const openMentionFor = (kind: PickKind | null) => {
     const el = taRef.current;
     const caret = el?.selectionStart ?? draft.length;
     const before = draft.slice(0, caret);
@@ -1301,45 +1301,31 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 </button>
               );
             })}
+            {/* `@` 才是机制本身，这个按钮只是替作者敲它——它存在是为了让作者
+                发现 `@` 能用，而不是为了取代它。一个而不是三个（设计稿 02g
+                屏 1c）：拆成三个换来的只是选择器本来就有的分组。 */}
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => openMentionFor(null)}
+              disabled={candidates.length === 0}
+            >
+              + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
+            </button>
+
+            {/* 设计稿 02g 屏 1c 的行文法，这里同样成立：间隔左边是**这条消息带
+                着什么**（有框、带 ×），右边是**这一场怎么工作**（无框）。 */}
             <span className={styles.attachSpacer} />
-            {/* `@` 才是机制本身，这几个按钮只是替作者敲它——它们存在是为了让
-                作者发现 `@` 能用，而不是为了取代它。 */}
-            <button
-              type="button"
-              className={styles.attachGhost}
-              onClick={() => openMentionFor("lore")}
-              disabled={!candidates.some((c) => c.type === "lore")}
-            >
-              + {t("roleplay.composer.addLore", { defaultValue: "条目" })}
-            </button>
-            <button
-              type="button"
-              className={styles.attachGhost}
-              onClick={() => openMentionFor("text")}
-              disabled={!candidates.some((c) => matchesKind(c, "text"))}
-            >
-              + {t("roleplay.composer.addDoc", { defaultValue: "文档" })}
-            </button>
-            {/* 只在这条链看得见图片时出现：纯文本模型上它会是一个永远点不动的
-                死芯片。 */}
-            {canSeeImages && (
-              <button
-                type="button"
-                className={styles.attachGhost}
-                onClick={() => openMentionFor("image")}
-                disabled={!candidates.some((c) => matchesKind(c, "image"))}
-              >
-                + {t("roleplay.composer.addImage", { defaultValue: "图片" })}
-              </button>
-            )}
-            {/* 设计稿 02g 屏 1z §4：这里今天只有六个方框，换成一个词之后左边
-                全留给这一位自己的材料。每位 agent 各传各的 disabled 集，词后面
-                点的名跟着当前这位变——比六个方框更能看出「这是这一位的设置」。
-                没有状态记忆：扮演根本不走那条路。 */}
-            <CapabilityMenu
-              disabled={disabledSubs}
-              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
-            />
+            {/* 屏 1z §4：这里原来是六个方框，换成一个词之后左边全留给这一位
+                自己的材料。每位 agent 各传各的 disabled 集，词后面点的名跟着
+                当前这位变——比六个方框更能看出「这是这一位的设置」。没有状态
+                记忆：扮演根本不走那条路。 */}
+            <span className={styles.attachSession}>
+              <CapabilityMenu
+                disabled={disabledSubs}
+                onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+              />
+            </span>
           </div>
 
           {refError && <div className={styles.refError}>{refError}</div>}

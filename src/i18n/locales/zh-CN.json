@@ -3772,9 +3772,6 @@
       "selectionChip": "选区 {{n}} 字",
       "detachSelection": "不附带选区",
       "catAll": "全部",
-      "addLore": "条目",
-      "addDoc": "文档",
-      "addImage": "图片",
       "removeRef": "移除这项引用",
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
@@ -3811,7 +3808,8 @@
       "create": "创建",
       "narratorHint": "旁白没有主角，其余相同",
       "deleteHint": "删除会把对话记录移进 .ai-writer/backups，可恢复",
-      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）"
+      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）",
+      "addRef": "引用"
     },
     "empty": {
       "title": "和你写的人对话，用第一人称。",
