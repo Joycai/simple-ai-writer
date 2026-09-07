@@ -383,6 +383,7 @@
       "fontHint": "CJK + Western font pairings applied to body and UI (system fonts only).",
       "mdThemeLabel": "Markdown Theme",
       "mdThemeHint": "Shared by the preview pane, knowledge-base entries and exported HTML / PDF. A theme file may bring its own fonts; one in the project's .ai-writer/themes/ travels with the repository.",
+      "mdThemeExamples": "Examples and the format guide (themes/ in the repository)",
       "reason": {
         "uiSelector": "Out of bounds · only token declarations on :root are read",
         "uiProperty": "Out of bounds · layout and type size are not an appearance theme's to set",

@@ -19,7 +19,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "../../../stores/appStore";
 import { useThemeStore } from "../../../stores/themeStore";
 import {
@@ -107,6 +107,9 @@ export function AppearanceThemeGrid() {
 
 // ─── The typography grid ─────────────────────────────────────────────────────
 
+/** The downloadable examples + the author's guide (`themes/README.md` in the repo). */
+const THEMES_EXAMPLES_URL = "https://github.com/Joycai/simple-ai-writer/tree/main/themes";
+
 export function MarkdownThemeGrid() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
@@ -132,7 +135,17 @@ export function MarkdownThemeGrid() {
         <span className={ui.rowTitle}>{t("systemSettings.general.mdThemeLabel")}</span>
         <span className={s.tag}>{t("systemSettings.general.mdThemeCount", { count: usableCount(entries) })}</span>
       </div>
-      <div className={ui.rowDesc}>{t("systemSettings.general.mdThemeHint")}</div>
+      <div className={ui.rowDesc}>
+        {t("systemSettings.general.mdThemeHint")}{" "}
+        {/* Opened through the shell, not the webview — a Tauri window has no tabs to come back from. */}
+        <a
+          className={s.noteLink}
+          href={THEMES_EXAMPLES_URL}
+          onClick={(e) => { e.preventDefault(); openUrl(THEMES_EXAMPLES_URL).catch(() => { /* best-effort */ }); }}
+        >
+          {t("systemSettings.general.mdThemeExamples")} ↗
+        </a>
+      </div>
       <div className={`${s.grid} ${s.gridMd}`}>
         {entries.map((entry) => (
           <ThemeCard
