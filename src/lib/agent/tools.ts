@@ -13,7 +13,7 @@ import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { convertExtOf } from "../import";
 import { transcribeExtOf } from "../asr/formats";
-import { landmarkIndex, readHtmlSlideRange, slideIndex, splitHtmlDeck, splitHtmlSlides, WHOLE_PAGE_TIER } from "../pptx/htmlSlides";
+import { htmlPageIndex, readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
@@ -1473,9 +1473,10 @@ export function paragraphIndex(text: string): string {
  * map of itself, which is what neither index gave before.
  */
 function htmlIndex(raw: string, canReadSlides: boolean): string {
-  const deck = splitHtmlDeck(raw);
-  if (deck.tier === WHOLE_PAGE_TIER || deck.slides.length < 2) return landmarkIndex(raw);
-  const index = slideIndex(deck.slides);
+  // One call, one tag scan: asking "is it a deck?" and "what is its map?"
+  // separately scanned the whole file twice on every page of every read.
+  const { isDeck, index } = htmlPageIndex(raw);
+  if (!index || !isDeck) return index;
   // The pointer is gated on the running toolset, not on the registry
   // (docs/reference/tool-presence.md). `WRITER_PRESET` and `NARRATOR_PRESET`
   // both carry `read_file` without `read_slides` — the narrator's comment is

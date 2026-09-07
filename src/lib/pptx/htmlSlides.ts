@@ -168,13 +168,35 @@ function matchesTier(tag: Tag, tier: (typeof SLIDE_TIERS)[number]): boolean {
 }
 
 /**
+ * Elements HTML closes for you — they have no end tag, ever.
+ *
+ * `elementEnd` depth-counts for a closing tag and falls back to the end of the
+ * file when it finds none. That fallback is right for a container someone
+ * forgot to close and catastrophically wrong here: `</img>` does not exist, so
+ * without this list an `<img id="logo">` reports a range running to the last
+ * line of the document, and a model asked to change the logo hands
+ * `rewrite_lines` a range covering everything below it.
+ *
+ * The list is the HTML spec's void elements. `<br>`/`<hr>`/`<meta>`/`<link>`
+ * are here as well as in `NEVER_LANDMARK` — that one decides what is worth
+ * *listing*, this one decides where an element *ends*, and the second question
+ * is asked by the slide splitter too (`[data-slide]` and `.slide` match any
+ * tag, an `<img data-slide="1">` included).
+ */
+const VOID_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr",
+]);
+
+/**
  * Where the element opened by `tags[at]` ends, by depth-counting its own tag
  * name. An element that is never closed runs to the end of the file — the
  * same thing a browser does with it, and better than dropping the slide.
+ * A void element ends at its own `>`, because it has no closing tag to find.
  */
 function elementEnd(html: string, tags: Tag[], at: number): number {
   const open = tags[at];
-  if (open.selfClosing) return open.end;
+  if (open.selfClosing || VOID_TAGS.has(open.name)) return open.end;
   let depth = 1;
   for (let k = at + 1; k < tags.length; k++) {
     const tag = tags[k];
@@ -226,7 +248,12 @@ export interface HtmlDeck {
  * converted — see `export_pptx`'s approval card.
  */
 export function splitHtmlDeck(html: string): HtmlDeck {
-  const raw = splitRaw(html);
+  return deckFrom(html, scanTags(html));
+}
+
+/** {@link splitHtmlDeck} on a scan the caller already has. */
+function deckFrom(html: string, tags: Tag[]): HtmlDeck {
+  const raw = splitRaw(html, tags);
   return { tier: raw.tier, slides: withLines(html, raw.slides) };
 }
 
@@ -236,8 +263,7 @@ interface RawSplit {
 }
 
 /** The split itself; {@link splitHtmlDeck} adds the line numbers. */
-function splitRaw(html: string): RawSplit {
-  const tags = scanTags(html);
+function splitRaw(html: string, tags: Tag[]): RawSplit {
   for (const tier of SLIDE_TIERS) {
     const hits = tags
       .map((tag, at) => ({ tag, at }))
@@ -511,7 +537,36 @@ interface Landmark {
  * file — and no parameter, for the reason edit-loop-plan.md §D2 gives.
  */
 export function landmarkIndex(html: string): string {
+  return landmarkFrom(html, scanTags(html));
+}
+
+/**
+ * The structural map of one page, whichever kind it is — what `read_file` puts
+ * in front of a paged `.html`.
+ *
+ * One entry point rather than two calls, because the caller's two questions
+ * ("is this a deck?" and "then what does its map look like?") are answered by
+ * the same tag scan, and asking them separately scanned the whole file twice
+ * on every page of every non-deck read.
+ *
+ * `isDeck` comes back rather than being folded into the string: whether to
+ * name `read_slides` alongside the map depends on the running toolset, and
+ * that is the agent layer's decision, not this module's
+ * (docs/reference/tool-presence.md).
+ */
+export function htmlPageIndex(html: string): { isDeck: boolean; index: string } {
   const tags = scanTags(html);
+  const deck = deckFrom(html, tags);
+  // One slide the size of the whole page is not a deck, and "this deck has 1
+  // slide" maps nothing — that page gets the landmark map instead.
+  if (deck.tier !== WHOLE_PAGE_TIER && deck.slides.length >= 2) {
+    return { isDeck: true, index: slideIndex(deck.slides) };
+  }
+  return { isDeck: false, index: landmarkFrom(html, tags) };
+}
+
+/** {@link landmarkIndex} on a scan the caller already has. */
+function landmarkFrom(html: string, tags: Tag[]): string {
   const found: Landmark[] = [];
 
   for (let i = 0; i < tags.length; i++) {
