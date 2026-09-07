@@ -240,7 +240,7 @@ currentColor  rgb(0,0,0)   ❌   rgb(34,197,94)     ✅
 
 **头号风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，同样宽度同样字号，网页里三行的段落在 PowerPoint 里可能变四行然后溢出；web font 更进不了 pptx，机器上没有就替换，一替换整版位移。三道应对：文本框按**字形**而不是容器测量（`Range.getBoundingClientRect`）、四周留 6% 余量且左右对称（居中/右对齐文字不会漂）、多行文本允许 PowerPoint 自动缩字号。剩下的靠引导——工具描述里明确要求用系统字体。
 
-**直接映射**：位置尺寸、纯色背景、边框、圆角、透明度、旋转、`<img>`、字体/字号/粗细/斜体/颜色/对齐，段落内富文本（`<strong>` 变成一个 run 而不是第二个文本框），列表符号（marker 不是文本节点，单独测量后补进去并把框左扩相应宽度）。
+**直接映射**：位置尺寸、纯色背景、边框、圆角、透明度、`<img>`（含 `object-fit` 裁剪与自身圆角）、字体/字号/粗细/斜体/颜色/对齐，段落内富文本（`<strong>` 变成一个 run 而不是第二个文本框），列表符号（marker 不是文本节点，单独测量后补进去并把框左扩相应宽度）。
 
 **退化成图片**：内联 SVG（图示类内容基本都走这条，视觉一致但不再是可编辑形状）、`<canvas>`。SVG 栅格化前会**把计算后的样式内联进克隆节点**——见 D19，这是它看起来对不对的分水岭。
 
@@ -308,3 +308,77 @@ currentColor  rgb(0,0,0)   ❌   rgb(34,197,94)     ✅
 - **沙箱参数不动**：导出 frame 与预览 frame 的 `sandbox` 必须保持一致（`allow-scripts`，**没有** `allow-same-origin`）。加上 same-origin 会让 app 能直接读 DOM——省掉注入和 postMessage，同时把 AI 生成的脚本放进 app 上下文。不做。
 - **风险：版式复杂的 deck 提取质量**。SmartArt、组合图形里的文字、自由排版的宣传页——读取端按 XML 文档顺序取，会给出顺序古怪的列表。格式的固有限制（同 PDF 导入丢表格版式），不靠启发式去猜。
 - **风险：导出端的字体**。系统字体之外的一切都是赌 PowerPoint 打开时那台机器上有。引导里写了，但引导不是保证。
+
+## 6. 保真度缺陷清单（2026-09-07 实测）
+
+> 状态：**A 段已修（见 6.5），B/C 段未修**。作者报「各种错位和元素丢失」。下面每一条都是在真浏览器里拿一份典型的
+> AI 生成 deck（渐变底、装饰圆、玻璃卡片、渐变标题、统计块、列表、旋转徽章、`object-fit` 图片、
+> 内联 SVG）跑 `harvester.js` 采下来的实测结果，不是推测——每条都注明了它在采集输出里长什么样。
+
+复现用的探针：把 `harvester.js` 作为内联脚本拼进一份 deck，用真浏览器打开、读 `window.__deck`。
+沙箱与 CSP 那条路径不参与（那是 D18 已经验过的），这里要看的只有**量出来的东西对不对**。
+
+### 6.1 会画错的（视觉上直接崩，且不报错）——**A 段，已修**
+
+| # | 现象 | 采集输出 | 根因 |
+|---|---|---|---|
+| F1 | 渐变标题变成一条大色条压在版面上 | `<h1>` 除了文字还多出 `rect [96,115 1088x141] fill=rgb(112,164,249)` | `-webkit-background-clip: text` 没被认出来。页面里渐变被裁进字形，采集器当成普通背景发了个整块矩形。计算样式里 `background-clip: "text"` 直接可读 |
+| F2 | 半透明玻璃卡变成**纯白实心块**，上面的浅灰字等于消失 | `.card` 的 `linear-gradient(rgba(255,255,255,.10), …)` → `fill=rgb(255,255,255)` | `averageColor` 只平均 RGB，**把 alpha 丢了**。深色底上的 10% 白 = 几乎看不见；输出成 100% 白 = 盖住一切。这一条最像作者说的「元素丢失」 |
+| F3 | 圆形变成圆角方块 | `.blob{border-radius:50%}` → `radiusPx=50` | `parseFloat("50%")` = 50，被当成 50px。百分比要按盒子短边解析 |
+| F4 | 图片/SVG 盖住文字 | 第 3 页两个 `image` 块排在所有文字**之后** | `rasterizeImg/rasterizeSvg` 是异步的，`push` 发生在 walk 结束之后 → 所有图片一律最后进列表 = PowerPoint 里一律最上层。整屏背景图会把整页文字埋了 |
+| F5 | 图片被拉伸变形 | `.hero` 源图 200×600，框 420×260，`object-fit: cover` | `drawImage(img,0,0,w,h)` 无条件铺满，不看 `object-fit`。圆头像的 `border-radius` 也一起丢 |
+
+### 6.2 会错位的（版面对不上，但认得出是什么）
+
+| # | 现象 | 采集输出 | 根因 |
+|---|---|---|---|
+| F6 | 段落行距被压扁约 30%，与旁边的元素错开一行多 | `.sub` 三行、CSS `line-height: 37.4px`（1.7 倍） | `lineSpacing` 从来没设过，PowerPoint 用自己的约 1.2 倍。22px 字三行：浏览器 112px、PPT 79px。因为 `valign: middle`，误差往两头摊 |
+| F7 | 字距标签（`letter-spacing: .28em` 这类）比框窄一截 | `.kicker` 量到 125px 宽（含 3.92px 字距） | `charSpacing` 没传。框是按含字距的宽度量的，文字按不含字距的宽度画 |
+| F8 | `<br>` 消失，两行挤成一行 | `<h1>把 HTML 变成<br>能改的幻灯片</h1>` → `"把 HTML 变成 \| 能改的幻灯片"` | `collectRuns` 把 `<br>` 换成空格。pptxgenjs 的 run 有 `breakLine` |
+| F9 | 数字和它的标签糊成一行、字号混在一个框里 | `.stat` → 一个 `text [96,403 347x82] sz=44,18,13 "92\|%\|位置误差 < 2px"` | 容器自己带文本节点（"92"）就吃掉整棵子树，块级后代不产生换行。与 F8 同一个修法 |
+| F10 | 列表第一项没有圆点，且比同级右移 14px | `"一期：接入行情"` x=580，另两项 `"• 二期…"` x=566 | `<li><span>…</span></li>`：文字在 inline 子元素上，`markerFor` 在那个 span 上问 `display` 得到 `inline` → 不是 list-item → 不补符号。要从最近的 list-item 祖先取 |
+| F11 | 旋转元素回正，且盒子被撑大 | `.badge{transform:rotate(-8deg)}` → 轴对齐的 `rect [1120,609 83x52]` | 完全没读 `transform`。`getBoundingClientRect` 给的是旋转后的外接矩形。pptxgenjs 的 shape/text/image 都有 `rotate`；未旋转的盒子就是 `offsetWidth/offsetHeight`，中心与外接矩形同心 |
+
+### 6.3 次要的
+
+- **`box-shadow` 全丢**：pptxgenjs 有 `shadow`，映射一次就有。
+- **元素 `opacity` 介于 0 和 1 之间被当成不透明**：只有 0 会被判成隐藏；0.5 的卡片画成实心。
+- **`overflow: hidden` 的裁剪没有传递**：装饰性大圆按完整尺寸导出。挂在幻灯片根上时 PowerPoint 会在页边裁掉、看不出来；挂在内部卡片上就会溢出来。
+- **渐变仍然只有平均色**：修好 F2 之后它至少是对的颜色和对的透明度，但仍是平色。真要保住渐变只能在采集端用 canvas 画一遍再当图片发——留作后续。
+
+### 6.4 建议的切分
+
+- ~~**A 段（画错的）**：F1 F2 F3 F4 F5~~ —— 已修，见 6.5。
+- **B 段（错位的）**：F6 F7 F8 F9 F10 F11。都是往 `deck.ts`/`write.ts` 多传一个已经量到的数，pptxgenjs 侧全有对应选项。
+- **C 段（次要的）**：阴影、部分透明、裁剪、渐变栅格化。
+
+三段都要动 `harvester.js`，所以每段都要**同时**改 `tauri.conf.json` 的 `sha256-`（`pptxHarvesterCsp.test.ts` 会拦），选择器表没动则 `htmlSlides.ts` 不用改。
+
+### 6.5 A 段的修法与验证（2026-09-07）
+
+五条全在 `harvester.js`，`deck.ts` / `write.ts` 一行没动——它们本来就对，只是收到的数是错的。
+
+| # | 修法 | 依据的计算属性 |
+|---|---|---|
+| F1 | `clipsBackgroundToText()` 认出 `background-clip: text`：**不发那个矩形**；`paintedColor()` 让文字改用渐变均色 | `background-clip`、`-webkit-text-fill-color` |
+| F2 | `averageColor()` 同时平均 alpha，返回 `rgba(…)`。全透明色标只贡献不透明度、不贡献色相（否则「淡出到透明」会被拉向黑） | 无 |
+| F3 | `resolveRadius()` 按盒子解析百分比；椭圆角取较紧的那条轴（OOXML 一个形状只有一个半径） | `border-*-radius` |
+| F4 | `reserve()` 在 walk 里按 DOM 顺序**先占位**，图片字节到了再 `place()` 回填 | 无 |
+| F5 | `fitMapping()` 按 `object-fit` 算源矩形（cover/contain/none/scale-down，`object-position` 只认百分比）；`clipRoundRect()` 把图自身的圆角画进 PNG 的 alpha | `object-fit`、`object-position`、`border-*-radius` |
+
+**F1 的两半都要修才有意义**：只删矩形，标题会退回继承来的颜色（深色底上常常是浅灰）；只改文字颜色，那条色条还压在版面上。
+
+**F5 顺带收紧了一条捷径**：`data:` 图原本直接透传给 PowerPoint。现在只有「页面就是把整张图拉满这个框、且没有圆角」时才走那条路——裁过或圆过的图透传出去，等于交一张页面从没显示过的图。
+
+**验证**（真浏览器，同 §4.4 的做法；jsdom 没有布局引擎，这一层照旧不进单测）：
+把 `harvester.js` 内联进一份典型 AI deck（渐变底、装饰圆、玻璃卡、渐变标题、统计块、列表、旋转徽章、`object-fit: cover` 图、内联 SVG），修前修后各采一次：
+
+| | 修前 | 修后 |
+|---|---|---|
+| 渐变标题 | 多一个 `rect [96,115 1088×141] fill=rgb(112,164,249)`，文字 `rgb(226,232,240)` | 无矩形，文字 `rgba(112,164,249,1)` |
+| 玻璃卡 | `fill=rgb(255,255,255)` | `fill=rgba(255,255,255,0.065)` |
+| `border-radius:50%` 的 520px 圆 | `radiusPx=50` | `radiusPx=260` |
+| 第 3 页图片顺序 | 两个 image 排在所有文字**之后** | 按 DOM 顺序夹在文字之间 |
+| 200×600 的图铺进 420×260 | 24942 字节，整张拉伸 | 16330 字节；回读像素：四角 alpha=0（16px 圆角生效）、画面只剩源图中段的蓝色（cover 裁剪生效，`cy=100` 的黄圆已被裁掉） |
+
+`src/lib/__tests__/pptxHarvester.test.ts` 用源码扫描把这五条钉住——不是能不能跑的问题，是**它们全都静默**：导出成功，只是画错，没有异常也没有降级提示可发。

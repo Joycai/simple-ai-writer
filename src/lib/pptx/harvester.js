@@ -96,23 +96,118 @@
    * discovering it in front of a client.
    */
   function averageColor(cssImage) {
-    var found = cssImage.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/g);
+    var found = cssImage.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}|\btransparent\b/g);
     if (!found || !found.length) return null;
     var probe = document.createElement("span");
     document.body.appendChild(probe);
-    var r = 0, g = 0, b = 0, n = 0;
+    var r = 0, g = 0, b = 0, n = 0, a = 0, stops = 0;
     for (var i = 0; i < found.length; i++) {
       probe.style.color = "";
       probe.style.color = found[i];
       var parts = getComputedStyle(probe).color.match(/[\d.]+/g);
       if (!parts) continue;
-      // A fully transparent stop contributes position, not colour.
-      if (parts[3] !== undefined && parseFloat(parts[3]) === 0) continue;
+      var alpha = parts[3] === undefined ? 1 : parseFloat(parts[3]);
+      a += alpha; stops++;
+      // A fully transparent stop contributes position and opacity, not hue:
+      // averaging its rgb would drag a fade-to-nothing towards black.
+      if (alpha === 0) continue;
       r += parseFloat(parts[0]); g += parseFloat(parts[1]); b += parseFloat(parts[2]); n++;
     }
     document.body.removeChild(probe);
-    if (!n) return null;
-    return "rgb(" + Math.round(r / n) + ", " + Math.round(g / n) + ", " + Math.round(b / n) + ")";
+    if (!n || !stops) return null;
+    return (
+      "rgba(" + Math.round(r / n) + ", " + Math.round(g / n) + ", " + Math.round(b / n) +
+      ", " + Math.round((a / stops) * 1000) / 1000 + ")"
+    );
+  }
+
+  /** Is this computed colour invisible? */
+  function isTransparent(css) {
+    if (!css) return true;
+    var value = String(css).trim().toLowerCase();
+    if (value === "transparent" || value === "none") return true;
+    var inside = value.match(/^rgba?\(([^)]*)\)$/);
+    if (!inside) return false;
+    var parts = inside[1].split(/[\s,/]+/).filter(Boolean);
+    return parts.length > 3 && parseFloat(parts[3]) === 0;
+  }
+
+  /**
+   * Is this element's background painted *inside its own glyphs*?
+   *
+   * `background-clip: text` with a transparent text fill is how a page writes
+   * a gradient heading. Measured naively the element reports a gradient
+   * background like any other box, so the exporter laid a solid coloured bar
+   * the full width of the heading across the slide — while the words
+   * themselves, whose fill is transparent, came out in the inherited colour.
+   * Both halves of that are wrong and neither raises anything.
+   */
+  function clipsBackgroundToText(style) {
+    var clip =
+      style.getPropertyValue("background-clip") ||
+      style.getPropertyValue("-webkit-background-clip");
+    return String(clip || "").indexOf("text") >= 0;
+  }
+
+  /** How far up to look for the gradient a `background-clip: text` run is painted with. */
+  var MAX_CLIP_ANCESTORS = 6;
+
+  /** The colour a gradient-filled heading averages to, or null if this is not one. */
+  function gradientTextColor(el) {
+    var node = el;
+    for (var i = 0; node && node.nodeType === 1 && i < MAX_CLIP_ANCESTORS; i++) {
+      var style = getComputedStyle(node);
+      if (clipsBackgroundToText(style)) {
+        var image = style.backgroundImage;
+        if (image && image !== "none") {
+          var average = averageColor(image);
+          if (average) return average;
+        }
+        if (!isTransparent(style.backgroundColor)) return style.backgroundColor;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * The colour a run of text is actually painted in.
+   *
+   * `-webkit-text-fill-color` overrides `color` where both are set, and its
+   * computed value is `color` where it is not — so reading it first is right
+   * in every case and only differs for the gradient-heading idiom, where it is
+   * transparent and the colour has to come from the clipped background.
+   */
+  function paintedColor(el, style) {
+    var fill = style.getPropertyValue("-webkit-text-fill-color");
+    if (fill && !isTransparent(fill)) return fill;
+    if (fill && isTransparent(fill)) {
+      var gradient = gradientTextColor(el);
+      if (gradient) return gradient;
+    }
+    return style.color;
+  }
+
+  function lengthPx(value, base) {
+    var n = parseFloat(value);
+    if (!isFinite(n)) return 0;
+    return String(value).indexOf("%") >= 0 ? (n / 100) * base : n;
+  }
+
+  /**
+   * The corner radius in px, with percentages resolved against the box.
+   *
+   * `getComputedStyle` hands back a percentage radius in the unit it was
+   * written in, so `border-radius: 50%` reads as `"50%"` and `parseFloat` turns
+   * a circle into a 50px rounded corner. Nothing reports it: the shape simply
+   * arrives as a squircle.
+   */
+  function resolveRadius(style, rect) {
+    var raw = String(style.borderTopLeftRadius || "").trim();
+    if (!raw) return 0;
+    var axes = raw.split(/\s+/);
+    // OOXML has one radius per shape, so an elliptical corner takes its tighter axis.
+    return Math.min(lengthPx(axes[0], rect.width), lengthPx(axes[1] || axes[0], rect.height));
   }
 
   function firstFamily(fontFamily) {
@@ -199,7 +294,7 @@
             bold: parseInt(style.fontWeight, 10) >= 600,
             italic: style.fontStyle === "italic",
             underline: (style.textDecorationLine || style.textDecoration || "").indexOf("underline") >= 0,
-            color: style.color,
+            color: paintedColor(parent, style),
             sizePx: size,
             font: firstFamily(style.fontFamily),
           });
@@ -339,14 +434,76 @@
     });
   }
 
-  function rasterizeImg(img, rect) {
+  /** The horizontal/vertical fractions of `object-position`; only percentages are honoured. */
+  function objectPosition(style) {
+    var parts = String(style.objectPosition || "50% 50%").trim().split(/\s+/);
+    function fraction(raw) {
+      return raw && raw.indexOf("%") >= 0 ? Math.min(1, Math.max(0, parseFloat(raw) / 100)) : 0.5;
+    }
+    return { x: fraction(parts[0]), y: fraction(parts[1] || parts[0]) };
+  }
+
+  /**
+   * How `object-fit` maps the picture's pixels onto its box.
+   *
+   * Null means "stretch the whole thing to fill the box", which is both the
+   * `fill` default and what this used to do unconditionally — so a portrait
+   * photo in a landscape frame, cropped on the page by `object-fit: cover`,
+   * arrived in PowerPoint squashed instead.
+   */
+  function fitMapping(img, style, boxW, boxH) {
+    var nw = img.naturalWidth || 0;
+    var nh = img.naturalHeight || 0;
+    var fit = style ? style.objectFit : "fill";
+    if (!nw || !nh || !fit || fit === "fill") return null;
+    var scale;
+    if (fit === "cover") scale = Math.max(boxW / nw, boxH / nh);
+    else if (fit === "contain") scale = Math.min(boxW / nw, boxH / nh);
+    else if (fit === "none") scale = 1;
+    else if (fit === "scale-down") scale = Math.min(1, Math.min(boxW / nw, boxH / nh));
+    else return null;
+    var sw = Math.min(nw, boxW / scale);
+    var sh = Math.min(nh, boxH / scale);
+    var drawW = sw * scale;
+    var drawH = sh * scale;
+    // Already fills the box exactly: nothing to crop or letterbox, so the
+    // cheap path stays available.
+    if (sw === nw && sh === nh && Math.abs(drawW - boxW) < 0.5 && Math.abs(drawH - boxH) < 0.5) {
+      return null;
+    }
+    var anchor = objectPosition(style);
+    return {
+      sx: (nw - sw) * anchor.x, sy: (nh - sh) * anchor.y, sw: sw, sh: sh,
+      dx: (boxW - drawW) * anchor.x, dy: (boxH - drawH) * anchor.y, dw: drawW, dh: drawH,
+    };
+  }
+
+  /** Clip the canvas to a rounded rectangle, so a round avatar stays round. */
+  function clipRoundRect(ctx, w, h, r) {
+    var radius = Math.min(r, w / 2, h / 2);
+    if (radius <= 0) return;
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.arcTo(w, 0, w, h, radius);
+    ctx.arcTo(w, h, 0, h, radius);
+    ctx.arcTo(0, h, 0, 0, radius);
+    ctx.arcTo(0, 0, w, 0, radius);
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  function rasterizeImg(img, rect, style) {
     var src = img.currentSrc || "";
+    var mapping = fitMapping(img, style, rect.width, rect.height);
+    var radius = style ? resolveRadius(style, rect) : 0;
     // Already self-contained: the app inlines every local picture as a data
     // URL before the frame loads (lib/fs/htmlDoc), so this is the normal path.
     // An SVG is the exception — PowerPoint's support for it is uneven, and a
     // deck that opens with holes in it is worse than one drawn at 2x — so it
-    // falls through to the canvas below and arrives as a PNG.
-    if (src.indexOf("data:") === 0 && src.indexOf("data:image/svg") !== 0) {
+    // falls through to the canvas below and arrives as a PNG. So does anything
+    // the page crops or rounds: passing those through untouched hands
+    // PowerPoint a picture the page never showed.
+    if (!mapping && !radius && src.indexOf("data:") === 0 && src.indexOf("data:image/svg") !== 0) {
       return Promise.resolve(src);
     }
     return new Promise(function (resolve) {
@@ -354,7 +511,17 @@
         var canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(rect.width * RASTER_SCALE));
         canvas.height = Math.max(1, Math.round(rect.height * RASTER_SCALE));
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        var ctx = canvas.getContext("2d");
+        if (radius) clipRoundRect(ctx, canvas.width, canvas.height, radius * RASTER_SCALE);
+        if (mapping) {
+          ctx.drawImage(
+            img, mapping.sx, mapping.sy, mapping.sw, mapping.sh,
+            mapping.dx * RASTER_SCALE, mapping.dy * RASTER_SCALE,
+            mapping.dw * RASTER_SCALE, mapping.dh * RASTER_SCALE,
+          );
+        } else {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
         // A remote picture taints the canvas and this throws — the honest
         // outcome is "this one is missing", not a blank rectangle.
         resolve(canvas.toDataURL("image/png"));
@@ -370,12 +537,31 @@
     var degraded = [];
     var pending = [];
 
-    function push(block, rect) {
+    /**
+     * Hold a place in paint order for a block that is not ready yet.
+     *
+     * Pictures are rasterized asynchronously, so pushing each one when its
+     * promise settled put *every* picture after everything the walk had found
+     * — and later shapes are the ones on top in PowerPoint. A slide with a
+     * full-bleed background photo exported with its entire text buried under
+     * it. The slot is taken during the walk, in DOM order, and filled in when
+     * the bytes arrive.
+     */
+    function reserve() {
+      blocks.push(null);
+      return blocks.length - 1;
+    }
+
+    function place(slot, block, rect) {
       block.x = rect.left - origin.left;
       block.y = rect.top - origin.top;
       block.w = rect.width;
       block.h = rect.height;
-      blocks.push(block);
+      blocks[slot] = block;
+    }
+
+    function push(block, rect) {
+      place(reserve(), block, rect);
     }
 
     (function walk(el, insideText) {
@@ -388,9 +574,10 @@
 
       if (tag === "IMG") {
         var imgRect = rect;
+        var imgSlot = reserve();
         pending.push(
-          rasterizeImg(el, imgRect).then(function (data) {
-            if (data) push({ kind: "image", data: data }, imgRect);
+          rasterizeImg(el, imgRect, style).then(function (data) {
+            if (data) place(imgSlot, { kind: "image", data: data }, imgRect);
             else degraded.push("a picture could not be embedded (" + (el.getAttribute("alt") || el.src.slice(0, 40)) + ")");
           }),
         );
@@ -411,14 +598,15 @@
               line: svgPaint.borderWidth
                 ? { color: style.borderTopColor, widthPx: svgPaint.borderWidth }
                 : undefined,
-              radiusPx: parseFloat(style.borderTopLeftRadius) || 0,
+              radiusPx: resolveRadius(style, svgRect),
             },
             svgRect,
           );
         }
+        var svgSlot = reserve();
         pending.push(
           rasterizeSvg(el, svgRect).then(function (data) {
-            if (data) push({ kind: "image", data: data }, svgRect);
+            if (data) place(svgSlot, { kind: "image", data: data }, svgRect);
             else degraded.push("an inline SVG could not be rasterized");
           }),
         );
@@ -437,7 +625,13 @@
       // The slide root itself contributes its background, nothing else.
       var paint = paints(style);
       var fill = paint.fill;
-      if (style.backgroundImage && style.backgroundImage !== "none") {
+      var hasBackgroundImage = style.backgroundImage && style.backgroundImage !== "none";
+      if (clipsBackgroundToText(style)) {
+        // Painted inside the glyphs, not behind them. The colour is not lost:
+        // collectRuns picks it up through paintedColor.
+        fill = null;
+        if (hasBackgroundImage) degraded.push("a gradient-filled heading became a solid colour");
+      } else if (hasBackgroundImage) {
         var average = averageColor(style.backgroundImage);
         if (average) {
           fill = average;
@@ -454,7 +648,7 @@
             line: paint.borderWidth
               ? { color: style.borderTopColor, widthPx: paint.borderWidth }
               : undefined,
-            radiusPx: parseFloat(style.borderTopLeftRadius) || 0,
+            radiusPx: resolveRadius(style, rect),
           },
           rect,
         );
@@ -502,7 +696,12 @@
     })(root, false);
 
     return Promise.all(pending).then(function () {
-      return { blocks: blocks, degraded: unique(degraded) };
+      // Slots whose picture never arrived stay null; they were reported as
+      // degraded when that happened.
+      return {
+        blocks: blocks.filter(function (block) { return block; }),
+        degraded: unique(degraded),
+      };
     });
   }
 
