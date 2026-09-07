@@ -91,8 +91,42 @@ describe("the harvester's fidelity rules", () => {
     expect(HARVESTER_SOURCE).toContain("function parseLinearGradient(");
     expect(HARVESTER_SOURCE).toContain("function rasterizeGradient(");
     expect(HARVESTER_SOURCE).toMatch(
-      /if \(painted\) \{[\s\S]{0,400}\} else \{[\s\S]{0,200}averageColor\(style\.backgroundImage\)/,
+      /if \(!gradient\) \{[\s\S]{0,200}averageColor\(style\.backgroundImage\)/,
     );
+  });
+
+  it("keeps the colour under a gradient, and the border over it", () => {
+    // CSS paints `background-color` beneath `background-image`. Dropping it
+    // left a frosted panel — a 12%-white sheen over a slate card — with
+    // nothing behind the sheen, so the card all but vanished. The border has
+    // to come after the picture for the opposite reason.
+    expect(HARVESTER_SOURCE).toMatch(
+      /if \(gradient\) \{[\s\S]{0,900}if \(fill\) \{[\s\S]{0,300}push\(\{ kind: "image", data: gradient[\s\S]{0,200}if \(paint\.borderWidth\)/,
+    );
+  });
+
+  it("hangs the shadow on the layer that is actually filled", () => {
+    // A gradient card's box is the *picture*. On the rect, the shadow was lost
+    // outright when there was no border, and cast from the outline — a
+    // hairline, not an elevation — when there was one.
+    expect(HARVESTER_SOURCE).toContain('push({ kind: "image", data: gradient, shadow: shadow');
+  });
+
+  it("paints a clipped gradient at the size the page left visible", () => {
+    // `push` cannot crop a picture, so an unclipped gradient blob parked half
+    // outside its card spilled across the slide while a solid one was cut.
+    // This raster is ours to draw, so it is drawn at the visible size.
+    expect(HARVESTER_SOURCE).toContain("function rasterizeGradient(parsed, rect, radius, visible)");
+    expect(HARVESTER_SOURCE).toContain("rasterizeGradient(linear, rect, radius, visible)");
+    expect(HARVESTER_SOURCE).toMatch(/push\(\{ kind: "image", data: gradient[^)]*\}, visible, clip\)/);
+  });
+
+  it("treats a transform-origin of zero as an origin, not as a missing one", () => {
+    // `transform-origin: left top` computes to `0px 0px`, and a falsy check
+    // took that for "unset" and rotated about the centre — landing the element
+    // about half its own diagonal from where the page drew it.
+    expect(HARVESTER_SOURCE).toContain("function originLength(");
+    expect(HARVESTER_SOURCE).not.toContain("parseFloat(pivot[0]) ||");
   });
 
   it("splits a CSS list on its top-level commas only", () => {
