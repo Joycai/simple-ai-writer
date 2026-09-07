@@ -1,6 +1,6 @@
 # agent 侧 HTML 读写：入口、坐标与超长行
 
-> 状态：`partial`（片 A / B / C / D 已实施；片 E 未做，且只交测量、不改生产代码）
+> 状态：`shipped`（五片全部走完。片 A–D 已实施；片 E 量完，结论是两件都不改——数字见 [`measurements/read-cost-2026-09.md`](measurements/read-cost-2026-09.md)）
 > 起因：2026-09-07 以「改某一部分时会不会退化成 read-all」为尺子，审阅了 app 对 `.html` 的读写支持。写的一侧是对的，读的一侧在**幻灯片形状**的页面上也已经不 read-all（[`pptx-plan.md`](../pptx-plan.md) 那半 + `read_slides` 吃 `.html`）。断的地方在四处：模型走 `read_file` 进来时**没人把它引到那份目录上**、`inspect_html` 的发现没有坐标、超长单行读不全、非幻灯片页面没有结构坐标。第五处是 IPC 量级，先量后改。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约与 `inspect_html` 的由来，§5.1 就是本文片 1 补的那句话）、[`large-doc-formatting-plan.md`](large-doc-formatting-plan.md)（段落地图，与本文的地标索引同构）、[`../html-artifact-plan.md`](../html-artifact-plan.md)（HTML 交付物的由来）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（schema 成本账）、[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（指路只能指向这次运行真有的工具）
 
@@ -167,20 +167,22 @@ This page has no slide sections. Its landmarks and the lines they occupy — rew
 
 **顺带修一个真 bug**：`readHtmlSlideRange` 里超大单页的那句 `read the rest with read_file (start_line=${slide.startLine})` 给的是这张 slide 的**起始**行，模型照做会从头重读。改成截断点之后的坐标，与片 3 的小数游标同一套口径（`1.0031` 而不是另造一种说法）——**因此片 4 排在片 3 之后**。
 
-## 8. 片 5：先只做测量
+## 8. 片 5：只做测量（已完成，结论是不改）
 
-**要量的两件事**：`search_text` 在真实规模项目上的墙钟与过 IPC 的字节数；一份 150–200KB 的 `.html` 用 `read_file` 分页读完的总时间与总字节数。
+量完了，数字与完整论证在 [`measurements/read-cost-2026-09.md`](measurements/read-cost-2026-09.md)；harness 是 `scripts/read-cost.ts`（配 `scripts/cost.vitest.config.ts`，照 `prompt-ab.ts` 的先例，**永不进 CI**）：
 
-**怎么量**：fixture 生成脚本不进仓（约 300 份 4KB `.md` + 3 份 60/120/200KB `.html`）。纯 JS 那一半（`scanText` 的扫描成本）用一个 vitest 用例量，可进 CI；IPC 那一半 vitest 量不到（`fs/fileio` 被 mock 掉），用**临时的、不提交的** instrumentation 在 dev app 里跑一次，把数字记进本节。
+```
+pnpm exec vitest run --config scripts/cost.vitest.config.ts
+```
 
-**判据**：~300 文件上 `search_text` < 1.5s → 不动它（一次运行只调一两次，背后已有节流进度条）；> 3s，或分页读明显占住一次长运行的墙钟 → 进 Stage B。
+**结论：两件都不改，`fs_grep` 不写。**
 
-**Stage B 的形状（量完再决定做不做）**
+- `search_text`：304 个文件、2.32MB，最慢一次查询 **16.8ms**，单次同步块最长 0.3ms，传输下界再加 6.8ms。判据是「> 1.5s 或同步块 > 100ms 或过 IPC > 5MB」，三条全不沾边。一份第二套搜索实现（大小写折叠 / 四个上限 / 排序 / 编码探测都要永远对齐）换不到这 17ms。
+- 分页读：今天也不改，但它**是二次的**——每页重读整个文件，页数又正比于文件大小，所以搬运量正比于大小的平方。实测 200KB → 10.35MB / 85ms，500KB → 64.5MB / 586ms，1MB → 256MB / 2313ms。这个 app 产出的 `.html` 在 60–200KB，85ms 摊在 53 个模型轮里看不见。
 
-- Rust 侧 `fs_grep`：字面量、大小写不敏感、过 `State<'_, FsScope>`、沿用今天 JS 侧的四个上限（`SEARCH_MAX_HITS=40` / `SEARCH_MAX_PER_FILE=8` / `LORE_MAX_HITS=12` / `LORE_MAX_PER_FILE=4`）返回带行号的命中。知识库那一半走 `readEntityFile` 而不是裸路径，**留在 JS**。
-- 分页读换部分读没那么简单：`pageLines` 要**全文总行数**才能写 "of N lines"，三个索引函数要**全文**才能建地图，所以直接换 `fs_read_head` 会同时打破两处。要么设计一个专门形状的 Rust 命令（行区间 + 总行数 + 地图），要么论证不动它。
-- `agentReadTools.test.ts` 用 in-memory Map mock 了 `../fs/fileio`——换 IPC 命令要同步改 mock。
-- 这台 Windows 机器上 `cargo test` 跑不起来，Rust 侧只能靠 `fmt` / `clippy` / `build` 加 JS 侧对拍，正确性靠实机验。
+**因此拐点不是「今天多快」，而是文件大小**：工作区里出现 **≥ 500KB 的单个文本文件**时回来看这一页。真到那天，修法也**不是 Rust**——`fs_read_head` 那条路走不通（`pageLines` 要全文总行数，三个索引函数要全文），而 `lib/fs/fileio.ts` 里一个 TTL 约 2 秒、在同模块写操作上失效的**读合并器**就够：实测「同一轮 40 页」那行的 7.81MB 会塌成一次 200KB 的读，零 Rust、零 schema、不动协议。
+
+**押错的那一条记在这里**：本文原写「我的先验是搜索**会**撑得起这次改动，而读的那一半不会」。两半都反了——搜索是完全不用管的那一半，读的那一半虽然今天同样不用管，却是唯一会撞墙的那一个。
 
 ## 9. 决策与弃案
 
