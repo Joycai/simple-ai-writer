@@ -418,6 +418,97 @@ describe("read_file", () => {
     });
   });
 
+  // The map an .html deck gets instead. edit-loop-plan.md §5.1 argued no
+  // file-type test was needed because ".html has read_slides' index instead" —
+  // true of read_slides, and never wired into read_file, which is the tool a
+  // model reaches for first. Without this, "change slide 3" starts by paging
+  // 4000 characters at a time (docs/feature/agent/html-read-edit-plan.md §4).
+  describe("the .html deck index", () => {
+    /** A deck long enough that one read cannot carry it. */
+    const deck = (n: number) =>
+      `<!DOCTYPE html>\n<html>\n<body>\n${Array.from(
+        { length: n },
+        (_, i) =>
+          `<section class="slide">\n<h2>第 ${i + 1} 页</h2>\n<p>${"内容".repeat(300)}</p>\n</section>`,
+      ).join("\n")}\n</body>\n</html>`;
+
+    it("maps a paged deck by slide, with the lines each one occupies", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      const out = await read({ path: `${PROJECT}/图示/发布.html` });
+
+      expect(out).toContain("This deck has 12 slide(s)");
+      expect(out).toContain("1. 第 1 页 (lines ");
+      expect(out).toContain("12. 第 12 页 (lines ");
+      // The map is in front of the page, like every other index here.
+      expect(out.indexOf("This deck has")).toBeLessThan(out.indexOf("     1\t"));
+    });
+
+    it("points at read_slides when the run holds it", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      expect(await read({ path: `${PROJECT}/图示/发布.html` })).toContain(
+        "Read one slide with read_slides (start_slide=N)",
+      );
+    });
+
+    // docs/reference/tool-presence.md: WRITER_PRESET and NARRATOR_PRESET both
+    // carry read_file without read_slides. The map still earns its place — the
+    // line ranges are coordinates whoever reads them — but naming a tool this
+    // run cannot call would spend a round on an unknown-tool error.
+    it("keeps the map but names no tool when the run has no read_slides", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      const out = (
+        await executeRegisteredTool(
+          { id: "c1", name: "read_file", arguments: JSON.stringify({ path: `${PROJECT}/图示/发布.html` }) },
+          ["read_file"],
+          ctx,
+        )
+      ).content;
+
+      expect(out).toContain("This deck has 12 slide(s)");
+      expect(out).not.toContain("read_slides");
+    });
+
+    it("samples rather than truncates a deck past the row cap", async () => {
+      fs.set(`${PROJECT}/图示/大.html`, deck(200));
+
+      const out = await read({ path: `${PROJECT}/图示/大.html` });
+      const rows = out.split("\n").filter((l) => /^\d+\. 第 \d+ 页 \(lines /.test(l));
+
+      expect(out).toContain("This deck has 200 slide(s)");
+      expect(rows.length).toBeLessThanOrEqual(60);
+      // The point of sampling: the map covers the END of the deck too, which a
+      // "first 60" truncation would not.
+      expect(rows[rows.length - 1]).toMatch(/^19[0-9]\./);
+    });
+
+    // A page the selectors could not divide is one slide the size of the whole
+    // page; "this deck has 1 slide" maps nothing. It falls through to the
+    // existing behaviour until the landmark index lands (§7).
+    it("leaves a page with no slide sections to the old fallbacks", async () => {
+      fs.set(
+        `${PROJECT}/落地页.html`,
+        `<!DOCTYPE html>\n<html>\n<body>\n<div>${"长文".repeat(3000)}</div>\n</body>\n</html>`,
+      );
+
+      const out = await read({ path: `${PROJECT}/落地页.html` });
+
+      expect(out).not.toContain("This deck has");
+      expect(out).not.toContain("read_slides");
+    });
+
+    it("does not map a deck the response carries whole", async () => {
+      fs.set(`${PROJECT}/图示/小.html`, "<body>\n<section class=\"slide\">A</section>\n<section class=\"slide\">B</section>\n</body>");
+
+      const out = await read({ path: `${PROJECT}/图示/小.html` });
+
+      expect(out).toContain("whole file, ");
+      expect(out).not.toContain("This deck has");
+    });
+  });
+
   it("errors when start_line is past the end", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "一\n二");
 

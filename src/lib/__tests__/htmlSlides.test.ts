@@ -211,6 +211,32 @@ describe("readHtmlSlideRange", () => {
     expect(first.markdown.indexOf("20. 第 20 页")).toBeLessThan(first.markdown.indexOf("## Slide 1"));
   });
 
+  // Uncapped, this index went out in full on EVERY paged response — a
+  // two-hundred-section page spent thousands of tokens per call describing
+  // itself. Sampled rather than truncated, for paragraphIndex's reason: the
+  // first sixty rows of two hundred map the first third, so the model would
+  // still have to page through the rest and the map would have bought nothing.
+  it("samples a deck past the row cap instead of listing all of it", () => {
+    const index = readHtmlSlideRange(deck(200), undefined, 200).markdown;
+    const rows = index.split("\n").filter((l) => /^\d+\. 第 \d+ 页 \(lines /.test(l));
+
+    expect(index).toContain("This deck has 200 slide(s)");
+    expect(index).toContain("every 4th one is listed below");
+    expect(rows.length).toBeLessThanOrEqual(60);
+    // Every sampled row is a real slide with a real range, and the sampling
+    // reaches the end of the deck — that is what makes it a map of all of it.
+    expect(rows[0]).toMatch(/^1\. /);
+    expect(rows[rows.length - 1]).toMatch(/^19[0-9]\. /);
+  });
+
+  it("lists every slide when the deck fits under the cap", () => {
+    const index = readHtmlSlideRange(deck(20), undefined, 200).markdown;
+
+    expect(index).toContain("the line ranges below are what rewrite_lines takes");
+    expect(index).not.toContain("one is listed below");
+    expect(index.split("\n").filter((l) => /^\d+\. 第 \d+ 页 \(lines /.test(l))).toHaveLength(20);
+  });
+
   it("indexes a response that starts partway in, too", () => {
     const range = readHtmlSlideRange(deck(20), 10, 200);
     expect(range.markdown).toContain("This deck has 20 slide(s)");

@@ -299,6 +299,14 @@ function withLines(
 }
 
 /**
+ * Longest index emitted before it is sampled instead of listed. Same number as
+ * the heading and paragraph maps use on the markdown side, for the same
+ * reason: an index that approaches the size of the thing it describes has
+ * defeated its own purpose.
+ */
+const INDEX_MAX_ROWS = 60;
+
+/**
  * A short label for a slide, for the index — the first heading's text, or
  * failing that the first text of any kind.
  *
@@ -389,13 +397,24 @@ export function readHtmlSlideRange(
  * finding the thing rather than on doing it.
  */
 export function slideIndex(slides: readonly HtmlSlide[]): string {
-  const rows = slides.map(
+  // Sampled rather than truncated once the deck is bigger than the cap, for
+  // the reason `paragraphIndex` gives (agent/tools.ts): the first sixty rows
+  // of a two-hundred-section page map its first third, so the model would
+  // still have to page through the rest and the index would have bought
+  // nothing. Every row sampled is a real slide with a real line range, so a
+  // coarse map of all of it beats a precise map of the beginning.
+  const step = Math.ceil(slides.length / INDEX_MAX_ROWS);
+  const shown = step > 1 ? slides.filter((_, i) => i % step === 0) : slides;
+  const rows = shown.map(
     (s) =>
       `${s.index}. ${slideTitle(s.html)} (lines ${s.startLine}-${s.endLine}, ` +
       `${s.html.length >= 1000 ? `${(s.html.length / 1000).toFixed(1)}k` : s.html.length} chars)`,
   );
   return [
-    `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
+    step > 1
+      ? `This deck has ${slides.length} slide(s); every ${step}th one is listed below ` +
+        "with the lines it occupies, which is what rewrite_lines takes:"
+      : `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
     ...rows,
   ].join("\n");
 }
