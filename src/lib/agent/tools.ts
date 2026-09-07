@@ -13,7 +13,7 @@ import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { convertExtOf } from "../import";
 import { transcribeExtOf } from "../asr/formats";
-import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
+import { readHtmlSlideRange, slideIndex, splitHtmlDeck, splitHtmlSlides, WHOLE_PAGE_TIER } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
@@ -1316,6 +1316,44 @@ export function paragraphIndex(text: string): string {
 }
 
 /**
+ * The map `read_file` puts in front of a paged `.html` — the deck's slides,
+ * not its (nonexistent) markdown headings.
+ *
+ * This closes a gap the edit-loop plan assumed was already closed.
+ * `docs/feature/agent/edit-loop-plan.md` §5.1 argued that no file-type test
+ * was needed because "a `.txt` without headings and an `.html` page both
+ * simply produce nothing — and an `.html` deck has `read_slides`' index
+ * instead". The first half is true and the second half was never wired:
+ * `headingIndex` matches ATX headings, so it is empty on every HTML file ever
+ * written, and `paragraphIndex` rarely clears its two-paragraph floor on
+ * compact markup. A model that opens a deck with `read_file` therefore got no
+ * map at all, and nothing anywhere told it `read_slides` reads this file by
+ * slide — `ai.instructions.agent` names `inspect_html` and stops. So "change
+ * the heading on slide 3" began by paging 4000 characters at a time.
+ *
+ * Free to compute: the splitter is pure text and the file is already in hand.
+ * A map rather than a parameter, for the reason every other index here is one
+ * (edit-loop-plan §D2) — a map you have to ask for costs the round it saves.
+ *
+ * Only a deck gets one. A page the selectors could not divide is one slide the
+ * size of the whole page, and "this deck has 1 slide" is not a map of
+ * anything; that page falls through to the paragraph index, and gets its own
+ * treatment in a later slice.
+ */
+function htmlIndex(raw: string, canReadSlides: boolean): string {
+  const deck = splitHtmlDeck(raw);
+  if (deck.tier === WHOLE_PAGE_TIER || deck.slides.length < 2) return "";
+  const index = slideIndex(deck.slides);
+  // The pointer is gated on the running toolset, not on the registry
+  // (docs/reference/tool-presence.md). `WRITER_PRESET` and `NARRATOR_PRESET`
+  // both carry `read_file` without `read_slides` — the narrator's comment is
+  // itself about this hazard. The index is still worth printing without it:
+  // the line ranges are what a range rewrite takes, whoever reads them.
+  if (!canReadSlides) return index;
+  return `${index}\nRead one slide with read_slides (start_slide=N) — it comes back as that slide's verbatim source, exact enough to quote back.`;
+}
+
+/**
  * Read a manuscript file, optionally starting partway in.
  *
  * Paging is by *line*, not character offset, because that is the coordinate the
@@ -1395,9 +1433,14 @@ export async function readWritingFile(
 
   // The map goes in front of the page, and only when there is more file than
   // the page carries — a response holding the whole file needs no map of it.
-  // Headings first; paragraphs are the fallback for the file that has none,
-  // which is exactly the file most in need of a map (see paragraphIndex).
-  const index = page.whole ? "" : headingIndex(raw) || paragraphIndex(raw);
+  // An .html deck is mapped the way the exporter divides it (htmlIndex);
+  // otherwise headings first, with paragraphs as the fallback for the file
+  // that has none, which is exactly the file most in need of a map.
+  const index = page.whole
+    ? ""
+    : (isHtmlPath(path) ? htmlIndex(raw, allowedTools?.includes("read_slides") ?? false) : "") ||
+      headingIndex(raw) ||
+      paragraphIndex(raw);
   return {
     toolCallId,
     content: `${index ? `${index}\n\n` : ""}${page.body}\n\n[... ${notes.join("; ")} ...]`,
