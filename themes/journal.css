@@ -1,0 +1,195 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   学报 · Journal — 排版主题样例 / a sample typography theme
+
+   报告、标书、周报、论文式长文的排版：章节自动编号（1 / 1.1 / 1.1.1）、
+   正文两端对齐、三线表、居中标题、打印时标题不落单。
+   For reports, bids, weeklies and paper-shaped long form: auto-numbered
+   sections, justified body, booktabs-style tables, centred title, headings
+   that never strand at a page break when printed.
+
+   怎么用 / How to use
+     1. 把这个文件放进主题文件夹：设置 → 通用 → 外观 → 「打开主题文件夹」；
+        或放进某个项目的 .ai-writer/themes/（只对那个项目生效，随仓库走）。
+        Drop the file in the themes folder (Settings → General → Appearance →
+        "Open themes folder"), or in a project's .ai-writer/themes/ (that
+        project only; it travels with the repository).
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「排版」一栏选中它。预览、知识库、导出的 HTML / PDF 一起换。
+        Pick it in the typography row. Preview, knowledge base and exported
+        HTML / PDF all follow.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（journal.css → journal）。复制一份改名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 上半部分是旋钮（--md-*），改数字就行；下半部分是规则，删掉不喜欢的段。
+       The top half is knobs (--md-*): change numbers. The bottom half is
+       rules: delete the blocks you don't want.
+     · 围栏：每条选择器都从 .md-body 开始，并且留在里面（不用 + / ~ 往外走）。
+       越界的规则会被丢弃并在设置卡片上列出原因，文件本身不会被改写。
+       The fence: every selector starts at .md-body and stays inside (no
+       + / ~ walking out). Out-of-bounds rules are dropped and listed on the
+       settings card with a reason; the file on disk is never rewritten.
+     · 颜色写 var(--color-*) / var(--md-color-*) 就跟着浅色 / 深色外观走；
+       写死一个色值也可以，卡片会标「自带颜色 · 不随外观变」。
+       Colours written as var(--color-*) / var(--md-color-*) follow the
+       light / dark appearance; a literal colour is allowed and the card
+       marks it "own colours · does not follow the appearance".
+     · 完整旋钮表和规则说明见同目录的 README.md。
+       The full knob table and the rules live in README.md beside this file.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ─────────────────────────────────────────────────────
+   只有 --theme-* 可以写在 :root 里；颜色和字体写在 .md-body 里。
+   Only --theme-* lines belong on :root; colours and fonts go on .md-body. */
+:root {
+  --theme-name: 学报;              /* 网格里显示的名字 / the name the grid shows */
+  --theme-kind: markdown;          /* 排版主题 / a typography theme (not ui) */
+  --theme-extends: clean;          /* 没写到的旋钮从这套内置取：manuscript | clean | magazine | wechat | typewriter
+                                      knobs left out come from this built-in */
+  --theme-version: 1;
+  --theme-author: simple-ai-writer;
+}
+
+/* ── 旋钮 / Knobs ──────────────────────────────────────────────────────────
+   每一个 --md-* 都有内置默认值（见 README.md 的表）；这里只写和「素雅」不同的。
+   Every --md-* has a built-in default (table in README.md); only what
+   differs from the Clean base is written here. */
+.md-body {
+  --md-font-body: var(--font-serif);       /* 正文衬线 / serif body */
+  --md-font-heading: var(--font-sans);     /* 标题无衬线 / sans headings */
+  --md-scale: 1;                           /* 字号倍率；字号本身归界面管 / size multiplier; the size itself belongs to the surface */
+  --md-line: 1.75;                         /* 行距 / line height */
+  --md-para-gap: 0.9em;                    /* 段距 / paragraph gap */
+  --md-para-indent: 0;                     /* 段首缩进 / first-line indent */
+
+  --md-h-weight: 600;                      /* 标题字重 / heading weight */
+  --md-h-space-top: 1.6em;                 /* 标题上方留白 / space above headings */
+  --md-h-space-bottom: 0.55em;             /* 标题下方留白 / space below headings */
+  --md-h1-size: 1.85em;                    /* 篇名 / the title */
+  --md-h1-weight: 600;
+  --md-h1-align: center;
+  --md-h1-letter: normal;
+  --md-h2-size: 1.28em;                    /* 章 / sections */
+  --md-h2-align: left;
+  --md-h3-size: 1.08em;                    /* 节 / subsections */
+  --md-h4-size: 1em;
+
+  --md-quote-style: normal;                /* 引文不用斜体 / quotes upright, not italic */
+  --md-quote-border: 2px solid var(--md-color-border);
+  --md-quote-bg: transparent;
+  --md-hr-line: 1px solid var(--md-color-border);
+  --md-hr-mark: "";                        /* 分隔线不带装饰字符 / no ornament on rules */
+
+  /* 章节计数器从文档开头归零 / section counters reset at the top of the document */
+  counter-reset: sec;
+}
+
+/* ── 章节编号 / Section numbering ──────────────────────────────────────────
+   ## 计 1、2、3；### 计 1.1、1.2；#### 计 1.1.1。# 是篇名，不编号。
+   ## counts 1, 2, 3; ### counts 1.1, 1.2; #### counts 1.1.1. # is the
+   title and is left alone. */
+.md-body h2 { counter-increment: sec; counter-reset: sub; }
+.md-body h3 { counter-increment: sub; counter-reset: subsub; }
+.md-body h4 { counter-increment: subsub; }
+
+.md-body h2::before,
+.md-body h3::before,
+.md-body h4::before {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--md-color-accent);
+  margin-right: 0.6em;
+}
+.md-body h2::before { content: counter(sec); }
+.md-body h3::before { content: counter(sec) "." counter(sub); }
+.md-body h4::before { content: counter(sec) "." counter(sub) "." counter(subsub); }
+
+/* ── 篇名与正文 / Title and body ───────────────────────────────────────────── */
+.md-body h1 { margin-bottom: 1.2em; }
+.md-body h2 { letter-spacing: 0.01em; }
+.md-body h5, .md-body h6 { font-family: var(--md-font-heading); }
+
+/* 两端对齐；列表和引文里保持左齐，短行两端对齐会拉出大空隙。
+   Justified body; lists and quotes stay ragged — short lines justify badly. */
+.md-body p { text-align: justify; }
+.md-body li p, .md-body blockquote p { text-align: left; }
+
+/* 链接用下划线线段而不是文字下划线，中文字下沿更干净。
+   Links carry a hairline instead of a text underline — cleaner under CJK glyphs. */
+.md-body a {
+  text-decoration: none;
+  border-bottom: 1px solid var(--md-color-accent);
+}
+
+/* 引文缩进成一段「摘要」的样子 / quotes indent like an abstract */
+.md-body blockquote {
+  margin: 0 2em var(--md-para-gap);
+  padding: 0 0 0 1em;
+  font-size: 0.94em;
+}
+
+/* ── 三线表 / Booktabs tables ──────────────────────────────────────────────
+   顶线、栏目线、底线三条；格子之间不画竖线。
+   Three rules — top, below the head, bottom — and no vertical lines. */
+.md-body table {
+  font-size: 0.88em;
+  border-top: 2px solid var(--md-color-text);
+  border-bottom: 2px solid var(--md-color-text);
+}
+.md-body th, .md-body td {
+  border: none;
+  border-bottom: 1px solid var(--md-color-border);
+  padding: 7px 10px;
+}
+.md-body th {
+  font-family: var(--md-font-heading);
+  font-weight: 600;
+  border-bottom: 1px solid var(--md-color-text);
+}
+.md-body tbody tr:last-child td { border-bottom: none; }
+
+/* ── 代码与图 / Code and figures ───────────────────────────────────────────── */
+.md-body pre {
+  border: none;
+  border-left: 3px solid var(--md-color-border);
+  font-size: 0.82em;
+}
+.md-body img { margin-left: auto; margin-right: auto; }
+
+/* ── 打印 / Print ──────────────────────────────────────────────────────────
+   @media / @supports / @container 里的规则同样要守围栏。
+   Rules inside @media / @supports / @container are held to the same fence. */
+@media print {
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4 { break-after: avoid; }
+  .md-body pre, .md-body table, .md-body blockquote, .md-body img { break-inside: avoid; }
+}
+
+/* ── 进阶 · 自带颜色 / Advanced · own colours ─────────────────────────────
+   去掉注释就把这套换成固定的米纸色，不再跟着外观变。
+   Uncomment to pin this theme to a cream palette that ignores the appearance.
+
+.md-body {
+  --md-color-text: #2B2620;
+  --md-color-dim: #5C5346;
+  --md-color-faint: #A89C8A;
+  --md-color-accent: #7A5C3E;
+  --md-color-surface: #F3EEE3;
+  --md-color-border: #D9D0C0;
+}
+*/
+
+/* ── 进阶 · 自带字体 / Advanced · own fonts ───────────────────────────────
+   字体文件放在和这个 css 同名的文件夹里（journal/），用相对路径引用；
+   安装和导出时会内联进样式表。远程 url() 会被拒绝。
+   Keep font files in a folder named after this css (journal/) and refer to
+   them relatively; they are inlined on install and export. Remote url()s
+   are refused.
+
+@font-face {
+  font-family: "Journal Serif";
+  src: url("journal/JournalSerif.woff2") format("woff2");
+  font-display: swap;
+}
+.md-body { --md-font-body: "Journal Serif", var(--font-serif); }
+*/

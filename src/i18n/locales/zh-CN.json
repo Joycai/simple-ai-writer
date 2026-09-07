@@ -383,6 +383,7 @@
       "fontHint": "中西文字体组合，正文与界面同步切换（仅使用系统自带字体）。",
       "mdThemeLabel": "Markdown 排版主题",
       "mdThemeHint": "预览面板、知识库正文与导出的 HTML / PDF 共用这套排版。作者主题可自带字体；放在项目 .ai-writer/themes/ 里的随仓库走。",
+      "mdThemeExamples": "样例与写法说明（仓库 themes/ 目录）",
       "reason": {
         "uiSelector": "越界 · 只读 :root 里的令牌声明",
         "uiProperty": "越界 · 布局与字号不由外观主题决定",
