@@ -83,6 +83,41 @@ describe("the harvester's fidelity rules", () => {
     );
   });
 
+  it("paints a linear gradient rather than averaging it away", () => {
+    // pptxgenjs exposes no gradient fill, and the average flattened exactly the
+    // panels a generated deck leans on hardest. Everything the parser will not
+    // take — radial, repeating, a stack — still falls back to the average, and
+    // that fallback is still reported to the author.
+    expect(HARVESTER_SOURCE).toContain("function parseLinearGradient(");
+    expect(HARVESTER_SOURCE).toContain("function rasterizeGradient(");
+    expect(HARVESTER_SOURCE).toMatch(
+      /if \(painted\) \{[\s\S]{0,400}\} else \{[\s\S]{0,200}averageColor\(style\.backgroundImage\)/,
+    );
+  });
+
+  it("splits a CSS list on its top-level commas only", () => {
+    // `rgba(0, 0, 0, .35) 0 18px 40px` is one shadow holding three commas.
+    expect(HARVESTER_SOURCE).toContain("function splitOutsideParens(");
+    expect(HARVESTER_SOURCE).toContain("function shadowOf(");
+  });
+
+  it("cuts a block down to what an ancestor's overflow leaves visible", () => {
+    // A decorative circle parked half outside its card is cut at the card's
+    // edge on the page; PowerPoint has no clipping and drew the whole circle.
+    expect(HARVESTER_SOURCE).toContain("function clipFor(");
+    expect(HARVESTER_SOURCE).toContain("function clipRect(");
+    // The slide's own overflow stays PowerPoint's business: it cuts at the
+    // slide edge anyway, and clipping there turns a circle hanging off the
+    // corner into a rounded rectangle sitting in it.
+    expect(HARVESTER_SOURCE).toContain("el === root ? clip : clipFor(style, rect, clip)");
+  });
+
+  it("carries a partial opacity down the walk", () => {
+    // `opacity` composites rather than inheriting, so an ancestor's fade
+    // applies to everything below it. Only zero used to be honoured.
+    expect(HARVESTER_SOURCE).toContain("var opacity = alpha * (isFinite(own) ? own : 1);");
+  });
+
   it("honours object-fit before taking the cheap data-URL path", () => {
     // The shortcut hands the original bytes straight to PowerPoint, which is
     // right only when the page draws the whole picture stretched to the box.

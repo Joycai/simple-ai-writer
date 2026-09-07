@@ -48,6 +48,26 @@ interface BoxPx {
    * every shape about its own centre.
    */
   rotate?: number;
+  /**
+   * The opacity this block inherits, 0–1, when it is not fully opaque.
+   *
+   * Every ancestor's `opacity` multiplied together: the property is not
+   * inherited in CSS, it composites, so a 60% card makes everything inside it
+   * 60% too. Only zero used to be honoured (as "hidden"), and everything
+   * between arrived solid.
+   */
+  opacity?: number;
+}
+
+/** A drop shadow as OOXML states one: a distance and a direction, not a vector. */
+export interface ShadowPx {
+  inset: boolean;
+  offsetPx: number;
+  /** Degrees clockwise from the positive x axis. */
+  angle: number;
+  blurPx: number;
+  /** Computed CSS colour, alpha included. */
+  color: string;
 }
 
 /** A painted box: background, border, or both. */
@@ -57,6 +77,7 @@ export interface RectBlock extends BoxPx {
   fill?: string;
   line?: { color: string; widthPx: number };
   radiusPx?: number;
+  shadow?: ShadowPx | null;
 }
 
 /** A run of text, measured on the text itself rather than its container. */
@@ -210,6 +231,57 @@ export function cssColor(css: string | undefined): PptxColor | null {
   return null;
 }
 
+/**
+ * Fold an inherited `opacity` into a colour's own alpha.
+ *
+ * They compose in the page — a 40%-opaque panel painted in a 50%-alpha colour
+ * shows 20% — and OOXML has only the one transparency per fill to say it with.
+ */
+export function fade(color: PptxColor | null, opacity: number | undefined): PptxColor | undefined {
+  if (!color) return undefined;
+  if (opacity === undefined || opacity >= 1) return color;
+  const visible = (1 - color.transparency / 100) * Math.max(0, opacity);
+  return { hex: color.hex, transparency: Math.round((1 - visible) * 100) };
+}
+
+/** An inherited opacity as the percentage pptxgenjs calls `transparency`. */
+function transparencyOf(opacity: number | undefined): number | undefined {
+  if (opacity === undefined || opacity >= 1) return undefined;
+  return Math.round((1 - Math.max(0, opacity)) * 100);
+}
+
+/** pptxgenjs clamps neither of these, and PowerPoint reads past the range as zero. */
+function clamp(value: number, high: number): number {
+  return Math.min(high, Math.max(0, value));
+}
+
+/**
+ * A measured shadow in PowerPoint's units, or undefined for none.
+ *
+ * `spread` is gone: OOXML's outer shadow has no counterpart for it. A shadow
+ * slightly the wrong size is a different class of wrong from the card that
+ * used to arrive with no elevation at all.
+ */
+function toShadow(
+  shadow: ShadowPx | null | undefined,
+  scale: number,
+  opacity: number | undefined,
+): PptxShadow | undefined {
+  if (!shadow) return undefined;
+  const color = cssColor(shadow.color);
+  if (!color) return undefined;
+  const visible = (1 - color.transparency / 100) * (opacity === undefined ? 1 : Math.max(0, opacity));
+  if (visible <= 0) return undefined;
+  return {
+    type: shadow.inset ? "inner" : "outer",
+    angle: Math.round(((shadow.angle % 360) + 360) % 360),
+    blur: clamp(pt(shadow.blurPx * scale), 100),
+    offset: clamp(pt(shadow.offsetPx * scale), 200),
+    color: color.hex,
+    opacity: Math.round(visible * 100) / 100,
+  };
+}
+
 function parseAlpha(raw: string | undefined): number {
   if (raw === undefined) return 1;
   const n = raw.endsWith("%") ? parseFloat(raw) / 100 : parseFloat(raw);
@@ -251,6 +323,7 @@ export type Shape =
       line?: { color: PptxColor; ptWidth: number };
       /** Clockwise degrees; PowerPoint turns the shape about its own centre. */
       rotate?: number;
+      shadow?: PptxShadow;
       /**
        * Corner radius **in inches**, which is the unit pptxgenjs's
        * `rectRadius` is in — it divides by the shape's shorter side itself to
@@ -281,8 +354,27 @@ export type Shape =
       /** Exact line spacing in points, or absent to leave PowerPoint's own. */
       lineSpacing?: number;
       rotate?: number;
+      /** Whole-shape transparency, 0–100, from the page's `opacity`. */
+      transparency?: number;
     }
-  | { kind: "image"; x: number; y: number; w: number; h: number; data: string; rotate?: number };
+  | {
+      kind: "image";
+      x: number; y: number; w: number; h: number;
+      data: string;
+      rotate?: number;
+      transparency?: number;
+    };
+
+/** A shadow in the units pptxgenjs takes: points and degrees. */
+export interface PptxShadow {
+  type: "outer" | "inner";
+  angle: number;
+  blur: number;
+  offset: number;
+  color: string;
+  /** 0–1, where 1 is fully opaque. */
+  opacity: number;
+}
 
 /**
  * Slack added around a measured text box, as a fraction of its size.
@@ -345,13 +437,16 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
     const rotate = block.rotate ? round(block.rotate) : undefined;
 
     if (block.kind === "image") {
-      shapes.push({ kind: "image", x, y, w, h, data: block.data, rotate });
+      shapes.push({
+        kind: "image", x, y, w, h, data: block.data, rotate,
+        transparency: transparencyOf(block.opacity),
+      });
       continue;
     }
 
     if (block.kind === "rect") {
-      const fill = cssColor(block.fill) ?? undefined;
-      const lineColor = block.line ? cssColor(block.line.color) : null;
+      const fill = fade(cssColor(block.fill), block.opacity);
+      const lineColor = block.line ? fade(cssColor(block.line.color), block.opacity) : undefined;
       const line = block.line && lineColor
         ? { color: lineColor, ptWidth: Math.max(0.25, pt(block.line.widthPx * scale)) }
         : undefined;
@@ -361,7 +456,10 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
       const radius = block.radiusPx
         ? Math.min(round(block.radiusPx * scale), round(Math.min(w, h) / 2))
         : 0;
-      shapes.push({ kind: "rect", x, y, w, h, fill, line, radius, rotate });
+      shapes.push({
+        kind: "rect", x, y, w, h, fill, line, radius, rotate,
+        shadow: toShadow(block.shadow, scale, block.opacity),
+      });
       continue;
     }
 
@@ -377,6 +475,7 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
       shrink: needsShrink(block),
       lineSpacing: lineSpacingPt(block, scale),
       rotate,
+      transparency: transparencyOf(block.opacity),
       runs: block.runs.map((run) => ({
         text: run.text,
         bold: run.bold,

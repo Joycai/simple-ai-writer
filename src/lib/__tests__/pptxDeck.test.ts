@@ -264,6 +264,74 @@ describe("toShapes", () => {
     expect(shapes.map((shape) => ("rotate" in shape ? shape.rotate : null))).toEqual([352, 12, 12]);
   });
 
+  it("composes an inherited opacity with the colour's own alpha", () => {
+    // They multiply in the page — a 40%-opaque panel painted in a half-alpha
+    // colour shows 20% — and OOXML has one transparency per fill to say it in.
+    const [shape] = toShapes(
+      deckOf([{ kind: "rect", x: 0, y: 0, w: 100, h: 100, opacity: 0.4,
+        fill: "rgba(34, 197, 94, 0.5)" }]),
+      0,
+    );
+    if (shape.kind !== "rect") throw new Error("expected a rect");
+    expect(shape.fill).toEqual({ hex: "22C55E", transparency: 80 });
+  });
+
+  it("gives text and pictures the same fade as a whole-shape transparency", () => {
+    // Neither has a fill to fold it into: PowerPoint carries it on the shape.
+    const shapes = toShapes(
+      deckOf([
+        { kind: "text", x: 0, y: 0, w: 100, h: 30, align: "left", lines: 1, opacity: 0.4,
+          runs: [{ text: "褪色", sizePx: 22 }] },
+        { kind: "image", x: 0, y: 0, w: 100, h: 30, data: "data:image/png;base64,AA", opacity: 0.25 },
+      ]),
+      0,
+    );
+    expect(shapes.map((shape) => ("transparency" in shape ? shape.transparency : null)))
+      .toEqual([60, 75]);
+  });
+
+  it("leaves a fully opaque block without a transparency at all", () => {
+    // `transparency: 0` and no transparency mean the same thing to PowerPoint,
+    // but writing it on every shape in the deck is noise in the XML.
+    const [shape] = toShapes(
+      deckOf([{ kind: "rect", x: 0, y: 0, w: 100, h: 100, fill: "rgb(0, 0, 0)", opacity: 1 }]),
+      0,
+    );
+    if (shape.kind !== "rect") throw new Error("expected a rect");
+    expect(shape.fill).toEqual({ hex: "000000", transparency: 0 });
+  });
+
+  it("turns a shadow's offset vector into a distance and a direction", () => {
+    // CSS states dx/dy; OOXML states how far and which way. `0 18px 40px` is
+    // eighteen pixels straight down, which is ninety degrees clockwise from
+    // the positive x axis — the same convention, since CSS's y grows down too.
+    const scale = inchesPerPx(CANVAS, slideSize(CANVAS));
+    const [shape] = toShapes(
+      deckOf([{ kind: "rect", x: 0, y: 0, w: 400, h: 200, fill: "rgb(0, 0, 0)",
+        shadow: { inset: false, offsetPx: 18, angle: 90, blurPx: 40, color: "rgba(0, 0, 0, 0.45)" } }]),
+      0,
+    );
+    if (shape.kind !== "rect") throw new Error("expected a rect");
+    expect(shape.shadow).toEqual({
+      type: "outer",
+      angle: 90,
+      blur: Math.round(40 * scale * 72 * 1000) / 1000,
+      offset: Math.round(18 * scale * 72 * 1000) / 1000,
+      color: "000000",
+      opacity: 0.45,
+    });
+  });
+
+  it("drops a shadow nobody can see", () => {
+    const [shape] = toShapes(
+      deckOf([{ kind: "rect", x: 0, y: 0, w: 400, h: 200, fill: "rgb(0, 0, 0)",
+        shadow: { inset: false, offsetPx: 8, angle: 90, blurPx: 4, color: "rgba(0, 0, 0, 0)" } }]),
+      0,
+    );
+    if (shape.kind !== "rect") throw new Error("expected a rect");
+    expect(shape.shadow).toBeUndefined();
+  });
+
   it("returns nothing for a slide that is not there", () => {
     expect(toShapes(deckOf([]), 7)).toEqual([]);
   });

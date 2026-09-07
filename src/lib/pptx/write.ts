@@ -37,6 +37,7 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           w: shape.w,
           h: shape.h,
           ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.transparency ? { transparency: shape.transparency } : {}),
         });
         continue;
       }
@@ -48,6 +49,7 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           h: shape.h,
           ...(shape.radius > 0 ? { rectRadius: shape.radius } : {}),
           ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.shadow ? { shadow: shape.shadow } : {}),
           ...(shape.fill
             ? { fill: { color: shape.fill.hex, transparency: shape.fill.transparency } }
             : { fill: { color: "FFFFFF", transparency: 100 } }),
@@ -98,6 +100,7 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           // for a single line and for mixed type sizes.
           ...(shape.lineSpacing ? { lineSpacing: shape.lineSpacing } : {}),
           ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.transparency ? { transparency: shape.transparency } : {}),
         },
       );
     }
