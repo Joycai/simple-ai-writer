@@ -1814,7 +1814,6 @@
       "queuePromote": "Move to the front",
       "queueRunning": "Running now:",
       "waitingLine": "This conversation is stopped at the card above. Answer it to continue.",
-      "waitingArrow": "↑ the card is right above the composer",
       "switchGuardTitle": "Switching to “{{name}}” stops the {{n}} conversations working here",
       "switchGuardClose": "Closing the project stops the {{n}} conversations working here",
       "switchGuardNote": "Conversations stay in this project's history; the {{n}} queued go back to their drafts.",
@@ -1845,6 +1844,9 @@
         "imagegen": "Draw",
         "imagegenActive": "Image-generation subagent active (click to disable for this session)",
         "imagegenDisabled": "Image-generation subagent disabled for this session (click to enable)",
+        "translate": "JA→ZH",
+        "translateActive": "JA→ZH translation subagent active (click to disable for this session)",
+        "translateDisabled": "JA→ZH translation subagent disabled for this session (click to enable)",
         "writer": "Writer",
         "writerActive": "Writer subagent on — it produces this conversation's final text (click to disable)",
         "writerDisabled": "Writer subagent disabled for this session (click to enable)"
@@ -1868,7 +1870,19 @@
         "clean": "everything landed as the preset says",
         "degradedHead": "{{n}} kind(s) of content fell back to a simpler form",
         "degradedNote": "Word has no equivalent for these. The rest of the document follows the preset exactly — nothing here affects the layout you are checking against."
-      }
+      },
+      "addRef": "Reference",
+      "sendHintShort": "Enter ↵",
+      "waitingClock": "Paused {{clock}}",
+      "capability": "Abilities",
+      "capabilityHint": "What this conversation can reach (switches off only — nothing unbound can be turned on here)",
+      "capabilityStopped": "{{names}} off",
+      "capabilityScope": "This conversation",
+      "capabilityResets": "resets per conversation",
+      "capabilityRestore": "off this conversation · restore",
+      "stateMemoryMeta": "beta · folded into state before each send",
+      "thinkingScope": "writes the model row",
+      "thinkingBudgetUnit": "tk · saved on blur"
     },
     "drawer": {
       "tabGenerate": "Generate",
@@ -3765,9 +3779,6 @@
       "selectionChip": "selection · {{n}} chars",
       "detachSelection": "Don't attach the selection",
       "catAll": "All",
-      "addLore": "entry",
-      "addDoc": "doc",
-      "addImage": "image",
       "removeRef": "Remove this reference",
       "imageTooLarge": "{{name}} is too large ({{size}}MB, max {{max}}MB)",
       "refUnreadable": "Can't read {{name}}",
@@ -3804,7 +3815,8 @@
       "create": "Create",
       "narratorHint": "A narrator has no character entry; everything else is the same",
       "deleteHint": "Deleting moves the transcript into .ai-writer/backups — recoverable",
-      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
+      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})",
+      "addRef": "Reference"
     },
     "empty": {
       "title": "Talk to the people you wrote, in first person.",

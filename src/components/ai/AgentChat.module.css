@@ -329,6 +329,10 @@
   gap: var(--space-2);
 }
 
+/* 材料行 (设计稿 02g 屏 1c). Two groups with one rule between them: framed
+   chips on the left are what *this message* carries, unframed words on the
+   right are how *this conversation* works. Nothing else lives here — the model's
+   own settings and the approval marker moved into the input's footer. */
 .attachRow {
   display: flex;
   align-items: center;
@@ -336,9 +340,32 @@
   gap: var(--space-2);
   min-height: 22px;
 }
-/* Pushes the standing `+ …` chips to the trailing edge, so what this message
-   carries and what could be added to it stay visually separate. */
+/* Pushes the session words to the trailing edge, so what this message carries
+   and how the conversation works stay visually separate. */
 .attachSpacer { flex: 1; }
+
+/* The right group travels as one unit: at 960px (屏 1e) it drops to its own
+   line rather than interleaving with material chips, and it stays right-aligned
+   there — being on the right *is* its identity. */
+.attachSession {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+/* Hairline between the one switch that stayed out and the word that swallowed
+   the rest — same family, different reach. */
+.attachDivider {
+  width: 1px;
+  height: 12px;
+  background: var(--color-border-panel);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Parked on a card: the words stay readable, the switches stop answering. */
+.attachRowWaiting { opacity: 0.55; pointer-events: none; }
 
 .attachChip {
   display: inline-flex;
@@ -353,6 +380,11 @@
   transition: background var(--transition-fast);
 }
 .attachChip:hover { background: var(--color-bg-selected); }
+/* 屏 1g-3: the only thing in this row allowed to truncate — it is a label, and
+   the middle is what goes (see middleEllipsis), never the extension. The
+   session words on the right are state and are never cut. */
+.attachChip { max-width: 320px; }
+.attachChip > span, .attachChip { white-space: nowrap; }
 
 .attachChipGhost {
   display: inline-flex;
@@ -610,12 +642,32 @@
      send stamp gets pushed onto the box's bottom border. */
   flex-shrink: 0;
 }
-/* Trailing edge per 1b/2d: 片段 (and the run note) lead, hint + button close
-   the row. */
+/* Trailing edge per 1b/2d: 片段 (and the run note) lead, then the three mono
+   readings of "how this gets sent" — 自动批准 · 思考 · the key — and the stamp
+   closes the row (设计稿 02g 屏 1c). */
+.footerSpacer { flex: 1; }
+
 .inputHint {
-  margin-left: auto;
   font: 400 10px/1.5 var(--font-mono);
   color: var(--color-text-kbd);
+  white-space: nowrap;
+}
+/* 屏 1e: at narrow widths the keyboard hint is the one thing here that may
+   shrink. 自动批准 and 思考 are state to be read; a shortcut reminder is not.
+   Two spans rather than a CSS `content` string, so the short form stays in the
+   locale files where every other author-facing word lives. */
+.hintShort { display: none; }
+@media (max-width: 1040px) {
+  .hintLong { display: none; }
+  .hintShort { display: inline; }
+}
+
+/* Present but not answering — see the waiting branch in AgentChat.tsx. */
+.footerInert {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* 2d 输入框两态 — one slot, three looks: ready = solid sienna + ink ↑ arrow;
@@ -1010,14 +1062,19 @@
 
 /* 1i: the composer's place while a card blocks the run — a sentence, not a
    greyed field. Same frame as the input, so nothing jumps. */
+/* 设计稿 02g 屏 1g-4 — the waiting composer.
+
+   This is now the input frame's *body*, not a line standing in for the whole
+   composer: the frame, the footer and the stop stamp all stay, one shade down.
+   The arrow that used to point at the card is gone with the change — the card
+   sits immediately above a box that has visibly stopped accepting typing, and
+   the sentence already says where to look. */
 .waitingLine {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
-  padding: 0 14px;
-  border: 1px solid var(--color-border-input);
-  background: var(--color-bg-base);
+  min-height: 40px;
+  padding: 14px 14px 10px;
 }
 .waitingText {
   flex: 1;
@@ -1025,9 +1082,9 @@
   font: 400 13px/1.6 var(--font-serif);
   color: var(--color-text-soft);
 }
-.waitingArrow {
-  flex-shrink: 0;
-  font: 400 10px/1 var(--font-mono);
-  color: var(--color-text-kbd);
-  white-space: nowrap;
+/* Half a step below bg-elevated: enough to read as "not yours to type in"
+   without going grey — nothing failed here, the turn is simply parked. */
+.inputRowWaiting {
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, var(--color-bg-base));
+  border-color: var(--color-border-panel);
 }

@@ -60,7 +60,7 @@ import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import type { TurnExport } from "../../lib/agent/chatSession";
-import { projectRelative as projectRel, toPosixPath } from "../../lib/paths";
+import { middleEllipsis, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { rewindableTurnIds } from "../../lib/agent/rewind";
 import { splitMentions } from "../../lib/agent/mentionText";
@@ -71,7 +71,7 @@ import { chatAgentPreset } from "../../lib/agent/packs";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
-import { SubAgentChips } from "./SubAgentChips";
+import { CapabilityMenu } from "./CapabilityMenu";
 import {
   findHandoff, handoffFailed, WorkOrder, WriterGutter, WriterUnavailable,
   type TurnHandoff,
@@ -82,7 +82,6 @@ import { ContextBar } from "./ContextBar";
 import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
-import { StateMemoryChip } from "./StateMemoryChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
 import type { AttachedItem } from "../../lib/lore/aiTask";
@@ -277,7 +276,7 @@ export function AgentChat() {
    * typed mention would, instead of becoming a second kind of attachment the
    * message has to carry separately.
    */
-  const openMentionFor = (kind: PickKind) => {
+  const openMentionFor = (kind: PickKind | null) => {
     const el = inputRef.current;
     const caret = el?.selectionStart ?? draftRef.current.length;
     const before = draftRef.current.slice(0, caret);
@@ -883,7 +882,10 @@ export function AgentChat() {
         {showWriterIntro && <WriterIntro onDismiss={dismissWriterIntro} />}
         <WriterStrip composingSince={composingSince} />
 
-        <div className={styles.attachRow}>
+        {/* Waiting: the session switches keep their words but stop responding —
+            flipping one mid-turn only affects the next one, and this row is not
+            where that promise should be made (屏 1g-4). */}
+        <div className={`${styles.attachRow} ${waiting ? styles.attachRowWaiting : ""}`}>
           {attachedQuote ? (
             <button
               className={styles.attachChip}
@@ -934,77 +936,83 @@ export function AgentChat() {
                 key={key}
                 className={styles.attachChip}
                 onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                title={shrunk ? `${shrunk} · ${t("ai.chat.removeRef")}` : t("ai.chat.removeRef")}
+                // The full name always reaches the author somewhere: the chip
+                // may cut its middle (屏 1g-3), the tooltip never does.
+                title={[label, shrunk, t("ai.chat.removeRef")].filter(Boolean).join(" · ")}
               >
                 {/* A picture is the one attachment whose cost the author can't
                     read off its name — mark it as what it is. */}
                 {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
                 {/* A recording travels as a path, not content — the mark says so. */}
                 {r.kind === "media" && <AudioLines size={10} strokeWidth={2} />}
-                @{label}
+                @{middleEllipsis(label)}
                 <X size={10} strokeWidth={2} />
               </button>
             );
           })}
-          {/* Standing affordances for the two things worth referencing. `@`
-              still works and is faster once known — these exist so the author
-              finds out that it does. */}
+          {/* One standing affordance, not three (设计稿 02g 屏 1c). `@` is the
+              whole mechanism and is faster once known; this exists so the
+              author finds out that it does, and splitting it per kind bought
+              three slots' worth of row for a filter the picker already has. */}
+          <button
+            className={styles.attachChipGhost}
+            onClick={() => openMentionFor(null)}
+            disabled={candidates.length === 0}
+            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
+          >
+            + {t("ai.chat.addRef", { defaultValue: "引用" })}
+          </button>
+
+          {/* The row's grammar (屏 1c · 1z §3): everything left of this spacer
+              is material *this message* carries and wears a frame; everything
+              right of it changes *this conversation* and wears none. The two
+              never mix, and at narrow widths the right group wraps as one unit
+              (see .attachSession in the stylesheet). */}
           <span className={styles.attachSpacer} />
-          <button
-            className={styles.attachChipGhost}
-            onClick={() => openMentionFor("lore")}
-            disabled={!candidates.some((c) => c.type === "lore")}
-            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-          >
-            + {terms.entry}
-          </button>
-          <button
-            className={styles.attachChipGhost}
-            onClick={() => openMentionFor("text")}
-            disabled={!candidates.some((c) => matchesKind(c, "text"))}
-            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-          >
-            + {terms.doc}
-          </button>
-          {/* Only when the model chain can see images: on a text-only setup without
-              vision subagent the chip would be permanently dead. */}
-          {canSeeImages && (
-            <button
-              className={styles.attachChipGhost}
-              onClick={() => openMentionFor("image")}
-              disabled={!candidates.some((c) => matchesKind(c, "image"))}
-              title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-            >
-              + {t("ai.chat.imageRef", { defaultValue: "图片" })}
-            </button>
-          )}
-          {/* Subagent session toggles (search, vision, longread) */}
-          <SubAgentChips />
-          {/* Same family of session switch: how the assistant works, not what
-              the message carries. */}
-          <PlanModeChip />
-          {/* 状态记忆 — only while its Beta is on (lib/agent/stateFlag). */}
-          <StateMemoryChip />
-          {/* Only while 本次对话都批准 is live — see AutoApproveChip. */}
-          <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent />
-          {/* Trailing edge, past the `+ …` affordances: this one doesn't add
-              material to the message, it changes how the model answers it. */}
-          <ReasoningControls variant="compact" />
+          <div className={styles.attachSession}>
+            {/* Outside 能力 on purpose: the one the author flips most. */}
+            <PlanModeChip />
+            <span className={styles.attachDivider} aria-hidden />
+            {/* The six subagent switches and 状态记忆, collapsed into one word
+                that names anything not in its default state. */}
+            <CapabilityMenu stateMemory />
+          </div>
         </div>
 
         {refError && <div className={styles.refError}>{refError}</div>}
 
         {waiting ? (
-          // Not disabled (not grey): a statement of why it waits, with the same
-          // mark the tab and the card carry — three on one vertical line.
-          <div className={styles.waitingLine}>
-            <ChatMark state="waiting" />
-            <span className={styles.waitingText}>
-              {t("ai.chat.waitingLine", { defaultValue: "这段停在上面那张卡。批准或拒绝之后才能继续说话。" })}
-            </span>
-            <span className={styles.waitingArrow}>
-              {t("ai.chat.waitingArrow", { defaultValue: "↑ 卡就在输入框上方" })}
-            </span>
+          // 设计稿 02g 屏 1g-4. The frame stays, one shade down — not struck
+          // out, not replaced by a bare line: the footer is where 自动批准 lives
+          // now, and this is the state where its placeholder earns its keep,
+          // because the card offering 本次都批准 is directly above and pressing
+          // it lights this word up. The stop stamp stays live too: the turn can
+          // still be called off wholesale.
+          <div className={`${styles.inputRow} ${styles.inputRowWaiting}`}>
+            <div className={styles.waitingLine}>
+              <ChatMark state="waiting" />
+              <span className={styles.waitingText}>
+                {t("ai.chat.waitingLine", { defaultValue: "这段停在上面那张卡。批准或拒绝之后才能继续说话。" })}
+              </span>
+            </div>
+            <div className={styles.inputFooter}>
+              {/* Inert, not gone: 片段 inserts into an input nobody can type in,
+                  and 思考 would look like it changed *this* turn (屏 1z §6). */}
+              <span className={styles.footerInert} aria-hidden>
+                <SnippetPicker value={draft} onInsert={setDraft} />
+              </span>
+              <span className={styles.footerSpacer} />
+              <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent variant="footer" />
+              <span className={styles.footerInert} aria-hidden>
+                <ReasoningControls variant="footer" />
+              </span>
+              <span className={styles.inputHint}>
+                {t("ai.chat.waitingClock", { defaultValue: "已停 {{clock}}", clock: runClock })}
+              </span>
+              <button className={`${styles.sendBtn} ${styles.stopBtn}`} onClick={handleStop} title={t("ai.chat.stop")}>
+                <span className={styles.sendGlyph} aria-hidden />
+              </button>
+            </div>
           </div>
         ) : (
         <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
@@ -1050,12 +1058,31 @@ export function AgentChat() {
                 {t("ai.chat.generating", { defaultValue: "正在生成" })} · {runClock}
               </span>
             )}
+            {/* 设计稿 02g 屏 1c: the footer is where "how this message gets
+                sent" is read — who nods for the writes, how hard the model
+                thinks, which key sends. Both of these used to sit in the chip
+                row above, where they wore the shape of session switches and
+                were neither. */}
+            <span className={styles.footerSpacer} />
+            <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent variant="footer" />
+            <ReasoningControls variant="footer" />
             <span className={styles.inputHint}>
-              {chatRunning
-                ? queued
+              {chatRunning ? (
+                queued
                   ? t("ai.chat.queuedHint", { defaultValue: "已排队 · 本轮结束后发送" })
                   : t("ai.chat.stopHint", { defaultValue: "Esc 停止" })
-                : t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
+              ) : (
+                <>
+                  {/* 屏 1e: the only thing in this footer allowed to abbreviate
+                      when the drawer is squeezed — the others are state. */}
+                  <span className={styles.hintLong}>
+                    {t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
+                  </span>
+                  <span className={styles.hintShort}>
+                    {t("ai.chat.sendHintShort", { defaultValue: "Enter ↵" })}
+                  </span>
+                </>
+              )}
             </span>
             {chatRunning ? (
               // 2d: the ink square is the *stop* mark — same slot, the raised

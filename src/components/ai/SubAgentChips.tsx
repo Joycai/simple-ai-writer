@@ -1,25 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
-import { useAiStore } from "../../stores/aiStore";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
-import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
+import type { SubAgentKind } from "../../lib/agent/subagent";
+import { useConfiguredKinds, FALLBACK_LABELS, type ChipKind } from "./subagentChipModel";
 import styles from "./toggleChip.module.css";
-
-/**
- * Every kind that is a chip — i.e. all of them except the two nobody calls.
- *
- * The writer is excluded because its switch is a session-level decision made
- * elsewhere (see below). `retrieval` is excluded for a plainer reason: by the
- * time these chips are on screen it has already run, and a control that only
- * takes effect on the *next* turn does not belong in a row of "for this turn"
- * toggles. It lives in Settings alone.
- */
-// `asr` is off the row too: transcription is an explicit act (a right-click,
-// or a tool whose card the author approves), never something the model picks
-// up mid-turn, so a "for this turn" toggle has nothing to switch off.
-type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval" | "asr">;
-const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval", "asr"];
-const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
 
 const ICONS: Record<ChipKind, LucideIcon> = {
   search: Globe,
@@ -31,7 +15,15 @@ const ICONS: Record<ChipKind, LucideIcon> = {
 };
 
 /**
- * Per-conversation switches for the subagents Settings has enabled.
+ * Per-conversation switches for the subagents Settings has enabled, as six
+ * boxes.
+ *
+ * This is the **settings-block** rendering, and after 设计稿 02g it is 一致性检查's
+ * alone: that surface is a form the author reads once before starting a run, so
+ * six open boxes cost nothing and save a click. On a composer — where the row
+ * is paid for on every message — the same switches collapse into one word; see
+ * `CapabilityMenu`. What the two share (which kinds exist, which are usable,
+ * what each is called) lives in `subagentChipModel`, so only the shapes differ.
  *
  * Subtractive only — a chip turns one off for this conversation; it can never
  * turn on something with no model bound. By default the state lives in
@@ -57,19 +49,11 @@ export function SubAgentChips({ disabled, onToggle }: {
   onToggle?: (kind: SubAgentKind) => void;
 } = {}) {
   const { t } = useTranslation();
-  const subAgents = useAiStore((s) => s.subAgents);
-  const models = useAiStore((s) => s.models);
   const chatDisabled = useActiveChat((c) => c.disabledSubAgents);
   const chatToggle = useAgentStore((s) => s.toggleSubAgent);
   const disabledSubAgents = disabled ?? chatDisabled;
   const toggleSubAgent = onToggle ?? chatToggle;
-
-  // Usable, not merely enabled: a vision subagent bound to a text model, or a
-  // search one whose model cannot browse, would give the author a switch that
-  // changes nothing — every other surface has already decided it is off.
-  const configuredKinds = CHIP_KINDS.filter(
-    (k) => subAgentModel(k, models, subAgents) !== null,
-  );
+  const configuredKinds = useConfiguredKinds();
 
   if (configuredKinds.length === 0) return null;
 
@@ -83,12 +67,7 @@ export function SubAgentChips({ disabled, onToggle }: {
         const Icon = ICONS[kind];
         const isDisabledThisSession = disabledSubAgents.includes(kind);
         const label = t(`ai.chat.subagentChip.${kind}`, {
-          defaultValue:
-            kind === "search" ? "联网"
-            : kind === "vision" ? "识图"
-            : kind === "pdf" ? "PDF"
-            : kind === "imagegen" ? "绘图"
-            : "长文",
+          defaultValue: FALLBACK_LABELS[kind],
         });
         const title = isDisabledThisSession
           ? t(`ai.chat.subagentChip.${kind}Disabled`, {

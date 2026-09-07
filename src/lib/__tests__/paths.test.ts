@@ -6,6 +6,7 @@ import {
   isProtectedPath,
   isSamePath,
   isStrictDescendant,
+  middleEllipsis,
   isWorkspacePath,
   joinPath,
   normalizePathSegments,
@@ -289,5 +290,33 @@ describe("isStrictDescendant", () => {
     expect(isStrictDescendant(dir, "/home/user/project/writing/卷二")).toBe(false);
     expect(isStrictDescendant(dir, "/home/user/project/writing")).toBe(false);
     expect(isStrictDescendant(dir, `${dir}-备份/第1章.md`)).toBe(false);
+  });
+});
+
+describe("middleEllipsis", () => {
+  it("leaves a name that already fits", () => {
+    expect(middleEllipsis("第三章.md")).toBe("第三章.md");
+    expect(middleEllipsis("x".repeat(30))).toBe("x".repeat(30));
+  });
+
+  it("cuts the middle and keeps the extension whole", () => {
+    const long = "漕运纪·第三卷·寒露夜至春分·三条支线时间线核对稿（2026-09-06 口述整理版）.md";
+    const out = middleEllipsis(long);
+    expect(out.endsWith(".md")).toBe(true);
+    expect(out.startsWith("漕运纪·第三卷")).toBe(true);
+    expect(out).toContain("…");
+    expect(out.length).toBeLessThanOrEqual(30);
+  });
+
+  it("treats a leading dot as the whole name, not an extension", () => {
+    const out = middleEllipsis(".gitignore-" + "x".repeat(40), 20);
+    expect(out).toContain("…");
+    expect(out.length).toBeLessThanOrEqual(20);
+  });
+
+  it("does not mistake a long tail segment for a suffix", () => {
+    // "…·一段很长的说明" is a sentence, not a file extension: nothing is pinned.
+    const out = middleEllipsis("稿子.这不是扩展名而是一整句很长的话", 16);
+    expect(out.length).toBeLessThanOrEqual(16);
   });
 });

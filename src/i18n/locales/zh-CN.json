@@ -1811,7 +1811,6 @@
       "queuePromote": "插到最前",
       "queueRunning": "正在跑的：",
       "waitingLine": "这段停在上面那张卡。批准或拒绝之后才能继续说话。",
-      "waitingArrow": "↑ 卡就在输入框上方",
       "switchGuardTitle": "切到《{{name}}》会停掉这里正在跑的 {{n}} 段会话",
       "switchGuardClose": "关闭项目会停掉这里正在跑的 {{n}} 段会话",
       "switchGuardNote": "对话都留在这个项目的历史里，回来能接着看；排队的 {{n}} 段退回草稿。",
@@ -1842,6 +1841,9 @@
         "imagegen": "绘图",
         "imagegenActive": "图片生成子代理已启用（点击在本次对话停用）",
         "imagegenDisabled": "图片生成子代理已在本次对话停用（点击启用）",
+        "translate": "日译中",
+        "translateActive": "日中翻译子代理已启用（点击在本次对话停用）",
+        "translateDisabled": "日中翻译子代理已在本次对话停用（点击启用）",
         "writer": "写手",
         "writerActive": "写手子代理已启用：本次对话的成文由它完成（点击停用）",
         "writerDisabled": "写手子代理已在本次对话停用（点击启用）"
@@ -1865,7 +1867,19 @@
         "clean": "全部内容都按预设落地",
         "degradedHead": "有 {{n}} 类内容退到了更简单的形式",
         "degradedNote": "这些东西 Word 里没有对等物。文档其余部分完全按预设落地——降级不影响排版核对。"
-      }
+      },
+      "addRef": "引用",
+      "sendHintShort": "Enter ↵",
+      "waitingClock": "已停 {{clock}}",
+      "capability": "能力",
+      "capabilityHint": "本次对话可用的能力（只能关，不能在这里打开没配模型的）",
+      "capabilityStopped": "{{names}} 已停",
+      "capabilityScope": "本次对话",
+      "capabilityResets": "换会话即重置",
+      "capabilityRestore": "本次已停 · 恢复",
+      "stateMemoryMeta": "beta · 发送前折成执行状态",
+      "thinkingScope": "写进模型行",
+      "thinkingBudgetUnit": "tk · 失焦提交"
     },
     "drawer": {
       "tabGenerate": "生成",
@@ -3758,9 +3772,6 @@
       "selectionChip": "选区 {{n}} 字",
       "detachSelection": "不附带选区",
       "catAll": "全部",
-      "addLore": "条目",
-      "addDoc": "文档",
-      "addImage": "图片",
       "removeRef": "移除这项引用",
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
@@ -3797,7 +3808,8 @@
       "create": "创建",
       "narratorHint": "旁白没有主角，其余相同",
       "deleteHint": "删除会把对话记录移进 .ai-writer/backups，可恢复",
-      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）"
+      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）",
+      "addRef": "引用"
     },
     "empty": {
       "title": "和你写的人对话，用第一人称。",
