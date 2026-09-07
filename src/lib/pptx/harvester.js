@@ -290,28 +290,37 @@
    * to a full-bleed slide background without anything to see — and thirty of
    * them at slide resolution would be most of the file.
    */
-  function rasterizeGradient(parsed, rect, radius) {
+  function rasterizeGradient(parsed, rect, radius, visible) {
     try {
+      // `visible` is what an ancestor's overflow leaves of the element. The
+      // gradient's geometry and its rounded corners still belong to the *full*
+      // box, so the whole thing is painted and the canvas simply covers the
+      // visible window of it — a picture cannot be clipped once it is in the
+      // deck, and this one is ours to draw at whatever size we like.
+      var box = visible || rect;
       var scale = Math.min(1, GRADIENT_MAX_PX / Math.max(rect.width, rect.height, 1));
       var canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(rect.width * scale));
-      canvas.height = Math.max(1, Math.round(rect.height * scale));
+      canvas.width = Math.max(1, Math.round(box.width * scale));
+      canvas.height = Math.max(1, Math.round(box.height * scale));
       var ctx = canvas.getContext("2d");
-      if (radius) clipRoundRect(ctx, canvas.width, canvas.height, radius * scale);
+      ctx.translate(-(box.left - rect.left) * scale, -(box.top - rect.top) * scale);
+      var width = rect.width * scale;
+      var height = rect.height * scale;
+      if (radius) clipRoundRect(ctx, width, height, radius * scale);
       // CSS measures from "up", clockwise; the unit vector in a y-down space.
       var radians = (parsed.angle * Math.PI) / 180;
       var ux = Math.sin(radians);
       var uy = -Math.cos(radians);
-      var length = Math.abs(canvas.width * ux) + Math.abs(canvas.height * uy);
+      var length = Math.abs(width * ux) + Math.abs(height * uy);
       var gradient = ctx.createLinearGradient(
-        canvas.width / 2 - (ux * length) / 2, canvas.height / 2 - (uy * length) / 2,
-        canvas.width / 2 + (ux * length) / 2, canvas.height / 2 + (uy * length) / 2,
+        width / 2 - (ux * length) / 2, height / 2 - (uy * length) / 2,
+        width / 2 + (ux * length) / 2, height / 2 + (uy * length) / 2,
       );
       for (var i = 0; i < parsed.stops.length; i++) {
         gradient.addColorStop(parsed.stops[i].at, parsed.stops[i].color);
       }
       ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, width, height);
       return canvas.toDataURL("image/png");
     } catch (e) {
       return null;
@@ -383,6 +392,19 @@
       if (gradient) return gradient;
     }
     return style.color;
+  }
+
+  /**
+   * One component of a computed `transform-origin`, in px.
+   *
+   * Falling back on a falsy `parseFloat` would take `0px` — which is exactly
+   * what `transform-origin: left top` computes to — for a missing value and
+   * rotate the element about its centre instead of its corner, landing it
+   * about half its own diagonal away from where the page drew it.
+   */
+  function originLength(value, size) {
+    var n = parseFloat(value);
+    return isFinite(n) ? n : size / 2;
   }
 
   function lengthPx(value, base) {
@@ -921,8 +943,8 @@
         from: from,
         to: blocks.length,
         angle: angle,
-        cx: flat.left - origin.left + (parseFloat(pivot[0]) || flat.width / 2),
-        cy: flat.top - origin.top + (parseFloat(pivot[1]) || flat.height / 2),
+        cx: flat.left - origin.left + originLength(pivot[0], flat.width),
+        cy: flat.top - origin.top + originLength(pivot[1], flat.height),
       });
       if (inline) el.style.setProperty("transform", inline, priority);
       else el.style.removeProperty("transform");
@@ -993,21 +1015,19 @@
       var paint = paints(style);
       var fill = paint.fill;
       var radius = resolveRadius(style, rect);
+      var shadow = shadowOf(style);
+      var visible = clipRect(rect, clip);
       var hasBackgroundImage = style.backgroundImage && style.backgroundImage !== "none";
+      var gradient = null;
       if (clipsBackgroundToText(style)) {
         // Painted inside the glyphs, not behind them. The colour is not lost:
         // collectRuns picks it up through paintedColor.
         fill = null;
         if (hasBackgroundImage) degraded.push("a gradient-filled heading became a solid colour");
       } else if (hasBackgroundImage) {
-        var linear = parseLinearGradient(style.backgroundImage);
-        var painted = linear ? rasterizeGradient(linear, rect, radius) : null;
-        if (painted) {
-          // Faithful, so nothing to report — but a picture, not a fill, so it
-          // is no longer a colour the author can change in PowerPoint.
-          push({ kind: "image", data: painted, opacity: opacity }, rect, clip);
-          fill = null;
-        } else {
+        var linear = visible ? parseLinearGradient(style.backgroundImage) : null;
+        gradient = linear ? rasterizeGradient(linear, rect, radius, visible) : null;
+        if (!gradient) {
           var average = averageColor(style.backgroundImage);
           if (average) {
             fill = average;
@@ -1017,7 +1037,33 @@
           }
         }
       }
-      if (fill || paint.borderWidth) {
+      if (gradient) {
+        // Three layers where a fill would have been one, because a picture
+        // sits *between* the other two: CSS paints `background-color` under
+        // the gradient (dropping it leaves a frosted panel with nothing behind
+        // it) and the border over it. The shadow travels with the picture —
+        // it is the layer that is actually filled, and a border-only rectangle
+        // casts its shadow from the outline, drawing a hairline instead of the
+        // panel's elevation. Faithful, so nothing here is reported as a
+        // degradation — but it is a picture, not a colour the author can
+        // change in PowerPoint.
+        if (fill) {
+          push({ kind: "rect", fill: fill, radiusPx: radius, opacity: opacity }, rect, clip);
+        }
+        push({ kind: "image", data: gradient, shadow: shadow, opacity: opacity }, visible, clip);
+        if (paint.borderWidth) {
+          push(
+            {
+              kind: "rect",
+              line: { color: style.borderTopColor, widthPx: paint.borderWidth },
+              radiusPx: radius,
+              opacity: opacity,
+            },
+            rect,
+            clip,
+          );
+        }
+      } else if (fill || paint.borderWidth) {
         push(
           {
             kind: "rect",
@@ -1026,7 +1072,7 @@
               ? { color: style.borderTopColor, widthPx: paint.borderWidth }
               : undefined,
             radiusPx: radius,
-            shadow: shadowOf(style),
+            shadow: shadow,
             opacity: opacity,
           },
           rect,

@@ -57,6 +57,15 @@ interface BoxPx {
    * between arrived solid.
    */
   opacity?: number;
+  /**
+   * The page's drop shadow.
+   *
+   * On the block that actually paints the element's box — which is the
+   * *picture* when the background is a rasterized gradient. Hanging it on the
+   * rect alone lost it entirely for a gradient card with no border, and drew
+   * it from the outline for one with a border.
+   */
+  shadow?: ShadowPx | null;
 }
 
 /** A drop shadow as OOXML states one: a distance and a direction, not a vector. */
@@ -77,7 +86,6 @@ export interface RectBlock extends BoxPx {
   fill?: string;
   line?: { color: string; widthPx: number };
   radiusPx?: number;
-  shadow?: ShadowPx | null;
 }
 
 /** A run of text, measured on the text itself rather than its container. */
@@ -363,6 +371,7 @@ export type Shape =
       data: string;
       rotate?: number;
       transparency?: number;
+      shadow?: PptxShadow;
     };
 
 /** A shadow in the units pptxgenjs takes: points and degrees. */
@@ -440,6 +449,7 @@ export function toShapes(deck: HarvestedDeck, slideIndex: number): Shape[] {
       shapes.push({
         kind: "image", x, y, w, h, data: block.data, rotate,
         transparency: transparencyOf(block.opacity),
+        shadow: toShadow(block.shadow, scale, block.opacity),
       });
       continue;
     }

@@ -38,6 +38,7 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           h: shape.h,
           ...(shape.rotate ? { rotate: shape.rotate } : {}),
           ...(shape.transparency ? { transparency: shape.transparency } : {}),
+          ...(shape.shadow ? { shadow: shape.shadow } : {}),
         });
         continue;
       }

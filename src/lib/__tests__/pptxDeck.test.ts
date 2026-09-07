@@ -332,6 +332,27 @@ describe("toShapes", () => {
     expect(shape.shadow).toBeUndefined();
   });
 
+  it("lets a picture carry a shadow, because a gradient panel is one", () => {
+    // A rasterized gradient background *is* the element's box, so it is the
+    // layer the page's `box-shadow` has to hang on. While the shadow lived on
+    // the rect alone, a gradient card with no border exported with none.
+    const scale = inchesPerPx(CANVAS, slideSize(CANVAS));
+    const [shape] = toShapes(
+      deckOf([{ kind: "image", x: 64, y: 100, w: 300, h: 160, data: "data:image/png;base64,AA",
+        shadow: { inset: false, offsetPx: 18, angle: 90, blurPx: 40, color: "rgba(0, 0, 0, 0.55)" } }]),
+      0,
+    );
+    if (shape.kind !== "image") throw new Error("expected an image");
+    expect(shape.shadow).toEqual({
+      type: "outer",
+      angle: 90,
+      blur: Math.round(40 * scale * 72 * 1000) / 1000,
+      offset: Math.round(18 * scale * 72 * 1000) / 1000,
+      color: "000000",
+      opacity: 0.55,
+    });
+  });
+
   it("returns nothing for a slide that is not there", () => {
     expect(toShapes(deckOf([]), 7)).toEqual([]);
   });
