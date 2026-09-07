@@ -1,0 +1,122 @@
+/* 能力 —— the collapsed session switches (设计稿 02g 屏 1c).
+   Borderless on purpose: a frame is class A's mark (what this message carries),
+   and everything in this row that is *not* framed changes the conversation
+   instead. The 7px square is the same open/closed mark the popover uses, so the
+   trigger and the menu read as one control. */
+
+.root {
+  position: relative;
+  display: inline-flex;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  background: transparent;
+  border: none;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-soft);
+  cursor: pointer;
+  /* The names after 「能力」 are the state; 屏 1e would rather this wraps than
+     see one of them clipped, so nothing here gets a max-width or an ellipsis. */
+  text-align: left;
+  transition: color var(--transition-fast);
+}
+.trigger:hover { color: var(--color-accent-text); }
+.trigger:focus-visible { outline: 1px solid var(--color-sienna); outline-offset: 2px; }
+
+.triggerWord { white-space: nowrap; }
+
+.count {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sep { color: var(--color-text-kbd); }
+
+/* Anything not in its default state says so in full words, in the row's
+   brightest tone — this is the whole reason the collapse is allowed. */
+.named { color: var(--color-text-primary); }
+
+.caret { color: var(--color-text-muted); flex-shrink: 0; }
+
+/* ── The menu ──────────────────────────────────────────────────────────────── */
+
+.popover {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  right: 0;
+  z-index: 20;
+  min-width: 268px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 6px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 140ms var(--ease-out);
+  transform-origin: bottom right;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--color-border-panel);
+}
+.headLabel {
+  font: 400 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-text-label);
+  text-transform: uppercase;
+}
+.headFill { flex: 1; }
+/* Not decoration: it is the answer to "does this follow me to the next tab". */
+.headMeta { font: 400 10px/1 var(--font-mono); color: var(--color-text-kbd); }
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.item:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.itemOff { color: var(--color-text-hint); }
+
+.itemName { white-space: nowrap; }
+.itemFill { flex: 1; }
+
+.itemModel {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 15ch;
+}
+/* The one accent in the menu: the way back. */
+.itemRestore { font: 400 10px/1 var(--font-sans); color: var(--color-accent-text); white-space: nowrap; }
+
+/* Filled = reachable this turn, hollow = stopped. Square, like every other
+   binary mark in the app (only status dots and radios are round). */
+.mark {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: var(--color-sienna);
+}
+.markOff { background: transparent; border: 1px solid var(--color-text-hint); }
+
+.rule { height: 1px; margin: 4px 0; background: var(--color-border-panel); }

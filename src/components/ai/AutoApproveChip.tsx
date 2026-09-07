@@ -16,16 +16,30 @@ import { baseName } from "../../lib/paths";
  *
  * @param owner Which surface is asking. A chip only lights up for the grant it
  *              owns, so the panel does not advertise chat's authorisation.
- * @param absent Render the dashed「自动批准 —」placeholder while no grant is
- *              live — the chip row's "absent" vocabulary (设计稿 02b 屏 1g), so
- *              the slot is always there to read. Chat asks for it; the panel's
- *              chip row (设计稿 02a) has no such slot.
+ * @param absent Render the「自动批准 —」placeholder while no grant is live —
+ *              the "absent" vocabulary (设计稿 02b 屏 1g), so the slot is always
+ *              there to read. Chat asks for it; the panel's chip row
+ *              (设计稿 02a) has no such slot.
+ * @param variant `chip` — the panel's bordered chip row (设计稿 02a).
+ *              `footer` — the assistant composer's footer word (设计稿 02g
+ *              屏 1c): mono, unframed, beside 思考. It sits inside the input
+ *              frame with the thinking dial because both answer "how does this
+ *              message get sent", while the switches outside the frame change
+ *              the conversation. 屏 1g-4 is why it is in the footer at all —
+ *              the placeholder earns its keep in the waiting state, where the
+ *              card offering 本次都批准 is right above it and pressing that card
+ *              lights this word up.
  */
-export function AutoApproveChip({ owner, absent = false }: { owner: unknown; absent?: boolean }) {
+export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
+  owner: unknown;
+  absent?: boolean;
+  variant?: "chip" | "footer";
+}) {
   const { t } = useTranslation();
   const grant = useAgentStore((s) => s.autoApprove);
   const clearAutoApprove = useAgentStore((s) => s.clearAutoApprove);
 
+  const footer = variant === "footer";
   const mine = grant && grant.key === owner ? grant : null;
   const blanket = !!mine && (mine.proposals || mine.plans);
   const appendCount = mine ? mine.appendPaths.length : 0;
@@ -35,7 +49,7 @@ export function AutoApproveChip({ owner, absent = false }: { owner: unknown; abs
     // Not a control: a grant is given on a card, never from here.
     return (
       <span
-        className={styles.absent}
+        className={footer ? styles.footerAbsent : styles.absent}
         aria-disabled
         title={t("ai.autoApprove.absentHint", { defaultValue: "没有自动批准：每次写入都会先问你。确认卡上的「本次都批准」会把它打开" })}
       >
@@ -53,8 +67,8 @@ export function AutoApproveChip({ owner, absent = false }: { owner: unknown; abs
   const parts = [
     blanket
       ? scope === "session"
-        ? t("ai.autoApprove.chipSession", { defaultValue: "本次对话自动批准中" })
-        : t("ai.autoApprove.chipRun", { defaultValue: "本次任务自动批准中" })
+        ? t("ai.autoApprove.chipSession", { defaultValue: "自动批准中 · 本次对话" })
+        : t("ai.autoApprove.chipRun", { defaultValue: "自动批准中 · 本次任务" })
       : appendCount > 0
         ? t("ai.autoApprove.chipAppend", { defaultValue: "自动追加 {{n}} 个文件", n: appendCount })
         : "",
@@ -67,7 +81,7 @@ export function AutoApproveChip({ owner, absent = false }: { owner: unknown; abs
   return (
     <button
       type="button"
-      className={styles.chip}
+      className={footer ? styles.footerChip : styles.chip}
       onClick={clearAutoApprove}
       title={
         blanket
@@ -80,9 +94,12 @@ export function AutoApproveChip({ owner, absent = false }: { owner: unknown; abs
             })
       }
     >
-      <ShieldOff size={12} className={styles.icon} />
+      {/* The footer is a line of words, not a row of chips: the shield would be
+          the only glyph among four mono labels and would read as a badge. The
+          × stays — it is the revocation, and the whole point of the marker. */}
+      {!footer && <ShieldOff size={12} className={styles.icon} />}
       <span className={styles.label}>{label}</span>
-      <X size={11} className={styles.icon} />
+      <X size={footer ? 9 : 11} className={styles.icon} />
     </button>
   );
 }

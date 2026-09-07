@@ -52,7 +52,7 @@ import { attachedKey } from "../../lib/lore/aiTask";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
-import { SubAgentChips } from "../ai/SubAgentChips";
+import { CapabilityMenu } from "../ai/CapabilityMenu";
 import { ContextBar } from "../ai/ContextBar";
 import { SnippetPicker } from "../ai/SnippetPicker";
 import { useSnippetSave } from "../ai/SnippetSaveMenu";
@@ -1332,7 +1332,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 + {t("roleplay.composer.addImage", { defaultValue: "图片" })}
               </button>
             )}
-            <SubAgentChips
+            {/* 设计稿 02g 屏 1z §4：这里今天只有六个方框，换成一个词之后左边
+                全留给这一位自己的材料。每位 agent 各传各的 disabled 集，词后面
+                点的名跟着当前这位变——比六个方框更能看出「这是这一位的设置」。
+                没有状态记忆：扮演根本不走那条路。 */}
+            <CapabilityMenu
               disabled={disabledSubs}
               onToggle={(kind) => toggleSubAgent(agent.id, kind)}
             />

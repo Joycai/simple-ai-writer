@@ -1,0 +1,36 @@
+/* A session switch that stays open on the composer row (设计稿 02g 屏 1c).
+   Today that is 计划模式 alone; everything else in its class folds into 能力.
+
+   No frame, by the row's own grammar: framed = material this message carries,
+   unframed and right of the spacer = how this conversation works. Off is the
+   plain state, so off is the hollow square — absence, not an error. */
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 2px;
+  background: transparent;
+  border: none;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-hint);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--transition-fast);
+}
+.switch:hover { color: var(--color-accent-text); }
+.switch:focus-visible { outline: 1px solid var(--color-sienna); outline-offset: 2px; }
+
+.switchOn { color: var(--color-text-soft); }
+
+.mark {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: var(--color-sienna);
+}
+.markOff { background: transparent; border: 1px solid currentColor; }
+
+.label { white-space: nowrap; }

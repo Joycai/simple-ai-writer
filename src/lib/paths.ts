@@ -338,3 +338,29 @@ export function resolveRelativePath(baseDir: string, rel: string): string {
 
   return out.join("/");
 }
+
+/**
+ * Shorten a file name from the middle, keeping the extension whole.
+ *
+ * Both ends of a file name are how an author recognises it: the beginning says
+ * what it is, the extension says what kind of thing it is. A tail-side ellipsis
+ * throws the second one away and leaves 「漕运纪·第三卷·寒露夜至春分·三条支…」,
+ * which reads the same as every other draft in the folder. So the cut is taken
+ * out of the middle (设计稿 02g 屏 1g-3).
+ *
+ * Returns the name unchanged when it already fits; callers put the full name in
+ * a title attribute either way.
+ */
+export function middleEllipsis(name: string, max = 30): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  // A leading dot is the whole name (".gitignore"), not an extension; anything
+  // longer than a handful of characters is a sentence, not a suffix.
+  const ext = dot > 0 && name.length - dot <= 8 ? name.slice(dot) : "";
+  const stem = ext ? name.slice(0, dot) : name;
+  const room = max - ext.length - 1;
+  if (room < 4) return `${name.slice(0, Math.max(1, max - 1))}…`;
+  const head = Math.ceil(room * 0.6);
+  const tail = room - head;
+  return `${stem.slice(0, head)}…${tail > 0 ? stem.slice(-tail) : ""}${ext}`;
+}
