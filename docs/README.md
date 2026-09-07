@@ -30,6 +30,7 @@ Two axes, encoded differently on purpose.
 
 | Doc | Status | Read when |
 |---|---|---|
+| [codemap.md](reference/codemap.md) | `living` | Changing **any** directory: one section per `src/components/*`, `src/lib/*` and `server/` — module split, invariants, why-not-the-other-way, and each subsystem's design-doc pointer. Moved out of `CLAUDE.md` on 2026-09-07 (it had grown to 73KB); `CLAUDE.md` keeps one line per directory plus the hard rules |
 | [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
