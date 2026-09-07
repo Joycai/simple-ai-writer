@@ -4,20 +4,21 @@
 > 起因：2026-09-07 以「改某一部分时会不会退化成 read-all」为尺子，审阅了 app 对 `.html` 的读写支持。写的一侧是对的，读的一侧在**幻灯片形状**的页面上也已经不 read-all（[`pptx-plan.md`](../pptx-plan.md) 那半 + `read_slides` 吃 `.html`）。断的地方在四处：模型走 `read_file` 进来时**没人把它引到那份目录上**、`inspect_html` 的发现没有坐标、超长单行读不全、非幻灯片页面没有结构坐标。第五处是 IPC 量级，先量后改。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约与 `inspect_html` 的由来，§5.1 就是本文片 1 补的那句话）、[`large-doc-formatting-plan.md`](large-doc-formatting-plan.md)（段落地图，与本文的地标索引同构）、[`../html-artifact-plan.md`](../html-artifact-plan.md)（HTML 交付物的由来）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（schema 成本账）、[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（指路只能指向这次运行真有的工具）
 
-## 1. 量纲：这一轮的余量是 131 / 82 token
+## 1. 量纲：这一轮的余量是 135 / 28 / 86 token
 
 工具 schema 每一轮原样重发（[runtime.ts](../../../src/lib/agent/runtime.ts) `getToolDefinitions`，最多 40 轮），`agentToolBudget.test.ts` 的棘轮量的就是它：
 
-| preset | 上限 | 实测 | 余量 |
+| preset | 上限 | 实测（2026-09-07） | 余量 |
 |---|---|---|---|
-| `AGENT_ASSIST_CAP` | 16,800 | 16,669 | **131 token** |
-| `WRITE_CAP` | 4,800 | 4,718 | **82 token** |
+| `AGENT_ASSIST_CAP` | 16,800 | 16,665 | 135 token |
+| `CONTINUE_CAP` | 2,000 | 1,972 | **28 token** |
+| `WRITE_CAP` | 4,800 | 4,714 | 86 token |
 
-`read_file`(97 tok) / `read_slides`(211) / `inspect_html`(147) / `read_document`(130) **四个都常驻在这两个 preset 里**，往任何一个的 description 加一句话要在两边各付一次。`contextForecast.test.ts` 另外钉着 32k 模型上 `agent` 档知识库仍分得到 >2000 字符、`write` 档 `free > 0`。
+`read_file`(97 tok) / `read_slides`(211) / `inspect_html`(147) / `read_document`(130) 常驻在这几个 preset 里，往任何一个的 description 加一句话要在每一档各付一次。**最紧的是 `CONTINUE_CAP` 的 28 token**——它比另外两个小一个数量级，而且最容易被漏掉：HTML 这条线上的讨论从来不提续写档，可 `CONTINUE_PRESET` 带着 `read_file` / `read_slides` / `read_document` 三个都在。本文第一版就漏了它，第一次实测才发现（§9 D5）。`contextForecast.test.ts` 另外钉着 32k 模型上 `agent` 档知识库仍分得到 >2000 字符、`write` 档 `free > 0`。
 
 > **所以本文的第一条设计原则：一切「指路」走工具的 RESULT 文本，不走 description。**
 
-结果文本只在它适用的那一轮付一次费，而且到达的时机更好——模型读到 trailer 的时候，写在几千 token 之前的那条规则早就滚出注意力了。这不是新发明：[`edit-loop-plan.md`](edit-loop-plan.md) §D2 论证过「目录搭分页的便车，不做参数」，`lineEcho` 那一套整个是运行时输出而不是 schema。**片 1 / 2 / 4 的 schema 成本因此是 0。**
+结果文本只在它适用的那一轮付一次费，而且到达的时机更好——模型读到 trailer 的时候，写在几千 token 之前的那条规则早就滚出注意力了。这不是新发明：[`edit-loop-plan.md`](edit-loop-plan.md) §D2 论证过「目录搭分页的便车，不做参数」，`lineEcho` 那一套整个是运行时输出而不是 schema。**四片的 schema 成本因此全是 0**——包括片 3，它的续读坐标塞进已有的 `start_line` 里（§6）。
 
 ## 2. 现状盘点
 
@@ -39,7 +40,7 @@
 - **I2 `numberLines` 的 gutter 一个字符都不改。** 6 位右对齐 + TAB，由 `lineEcho.test.ts` 逐字符钉死，另有三个测试文件在断言里抄了它。
 - **I3 `pageLines` 的 `notes[0]` 位置是载荷。** `readWritingFile` 和 `readDocumentFile` 都在 `notes.splice(1, 0, …)`。
 - **I4 已钉的 trailer 串继续成立**：`whole file, N lines`、`lines A-B of N shown`、`pass start_line=N to continue`（`agentReadTools.test.ts` 用正则把数字抠出来再喂回去）、`cut mid-line`。
-- **I5 一个不从列 1 开始的片段不许挂行号。** 挂了模型会把它当整行抄进 `find`。
+- **I5 行内片段的「我是第几个字符」由 notes 承载，不由 gutter 承载。** gutter 保持统一（长行的尾片没有换行符，正好占一行、编号就是它自己的行号）——今天长行的**第一页**本来就是这样一个片段，续读页跟它一致比跟它不一致好。真正要说清「这不是整行」的地方是 notes，因为那正是模型准备把它抄进 `find` 之前读到的最后一句话。
 - **I6 标错行比不标行糟。** 两份 slide 清单（运行时 `querySelectorAll` 与文本切分）对不上时，整体丢掉行区间，不猜。
 
 ## 4. 片 1：`read_file` 打开 `.html` 时给目录并指向 `read_slides`
@@ -88,29 +89,50 @@ export function formatDeckReport(
 
 这一片修的是正确性，不只是效率。触发场景不假设：内联 `<style>` 压成一行、SVG 的 `d="M…"` 长路径、作者拖进来的保存网页或导出报告（常是单行）。
 
-**`pageLines` 的新形状**
+**续读坐标塞进已有的 `start_line`，不加参数**
 
-```ts
-export function pageLines(raw: string, from: number, fromChar = 1): { … } | { error: string }
+`start_line` 在四个读工具的 schema 里本来就是 `"type": "number"`，而四个调用方都把模型给的值原样传进 `pageLines`（`registry.ts` 三处 + `tools.ts` 的 lore 读），`pageLines` 自己才 `Math.floor` 掉小数。所以一个 `57.0001` 形状的游标今天就能原封不动地到达 `pageLines`——**一处改动同时修好四个读工具，且 schema 一个 token 都不动**。
+
+```
+游标 = 行号 + 页序 / 10000        页序 ∈ [0, 9999]，固定四位小数
+页序 k 表示：从这一行的第 k * READ_MAX_CHARS 个字符（0 基）开始
 ```
 
-- `fromChar <= 1` — **整行模式**，与今天逐字节一致（`body` 仍过 `numberLines`）。
-- `fromChar > 1` — **行内续读模式**：取 `lines[from-1].slice(fromChar-1, fromChar-1+READ_MAX_CHARS)`，**不加 gutter**（I5），坐标改由 notes 承载。
-- 返回对象新增 `nextChar: number | null`。加字段是安全的：四个调用方都不做穷尽解构，也没人读 `from`/`to`/`total`。
+`57` = 第 57 行从头；`57.0001` = 第 57 行从第 4001 字符起；`57.0002` = 从第 8001 字符起。四位小数够 40 MB 的单行，双精度也稳（`Math.round((57.0002 - 57) * 10000) === 2`）。**这个字面量永远由工具产出、模型抄回，从不由模型自己拼**——和今天的 `start_line=21` 是同一份契约。
 
-**notes 的措辞**（`notes[0]` 的位置不动，I3；`cut mid-line` 保住，I4）
+**`pageLines` 的新形状**（签名不变，返回对象加两个字段）
 
-- 整行模式命中 `cutMidLine`：`line 3247 is longer than the 4000-character limit and was cut mid-line — pass start_line=3247 with start_char=4001 to read the rest of it`
-- 行内模式 `notes[0]`：`line 3247, characters 4001-8000 of 51203 — this fragment does not start at the beginning of the line, and carries no line-number gutter`
-- 后续：还有剩余 → `pass start_line=3247 with start_char=8001 to continue this line`；这一行读完而文件还有下文 → `line 3247 ends here; pass start_line=3248 to continue the file`
+```ts
+/** 精确给出下一次该传什么，或文件到底了。新字段。 */
+next: string | null;
+/** 这一页从行内某处开始、或在行内被截断。新字段。 */
+partial: boolean;
+```
 
-单行文件因此有了出路：续读坐标由字符游标给出，不再受 `to < lines.length` 那道门挡着。`whole` 的算法不变，行内模式下恒为 `false`。
+- 拆出 `line = Math.floor(from)` 与 `part = Math.round((from - line) * 10000)`，`skip = part * READ_MAX_CHARS`。
+- 起始那一行剩余 > `READ_MAX_CHARS` → 只回这一片，`next = pageCursor(line, part + 1)`；否则补完这一行后按今天的逻辑继续装整行，`next = String(to + 1)`。
+- `body` **照旧过 `numberLines`**（I2）：长行的尾片里没有换行符，所以它正好占一行 gutter、编号就是 `line`，后面接上的整行自然是 `line+1, line+2…`。**gutter 格式一个字符都不用改**，`whole` 的算法也只多一个 `part === 0` 的合取项。
+- 第一页的行为与今天**逐字节相同**（9000 字符的单行仍然回前 4000 且带 `     1\t`），所以现有的 `cut mid-line` 断言原样通过。
 
-**只有 `read_file` 拿这个参数。** `read_document` 走同一个 `pageLines`，但转换出来的 markdown 极少有 4000 字符的行，而它的 schema 也在两个 preset 里——两个都加会把 `write` 档顶到 4,818 > 4,800。`pageLines` 的新形参可选、默认 1，另外三个调用方一字不改。
+**notes**（`notes[0]` 的位置不动，I3）
 
-**schema 账**：`start_char` 的 JSON 按 `estimateToolsTokens` 的口径（`JSON.stringify` 后 4 字符/token）实测 38–69 token → assist 16,707~16,738 / 16,800，write 4,756~4,787 / 4,800。**两个棘轮都不用抬**，但余量只剩几十 token，PR 里要重新量一次并把数字写回 `agentToolBudget.test.ts` 的注释。命名合规：`agentToolConventions.test.ts` 要求分页游标叫 `start_*`。
+- `notes[0]`：`lines 57-57 of 900 shown` 后按需追加 `(line 57, characters 4001-8000 of 51203)`——`whole file, N lines` 与 `lines A-B of N shown` 两个已钉子串都保住（I4）。
+- 截断时：`cut mid-line — pass start_line=57.0001 to continue inside line 57: the digits after the dot are a position INSIDE that line, not a line number.` 再带上「这一行还剩几页、首尾游标各是什么、几页可以同一轮一起要」——40 轮的上限下，一份 500 片的压缩页面就是靠这句话读得完的。
+- 不截断而文件还有下文时，那句 `pass start_line=${to + 1} to continue — several pages can be requested in the same round, they do not wait on each other` **逐字节不变**，所以 `agentReadTools.test.ts` 里把数字抠出来再喂回去的那一例照旧。
+- 模型自己编出来的游标要报错并**给出正确的字面量**：`Error: start_line 57.0009 is past the end of line 57 (12000 characters, 3 pages). Its last page is start_line=57.0002.`
 
-**写工具不需要改**：模型现在能把超长行读全，`rewrite_lines` 重写它、`propose_edit` 在它内部定位都成立。修复留在读的一侧。
+单行文件因此有了出路：续读坐标由游标给出，不再受 `to < lines.length` 那道门挡着。
+
+**`search_text` 顺手接上**（同一片，仍是零 schema）：命中行长于 `READ_MAX_CHARS` 时，把坐标渲染成 `> L1 (character 124501 — read it with start_line=1.0031)`。「在压缩页面里找到那一段」于是从无界翻页变成一次搜 + 一次读。
+
+**写工具不需要改**：`rewrite_lines` 与 `rewrite_lore_lines` 都做 `Math.floor(Number(...))`，游标漏进写工具只会退化成整行，不会写坏东西。修复留在读的一侧。
+
+**唯一的不确定**是小模型会不会把 `57.0001` 抄成 `57`——代价是白费一轮（拿到同一页和同一条纠正提示），不是数据损坏。落地前用仓里已有的 `scripts/prompt-ab.ts` 台架在本地 12B 上过一遍；也顺手在 registry 里把 `args.start_line` 改成 `Number(args.start_line)`，模型把它字符串化也还能用（三行，零成本）。
+
+**同片顺带的两个防护**（都在读/回执一侧，不动协议）
+
+- `echoRegion` 只按 40 **行**封顶，没有字符上限。真让模型重写了一行 132 KB，批准回执会把它整行回显。给单行加一个约 500 字符的截断标记即可，`numberLines` 的格式不受影响。
+- `read_file` 在截断时追加一句（仅当本次运行有 `propose_edit`，I1）：改这么长的一行请把有辨识度的片段抄进 `find`，`rewrite_lines` 会替换掉整整 13 万字符。
 
 ## 7. 片 4：非幻灯片 HTML 的结构地标索引
 
@@ -132,7 +154,7 @@ This page has no slide sections. Its landmarks and the lines they occupy — rew
 
 选行：全部 `<h1>`–`<h6>`（文本用 `slideTitle` 取），带 `id` 的块级元素，以及 `header / nav / main / footer / aside / figure / table`。超过 60 行时**先保住全部标题**，剩余额度给 id 地标——不能像 `paragraphIndex` 那样等距抽样，标题的价值不均匀。标题和 id 都没有 → 返回 `""`，落回 `paragraphIndex`。
 
-**顺带修一个真 bug**：`readHtmlSlideRange` 里超大单页的那句 `read the rest with read_file (start_line=${slide.startLine})` 给的是这张 slide 的**起始**行，模型照做会从头重读。改成截断点之后的坐标，与片 3 的 `start_char` 口径一致——**因此片 4 排在片 3 之后**。
+**顺带修一个真 bug**：`readHtmlSlideRange` 里超大单页的那句 `read the rest with read_file (start_line=${slide.startLine})` 给的是这张 slide 的**起始**行，模型照做会从头重读。改成截断点之后的坐标，与片 3 的小数游标同一套口径（`1.0031` 而不是另造一种说法）——**因此片 4 排在片 3 之后**。
 
 ## 8. 片 5：先只做测量
 
@@ -153,7 +175,7 @@ This page has no slide sections. Its landmarks and the lines they occupy — rew
 
 ### D1 指路走结果文本，不走 description
 
-余量 131 / 82 token，而一句像样的英文指引就是 50 token 起，四个相关工具都常驻在两个 preset 里。结果文本免费，而且到达时机更好。同 [`edit-loop-plan.md`](edit-loop-plan.md) §D2。
+余量 135 / 28 / 86 token，而一句像样的英文指引就是 50 token 起，四个相关工具在三档里都常驻。结果文本免费，而且到达时机更好。同 [`edit-loop-plan.md`](edit-loop-plan.md) §D2。
 
 ### D2 `htmlIndex` 不做参数
 
@@ -167,13 +189,17 @@ This page has no slide sections. Its landmarks and the lines they occupy — rew
 
 扫描器（`scanTags`）、元素闭合（`elementEnd`）、行号映射（`lineMapFor`）、短标签（`slideTitle`）四个都要复用。新开模块就得把它们导出，等于把一个私有扫描器变成公共 API，还多一条 import 边；而 `htmlSlides.ts` 的职责本来就是「按结构读一份 `.html`」，按页只是其中一种结构。
 
-### D5 只有 `read_file` 拿 `start_char`
+### D5 续读坐标塞进 `start_line`，不加 `start_char` 参数（弃案有账）
 
-`read_document` 也走 `pageLines`，但它的输入是转换出来的 markdown——4000 字符的单行不是它的形状。两个都加会把 `write` 档顶破棘轮，而破棘轮换来的是一条几乎走不到的岔路。
+本文第一版写的是「加 `start_char`，实测 38–69 token，两个棘轮都装得下」。**那个账漏了一档**：`CONTINUE_PRESET`（续写）也带 `read_file`/`read_slides`/`read_document`，而它的余量实测只有 **28 token**——最便宜的可用参数 JSON 是 +29，一句像样的说明就 +47。抬 `CONTINUE_CAP` 是可以的，但换来的是**续写每一轮都在为一个它永远用不到的参数付费**：4000 字符的单行不是小说正文的形状。
 
-### D6 行内片段不挂行号
+小数游标零成本，而且还多两个好处：一处改动同时修好四个读工具，不拆 `pageLines` 自己注释里那条「这是**唯一**一份分页实现，预算、首行溢出规则、trailer 措辞都不许在工具之间分叉」；协议本身也不需要模型理解，它只需要抄回工具给它的字面量。
 
-挂了就是骗人：模型会把一个从第 4001 字符开始的片段当整行抄进 `find`，而那个 `find` 永远匹配不上。宁可让它看起来不一样，并在 notes 里说清楚（I5）。
+代价是坐标看起来怪，且模型可能把 `57.0001` 抄成 `57`——那是白费一轮，不是数据损坏，而且纠正提示当场就在。落地前用 `scripts/prompt-ab.ts` 在本地 12B 上验一遍；真验不过就退回加参数 + 抬棘轮。
+
+### D6 弃案：负数或纯字符偏移的游标
+
+`start_line=-124501` 当全文字符偏移也能编码，还是整数、没有浮点问题。弃掉是因为**行号从坐标里消失了**——那是 `search_text` 的 `L34`、`rewrite_lines` 的 `start_line` 和这一侧唯一共用的语汇；而且掉一个负号静默地就是「第 1 行」，和掉一个小数点一样错，但数字本身连个提示都不剩。
 
 ### D7 片 5 先量后改
 
@@ -185,11 +211,11 @@ This page has no slide sections. Its landmarks and the lines they occupy — rew
 |---|---|---|
 | A | `read_file` 的 `.html` 目录 + 指路（§4） | — |
 | B | `inspect_html` 发现带行区间（§5） | — |
-| C | 超长单行可续读（§6） | — |
+| C | 超长单行可续读 + `search_text` 的行内坐标（§6） | — |
 | D | 地标索引 + 截断坐标修正（§7） | A（分派点）、C（坐标口径） |
 | E | 测量（§8） | — |
 
-A 与 B 互不依赖，可并行。每片一个 PR，合完停下来等作者实机验；PR body 写明合并顺序。
+A 与 B 互不依赖，可并行。每片一个 PR，合完停下来等作者实机验；PR body 写明合并顺序。**四片都不动 schema**，所以 `agentToolBudget.test.ts` 与 `contextForecast.test.ts` 全程应当纹丝不动——它们红了就说明有东西漏进 description 了。
 
 ## 11. 验证
 
