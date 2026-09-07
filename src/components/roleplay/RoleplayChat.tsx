@@ -1118,6 +1118,26 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
       {/* ── 输入区 ── */}
       <div className={styles.composer}>
+        {/* 记忆条和附件行都在输入框**外面**，和对话助手同一个次序
+            （ContextBar → 身份/语法条 → 材料行 → 输入框）。它们原来长在框里，
+            于是「这一场怎么工作」的开关和「这条消息怎么被送出去」挤在同一个
+            框内——正是设计稿 02g 屏 1c 要分开的两件事。 */}
+        <div className={styles.ctxBand}>
+        <ContextBar
+          context={context}
+          /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
+             schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
+             没装配（见 12-context-trace-plan §4）。 */
+          preflight={session?.history ? null : preflightBar}
+          /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
+             归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
+          onCompact={context.canFold && !isRunning && !compacting && queuePos < 0
+            ? () => void compactNow(agent.id)
+            : undefined}
+          compacting={compacting}
+        />
+        </div>
+
         <div className={styles.composerHead}>
           {agent.kind === "narrator" ? (
             <span className={styles.personaHint}>
@@ -1190,6 +1210,90 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           </div>
         )}
 
+        {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
+            原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
+        <div className={styles.attachRow}>
+          {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
+              读成两套互不相干的机制。 */}
+          {quote ? (
+            <button
+              type="button"
+              className={styles.attachChip}
+              onClick={() => setDetached(true)}
+              title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
+            >
+              {t("roleplay.composer.selectionChip", {
+                n: quote.length, defaultValue: `选区 ${quote.length} 字`,
+              })}
+              <X size={10} strokeWidth={2} />
+            </button>
+          ) : selection ? (
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => setDetached(false)}
+            >
+              + {t("roleplay.composer.selectionChip", {
+                n: selection.length, defaultValue: `选区 ${selection.length} 字`,
+              })}
+            </button>
+          ) : null}
+          {refs.map((r) => {
+            const key = attachedKey(r);
+            const label = r.kind === "lore" ? r.entity.name : r.file.name;
+            // 悄悄发一张缩过的图，作者事后无从解释模型为什么看不清截图里的
+            // 小字——chip 是他们唯一会看的地方。
+            const remove = t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" });
+            const shrunk = r.kind === "image" && r.downscaled
+              ? t("roleplay.composer.imageDownscaled", {
+                  defaultValue: "已缩小以适应发送上限（{{detail}}）",
+                  detail: downscaleNote(r.downscaled),
+                })
+              : null;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={styles.attachChip}
+                onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
+                title={shrunk ? `${shrunk} · ${remove}` : remove}
+              >
+                {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
+                {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                @{label}
+                <X size={10} strokeWidth={2} />
+              </button>
+            );
+          })}
+          {/* `@` 才是机制本身，这个按钮只是替作者敲它——它存在是为了让作者
+              发现 `@` 能用，而不是为了取代它。一个而不是三个（设计稿 02g
+              屏 1c）：拆成三个换来的只是选择器本来就有的分组。 */}
+          <button
+            type="button"
+            className={styles.attachGhost}
+            onClick={() => openMentionFor(null)}
+            disabled={candidates.length === 0}
+          >
+            + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
+          </button>
+
+          {/* 设计稿 02g 屏 1c 的行文法，这里同样成立：间隔左边是**这条消息带
+              着什么**（有框、带 ×），右边是**这一场怎么工作**（无框）。 */}
+          <span className={styles.attachSpacer} />
+          {/* 屏 1z §4：这里原来是六个方框，换成一个词之后左边全留给这一位
+              自己的材料。每位 agent 各传各的 disabled 集，词后面点的名跟着
+              当前这位变——比六个方框更能看出「这是这一位的设置」。没有状态
+              记忆：扮演根本不走那条路。 */}
+          <span className={styles.attachSession}>
+            <CapabilityMenu
+              disabled={disabledSubs}
+              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+            />
+          </span>
+        </div>
+
+        {refError && <div className={styles.refError}>{refError}</div>}
+
         <div className={styles.inputBox}>
           <div className={styles.inputStack}>
             {!composing && <ComposerMirror text={draft} innerRef={mirrorRef} />}
@@ -1231,104 +1335,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               onDismiss={() => { mention.close(); setPickKind(null); }}
             />
           )}
-
-          <ContextBar
-            context={context}
-            /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
-               schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
-               没装配（见 12-context-trace-plan §4）。 */
-            preflight={session?.history ? null : preflightBar}
-            /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
-               归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
-            onCompact={context.canFold && !isRunning && !compacting && queuePos < 0
-              ? () => void compactNow(agent.id)
-              : undefined}
-            compacting={compacting}
-          />
-
-          {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
-              原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
-          <div className={styles.attachRow}>
-            {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
-                读成两套互不相干的机制。 */}
-            {quote ? (
-              <button
-                type="button"
-                className={styles.attachChip}
-                onClick={() => setDetached(true)}
-                title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
-              >
-                {t("roleplay.composer.selectionChip", {
-                  n: quote.length, defaultValue: `选区 ${quote.length} 字`,
-                })}
-                <X size={10} strokeWidth={2} />
-              </button>
-            ) : selection ? (
-              <button
-                type="button"
-                className={styles.attachGhost}
-                onClick={() => setDetached(false)}
-              >
-                + {t("roleplay.composer.selectionChip", {
-                  n: selection.length, defaultValue: `选区 ${selection.length} 字`,
-                })}
-              </button>
-            ) : null}
-            {refs.map((r) => {
-              const key = attachedKey(r);
-              const label = r.kind === "lore" ? r.entity.name : r.file.name;
-              // 悄悄发一张缩过的图，作者事后无从解释模型为什么看不清截图里的
-              // 小字——chip 是他们唯一会看的地方。
-              const remove = t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" });
-              const shrunk = r.kind === "image" && r.downscaled
-                ? t("roleplay.composer.imageDownscaled", {
-                    defaultValue: "已缩小以适应发送上限（{{detail}}）",
-                    detail: downscaleNote(r.downscaled),
-                  })
-                : null;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className={styles.attachChip}
-                  onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                  title={shrunk ? `${shrunk} · ${remove}` : remove}
-                >
-                  {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
-                  {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
-                  @{label}
-                  <X size={10} strokeWidth={2} />
-                </button>
-              );
-            })}
-            {/* `@` 才是机制本身，这个按钮只是替作者敲它——它存在是为了让作者
-                发现 `@` 能用，而不是为了取代它。一个而不是三个（设计稿 02g
-                屏 1c）：拆成三个换来的只是选择器本来就有的分组。 */}
-            <button
-              type="button"
-              className={styles.attachGhost}
-              onClick={() => openMentionFor(null)}
-              disabled={candidates.length === 0}
-            >
-              + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
-            </button>
-
-            {/* 设计稿 02g 屏 1c 的行文法，这里同样成立：间隔左边是**这条消息带
-                着什么**（有框、带 ×），右边是**这一场怎么工作**（无框）。 */}
-            <span className={styles.attachSpacer} />
-            {/* 屏 1z §4：这里原来是六个方框，换成一个词之后左边全留给这一位
-                自己的材料。每位 agent 各传各的 disabled 集，词后面点的名跟着
-                当前这位变——比六个方框更能看出「这是这一位的设置」。没有状态
-                记忆：扮演根本不走那条路。 */}
-            <span className={styles.attachSession}>
-              <CapabilityMenu
-                disabled={disabledSubs}
-                onToggle={(kind) => toggleSubAgent(agent.id, kind)}
-              />
-            </span>
-          </div>
-
-          {refError && <div className={styles.refError}>{refError}</div>}
 
           <div className={styles.inputFoot}>
             {/* 插入而不是发送：片段是个开头，作者补完再发。 */}

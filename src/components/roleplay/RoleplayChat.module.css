@@ -1064,13 +1064,18 @@
 
 /* 附件行：这条消息**带着什么**（芯片）+ 这一场**怎么工作**（子代理开关）。
    在输入框下方、脚注上方——它属于「这一条消息」，不属于整个面板。 */
+/* 输入框**外面**（设计稿 02g 屏 1c）：框外是「这一场怎么工作」，框内是
+   「这条消息怎么被送出去」。这一行原来长在框里，和 textarea、页脚同框。 */
 .attachRow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin-bottom: 9px;
 }
+
+/* 记忆条也出了框，落在输入区最上面——与对话助手同位置。 */
+.ctxBand { padding-bottom: 10px; }
 
 .attachSpacer { flex: 1; min-width: 0; }
 
@@ -1115,7 +1120,7 @@
 .attachGhost:disabled { opacity: 0.4; cursor: default; }
 
 .refError {
-  margin-top: 8px;
+  margin: -2px 0 8px;
   font-family: var(--font-sans);
   font-size: 11px;
   line-height: 1.5;
