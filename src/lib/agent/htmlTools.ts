@@ -70,9 +70,15 @@ export async function inspectHtmlTool(
     // reported because they answer different questions — "how did it divide"
     // and "did anything fall off". They agree by construction: harvester.js
     // and htmlSlides.ts share the selector list, held by a test.
-    const { tier } = splitHtmlDeck(html);
+    //
+    // That agreement is also what lets each finding carry a line range: the
+    // splitter already knows where every slide sits in the source, so
+    // "slide 3 spills off the right edge" can arrive as "slide 3, lines
+    // 88-142" and be acted on without a round of read_slides to find it.
+    // `formatDeckReport` drops the ranges itself if the two counts disagree.
+    const { tier, slides } = splitHtmlDeck(html);
     const deck = await harvestDeck(html, dirName(path) || null);
-    return { toolCallId, content: formatDeckReport(inspectDeck(deck), path, tier) };
+    return { toolCallId, content: formatDeckReport(inspectDeck(deck), path, tier, slides) };
   } catch (e) {
     // A page that cannot be laid out is a finding, not a tool failure — say so
     // in words the model can act on rather than as an internal error.
