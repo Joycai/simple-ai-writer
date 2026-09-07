@@ -15,6 +15,7 @@ import {
   WHOLE_PAGE_TIER,
   readHtmlSlideRange,
   slideTitle,
+  htmlPageIndex,
   landmarkIndex,
   splitHtmlDeck,
   splitHtmlSlides,
@@ -338,6 +339,87 @@ describe("landmarkIndex", () => {
 
   it("says nothing about a page with no structure to report", () => {
     expect(landmarkIndex(page(`<div>${"长文".repeat(200)}</div>`))).toBe("");
+  });
+
+  // `</img>` does not exist, so depth-counting for it ran to the end of the
+  // file: an <img id="logo"> on line 5 of a 12-line page reported (lines 5-12),
+  // and "change the logo" became rewrite_lines over everything below it. The
+  // label was corrupted by the same runaway range — it read text out of the
+  // rest of the document — so the row looked plausible rather than broken.
+  it("ends a void element at its own tag, not at the end of the file", () => {
+    const html = page(
+      `<main>\n  <img id="logo" src="a.png">\n  <h1>标题</h1>\n  <input id="email" type="email">\n` +
+        `  <div id="tail"><p>结尾</p></div>\n</main>`,
+    );
+
+    const index = landmarkIndex(html);
+    const total = html.split("\n").length;
+    // Each row is one line ending in its range, so anchoring to end-of-line is
+    // what reads the range rather than the label's own parentheses.
+    const ranges = [...index.matchAll(/<(?:img|input) id="[^"]*">.*\(lines (\d+)-(\d+)\)$/gm)];
+
+    expect(ranges).toHaveLength(2);
+    for (const [, from, to] of ranges) {
+      // A void element occupies exactly the line it is written on.
+      expect(Number(to)).toBe(Number(from));
+      expect(Number(to)).toBeLessThan(total);
+    }
+    // The label is the element's own, not scavenged from the rest of the page.
+    expect(index).not.toContain('<img id="logo"> 标题');
+    expect(index).toContain('<img id="logo"> (no text)');
+    // The real container beside them is unaffected.
+    expect(index).toMatch(/<div id="tail">.*\(lines \d+-\d+\)$/m);
+  });
+});
+
+// The same fallback, reached from the other side: `[data-slide]` and `.slide`
+// match ANY tag, so a hand-written deck that marks a full-bleed picture as a
+// slide hit it too — and there "slide 2 runs to the end of the file" is what
+// the exporter and every quoted edit would have believed.
+describe("void elements in the slide split", () => {
+  it("does not let an <img data-slide> swallow the rest of the deck", () => {
+    const html = page(
+      `<div data-slide="1">第一页</div>\n<img data-slide="2" src="full.png">\n<div data-slide="3">第三页</div>`,
+    );
+
+    const slides = splitHtmlSlides(html);
+
+    expect(slides).toHaveLength(3);
+    expect(slides[1].html).toBe('<img data-slide="2" src="full.png">');
+    expect(slides[2].html).toBe('<div data-slide="3">第三页</div>');
+    expect(slides[1].startLine).toBe(slides[1].endLine);
+  });
+});
+
+// read_file's one call for both questions: which kind of page is this, and
+// what does its map look like. Two calls scanned the whole file twice on every
+// page of every non-deck read.
+describe("htmlPageIndex", () => {
+  it("returns the deck index for a deck", () => {
+    const html = page(
+      Array.from({ length: 4 }, (_, i) => `<section><h1>第 ${i + 1} 页</h1></section>`).join("\n"),
+    );
+
+    const { isDeck, index } = htmlPageIndex(html);
+
+    expect(isDeck).toBe(true);
+    expect(index).toContain("This deck has 4 slide(s)");
+  });
+
+  // One slide the size of the whole page is not a deck: "this deck has 1
+  // slide" maps nothing, so that page takes the landmark route instead.
+  it("treats a single-section page as a page, not a one-slide deck", () => {
+    const { isDeck, index } = htmlPageIndex(page("<section><h1>一</h1><h2>二</h2></section>"));
+
+    expect(isDeck).toBe(false);
+    expect(index).toContain("This page has no slide sections");
+  });
+
+  it("reports no map at all when there is no structure", () => {
+    const { isDeck, index } = htmlPageIndex(page(`<div>${"长文".repeat(200)}</div>`));
+
+    expect(isDeck).toBe(false);
+    expect(index).toBe("");
   });
 
   // Headings survive the cap first: paragraphs are interchangeable and
