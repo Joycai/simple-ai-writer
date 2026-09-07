@@ -944,6 +944,20 @@ function parseArgs<T>(raw: string): T {
 }
 
 /**
+ * A paging cursor as `pageLines` wants it — a number, whatever the model sent.
+ *
+ * The cursor carries a fractional part now (`57.0001` continues inside line
+ * 57; see `pageLines`), and a model that stringifies its arguments would
+ * otherwise hand over `"57.0001"` and silently get line 1. Coercing here
+ * rather than widening the schema keeps the per-round cost at zero.
+ */
+function cursorArg(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
  * Stands in for the active profile's category ids inside a tool *description*,
  * substituted by `getToolDefinitions`. Same reason the enums are patched there:
  * this registry is a module-level constant, so anything baked in freezes to
@@ -1025,7 +1039,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const entity = args.entity ?? args.name;
       if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
       return readLoreEntity(
-        call.id, entity, ctx.loreIndex, galleryViewer(ctx), args.file, args.start_line,
+        call.id, entity, ctx.loreIndex, galleryViewer(ctx), args.file, cursorArg(args.start_line),
         ctx.allowedTools?.includes("rewrite_lore_lines") ?? false,
       );
     },
@@ -1148,7 +1162,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-      return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line, ctx.allowedTools);
+      return readWritingFile(call.id, args.path, ctx.projectPath, cursorArg(args.start_line), ctx.allowedTools);
     },
   },
 
@@ -1211,7 +1225,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-      return readDocumentFile(call.id, args.path, ctx.projectPath, args.start_line);
+      return readDocumentFile(call.id, args.path, ctx.projectPath, cursorArg(args.start_line));
     },
   },
 

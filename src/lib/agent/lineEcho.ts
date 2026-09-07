@@ -44,6 +44,30 @@ export const ECHO_MAX_LINES = 40;
 const EDGE_LINES = 3;
 
 /**
+ * Longest single line echoed in full.
+ *
+ * `ECHO_MAX_LINES` caps how many lines come back, which is the whole budget
+ * for prose — where a line is a sentence. It is no budget at all for the files
+ * that arrive as one enormous line (a minified page, a saved web page, an SVG
+ * path), and a receipt for a one-line rewrite there would echo 130,000
+ * characters: the round this exists to save, spent several times over.
+ */
+const ECHO_MAX_LINE_CHARS = 500;
+
+/**
+ * One echoed line, cut if it is a budget on its own.
+ *
+ * Marked rather than silently shortened, and marked in a way that is visibly
+ * not quotable — an echo is text the model may copy back into an edit, so a
+ * truncation it cannot see is the one failure worth spending characters to
+ * avoid. The marker carries no newline, so the numbering is unaffected.
+ */
+function clampEchoLine(line: string): string {
+  if (line.length <= ECHO_MAX_LINE_CHARS) return line;
+  return `${line.slice(0, ECHO_MAX_LINE_CHARS)} [… ${line.length - ECHO_MAX_LINE_CHARS} more character(s) on this line, not echoed ...]`;
+}
+
+/**
  * Prefix each line with its 1-based number, starting at `from`.
  *
  * Uniform rather than conditional on purpose: "read_file output has line
@@ -78,7 +102,7 @@ export function echoRegion(content: string, from: number, to: number): string {
   const top = Math.max(1, from - CONTEXT_LINES);
   const bottom = Math.min(lines.length, to + CONTEXT_LINES);
   const slice = (a: number, b: number) =>
-    numberLines(lines.slice(a - 1, b).join("\n"), a);
+    numberLines(lines.slice(a - 1, b).map(clampEchoLine).join("\n"), a);
 
   if (to - from + 1 <= ECHO_MAX_LINES) return slice(top, bottom);
 

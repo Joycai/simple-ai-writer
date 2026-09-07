@@ -285,6 +285,126 @@ describe("read_file", () => {
     expect(out.split("\n\n[...")[0]).toHaveLength(4000 + "     1\t".length);
   });
 
+  // Before the cursor, "cut mid-line" was the end of the road: no coordinate
+  // to continue from, and the whole-line continuation note was gated on there
+  // being a further LINE. So a file that is one long line — a minified page, a
+  // saved web page, an exported report — could not be read past its first 4000
+  // characters, and a model that then rewrote that line dropped the rest
+  // without anything erroring (html-read-edit-plan.md §6).
+  describe("paging inside one long line", () => {
+    /** Strip the gutter back off, so a round-trip can be compared to the file. */
+    const unnumber = (out: string) =>
+      out
+        .split("\n\n[...")[0]
+        .split("\n")
+        .map((l) => l.replace(/^ *\d+\t/, ""))
+        .join("\n");
+
+    it("reads a one-line file to its end, following the cursor", async () => {
+      const body = Array.from({ length: 30_000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
+      fs.set(`${PROJECT}/落地页.html`, body);
+
+      let cursor: number | undefined;
+      let got = "";
+      let calls = 0;
+      for (;;) {
+        const out = await read({ path: `${PROJECT}/落地页.html`, start_line: cursor });
+        calls++;
+        got += unnumber(out);
+        const next = out.match(/pass start_line=([\d.]+)/);
+        if (!next) break;
+        cursor = Number(next[1]);
+        expect(calls).toBeLessThan(20); // a cursor that does not advance would spin
+      }
+
+      expect(got).toBe(body);
+      expect(calls).toBe(Math.ceil(30_000 / 4000));
+    });
+
+    it("names the cursor to continue inside the line, and how many pages are left", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(9000));
+
+      const out = await read({ path: `${PROJECT}/落地页.html` });
+
+      expect(out).toContain("cut mid-line");
+      expect(out).toContain("pass start_line=1.0001");
+      expect(out).toContain("not a line number");
+      // 9000 chars is three pages; two of them are still to come.
+      expect(out).toContain("2 more page(s) finish it (1.0001 … 1.0002)");
+    });
+
+    it("says which characters of the line a continuation page holds", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(10_000));
+
+      const out = await read({ path: `${PROJECT}/落地页.html`, start_line: 1.0001 });
+
+      expect(out).toContain("lines 1-1 of 1 shown (line 1, characters 4001-8000 of 10000)");
+      expect(out).toContain("pass start_line=1.0002");
+    });
+
+    // The tail of a long line used to be unreachable in a multi-line file too:
+    // paging advanced past it to the next whole line and never came back.
+    it("finishes a long line mid-file and then packs the lines after it", async () => {
+      const lines = ["短一", "短二", "长".repeat(10_000), "短四", "短五"];
+      fs.set(`${PROJECT}/mixed.md`, lines.join("\n"));
+
+      let cursor: number | undefined;
+      let got = "";
+      for (;;) {
+        const out = await read({ path: `${PROJECT}/mixed.md`, start_line: cursor });
+        got += unnumber(out);
+        const next = out.match(/pass start_line=([\d.]+)/);
+        if (!next) break;
+        // A whole-line boundary joins with a newline; a mid-line one does not.
+        if (!next[1].includes(".")) got += "\n";
+        cursor = Number(next[1]);
+      }
+
+      expect(got).toBe(lines.join("\n"));
+    });
+
+    it("answers an invented cursor with the right one", async () => {
+      fs.set(`${PROJECT}/mixed.md`, `短一\n${"长".repeat(10_000)}`);
+
+      expect(await read({ path: `${PROJECT}/mixed.md`, start_line: 1.0009 })).toContain(
+        "Line 1 fits in one page — pass start_line=1.",
+      );
+      expect(await read({ path: `${PROJECT}/mixed.md`, start_line: 2.0009 })).toContain(
+        "Its last page is start_line=2.0002.",
+      );
+    });
+
+    // A model that stringifies its arguments would otherwise silently get
+    // line 1 — the fractional part is where that stops being harmless.
+    it("accepts the cursor as a string", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(10_000));
+
+      expect(await read({ path: `${PROJECT}/落地页.html`, start_line: "1.0001" })).toContain(
+        "characters 4001-8000",
+      );
+    });
+
+    it("warns that a range rewrite would take the part not shown", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(9000));
+      const args = { path: `${PROJECT}/落地页.html` };
+
+      const withEdit = (
+        await executeRegisteredTool(
+          { id: "c1", name: "read_file", arguments: JSON.stringify(args) },
+          ["read_file", "propose_edit"],
+          ctx,
+        )
+      ).content;
+      const without = await read(args);
+
+      expect(withEdit).toContain("quote a distinctive fragment into propose_edit's 'find'");
+      // Not on a run that cannot call it, and not on an ordinary page.
+      expect(without).not.toContain("propose_edit");
+      fs.set(`${PROJECT}/短.md`, "一\n二");
+      expect(await read({ path: `${PROJECT}/短.md` })).not.toContain("longer than one page");
+    });
+  });
+
   // The counterpart of read_slides' deck index: a map of the file arrives with
   // the page that could not hold it, so "rewrite the 风险 section" does not
   // begin by paging 4000 characters at a time until that section goes by.
@@ -616,6 +736,29 @@ describe("search_text", () => {
     expect(snippet.length).toBeLessThan(220);
     expect(snippet.startsWith("…")).toBe(true);
     expect(snippet.endsWith("…")).toBe(true);
+  });
+
+  // "L1" is a complete answer for prose, where a line is a sentence. On a
+  // minified page line 1 IS the document, so it tells the model the match is
+  // somewhere in 200,000 characters and gives it no way to ask for that part.
+  // With the cursor, finding a region in such a file is one search and one
+  // read rather than unbounded paging.
+  it("hands a jump cursor when the hit sits on a line too long to read whole", async () => {
+    fs.set(`${PROJECT}/落地页.html`, `${"甲".repeat(9000)}断剑${"乙".repeat(2000)}`);
+
+    const out = await search({ query: "断剑" });
+
+    expect(out).toContain("character 9001 of 11002");
+    expect(out).toContain("read from it with start_line=1.0002");
+  });
+
+  it("leaves an ordinary hit's coordinate alone", async () => {
+    fs.set(`${PROJECT}/writing/ch1.md`, "一\n他握紧那柄断剑。");
+
+    const out = await search({ query: "断剑" });
+
+    expect(out).toContain("L2: 他握紧那柄断剑。");
+    expect(out).not.toContain("read from it with");
   });
 
   // A handful of hits means the search FOUND the place, and what happens next
@@ -1347,6 +1490,21 @@ describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）
 
     const second = await readLoreEntity("c1", "Big", index, "none", "history.md", next);
     expect(second.content).toContain(`${String(next).padStart(6)}\t第${next}行线索。`);
+  });
+
+  // One pageLines implementation, so the long-line cursor is not a read_file
+  // feature — a facet written as one enormous line pages the same way, with
+  // the same literal. This is the property that made putting the cursor in
+  // `start_line` worth it over a parameter on one tool.
+  it("超长单行的续读游标在知识库这边同样成立", async () => {
+    fs.set(BIG + "/history.md", "线".repeat(9000));
+
+    const first = await readLoreEntity("c1", "Big", index, "none", "history.md");
+    expect(first.content).toContain("cut mid-line");
+    expect(first.content).toContain("pass start_line=1.0001");
+
+    const second = await readLoreEntity("c1", "Big", index, "none", "history.md", 1.0001);
+    expect(second.content).toContain("characters 4001-8000 of 9000");
   });
 
   it("file 拼错时报出这条条目真有的文件", async () => {
