@@ -10,6 +10,13 @@ vi.mock("../../fs/fileio", () => ({
   readDir: vi.fn(async () => []),
 }));
 
+// 「幻灯片 deck」卡随 PPTX 导出的 Beta 开关出现；这里把开关做成可拨的。
+let pptxOn = true;
+vi.mock("../../pptx/flag", () => ({
+  isPptxExportEnabled: () => pptxOn,
+  setPptxExportEnabled: (on: boolean) => { pptxOn = on; },
+}));
+
 import { BUILTIN_WORKFLOWS } from "../builtins";
 import { serializeWorkflowFile, suggestWorkflowId } from "../write";
 import {
@@ -70,9 +77,33 @@ describe("parseWorkflowFile", () => {
 
 describe("mergeWorkflows", () => {
   it("零项目文件时清单里站着全部内置卡 —— 开箱即用", () => {
+    pptxOn = true;
     const merged = mergeWorkflows([]);
     expect(merged.map((c) => c.id)).toEqual(BUILTIN_WORKFLOWS.map((b) => b.id));
     expect(merged.every((c) => c.builtin && !c.disabled)).toBe(true);
+  });
+
+  it("指着 Beta 工具的内置卡随开关缺席，而不是留一张教模型调不存在工具的卡", () => {
+    // 工具在场性契约：关掉时是缺席。export_pptx 关着，「幻灯片 deck」也不在——
+    // 合并视图里没有，清单里没有，read_workflow 也找不到。
+    pptxOn = false;
+    const merged = mergeWorkflows([]);
+    expect(merged.some((c) => c.id === "pptx-deck")).toBe(false);
+    expect(workflowRoster(merged)).not.toContain("幻灯片 deck");
+    expect(findWorkflow(merged, "pptx-deck")).toBeNull();
+
+    pptxOn = true;
+    const on = mergeWorkflows([]);
+    expect(on.some((c) => c.id === "pptx-deck")).toBe(true);
+    expect(findWorkflow(on, "幻灯片 deck（可导出 PPTX）")?.body).toContain("export_pptx");
+  });
+
+  it("作者自己写的同 id 文件不受开关影响 —— 那是他们的卡", () => {
+    pptxOn = false;
+    const mine = card("pptx-deck", { name: "我的 deck 规矩" });
+    const merged = mergeWorkflows([mine]);
+    expect(merged.some((c) => c === mine)).toBe(true);
+    pptxOn = true;
   });
 
   it("同 id 的项目文件整张替换内置卡，位置不变", () => {

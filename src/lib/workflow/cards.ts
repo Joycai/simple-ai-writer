@@ -77,8 +77,14 @@ export function mergeWorkflows(projectCards: readonly WorkflowCard[]): WorkflowC
   for (const b of BUILTIN_WORKFLOWS) {
     const override = byId.get(b.id);
     if (override) {
+      // 作者写的文件永远是作者的卡，哪怕它覆盖的内置卡此刻不在——那是他们的
+      // 项目、他们的话。
       byId.delete(b.id);
       out.push(override);
+    } else if (b.available && !b.available()) {
+      // 指着某个没开的 Beta 工具的卡：缺席，不进合并视图。管理界面也不显示它——
+      // 一张"存在但灰着、说的工具你没有"的卡解释起来比它值的多。
+      continue;
     } else {
       out.push({ ...b, builtin: true, disabled: false, description: clampDesc(b.description) });
     }
