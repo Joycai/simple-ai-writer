@@ -238,7 +238,7 @@ currentColor  rgb(0,0,0)   ❌   rgb(34,197,94)     ✅
 
 第三条最容易被忽略也最决定客户愿不愿意接手：`pruneBlocks` 丢掉没有可见绘制（无填充、无边框、无文字）的盒子。不剪的话视觉上完美，打开一看图层面板三百层，等于交了个不能改的东西——那还不如直接给截图。
 
-**头号风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，同样宽度同样字号，网页里三行的段落在 PowerPoint 里可能变四行然后溢出；web font 更进不了 pptx，机器上没有就替换，一替换整版位移。三道应对：文本框按**字形**而不是容器测量（`Range.getBoundingClientRect`）、四周留 6% 余量且左右对称（居中/右对齐文字不会漂）、多行文本允许 PowerPoint 自动缩字号。剩下的靠引导——工具描述里明确要求用系统字体。
+**头号风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，同样宽度同样字号，网页里三行的段落在 PowerPoint 里可能变四行然后溢出；web font 更进不了 pptx，机器上没有就替换，一替换整版位移。三道应对：文本框按**字形**而不是容器测量（`Range.getBoundingClientRect`）、四周留 6% 余量且左右对称（居中/右对齐文字不会漂）、多行文本允许 PowerPoint 自动缩字号。剩下的靠引导——工具描述里明确要求用系统字体，`inspect_html` 的源码预检（§7）把非系统字体点名到行。
 
 **直接映射**：位置尺寸、纯色背景、边框、圆角、透明度、旋转、行高、字距、`<img>`（含 `object-fit` 裁剪与自身圆角）、字体/字号/粗细/斜体/颜色/对齐，段落内富文本（`<strong>` 变成一个 run 而不是第二个文本框），列表符号（marker 不是文本节点，单独测量后补进去并把框左扩相应宽度）。
 
@@ -246,7 +246,9 @@ currentColor  rgb(0,0,0)   ❌   rgb(34,197,94)     ✅
 
 **退化成近似**：径向/圆锥/重复/多层渐变 → 色标平均色（保留 alpha）。**线性渐变已不在此列**：它被栅格化成图片，视觉上一致，代价是不再是可改的填充色（见 6.7）。
 
-**丢掉**：CSS 滤镜、混合模式、文字阴影（盒阴影已支持）、动画。
+**丢掉**：CSS 滤镜、混合模式、文字阴影（盒阴影已支持）、动画、`<video>` / `<iframe>`。
+
+**看不见的**（采集端原理上读不到，只能在生成端拦，见 §7）：伪元素 `::before` / `::after`（没有盒子可量）、入场动画初始态 `opacity: 0`（被判为隐藏）。
 
 每次导出都把降级项列给作者，`degradedSummary` 一行一条——只说"完成"会把变成平色的渐变藏起来。
 
@@ -490,3 +492,117 @@ PowerPoint 里同样会挤——那是页面自己的选择，照抄才是保真
 **同时复核并撤回的一条**：曾怀疑 `<a:spcPts>` 与 `fit: "shrink"` 打架——autofit 缩字号但不缩磅值行距，
 所以多出来的那一行仍会溢出。**不成立**：缩字号会让文字重新排回**更少的行**，行距不变也就不再溢出，
 box 本来就是按页面的行数和行距量的。留下的只是"行距相对缩小后的字看起来偏松"这个观感差异，不是缺陷。
+
+## 7. 生成端契约（2026-09-08；切片 1 已实施，见 7.7）
+
+§6 把采集端补到了"计算属性能读到什么，就画对什么"的边界。剩下的丢失与错位，
+来源换了一边：**模型写了采集端原理上读不到、或 pptx 原理上装不下的东西**。
+业界走 HTML 中间层的产品（Claude 的 pptx skill、Manus、Genspark 等）在这一步做的都是同一件事——
+给生成端一份"导出友好的 HTML 子集"契约，让模型先不要写出转不了的东西。这一节规划我们的版本。
+
+### 7.1 为什么现在轮到生成端
+
+三类典型写法会造成作者报的那种"元素丢失"，且**三类都不是采集端能修的**：
+
+1. **伪元素 `::before` / `::after`**。DOM 遍历看不见它们，`Range` 也选不中伪元素，所以**没有盒子可量**——
+   `getComputedStyle(el, "::before")` 能给颜色和 `content`，给不了位置。AI 写的 deck 里自定义列表圆点、
+   标题下的装饰横线、编号徽章、图标字体（Font Awesome 就是伪元素 + web font）全走这条路，导出后整个消失。
+2. **入场动画的初始态**。`opacity: 0` + `animation: fadeIn …` 在页面上看得见（动画跑完了），
+   但采集端的 `isHidden` 把 `opacity === 0` 判为隐藏（harvester.js `isHidden`），整块不发。
+   采集端改成"忽略 opacity 0"又会把真正隐藏的元素画出来，两边都不对——只有生成端知道哪种意图。
+3. **web font**。进不了 .pptx，PowerPoint 替换后回流，换行数一变就溢出。§4.2 已经把它列为头号风险，
+   但应对只是"工具描述里要求用系统字体"。
+
+再加上已知只能近似的：径向/圆锥/`url()` 背景平均色，`text-shadow` / `filter` / `backdrop-filter` /
+`mix-blend-mode` 丢，SVG 内的文字变成图的一部分，`writing-mode` 竖排变横排，复合 `transform` 只剩外接矩形。
+
+### 7.2 现状：契约只活在一处，而且过期了
+
+- `export_pptx` 的 description（`registry.ts`）是**唯一**的契约。它仍写着"渐变变平均色、阴影丢"——
+  C 段之后都不成立；伪元素与 `opacity: 0` 一字未提。话和能力已经对不上（`tool-presence.md` 的头条）。
+- 这段描述每轮都计费。`agent-tool-context.md` 的表里它是最贵的描述之一（1677 tok），
+  再往里堆失败清单是往 fixed header 里堆散文。
+- 反馈回路 `inspect_html` 只报**量到的**：溢出、空页、采集端记下的 `degraded`。
+  量不到的（伪元素、被判隐藏的动画元素）永远不出现在报告里——这正是它们最危险的原因：
+  模型跑了检查、报告说干净、导出来还是缺。
+
+### D20 契约分三层，按"模型什么时候需要它"放
+
+| 层 | 放哪 | 内容 | 成本 |
+|---|---|---|---|
+| 规则 | `export_pptx` description | 五条"怎么写才对"，不列失败清单 | 每轮；目标比现在**短** |
+| 失败清单 | 静态预检 `lib/pptx/lint.ts`，挂在 `inspect_html` 报告与导出审批卡 | 违规处的选择器/行号 + 替代写法 | 干净的页零成本 |
+| 完整契约 + 骨架 | 模型**开始写 deck** 的入口（一张内置工作流卡，可被项目覆盖） | 1280×720 `<section class="slide">` 骨架、系统字体栈、`data-pptx-skip`、上面的规则全文 | 只在写 deck 时进上下文 |
+
+理由是三条已有的原则：`tool-presence.md`（话要和能力一致）、`agent-tool-context.md`（不在 fixed header 里堆散文）、
+`inspect.ts` 头注释的信条——**准确性来自模型自己能跑的廉价确定性检查器，不来自模型更聪明**。
+第三层做不做，等前两层在真机上跑过再定。
+
+### D21 预检是文本级，不是 DOM 级
+
+- 和 `splitHtmlDeck` 同一层：一次读文件、不渲染、在 proposal 时就知道（`exportPreflight.test.ts` 钉住的模式）。
+  纯函数，可测，**不碰 `harvester.js`**，CSP hash 不动。
+- 代价：不解析选择器匹配到哪些元素，所以报的是"`.card::after` 画了导不出的内容（第 41 行）"，
+  而不是"第 3 页的卡片"。对模型够用——它写的 CSS 它认得；`<style>` 块内能给行号，
+  内联 `style=""` 能给所在幻灯片的行段（splitter 已经有）。
+- 假阳性接受：注释里的、`display: none` 分支里的 `::before` 也会报，误报的代价是一行提示。
+- 不做的：不猜 `font-family` 回退链够不够安全，只报 `@font-face`、外链字体、首选字体不在系统清单。
+
+### 7.3 规则表
+
+每条对应采集端一个**已知且验证过**的缺口。级别：丢失 > 错位 > 近似，报告按级别排。
+
+| # | 触发（文本模式） | 后果 | 建议改法 | 级别 |
+|---|---|---|---|---|
+| P1 | `::before` / `::after` 规则块里 `content:` 不是 `none` | 整个伪元素消失，没有盒子可量 | 换成真元素（`<span class="dot">`、`<i>`）；列表圆点用原生 `list-style` | 丢失 |
+| P2 | 同一规则块里 `opacity: 0` 与 `animation` / `transition` 同现，或有 `@keyframes` 且某规则 `opacity: 0` | 被判为隐藏，整块不发 | 去掉入场动画或初始态改 1；动画本来就不进 pptx | 丢失 |
+| P3 | `<video>` / `<iframe>` / `<audio>` | 丢 | 截一帧成 `<img>` | 丢失 |
+| P4 | `@font-face`、`fonts.googleapis.com` / `fonts.gstatic.com`、`font-family` 首选不在系统清单 | 替换 + 回流，换行数变、溢出 | PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia 栈 | 错位 |
+| P5 | `transform:` 含 `skew` / `matrix`，或 `rotate` 与 `translate` / `scale` 并用 | 只认纯旋转（§6.6 F11）；复合的按外接矩形、角度丢 | 只用 `rotate()`，位移用 `left` / `top` | 错位 |
+| P6 | `writing-mode: vertical-*` | 盒子对、文字横排 | 横排文字 + 纯 `rotate(90deg)` | 错位 |
+| P7 | `text-shadow:` | 丢 | 去掉，改粗字或对比色 | 近似 |
+| P8 | `filter:`、`backdrop-filter:`、`mix-blend-mode:` | 丢；玻璃卡变成平的半透明块 | 半透明底色 + 1px 边框表达玻璃感（这条已保真，§6.5 F2） | 近似 |
+| P9 | `radial-gradient` / `conic-gradient` / `repeating-*` / 多层背景 / `background(-image): url(` | 平均色 | 线性渐变（已栅格化，§6.7）或 `<img>` | 近似 |
+| P10 | `<svg>` 内有 `<text>` | 随 SVG 变成图片，文字不可编辑 | 文字放 HTML，SVG 只留图形 | 近似 |
+
+排序靠数据：这张表按采集端缺口列，**哪条在作者的真实 deck 里最常见**要拿作者手头出过问题的那几份跑一遍才知道。
+切片 1 落地后第一件事是拿真 deck 校正措辞与顺序。
+
+### 7.4 接入点
+
+- **`inspect_html`**：报告末尾加一段 `Will not carry across:`，按级别一条一行，超过上限计数；
+  空则**一个字不加**（干净的 30 页 deck 仍是一句话，`formatDeckReport` 的原则）。
+- **`export_pptx`**：proposal 时跑同一份预检，结果进 `PptxProposal`，审批卡显示
+  "这份有 N 处导出会丢"再让作者点批准；工具返回值里与运行时 `degraded` **并列**——
+  `degraded` 是"量到的"，预检是"没量到但知道会丢的"，两份合起来才是完整清单。**不阻断**：作者可能就是要那份不完美的。
+- **description 改写**：五条规则 + "先跑 `inspect_html`，它会指出导不出的写法"，删掉过期的失败清单。
+  字数目标：比现在短，`agentToolBudget.test.ts` 的 cap 相应下调。
+
+### 7.5 守卫
+
+- `lint.test.ts`：每条规则一正一反例（P1 `content: none` 不报；P2 `opacity: .9` 不报；P4 系统字体栈不报）。
+- 源码守卫：description 与预检规则集一致——描述里不再出现"平均色 / 阴影丢"这类过期话，
+  描述提到的每个限制预检都认得（`tool-presence.md` 第 5 条）。
+- `pptxHarvesterCsp.test.ts` 不受影响：本节不改 `harvester.js`。
+
+### 7.6 切分
+
+- **切片 1**：`lib/pptx/lint.ts` + 测试；接入 `inspect_html`；改写 `export_pptx` description；§4.2 的"丢掉"清单同步。全在可测层。
+- **切片 2**：接入审批卡与工具返回值（动 `PptxProposal` 与卡片组件）。
+- **切片 3（可选）**：入口引导——内置工作流卡或 pack 任务携带完整契约与 1280×720 骨架。
+
+### 7.7 切片 1 的落地（2026-09-08）
+
+- **`lib/pptx/lint.ts`**：`lintDeckSource(html)` 返回 `{rule, level, line, what, fix}[]`，`formatLintFindings` 把它排成模型读的段落，空则返回 `""`。
+  实现上按 D21：`<style>` 块与内联 `style=""` 各成一段并记住在页面里的偏移，行号由偏移反算；
+  HTML 注释与 CSS 注释先用等长空白抹掉，偏移不变；规则块用"最内层 `{…}`"的正则切，`@media` 外壳自然落空。
+  P1/P2 只看规则块（要知道选择器对伪元素/动画做了什么），P4–P9 扫所有声明，P3/P4（外链字体）/P10 扫标记。
+  同一 (规则, 措辞) 只报一次、按级别再按行号排、最多列 12 条其余计数。
+- **正则里的一个坑**：`text-shadow\s*:\s*(?!none)` 会被回溯绕过——`\s*` 少吃一个空格，前瞻看到的是 `" none"`，
+  于是 `text-shadow: none` 被报了。写法必须是 `:(?!\s*none\b)`。`pptxLint.test.ts` 的反例钉住了它。
+- **`inspect_html`**：预检段落**追加**在量测报告之后，不替代它；页面渲染失败的分支也带上——那些发现本来就不需要布局。
+- **`export_pptx` 描述**：改成五条"怎么写才对"，删掉过期的失败清单（"渐变变平均色、阴影丢"）。
+  量过：原 307 tok，第一稿 324，压到 **299**。`agentToolBudget.test.ts` 的 export pack cap 不用动。
+- **守卫**：`pptxLint.test.ts` 每条规则一正一反例；最后一组是对描述的源码守卫——必须提 `::before/::after`、`opacity 0`、`SYSTEM fonts`、`inspect_html`，不得再出现 `average solid colour` / `shadows … dropped`。
+- **没动**：`harvester.js`（CSP hash 不变）、`SLIDE_SELECTORS`、审批卡（切片 2）。
+- **待校正**：规则表的顺序与措辞要拿作者真实出过问题的 deck 跑一遍预检再定（§7.3 末段）。

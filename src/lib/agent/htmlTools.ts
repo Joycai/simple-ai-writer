@@ -26,6 +26,7 @@ import { dirName, resolveWorkspacePath } from "../paths";
 import { harvestDeck } from "../pptx/harvest";
 import { formatDeckReport, inspectDeck } from "../pptx/inspect";
 import { splitHtmlDeck } from "../pptx/htmlSlides";
+import { formatLintFindings, lintDeckSource } from "../pptx/lint";
 import type { ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -65,6 +66,15 @@ export async function inspectHtmlTool(
     return { toolCallId, content: `Error reading file: ${String(e)}` };
   }
 
+  // The third question, after "how did it divide" and "did anything fall
+  // off": "what did the author write that the exporter cannot see". A
+  // `::before` bullet or an entrance animation starting at opacity 0 leaves
+  // no trace in the measured deck — the layer above reports clean and the
+  // .pptx comes back with holes — so it is found in the source, and stated
+  // beside the measured report, never instead of it (pptx-plan.md §7).
+  const lint = formatLintFindings(lintDeckSource(html));
+  const withLint = (report: string) => (lint ? `${report}\n\n${lint}` : report);
+
   try {
     // The split is text-level and the measurement is layout-level; both are
     // reported because they answer different questions — "how did it divide"
@@ -78,16 +88,18 @@ export async function inspectHtmlTool(
     // `formatDeckReport` drops the ranges itself if the two counts disagree.
     const { tier, slides } = splitHtmlDeck(html);
     const deck = await harvestDeck(html, dirName(path) || null);
-    return { toolCallId, content: formatDeckReport(inspectDeck(deck), path, tier, slides) };
+    return { toolCallId, content: withLint(formatDeckReport(inspectDeck(deck), path, tier, slides)) };
   } catch (e) {
     // A page that cannot be laid out is a finding, not a tool failure — say so
-    // in words the model can act on rather than as an internal error.
+    // in words the model can act on rather than as an internal error. The
+    // source findings still apply: they needed no layout to be found.
     return {
       toolCallId,
-      content:
+      content: withLint(
         `Could not measure ${path}: ${e instanceof Error ? e.message : String(e)}. ` +
-        "A page that never finishes rendering usually has a script that throws or a resource it waits on; " +
-        "the conversion to .pptx would fail the same way.",
+          "A page that never finishes rendering usually has a script that throws or a resource it waits on; " +
+          "the conversion to .pptx would fail the same way.",
+      ),
     };
   }
 }
