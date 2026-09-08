@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { formatLintFindings, lintDeckSource } from "../pptx/lint";
+import { formatLintFindings, groupLint, lintDeckSource } from "../pptx/lint";
 
 const page = (style: string, body = "") =>
   `<!doctype html>\n<html><head>\n<style>\n${style}\n</style>\n</head>\n<body>\n<section class="slide">\n${body}\n</section>\n</body></html>`;
@@ -64,7 +64,7 @@ describe("lintDeckSource", () => {
 
   it("P4: a font PowerPoint does not have shifts the layout; the system stack does not", () => {
     const found = lintDeckSource(page(`body { font-family: 'Inter', system-ui, sans-serif; }\nh1 { font-family: Inter; }`));
-    expect(found.map((f) => [f.rule, f.level])).toEqual([["P4", "shifted"]]);
+    expect(found.map((f) => [f.rule, f.level, f.line])).toEqual([["P4", "shifted", 4], ["P4", "shifted", 5]]);
     expect(found[0].what).toContain('"Inter"');
     expect(rules(page(`body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif }\ncode { font-family: Consolas, monospace }\n.zh { font-family: "微软雅黑" }`))).toEqual([]);
     // Loading one is the same finding, however it is loaded.
@@ -118,13 +118,33 @@ describe("lintDeckSource", () => {
     ]);
   });
 
-  it("orders lost before shifted before approximated, and says each thing once", () => {
+  it("orders lost before shifted before approximated, and keeps every line a rule hit", () => {
     const html = page(
       `h1 { text-shadow: 0 0 1px #000; font-family: Inter }
        h2 { font-family: Inter }
        li::before { content: "•" }`,
     );
-    expect(lintDeckSource(html).map((f) => f.rule)).toEqual(["P1", "P4", "P7"]);
+    expect(lintDeckSource(html).map((f) => [f.rule, f.line])).toEqual([["P1", 6], ["P4", 4], ["P4", 5], ["P7", 4]]);
+    // The model reads one entry per fact, with every line on it.
+    const text = formatLintFindings(lintDeckSource(html));
+    expect(text.split("\n")).toHaveLength(1 + 3);
+    expect(text).toContain('- SHIFTED line 4, 5: font "Inter"');
+  });
+});
+
+describe("groupLint", () => {
+  it("folds findings by rule, keeps lost first, and lists every line each rule hit", () => {
+    const html = page(
+      `h1 { text-shadow: 0 0 1px #000 }
+       li::before { content: "•" }
+       .bar::after { content: "" }
+       h2 { text-shadow: 0 0 2px #000 }`,
+    );
+    expect(groupLint(lintDeckSource(html))).toEqual([
+      { rule: "P1", level: "lost", lines: [5, 6] },
+      { rule: "P7", level: "approximated", lines: [4, 7] },
+    ]);
+    expect(groupLint([])).toEqual([]);
   });
 });
 

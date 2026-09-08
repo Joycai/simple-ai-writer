@@ -84,6 +84,28 @@ describe("export_pptx preflight", () => {
     expect(captured[0]).toMatchObject({ slides: 1, tier: WHOLE_PAGE_TIER, wholePage: true });
   });
 
+  // What the source says will not export rides on the card, so the author
+  // approving a deck whose every bullet is a ::before approves it knowing
+  // the bullets will not be there. Same read as the slide count, same time.
+  it("puts the source findings on the proposal before anything is rendered", async () => {
+    fs.set(
+      `${PROJECT}/deck.html`,
+      `<style>\nli::before { content: "•" }\n</style>\n<section class="slide"><ul><li>一</li></ul></section>`,
+    );
+
+    await exportPptxTool("c1", { html_path: `${PROJECT}/deck.html` }, ctx());
+
+    const proposal = captured[0];
+    if (proposal.kind !== "pptx") throw new Error("expected a pptx proposal");
+    expect(proposal.lint.map((f) => [f.rule, f.level, f.line])).toEqual([["P1", "lost", 2]]);
+
+    fs.set(`${PROJECT}/clean.html`, page('<section class="slide">一</section>'));
+    await exportPptxTool("c2", { html_path: `${PROJECT}/clean.html` }, ctx());
+    const clean = captured[1];
+    if (clean.kind !== "pptx") throw new Error("expected a pptx proposal");
+    expect(clean.lint).toEqual([]);
+  });
+
   it("still refuses a path that is not html, or is not there", async () => {
     const notHtml = await exportPptxTool("c1", { html_path: `${PROJECT}/a.md` }, ctx());
     expect(notHtml.content).toContain("not an .html file");

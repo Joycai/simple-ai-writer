@@ -109,6 +109,7 @@ import {
 import { messageCeilingFor } from "../lib/agent/toolCost";
 import { workflowBriefingSection } from "../lib/workflow";
 import { docxBriefingSection } from "../lib/docx/briefing";
+import { formatLintFindings } from "../lib/pptx/lint";
 import { currentFormats } from "./docFormatStore";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
@@ -922,6 +923,11 @@ async function applyProposal(
           outcome.degraded.length
             ? `These did not carry across faithfully — tell the author:\n- ${outcome.degraded.join("\n- ")}`
             : "",
+          // Two lists, two kinds of fact: the one above is what the conversion
+          // *measured* and degraded; this one is what the source said before
+          // anything was rendered — the ::before bullets the harvester never
+          // saw. Only both together are the whole account.
+          formatLintFindings(proposal.lint),
         ].filter(Boolean).join("\n"),
       };
     }

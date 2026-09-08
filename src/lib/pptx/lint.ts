@@ -295,16 +295,47 @@ export function lintDeckSource(html: string): LintFinding[] {
     };
   }, out);
 
-  // One finding per distinct (rule, what): a font declared eight times is one
-  // font. The first occurrence keeps its line.
+  // One finding per (rule, what, line): every line a rule hit is kept, because
+  // the card lists them; a font declared twice on one line is one finding.
+  // `formatLintFindings` folds the lines back together for the model.
   const seen = new Set<string>();
   const unique = out.filter((f) => {
-    const key = `${f.rule}|${f.what}`;
+    const key = `${f.rule}|${f.what}|${f.line}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
   return unique.sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || a.line - b.line);
+}
+
+/** One rule's findings folded together — what the approval card lists. */
+export interface LintGroup {
+  rule: string;
+  level: LintLevel;
+  /** Distinct lines, ascending. */
+  lines: number[];
+}
+
+/**
+ * The findings by rule, for the author rather than the model.
+ *
+ * The card has no room for a sentence per line and the author does not need
+ * one: "pseudo-element content, lines 12 and 40" is the whole fact, and the
+ * sentence for each rule lives in the locale files in both languages. Rules
+ * keep the finding order — lost first — and each carries every line it hit.
+ */
+export function groupLint(findings: readonly LintFinding[]): LintGroup[] {
+  const groups: LintGroup[] = [];
+  for (const f of findings) {
+    let group = groups.find((g) => g.rule === f.rule);
+    if (!group) {
+      group = { rule: f.rule, level: f.level, lines: [] };
+      groups.push(group);
+    }
+    if (!group.lines.includes(f.line)) group.lines.push(f.line);
+  }
+  for (const g of groups) g.lines.sort((a, b) => a - b);
+  return groups;
 }
 
 const LEVEL_WORD: Record<LintLevel, string> = {
@@ -320,13 +351,21 @@ const LEVEL_WORD: Record<LintLevel, string> = {
  */
 export function formatLintFindings(findings: readonly LintFinding[]): string {
   if (findings.length === 0) return "";
+  // A font declared on eight lines is one fact with eight places, not eight
+  // facts: fold by (rule, what) and name every line on the one entry.
+  const folded: { finding: LintFinding; lines: number[] }[] = [];
+  for (const f of findings) {
+    const entry = folded.find((e) => e.finding.rule === f.rule && e.finding.what === f.what);
+    if (entry) entry.lines.push(f.line);
+    else folded.push({ finding: f, lines: [f.line] });
+  }
   const lines = [
     "Found in the SOURCE (not measured) — these will not carry across to .pptx as written:",
   ];
-  for (const f of findings.slice(0, MAX_LISTED)) {
-    lines.push(`- ${LEVEL_WORD[f.level]} line ${f.line}: ${f.what}. Fix: ${f.fix}.`);
+  for (const { finding, lines: at } of folded.slice(0, MAX_LISTED)) {
+    lines.push(`- ${LEVEL_WORD[finding.level]} line ${at.join(", ")}: ${finding.what}. Fix: ${finding.fix}.`);
   }
-  const rest = findings.length - MAX_LISTED;
+  const rest = folded.length - MAX_LISTED;
   if (rest > 0) lines.push(`- and ${rest} more.`);
   return lines.join("\n");
 }

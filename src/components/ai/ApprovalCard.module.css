@@ -520,6 +520,37 @@
   padding: 10px 12px;
 }
 
+/* 源码里查出的、导出会丢或走样的写法。一行一条规则，行号跟在后面等宽小字。
+   「会丢」的那几行用和整页警告同一块底色——同一种性质：不拦着，但作者得知道；
+   「走样」的只是 hint 色，和降级提示同重。 */
+.pptxLint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.pptxLintHead {
+  color: var(--color-text-secondary);
+  padding-bottom: 2px;
+}
+.pptxLintRow,
+.pptxLintLost {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 2px 12px;
+}
+.pptxLintRow { color: var(--color-text-hint); }
+.pptxLintLost { background: var(--color-diff-del-bg); }
+.pptxLintLines {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-hint);
+  white-space: nowrap;
+}
+
 /* 文档内容的构成，一行几个数。和下面那张规格表刻意不同重：规格表是作者要看清
    的（等宽、成列），这一行只是「有什么」的一瞥。 */
 .docxOutline {
