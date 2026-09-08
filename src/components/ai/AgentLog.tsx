@@ -37,6 +37,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
@@ -59,6 +60,51 @@ import {
   formatToolResult,
 } from "../../lib/agent/logFormat";
 import styles from "./AgentLog.module.css";
+
+/**
+ * The estimate/measurement pair for one round, when it exists and means
+ * something (see `round-done` in lib/agent/events).
+ *
+ * `null` covers three different silences and deliberately does not distinguish
+ * them here: the round is still in flight, the log predates the event, or the
+ * runtime marked the pair incomparable. In all three the honest display is the
+ * estimate alone — a drift figure the app cannot stand behind is worse than no
+ * drift figure.
+ */
+function measuredPair(round: {
+  estInputTokens: number;
+  toolTokens: number;
+  actualInputTokens?: number;
+}): { est: number; actual: number; pct: number } | null {
+  const actual = round.actualInputTokens;
+  if (actual === undefined || actual <= 0) return null;
+  const est = round.estInputTokens + round.toolTokens;
+  if (est <= 0) return null;
+  return { est, actual, pct: Math.round(((actual - est) / est) * 100) };
+}
+
+/** `+7%` / `−3%` — signed, because the direction is the whole point. */
+function measuredDelta(round: Parameters<typeof measuredPair>[0]): string | null {
+  const pair = measuredPair(round);
+  if (!pair) return null;
+  // A real minus sign, not a hyphen: this sits in a mono run of digits.
+  return pair.pct >= 0 ? `+${pair.pct}%` : `−${Math.abs(pair.pct)}%`;
+}
+
+/** The hover's second sentence: what was estimated, what was charged. */
+function measuredSuffix(
+  t: TFunction,
+  round: Parameters<typeof measuredPair>[0],
+): string {
+  const pair = measuredPair(round);
+  if (!pair) return "";
+  return " · " + t("ai.agent.log.roundMeasured", {
+    defaultValue: "端点实计 {{actual}}（估 {{est}}，差 {{delta}}）",
+    actual: pair.actual.toLocaleString(),
+    est: pair.est.toLocaleString(),
+    delta: measuredDelta(round) ?? "",
+  });
+}
 
 /** Rounds shown before the rest fold away — the same window the chat transcript uses. */
 const ROUND_WINDOW = 5;
@@ -126,6 +172,8 @@ interface Row {
     estInputTokens: number;
     /** Tool schemas on top of that; 0 on logs persisted before 1.22. */
     toolTokens: number;
+    /** What the endpoint charged, when the two are comparable (round-done). */
+    actualInputTokens?: number;
     at: number;
   };
 }
@@ -136,6 +184,16 @@ interface Row {
  */
 function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
   const targetLog = filterTopLevel ? log.filter((e) => !e.parentStep) : log;
+  // Read ahead for the measurements: `round-done` arrives at the *end* of its
+  // round, long after the marker has been attached to the round's first row, so
+  // it cannot be folded in during the same pass. It never becomes a row of its
+  // own — it did not happen in the round, it describes it.
+  const measured = new Map<number, number>();
+  for (const event of targetLog) {
+    if (event.kind === "round-done" && !event.incomparable) {
+      measured.set(event.round, event.actualInputTokens);
+    }
+  }
   const rows: Row[] = [];
   let pending: Row["round"];
   for (const event of targetLog) {
@@ -145,10 +203,12 @@ function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
         maxRounds: event.maxRounds,
         estInputTokens: event.estInputTokens,
         toolTokens: event.toolTokens ?? 0,
+        actualInputTokens: measured.get(event.round),
         at: event.at,
       };
       continue;
     }
+    if (event.kind === "round-done") continue;
     rows.push({ event, round: pending });
     pending = undefined;
   }
@@ -409,12 +469,14 @@ function AgentLogRow({ row, showTime, runStatus }: {
   const roundChip = round ? (
     <span
       className={styles.rowRound}
-      title={t("ai.agent.log.round", {
-        round: round.round,
-        max: round.maxRounds,
-        tokens: (round.estInputTokens + round.toolTokens).toLocaleString(),
-        toolTokens: round.toolTokens.toLocaleString(),
-      })}
+      title={
+        t("ai.agent.log.round", {
+          round: round.round,
+          max: round.maxRounds,
+          tokens: (round.estInputTokens + round.toolTokens).toLocaleString(),
+          toolTokens: round.toolTokens.toLocaleString(),
+        }) + measuredSuffix(t, round)
+      }
     >
       {t("ai.agent.log.roundShort", {
         defaultValue: "{{round}}/{{max}} 轮",
@@ -895,8 +957,27 @@ function RoundBlock({
           })}
         </span>
         <span className={styles.rowName}>{gist}</span>
-        <span className={styles.rowMetaRight}>
+        <span
+          className={styles.rowMetaRight}
+          title={
+            t("ai.agent.log.round", {
+              round: group.round,
+              max: group.maxRounds,
+              tokens: (group.estInputTokens + group.toolTokens).toLocaleString(),
+              toolTokens: group.toolTokens.toLocaleString(),
+            }) + measuredSuffix(t, group)
+          }
+        >
           {formatTokenCount(group.estInputTokens + group.toolTokens)} tk
+          {/* The endpoint's own count, beside the estimate that predicted it —
+              the only place in the app where those two numbers meet. Shown as
+              the signed gap because the absolute pair is already one hover
+              away, and it is the gap that says whether the meter can be
+              trusted. Absent whenever the two would not describe the same
+              bytes (server tools, images, a relay that reports nothing). */}
+          {measuredDelta(group) !== null && (
+            <span className={styles.roundDrift}>{measuredDelta(group)}</span>
+          )}
         </span>
         <span className={styles.rowChevron}>
           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}

@@ -130,6 +130,40 @@ export type AgentEvent = AgentEventScope & (
       toolTokens?: number;
       at: number;
     }
+  | {
+      /**
+       * What the endpoint actually charged for the round `round-start` just
+       * estimated — the other half of the only pair in the app where an
+       * estimate and a measurement describe the same bytes.
+       *
+       * Emitted per **round**, not per run, because that is the only level at
+       * which the two are comparable: a run's `token_usage` row is the sum of N
+       * prompts, each longer than the last, and matches no single estimate.
+       * The four protocol families are already folded into one `Usage` shape by
+       * their own clients (`lib/ai/anthropic.ts readUsage` has the hardest
+       * case), so `actualInputTokens` means the same thing on all of them: the
+       * whole prompt the server counted, cached parts included.
+       *
+       * See docs/feature/agent/token-estimate-calibration-plan.md.
+       */
+      kind: "round-done";
+      round: number;
+      actualInputTokens: number;
+      /**
+       * Set when this round's two numbers describe different things, so no
+       * reader — the log today, the calibration sampler later — mistakes the
+       * gap for the estimator being wrong:
+       *
+       * - `server-tools` — the endpoint ran a tool for itself and billed the
+       *   results it injected. Those tokens were never in a request we composed.
+       * - `images` — the estimate prices every image at a flat 800; real
+       *   billing is per tile and can differ several-fold.
+       * - `no-usage` — the endpoint reported nothing (or zero). Common on
+       *   relays, and "absent" must never be read as "estimated high".
+       */
+      incomparable?: "server-tools" | "images" | "no-usage";
+      at: number;
+    }
   | { kind: "tool-step"; step: ToolStep; at: number }
   | {
       /**

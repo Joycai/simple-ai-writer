@@ -1417,7 +1417,8 @@
         "truncatedContinued": "output hit the cap — asked it to continue ({{n}}×)",
         "truncatedRetried": "tool call hit the cap and was discarded — asked it to write in pieces ({{n}}×)",
         "truncationContinue": "cut off {{n}}× in a row — author chose to keep trying",
-        "truncationStop": "cut off {{n}}× in a row — author chose to stop"
+        "truncationStop": "cut off {{n}}× in a row — author chose to stop",
+        "roundMeasured": "endpoint counted {{actual}} (estimated {{est}}, off by {{delta}})"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",

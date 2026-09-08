@@ -281,6 +281,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 估算和端点实计的差，贴在这一轮的 token 数后面（S1 · token-estimate-calibration-plan）。
+   一档更淡：主角是那个 token 数，这一小段是「它准不准」的注脚。不上红绿——偏高
+   偏低都不是错误，是这把尺子的偏差，而作者要读的是它稳不稳。 */
+.roundDrift {
+  margin-left: 5px;
+  color: var(--color-text-kbd);
+}
+
 /* 进度比一句结果摘要长，而它左边那半行（工具名 + 参数）此刻恰好是最不需要读全的
    一半——参数在运行期间一个字都不会变。所以让出去。 */
 .rowMetaProgress { max-width: 62%; }
