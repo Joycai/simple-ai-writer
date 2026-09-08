@@ -3269,6 +3269,7 @@
     "dragCountCopy": "+{{count}} items",
     "dropToRoot": "Move to project root",
     "assetsLabel": "Images",
+    "picturesLabel": "Pictures",
     "assetsOrphan": "No document with this name — image links may be broken",
     "relink": "Re-attach to…",
     "relinkAskText": "Re-attach \"{{name}}\" to which document? The folder is renamed and that document's image links are rewritten with it.",

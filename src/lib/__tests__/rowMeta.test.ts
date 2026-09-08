@@ -4,7 +4,9 @@ import {
   extLabel,
   isSecondary,
   orphanedAssetGroups,
+  pictureFolders,
   relinkCandidates,
+  resolveRowKind,
   rowKind,
 } from "../fs/rowMeta";
 
@@ -117,5 +119,76 @@ describe("relinkCandidates", () => {
   it("answers empty for a folder that is not in any assets/", () => {
     expect(relinkCandidates(tree, "/p/卷一/第一章 醒来.md")).toEqual([]);
     expect(relinkCandidates(tree, "/p/不存在")).toEqual([]);
+  });
+});
+
+describe("pictureFolders", () => {
+  const dir = (name: string, children: unknown[] = []) =>
+    ({ name, path: `/p/${name}`, is_dir: true, children }) as never;
+  const file = (name: string) => ({ name, path: `/p/x/${name}`, is_dir: false }) as never;
+
+  it("lets the content decide, not the name", () => {
+    // 叫 images 却装着章节 —— 错标比漏标更糟：作者会以为那里面没有正文。
+    expect(pictureFolders([dir("images", [file("第一章.md")])])).toEqual(new Set());
+    // 叫「素材」不在任何名单的直觉里，但里面全是图。
+    expect(pictureFolders([dir("素材", [file("封面.png"), file("插页.JPG")])]))
+      .toEqual(new Set(["/p/素材"]));
+  });
+
+  it("only lets the name speak when there is no file to judge by", () => {
+    expect(pictureFolders([dir("img")])).toEqual(new Set(["/p/img"]));
+    expect(pictureFolders([dir("IMAGES")])).toEqual(new Set(["/p/IMAGES"]));
+    expect(pictureFolders([dir("第三卷")])).toEqual(new Set());
+  });
+
+  it("drops the whole folder back on one stray non-image", () => {
+    // 「全是图片」而不是「大部分是图片」：后者要数数，而这个模块不数数。
+    // 宁可漏标不可错标，所以这条是断言，不是将来可以顺手放宽的默认值。
+    expect(pictureFolders([dir("截图", [file("界面.png"), file("合同.pdf")])])).toEqual(new Set());
+  });
+
+  it("reads through nesting, and marks each level that qualifies", () => {
+    const tree = [dir("插画", [
+      { name: "第一章", path: "/p/插画/第一章", is_dir: true, children: [file("图一.png")] },
+      { name: "第二章", path: "/p/插画/第二章", is_dir: true, children: [file("图二.webp")] },
+    ])];
+    expect(pictureFolders(tree)).toEqual(
+      new Set(["/p/插画", "/p/插画/第一章", "/p/插画/第二章"]),
+    );
+  });
+
+  it("never takes an assets group, however full of pictures it is", () => {
+    // 抢走它就等于抢走失配提示与「重新关联到…」—— 那两样是这一种行的全部意义。
+    const tree = [{
+      name: "assets", path: "/p/assets", is_dir: true,
+      children: [{ name: "第一章", path: "/p/assets/第一章", is_dir: true, children: [file("图.png")] }],
+    }];
+    expect(pictureFolders(tree as never)).toEqual(new Set());
+  });
+});
+
+describe("resolveRowKind", () => {
+  const pictures = new Set(["/p/截图"]);
+
+  it("joins the subtree's answer onto the name's", () => {
+    const folder = { name: "截图", path: "/p/截图", is_dir: true };
+    expect(rowKind(folder.name, true, null)).toBe("folder");
+    expect(resolveRowKind(folder, null, pictures)).toBe("pictures");
+  });
+
+  it("never overrides a kind that carries behaviour", () => {
+    // 一个 assets 组即便进了那张表也还是 assets：它背后挂着修复动作。
+    const group = { name: "截图", path: "/p/截图", is_dir: true };
+    expect(resolveRowKind(group, "assets", pictures)).toBe("assets");
+    const doc = { name: "截图", path: "/p/截图", is_dir: false };
+    expect(resolveRowKind(doc, null, pictures)).toBe("original");
+  });
+});
+
+describe("the picture folder row keeps out of the other columns", () => {
+  it("stays one grey back and leaves the right column to its own word", () => {
+    expect(isSecondary("pictures")).toBe(true);
+    // 目录名里带点的情况下，后缀标签绝不能冒出来抢掉「图片」。
+    expect(extLabel("2024.05", "pictures")).toBeNull();
   });
 });

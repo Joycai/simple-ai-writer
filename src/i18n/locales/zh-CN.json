@@ -3262,6 +3262,7 @@
     "dragCountCopy": "＋{{count}} 项",
     "dropToRoot": "移到「{{name}}」根目录",
     "assetsLabel": "插图",
+    "picturesLabel": "图片",
     "assetsOrphan": "没有同名文档，文档里的图片链接可能已断",
     "relink": "重新关联到…",
     "relinkAskText": "把「{{name}}」重新关联到哪份文档？文件夹会改名，那份文档里的图片链接一起改写。",

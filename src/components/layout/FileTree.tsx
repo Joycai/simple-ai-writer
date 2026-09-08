@@ -19,7 +19,8 @@ import {
   pruneNested, pruneSelection, rangeBetween,
 } from "../../lib/fs/selection";
 import {
-  extLabel, isSecondary, orphanedAssetGroups, relinkCandidates, rowKind, type RowKind,
+  extLabel, isSecondary, orphanedAssetGroups, pictureFolders, relinkCandidates,
+  resolveRowKind, rowKind, type RowKind,
 } from "../../lib/fs/rowMeta";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
@@ -151,6 +152,8 @@ interface TreeCtx {
   docCounts: ReadonlyMap<string, number>;
   /** `assets/<组>` folders whose document is gone — one walk, not a lookup per row. */
   orphanAssets: ReadonlySet<string>;
+  /** 作者自己的、只装图片的目录 —— 同样一次走查，判据在 `rowMeta`。 */
+  pictureDirs: ReadonlySet<string>;
   /** The delete confirmation, rendered under the last row it would remove. */
   deleteAsk: { afterPath: string; text: string } | null;
   confirmDelete: () => void;
@@ -180,7 +183,8 @@ function depthVar(depth: number): CSSProperties {
 // ── Row icon ──────────────────────────────────────────────────────────────────
 
 /**
- * 六种图标，两级灰，一个颜色都不加（设计稿 01b §2g）：这个面板只有一个强调色，而
+ * 七种行六枚图标（插图与图片目录共用一枚），两级灰，一个颜色都不加
+ * （设计稿 01b §2g）：这个面板只有一个强调色，而
  * 赭石已经被「当前打开」和「选区」占满 —— 再给文件种类分色，等于用色相说三件互不
  * 相关的事。容器与叶子的区别交给**填充**：分组实心，文档描边。
  */
@@ -194,6 +198,9 @@ function RowIcon({ kind, open, orphan }: { kind: RowKind; open: boolean; orphan:
     switch (kind) {
       case "folder": return open ? <FolderOpen size={16} strokeWidth={1.6} /> : <Folder size={16} strokeWidth={1.6} />;
       case "assets": return orphan ? <Link2 size={16} strokeWidth={1.5} /> : <Images size={16} strokeWidth={1.5} />;
+      // 与 assets 同一枚：两者说的是同一件事「这里面是图片」，区别在右列那个词上
+      // ——「插图」绑着一份文档、有修复动作，「图片」就是个目录。
+      case "pictures": return <Images size={16} strokeWidth={1.5} />;
       case "doc": return <FileText size={16} strokeWidth={1.6} />;
       case "deliverable": return <FileCode size={16} strokeWidth={1.6} />;
       case "image": return <FileImage size={16} strokeWidth={1.5} />;
@@ -394,7 +401,7 @@ const TreeNode = memo(function TreeNode({
     renamingPath, openMenu, deleteAsk, confirmDelete, cancelDelete,
     relinkAsk, confirmRelink, cancelRelink,
     transcribeAsk, confirmTranscribe, cancelTranscribe,
-    draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets,
+    draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets, pictureDirs,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
@@ -408,7 +415,7 @@ const TreeNode = memo(function TreeNode({
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && isSamePath(activeFilePath, node.path);
   const isRenaming = renamingPath === node.path;
-  const kind = rowKind(node.name, node.is_dir, parentName);
+  const kind = resolveRowKind(node, parentName, pictureDirs);
   const orphan = orphanAssets.has(node.path);
   // 一列两义：分组显示它下面任意深度的 .md 篇数，文档显示后缀标签。
   const docCount = node.is_dir ? (docCounts.get(node.path) ?? 0) : 0;
@@ -449,6 +456,7 @@ const TreeNode = memo(function TreeNode({
       );
     }
     if (kind === "assets") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.assetsLabel")}</span>;
+    if (kind === "pictures") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.picturesLabel")}</span>;
     if (node.is_dir) {
       return docCount > 0
         ? <span className={styles.rightCol} title={t("fileTree.dirCount", { count: docCount })}>{docCount}</span>
@@ -704,6 +712,9 @@ export function FileTree() {
   }, [fileTree]);
 
   const orphanAssets = useMemo(() => orphanedAssetGroups(fileTree), [fileTree]);
+
+  // 只装图片的目录，同样一次自底向上的走查（判据在 rowMeta，不散进这里）。
+  const pictureDirs = useMemo(() => pictureFolders(fileTree), [fileTree]);
 
   // A selection outlives the gesture that acted on it — a move rewrites every
   // selected path, a delete removes them — so anything no longer on disk has
@@ -1803,6 +1814,7 @@ export function FileTree() {
     cutPaths,
     docCounts,
     orphanAssets,
+    pictureDirs,
     deleteAsk: deleteAsk ? { afterPath: deleteAsk.afterPath, text: deleteAsk.text } : null,
     relinkAsk,
     transcribeAsk,
@@ -1810,7 +1822,7 @@ export function FileTree() {
   }), [
     activeFilePath, selected, creatingIn, creatingType, createError,
     renamingPath, renameError, draggingPaths, dragOverDir, springPath, cutPaths,
-    docCounts, orphanAssets, deleteAsk, relinkAsk, transcribeAsk, stableHandlers,
+    docCounts, orphanAssets, pictureDirs, deleteAsk, relinkAsk, transcribeAsk, stableHandlers,
   ]);
 
   const footer = () => {
