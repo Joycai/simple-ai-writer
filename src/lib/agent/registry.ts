@@ -20,6 +20,7 @@
 import type { ToolDefinition } from "../ai/types";
 import type { Insertion } from "./editApply";
 import type { DocxOutline } from "../docx";
+import type { LintFinding } from "../pptx/lint";
 import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
@@ -403,6 +404,13 @@ export interface PptxProposal extends ProposalBase {
   tier: string;
   /** True when no slide selector matched and the page became one slide. */
   wholePage: boolean;
+  /**
+   * What the source says will not carry across (lib/pptx/lint) — found at
+   * proposal time, like the slide count, because it needs no rendering. The
+   * card shows it so the author approves knowing what the file will lack;
+   * the apply report repeats it beside what the conversion itself degraded.
+   */
+  lint: LintFinding[];
 }
 
 /**

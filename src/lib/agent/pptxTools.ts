@@ -19,6 +19,7 @@ import { fileExists, readFile } from "../fs/fileio";
 import { resolveWorkspacePath } from "../paths";
 import { pptxPathFor } from "../pptx";
 import { WHOLE_PAGE_TIER, splitHtmlDeck } from "../pptx/htmlSlides";
+import { lintDeckSource } from "../pptx/lint";
 import type { PptxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -85,6 +86,10 @@ export async function exportPptxTool(
     slides: slides.length,
     tier,
     wholePage,
+    // Same read, same reason: what the page *says* it does is knowable now,
+    // and the author approving a deck with a ::before bullet on every slide
+    // should be approving it knowing the bullets will not be there.
+    lint: lintDeckSource(html),
     reason: args.reason,
   };
 

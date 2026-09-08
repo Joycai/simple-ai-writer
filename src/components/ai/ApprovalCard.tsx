@@ -35,6 +35,7 @@ import type {
 } from "../../lib/agent/registry";
 import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
 import type { TranscribeProposal } from "../../lib/agent/registry";
+import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
@@ -331,8 +332,14 @@ function MoveBody({ proposal }: { proposal: MoveProposal }) {
  * would ask them to review the same thing twice. What is new is that a file
  * appears — so the card says which file, from what.
  */
+/** Lines named per rule on the pptx card before the rest are counted. */
+const LINT_LINES_SHOWN = 4;
+
 function PptxBody({ proposal }: { proposal: PptxProposal }) {
   const { t } = useTranslation();
+  // 源码里查出来的、导出时会丢或走样的写法（lib/pptx/lint），按规则折叠成一行一
+  // 条。和「整页压成一张」一样：不拦着，说清楚——作者可能就是要这份不完美的。
+  const lint = groupLint(proposal.lint);
   return (
     <>
       <div className={styles.moveBlock}>
@@ -358,6 +365,24 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
             defaultValue:
               "页面里没有幻灯片分节，整页会压成一张。分页请用 <section class=\"slide\">。",
           })}
+        </div>
+      )}
+
+      {lint.length > 0 && (
+        <div className={styles.pptxLint}>
+          <div className={styles.pptxLintHead}>
+            {t("ai.approval.pptxLintHead", { n: proposal.lint.length })}
+          </div>
+          {lint.map((g) => (
+            <div key={g.rule} className={g.level === "lost" ? styles.pptxLintLost : styles.pptxLintRow}>
+              <span>{t(`ai.approval.pptxLint.${g.rule}`)}</span>
+              <span className={styles.pptxLintLines}>
+                {t("ai.approval.pptxLintLines", { lines: g.lines.slice(0, LINT_LINES_SHOWN).join("、") })}
+                {g.lines.length > LINT_LINES_SHOWN &&
+                  t("ai.approval.pptxLintMore", { n: g.lines.length - LINT_LINES_SHOWN })}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
