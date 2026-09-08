@@ -337,3 +337,60 @@ describe("taskDocRevision", () => {
     ).toBe(3);
   });
 });
+
+describe("buildLogModel — the round's measured input", () => {
+  const roundDone = (
+    round: number,
+    actualInputTokens: number,
+    incomparable?: "server-tools" | "images" | "no-usage",
+  ): AgentEvent => ({ kind: "round-done", round, actualInputTokens, incomparable, at: at() });
+
+  it("folds the endpoint's count onto the round it measures, not a row of its own", () => {
+    const model = buildLogModel([
+      runStart(),
+      roundStart(1, 900),
+      roundDone(1, 1100),
+      tool("read_file", "c1", 1),
+    ], false);
+    expect(model.rounds).toHaveLength(1);
+    expect(model.rounds[0].actualInputTokens).toBe(1100);
+    // It never becomes an event inside the round — it describes the round.
+    expect(model.rounds[0].events.map((e) => e.kind)).toEqual(["tool-step"]);
+  });
+
+  it("drops a count the runtime marked incomparable, rather than showing a gap it cannot explain", () => {
+    for (const why of ["server-tools", "images", "no-usage"] as const) {
+      const model = buildLogModel([runStart(), roundStart(1, 900), roundDone(1, 9999, why)], false);
+      expect(model.rounds[0].actualInputTokens).toBeUndefined();
+    }
+  });
+
+  it("leaves a round still in flight unmeasured", () => {
+    const model = buildLogModel([runStart(), roundStart(1, 900)], false);
+    expect(model.rounds[0].actualInputTokens).toBeUndefined();
+  });
+
+  it("matches each round's own count when several rounds ran", () => {
+    const model = buildLogModel([
+      runStart(),
+      roundStart(1, 900),
+      roundDone(1, 1000),
+      roundStart(2, 1800),
+      roundDone(2, 2000),
+    ], false);
+    expect(model.rounds.map((r) => r.actualInputTokens)).toEqual([1000, 2000]);
+  });
+
+  it("gives a resumed session's repeated round number to the later round", () => {
+    // A resumed run re-numbers from 1, so one log can hold two round 1s. The
+    // measurement belongs to the one still running.
+    const model = buildLogModel([
+      runStart(),
+      roundStart(1, 900),
+      roundDone(1, 1000),
+      roundStart(1, 4000),
+      roundDone(1, 4200),
+    ], false);
+    expect(model.rounds.map((r) => r.actualInputTokens)).toEqual([1000, 4200]);
+  });
+});

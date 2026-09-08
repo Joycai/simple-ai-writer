@@ -1415,7 +1415,8 @@
         "truncatedContinued": "输出被上限截断，已让它接着写（第 {{n}} 次）",
         "truncatedRetried": "工具调用被上限截断并丢弃，已要求分段重写（第 {{n}} 次）",
         "truncationContinue": "连续 {{n}} 次被截断 — 作者选择继续重试",
-        "truncationStop": "连续 {{n}} 次被截断 — 作者选择到此为止"
+        "truncationStop": "连续 {{n}} 次被截断 — 作者选择到此为止",
+        "roundMeasured": "端点实计 {{actual}}（估 {{est}}，差 {{delta}}）"
       },
       "tool": {
         "list_lore_entities": "列举{{entry}}",

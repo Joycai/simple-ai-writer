@@ -95,12 +95,59 @@ describe("runAgent", () => {
     expect(last(opts.output)).toBe("hello world");
     // Streamed, not delivered in one lump.
     expect(opts.output).toEqual(["hello ", "hello world"]);
-    // Exactly one round-start, no tool steps
-    expect(opts.events.map((e) => e.kind)).toEqual(["round-start"]);
+    // Exactly one round, no tool steps — and the round's two halves: the
+    // estimate before the request, the endpoint's own count after it.
+    expect(opts.events.map((e) => e.kind)).toEqual(["round-start", "round-done"]);
     const round = opts.events[0] as Extract<AgentEvent, { kind: "round-start" }>;
     expect(round.round).toBe(1);
     expect(round.maxRounds).toBe(8);
     expect(round.estInputTokens).toBeGreaterThan(0);
+    const measured = opts.events[1] as Extract<AgentEvent, { kind: "round-done" }>;
+    expect(measured.round).toBe(1);
+    expect(measured.actualInputTokens).toBe(10);
+    // Plain text, no server tools, no pictures: the pair is comparable, which
+    // is what makes it a calibration sample later (S2).
+    expect(measured.incomparable).toBeUndefined();
+  });
+
+  it("marks a round incomparable when the endpoint reports no usage", async () => {
+    // Common on relays. A missing count must never read as "we estimated high"
+    // — it is not a measurement at all.
+    queueRound([{ text: "hi" }, { done: true, inputTokens: 0, outputTokens: 0 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const measured = opts.events.find(
+      (e): e is Extract<AgentEvent, { kind: "round-done" }> => e.kind === "round-done",
+    );
+    expect(measured?.incomparable).toBe("no-usage");
+  });
+
+  it("marks a round incomparable when a picture rode along", async () => {
+    // The estimate prices every image at a flat 800; real billing is per tile.
+    queueRound([{ text: "hi" }, { done: true, inputTokens: 4000, outputTokens: 5 }]);
+    const opts = makeOptions({
+      messages: [
+        { role: "system", content: "sys" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what is this" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+          ],
+        },
+      ] as StreamMessage[],
+    });
+
+    await runAgent(opts);
+
+    const measured = opts.events.find(
+      (e): e is Extract<AgentEvent, { kind: "round-done" }> => e.kind === "round-done",
+    );
+    expect(measured?.incomparable).toBe("images");
+    // Still reported — the log just won't draw a drift from it.
+    expect(measured?.actualInputTokens).toBe(4000);
   });
 
   it("discards what the model said before calling a tool", async () => {
@@ -159,11 +206,13 @@ describe("runAgent", () => {
 
     expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0, outcome: "completed" });
 
-    // Event order: round 1, tool running, tool done, round 2
+    // Event order: round 1 + its measurement, tool running, tool done, round 2
+    // + its measurement. Each round's count arrives before its tool steps run:
+    // the request is already paid for by then.
     expect(opts.events.map((e) => e.kind)).toEqual([
-      "round-start", "tool-step", "tool-step", "round-start",
+      "round-start", "round-done", "tool-step", "tool-step", "round-start", "round-done",
     ]);
-    const doneStep = opts.events[2] as Extract<AgentEvent, { kind: "tool-step" }>;
+    const doneStep = opts.events[3] as Extract<AgentEvent, { kind: "tool-step" }>;
     expect(doneStep.step.status).toBe("done");
     expect(doneStep.step.resultSummary).toContain("Ava");
 
