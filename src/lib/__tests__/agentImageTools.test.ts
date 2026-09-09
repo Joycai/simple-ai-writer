@@ -80,6 +80,27 @@ describe("generate_image", () => {
     expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: null });
   });
 
+  it("resyncs the run snapshot for that one entity once the picture is in", async () => {
+    // The apply (agentStore) puts the picture in the store; without this the
+    // run's own snapshot never learns of it, and the model's next
+    // set_lore_avatar by gallery filename comes back "not found".
+    const { ctx } = ctxWith({ approved: true });
+    const onLoreChanged = vi.fn();
+    (ctx as { onLoreChanged?: unknown }).onLoreChanged = onLoreChanged;
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);
+    expect(onLoreChanged).toHaveBeenCalledWith({
+      category: "characters", id: "elden", dirPath: ENTITY.dirPath,
+    });
+  });
+
+  it("does not resync when the author rejected — nothing changed", async () => {
+    const { ctx } = ctxWith({ approved: false });
+    const onLoreChanged = vi.fn();
+    (ctx as { onLoreChanged?: unknown }).onLoreChanged = onLoreChanged;
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);
+    expect(onLoreChanged).not.toHaveBeenCalled();
+  });
+
   it("prices the run so the card can show what is being agreed to", async () => {
     const { ctx, seen } = ctxWith();
     await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);

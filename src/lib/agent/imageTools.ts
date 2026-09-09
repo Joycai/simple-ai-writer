@@ -20,6 +20,7 @@ import { categoryImageSlots, findImageSlot } from "../profile/active";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
 import type { ToolResult } from "./tools";
+import { syncLore } from "./writeTools";
 import { baseName } from "../paths";
 
 let proposalCounter = 0;
@@ -129,6 +130,16 @@ async function proposeIllustration(
       toolCallId,
       content: `The author REJECTED this image${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same prompt; adjust per the reason or move on.`,
     };
+  }
+  // The picture is in the gallery on disk and in the store, but not yet in
+  // this run's snapshot — and the snapshot is what read_lore_entity and
+  // set_lore_avatar answer from, so without this the model is told a file
+  // exists that its next call cannot find (the same gap syncLore closed for
+  // create_lore_entity). Last, after the apply, like every write tool.
+  if (spec.dest.kind === "lore") {
+    const dir = spec.dest.entityDir;
+    const entity = Object.values(ctx.loreIndex).flat().find((e) => e.dirPath === dir);
+    await syncLore(ctx, entity);
   }
   // The applied outcome rides back on backupPath — see agentStore's
   // illustrate case, which puts the report there rather than inventing a

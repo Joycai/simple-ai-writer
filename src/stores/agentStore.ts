@@ -871,11 +871,20 @@ async function applyProposal(
       const { projectPath: root } = useProjectStore.getState();
       const outcome = await runIllustration(proposal, root ?? "", signal, onProgress);
       if (proposal.dest.kind === "lore") {
-        // The gallery grew — rescan so the entity view shows it at once.
+        // The gallery grew — refresh so the entity view shows it at once.
         // Awaited: this function's caller reports the outcome to the model, and
-        // an unawaited scan makes "saved" race the index that proves it.
+        // an unawaited refresh makes "saved" race the index that proves it.
+        // One folder when the index still knows it; the walk otherwise (the
+        // proposal carries the folder, not the entry, and only the walk can
+        // place a folder the index has lost track of).
         const { useLoreStore } = await import("./loreStore");
-        if (root) await useLoreStore.getState().scanProject(root);
+        if (root) {
+          const lore = useLoreStore.getState();
+          const dir = proposal.dest.entityDir;
+          const entity = Object.values(lore.index).flat().find((e) => e.dirPath === dir);
+          if (entity) await lore.refreshEntity(root, entity);
+          else await lore.scanProject(root);
+        }
       } else {
         // Same reason the pptx case below refreshes: the picture is written
         // with the raw byte writer, which the file tree knows nothing about, so
