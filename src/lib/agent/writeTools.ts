@@ -49,6 +49,7 @@ import {
   type CategoryId,
   type FacetMeta,
   type LoreEntity,
+  type LoreEntityAddress,
   type LoreFacet,
   type LoreIndex,
 } from "../lore";
@@ -217,10 +218,21 @@ export async function proposeLorePlanTool(
  *
  * Invariant for callers: resync **last**, and never touch disk through an
  * entity resolved before it — those objects are detached once this returns.
+ *
+ * Pass `changed` when the write stayed inside that entity's folder — a body
+ * edit, a facet, a picture, the avatar. The surface then re-reads that one
+ * folder (`loreStore.refreshEntity`) instead of walking every entry, which
+ * is what a rescan after *each* write call used to cost. Leave it out when
+ * the write changed what exists or where: create, move, delete, a pack run.
+ * The address is copied out before the await, because the entity object is
+ * exactly what the resync detaches.
  */
-export async function syncLore(ctx: ToolContext): Promise<void> {
+export async function syncLore(ctx: ToolContext, changed?: LoreEntity): Promise<void> {
   try {
-    const fresh = await ctx.onLoreChanged?.();
+    const address: LoreEntityAddress | undefined = changed
+      ? { category: changed.category, id: changed.id, dirPath: changed.dirPath }
+      : undefined;
+    const fresh = await ctx.onLoreChanged?.(address);
     if (!fresh) return;
     for (const key of Object.keys(ctx.loreIndex)) delete ctx.loreIndex[key];
     Object.assign(ctx.loreIndex, cloneLoreIndex(fresh));
@@ -471,7 +483,7 @@ export async function updateLoreFileTool(
   const backupPath = await backupFile(ctx.projectPath, targetPath);
   await writeEntityFile(entity.dirPath, file, content);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   const suffix = backupPath
     ? `Previous version backed up to ${backupPath}.`
     : "This is a new file (no backup needed).";
@@ -679,7 +691,7 @@ export async function updateLoreMetaTool(
   entity.aliases = aliases;
   entity.summary = summary;
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   const changed = [
     "summary" in args ? `summary="${summary}"` : null,
     "aliases" in args || "add_aliases" in args ? `aliases=[${aliases.join(", ")}]` : null,
@@ -747,7 +759,7 @@ export async function appendLoreFileTool(
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   // Where the entry now ends. Nothing above the addition moved, so one number
   // is the whole update — the same answer append_file gives on the manuscript
   // side (edit-loop-plan.md §5.3), and the coordinate search_text reports for
@@ -855,7 +867,7 @@ export async function editLoreFileTool(
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   const which = describeEditTarget(positions.length, target);
   return {
     toolCallId,
@@ -1040,7 +1052,7 @@ export async function rewriteLoreLinesTool(
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1241,7 +1253,7 @@ export async function createLoreFacetTool(
   if (at >= 0) entity.facets[at] = snapshot;
   else (entity.facets ??= []).push(snapshot);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   const inert = meta.mode === "auto" && meta.keys.length === 0;
   return {
     toolCallId,
@@ -1375,7 +1387,7 @@ export async function updateFacetMetaTool(
   if (at >= 0) entity.facets[at] = snapshot;
   else (entity.facets ??= []).push(snapshot);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   const inert = next.mode === "auto" && next.keys.length === 0;
   return {
     toolCallId,
@@ -1429,7 +1441,7 @@ export async function deleteLoreFileTool(
   await removeFile(targetPath);
   forgetFileInSnapshot(entity, file);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1537,7 +1549,7 @@ export async function addLoreImageTool(
   const saved = await addLoreImage(entity.dirPath, landing, bytes, desc, slot);
   (entity.images ??= []).push({ file: saved, desc, slot, absPath: `${entity.dirPath}/${saved}` });
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1623,7 +1635,7 @@ export async function updateLoreImageTool(
   const at = (entity.images ?? []).findIndex((i) => i.file === listed.file);
   if (at >= 0) entity.images[at] = { ...entity.images[at], desc: updated.desc, slot: updated.slot };
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1666,7 +1678,7 @@ export async function deleteLoreImageTool(
   await dropLoreImageEntry(entity.dirPath, listed.file);
   entity.images = (entity.images ?? []).filter((i) => i.file !== listed.file);
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1734,7 +1746,7 @@ export async function setLoreAvatarTool(
   await setEntityAvatar(entity.dirPath, bytes, ext);
   entity.avatarPath = `${entity.dirPath}/avatar.${ext}`;
 
-  await syncLore(ctx);
+  await syncLore(ctx, entity);
   return {
     toolCallId,
     content:
@@ -1803,7 +1815,7 @@ export async function copyLoreFileTool(
       img.slot && !findImageSlot(target.category, img.slot)
         ? ` Note: its slot "${img.slot}" is not declared by category "${target.category}", so it shows as unclassified there.`
         : "";
-    await syncLore(ctx);
+    await syncLore(ctx, target);
     return {
       toolCallId,
       content:
@@ -1853,7 +1865,7 @@ export async function copyLoreFileTool(
     facet?.slot && !findFacetSlot(target.category, facet.slot)
       ? ` Note: its slot "${facet.slot}" is not declared by category "${target.category}", so it shows as unclassified there.`
       : "";
-  await syncLore(ctx);
+  await syncLore(ctx, target);
   return {
     toolCallId,
     content:
