@@ -99,7 +99,7 @@ async function readCategoryEntities(
   try {
     for (const entry of await readDir(catPath)) {
       if (!entry.isDirectory) continue;
-      const entity = await readEntity(category, entry.name, `${catPath}/${entry.name}`);
+      const entity = await scanEntity(category, entry.name, `${catPath}/${entry.name}`);
       if (entity) out.push(entity);
     }
   } catch {
@@ -108,11 +108,22 @@ async function readCategoryEntities(
   return out;
 }
 
-async function readEntity(
+/**
+ * Read one entity directory into its index entry — the unit `scanLore` is
+ * made of, exported so a write that stayed inside one folder can refresh
+ * *that* entry instead of walking the whole knowledge base again
+ * (`loreStore.refreshEntity`, fed by the agent's write tools through
+ * `ToolContext.onLoreChanged`).
+ *
+ * Never throws and never returns nothing: a folder whose files cannot be read
+ * is still an entity, listed under its directory name with empty fields, the
+ * same as it always was in a full scan.
+ */
+export async function scanEntity(
   category: CategoryId,
   id: string,
   dirPath: string,
-): Promise<LoreEntity | null> {
+): Promise<LoreEntity> {
   const indexPath = `${dirPath}/index.md`;
   let name = id;
   let aliases: string[] = [];
@@ -120,6 +131,25 @@ async function readEntity(
   let dict = false;
   let collections: string[] = [];
   let cover: string | null = null;
+
+  // One listing answers every "is this file here?" question below. They used
+  // to be asked of the disk one file at a time — four avatar probes, images.md,
+  // one per gallery picture — and each probe is an IPC round trip that also
+  // canonicalizes the path on the Rust side (`scope.check`), twice when the
+  // file is absent. Over a few hundred entries those probes were most of a
+  // scan's wall-clock, and a scan runs after every agent write
+  // (`writeTools.syncLore`). Lowercased keys: the probes went through the
+  // filesystem, which is case-insensitive on Windows and macOS, so `avatar.PNG`
+  // must keep counting — the value is the name as the disk spells it.
+  const onDisk = new Map<string, string>();
+  try {
+    for (const e of await readDir(dirPath)) {
+      if (!e.isDirectory) onDisk.set(e.name.toLowerCase(), e.name);
+    }
+  } catch {
+    // unreadable dir — entity still listed with defaults, like a missing index.md
+  }
+  const spelled = (file: string): string | undefined => onDisk.get(file.toLowerCase());
 
   const citeTargets: string[] = [];
   try {
@@ -146,38 +176,34 @@ async function readEntity(
   }
 
   // Collect *.md files in dir
-  let mdFiles: string[] = [];
-  let avatarPath: string | null = null;
-  try {
-    const entries = await readDir(dirPath);
-    mdFiles = entries
-      .filter((e) => !e.isDirectory && e.name.endsWith(".md"))
-      .map((e) => e.name);
+  const mdFiles = [...onDisk.values()].filter((f) => f.endsWith(".md"));
 
-    const avatarExts = ["png", "jpg", "jpeg", "webp"];
-    for (const ext of avatarExts) {
-      const candidate = `${dirPath}/avatar.${ext}`;
-      if (await fileExists(candidate)) {
-        avatarPath = candidate;
-        break;
-      }
+  let avatarPath: string | null = null;
+  for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+    const found = spelled(`avatar.${ext}`);
+    if (found) {
+      avatarPath = `${dirPath}/${found}`;
+      break;
     }
-  } catch {}
+  }
 
   // Parse images.md if present. Each entry's `file` is resolved against dirPath
   // and dropped if the underlying file is missing — keeps the list trustworthy.
   const images: LoreImage[] = [];
-  try {
-    const raw = await readFile(`${dirPath}/images.md`);
-    const entries = parseImagesMd(raw);
-    for (const { file, desc, slot } of entries) {
-      const absPath = `${dirPath}/${file}`;
-      if (await fileExists(absPath)) {
-        images.push({ file, desc, slot, absPath });
+  if (spelled("images.md")) {
+    try {
+      const raw = await readFile(`${dirPath}/images.md`);
+      for (const { file, desc, slot } of parseImagesMd(raw)) {
+        const absPath = `${dirPath}/${file}`;
+        // The gallery writes bare filenames (`addLoreImage`), which the listing
+        // answers for. A hand-written heading naming a sub-path is the one
+        // shape it cannot, so that one still asks the disk.
+        const present = /[/\\]/.test(file) ? await fileExists(absPath) : !!spelled(file);
+        if (present) images.push({ file, desc, slot, absPath });
       }
+    } catch {
+      // unreadable images.md — entity has no gallery, leave images empty
     }
-  } catch {
-    // images.md missing — entity has no gallery, leave images empty
   }
 
   // Parse facet metadata from every non-reserved md. Files whose frontmatter
