@@ -641,8 +641,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // Awaited, and returns the fresh index, so the run's own snapshot
             // can resolve an entity the run itself just created — see
             // writeTools.syncLore.
-            onLoreChanged: async () => {
-              await useLoreStore.getState().scanProject(projectPath);
+            onLoreChanged: async (changed) => {
+              const lore = useLoreStore.getState();
+              if (changed) await lore.refreshEntity(projectPath, changed);
+              else await lore.scanProject(projectPath);
               return useLoreStore.getState().index;
             },
             onMemoryChanged: () => {

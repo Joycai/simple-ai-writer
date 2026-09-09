@@ -187,6 +187,19 @@ export function loreEntityCount(index: LoreIndex): number {
  * only need identity — the same reason `readLoreEntity` guards `mdFiles?.length`
  * — and a clone is the wrong place to start throwing about it.
  */
+/**
+ * Where one entity lives — enough to re-read its folder without the rest of
+ * the index (`scanEntity`, `loreStore.refreshEntity`). `dirPath` is the key
+ * the index is matched on; `category` and `id` are what the re-read entry is
+ * labelled with, and both are stable across every in-place write (renames and
+ * category moves relocate the folder and go through a full scan instead).
+ */
+export interface LoreEntityAddress {
+  category: CategoryId;
+  id: string;
+  dirPath: string;
+}
+
 export function cloneLoreIndex(index: LoreIndex): LoreIndex {
   const out: LoreIndex = {};
   for (const [category, list] of Object.entries(index)) {

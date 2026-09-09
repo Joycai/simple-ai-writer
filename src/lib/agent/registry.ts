@@ -25,7 +25,7 @@ import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import i18n from "../../i18n";
-import { type LoreIndex, type LoreScope } from "../lore";
+import { type LoreEntityAddress, type LoreIndex, type LoreScope } from "../lore";
 import { loreCategories, loreCategoryIds } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import {
@@ -686,8 +686,15 @@ export interface ToolContext {
    * Optional only because the read-only presets legitimately have no lore to
    * write (see `presets.ts`). Any context whose preset carries a lore *write*
    * tool must supply it.
+   *
+   * `changed` names the one entity a write stayed inside of — a body edit, a
+   * facet, a gallery picture — so the surface can re-read that folder alone
+   * (`loreStore.refreshEntity`) instead of walking the whole knowledge base,
+   * which is what a full rescan costs after *every* write call. Omitted when
+   * the write changed what entities exist or where (create / move / delete /
+   * pack runs): those need the walk. A surface may ignore the hint and rescan.
    */
-  onLoreChanged?: () => LoreIndex | void | Promise<LoreIndex | void>;
+  onLoreChanged?: (changed?: LoreEntityAddress) => LoreIndex | void | Promise<LoreIndex | void>;
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
   /**

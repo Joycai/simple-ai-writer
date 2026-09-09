@@ -2692,8 +2692,12 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         // 谁来读图，由 routeTools 一处判定（它同时也是摘掉 read_lore_image
         // 的那一处）。图集清单据此说出真正走得通的那条路。
         visionDelegate: routed.visionDelegate,
-        onLoreChanged: async () => {
-          await useLoreStore.getState().scanProject(projectPath);
+        onLoreChanged: async (changed) => {
+          // One folder re-read when the write stayed inside an entity; the
+          // whole walk only when what exists changed (see ToolContext).
+          const lore = useLoreStore.getState();
+          if (changed) await lore.refreshEntity(projectPath, changed);
+          else await lore.scanProject(projectPath);
           // Re-read rather than returning scanProject's own result: if a
           // later scan won the store's queue, that is the one we want.
           return useLoreStore.getState().index;

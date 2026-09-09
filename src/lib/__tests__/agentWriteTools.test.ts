@@ -436,6 +436,48 @@ describe("append_lore_file", () => {
   });
 });
 
+// ─── the onLoreChanged hint ──────────────────────────────────────────────────
+
+describe("onLoreChanged is told which entity an in-place write stayed inside", () => {
+  const AVA = {
+    category: "characters",
+    id: "ava",
+    dirPath: `${PROJECT}/.ai-writer/lore/characters/ava`,
+  };
+
+  it("names the entity for a body edit, so the surface re-reads one folder", async () => {
+    const onLoreChanged = vi.fn();
+    await run("edit_lore_file", {
+      entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+    }, makeCtx({ onLoreChanged }));
+    expect(onLoreChanged).toHaveBeenCalledWith(AVA);
+  });
+
+  it("names it for a facet, a picture and the avatar too", async () => {
+    const onLoreChanged = vi.fn();
+    const ctx = makeCtx({ onLoreChanged });
+    await run("create_lore_facet", {
+      entity: "Ava", title: "童年", keys: ["童年"], content: "她生在海边。",
+    }, ctx);
+    await run("update_lore_meta", { entity: "Ava", summary: "the heroine" }, ctx);
+    fs.set(`${PROJECT}/face.png`, "png bytes");
+    await run("set_lore_avatar", { entity: "Ava", file: `${PROJECT}/face.png` }, ctx);
+    expect(onLoreChanged).toHaveBeenCalledTimes(3);
+    for (const call of onLoreChanged.mock.calls) expect(call[0]).toEqual(AVA);
+  });
+
+  it("names nothing when the write changed what exists — the surface must walk", async () => {
+    const onLoreChanged = vi.fn();
+    const ctx = makeCtx({ onLoreChanged });
+    await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+    await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(onLoreChanged).toHaveBeenCalledTimes(2);
+    for (const call of onLoreChanged.mock.calls) expect(call[0]).toBeUndefined();
+  });
+});
+
 describe("edit_lore_file", () => {
   const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
   const AVA = `${PROJECT}/.ai-writer/lore/characters/ava/index.md`;
