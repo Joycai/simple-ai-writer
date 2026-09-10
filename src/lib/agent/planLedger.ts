@@ -35,6 +35,8 @@ export interface LedgerStep {
   writes: ToolStep[];
   added: number;
   removed: number;
+  /** The author skipped this step at its card (a destructive step, 1g). */
+  skipped: boolean;
 }
 
 export interface PlanLedger {
@@ -74,6 +76,7 @@ export function buildPlanLedgers(log: readonly AgentEvent[]): PlanLedger[] {
           writes: [],
           added: 0,
           removed: 0,
+          skipped: false,
         })),
         written: 0,
         added: 0,
@@ -90,6 +93,10 @@ export function buildPlanLedgers(log: readonly AgentEvent[]): PlanLedger[] {
       );
       if (!ledger) continue;
       const entry = ledger.steps[at - ledger.plan.offset];
+      if (step.planSkipped) {
+        entry.skipped = true;
+        continue;
+      }
       entry.writes.push(step);
       if (step.change) {
         const receipt = receiptOf(step.change);

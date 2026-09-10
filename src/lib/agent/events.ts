@@ -177,6 +177,8 @@ export interface ToolStep {
   planStep?: number;
   /** A lore write the gate turned away: no approved step covered it. */
   planRefused?: true;
+  /** A destructive step the author skipped at its card: nothing was written. */
+  planSkipped?: true;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */

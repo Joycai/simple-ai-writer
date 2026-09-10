@@ -1747,7 +1747,23 @@
       "subfolderCount": "{{n}} subfolders inside",
       "deleteAllLines": "… all {{n}} lines will go",
       "deleteRest": "… {{n}} more",
-      "deleteRestSized": "… {{n}} more · {{chars}} chars"
+      "deleteRestSized": "… {{n}} more · {{chars}} chars",
+      "loreStep": {
+        "titleDelete": "Delete entry",
+        "titleRewrite": "Update entry",
+        "stepOf": "Plan step {{n}} of {{total}}",
+        "deleteMeta": "−{{n}} files · {{chars}} chars",
+        "rewriteMeta": "replaces {{removed}} of {{original}} chars",
+        "whyDelete": "Deletes an entry, so this step waits",
+        "whyRewrite": "Replaces most of the text, so this step waits",
+        "citedBy": "Cited by {{n}}: {{who}}",
+        "notCited": "Not cited by any document",
+        "notCitedPartial": "No citations found in the documents scanned",
+        "moreFiles": "… {{n}} more files",
+        "tooLong": "Too long to carry on the card; the file is untouched until you approve.",
+        "note": "Approving writes it as planned; skipping leaves the rest of the plan standing.",
+        "skip": "Skip this step"
+      }
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",
@@ -1803,7 +1819,8 @@
         "refused": "Refused · not in the plan",
         "tooBig": "Too large to keep in the log; the previous version is at {{path}}",
         "noText": "No text comparison was kept for this write",
-        "unchanged": "No change in content"
+        "unchanged": "No change in content",
+        "skipped": "Skipped"
       }
     },
     "mention": {

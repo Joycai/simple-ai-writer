@@ -814,6 +814,12 @@ async function applyProposal(
       };
     }
 
+    case "loreStep":
+      // Approval is the whole act: the lore tool that raised the card does the
+      // write itself once it hears yes (writeTools `pauseForStep`), with its
+      // own backup — there is nothing to apply or back up on this side.
+      return { report: null };
+
     case "command": {
       // Like `transcribe`: nothing has run yet, and approval is what starts
       // the process. The runner owns the abort → kill wiring and the log; the

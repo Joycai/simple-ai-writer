@@ -1460,6 +1460,82 @@ describe("lore plan gate", () => {
     expect(ctx.lorePlan!.refused.has("t1")).toBe(true);
   });
 
+  it("stops before deleting an entry, and a skip leaves it and the plan standing", async () => {
+    const cards: object[] = [];
+    const ctx = unplanned({
+      requestPlanApproval: async () => ({ approved: true }),
+      requestApproval: async (p) => { cards.push(p); return { approved: false }; },
+    });
+    await run("propose_lore_plan", { steps: [{ action: "delete", entity: "Ava", detail: "与主角重复" }] }, ctx);
+
+    const res = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+
+    expect(cards[0]).toMatchObject({
+      kind: "loreStep",
+      trigger: "deleteEntity",
+      entity: "Ava",
+      detail: "与主角重复",
+      stepNumber: 1,
+      stepTotal: 1,
+    });
+    // A skip is not a rejection of the plan — the model is told the rest stands.
+    expect(res.content).toContain("SKIPPED");
+    expect(res.content).toContain("rest of the approved plan still stands");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+    expect(ctx.lorePlan!.skipped.has("t1")).toBe(true);
+  });
+
+  it("deletes the entry once the author approves the step", async () => {
+    const cards: object[] = [];
+    const ctx = unplanned({
+      requestPlanApproval: async () => ({ approved: true }),
+      requestApproval: async (p) => { cards.push(p); return { approved: true }; },
+    });
+    await run("propose_lore_plan", { steps: [{ action: "delete", entity: "Ava", detail: "与主角重复" }] }, ctx);
+
+    const res = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+
+    expect(cards).toHaveLength(1);
+    expect(res.content).toContain("Deleted lore entity");
+  });
+
+  it("keeps today's behaviour on a surface that cannot show the card", async () => {
+    const ctx = unplanned({
+      requestPlanApproval: async () => ({ approved: true }),
+      requestApproval: undefined,
+    });
+    await run("propose_lore_plan", { steps: [{ action: "delete", entity: "Ava", detail: "与主角重复" }] }, ctx);
+
+    const res = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(res.content).toContain("Deleted lore entity");
+  });
+
+  it("stops a write that replaces most of a long entry, and lets a correction through", async () => {
+    const LONG_PATH = `${PROJECT}/.ai-writer/lore/characters/ava/long.md`;
+    const longBody = "开头一句独特的话。" + "旧".repeat(250);
+    fs.set(LONG_PATH, longBody);
+    const cards: object[] = [];
+    const ctx = unplanned({
+      requestPlanApproval: async () => ({ approved: true }),
+      requestApproval: async (p) => { cards.push(p); return { approved: false }; },
+    });
+    await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava", file: "long.md", detail: "重写长特征" }],
+    }, ctx);
+
+    // A correction: a few characters of a long entry. Goes straight through.
+    const small = await run("edit_lore_file", { entity: "Ava", file: "long.md", find: "独特", replace: "特别" }, ctx);
+    expect(cards).toHaveLength(0);
+    expect(small.content).not.toContain("SKIPPED");
+
+    // A replacement of nearly all of it stops, and the skip leaves the file alone.
+    const before = fs.get(LONG_PATH)!;
+    const big = await run("update_lore_file", { entity: "Ava", file: "long.md", content: "新".repeat(260) }, ctx);
+    expect(cards[0]).toMatchObject({ kind: "loreStep", trigger: "majorRewrite", file: "long.md" });
+    expect(big.content).toContain("SKIPPED");
+    expect(fs.get(LONG_PATH)).toBe(before);
+  });
+
   it("lets exactly the approved steps through and refuses the rest", async () => {
     const seen: LorePlan[] = [];
     const ctx = unplanned({

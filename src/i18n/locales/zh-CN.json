@@ -1745,7 +1745,23 @@
       "subfolderCount": "含 {{n}} 个子文件夹",
       "deleteAllLines": "⋯ 全部 {{n}} 行都会删掉",
       "deleteRest": "⋯ 还有 {{n}} 个",
-      "deleteRestSized": "⋯ 还有 {{n}} 个 · {{chars}} 字"
+      "deleteRestSized": "⋯ 还有 {{n}} 个 · {{chars}} 字",
+      "loreStep": {
+        "titleDelete": "删除条目",
+        "titleRewrite": "更新条目",
+        "stepOf": "方案第 {{n}} / {{total}} 步",
+        "deleteMeta": "−{{n}} 个文件 · {{chars}} 字",
+        "rewriteMeta": "替换 {{removed}} / {{original}} 字",
+        "whyDelete": "删条目 · 所以停下来",
+        "whyRewrite": "超过六成正文 · 所以停下来",
+        "citedBy": "被 {{n}} 个文档引用：{{who}}",
+        "notCited": "没有文档引用它",
+        "notCitedPartial": "在扫过的文档里没有发现引用它的",
+        "moreFiles": "⋯ 还有 {{n}} 个文件",
+        "tooLong": "正文太长，没有随卡片带上；批准之前文件不会动。",
+        "note": "批准就照方案写入；跳过这步不影响方案里的其他步骤。",
+        "skip": "跳过这步"
+      }
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
@@ -1800,7 +1816,8 @@
         "refused": "被拒 · 不在方案里",
         "tooBig": "改动太大，正文没有随日志保存；完整的旧版在 {{path}}",
         "noText": "这次写入没有留下正文对照",
-        "unchanged": "写入前后内容一致"
+        "unchanged": "写入前后内容一致",
+        "skipped": "已跳过"
       }
     },
     "mention": {

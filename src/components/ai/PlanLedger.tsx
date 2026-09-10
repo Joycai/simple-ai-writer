@@ -121,6 +121,8 @@ function LedgerStepRow({ entry }: { entry: LedgerStep }) {
                 </>
               )}
             </>
+          ) : entry.skipped ? (
+            t("ai.plan.ledger.skipped")
           ) : (
             t("ai.plan.ledger.notYet")
           )}

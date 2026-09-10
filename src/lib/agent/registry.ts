@@ -631,6 +631,46 @@ export interface CommandProposal extends ProposalBase {
 }
 
 /**
+ * An approved lore step that still stops before it is written (设计稿 02h 1g).
+ *
+ * The plan was the author's grant for the pass, and most of its steps land
+ * without asking. Two do not: deleting an entry, and replacing most of an
+ * entry's text (`agent/destructive`). The lore tool raises this card and does
+ * the write itself once it hears yes — so approving applies nothing here, and
+ * declining skips this one step while the rest of the plan stands.
+ *
+ * Never covered by a standing grant: it is not in `AUTO_APPROVABLE`, and the
+ * plan being approved is exactly the grant this card exists to second-guess.
+ */
+export interface LoreStepProposal extends ProposalBase {
+  kind: "loreStep";
+  trigger: "deleteEntity" | "majorRewrite";
+  entity: string;
+  category: string;
+  /** The plan step's own sentence — what the author approved, word for word. */
+  detail: string;
+  /** 1-based position among the run's approved steps, and how many there are. */
+  stepNumber: number;
+  stepTotal: number;
+  /** majorRewrite: which file of the entry. */
+  file?: string;
+  /** majorRewrite: the texts, when small enough to carry (`CHANGE_TEXT_CHARS`). */
+  before?: string;
+  after?: string;
+  /** majorRewrite: the body's length, and how much of it the write removes. */
+  originalChars?: number;
+  removedChars?: number;
+  /** deleteEntity: the entry's files, capped, each with its opening line. */
+  files?: { name: string; chars: number; head: string }[];
+  totalChars?: number;
+  fileCount?: number;
+  /** deleteEntity: documents that cite the entry, project-relative. */
+  citedBy?: string[];
+  /** The citation scan hit its cap, so `citedBy` is a floor. */
+  citedPartial?: true;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -654,7 +694,8 @@ export type Proposal =
   | XlsxProposal
   | ConvertProposal
   | TranscribeProposal
-  | CommandProposal;
+  | CommandProposal
+  | LoreStepProposal;
 
 export type ApprovalDecision =
   | {
