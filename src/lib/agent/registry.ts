@@ -50,7 +50,7 @@ import { transcribeAudioTool } from "../asr/tool";
 import type { ConvertExt } from "../import";
 import { inspectHtmlTool } from "./htmlTools";
 import {
-  createLoreCategoryTool,
+  manageCategoryTool,
   fileLoreEntriesTool,
   manageCollectionTool,
 } from "./organizeTools";
@@ -622,6 +622,24 @@ export interface LoreOrganizer {
   file: (dirPaths: string[], add: string[], remove: string[]) => Promise<LoreEntityAddress[]>;
   /** 新建分类，传作者能读的标签，返回真正落成的 id。 */
   createCategory: (label: string) => Promise<string>;
+  /**
+   * **作者自建**的分类 id。改名和删除只对这些生效：能力包带来的分类属于那个包
+   * （去掉它得整包关掉），孤儿文件夹压根没有声明可改。写成 getter，理由同
+   * `collections`——同一次运行里刚建的分类，下一句就要能改名。
+   */
+  userCategories: string[];
+  /**
+   * 改分类的**标签**。id 就是磁盘上的文件夹名，这里一个字都不碰它，所以没有任何
+   * 条目搬家、没有 `[[lore:分类/id]]` 失效、没有置顶要重指——这是分类改名和
+   * 「把条目换个分类」代价完全不同的地方。
+   */
+  renameCategory: (id: string, label: string) => Promise<void>;
+  /**
+   * 把分类的**声明**从 profile.json 摘掉。磁盘上的文件夹一动不动，所以调用方必须
+   * 先确认它是空的：留着成员就等于把一整个分类降级成孤儿（标签退化成文件夹 id），
+   * 而那是作者该亲眼看着做的事。
+   */
+  deleteCategory: (id: string) => Promise<void>;
 }
 
 /** Everything an executor may need about the running project. */
@@ -912,7 +930,7 @@ export type ToolId =
   | "delete_lore_image"
   | "manage_collection"
   | "file_lore_entries"
-  | "create_lore_category"
+  | "manage_category"
   | "set_lore_avatar"
   | "copy_lore_file"
   | "move_lore_entity"
@@ -1522,7 +1540,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Entity category — must be one that already exists (create_lore_category, plan-gated, adds one only when none fits).",
+                "Entity category — must be one that already exists (manage_category, plan-gated, adds one only when none fits).",
             },
             summary: { type: "string", description: "One-line summary shown in listings and used for activation" },
             aliases: {
@@ -1990,25 +2008,31 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => fileLoreEntriesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
-  create_lore_category: {
+  manage_category: {
     access: "write-auto",
     group: "lore_organize",
     definition: {
       type: "function",
       function: {
-        name: "create_lore_category",
+        name: "manage_category",
         description:
-          "Create a new knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同), which is also its folder on disk. Reach for it only when existing categories genuinely cannot hold a kind of entry; to group by project use a collection instead. Requires an approved plan step with target 'category'. There is deliberately no rename or delete counterpart: those would relocate every member entry's folder.",
+          "Create, rename or delete a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. Requires an approved plan step with target 'category'.",
         parameters: {
           type: "object",
           properties: {
-            label: { type: "string", description: "What the author will see this category called; the folder id is derived from it" },
+            op: { type: "string", enum: ["create", "rename", "delete"], description: "What to do" },
+            category: {
+              type: "string",
+              description:
+                "The category to act on — its id or its author-facing label. For 'create', the label you are giving it (the folder id is derived from it).",
+            },
+            new_label: { type: "string", description: "rename only: the new author-facing label" },
           },
-          required: ["label"],
+          required: ["op", "category"],
         },
       },
     },
-    execute: (call, ctx) => createLoreCategoryTool(call.id, parseArgs(call.arguments), ctx),
+    execute: (call, ctx) => manageCategoryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delete_lore_image: {
@@ -2131,7 +2155,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Category to move the entity into — must exist (create_lore_category adds one only when none fits). Omit to keep the current one.",
+                "Category to move the entity into — must exist (manage_category adds one only when none fits). Omit to keep the current one.",
             },
             keep_old_name_as_alias: {
               type: "boolean",

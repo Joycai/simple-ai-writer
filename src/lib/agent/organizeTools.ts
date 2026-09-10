@@ -1,7 +1,7 @@
 /**
- * 重整知识库**组织结构**的工具：集合的建/改名/删、把条目归入或移出、新建分类。
+ * 重整知识库**组织结构**的工具：集合的建/改名/删、把条目归入或移出、分类的建/改名/删。
  *
- * ## 为什么这些工具存在（而分类的改名/删除仍然不存在）
+ * ## 为什么这些工具存在
  *
  * `writeTools` 顶上写着一条老规矩：没有任何工具能建/改名/删分类，因为分类是作者
  * 在 app 里管的组织方案。这条规矩在「作者委派一次批量整理」面前不成立——
@@ -12,14 +12,24 @@
  * （`plan.ts`），作者在方案卡上逐行看见「新建集合《雪原书》」「归入 12 条：…」再
  * 决定。所以 agent 不能发明集合——它只能**提议**发明，批准的是人。
  *
- * 唯一保留的不对称是**分类只给 create**：分类是磁盘上的文件夹，新建只是建目录，
- * 而改名/删除会让每个成员条目的文件夹搬家，并让 `[[lore:分类/id]]` 路径引用和特征
- * 置顶失效。集合三个都给，因为它只是 frontmatter 上的一个字段，可逆且便宜。
+ * 分类曾经只给 create，理由写的是「改名/删除会让每个成员条目的文件夹搬家」。那条理由
+ * 是错的，而且错得很具体：分类的 **id 就是文件夹名**，而改名改的是 `labelZh`/`labelEn`
+ * ——`WorkspacePane.handleRename` 从来只换标签，id 原样留着。所以改名不搬任何东西，
+ * `[[lore:分类/id]]` 和按 dirPath 存的置顶一个都不受影响。删除同理：摘掉的是
+ * profile.json 里的一行声明，文件夹留在原地。真正会让文件夹搬家的是**把条目换个分类**
+ * （`move_lore_entity`），那是另一件事，它一直有自己的工具。
  *
- * 分类**作为搬入目的地**则和集合齐平了：一个 target 为 `category` 的 move 步骤，
- * `members` 列出这一批条目，`move_lore_entity` 逐条过这一个步骤的门（见
- * `writeTools.ts` 的 `moveGate`）。所以「把 12 条归到势力」在卡上是一行，不是十二行
- * ——这一条本来就是这个文件开头那段话的重点，只是分类这一侧晚补了一步。
+ * 于是两根轴的管理面终于对齐了。分类只保留一条集合没有的纪律：**删除拒绝还有成员的
+ * 分类**。摘掉声明不删任何东西，但会让整个分类退化成孤儿（标签退回文件夹 id、条目照常
+ * 注入），而那不是「删掉」这个词让作者预期的结果——所以搬家必须单独占一个方案步骤，
+ * 作者在卡上分别读到「12 条搬去势力」和「删掉空分类」。改名和删除还都只对**作者自建**
+ * 的分类生效：能力包带来的分类属于那个包（去掉它得整包关掉），孤儿文件夹压根没有声明
+ * 可改。这两条和作者在 app 里能做的事完全一致，不多一分也不少一分。
+ *
+ * 分类**作为搬入目的地**同样是一个 target 为 `category` 的 move 步骤，`members` 列出
+ * 这一批条目，`move_lore_entity` 逐条过这一个步骤的门（见 `writeTools.ts` 的 `moveGate`）。
+ * 所以「把 12 条归到势力」在卡上是一行，不是十二行。分类改名共用同一个 move 动作、同一
+ * 个 target，只是不带 `members`。
  *
  * ## 这一组是 deferred 的
  *
@@ -198,51 +208,132 @@ export async function fileLoreEntriesTool(
   };
 }
 
-// ─── create_lore_category ────────────────────────────────────────────────────
+// ─── manage_category ─────────────────────────────────────────────────────────
 
-export async function createLoreCategoryTool(
-  toolCallId: string,
-  args: { label?: string },
-  ctx: ToolContext,
-): Promise<ToolResult> {
-  const org = organizerOf(toolCallId, ctx);
-  if ("content" in org) return org;
-
-  const label = String(args.label ?? "").trim();
-  if (!label) return { toolCallId, content: "Error: 'label' is required — what the author will see this category called." };
-
-  // 查重先于方案门，且幂等成功而不是报错——同 manage_collection 的 create：报错只会
-  // 让模型换个名字重试，而《人物2》恰恰是最坏的结果。三路比对（id / labelZh /
-  // labelEn，忽略大小写），因为撞车的典型形态就是模型拿作者的中文说法当新分类名，
-  // 而那正是某个现有 id 的标签。只查已声明分类：label 撞上孤儿文件夹的场景不拦——
-  // 同名自定义分类会「收养」那个文件夹，正是停用包降级设计期望的迁出路径。
-  const key = label.toLowerCase();
-  const existing = loreCategories().find(
+/**
+ * 按 id 或作者所见的标签找一个**已声明**的分类。三路比对（id / labelZh / labelEn，
+ * 忽略大小写），因为模型手上的名字一半来自作者的说法，而那正是某个 id 的标签。
+ */
+function findCategory(name: string) {
+  const key = name.trim().toLowerCase();
+  return loreCategories().find(
     (c) =>
       c.id.toLowerCase() === key ||
       c.labelZh.trim().toLowerCase() === key ||
       c.labelEn.trim().toLowerCase() === key,
   );
-  if (existing) {
+}
+
+/** 已声明分类的清单，给「没有这个分类」的错误信息用。 */
+function categoryList(isZh: boolean): string {
+  return loreCategories().map((c) => categoryRef(c, isZh)).join(", ") || "(none)";
+}
+
+export async function manageCategoryTool(
+  toolCallId: string,
+  args: { op?: string; category?: string; new_label?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const org = organizerOf(toolCallId, ctx);
+  if ("content" in org) return org;
+
+  const op = String(args.op ?? "").trim();
+  const name = String(args.category ?? "").trim();
+  const isZh = i18n.language === "zh-CN";
+  if (!name) {
+    return { toolCallId, content: "Error: 'category' is required — the category to act on (for 'create', the label you are giving it)." };
+  }
+
+  if (op === "create") {
+    // 查重先于方案门，且幂等成功而不是报错——同 manage_collection 的 create：报错只会
+    // 让模型换个名字重试，而《人物2》恰恰是最坏的结果。只查已声明分类：label 撞上孤儿
+    // 文件夹的场景不拦——同名自定义分类会「收养」那个文件夹，正是停用包降级设计期望
+    // 的迁出路径。
+    const existing = findCategory(name);
+    if (existing) {
+      return {
+        toolCallId,
+        content:
+          `Category "${name}" already exists as ${categoryRef(existing, isZh)} — nothing to create. ` +
+          `File entries into it with create_lore_entity / move_lore_entity, passing the id "${existing.id}".`,
+      };
+    }
+    const g = gate(toolCallId, ctx, "create", name, "category");
+    if ("refusal" in g) return g.refusal;
+    // 这一条不回灌快照：新分类是空的，`ctx.loreIndex` 至多少一个空键，而
+    // `setCustomCategories` 那一侧已经全量重扫过 store 了——再 `syncLore(ctx)` 只会
+    // 紧接着再扫一遍全库。真往里放条目的 `create_lore_entity` 本来就走全量刷新。
+    // rename / delete 同理，而且它们连条目内容都没碰。
+    const id = await org.createCategory(name);
     return {
       toolCallId,
       content:
-        `Category "${label}" already exists as ${categoryRef(existing, i18n.language === "zh-CN")} — nothing to create. ` +
-        `File entries into it with create_lore_entity / move_lore_entity, passing the id "${existing.id}".`,
+        `Created category "${name}" (id: ${id}). New entries can go in it via create_lore_entity, and existing ones via move_lore_entity.`,
     };
   }
 
-  const g = gate(toolCallId, ctx, "create", label, "category");
-  if ("refusal" in g) return g.refusal;
+  if (op !== "rename" && op !== "delete") {
+    return { toolCallId, content: "Error: 'op' must be one of: create, rename, delete." };
+  }
 
-  // 这一条不回灌快照：新分类是空的，`ctx.loreIndex` 至多少一个空键，而
-  // `setCustomCategories` 那一侧已经全量重扫过 store 了——再 `syncLore(ctx)` 只会
-  // 紧接着再扫一遍全库。真往里放条目的 `create_lore_entity` 本来就走全量刷新。
-  const id = await org.createCategory(label);
+  const target = findCategory(name);
+  if (!target) {
+    // 孤儿文件夹（有条目、没有任何包声明它）值得单独说一句：它不是「不存在」，
+    // 而是没有可改的声明——把这两种说成同一句，模型会去建一个同名分类，而那会
+    // 「收养」这个文件夹，是完全不同的一次改动。
+    const orphan = Object.keys(ctx.loreIndex).some((id) => id.toLowerCase() === name.toLowerCase());
+    return {
+      toolCallId,
+      content: orphan
+        ? `Error: "${name}" is a folder in the knowledge base that no enabled pack declares, so there is no category declaration to ${op}. Its entries are listed and injected as usual; move them into a declared category with move_lore_entity if they should leave.`
+        : `Error: there is no category "${name}". Existing categories: ${categoryList(isZh)}.`,
+    };
+  }
+  if (!org.userCategories.includes(target.id)) {
+    return {
+      toolCallId,
+      content:
+        `Error: ${categoryRef(target, isZh)} comes from a capability pack, not from the author, so it cannot be ${op === "rename" ? "renamed" : "deleted"} here — a pack's categories go away by turning the pack off, which is the author's switch in Settings. Only categories the author created themselves can be.`,
+    };
+  }
+
+  if (op === "rename") {
+    const label = String(args.new_label ?? "").trim();
+    if (!label) return { toolCallId, content: "Error: 'new_label' is required for a rename — the new author-facing label." };
+    const clash = findCategory(label);
+    if (clash && clash.id !== target.id) {
+      return {
+        toolCallId,
+        content: `Error: "${label}" is already ${categoryRef(clash, isZh)} — two categories answering to one name would make every "which category" answer ambiguous. Pick a different label, or move the entries into that category instead with move_lore_entity.`,
+      };
+    }
+    const g = gate(toolCallId, ctx, "move", target.id, "category");
+    if ("refusal" in g) return g.refusal;
+    await org.renameCategory(target.id, label);
+    return {
+      toolCallId,
+      content:
+        `Renamed the category to "${label}". Its folder id stays \`${target.id}\`, so nothing moved on disk — every entry, every \`[[lore:…]]\` citation and every pinned entry still resolves. Keep passing the id "${target.id}" to create_lore_entity / move_lore_entity.`,
+    };
+  }
+
+  // delete —— 有成员就拒绝。摘掉声明不删任何东西，但会让整个分类退化成孤儿（标签
+  // 变回文件夹 id、条目照常注入），而那不是「删掉」这个词让作者预期的结果。让搬家
+  // 单独占一个方案步骤，作者就能在卡上分别读到「12 条搬去势力」和「删掉空分类」。
+  const members = ctx.loreIndex[target.id] ?? [];
+  if (members.length > 0) {
+    return {
+      toolCallId,
+      content:
+        `Error: ${categoryRef(target, isZh)} still holds ${members.length} ${members.length === 1 ? "entry" : "entries"} (${members.map((e) => e.name).join(", ")}). Deleting the category would not delete them — it would leave their folder undeclared, so they would keep showing up under the raw folder name. Move them somewhere first with move_lore_entity, as its own plan step, then delete the empty category.`,
+    };
+  }
+  const g = gate(toolCallId, ctx, "delete", target.id, "category");
+  if ("refusal" in g) return g.refusal;
+  await org.deleteCategory(target.id);
   return {
     toolCallId,
     content:
-      `Created category "${label}" (id: ${id}). New entries can go in it via create_lore_entity, and existing ones via move_lore_entity. ` +
-      "There is no tool to rename or delete a category: a category is a folder on disk, so either would relocate every member entry and stale its `[[lore:…]]` path citations. Ask the author to do it in the app — renaming a user-defined category is in Settings → 工作区, and deleting one is on its right-click menu on the knowledge-base wall.",
+      `Deleted the category ${categoryRef(target, isZh)}. It was empty, so no entry was affected; its (empty) folder stays on disk and is simply no longer offered as a destination.`,
   };
 }

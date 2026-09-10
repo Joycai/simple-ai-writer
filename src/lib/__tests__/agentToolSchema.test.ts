@@ -104,13 +104,13 @@ describe("lore categories named in a tool description", () => {
     expect(text).not.toContain("skills");
   });
 
-  it("no schema still claims no tool creates categories — create_lore_category exists", () => {
+  it("no schema still claims no tool creates categories — manage_category exists", () => {
     // The pre-organizeTools wording survived in two parameter descriptions and
     // sent the model to the author for something it can propose itself.
     for (const def of getToolDefinitions(["create_lore_entity", "move_lore_entity"])) {
       const text = def.function.description + JSON.stringify(def.function.parameters);
       expect(text.toLowerCase()).not.toContain("no tool creates");
-      expect(text).toContain("create_lore_category");
+      expect(text).toContain("manage_category");
     }
   });
 

@@ -108,7 +108,7 @@ export function stepTarget(step: LorePlanStep): LorePlanTarget {
  *                  category 步骤——兑现它的是 `move_lore_entity`，它在这一组里。
  *   lore_organize  集合步骤（建/改名/删/归集），以及**新建分类**那种 category
  *                  步骤——兑现它们的是 `manage_collection` / `file_lore_entries` /
- *                  `create_lore_category`。
+ *                  `manage_category`。
  *
  * 两边都不是「有非条目步骤就全装」：批准一份「改写条目正文」的方案不该顺手把集合
  * 工具塞进来，反过来也一样。

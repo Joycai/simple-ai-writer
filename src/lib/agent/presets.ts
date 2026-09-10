@@ -166,7 +166,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_lore_image",
     "manage_collection",
     "file_lore_entries",
-    "create_lore_category",
+    "manage_category",
     "set_lore_avatar",
     "copy_lore_file",
     "move_lore_entity",
