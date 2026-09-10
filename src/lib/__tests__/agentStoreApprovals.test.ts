@@ -11,7 +11,7 @@ import type { LorePlan } from "../agent/plan";
 function proposal(id: string): EditProposal {
   return {
     kind: "edit", id, path: "/p/writing/a.md", find: "x", replace: "y", occurrences: 1,
-    matches: [{ line: 1, endLine: 1, before: "", after: "" }],
+    matches: [{ line: 1, endLine: 1, before: [], after: [] }],
   };
 }
 

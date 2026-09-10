@@ -1568,7 +1568,7 @@
       "writerRangeGone": "第 {{from}}-{{to}} 行在这次运行期间已经不在了，没有写入。"
     },
     "approval": {
-      "title": "待确认的正文修改",
+      "title": "改一段",
       "titleRewrite": "待确认的{{doc}}全文改写",
       "titleAppend": "追加内容",
       "titleInsert": "待确认的插入",
@@ -1609,10 +1609,9 @@
       "imageMeta": "存入 {{destination}} · 由 {{model}} 生成",
       "titleDelete": "待确认的{{doc}}删除",
       "titleDeleteVolume": "待确认的整个文件夹删除",
-      "editLines": "第 {{from}}–{{to}} 行",
+      "editLines": "L{{from}}–{{to}}",
       "editNth": "第 {{n}} 处 / 共 {{total}} 处",
-      "editAll": "替换全部 {{n}} 处",
-      "findLabel": "原文",
+      "editAll": "全部 {{n}} 处",
       "replaceLabel": "替换为",
       "emptyChapter": "（空{{doc}}）",
       "emptyFolder": "（新建一个空文件夹）",
@@ -1690,7 +1689,20 @@
         "pipe-to-shell": "看起来会把网上下载的内容直接执行",
         "eval": "看起来会把文本当代码执行",
         "disk": "看起来会动整块磁盘"
-      }
+      },
+      "editSection": "§ {{title}}",
+      "editSections": "跨 {{n}} 个小节",
+      "editWholesale": "整段替换",
+      "editSameLength": "字数不变",
+      "editNoChange": "新文与原文一字不差。批准不会改动文件。",
+      "changeCount": "{{n}} 处改动",
+      "placeCount": "{{n}} 处",
+      "whitespaceOnly": "只有空白",
+      "moreOccurrences": "还有 {{n}} 处没显示",
+      "moreUniform": "还有 {{n}} 处没显示 · 全部是同一种替换",
+      "showAll": "展开全部",
+      "gapUnchanged": "⋯ 中间 {{n}} 行没有改动",
+      "skip": "跳过"
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",

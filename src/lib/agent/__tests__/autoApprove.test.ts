@@ -44,7 +44,7 @@ function editProposal(id: string): Proposal {
   return {
     kind: "edit", id, path: "/p/writing/ch1.md",
     find: "TARGET", replace: "REPLACED", occurrences: 1, reason: "tighten",
-    matches: [{ line: 1, endLine: 1, before: "", after: "" }],
+    matches: [{ line: 1, endLine: 1, before: [], after: [] }],
   };
 }
 

@@ -1,0 +1,110 @@
+/* The change window (设计稿 02h 1z A/C). Geometry lives here; what to draw is
+   decided in lib/diff/windows, so this file has no thresholds in it. */
+
+.windows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* One window is a block of rows with no frame of its own — the tinted rows are
+   the edge. A border here would put a box inside the card's box. */
+.window {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-base);
+}
+
+.row,
+.gap {
+  display: grid;
+  grid-template-columns: 40px 14px 1fr;
+  align-items: baseline;
+  font: 400 12px/1.8 var(--font-mono);
+}
+
+/* Right-aligned like every gutter the author has ever read; tabular so the
+   digits do not shuffle between 99 and 100. */
+.line {
+  text-align: right;
+  padding-right: 8px;
+  font: 400 10px/1.8 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-hint);
+  user-select: none;
+}
+
+.mark {
+  text-align: center;
+  color: inherit;
+  opacity: 0.75;
+  user-select: none;
+}
+
+.text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-right: 10px;
+}
+
+.context {
+  color: var(--color-text-muted);
+}
+
+.del {
+  background: var(--color-diff-del-bg);
+  color: var(--color-diff-del-text);
+}
+
+.add {
+  background: var(--color-diff-add-bg);
+  color: var(--color-diff-add-text);
+}
+
+/* The line number inside a tinted row belongs to that row, not to the gutter:
+   mixed toward its own side so the column still reads as one line of numbers. */
+.del .line {
+  color: color-mix(in oklab, var(--color-diff-del-text) 55%, var(--color-diff-del-bg));
+}
+
+.add .line {
+  color: color-mix(in oklab, var(--color-diff-add-text) 55%, var(--color-diff-add-bg));
+}
+
+/* Token-level highlight is a deeper wash of the row's own colour, not a fifth
+   token — one hue per side, two depths. */
+.litDel,
+.litAdd {
+  background: color-mix(in oklab, var(--color-diff-del-bg), var(--color-diff-del-text) 22%);
+  color: inherit;
+  border-radius: 0;
+}
+
+.litAdd {
+  background: color-mix(in oklab, var(--color-diff-add-bg), var(--color-diff-add-text) 22%);
+}
+
+.gapText {
+  font: 400 10px/1.8 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+/* ── The rail (设计稿 1k) ────────────────────────────────────────────────────
+   The number column is 15% of a 280px rail, so it goes and the line moves into
+   the locator. The mark column stays: it is what makes a row readable at a
+   glance, and it costs 12px. */
+@container (max-width: 479px) {
+  .row,
+  .gap {
+    grid-template-columns: 12px 1fr;
+  }
+
+  /* Hidden here as well as dropped by the component. The two must not be able
+     to disagree: a row that still has its number cell under a two-column grid
+     puts the text in the 12px column and prints one character per line, and
+     that is exactly what the first paint after a resize would look like if
+     this rule trusted the measurement to have landed first. */
+  .line {
+    display: none;
+  }
+}

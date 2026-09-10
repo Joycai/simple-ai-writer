@@ -151,8 +151,13 @@ export const MAX_INLINE_DISTANCE = 600;
  * and marking the handful of characters they share (a comma, a 的) is worse
  * than not marking anything: it invites the eye to read a relationship that
  * is not there.
+ *
+ * The number and the formula are the design's (02h 1z B): Dice, `2·shared /
+ * (|a| + |b|)`, at 0.5. Measuring against the longer side instead would call
+ * a sentence with half of it cut away "the same line, edited" — the cases that
+ * most need to read as a replacement are exactly the ones that rule flatters.
  */
-export const INLINE_MIN_SIMILARITY = 0.3;
+export const INLINE_MIN_SIMILARITY = 0.5;
 
 /**
  * Token-level diff of two short texts — the edit card's find/replace, or one
@@ -272,7 +277,7 @@ function pairInline(lines: DiffLine[]): void {
         const del = lines[i + k];
         const add = lines[delEnd + k];
         const segs = diffInline(del.text, add.text);
-        if (segs && similarity(segs) >= INLINE_MIN_SIMILARITY) {
+        if (segs && dice(segs) >= INLINE_MIN_SIMILARITY) {
           del.inline = segs;
           add.inline = segs;
         }
@@ -282,15 +287,21 @@ function pairInline(lines: DiffLine[]): void {
   }
 }
 
-/** Share of the larger side that survived the edit, 0–1. */
-function similarity(segs: readonly DiffSeg[]): number {
-  let equal = 0;
+/**
+ * How alike two texts are, 0–1: `2·shared / (|a| + |b|)` (Dice).
+ *
+ * Exported because the same coefficient decides two things that must agree —
+ * whether one line's tokens are worth marking, and whether a whole window is
+ * an edit or a rewrite (`diff/windows`).
+ */
+export function dice(segs: readonly DiffSeg[]): number {
+  let shared = 0;
   let aLen = 0;
   let bLen = 0;
   for (const seg of segs) {
     const n = seg.text.length;
     if (seg.type === "equal") {
-      equal += n;
+      shared += n;
       aLen += n;
       bLen += n;
     } else if (seg.type === "del") {
@@ -299,8 +310,7 @@ function similarity(segs: readonly DiffSeg[]): number {
       bLen += n;
     }
   }
-  const longer = Math.max(aLen, bLen);
-  return longer === 0 ? 1 : equal / longer;
+  return aLen + bLen === 0 ? 1 : (2 * shared) / (aLen + bLen);
 }
 
 /** Group changed lines with their context, merging regions that would overlap. */

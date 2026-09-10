@@ -1812,7 +1812,7 @@ describe("propose_edit", () => {
     // Where it lands, not only what it says — an edit card without this can
     // show the replacement and not the place it goes.
     expect(approvals[0]).toMatchObject({
-      matches: [{ line: 1, endLine: 1, before: "", after: "" }],
+      matches: [{ line: 1, endLine: 1, before: [], after: [] }],
     });
     expect(res.content).toContain("approved and applied");
     expect(res.content).toContain("/proj/.ai-writer/backups/x");

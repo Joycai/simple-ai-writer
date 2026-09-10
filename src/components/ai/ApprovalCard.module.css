@@ -5,6 +5,14 @@
 .card {
   border: 1px solid var(--color-border-accent);
   background: var(--color-bg-inset);
+  container-type: inline-size;
+}
+
+/* An edit whose replacement is the text it replaces. Not an error and not
+   hidden: one step quieter on the edge, and a 「跳过」 where 「批准」 would be
+   (设计稿 02h 1l). */
+.cardQuiet {
+  border-color: color-mix(in oklab, var(--color-border-accent) 55%, var(--color-bg-inset));
 }
 
 .header {
@@ -35,11 +43,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The two numbers that say which way the change went. They carry the same
+   colours as the rows below, so the header and the window agree at a glance. */
+.metaAdd { color: var(--color-diff-add-text); }
+.metaDel { color: var(--color-diff-del-text); }
+
+/* Capped and scrolled, so the card's maximum height is a constant: forty
+   changed places and a 60,000-character rewrite make the same-sized card, and
+   the decision — the footer — is always on screen (设计稿 02h 1l). */
 .body {
   padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .reason {
@@ -59,24 +77,52 @@
   color: var(--color-error);
 }
 
-/* Which occurrence a targeted edit lands on, shown only when there is more
-   than one. "All of them" takes the warning tint for the same reason a
-   shrinking rewrite does: it is the case where more of the file changes than
-   the single find/replace below it appears to say. */
-.editScope,
-.editScopeWarn {
-  font: 500 11px/1.6 var(--font-sans);
+/* Where the change lands: which lines, which occurrence of how many, which
+   section (设计稿 02h 1a). A line number says where in the file; a section
+   title says where in the book, and that is the one an author navigates by.
+   「全部 N 处」 takes the warning tint for the same reason a shrinking rewrite
+   does — more of the file changes than the window below it appears to say. */
+.locator,
+.locatorWarn {
+  font: 400 10px/1.6 var(--font-mono);
   color: var(--color-text-muted);
 }
 
-.editScopeWarn {
+.locatorWarn {
   color: var(--color-error);
 }
 
-/* Diff faces are mono — this is a change under review, not finished prose.
-   Outgoing text in the del tint, incoming in the add tint (mockup 1h). */
-.replaceBlock,
-.findBlock {
+/* 「1 处改动 · 整段替换」 — how many windows follow, and whether looking for a
+   word-level difference in them is a waste of the author's attention. */
+.changeCount {
+  font: 500 11px/1.6 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+
+/* The fold: a dashed edge, because what it hides is still there. */
+.foldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: 1px dashed var(--color-border-panel);
+  color: var(--color-text-hint);
+  font: 400 10px/1.6 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.foldRow:hover { color: var(--color-text-secondary); border-color: var(--color-sienna); }
+
+.foldAction {
+  margin-left: auto;
+  color: var(--color-sienna);
+}
+
+/* Diff faces are mono — this is a change under review, not finished prose. */
+.replaceBlock {
   margin: 0;
   font: 400 12px/1.8 var(--font-mono);
   white-space: pre-wrap;
@@ -86,10 +132,6 @@
   max-height: 180px;
   overflow-y: auto;
   color: var(--color-diff-add-text);
-}
-.findBlock {
-  background: var(--color-diff-del-bg);
-  color: var(--color-diff-del-text);
 }
 
 /* Insertions: a list of places, not a diff. Each row is a line number in the
@@ -352,6 +394,20 @@
   transition: background var(--transition-fast);
 }
 .btnApprove:hover:not(:disabled) { background: var(--color-sienna-hover); }
+
+/* Where 「批准」 sits on a card with nothing to authorise. Outlined rather than
+   solid: pressing it lets the run continue, which is not the same act. */
+.btnSkip {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-secondary);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.btnSkip:hover:not(:disabled) { color: var(--color-sienna); border-color: var(--color-sienna); }
+.btnSkip:disabled { opacity: 0.4; cursor: not-allowed; }
 .btnApprove:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Illustration proposal ──────────────────────────────────────────────── */
@@ -714,4 +770,13 @@
 .specToggleLine input[type="checkbox"] {
   margin: 0;
   accent-color: var(--color-accent);
+}
+
+/* ── The rail (设计稿 02h 1k) ────────────────────────────────────────────────
+   Keyed off the card, not the window: the same card is 1100 wide in the drawer
+   and 240 in the rail. **必须留在文件末尾** —— 容器查询不改变特异性。 */
+@container (max-width: 479px) {
+  .body {
+    max-height: 40vh;
+  }
 }
