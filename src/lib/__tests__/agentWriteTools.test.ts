@@ -2823,3 +2823,52 @@ describe("delete_lore_image 摘掉头像", () => {
     expect(res.content).toContain('file: "avatar"');
   });
 });
+
+describe("move_lore_entity 不抹掉归属与封面", () => {
+  // #552 修了 update_lore_meta 和 update_lore_file，漏了第三个整份重写 frontmatter
+  // 的写入方。窗口是真的：一次长运行进行中作者在面板里归了一条集，这次运行随后给
+  // 它改个名，归属就没了——和那两个一模一样的形状。
+  it("改名之后，盘上的 collections / cover 原样还在", async () => {
+    const ctx = withFiling(makeCtx());
+    const res = await run("move_lore_entity", { entity: "Ava", new_name: "Ava Reyes" }, ctx);
+    expect(res.content).not.toContain("Error");
+    // 落点的 id 由 slugifyEntityId 决定，测试不猜它——找那份唯一的 index.md。
+    const path = [...fs.keys()].find((k) => k.includes("/characters/") && k.endsWith("/index.md"))!;
+    const written = fs.get(path)!;
+    expect(written).toContain('collections: ["小说A", "共享设定"]');
+    expect(written).toContain('cover: "portrait.png"');
+  });
+
+  it("换分类同样带着走", async () => {
+    const ctx = withFiling(makeCtx());
+    const res = await run("move_lore_entity", { entity: "Ava", new_category: "world" }, ctx);
+    expect(res.content).not.toContain("Error");
+    const written = fs.get(`${dirOf("world", "ava")}/index.md`)!;
+    expect(written).toContain('collections: ["小说A", "共享设定"]');
+  });
+});
+
+describe("归集走不通时说得出下一步", () => {
+  // 真实事故：派单建条目 → 想把它归进集合 → 改 frontmatter 被拒、file_lore_entries
+  // 报 Unknown tool → 模型报告「工具包里没有归集手段」并回头问作者。拒绝信息里
+  // 必须写着那条真正的出路。
+  it("collections 拒绝里点名了怎么把 file_lore_entries 拿到手", async () => {
+    const ctx = withFiling(makeCtx());
+    const content = [
+      "---",
+      'name: "Ava"',
+      "aliases: []",
+      "category: characters",
+      'summary: "the protagonist"',
+      'cover: "portrait.png"',
+      "---",
+      "",
+      "# Ava",
+      "",
+    ].join("\n");
+    const res = await run("update_lore_file", { entity: "Ava", content }, ctx);
+    expect(res.content).toContain("file_lore_entries");
+    expect(res.content).toContain("propose_lore_plan");
+    expect(res.content).toContain("'collection'");
+  });
+});
