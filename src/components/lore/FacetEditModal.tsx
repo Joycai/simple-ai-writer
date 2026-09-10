@@ -68,7 +68,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
-  const scanProject = useLoreStore((s) => s.scanProject);
+  const refreshEntity = useLoreStore((s) => s.refreshEntity);
   const shellCloseRef = useRef<(() => void) | null>(null);
   const requestClose = () => (shellCloseRef.current ?? onClose)();
 
@@ -239,7 +239,9 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
       } else {
         savedFile = await createFacetFile(entity.dirPath, meta, body);
       }
-      await scanProject(projectPath);
+      // 特征文件从头到尾都在条目自己的文件夹里，没有任何东西会出现或消失——
+      // 重读这一个文件夹就够了，全量扫描在几百条目的项目上是上千次 IPC。
+      await refreshEntity(projectPath, entity);
       if (savedFile) onSaved?.(savedFile);
       requestClose();
     } catch (e) {

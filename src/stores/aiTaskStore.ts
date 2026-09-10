@@ -643,7 +643,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // writeTools.syncLore.
             onLoreChanged: async (changed) => {
               const lore = useLoreStore.getState();
-              if (changed) await lore.refreshEntity(projectPath, changed);
+              if (Array.isArray(changed)) await lore.refreshEntities(projectPath, changed);
+              else if (changed) await lore.refreshEntity(projectPath, changed);
               else await lore.scanProject(projectPath);
               return useLoreStore.getState().index;
             },

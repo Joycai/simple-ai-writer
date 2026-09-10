@@ -200,6 +200,18 @@ export interface LoreEntityAddress {
   dirPath: string;
 }
 
+/**
+ * An entity's address, copied out of it.
+ *
+ * A copy rather than the entity itself because the two live different lengths
+ * of time: a refresh detaches the entity object it replaces, so anything that
+ * held on to it is looking at a stale object, while the address stays true for
+ * as long as the folder does.
+ */
+export function entityAddress(entity: LoreEntity): LoreEntityAddress {
+  return { category: entity.category, id: entity.id, dirPath: entity.dirPath };
+}
+
 export function cloneLoreIndex(index: LoreIndex): LoreIndex {
   const out: LoreIndex = {};
   for (const [category, list] of Object.entries(index)) {

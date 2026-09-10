@@ -19,7 +19,7 @@ import {
   manageCollectionTool,
 } from "../agent/organizeTools";
 import type { LoreOrganizer, ToolContext } from "../agent/registry";
-import type { LoreEntity, LoreIndex } from "../lore";
+import type { LoreEntity, LoreEntityAddress, LoreIndex } from "../lore";
 
 function entity(name: string, collections: string[] = []): LoreEntity {
   return {
@@ -41,6 +41,15 @@ const INDEX: LoreIndex = {
   characters: [entity("Aria", ["小说A"]), entity("Bran"), entity("Cass")],
 };
 
+const addressOf = (dirPath: string): LoreEntityAddress =>
+  ({ category: "characters", id: dirPath.split("/").pop() ?? "", dirPath });
+
+/** 真实实现里 `refileCollection` 交回的那份名单：归入这个集合的成员。 */
+const membersOf = (collection: string): LoreEntityAddress[] =>
+  (INDEX.characters ?? [])
+    .filter((e) => (e.collections ?? []).includes(collection))
+    .map((e) => addressOf(e.dirPath));
+
 interface Calls {
   created: string[];
   renamed: [string, string][];
@@ -59,14 +68,21 @@ function organizer(): LoreOrganizer {
       return declared;
     },
     createCollection: async (n) => { declared = [...declared, n]; calls.created.push(n); },
-    renameCollection: async (a, b) => { calls.renamed.push([a, b]); },
-    deleteCollection: async (n) => { calls.deleted.push(n); },
-    file: async (dirs, add, remove) => { calls.filed.push({ dirs, add, remove }); },
+    // 三条写入都交回真的改过的条目地址——工具拿它回灌运行快照，见下面「快照回灌」。
+    renameCollection: async (a, b) => { calls.renamed.push([a, b]); return membersOf(a); },
+    deleteCollection: async (n) => { calls.deleted.push(n); return membersOf(n); },
+    file: async (dirs, add, remove) => {
+      calls.filed.push({ dirs, add, remove });
+      return dirs.map((d) => addressOf(d));
+    },
     createCategory: async (label) => { calls.categories.push(label); return "contract"; },
   };
 }
 
-function ctxWith(steps: LorePlanStep[], opts?: { organize?: boolean }): ToolContext {
+function ctxWith(
+  steps: LorePlanStep[],
+  opts?: { organize?: boolean; onLoreChanged?: ToolContext["onLoreChanged"] },
+): ToolContext {
   const gate: PlanGate = createPlanGate();
   gate.steps = steps;
   gate.asked = steps.length > 0;
@@ -76,6 +92,7 @@ function ctxWith(steps: LorePlanStep[], opts?: { organize?: boolean }): ToolCont
     multimodal: false,
     lorePlan: gate,
     organize: opts?.organize === false ? undefined : organizer(),
+    onLoreChanged: opts?.onLoreChanged,
   };
 }
 
@@ -251,5 +268,63 @@ describe("agent 指令与工具的说法一致", () => {
     expect(zh.ai.instructions.agent).toContain("create_lore_category");
     expect(en.ai.instructions.agent).not.toContain("No tool creates or deletes categories");
     expect(en.ai.instructions.agent).toContain("create_lore_category");
+  });
+});
+
+describe("快照回灌", () => {
+  // 不回灌的后果不是「界面慢一拍」，而是数据丢失：同一次运行里紧接着的
+  // update_lore_meta 会拿快照上那份旧的 collections 覆写回磁盘（saveEntityMetaAndBody
+  // 缺席即沿用手上这份 entity），把刚归好的集合静静撤销。
+  it("归集之后按地址回灌，而不是要求全量重扫", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "update", entity: "小说B", members: ["Bran"] })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    const r = await fileLoreEntriesTool("f1", { entities: ["Bran"], add: ["小说B"] }, ctx);
+    expect(r.content).toContain("Filed 1 entry");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/bran")]);
+  });
+
+  it("集合改名回灌的是成员，不是全库", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "move", entity: "小说A" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "rename", collection: "小说A", new_name: "雪原书" }, ctx);
+    // Aria 是唯一的成员；Bran / Cass 一个字节都没变，不该跟着重读。
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/aria")]);
+  });
+
+  it("删除集合同样只回灌成员", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "delete", entity: "小说A" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "delete", collection: "小说A" }, ctx);
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/aria")]);
+  });
+
+  it("新建集合不碰任何条目，所以一次刷新都不发", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "create", entity: "雪原书" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "create", collection: "雪原书" }, ctx);
+    expect(seen).toEqual([]);
+  });
+
+  it("回灌失败不会把已经落盘的归集报成失败", async () => {
+    // syncLore 从不抛：写已经成功了，报错只会让模型再归一次。
+    const ctx = ctxWith(
+      [collectionStep({ action: "update", entity: "小说B", members: ["Bran"] })],
+      { onLoreChanged: () => { throw new Error("rescan blew up"); } },
+    );
+    const r = await fileLoreEntriesTool("f1", { entities: ["Bran"], add: ["小说B"] }, ctx);
+    expect(r.content).toContain("Filed 1 entry");
   });
 });

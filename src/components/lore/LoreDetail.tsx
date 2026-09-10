@@ -447,7 +447,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         summary: dSummary.trim(),
         dict: dDict,
       }, dBody);
-      await scanProject(projectPath);
+      // 改名或换分类会把文件夹搬走，索引里的分类键也跟着变——那才要全量重扫。
+      // 只改了简介 / 触发词 / 正文的那一次（常见得多）只重读一个文件夹。
+      if (moved.dirPath === entity.dirPath) await refreshEntity(projectPath, moved);
+      else await scanProject(projectPath);
       // Follow the entity to its (possibly new) folder, and refresh the local
       // body copy — the read-back effect only reruns when dirPath changes.
       setLoc({ category: moved.category, id: moved.id });
@@ -466,8 +469,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   // Every caller of this changed something *inside* this entity's folder — a
   // picture, the cover, a facet file, a description — so one folder is
-  // re-read rather than the whole knowledge base. Saving the edit form stays
-  // on scanProject: a rename or a category change relocates the folder.
+  // re-read rather than the whole knowledge base. Saving the edit form takes
+  // the same path unless the save actually relocated the folder (a rename or
+  // a category change), which is the one case the walk is for.
   const refresh = async () => {
     if (projectPath) await refreshEntity(projectPath, entity);
   };

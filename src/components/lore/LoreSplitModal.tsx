@@ -92,7 +92,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const { models, providers, activeModelId } = useAiStore();
   // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
   const [modelId, setModelId] = useState(activeModelId ?? "");
-  const scanProject = useLoreStore((s) => s.scanProject);
+  const refreshEntity = useLoreStore((s) => s.refreshEntity);
 
   const [phase, setPhase] = useState<"input" | "generating" | "review">("input");
   /**
@@ -269,7 +269,8 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
       const fm = indexRaw.match(/^---\n[\s\S]*?\n---\n?/)?.[0] ?? "";
       await writeEntityFile(entity.dirPath, "index.md", fm + core.trim() + "\n");
 
-      await scanProject(projectPath);
+      // 拆分只在条目自己的文件夹里加文件、重写 index.md——重读这一个文件夹。
+      await refreshEntity(projectPath, entity);
       onApplied?.();
       requestClose();
     } catch (e) {

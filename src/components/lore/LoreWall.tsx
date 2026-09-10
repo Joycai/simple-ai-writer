@@ -239,12 +239,15 @@ export function LoreWall() {
    * 置顶的条目（AI 面板里勾的那份）。围栏生效时它们**越栏**——显式指定＝作者坚持
    * ——所以墙上不能把它们翻面，否则界面在说 AI 看不见，而 AI 其实看得见。
    *
-   * 依赖里带上 `index` 是有意的：置顶存在 prefs 里（不是 React 状态），扫描是这个
-   * 组件能观察到的、离「作者刚在别处改过东西」最近的一个信号。
+   * 依赖里带上 `index` 是有意的：置顶存在 prefs 里（不是 React 状态），而扫描是这个
+   * 组件能观察到的、离「作者刚在别处改过东西」最近的一个信号。`pinRev` 管的是
+   * **本组件自己**改的那一次：右键「越栏」只写了一行 prefs，磁盘上知识库一个字节
+   * 都没变，靠重扫全库来逼一次重渲染是几百个条目、上千次 IPC 换一个计数器。
    */
+  const [pinRev, setPinRev] = useState(0);
   const pinnedDirs = useMemo(
     () => pinnedEntityDirs(loadPinnedLore(projectPath)),
-    [projectPath, index],
+    [projectPath, index, pinRev],
   );
 
   const unfiled = useMemo(() => ungroupedCount(index), [index]);
@@ -599,7 +602,7 @@ export function LoreWall() {
             action: () => {
               const cur = loadPinnedLore(projectPath);
               if (!cur.includes(e.dirPath)) savePinnedLore(projectPath, [...cur, e.dirPath]);
-              void scanProject(projectPath!);
+              setPinRev((n) => n + 1);
             },
           }]
         : []),
@@ -1188,8 +1191,8 @@ export function LoreWall() {
           onClose={() => setShowManage(false)}
           onReorder={(next) => useProjectStore.getState().setCollections(next)}
           onCreate={(name) => useProjectStore.getState().setCollections([...collections, name])}
-          onRename={(from, to) => useProjectStore.getState().renameCollection(from, to)}
-          onDelete={(name) => useProjectStore.getState().deleteCollection(name)}
+          onRename={async (from, to) => { await useProjectStore.getState().renameCollection(from, to); }}
+          onDelete={async (name) => { await useProjectStore.getState().deleteCollection(name); }}
         />
       )}
 

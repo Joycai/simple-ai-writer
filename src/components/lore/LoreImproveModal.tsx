@@ -51,7 +51,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { models, providers, activeModelId } = useAiStore();
   // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
   const [modelId, setModelId] = useState(activeModelId ?? "");
-  const { index, scanProject } = useLoreStore();
+  const { index, refreshEntity } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
   // Write target (设计稿 03a 屏 09 · 写入目标): "__index__" = the entity's index.md,
@@ -323,7 +323,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           priority: 0,
           mode: draftMode,
         }, entity.category), body);
-        await scanProject(projectPath);
+        await refreshEntity(projectPath, entity);
         requestClose();
         return;
       }
@@ -338,7 +338,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
       } else {
         await writeEntityFile(entity.dirPath, "index.md", body);
       }
-      await scanProject(projectPath);
+      // 两条路都只写条目文件夹里的文件（新建特征 / 改写正文），条目不搬家。
+      await refreshEntity(projectPath, entity);
       requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

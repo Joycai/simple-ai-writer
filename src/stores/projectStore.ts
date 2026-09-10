@@ -46,6 +46,7 @@ import {
   scopeHas,
   scopeWithout,
   type LoreEntity,
+  type LoreEntityAddress,
 } from "../lib/lore";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
@@ -213,20 +214,23 @@ interface ProjectState {
    * File entries into / out of collections. Any name that is not declared yet is
    * declared first, so 「新建集合并归入」 is one action rather than two the author
    * has to remember to do in order.
+   *
+   * 这三条都交回**真的改过的条目地址**：索引已经按它精确刷新过了，而 agent 那一侧
+   * 还要拿同一份名单回灌一次运行快照（见 `agent/organizeTools`）。
    */
   fileIntoCollections: (
     entities: readonly LoreEntity[],
     add: readonly string[],
     remove: readonly string[],
-  ) => Promise<void>;
+  ) => Promise<LoreEntityAddress[]>;
   /** Rename a collection: the declaration and every member entry's frontmatter. */
-  renameCollection: (from: string, to: string) => Promise<void>;
+  renameCollection: (from: string, to: string) => Promise<LoreEntityAddress[]>;
   /**
    * Delete a collection: drop the declaration and unfile every member.
    * **No entry is ever deleted** — they become 未归集 (or keep their other
    * collections, since membership is a list).
    */
-  deleteCollection: (name: string) => Promise<void>;
+  deleteCollection: (name: string) => Promise<LoreEntityAddress[]>;
 
   /**
    * Create a file (or folder) under `parentDir` and return its absolute path.
@@ -329,7 +333,7 @@ export function loreOrganizer(): LoreOrganizer {
       const entities = dirPaths
         .map((d) => byDir.get(d))
         .filter((e): e is LoreEntity => !!e);
-      await st().fileIntoCollections(entities, add, remove);
+      return st().fileIntoCollections(entities, add, remove);
     },
     createCategory: async (label) => {
       // 和知识库墙的「新建分类」同一条路：作者给标签，文件夹 id 推导出来，
@@ -555,7 +559,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fileIntoCollections: async (entities, add, remove) => {
     const { projectPath, workspace, customPacks, customCategories, collections } = get();
     if (!projectPath) throw new Error("Open a project before filing entries.");
-    if (entities.length === 0 || (add.length === 0 && remove.length === 0)) return;
+    if (entities.length === 0 || (add.length === 0 && remove.length === 0)) return [];
 
     // 先补声明再写条目：声明只贡献顺序与空集合，但少了它，作者刚建的集合会在管理
     // 面板里缺席，而它明明已经有成员了。
@@ -568,18 +572,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ collections: next });
     }
 
-    await fileEntities(projectPath, entities, add, remove);
-    await useLoreStore.getState().scanProject(projectPath);
+    // 只重读真的改过的那几条：归集改的是 frontmatter 上一个字段，条目全都留在
+    // 自己的文件夹里，没有任何东西会出现或消失。全量重扫在几百条目的项目上是上千
+    // 次 IPC，而归一次集常常只动一条。
+    const touched = await fileEntities(projectPath, entities, add, remove);
+    await useLoreStore.getState().refreshEntities(projectPath, touched);
+    return touched;
   },
 
   renameCollection: async (from, to) => {
     const { projectPath, workspace, customPacks, customCategories, collections } = get();
     if (!projectPath) throw new Error("Open a project before changing its collections.");
     const target = to.trim();
-    if (!target || sameCollection(from, target)) return;
+    if (!target || sameCollection(from, target)) return [];
 
     const loreStore = useLoreStore.getState();
-    await refileCollection(projectPath, loreStore.index, from, target);
+    const touched = await refileCollection(projectPath, loreStore.index, from, target);
     const next = renameInList(collections, from, target);
     await saveProfileFile(projectPath, {
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
@@ -590,7 +598,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (scopeHas(loreStore.scope, from)) {
       loreStore.setScope(projectPath, renameScope(loreStore.scope, from, target));
     }
-    await useLoreStore.getState().scanProject(projectPath);
+    // 改名重写的是成员条目的 frontmatter，`refileCollection` 刚把名单交回来——
+    // 非成员一个字节都没变，没有理由陪着一起重扫。
+    await useLoreStore.getState().refreshEntities(projectPath, touched);
+    return touched;
   },
 
   deleteCollection: async (name) => {
@@ -598,7 +609,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!projectPath) throw new Error("Open a project before changing its collections.");
 
     const loreStore = useLoreStore.getState();
-    await refileCollection(projectPath, loreStore.index, name, null);
+    const touched = await refileCollection(projectPath, loreStore.index, name, null);
     const next = removeFromList(collections, name);
     await saveProfileFile(projectPath, {
       enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
@@ -608,7 +619,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (scopeHas(loreStore.scope, name)) {
       loreStore.setScope(projectPath, scopeWithout(loreStore.scope, name));
     }
-    await useLoreStore.getState().scanProject(projectPath);
+    // 同 renameCollection：删一摊只摘掉成员条目上的那个字段。
+    await useLoreStore.getState().refreshEntities(projectPath, touched);
+    return touched;
   },
 
   refreshFileTree: async () => {

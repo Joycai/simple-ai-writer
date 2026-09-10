@@ -10,11 +10,13 @@ import { parseImagesMd } from "./gallery";
 import { loreCategories } from "../profile/active";
 import { addCollection, normalizeCollections, removeCollection, renameCollection, sameCollection } from "./collections";
 import {
+  entityAddress,
   RESERVED_ENTITY_FILES,
   type CategoryId,
   type EntityMeta,
   type FacetMeta,
   type LoreEntity,
+  type LoreEntityAddress,
   type LoreFacet,
   type LoreImage,
   type LoreIndex,
@@ -439,8 +441,11 @@ export async function createEntityWithContent(
 // ─── Collections ─────────────────────────────────────────────────────────────
 
 /**
- * 把索引里所有归入 `from` 的条目改归 `to`（`to` 为 null ＝ 取消归属），返回改写了
- * 几条。
+ * 把索引里所有归入 `from` 的条目改归 `to`（`to` 为 null ＝ 取消归属），返回**真的
+ * 改写了哪几条**（地址，不是计数）。
+ *
+ * 返回地址而不是数字，是因为调用方接下来要刷新索引：拿着这份名单就只重读这几条，
+ * 拿着一个计数就只能全量重扫，而全量重扫在几百条目的项目上是上千次 IPC。
  *
  * 集合的 id 就是它的名字（见 ./collections 的说明），所以重命名和删除是**改写成员
  * 条目的 frontmatter**，不是改一行声明。这是那个取舍的代价，而它买到的是作者手改
@@ -456,8 +461,8 @@ export async function refileCollection(
   index: LoreIndex,
   from: string,
   to: string | null,
-): Promise<number> {
-  let touched = 0;
+): Promise<LoreEntityAddress[]> {
+  const touched: LoreEntityAddress[] = [];
   for (const entities of Object.values(index)) {
     for (const entity of entities ?? []) {
       const current = entity.collections ?? [];
@@ -480,7 +485,7 @@ export async function refileCollection(
           },
           content,
         );
-        touched++;
+        touched.push(entityAddress(entity));
       } catch (e) {
         console.warn(`[lore] could not refile ${entity.dirPath}:`, e);
       }
@@ -496,15 +501,16 @@ export async function refileCollection(
  * ——勾一个集合的意思是「这批都进去」，不是「这批的归属变成这一个」。后者会在作者
  * 只想补一个标签时静静抹掉别的归属，而那种丢失既没有提示也不容易发现。
  *
- * 返回真的改动过的条目数（已经是那个状态的会被跳过，所以重复点不会白写一遍磁盘）。
+ * 返回真的改动过的条目（已经是那个状态的会被跳过，所以重复点不会白写一遍磁盘）。
+ * 和 `refileCollection` 一样给地址而不是计数——调用方要按它刷新索引。
  */
 export async function fileEntities(
   projectPath: string,
   entities: readonly LoreEntity[],
   add: readonly string[],
   remove: readonly string[],
-): Promise<number> {
-  let touched = 0;
+): Promise<LoreEntityAddress[]> {
+  const touched: LoreEntityAddress[] = [];
   for (const entity of entities) {
     let next = entity.collections ?? [];
     for (const name of add) next = addCollection(next, name);
@@ -527,7 +533,7 @@ export async function fileEntities(
         },
         content,
       );
-      touched++;
+      touched.push(entityAddress(entity));
     } catch (e) {
       console.warn(`[lore] could not file ${entity.dirPath}:`, e);
     }
