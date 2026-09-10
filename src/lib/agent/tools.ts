@@ -78,11 +78,18 @@ export function formatLoreIndex(
   // 这一段是**结果文本**、不是 schema——只在模型真的调用时计费，不吃每轮常驻的
   // 工具预算。而少了它，模型要归档就得先把条目一条条读一遍才知道现有的归档长什么
   // 样，那才是真的贵。
+  //
+  // 末尾那句「归集要在方案里写一条 collection 步骤」也在这里，而不是在
+  // propose_lore_plan 的 schema 里，理由同上：它只对**有集合的项目**成立，而
+  // schema 是每一轮都发的。位置也正好——模型是在这一份清单上决定方案长什么样的，
+  // 而归集工具属于延迟组，方案里没有 collection 步骤就根本不下发（runtime.ts）。
+  // 少了这句，一份只写了 entity 步骤的方案批准之后，模型才发现自己没有归集的手段。
   const views = collectionViews(loreIndex, [...(declared ?? [])]);
   const filed = views.length > 0;
   const catalogue = filed
     ? `Collections: ${views.map((v) => `${v.name} (${v.count})`).join(" · ")}` +
-      `\nAn entry belongs to any number of them, or none. They are the author's own filing scheme — file into an existing one rather than inventing a name.\n`
+      `\nAn entry belongs to any number of them, or none. They are the author's own filing scheme — file into an existing one rather than inventing a name.` +
+      `\nFiling happens through file_lore_entries, which is only loaded once the author approves a plan step whose \`target\` is 'collection' — so if this pass files anything, that step has to be in the plan you propose, alongside the entity steps. Creating an entry does NOT file it (a new entry joins only the collections of an active 取材范围).\n`
     : "";
 
   const lines: string[] = [];

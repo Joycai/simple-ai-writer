@@ -101,10 +101,15 @@ describe("lore_write is withheld until a plan is approved", () => {
     expect(offered[0]).toEqual(["list_lore_entities", "propose_lore_plan"]);
   });
 
-  it("refuses a deferred tool called before its group loads", async () => {
+  it("refuses a deferred tool called before its group loads, and says how to earn it", async () => {
     // The boundary. Not "the model is told to plan first" (that is plan.ts's
     // error text) — the tool is not on offer at all, so the dispatcher has
     // nothing to run.
+    //
+    // 但报文不能是光秃秃的「Unknown tool」：模型只能把它读成「这个工具不存在」，
+    // 于是放弃并回头问作者（真实事故：派单建条目 → 想归集 → file_lore_entries
+    // 报 Unknown tool → 模型报告「工具包里没有归集手段」）。正确的下一步一直在
+    // 那儿——再提一份带对应步骤的方案——所以这里必须说出来。
     queueRound([
       { toolCalls: [{ index: 0, id: "c1", name: "create_lore_entity", arguments: "{}" }] },
       done,
@@ -118,8 +123,29 @@ describe("lore_write is withheld until a plan is approved", () => {
     const steps = opts.events.filter((e) => e.kind === "tool-step");
     const step = steps[steps.length - 1];
     expect(step).toMatchObject({ step: { name: "create_lore_entity", status: "error" } });
-    expect((step as { step: { resultSummary: string } }).step.resultSummary)
-      .toContain("Unknown tool");
+    const summary = (step as { step: { resultSummary: string } }).step.resultSummary;
+    // 「不存在」和「还没装」是两件事，报文必须分得开。
+    expect(summary).not.toContain("Unknown tool");
+    expect(summary).toContain("not loaded yet");
+    expect(summary).toContain("propose_lore_plan");
+  });
+
+  it("真正不认识的工具名仍然是 Unknown tool", async () => {
+    // 上一条的反面：预设里根本没有的名字不该被说成「再提个方案就有」——那是在
+    // 承诺一个这个 surface 给不了的能力（tool-presence 契约）。
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "export_pptx", arguments: "{}" }] },
+      done,
+    ]);
+    queueRound([{ text: "fine" }, done]);
+    const opts = makeOptions(createPlanGate());
+
+    await runAgent(opts);
+
+    const steps = opts.events.filter((e) => e.kind === "tool-step");
+    const summary = (steps[steps.length - 1] as { step: { resultSummary: string } }).step.resultSummary;
+    expect(summary).toContain("Unknown tool");
+    expect(summary).not.toContain("not loaded yet");
   });
 
   it("appends the group once the gate has approved steps, keeping the prefix stable", async () => {

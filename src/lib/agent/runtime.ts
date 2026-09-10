@@ -1197,10 +1197,16 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // not an optimisation. Leave it as the preset's full set and a deferred
       // tool stays callable while its schema is being withheld — which is the
       // gate doing nothing at all, dressed up as a saving.
+      // 还没装载的那些：模型调到它们时该听见「再提一份方案就有」，而不是
+      // 「这个工具不存在」——后者是它唯一能读到的意思，也是它放弃的原因。
+      const pendingTools = (Object.keys(deferred) as ToolGroup[])
+        .filter((g) => !loadedGroups.has(g))
+        .flatMap((g) => deferred[g]);
       const result: ToolResult = await executeRegisteredTool(
         toolCall,
         activeTools,
         callContext,
+        pendingTools,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
       if (!isError && (tc.name === "task_plan" || tc.name === "task_progress")) {

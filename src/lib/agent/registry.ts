@@ -3824,10 +3824,43 @@ export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
  * come back as error-text results — the model gets to read the error and retry,
  * and a single bad call never kills the run.
  */
+/**
+ * 一个**这次运行有、但还没装载**的延迟工具被调用时说什么。
+ *
+ * 存在的理由是一次真实的死路：派单去建一条条目、方案里只有 entity 步骤，于是
+ * `lore_organize` 整组没装；模型想把新条目归进集合，改 frontmatter 被
+ * `update_lore_file` 拒绝（那条守卫是对的），转头调 `file_lore_entries` 得到
+ * 「Unknown tool」——它只能读成「这个工具不存在」，于是放弃并回头问作者。而正确的
+ * 下一步一直在那儿：重新 `propose_lore_plan` 带一条 collection 步骤，工具下一轮就装上。
+ * 没有任何一处说出这句话，所以这里说。
+ *
+ * 只对**这次运行的预设里真有**的工具这么说（`pending`），否则就是在承诺一个这个
+ * surface 根本给不了的能力——`tool-presence.md` 的契约。
+ */
+function unloadedToolMessage(name: string, group: ToolGroup): string {
+  const organize = group === "lore_organize";
+  const how = organize
+    ? "a plan step whose `target` is 'collection' (or 'category' for a new one)"
+    : "a plan step naming the entity you mean to change";
+  return (
+    `Error: ${name} is not loaded yet — it is withheld until the plan covers it, not missing. ` +
+    `It becomes callable as soon as the author approves ${how}: call propose_lore_plan again with that step included, ` +
+    `then use ${name} on the next round.` +
+    // 绕过去的那条路只有归集那一支有（改 index.md 的 frontmatter），而它已经被
+    // update_lore_file 挡住了。对 create/update 那一支说这句话是无的放矢。
+    (organize ? " Do not work around it by rewriting an entry's frontmatter." : "")
+  );
+}
+
 export async function executeRegisteredTool(
   call: ToolCall,
   allowed: readonly ToolId[],
   ctx: ToolContext,
+  /**
+   * 这次运行的预设里有、但所属延迟组还没装载的工具。由 `runtime` 传入——只有它
+   * 知道预设的全貌和已装载的组。缺席即「没有这类工具」，报文退回原来那句。
+   */
+  pending: readonly ToolId[] = [],
 ): Promise<ToolResult> {
   // Narrowed rather than asserted: `call.name` is whatever the model emitted,
   // so a double cast here would hand a `RegisteredTool` shape to something
@@ -3835,7 +3868,17 @@ export async function executeRegisteredTool(
   const isAllowed = (name: string): name is ToolId =>
     (allowed as readonly string[]).includes(name);
   const tool = isAllowed(call.name) ? REGISTRY[call.name] : undefined;
-  if (!tool) return { toolCallId: call.id, content: `Unknown tool: ${call.name}` };
+  if (!tool) {
+    const waiting = (pending as readonly string[]).includes(call.name)
+      ? REGISTRY[call.name as ToolId]?.group
+      : undefined;
+    return {
+      toolCallId: call.id,
+      content: waiting
+        ? unloadedToolMessage(call.name, waiting)
+        : `Unknown tool: ${call.name}`,
+    };
+  }
   // The fence (see RegisteredTool.projectFree). Here rather than in each
   // handler because it has to hold for the forty-odd that never thought about
   // it, and for the next one: this is the single door every model-requested

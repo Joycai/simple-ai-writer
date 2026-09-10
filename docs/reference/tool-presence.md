@@ -16,10 +16,24 @@
 | 形状 | 长什么样 | 代价 |
 |---|---|---|
 | **死指针** | 结果文本教模型调一个已被摘掉／这个 preset 本来就没有的工具 | 一轮 Unknown tool。看得见，能自愈 |
+| **「还没装」被说成「不存在」** | 延迟组里的工具在装载之前被调到，报文是光秃秃的 `Unknown tool` | 模型只能读成「这个工具不存在」，于是放弃并回头问作者——而正确的下一步（再提一份带对应步骤的方案）一直在那儿 |
 | **能力静默消失** | 文本说「做不到」，其实换条路做得到 | **模型再也不去要了。** 作者打开的开关没有效果，且没有任何报错 |
 | **后门** | 工具集比 preset 声明的宽——通常是被某个 `some()`／通配追加进来的 | 一条 preset 注释明说不该有的路，隔一层间接又通了 |
 
-第二种是这份文档存在的理由。第一种是它的常见形态，第三种是它的镜像。
+第二种是这份文档存在的理由。第一种是它的常见形态，第三种是它的镜像。第四种是第二种
+的时间维度版本——能力没有缺席，只是**还没到**，而报文把「还没到」说成了「没有」。
+
+第四种发生过一次，值得记下来：派单去建一条知识库条目，主控提的方案里只有 entity 步骤，
+于是 `lore_organize` 整组没装（`planLoadsOrganize` 要求方案里有 collection/category 步骤）。
+子运行想把新条目归进集合，改 frontmatter 被 `update_lore_file` 的守卫拒绝（那条守卫是对
+的），转头调 `file_lore_entries` 拿到 `Unknown tool: file_lore_entries`——于是它向作者
+报告「派单工具集里没有 filing 手段」。三处都在各自尽职，合起来是一条死路。
+
+修法是让报文分得清这两件事（`registry.ts` 的 `unloadedToolMessage`）：**本次 preset 里
+真有、只是所属延迟组还没装**的工具，报「还没装载 + 怎么装上」；预设里根本没有的名字，
+仍然是 `Unknown tool`——对后者说「再提个方案就有」，就是在承诺这个 surface 给不了的能力，
+那正好是第一种失败形状。判据同样不是「registry 里有没有」，而是 `runtime` 传下来的
+`pending`（这次预设的延迟工具中尚未装载的那些）。
 
 三种都发生过，且都不是有人写错了一行——是**判据取错了变量**。
 
@@ -68,6 +82,8 @@
 | `aiTaskStore` / `agentStore` 的两份清单 | 工作流卡与 docx 格式表跟着 `read_workflow` / `export_docx` 走，不跟档位走 |
 | `roleplay/presets.ts` `subAgentsFor` | 扮演角色的子代理白名单，只有 vision（见 [02-design §8](../feature/roleplay/02-design.md)） |
 | `roleplay/presets.ts` 旁白工具集 | `read_slides` 与 `read_document` **一起**缺席——只留一个会让 `read_file` 的改口指向不存在的工具 |
+| `registry.ts` `unloadedToolMessage` | 延迟组未装载时报「还没装 + 怎么装上」，预设里没有的名字才报 `Unknown tool` |
+| `tools.ts` `formatLoreIndex` 集合抬头 | 有集合的项目才多一句「归集要在方案里写一条 collection 步骤」——它只对有集合的项目成立，也只在模型真的去看清单时计费 |
 | `routing.ts` `transcribe_audio` · `tools.ts` 音频改口 | 追加规则同 `translate`（Beta 开 **且** `asr` 档位绑了 `isAsrOnly` 的模型）；`read_file` 遇到音视频文件时按 `allowedTools` 判：有就点名 `transcribe_audio`，没有就说要作者去实验室开开关并绑模型——不点一个本次运行没有的工具 |
 
 ## 一个例外：跨工具改口

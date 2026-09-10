@@ -488,7 +488,8 @@ export async function updateLoreFileTool(
         toolCallId,
         content:
           `Error: this write would change the entry's collections (${collectionLine(diskCollections)} → ${collectionLine(sentCollections)}). ` +
-          "Filing is the author's, and it goes through file_lore_entries under an approved plan step — never through a whole-file write. " +
+          "Filing is the author's, and it goes through file_lore_entries — never through a whole-file write. " +
+          "If you do not have that tool, it is because it loads only once the author approves a plan step whose `target` is 'collection': call propose_lore_plan again with that step, then file. " +
           (diskCollections.length
             ? `Resend the file with this line in the frontmatter, exactly: \`collections: [${diskCollections.map((c) => JSON.stringify(c)).join(", ")}]\``
             : "Resend the file with no `collections` line at all."),
@@ -2150,11 +2151,17 @@ export async function moveLoreEntityTool(
   let body = `# ${newName ?? entity.name}\n`;
   let summary = entity.summary;
   let aliases = entity.aliases;
+  let collections = entity.collections ?? [];
+  let cover = entity.cover ?? null;
   try {
     const raw = await readEntityFile(entity.dirPath, "index.md");
     const parsed = parseFrontmatter(raw);
     body = parsed.content;
     if (typeof parsed.data.summary === "string") summary = parsed.data.summary;
+    collections = normalizeCollections(parsed.data.collections);
+    cover = typeof parsed.data.cover === "string" && parsed.data.cover.trim()
+      ? parsed.data.cover.trim()
+      : null;
   } catch {
     // no index.md — the rewrite below creates one from the scanned metadata
   }
@@ -2171,9 +2178,24 @@ export async function moveLoreEntityTool(
   const moved = await saveEntityMetaAndBody(
     ctx.projectPath,
     entity,
-    { name: newName ?? entity.name, aliases, category: newCategory ?? entity.category, summary, dict: entity.dict },
+    // collections / cover 显式从**盘上**带过来，和 body / summary / aliases 同一份
+    // 读取——这是第三个整份重写 frontmatter 的写入方，前两个（update_lore_meta、
+    // update_lore_file）已经守住了这条。留给 saveEntityMetaAndBody 兜底就是从
+    // `entity` 上取，而那是运行开始时的快照：作者在一次长运行进行中于面板里归的
+    // 集，会被这次改名静静撤销。
+    {
+      name: newName ?? entity.name,
+      aliases,
+      category: newCategory ?? entity.category,
+      summary,
+      dict: entity.dict,
+      collections,
+      cover,
+    },
     body,
   );
+  entity.collections = collections;
+  entity.cover = cover;
   relocateInSnapshot(ctx.loreIndex, entity, moved);
   entity.name = newName ?? entity.name;
   entity.aliases = aliases;
