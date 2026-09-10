@@ -53,6 +53,8 @@ export interface ToolResult {
   change?: ChangeRecord;
   /** `propose_lore_plan`, approved: the plan the ledger is built on. */
   plan?: PlanRecord;
+  /** An approved write that went through under a standing grant. */
+  autoApproved?: true;
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

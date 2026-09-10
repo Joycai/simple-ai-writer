@@ -42,8 +42,9 @@ import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
-import { buildPlanLedgers } from "../../lib/agent/planLedger";
+import { buildPlanLedgers, summarizeTurnWrites } from "../../lib/agent/planLedger";
 import { PlanLedgerBand, type UndoHandler } from "./PlanLedger";
+import { TurnWritesBand } from "./TurnWrites";
 import {
   buildLogModel,
   roundRows,
@@ -1140,6 +1141,8 @@ export function AgentLog({
   // persisted log, so a restarted session still has its account of what the
   // plan turned into.
   const ledgers = useMemo(() => buildPlanLedgers(log), [log]);
+  // Everything the turn wrote, for the band at its foot (设计稿 02h 1j).
+  const writes = useMemo(() => summarizeTurnWrites(log), [log]);
   const ownHeadline = useHeadline(model);
   const headline = headlineOverride && model.summary.state === "running" ? headlineOverride : ownHeadline;
   // The live round's own start, not the run's: a run is long for honest reasons
@@ -1351,6 +1354,11 @@ export function AgentLog({
           </ul>
         </>
       )}
+
+      {/* The foot of a finished turn: what it wrote, and the line that sums it.
+          Not while it runs — the tail above is already the live account, and a
+          total that keeps changing under the reader is not a total. */}
+      {!isRunning && <TurnWritesBand summary={writes} onUndo={onUndo} />}
     </>
   );
 

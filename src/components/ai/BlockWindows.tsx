@@ -29,9 +29,15 @@ const KIND_STYLE: Record<BlockChangeKind, string> = {
 export function BlockWindows({
   windows,
   lineNumbers,
+  expandable = true,
 }: {
   windows: readonly BlockWindow[];
   lineNumbers: boolean;
+  /**
+   * False for windows read back from the log: the lines past each side's first
+   * two were never kept, so a fold there is a count, not a door.
+   */
+  expandable?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<readonly number[]>([]);
@@ -74,7 +80,7 @@ export function BlockWindows({
             <WindowRows
               rows={rows}
               lineNumbers={lineNumbers}
-              onFold={() => setOpen([...open, i])}
+              onFold={expandable ? () => setOpen([...open, i]) : undefined}
             />
           </div>
         );

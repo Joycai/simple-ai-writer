@@ -1,0 +1,145 @@
+/* What a turn wrote (设计稿 02h 1j). A band at the foot of the execution log:
+   the log's type and spacing, the diff colours only on the numbers. */
+
+.band {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-hairline);
+  /* The change windows inside degrade on the band's own width, as they do on a
+     card — the log is 1100 wide in the drawer and 240 in the rail. */
+  container-type: inline-size;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 0;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 var(--space-3);
+}
+
+/* The row header mirrors the card header it replaces: verb, file, numbers. */
+.head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+
+.head:hover { background: var(--color-bg-hover); }
+
+.verb {
+  flex-shrink: 0;
+  color: var(--color-text-primary);
+}
+
+.file {
+  min-width: 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.numbers {
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.add { color: var(--color-diff-add-text); }
+.del { color: var(--color-diff-del-text); }
+
+/* Nobody read this one. Said plainly, in the same weight as the file name. */
+.auto {
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-sienna);
+}
+
+.undone {
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+.chevron {
+  margin-left: auto;
+  align-self: center;
+  display: flex;
+  color: var(--color-text-hint);
+}
+
+.head:hover .chevron { color: var(--color-sienna); }
+
+.undo,
+.undoAll,
+.open {
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-sienna);
+  font: 400 10px/1.6 var(--font-mono);
+  cursor: pointer;
+}
+
+.undo:hover:not(:disabled),
+.undoAll:hover:not(:disabled),
+.open:hover { text-decoration: underline; }
+.undo:disabled,
+.undoAll:disabled { opacity: 0.4; cursor: default; }
+
+.refusal {
+  padding: 0 var(--space-3) 4px;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-diff-del-text);
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px var(--space-3) 8px;
+}
+
+.detail > * { align-self: stretch; }
+.detail > .open { align-self: flex-start; }
+
+/* The end-of-turn line: under 本次都批准 it may be the only thing read. */
+.summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding: 6px var(--space-3);
+  border-top: 1px dashed var(--color-hairline);
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+
+.summaryTitle {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.summary > .undoAll { margin-left: auto; }

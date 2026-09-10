@@ -11,7 +11,10 @@ import type { EditProposal } from "../agent/registry";
 
 const h = vi.hoisted(() => ({
   content: "",
+  activeFilePath: null as string | null,
   writeFile: vi.fn(async (_path: string, _content: string) => {}),
+  setContent: vi.fn((_content: string) => {}),
+  saveNow: vi.fn(async () => {}),
 }));
 
 vi.mock("../agent/backup", () => ({ backupFile: vi.fn(async () => null) }));
@@ -20,10 +23,10 @@ vi.mock("../fs/fileio", () => ({
   writeFile: h.writeFile,
 }));
 vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: { getState: () => ({ projectPath: "/proj", activeFilePath: null }) },
+  useProjectStore: { getState: () => ({ projectPath: "/proj", activeFilePath: h.activeFilePath }) },
 }));
 vi.mock("../../stores/editorStore", () => ({
-  useEditorStore: { getState: () => ({ content: "", setContent: vi.fn() }) },
+  useEditorStore: { getState: () => ({ content: h.content, setContent: h.setContent, saveNow: h.saveNow }) },
 }));
 
 import { useAgentStore } from "../../stores/agentStore";
@@ -43,6 +46,32 @@ function proposal(
 describe("agentStore.approve — applyEdit uniqueness", () => {
   beforeEach(() => {
     h.writeFile.mockClear();
+    h.setContent.mockReset();
+    h.saveNow.mockReset();
+    h.activeFilePath = null;
+  });
+
+  it("saves an edit to the open document at once, so what reads the file back sees it", async () => {
+    // The write receipt and the log's change record both re-read the file once
+    // the approval returns; the editor's two-second autosave would hand them the
+    // text from before the edit, and the record's fingerprint would later make
+    // undo refuse a file nobody touched.
+    h.activeFilePath = "/proj/writing/a.md";
+    h.content = "红色的门。";
+    const order: string[] = [];
+    h.setContent.mockImplementation(() => {
+      order.push("set");
+    });
+    h.saveNow.mockImplementation(async () => {
+      order.push("save");
+    });
+    const decision = useAgentStore.getState().requestApproval(proposal("红色", "蓝色"), {});
+    await useAgentStore.getState().approve("e1");
+
+    expect((await decision).approved).toBe(true);
+    expect(h.setContent).toHaveBeenCalledWith("蓝色的门。");
+    expect(order).toEqual(["set", "save"]);
+    expect(h.writeFile).not.toHaveBeenCalled();
   });
 
   it("refuses to apply when the find text matches more than once", async () => {

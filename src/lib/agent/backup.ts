@@ -13,7 +13,8 @@
 
 import { fileExists, makeDir, readFile, renamePath, writeFile } from "../fs/fileio";
 import { baseName, projectRelative } from "../paths";
-import type { ChangeRecord } from "./events";
+import type { ChangeRecord, StoredDiff } from "./events";
+import { rewriteWindows } from "../diff/blocks";
 
 /** The flat backup destination for `absPath`, shared by both backup flavours. */
 async function backupDest(projectPath: string, absPath: string): Promise<string> {
@@ -63,6 +64,42 @@ export async function backupFile(projectPath: string, absPath: string): Promise<
  * text renders as "everything was added", which is a claim, not a shortage.
  */
 export const CHANGE_TEXT_CHARS = 4_000;
+
+/** Windows kept for a change whose texts were too long to keep. */
+export const STORED_WINDOWS = 6;
+
+/** Longest line kept inside a stored window. */
+export const STORED_ROW_CHARS = 300;
+
+/**
+ * The change as windows, for a record that cannot keep its texts.
+ *
+ * What is dropped is what a folded window would not show anyway — each side's
+ * lines past its first two — and each kept line is clipped, so the size is a
+ * constant however long the chapter. Nothing is recorded when there is no
+ * readable diff to keep (a refused one, or no change at all).
+ */
+function storedDiff(before?: string, after?: string): { diff?: StoredDiff } {
+  if (before === undefined && after === undefined) return {};
+  const model = rewriteWindows(before ?? "", after ?? "", { context: 1, maxWindows: STORED_WINDOWS });
+  if (model.degraded || model.empty || model.windows.length === 0) return {};
+  return {
+    diff: {
+      windows: model.windows.map((window) => ({
+        ...window,
+        rows: window.rows
+          .filter((row) => !row.overflow)
+          .map((row) =>
+            row.text.length > STORED_ROW_CHARS
+              ? { ...row, text: `${row.text.slice(0, STORED_ROW_CHARS)}…` }
+              : row,
+          ),
+      })),
+      hiddenTotal: model.hiddenTotal,
+      summary: model.summary,
+    },
+  };
+}
 
 /**
  * A short, stable fingerprint of a text — change detection, not security.
@@ -114,6 +151,7 @@ export function changeOf(params: {
     beforeChars: before?.length ?? 0,
     afterChars: after?.length ?? 0,
     ...(after !== undefined ? { afterHash: hashText(after) } : {}),
+    ...(fits ? {} : storedDiff(before, after)),
     ...(params.backupPath ? { backupPath: params.backupPath } : {}),
   };
 }

@@ -8,7 +8,7 @@
  * the characters that changed rather than the size of the entry.
  */
 import { describe, expect, it } from "vitest";
-import { buildPlanLedgers, receiptOf, turnWrites, undoneIds } from "../agent/planLedger";
+import { buildPlanLedgers, receiptOf, summarizeTurnWrites, turnWrites, undoneIds } from "../agent/planLedger";
 import type { AgentEvent, ChangeRecord, PlanRecord, ToolStep } from "../agent/events";
 
 let clock = 1_700_000_000_000;
@@ -141,6 +141,36 @@ describe("buildPlanLedgers", () => {
     expect(turnWrites(log).map((w) => w.toolCallId)).toEqual(["a", "b"]);
     // Only an undo that happened counts; a refused attempt leaves the write standing.
     expect([...undoneIds(log)]).toEqual(["b"]);
+  });
+
+  it("sums a turn's writes for the line at its foot", () => {
+    const doc = (before: string, after: string): ChangeRecord => ({
+      path: "writing/港口.md",
+      action: "update",
+      before,
+      after,
+      beforeChars: before.length,
+      afterChars: after.length,
+    });
+    const log: AgentEvent[] = [
+      stepEvent({ toolCallId: "p", name: "propose_lore_plan", plan: PLAN }),
+      stepEvent({
+        toolCallId: "r",
+        name: "rewrite_document",
+        autoApproved: true,
+        change: doc("一段。\n\n要删的一段。\n\n末段。", "一段。\n\n末段。"),
+      }),
+      stepEvent({ toolCallId: "l", name: "edit_lore_file", planStep: 1, change: update("金发。", "银发。") }),
+      stepEvent({ toolCallId: "x", name: "update_lore_file", status: "error", change: update("a", "b") }),
+      { kind: "undo", toolCallId: "l", outcome: "undone", at: at() },
+    ];
+
+    const summary = summarizeTurnWrites(log);
+    expect(summary.rows.map((r) => r.toolCallId)).toEqual(["r", "l"]);
+    expect(summary).toMatchObject({ documents: 1, entries: 1, deletedBlocks: 1 });
+    expect(summary.rows[0]).toMatchObject({ autoApproved: true, planned: false, lore: false });
+    // The plan write is counted, but its row belongs to the ledger.
+    expect(summary.rows[1]).toMatchObject({ planned: true, lore: true, undo: { outcome: "undone" } });
   });
 
   it("builds nothing for a plan that was not approved", () => {

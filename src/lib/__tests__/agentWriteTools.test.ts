@@ -251,6 +251,23 @@ describe("changeOf", () => {
     expect(hashText("金发")).not.toBe(hashText("银发"));
   });
 
+  it("keeps a bounded diff when the texts are too long to keep", () => {
+    // A chapter is usually past the cap; a record that could only say the sizes
+    // would leave the log where the approval cards started.
+    const para = (s: string) => s.repeat(Math.ceil(CHANGE_TEXT_CHARS / s.length) + 1);
+    const before = `开头一段。\n\n${para("要删掉的这一段很长。")}\n\n结尾一段。`;
+    const after = "开头一段。\n\n结尾一段。";
+    const rec = changeOf({ projectPath: PROJECT, path, before, after });
+
+    expect(rec.before).toBeUndefined();
+    expect(rec.diff?.windows[0].kind).toBe("del");
+    expect(rec.diff?.summary.deletedBlocks).toBe(1);
+    // Clipped, so the size does not grow with the chapter.
+    for (const row of rec.diff!.windows[0].rows) expect(row.text.length).toBeLessThanOrEqual(301);
+    // Short texts keep the texts, not a diff.
+    expect(changeOf({ projectPath: PROJECT, path, before: "a", after: "b" }).diff).toBeUndefined();
+  });
+
   it("carries the backup path only when there is one", () => {
     expect(changeOf({ projectPath: PROJECT, path, after: "new" }).backupPath).toBeUndefined();
     expect(
@@ -1919,6 +1936,29 @@ describe("rewrite_document", () => {
       original: "第一段。\n第二段。\n第三段。\n",
     });
   });
+
+  it("hands the log the change once approved, and marks one nobody read", async () => {
+    const auto = await run("rewrite_document", { path: DOC, content: "第一段。\n第三段。\n" }, makeCtx({
+      requestApproval: async () => ({ approved: true, backupPath: "/proj/.ai-writer/backups/x", auto: true }),
+    }));
+    expect(auto.change).toMatchObject({
+      path: "writing/ch1.md",
+      action: "update",
+      before: "第一段。\n第二段。\n第三段。\n",
+      backupPath: "/proj/.ai-writer/backups/x",
+    });
+    expect(auto.autoApproved).toBe(true);
+
+    const read = await run("rewrite_document", { path: DOC, content: "第一段。\n第三段。\n" }, makeCtx({
+      requestApproval: async () => ({ approved: true }),
+    }));
+    expect(read.autoApproved).toBeUndefined();
+
+    const rejected = await run("rewrite_document", { path: DOC, content: "第一段。\n第三段。\n" }, makeCtx({
+      requestApproval: async () => ({ approved: false }),
+    }));
+    expect(rejected.change).toBeUndefined();
+  });
 });
 
 // ─── propose_edit ────────────────────────────────────────────────────────────
@@ -2566,6 +2606,17 @@ describe("chapter structure tools", () => {
       });
       expect(res.content).toContain("backups");
       expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("hands the log what it deleted, with the backup the approval made", async () => {
+      const res = await run("delete_chapter", { path: CH1, reason: "重复" }, makeCtx({
+        requestApproval: async () => ({ approved: true, backupPath: "/proj/.ai-writer/backups/deleted-1-ch1.md" }),
+      }));
+      expect(res.change).toMatchObject({
+        action: "delete",
+        before: "第一章的正文。",
+        backupPath: "/proj/.ai-writer/backups/deleted-1-ch1.md",
+      });
     });
 
     it("names the documents that link to it", async () => {

@@ -23,6 +23,7 @@
  */
 
 import { diffInline } from "../diff";
+import { rewriteWindows } from "../diff/blocks";
 import type { AgentEvent, ChangeRecord, PlanRecord, ToolStep, UndoEvent } from "./events";
 import type { LorePlanStep } from "./plan";
 
@@ -158,6 +159,82 @@ export function turnWrites(log: readonly AgentEvent[]): TurnWrite[] {
     out.push({ toolCallId: step.toolCallId, toolName: step.name, change: step.change });
   }
   return out;
+}
+
+/** One write of the turn, as the end-of-turn band shows it (设计稿 02h 1j). */
+export interface TurnWriteRow extends TurnWrite {
+  added: number;
+  removed: number;
+  /** Paragraphs a rewrite removed outright — the red number the summary keeps. */
+  deletedBlocks: number;
+  /** A knowledge-base file rather than a document. */
+  lore: boolean;
+  /** Carried out a plan step: its row lives in the plan ledger, not here. */
+  planned: boolean;
+  autoApproved: boolean;
+  undo?: UndoEvent;
+}
+
+export interface TurnWritesSummary {
+  rows: TurnWriteRow[];
+  /** Distinct documents written. */
+  documents: number;
+  /** Distinct knowledge-base entries written. */
+  entries: number;
+  added: number;
+  removed: number;
+  deletedBlocks: number;
+}
+
+/**
+ * Everything a turn wrote, summed — the line the author reads when the cards
+ * never appeared (设计稿 02h 1j).
+ *
+ * The removals stay in it whatever else is folded away: under 本次都批准 this
+ * line may be the only thing the author looks at, and 「删 2 段」 is the part of
+ * it that has to be impossible to miss.
+ */
+export function summarizeTurnWrites(log: readonly AgentEvent[]): TurnWritesSummary {
+  const undos = new Map<string, UndoEvent>();
+  for (const event of log) if (event.kind === "undo") undos.set(event.toolCallId, event);
+
+  const rows: TurnWriteRow[] = [];
+  for (const event of log) {
+    if (event.kind !== "tool-step" || event.parentStep) continue;
+    const { step } = event;
+    if (step.status !== "done" || step.planSkipped || !step.change) continue;
+    const change = step.change;
+    const receipt = receiptOf(change);
+    rows.push({
+      toolCallId: step.toolCallId,
+      toolName: step.name,
+      change,
+      added: receipt.added,
+      removed: receipt.removed,
+      deletedBlocks: deletedBlocksOf(change),
+      lore: change.path.startsWith(".ai-writer/lore/"),
+      planned: step.planStep !== undefined,
+      autoApproved: step.autoApproved === true,
+      ...(undos.get(step.toolCallId) ? { undo: undos.get(step.toolCallId) } : {}),
+    });
+  }
+
+  return {
+    rows,
+    documents: new Set(rows.filter((r) => !r.change.path.startsWith(".ai-writer/")).map((r) => r.change.path)).size,
+    entries: new Set(rows.filter((r) => r.lore).map((r) => r.change.entity ?? r.change.path)).size,
+    added: rows.reduce((n, r) => n + r.added, 0),
+    removed: rows.reduce((n, r) => n + r.removed, 0),
+    deletedBlocks: rows.reduce((n, r) => n + r.deletedBlocks, 0),
+  };
+}
+
+/** Paragraphs an update removed outright, from the kept diff or the kept texts. */
+function deletedBlocksOf(change: ChangeRecord): number {
+  if (change.action !== "update") return 0;
+  if (change.diff) return change.diff.summary.deletedBlocks;
+  if (change.before === undefined || change.after === undefined) return 0;
+  return rewriteWindows(change.before, change.after, { context: 0, maxWindows: 1 }).summary.deletedBlocks;
 }
 
 /** Tool calls whose write has been undone. */

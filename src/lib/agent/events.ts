@@ -15,6 +15,7 @@
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
 import type { HandoffBrief } from "./handoff";
 import type { LorePlanStep } from "./plan";
+import type { BlockWindow, RewriteSummary } from "../diff/blocks";
 
 /**
  * What the author chose when a run hit its round cap.
@@ -117,6 +118,22 @@ export interface ChangeRecord {
   afterHash?: string;
   /** The record is of a whole folder — an entry deleted — not of one file. */
   dir?: true;
+  /**
+   * The change as windows, kept only when the texts themselves were too long
+   * to keep (`CHANGE_TEXT_CHARS`). A chapter is usually past that cap, and a
+   * record that could only say "12 400 → 11 588" would put the author right
+   * back where the approval cards started. Bounded by construction: a few
+   * windows, each side's first lines, each line clipped.
+   */
+  diff?: StoredDiff;
+}
+
+/** A change's windows as kept in the log — see `ChangeRecord.diff`. */
+export interface StoredDiff {
+  windows: BlockWindow[];
+  /** Change groups past the kept windows. */
+  hiddenTotal: number;
+  summary: RewriteSummary;
 }
 
 /**
@@ -187,6 +204,12 @@ export interface ToolStep {
   planRefused?: true;
   /** A destructive step the author skipped at its card: nothing was written. */
   planSkipped?: true;
+  /**
+   * Applied under a standing 本次都批准 grant: no card was shown and nobody
+   * read it. The log row says so, because this row is the only place the
+   * author will ever see this change (设计稿 02h 1j).
+   */
+  autoApproved?: true;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */

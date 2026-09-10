@@ -1489,7 +1489,21 @@
         "task_progress": "Update progress",
         "write_note": "Write note",
         "read_note": "Read note",
-        "list_notes": "List notes"
+        "list_notes": "List notes",
+        "insert_lines": "Insert lines",
+        "append_file": "Append to file",
+        "rewrite_document": "Rewrite document"
+      },
+      "writes": {
+        "title": "Written this turn",
+        "documents": "{{n}} documents",
+        "entries": "{{n}} entries",
+        "unitChars": "chars",
+        "deletedBlocks": "{{n}} paragraphs cut",
+        "autoApproved": "auto-approved",
+        "undoAll": "Undo everything this turn",
+        "openInEditor": "Open in editor",
+        "moreStored": "{{n}} more changes not kept in the log"
       }
     },
     "writer": {
