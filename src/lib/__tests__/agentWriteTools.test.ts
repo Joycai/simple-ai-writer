@@ -2418,13 +2418,24 @@ describe("chapter structure tools", () => {
         kind: "delete",
         path: CH1,
         chars: "第一章的正文。".length,
+        lines: 1,
         // The card has to be able to show what goes; a size is not something
         // an author can check a deletion against.
         excerpt: "第一章的正文。",
+        // The one fact that stops being knowable the moment the file is gone.
+        backlinks: [],
         reason: "与第2章重复",
       });
       expect(res.content).toContain("backups");
       expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("names the documents that link to it", async () => {
+      fs.set(`${PROJECT}/大纲.md`, "见 [第一章](writing/卷一/第1章.md)。");
+
+      await run("delete_chapter", { path: CH1, reason: "与第2章重复" }, approving());
+
+      expect(proposals[0].backlinks).toEqual(["大纲.md"]);
     });
 
     it("refuses a volume folder — that is the author's own call", async () => {
@@ -2679,13 +2690,28 @@ describe("chapter structure tools", () => {
         path: `${PROJECT}/writing/卷一`,
         isDir: true,
         fileCount: 3, // 第1章 + 第2章 + 番外/彩蛋
-        // Folder-relative, so the header's folder name is not repeated on
-        // every row; nested files keep their sub-path.
-        files: ["第1章.md", "第2章.md", "番外/彩蛋.md"],
+        dirCount: 1, // 番外
         reason: "整卷废弃",
       });
+      // Folder-relative paths, biggest first: what an author checks a bulk
+      // deletion against is whether something large is in it.
+      const entries = (proposals[0] as { entries: { path: string; chars: number }[] }).entries;
+      expect(entries.map((e) => e.path)).toEqual(["第1章.md", "第2章.md", "番外/彩蛋.md"]);
+      expect(entries[0].chars).toBe("第一章的正文。".length);
+      expect(entries[2].chars).toBe(1);
+      expect(proposals[0].chars).toBe("第一章的正文。".length * 2 + 1);
       expect(res.content).toContain("backups");
       expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("says which of the folder's files something else links to", async () => {
+      fs.set(`${PROJECT}/大纲.md`, "见 [第一章](writing/卷一/第1章.md)。");
+
+      await run("delete_directory", { path: `${PROJECT}/writing/卷一`, reason: "整卷废弃" }, approving());
+
+      const entries = (proposals[0] as { entries: { path: string; backlinks?: string[] }[] }).entries;
+      expect(entries.find((e) => e.path === "第1章.md")?.backlinks).toEqual(["大纲.md"]);
+      expect(entries.find((e) => e.path === "第2章.md")?.backlinks).toBeUndefined();
     });
 
     it("refuses the project root — that is the workspace, not a folder in it", async () => {
