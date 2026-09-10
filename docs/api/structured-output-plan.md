@@ -1,7 +1,7 @@
 # 结构化输出开关：按模型声明 JSON 模式 / JSON Schema
 
 > **状态：`shipped` `unverified`** —— 2026-09-02 定案，三片当天全部落地。第 1 片：数据层、
-> 三层解析、`json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行（随设计稿 19，
+> 三层解析、`json_schema` 形状、`strictify` / `stripNulls`、兜底路径、模型抽屉那一行（随设计稿 05c，
 > 见 [`docs/feature/model-drawer-redesign-brief.md`](../feature/model-drawer-redesign-brief.md)）。
 > 第 2 片：§5.3 的 400 学习与 memo（`jsonMode.ts` 的 `withJsonModeFallback`，两处调用方都走它），
 > `generator.ts` 的 `loreEntitySchema`（`category` 用 enum 钉住）。第 3 片：§7 第 3 点——降级可预测
@@ -359,6 +359,12 @@ strictify(schema):
    `responseJsonSchema` 字样（`isJsonModeRejection` 靠它降级）。
 
 在这五条之前，本文所有关于 DashScope 实际行为的陈述都只是文档转述，状态 `unverified`。
+
+**2026-09-03 部分已验**（[`qianwen-compat-plan.md`](qianwen-compat-plan.md) §1）：第 2 条成立——
+qwen3.8-flash / 3.7-flash 思考开着 + `json_schema` strict 流式，`reasoning_content` 与 `content` 照常分流，
+输出合法 JSON；deepseek-v4-pro-0813、kimi-k3、glm-5.2 亦然。第 3 条的判据样本还没有（没拿不支持的模型试），
+但拿到了另一条：**MiniMax-M2.5 对 `response_format` 不报错也不强制**（同一请求一次围栏 JSON、一次散文），
+是"无视"而非"拒绝"，400 学习抓不到，只能作者手动把它声明成「关」。第 1、4、5 条仍未验。
 
 ## 12. 弃案
 

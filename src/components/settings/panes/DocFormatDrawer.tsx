@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import { PaperPreview } from "./PaperPreview";
 import { isFontInstalled } from "../../../lib/docx/fontCheck";
 import {
@@ -34,6 +34,11 @@ import {
   type PageSizeName,
   HEADING_NUMBER_FORMATS,
   PAGE_NUMBER_STYLES,
+  headingNumberSample,
+  headingNumberingLine,
+  isChineseNumbering,
+  numberingConflicts,
+  numberingPickBlocked,
   type HeadingNumberFormat,
   type PageNumberStyle,
 } from "../../../lib/docx/format";
@@ -84,6 +89,27 @@ export function DocFormatDrawer({
   const region = bodyRegionMm(format.page);
   const paper = paperMm(format.page);
   const indentMm = format.body.firstLineChars * format.body.sizePt * MM_PER_PT;
+  const numberingOn = format.headingNumbering.enabled;
+  const numLevels = format.headingNumbering.levels;
+  // 已存下的坏组合（#505 之前复制出去的论文预设）：下拉拦得住选、拦不住存过的值，只能指出来。
+  const numConflicts = numberingOn ? numberingConflicts(numLevels) : [];
+  // 编号下拉旁那行 mono：这一级此刻要么已经坏了（warm），要么有项被拦要说一声为什么，要么就是「样例即选项」。
+  const numEcho = (lv: number): { text: string; warm: boolean } => {
+    const here = numberingPickBlocked(numLevels, lv, numLevels[lv]);
+    if (here === "upperChinese") return { text: t("docxFormat.drawer.numberingConflictDotted"), warm: true };
+    if (here === "lowerDotted") return { text: t("docxFormat.drawer.numberingConflictChinese"), warm: true };
+    if (numLevels.slice(lv + 1).includes("decimalDotted")) return { text: t("docxFormat.drawer.numberingNoChinese"), warm: false };
+    if (numLevels.slice(0, lv).some(isChineseNumbering)) return { text: t("docxFormat.drawer.numberingNoDotted"), warm: false };
+    return { text: t("docxFormat.drawer.numberingPick"), warm: false };
+  };
+  const hasPn = format.headerFooter.pageNumber !== "none";
+  const hasAny = hasPn || !!format.headerFooter.headerText.trim() || format.headerFooter.headerRule;
+  const hfEmpty = !hasAny;
+  // 「一、总体要求」那个反例——前缀取 H1 当前的写法，关掉或不编号时不会渲染到这里。
+  const exPrefix = numberingOn && format.headingNumbering.levels[0] !== "none"
+    ? headingNumberSample(format.headingNumbering.levels[0], 0)
+    : t("docxFormat.drawer.numberingExPrefix");
+  const exRest = t("docxFormat.drawer.numberingExRest");
 
   return (
     <>
@@ -91,6 +117,17 @@ export function DocFormatDrawer({
       <div className={styles.scrim} />
       <div className={styles.drawer} role="dialog" aria-label={t("docxFormat.drawer.title")}>
         <div className={styles.drawerHead}>
+          {/* ≤720 抽屉铺满整屏，于是它不再是「旁边滑出来的一层」而是「推进去的一屏」，
+              出口也就该是左上角那支返回箭头（设计稿 05f 屏 1m）。两个按钮都渲染、
+              各自在自己的宽度下显示：宽度是 CSS 知道的事，让 JS 去量它只会多一个
+              会和媒体查询对不上的真值。 */}
+          <button
+            className={styles.backBtn}
+            onClick={() => (dirty ? setConfirmDiscard(true) : onClose())}
+            aria-label={t("common.back", { defaultValue: "返回" })}
+          >
+            <ArrowLeft size={16} />
+          </button>
           <div className={styles.drawerHeadMain}>
             <div className={styles.drawerEyebrow}>{t("docxFormat.drawer.title")}</div>
             <input
@@ -226,7 +263,23 @@ export function DocFormatDrawer({
             </Field>
 
             {/* ── 标题 1–4 ───────────────────────────────────────────── */}
-            <GroupHead label={t("docxFormat.drawer.groupHeadings")} summary={t("docxFormat.drawer.headingsHint")} />
+            <GroupHead
+              label={t("docxFormat.drawer.groupHeadings")}
+              summary={numberingOn
+                ? t("docxFormat.drawer.numberingSummary", { s: headingNumberingLine(format.headingNumbering) })
+                : t("docxFormat.drawer.numberingSummaryOff")}
+            />
+            {/* 总开关单独一行、留在表外：它管四级，不属于任何一级（05h 1z · A1）。 */}
+            <Field label={t("docxFormat.drawer.numbering")}>
+              <Switch
+                on={format.headingNumbering.enabled}
+                label={t("docxFormat.drawer.numbering")}
+                onChange={(enabled) => patch({ headingNumbering: { ...format.headingNumbering, enabled } })}
+              />
+              <span className={styles.echo}>
+                {format.headingNumbering.enabled ? t("docxFormat.drawer.numberingOn") : t("docxFormat.drawer.numberingOffHint")}
+              </span>
+            </Field>
             <div className={styles.headTable} role="table">
               <div className={styles.headRowHead} role="row">
                 <span>{t("docxFormat.drawer.colLevel")}</span>
@@ -235,6 +288,11 @@ export function DocFormatDrawer({
                 <span>{t("docxFormat.drawer.colAlign")}</span>
                 <span>{t("docxFormat.drawer.colSpacing")}</span>
                 <span>{t("docxFormat.drawer.colBreak")}</span>
+                {/* 第七列。— 是「作者选了不编号」，关闭时整列同一种灰的 —；虚线是「未设」，
+                    这里一格都不用——关不是未设（05h 1z · A2）。 */}
+                <span className={numberingOn ? styles.colOn : undefined}>
+                  {numberingOn ? t("docxFormat.drawer.colNumbering") : t("docxFormat.drawer.colNumberingOff")}
+                </span>
               </div>
               {format.headings.map((h, i) => (
                 <button
@@ -248,10 +306,45 @@ export function DocFormatDrawer({
                   <span>{h.bold ? t("common.yes", { defaultValue: "是" }) : t("common.no", { defaultValue: "否" })}</span>
                   <span>{t(`docxFormat.drawer.align_${h.align}`)}</span>
                   <span>{`${h.spaceBeforePt} / ${h.spaceAfterPt}`}</span>
-                  <span>{h.pageBreakBefore ? t("common.yes", { defaultValue: "是" }) : t("common.no", { defaultValue: "否" })}</span>
+                  {/* 「每章页码重来」开着时 H1 那一格写「分节」：核对表不能写「是」而文件里是另一回事
+                      ——分节符自己分页，效果在、但走的不是这个字段（05h 1z · B5）。 */}
+                  {i === 0 && format.headerFooter.restartEachChapter && format.headerFooter.pageNumber !== "none"
+                    ? <span className={styles.cellDim}>{t("docxFormat.drawer.sectioned")}</span>
+                    : <span>{h.pageBreakBefore ? t("common.yes", { defaultValue: "是" }) : t("common.no", { defaultValue: "否" })}</span>}
+                  <span className={!numberingOn || numLevels[i] === "none" ? styles.cellDim : numConflicts.includes(i) ? styles.cellConflict : undefined}>
+                    {numberingOn ? headingNumberSample(numLevels[i], i) : "—"}
+                  </span>
                 </button>
               ))}
             </div>
+            <div className={styles.tableFoot}>{t("docxFormat.drawer.numberingFoot")}</div>
+            {numConflicts.length > 0 && (
+              <div className={`${styles.tableFoot} ${styles.tableFootNote}`}>
+                {t("docxFormat.drawer.numberingConflictFoot", { levels: numConflicts.map((i) => `H${i + 1}`).join(" / ") })}
+              </div>
+            )}
+            {/* 「不要手写序号」给一个反例：比回显重（一块常驻说明 + 一行真实后果），比警告轻（中性灰、
+                无红、无 ⚠）。这里不做检测，也不替作者删——码里确实没有，稿子不许暗示有（05h 1z · A3）。 */}
+            {numberingOn && (
+              <div className={styles.onBlock}>
+                <div className={styles.onBlockHead}>
+                  <span className={styles.onBlockMark} />
+                  <span className={styles.onBlockTitle}>{t("docxFormat.drawer.numberingOnTitle")}</span>
+                </div>
+                <div className={styles.onBlockText}>
+                  {t("docxFormat.drawer.numberingOnText")}
+                  <strong>{t("docxFormat.drawer.numberingOnStrong")}</strong>
+                  {t("docxFormat.drawer.numberingOnText2")}
+                </div>
+                <div className={styles.onBlockExample}>
+                  <span className={styles.onBlockExLabel}>{t("docxFormat.drawer.numberingExLabel")}</span>
+                  <span className={styles.onBlockExText}>{exPrefix}{exRest}</span>
+                  <span className={styles.onBlockArrow}>→</span>
+                  <span className={styles.onBlockExText}>{exPrefix}<mark className={styles.onBlockDup}>{exPrefix}</mark>{exRest}</span>
+                </div>
+                <div className={styles.onBlockFoot}>{t("docxFormat.drawer.numberingOnFoot")}</div>
+              </div>
+            )}
 
             <div className={styles.levelPanel}>
               <div className={styles.levelPanelHead}>
@@ -281,8 +374,34 @@ export function DocFormatDrawer({
               <Field label={t("docxFormat.drawer.pageBreak")}>
                 <Switch on={!!format.headings[level].pageBreakBefore} label={t("docxFormat.drawer.pageBreak")}
                         onChange={(v) => patchHeading(level, { pageBreakBefore: v })} />
-                <span className={styles.echo}>{t("docxFormat.drawer.pageBreakHint")}</span>
+                <span className={styles.echo}>
+                  {level === 0 && format.headerFooter.restartEachChapter && format.headerFooter.pageNumber !== "none"
+                    ? t("docxFormat.drawer.pageBreakSectioned")
+                    : t("docxFormat.drawer.pageBreakHint")}
+                </span>
               </Field>
+              {/* 下拉项就是样例本身：写法名认不出来，样子一眼就认得；回显那一列＝表里的那一格。 */}
+              {numberingOn && (
+                <Field label={t("docxFormat.drawer.colNumbering")}>
+                  <select
+                    className={styles.select}
+                    value={format.headingNumbering.levels[level]}
+                    onChange={(e) => {
+                      const levels = [...format.headingNumbering.levels] as DocFormat["headingNumbering"]["levels"];
+                      levels[level] = e.target.value as HeadingNumberFormat;
+                      patch({ headingNumbering: { ...format.headingNumbering, levels } });
+                    }}
+                  >
+                    {/* 含上级的写法和它之上的中文计数互斥：选不了的项灰掉，旁边的 mono 说为什么。 */}
+                    {HEADING_NUMBER_FORMATS.map((k) => (
+                      <option key={k} value={k} disabled={numberingPickBlocked(numLevels, level, k) !== null}>
+                        {headingNumberSample(k, level)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={`${styles.echo} ${numEcho(level).warm ? styles.echoWarm : ""}`}>{numEcho(level).text}</span>
+                </Field>
+              )}
             </div>
 
             {/* ── 其他块 ─────────────────────────────────────────────── */}
@@ -324,50 +443,12 @@ export function DocFormatDrawer({
               <span className={styles.echo}>{t("docxFormat.drawer.repeatHeader")}</span>
             </Field>
 
-            {/* ── 标题自动编号 ───────────────────────────────────────── */}
-            <GroupHead
-              label={t("docxFormat.drawer.groupNumbering")}
-              summary={
-                format.headingNumbering.enabled
-                  ? format.headingNumbering.levels
-                      .map((lv, i) => (lv === "none" ? "—" : numberingSample(lv, i)))
-                      .join("  ")
-                  : t("docxFormat.drawer.numberingOff")
-              }
-            />
-            <Field label={t("docxFormat.drawer.numbering")}>
-              <Switch
-                on={format.headingNumbering.enabled}
-                label={t("docxFormat.drawer.numbering")}
-                onChange={(enabled) => patch({ headingNumbering: { ...format.headingNumbering, enabled } })}
-              />
-              <span className={styles.echo}>{t("docxFormat.drawer.numberingHint")}</span>
-            </Field>
-            {format.headingNumbering.enabled &&
-              format.headingNumbering.levels.map((lv, i) => (
-                <Field key={i} label={`H${i + 1}`}>
-                  <select
-                    className={styles.select}
-                    value={lv}
-                    onChange={(e) => {
-                      const levels = [...format.headingNumbering.levels] as DocFormat["headingNumbering"]["levels"];
-                      levels[i] = e.target.value as HeadingNumberFormat;
-                      patch({ headingNumbering: { ...format.headingNumbering, levels } });
-                    }}
-                  >
-                    {HEADING_NUMBER_FORMATS.map((k) => (
-                      <option key={k} value={k}>{t(`docxFormat.drawer.num_${k}`)}</option>
-                    ))}
-                  </select>
-                  {/* 写法名认不出来，样子一眼就认得——所以样例始终在旁边 */}
-                  <span className={styles.echo}>{lv === "none" ? "—" : numberingSample(lv, i)}</span>
-                </Field>
-              ))}
-
             {/* ── 页眉页脚 ───────────────────────────────────────────── */}
+            {/* 空态摘要就是「留空就一行都不写进文件」那句话——它只在空态成立，就只在空态出现；
+                字段级的两处（占位「留空＝不写页眉」、下拉第一项「不写页码」）是值本身，留着（05h 1z · B2）。 */}
             <GroupHead
               label={t("docxFormat.drawer.groupHeader")}
-              summary={headerFooterSummary(format, t)}
+              summary={hfEmpty ? t("docxFormat.drawer.headerEmptySummary") : headerFooterSummary(format, t)}
             />
             <Field label={t("docxFormat.drawer.headerText")}>
               <input
@@ -378,28 +459,45 @@ export function DocFormatDrawer({
                 aria-label={t("docxFormat.drawer.headerText")}
               />
               {format.headerFooter.headerText.trim() && (
-                <AlignSeg
+                <Seg
                   value={format.headerFooter.headerAlign}
-                  onChange={(headerAlign) => patch({ headerFooter: { ...format.headerFooter, headerAlign } })}
+                  options={HF_ALIGNS.map((a) => ({ value: a, label: t(`docxFormat.drawer.align_${a}`) }))}
+                  onChange={(v) => patch({ headerFooter: { ...format.headerFooter, headerAlign: v as Align } })}
                 />
               )}
             </Field>
             <Field label={t("docxFormat.drawer.pageNumber")}>
-              <select
-                className={styles.select}
-                value={format.headerFooter.pageNumber}
-                onChange={(e) => patch({ headerFooter: { ...format.headerFooter, pageNumber: e.target.value as PageNumberStyle } })}
-              >
-                {PAGE_NUMBER_STYLES.map((k) => (
-                  <option key={k} value={k}>{t(`docxFormat.drawer.pn_${k}`)}</option>
-                ))}
-              </select>
-              {format.headerFooter.pageNumber !== "none" && (
-                <AlignSeg
-                  value={format.headerFooter.pageNumberAlign}
-                  onChange={(pageNumberAlign) => patch({ headerFooter: { ...format.headerFooter, pageNumberAlign } })}
-                />
-              )}
+              <div className={styles.stack}>
+                <div className={styles.stackRow}>
+                  <select
+                    className={styles.select}
+                    value={format.headerFooter.pageNumber}
+                    onChange={(e) => patch({ headerFooter: { ...format.headerFooter, pageNumber: e.target.value as PageNumberStyle } })}
+                  >
+                    {PAGE_NUMBER_STYLES.map((k) => (
+                      <option key={k} value={k}>{t(`docxFormat.drawer.pn_${k}`)}</option>
+                    ))}
+                  </select>
+                  {hasPn && (
+                    <Seg
+                      value={format.headerFooter.pageNumberAlign}
+                      options={HF_ALIGNS.map((a) => ({ value: a, label: t(`docxFormat.drawer.align_${a}`) }))}
+                      onChange={(v) => patch({ headerFooter: { ...format.headerFooter, pageNumberAlign: v as Align } })}
+                    />
+                  )}
+                </div>
+                {/* 一个字段一个值：左 / 中 / 右仍只有一个选中态；互换那条规则写在段下，只在「奇偶页不同」
+                    开着时出现——它是那个开关的结果，不是对齐的第二套值（05h 1z · B4）。 */}
+                {hasPn && format.headerFooter.differentOddEven && (
+                  <div className={styles.oddEvenEcho}>
+                    {t("docxFormat.drawer.oddEvenEcho", {
+                      odd: t(`docxFormat.drawer.align_${format.headerFooter.pageNumberAlign}`),
+                      even: t(`docxFormat.drawer.align_${mirrorAlign(format.headerFooter.pageNumberAlign)}`),
+                    })}
+                    <span className={styles.oddEvenCenter}>{t("docxFormat.drawer.oddEvenCenter")}</span>
+                  </div>
+                )}
+              </div>
             </Field>
             <Field label={t("docxFormat.drawer.headerRule")}>
               <Switch
@@ -409,39 +507,35 @@ export function DocFormatDrawer({
               />
               <span className={styles.echo}>{t("docxFormat.drawer.headerRuleHint")}</span>
             </Field>
-            {format.headerFooter.pageNumber !== "none" && (
-              <Field label={t("docxFormat.drawer.oddEven")}>
-                <Switch
-                  on={format.headerFooter.differentOddEven}
-                  label={t("docxFormat.drawer.oddEven")}
-                  onChange={(differentOddEven) => patch({ headerFooter: { ...format.headerFooter, differentOddEven } })}
-                />
-                <span className={styles.echo}>{t("docxFormat.drawer.oddEvenHint")}</span>
-              </Field>
-            )}
-            {(format.headerFooter.pageNumber !== "none" ||
-              format.headerFooter.headerText.trim() ||
-              format.headerFooter.headerRule) && (
-              <Field label={t("docxFormat.drawer.firstPage")}>
-                <Switch
-                  on={format.headerFooter.differentFirstPage}
-                  label={t("docxFormat.drawer.firstPage")}
-                  onChange={(differentFirstPage) => patch({ headerFooter: { ...format.headerFooter, differentFirstPage } })}
-                />
-                <span className={styles.echo}>{t("docxFormat.drawer.firstPageHint")}</span>
-              </Field>
-            )}
-            {format.headerFooter.pageNumber !== "none" && (
-              <Field label={t("docxFormat.drawer.restartChapter")}>
-                <Switch
-                  on={format.headerFooter.restartEachChapter}
-                  label={t("docxFormat.drawer.restartChapter")}
-                  onChange={(restartEachChapter) => patch({ headerFooter: { ...format.headerFooter, restartEachChapter } })}
-                />
-                <span className={styles.echo}>{t("docxFormat.drawer.restartChapterHint")}</span>
-              </Field>
-            )}
-            <div className={styles.laterNote}>{t("docxFormat.drawer.headerLater")}</div>
+            {/* 三行依赖字段不消失：虚线开关 + 次级标签 + 一句「先设页码」。作者会在没设页码时找「首页不同」
+                ——公文的甲方就是这么说的；三行都不见，他无从知道这一组能做这三件事（05h 1z · B1）。 */}
+            <Field label={t("docxFormat.drawer.oddEven")} dim={!hasPn}>
+              <Switch
+                on={format.headerFooter.differentOddEven}
+                label={t("docxFormat.drawer.oddEven")}
+                disabled={!hasPn}
+                onChange={(differentOddEven) => patch({ headerFooter: { ...format.headerFooter, differentOddEven } })}
+              />
+              <span className={styles.echo}>{hasPn ? t("docxFormat.drawer.oddEvenHint") : t("docxFormat.drawer.needPageNumber")}</span>
+            </Field>
+            <Field label={t("docxFormat.drawer.firstPage")} dim={!hasAny}>
+              <Switch
+                on={format.headerFooter.differentFirstPage}
+                label={t("docxFormat.drawer.firstPage")}
+                disabled={!hasAny}
+                onChange={(differentFirstPage) => patch({ headerFooter: { ...format.headerFooter, differentFirstPage } })}
+              />
+              <span className={styles.echo}>{hasAny ? t("docxFormat.drawer.firstPageHint") : t("docxFormat.drawer.needAny")}</span>
+            </Field>
+            <Field label={t("docxFormat.drawer.restartChapter")} dim={!hasPn}>
+              <Switch
+                on={format.headerFooter.restartEachChapter}
+                label={t("docxFormat.drawer.restartChapter")}
+                disabled={!hasPn}
+                onChange={(restartEachChapter) => patch({ headerFooter: { ...format.headerFooter, restartEachChapter } })}
+              />
+              <span className={styles.echo}>{hasPn ? t("docxFormat.drawer.restartChapterHint") : t("docxFormat.drawer.needPageNumber")}</span>
+            </Field>
           </div>
 
           <div className={styles.drawerPreview}>
@@ -463,14 +557,22 @@ export function DocFormatDrawer({
         </div>
 
         <div className={styles.drawerFoot}>
-          <span className={styles.footHint}>{t("docxFormat.drawer.saveHint")}</span>
+          {/* 坏的编号组合（含上级之上是中文计数）到这里就存不进去了：下拉拦得住选，老预设
+              带进来的值只能在这一步拦。脚注说的是哪几级、后果是什么，保存键跟着禁用。 */}
+          {numConflicts.length > 0 ? (
+            <span className={`${styles.footHint} ${styles.footHintWarm}`}>
+              {t("docxFormat.drawer.saveBlockedNumbering", { levels: numConflicts.map((i) => `H${i + 1}`).join(" / ") })}
+            </span>
+          ) : (
+            <span className={styles.footHint}>{t("docxFormat.drawer.saveHint")}</span>
+          )}
           <span className={styles.grow} />
           <button className={styles.ghostBtn} onClick={() => (dirty ? setConfirmDiscard(true) : onClose())}>
             {t("common.cancel", { defaultValue: "取消" })}
           </button>
           <button
             className={styles.primaryBtn}
-            disabled={!label.trim()}
+            disabled={!label.trim() || numConflicts.length > 0}
             onClick={() => onSave({ ...preset, label: label.trim(), builtin: false, format })}
           >
             {t("common.save", { defaultValue: "保存" })}
@@ -504,10 +606,10 @@ function GroupHead({ label, summary }: { label: string; summary: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, dim = false, children }: { label: string; dim?: boolean; children: ReactNode }) {
   return (
     <div className={styles.field}>
-      <span className={styles.fieldLabel}>{label}</span>
+      <span className={`${styles.fieldLabel} ${dim ? styles.fieldLabelDim : ""}`}>{label}</span>
       <div className={styles.fieldBody}>{children}</div>
     </div>
   );
@@ -534,27 +636,82 @@ function FontField({ label, value, onChange }: { label: string; value: string; o
   );
 }
 
-/** 号数下拉 + 磅数回显。作者手上的规格用哪种写法都有可能，所以两种都要在。 */
+/** 一个数值用哪种写法显示：有号数就显示号数，没有就显示磅。 */
+function sizeDisplay(pt: number): string {
+  const named = CN_SIZES.find(([, p]) => p === pt);
+  return named ? named[0] : String(pt);
+}
+
+/**
+ * 字号：一个框，两种写法（设计稿 05e 屏 1e）。输入框接受号数也接受磅值——甲方要求写
+ * 「三号」还是写「16」都能直接照抄；另一种写法永远在框内右侧回显（灰色、不可编辑）。
+ * 没有对应号数的磅值是允许的，不是错（回显「磅 · 无对应号数」）。号数表折在框尾的
+ * 小箭头后面，两种写法并列、等宽对齐。
+ */
 function SizePicker({ value, onChange }: { value: number; onChange: (pt: number) => void }) {
   const { t } = useTranslation();
-  const named = CN_SIZES.find(([, pt]) => pt === value);
+  const [draft, setDraft] = useState(sizeDisplay(value));
+  const [editing, setEditing] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (!editing) setDraft(sizeDisplay(value)); }, [value, editing]);
+
+  const parsed = parseSize(draft);
+  const typedName = CN_SIZES.some(([name]) => name === draft.trim());
+  const named = parsed !== null ? CN_SIZES.find(([, pt]) => pt === parsed) : undefined;
+  const echo = parsed === null
+    ? ""
+    : typedName
+      ? t("docxFormat.drawer.echoPt", { pt: parsed })
+      : named
+        ? t("docxFormat.drawer.echoName", { name: named[0] })
+        : t("docxFormat.drawer.echoNoName");
+
+  const commit = () => {
+    setEditing(false);
+    // 解析失败退回原值，不静默取默认——同 format.ts 那条纪律。
+    if (parsed === null) { setDraft(sizeDisplay(value)); return; }
+    if (parsed !== value) onChange(parsed);
+  };
+
   return (
-    <>
-      <select
-        className={styles.select}
-        value={named ? named[0] : "__custom"}
-        onChange={(e) => {
-          const pt = parseSize(e.target.value);
-          if (pt !== null) onChange(pt);
-        }}
+    <span className={styles.sizeWrap}>
+      <input
+        className={styles.sizeInput}
+        value={draft}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setOpen(false); }}
+        aria-label={t("docxFormat.drawer.size")}
+      />
+      <span className={styles.sizeEcho}>{echo}</span>
+      <button
+        type="button"
+        className={styles.sizeToggle}
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t("docxFormat.drawer.sizeTable")}
+        aria-expanded={open}
       >
-        {!named && <option value="__custom">{t("docxFormat.drawer.customSize")}</option>}
-        {CN_SIZES.map(([name, pt]) => (
-          <option key={name} value={name}>{`${name}（${pt} 磅）`}</option>
-        ))}
-      </select>
-      <Num value={value} unit={t("docxFormat.drawer.pt")} min={1} max={200} step={0.5} onChange={onChange} />
-    </>
+        <ChevronDown size={11} />
+      </button>
+      {open && (
+        <div className={styles.sizeTable} role="listbox">
+          {CN_SIZES.map(([name, pt]) => (
+            <button
+              key={name}
+              type="button"
+              role="option"
+              aria-selected={pt === value}
+              className={`${styles.sizeRow} ${pt === value ? styles.sizeRowOn : ""}`}
+              onClick={() => { onChange(pt); setOpen(false); }}
+            >
+              <span>{name}</span>
+              <span className={styles.sizeRowPt}>{`${pt} ${t("docxFormat.drawer.pt")}`}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -679,13 +836,15 @@ function Num({
   );
 }
 
-function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (v: boolean) => void }) {
+/** 禁用＝虚线边、透明底：05c 的方言，未设是虚线，不是不见。 */
+function Switch({ on, label, disabled = false, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
-      className={`${styles.switch} ${on ? styles.switchOn : ""}`}
+      className={`${styles.switch} ${on && !disabled ? styles.switchOn : ""} ${disabled ? styles.switchDashed : ""}`}
       role="switch"
       aria-checked={on}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!on)}
     >
       <span className={styles.switchKnob} />
@@ -693,19 +852,15 @@ function Switch({ on, label, onChange }: { on: boolean; label: string; onChange:
   );
 }
 
-const round1 = (n: number): number => Math.round(n * 10) / 10;
+/** 页眉与页码只有左 / 中 / 右——两端对齐对一行页码没有意义。 */
+const HF_ALIGNS: Align[] = ["left", "center", "right"];
 
-/** 「一、」「（一）」「1.1」——写法名认不出来，样子一眼就认得。 */
-function numberingSample(kind: HeadingNumberFormat, level: number): string {
-  switch (kind) {
-    case "chinese": return "一、";
-    case "chineseParen": return "（一）";
-    case "decimal": return "1.";
-    case "decimalParen": return "（1）";
-    case "decimalDotted": return Array.from({ length: level + 1 }, () => "1").join(".");
-    default: return "";
-  }
+/** 奇偶页互换：左右对调、居中不动——和 write.ts 里的 mirror 是同一条规则。 */
+function mirrorAlign(a: Align): Align {
+  return a === "left" ? "right" : a === "right" ? "left" : a;
 }
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
 
 function headerFooterSummary(format: DocFormat, t: (k: string) => string): string {
   const hf = format.headerFooter;

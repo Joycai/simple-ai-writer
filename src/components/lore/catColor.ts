@@ -1,5 +1,5 @@
 /**
- * Per-category accent color (设计稿 03 分类六色), shared by the card wall, the
+ * Per-category accent color (设计稿 03a 分类六色), shared by the card wall, the
  * detail breadcrumb and any other lore surface that shows a category dot.
  *
  * The novel built-ins map onto the --lore-cat-* tokens; ids from other

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BUILTIN_FORMATS, type DocFormatPreset } from "../format";
-import { describeOrigin, FormatResolveError, resolveFormat } from "../resolve";
+import { FormatResolveError, originName, resolveFormat } from "../resolve";
 
 const PRESETS: DocFormatPreset[] = [
   ...BUILTIN_FORMATS,
@@ -18,6 +18,9 @@ describe("三级来源", () => {
     const { format, origin } = resolveFormat(PRESETS, "clean");
     expect(origin).toEqual({ kind: "default", presetId: "clean", presetLabel: "素雅" });
     expect(format.body.font.eastAsia).toBe("思源黑体");
+    // 卡上左边那一格只写「默认格式」，预设名走右边那句安静的话——写全就成了
+    // 「默认格式：素雅 素雅」（设计稿 05f 屏 1j ①）。
+    expect(originName(origin)).toBe("默认格式");
   });
 
   it("点名一个预设就用它", () => {
@@ -28,7 +31,7 @@ describe("三级来源", () => {
   it("模仿来的预设记得它是从哪份文件读的", () => {
     const { origin } = resolveFormat(PRESETS, "clean", { formatId: "imitated:模板.docx#a1b2" });
     expect(origin).toEqual({ kind: "imitated", presetId: "imitated:模板.docx#a1b2", sourceFile: "模板.docx" });
-    expect(describeOrigin(origin)).toBe("照 模板.docx 模仿");
+    expect(originName(origin)).toBe("照 模板.docx 模仿");
   });
 });
 
@@ -59,7 +62,8 @@ describe("overrides", () => {
       expect(origin.changed).toContainEqual({
         key: "line", label: "行距", from: "固定值 28 磅", to: "1.5 倍行距",
       });
-      expect(describeOrigin(origin)).toBe("预设：公文（改了 2 项）");
+      // 卡上的名字不带改动计数——那是它旁边那枚徽标的话（设计稿 05f 屏 1j ④）。
+      expect(originName(origin)).toBe("预设：公文");
     }
   });
 

@@ -96,23 +96,337 @@
    * discovering it in front of a client.
    */
   function averageColor(cssImage) {
-    var found = cssImage.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/g);
+    var found = cssImage.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}|\btransparent\b/g);
     if (!found || !found.length) return null;
     var probe = document.createElement("span");
     document.body.appendChild(probe);
-    var r = 0, g = 0, b = 0, n = 0;
+    var r = 0, g = 0, b = 0, n = 0, a = 0, stops = 0;
     for (var i = 0; i < found.length; i++) {
       probe.style.color = "";
       probe.style.color = found[i];
       var parts = getComputedStyle(probe).color.match(/[\d.]+/g);
       if (!parts) continue;
-      // A fully transparent stop contributes position, not colour.
-      if (parts[3] !== undefined && parseFloat(parts[3]) === 0) continue;
+      var alpha = parts[3] === undefined ? 1 : parseFloat(parts[3]);
+      a += alpha; stops++;
+      // A fully transparent stop contributes position and opacity, not hue:
+      // averaging its rgb would drag a fade-to-nothing towards black.
+      if (alpha === 0) continue;
       r += parseFloat(parts[0]); g += parseFloat(parts[1]); b += parseFloat(parts[2]); n++;
     }
     document.body.removeChild(probe);
-    if (!n) return null;
-    return "rgb(" + Math.round(r / n) + ", " + Math.round(g / n) + ", " + Math.round(b / n) + ")";
+    if (!n || !stops) return null;
+    return (
+      "rgba(" + Math.round(r / n) + ", " + Math.round(g / n) + ", " + Math.round(b / n) +
+      ", " + Math.round((a / stops) * 1000) / 1000 + ")"
+    );
+  }
+
+  /**
+   * Split a CSS list on its top-level commas.
+   *
+   * `rgba(0, 0, 0, .35) 0 18px 40px` is one value containing three commas, so
+   * splitting on every comma turns one shadow into four fragments of nonsense.
+   */
+  function splitOutsideParens(text) {
+    var parts = [];
+    var depth = 0;
+    var start = 0;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i);
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      else if (ch === "," && depth === 0) {
+        parts.push(text.slice(start, i));
+        start = i + 1;
+      }
+    }
+    parts.push(text.slice(start));
+    return parts;
+  }
+
+  /**
+   * The page's drop shadow, in the polar form OOXML wants.
+   *
+   * CSS states an offset vector; PowerPoint states a distance and a direction.
+   * The angle is the same number in both once you remember CSS's y grows
+   * downwards, which is also the direction OOXML measures clockwise from.
+   *
+   * Only the first of a stack: CSS composes any number of shadows, PowerPoint
+   * has one. `spread` has no OOXML counterpart and is dropped — a shadow
+   * slightly the wrong size is not in the same class of wrong as no shadow,
+   * which is what a card with an elevation of 40px used to arrive as.
+   */
+  function shadowOf(style) {
+    var raw = String(style.boxShadow || "");
+    if (!raw || raw === "none") return null;
+    var first = splitOutsideParens(raw)[0];
+    var lengths = first.match(/-?[\d.]+px/g);
+    if (!lengths || lengths.length < 2) return null;
+    var dx = parseFloat(lengths[0]);
+    var dy = parseFloat(lengths[1]);
+    var blur = lengths.length > 2 ? parseFloat(lengths[2]) : 0;
+    if (!dx && !dy && !blur) return null;
+    var colour = first.match(/rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/);
+    return {
+      inset: /(^|\s)inset(\s|$)/.test(first),
+      offsetPx: Math.sqrt(dx * dx + dy * dy),
+      angle: (((Math.atan2(dy, dx) * 180) / Math.PI) % 360 + 360) % 360,
+      blurPx: blur,
+      color: colour ? colour[0] : "rgba(0, 0, 0, 0.5)",
+    };
+  }
+
+  /** Overflow values that cut their contents off. */
+  var CLIPPING_OVERFLOW = ["hidden", "clip", "auto", "scroll"];
+
+  /** The visible part of `rect`, or null when an ancestor's overflow hides it all. */
+  function clipRect(rect, clip) {
+    if (!clip) return rect;
+    var left = Math.max(rect.left, clip.left);
+    var top = Math.max(rect.top, clip.top);
+    var right = Math.min(rect.left + rect.width, clip.left + clip.width);
+    var bottom = Math.min(rect.top + rect.height, clip.top + clip.height);
+    if (right - left < 0.5 || bottom - top < 0.5) return null;
+    return { left: left, top: top, width: right - left, height: bottom - top };
+  }
+
+  /**
+   * The clip an element imposes on its descendants.
+   *
+   * A generated deck decorates with big blurred circles parked half outside
+   * their card; the page cuts them at the card's edge and PowerPoint, which
+   * has no clipping, drew the whole circle across everything next to it.
+   */
+  function clipFor(style, rect, current) {
+    if (
+      CLIPPING_OVERFLOW.indexOf(style.overflowX) < 0 &&
+      CLIPPING_OVERFLOW.indexOf(style.overflowY) < 0
+    ) {
+      return current;
+    }
+    var box = {
+      left: rect.left + (parseFloat(style.borderLeftWidth) || 0),
+      top: rect.top + (parseFloat(style.borderTopWidth) || 0),
+      width:
+        rect.width - (parseFloat(style.borderLeftWidth) || 0) - (parseFloat(style.borderRightWidth) || 0),
+      height:
+        rect.height - (parseFloat(style.borderTopWidth) || 0) - (parseFloat(style.borderBottomWidth) || 0),
+    };
+    // Nested clips that miss each other leave nothing visible at all.
+    return clipRect(box, current) || { left: 0, top: 0, width: 0, height: 0 };
+  }
+
+  /** `to <side>` in the degrees CSS would have written. */
+  var SIDE_ANGLES = { "to top": 0, "to right": 90, "to bottom": 180, "to left": 270 };
+
+  /** How wide a rasterized gradient gets. Smooth by nature, so it upscales cleanly. */
+  var GRADIENT_MAX_PX = 192;
+
+  /**
+   * A `linear-gradient(…)` broken into an angle and colour stops.
+   *
+   * Null for anything else — radial, conic, repeating, a stack of several, a
+   * stop positioned in px, a corner keyword whose angle depends on the box.
+   * Those keep the old average-colour behaviour, which is reported to the
+   * author as a degradation; this path is the one that no longer needs to be.
+   */
+  function parseLinearGradient(image) {
+    if (splitOutsideParens(image).length > 1) return null;
+    var body = image.match(/^linear-gradient\((.*)\)$/);
+    if (!body) return null;
+    var parts = splitOutsideParens(body[1]);
+    var angle = 180;
+    var head = parts[0].trim();
+    if (/^-?[\d.]+deg$/.test(head)) {
+      angle = parseFloat(head);
+      parts.shift();
+    } else if (/^to\s/.test(head)) {
+      angle = SIDE_ANGLES[head.replace(/\s+/g, " ")];
+      if (angle === undefined) return null;
+      parts.shift();
+    } else if (/^(-?[\d.]+(rad|turn|grad)|in\s)/.test(head)) {
+      return null;
+    }
+    var stops = [];
+    for (var i = 0; i < parts.length; i++) {
+      var text = parts[i].trim();
+      var colour = text.match(/^(rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}|[a-zA-Z]+)/);
+      if (!colour) return null;
+      var rest = text.slice(colour[0].length).trim();
+      if (rest && !/^-?[\d.]+%$/.test(rest)) return null;
+      stops.push({ color: colour[0], at: rest ? parseFloat(rest) / 100 : null });
+    }
+    if (stops.length < 2) return null;
+    return { angle: angle, stops: spreadStops(stops) };
+  }
+
+  /** CSS fills in the positions a gradient leaves out: ends pinned, gaps even. */
+  function spreadStops(stops) {
+    if (stops[0].at === null) stops[0].at = 0;
+    if (stops[stops.length - 1].at === null) stops[stops.length - 1].at = 1;
+    for (var i = 1; i < stops.length - 1; i++) {
+      if (stops[i].at !== null) continue;
+      var next = i;
+      while (stops[next].at === null) next++;
+      var from = stops[i - 1].at;
+      var step = (stops[next].at - from) / (next - i + 1);
+      for (var j = i; j < next; j++) stops[j].at = from + step * (j - i + 1);
+    }
+    // A stop may not sit before the one in front of it.
+    for (var k = 1; k < stops.length; k++) {
+      stops[k].at = Math.min(1, Math.max(stops[k].at, stops[k - 1].at));
+    }
+    return stops;
+  }
+
+  /**
+   * Paint a linear gradient into a PNG the size of the element.
+   *
+   * pptxgenjs exposes no gradient fill, and the average colour it used to fall
+   * back to flattens exactly the panels a generated deck leans on hardest. A
+   * picture is not editable the way a fill is, but it is what the page showed.
+   *
+   * Small on purpose: a gradient carries no detail, so a 640px raster upscales
+   * to a full-bleed slide background without anything to see — and thirty of
+   * them at slide resolution would be most of the file.
+   */
+  function rasterizeGradient(parsed, rect, radius, visible) {
+    try {
+      // `visible` is what an ancestor's overflow leaves of the element. The
+      // gradient's geometry and its rounded corners still belong to the *full*
+      // box, so the whole thing is painted and the canvas simply covers the
+      // visible window of it — a picture cannot be clipped once it is in the
+      // deck, and this one is ours to draw at whatever size we like.
+      var box = visible || rect;
+      var scale = Math.min(1, GRADIENT_MAX_PX / Math.max(rect.width, rect.height, 1));
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(box.width * scale));
+      canvas.height = Math.max(1, Math.round(box.height * scale));
+      var ctx = canvas.getContext("2d");
+      ctx.translate(-(box.left - rect.left) * scale, -(box.top - rect.top) * scale);
+      var width = rect.width * scale;
+      var height = rect.height * scale;
+      if (radius) clipRoundRect(ctx, width, height, radius * scale);
+      // CSS measures from "up", clockwise; the unit vector in a y-down space.
+      var radians = (parsed.angle * Math.PI) / 180;
+      var ux = Math.sin(radians);
+      var uy = -Math.cos(radians);
+      var length = Math.abs(width * ux) + Math.abs(height * uy);
+      var gradient = ctx.createLinearGradient(
+        width / 2 - (ux * length) / 2, height / 2 - (uy * length) / 2,
+        width / 2 + (ux * length) / 2, height / 2 + (uy * length) / 2,
+      );
+      for (var i = 0; i < parsed.stops.length; i++) {
+        gradient.addColorStop(parsed.stops[i].at, parsed.stops[i].color);
+      }
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      return canvas.toDataURL("image/png");
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Is this computed colour invisible? */
+  function isTransparent(css) {
+    if (!css) return true;
+    var value = String(css).trim().toLowerCase();
+    if (value === "transparent" || value === "none") return true;
+    var inside = value.match(/^rgba?\(([^)]*)\)$/);
+    if (!inside) return false;
+    var parts = inside[1].split(/[\s,/]+/).filter(Boolean);
+    return parts.length > 3 && parseFloat(parts[3]) === 0;
+  }
+
+  /**
+   * Is this element's background painted *inside its own glyphs*?
+   *
+   * `background-clip: text` with a transparent text fill is how a page writes
+   * a gradient heading. Measured naively the element reports a gradient
+   * background like any other box, so the exporter laid a solid coloured bar
+   * the full width of the heading across the slide — while the words
+   * themselves, whose fill is transparent, came out in the inherited colour.
+   * Both halves of that are wrong and neither raises anything.
+   */
+  function clipsBackgroundToText(style) {
+    var clip =
+      style.getPropertyValue("background-clip") ||
+      style.getPropertyValue("-webkit-background-clip");
+    return String(clip || "").indexOf("text") >= 0;
+  }
+
+  /** How far up to look for the gradient a `background-clip: text` run is painted with. */
+  var MAX_CLIP_ANCESTORS = 6;
+
+  /** The colour a gradient-filled heading averages to, or null if this is not one. */
+  function gradientTextColor(el) {
+    var node = el;
+    for (var i = 0; node && node.nodeType === 1 && i < MAX_CLIP_ANCESTORS; i++) {
+      var style = getComputedStyle(node);
+      if (clipsBackgroundToText(style)) {
+        var image = style.backgroundImage;
+        if (image && image !== "none") {
+          var average = averageColor(image);
+          if (average) return average;
+        }
+        if (!isTransparent(style.backgroundColor)) return style.backgroundColor;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * The colour a run of text is actually painted in.
+   *
+   * `-webkit-text-fill-color` overrides `color` where both are set, and its
+   * computed value is `color` where it is not — so reading it first is right
+   * in every case and only differs for the gradient-heading idiom, where it is
+   * transparent and the colour has to come from the clipped background.
+   */
+  function paintedColor(el, style) {
+    var fill = style.getPropertyValue("-webkit-text-fill-color");
+    if (fill && !isTransparent(fill)) return fill;
+    if (fill && isTransparent(fill)) {
+      var gradient = gradientTextColor(el);
+      if (gradient) return gradient;
+    }
+    return style.color;
+  }
+
+  /**
+   * One component of a computed `transform-origin`, in px.
+   *
+   * Falling back on a falsy `parseFloat` would take `0px` — which is exactly
+   * what `transform-origin: left top` computes to — for a missing value and
+   * rotate the element about its centre instead of its corner, landing it
+   * about half its own diagonal away from where the page drew it.
+   */
+  function originLength(value, size) {
+    var n = parseFloat(value);
+    return isFinite(n) ? n : size / 2;
+  }
+
+  function lengthPx(value, base) {
+    var n = parseFloat(value);
+    if (!isFinite(n)) return 0;
+    return String(value).indexOf("%") >= 0 ? (n / 100) * base : n;
+  }
+
+  /**
+   * The corner radius in px, with percentages resolved against the box.
+   *
+   * `getComputedStyle` hands back a percentage radius in the unit it was
+   * written in, so `border-radius: 50%` reads as `"50%"` and `parseFloat` turns
+   * a circle into a 50px rounded corner. Nothing reports it: the shape simply
+   * arrives as a squircle.
+   */
+  function resolveRadius(style, rect) {
+    var raw = String(style.borderTopLeftRadius || "").trim();
+    if (!raw) return 0;
+    var axes = raw.split(/\s+/);
+    // OOXML has one radius per shape, so an elliptical corner takes its tighter axis.
+    return Math.min(lengthPx(axes[0], rect.width), lengthPx(axes[1] || axes[0], rect.height));
   }
 
   function firstFamily(fontFamily) {
@@ -140,6 +454,34 @@
    * put it: the box is widened leftwards by the marker's measured width, so
    * nothing else on the slide shifts.
    */
+  /** How far above a text node its list item may sit. */
+  var MAX_MARKER_ANCESTORS = 4;
+
+  /**
+   * The list item whose marker belongs in front of this text, or null.
+   *
+   * The marker is drawn by the browser on the *item*, but the text carrying it
+   * is often a level down — `<li><span>…</span></li>` is what a generated deck
+   * writes about half the time. Asking the span whether it is a list item
+   * answered no, so that one bullet went missing while its siblings kept
+   * theirs, and the line lost the marker's width of indent with it.
+   *
+   * Claimed once per item, so a two-paragraph `<li>` gets one bullet.
+   */
+  function listItemFor(el) {
+    var node = el;
+    for (var i = 0; node && node.nodeType === 1 && i < MAX_MARKER_ANCESTORS; i++) {
+      var style = getComputedStyle(node);
+      if (style.display.indexOf("list-item") >= 0) {
+        if (node.sawListMarked) return null;
+        node.sawListMarked = true;
+        return { el: node, style: style };
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
   function markerFor(el, style) {
     if (style.display.indexOf("list-item") < 0) return null;
     if (style.listStyleType === "none") return null;
@@ -177,8 +519,31 @@
    * as bold text in one PowerPoint paragraph instead of becoming a second text
    * box positioned next to the first.
    */
+  /** Display values that start their own line. `inline-block` and friends do not. */
+  var BLOCK_DISPLAYS = [
+    "block", "flow-root", "list-item", "flex", "grid",
+    "table", "table-row", "table-cell", "table-caption",
+  ];
+
+  function isBlockLevel(style) {
+    return BLOCK_DISPLAYS.indexOf(style.display) >= 0;
+  }
+
   function collectRuns(el) {
     var runs = [];
+
+    /**
+     * End the current line.
+     *
+     * A `<br>` used to become a space, and a block-level child contributed no
+     * break at all — so a two-line heading arrived as one long line, and a
+     * `<div class="stat">92<span>%</span><div>增长</div></div>` arrived as
+     * `92%增长` in a single box with three font sizes in it.
+     */
+    function breakLine() {
+      if (runs.length) runs[runs.length - 1].breakAfter = true;
+    }
+
     (function walk(node) {
       for (var i = 0; i < node.childNodes.length; i++) {
         var child = node.childNodes[i];
@@ -186,34 +551,46 @@
           var raw = child.nodeValue.replace(/\s+/g, " ");
           if (!raw.trim()) {
             // Whitespace between inline elements is real spacing, but leading
-            // and trailing whitespace is just source formatting.
-            if (runs.length && raw === " ") runs[runs.length - 1].text += " ";
+            // and trailing whitespace is just source formatting — and a space
+            // after a line has ended is neither.
+            var last = runs.length ? runs[runs.length - 1] : null;
+            if (last && !last.breakAfter && raw === " ") last.text += " ";
             continue;
           }
           var parent = child.parentElement || el;
           var style = getComputedStyle(parent);
           var size = parseFloat(style.fontSize) || 0;
           if (size < MIN_FONT_PX) continue;
+          var spacing = parseFloat(style.letterSpacing);
           runs.push({
             text: transformText(raw, style),
             bold: parseInt(style.fontWeight, 10) >= 600,
             italic: style.fontStyle === "italic",
             underline: (style.textDecorationLine || style.textDecoration || "").indexOf("underline") >= 0,
-            color: style.color,
+            color: paintedColor(parent, style),
             sizePx: size,
+            // The box was measured *with* the tracking, so leaving it behind
+            // draws the words narrower than the box they were measured into.
+            spacingPx: isFinite(spacing) && spacing ? spacing : undefined,
             font: firstFamily(style.fontFamily),
           });
         } else if (child.nodeType === 1) {
           var childStyle = getComputedStyle(child);
           if (isHidden(child, childStyle)) continue;
           if (child.tagName === "BR") {
-            if (runs.length) runs[runs.length - 1].text += " ";
+            breakLine();
             continue;
           }
+          var block = isBlockLevel(childStyle);
+          if (block) breakLine();
           walk(child);
+          if (block) breakLine();
         }
       }
     })(el);
+
+    // A break on the last run is a blank line at the end of the shape.
+    if (runs.length) runs[runs.length - 1].breakAfter = undefined;
     return runs;
   }
 
@@ -339,14 +716,76 @@
     });
   }
 
-  function rasterizeImg(img, rect) {
+  /** The horizontal/vertical fractions of `object-position`; only percentages are honoured. */
+  function objectPosition(style) {
+    var parts = String(style.objectPosition || "50% 50%").trim().split(/\s+/);
+    function fraction(raw) {
+      return raw && raw.indexOf("%") >= 0 ? Math.min(1, Math.max(0, parseFloat(raw) / 100)) : 0.5;
+    }
+    return { x: fraction(parts[0]), y: fraction(parts[1] || parts[0]) };
+  }
+
+  /**
+   * How `object-fit` maps the picture's pixels onto its box.
+   *
+   * Null means "stretch the whole thing to fill the box", which is both the
+   * `fill` default and what this used to do unconditionally — so a portrait
+   * photo in a landscape frame, cropped on the page by `object-fit: cover`,
+   * arrived in PowerPoint squashed instead.
+   */
+  function fitMapping(img, style, boxW, boxH) {
+    var nw = img.naturalWidth || 0;
+    var nh = img.naturalHeight || 0;
+    var fit = style ? style.objectFit : "fill";
+    if (!nw || !nh || !fit || fit === "fill") return null;
+    var scale;
+    if (fit === "cover") scale = Math.max(boxW / nw, boxH / nh);
+    else if (fit === "contain") scale = Math.min(boxW / nw, boxH / nh);
+    else if (fit === "none") scale = 1;
+    else if (fit === "scale-down") scale = Math.min(1, Math.min(boxW / nw, boxH / nh));
+    else return null;
+    var sw = Math.min(nw, boxW / scale);
+    var sh = Math.min(nh, boxH / scale);
+    var drawW = sw * scale;
+    var drawH = sh * scale;
+    // Already fills the box exactly: nothing to crop or letterbox, so the
+    // cheap path stays available.
+    if (sw === nw && sh === nh && Math.abs(drawW - boxW) < 0.5 && Math.abs(drawH - boxH) < 0.5) {
+      return null;
+    }
+    var anchor = objectPosition(style);
+    return {
+      sx: (nw - sw) * anchor.x, sy: (nh - sh) * anchor.y, sw: sw, sh: sh,
+      dx: (boxW - drawW) * anchor.x, dy: (boxH - drawH) * anchor.y, dw: drawW, dh: drawH,
+    };
+  }
+
+  /** Clip the canvas to a rounded rectangle, so a round avatar stays round. */
+  function clipRoundRect(ctx, w, h, r) {
+    var radius = Math.min(r, w / 2, h / 2);
+    if (radius <= 0) return;
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.arcTo(w, 0, w, h, radius);
+    ctx.arcTo(w, h, 0, h, radius);
+    ctx.arcTo(0, h, 0, 0, radius);
+    ctx.arcTo(0, 0, w, 0, radius);
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  function rasterizeImg(img, rect, style) {
     var src = img.currentSrc || "";
+    var mapping = fitMapping(img, style, rect.width, rect.height);
+    var radius = style ? resolveRadius(style, rect) : 0;
     // Already self-contained: the app inlines every local picture as a data
     // URL before the frame loads (lib/fs/htmlDoc), so this is the normal path.
     // An SVG is the exception — PowerPoint's support for it is uneven, and a
     // deck that opens with holes in it is worse than one drawn at 2x — so it
-    // falls through to the canvas below and arrives as a PNG.
-    if (src.indexOf("data:") === 0 && src.indexOf("data:image/svg") !== 0) {
+    // falls through to the canvas below and arrives as a PNG. So does anything
+    // the page crops or rounds: passing those through untouched hands
+    // PowerPoint a picture the page never showed.
+    if (!mapping && !radius && src.indexOf("data:") === 0 && src.indexOf("data:image/svg") !== 0) {
       return Promise.resolve(src);
     }
     return new Promise(function (resolve) {
@@ -354,7 +793,17 @@
         var canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(rect.width * RASTER_SCALE));
         canvas.height = Math.max(1, Math.round(rect.height * RASTER_SCALE));
-        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        var ctx = canvas.getContext("2d");
+        if (radius) clipRoundRect(ctx, canvas.width, canvas.height, radius * RASTER_SCALE);
+        if (mapping) {
+          ctx.drawImage(
+            img, mapping.sx, mapping.sy, mapping.sw, mapping.sh,
+            mapping.dx * RASTER_SCALE, mapping.dy * RASTER_SCALE,
+            mapping.dw * RASTER_SCALE, mapping.dh * RASTER_SCALE,
+          );
+        } else {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        }
         // A remote picture taints the canvas and this throws — the honest
         // outcome is "this one is missing", not a blank rectangle.
         resolve(canvas.toDataURL("image/png"));
@@ -364,23 +813,144 @@
     });
   }
 
+  /**
+   * The clockwise angle of a transform that is *only* a rotation, else 0.
+   *
+   * Only a pure rotation, because the fix below measures the element with its
+   * transform switched off: for a rotation that is exactly right (transforms
+   * do not affect layout, so the untransformed rect is the element's real
+   * box), while for a `translate(-50%, -50%)` it would report the element
+   * somewhere the page never drew it. A scale or a skew is left alone for the
+   * same reason — the old bounding-box behaviour is wrong, but wrong in a way
+   * that at least covers the right area.
+   */
+  function pureRotation(style) {
+    var matrix = String(style.transform || "");
+    var inside = matrix.match(/^matrix\(([^)]+)\)$/);
+    if (!inside) return 0;
+    var n = inside[1].split(",");
+    var a = parseFloat(n[0]), b = parseFloat(n[1]), c = parseFloat(n[2]), d = parseFloat(n[3]);
+    var e = parseFloat(n[4]), f = parseFloat(n[5]);
+    if (Math.abs(e) > 0.5 || Math.abs(f) > 0.5) return 0;
+    if (Math.abs(Math.sqrt(a * a + b * b) - 1) > 0.01) return 0;
+    if (Math.abs(a - d) > 0.01 || Math.abs(b + c) > 0.01) return 0;
+    var degrees = (Math.atan2(b, a) * 180) / Math.PI;
+    if (Math.abs(degrees) < 0.1) return 0;
+    return (degrees % 360 + 360) % 360;
+  }
+
+  /**
+   * Rotate the blocks a rotated subtree produced, about the point the page
+   * rotated them about.
+   *
+   * PowerPoint turns each shape about its own centre, so reproducing a rotated
+   * group means moving every shape's centre to where the rotation put it and
+   * then turning it in place — which composes to exactly the same picture.
+   * Innermost span first, so a rotation inside a rotation still lands right.
+   */
+  function applyRotations(blocks, spans) {
+    for (var i = spans.length - 1; i >= 0; i--) {
+      var span = spans[i];
+      var radians = (span.angle * Math.PI) / 180;
+      var cos = Math.cos(radians), sin = Math.sin(radians);
+      for (var j = span.from; j < span.to; j++) {
+        var block = blocks[j];
+        if (!block) continue;
+        var dx = block.x + block.w / 2 - span.cx;
+        var dy = block.y + block.h / 2 - span.cy;
+        block.x = span.cx + dx * cos - dy * sin - block.w / 2;
+        block.y = span.cy + dx * sin + dy * cos - block.h / 2;
+        block.rotate = ((block.rotate || 0) + span.angle) % 360;
+      }
+    }
+  }
+
   function harvestSlide(root) {
     var origin = root.getBoundingClientRect();
     var blocks = [];
     var degraded = [];
     var pending = [];
+    var rotations = [];
 
-    function push(block, rect) {
+    /**
+     * Hold a place in paint order for a block that is not ready yet.
+     *
+     * Pictures are rasterized asynchronously, so pushing each one when its
+     * promise settled put *every* picture after everything the walk had found
+     * — and later shapes are the ones on top in PowerPoint. A slide with a
+     * full-bleed background photo exported with its entire text buried under
+     * it. The slot is taken during the walk, in DOM order, and filled in when
+     * the bytes arrive.
+     */
+    function reserve() {
+      blocks.push(null);
+      return blocks.length - 1;
+    }
+
+    function place(slot, block, rect) {
       block.x = rect.left - origin.left;
       block.y = rect.top - origin.top;
       block.w = rect.width;
       block.h = rect.height;
-      blocks.push(block);
+      blocks[slot] = block;
     }
 
-    (function walk(el, insideText) {
+    /**
+     * Emit a block, cut down to what an ancestor's overflow leaves visible.
+     *
+     * Only a painted box takes the intersection as its own: cropping a text
+     * box would make PowerPoint reflow it, and cropping a picture's frame
+     * would squash the picture rather than cut it. Those are kept whole, or
+     * dropped when nothing of them shows at all.
+     */
+    function push(block, rect, clip) {
+      var visible = clipRect(rect, clip);
+      if (!visible) return;
+      place(reserve(), block, block.kind === "rect" ? visible : rect);
+    }
+
+    /**
+     * Measure a rotated element the way it was laid out, then rotate the
+     * result back.
+     *
+     * `getBoundingClientRect` on a rotated element is the *axis-aligned box
+     * around* it: wider and taller than the element, and with the angle gone.
+     * A rotated badge therefore exported upright inside an oversized pill.
+     * Switching the transform off restores the layout box exactly — transforms
+     * never affected layout — so the subtree measures normally and every block
+     * it produced is turned afterwards, about the page's own transform-origin.
+     */
+    function walk(el, insideText, alpha, clip) {
       var style = getComputedStyle(el);
       if (isHidden(el, style)) return;
+      var own = parseFloat(style.opacity);
+      var opacity = alpha * (isFinite(own) ? own : 1);
+      var angle = pureRotation(style);
+      if (!angle) {
+        measure(el, style, insideText, opacity, clip);
+        return;
+      }
+      var inline = el.style.getPropertyValue("transform");
+      var priority = el.style.getPropertyPriority("transform");
+      el.style.setProperty("transform", "none", "important");
+      var flat = el.getBoundingClientRect();
+      var pivot = String(style.transformOrigin || "").split(" ");
+      var from = blocks.length;
+      // No clip inside: the rect an ancestor clips with is in page
+      // coordinates, and everything under here is being measured unrotated.
+      measure(el, style, insideText, opacity, null);
+      rotations.push({
+        from: from,
+        to: blocks.length,
+        angle: angle,
+        cx: flat.left - origin.left + originLength(pivot[0], flat.width),
+        cy: flat.top - origin.top + originLength(pivot[1], flat.height),
+      });
+      if (inline) el.style.setProperty("transform", inline, priority);
+      else el.style.removeProperty("transform");
+    }
+
+    function measure(el, style, insideText, opacity, clip) {
       var rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return;
 
@@ -388,9 +958,11 @@
 
       if (tag === "IMG") {
         var imgRect = rect;
+        if (!clipRect(imgRect, clip)) return;
+        var imgSlot = reserve();
         pending.push(
-          rasterizeImg(el, imgRect).then(function (data) {
-            if (data) push({ kind: "image", data: data }, imgRect);
+          rasterizeImg(el, imgRect, style).then(function (data) {
+            if (data) place(imgSlot, { kind: "image", data: data, opacity: opacity }, imgRect);
             else degraded.push("a picture could not be embedded (" + (el.getAttribute("alt") || el.src.slice(0, 40)) + ")");
           }),
         );
@@ -411,14 +983,19 @@
               line: svgPaint.borderWidth
                 ? { color: style.borderTopColor, widthPx: svgPaint.borderWidth }
                 : undefined,
-              radiusPx: parseFloat(style.borderTopLeftRadius) || 0,
+              radiusPx: resolveRadius(style, svgRect),
+              shadow: shadowOf(style),
+              opacity: opacity,
             },
             svgRect,
+            clip,
           );
         }
+        if (!clipRect(svgRect, clip)) return;
+        var svgSlot = reserve();
         pending.push(
           rasterizeSvg(el, svgRect).then(function (data) {
-            if (data) push({ kind: "image", data: data }, svgRect);
+            if (data) place(svgSlot, { kind: "image", data: data, opacity: opacity }, svgRect);
             else degraded.push("an inline SVG could not be rasterized");
           }),
         );
@@ -427,7 +1004,7 @@
 
       if (tag === "CANVAS") {
         try {
-          push({ kind: "image", data: el.toDataURL("image/png") }, rect);
+          push({ kind: "image", data: el.toDataURL("image/png"), opacity: opacity }, rect, clip);
         } catch (e) {
           degraded.push("a <canvas> could not be read");
         }
@@ -437,16 +1014,56 @@
       // The slide root itself contributes its background, nothing else.
       var paint = paints(style);
       var fill = paint.fill;
-      if (style.backgroundImage && style.backgroundImage !== "none") {
-        var average = averageColor(style.backgroundImage);
-        if (average) {
-          fill = average;
-          degraded.push("a gradient/image background became a solid colour");
-        } else {
-          degraded.push("a background image was dropped");
+      var radius = resolveRadius(style, rect);
+      var shadow = shadowOf(style);
+      var visible = clipRect(rect, clip);
+      var hasBackgroundImage = style.backgroundImage && style.backgroundImage !== "none";
+      var gradient = null;
+      if (clipsBackgroundToText(style)) {
+        // Painted inside the glyphs, not behind them. The colour is not lost:
+        // collectRuns picks it up through paintedColor.
+        fill = null;
+        if (hasBackgroundImage) degraded.push("a gradient-filled heading became a solid colour");
+      } else if (hasBackgroundImage) {
+        var linear = visible ? parseLinearGradient(style.backgroundImage) : null;
+        gradient = linear ? rasterizeGradient(linear, rect, radius, visible) : null;
+        if (!gradient) {
+          var average = averageColor(style.backgroundImage);
+          if (average) {
+            fill = average;
+            degraded.push("a gradient/image background became a solid colour");
+          } else {
+            degraded.push("a background image was dropped");
+          }
         }
       }
-      if (fill || paint.borderWidth) {
+      if (gradient) {
+        // Three layers where a fill would have been one, because a picture
+        // sits *between* the other two: CSS paints `background-color` under
+        // the gradient (dropping it leaves a frosted panel with nothing behind
+        // it) and the border over it. The shadow travels with the picture —
+        // it is the layer that is actually filled, and a border-only rectangle
+        // casts its shadow from the outline, drawing a hairline instead of the
+        // panel's elevation. Faithful, so nothing here is reported as a
+        // degradation — but it is a picture, not a colour the author can
+        // change in PowerPoint.
+        if (fill) {
+          push({ kind: "rect", fill: fill, radiusPx: radius, opacity: opacity }, rect, clip);
+        }
+        push({ kind: "image", data: gradient, shadow: shadow, opacity: opacity }, visible, clip);
+        if (paint.borderWidth) {
+          push(
+            {
+              kind: "rect",
+              line: { color: style.borderTopColor, widthPx: paint.borderWidth },
+              radiusPx: radius,
+              opacity: opacity,
+            },
+            rect,
+            clip,
+          );
+        }
+      } else if (fill || paint.borderWidth) {
         push(
           {
             kind: "rect",
@@ -454,9 +1071,12 @@
             line: paint.borderWidth
               ? { color: style.borderTopColor, widthPx: paint.borderWidth }
               : undefined,
-            radiusPx: parseFloat(style.borderTopLeftRadius) || 0,
+            radiusPx: radius,
+            shadow: shadow,
+            opacity: opacity,
           },
           rect,
+          clip,
         );
       }
 
@@ -466,7 +1086,8 @@
         var runs = collectRuns(el);
         if (runs.length && measured.box.width > 0) {
           var box = measured.box;
-          var marker = markerFor(el, style);
+          var item = listItemFor(el);
+          var marker = item ? markerFor(item.el, item.style) : null;
           if (marker && runs.length) {
             runs[0] = {
               text: marker.text + runs[0].text,
@@ -475,6 +1096,8 @@
               underline: runs[0].underline,
               color: runs[0].color,
               sizePx: runs[0].sizePx,
+              spacingPx: runs[0].spacingPx,
+              breakAfter: runs[0].breakAfter,
               font: runs[0].font,
             };
             box = {
@@ -484,25 +1107,48 @@
               height: box.height,
             };
           }
+          // `normal` has no number to read, so the browser's own answer —
+          // the height it actually used per line — stands in for it.
+          var lineHeight = parseFloat(style.lineHeight);
           push(
             {
               kind: "text",
               runs: runs,
               align: normalizeAlign(style.textAlign, style.direction),
               lines: measured.lines,
+              lineHeightPx:
+                isFinite(lineHeight) && lineHeight > 0
+                  ? lineHeight
+                  : measured.box.height / measured.lines,
+              opacity: opacity,
             },
             box,
+            clip,
           );
         }
       }
 
+      // The slide's own overflow is left to PowerPoint, which cuts at the
+      // slide edge anyway — clipping there would only turn a decorative circle
+      // hanging off the corner into a rounded rectangle sitting in it.
+      var childClip = el === root ? clip : clipFor(style, rect, clip);
       for (var i = 0; i < el.children.length; i++) {
-        walk(el.children[i], insideText || ownText);
+        walk(el.children[i], insideText || ownText, opacity, childClip);
       }
-    })(root, false);
+    }
+
+    walk(root, false, 1, null);
 
     return Promise.all(pending).then(function () {
-      return { blocks: blocks, degraded: unique(degraded) };
+      // Before the nulls are dropped: the spans are index ranges into this
+      // array, and a picture that failed still occupies its slot.
+      applyRotations(blocks, rotations);
+      // Slots whose picture never arrived stay null; they were reported as
+      // degraded when that happened.
+      return {
+        blocks: blocks.filter(function (block) { return block; }),
+        degraded: unique(degraded),
+      };
     });
   }
 
@@ -534,6 +1180,127 @@
     parent.postMessage(payload, "*");
   }
 
+  function hasBox(el) {
+    var r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  /** A slide that would be skipped or measure as nothing if harvested as-is. */
+  function needsReveal(el) {
+    return isHidden(el, getComputedStyle(el)) || !hasBox(el);
+  }
+
+  function classesOf(el) {
+    return (el.getAttribute("class") || "").split(/\s+/).filter(Boolean);
+  }
+
+  /**
+   * Snap every transition and animation under `roots` to its end state.
+   *
+   * Two reasons, one of which is the correctness of everything below: a class
+   * flip that starts a 400ms fade reports opacity 0 at the moment it is
+   * measured, so a slide revealed by class would still be dropped as hidden.
+   * The other is fidelity — an entrance animation on the *shown* slide is
+   * otherwise measured 32ms in, with the heading still 20px below where it
+   * ends up. Duration zero rather than `none`: a `forwards` animation keeps
+   * its end value, which is the page's final look, where `none` would fall
+   * back to the pre-animation style.
+   */
+  function snapMotion(roots) {
+    for (var i = 0; i < roots.length; i++) {
+      var els = [roots[i]].concat(Array.prototype.slice.call(roots[i].querySelectorAll("*")));
+      for (var j = 0; j < els.length; j++) {
+        var s = els[j].style;
+        if (!s) continue;
+        s.setProperty("transition-duration", "0s", "important");
+        s.setProperty("transition-delay", "0s", "important");
+        s.setProperty("animation-duration", "0s", "important");
+        s.setProperty("animation-delay", "0s", "important");
+      }
+    }
+  }
+
+  /**
+   * The page's own "current slide" marker: a class that, added on its own to a
+   * hidden slide, makes it visible. Found by trying each class the shown slides
+   * share on the first hidden one, so a class the shown slide merely happens to
+   * carry (`cover`) is not mistaken for the marker and copied onto every page.
+   */
+  function markerClasses(shown, hidden) {
+    if (!shown.length || !hidden.length) return [];
+    var probe = hidden[0];
+    var found = [];
+    var candidates = classesOf(shown[0]);
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      var everywhere = true;
+      for (var j = 1; j < shown.length && everywhere; j++) {
+        if (classesOf(shown[j]).indexOf(c) < 0) everywhere = false;
+      }
+      if (!everywhere || classesOf(probe).indexOf(c) >= 0) continue;
+      probe.classList.add(c);
+      if (!needsReveal(probe)) found.push(c);
+      probe.classList.remove(c);
+    }
+    return found;
+  }
+
+  /** Inline overrides for what no class explains — a `style.display = "none"` set by script. */
+  function forceShown(el, display, size) {
+    var style = getComputedStyle(el);
+    if (style.display === "none") el.style.setProperty("display", display, "important");
+    if (style.visibility === "hidden") el.style.setProperty("visibility", "visible", "important");
+    if (parseFloat(style.opacity || "1") === 0) el.style.setProperty("opacity", "1", "important");
+    if (hasBox(el)) return;
+    el.style.setProperty("transform", "none", "important");
+    if (hasBox(el) || !size) return;
+    // Collapsed to nothing (`height: 0; overflow: hidden`): give it the box
+    // the page gives the slide it does show.
+    el.style.setProperty("width", size.width + "px", "important");
+    el.style.setProperty("height", size.height + "px", "important");
+    el.style.setProperty("max-height", "none", "important");
+  }
+
+  /**
+   * Put every slide the page is hiding into the state it uses for the one it
+   * shows, so all of them can be measured.
+   *
+   * A generated deck very often arrives as a slideshow rather than a stack: one
+   * `<section>` visible and a prev/next script that flips a class
+   * (`.slide.active`) or an inline `display`. Harvested as-is, every slide but
+   * the current one is `display: none`, has no box, and exports as an empty
+   * page — a five-page deck whose .pptx has content on page one. The export is
+   * of the page's *content*, not of the state its script left it in.
+   *
+   * Two mechanisms, because pages hide slides two ways. The page's own marker
+   * class is preferred: adding it also runs the *descendant* rules —
+   * `.slide:not(.active) h1 { opacity: 0 }` — that a forced `display` on the
+   * root would leave in place, giving a visible slide with invisible text.
+   * Inline overrides then cover whatever is still hidden or sizeless, which is
+   * what a `style.display = "none"` set by script comes down to.
+   *
+   * A slide the author marked `data-pptx-skip` is left alone — hidden on
+   * purpose is a different thing from hidden by a slideshow.
+   */
+  function revealSlides(roots) {
+    if (roots.length < 2) return;
+    var shown = [];
+    var hidden = [];
+    for (var i = 0; i < roots.length; i++) {
+      if (roots[i].hasAttribute("data-pptx-skip")) continue;
+      (needsReveal(roots[i]) ? hidden : shown).push(roots[i]);
+    }
+    if (!hidden.length) return;
+
+    var marker = markerClasses(shown, hidden);
+    var display = shown.length ? getComputedStyle(shown[0]).display : "block";
+    var size = shown.length ? shown[0].getBoundingClientRect() : null;
+    for (var j = 0; j < hidden.length; j++) {
+      for (var k = 0; k < marker.length; k++) hidden[j].classList.add(marker[k]);
+      if (needsReveal(hidden[j])) forceShown(hidden[j], display, size);
+    }
+  }
+
   function run() {
     try {
       var roots = slideRoots();
@@ -541,6 +1308,8 @@
         send({ ok: false, error: "no slides found in this page" });
         return;
       }
+      snapMotion(roots);
+      revealSlides(roots);
       var first = roots[0].getBoundingClientRect();
       if (first.width <= 0 || first.height <= 0) {
         send({ ok: false, error: "the first slide has no size" });

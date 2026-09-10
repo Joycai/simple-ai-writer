@@ -1,5 +1,6 @@
 # 给 Claude Design 的 UI 设计任务书 —— Word 导出与排版格式
 
+> 状态：`shipped`。设计稿是 claude.ai/design 项目的 **`05e Word 排版格式（一）Word Format A.dc.html`**（屏 1a–1g：设置页 / 纸样细节 / 行状态 / 控件 / 编辑抽屉）与 **`05f Word 排版格式（二）Word Format B.dc.html`**（屏 1h–1n：读取模态 / 审批卡 / 结果 / 空态与删除 / 窄窗口 / 开关）。实现记录在 [01-agent-design.md](01-agent-design.md) §11–§12；2026-09-06 稿按实现回填，稿与码同口径。
 > 这份文件是**自包含的**：`---` 以后的全部内容可以整段复制丢给 Claude Design，不需要它读代码库。
 > 设计回来之后，实现时对照 [01-agent-design.md](01-agent-design.md) §5 / §6 / §7 核对每个态是否都有画。
 

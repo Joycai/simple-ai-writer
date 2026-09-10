@@ -10,25 +10,26 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
-import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
+import { costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
-import { bytesToBase64 } from "../fs/images";
+import { withCurrentTime } from "../context/clock";
+import { bytesToBase64, isImagePath } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
 import { isWorkspacePath, resolveRelativePath } from "../paths";
 import type { TaskPreset } from "./presets";
 import { runAgent, type AgentRunResult } from "./runtime";
 import type { ToolContext } from "./registry";
-import type { ToolCall, ToolResult } from "./tools";
+import { loadProjectImage, shrunkNote, type ToolCall, type ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
 
 export type SubAgentKind =
   | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer"
-  | "retrieval";
+  | "retrieval" | "asr";
 
 export const SUBAGENT_KINDS: readonly SubAgentKind[] =
-  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer", "retrieval"];
+  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer", "retrieval", "asr"];
 
 /**
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
@@ -63,9 +64,15 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * fed back through the ordinary substring matcher — deliberately, because that
  * keeps the injection report saying 「由「星辉之杖」命中」 instead of a score the
  * author cannot act on. See docs/feature/lore/lore-retrieval-plan.md §5.
+ *
+ * `asr` is excluded on imagegen's grounds: a transcription model's endpoint
+ * takes an audio URL, not messages — there is no conversation to delegate.
+ * The assistant's interface to it is the `transcribe_audio` tool (a proposal
+ * card *before* the paid call, docs/feature/asr/01-execution-plan.md §5), and
+ * the file tree's 右键 reaches the same `lib/asr/run` directly.
  */
 export type DelegateKind =
-  Exclude<SubAgentKind, "imagegen" | "translate" | "writer" | "retrieval">;
+  Exclude<SubAgentKind, "imagegen" | "translate" | "writer" | "retrieval" | "asr">;
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
@@ -93,7 +100,7 @@ export const SUB_PRESETS: Record<DelegateKind, TaskPreset> = {
   },
   longread: {
     id: "subagent-longread",
-    tools: ["read_file", "read_slides", "search_text", "list_files"],
+    tools: ["read_file", "read_slides", "read_document", "search_text", "list_files"],
     maxRounds: 4,
     finishPolicy: "force-text",
     serverTools: "off",
@@ -126,6 +133,13 @@ export const MAX_PDF_BYTES = 150 * 1024 * 1024;
  * that a refusal reads as "split the job", not as an arbitrary wall.
  */
 export const MAX_PDF_FILES = 3;
+
+/**
+ * How many pictures one vision delegation may carry in its first message.
+ * Each one is a full image payload on a request that is rebuilt every round,
+ * so a wide job is split rather than sent as one.
+ */
+export const MAX_VISION_IMAGES = 8;
 
 /**
  * Read one project PDF for a delegation, or say exactly why not.
@@ -215,14 +229,20 @@ export function subAgentModel(
   // plausible; nothing errors, and the author reads a worse translation as the
   // feature working.
   if (kind === "translate" && !isTranslateOnly(model)) return null;
+  // Same shape as translate: only a model *declared* a transcription model
+  // may be bound here. The failure is loud rather than silent this time (the
+  // ASR endpoint 400s on a chat model's id), but the declaration is still the
+  // one place the author says "this row is the transcriber".
+  if (kind === "asr" && !isAsrOnly(model)) return null;
   // The writer is the one kind with no capability to test for — any text model
   // can write — so the check runs the other way, excluding what cannot: an
   // image/video model has no prose to give, and a translation-only model is the
   // silent failure of the set. Sakura bound here reports no error at all; it
   // just returns the work order back, translated. That is a worse outcome than
-  // an unset switch, so it is refused rather than warned about.
+  // an unset switch, so it is refused rather than warned about. A
+  // transcription-only model has no prose to give either.
   if (kind === "writer" && (model.type === "image" || model.type === "video")) return null;
-  if (kind === "writer" && isTranslateOnly(model)) return null;
+  if (kind === "writer" && (isTranslateOnly(model) || isAsrOnly(model))) return null;
   return model;
 }
 
@@ -438,8 +458,45 @@ export async function executeDelegate(
     userContent = parts;
   }
 
+  // The vision kind's image refs are payload too — read here and attached as
+  // image parts ahead of the instruction, not left as paths for the sub-run to
+  // fetch with read_image. The path-only form was tried first and is the bug
+  // this replaces: the sub-run holds a filename and a tool, and its prompt says
+  // "observe the reference pictures" — so a model that does not infer the tool
+  // call answers, in good faith, that no image was provided. Handing over the
+  // bytes makes the first request the whole job, as the pdf kind already does;
+  // the tools stay for a lore entity's gallery and any follow-up look. A ref
+  // that names an image but resolves to none fails the delegation up front,
+  // with the tool's own error, rather than starting a run that cannot succeed.
+  if (kind === "vision") {
+    const imageRefs = refs.filter(isImagePath);
+    if (imageRefs.length > MAX_VISION_IMAGES) {
+      return fail(`too many images (${imageRefs.length}) — delegate at most ${MAX_VISION_IMAGES} per call, splitting the job if needed.`);
+    }
+    if (imageRefs.length) {
+      const parts: ContentPart[] = [];
+      const captions: string[] = [];
+      for (const ref of imageRefs) {
+        const loaded = await loadProjectImage(ctx.projectPath, ref);
+        if ("error" in loaded) return fail(loaded.error.replace(/^Error:\s*/, ""));
+        captions.push(`- ${loaded.name} — ${loaded.path}${shrunkNote(loaded.downscaled)}`);
+        parts.push({ type: "image_url", image_url: { url: loaded.dataUrl } });
+      }
+      // Same two-template rule as above: a 「参考资源」 heading appears only
+      // when there is something under it.
+      const otherRefs = refs.filter((r) => !isImagePath(r));
+      const text =
+        i18n.t("ai.instructions.subagentTaskWithImages", { task, images: captions.join("\n") }) +
+        (otherRefs.length
+          ? i18n.t("ai.instructions.subagentRefsList", { refs: otherRefs.map((r) => `- ${r}`).join("\n") })
+          : "");
+      parts.push({ type: "text", text });
+      userContent = parts;
+    }
+  }
+
   const messages: StreamMessage[] = [
-    { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`) },
+    { role: "system", content: withCurrentTime(i18n.t(`ai.instructions.subagent.${kind}`)) },
     { role: "user", content: userContent },
   ];
 

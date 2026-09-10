@@ -24,6 +24,7 @@
   .previewCol { max-width: 500px; }
 }
 
+
 /* ── 预设列表 ───────────────────────────────────────────────────────────── */
 
 .listCol { min-width: 0; }
@@ -68,6 +69,10 @@
   font-size: 12.5px;
   line-height: 1.7;
   color: var(--stg-text-desc);
+}
+.emptyCustomTitle {
+  color: var(--stg-text);
+  margin-bottom: 2px;
 }
 
 .row {
@@ -161,6 +166,8 @@
   margin-top: 7px;
   overflow-wrap: anywhere;
 }
+/* 宽屏一行：字体 · 字号 · 行距 · 缩进；≤720 后半段自成一行（见文末的媒体查询）。 */
+.rowSummaryRest::before { content: " · "; }
 
 /* ── 纸样预览 ───────────────────────────────────────────────────────────── */
 
@@ -205,6 +212,9 @@
   --doc-region-edge: var(--stg-accent-soft);
   --doc-bar-heading: var(--stg-text-secondary);
   --doc-bar-body: var(--stg-text-placeholder);
+  /* 页码与页眉横线（05h 屏 1c）：页码借「引线与刻度」那一类的等宽字，横线借「灰条」的家族。 */
+  --doc-pagenum: var(--stg-text-secondary);
+  --doc-header-rule: var(--stg-text-warm);
 }
 
 .previewStage { position: relative; margin: 0 auto; }
@@ -273,6 +283,41 @@
 
 .barHeading { position: absolute; background: var(--doc-bar-heading); }
 .barBody { position: absolute; background: var(--doc-bar-body); }
+
+.headerRule { position: absolute; height: 1px; background: var(--doc-header-rule); }
+/* 全图唯一真的写字的地方：真实的字符串一律 mono。 */
+.pageNum {
+  position: absolute;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--doc-pagenum);
+  white-space: nowrap;
+}
+.pageNumCompact { font-size: 7px; }
+
+/* 行号刻度与「N 字位」：8px 等宽、最淡一档——它们是格子的编号，不是尺寸标注。 */
+.rowNums { position: absolute; width: 12px; }
+.rowNum {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1;
+  color: var(--stg-text-placeholder);
+}
+.charColsTag {
+  position: absolute;
+  transform: translateY(calc(-100% - 3px));
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1;
+  color: var(--stg-text-placeholder);
+  white-space: nowrap;
+}
 
 .schematic {
   position: absolute;
@@ -397,6 +442,22 @@
   border-bottom: 1px solid var(--stg-line-section);
 }
 
+/* ≤720 才出现（见文末的媒体查询）——那个宽度下抽屉铺满整屏，出口在左上。 */
+.backBtn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  flex: none;
+  background: transparent;
+  border: none;
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.backBtn:hover { color: var(--stg-accent); }
+
 .drawerHeadMain { flex: 1; min-width: 0; }
 
 .drawerEyebrow {
@@ -489,6 +550,8 @@
   font-size: 12px;
   color: var(--stg-text-secondary);
 }
+/* 前提没满足的依赖字段：标签退到次级色，开关虚线——未设是虚线，不是不见。 */
+.fieldLabelDim { color: var(--stg-text-faint); }
 
 .fieldBody {
   display: flex;
@@ -503,6 +566,8 @@
   font-size: 10.5px;
   color: var(--stg-text-faint);
 }
+/* 这一级的编号组合已经坏了（含上级之上是中文计数）：暖色而不是红，指出来、不吓人。 */
+.echoWarm { color: var(--stg-text-warm); }
 
 .times { color: var(--stg-text-faint); font-size: 12px; }
 
@@ -556,6 +621,77 @@
   white-space: nowrap;
 }
 
+/* 字号：一个框，两种写法（设计稿 05e 屏 1e）。框里是输入 + 灰色回显 + 号数表的小箭头。 */
+.sizeWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+}
+.sizeWrap:focus-within { border-color: var(--stg-accent); box-shadow: var(--shadow-focus); }
+.sizeInput {
+  width: 64px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--stg-text);
+  background: transparent;
+  border: none;
+  padding: 6px 4px 6px 8px;
+  outline: none;
+}
+.sizeEcho {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--stg-text-faint);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+.sizeToggle {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border: none;
+  border-left: 1px solid var(--stg-line-row);
+  background: transparent;
+  color: var(--stg-text-faint);
+  cursor: pointer;
+}
+.sizeToggle:hover { color: var(--stg-text); }
+.sizeTable {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 7;
+  min-width: 220px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border-mid);
+  box-shadow: var(--shadow-lg);
+}
+.sizeRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--stg-text);
+  text-align: left;
+  cursor: pointer;
+}
+.sizeRow:hover { background: var(--color-bg-hover); }
+.sizeRowOn,
+.sizeRowOn:hover {
+  background: color-mix(in srgb, var(--stg-accent) 9%, var(--stg-bg));
+  box-shadow: inset 2px 0 0 var(--stg-accent);
+}
+.sizeRowPt { color: var(--stg-text-desc); }
+
 .seg {
   display: inline-flex;
   border: 1px solid var(--stg-border-mid);
@@ -596,6 +732,13 @@
 }
 
 .switchOn { background: var(--stg-accent); border-color: var(--stg-accent); }
+.switchDashed,
+.switchDashed:disabled {
+  background: transparent;
+  border-style: dashed;
+  cursor: default;
+}
+.switchDashed .switchKnob { background: var(--stg-line-section); transform: none; }
 
 .switchKnob {
   width: 10px;
@@ -645,7 +788,9 @@
 .headRowHead,
 .headRow {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px 46px 62px 38px;
+  /* 七列到此为止：「字体 · 字号」在 760px 抽屉里从 190px 缩到约 162px，楷体_GB2312 三号（16）
+     还放得下，再加第八列就放不下了——后面要加字段只能进展开面板（05h 屏 1d）。 */
+  grid-template-columns: 34px minmax(0, 1fr) 30px 42px 58px 38px 52px;
   gap: 8px;
   align-items: center;
   width: 100%;
@@ -680,6 +825,59 @@
 
 .headRow > span,
 .headRowHead > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 表头「编号」列开着时点一下赭石；关着时整列同一种灰的 —。 */
+.headRowHead .colOn { color: var(--stg-accent); }
+.cellDim { color: var(--stg-text-placeholder); }
+.tableFoot {
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--stg-text-faint);
+}
+.tableFootNote { margin-top: 3px; color: var(--stg-text-warm); }
+/* 表里坏了的那一格：和面板里的回显同一种暖色。 */
+.cellConflict { color: var(--stg-text-warm); }
+
+/* 「开着的时候」——一块常驻说明 + 一行真实后果。中性灰、无红、无 ⚠（05h 1z · A3）。 */
+.onBlock {
+  margin-top: 12px;
+  padding: 13px 15px 15px;
+  background: var(--stg-hint);
+  border-left: 2px solid var(--stg-border-warn);
+}
+.onBlockHead { display: flex; align-items: center; gap: 9px; }
+.onBlockMark { flex: none; width: 8px; height: 8px; border: 1.5px solid var(--stg-text-warm); box-sizing: border-box; }
+.onBlockTitle {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--stg-text-faint);
+  text-transform: uppercase;
+}
+.onBlockText { margin-top: 9px; font-size: 11.5px; line-height: 1.75; color: var(--stg-text-secondary); text-wrap: pretty; }
+.onBlockText strong { font-weight: 500; color: var(--stg-text); }
+.onBlockExample {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--stg-text);
+}
+.onBlockExLabel { font-family: var(--font-sans); font-size: 11px; color: var(--stg-text-faint); }
+.onBlockArrow { color: var(--stg-text-faint); }
+.onBlockDup { background: var(--color-amber-soft); color: inherit; }
+.onBlockFoot { margin-top: 9px; font-size: 10.5px; line-height: 1.6; color: var(--stg-text-faint); }
+
+/* 页码那一格：下拉 + 对齐段一行，奇偶互换的回显在段下一行 mono。 */
+.stack { display: flex; flex-direction: column; gap: 7px; min-width: 0; flex: 1; }
+.stackRow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.oddEvenEcho { font-family: var(--font-mono); font-size: 10.5px; color: var(--stg-text-secondary); }
+.oddEvenCenter { margin-left: 8px; color: var(--stg-text-faint); }
 
 .levelPanel {
   border: 1px solid var(--stg-border);
@@ -706,15 +904,6 @@
 
 .levelPanel .field { grid-template-columns: 84px minmax(0, 1fr); }
 .levelPanel .field:last-of-type { border-bottom: none; }
-
-.laterNote {
-  padding: 12px 14px;
-  background: var(--stg-hint);
-  border-left: 2px solid var(--stg-border-warn);
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--stg-text-secondary);
-}
 
 /* 抽屉右栏的小纸样 */
 
@@ -745,6 +934,8 @@
 }
 
 .footHint { font-size: 11.5px; color: var(--stg-text-desc); }
+/* 保存被编号组合拦住时的脚注：和表里、面板里那几处同一种暖色。 */
+.footHintWarm { color: var(--stg-text-warm); }
 
 .primaryBtn,
 .ghostBtn,
@@ -756,6 +947,9 @@
 }
 
 .primaryBtn { background: var(--stg-accent); color: var(--color-on-accent); }
+/* 删除确认键：深中性填色——赭石是「这是你要的那个」，不能用来确认删除；红这套语言里没有。 */
+.neutralBtn { background: var(--stg-text); color: var(--stg-bg); }
+.neutralBtn:hover { background: var(--stg-text-secondary); }
 .primaryBtn:hover { background: var(--stg-accent-hover); }
 .primaryBtn:disabled { opacity: 0.5; cursor: default; }
 
@@ -818,6 +1012,22 @@
 .rowAction:hover { color: var(--stg-accent); }
 .rowActionStrong { color: var(--stg-accent); }
 
+/* 那个点按钮只在 ≤720 出现（见文末的媒体查询）——宽屏有悬停，一排写着字的动作
+   比一个要先点开才知道装了什么的按钮好。 */
+.rowMenu { display: none; flex: none; }
+.rowMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.rowMenuBtn:hover { color: var(--stg-accent); background: var(--color-bg-hover); }
+
 .headActions { display: flex; gap: 10px; flex: none; }
 
 .outlineBtn {
@@ -851,6 +1061,12 @@
   display: flex;
   flex-direction: column;
 }
+
+.modalNarrow { width: min(520px, calc(100% - 48px)); }
+
+/* 「默认交给 ▾」：删的正好是默认那套时的转交行。 */
+.handoff { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.handoffLabel { font-size: 12px; color: var(--stg-text-secondary); }
 
 .modalHead {
   display: flex;
@@ -950,6 +1166,22 @@
 
 .sourceDeclared { color: var(--stg-accent); }
 .sourceDefault { color: var(--stg-text-placeholder); }
+/* 「没读」是来源列的合法值：这一版不去看，不是文件里没有。斜纹＝「这块不适用」。 */
+.sourceUnread {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: right;
+  color: var(--stg-text-secondary);
+}
+.readRowUnread {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--stg-border) 45%, var(--stg-card)) 0 4px,
+    var(--stg-card) 4px 9px
+  );
+}
+.readRowUnread .readValue { color: var(--stg-text-secondary); }
+.adoptNote { margin-bottom: 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--stg-text-faint); }
 
 .modalNote {
   margin-top: 12px;
@@ -1023,4 +1255,46 @@
   padding-top: 14px;
   border-top: 1px solid var(--stg-line-row);
   flex-wrap: wrap;
+}
+
+/* ── 720px 以下的规则放在文件末尾：它们要压过上面 .rowActions / .rowSummaryRest / .previewCol
+   的基态，同一特异性下靠的是次序。 ── */
+/* 宽屏下这三样不存在：展开钮、收起后的一行摘要、折行的摘要后半段 */
+.previewToggle { display: none; }
+.previewBar { display: none; }
+
+/* 720px 以下（设计稿 05f 屏 1m）：纸样收成一行可展开的条，下面挂一行等宽摘要；列表摘要折两行；
+   那排靠悬停出现的动作换成一个点按钮 + 菜单——这个宽度多半是触屏，而触屏没有悬停。 */
+@media (max-width: 720px) {
+  .previewCol { position: static; max-width: none; }
+  .previewToggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 11.5px;
+    color: var(--stg-accent);
+    cursor: pointer;
+  }
+  .previewChevronOpen { transform: rotate(180deg); }
+  .previewBar {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--stg-text-desc);
+    padding-bottom: 10px;
+  }
+  .previewCollapsed .previewBody { display: none; }
+  .rowSummaryRest { display: block; }
+  .rowSummaryRest::before { content: none; }
+  .rowActions { display: none; }
+  .rowMenu { display: block; }
+  /* 抽屉铺满整屏：没有左边那条界线、不投影——它不是浮在别的东西上面的一层，
+     而是这一屏本身。出口从右上的 × 换成左上的返回箭头。 */
+  .drawer { border-left: none; box-shadow: none; }
+  .backBtn { display: inline-flex; }
+  .drawerHead .iconBtn { display: none; }
 }

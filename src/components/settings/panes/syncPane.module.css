@@ -1,5 +1,5 @@
 /**
- * 同步与备份 · 设计稿 14「同步在场感」的设置页半边。
+ * 同步与备份 · 设计稿 03d「同步在场感」的设置页半边。
  *
  * 三个形制,对应设计稿的三个决定:
  * — 锚点卡(.anchor):状态 + 全页唯一的连接入口 + 唯一的推/拉动作。
@@ -239,6 +239,15 @@
 .paperRowLast { border-bottom: none; }
 .paperRowMain { flex: 1; min-width: 0; }
 .paperRowTitle { font-size: 14px; font-weight: 500; color: var(--stg-text); }
+/* 「始终开启」：一条陈述，不是一个开关——描边 mono 小签，与列表里的中性小标同形。 */
+.alwaysTag {
+  flex: none;
+  font: 400 10.5px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--stg-text-warm);
+  border: 1px solid var(--stg-kbd-border);
+  padding: 4px 7px;
+}
 .paperRowDesc { margin-top: 4px; font-size: 12px; color: var(--stg-text-desc); line-height: 1.7; }
 
 /* 服务器库单选列表(未绑定时)。 */

@@ -1,6 +1,6 @@
 # 给 Claude Design 的 UI 设计任务书：写手子代理
 
-> **状态**：`shipped` —— 设计稿已回（claude.ai/design 项目 `12 写手 Writer.dc.html`，TURN 1 屏 1a/1b/2a/3a/3b/3c/4a/5a/5b/6a/6b/7a/8a），并已落地。下面保留原任务书正文，作为「问了什么」的记录；**设计稿怎么回答的、以及实现时的出入**记在文末的「设计稿回来之后」。
+> **状态**：`shipped` —— 设计稿已回（claude.ai/design 项目 `04d 写手 Writer.dc.html`，TURN 1 屏 1a/1b/2a/3a/3b/3c/4a/5a/5b/6a/6b/7a/8a），并已落地。下面保留原任务书正文，作为「问了什么」的记录；**设计稿怎么回答的、以及实现时的出入**记在文末的「设计稿回来之后」。
 > 这份文件是**自包含的**——底下 `---` 以后的全部内容可以整段复制丢给 Claude Design，不需要它读代码库。
 > 视觉口径已抄进 [`docs/reference/design-system.md`](../../reference/design-system.md) → AI 面板设计语言。
 

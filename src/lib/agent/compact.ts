@@ -23,6 +23,7 @@ import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate"
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 import { facetKey, type LoreActivationReport } from "../context/loreSelect";
+import type { SkillState } from "./skillState";
 
 // ── Budget constants (docs/feature/agent/chat-memory-plan.md §6) ──────────────────
 
@@ -46,6 +47,74 @@ export const FOLD_RESULT_CLIP = 200;
  * pasted chapter doesn't dominate the summarize request.
  */
 export const FOLD_TEXT_CLIP = 2000;
+
+// ── Author-set trigger (docs/feature/agent/compact-threshold-plan.md §B.0) ────
+
+/**
+ * `assumed` is the ceiling line on a model that declares no window: the
+ * settings readout says "受假定输入上限限制" rather than naming a 窗口占用 the
+ * author cannot meaningfully raise.
+ */
+export type CompactTriggerBound = "tokens" | "ratio" | "ceiling" | "assumed";
+
+export interface CompactTrigger {
+  /** Message tokens at which the automatic fold fires. */
+  tokens: number;
+  /** Which of the three lines is the lowest — what the settings readout names. */
+  boundBy: CompactTriggerBound;
+}
+
+/**
+ * Where automatic compaction fires: the **lowest of three lines**.
+ *
+ *   tokens   — the absolute slider (8k–512k)
+ *   ratio    — the window-ratio slider (50–80%) × the model's declared window
+ *   ceiling  — the classic line, `COMPACT_TRIGGER × messageCeiling`
+ *
+ * The ceiling line stays in the set, and it is the one the sliders can never
+ * beat upward: it is the last safe distance before `trimHistory` starts
+ * eliding tool results, and a fold that fires above it would never get to
+ * fire at all. So the sliders only ever pull the line *earlier*; at their
+ * defaults (top of both ranges) the answer is the ceiling line, i.e. exactly
+ * the behaviour before they existed.
+ *
+ * With the default 窗口占用 of 50% the ceiling line sits near 35% of the
+ * window, so the ratio slider's whole 50–80% range loses to it — the settings
+ * pane's readout exists to say which line won, and that one names 窗口占用.
+ *
+ * `ratio` needs a declared window; without one only `tokens` and `ceiling`
+ * compete (the ceiling then being the assumed one, see lib/context/budget).
+ * Ties go to the ceiling, then to ratio — a line that merely equals the
+ * classic one has not changed anything worth naming.
+ */
+export function compactTriggerFor(input: {
+  contextSize?: number;
+  messageCeiling: number;
+  triggerTokens: number;
+  triggerRatio: number;
+}): CompactTrigger {
+  const window = input.contextSize ?? 0;
+  const hasWindow = window > 0;
+  let tokens = Math.max(0, Math.floor(input.messageCeiling * COMPACT_TRIGGER));
+  let boundBy: CompactTriggerBound = hasWindow ? "ceiling" : "assumed";
+  if (hasWindow) {
+    const ratioLine = Math.floor(window * input.triggerRatio);
+    if (ratioLine < tokens) { tokens = ratioLine; boundBy = "ratio"; }
+  }
+  const tokenLine = Math.floor(input.triggerTokens);
+  if (tokenLine < tokens) { tokens = tokenLine; boundBy = "tokens"; }
+  return { tokens: Math.max(0, tokens), boundBy };
+}
+
+/**
+ * Where a fold stops, given where it fired. Keeps the classic 0.70 → 0.45 gap
+ * as a *ratio* of the trigger rather than a share of the ceiling: with the
+ * trigger pulled down to 16k on a 100k ceiling, a fixed 45k target would sit
+ * above the trigger and the history would fold on every single turn.
+ */
+export function retainTargetFor(triggerTokens: number): number {
+  return triggerTokens * (RETAIN_TARGET / COMPACT_TRIGGER);
+}
 
 // ── Session bookkeeping ─────────────────────────────────────────────
 
@@ -132,6 +201,19 @@ export interface ChatSessionMeta {
    * tier without parsing the prompt back out of the message.
    */
   briefingTier: "assist" | "orchestrator";
+  /**
+   * 状态记忆（SKILL.state 模式，lib/agent/skillState）开着没有。**会话的**属性
+   * 而不是芯片的临时状态：历史的形状（每轮折叠、只留上一轮）取决于它，所以它
+   * 随会话落盘、随会话恢复——不像 planMode 那样切换会话就归零。
+   */
+  stateMode: boolean;
+  /**
+   * 当前的执行状态 Σ——`summary` 那条消息在状态模式下装的就是它的渲染。null =
+   * 还没折叠过、或最近一次折叠是普通归纳（那时 `summaryText` 是散文）。两种
+   * 模式互相接得上：状态模式接手一段散文摘要时把它当输入，普通归纳接手一份
+   * 状态时把 `summaryText`（状态的 JSON）当【已有摘要】。
+   */
+  state: SkillState | null;
 }
 
 export function createSessionMeta(): ChatSessionMeta {
@@ -144,6 +226,8 @@ export function createSessionMeta(): ChatSessionMeta {
     lastDocPath: null,
     bodyDocPath: null,
     briefingTier: "assist",
+    stateMode: false,
+    state: null,
   };
 }
 
@@ -279,9 +363,10 @@ export function excludeDirsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set
 /**
  * Drop every ledger entry whose carrier `keep` rejects, and forget any entity
  * left holding nothing. Both callers are "these messages are gone": compaction
- * folding turns away, and a block being rebuilt from scratch.
+ * folding turns away, a block being rebuilt from scratch, and a rewind cutting
+ * the history short (lib/agent/rewind).
  */
-function pruneLedger(meta: ChatSessionMeta, keep: (carrier: StreamMessage) => boolean): void {
+export function pruneLedger(meta: ChatSessionMeta, keep: (carrier: StreamMessage) => boolean): void {
   for (const [dir, rec] of meta.injected) {
     if (rec.coreCarrier && !keep(rec.coreCarrier)) rec.coreCarrier = null;
     for (const [file, carrier] of rec.facetCarriers) {
@@ -395,14 +480,31 @@ export function planFold(
    * happening: the bar counted the schemas, this did not.
    */
   ceilingTokens: number,
-  opts?: { force?: boolean },
+  opts?: {
+    force?: boolean;
+    /**
+     * Where the automatic fold fires, in message tokens — {@link compactTriggerFor}'s
+     * answer. Absent = the classic line, `COMPACT_TRIGGER × ceilingTokens`. The
+     * post-fold target scales with it ({@link retainTargetFor}).
+     */
+    triggerTokens?: number;
+    /**
+     * Turns kept verbatim however far the fold goes. Absent = {@link MIN_KEEP_TURNS}.
+     * The state-memory mode (lib/agent/skillState) passes 1: its whole point is
+     * that the conversation does not accumulate, and the one turn it keeps is
+     * the paper's "latest observation".
+     */
+    keepTurns?: number;
+  },
 ): FoldPlan | null {
   const force = opts?.force ?? false;
   if (ceilingTokens <= 0) return null;
-  if (!force && estimateMessagesTokens(history) <= ceilingTokens * COMPACT_TRIGGER) return null;
+  const trigger = opts?.triggerTokens ?? ceilingTokens * COMPACT_TRIGGER;
+  if (!force && estimateMessagesTokens(history) <= trigger) return null;
 
   const { prelude, turns } = segmentHistory(history, meta);
-  const foldable = turns.length - MIN_KEEP_TURNS;
+  const keepTurns = Math.max(1, opts?.keepTurns ?? MIN_KEEP_TURNS);
+  const foldable = turns.length - keepTurns;
   if (foldable <= 0) return null;
 
   // The rebuilt history's fixed parts: the prelude minus the dropped seed
@@ -412,7 +514,7 @@ export function planFold(
   const keptPrelude = prelude.filter(
     (m) => m !== meta.seedContext && m !== meta.summary,
   );
-  const target = ceilingTokens * RETAIN_TARGET;
+  const target = retainTargetFor(trigger);
   const baseTokens = estimateMessagesTokens(keptPrelude) + SUMMARY_BUDGET_TOKENS;
 
   let kept = baseTokens;

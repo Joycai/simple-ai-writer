@@ -36,8 +36,13 @@ interface DocFormatState {
   select: (id: string) => void;
   /** 新建或改写一套自建预设，落盘。 */
   saveFormat: (preset: DocFormatPreset) => Promise<void>;
-  /** 删一套自建预设。内置的删不掉——调用方不该给它们删按钮。 */
-  removeFormat: (id: string) => Promise<void>;
+  /**
+   * 删一套自建预设。内置的删不掉——调用方不该给它们删按钮。
+   *
+   * 删的正好是默认那套时，`handoffTo` 是作者点名接手的那一套（设计稿 05f 屏 1l：
+   * 允许删，但必须转交）。没点名就落回内置的第一套——「没有默认」这个状态永远不存在。
+   */
+  removeFormat: (id: string, handoffTo?: string) => Promise<void>;
   /** 「复制一份」：任何一套（含内置）都能复制成一套可改的自建预设，返回新 id。 */
   duplicate: (id: string) => Promise<string | null>;
   /** 把 `read_doc_format` 读到的格式挂进本次会话。 */
@@ -79,8 +84,21 @@ export function nextCustomId(presets: readonly DocFormatPreset[]): string {
  * 从一份 .docx 读来的格式在本次会话里的 id。用路径而不是内容哈希：同一份文件
  * 再读一次应该覆盖上一次的结果，而不是攒出两条。
  */
+const IMITATED_PREFIX = "imitated:";
+
 export function imitatedIdFor(path: string): string {
-  return `imitated:${path}`;
+  return `${IMITATED_PREFIX}${path}`;
+}
+
+/**
+ * 这套格式还只挂在本次会话里吗——即「照一份 .docx 模仿，但没存成预设」。
+ *
+ * 用 id 前缀而不是 `imitatedFrom`：作者点「存为预设」存下来的那一套**也**带着
+ * `imitatedFrom`（列表里的「读自 甲方模板.docx」就是它），而那一套已经是作者
+ * 自己的资产了，审批卡上不该再写「未存为预设」。
+ */
+export function isSessionImitated(id: string): boolean {
+  return id.startsWith(IMITATED_PREFIX);
 }
 
 export const useDocFormatStore = create<DocFormatState>((set, get) => ({
@@ -127,11 +145,14 @@ export const useDocFormatStore = create<DocFormatState>((set, get) => ({
     });
   },
 
-  removeFormat: async (id) => {
+  removeFormat: async (id, handoffTo) => {
     await deleteCustomFormat(id);
     set((s) => {
       const presets = s.presets.filter((p) => p.id !== id);
-      const defaultId = reconcile(presets, s.defaultId);
+      // 删掉的正好是默认——作者点名的那一套接手；没点名（或点了一个已经不在的）
+      // 就落回内置的第一套。
+      const wanted = s.defaultId === id && handoffTo ? handoffTo : s.defaultId;
+      const defaultId = reconcile(presets, wanted);
       // 删掉的正好是默认——默认必须落回一个真实存在的预设，并且**写回偏好**，
       // 否则下次启动读到的还是那个死 id。
       if (defaultId !== s.defaultId) writePref(PREF_KEY, defaultId);

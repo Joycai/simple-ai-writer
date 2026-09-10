@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Manual harness reports (scripts/prompt-ab.ts, scripts/read-cost.ts) — the
+# committed copy of a run lives under docs/feature/agent/measurements/.
+prompt-ab-report.txt
+read-cost-report.txt

@@ -1,13 +1,15 @@
 /**
- * Streaming AI client supporting OpenAI (and compatible), Gemini, and Anthropic
- * APIs. Entry point: `streamCompletion` dispatches to the provider adapters in
- * ./openai, ./gemini and ./anthropic. Shared protocol types live in ./types.
+ * Streaming AI client supporting OpenAI Chat Completions (and compatible),
+ * OpenAI Responses (and compatible), Gemini, and Anthropic APIs. Entry point:
+ * `streamCompletion` dispatches to the provider adapters in ./openai,
+ * ./responses, ./gemini and ./anthropic. Shared protocol types live in ./types.
  */
 
 import { streamAnthropic } from "./anthropic";
 import { beginApiLog } from "./apiLog";
 import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
+import { streamResponses } from "./responses";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
 import {
   forcedToolChoiceRefused, isForcedToolChoice, isForcedToolChoiceRejection,
@@ -62,6 +64,9 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
         break;
       case "anthropic":
         await streamAnthropic(wrapped);
+        break;
+      case "responses":
+        await streamResponses(wrapped);
         break;
       default:
         await streamOpenAI(wrapped);

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
+import { WebviewCapsNotice } from "./components/common/WebviewCapsNotice";
 import { IconRail } from "./components/layout/IconRail";
 import { AiRail } from "./components/layout/AiRail";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -9,6 +10,7 @@ import { EditorArea } from "./components/layout/EditorArea";
 import { ResizeHandle } from "./components/layout/ResizeHandle";
 import { SettingsPage } from "./components/settings/SettingsPage";
 import { AiDrawer } from "./components/ai/AiDrawer";
+import { ChatSwitchGuard } from "./components/ai/ChatSwitchGuard";
 import { InlineAiBubble } from "./components/ai/InlineAiBubble";
 import { LoreWall } from "./components/lore/LoreWall";
 import { LibraryView } from "./components/library/LibraryView";
@@ -17,6 +19,10 @@ import { SyncPreviewModal } from "./components/sync/SyncPreviewModal";
 import { ConfigRestoreModal } from "./components/sync/ConfigRestoreModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { clampSidebarWidth, useAppStore } from "./stores/appStore";
+// Side-effect import: the theme store subscribes to project changes at
+// module scope, so a project's `.ai-writer/themes/` joins the registry
+// whether or not Settings has ever been opened.
+import "./stores/themeStore";
 import { useAiStore } from "./stores/aiStore";
 import { useMainView, useProjectStore } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
@@ -150,6 +156,9 @@ export default function App() {
       }}
     >
       <TitleBar />
+      {/* Under the TitleBar, above every view: the webview is older than the
+          build was made for, so some feature will break when reached. */}
+      <WebviewCapsNotice />
 
       {/* `position: relative` so the settings page can fill exactly this band —
           everything below the TitleBar, which stays put as the drag region. */}
@@ -197,6 +206,7 @@ export default function App() {
       </div>
 
       <AiDrawer />
+      <ChatSwitchGuard />
       <InlineAiBubble />
       <CommandPalette />
       {/* Outside the settings shell on purpose: a sync survives the settings

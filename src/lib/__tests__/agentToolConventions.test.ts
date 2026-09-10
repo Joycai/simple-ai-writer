@@ -183,8 +183,10 @@ describe("the open-folder fence", () => {
     const free = ALL_TOOL_IDS.filter((id) => !toolNeedsProject(id));
     // The split collector appends to an in-memory sink the modal renders; its
     // run (lib/lore/splitter) is the one caller that passes no project at all.
+    // The 一致性检查 collectors (lib/consistency/reviewTools) are the same shape:
+    // an in-memory sink, and handlers the tests run with no project.
     // Anything else added here needs a reason of that kind in its registry entry.
-    expect(free.sort()).toEqual(["split_core", "split_facet"]);
+    expect(free.sort()).toEqual(["report_issue", "report_pass", "split_core", "split_facet"]);
   });
 
   it("refuses a fenced tool with no folder open, before the handler runs", async () => {

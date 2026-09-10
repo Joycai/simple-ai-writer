@@ -1,44 +1,69 @@
-import {
+import { Fragment,
   useState, useRef, useEffect, useMemo, createContext, useContext, memo,
   type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
+import { AudioLines,
   Folder, FolderOpen, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
   ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
-  Monitor, Presentation,
+  Monitor, Presentation, X,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
-import { fileExists, previewHtmlWindow } from "../../lib/fs/fileio";
+import { fileExists, previewHtmlWindow, readFileHead } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
-  allRows, ancestorsOf, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
+  allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
   pruneNested, pruneSelection, rangeBetween,
 } from "../../lib/fs/selection";
 import {
-  extLabel, isSecondary, orphanedAssetGroups, relinkCandidates, rowKind, type RowKind,
+  extLabel, isSecondary, orphanedAssetGroups, pictureFolders, relinkCandidates,
+  resolveRowKind, rowKind, type RowKind,
 } from "../../lib/fs/rowMeta";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, convertExtOf, convertProjectFile, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
+import { isAsrEnabled, isAsrDiarizationDefault, isAsrTimestampsEnabled } from "../../lib/asr/flag";
+import { isVideoExt, transcribeExtOf } from "../../lib/asr/formats";
+import { estimateCost, formatBytes, wavDurationSeconds } from "../../lib/asr/cost";
+import { formatClock } from "../../lib/asr/render";
+import { subAgentModel } from "../../lib/agent/subagent";
+import { useAiStore } from "../../stores/aiStore";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
-import { comboLabel, matchesCombo } from "../../lib/shortcuts";
+import { CLOSE_DOC_COMBOS, comboLabel, combosLabel, matchesCombo } from "../../lib/shortcuts";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
-import { useComposerStore } from "../../stores/composerStore";
-import { useEditorStore } from "../../stores/editorStore";
+import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
+import { useAgentStore } from "../../stores/agentStore";
+import { closeDocument, useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { loreEntityCount } from "../../lib/lore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./FileTree.module.css";
+
+/**
+ * 转写前的确认条（设计稿 02f 屏 1c）要说的四件事，在打开它之前算好：文件多大、
+ * WAV 能从文件头算出的时长、模型行有单价时的估价、会写到哪。`diarization` 是
+ * 这一次的初值（子代理里的默认），作者在条上改的只管这一次。
+ */
+interface TranscribeAskState {
+  path: string;
+  name: string;
+  ext: string;
+  bytes: number;
+  seconds: number | null;
+  pricePerSecond: number | undefined;
+  estimate: number | null;
+  target: string;
+  diarization: boolean;
+}
 
 /** A dragged or clipboarded entry — the pair every transfer needs. */
 interface TransferSource { path: string; isDir: boolean }
@@ -75,6 +100,9 @@ const COMBO_COLLAPSE_ALL = { mod: true, alt: true, key: "ArrowLeft" } as const;
  * dispatch 级的绑定撞在一起是静默的：先注册的赢，另一个永远不响。⌥⌘L 空着。
  */
 const COMBO_REVEAL_DOC = { mod: true, alt: true, key: "l" } as const;
+
+/** 最后一条已兑现的 `projectStore.revealRequest.seq`——见 FileTree 里消费它的 effect。 */
+let consumedRevealSeq = 0;
 const COMBO_NEW_DOC = { mod: true, key: "n" } as const;
 const COMBO_NEW_GROUP = { mod: true, shift: true, key: "n" } as const;
 
@@ -124,6 +152,8 @@ interface TreeCtx {
   docCounts: ReadonlyMap<string, number>;
   /** `assets/<组>` folders whose document is gone — one walk, not a lookup per row. */
   orphanAssets: ReadonlySet<string>;
+  /** 作者自己的、只装图片的目录 —— 同样一次走查，判据在 `rowMeta`。 */
+  pictureDirs: ReadonlySet<string>;
   /** The delete confirmation, rendered under the last row it would remove. */
   deleteAsk: { afterPath: string; text: string } | null;
   confirmDelete: () => void;
@@ -132,6 +162,10 @@ interface TreeCtx {
   relinkAsk: { groupPath: string; candidates: readonly FileNode[] } | null;
   confirmRelink: (docPath: string) => void;
   cancelRelink: () => void;
+  /** 转写前的确认条，长在那一行下面（设计稿 02f 屏 1c）。 */
+  transcribeAsk: TranscribeAskState | null;
+  confirmTranscribe: (diarization: boolean) => void;
+  cancelTranscribe: () => void;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -149,7 +183,8 @@ function depthVar(depth: number): CSSProperties {
 // ── Row icon ──────────────────────────────────────────────────────────────────
 
 /**
- * 六种图标，两级灰，一个颜色都不加（设计稿 17 §2g）：这个面板只有一个强调色，而
+ * 七种行六枚图标（插图与图片目录共用一枚），两级灰，一个颜色都不加
+ * （设计稿 01b §2g）：这个面板只有一个强调色，而
  * 赭石已经被「当前打开」和「选区」占满 —— 再给文件种类分色，等于用色相说三件互不
  * 相关的事。容器与叶子的区别交给**填充**：分组实心，文档描边。
  */
@@ -163,6 +198,9 @@ function RowIcon({ kind, open, orphan }: { kind: RowKind; open: boolean; orphan:
     switch (kind) {
       case "folder": return open ? <FolderOpen size={16} strokeWidth={1.6} /> : <Folder size={16} strokeWidth={1.6} />;
       case "assets": return orphan ? <Link2 size={16} strokeWidth={1.5} /> : <Images size={16} strokeWidth={1.5} />;
+      // 与 assets 同一枚：两者说的是同一件事「这里面是图片」，区别在右列那个词上
+      // ——「插图」绑着一份文档、有修复动作，「图片」就是个目录。
+      case "pictures": return <Images size={16} strokeWidth={1.5} />;
       case "doc": return <FileText size={16} strokeWidth={1.6} />;
       case "deliverable": return <FileCode size={16} strokeWidth={1.6} />;
       case "image": return <FileImage size={16} strokeWidth={1.5} />;
@@ -298,6 +336,62 @@ function RenameInput({ node, depth, kind, orphan }: { node: FileNode; depth: num
 // off one context — memoizing keeps a FileTree-local state change that does
 // *not* feed the (memoized) context value, like opening the context menu,
 // from re-rendering every row in the project.
+/**
+ * 转写前的确认条本体（设计稿 02f 屏 1c）。四行按「是什么 → 花多少 → 去哪里 → 落在哪」
+ * 排；估价只有算得出时长且填了单价时才有数，否则虚线 + 「按实际秒数计」；「去处」
+ * 那句是隐私事实，陈述句、不加色、不进 tooltip。按钮写动作：「上传并转写」。
+ */
+function TranscribeAskBar({
+  ask, onConfirm, onCancel,
+}: { ask: TranscribeAskState; onConfirm: (diarization: boolean) => void; onCancel: () => void }) {
+  const { t } = useTranslation();
+  const [dia, setDia] = useState(ask.diarization);
+  const sizeLine = ask.seconds !== null
+    ? `${formatBytes(ask.bytes)} · ${formatClock(ask.seconds * 1000)}`
+    : `${formatBytes(ask.bytes)} · ${t("fileTree.transcribeAskNoLength", { ext: ask.ext })}`;
+  const estimate = ask.estimate !== null && ask.seconds !== null
+    ? { v: `¥ ${ask.estimate.toFixed(2)}`, sub: t("fileTree.transcribeAskEstimateSub", { s: Math.round(ask.seconds).toLocaleString(), p: ask.pricePerSecond }), dash: false }
+    : {
+        v: t("fileTree.transcribeAskEstimateUnknown"),
+        sub: ask.pricePerSecond === undefined ? t("fileTree.transcribeAskNoPrice") : t("fileTree.transcribeAskRate"),
+        dash: true,
+      };
+  const rows: { k: string; v: string; sub?: string; dash?: boolean }[] = [
+    { k: t("fileTree.transcribeAskFile"), v: ask.name, sub: sizeLine },
+    { k: t("fileTree.transcribeAskEstimate"), ...estimate },
+    { k: t("fileTree.transcribeAskGoesTo"), v: t(isVideoExt(ask.ext) ? "fileTree.transcribeAskGoesToVideo" : "fileTree.transcribeAskGoesToText") },
+    { k: t("fileTree.transcribeAskWrites"), v: baseName(ask.target), sub: t("fileTree.transcribeAskWritesSub") },
+  ];
+  return (
+    <div className={styles.transcribeAsk} onClick={(e) => e.stopPropagation()}>
+      <div className={styles.deleteAskText}>{t("fileTree.transcribeAskLead")}</div>
+      <div className={styles.transcribeAskRows}>
+        {rows.map((r) => (
+          <Fragment key={r.k}>
+            <span className={styles.transcribeAskKey}>{r.k}</span>
+            <span>
+              <span className={r.dash ? styles.transcribeAskValDash : styles.transcribeAskVal}>{r.v}</span>
+              {r.sub && <span className={styles.transcribeAskSub}>{r.sub}</span>}
+            </span>
+          </Fragment>
+        ))}
+        <span className={styles.transcribeAskKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
+        <span>
+          <label className={styles.transcribeAskToggle}>
+            <input type="checkbox" checked={dia} onChange={(e) => setDia(e.target.checked)} />
+            {t("fileTree.transcribeAskDiarization")}
+          </label>
+          <span className={styles.transcribeAskSub}>{t("fileTree.transcribeAskDiarizationSrc")}</span>
+        </span>
+      </div>
+      <div className={styles.deleteAskRow}>
+        <button className={styles.transcribeAskGo} onClick={() => onConfirm(dia)}>{t("fileTree.transcribeAskGo")}</button>
+        <button className={styles.deleteAskCancel} onClick={onCancel}>{t("common.cancel")}</button>
+      </div>
+    </div>
+  );
+}
+
 const TreeNode = memo(function TreeNode({
   node, depth, parentName,
 }: { node: FileNode; depth: number; parentName: string | null }) {
@@ -306,7 +400,8 @@ const TreeNode = memo(function TreeNode({
     activeFilePath, selected, onRowClick, creatingIn,
     renamingPath, openMenu, deleteAsk, confirmDelete, cancelDelete,
     relinkAsk, confirmRelink, cancelRelink,
-    draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets,
+    transcribeAsk, confirmTranscribe, cancelTranscribe,
+    draggingPaths, dragOverDir, springPath, cutPaths, docCounts, orphanAssets, pictureDirs,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
@@ -320,7 +415,7 @@ const TreeNode = memo(function TreeNode({
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && isSamePath(activeFilePath, node.path);
   const isRenaming = renamingPath === node.path;
-  const kind = rowKind(node.name, node.is_dir, parentName);
+  const kind = resolveRowKind(node, parentName, pictureDirs);
   const orphan = orphanAssets.has(node.path);
   // 一列两义：分组显示它下面任意深度的 .md 篇数，文档显示后缀标签。
   const docCount = node.is_dir ? (docCounts.get(node.path) ?? 0) : 0;
@@ -361,6 +456,7 @@ const TreeNode = memo(function TreeNode({
       );
     }
     if (kind === "assets") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.assetsLabel")}</span>;
+    if (kind === "pictures") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.picturesLabel")}</span>;
     if (node.is_dir) {
       return docCount > 0
         ? <span className={styles.rightCol} title={t("fileTree.dirCount", { count: docCount })}>{docCount}</span>
@@ -455,6 +551,12 @@ const TreeNode = memo(function TreeNode({
         </div>
       )}
 
+      {/* 转写确认条：同一条规矩，手指在哪就在哪问。它是这组「对文件做一件事」里
+          唯一一个上传 + 付费的，所以点下去不直接跑（设计稿 02f 屏 1c）。 */}
+      {transcribeAsk?.path === node.path && (
+        <TranscribeAskBar ask={transcribeAsk} onConfirm={confirmTranscribe} onCancel={cancelTranscribe} />
+      )}
+
       {node.is_dir && open && (
         <div>
           {creatingIn === node.path && <CreateInput depth={depth} />}
@@ -533,6 +635,8 @@ export function FileTree() {
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  const revealPath = useProjectStore((s) => s.revealPath);
+  const revealRequest = useProjectStore((s) => s.revealRequest);
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);
   const relinkAssets = useProjectStore((s) => s.relinkAssets);
@@ -562,6 +666,12 @@ export function FileTree() {
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const [deleteAsk, setDeleteAsk] = useState<{ targets: TransferSource[]; afterPath: string; text: string } | null>(null);
   const [relinkAsk, setRelinkAsk] = useState<{ groupPath: string; candidates: FileNode[] } | null>(null);
+  const [transcribeAsk, setTranscribeAsk] = useState<TranscribeAskState | null>(null);
+  // 转写的入口是否可用：Beta 开着且子代理里绑了一个转写模型。Beta 关 = 菜单项不存在；
+  // Beta 开但没绑 = 禁用并指路（设计稿 02f 屏 1c ②）。
+  const aiModels = useAiStore((st) => st.models);
+  const subAgents = useAiStore((st) => st.subAgents);
+  const asrModel = subAgentModel("asr", aiModels, subAgents);
   // Where a shift-range starts. Held separately from the selection because it
   // must survive the range being redrawn: dragging a shift-click up and down
   // has to grow and shrink one span, not chain new ones off the last row.
@@ -603,6 +713,9 @@ export function FileTree() {
 
   const orphanAssets = useMemo(() => orphanedAssetGroups(fileTree), [fileTree]);
 
+  // 只装图片的目录，同样一次自底向上的走查（判据在 rowMeta，不散进这里）。
+  const pictureDirs = useMemo(() => pictureFolders(fileTree), [fileTree]);
+
   // A selection outlives the gesture that acted on it — a move rewrites every
   // selected path, a delete removes them — so anything no longer on disk has
   // to drop out before it can widen the *next* gesture.
@@ -613,14 +726,19 @@ export function FileTree() {
     });
   }, [everyRow]);
 
-  // Opening a document from anywhere else (command palette, outline, a link)
-  // moves the selection with it, so the sidebar never shows one file open and
-  // a different one selected.
+  // Opening a document from anywhere else (command palette, outline, a link,
+  // back/forward) reveals it — 树外打开即定位: expand down to it, scroll it into
+  // view and move the selection with it, so the sidebar never shows one file
+  // open and a different one selected. The tree's own opens write the path to
+  // `treeOpenedRef` first and skip this: that row was just clicked, it is on
+  // screen already. The ref starts at the mounted value, so switching sidebar
+  // tabs does not re-centre the current document.
+  const treeOpenedRef = useRef<string | null>(activeFilePath);
   useEffect(() => {
     if (!activeFilePath) return;
-    setSelected((prev) => (prev.has(activeFilePath) ? prev : new Set([activeFilePath])));
-    setAnchor(activeFilePath);
-  }, [activeFilePath]);
+    if (treeOpenedRef.current === activeFilePath) return;
+    revealPath(activeFilePath);
+  }, [activeFilePath, revealPath]);
 
   // 「已折叠 N 个分组」 says its piece and goes. No layout animation: it is the
   // one thing on screen that must not move the tree it is describing.
@@ -695,7 +813,7 @@ export function FileTree() {
     }
     setSelected(new Set([node.path]));
     setAnchor(node.path);
-    if (!node.is_dir) setActiveFilePath(node.path);
+    if (!node.is_dir) { treeOpenedRef.current = node.path; setActiveFilePath(node.path); }
   };
 
   const clearSelection = () => {
@@ -709,7 +827,7 @@ export function FileTree() {
   const hasAnyFolder = useMemo(() => everyRow.some((r) => r.isDir), [everyRow]);
 
   /**
-   * 反馈的主体是按钮，不是树（设计稿 17 §2c）。按钮翻成实底赭石就留在那里，所以
+   * 反馈的主体是按钮，不是树（设计稿 01b §2c）。按钮翻成实底赭石就留在那里，所以
    * 「再点一次＝全部展开」在同一个位置、同一个手指；这里第二重的确认条说的是**数
    * 量**，那是树自己没法说的话。
    *
@@ -783,23 +901,26 @@ export function FileTree() {
   }, [activeFilePath, currentHidden, visiblePaths, renamingPath]);
 
   const revealCurrent = () => {
-    if (!activeFilePath) return;
-    const { expandedDirs: dirs, setExpandedDirs } = useProjectStore.getState();
-    const chain = ancestorsOf(fileTree, activeFilePath);
-    if (chain.length > 0) {
-      const next = { ...dirs };
-      for (const dir of chain) next[dir] = true;
-      setExpandedDirs(next);
-    }
-    setSelected(new Set([activeFilePath]));
-    setAnchor(activeFilePath);
+    if (activeFilePath) revealPath(activeFilePath);
+  };
+
+  // 兑现定位请求：展开已经由 store 做完，这里只剩选中与滚动。`seq` 记在模块级而
+  // 不是 ref 里——树卸载（切到别的侧栏标签）再挂回来，同一条请求不该再居中一遍，
+  // 而卸载期间到达的那条又必须被兑现。
+  useEffect(() => {
+    if (!revealRequest || revealRequest.seq <= consumedRevealSeq) return;
+    consumedRevealSeq = revealRequest.seq;
+    const { path } = revealRequest;
+    setSelected(new Set([path]));
+    setAnchor(path);
     // After the expansion has rendered — the row does not exist before it.
-    window.requestAnimationFrame(() => {
+    const id = window.requestAnimationFrame(() => {
       treeRef.current
-        ?.querySelector(`[data-path="${CSS.escape(activeFilePath)}"]`)
+        ?.querySelector(`[data-path="${CSS.escape(path)}"]`)
         ?.scrollIntoView({ block: "center" });
     });
-  };
+    return () => window.cancelAnimationFrame(id);
+  }, [revealRequest]);
 
   // ── Transfers ───────────────────────────────────────────────────────────────
 
@@ -1027,6 +1148,93 @@ export function FileTree() {
   };
 
   /**
+   * 转写前先出确认条（设计稿 02f 屏 1c）：这是右键这一组里唯一一个上传 + 付费的。
+   * 条上要说的数在这里算好——大小、WAV 的时长、有单价时的估价、落点。`FileNode`
+   * 没有 size，所以问一次磁盘：`readFileHead` 一次往返给回真实大小和前 64KB，
+   * 而不是把一份几百 MB 的录音整个读进来只为了看它的头四个字节。
+   */
+  const askTranscribe = async (node: FileNode) => {
+    if (busy) return;
+    const ext = transcribeExtOf(node.name);
+    if (!ext) return;
+    try {
+      const { transcriptTargetFor } = await import("../../lib/asr");
+      const head = await readFileHead(node.path, 64 * 1024);
+      // 真实大小传给它：流式写出的 WAV 的时长只能由「data 块到文件末尾」反推。
+      const seconds = ext === "wav" ? wavDurationSeconds(head.head, head.size) : null;
+      const pricePerSecond = asrModel?.pricePerSecond;
+      setTranscribeAsk({
+        path: node.path,
+        name: node.name,
+        ext,
+        bytes: head.size,
+        seconds,
+        pricePerSecond,
+        estimate: seconds === null ? null : estimateCost(seconds, pricePerSecond),
+        target: await transcriptTargetFor(node.path),
+        diarization: isAsrDiarizationDefault(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.transcribeFailed", { name: node.name })} ${message}`);
+    }
+  };
+
+  /**
+   * 确认之后才上传、提交、轮询、写盘。busy 条借「转换文档」那一条，标签随阶段变
+   * （上传中 · 2.4MB → 排队中 → 识别中 · 第 n 次查询），没有进度条——我们拿不到
+   * 百分比（设计稿 02f 屏 1d）。完成开新文件、发一句痕迹；失败把原因留在错误条上。
+   */
+  const handleTranscribe = async (diarization: boolean) => {
+    const ask = transcribeAsk;
+    setTranscribeAsk(null);
+    if (!ask || busy || !projectPath) return;
+    setBusy({ path: ask.path, text: t("fileTree.transcribeReading", { name: ask.name }) });
+    setTransferError(null);
+    try {
+      const asr = await import("../../lib/asr");
+      const conn = await asr.resolveAsrConn();
+      if (asr.isAsrUnavailable(conn)) throw new Error(conn.error);
+      const outcome = await asr.transcribeFile({
+        projectPath,
+        sourcePath: ask.path,
+        conn,
+        options: { diarization },
+        onProgress: (p) => {
+          const text = p.phase === "uploading" ? t("fileTree.transcribeUploading", { size: formatBytes(ask.bytes) })
+            : p.phase === "queued" ? t("fileTree.transcribeQueued")
+            : p.phase === "running" ? t("fileTree.transcribeRunning", { n: p.polls ?? 1 })
+            : p.phase === "downloading" ? t("fileTree.transcribeDownloading")
+            : t("fileTree.transcribeReading", { name: ask.name });
+          setBusy({ path: ask.path, text });
+        },
+      });
+      const target = await asr.writeTranscript(ask.path, outcome.transcript, {
+        modelId: conn.modelId,
+        timestamps: isAsrTimestampsEnabled(),
+        speakers: diarization,
+      });
+      const cost = await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
+      await refreshFileTree();
+      setActiveFilePath(target);
+      const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
+      const name = baseName(target);
+      setNotice({
+        text: outcome.cached
+          ? t("fileTree.transcribedCached", { seconds, name })
+          : cost !== null
+            ? t("fileTree.transcribedCost", { seconds, cost: cost.toFixed(2), name })
+            : t("fileTree.transcribed", { seconds, name }),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setTransferError(`${t("fileTree.transcribeFailed", { name: ask.name })} ${message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
    * `.html` 的两件事，和预览工具条上的那两个按钮是**同一段代码**（`previewHtmlWindow`
    * / `exportHtmlToPptx`），只是从树上够得着 —— 一份交付稿不必先在编辑器里打开才能
    * 预览或导出。
@@ -1245,10 +1453,13 @@ export function FileTree() {
       );
       return;
     }
-    const { chatRefs, setChatRefs, setChatDraft } = useComposerStore.getState();
+    // Into the conversation on screen — the one the author will look at next.
+    const chatKey = useAgentStore.getState().activeChatKey;
+    const composer = useComposerStore.getState();
+    const chatRefs = chatComposerOf(composer, chatKey).refs;
     if (!chatRefs.some((r) => attachedKey(r) === attachedKey(outcome.item))) {
-      setChatRefs((prev) => [...prev, outcome.item]);
-      setChatDraft((prev) => {
+      composer.setChatRefs(chatKey, (prev) => [...prev, outcome.item]);
+      composer.setChatDraft(chatKey, (prev) => {
         const sep = prev && !/\s$/.test(prev) ? " " : "";
         return `${prev}${sep}@[${file.name}] `;
       });
@@ -1268,7 +1479,7 @@ export function FileTree() {
   // ── Menus ───────────────────────────────────────────────────────────────────
 
   /**
-   * 三条规则（设计稿 17 §1j）：**不成立的项不渲染，而不是禁用**（剪贴板空 → 没有
+   * 三条规则（设计稿 01c §1j）：**不成立的项不渲染，而不是禁用**（剪贴板空 → 没有
    * 「粘贴」；多选 → 没有「重命名」）；顺序固定为**造 → 搬 → 查 → 毁**，三种菜单里
    * 项的相对顺序永不变，只增删；删除永远在最后、永远隔一条线。
    */
@@ -1370,8 +1581,17 @@ export function FileTree() {
     } else {
       items.push(
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
-          action: () => setActiveFilePath(node.path) },
+          action: () => { treeOpenedRef.current = node.path; setActiveFilePath(node.path); } },
       );
+      // 「关闭」只长在**当前打开的**那一行上（设计稿 01e 屏 1e-1）：关闭一个没
+      // 打开的文件不是一个动作。与面包屑末尾的 × 和 ⌘W 是同一个 closeDocument()。
+      if (isSamePath(node.path, activeFilePath)) {
+        items.push({
+          kind: "item", icon: <X size={13} />, label: t("titleBar.closeDoc"),
+          shortcut: combosLabel(CLOSE_DOC_COMBOS),
+          action: () => void closeDocument(),
+        });
+      }
       // 「预览」指的是**另开的预览窗口**，不是编辑器右边那半 —— 打开这份文件本来
       // 就会显示预览面板，菜单里再放一个同义的项没有意义。那个窗口有自己的自定义
       // 协议、不在应用的 CSP 底下，是页面里的脚本**真正跑起来**的唯一地方。
@@ -1400,6 +1620,18 @@ export function FileTree() {
           kind: "item", icon: <Presentation size={13} />, label: t("fileTree.exportPptx"),
           disabled: busy !== null,
           action: () => void handleExportPptx(node),
+        });
+      }
+      // 转写（设计稿 02f 屏 1c）：Beta 关着**不存在**；开着但没绑模型则禁用并指路——
+      // 作者刚在实验室开了开关，看不到入口会以为开关没生效。BETA 小标是这项在实验室
+      // 里的记号。
+      if (transcribeExtOf(node.name) && isAsrEnabled()) {
+        items.push({
+          kind: "item", icon: <AudioLines size={13} />, label: t("fileTree.transcribe"),
+          badge: t("fileTree.transcribeBadge"),
+          disabled: busy !== null || !asrModel,
+          hint: asrModel ? undefined : t("fileTree.transcribeUnbound"),
+          action: () => void askTranscribe(node),
         });
       }
       // Only on files the assistant can take (the `@` picker's own kinds) —
@@ -1453,15 +1685,12 @@ export function FileTree() {
 
   /**
    * ⋯ 的内容随宽度变：≥360px 时「导入文件 / 刷新」已经升到工具栏上，菜单里就只剩
-   * 上面两项。档位是容器查询，JS 看不见它——所以在**打开菜单的这一刻**量一次容器，
+   * 「全部展开」一项——「定位当前文档」已经是工具栏的常驻按钮（设计稿 01d §2a），菜单里再放一份是两个入口指同一个按钮。档位是容器查询，JS 看不见它——所以在**打开菜单的这一刻**量一次容器，
    * 一次测量，不是每行一次。
    */
   const overflowItems = (): ContextMenuEntry[] => {
     const wide = (containerRef.current?.clientWidth ?? 240) >= 359;
     const items: ContextMenuEntry[] = [
-      { kind: "item", icon: <Crosshair size={13} />, label: t("fileTree.revealCurrent"),
-        shortcut: comboLabel(COMBO_REVEAL_DOC),
-        disabled: !activeFilePath, action: revealCurrent },
       { kind: "item", icon: <ChevronsUpDown size={13} />, label: t("fileTree.expandAll"),
         disabled: !hasAnyFolder,
         action: () => { useProjectStore.getState().expandAllDirs(); setNotice(null); } },
@@ -1555,6 +1784,8 @@ export function FileTree() {
     onDragOverDir, onDragLeaveDir, onDropInDir, confirmDelete,
     cancelDelete: () => setDeleteAsk(null),
     confirmRelink, cancelRelink: () => setRelinkAsk(null),
+    confirmTranscribe: (diarization: boolean) => void handleTranscribe(diarization),
+    cancelTranscribe: () => setTranscribeAsk(null),
   };
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; });
@@ -1572,6 +1803,8 @@ export function FileTree() {
     onDropInDir: (e, node) => handlersRef.current.onDropInDir(e, node),
     confirmDelete: () => void handlersRef.current.confirmDelete(),
     cancelDelete: () => handlersRef.current.cancelDelete(),
+    confirmTranscribe: (diarization) => handlersRef.current.confirmTranscribe(diarization),
+    cancelTranscribe: () => handlersRef.current.cancelTranscribe(),
     confirmRelink: (docPath) => void handlersRef.current.confirmRelink(docPath),
     cancelRelink: () => handlersRef.current.cancelRelink(),
   }), []);
@@ -1590,13 +1823,15 @@ export function FileTree() {
     cutPaths,
     docCounts,
     orphanAssets,
+    pictureDirs,
     deleteAsk: deleteAsk ? { afterPath: deleteAsk.afterPath, text: deleteAsk.text } : null,
     relinkAsk,
+    transcribeAsk,
     ...stableHandlers,
   }), [
     activeFilePath, selected, creatingIn, creatingType, createError,
     renamingPath, renameError, draggingPaths, dragOverDir, springPath, cutPaths,
-    docCounts, orphanAssets, deleteAsk, relinkAsk, stableHandlers,
+    docCounts, orphanAssets, pictureDirs, deleteAsk, relinkAsk, transcribeAsk, stableHandlers,
   ]);
 
   const footer = () => {
@@ -1632,7 +1867,7 @@ export function FileTree() {
   return (
     <TreeCtx.Provider value={ctx}>
       <div className={styles.container} ref={containerRef}>
-        {/* 节标题与工具栏本来就是同一行的左右两半（设计稿 17 §1f）。 */}
+        {/* 节标题与工具栏本来就是同一行的左右两半（设计稿 01b §1f）。 */}
         <div className={styles.toolbar}>
           <span className={styles.toolbarLabel}>{t("sidebar.files")}</span>
           <span className={styles.toolbarSpacer} />
@@ -1669,6 +1904,18 @@ export function FileTree() {
           </button>
           {/* 视图组 */}
           <span className={`${styles.toolbarDivider} ${styles.wide}`} />
+          {/* 定位当前文档：视图组第一枚（设计稿 01d §2a）。它作用于一个点、比「全部折叠」
+              更常按，且两者是一对反义动作——折叠完想回到当前文档时手不用动。禁用语法沿用
+              「全部折叠」（opacity .4、无 hover、无 tooltip）：唯一的禁用条件是没有打开的
+              文档。按钮是动词、脚线是状态，两个都留（§2c）。 */}
+          <button
+            className={`${styles.toolbarBtn} ${styles.revealBtn}`}
+            title={activeFilePath ? `${t("fileTree.revealCurrent")} ${comboLabel(COMBO_REVEAL_DOC)}` : undefined}
+            disabled={!activeFilePath}
+            onClick={revealCurrent}
+          >
+            <Crosshair size={14} strokeWidth={1.7} />
+          </button>
           <button
             className={`${styles.toolbarBtn} ${!anyOpenDir && hasAnyFolder ? styles.armed : ""}`}
             title={hasAnyFolder

@@ -138,8 +138,12 @@ export interface MemoryRecord {
   keys: string[];
 }
 
-/** 同时最多几个 agent 在生成。信号量，不是三个分支——改成 5 就是改这个数。 */
-export const MAX_CONCURRENT_RUNS = 3;
+/**
+ * 同时最多几个 agent 在生成。信号量，不是三个分支——改成 5 就是改这个数。
+ * 定义住在 lib/agent/scheduler（对话助手的多个活会话用的是同一个数）；
+ * 这里再导出一次，扮演侧的 import 路径不变。
+ */
+export { MAX_CONCURRENT_RUNS } from "../agent/scheduler";
 
 /** `read_scene` 省略范围时给最近多少轮。 */
 export const DEFAULT_SCENE_WINDOW = 20;

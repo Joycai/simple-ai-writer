@@ -1,5 +1,5 @@
 /**
- * 一个 agent 的对话区（设计稿 08 屏 1a / 1b / 1e / 1h）。
+ * 一个 agent 的对话区（设计稿 04a 屏 1a / 1b / 1e / 1h）。
  *
  * 稿面而不是聊天：一栏 640px 居中、与编辑器正文同宽，作者的回合只用一条 2px
  * 赭石左规 + 一个小号名标区分，角色的回合直接落在纸上。没有气泡、没有左右
@@ -13,12 +13,13 @@
  * 让位给原生文本，否则作者会对着一片透明打字。
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
+import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
+import { listArchives, loadPersonaCard, type ArchivedScene } from "../../lib/roleplay/store";
 import { currentSceneNo } from "../../lib/roleplay/scene";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
@@ -37,7 +38,7 @@ import {
 } from "../../lib/agent/contextBreakdown";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
-import { presetFor } from "../../lib/roleplay/presets";
+import { presetFor, subAgentsFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
 import { recalledNames, type TurnContextTrace } from "../../lib/roleplay/trace";
 import { TraceBody, TraceToggle } from "./TurnTrace";
@@ -51,7 +52,7 @@ import { attachedKey } from "../../lib/lore/aiTask";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
-import { SubAgentChips } from "../ai/SubAgentChips";
+import { CapabilityMenu } from "../ai/CapabilityMenu";
 import { ContextBar } from "../ai/ContextBar";
 import { SnippetPicker } from "../ai/SnippetPicker";
 import { useSnippetSave } from "../ai/SnippetSaveMenu";
@@ -137,7 +138,7 @@ function ComposerMirror({ text, innerRef }: {
  * 回复末尾那两本账：取材条 + 执行日志。
  *
  * 并排一行、都用三角，是因为它们是同一类东西——**事件用箭头，账目用三角**
- * （设计稿 13 · 1a）。「← 想起了」「→ 记下了」是这一轮发生的事，方向就是它们
+ * （设计稿 04c · 1a）。「← 想起了」「→ 记下了」是这一轮发生的事，方向就是它们
  * 和这一轮的关系；这两条不是事件，是事后可以查的账。
  *
  * 取材条**恒在**（哪怕这一轮零命中，甚至没有记录），执行日志只在有步骤时出现：
@@ -145,6 +146,7 @@ function ComposerMirror({ text, innerRef }: {
  */
 function TurnLedger({
   trace, log, traceOpen, logOpen, onToggleTrace, onToggleLog, onRaiseBudget, onOpenArea,
+  onUnbind, onEditBindings,
 }: {
   trace: TurnContextTrace | undefined;
   log: AgentEvent[] | undefined;
@@ -154,6 +156,8 @@ function TurnLedger({
   onToggleLog: () => void;
   onRaiseBudget: () => void;
   onOpenArea: () => void;
+  onUnbind: (path: string) => void;
+  onEditBindings: () => void;
 }) {
   const { t } = useTranslation();
   const steps = log?.filter((e) => e.kind === "tool-step").length ?? 0;
@@ -176,7 +180,13 @@ function TurnLedger({
         )}
       </div>
       {traceOpen && trace && (
-        <TraceBody trace={trace} onRaiseBudget={onRaiseBudget} onOpenArea={onOpenArea} />
+        <TraceBody
+          trace={trace}
+          onRaiseBudget={onRaiseBudget}
+          onOpenArea={onOpenArea}
+          onUnbind={onUnbind}
+          onEditBindings={onEditBindings}
+        />
       )}
       {logOpen && log && (
         <div className={styles.logBody}><AgentLog log={log} isRunning={false} compact /></div>
@@ -187,7 +197,7 @@ function TurnLedger({
 
 function TurnBlock({ turn, ledger, memories, recalled, onOpenArea, onRewind, confirm, doomed }: {
   turn: SceneTurn;
-  /** 回复末尾那两本可以查的账：取材条 + 执行日志（设计稿 13 · 1a）。 */
+  /** 回复末尾那两本可以查的账：取材条 + 执行日志（设计稿 04c · 1a）。 */
   ledger?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
@@ -281,12 +291,30 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const retry = useRoleplayStore((s) => s.retry);
   const rewind = useRoleplayStore((s) => s.rewind);
   const dequeue = useRoleplayStore((s) => s.dequeue);
+  const updateAgent = useRoleplayStore((s) => s.updateAgent);
   const promote = useRoleplayStore((s) => s.promote);
   const toggleSubAgent = useRoleplayStore((s) => s.toggleSubAgent);
   const refreshBinding = useRoleplayStore((s) => s.refreshBinding);
+  const compacting = useRoleplayStore((s) => s.compacting.includes(agent.id));
+  const compactNow = useRoleplayStore((s) => s.compactNow);
   const setAgentModel = useRoleplayStore((s) => s.setAgentModel);
 
-  const [draft, setDraft] = useState("");
+  // 输入框和附件住在 composerStore 而不是 useState：AI 抽屉一收起整个稿面就
+  // 卸载，未发出的那半段话不能跟着死掉（对话助手同一条规则）。按 agent id
+  // 分槽——这个组件按 agent 重挂，写给甲的一句话不能出现在乙的框里。
+  const draft = useComposerStore((s) => roleplayComposerOf(s, agent.id).draft);
+  const refs = useComposerStore((s) => roleplayComposerOf(s, agent.id).refs);
+  const setRoleplayDraft = useComposerStore((s) => s.setRoleplayDraft);
+  const setRoleplayRefs = useComposerStore((s) => s.setRoleplayRefs);
+  const clearComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  const setDraft = useCallback(
+    (update: string | ((prev: string) => string)) => setRoleplayDraft(agent.id, update),
+    [agent.id, setRoleplayDraft],
+  );
+  const setRefs = useCallback(
+    (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) => setRoleplayRefs(agent.id, update),
+    [agent.id, setRoleplayRefs],
+  );
   const [composing, setComposing] = useState(false);
   // 第一次进来默认展开：折起来之后它只剩四个符号，不认识的人不会去点「展开」。
   // 作者亲手收起过一次就记住，此后一直折着。
@@ -294,7 +322,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [openTrace, setOpenTrace] = useState<number | null>(null);
-  const [refs, setRefs] = useState<AttachedItem[]>([]);
   /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
   const [refError, setRefError] = useState<string | null>(null);
   /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
@@ -367,6 +394,21 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const loreIndex = useLoreStore((s) => s.index);
   const fileTree = useProjectStore((s) => s.fileTree);
   const projectPath = useProjectStore((s) => s.projectPath);
+
+  /* 取材条上失效绑定那一行的「解除绑定」：摘掉这一条路径。扮演指令住在人设卡里而
+     不在 agent 上，而 updateAgent 的 draft 要它——读回来原样写回，别的字段照抄。 */
+  const unbindPath = useCallback(async (path: string) => {
+    if (!projectPath) return;
+    const instruction = await loadPersonaCard(projectPath, agent.id);
+    await updateAgent(agent.id, {
+      kind: agent.kind,
+      name: agent.name,
+      primaryDirPath: agent.primaryDirPath,
+      boundPaths: agent.boundPaths.filter((p) => p !== path),
+      modelId: agent.modelId,
+      instruction,
+    });
+  }, [projectPath, agent, updateAgent]);
   const mention = useMentionState();
 
   const models = useAiStore((s) => s.models);
@@ -377,9 +419,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     [models, agent.modelId, activeModelId],
   );
   const disabledSubs = session?.disabledSubAgents ?? EMPTY_SUBS;
+  // 过 `subAgentsFor`：下面两个消费者都必须和 `roleplayStore` 跑时看到的是
+  // 同一份 subs——`canSeeImages` 决定附件候选，`toolTokens` 画的是折叠线。
   const effectiveSubs = useMemo(
-    () => withSessionOverrides(subAgents, disabledSubs),
-    [subAgents, disabledSubs],
+    () => subAgentsFor(agent.kind, withSessionOverrides(subAgents, disabledSubs)),
+    [agent.kind, subAgents, disabledSubs],
   );
   /**
    * 这条链看不看得见图片：本模型是多模态，或者识图子代理还开着。看不见就不把
@@ -404,6 +448,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const autoCompact = useAppStore((s) => s.autoCompact);
+  const compactTriggerTokens = useAppStore((s) => s.compactTriggerTokens);
+  const compactTriggerRatio = useAppStore((s) => s.compactTriggerRatio);
   /**
    * 工具 schema 的开销。按**路由之后**的工具算（子代理会摘掉 read_image、补上
    * delegate），否则这一段会和它旁边那排芯片说的不是同一回事。
@@ -426,10 +473,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       toolTokens,
       inputCeilingFor(boundModel?.contextSize, contextUtilization),
       boundModel?.contextSize ?? 0,
+      { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
     ),
     // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization],
+    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization,
+      autoCompact, compactTriggerTokens, compactTriggerRatio],
   );
 
   /**
@@ -575,13 +624,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const jumpToTurn = (turn: number) => {
     document.getElementById(`rp-turn-${turn}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
-  const canSend = draft.trim().length > 0;
+  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。
+  const canSend = draft.trim().length > 0 && !compacting;
 
   const doSend = () => {
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
-    setDraft("");
-    setRefs([]);
+    clearComposer(agent.id);
     setRefError(null);
     // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
     // 只做过一次的决定。想再带上，在编辑器里重新划一次。
@@ -602,7 +651,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
    * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
    */
-  const openMentionFor = (kind: PickKind) => {
+  const openMentionFor = (kind: PickKind | null) => {
     const el = taRef.current;
     const caret = el?.selectionStart ?? draft.length;
     const before = draft.slice(0, caret);
@@ -810,7 +859,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             {t("roleplay.stale.body", { defaultValue: "绑定内容被改过（条目、人设或身份），本次对话用的还是旧版本。" })}
           </span>
           <div className={styles.spacer} />
-          <button type="button" className={styles.staleBtn} onClick={() => void refreshBinding(agent.id)}>
+          <button
+            type="button"
+            className={styles.staleBtn}
+            onClick={() => void refreshBinding(agent.id)}
+            disabled={compacting}
+          >
             {t("roleplay.stale.refresh", { defaultValue: "刷新绑定" })}
           </button>
         </div>
@@ -952,7 +1006,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               recalled={recalledNames(session.contextTrace[turn.index]?.area ?? null)}
               onOpenArea={() => setShowMemory(true)}
               onRewind={
-                rewindTo === null && turn.speaker === "author" && !isRunning && queuePos < 0
+                rewindTo === null && turn.speaker === "author" && !isRunning && !compacting && queuePos < 0
                   && turn.index < (session?.turns.length ?? 0)
                   ? () => setRewindTo(turn.index)
                   : undefined
@@ -964,7 +1018,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               ledger={turn.speaker === "agent" ? (
                 <TurnLedger
                   /* 取材条和执行日志是同一类东西——都不是一次性事件，是可以查
-                     的账，所以并排在回复末尾、都用三角（设计稿 13 · 1a：事件用
+                     的账，所以并排在回复末尾、都用三角（设计稿 04c · 1a：事件用
                      箭头，账目用三角）。 */
                   trace={session.contextTrace[turn.index]}
                   log={session.log[turn.index]}
@@ -974,6 +1028,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                   onToggleLog={() => setOpenLog(openLog === turn.index ? null : turn.index)}
                   onRaiseBudget={raiseLoreBudget}
                   onOpenArea={() => setShowMemory(true)}
+                  onUnbind={(path) => void unbindPath(path)}
+                  onEditBindings={onEdit}
                 />
               ) : undefined}
             />
@@ -1016,7 +1072,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {/* 按停之后这一问仍孤零零留在 transcript 里，却没有回复——和报错的后果
               一样，所以通向同一个 retry。用比错误带更轻的一行：它不是出了问题，
               是作者自己按的。 */}
-          {session?.stopped && !session.error && session.lastJob && !isRunning && queuePos < 0 && (
+          {session?.stopped && !session.error && session.lastJob && !isRunning && !compacting && queuePos < 0 && (
             <div className={styles.stoppedBar}>
               <span className={styles.stoppedText}>
                 {t("roleplay.stopped", { defaultValue: "已停止，这一问还没有回复" })}
@@ -1035,7 +1091,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {session?.error && (
             <div className={styles.errorBar}>
               <span className={styles.errorText}>{session.error}</span>
-              {session.lastJob && !isRunning && queuePos < 0 && (
+              {session.lastJob && !isRunning && !compacting && queuePos < 0 && (
                 <button
                   type="button"
                   className={styles.errorRetry}
@@ -1062,6 +1118,26 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
       {/* ── 输入区 ── */}
       <div className={styles.composer}>
+        {/* 记忆条和附件行都在输入框**外面**，和对话助手同一个次序
+            （ContextBar → 身份/语法条 → 材料行 → 输入框）。它们原来长在框里，
+            于是「这一场怎么工作」的开关和「这条消息怎么被送出去」挤在同一个
+            框内——正是设计稿 02g 屏 1c 要分开的两件事。 */}
+        <div className={styles.ctxBand}>
+        <ContextBar
+          context={context}
+          /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
+             schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
+             没装配（见 12-context-trace-plan §4）。 */
+          preflight={session?.history ? null : preflightBar}
+          /* 「立即归纳」——和 AI 助手同款同位置。以前扮演页没有它，只因为扮演的
+             归纳走另一条代码路（不在 agentStore 上），不是设计上不要。 */
+          onCompact={context.canFold && !isRunning && !compacting && queuePos < 0
+            ? () => void compactNow(agent.id)
+            : undefined}
+          compacting={compacting}
+        />
+        </div>
+
         <div className={styles.composerHead}>
           {agent.kind === "narrator" ? (
             <span className={styles.personaHint}>
@@ -1134,6 +1210,90 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           </div>
         )}
 
+        {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
+            原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
+        <div className={styles.attachRow}>
+          {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
+              读成两套互不相干的机制。 */}
+          {quote ? (
+            <button
+              type="button"
+              className={styles.attachChip}
+              onClick={() => setDetached(true)}
+              title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
+            >
+              {t("roleplay.composer.selectionChip", {
+                n: quote.length, defaultValue: `选区 ${quote.length} 字`,
+              })}
+              <X size={10} strokeWidth={2} />
+            </button>
+          ) : selection ? (
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => setDetached(false)}
+            >
+              + {t("roleplay.composer.selectionChip", {
+                n: selection.length, defaultValue: `选区 ${selection.length} 字`,
+              })}
+            </button>
+          ) : null}
+          {refs.map((r) => {
+            const key = attachedKey(r);
+            const label = r.kind === "lore" ? r.entity.name : r.file.name;
+            // 悄悄发一张缩过的图，作者事后无从解释模型为什么看不清截图里的
+            // 小字——chip 是他们唯一会看的地方。
+            const remove = t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" });
+            const shrunk = r.kind === "image" && r.downscaled
+              ? t("roleplay.composer.imageDownscaled", {
+                  defaultValue: "已缩小以适应发送上限（{{detail}}）",
+                  detail: downscaleNote(r.downscaled),
+                })
+              : null;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={styles.attachChip}
+                onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
+                title={shrunk ? `${shrunk} · ${remove}` : remove}
+              >
+                {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
+                {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                @{label}
+                <X size={10} strokeWidth={2} />
+              </button>
+            );
+          })}
+          {/* `@` 才是机制本身，这个按钮只是替作者敲它——它存在是为了让作者
+              发现 `@` 能用，而不是为了取代它。一个而不是三个（设计稿 02g
+              屏 1c）：拆成三个换来的只是选择器本来就有的分组。 */}
+          <button
+            type="button"
+            className={styles.attachGhost}
+            onClick={() => openMentionFor(null)}
+            disabled={candidates.length === 0}
+          >
+            + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
+          </button>
+
+          {/* 设计稿 02g 屏 1c 的行文法，这里同样成立：间隔左边是**这条消息带
+              着什么**（有框、带 ×），右边是**这一场怎么工作**（无框）。 */}
+          <span className={styles.attachSpacer} />
+          {/* 屏 1z §4：这里原来是六个方框，换成一个词之后左边全留给这一位
+              自己的材料。每位 agent 各传各的 disabled 集，词后面点的名跟着
+              当前这位变——比六个方框更能看出「这是这一位的设置」。没有状态
+              记忆：扮演根本不走那条路。 */}
+          <span className={styles.attachSession}>
+            <CapabilityMenu
+              disabled={disabledSubs}
+              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+            />
+          </span>
+        </div>
+
+        {refError && <div className={styles.refError}>{refError}</div>}
+
         <div className={styles.inputBox}>
           <div className={styles.inputStack}>
             {!composing && <ComposerMirror text={draft} innerRef={mirrorRef} />}
@@ -1175,108 +1335,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               onDismiss={() => { mention.close(); setPickKind(null); }}
             />
           )}
-
-          <ContextBar
-            context={context}
-            /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
-               schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
-               没装配（见 12-context-trace-plan §4）。 */
-            preflight={session?.history ? null : preflightBar}
-          />
-
-          {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
-              原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
-          <div className={styles.attachRow}>
-            {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
-                读成两套互不相干的机制。 */}
-            {quote ? (
-              <button
-                type="button"
-                className={styles.attachChip}
-                onClick={() => setDetached(true)}
-                title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
-              >
-                {t("roleplay.composer.selectionChip", {
-                  n: quote.length, defaultValue: `选区 ${quote.length} 字`,
-                })}
-                <X size={10} strokeWidth={2} />
-              </button>
-            ) : selection ? (
-              <button
-                type="button"
-                className={styles.attachGhost}
-                onClick={() => setDetached(false)}
-              >
-                + {t("roleplay.composer.selectionChip", {
-                  n: selection.length, defaultValue: `选区 ${selection.length} 字`,
-                })}
-              </button>
-            ) : null}
-            {refs.map((r) => {
-              const key = attachedKey(r);
-              const label = r.kind === "lore" ? r.entity.name : r.file.name;
-              // 悄悄发一张缩过的图，作者事后无从解释模型为什么看不清截图里的
-              // 小字——chip 是他们唯一会看的地方。
-              const remove = t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" });
-              const shrunk = r.kind === "image" && r.downscaled
-                ? t("roleplay.composer.imageDownscaled", {
-                    defaultValue: "已缩小以适应发送上限（{{detail}}）",
-                    detail: downscaleNote(r.downscaled),
-                  })
-                : null;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className={styles.attachChip}
-                  onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                  title={shrunk ? `${shrunk} · ${remove}` : remove}
-                >
-                  {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
-                  {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
-                  @{label}
-                  <X size={10} strokeWidth={2} />
-                </button>
-              );
-            })}
-            <span className={styles.attachSpacer} />
-            {/* `@` 才是机制本身，这几个按钮只是替作者敲它——它们存在是为了让
-                作者发现 `@` 能用，而不是为了取代它。 */}
-            <button
-              type="button"
-              className={styles.attachGhost}
-              onClick={() => openMentionFor("lore")}
-              disabled={!candidates.some((c) => c.type === "lore")}
-            >
-              + {t("roleplay.composer.addLore", { defaultValue: "条目" })}
-            </button>
-            <button
-              type="button"
-              className={styles.attachGhost}
-              onClick={() => openMentionFor("text")}
-              disabled={!candidates.some((c) => matchesKind(c, "text"))}
-            >
-              + {t("roleplay.composer.addDoc", { defaultValue: "文档" })}
-            </button>
-            {/* 只在这条链看得见图片时出现：纯文本模型上它会是一个永远点不动的
-                死芯片。 */}
-            {canSeeImages && (
-              <button
-                type="button"
-                className={styles.attachGhost}
-                onClick={() => openMentionFor("image")}
-                disabled={!candidates.some((c) => matchesKind(c, "image"))}
-              >
-                + {t("roleplay.composer.addImage", { defaultValue: "图片" })}
-              </button>
-            )}
-            <SubAgentChips
-              disabled={disabledSubs}
-              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
-            />
-          </div>
-
-          {refError && <div className={styles.refError}>{refError}</div>}
 
           <div className={styles.inputFoot}>
             {/* 插入而不是发送：片段是个开头，作者补完再发。 */}

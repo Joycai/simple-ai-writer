@@ -2,7 +2,7 @@
  * 取材条的**取数**一侧：把一轮的原始取材事实（`TurnContextTrace`）折算成稿面
  * 上要显示的那些行和数字。
  *
- * 设计稿 13「本轮取材条」。纯函数、不 import 任何组件和 store，所以设计稿里那
+ * 设计稿 04c「本轮取材条」。纯函数、不 import 任何组件和 store，所以设计稿里那
  * 些「几条算一条」的规则可以逐条钉在测试里——而它们正是这个组件最容易悄悄算
  * 错的部分：收起行只报三个数，每个数都是一次聚合，聚合错了不会报错，只会让作
  * 者对着一个错的数字去改设定。
@@ -30,7 +30,7 @@ import type { ResidentPiece, TurnContextTrace } from "./trace";
 /** 设计稿 2e：关键字最多平铺三个，其余折成一个数。 */
 export const KEYWORDS_INLINE_CAP = 3;
 
-/** 设计稿 2i：窄档下命中超过这个数才折叠，按字数从大到小留前几条。 */
+/** 设计稿 2i：命中超过这个数才折叠，保留报告里的前几条——顺序不动，不按字数重排。 */
 export const NARROW_HIT_CAP = 6;
 
 // ─── 收起行 ──────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ function toHitRow(e: LoreEntityReport): HitRow {
 }
 
 /**
- * 这一轮选中的条目，按注入量从大到小。
+ * 这一轮选中的条目，**按报告里的次序**。
  *
  * **`coreResident`（0 字）的那些也在里面**，尽管它们一个字都没贡献。设计稿把
  * 「0 字」列为五句不能互相代替的话之一：它的意思是「命中了，但正文已经在常驻
@@ -176,27 +176,41 @@ function toHitRow(e: LoreEntityReport): HitRow {
  * 所以这里**不用** `contributingEntities`：那个过滤器是给日志里那句「注入了 N
  * 条」用的（报一个不存在的注入是另一种错），和这里要回答的问题不是同一个。
  *
- * 排序不是审美：窄栏下要折叠成「前 6 条 + 还有 N 条」，被折起来的应当是最小的
- * 那些，而 0 字的自然沉到最后。宽栏用同一个顺序，免得同一轮的两种宽度读出两个
- * 不同的故事。
+ * **不按字数重排**（设计稿 04c 屏 2b/2i）：报告的顺序就是上下文里的顺序，作者是
+ * 在核对模型看到了什么，不是在看排行榜。窄栏折叠留下的是报告里靠前的几条，宽窄
+ * 两种读法因此仍是同一个顺序。TURN 1 曾按字数降序，TURN 2 撤了它。
  */
 export function hitRows(report: LoreActivationReport | null): HitRow[] {
   if (!report) return [];
-  return report.entities.map(toHitRow).sort((a, b) => b.chars - a.chars);
+  return report.entities.map(toHitRow);
 }
 
 // ─── 没进去 ──────────────────────────────────────────────────────────────────
 
 export interface DropRow {
-  /** 「铁鳞甲 · 产地」——条目名 + 那一段。 */
+  /** 「铁鳞甲 · 产地」——条目名 + 那一段；`images` 行只有条目名，「配图 N 张」由界面拼。 */
   label: string;
+  /** 落选的是一段特征，还是没装下的配图清单。 */
+  kind: "facet" | "images";
   reason: "no-key" | "group-lost" | "budget" | "manual-only" | "resident";
   /** `group-lost`：赢的那一条。 */
   winner: string | null;
+  /** `group-lost`：那个互斥组的名字——「被挤掉」要说清是哪一组的位子。 */
+  group: string | null;
+  /** `no-key`：它现有的关键字——作者最常改的就是这一条，不列出来等于让他去翻。 */
+  keys: string[];
   /** `budget`：这一段需要多少字符——即提高预算能换回什么。 */
   neededChars: number | null;
+  /** `images`：没装下几张 / 清单里装下了几张。 */
+  imageCount: number | null;
+  imagesKept: number | null;
 }
 
+/**
+ * 没进去的清单。收起行的「N 没进去」（`summarize`）数着没装下的配图，所以这里
+ * 也得把它列成一行——否则一展开数字就对不上（设计稿 04c 屏 2f 把 droppedImages
+ * 归在「超预算」一类）。
+ */
 export function dropRows(report: LoreActivationReport | null): DropRow[] {
   if (!report) return [];
   const rows: DropRow[] = [];
@@ -204,9 +218,27 @@ export function dropRows(report: LoreActivationReport | null): DropRow[] {
     for (const d of e.droppedFacets) {
       rows.push({
         label: `${e.name} · ${d.title}`,
+        kind: "facet",
         reason: d.reason,
         winner: d.winner ?? null,
+        group: d.group ?? null,
+        keys: d.keys ?? [],
         neededChars: d.neededChars ?? null,
+        imageCount: null,
+        imagesKept: null,
+      });
+    }
+    if (e.droppedImages) {
+      rows.push({
+        label: e.name,
+        kind: "images",
+        reason: "budget",
+        winner: null,
+        group: null,
+        keys: [],
+        neededChars: null,
+        imageCount: e.droppedImages,
+        imagesKept: e.layers.filter((l) => l.kind === "gallery").reduce((n, l) => n + (l.count ?? 0), 0),
       });
     }
   }

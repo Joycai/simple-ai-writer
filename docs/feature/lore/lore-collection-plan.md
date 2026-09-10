@@ -1,6 +1,6 @@
 # 知识库集合（Collections）——第二根轴
 
-> 状态：**已实施**（数据层 + 设计稿 03 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
+> 状态：**已实施**（数据层 + 设计稿 03b 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
 > [`lore-collection-ui-brief.md`](./lore-collection-ui-brief.md)，视觉口径见
 > [`design-system.md`](../../reference/design-system.md) → 知识库设计语言 → 集合。
 > 相关：[`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、[`lore-facet-plan.md`](./lore-facet-plan.md)（条目内的粒度）。
@@ -144,7 +144,7 @@ AI 模态。
 **新建条目会归进当前范围**（作者手建与 agent 建的都是）：范围生效时新建的条目若落成
 未归集，它会立刻从作者刚刚建它的那面墙上消失。
 
-## 7. UI（设计稿 03 屏 24–31）
+## 7. UI（设计稿 03b 屏 24–31）
 
 设计师用一句话定了整套语汇：**分类用颜色，集合用装订；取材范围不是筛选，它把围栏外的
 卡片翻面**。四个开放问题的答案都落进了实现：
@@ -206,7 +206,7 @@ AI 模态。
 |---|---|
 | `manage_collection` | `op: create / rename / delete` |
 | `file_lore_entries` | `entities[]` + `add[]` / `remove[]`，一次一批 |
-| `create_lore_category` | 只有 create |
+| `manage_category` | create / rename / delete（删除拒绝非空；见 lore-category-manage-plan.md §8） |
 
 **分类只给 create** 是唯一保留的不对称，不是嘴硬：分类是磁盘上的文件夹，新建只是建
 目录，而改名/删除会让每个成员条目的文件夹搬家，并让 `[[lore:分类/id]]` 路径引用和特征

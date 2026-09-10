@@ -39,7 +39,7 @@ describe("presetForTools", () => {
 
 describe("the write tier carries", () => {
   it("the read tools a page is assembled from", () => {
-    for (const id of ["list_files", "read_file", "search_text", "read_slides", "read_image"]) {
+    for (const id of ["list_files", "read_file", "search_text", "read_slides", "read_document", "read_image"]) {
       expect(has(id)).toBe(true);
     }
   });

@@ -120,7 +120,7 @@ export interface LoreEntity {
    */
   collections: string[];
   /**
-   * 阅读模式档案头大图指向的图库文件名，frontmatter `cover`（设计稿 16 屏
+   * 阅读模式档案头大图指向的图库文件名，frontmatter `cover`（设计稿 03c 屏
    * 1z/1f 的「主图」）。作者在 lightbox 里显式指定；缺席时阅读模式取第一个
    * 配图组的第一张。指向的文件不在图库里时按缺席处理——图删了封面就静默退回
    * 缺省，绝不报错。展示专用：注入路径一个字都不读它。
@@ -187,6 +187,31 @@ export function loreEntityCount(index: LoreIndex): number {
  * only need identity — the same reason `readLoreEntity` guards `mdFiles?.length`
  * — and a clone is the wrong place to start throwing about it.
  */
+/**
+ * Where one entity lives — enough to re-read its folder without the rest of
+ * the index (`scanEntity`, `loreStore.refreshEntity`). `dirPath` is the key
+ * the index is matched on; `category` and `id` are what the re-read entry is
+ * labelled with, and both are stable across every in-place write (renames and
+ * category moves relocate the folder and go through a full scan instead).
+ */
+export interface LoreEntityAddress {
+  category: CategoryId;
+  id: string;
+  dirPath: string;
+}
+
+/**
+ * An entity's address, copied out of it.
+ *
+ * A copy rather than the entity itself because the two live different lengths
+ * of time: a refresh detaches the entity object it replaces, so anything that
+ * held on to it is looking at a stale object, while the address stays true for
+ * as long as the folder does.
+ */
+export function entityAddress(entity: LoreEntity): LoreEntityAddress {
+  return { category: entity.category, id: entity.id, dirPath: entity.dirPath };
+}
+
 export function cloneLoreIndex(index: LoreIndex): LoreIndex {
   const out: LoreIndex = {};
   for (const [category, list] of Object.entries(index)) {

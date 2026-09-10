@@ -7,7 +7,9 @@ import { isXlsxExportEnabled, setXlsxExportEnabled } from "../../../lib/xlsx/fla
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
+import { isAsrEnabled, setAsrEnabled } from "../../../lib/asr/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
+import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import styles from "./Lab.module.css";
@@ -33,7 +35,7 @@ interface Props {
  * for all of them, and off means absent: the tool is not in the model's
  * toolset, the entry point is not drawn. Nothing on disk is deleted.
  *
- * 设计稿 18 groups them by what switching one on costs the author — 导出格式
+ * 设计稿 05b groups them by what switching one on costs the author — 导出格式
  * (nothing: one more file type) · 工作方式 (changes how the assistant and the
  * author interact) · 本地服务 (another program has to be running first) — and
  * gives the three with a next step a signpost that appears only once the
@@ -46,8 +48,10 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const [xlsxOn, setXlsxOn] = useState(isXlsxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [orchestratorOn, setOrchestratorOn] = useState(isOrchestratorEnabled());
+  const [skillStateOn, setSkillStateOn] = useState(isSkillStateEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
+  const [asrOn, setAsrOn] = useState(isAsrEnabled());
 
   const toggleDocx = (enabled: boolean) => {
     setDocxExportEnabled(enabled);
@@ -108,11 +112,18 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             label={t("systemSettings.lab.roleplayLabel")}
           />
         </Row>
-        <Row top title={t("systemSettings.lab.toolPackLabel")} desc={t("systemSettings.lab.toolPackHint")} last>
+        <Row top title={t("systemSettings.lab.toolPackLabel")} desc={t("systemSettings.lab.toolPackHint")}>
           <Toggle
             on={orchestratorOn}
             onChange={(next) => { setOrchestratorEnabled(next); setOrchestratorOn(next); }}
             label={t("systemSettings.lab.toolPackLabel")}
+          />
+        </Row>
+        <Row top title={t("systemSettings.lab.skillStateLabel")} desc={t("systemSettings.lab.skillStateHint")} last>
+          <Toggle
+            on={skillStateOn}
+            onChange={(next) => { setSkillStateEnabled(next); setSkillStateOn(next); }}
+            label={t("systemSettings.lab.skillStateLabel")}
           />
         </Row>
       </Section>
@@ -139,12 +150,30 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
           foot={comfyOn
             ? goNext("providers-models", "systemSettings.tabs.providersModels", "systemSettings.lab.goComfyHint")
             : undefined}
-          last
         >
           <Toggle
             on={comfyOn}
             onChange={(next) => { setComfyUiEnabled(next); setComfyOn(next); }}
             label={t("systemSettings.lab.comfyuiLabel")}
+          />
+        </Row>
+        {/* 音频转写（设计稿 02f 屏 1a）：住在日中翻译旁边——同样是一个 Beta 开关
+            + 一个只会干一件事的专用模型 + 子代理里的绑定。区别是它不在本机跑、
+            不免费，所以说明里把「上传到阿里云临时存储 · 按秒计费」写成陈述句。
+            关着时的补充句说的是入口**不存在**（不是禁用）。 */}
+        <Row
+          top
+          title={t("systemSettings.lab.asrLabel")}
+          desc={t("systemSettings.lab.asrHint")}
+          foot={asrOn
+            ? goNext("subagents", "systemSettings.tabs.subagents", "systemSettings.lab.goAsrHint")
+            : <div className={ui.rowDesc}>{t("systemSettings.lab.asrOffHint")}</div>}
+          last
+        >
+          <Toggle
+            on={asrOn}
+            onChange={(next) => { setAsrEnabled(next); setAsrOn(next); }}
+            label={t("systemSettings.lab.asrLabel")}
           />
         </Row>
       </Section>

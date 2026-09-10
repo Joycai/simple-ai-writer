@@ -32,6 +32,35 @@ export async function readBinaryFile(path: string): Promise<Uint8Array> {
   return pluginReadFile(path);
 }
 
+/** A file's real length, plus as much of its head as was asked for. */
+export interface FileHead {
+  /** The whole file's size in bytes — not `head.byteLength`. */
+  size: number;
+  head: Uint8Array;
+}
+
+/**
+ * How big is it, and what do its first `maxBytes` bytes say — one round trip,
+ * without paying for the rest of the file.
+ *
+ * {@link readBinaryFile} is the wrong tool whenever the answer is a number:
+ * a 1.5 GB recording crosses the IPC boundary and lands in the webview heap
+ * whole. Anything that only needs a size (to quote it, to refuse it) or a
+ * container header (RIFF, and one day ID3) comes here instead.
+ *
+ * `size` is the file's real length even when `head` is a prefix — that is the
+ * point, not an accident: a streamed WAV writes a sentinel where its data
+ * length belongs, and the only way to recover the duration is to know how far
+ * the file actually runs.
+ */
+export async function readFileHead(path: string, maxBytes: number): Promise<FileHead> {
+  const res = await invoke<{ size: number; head: string }>("fs_read_head", {
+    path,
+    maxBytes: Math.max(0, Math.floor(maxBytes)),
+  });
+  return { size: res.size, head: fromBase64(res.head) };
+}
+
 /**
  * Write raw bytes.
  *

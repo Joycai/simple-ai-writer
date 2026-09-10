@@ -63,10 +63,21 @@ export async function fetchRemoteModels(
     });
     if (!res.ok) throw modelsFetchError(res.status, standard, "Anthropic");
     const data = await res.json();
-    return (data.data ?? []).map((m: Record<string, string>) => ({
-      id: m.id,
-      name: m.display_name ?? m.id,
-    }));
+    return (data.data ?? [])
+      // A relay serving several protocols off one catalogue may say which of
+      // them each model answers on (OrcaRouter's `supported_endpoint_types`:
+      // `["anthropic", "openai"]` on a Claude, `["openai"]` alone on a GPT).
+      // A model listed without this surface would only 4xx at /messages, so it
+      // is left out; no declaration, or one of another shape, keeps the row —
+      // the official list carries no such field and must read as before.
+      .filter((m: Record<string, unknown>) => {
+        const surfaces = m.supported_endpoint_types;
+        return !Array.isArray(surfaces) || surfaces.includes("anthropic");
+      })
+      .map((m: Record<string, string>) => ({
+        id: m.id,
+        name: m.display_name ?? m.id,
+      }));
   }
   // OpenAI / compatible
   const res = await fetch(modelsUrl(standard, baseUrl), {
@@ -162,7 +173,9 @@ export async function testProviderConnection(
       return { ok: false, error: `API error ${res.status} (${url}): ${error}` };
     }
 
-    if (family !== "openai") {
+    // Gemini and Anthropic answered a one-item page; only the two OpenAI-shaped
+    // families (which share `/models`) return a list worth counting.
+    if (family === "gemini" || family === "anthropic") {
       return { ok: true, message: i18n.t("aiConfig.providers.testOk") };
     }
     const data = await res.json();
@@ -225,6 +238,14 @@ async function probeCompletionEndpoint(
     return { ok: false, error: i18n.t("aiConfig.providers.testAuthFailed", { status: res.status }) };
   }
   const apiMessage = apiErrorMessage(text);
+  // 402 is the relay's credit gate (OrcaRouter answers every completion call
+  // on an empty account with it, before looking at the model). The key is
+  // right and the endpoint spoke, but nothing will run until the author tops
+  // up — reporting that as "reachable" would send them looking for a bug in
+  // the model id instead. Its own message names the amount, so hand it over.
+  if (res.status === 402) {
+    return { ok: false, error: `HTTP 402: ${apiMessage?.slice(0, 300) || text.slice(0, 300)}` };
+  }
   if (apiMessage !== null) {
     return {
       ok: true,
@@ -254,6 +275,15 @@ function completionProbeRequest(
       return {
         url: anthropicUrl(baseUrl, "/messages"),
         body: { model: PROBE_MODEL, max_tokens: 1, messages },
+      };
+    case "responses":
+      // A Responses-only relay need not serve /chat/completions, so the
+      // fallback has to speak this family's own shape. 16 is the documented
+      // minimum for max_output_tokens; the made-up model is refused before it
+      // matters. store:false for the same reason the adapter sends it.
+      return {
+        url: openaiUrl(baseUrl, "/responses"),
+        body: { model: PROBE_MODEL, input: "hi", max_output_tokens: 16, store: false, stream: false },
       };
     default:
       return {

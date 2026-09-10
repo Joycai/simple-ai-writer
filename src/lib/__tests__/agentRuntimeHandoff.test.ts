@@ -244,7 +244,7 @@ describe("runAgent — writer handoff", () => {
    * one. App text pushed into the turn would be the one thing the signature
    * design forbids: a paragraph in the reading column that nobody's model
    * wrote. The reason travels on the event, and the surface renders it outside
-   * the prose (设计稿 12 · 屏 1a 轮 4).
+   * the prose (设计稿 04d · 屏 1a 轮 4).
    */
   it("leaves the turn empty when the writer cannot run, and reports why on the event", async () => {
     queueRound([handoffCall({ goal: "g", kind: "prose" }), done]);

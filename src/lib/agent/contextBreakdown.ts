@@ -46,9 +46,30 @@
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import {
-  COMPACT_TRIGGER, MIN_KEEP_TURNS, injectionCarriers, segmentHistory,
-  type ChatSessionMeta,
+  COMPACT_TRIGGER, MIN_KEEP_TURNS, compactTriggerFor, injectionCarriers, segmentHistory,
+  type ChatSessionMeta, type CompactTriggerBound,
 } from "./compact";
+import { STATE_KEEP_TURNS } from "./skillState";
+
+/**
+ * The author's compaction settings (appStore), as the bar needs them. The bar
+ * hands them to {@link compactTriggerFor} with its *own* message ceiling, so
+ * the mark it draws and the fold the store runs are one computation, not two.
+ */
+export interface CompactPrefs {
+  autoCompact: boolean;
+  triggerTokens: number;
+  triggerRatio: number;
+  /**
+   * 状态记忆 is on for this conversation (lib/agent/skillState): the fold is
+   * no longer a threshold event but happens every turn, keeping
+   * {@link STATE_KEEP_TURNS} verbatim. The bar then draws **no** trigger
+   * mark — the mark means "past here the next turn folds", and in this mode
+   * the next turn folds wherever the bar stands — and `canFold` counts against
+   * the mode's own keep, or the 立即归纳 button would hide one turn too early.
+   */
+  stateMode?: boolean;
+}
 
 /**
  * Bar segments, in wire order. `system` folds the tool schemas in with the
@@ -132,6 +153,16 @@ export interface ContextBreakdown {
    * 「下一轮会归纳」 and 「压缩救不了这一轮」 are not the same news.
    */
   over: boolean;
+  /**
+   * Whether the app folds on its own past the mark, or only when the author
+   * presses 立即归纳. Off does not move the mark — it changes what the mark
+   * promises, and the bar's sentence has to say so.
+   */
+  autoCompact: boolean;
+  /** Which line placed the mark — see {@link compactTriggerFor}. */
+  compactBoundBy: CompactTriggerBound;
+  /** See {@link CompactPrefs.stateMode}; the legend's sentence keys on it. */
+  stateMode: boolean;
 }
 
 /**
@@ -233,6 +264,8 @@ export function computeContextBreakdown(
   toolTokens: number,
   ceilingTokens: number,
   contextSize: number,
+  /** Absent = the classic line and automatic folding (tests, older callers). */
+  compact?: CompactPrefs,
 ): ContextBreakdown {
   const totals: Record<Exclude<ContextSegmentKey, "free">, number> = {
     // A session that hasn't run yet still pays for the tool schemas the moment
@@ -284,7 +317,17 @@ export function computeContextBreakdown(
   // records the first half of that symptom; this is the other side of it.
   const messageTokens = Math.max(0, usedTokens - toolTokens);
   const messageCeiling = Math.max(0, ceiling - toolTokens);
-  const compactAtTokens = toolTokens + messageCeiling * COMPACT_TRIGGER;
+  //
+  // With the author's sliders in play the line is whichever of the three is
+  // lowest (compactTriggerFor) — still measured on the message side, so it
+  // still sits after the schemas on this axis.
+  const trigger = compact
+    ? compactTriggerFor({
+        contextSize, messageCeiling,
+        triggerTokens: compact.triggerTokens, triggerRatio: compact.triggerRatio,
+      })
+    : { tokens: messageCeiling * COMPACT_TRIGGER, boundBy: "ceiling" as const };
+  const compactAtTokens = toolTokens + trigger.tokens;
 
   // Can compaction fold anything at all? Both halves are `planFold`'s own
   // refusals, mirrored:
@@ -300,12 +343,16 @@ export function computeContextBreakdown(
   // to remove, arriving by a different route. A fresh session (`history` null,
   // zero turns) falls through the same gate, which is why it needs no case of
   // its own.
+  const stateMode = compact?.stateMode ?? false;
+  const keepTurns = stateMode ? STATE_KEEP_TURNS : MIN_KEEP_TURNS;
   const foldableTurns =
-    history && meta ? segmentHistory(history, meta).turns.length - MIN_KEEP_TURNS : 0;
+    history && meta ? segmentHistory(history, meta).turns.length - keepTurns : 0;
   const canFold = messageCeiling > 0 && foldableTurns > 0;
 
   const over = usedTokens > ceiling;
-  const willCompact = canFold && messageTokens > messageCeiling * COMPACT_TRIGGER;
+  // In state mode there is no line to cross: the fold is unconditional, so the
+  // mark would promise a threshold that plays no part.
+  const willCompact = !stateMode && canFold && messageTokens > trigger.tokens;
 
   return {
     segments: [
@@ -320,8 +367,11 @@ export function computeContextBreakdown(
     ceilingTokens: ceiling,
     contextSize,
     canFold,
-    compactMarkerPct: canFold ? Math.min(100, (compactAtTokens * 100) / span) : null,
+    compactMarkerPct: canFold && !stateMode ? Math.min(100, (compactAtTokens * 100) / span) : null,
     willCompact,
     over,
+    autoCompact: compact?.autoCompact ?? true,
+    compactBoundBy: trigger.boundBy,
+    stateMode,
   };
 }

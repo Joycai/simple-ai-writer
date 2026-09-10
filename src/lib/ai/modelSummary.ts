@@ -1,5 +1,5 @@
 /**
- * Two read-only views of a model row for the settings surfaces — 设计稿 19.
+ * Two read-only views of a model row for the settings surfaces — 设计稿 05c.
  *
  * `wireSummary` is the editor's 「将发送」 line: which request-body fields this
  * row's declarations actually put on the wire, spelled the way the wire spells
@@ -109,11 +109,15 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
 
   const so = effectiveStructuredOutput({ standard, baseUrl, modelId: m.modelId, structuredOutput: m.structuredOutput });
   if (so !== "off") {
-    out.push(family !== "gemini"
-      ? { key: "response_format", value: so, scope: "structured" }
-      : so === "json_schema"
+    // 三条线三个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
+    // 否则只是 responseMimeType）、Responses 的 text.format、其余的 response_format。
+    out.push(family === "gemini"
+      ? so === "json_schema"
         ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
-        : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" });
+        : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
+      : family === "responses"
+        ? { key: "text.format", value: so, scope: "structured" }
+        : { key: "response_format", value: so, scope: "structured" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;

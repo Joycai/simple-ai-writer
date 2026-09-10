@@ -18,7 +18,7 @@ import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { NativeReasoning } from "../ai/reasoning";
 import type {
-  AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
+  AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
 import {
   createServerToolLog, type AgentEvent, type RoundLimitDecision, type ToolStep,
@@ -627,10 +627,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let roundToolCalls: AccumulatedToolCall[] = [];
     /** Whether the endpoint cut this round off at `max_tokens`. */
     let roundTruncated = false;
+    /**
+     * Did the endpoint run a tool for itself this round? Not "were they
+     * offered": an offered-but-unused server tool adds nothing to the prompt,
+     * and throwing those samples away would discard most of a search-enabled
+     * model's rounds for no reason.
+     */
+    let roundUsedServerTools = false;
     let roundStopReason: string | undefined;
     let roundGeminiModelParts: unknown[] | undefined;
     let roundReasoning: NativeReasoning | undefined;
     let roundThinkingBlocks: ThinkingBlockCarry | undefined;
+    let roundResponseItems: ResponseItemCarry | undefined;
     // Streamed reasoning for this round, reported to the log as it grows. The
     // start time is captured on the first fragment rather than at round start:
     // a model that thinks only after reading a tool result would otherwise be
@@ -774,6 +782,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
               at: Date.now(),
             });
           } else if ("serverTool" in chunk) {
+            roundUsedServerTools = true;
             // A tool the endpoint ran for itself. Reported as a tool step so it
             // reads like every other one in the log — but it never touches
             // `roundToolCalls`: there is nothing left to execute, and answering
@@ -816,10 +825,30 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             roundGeminiModelParts = chunk._geminiModelParts;
             roundReasoning = chunk._reasoning;
             roundThinkingBlocks = chunk._thinkingBlocks;
+            roundResponseItems = chunk._responseItems;
           } else if ("done" in chunk) {
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
             totalCachedTokens += chunk.cachedTokens ?? 0;
+            // The measurement half of the pair `round-start` opened, emitted
+            // here because this is the one place that holds both the request we
+            // composed and the count the endpoint returned for it. What makes
+            // the two incomparable is decided here too, where the answer is
+            // known — a later reader can only guess (see events.ts).
+            opts.onEvent({
+              kind: "round-done",
+              round,
+              actualInputTokens: chunk.inputTokens,
+              incomparable:
+                chunk.inputTokens <= 0
+                  ? "no-usage"
+                  : roundUsedServerTools
+                    ? "server-tools"
+                    : history.some(hasImageParts)
+                      ? "images"
+                      : undefined,
+              at: Date.now(),
+            });
             // Held, not emitted: the event now also reports what the runtime
             // *did* about it, and that isn't known until we see whether this
             // round's casualty was the prose or a tool call's arguments.
@@ -964,7 +993,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // the whole署名 design forbids — a paragraph in the reading column that
         // nobody's model wrote. The reason travels on `handoff-done` instead,
         // and the surface renders it as an app notice outside the prose
-        // (设计稿 12 · 屏 1a 轮 4).
+        // (设计稿 04d · 屏 1a 轮 4).
         const finalText =
           res.text.trim() || (degraded && roundText.trim() ? roundText : "");
 
@@ -1104,6 +1133,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         _geminiModelParts: roundGeminiModelParts,
         _reasoning: roundReasoning,
         _thinkingBlocks: roundThinkingBlocks,
+        _responseItems: roundResponseItems,
       });
     }
 

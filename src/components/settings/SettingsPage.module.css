@@ -11,7 +11,7 @@
   overflow: hidden;
   background: var(--color-bg-base);
 
-  /* ── 设置页色系接入 (设计稿 04) ──
+  /* ── 设置页色系接入 (设计稿 05a) ──
      The settings surface keeps its own warm-paper family, one step lighter
      than the workspace, and reads in Source Serif 4 / Noto Serif SC. Every
      pane, drawer and dialog under this subtree consumes the same --color-*
@@ -148,7 +148,25 @@
 
 .navIcon { flex-shrink: 0; }
 
-/* ─── 排版格式: the one nav item a switch adds and removes (设计稿 18) ──────
+/* 导航项尾巴上的 BETA 小标（设计稿 05e 屏 1a / 05f 屏 1n）。同 05b 的写法：等宽、
+   描边、不填色——它标注这一项的成色，不和选中态争那一块底。`margin-left:auto`
+   把它顶到行尾，所以标签长短不影响它的位置。 */
+.navBadge {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: var(--color-text-hint);
+  border: 1px solid var(--color-border);
+  padding: 2px 4px;
+  line-height: 1;
+}
+.navItemActive .navBadge {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ─── 排版格式: the one nav item a switch adds and removes (设计稿 05b) ──────
    Expands from zero height in 240ms on the same frame the Word switch goes
    on — no translate, so the items below simply move down — and collapses in
    reverse when it goes off. `inert` on the box (SettingsPage.tsx) is what

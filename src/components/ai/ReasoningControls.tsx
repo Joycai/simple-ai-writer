@@ -16,10 +16,11 @@
  * level governs — the whole response on Anthropic, thinking alone elsewhere.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
+import { usePopoverDismiss } from "./usePopoverDismiss";
 import {
   categoryHasControl, isOnOffCategory, onEffort, resolveThinkingCategory, thinkingIsOn,
   type ReasoningEffort, type ThinkingBudgetSpec,
@@ -34,8 +35,46 @@ interface Props {
   /**
    * `row` — labelled chip rows, for the panel's settings block.
    * `compact` — a dropdown chip, for a toolbar with no room for a row.
+   * `footer` — one mono word in the assistant composer's footer, with the real
+   *   controls in a popover (设计稿 02g 屏 1c). The word is generated from the
+   *   value, whatever shape the vendor's category has, so the setting is always
+   *   readable without opening anything; the popover is headed 「写进模型行」
+   *   because this is the one control in the composer that is not scoped to the
+   *   conversation (屏 1z §5).
    */
-  variant: "row" | "compact";
+  variant: "row" | "compact" | "footer";
+}
+
+/**
+ * The one word the footer shows for the current value — 屏 1f's four forms:
+ * a switch reads 开 / 关, a budget reads its number, a level reads its name,
+ * and Qwen's switch-plus-budget reads 开 · 8192. `默认` is what "send nothing"
+ * looks like, and it is the only word that is not a value.
+ */
+function footerValueWord(
+  t: (k: string, o?: Record<string, unknown>) => string,
+  cat: ReturnType<typeof resolveThinkingCategory>,
+  current: ReasoningEffort,
+  budget: number | undefined,
+): string {
+  const onOff = isOnOffCategory(cat);
+  const hasBudget = cat.shape === "budget";
+  const off = current === "off";
+  if (onOff && hasBudget) {
+    const state = off
+      ? t("aiConfig.models.reasoningEffortOff")
+      : t("aiConfig.models.reasoningEffortOn");
+    return budget != null && !off ? `${state} · ${budget}` : state;
+  }
+  if (onOff) {
+    return off ? t("aiConfig.models.reasoningEffortOff") : t("aiConfig.models.reasoningEffortOn");
+  }
+  if (hasBudget) {
+    // No budget stored means the endpoint's own default — say so rather than
+    // showing the placeholder number as though the author had chosen it.
+    return budget != null ? String(budget) : t(labelKeyFor("default"));
+  }
+  return t(labelKeyFor(current));
 }
 
 export function ReasoningControls({ variant }: Props) {
@@ -104,6 +143,38 @@ export function ReasoningControls({ variant }: Props) {
     />
   );
 
+  if (variant === "footer") {
+    return (
+      <FooterDial
+        label={label}
+        value={footerValueWord(t, cat, current, model.thinkingBudget)}
+      >
+        {onOff && onOffChips}
+        {hasBudget && (
+          <div className={styles.footerField}>
+            {budgetField}
+            <span className={styles.footerFieldNote}>
+              {t("ai.chat.thinkingBudgetUnit", { defaultValue: "tk · 失焦提交" })}
+            </span>
+          </div>
+        )}
+        {levels && (
+          <div className={styles.chipGroup}>
+            {cat.menu.map((e) => (
+              <button
+                key={e}
+                className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
+                onClick={() => set(e)}
+              >
+                {t(labelKeyFor(e))}
+              </button>
+            ))}
+          </div>
+        )}
+      </FooterDial>
+    );
+  }
+
   if (variant === "compact") {
     return (
       <div className={styles.compactGroup}>
@@ -150,6 +221,54 @@ export function ReasoningControls({ variant }: Props) {
             : t("ai.panel.thinkingHint")}
       </div>
     </>
+  );
+}
+
+/**
+ * The composer footer's dial: the value as one mono word, the real control in
+ * a popover above it (设计稿 02g 屏 1c · 1f).
+ *
+ * The header is not decoration. This is the only control on the composer that
+ * outlives the conversation — it writes the model row, and Settings › 模型 shows
+ * the same value — so the popover says so before the author changes anything
+ * (屏 1z §5 weighs that against moving it up beside the model name).
+ */
+function FooterDial({ label, value, children }: {
+  label: string;
+  value: string;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  usePopoverDismiss(open, useCallback(() => setOpen(false), []), root);
+
+  return (
+    <div className={styles.footerRoot} ref={root}>
+      <button
+        type="button"
+        className={styles.footerTrigger}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        {label}
+        <span className={styles.footerValue}>{value}</span>
+        <ChevronDown size={9} className={styles.footerCaret} aria-hidden />
+      </button>
+      {open && (
+        <div className={styles.footerPopover} role="menu">
+          <div className={styles.footerHead}>
+            <span className={styles.footerHeadLabel}>{label}</span>
+            <span className={styles.footerHeadFill} />
+            <span className={styles.footerHeadMeta}>
+              {t("ai.chat.thinkingScope", { defaultValue: "写进模型行" })}
+            </span>
+          </div>
+          <div className={styles.footerBody}>{children}</div>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -30,7 +30,16 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
     const slide = pres.addSlide();
     for (const shape of toShapes(deck, index)) {
       if (shape.kind === "image") {
-        slide.addImage({ data: shape.data, x: shape.x, y: shape.y, w: shape.w, h: shape.h });
+        slide.addImage({
+          data: shape.data,
+          x: shape.x,
+          y: shape.y,
+          w: shape.w,
+          h: shape.h,
+          ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.transparency ? { transparency: shape.transparency } : {}),
+          ...(shape.shadow ? { shadow: shape.shadow } : {}),
+        });
         continue;
       }
       if (shape.kind === "rect") {
@@ -40,6 +49,8 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           w: shape.w,
           h: shape.h,
           ...(shape.radius > 0 ? { rectRadius: shape.radius } : {}),
+          ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.shadow ? { shadow: shape.shadow } : {}),
           ...(shape.fill
             ? { fill: { color: shape.fill.hex, transparency: shape.fill.transparency } }
             : { fill: { color: "FFFFFF", transparency: 100 } }),
@@ -64,6 +75,8 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
             underline: run.underline ? { style: "sng" as const } : undefined,
             color: run.color,
             fontSize: run.ptSize,
+            charSpacing: run.ptSpacing,
+            breakLine: run.breakLine,
             fontFace: run.font,
           },
         })),
@@ -83,6 +96,12 @@ export async function deckToPptx(deck: HarvestedDeck): Promise<Uint8Array> {
           wrap: true,
           // Only where reflow is possible — see TEXT_SLACK in deck.ts.
           fit: shape.shrink ? "shrink" : "none",
+          // The page's own line box, where one number can describe it — see
+          // lineSpacingPt. Absent leaves PowerPoint's default, which is right
+          // for a single line and for mixed type sizes.
+          ...(shape.lineSpacing ? { lineSpacing: shape.lineSpacing } : {}),
+          ...(shape.rotate ? { rotate: shape.rotate } : {}),
+          ...(shape.transparency ? { transparency: shape.transparency } : {}),
         },
       );
     }

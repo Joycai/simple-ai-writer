@@ -285,6 +285,126 @@ describe("read_file", () => {
     expect(out.split("\n\n[...")[0]).toHaveLength(4000 + "     1\t".length);
   });
 
+  // Before the cursor, "cut mid-line" was the end of the road: no coordinate
+  // to continue from, and the whole-line continuation note was gated on there
+  // being a further LINE. So a file that is one long line — a minified page, a
+  // saved web page, an exported report — could not be read past its first 4000
+  // characters, and a model that then rewrote that line dropped the rest
+  // without anything erroring (html-read-edit-plan.md §6).
+  describe("paging inside one long line", () => {
+    /** Strip the gutter back off, so a round-trip can be compared to the file. */
+    const unnumber = (out: string) =>
+      out
+        .split("\n\n[...")[0]
+        .split("\n")
+        .map((l) => l.replace(/^ *\d+\t/, ""))
+        .join("\n");
+
+    it("reads a one-line file to its end, following the cursor", async () => {
+      const body = Array.from({ length: 30_000 }, (_, i) => String.fromCharCode(97 + (i % 26))).join("");
+      fs.set(`${PROJECT}/落地页.html`, body);
+
+      let cursor: number | undefined;
+      let got = "";
+      let calls = 0;
+      for (;;) {
+        const out = await read({ path: `${PROJECT}/落地页.html`, start_line: cursor });
+        calls++;
+        got += unnumber(out);
+        const next = out.match(/pass start_line=([\d.]+)/);
+        if (!next) break;
+        cursor = Number(next[1]);
+        expect(calls).toBeLessThan(20); // a cursor that does not advance would spin
+      }
+
+      expect(got).toBe(body);
+      expect(calls).toBe(Math.ceil(30_000 / 4000));
+    });
+
+    it("names the cursor to continue inside the line, and how many pages are left", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(9000));
+
+      const out = await read({ path: `${PROJECT}/落地页.html` });
+
+      expect(out).toContain("cut mid-line");
+      expect(out).toContain("pass start_line=1.0001");
+      expect(out).toContain("not a line number");
+      // 9000 chars is three pages; two of them are still to come.
+      expect(out).toContain("2 more page(s) finish it (1.0001 … 1.0002)");
+    });
+
+    it("says which characters of the line a continuation page holds", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(10_000));
+
+      const out = await read({ path: `${PROJECT}/落地页.html`, start_line: 1.0001 });
+
+      expect(out).toContain("lines 1-1 of 1 shown (line 1, characters 4001-8000 of 10000)");
+      expect(out).toContain("pass start_line=1.0002");
+    });
+
+    // The tail of a long line used to be unreachable in a multi-line file too:
+    // paging advanced past it to the next whole line and never came back.
+    it("finishes a long line mid-file and then packs the lines after it", async () => {
+      const lines = ["短一", "短二", "长".repeat(10_000), "短四", "短五"];
+      fs.set(`${PROJECT}/mixed.md`, lines.join("\n"));
+
+      let cursor: number | undefined;
+      let got = "";
+      for (;;) {
+        const out = await read({ path: `${PROJECT}/mixed.md`, start_line: cursor });
+        got += unnumber(out);
+        const next = out.match(/pass start_line=([\d.]+)/);
+        if (!next) break;
+        // A whole-line boundary joins with a newline; a mid-line one does not.
+        if (!next[1].includes(".")) got += "\n";
+        cursor = Number(next[1]);
+      }
+
+      expect(got).toBe(lines.join("\n"));
+    });
+
+    it("answers an invented cursor with the right one", async () => {
+      fs.set(`${PROJECT}/mixed.md`, `短一\n${"长".repeat(10_000)}`);
+
+      expect(await read({ path: `${PROJECT}/mixed.md`, start_line: 1.0009 })).toContain(
+        "Line 1 fits in one page — pass start_line=1.",
+      );
+      expect(await read({ path: `${PROJECT}/mixed.md`, start_line: 2.0009 })).toContain(
+        "Its last page is start_line=2.0002.",
+      );
+    });
+
+    // A model that stringifies its arguments would otherwise silently get
+    // line 1 — the fractional part is where that stops being harmless.
+    it("accepts the cursor as a string", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(10_000));
+
+      expect(await read({ path: `${PROJECT}/落地页.html`, start_line: "1.0001" })).toContain(
+        "characters 4001-8000",
+      );
+    });
+
+    it("warns that a range rewrite would take the part not shown", async () => {
+      fs.set(`${PROJECT}/落地页.html`, "甲".repeat(9000));
+      const args = { path: `${PROJECT}/落地页.html` };
+
+      const withEdit = (
+        await executeRegisteredTool(
+          { id: "c1", name: "read_file", arguments: JSON.stringify(args) },
+          ["read_file", "propose_edit"],
+          ctx,
+        )
+      ).content;
+      const without = await read(args);
+
+      expect(withEdit).toContain("quote a distinctive fragment into propose_edit's 'find'");
+      // Not on a run that cannot call it, and not on an ordinary page.
+      expect(without).not.toContain("propose_edit");
+      fs.set(`${PROJECT}/短.md`, "一\n二");
+      expect(await read({ path: `${PROJECT}/短.md` })).not.toContain("longer than one page");
+    });
+  });
+
   // The counterpart of read_slides' deck index: a map of the file arrives with
   // the page that could not hold it, so "rewrite the 风险 section" does not
   // begin by paging 4000 characters at a time until that section goes by.
@@ -418,6 +538,116 @@ describe("read_file", () => {
     });
   });
 
+  // The map an .html deck gets instead. edit-loop-plan.md §5.1 argued no
+  // file-type test was needed because ".html has read_slides' index instead" —
+  // true of read_slides, and never wired into read_file, which is the tool a
+  // model reaches for first. Without this, "change slide 3" starts by paging
+  // 4000 characters at a time (docs/feature/agent/html-read-edit-plan.md §4).
+  describe("the .html deck index", () => {
+    /** A deck long enough that one read cannot carry it. */
+    const deck = (n: number) =>
+      `<!DOCTYPE html>\n<html>\n<body>\n${Array.from(
+        { length: n },
+        (_, i) =>
+          `<section class="slide">\n<h2>第 ${i + 1} 页</h2>\n<p>${"内容".repeat(300)}</p>\n</section>`,
+      ).join("\n")}\n</body>\n</html>`;
+
+    it("maps a paged deck by slide, with the lines each one occupies", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      const out = await read({ path: `${PROJECT}/图示/发布.html` });
+
+      expect(out).toContain("This deck has 12 slide(s)");
+      expect(out).toContain("1. 第 1 页 (lines ");
+      expect(out).toContain("12. 第 12 页 (lines ");
+      // The map is in front of the page, like every other index here.
+      expect(out.indexOf("This deck has")).toBeLessThan(out.indexOf("     1\t"));
+    });
+
+    it("points at read_slides when the run holds it", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      expect(await read({ path: `${PROJECT}/图示/发布.html` })).toContain(
+        "Read one slide with read_slides (start_slide=N)",
+      );
+    });
+
+    // docs/reference/tool-presence.md: WRITER_PRESET and NARRATOR_PRESET both
+    // carry read_file without read_slides. The map still earns its place — the
+    // line ranges are coordinates whoever reads them — but naming a tool this
+    // run cannot call would spend a round on an unknown-tool error.
+    it("keeps the map but names no tool when the run has no read_slides", async () => {
+      fs.set(`${PROJECT}/图示/发布.html`, deck(12));
+
+      const out = (
+        await executeRegisteredTool(
+          { id: "c1", name: "read_file", arguments: JSON.stringify({ path: `${PROJECT}/图示/发布.html` }) },
+          ["read_file"],
+          ctx,
+        )
+      ).content;
+
+      expect(out).toContain("This deck has 12 slide(s)");
+      expect(out).not.toContain("read_slides");
+    });
+
+    it("samples rather than truncates a deck past the row cap", async () => {
+      fs.set(`${PROJECT}/图示/大.html`, deck(200));
+
+      const out = await read({ path: `${PROJECT}/图示/大.html` });
+      const rows = out.split("\n").filter((l) => /^\d+\. 第 \d+ 页 \(lines /.test(l));
+
+      expect(out).toContain("This deck has 200 slide(s)");
+      expect(rows.length).toBeLessThanOrEqual(60);
+      // The point of sampling: the map covers the END of the deck too, which a
+      // "first 60" truncation would not.
+      expect(rows[rows.length - 1]).toMatch(/^19[0-9]\./);
+    });
+
+    // A page the selectors could not divide is one slide the size of the whole
+    // page; "this deck has 1 slide" maps nothing. It is mapped by its markup
+    // instead, so that "rewrite the 三个季度 section" arrives as a range.
+    it("maps a page with no slide sections by its landmarks", async () => {
+      fs.set(
+        `${PROJECT}/落地页.html`,
+        `<!DOCTYPE html>\n<html>\n<body>\n<main>\n<div id="hero">\n<h1>产品发布计划</h1>\n` +
+          `<p>${"内容".repeat(1500)}</p>\n</div>\n<div id="quarters">\n<h2>三个季度</h2>\n` +
+          `<p>${"细节".repeat(1500)}</p>\n</div>\n</main>\n</body>\n</html>`,
+      );
+
+      const out = await read({ path: `${PROJECT}/落地页.html` });
+
+      expect(out).toContain("This page has no slide sections");
+      expect(out).toContain('<div id="quarters"> 三个季度 (lines 9-12)');
+      // It is a deck index's alternative, not an addition to it.
+      expect(out).not.toContain("This deck has");
+      expect(out).not.toContain("read_slides");
+      // And it goes in front of the page, like every other map here.
+      expect(out.indexOf("This page has no slide")).toBeLessThan(out.indexOf("     1\t"));
+    });
+
+    it("falls back to the paragraph map when a page has no landmarks either", async () => {
+      fs.set(
+        `${PROJECT}/无结构.html`,
+        `<!DOCTYPE html>\n<html>\n<body>\n<div>${"长文".repeat(3000)}</div>\n</body>\n</html>`,
+      );
+
+      const out = await read({ path: `${PROJECT}/无结构.html` });
+
+      expect(out).not.toContain("This page has no slide sections");
+      expect(out).not.toContain("This deck has");
+    });
+
+    it("does not map a deck the response carries whole", async () => {
+      fs.set(`${PROJECT}/图示/小.html`, "<body>\n<section class=\"slide\">A</section>\n<section class=\"slide\">B</section>\n</body>");
+
+      const out = await read({ path: `${PROJECT}/图示/小.html` });
+
+      expect(out).toContain("whole file, ");
+      expect(out).not.toContain("This deck has");
+    });
+  });
+
   it("errors when start_line is past the end", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "一\n二");
 
@@ -525,6 +755,29 @@ describe("search_text", () => {
     expect(snippet.length).toBeLessThan(220);
     expect(snippet.startsWith("…")).toBe(true);
     expect(snippet.endsWith("…")).toBe(true);
+  });
+
+  // "L1" is a complete answer for prose, where a line is a sentence. On a
+  // minified page line 1 IS the document, so it tells the model the match is
+  // somewhere in 200,000 characters and gives it no way to ask for that part.
+  // With the cursor, finding a region in such a file is one search and one
+  // read rather than unbounded paging.
+  it("hands a jump cursor when the hit sits on a line too long to read whole", async () => {
+    fs.set(`${PROJECT}/落地页.html`, `${"甲".repeat(9000)}断剑${"乙".repeat(2000)}`);
+
+    const out = await search({ query: "断剑" });
+
+    expect(out).toContain("character 9001 of 11002");
+    expect(out).toContain("read from it with start_line=1.0002");
+  });
+
+  it("leaves an ordinary hit's coordinate alone", async () => {
+    fs.set(`${PROJECT}/writing/ch1.md`, "一\n他握紧那柄断剑。");
+
+    const out = await search({ query: "断剑" });
+
+    expect(out).toContain("L2: 他握紧那柄断剑。");
+    expect(out).not.toContain("read from it with");
   });
 
   // A handful of hits means the search FOUND the place, and what happens next
@@ -1163,7 +1416,7 @@ describe("read_lore_entity — 互斥组标注", () => {
   });
 
   it("给同组的特征标出互斥，不给无组的加噪声", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    const { content } = await readLoreEntity("c1", "Kael", index, "none");
     expect(content).toContain("=== outfit-armor.md === [group: outfit —");
     expect(content).toContain("=== outfit-casual.md === [group: outfit —");
     expect(content).toContain("=== backstory.md ===\n     1\tOrphaned young.");
@@ -1171,13 +1424,13 @@ describe("read_lore_entity — 互斥组标注", () => {
   });
 
   it("两套服装照旧都读得到——标注是提示，不是过滤", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    const { content } = await readLoreEntity("c1", "Kael", index, "none");
     expect(content).toContain("Silver plate.");
     expect(content).toContain("Linen dress.");
   });
 
   it("行号契约的那句话跟在结果末尾——规则在它生效的地方到达", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    const { content } = await readLoreEntity("c1", "Kael", index, "none");
     expect(content).toContain("line numbers count from the top of each FILE");
   });
 
@@ -1185,9 +1438,9 @@ describe("read_lore_entity — 互斥组标注", () => {
     // 八个 preset 带 read_lore_entity 却没有任何 lore 写工具（续写/设定改进/
     // facet/写手/扮演/orchestrator 档）：向它们宣传一个不可调用的工具，模型照做
     // 就是一轮 Unknown tool。持有与否由 registry 从 allowed 表传入。
-    const bare = await readLoreEntity("c1", "Kael", index, false);
+    const bare = await readLoreEntity("c1", "Kael", index, "none");
     expect(bare.content).not.toContain("rewrite_lore_lines");
-    const armed = await readLoreEntity("c1", "Kael", index, false, undefined, undefined, true);
+    const armed = await readLoreEntity("c1", "Kael", index, "none", undefined, undefined, true);
     expect(armed.content).toContain("what rewrite_lore_lines takes");
   });
 
@@ -1236,7 +1489,7 @@ describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）
   });
 
   it("超上限时给 index.md + 文件表，而不是全文", async () => {
-    const { content } = await readLoreEntity("c1", "Big", index, false);
+    const { content } = await readLoreEntity("c1", "Big", index, "none");
 
     expect(content).toContain("     3\t主角。"); // index.md still arrives, numbered
     expect(content).toContain("too large to return whole");
@@ -1248,30 +1501,45 @@ describe("read_lore_entity — 大条目的分页（edit-loop-plan.md §14 L2）
   it("file 参数点读一个文件，按 read_file 的同一套分页", async () => {
     fs.set(BIG + "/history.md", Array.from({ length: 300 }, (_, i) => `第${i + 1}行线索。${"废".repeat(20)}`).join("\n"));
 
-    const first = await readLoreEntity("c1", "Big", index, false, "history.md");
+    const first = await readLoreEntity("c1", "Big", index, "none", "history.md");
     expect(first.content).toContain("=== history.md ===");
     expect(first.content).toContain("     1\t第1行线索。");
     expect(first.content).toMatch(/lines 1-(\d+) of 300 shown/);
     const next = Number(first.content.match(/pass start_line=(\d+) to continue/)![1]);
 
-    const second = await readLoreEntity("c1", "Big", index, false, "history.md", next);
+    const second = await readLoreEntity("c1", "Big", index, "none", "history.md", next);
     expect(second.content).toContain(`${String(next).padStart(6)}\t第${next}行线索。`);
   });
 
+  // One pageLines implementation, so the long-line cursor is not a read_file
+  // feature — a facet written as one enormous line pages the same way, with
+  // the same literal. This is the property that made putting the cursor in
+  // `start_line` worth it over a parameter on one tool.
+  it("超长单行的续读游标在知识库这边同样成立", async () => {
+    fs.set(BIG + "/history.md", "线".repeat(9000));
+
+    const first = await readLoreEntity("c1", "Big", index, "none", "history.md");
+    expect(first.content).toContain("cut mid-line");
+    expect(first.content).toContain("pass start_line=1.0001");
+
+    const second = await readLoreEntity("c1", "Big", index, "none", "history.md", 1.0001);
+    expect(second.content).toContain("characters 4001-8000 of 9000");
+  });
+
   it("file 拼错时报出这条条目真有的文件", async () => {
-    const { content } = await readLoreEntity("c1", "Big", index, false, "histroy.md");
+    const { content } = await readLoreEntity("c1", "Big", index, "none", "histroy.md");
     expect(content).toContain('"histroy.md" does not exist');
     expect(content).toContain("index.md, history.md, outfit.md");
   });
 
   it("images.md 拒读——图集另有自己的通道", async () => {
-    const { content } = await readLoreEntity("c1", "Big", index, false, "images.md");
+    const { content } = await readLoreEntity("c1", "Big", index, "none", "images.md");
     expect(content).toContain("read_lore_image");
   });
 
   it("小条目一个字都不降级——整条返回仍是常态", async () => {
     fs.set(BIG + "/history.md", "短短的过往。");
-    const { content } = await readLoreEntity("c1", "Big", index, false);
+    const { content } = await readLoreEntity("c1", "Big", index, "none");
     expect(content).toContain("短短的过往。");
     expect(content).not.toContain("too large");
   });
@@ -1303,28 +1571,136 @@ describe("read_lore_entity — file 参数的路径包含", () => {
   });
 
   it("拒绝 ../ 穿越，机密一个字不过界", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false, "../../../tasks/t1/task.md");
+    const { content } = await readLoreEntity("c1", "Kael", index, "none", "../../../tasks/t1/task.md");
     expect(content).toContain("must be a plain .md filename");
     expect(content).not.toContain("SECRET TASK NOTES");
   });
 
   it("拒绝反斜杠形式的穿越", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false, "..\\..\\project.md");
+    const { content } = await readLoreEntity("c1", "Kael", index, "none", "..\\..\\project.md");
     expect(content).toContain("must be a plain .md filename");
   });
 
   it("拒绝 ./images.md——图集拒读不吃前缀绕过", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false, "./images.md");
+    const { content } = await readLoreEntity("c1", "Kael", index, "none", "./images.md");
     expect(content).toContain("must be a plain .md filename");
   });
 
   it("Images.md 也按图集拒读——装机盘是大小写不敏感的", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false, "Images.md");
+    const { content } = await readLoreEntity("c1", "Kael", index, "none", "Images.md");
     expect(content).toContain("read_lore_image");
   });
 
   it("拒绝信息里列出这条条目真有的文件", async () => {
-    const { content } = await readLoreEntity("c1", "Kael", index, false, "../other.md");
+    const { content } = await readLoreEntity("c1", "Kael", index, "none", "../other.md");
     expect(content).toContain("index.md, backstory.md");
+  });
+});
+
+/**
+ * 图集清单末尾那句「谁能打开它们」。
+ *
+ * 它曾经只看 `multimodal`，于是两种情况同时说错：识图子代理开着时
+ * `read_lore_image` 已经被 `routeTools` 摘掉，清单还在教模型调它；而主模型是
+ * 纯文本、识图子代理开着时，清单说「本模型读不了图」——图其实读得到，只是要
+ * 换一条路，于是那次运行再也没去要那张图。
+ */
+describe("read_lore_entity — 图集清单指的是真的走得通的那条路", () => {
+  const NELL = "/proj/.ai-writer/lore/characters/nell";
+  const index = {
+    characters: [{
+      name: "Nell",
+      dirPath: NELL,
+      mdFiles: ["index.md"],
+      avatarPath: NELL + "/avatar.png",
+      images: [{ file: "coat.png", desc: "红大衣", absPath: NELL + "/coat.png" }],
+      facets: [],
+    }],
+  } as never;
+
+  beforeEach(() => {
+    fs.set(NELL + "/index.md", "A courier.");
+  });
+
+  it("本模型能看图且工具在场时，点名 read_lore_image", async () => {
+    const { content } = await readLoreEntity("c1", "Nell", index, "here");
+    expect(content).toContain("call read_lore_image");
+    expect(content).toContain("- coat.png: 红大衣");
+  });
+
+  /**
+   * 把整条 delegate 调用拼出来，是因为 `references` 要的是**全路径**，而下面
+   * 那几行是光秃秃的文件名——清单本身给不出可用形式的那个参数。
+   */
+  it("识图子代理接手时，给出的是 delegate 那条路和它要的全路径", async () => {
+    const { content } = await readLoreEntity("c1", "Nell", index, "delegate");
+    expect(content).not.toContain("call read_lore_image");
+    expect(content).toContain('delegate(kind: "vision"');
+    expect(content).toContain(`["${NELL}/<filename>"]`);
+  });
+
+  it("谁都读不了时，不点名任何工具", async () => {
+    const { content } = await readLoreEntity("c1", "Nell", index, "none");
+    expect(content).toContain("nothing on this run can view a picture");
+    expect(content).not.toContain("read_lore_image");
+    expect(content).not.toContain("delegate(");
+  });
+
+  // 三档都要带上目录：作者要看图时，回复里嵌的那个链接必须解析得到。
+  it("每一档都带着条目目录", async () => {
+    for (const viewer of ["here", "delegate", "none"] as const) {
+      const { content } = await readLoreEntity("c1", "Nell", index, viewer);
+      expect(content).toContain(NELL);
+    }
+  });
+});
+
+/**
+ * 判定本身住在 registry（`galleryViewer`），而它两条都查 `allowedTools`——
+ * 这才是修复，不是保险：`WRITER_PRESET` 带 `read_lore_entity` 却不带
+ * `read_lore_image`，多模态模型上以前照样被教着去调那个不存在的工具。
+ */
+describe("galleryViewer — 由本次运行真正持有的工具决定", () => {
+  const NELL = "/proj/.ai-writer/lore/characters/nell";
+  const index = {
+    characters: [{
+      name: "Nell", dirPath: NELL, mdFiles: ["index.md"],
+      images: [{ file: "coat.png", desc: "红大衣", absPath: NELL + "/coat.png" }],
+      facets: [],
+    }],
+  } as never;
+  const read = (allowed: ToolId[], over: Partial<ToolContext>) => executeRegisteredTool(
+    { id: "c1", name: "read_lore_entity", arguments: JSON.stringify({ entity: "Nell" }) },
+    ["read_lore_entity", ...allowed],
+    { ...ctx, loreIndex: index, ...over },
+  );
+
+  beforeEach(() => {
+    fs.set(NELL + "/index.md", "A courier.");
+  });
+
+  it("多模态但工具不在场——不点名它", async () => {
+    const res = await read([], { multimodal: true });
+    expect(res.content).not.toContain("call read_lore_image");
+  });
+
+  it("多模态且工具在场——点名它", async () => {
+    const res = await read(["read_lore_image"], { multimodal: true });
+    expect(res.content).toContain("call read_lore_image");
+  });
+
+  /**
+   * 纯文本主模型 + 识图子代理：正是那种「能力还在，只是换了条路」的运行，
+   * 而旧写法在这里说的是「本模型读不了图」。
+   */
+  it("识图子代理接手时给 delegate，哪怕主模型是纯文本", async () => {
+    const res = await read(["delegate"], { multimodal: false, visionDelegate: true });
+    expect(res.content).toContain('delegate(kind: "vision"');
+  });
+
+  // 标志位在、工具不在（本轮没有 workspace，delegate 就没被追加）：别指路。
+  it("delegate 不在工具集里时，标志位不算数", async () => {
+    const res = await read([], { multimodal: false, visionDelegate: true });
+    expect(res.content).toContain("nothing on this run can view a picture");
   });
 });

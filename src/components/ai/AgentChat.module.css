@@ -329,6 +329,10 @@
   gap: var(--space-2);
 }
 
+/* 材料行 (设计稿 02g 屏 1c). Two groups with one rule between them: framed
+   chips on the left are what *this message* carries, unframed words on the
+   right are how *this conversation* works. Nothing else lives here — the model's
+   own settings and the approval marker moved into the input's footer. */
 .attachRow {
   display: flex;
   align-items: center;
@@ -336,9 +340,32 @@
   gap: var(--space-2);
   min-height: 22px;
 }
-/* Pushes the standing `+ …` chips to the trailing edge, so what this message
-   carries and what could be added to it stay visually separate. */
+/* Pushes the session words to the trailing edge, so what this message carries
+   and how the conversation works stay visually separate. */
 .attachSpacer { flex: 1; }
+
+/* The right group travels as one unit: at 960px (屏 1e) it drops to its own
+   line rather than interleaving with material chips, and it stays right-aligned
+   there — being on the right *is* its identity. */
+.attachSession {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+/* Hairline between the one switch that stayed out and the word that swallowed
+   the rest — same family, different reach. */
+.attachDivider {
+  width: 1px;
+  height: 12px;
+  background: var(--color-border-panel);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Parked on a card: the words stay readable, the switches stop answering. */
+.attachRowWaiting { opacity: 0.55; pointer-events: none; }
 
 .attachChip {
   display: inline-flex;
@@ -353,6 +380,11 @@
   transition: background var(--transition-fast);
 }
 .attachChip:hover { background: var(--color-bg-selected); }
+/* 屏 1g-3: the only thing in this row allowed to truncate — it is a label, and
+   the middle is what goes (see middleEllipsis), never the extension. The
+   session words on the right are state and are never cut. */
+.attachChip { max-width: 320px; }
+.attachChip > span, .attachChip { white-space: nowrap; }
 
 .attachChipGhost {
   display: inline-flex;
@@ -367,11 +399,10 @@
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .attachChipGhost:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
-
-.attachEmpty {
-  font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-hint);
-}
+/* Nothing to add yet (no selection, no candidates): the chip stays — it is
+   the slot's default (设计稿 02b 屏 1g) — but it does not invite. */
+.attachChipGhost:disabled { color: var(--color-text-hint); cursor: default; }
+.attachChipGhost:disabled:hover { color: var(--color-text-hint); border-color: var(--color-border-muted); }
 
 /* Why an attachment the author just picked isn't in the row above. Quieter
    than .error — nothing failed mid-run, a file was simply refused — but it
@@ -428,7 +459,7 @@
 .ctxSeg_free         { background: transparent; }
 .ctxSwatch.ctxSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
 
-/* ── 预估态（设计稿 13 · 2h）──
+/* ── 预估态（设计稿 04c · 2h）──
    同一根条、同样的高度，只换三样：读数的动词、右侧轨道的纹样、以及撤掉折叠竖线。
    前三段和实测态用同一批 token（系统+工具 / 绑定 / 记忆），因为它们就是同一批
    东西；只有第四段是新的。 */
@@ -611,12 +642,32 @@
      send stamp gets pushed onto the box's bottom border. */
   flex-shrink: 0;
 }
-/* Trailing edge per 1b/2d: 片段 (and the run note) lead, hint + button close
-   the row. */
+/* Trailing edge per 1b/2d: 片段 (and the run note) lead, then the three mono
+   readings of "how this gets sent" — 自动批准 · 思考 · the key — and the stamp
+   closes the row (设计稿 02g 屏 1c). */
+.footerSpacer { flex: 1; }
+
 .inputHint {
-  margin-left: auto;
   font: 400 10px/1.5 var(--font-mono);
   color: var(--color-text-kbd);
+  white-space: nowrap;
+}
+/* 屏 1e: at narrow widths the keyboard hint is the one thing here that may
+   shrink. 自动批准 and 思考 are state to be read; a shortcut reminder is not.
+   Two spans rather than a CSS `content` string, so the short form stays in the
+   locale files where every other author-facing word lives. */
+.hintShort { display: none; }
+@media (max-width: 1040px) {
+  .hintLong { display: none; }
+  .hintShort { display: inline; }
+}
+
+/* Present but not answering — see the waiting branch in AgentChat.tsx. */
+.footerInert {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* 2d 输入框两态 — one slot, three looks: ready = solid sienna + ink ↑ arrow;
@@ -685,6 +736,111 @@
   margin: 4px 0 10px;
 }
 
+/* ── 导出回执（设计稿 05f 屏 1k）─────────────────────────────────────────────
+   一张纸，不是一条通知：它要在对话里留着，作者三屏之后还能翻回来看导出到哪了。
+   全卡没有一处红色——降级是事实，不是错误。 */
+.exportCard {
+  margin: 8px 0 10px;
+  padding: 10px 12px 11px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+}
+
+.exportHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 唯一一处绿：它说的是「落盘了」这一件事，不为整张卡定调。 */
+.exportTick { color: var(--color-success); flex: none; }
+
+.exportTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.exportMeta {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-hint);
+}
+
+.exportPathRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.exportPath {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+.exportReveal {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 11px;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.exportReveal:hover { text-decoration: underline; }
+
+.exportFormat {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+/* 降级那一段和上面隔一条线，但**不换底色**：换了就成了卡中卡，读起来像一则警告。 */
+.exportDegraded {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.exportDegradedHead {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin-bottom: 5px;
+}
+
+.exportDegradedItem {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+/* 方形，不是圆点也不是 ⚠：中性的记号，只负责起一行。 */
+.exportDegradedMark {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  background: var(--color-text-hint);
+}
+
+.exportDegradedNote {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--color-text-hint);
+}
+
 /* Sized to read at a glance in a narrow drawer without becoming the whole
    turn — the prose underneath is still the answer. */
 .turnImage {
@@ -729,8 +885,206 @@
 /* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
    本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
 @media (prefers-reduced-motion: reduce) {
+  .queueSpinner { animation: none; }
   .thinkingSpinner {
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
   }
+}
+
+/* The compaction line with 自动归纳 off (设计稿 02e): same position, hung under
+   the bar as a 1×4px grey tick — a reference, not a promise. The wrapper is
+   the positioning context because the bar itself clips its overflow. */
+.ctx { position: relative; }
+.ctxMarkOff {
+  position: absolute;
+  top: 7px;
+  width: 1px;
+  height: 4px;
+  background: var(--color-text-faint);
+  pointer-events: none;
+}
+
+/* ── 回到这里重说 ─────────────────────────────────────────────────── */
+/* The time line grows a left-hand slot for the rewind button. Right-aligned
+   like the block: the time keeps its place at the outer edge, the button sits
+   inboard of it. */
+.turnFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Hover-revealed, in the time line's own voice (mono hint). An undo should not
+   stand with its hand up on every line of the transcript. */
+.rewindBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: 400 11px/1 var(--font-sans);
+  letter-spacing: 0.04em;
+  color: var(--color-text-hint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+.userBlock:hover .rewindBtn { opacity: 1; }
+.rewindBtn:focus-visible { opacity: 1; outline: none; color: var(--color-accent-text); }
+.rewindBtn:hover { color: var(--color-accent-text); }
+
+/* The confirm grows under the question it is about — the block's own width,
+   so the question and what it asks stay one thing. */
+.rewindBar {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 9px 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-accent);
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-soft);
+  text-align: left;
+}
+.rewindText { flex: 1; min-width: 0; }
+.rewindCancel,
+.rewindGo {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: 400 12px/1.5 var(--font-sans);
+  cursor: pointer;
+}
+.rewindCancel { color: var(--color-text-dim); }
+.rewindCancel:hover { color: var(--color-text-primary); }
+.rewindGo { color: var(--color-accent-text); }
+.rewindGo:hover { text-decoration: underline; }
+
+/* Everything the pending rewind would discard. "N exchanges" is a number; the
+   dimming is what that number looks like on the page, before the author
+   commits to it. */
+.turnDoomed {
+  opacity: 0.34;
+  transition: opacity 140ms var(--ease-out);
+}
+
+/* ── 多个会话 (设计稿 02b) ─────────────────────────────────────────────────── */
+
+/* 1g/1j: the empty conversation — two lines of serif, nothing else. */
+.emptyState {
+  margin: auto;
+  max-width: 46ch;
+  text-align: center;
+}
+.emptyTitle {
+  font: 300 22px/1.3 var(--font-serif);
+  color: var(--color-text-soft);
+}
+.emptyBody {
+  margin-top: 10px;
+  font: 400 13px/1.7 var(--font-serif);
+  color: var(--color-text-dim);
+}
+
+/* 1i: stopped at a card — the transcript steps back so the card reads first. */
+.messagesDim { opacity: 0.55; transition: opacity 240ms var(--ease-out); }
+/* The card is the one thing in this conversation with a 2px sienna top line —
+   the same line as the current tab's. */
+.approvals > :first-child { box-shadow: inset 0 2px 0 var(--color-sienna); }
+
+/* 1h: 排队 — the roster's queue card, in this conversation's words. The hollow
+   ring sits in the gutter at the card's head, the same mark the tab wears;
+   inside, the roster's spinner says the wait is live. */
+.queueCard {
+  margin: 0 var(--space-6) var(--space-3);
+  display: flex;
+  gap: 14px;
+  animation: dropIn 200ms var(--ease-out);
+}
+.queueGutter {
+  width: 24px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 18px;
+}
+.queueBox {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+}
+.queueRow { display: flex; align-items: center; gap: 12px; padding: 13px 16px; }
+.queueSpinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--color-border-input);
+  border-top-color: var(--color-text-dim);
+  border-radius: 50%;
+  animation: spin 1.1s linear infinite;
+  flex-shrink: 0;
+}
+.queueText { font: 400 13px/1.5 var(--font-sans); color: var(--color-text-soft); }
+.queueHint { font: 400 11px/1 var(--font-mono); color: var(--color-text-hint); }
+.queueSpacer { flex: 1; }
+.queueBtn,
+.queueBtnAccent {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.queueBtn { font-weight: 500; }
+.queueBtn:hover { color: var(--color-text-primary); }
+.queueBtnAccent { color: var(--color-sienna); font-weight: 500; }
+.queueBtnAccent:hover { color: var(--color-sienna-hover); }
+.queueRunning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-hairline);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-hint);
+}
+.queueRunningNames {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 1i: the composer's place while a card blocks the run — a sentence, not a
+   greyed field. Same frame as the input, so nothing jumps. */
+/* 设计稿 02g 屏 1g-4 — the waiting composer.
+
+   This is now the input frame's *body*, not a line standing in for the whole
+   composer: the frame, the footer and the stop stamp all stay, one shade down.
+   The arrow that used to point at the card is gone with the change — the card
+   sits immediately above a box that has visibly stopped accepting typing, and
+   the sentence already says where to look. */
+.waitingLine {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 14px 14px 10px;
+}
+.waitingText {
+  flex: 1;
+  min-width: 0;
+  font: 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-soft);
+}
+/* Half a step below bg-elevated: enough to read as "not yours to type in"
+   without going grey — nothing failed here, the turn is simply parked. */
+.inputRowWaiting {
+  background: color-mix(in srgb, var(--color-bg-elevated) 55%, var(--color-bg-base));
+  border-color: var(--color-border-panel);
 }

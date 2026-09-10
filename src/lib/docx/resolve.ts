@@ -166,16 +166,23 @@ function applyOverrides(
   return { format: { ...base, body, page }, changed };
 }
 
-/** 审批卡 header 上的那句话。 */
-export function describeOrigin(origin: FormatOrigin): string {
+/**
+ * 审批卡「格式来源」那一格里的**名字**（设计稿 05f 屏 1j）。
+ *
+ * 它比 `describeOrigin` 短两处，而两处都是为了不在同一张卡上把同一件事说两遍：
+ * 默认那一套的名字（「手稿」）走右边那句安静的话，改动计数走「改了 N 项」那枚
+ * 徽标——把它们再写进这一格，作者读到的就是「默认格式：手稿 手稿」。
+ */
+export function originName(origin: FormatOrigin): string {
   switch (origin.kind) {
     case "default":
-      return `默认格式：${origin.presetLabel}`;
+      return "默认格式";
     case "preset":
       return `预设：${origin.presetLabel}`;
     case "imitated":
       return `照 ${origin.sourceFile} 模仿`;
     case "overridden":
-      return `${describeOrigin(origin.base)}（改了 ${origin.changed.length} 项）`;
+      return originName(origin.base);
   }
 }
+

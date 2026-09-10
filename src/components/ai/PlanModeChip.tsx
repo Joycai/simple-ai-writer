@@ -1,11 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { ListChecks } from "lucide-react";
-import { useAgentStore } from "../../stores/agentStore";
-import styles from "./toggleChip.module.css";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
+import styles from "./sessionSwitch.module.css";
 
 /**
- * 计划模式 — a switch on how the assistant works, sitting beside the subagent
- * switches because it is the same kind of control.
+ * 计划模式 — a switch on how the assistant works.
  *
  * It replaced a 「制定计划」 *button*, which sent a one-off turn asking the model
  * to plan whatever the conversation had been about. That put the plan in the
@@ -15,19 +13,21 @@ import styles from "./toggleChip.module.css";
  * applies to the work the author is about to ask for — every turn while it is
  * on carries the instruction (see agentStore.planMode).
  *
- * Subtractive-by-default like the chips next to it: off is the plain state, so
- * off wears the dashed ghost border and on lights up.
+ * It is the one session switch that stays **outside** 能力 (设计稿 02g 屏 1c):
+ * of everything in that class it is the one the author flips most, so it keeps
+ * a one-click home. Borderless, with the same 7px square the capability menu
+ * uses for on/off — a frame in this row means "material this message carries",
+ * and this changes neither the message nor the model.
  */
 export function PlanModeChip() {
   const { t } = useTranslation();
-  const planMode = useAgentStore((s) => s.planMode);
+  const planMode = useActiveChat((c) => c.planMode);
   const setPlanMode = useAgentStore((s) => s.setPlanMode);
 
-  const label = t("ai.chat.planMode", { defaultValue: "计划模式" });
   return (
     <button
       type="button"
-      className={`${styles.chip} ${planMode ? styles.chipActive : styles.chipDisabled}`}
+      className={`${styles.switch} ${planMode ? styles.switchOn : ""}`}
       onClick={() => setPlanMode(!planMode)}
       aria-pressed={planMode}
       title={
@@ -40,8 +40,8 @@ export function PlanModeChip() {
             })
       }
     >
-      <ListChecks size={12} className={styles.icon} />
-      <span className={styles.label}>{label}</span>
+      <span className={`${styles.mark} ${planMode ? "" : styles.markOff}`} aria-hidden />
+      <span className={styles.label}>{t("ai.chat.planMode", { defaultValue: "计划模式" })}</span>
     </button>
   );
 }

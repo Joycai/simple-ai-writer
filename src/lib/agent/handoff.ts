@@ -26,6 +26,7 @@ import { costFor } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { fileExists, readFile } from "../fs/fileio";
+import { withCurrentTime } from "../context/clock";
 import { normalizeChapterFileName } from "../context/outline";
 import { baseName, dirName, joinPath, resolveWorkspacePath } from "../paths";
 import type { AgentEvent } from "./events";
@@ -382,7 +383,7 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
   open(conn.model.name);
 
   const messages: StreamMessage[] = [
-    { role: "system", content: writerSystemPrompt(brief, args.inheritedSystem) },
+    { role: "system", content: withCurrentTime(writerSystemPrompt(brief, args.inheritedSystem)) },
     { role: "user", content: renderBrief(brief) },
   ];
 

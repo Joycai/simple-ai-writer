@@ -1,4 +1,4 @@
-/* 记忆区浏览。设计稿 08 TURN 2 屏 2d。
+/* 记忆区浏览。设计稿 04b 屏 2d。
    知识库是格纸墙 + 硬阴影卡片；这里是**横格纸内页、单色、细线分行、卡片不浮起**。
    同一套材料，两种装订——这是「它不是知识库」在视觉上的全部说法。 */
 
@@ -6,7 +6,7 @@
   position: fixed;
   inset: 0;
   z-index: 62;
-  background: rgba(0, 0, 0, 0.36);
+  background: var(--color-bg-overlay);
 }
 
 .surface {

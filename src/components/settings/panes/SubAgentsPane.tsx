@@ -11,7 +11,14 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
-import { conversationalModels, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import {
+  isAsrDiarizationDefault,
+  isAsrTimestampsEnabled,
+  setAsrDiarizationDefault,
+  setAsrTimestampsEnabled,
+} from "../../../lib/asr/flag";
+import { looksLikeFiletransModel } from "../../../lib/asr/formats";
 import { WRITER_PRESET } from "../../../lib/agent/presets";
 import {
   clampChunkLines,
@@ -37,7 +44,7 @@ import css from "./SubAgents.module.css";
  * A subagent is only ever a *pair* — the specialist and the model running it —
  * and half a pair is worth nothing, so each one is one card that answers "does
  * this work?" in a glance: a status dot, the capability the model must have,
- * the switch, the binding, and the caution it has earned (设计稿 04). What a
+ * the switch, the binding, and the caution it has earned (设计稿 05a). What a
  * subagent *does* (its tool set, round budget, output contract) is code, not
  * configuration; see `lib/agent/subagent.ts` and docs/feature/agent/subagent-lld.md §5.2.
  */
@@ -47,6 +54,9 @@ export function SubAgentsPane() {
   /** Bumped so the 再看一次说明 button can confirm it did something. */
   const [introReset, setIntroReset] = useState(0);
   const [chunkLines, setChunkLines] = useState(translateLinesPerChunk());
+  // 转写的两个产物偏好（设计稿 02f 屏 1a「产物偏好」）：每张确认卡的默认值，卡上可临时改。
+  const [asrTimestamps, setAsrTimestamps] = useState(isAsrTimestampsEnabled());
+  const [asrDiarization, setAsrDiarization] = useState(isAsrDiarizationDefault());
   const models = useAiStore((s) => s.models);
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
@@ -65,6 +75,9 @@ export function SubAgentsPane() {
   const textCandidates = conversational.filter((m) => m.enabled && m.type !== "image");
   const imageCandidates = conversational.filter((m) => m.enabled && m.type === "image");
   const translateCandidates = models.filter((m) => m.enabled && isTranslateOnly(m));
+  // Fifth case, translate's twin: only a row declared a transcription model
+  // (its endpoint takes an audio URL, not messages).
+  const asrCandidates = models.filter((m) => m.enabled && isAsrOnly(m));
   // The writer is the fourth case, and the only one defined by exclusion: any
   // text model can write, so there is no capability to require — the list is
   // narrowed by what provably *cannot*. `video` matters here and nowhere else
@@ -77,6 +90,7 @@ export function SubAgentsPane() {
   const candidatesFor = (kind: SubAgentKind): Model[] =>
     kind === "imagegen" ? imageCandidates
     : kind === "translate" ? translateCandidates
+    : kind === "asr" ? asrCandidates
     : kind === "writer" ? proseCandidates
     : textCandidates;
 
@@ -106,6 +120,14 @@ export function SubAgentsPane() {
     if (kind === "translate" && !isTranslateOnly(model)) {
       return t("systemSettings.subagents.warnNotTranslate");
     }
+    if (kind === "asr" && !isAsrOnly(model)) {
+      return t("systemSettings.subagents.warnNotAsr");
+    }
+    // 实测：录音文件识别接口只认 *-filetrans 的 id，别的一律 400「url error」——
+    // 在这里就说，别等作者上传完一个文件再被平台拒（lib/asr/conn.ts）。
+    if (kind === "asr" && !looksLikeFiletransModel(model.modelId)) {
+      return t("systemSettings.subagents.warnAsrNotFiletrans", { id: model.modelId });
+    }
     return undefined;
   };
 
@@ -113,6 +135,7 @@ export function SubAgentsPane() {
   const metaFor = (kind: SubAgentKind): string => {
     if (kind === "imagegen") return t("systemSettings.subagents.imagegenMeta");
     if (kind === "translate") return t("systemSettings.subagents.translateMeta");
+    if (kind === "asr") return t("systemSettings.subagents.asrMeta");
     // Only the round budget here. What this binding *costs* is a bigger fact
     // than a trailing note on a picker row, so it gets the line of its own
     // below — and repeating it in both places was the first thing that looked
@@ -321,6 +344,53 @@ export function SubAgentsPane() {
                         <span className={css.desc}>{t("systemSettings.subagents.translateChunk")}</span>
                       </label>
                     </>)}
+
+                    {/* 转写的「产物偏好」（设计稿 02f 屏 1a）：这两个是**产物长什么样**
+                        的偏好而不是能力开关，所以住这一行而不是实验室；它们是每张
+                        确认卡的默认值，卡上改的只管那一次。两处开关长得一样是对的——
+                        控制的是同一件事，层级靠标签说清。 */}
+                    {kind === "asr" && (
+                      <div className={css.prefs}>
+                        <div className={css.prefHead}>
+                          <span className={css.prefLabel}>{t("systemSettings.subagents.asrPrefs")}</span>
+                          <span className={css.prefHint}>{t("systemSettings.subagents.asrPrefsHint")}</span>
+                        </div>
+                        {/* 两格一行、开关比启用开关小一号（36 vs 42）：两处开关长得一样是对的，
+                            层级靠标签和尺寸说清，不靠长得不一样（设计稿 02f 1z 张力 4）。 */}
+                        <div className={css.prefGrid}>
+                          <div className={css.prefItem}>
+                            <div className={css.prefBody}>
+                              <div className={css.prefTitle}>
+                                {t("systemSettings.subagents.asrTimestamps")}
+                                <span className={css.prefMono}>[03:12]</span>
+                              </div>
+                              <div className={css.prefDesc}>{t("systemSettings.subagents.asrTimestampsHint")}</div>
+                            </div>
+                            <Toggle
+                              className={css.toggleSmall}
+                              on={asrTimestamps}
+                              onChange={(next) => { setAsrTimestampsEnabled(next); setAsrTimestamps(next); }}
+                              label={t("systemSettings.subagents.asrTimestamps")}
+                            />
+                          </div>
+                          <div className={css.prefItem}>
+                            <div className={css.prefBody}>
+                              <div className={css.prefTitle}>
+                                {t("systemSettings.subagents.asrDiarization")}
+                                <span className={css.prefMono}>{t("systemSettings.subagents.asrDiarizationMono")}</span>
+                              </div>
+                              <div className={css.prefDesc}>{t("systemSettings.subagents.asrDiarizationHint")}</div>
+                            </div>
+                            <Toggle
+                              className={css.toggleSmall}
+                              on={asrDiarization}
+                              onChange={(next) => { setAsrDiarizationDefault(next); setAsrDiarization(next); }}
+                              label={t("systemSettings.subagents.asrDiarization")}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* 写手绑空时给一条**行动**条而不是纯警告：这里有一步到位的

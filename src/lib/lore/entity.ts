@@ -10,11 +10,13 @@ import { parseImagesMd } from "./gallery";
 import { loreCategories } from "../profile/active";
 import { addCollection, normalizeCollections, removeCollection, renameCollection, sameCollection } from "./collections";
 import {
+  entityAddress,
   RESERVED_ENTITY_FILES,
   type CategoryId,
   type EntityMeta,
   type FacetMeta,
   type LoreEntity,
+  type LoreEntityAddress,
   type LoreFacet,
   type LoreImage,
   type LoreIndex,
@@ -99,7 +101,7 @@ async function readCategoryEntities(
   try {
     for (const entry of await readDir(catPath)) {
       if (!entry.isDirectory) continue;
-      const entity = await readEntity(category, entry.name, `${catPath}/${entry.name}`);
+      const entity = await scanEntity(category, entry.name, `${catPath}/${entry.name}`);
       if (entity) out.push(entity);
     }
   } catch {
@@ -108,11 +110,22 @@ async function readCategoryEntities(
   return out;
 }
 
-async function readEntity(
+/**
+ * Read one entity directory into its index entry — the unit `scanLore` is
+ * made of, exported so a write that stayed inside one folder can refresh
+ * *that* entry instead of walking the whole knowledge base again
+ * (`loreStore.refreshEntity`, fed by the agent's write tools through
+ * `ToolContext.onLoreChanged`).
+ *
+ * Never throws and never returns nothing: a folder whose files cannot be read
+ * is still an entity, listed under its directory name with empty fields, the
+ * same as it always was in a full scan.
+ */
+export async function scanEntity(
   category: CategoryId,
   id: string,
   dirPath: string,
-): Promise<LoreEntity | null> {
+): Promise<LoreEntity> {
   const indexPath = `${dirPath}/index.md`;
   let name = id;
   let aliases: string[] = [];
@@ -120,6 +133,25 @@ async function readEntity(
   let dict = false;
   let collections: string[] = [];
   let cover: string | null = null;
+
+  // One listing answers every "is this file here?" question below. They used
+  // to be asked of the disk one file at a time — four avatar probes, images.md,
+  // one per gallery picture — and each probe is an IPC round trip that also
+  // canonicalizes the path on the Rust side (`scope.check`), twice when the
+  // file is absent. Over a few hundred entries those probes were most of a
+  // scan's wall-clock, and a scan runs after every agent write
+  // (`writeTools.syncLore`). Lowercased keys: the probes went through the
+  // filesystem, which is case-insensitive on Windows and macOS, so `avatar.PNG`
+  // must keep counting — the value is the name as the disk spells it.
+  const onDisk = new Map<string, string>();
+  try {
+    for (const e of await readDir(dirPath)) {
+      if (!e.isDirectory) onDisk.set(e.name.toLowerCase(), e.name);
+    }
+  } catch {
+    // unreadable dir — entity still listed with defaults, like a missing index.md
+  }
+  const spelled = (file: string): string | undefined => onDisk.get(file.toLowerCase());
 
   const citeTargets: string[] = [];
   try {
@@ -146,38 +178,34 @@ async function readEntity(
   }
 
   // Collect *.md files in dir
-  let mdFiles: string[] = [];
-  let avatarPath: string | null = null;
-  try {
-    const entries = await readDir(dirPath);
-    mdFiles = entries
-      .filter((e) => !e.isDirectory && e.name.endsWith(".md"))
-      .map((e) => e.name);
+  const mdFiles = [...onDisk.values()].filter((f) => f.endsWith(".md"));
 
-    const avatarExts = ["png", "jpg", "jpeg", "webp"];
-    for (const ext of avatarExts) {
-      const candidate = `${dirPath}/avatar.${ext}`;
-      if (await fileExists(candidate)) {
-        avatarPath = candidate;
-        break;
-      }
+  let avatarPath: string | null = null;
+  for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+    const found = spelled(`avatar.${ext}`);
+    if (found) {
+      avatarPath = `${dirPath}/${found}`;
+      break;
     }
-  } catch {}
+  }
 
   // Parse images.md if present. Each entry's `file` is resolved against dirPath
   // and dropped if the underlying file is missing — keeps the list trustworthy.
   const images: LoreImage[] = [];
-  try {
-    const raw = await readFile(`${dirPath}/images.md`);
-    const entries = parseImagesMd(raw);
-    for (const { file, desc, slot } of entries) {
-      const absPath = `${dirPath}/${file}`;
-      if (await fileExists(absPath)) {
-        images.push({ file, desc, slot, absPath });
+  if (spelled("images.md")) {
+    try {
+      const raw = await readFile(`${dirPath}/images.md`);
+      for (const { file, desc, slot } of parseImagesMd(raw)) {
+        const absPath = `${dirPath}/${file}`;
+        // The gallery writes bare filenames (`addLoreImage`), which the listing
+        // answers for. A hand-written heading naming a sub-path is the one
+        // shape it cannot, so that one still asks the disk.
+        const present = /[/\\]/.test(file) ? await fileExists(absPath) : !!spelled(file);
+        if (present) images.push({ file, desc, slot, absPath });
       }
+    } catch {
+      // unreadable images.md — entity has no gallery, leave images empty
     }
-  } catch {
-    // images.md missing — entity has no gallery, leave images empty
   }
 
   // Parse facet metadata from every non-reserved md. Files whose frontmatter
@@ -413,8 +441,11 @@ export async function createEntityWithContent(
 // ─── Collections ─────────────────────────────────────────────────────────────
 
 /**
- * 把索引里所有归入 `from` 的条目改归 `to`（`to` 为 null ＝ 取消归属），返回改写了
- * 几条。
+ * 把索引里所有归入 `from` 的条目改归 `to`（`to` 为 null ＝ 取消归属），返回**真的
+ * 改写了哪几条**（地址，不是计数）。
+ *
+ * 返回地址而不是数字，是因为调用方接下来要刷新索引：拿着这份名单就只重读这几条，
+ * 拿着一个计数就只能全量重扫，而全量重扫在几百条目的项目上是上千次 IPC。
  *
  * 集合的 id 就是它的名字（见 ./collections 的说明），所以重命名和删除是**改写成员
  * 条目的 frontmatter**，不是改一行声明。这是那个取舍的代价，而它买到的是作者手改
@@ -430,8 +461,8 @@ export async function refileCollection(
   index: LoreIndex,
   from: string,
   to: string | null,
-): Promise<number> {
-  let touched = 0;
+): Promise<LoreEntityAddress[]> {
+  const touched: LoreEntityAddress[] = [];
   for (const entities of Object.values(index)) {
     for (const entity of entities ?? []) {
       const current = entity.collections ?? [];
@@ -454,7 +485,7 @@ export async function refileCollection(
           },
           content,
         );
-        touched++;
+        touched.push(entityAddress(entity));
       } catch (e) {
         console.warn(`[lore] could not refile ${entity.dirPath}:`, e);
       }
@@ -470,15 +501,16 @@ export async function refileCollection(
  * ——勾一个集合的意思是「这批都进去」，不是「这批的归属变成这一个」。后者会在作者
  * 只想补一个标签时静静抹掉别的归属，而那种丢失既没有提示也不容易发现。
  *
- * 返回真的改动过的条目数（已经是那个状态的会被跳过，所以重复点不会白写一遍磁盘）。
+ * 返回真的改动过的条目（已经是那个状态的会被跳过，所以重复点不会白写一遍磁盘）。
+ * 和 `refileCollection` 一样给地址而不是计数——调用方要按它刷新索引。
  */
 export async function fileEntities(
   projectPath: string,
   entities: readonly LoreEntity[],
   add: readonly string[],
   remove: readonly string[],
-): Promise<number> {
-  let touched = 0;
+): Promise<LoreEntityAddress[]> {
+  const touched: LoreEntityAddress[] = [];
   for (const entity of entities) {
     let next = entity.collections ?? [];
     for (const name of add) next = addCollection(next, name);
@@ -501,7 +533,7 @@ export async function fileEntities(
         },
         content,
       );
-      touched++;
+      touched.push(entityAddress(entity));
     } catch (e) {
       console.warn(`[lore] could not file ${entity.dirPath}:`, e);
     }
@@ -532,14 +564,18 @@ export async function moveEntitiesToCategory(
   projectPath: string,
   entities: readonly LoreEntity[],
   category: CategoryId,
+  /** 每处理完一条（搬了 / 跳过 / 失败都算）报一次进度——「移到分类」浮层上那个 3/5。 */
+  onProgress?: (done: number, total: number) => void,
 ): Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }> {
   const moves: CategoryMove[] = [];
   const failed: string[] = [];
   let skipped = 0;
+  let done = 0;
 
   for (const entity of entities) {
     if (entity.category === category) {
       skipped++;
+      onProgress?.(++done, entities.length);
       continue;
     }
     try {
@@ -570,6 +606,7 @@ export async function moveEntitiesToCategory(
       console.warn(`[lore] could not move ${entity.dirPath} to ${category}:`, e);
       failed.push(entity.name);
     }
+    onProgress?.(++done, entities.length);
   }
   return { moves, skipped, failed };
 }

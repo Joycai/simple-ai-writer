@@ -1,3 +1,4 @@
+import type { SearchScope } from "../lib/search/globalSearch";
 import { create } from "zustand";
 import i18n from "../i18n";
 import { deletePref, LORE_SCOPE_PREFIX, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
@@ -24,6 +25,12 @@ import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
   CONTEXT_UTILIZATION_MIN,
+  COMPACT_TRIGGER_RATIO_DEFAULT,
+  COMPACT_TRIGGER_RATIO_MAX,
+  COMPACT_TRIGGER_RATIO_MIN,
+  COMPACT_TRIGGER_TOKENS_DEFAULT,
+  COMPACT_TRIGGER_TOKENS_MAX,
+  COMPACT_TRIGGER_TOKENS_MIN,
 } from "../lib/context/budget";
 import {
   PREVIEW_ZOOM_DEFAULT,
@@ -32,12 +39,11 @@ import {
   snapPreviewZoom,
   stepPreviewZoom,
 } from "../lib/editor/previewZoom";
+import { DEFAULT_MARKDOWN_THEME } from "../lib/theme/markdownThemes";
+import { BUILTIN_THEME_FOR_SCHEME, type ColorScheme } from "../lib/theme/scheme";
 import {
-  DEFAULT_MARKDOWN_THEME,
-  MARKDOWN_THEME_IDS,
-  MD_THEME_ATTR,
-  type MarkdownThemeId,
-} from "../lib/theme/markdownThemes";
+  applyResolvedMarkdownTheme, applyResolvedTheme, ensureSelectedLoaded, type SelectedThemes,
+} from "../lib/theme/install";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -46,6 +52,8 @@ export type FontScheme = "manuscript" | "song" | "hei" | "kai";
 const FONT_SCHEMES: FontScheme[] = ["manuscript", "song", "hei", "kai"];
 
 const THEME_KEY = "app:theme";
+const THEME_LIGHT_KEY = "app:themeLight";
+const THEME_DARK_KEY = "app:themeDark";
 const LANG_KEY = "app:language";
 const FONT_KEY = "app:fontScheme";
 const MD_THEME_KEY = "app:markdownTheme";
@@ -58,6 +66,9 @@ const OPENED_AT_KEY = "app:projectOpenedAt";
 const PIN_HINT_KEY = "app:pinHintDone";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
+const AUTO_COMPACT_KEY = "app:autoCompact";
+const COMPACT_TOKENS_KEY = "app:compactTriggerTokens";
+const COMPACT_RATIO_KEY = "app:compactTriggerRatio";
 const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
 const DRAFT_COUNT_KEY = "app:draftCount";
 
@@ -90,6 +101,16 @@ export const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000] as const;
 function storedTheme(): ThemeMode {
   return (readPref(THEME_KEY) as ThemeMode | null) ?? "dark";
 }
+/**
+ * The theme id for one polarity — a theme file's id or the built-in. Not
+ * validated here: whether the file exists and parses is the registry's call
+ * (`lib/theme/install`), and an id it cannot honour falls back to the
+ * built-in at apply time while the preference stays as the author set it.
+ */
+function storedThemeFor(scheme: ColorScheme): string {
+  const raw = readPref(scheme === "light" ? THEME_LIGHT_KEY : THEME_DARK_KEY)?.trim();
+  return raw || BUILTIN_THEME_FOR_SCHEME[scheme];
+}
 function storedLang(): Language {
   return (readPref(LANG_KEY) as Language | null) ?? "zh-CN";
 }
@@ -97,9 +118,13 @@ function storedFontScheme(): FontScheme {
   const raw = readPref(FONT_KEY) as FontScheme | null;
   return raw && FONT_SCHEMES.includes(raw) ? raw : "manuscript";
 }
-function storedMarkdownTheme(): MarkdownThemeId {
-  const raw = readPref(MD_THEME_KEY) as MarkdownThemeId | null;
-  return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
+/**
+ * A built-in id or a typography theme file's id. Like the appearance ids,
+ * not validated here: the registry decides whether the file exists and
+ * parses, and falls back to the default at apply time without rewriting it.
+ */
+function storedMarkdownTheme(): string {
+  return readPref(MD_THEME_KEY)?.trim() || DEFAULT_MARKDOWN_THEME;
 }
 function storedPreviewZoom(): number {
   const raw = parseFloat(readPref(PREVIEW_ZOOM_KEY) ?? "");
@@ -147,6 +172,19 @@ const storedContextUtilization = () =>
   clamp(
     parseFloat(readPref(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
     CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
+  );
+// Absent = on: the switch was added after compaction shipped, and an install
+// that never saw it must keep folding the way it always has.
+const storedAutoCompact = () => readPref(AUTO_COMPACT_KEY) !== "0";
+const storedCompactTriggerTokens = () =>
+  clamp(
+    parseInt(readPref(COMPACT_TOKENS_KEY) ?? "", 10) || COMPACT_TRIGGER_TOKENS_DEFAULT,
+    COMPACT_TRIGGER_TOKENS_MIN, COMPACT_TRIGGER_TOKENS_MAX,
+  );
+const storedCompactTriggerRatio = () =>
+  clamp(
+    parseFloat(readPref(COMPACT_RATIO_KEY) ?? "") || COMPACT_TRIGGER_RATIO_DEFAULT,
+    COMPACT_TRIGGER_RATIO_MIN, COMPACT_TRIGGER_RATIO_MAX,
   );
 const storedDraftCount = () => clamp(parseInt(readPref(DRAFT_COUNT_KEY) ?? "1", 10) || 1, 1, MAX_DRAFTS);
 /**
@@ -196,6 +234,8 @@ function prefBackedState() {
   const pinnedProjects = loadPinnedProjects();
   return {
     theme: storedTheme(),
+    themeLight: storedThemeFor("light"),
+    themeDark: storedThemeFor("dark"),
     language: storedLang(),
     fontScheme: storedFontScheme(),
     markdownTheme: storedMarkdownTheme(),
@@ -208,6 +248,9 @@ function prefBackedState() {
     pinHintDone: readPref(PIN_HINT_KEY) === "1",
     loreBudgetTokens: storedLoreBudget(),
     contextUtilization: storedContextUtilization(),
+    autoCompact: storedAutoCompact(),
+    compactTriggerTokens: storedCompactTriggerTokens(),
+    compactTriggerRatio: storedCompactTriggerRatio(),
     draftCount: storedDraftCount(),
     defaultMaxOutput: storedDefaultMaxOutput(),
     imageMaxLongEdge: storedImageMaxLongEdge(),
@@ -268,9 +311,12 @@ export function screenNeedsProject(screen: AppScreen): boolean {
 
 interface AppState {
   theme: ThemeMode;
+  /** The appearance theme each polarity uses (`lib/theme/install`): 跟随系统 is a pair. */
+  themeLight: string;
+  themeDark: string;
   language: Language;
   fontScheme: FontScheme;
-  markdownTheme: MarkdownThemeId;
+  markdownTheme: string;
   /**
    * How large the rendered preview draws, as a factor on the ladder in
    * `lib/editor/previewZoom`. An appearance preference like the markdown
@@ -300,6 +346,15 @@ interface AppState {
   /** Share of the model's context window one request may occupy (0–1). */
   contextUtilization: number;
   /**
+   * 对话归纳 (docs/feature/agent/compact-threshold-plan.md): whether the chat
+   * and roleplay fold old turns on their own past the trigger, and the two
+   * author-set lines the trigger is the lowest of — an absolute token count
+   * and a share of the model's window. Resolved by `compactTriggerFor`.
+   */
+  autoCompact: boolean;
+  compactTriggerTokens: number;
+  compactTriggerRatio: number;
+  /**
    * Fallback per-reply output cap for models that declare none and aren't in
    * the built-in table (`lib/ai/modelLimits`). 0 = leave it to each protocol.
    */
@@ -318,6 +373,11 @@ interface AppState {
   // Manuscript additions
   mainView: MainView;
   showCommandPalette: boolean;
+  /**
+   * 「以某个档打开」的请求（⌘P ＝ 打开并落到「文档」档）。带 seq 是因为面板已开着时
+   * 再按 ⌘P 也要切档——同一个值不会触发两次。null ＝ 沿用面板自己记的上次档位。
+   */
+  paletteScopeRequest: { scope: SearchScope; seq: number } | null;
   showAiDrawer: boolean;
   aiDrawerMode: AiDrawerMode;
   /**
@@ -338,9 +398,13 @@ interface AppState {
   settingsTab: SettingsTab;
 
   setTheme: (theme: ThemeMode) => void;
+  /** Pick the appearance theme for one polarity. */
+  setThemeFor: (scheme: ColorScheme, id: string) => void;
+  /** Re-apply the resolved theme — after the registry reloaded (设置 → 重新载入). */
+  applyCurrentTheme: (animated?: boolean) => void;
   setLanguage: (lang: Language) => void;
   setFontScheme: (scheme: FontScheme) => void;
-  setMarkdownTheme: (id: MarkdownThemeId) => void;
+  setMarkdownTheme: (id: string) => void;
   /** Set the preview zoom, snapped to the ladder. */
   setPreviewZoom: (zoom: number) => void;
   /** Step one rung in (+1) or out (-1); no-op at the ends. */
@@ -353,6 +417,9 @@ interface AppState {
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
   setLoreBudgetTokens: (tokens: number) => void;
   setContextUtilization: (ratio: number) => void;
+  setAutoCompact: (on: boolean) => void;
+  setCompactTriggerTokens: (tokens: number) => void;
+  setCompactTriggerRatio: (ratio: number) => void;
   setDraftCount: (n: number) => void;
   setDefaultMaxOutput: (tokens: number) => void;
   setImageMaxLongEdge: (px: number) => void;
@@ -404,6 +471,7 @@ interface AppState {
    */
   showScreen: (screen: AppScreen) => void;
   setShowCommandPalette: (v: boolean) => void;
+  openCommandPalette: (scope?: SearchScope) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
   /** Open the assistant header's model picker (see `modelPickerNonce`). */
   openModelPicker: () => void;
@@ -421,8 +489,18 @@ function resolveTheme(mode: ThemeMode): "dark" | "light" {
   return mode;
 }
 
-function applyTheme(mode: ThemeMode) {
-  document.documentElement.setAttribute("data-theme", resolveTheme(mode));
+const selectedThemes = (s: { themeLight: string; themeDark: string; markdownTheme: string }): SelectedThemes =>
+  ({ light: s.themeLight, dark: s.themeDark, markdown: s.markdownTheme });
+
+/**
+ * Writes `data-theme` (the theme the registry resolves for the polarity —
+ * the author's file, or the built-in when that file is absent or unusable)
+ * and `data-scheme` (the polarity itself) — see lib/theme/scheme for why
+ * there are two attributes and why nothing else reads the first one's value.
+ */
+function applyTheme(mode: ThemeMode, selected: SelectedThemes) {
+  const scheme = resolveTheme(mode);
+  applyResolvedTheme(scheme, selected[scheme]);
 }
 
 /**
@@ -433,15 +511,15 @@ function applyTheme(mode: ThemeMode) {
  * API is unavailable (older webviews) or the user prefers reduced motion.
  * Used for user/system-driven changes only; the initial load stays instant.
  */
-function applyThemeAnimated(mode: ThemeMode) {
+function applyThemeAnimated(mode: ThemeMode, selected: SelectedThemes) {
   const doc = document as Document & {
     startViewTransition?: (cb: () => void) => unknown;
   };
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (typeof doc.startViewTransition === "function" && !reduced) {
-    doc.startViewTransition(() => applyTheme(mode));
+    doc.startViewTransition(() => applyTheme(mode, selected));
   } else {
-    applyTheme(mode);
+    applyTheme(mode, selected);
   }
 }
 
@@ -449,9 +527,13 @@ function applyFontScheme(scheme: FontScheme) {
   document.documentElement.setAttribute("data-font", scheme);
 }
 
-/** Every `.md-body` container reads its look off this attribute. */
-function applyMarkdownTheme(id: MarkdownThemeId) {
-  document.documentElement.setAttribute(MD_THEME_ATTR, id);
+/**
+ * Every `.md-body` container reads its look off `data-md-theme` — the
+ * built-in, or the built-in a theme file extends with the file's own sheet
+ * installed after it (lib/theme/install).
+ */
+function applyMarkdownTheme(id: string) {
+  applyResolvedMarkdownTheme(id);
 }
 
 let systemThemeListener: (() => void) | null = null;
@@ -464,6 +546,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   mainView: "editor",
   showCommandPalette: false,
+  paletteScopeRequest: null,
   showAiDrawer: false,
   modelPickerNonce: 0,
   showOnboarding: false,
@@ -473,7 +556,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => {
     writePref(THEME_KEY, theme);
     set({ theme });
-    applyThemeAnimated(theme);
+    applyThemeAnimated(theme, selectedThemes(get()));
 
     if (systemThemeListener) {
       window.matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", systemThemeListener);
@@ -481,9 +564,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      systemThemeListener = () => applyThemeAnimated(get().theme);
+      systemThemeListener = () => applyThemeAnimated(get().theme, selectedThemes(get()));
       mq.addEventListener("change", systemThemeListener);
     }
+  },
+
+  setThemeFor: (scheme, id) => {
+    writePref(scheme === "light" ? THEME_LIGHT_KEY : THEME_DARK_KEY, id);
+    set(scheme === "light" ? { themeLight: id } : { themeDark: id });
+    // The settings grid only offers ids the registry holds, so this is a
+    // rebuild without I/O; a caller naming an unknown id gets its file read.
+    const selected = selectedThemes(get());
+    void ensureSelectedLoaded(selected).then(() => applyThemeAnimated(get().theme, selected));
+  },
+
+  applyCurrentTheme: (animated = true) => {
+    const selected = selectedThemes(get());
+    if (animated) applyThemeAnimated(get().theme, selected);
+    else applyTheme(get().theme, selected);
   },
 
   setLanguage: (language) => {
@@ -558,6 +656,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ contextUtilization: clamped });
   },
 
+  setAutoCompact: (on) => {
+    writePref(AUTO_COMPACT_KEY, on ? "1" : "0");
+    set({ autoCompact: on });
+  },
+
+  setCompactTriggerTokens: (tokens) => {
+    const clamped = clamp(Math.round(tokens), COMPACT_TRIGGER_TOKENS_MIN, COMPACT_TRIGGER_TOKENS_MAX);
+    writePref(COMPACT_TOKENS_KEY, String(clamped));
+    set({ compactTriggerTokens: clamped });
+  },
+
+  setCompactTriggerRatio: (ratio) => {
+    const clamped = clamp(ratio, COMPACT_TRIGGER_RATIO_MIN, COMPACT_TRIGGER_RATIO_MAX);
+    writePref(COMPACT_RATIO_KEY, String(clamped));
+    set({ compactTriggerRatio: clamped });
+  },
+
   setDraftCount: (n) => {
     const clamped = clamp(Math.round(n), 1, MAX_DRAFTS);
     writePref(DRAFT_COUNT_KEY, String(clamped));
@@ -609,7 +724,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       if (isProjectPinned(state.pinnedProjects, path)) return {};
       // Appended, not prepended: a new pin lands at the end of 「已固定」 so the
-      // rows already there do not shift under the author's cursor (设计稿 15
+      // rows already there do not shift under the author's cursor (设计稿 01a
       // 屏 1b: the row slides to the section's last place).
       const pinnedProjects = [...state.pinnedProjects, path];
       writePrefMerged(PINNED_PROJECTS_KEY, JSON.stringify(pinnedProjects), mergePinnedProjects);
@@ -705,9 +820,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const touched = (key: string) => !changedKeys || changedKeys.includes(key);
     const next = prefBackedState();
     set(next);
-    if (touched(THEME_KEY)) applyThemeAnimated(next.theme);
+    if (touched(THEME_KEY) || touched(THEME_LIGHT_KEY) || touched(THEME_DARK_KEY)) {
+      // An imported preference may name a file this machine does not have;
+      // the registry marks it missing and the built-in applies instead.
+      const selected = selectedThemes(next);
+      void ensureSelectedLoaded(selected).then(() => applyThemeAnimated(next.theme, selected));
+    }
     if (touched(FONT_KEY)) applyFontScheme(next.fontScheme);
-    if (touched(MD_THEME_KEY)) applyMarkdownTheme(next.markdownTheme);
+    if (touched(MD_THEME_KEY)) {
+      const selected = selectedThemes(next);
+      void ensureSelectedLoaded(selected).then(() => applyMarkdownTheme(next.markdownTheme));
+    }
     if (touched(LANG_KEY) && next.language !== i18n.language) i18n.changeLanguage(next.language);
   },
 
@@ -744,7 +867,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     s.setActiveSideTab(screen);
     s.setSidebarCollapsed(false);
   },
-  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  // A scoped request is one-shot. Every ordinary open/close path clears it so
+  // a past Cmd+P cannot override the palette's remembered tab on a later Cmd+K.
+  setShowCommandPalette: (v) => set({ showCommandPalette: v, paletteScopeRequest: null }),
+  openCommandPalette: (scope) =>
+    set((s) => ({
+      showCommandPalette: true,
+      paletteScopeRequest: scope ? { scope, seq: (s.paletteScopeRequest?.seq ?? 0) + 1 } : null,
+    })),
   // Omitting `mode` means "just open it" — the drawer comes back on whichever
   // tab was last used. Only the mode-specific entry points (Ctrl+J/Ctrl+L, the
   // command palette, the inline bubble) name a tab, and naming one remembers it.
@@ -765,7 +895,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 // disagree.
 {
   const s = useAppStore.getState();
-  applyTheme(s.theme);
+  // The selected theme files were read in main.tsx's boot(), before this
+  // module was imported, so the first frame is already the author's theme.
+  applyTheme(s.theme, selectedThemes(s));
   applyFontScheme(s.fontScheme);
   applyMarkdownTheme(s.markdownTheme);
 }

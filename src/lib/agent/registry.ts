@@ -20,17 +20,19 @@
 import type { ToolDefinition } from "../ai/types";
 import type { Insertion } from "./editApply";
 import type { DocxOutline } from "../docx";
+import type { LintFinding } from "../pptx/lint";
 import type { DocFormat, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import i18n from "../../i18n";
-import { type LoreIndex, type LoreScope } from "../lore";
+import { type LoreEntityAddress, type LoreIndex, type LoreScope } from "../lore";
 import { loreCategories, loreCategoryIds } from "../profile/active";
 import { categoryRef } from "../profile/model";
 import {
   formatLoreIndex,
   listWritingFiles,
   readLoreEntity,
+  type GalleryViewer,
   readLoreImage,
   readProjectImage,
   readSlidesFile,
@@ -42,9 +44,13 @@ import {
 import { LORE_PLAN_ACTIONS, LORE_PLAN_TARGETS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
+import { readDocumentFile } from "./documentTools";
+import { convertDocumentTool } from "./convertTools";
+import { transcribeAudioTool } from "../asr/tool";
+import type { ConvertExt } from "../import";
 import { inspectHtmlTool } from "./htmlTools";
 import {
-  createLoreCategoryTool,
+  manageCategoryTool,
   fileLoreEntriesTool,
   manageCollectionTool,
 } from "./organizeTools";
@@ -111,6 +117,7 @@ import {
   writeNoteTool,
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
+import { reportIssueCall, reportPassCall, type ReviewSink } from "../consistency/reviewTools";
 import { executeDelegate, type SubAgentKind } from "./subagent";
 import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
@@ -397,6 +404,13 @@ export interface PptxProposal extends ProposalBase {
   tier: string;
   /** True when no slide selector matched and the page became one slide. */
   wholePage: boolean;
+  /**
+   * What the source says will not carry across (lib/pptx/lint) — found at
+   * proposal time, like the slide count, because it needs no rendering. The
+   * card shows it so the author approves knowing what the file will lack;
+   * the apply report repeats it beside what the conversion itself degraded.
+   */
+  lint: LintFinding[];
 }
 
 /**
@@ -413,11 +427,18 @@ export interface DocxProposal extends ProposalBase {
   sourcePath: string;
   /** Exactly what will be applied. Resolved once, at proposal time. */
   format: DocFormat;
-  /** Where that format came from — the card's headline, see `describeOrigin`. */
+  /**
+   * Where that format came from — the card's headline, see `originName`. It is
+   * deliberately the *short* name: the preset's own name and the override count
+   * ride in `originNote` and the 改了 N 项 chip beside it, and repeating either
+   * here reads as two different facts (设计稿 05f 屏 1j).
+   */
   originKind: FormatOrigin["kind"];
   originLabel: string;
   /** The quiet right-hand note: 内置 · 未改动 / 未存为预设 / the preset's name. */
   originNote?: string;
+  /** One parenthetical under the band — today only "N items Word defaulted". */
+  originFootnote?: string;
   /** Only when the preset was overridden this once: which fields, from → to. */
   changed?: FormatChange[];
   /** The five-row spec table, already in final values. */
@@ -455,6 +476,64 @@ export interface XlsxProposal extends ProposalBase {
 }
 
 /**
+ * Land a Word / Excel / PDF / PowerPoint file in the project as a markdown
+ * document beside it — the write half of `read_document`.
+ *
+ * The conversion has already run when the card is raised (through the same
+ * cache `read_document` reads from), so the card shows what will land and the
+ * apply step copies that entry out rather than converting again: what was
+ * approved and what lands are the same bytes even if the source moved on
+ * (lib/import/materialize). The source is never touched; a name collision
+ * numbers the new file. docs/feature/agent/document-read-plan.md §10.
+ */
+export interface ConvertProposal extends ProposalBase {
+  kind: "convert";
+  /** The office file. `path` is the intended `.md` beside it, before numbering. */
+  sourcePath: string;
+  ext: ConvertExt;
+  /** The cache entry holding the finished conversion. */
+  cacheDir: string;
+  chars: number;
+  pictures: number;
+  /** A PDF whose text layer came out empty — a scan. The card says so. */
+  scanned: boolean;
+  /** The opening of the converted text, for the card. */
+  excerpt: string;
+}
+
+/**
+ * Transcribe an audio / video file in the project into a timestamped markdown
+ * transcript beside it (lib/asr). The one proposal whose card comes *before*
+ * the expensive step rather than after it: the transcription is the paid,
+ * uploading, uncancellable action, so nothing has run when the card is raised
+ * — the card carries only what the file header gives (size, a WAV's duration,
+ * an estimate when the model row has a price). Approval runs upload → submit
+ * → poll → write in the apply step, reporting the three stages through
+ * `onApplyProgress`. docs/feature/asr/01-execution-plan.md §1 不变量 4.
+ */
+export interface TranscribeProposal extends ProposalBase {
+  kind: "transcribe";
+  /** The audio / video file. `path` is the intended `.md` beside it, after numbering. */
+  sourcePath: string;
+  /** Project-relative spelling of `sourcePath`, for the card. */
+  sourceLabel: string;
+  ext: string;
+  bytes: number;
+  /** Known before upload only for WAV; null means "billed by actual seconds once done". */
+  seconds: number | null;
+  /** The model row's per-second price; undefined = the usage page cannot price the run. */
+  pricePerSecond: number | undefined;
+  /** `seconds × pricePerSecond` when both exist. */
+  estimate: number | null;
+  /** This run's speaker diarization — the card's own switch may flip it before approval. */
+  diarization: boolean;
+  speakerCount?: number;
+  languageHints?: string[];
+  /** The bound model's display name. */
+  modelName: string;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -475,7 +554,9 @@ export type Proposal =
   | IllustrateProposal
   | PptxProposal
   | DocxProposal
-  | XlsxProposal;
+  | XlsxProposal
+  | ConvertProposal
+  | TranscribeProposal;
 
 export type ApprovalDecision =
   | {
@@ -530,12 +611,35 @@ export interface LoreOrganizer {
   /** 当前声明的集合，按作者排的顺序。 */
   collections: string[];
   createCollection: (name: string) => Promise<void>;
-  renameCollection: (from: string, to: string) => Promise<void>;
-  deleteCollection: (name: string) => Promise<void>;
-  /** 把条目（按 dirPath）归入 / 移出集合。 */
-  file: (dirPaths: string[], add: string[], remove: string[]) => Promise<void>;
+  /**
+   * 改名与删除都改写**成员条目的 frontmatter**（集合的 id 就是它的名字），所以
+   * 两者都交回真的动过的那几条地址——调用方拿它回灌运行快照。空数组＝这个集合
+   * 一个成员都没有，不是失败。
+   */
+  renameCollection: (from: string, to: string) => Promise<LoreEntityAddress[]>;
+  deleteCollection: (name: string) => Promise<LoreEntityAddress[]>;
+  /** 把条目（按 dirPath）归入 / 移出集合；同样交回真的动过的那几条。 */
+  file: (dirPaths: string[], add: string[], remove: string[]) => Promise<LoreEntityAddress[]>;
   /** 新建分类，传作者能读的标签，返回真正落成的 id。 */
   createCategory: (label: string) => Promise<string>;
+  /**
+   * **作者自建**的分类 id。改名和删除只对这些生效：能力包带来的分类属于那个包
+   * （去掉它得整包关掉），孤儿文件夹压根没有声明可改。写成 getter，理由同
+   * `collections`——同一次运行里刚建的分类，下一句就要能改名。
+   */
+  userCategories: string[];
+  /**
+   * 改分类的**标签**。id 就是磁盘上的文件夹名，这里一个字都不碰它，所以没有任何
+   * 条目搬家、没有 `[[lore:分类/id]]` 失效、没有置顶要重指——这是分类改名和
+   * 「把条目换个分类」代价完全不同的地方。
+   */
+  renameCategory: (id: string, label: string) => Promise<void>;
+  /**
+   * 把分类的**声明**从 profile.json 摘掉。磁盘上的文件夹一动不动，所以调用方必须
+   * 先确认它是空的：留着成员就等于把一整个分类降级成孤儿（标签退化成文件夹 id），
+   * 而那是作者该亲眼看着做的事。
+   */
+  deleteCategory: (id: string) => Promise<void>;
 }
 
 /** Everything an executor may need about the running project. */
@@ -570,6 +674,18 @@ export interface ToolContext {
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
+   * Whether a usable vision subagent reads pictures for this run — from
+   * `routeTools`, which is also what stripped `read_image` / `read_lore_image`
+   * from the toolset.
+   *
+   * Read tools use it to keep a *listing* honest about who can open what it
+   * lists. `multimodal` alone cannot: with vision live it is the wrong model's
+   * property — a text-only main model behind a multimodal vision subagent said
+   * "text descriptions only", and the run then never asked for the picture the
+   * author had switched a subagent on to read.
+   */
+  visionDelegate?: boolean;
+  /**
    * The tools this run may actually call — filled in by `executeRegisteredTool`
    * from its own `allowed` list, never by callers. Read-side handlers use it to
    * keep their result trailers honest: `read_lore_entity`'s gutter note names
@@ -593,8 +709,18 @@ export interface ToolContext {
    * Optional only because the read-only presets legitimately have no lore to
    * write (see `presets.ts`). Any context whose preset carries a lore *write*
    * tool must supply it.
+   *
+   * `changed` names the entities a write stayed inside of — a body edit, a
+   * facet, a gallery picture, or the N entries one filing call re-tagged — so
+   * the surface can re-read those folders alone (`loreStore.refreshEntities`)
+   * instead of walking the whole knowledge base, which is what a full rescan
+   * costs after *every* write call. Omitted when the write changed what
+   * entities exist or where (create / move / delete / pack runs): those need
+   * the walk. A surface may ignore the hint and rescan.
    */
-  onLoreChanged?: () => LoreIndex | void | Promise<LoreIndex | void>;
+  onLoreChanged?: (
+    changed?: LoreEntityAddress | LoreEntityAddress[],
+  ) => LoreIndex | void | Promise<LoreIndex | void>;
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
   /**
@@ -636,6 +762,12 @@ export interface ToolContext {
    * refuse rather than dropping the model's work on the floor.
    */
   splitSink?: SplitSink;
+  /**
+   * Collector for a 一致性检查 window (lib/consistency/reviewTools). Same
+   * contract as `splitSink`: nothing on disk, the panel reads the sink live.
+   * Absent means this surface is not a check, and report_* refuse.
+   */
+  reviewSink?: ReviewSink;
   /** Active on-disk task workspace (.ai-writer/tasks/<taskId>/). */
   taskWorkspace?: TaskWorkspaceHandle;
   /**
@@ -777,6 +909,7 @@ export type ToolId =
   | "list_files"
   | "read_file"
   | "read_slides"
+  | "read_document"
   | "inspect_html"
   | "search_text"
   | "read_memory"
@@ -797,7 +930,7 @@ export type ToolId =
   | "delete_lore_image"
   | "manage_collection"
   | "file_lore_entries"
-  | "create_lore_category"
+  | "manage_category"
   | "set_lore_avatar"
   | "copy_lore_file"
   | "move_lore_entity"
@@ -805,6 +938,8 @@ export type ToolId =
   | "update_memory"
   | "split_core"
   | "split_facet"
+  | "report_issue"
+  | "report_pass"
   | "propose_edit"
   | "rewrite_document"
   | "rewrite_lines"
@@ -820,6 +955,7 @@ export type ToolId =
   | "export_pptx"
   | "export_docx"
   | "export_xlsx"
+  | "convert_document"
   | "read_doc_format"
   | "generate_image"
   | "edit_image"
@@ -841,10 +977,25 @@ export type ToolId =
   | "recall"
   | "delegate"
   | "run_pack"
-  | "translate";
+  | "translate"
+  | "transcribe_audio";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
+}
+
+/**
+ * A paging cursor as `pageLines` wants it — a number, whatever the model sent.
+ *
+ * The cursor carries a fractional part now (`57.0001` continues inside line
+ * 57; see `pageLines`), and a model that stringifies its arguments would
+ * otherwise hand over `"57.0001"` and silently get line 1. Coercing here
+ * rather than widening the schema keeps the per-round cost at zero.
+ */
+function cursorArg(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 /**
@@ -854,6 +1005,26 @@ function parseArgs<T>(raw: string): T {
  * whichever profile happened to load first.
  */
 const CATEGORY_PLACEHOLDER = "{{categories}}";
+
+/**
+ * Who, on this run, can actually open one of the pictures `read_lore_entity`
+ * lists — the gallery listing's trailer names it, and naming the wrong one
+ * costs a round at best and a capability at worst.
+ *
+ * Both arms are checked against `allowedTools` rather than against the flags
+ * alone, and that is the fix rather than an extra safety belt: the listing used
+ * to say "call read_lore_image" whenever the model was multimodal, on presets
+ * that do not carry that tool (`WRITER_PRESET` does not) and on every run where
+ * a live vision subagent had just had it stripped. Same failure as the gutter
+ * note that names `rewrite_lore_lines` — an unknown-tool round — which is why
+ * it is answered the same way.
+ */
+function galleryViewer(ctx: ToolContext): GalleryViewer {
+  const has = (t: ToolId) => ctx.allowedTools?.includes(t) ?? false;
+  if (ctx.multimodal && has("read_lore_image")) return "here";
+  if (ctx.visionDelegate && has("delegate")) return "delegate";
+  return "none";
+}
 
 const REGISTRY: Record<ToolId, RegisteredTool> = {
   list_lore_entities: {
@@ -880,7 +1051,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_lore_entity",
         description:
-          "Read a lore entity: its index.md and supplementary .md files, with per-file line numbers. A very large entry comes back as index.md plus a table of its other files — pass 'file' to read one of those (paged; 'start_line' continues). The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
+          "Read a lore entity: its index.md and supplementary .md files, with per-file line numbers. A very large entry comes back as index.md plus a table of its other files — pass 'file' to read one of those (paged; 'start_line' continues). The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. The listing says whether anything on this run can open one, and how. Call list_lore_entities first to get the exact entity names.",
         parameters: {
           type: "object",
           properties: {
@@ -909,7 +1080,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const entity = args.entity ?? args.name;
       if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
       return readLoreEntity(
-        call.id, entity, ctx.loreIndex, ctx.multimodal, args.file, args.start_line,
+        call.id, entity, ctx.loreIndex, galleryViewer(ctx), args.file, cursorArg(args.start_line),
         ctx.allowedTools?.includes("rewrite_lore_lines") ?? false,
       );
     },
@@ -1032,7 +1203,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: async (call, ctx) => {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-      return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line);
+      return readWritingFile(call.id, args.path, ctx.projectPath, cursorArg(args.start_line), ctx.allowedTools);
     },
   },
 
@@ -1065,6 +1236,37 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_slide?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
       return readSlidesFile(call.id, args.path, ctx.projectPath, args.start_slide);
+    },
+  },
+
+  read_document: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_document",
+        description:
+          "Read a Word (.docx), Excel (.xlsx) or PDF file in the project as text — read_file cannot open these. It is converted to markdown (headings, tables, one `## sheet` per worksheet, `<!-- page N -->` markers in a PDF) and paged like read_file: about 4000 characters per call, with the start_line to pass next. The conversion is cached outside the workspace; nothing is written to the project and the original is untouched. Pictures inside it are extracted and named in the result, for read_image. For a .pptx use read_slides.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path, built from a list_files folder line + \"/\" + filename",
+            },
+            start_line: {
+              type: "number",
+              description: "1-based line to start at — the start_line the previous call handed back. Omit for the top.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
+      if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
+      return readDocumentFile(call.id, args.path, ctx.projectPath, cursorArg(args.start_line));
     },
   },
 
@@ -1338,7 +1540,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Entity category — must be one that already exists (create_lore_category, plan-gated, adds one only when none fits).",
+                "Entity category — must be one that already exists (manage_category, plan-gated, adds one only when none fits).",
             },
             summary: { type: "string", description: "One-line summary shown in listings and used for activation" },
             aliases: {
@@ -1806,25 +2008,31 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => fileLoreEntriesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
-  create_lore_category: {
+  manage_category: {
     access: "write-auto",
     group: "lore_organize",
     definition: {
       type: "function",
       function: {
-        name: "create_lore_category",
+        name: "manage_category",
         description:
-          "Create a new knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同), which is also its folder on disk. Reach for it only when existing categories genuinely cannot hold a kind of entry; to group by project use a collection instead. Requires an approved plan step with target 'category'. There is deliberately no rename or delete counterpart: those would relocate every member entry's folder.",
+          "Create, rename or delete a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. Requires an approved plan step with target 'category'.",
         parameters: {
           type: "object",
           properties: {
-            label: { type: "string", description: "What the author will see this category called; the folder id is derived from it" },
+            op: { type: "string", enum: ["create", "rename", "delete"], description: "What to do" },
+            category: {
+              type: "string",
+              description:
+                "The category to act on — its id or its author-facing label. For 'create', the label you are giving it (the folder id is derived from it).",
+            },
+            new_label: { type: "string", description: "rename only: the new author-facing label" },
           },
-          required: ["label"],
+          required: ["op", "category"],
         },
       },
     },
-    execute: (call, ctx) => createLoreCategoryTool(call.id, parseArgs(call.arguments), ctx),
+    execute: (call, ctx) => manageCategoryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delete_lore_image: {
@@ -1835,7 +2043,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "delete_lore_image",
         description:
-          "Remove ONE picture from an entity's gallery. The image file is moved into .ai-writer/backups/ rather than erased, and its images.md entry is dropped, so the author can restore both. The avatar cannot be removed this way — set_lore_avatar replaces it.",
+          "Remove ONE picture from an entity's gallery, or its avatar. The file is moved into .ai-writer/backups/ rather than erased — for a gallery picture the images.md entry is dropped too — so the author can restore it. Pass file: \"avatar\" to take the portrait off an entry entirely (its card falls back to the initial, and its gallery is untouched); set_lore_avatar only ever REPLACES one, so this is the only way back to no avatar at all.",
         parameters: {
           type: "object",
           properties: {
@@ -1845,7 +2053,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             file: {
               type: "string",
-              description: "The image filename exactly as listed in read_lore_entity's gallery block",
+              description:
+                "The image filename exactly as listed in read_lore_entity's gallery block, or the word \"avatar\" to remove the entity's portrait.",
             },
             reason: {
               type: "string",
@@ -1867,7 +2076,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "set_lore_avatar",
         description:
-          "Set an entity's avatar (its card portrait) from a picture that already exists — one of its own gallery filenames, or the path of an image in the project. The source is copied, not moved, and the previous avatar goes into .ai-writer/backups/ first. To draw a brand-new portrait, generate_image into the gallery first, then promote it with this.",
+          "Set an entity's avatar (its card portrait) from a picture that already exists — one of its own gallery filenames, or the path of an image in the project. The source is copied, not moved, and the previous avatar goes into .ai-writer/backups/ first. To draw a brand-new portrait, generate_image into the gallery first, then promote it with this. This tool only ever replaces a portrait; taking one off is delete_lore_image(file: \"avatar\").",
         parameters: {
           type: "object",
           properties: {
@@ -1946,7 +2155,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
               description:
-                "Category to move the entity into — must exist (create_lore_category adds one only when none fits). Omit to keep the current one.",
+                "Category to move the entity into — must exist (manage_category adds one only when none fits). Omit to keep the current one.",
             },
             keep_old_name_as_alias: {
               type: "boolean",
@@ -2092,6 +2301,85 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: splitFacetCall,
+  },
+
+  // ── 一致性检查 collectors (lib/consistency/reviewTools) ──
+  // Same shape as the split collectors: "read" access, nothing on disk, the
+  // panel reads the sink live. projectFree for the same reason — the sink is
+  // in memory, and the tests run the handlers with no project at all.
+  report_issue: {
+    access: "read",
+    projectFree: true,
+    definition: {
+      type: "function",
+      function: {
+        name: "report_issue",
+        description:
+          "Record ONE inconsistency between the text you were given and the knowledge base (or the earlier text). Call it once per finding, as soon as you have verified it — never batch several into one call, and never list findings in prose instead. 'quote' must be copied VERBATIM from the segment and occur exactly once in it; the call is refused otherwise, so resend with a shorter or longer span. Categories in this project: {{categories}}; use 'timeline' for ordering/continuity.",
+        parameters: {
+          type: "object",
+          properties: {
+            severity: {
+              type: "string",
+              enum: ["conflict", "warning"],
+              description:
+                "conflict = the text contradicts established material; warning = it may be deliberate but is worth a look.",
+            },
+            category: {
+              type: "string",
+              description: "Which kind of material this is about — a category id from the list above, or 'timeline'.",
+            },
+            title: { type: "string", description: "Short label, ≤ 12 characters where possible, e.g. \"林辰惯用手\"." },
+            quote: {
+              type: "string",
+              description:
+                "The exact span from the segment, copied character-for-character including punctuation. One clause; must occur exactly once in the segment.",
+            },
+            reference: {
+              type: "string",
+              description: "What the knowledge base or the earlier text establishes instead, and where that comes from (entry · facet, or chapter).",
+            },
+            suggestion: {
+              type: "string",
+              description:
+                "A drop-in replacement for 'quote' that resolves the conflict — same length and register. Omit when no single local edit fixes it.",
+            },
+            entity: {
+              type: "string",
+              description: "Name of the knowledge-base entry involved, exactly as the material gives it. Omit for a pure ordering/continuity finding.",
+            },
+          },
+          required: ["severity", "title", "quote", "reference"],
+        },
+      },
+    },
+    execute: reportIssueCall,
+  },
+
+  report_pass: {
+    access: "read",
+    projectFree: true,
+    definition: {
+      type: "function",
+      function: {
+        name: "report_pass",
+        description:
+          "Record ONE fact you checked against the knowledge base and found consistent — e.g. a character's faction, a place name's spelling, a number that matches. This is how the author sees what the check actually covered: a check that only ever speaks up cannot be told apart from one that did not look. Call it once per verified fact.",
+        parameters: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "Short label for the fact, e.g. \"林辰阵营\"." },
+            entity: { type: "string", description: "The knowledge-base entry it concerns, when there is one." },
+            quote: {
+              type: "string",
+              description: "Optional: the span in the segment where you checked it, verbatim — gives the pass a line number.",
+            },
+          },
+          required: ["label"],
+        },
+      },
+    },
+    execute: reportPassCall,
   },
 
   propose_edit: {
@@ -2449,7 +2737,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "export_pptx",
         description:
-          "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the author approves the card. Write the deck as HTML first with create_file, then call this — the conversion is deterministic code, not a model: it lays the page out in a browser and writes every box it measures as a PowerPoint shape, so text stays real editable text. Rules for an .html that converts well: ONE `<section class=\"slide\">` per slide, every slide the same fixed pixel size (1280x720 for 16:9); lay out however you like inside it (absolute, flex, grid all work — only the final measured layout matters); use SYSTEM fonts (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia) because a web font cannot travel into a .pptx and PowerPoint will substitute it and shift the layout; keep text in real text elements rather than drawing it inside an SVG. What degrades: inline SVG becomes a picture (fine for diagrams), a gradient background becomes its average solid colour, and CSS filters, blend modes, shadows on text and animation are dropped. Put `data-pptx-skip` on anything decorative that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
+          "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the author approves the card. Write the deck as HTML with create_file first; the conversion is deterministic code, not a model — it lays the page out in a browser and writes every measured box as a PowerPoint shape, so text stays real editable text. Five rules for a page that converts well: (1) ONE `<section class=\"slide\">` per slide, all the same fixed pixel size (1280x720 for 16:9); inside, any layout works — only the measured result matters. (2) SYSTEM fonts only (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia): a web font cannot enter a .pptx, PowerPoint substitutes one and the text reflows. (3) Draw with real elements, never with ::before/::after — a pseudo-element has no box to measure and vanishes. (4) No entrance animations: an element starting at opacity 0 is exported as hidden. (5) Words in HTML, not inside an SVG. Run inspect_html first — it names every construct that will not carry across, with its line. Put `data-pptx-skip` on decoration that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
         parameters: {
           type: "object",
           properties: {
@@ -2554,6 +2842,64 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => exportXlsxTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  convert_document: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "convert_document",
+        description:
+          "Turn a Word (.docx), Excel (.xlsx), PDF or PowerPoint (.pptx) file in the project into a markdown document beside it, as a NEW file. Only for when the author wants an editable copy in the project — to read one, use read_document, which writes nothing. NOTHING is written until the author approves the card. The original is kept untouched, a name collision numbers the new file, and pictures inside it land in assets/ next to the document.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the file to convert" },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => convertDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  transcribe_audio: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "transcribe_audio",
+        description:
+          "Transcribe an audio or video file in the project (mp3, wav, m4a, flac, ogg, mp4, mkv, mov…) into a timestamped markdown transcript written as a NEW .md file beside it. This is the ONLY way to read a recording — read_file cannot open audio. It uploads the file to the transcription service and is billed per second of audio, so the author reviews a card FIRST and nothing runs until they approve; after approval the transcript lands on disk and you read it with read_file. Do not call it for a file that already has a transcript beside it.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the audio or video file" },
+            diarization: {
+              type: "boolean",
+              description: "Label speakers (说话人 1 / 2 …). Only useful for a conversation; omit to use the author's default",
+            },
+            speaker_count: { type: "integer", description: "Expected number of speakers (2–100), only with diarization" },
+            language_hints: {
+              type: "array",
+              items: { type: "string" },
+              description: "Language codes the audio is in, e.g. [\"zh\"] or [\"zh\", \"en\"]; omit to auto-detect",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => transcribeAudioTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   read_doc_format: {
@@ -3244,7 +3590,10 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             references: {
               type: "array",
               items: { type: "string" },
-              description: "Paths the subagent should work on (documents, images, or PDF files).",
+              description:
+                "Paths the subagent should work on (documents, images, or PDF files). " +
+                "For vision and pdf these are the payload: each image / .pdf path is read here and attached to the subagent's first message, " +
+                "so pass the full path from list_files (or the path a document's link resolves to) — a bare filename that matches no file fails the call.",
             },
           },
           required: ["kind", "task"],
@@ -3268,8 +3617,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         name: "run_pack",
         description:
           "Dispatch one self-contained WRITE job to a specialist agent carrying a focused toolset for it. " +
-          "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html); " +
-          "'lore_edit' — create, update or reorganize knowledge-base entries; " +
+          "Packs: 'file_write' — create, edit or restructure project documents (md/txt/html), or convert an Office/PDF file into one; " +
+          "'lore_edit' — create, update or reorganize knowledge-base entries, including their galleries (file an existing picture, retune or remove one); " +
           "'export' — convert documents to pptx/docx/xlsx. " +
           "The specialist cannot see this conversation: state the WHOLE job in 'task' — source paths, " +
           "target file or entry names, and the exact changes wanted — and list material files or note " +

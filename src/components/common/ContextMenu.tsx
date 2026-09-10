@@ -7,7 +7,11 @@ export type ContextMenuEntry =
       kind: "item";
       icon?: ReactNode;
       label: string;
+      /** 标签下的一行 mono 小字——禁用项写「为什么禁用、去哪儿解」（设计稿 03f 屏 1b ④）。 */
+      hint?: string;
       shortcut?: string;
+      /** 标签右侧的 mono 小标（`Beta`）——这项在实验室里的记号（设计稿 02f 屏 1c）。 */
+      badge?: string;
       danger?: boolean;
       disabled?: boolean;
       action: () => void;
@@ -36,13 +40,17 @@ export function ContextMenu({
   }, [onClose]);
 
   // Clamp into the viewport using an estimated menu size (items are fixed-height).
-  const height = items.reduce((h, it) => h + (it.kind === "divider" ? 9 : 30), 10);
+  const height = items.reduce(
+    (h, it) => h + (it.kind === "divider" ? 9 : it.hint ? 44 : 30),
+    10,
+  );
   const left = Math.min(x, window.innerWidth - 204);
   const top = Math.min(y, window.innerHeight - height - 8);
 
   return createPortal(
     <div
       className={styles.overlay}
+      data-context-menu
       onMouseDown={onClose}
       onContextMenu={(e) => { e.preventDefault(); onClose(); }}
     >
@@ -57,12 +65,16 @@ export function ContextMenu({
           ) : (
             <button
               key={i}
-              className={`${styles.item} ${it.danger ? styles.itemDanger : ""}`}
+              className={`${styles.item} ${it.danger ? styles.itemDanger : ""} ${it.hint ? styles.itemWithHint : ""}`}
               disabled={it.disabled}
               onClick={() => { onClose(); it.action(); }}
             >
               {it.icon}
-              <span className={styles.label}>{it.label}</span>
+              <span className={styles.label}>
+                {it.label}
+                {it.badge && <span className={styles.badge}>{it.badge}</span>}
+                {it.hint && <span className={styles.hint}>{it.hint}</span>}
+              </span>
               {it.shortcut && <span className={styles.shortcut}>{it.shortcut}</span>}
             </button>
           ),

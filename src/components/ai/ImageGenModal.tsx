@@ -162,7 +162,7 @@ export function ImageGenModal({ target, onClose }: Props) {
   const storeError = useImageStore((s) => s.error);
   const currentTurn = getCurrentTurn();
   const generating = running;
-  // 出图计时 (设计稿 18: 生成中 · 9s) — 独立于提示词起草。
+  // 出图计时 (设计稿 03a 屏 18: 生成中 · 9s) — 独立于提示词起草。
   const genElapsed = useRunClock(generating);
   /** The pending edit instruction — the conversational half of the modal. */
   const [editDraft, setEditDraft] = useState("");
@@ -485,7 +485,7 @@ export function ImageGenModal({ target, onClose }: Props) {
               <div className={styles.headerSub}>{target.subject}</div>
             </div>
           </div>
-          {/* 提示词模型留在 header（设计稿 18 未画它，但哪一个在起草提示词
+          {/* 提示词模型留在 header（设计稿 03a 屏 18 未画它，但哪一个在起草提示词
               必须可见）；出图模型挪去 footer 的动作条 (设计稿 v4)。 */}
           <div className={gen.modelPickers}>
             <label className={gen.modelPicker}>
@@ -631,7 +631,7 @@ export function ImageGenModal({ target, onClose }: Props) {
                 )}
               </div>
 
-              {/* 图库描述 (设计稿 18): 保存时写入的那一行文字，供纯文本模型阅读 */}
+              {/* 图库描述 (设计稿 03a 屏 18): 保存时写入的那一行文字，供纯文本模型阅读 */}
               <div className={styles.section}>
                 <label className={styles.label}>
                   {t("lore.imageGen.noteLabel", { defaultValue: "图库描述" })}
@@ -682,7 +682,7 @@ export function ImageGenModal({ target, onClose }: Props) {
 
               {(error || storeError) && <div className={styles.error}>{error ?? storeError}</div>}
 
-              {/* 出图中的占位卡 (设计稿 18): 斜纹底 + 转圈 + 生成中 · Ns */}
+              {/* 出图中的占位卡 (设计稿 03a 屏 18): 斜纹底 + 转圈 + 生成中 · Ns */}
               {generating && (
                 <div className={gen.genPlaceholder}>
                   <RunStatusLine

@@ -133,11 +133,18 @@ describe("initSchema", () => {
     h.load.mockImplementationOnce(async (path: string) => ({
       path,
       execute: vi.fn(async (_sql: string) => {}),
-      select: vi.fn(async (_sql: string) => [{ name: "id" }, { name: "pinned" }]),
+      select: vi.fn(async (_sql: string) => [{ name: "id" }, { name: "pinned" }, { name: "title" }]),
     }));
 
     const sql = (await statements("/proj-current")).join("\n");
     expect(sql).not.toMatch(/ALTER TABLE chat_sessions/);
+  });
+
+  it("adds chat_sessions.title to a database that predates it", async () => {
+    // Same discipline as `pinned`, same stakes: without the column the cap
+    // would prune a conversation the author had named.
+    const sql = (await statements("/proj-b")).join("\n");
+    expect(sql).toMatch(/ALTER TABLE chat_sessions ADD COLUMN title\b/);
   });
 
   it("drops them from projects that already have them", async () => {

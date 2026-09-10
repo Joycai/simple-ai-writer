@@ -1,10 +1,10 @@
-/* 设计稿 08 屏 1f。二层抽屉，760px。 */
+/* 设计稿 04a 屏 1f。二层抽屉，760px。 */
 
 .scrim {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--color-bg-overlay);
 }
 
 .drawer {

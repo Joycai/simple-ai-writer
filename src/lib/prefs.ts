@@ -30,6 +30,11 @@ import { isSamePath } from "./paths";
 
 export const PREF_KEYS = [
   "app:theme",
+  // Which appearance theme each polarity uses — a theme file's id, or the
+  // built-in (`paper` / `night`). The mode above resolves the polarity, the
+  // polarity picks one of these: 「跟随系统」 is a pair (lib/theme/install).
+  "app:themeLight",
+  "app:themeDark",
   "app:language",
   "app:fontScheme",
   "app:markdownTheme",
@@ -42,6 +47,10 @@ export const PREF_KEYS = [
   "app:pinHintDone",
   "app:loreBudgetTokens",
   "app:contextUtilization",
+  // 对话归纳：自动归纳开关 + 两条阈值滑块（lib/agent/compact → compactTriggerFor）。
+  "app:autoCompact",
+  "app:compactTriggerTokens",
+  "app:compactTriggerRatio",
   "app:aiDrawerMode",
   // 条目详情打开成哪种看法：阅读（书页）/ 管理（三栏台）。缺席＝阅读。
   // 常量与解析在 lib/lore/readView（LORE_DETAIL_MODE_PREF）。
@@ -63,16 +72,25 @@ export const PREF_KEYS = [
   "app:comfyuiBeta",
   // 助手工具包模式（orchestrator 档）的 Beta 开关 — lib/agent/packFlag.
   "app:toolPackOrchestratorBeta",
+  // 状态记忆（SKILL.state 模式）的 Beta 开关 — lib/agent/stateFlag.
+  "app:skillStateBeta",
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",
+  // The set of engine built-ins the author was already told this webview
+  // lacks (lib/webviewCaps). Machine-local: the engine is the machine's.
+  "app:webviewCapsNoticed",
   "app:notifyEnabled",
   "app:notifyApproval",
   "app:notifyDone",
+  "app:notifyError",
   // Knowledge-base sync: the server's address. An installation property, not a
   // project one — several projects share one server. Its token lives in the OS
   // keyring instead (see lib/sync/config).
   "app:kbServerUrl",
+  // When this machine last reached that server — the 「上次连通」 clause on the
+  // anchor card's offline strip (设计稿 03d 屏 1g). Installation-level like the URL.
+  "app:kbLastConnectedAt",
   "manuscript:onboarding-done",
   "ai:activeModelId",
   "ai:activePromptId",
@@ -94,6 +112,12 @@ export const PREF_KEYS = [
   "ai:subagent:translate:enabled",
   "ai:subagent:writer:modelId",
   "ai:subagent:writer:enabled",
+  "ai:subagent:asr:modelId",
+  "ai:subagent:asr:enabled",
+  // 音频转写（Beta）— lib/asr/flag：开关，以及两个产物偏好（时间戳缺席＝开，分离缺席＝关）。
+  "app:asrBeta",
+  "ai:asr:timestamps",
+  "ai:asr:diarization",
   // 写手的一次性说明看过没有。设置卡上的「再看一次说明」清掉它。
   "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
@@ -129,6 +153,7 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "app:pinnedProjects",
   "app:projectOpenedAt",
   "app:pinHintDone",
+  "app:webviewCapsNoticed",
   "manuscript:onboarding-done",
 ];
 

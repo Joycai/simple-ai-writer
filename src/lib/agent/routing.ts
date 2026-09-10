@@ -20,6 +20,7 @@ import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
+import { isAsrEnabled } from "../asr/flag";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
@@ -34,6 +35,18 @@ export interface RoutedTools {
    * the main model writing.
    */
   finishPolicy: FinishPolicy;
+  /**
+   * Whether a usable vision subagent took reading pictures over from the main
+   * model — i.e. exactly the condition that stripped `read_image` /
+   * `read_lore_image` above.
+   *
+   * Returned rather than re-derived at each surface for the reason
+   * `resolveVisionConn` states: there should be **one** answer to "who reads
+   * images here", and it should be computed where the strip decision is. Pass
+   * it into `ToolContext.visionDelegate`; a read tool whose result names a
+   * viewer has no other way to know which one is real.
+   */
+  visionDelegate: boolean;
 }
 
 /**
@@ -177,6 +190,11 @@ function route(
   if (isTranslateEnabled() && live("translate") && !tools.includes("translate")) {
     tools.push("translate");
   }
+  // Same shape as translate: a Beta flag and a bound `asr` model, both
+  // unknowable at preset time; off means absent, never a tool that refuses.
+  if (isAsrEnabled() && live("asr") && !tools.includes("transcribe_audio")) {
+    tools.push("transcribe_audio");
+  }
 
   // Appended for the surfaces that can render the question card (chat, the
   // task panel outside a batch run) — same shape as `translate` above, and the
@@ -218,5 +236,6 @@ function route(
     tools,
     serverTools: serverToolsPolicy,
     finishPolicy,
+    visionDelegate: live("vision"),
   };
 }

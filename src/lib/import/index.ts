@@ -39,6 +39,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { fileExists, makeDir, writeBinaryFile, writeFile } from "../fs/fileio";
 import { IMAGE_EXTENSIONS, TEXT_EXTENSIONS } from "../fs/images";
+import { ASR_AUDIO_EXTENSIONS, ASR_VIDEO_EXTENSIONS } from "../asr/formats";
 import { assetRelDirFor } from "../image/assets";
 import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
@@ -64,7 +65,18 @@ export const CONVERT_EXTENSIONS = ["docx", "xlsx", "pdf", "pptx"] as const;
  * reason to convert.
  */
 export const COPY_TEXT_EXTENSIONS = TEXT_EXTENSIONS;
-export const COPY_BINARY_EXTENSIONS = IMAGE_EXTENSIONS;
+/**
+ * Pictures, plus recordings and video: the audio-transcription tools
+ * (`lib/asr`) read those off disk, so a file the author wants transcribed has
+ * to be *in* the project first — and copying is the only sensible disposition
+ * for a media file. Not gated on the ASR Beta: a project may hold its source
+ * recordings whether or not it transcribes them.
+ */
+export const COPY_BINARY_EXTENSIONS: readonly string[] = [
+  ...IMAGE_EXTENSIONS,
+  ...ASR_AUDIO_EXTENSIONS,
+  ...ASR_VIDEO_EXTENSIONS,
+];
 
 /** Everything the picker offers, convert and copy alike. */
 export const IMPORT_EXTENSIONS: readonly string[] = [

@@ -135,4 +135,66 @@ describe("formatDeckReport", () => {
     expect(out).toContain("Slide(s) 1 measured as EMPTY");
     expect(out).toContain("wrong class name");
   });
+
+  // What turns a finding into an actionable one. `label()` gives a
+  // 24-character, whitespace-normalized quotation — a search hint, not
+  // something propose_edit's `find` can take — so before this every finding
+  // cost a round of read_slides to locate. The splitter has already produced
+  // these ranges by the time anything is measured.
+  describe("line ranges", () => {
+    const at = (...pairs: [number, number][]) =>
+      pairs.map(([startLine, endLine]) => ({ startLine, endLine }));
+
+    it("names where the offending slide sits in the source", () => {
+      const deck = deckOf([
+        slide([text("一")]),
+        slide([text("挤出去的标题", { y: 700, h: 60 })]),
+        slide([text("三")]),
+      ]);
+
+      const out = formatDeckReport(
+        inspectDeck(deck),
+        "/proj/deck.html",
+        "section.slide",
+        at([4, 20], [21, 42], [43, 60]),
+      );
+
+      expect(out).toContain("Slide 2 (lines 21-42, 1 boxes)");
+      expect(out).toContain("40px below the bottom edge");
+    });
+
+    it("names them for empty slides too", () => {
+      const out = formatDeckReport(
+        inspectDeck(deckOf([slide([]), slide([text("二")])])),
+        "/p/d.html",
+        ".slide",
+        at([4, 6], [7, 9]),
+      );
+
+      expect(out).toContain("Slide(s) 1 (lines 4-6) measured as EMPTY");
+    });
+
+    // The two lists come from different halves of the same page — the
+    // browser's querySelectorAll and the text splitter. They agree by
+    // construction, but a deck whose slides a script generates exists only in
+    // the rendered DOM. Lining them up by index anyway would point a finding
+    // at another slide's lines, and the model would act on it.
+    it("drops every range when the two counts disagree", () => {
+      const deck = deckOf([slide([text("一")]), slide([text("挤", { y: 700, h: 60 })])]);
+
+      const out = formatDeckReport(inspectDeck(deck), "/p/d.html", "section", at([4, 9]));
+
+      expect(out).toContain("Slide 2 (1 boxes)");
+      expect(out).not.toContain("lines ");
+    });
+
+    it("reads exactly as before when the caller has no ranges", () => {
+      const deck = deckOf([slide([]), slide([text("挤", { y: 700, h: 60 })])]);
+      const report = inspectDeck(deck);
+
+      expect(formatDeckReport(report, "/p/d.html", "section", undefined)).toBe(
+        formatDeckReport(report, "/p/d.html", "section"),
+      );
+    });
+  });
 });

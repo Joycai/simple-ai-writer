@@ -226,6 +226,25 @@ const AVATAR_EXTS = ["png", "jpg", "jpeg", "webp"] as const;
  * accumulate stale files when the user switches formats) then writes the new
  * one. The scanner picks up the new path on the next refresh.
  */
+/**
+ * 摘掉条目的头像，返回真的删掉了没有。
+ *
+ * 存在的理由不是对称好看：在它之前，头像只能**换**不能**没有**——作者设错一次
+ * 就再也回不到「这条没有头像」的状态，而卡片会一直挂着那张错的图。四个后缀全扫
+ * 一遍，和 `setEntityAvatar` 同一个理由：手工建出来的文件夹里可能同时躺着
+ * avatar.png 和 avatar.jpg，只删扫描器挑中的那一张，下一次扫描头像又回来了。
+ */
+export async function clearEntityAvatar(dirPath: string): Promise<boolean> {
+  let removed = false;
+  for (const e of AVATAR_EXTS) {
+    const path = `${dirPath}/avatar.${e}`;
+    if (await fileExists(path)) {
+      try { await removeFile(path); removed = true; } catch { /* best-effort */ }
+    }
+  }
+  return removed;
+}
+
 export async function setEntityAvatar(
   dirPath: string,
   bytes: Uint8Array,

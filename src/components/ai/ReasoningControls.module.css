@@ -60,6 +60,72 @@
 }
 .budgetInput:focus-visible { border-color: var(--color-sienna); outline: none; }
 
+/* ── Footer variant: one word in the composer's footer (设计稿 02g 屏 1c) ──── */
+
+.footerRoot { position: relative; display: inline-flex; }
+
+.footerTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.footerTrigger:hover { color: var(--color-accent-text); }
+.footerTrigger:focus-visible { outline: 1px solid var(--color-sienna); outline-offset: 2px; }
+
+/* The value is the brighter half: the label is a category, the value is the
+   setting, and 屏 1f asks for the setting to be readable without opening. */
+.footerValue { color: var(--color-text-soft); }
+.footerCaret { color: var(--color-text-kbd); flex-shrink: 0; }
+
+.footerPopover {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  right: 0;
+  z-index: 20;
+  min-width: 196px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  box-shadow: var(--shadow-lg);
+  animation: riseIn 140ms var(--ease-out);
+  transform-origin: bottom right;
+}
+
+.footerHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-panel);
+}
+.footerHeadLabel {
+  font: 400 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-text-label);
+  text-transform: uppercase;
+}
+.footerHeadFill { flex: 1; }
+/* 「写进模型行」 — the one thing an author must know before touching this dial:
+   it is not scoped to the conversation the composer belongs to. */
+.footerHeadMeta { font: 400 10px/1 var(--font-mono); color: var(--color-text-kbd); }
+
+.footerBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 10px 12px 11px;
+}
+
+.footerField { display: flex; align-items: center; gap: 7px; }
+.footerFieldNote { font: 400 10px/1 var(--font-mono); color: var(--color-text-kbd); }
+
 /* ── Compact variant: a dial that fits in a toolbar ────────────────────────── */
 
 .compactGroup {

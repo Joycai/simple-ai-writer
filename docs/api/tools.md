@@ -231,3 +231,15 @@ citation 只对签发方有意义），但不依赖对方懂不懂服务端工�
 工具与消息在同一个 item 流里并列，没有"assistant 消息挂一个旁路字段"这一层。
 `tools` 里还可以混入服务端内置工具（`file_search`、`web_search`、`computer` 等），
 它们的调用/结果也是 item 类型。
+
+2026-09 对 GPT-5.4 / 5.5 / 5.6 的实测（[`responses.md`](responses.md) §2.3、§5）：
+
+- **`strict` 省略＝自动 strict**：响应里 `tools[].strict` 回显 `true`，含 `["string","null"]`
+  的 schema 也过；要非 strict 语义必须显式 `strict: false`。与 ① 族"默认非 strict"相反。
+- `tool_choice` 收 `none/auto/required`、`{type:"function",name}`，另有 `{type:"allowed_tools",
+  mode, tools}`。**思考开着时强制档合法**，没有 ① 族 DeepSeek 式的"思考中禁止强制"。
+- 流式：`response.function_call_arguments.delta` 分片 + `…done` 给完整串，之后
+  `response.output_item.done` 再给整个 `function_call` 条目。
+- 回传：下一轮 `input` = 历史 + 上一轮 `output[]` 原样 + `function_call_output`。
+  去掉 `reasoning` 条目、去掉其 `encrypted_content`、或只回裸 `{type,call_id,name,arguments}`
+  都 200——**配对硬要求只在 `call_id` 上**，推理条目的缺失是质量问题不是报错。

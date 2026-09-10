@@ -1,4 +1,4 @@
-/* 阅读模式（设计稿 16）：格纸墙上摊开的一张纸。
+/* 阅读模式（设计稿 03c）：格纸墙上摊开的一张纸。
    纸 820 × 内容量高 · 正文测量 660 · 整墙滚动，纸不自滚。
    容器查询三档：≥1300 出页边目录 · ≤900 收窄 · ≥1400 图库 3 列。 */
 
@@ -101,7 +101,7 @@
 .cover:hover { border-color: var(--color-border-strong); }
 .cover:active { transform: scale(0.99); }
 .heroRight { flex: 1; min-width: 0; padding-top: 2px; }
-.name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text); }
+.name { margin: 0; font: 300 40px/1.1 var(--font-serif); color: var(--color-text-primary); }
 .hitNote {
   margin-top: 12px;
   font: 400 10px/1 var(--font-mono);
@@ -116,7 +116,7 @@
   background: var(--color-tag-bg);
   border-bottom: 2px solid var(--color-sienna);
   font: 400 14px/1.3 var(--font-serif);
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 
 /* ── 元信息行 / 降级注 ──────────────────────────────────────────────── */
@@ -204,7 +204,7 @@
 /* ── 概要 = 导语 ────────────────────────────────────────────────────── */
 
 .lede { margin-top: 26px; padding-left: 20px; border-left: 3px solid var(--color-sienna); }
-.ledeText { font: italic 300 20px/1.75 var(--font-serif); color: var(--color-text); }
+.ledeText { font: italic 300 20px/1.75 var(--font-serif); color: var(--color-text-primary); }
 .ledeNote { margin-top: 8px; font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
 
 /* ── 节头基线与注入记号 ─────────────────────────────────────────────── */
@@ -212,7 +212,7 @@
 .topSect { margin-top: 34px; }
 .faceHead { margin-top: 44px; display: flex; align-items: baseline; gap: 12px; }
 .topSect .faceHead { margin-top: 0; }
-.faceName { font: 400 22px/1.3 var(--font-serif); color: var(--color-text); }
+.faceName { font: 400 22px/1.3 var(--font-serif); color: var(--color-text-primary); }
 .faceTag {
   font: 400 10px/1 var(--font-mono);
   letter-spacing: 0.1em;
@@ -229,7 +229,7 @@
 .facetSect { margin-top: 30px; }
 .faceHead + .facetSect, .faceHead + .groupWrap { margin-top: 26px; }
 .facetTitleRow { margin-top: 12px; display: flex; align-items: baseline; gap: 10px; }
-.facetTitle { font: 500 19px/1.4 var(--font-serif); color: var(--color-text); }
+.facetTitle { font: 500 19px/1.4 var(--font-serif); color: var(--color-text-primary); }
 .prioActive { font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
 .prioPlain { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
 .metaLine { margin-top: 6px; font: 400 11px/1.6 var(--font-mono); color: var(--color-text-muted); }
@@ -290,7 +290,7 @@
 /* 按压挂在图片上而不是 <figure> 上：<figure> 还包着图注，整块缩放会让文字跟着抖。
    幅度同 .cover 取 0.99——整格图面积大。 */
 .figure:active .figureImg { transform: scale(0.99); }
-/* 缩略图未就绪/读不到时的斜纹占位（设计稿 18 的占位卡语汇） */
+/* 缩略图未就绪/读不到时的斜纹占位（设计稿 03a 屏 18 的占位卡语汇） */
 .figurePh {
   display: flex;
   align-items: center;
@@ -307,6 +307,41 @@
 }
 .figureCaption { margin-top: 8px; font: 400 13px/1.6 var(--font-serif); color: var(--color-text-secondary); }
 .figureCaptionMono { margin-top: 8px; font: 400 10px/1.6 var(--font-mono); color: var(--color-text-faint); }
+
+/* ── 词表（dict 条目，设计稿 03c 屏 1e）─────────────────────────────────
+   三栏 190 / 150 / flex · gap 16。原文列 mono，因为它是要被**照抄**的字串；
+   译文正体不加粗；备注 italic 最淡一档。译文列 150 按 4–6 汉字定，超长译名
+   换行、行高随之，不截断。词表整体仍是一节：节头 3px 赭石线 + mono 边注在
+   TSX 里——正文＝常驻，词表只是它的渲染方式，不是新的注入单位。
+   色值全是稿上那三枚：#B5A99A ＝ --color-text-faint · #ECE2CE ＝
+   --color-border-soft · #C9BFA8 ＝ --lore-neutral-line。 */
+
+.dictTable { margin-top: 14px; }
+.dictHeadRow,
+.dictRow {
+  display: grid;
+  grid-template-columns: 190px 150px minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: baseline;
+}
+.dictHeadRow {
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--lore-neutral-line);
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--color-text-faint);
+}
+.dictRow {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.dictColSrc, .dictColDst, .dictColNote { min-width: 0; overflow-wrap: anywhere; }
+.dictSrc { font: 400 13px/1.6 var(--font-mono); color: var(--color-text-primary); }
+.dictDst { font: 400 15px/1.6 var(--font-serif); color: var(--color-text-primary); }
+/* 备注为空则第三栏留白，不写占位——空 span 本来就不占字 */
+.dictNote { font: italic 300 12px/1.6 var(--font-serif); color: var(--color-text-faint); }
+/* 解析失败的行按原样 markdown 段落落在词表下方，不吞掉内容 */
+.dictRest { margin-top: 16px; }
 
 /* ── 落款与过渡行 ───────────────────────────────────────────────────── */
 
@@ -332,7 +367,7 @@
   border: none;
   background: none;
   font: 400 19px/1.3 var(--font-serif);
-  color: var(--color-text);
+  color: var(--color-text-primary);
   cursor: pointer;
   /* 过渡挂在基态、逐属性列出（同文件 .sect / .editMark 的写法），否则翻页
      入口的颜色是瞬切的。 */
@@ -396,7 +431,7 @@
 }
 /* 主项才是目录的主要跳转目标，悬停语汇与子项 .tocSub 同色同速。 */
 .tocItem:hover { color: var(--color-text-secondary); }
-.tocItemActive { color: var(--color-text); font-weight: 500; }
+.tocItemActive { color: var(--color-text-primary); font-weight: 500; }
 .tocTick { width: 8px; height: 1px; background: var(--lore-flip-border); flex-shrink: 0; }
 .tocTickActive { width: 14px; height: 3px; background: var(--color-sienna); flex-shrink: 0; }
 .tocSub {
@@ -453,4 +488,11 @@
   .nextRow { padding: 16px 28px; }
   /* -38 的页边记号在贴满的纸上无处可挂 */
   .editMark { display: none; }
+  /* 词表三栏压成两栏：备注移到译文下一行、缩进对齐译文列，仍 12px italic。
+     原文列不动——它是这张表的检索键。栏头的「备注」随之收掉。 */
+  .dictHeadRow,
+  .dictRow { grid-template-columns: 190px minmax(0, 1fr); }
+  .dictHeadRow .dictColNote { display: none; }
+  .dictRow .dictColNote { grid-column: 2; }
+  .dictRow .dictColNote:empty { display: none; }
 }

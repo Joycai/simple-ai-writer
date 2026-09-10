@@ -1,5 +1,5 @@
 /**
- * Entity-level AI task chooser (设计稿 03 · 实体 AI 中心) — the single
+ * Entity-level AI task chooser (设计稿 03a · 实体 AI 中心) — the single
  * "AI 编辑助手" entry on the entity hero. A 2×2 action grid; picking a cell
  * hands the choice back to LoreDetail, which opens the matching flow
  * (improve / meta improve / image gen / split). Deliberately dumb: no AI
@@ -21,11 +21,13 @@ interface Props {
   imageGenReady?: boolean;
   /** This entry is a 翻译词典 (LoreEntity.dict) — shows the 词典标准化 cell. */
   dictEntry?: boolean;
+  /** 词典条目正文今天能解析出几条 / 一共几行——第五格右侧那两个数（设计稿 03f 屏 1g）。 */
+  dictStats?: { parsed: number; lines: number };
   onPick: (task: EntityAiTask) => void;
   onClose: () => void;
 }
 
-export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry = false, onPick, onClose }: Props) {
+export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry = false, dictStats, onPick, onClose }: Props) {
   const { t } = useTranslation();
   const shellCloseRef = useRef<(() => void) | null>(null);
   const requestClose = () => (shellCloseRef.current ?? onClose)();
@@ -53,15 +55,6 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry 
       name: t("lore.aiHub.splitName", { defaultValue: "拆分整理" }),
       desc: t("lore.aiHub.splitDesc", { defaultValue: "把条目内容重新整理并拆分为特征" }),
     },
-    // 只有勾了「翻译词典」开关的条目才有这一格：别的条目没有"Sakura 词典格式"
-    // 这个概念，摆在那里只会让人点出一个空结果。
-    ...(dictEntry
-      ? [{
-          task: "dict" as const,
-          name: t("lore.aiHub.dictName"),
-          desc: t("lore.aiHub.dictDesc"),
-        }]
-      : []),
   ];
 
   return (
@@ -72,6 +65,7 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry 
           <span className={hub.headTitle}>
             {entityName} · {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
           </span>
+          {dictEntry && <span className={hub.tag}>{t("lore.aiHub.dictTag")}</span>}
           <span className={hub.spacer} />
           <span className={hub.headKbd}>Esc {t("common.close", { defaultValue: "关闭" })}</span>
           <button className={styles.closeBtn} onClick={requestClose}><X size={14} /></button>
@@ -90,6 +84,27 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry 
               <div className={hub.desc}>{c.desc}</div>
             </button>
           ))}
+          {/* 只有勾了「翻译词典」开关的条目才有这一格：别的条目没有"Sakura 词典格式"这个
+              概念，摆在那里只会让人点出一个空结果。它独占第三行整宽而不是做 2+2+1 的孤儿
+              格——它本来就是另一类动作：前四格生成内容，它只搬格式（设计稿 03f 屏 1g）。 */}
+          {dictEntry && (
+            <button className={`${hub.cell} ${hub.cellDict}`} onClick={() => onPick("dict")}>
+              <div className={hub.dictMain}>
+                <div className={hub.nameRow}>
+                  <span className={hub.name}>{t("lore.aiHub.dictName")}</span>
+                  <span className={hub.dictOnly}>{t("lore.aiHub.dictOnly")}</span>
+                </div>
+                <div className={hub.desc}>{t("lore.aiHub.dictDesc")}</div>
+              </div>
+              {dictStats && (
+                <span className={hub.dictStats}>
+                  {t("lore.aiHub.dictStats")}
+                  <br />
+                  {t("lore.aiHub.dictStatsLine", { parsed: dictStats.parsed, lines: dictStats.lines })}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </ModalShell>

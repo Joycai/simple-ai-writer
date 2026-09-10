@@ -11,7 +11,9 @@
 import { isChapterFile, naturalCompare } from "../context/outline";
 import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
-import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
+import { convertExtOf } from "../import";
+import { transcribeExtOf } from "../asr/formats";
+import { htmlPageIndex, readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
@@ -198,6 +200,28 @@ export function allEntityNames(loreIndex: LoreIndex): string {
 const ENTITY_MAX_CHARS = 10_000;
 
 /**
+ * Denominator of a cursor's fractional part: `57.0002` is line 57 from its
+ * third page. Four decimals addresses 40 MB of one line, which is far past
+ * anything the file reader hands back whole.
+ */
+const PART_SCALE = 10_000;
+
+/**
+ * The exact literal a caller passes back as `start_line`.
+ *
+ * Always produced here and copied back by the model, never composed by it —
+ * the same contract `start_line=21` has had all along.
+ */
+export function pageCursor(line: number, part: number): string {
+  return part === 0 ? String(line) : `${line}.${String(part).padStart(4, "0")}`;
+}
+
+/** How many pages one line occupies. */
+function partsOf(len: number): number {
+  return Math.max(1, Math.ceil(len / READ_MAX_CHARS));
+}
+
+/**
  * Page `raw` by whole lines from `from`, under `READ_MAX_CHARS` — THE paging
  * implementation, not a copy of one: `read_file` (readWritingFile) and the
  * lore paths both run this loop, so "read the rest with start_line=N" means
@@ -205,54 +229,136 @@ const ENTITY_MAX_CHARS = 10_000;
  * rule or the trailer wording cannot fork between tools. The first line is
  * always taken even when it alone exceeds the budget — otherwise a file
  * written as one long paragraph per line would return nothing at all.
+ *
+ * **A line longer than the budget is paged too**, by the fractional part of
+ * `from`: `57.0001` is line 57 continuing from its 4001st character. Before
+ * this, an over-long line was cut and the model was told only *that* it had
+ * been cut — no coordinate to continue from, and the whole-line continuation
+ * note was gated on there being a further line at all. So the tail of a long
+ * line was unreachable, and a file that is ONE long line (a minified page, a
+ * saved web page, an exported report) could not be read past its first 4000
+ * characters. The model would then `rewrite_lines` a line it had only half
+ * read, which is silent truncation of the rest.
+ *
+ * The cursor rides in `start_line` rather than in a new parameter because the
+ * schema is re-sent every round and the read tier has 28 tokens of headroom
+ * (`agentToolBudget.test.ts`); `start_line` is already `type: number` and
+ * every call site passes the model's value straight through, so one change
+ * here reaches all four readers and costs nothing per round. Full account,
+ * including the rejected `start_char` parameter:
+ * `docs/feature/agent/html-read-edit-plan.md` §6 / D5.
+ *
+ * The gutter is untouched (`numberLines`): a long line's tail carries no
+ * newline, so it occupies exactly one numbered row — its own — and whole
+ * lines packed after it number on from there. Today's *first* page of a long
+ * line is already such a fragment, so a continuation page that looked
+ * different would be the odd one out. "This is not the whole line" is said in
+ * the notes, which is the last thing read before anything is quoted back.
  */
-function pageLines(raw: string, from: number): {
+export function pageLines(raw: string, from: number): {
   body: string;
   from: number;
   to: number;
   total: number;
   /** start === 1 && to === total && nothing cut — callers skip their maps on it. */
   whole: boolean;
+  /** The literal for the next call, or null at the end of the file. */
+  next: string | null;
+  /** This page begins and/or ends inside a line rather than on its boundaries. */
+  partial: boolean;
   notes: string[];
 } | { error: string } {
   const lines = raw.split(/\r?\n/);
-  const start = Math.max(1, Math.floor(from));
+  const cursor = Number.isFinite(from) ? from : 1;
+  const start = Math.max(1, Math.floor(cursor));
   if (start > lines.length) {
     return { error: `start_line ${start} is past the end of the file, which has ${lines.length} line(s).` };
   }
-  let taken = 0;
-  let chars = 0;
-  for (let i = start - 1; i < lines.length; i++) {
-    const cost = lines[i].length + 1;
-    if (taken > 0 && chars + cost > READ_MAX_CHARS) break;
-    chars += cost;
-    taken++;
+
+  const first = lines[start - 1];
+  const part = cursor > start ? Math.round((cursor - start) * PART_SCALE) : 0;
+  const skip = part * READ_MAX_CHARS;
+  if (part > 0 && skip >= first.length) {
+    // An invented cursor is answered with the right one. Naming the literal
+    // rather than the rule is this file's house style for a refusal — the
+    // model's next call lands, instead of spending a round on a second guess.
+    const parts = partsOf(first.length);
+    const fix =
+      parts === 1
+        ? `Line ${start} fits in one page — pass start_line=${start}.`
+        : `Its last page is start_line=${pageCursor(start, parts - 1)}.`;
+    return {
+      error:
+        `start_line ${from} is past the end of line ${start}, which is ${first.length} character(s) long` +
+        `${parts === 1 ? "" : ` (${parts} pages)`}. ${fix}`,
+    };
   }
-  const to = start + taken - 1;
-  let body = lines.slice(start - 1, to).join("\n");
-  const cutMidLine = body.length > READ_MAX_CHARS;
-  if (cutMidLine) body = body.slice(0, READ_MAX_CHARS);
-  const whole = start === 1 && to === lines.length && !cutMidLine;
+
+  const remaining = first.length - skip;
+  const cutMidLine = remaining > READ_MAX_CHARS;
+
+  let body: string;
+  let to = start;
+  if (cutMidLine) {
+    body = first.slice(skip, skip + READ_MAX_CHARS);
+  } else {
+    // The rest of the starting line fits; whole lines are packed after it
+    // under what is left of the budget. With part === 0 this is byte for byte
+    // the loop that was here before.
+    let taken = 1;
+    let chars = remaining + 1;
+    for (let i = start; i < lines.length; i++) {
+      const cost = lines[i].length + 1;
+      if (chars + cost > READ_MAX_CHARS) break;
+      chars += cost;
+      taken++;
+    }
+    to = start + taken - 1;
+    body = [first.slice(skip), ...lines.slice(start, to)].join("\n");
+  }
+
+  const partial = part > 0 || cutMidLine;
+  const whole = part === 0 && start === 1 && to === lines.length && !cutMidLine;
+  const shownOfFirst = cutMidLine ? READ_MAX_CHARS : remaining;
   const notes = [
     whole
       ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
-      : `lines ${start}-${to} of ${lines.length} shown`,
+      : `lines ${start}-${to} of ${lines.length} shown` +
+        (partial
+          ? ` (line ${start}, characters ${skip + 1}-${skip + shownOfFirst} of ${first.length})`
+          : ""),
   ];
-  if (cutMidLine) notes.push(`line ${start} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`);
-  // The "in one round" half is the expensive one to leave unsaid. Paging reads
-  // as a sequence, so a model treats page N+1 as waiting on page N and spends a
-  // round — and the whole tool schema — on each one; reading a long document
-  // through therefore costs more in schema than the document is worth. They are
-  // in fact independent calls the runtime runs concurrently
-  // (`partitionParallelSegments`). Said here rather than only in the system
-  // instruction because this is where it applies, and by the time the model is
-  // reading this trailer the instruction is thousands of tokens upstream (D1).
-  if (to < lines.length) {
+
+  let next: string | null;
+  if (cutMidLine) {
+    const parts = partsOf(first.length);
+    next = part + 1 < PART_SCALE ? pageCursor(start, part + 1) : null;
     notes.push(
-      `pass start_line=${to + 1} to continue — several pages can be requested in the same round, they do not wait on each other`,
+      next === null
+        ? `line ${start} was cut mid-line and is too long to address further`
+        : `cut mid-line — pass start_line=${next} to continue INSIDE line ${start}: the digits ` +
+          `after the dot are a position within that line, not a line number. ${parts - part - 1} ` +
+          `more page(s) finish it (${next} … ${pageCursor(start, parts - 1)}), and they can all ` +
+          "be requested in the same round",
     );
+  } else {
+    next = to < lines.length ? String(to + 1) : null;
+    // The "in one round" half is the expensive one to leave unsaid. Paging reads
+    // as a sequence, so a model treats page N+1 as waiting on page N and spends a
+    // round — and the whole tool schema — on each one; reading a long document
+    // through therefore costs more in schema than the document is worth. They are
+    // in fact independent calls the runtime runs concurrently
+    // (`partitionParallelSegments`). Said here rather than only in the system
+    // instruction because this is where it applies, and by the time the model is
+    // reading this trailer the instruction is thousands of tokens upstream (D1).
+    if (next !== null) {
+      notes.push(
+        `pass start_line=${next} to continue — several pages can be requested in the same round, they do not wait on each other`,
+      );
+    }
   }
-  return { body: numberLines(body, start), from: start, to, total: lines.length, whole, notes };
+
+  return { body: numberLines(body, start), from: start, to, total: lines.length, whole, next, partial, notes };
 }
 
 /**
@@ -278,11 +384,25 @@ function loreGutterNote(canRewrite: boolean): string {
   );
 }
 
+/**
+ * Who can open one of the gallery's pictures on this run: this model with
+ * `read_lore_image`, the vision subagent through `delegate`, or nobody.
+ *
+ * A three-way instead of the `multimodal` boolean it replaces, because with a
+ * vision subagent live that boolean is **the wrong model's** property — and
+ * both of its answers were then wrong in the same run: it strips
+ * `read_lore_image`, so "call read_lore_image" names a tool that is gone, and
+ * a text-only main model behind it printed "text descriptions only" about
+ * pictures that were, in fact, readable. Decided by `galleryViewer` in the
+ * registry, where `allowedTools` is.
+ */
+export type GalleryViewer = "here" | "delegate" | "none";
+
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
-  multimodal: boolean,
+  imageViewer: GalleryViewer,
   file?: string,
   startLine?: number,
   canRewrite = false,
@@ -380,9 +500,18 @@ export async function readLoreEntity(
     // resolves to nothing and renders as an empty box. Once in the header, not
     // once per line — they are all files in the same directory.
     const where = `they are files in ${found.dirPath}, and embedding one in a reply needs that full path`;
-    const header = multimodal
-      ? `=== images === (descriptions; call read_lore_image(entity: "${name}", file: ...) to view one; ${where})`
-      : `=== images === (text descriptions only — current model is text-only; ${where})`;
+    // Three viewers, one sentence each. The delegate arm spells the whole call
+    // out because its argument is the one thing this listing does not otherwise
+    // hand over in usable form: `references` wants a full path, and the lines
+    // below are bare filenames.
+    const how =
+      imageViewer === "here"
+        ? `descriptions; call read_lore_image(entity: "${name}", file: ...) to view one`
+        : imageViewer === "delegate"
+        ? "descriptions; the vision subagent reads pictures on this run — "
+          + `delegate(kind: "vision", references: ["${found.dirPath}/<filename>"]) to have one described`
+        : "text descriptions only — nothing on this run can view a picture";
+    const header = `=== images === (${how}; ${where})`;
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 
@@ -507,7 +636,7 @@ function tooLargeError(label: string, bytes: number): string {
  * is one whose fine print may no longer be legible, and a model that reads a
  * blurred label confidently is worse than one that says it cannot.
  */
-function shrunkNote(downscaled: Downscaled | undefined): string {
+export function shrunkNote(downscaled: Downscaled | undefined): string {
   return downscaled ? ` Downscaled to fit the size limit (${downscaleNote(downscaled)}).` : "";
 }
 
@@ -520,6 +649,79 @@ function shrunkNote(downscaled: Downscaled | undefined): string {
  * filename may legitimately contain a `%`.
  */
 const decodeLinkPath = decodeLinkSegments;
+
+/** What `loadProjectImage` hands back for a picture that resolved and loaded. */
+export interface LoadedProjectImage {
+  /** `data:<mime>;base64,…`, already re-encoded smaller if the picture was over the ceilings. */
+  dataUrl: string;
+  /** Filename, for the caption the model reads. */
+  name: string;
+  /** The absolute path the picture was read from — the spelling that won. */
+  path: string;
+  downscaled: Downscaled | undefined;
+}
+
+/**
+ * Resolve a model-supplied image path against the project and read it for a
+ * model: the whole of `read_image` except the tool-result envelope, so that a
+ * caller which attaches a picture to a request *before* any tool round — the
+ * vision delegation — resolves paths by exactly the rules the tool would.
+ * Errors come back as the text the tool would answer with, `Error:` prefix
+ * included, since the delegation relays them to the same reader.
+ */
+export async function loadProjectImage(
+  projectPath: string,
+  rawPath: string,
+): Promise<LoadedProjectImage | { error: string }> {
+  // Containment is a prefix test, and every absolute path is inside the empty
+  // prefix — so a surface that runs the loop without a project (the lore
+  // generator passes "") would turn this into "read any image on the disk".
+  // The registry's door now refuses every non-`projectFree` tool for this same
+  // reason; this stays because the hazard it names is this function's own, and
+  // because it answers with what *this* tool should say.
+  if (!projectPath) {
+    return { error: "Error: no project is open — do not call this tool here." };
+  }
+  const wanted = rawPath.trim();
+  if (!wanted) return { error: "Error: 'path' argument is required." };
+
+  // Relative paths resolve against the project root — `resolveRelativePath`
+  // returns an absolute one unchanged, so both spellings go through one call.
+  const candidates = [...new Set([wanted, decodeLinkPath(wanted)])]
+    .map((p) => resolveRelativePath(projectPath, p));
+
+  if (!candidates.some(isImagePath)) {
+    return {
+      error: `Error: "${wanted}" is not an image (expected one of: ${IMAGE_EXT_LIST}). Text files are read with read_file.`,
+    };
+  }
+  const inside = candidates.filter((p) => isPathWithin(projectPath, p));
+  if (!inside.length) {
+    return { error: "Error: Path is outside the project folder." };
+  }
+
+  let path: string | null = null;
+  for (const p of inside) {
+    if (await fileExists(p)) { path = p; break; }
+  }
+  if (!path) {
+    return {
+      // Says how to build a correct path rather than just refusing: the two
+      // ways to reach an image differ, and a bare "not found" leaves the model
+      // retrying the same wrong spelling.
+      error: `Error: no image at "${inside[0]}". Absolute paths come from list_files (its folder line + "/" + the filename); a link written inside a document — ![](assets/…) — is relative to that document's own folder, so join the two.`,
+    };
+  }
+
+  try {
+    const { dataUrl, bytes, downscaled } = await imageForModel(path);
+    const name = baseName(path) || path;
+    if (bytes.length > MAX_IMAGE_BYTES) return { error: tooLargeError(name, bytes.length) };
+    return { dataUrl, name, path, downscaled };
+  } catch (e) {
+    return { error: `Error reading "${path}": ${String(e)}` };
+  }
+}
 
 /**
  * View any image in the project as visual input — the counterpart to
@@ -544,60 +746,13 @@ export async function readProjectImage(
   if (!multimodal) {
     return { toolCallId, content: "Error: the active model is text-only and cannot accept images." };
   }
-  // Containment is a prefix test, and every absolute path is inside the empty
-  // prefix — so a surface that runs the loop without a project (the lore
-  // generator passes "") would turn this into "read any image on the disk".
-  // The registry's door now refuses every non-`projectFree` tool for this same
-  // reason; this stays because the hazard it names is this function's own, and
-  // because it answers with what *this* tool should say.
-  if (!projectPath) {
-    return { toolCallId, content: "Error: no project is open — do not call this tool here." };
-  }
-  const wanted = rawPath.trim();
-  if (!wanted) return { toolCallId, content: "Error: 'path' argument is required." };
-
-  // Relative paths resolve against the project root — `resolveRelativePath`
-  // returns an absolute one unchanged, so both spellings go through one call.
-  const candidates = [...new Set([wanted, decodeLinkPath(wanted)])]
-    .map((p) => resolveRelativePath(projectPath, p));
-
-  if (!candidates.some(isImagePath)) {
-    return {
-      toolCallId,
-      content: `Error: "${wanted}" is not an image (expected one of: ${IMAGE_EXT_LIST}). Text files are read with read_file.`,
-    };
-  }
-  const inside = candidates.filter((p) => isPathWithin(projectPath, p));
-  if (!inside.length) {
-    return { toolCallId, content: "Error: Path is outside the project folder." };
-  }
-
-  let path: string | null = null;
-  for (const p of inside) {
-    if (await fileExists(p)) { path = p; break; }
-  }
-  if (!path) {
-    return {
-      toolCallId,
-      // Says how to build a correct path rather than just refusing: the two
-      // ways to reach an image differ, and a bare "not found" leaves the model
-      // retrying the same wrong spelling.
-      content: `Error: no image at "${inside[0]}". Absolute paths come from list_files (its folder line + "/" + the filename); a link written inside a document — ![](assets/…) — is relative to that document's own folder, so join the two.`,
-    };
-  }
-
-  try {
-    const { dataUrl, bytes, downscaled } = await imageForModel(path);
-    const name = baseName(path) || path;
-    if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(name, bytes.length) };
-    return {
-      toolCallId,
-      content: `Image "${name}" from ${path}.${shrunkNote(downscaled)}`,
-      imageDataUrls: [dataUrl],
-    };
-  } catch (e) {
-    return { toolCallId, content: `Error reading "${path}": ${String(e)}` };
-  }
+  const loaded = await loadProjectImage(projectPath, rawPath);
+  if ("error" in loaded) return { toolCallId, content: loaded.error };
+  return {
+    toolCallId,
+    content: `Image "${loaded.name}" from ${loaded.path}.${shrunkNote(loaded.downscaled)}`,
+    imageDataUrls: [loaded.dataUrl],
+  };
 }
 
 /** Ceiling on how many files one listing reports, before it starts omitting. */
@@ -800,6 +955,28 @@ function scanText(
 }
 
 /**
+ * A hit's coordinate — and, on a line too long to read in one page, the cursor
+ * that lands on it.
+ *
+ * `L1` is a complete answer for prose, where a line is a sentence or two. It
+ * is nearly useless on a minified page, where line 1 *is* the document: the
+ * model knows the match is somewhere in 200,000 characters and has no way to
+ * ask for that part. The cursor closes it — one search, then one read that
+ * lands on the match instead of on the top of the file.
+ *
+ * Safe to name `start_line` here: no preset carries `search_text` without
+ * `read_file` (docs/reference/tool-presence.md).
+ */
+function hitLabel(line: string, hit: HitAt): string {
+  const at = `L${hit.line + 1}`;
+  if (line.length <= READ_MAX_CHARS) return at;
+  return (
+    `${at} (character ${hit.col + 1} of ${line.length}; read from it with ` +
+    `start_line=${pageCursor(hit.line + 1, Math.floor(hit.col / READ_MAX_CHARS))})`
+  );
+}
+
+/**
  * Render one section's blocks.
  *
  * The context decision is taken **per section** rather than over the search as
@@ -817,7 +994,10 @@ function renderSection(
     const body = withContext
       ? file.at.map((h) => hitWithContext(file.lines, h, needleLen)).join("\n  ⋮\n")
       : file.at
-          .map((h) => `  L${h.line + 1}: ${snippetAround(file.lines[h.line], h.col, needleLen)}`)
+          .map(
+            (h) =>
+              `  ${hitLabel(file.lines[h.line], h)}: ${snippetAround(file.lines[h.line], h.col, needleLen)}`,
+          )
           .join("\n");
     return (
       `${file.path}\n${body}` +
@@ -854,7 +1034,9 @@ function hitWithContext(lines: string[], hit: HitAt, needleLen: number): string 
       : i === hit.line
         ? snippetAround(line, hit.col, needleLen)
         : `${line.slice(0, SNIPPET_MAX)}…`;
-    out.push(`${i === hit.line ? ">" : " "} L${i + 1}: ${text}`);
+    out.push(
+      i === hit.line ? `> ${hitLabel(line, hit)}: ${text}` : `  L${i + 1}: ${text}`,
+    );
   }
   return out.join("\n");
 }
@@ -1265,6 +1447,46 @@ export function paragraphIndex(text: string): string {
 }
 
 /**
+ * The map `read_file` puts in front of a paged `.html` — the deck's slides,
+ * not its (nonexistent) markdown headings.
+ *
+ * This closes a gap the edit-loop plan assumed was already closed.
+ * `docs/feature/agent/edit-loop-plan.md` §5.1 argued that no file-type test
+ * was needed because "a `.txt` without headings and an `.html` page both
+ * simply produce nothing — and an `.html` deck has `read_slides`' index
+ * instead". The first half is true and the second half was never wired:
+ * `headingIndex` matches ATX headings, so it is empty on every HTML file ever
+ * written, and `paragraphIndex` rarely clears its two-paragraph floor on
+ * compact markup. A model that opens a deck with `read_file` therefore got no
+ * map at all, and nothing anywhere told it `read_slides` reads this file by
+ * slide — `ai.instructions.agent` names `inspect_html` and stops. So "change
+ * the heading on slide 3" began by paging 4000 characters at a time.
+ *
+ * Free to compute: the splitter is pure text and the file is already in hand.
+ * A map rather than a parameter, for the reason every other index here is one
+ * (edit-loop-plan §D2) — a map you have to ask for costs the round it saves.
+ *
+ * A page the selectors could not divide is one slide the size of the whole
+ * page, and "this deck has 1 slide" maps nothing — so that page is mapped by
+ * its markup instead (`landmarkIndex`): headings, `id`s, and the tags that are
+ * a place on their own. Between the two, every `.html` now arrives with some
+ * map of itself, which is what neither index gave before.
+ */
+function htmlIndex(raw: string, canReadSlides: boolean): string {
+  // One call, one tag scan: asking "is it a deck?" and "what is its map?"
+  // separately scanned the whole file twice on every page of every read.
+  const { isDeck, index } = htmlPageIndex(raw);
+  if (!index || !isDeck) return index;
+  // The pointer is gated on the running toolset, not on the registry
+  // (docs/reference/tool-presence.md). `WRITER_PRESET` and `NARRATOR_PRESET`
+  // both carry `read_file` without `read_slides` — the narrator's comment is
+  // itself about this hazard. The index is still worth printing without it:
+  // the line ranges are what a range rewrite takes, whoever reads them.
+  if (!canReadSlides) return index;
+  return `${index}\nRead one slide with read_slides (start_slide=N) — it comes back as that slide's verbatim source, exact enough to quote back.`;
+}
+
+/**
  * Read a manuscript file, optionally starting partway in.
  *
  * Paging is by *line*, not character offset, because that is the coordinate the
@@ -1276,6 +1498,8 @@ export async function readWritingFile(
   rawPath: string,
   projectPath: string,
   startLine?: number,
+  /** This run's tool set, so a refusal can point at a tool only when it is there. */
+  allowedTools?: readonly string[],
 ): Promise<ToolResult> {
   // The path argument is model-controlled. A plain startsWith check would
   // accept `../` traversal (`/project/../etc/x`) and prefix siblings
@@ -1294,6 +1518,31 @@ export async function readWritingFile(
     return {
       toolCallId,
       content: `Error: "${path}" is a PowerPoint presentation, not a text file. Use read_slides to read it.`,
+    };
+  }
+  // Same for the other office formats: a .docx/.xlsx is a zip and a PDF is
+  // binary, and the tool that converts them is read_document. Redirecting here
+  // costs the model nothing; letting the decode run costs it a round spent
+  // concluding the file is empty (document-read-plan.md D6).
+  const office = convertExtOf(path);
+  if (office) {
+    const kind = office === "docx" ? "Word document" : office === "xlsx" ? "Excel workbook" : "PDF document";
+    return {
+      toolCallId,
+      content: `Error: "${path}" is a ${kind}, not a text file. Use read_document to read it.`,
+    };
+  }
+  // A recording: no reader here at all. Name transcribe_audio only when this
+  // run actually has it (docs/reference/tool-presence.md — a pointer to a tool
+  // the model cannot call is worse than none); otherwise say what the author
+  // would have to switch on.
+  if (transcribeExtOf(path)) {
+    const has = allowedTools?.includes("transcribe_audio") ?? false;
+    return {
+      toolCallId,
+      content: has
+        ? `Error: "${path}" is an audio/video file, not a text file. Use transcribe_audio to turn it into a transcript, then read that.`
+        : `Error: "${path}" is an audio/video file, and this run has no transcription tool. Tell the author it needs 实验室 → 音频转写 switched on and a model bound under 子代理.`,
     };
   }
 
@@ -1315,11 +1564,29 @@ export async function readWritingFile(
   const notes = [...page.notes];
   notes.splice(1, 0, "the number before each tab is the line number, not file content — never copy it into an edit");
 
+  // A line longer than one page is the case where naming its range is a trap:
+  // a range rewrite replaces the whole line, and a model that has read only
+  // part of it would drop the rest — silently, because nothing errors. Said
+  // only where it applies, and only when this run actually holds the tool it
+  // recommends (docs/reference/tool-presence.md).
+  if (page.partial && (allowedTools?.includes("propose_edit") ?? false)) {
+    notes.push(
+      "this line is longer than one page — to change part of it, quote a distinctive fragment " +
+        "into propose_edit's 'find'; rewriting the range would replace the whole line, including " +
+        "the part not shown here",
+    );
+  }
+
   // The map goes in front of the page, and only when there is more file than
   // the page carries — a response holding the whole file needs no map of it.
-  // Headings first; paragraphs are the fallback for the file that has none,
-  // which is exactly the file most in need of a map (see paragraphIndex).
-  const index = page.whole ? "" : headingIndex(raw) || paragraphIndex(raw);
+  // An .html deck is mapped the way the exporter divides it (htmlIndex);
+  // otherwise headings first, with paragraphs as the fallback for the file
+  // that has none, which is exactly the file most in need of a map.
+  const index = page.whole
+    ? ""
+    : (isHtmlPath(path) ? htmlIndex(raw, allowedTools?.includes("read_slides") ?? false) : "") ||
+      headingIndex(raw) ||
+      paragraphIndex(raw);
   return {
     toolCallId,
     content: `${index ? `${index}\n\n` : ""}${page.body}\n\n[... ${notes.join("; ")} ...]`,
@@ -1401,7 +1668,7 @@ export async function readSlidesFile(
       toolCallId,
       content:
         `Error: "${path}" is neither a .pptx nor an .html file. read_slides reads presentations only — ` +
-        "use read_file for text documents. Legacy .ppt (PowerPoint 97-2003) cannot be " +
+        "use read_file for text documents and read_document for Word / Excel / PDF files. Legacy .ppt (PowerPoint 97-2003) cannot be " +
         "read at all; it has to be saved as .pptx first.",
     };
   }

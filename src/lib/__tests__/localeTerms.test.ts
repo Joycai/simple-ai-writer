@@ -17,7 +17,7 @@
  *      exactly why it needs a machine to watch it — nobody notices by reading.
  *
  * Code comments are deliberately *not* scanned. They carry design records and
- * quoted mockup titles (设计稿 03 · 屏 17「AI 执行进度 · 思维链」), and a word
+ * quoted mockup titles (设计稿 03a · 屏 17「AI 执行进度 · 思维链」), and a word
  * ban over prose is a false-positive machine. Each batch sweeps its own
  * comments instead; see terminology.md §4.
  *

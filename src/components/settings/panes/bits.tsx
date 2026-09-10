@@ -79,13 +79,16 @@ export function Row({
   foot,
   top,
   last,
+  titleExtra,
   children,
 }: {
   title?: string;
+  /** Sits on the title's baseline, after it — a small tag (设计稿 02e's 生效中). */
+  titleExtra?: ReactNode;
   desc?: string;
   warn?: string;
   /** Anything that belongs under the description on the label side — a
-   *  second line of copy, a signpost (设计稿 18's 「接着去 … →」). */
+   *  second line of copy, a signpost (设计稿 05b's 「接着去 … →」). */
   foot?: ReactNode;
   /** Pin the control to the row's first line instead of its vertical centre.
    *  For rows whose label side can grow (a foot that comes and goes): the
@@ -98,7 +101,11 @@ export function Row({
   return (
     <div className={`${ui.row} ${top ? ui.rowTop : ""} ${last ? ui.rowLast : ""}`}>
       <div className={ui.rowMain}>
-        {title && <div className={ui.rowTitle}>{title}</div>}
+        {title && (
+          titleExtra
+            ? <div className={ui.rowTitleLine}><span className={ui.rowTitle}>{title}</span>{titleExtra}</div>
+            : <div className={ui.rowTitle}>{title}</div>
+        )}
         {desc && <div className={ui.rowDesc}>{desc}</div>}
         {warn && <div className={ui.rowWarn}>{warn}</div>}
         {foot}

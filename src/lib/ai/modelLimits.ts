@@ -74,6 +74,17 @@ const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
   ["qwen-max", 8_192],
   ["qwen-plus", 8_192],
   ["qwen-turbo", 8_192],
+  // ── 千问AI平台 catalogue, 2026-09 (docs/api/qianwen-compat-plan.md P6) ──
+  // Numbers are the platform's model pages; the third-party models are listed
+  // under the bare ids the platform uses (`kimi-k3`, `glm-5.2`), which is also
+  // what the vendors' own endpoints call them. Planning-only, per the header.
+  ["qwen3.8-flash", 131_072],
+  ["qwen3.7-flash", 131_072],
+  ["qwen3-vl-plus", 32_768],
+  ["deepseek-v4-pro", 393_216],
+  ["glm-5.2", 131_072],
+  ["kimi-k3", 1_000_000],
+  ["minimax-m2.5", 32_768],
 ];
 
 /**

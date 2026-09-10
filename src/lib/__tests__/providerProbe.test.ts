@@ -71,6 +71,45 @@ describe("Anthropic probing", () => {
       testProviderConnection("https://api.anthropic.com/v1", "bad", "anthropic"),
     ).resolves.toMatchObject({ ok: false });
   });
+
+  it("reports a credit gate as failure, with the relay's own message", async () => {
+    // OrcaRouter on an empty account (verified live): /v1/models is fine, the
+    // completion answers 402 with an OpenAI-shaped error before reading the
+    // model. The endpoint spoke and the key is right, but nothing will run.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        String(url).endsWith("/models")
+          ? new Response("{}", { status: 404 })
+          : new Response(
+              JSON.stringify({ error: { message: "You're out of credits — this request needs $0.0006.", code: "insufficient_user_quota" } }),
+              { status: 402 },
+            ),
+      ),
+    );
+    const result = await testProviderConnection("https://relay.example", "k", "openai_compat");
+    expect(result).toMatchObject({ ok: false });
+    expect((result as { error: string }).error).toContain("402");
+    expect((result as { error: string }).error).toContain("out of credits");
+  });
+
+  it("fetchRemoteModels keeps only the models a multi-protocol relay serves on this surface", async () => {
+    // OrcaRouter's one catalogue, reached through the Claude-format preset:
+    // bare host as the base (anthropicRoot appends /v1), Bearer as the key.
+    const calls = mockFetch({
+      data: [
+        { id: "anthropic/claude-sonnet-4.6", supported_endpoint_types: ["anthropic", "openai"] },
+        { id: "openai/gpt-4o", supported_endpoint_types: ["openai"] },
+        // No declaration — the official list has none — stays in.
+        { id: "undeclared" },
+      ],
+    });
+    const models = await fetchRemoteModels("https://api.orcarouter.ai", "sk-orca-x", "anthropic_compat", "bearer");
+    expect(calls[0].url).toBe("https://api.orcarouter.ai/v1/models");
+    expect(calls[0].headers.get("authorization")).toBe("Bearer sk-orca-x");
+    expect(calls[0].headers.get("x-api-key")).toBeNull();
+    expect(models.map((m) => m.id)).toEqual(["anthropic/claude-sonnet-4.6", "undeclared"]);
+  });
 });
 
 describe("OpenAI-compatible probing is unaffected", () => {
@@ -79,6 +118,43 @@ describe("OpenAI-compatible probing is unaffected", () => {
     await testProviderConnection("https://api.example.com/v1", "secret-key", "openai");
     expect(calls[0].headers.get("Authorization")).toBe("Bearer secret-key");
     expect(calls[0].url).not.toContain("secret-key");
+  });
+});
+
+describe("Responses-family probing", () => {
+  it("counts the shared /models list like the Chat Completions half", async () => {
+    const calls = mockFetch({ data: [{ id: "gpt-5.5" }, { id: "gpt-5.6-sol" }] });
+    const result = await testProviderConnection("", "secret-key", "openai_responses");
+    expect(result.ok).toBe(true);
+    expect(calls[0].url).toBe("https://api.openai.com/v1/models");
+    expect(calls[0].headers.get("Authorization")).toBe("Bearer secret-key");
+    expect(result.ok && result.message).toContain("2");
+  });
+
+  it("falls back to POST /responses on a relay without /models", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const u = String(url);
+        calls.push({ url: u, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+        if (u.includes("/models")) return new Response("<html>Not Found</html>", { status: 404 });
+        // A New API relay refuses a made-up model with 503 + its own JSON
+        // envelope (docs/api/responses.md §6) — the API spoke, so it counts.
+        return new Response(
+          JSON.stringify({ error: { code: "model_not_found", message: "No available channel for model __connection_probe__", type: "new_api_error" } }),
+          { status: 503 },
+        );
+      }),
+    );
+    const result = await testProviderConnection("https://relay.example.com/v1", "k", "openai_responses_compat");
+    expect(result.ok).toBe(true);
+    expect(calls[1].url).toBe("https://relay.example.com/v1/responses");
+    expect(calls[1].method).toBe("POST");
+    // This family's own shape, not a Chat Completions body — a Responses-only
+    // relay need not serve /chat/completions at all.
+    expect(calls[1].body).toMatchObject({ input: "hi", max_output_tokens: 16, store: false });
+    expect(calls[1].body).not.toHaveProperty("messages");
   });
 });
 

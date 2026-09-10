@@ -4,12 +4,12 @@
  * ignored the answer.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useAgentStore } from "../../stores/agentStore";
+import { activeChat, useAgentStore } from "../../stores/agentStore";
 import type { RoundLimitDecision } from "../agent/events";
 
 describe("round-limit pause availability", () => {
   beforeEach(() => {
-    useAgentStore.setState({ pendingRoundLimits: [], chatTaskWorkspace: null });
+    useAgentStore.setState({ pendingRoundLimits: [] });
   });
 
   it("carries canPause on the queued item, not from chat state", async () => {
@@ -25,8 +25,16 @@ describe("round-limit pause availability", () => {
     expect(items.find((i) => i.runId === runA)!.canPause).toBe(true);
     expect(items.find((i) => i.runId === runB)!.canPause).toBe(false);
 
-    // And it does not track chatTaskWorkspace, which is what the card used to read.
-    useAgentStore.setState({ chatTaskWorkspace: { taskId: "t1", ensure: async () => ({ taskId: "t1", dir: "/d" }) } });
+    // And it does not track the conversation's workspace, which is what the card used to read.
+    useAgentStore.setState((st) => ({
+      chats: {
+        ...st.chats,
+        [st.activeChatKey]: {
+          ...activeChat(st),
+          taskWorkspace: { taskId: "t1", ensure: async () => ({ taskId: "t1", dir: "/d" }) },
+        },
+      },
+    }));
     expect(useAgentStore.getState().pendingRoundLimits.find((i) => i.runId === runB)!.canPause).toBe(false);
   });
 

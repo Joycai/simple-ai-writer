@@ -5,13 +5,13 @@ import { useSyncStore } from "../../../stores/syncStore";
 import type { RemoteSyncRecord } from "../../../lib/sync/client";
 import type { FreshnessVerdict } from "../../../lib/sync/status";
 import { ConfigBackupSection } from "./ConfigBackupSection";
-import { Pane, PaneHeader, Toggle } from "./bits";
+import { Pane, PaneHeader } from "./bits";
 import ui from "../settingsUi.module.css";
 import sp from "./syncPane.module.css";
 import { baseName } from "../../../lib/paths";
 
 /**
- * 同步与备份 —— 设计稿 14「同步在场感」的设置页半边。三个决定:
+ * 同步与备份 —— 设计稿 03d「同步在场感」的设置页半边。三个决定:
  *
  * **连接收进锚点卡本身。** 服务器不再是一个区块,而是锚点卡最上面那一条;
  * 断线时那一条就地展开成表单。全页只有这一个连接入口——原来页底那个
@@ -33,7 +33,6 @@ export function SyncPane() {
   const [creating, setCreating] = useState(false);
   const [editConn, setEditConn] = useState(false);
   const [showAllRecords, setShowAllRecords] = useState(false);
-  const [autoBackup, setAutoBackup] = useState(true);
 
   useEffect(() => {
     // Without a project this still has to run: it is what loads the saved
@@ -101,6 +100,11 @@ export function SyncPane() {
               <span className={sp.stripHost}>{hostOf(sync.serverUrl)}</span>
               <span className={sp.stripNote}>
                 {t(sync.connection === "error" ? "sync.aFailTitle" : "sync.aOffline")}
+                {/* 设计稿 03d 屏 1g: 「连不上 · 上次连通 今天 09:12」— when it last worked
+                    is the one fact that tells a dead server from a wrong address. */}
+                {sync.lastConnectedAt
+                  ? ` · ${t("sync.aLastOnline", { when: new Date(sync.lastConnectedAt).toLocaleString() })}`
+                  : ""}
               </span>
               <span className={sp.stripSpacer} />
               {/* While the form is open its own button is the action; a second
@@ -395,10 +399,11 @@ export function SyncPane() {
                 <div className={sp.paperRowTitle}>{t("sync.autoBackup")}</div>
                 <div className={sp.paperRowDesc}>{t("sync.autoBackupDesc")}</div>
               </div>
-              {/* Read-only for now: the executor always backs up before a pull
-                  (lib/sync/run rule 2), and a switch that could turn the only
-                  safety net off would need its own confirmation to be honest. */}
-              <Toggle on={autoBackup} onChange={setAutoBackup} label={t("sync.autoBackup")} />
+              {/* Not a switch. The executor always backs up before a pull (lib/sync/run
+                  rule 2) and nothing reads a preference here, so a toggle would be
+                  the 「能力静默消失」 shape from docs/reference/tool-presence.md — the
+                  author flips it and nothing changes. The row states the fact. */}
+              <span className={sp.alwaysTag}>{t("sync.autoBackupAlways")}</span>
             </div>
             <div className={`${sp.paperRow} ${sp.paperRowLast}`}>
               <div className={sp.paperRowMain}>

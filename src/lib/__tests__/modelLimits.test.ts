@@ -11,6 +11,14 @@ import { describe, expect, it } from "vitest";
 import { effectiveMaxOutput, knownMaxOutput } from "../ai/modelLimits";
 
 describe("knownMaxOutput", () => {
+  it("knows the 2026-09 千问AI平台 catalogue, dated snapshots and vendor prefixes included", () => {
+    expect(knownMaxOutput("qwen3.8-flash")).toBe(131_072);
+    expect(knownMaxOutput("deepseek-v4-pro-0813")).toBe(393_216);
+    expect(knownMaxOutput("kimi/kimi-k3")).toBe(1_000_000);
+    expect(knownMaxOutput("MiniMax-M2.5")).toBe(32_768);
+    expect(knownMaxOutput("qwen3-vl-plus-2025-12-19")).toBe(32_768);
+  });
+
   it("matches the longest prefix, not the first", () => {
     // gpt-4-turbo's own cap, not the gpt-4 entry's.
     expect(knownMaxOutput("gpt-4-turbo")).toBe(4_096);

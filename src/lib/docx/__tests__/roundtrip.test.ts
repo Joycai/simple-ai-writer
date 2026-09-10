@@ -167,6 +167,27 @@ describe("标题自动编号（三期）", () => {
     expect(numbering).toContain('w:val="%3."');
   });
 
+  it("论文那套是 1. 1.1 1.1.1——含上级的写法之上不能是中文计数", async () => {
+    // decimalDotted 的 text 是 %1.%2，%1 按第一级的格式渲染：第一级若是 chineseCounting，
+    // Word 会把 H2 排成「一.1」。这条守的是全部内置预设，不只是论文。
+    for (const { id, format } of BUILTIN_FORMATS) {
+      const { enabled, levels } = format.headingNumbering;
+      if (!enabled) continue;
+      levels.forEach((kind, i) => {
+        if (kind !== "decimalDotted") return;
+        for (const upper of levels.slice(0, i)) {
+          expect(upper, `${id} H${i + 1} 之上的 ${upper}`).not.toMatch(/^chinese/);
+        }
+      });
+    }
+    const thesis = BUILTIN_FORMATS.find((p) => p.id === "thesis")!.format;
+    const numbering = (await build(thesis)).get("word/numbering.xml")!;
+    expect(numbering).toContain('w:val="%1."');
+    expect(numbering).toContain('w:val="%1.%2"');
+    expect(numbering).toContain('w:val="%1.%2.%3"');
+    expect(numbering).not.toContain("chineseCounting");
+  });
+
   it("序号和标题之间不插制表位", async () => {
     // Word 的默认 tab 会把标题推到一个和正文对不齐的位置上。
     const numbering = (await build()).get("word/numbering.xml")!;

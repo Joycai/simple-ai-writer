@@ -96,6 +96,29 @@ describe("defaultCategoryId / categoriesForFamily", () => {
     expect(defaultCategoryId("anthropic")).toBe("claude-adaptive");
   });
 
+  it("gives the Responses family its own category, never a Chat Completions one", () => {
+    // `openai-generic` would put Chat Completions' `reasoning_effort` on a
+    // wire that spells it `reasoning.effort`.
+    expect(defaultCategoryId("openai_responses")).toBe("responses-effort");
+    expect(defaultCategoryId("openai_responses_compat")).toBe("responses-effort");
+    expect(categoriesForFamily("responses")).toEqual(["responses-effort", "off"]);
+    expect(categoriesForFamily("openai")).not.toContain("responses-effort");
+  });
+
+  it("drops a declared category from another family, keeping only `off` across families", () => {
+    // A provider whose standard was switched under an existing model, or an
+    // imported row: the declared category must not carry its wire fields over.
+    expect(resolveThinkingCategory({ thinkingCategory: "openai-generic" }, "openai_responses").id)
+      .toBe("responses-effort");
+    expect(resolveThinkingCategory({ thinkingCategory: "responses-effort" }, "openai_compat").id)
+      .toBe("openai-generic");
+    expect(resolveThinkingCategory({ thinkingCategory: "openai-generic" }, "anthropic").id)
+      .toBe("claude-adaptive");
+    expect(resolveThinkingCategory({ thinkingCategory: "off" }, "openai_responses").id).toBe("off");
+    // Same family is still honoured as declared.
+    expect(resolveThinkingCategory({ thinkingCategory: "deepseek" }, "openai_compat").id).toBe("deepseek");
+  });
+
   it("offers only the family's own categories, plus the always-present `off`", () => {
     const openai = categoriesForFamily("openai");
     expect(openai).toContain("openai-generic");

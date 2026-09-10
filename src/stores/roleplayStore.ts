@@ -25,11 +25,13 @@
 
 import { create } from "zustand";
 import i18n from "../i18n";
+import { useComposerStore } from "./composerStore";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { summarizeForCompaction } from "../lib/agent/compactRun";
-import { presetFor } from "../lib/roleplay/presets";
+import { compactTriggerFor } from "../lib/agent/compact";
+import { presetFor, subAgentsFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
 import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/taskWorkspace";
@@ -69,7 +71,7 @@ import { scriptPreview } from "../lib/roleplay/markup";
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
   conversationReader, inspectAgent, loadStaticContext, prepareContinuedHistory,
-  prepareSeededHistory,
+  prepareSeededHistory, compactSceneNow,
 } from "../lib/roleplay/run";
 import {
   namedRefs, type PreflightEstimate, type TurnContextTrace,
@@ -82,6 +84,7 @@ import type {
   AreaNote, ArchiveInfo, SceneInfo, SceneReader, SceneSlice,
 } from "../lib/roleplay/sceneTools";
 import { currentSceneNo } from "../lib/roleplay/scene";
+import { hasQueuedJob, nextRunnableJobIndex } from "../lib/roleplay/scheduler";
 import {
   archiveDir, archiveSession, deleteAgentDir, listArchives, loadPersonaCard, loadRoster,
   loadSession, loadSummary, memoryPath, peekNextArchiveNo, saveRoster, savePersonaCard,
@@ -225,6 +228,8 @@ interface RoleplayState {
 
   /** 正在生成的 agentId。上限 MAX_CONCURRENT_RUNS。 */
   running: string[];
+  /** 正在手动归纳的 agentId（compactNow）。归纳期间不接受发送。 */
+  compacting: string[];
   /** 排队中的作业，FIFO。 */
   queue: Job[];
   aborts: Record<string, AbortController>;
@@ -290,6 +295,12 @@ interface RoleplayState {
   /** `quote` = 编辑器里选中的正文，随这一条消息上线（transcript 里仍只存作者敲的字）。 */
   send: (agentId: string, text: string, refs?: AttachedItem[], quote?: string) => Promise<void>;
   stop: (agentId: string) => void;
+  /**
+   * 作者的「立即归纳」：force 档折叠，不看自动归纳开关、不看阈值（同
+   * agentStore.compactChatNow）。落地后的摘要落盘与记忆块刷新走 lib 的
+   * afterCompaction——和自动那条路是同一步。
+   */
+  compactNow: (agentId: string) => Promise<void>;
   /** 重跑上一次失败的作业。只在 `session.error` 亮着时有意义。 */
   retry: (agentId: string) => void;
   /**
@@ -519,7 +530,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     }));
 
     const loreIndex = useLoreStore.getState().index;
-    const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
+    const {
+      loreBudgetTokens, contextUtilization, autoCompact, compactTriggerTokens, compactTriggerRatio,
+    } = useAppStore.getState();
     const persona = agent.authorPersona ?? get().authorPersona;
     // 留给**消息**的上限：工具 schema 那一份已经扣掉了（lib/agent/toolCost）。
     // 压缩和 runtime 的历史裁剪都量这个数——两边各算各的，就是上下文条越过
@@ -528,7 +541,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       model.contextSize,
       contextUtilization,
       presetFor(agent.kind),
-      withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
+      subAgentsFor(
+        agent.kind,
+        withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
+      ),
       models,
     );
 
@@ -629,6 +645,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreBudgetChars: loreBudgetTokens * charsPerToken,
           areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
           ceilingTokens: messageCeiling,
+          // 同 agentStore.sendChat：自动归纳的开关和触发线（三条线取最小）。
+          autoCompact,
+          triggerTokens: compactTriggerFor({
+            contextSize: model.contextSize, messageCeiling,
+            triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
+          }).tokens,
           summarize: (input) =>
             summarizeForCompaction(connOptions({ provider, model, apiKey }), input, controller.signal),
         });
@@ -681,9 +703,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       }
 
       const preset = presetFor(agent.kind);
-      const effectiveSubs = withSessionOverrides(
-      subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
-    );
+      // 白名单在这里，不在 routeTools 里：`delegate` 该不该出现、`translate`
+      // 该不该追加、`resolveSubAgent` 放行哪些 kind，三件事读的都是这一份。
+      const effectiveSubs = subAgentsFor(agent.kind, withSessionOverrides(
+        subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
+      ));
       const routed = routeTools(preset, effectiveSubs, workspace, models);
 
       const result = await runAgent({
@@ -696,6 +720,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreIndex,
           loreScope: useLoreStore.getState().scope,
           multimodal: model.type === "multimodal",
+          visionDelegate: routed.visionDelegate,
           taskWorkspace: workspace,
           signal: controller.signal,
           // 只有旁白拿得到这个通道，所以扮演 agent 的 scene 工具即使被硬塞
@@ -849,6 +874,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           liveLog: appendAgentEventTo(s.liveLog, { kind: "run-error", message: msg, at: Date.now() }),
         }));
         recordRunOutcome(model.id, msg);
+        // A reply that never came is worth a ping whichever agent is on screen —
+        // the focus gate in lib/notify is what keeps it quiet in the foreground.
+        notify("error", i18n.t("notify.failedTitle"), i18n.t("roleplay.notify.failed", {
+          name: agent.name, error: msg, defaultValue: `${agent.name} 的回复失败了：${msg}`,
+        }));
       }
     } finally {
       const { useAgentStore } = await import("./agentStore");
@@ -877,9 +907,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
   /** 信号量：有名额就拉起队首里第一个自己没在跑的作业。 */
   const pump = async () => {
     for (;;) {
-      const { running, queue } = get();
+      const { running, compacting, queue } = get();
       if (running.length >= MAX_CONCURRENT_RUNS) return;
-      const idx = queue.findIndex((j) => !running.includes(j.agentId));
+      const idx = nextRunnableJobIndex(queue, running, compacting);
       if (idx < 0) return;
       const job = queue[idx];
       set((st) => ({
@@ -900,6 +930,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     sessions: {},
     activeAgentId: null,
     running: [],
+    compacting: [],
     queue: [],
     aborts: {},
     unread: {},
@@ -921,7 +952,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // `aborts` 一起被丢掉，留下几个谁也停不了的运行往旧项目里写。
       if (get().projectPath !== projectPath) {
         for (const c of Object.values(get().aborts)) c.abort();
-        set({ sessions: {}, running: [], queue: [], aborts: {}, activeAgentId: null, unread: {}, stale: {} });
+        set({ sessions: {}, running: [], compacting: [], queue: [], aborts: {}, activeAgentId: null, unread: {}, stale: {} });
       }
       set({ projectPath, loaded: false, rosterError: null });
       try {
@@ -957,7 +988,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       set({
         projectPath: null, loaded: false, rosterError: null, order: [], agents: {},
         authorPersona: NO_PERSONA, sessions: {}, activeAgentId: null,
-        running: [], queue: [], aborts: {}, unread: {}, stale: {}, preflight: {},
+        running: [], compacting: [], queue: [], aborts: {}, unread: {}, stale: {}, preflight: {},
       });
     },
 
@@ -1088,8 +1119,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[id];
       if (!projectPath || !agent) return;
-      // 跑着的时候不许开新场：正在写的那一轮会追加到一个已经被移走的文件上。
-      if (get().running.includes(id) || get().queue.some((j) => j.agentId === id)) return;
+      // 跑着或归纳时不许开新场：两边都会把结果写回一份已经被移走的会话。
+      if (
+        get().running.includes(id) ||
+        get().compacting.includes(id) ||
+        hasQueuedJob(get().queue, id)
+      ) return;
 
       const continuing = opts.mode === "continue" && !!opts.recap;
       /**
@@ -1220,6 +1255,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     removeAgent: async (id) => {
       const { projectPath } = get();
       get().stop(id);
+      // 未发出的那句话是写给这个 agent 的，它没了，草稿也没有去处。
+      useComposerStore.getState().clearRoleplayComposer(id);
       set((st) => {
         const agents = { ...st.agents };
         delete agents[id];
@@ -1324,6 +1361,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const agent = get().agents[agentId];
       const body = text.trim();
       if (!projectPath || !agent || !body) return;
+      // 归纳中不接受发送：runJob 会拿同一份 history，和折叠撞在一起（同 chat 的
+      // chatCompacting）。composer 的按钮也据此禁用，这里是最后一道门。
+      if (get().compacting.includes(agentId)) return;
 
       const persona = agent.authorPersona ?? get().authorPersona;
       const personaName = persona.mode === "lore" && persona.dirPath
@@ -1357,9 +1397,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { useAiStore } = await import("./aiStore");
       const { models, activeModelId, subAgents } = useAiStore.getState();
       const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));
-      const subs = withSessionOverrides(
+      const subs = subAgentsFor(agent.kind, withSessionOverrides(
         subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
-      );
+      ));
       const { visionSubAgentModel } = await import("../lib/agent/subagent");
       // 正文已经常驻在上下文里的条目**不再内联第二份**：绑定块（或 system 层）
       // 一份、【引用资料】一份，是同一段文字在同一次请求里出现两遍，而且会一直
@@ -1387,6 +1427,102 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       void pump();
     },
 
+    compactNow: async (agentId) => {
+      const { projectPath } = get();
+      const agent = get().agents[agentId];
+      const session = get().sessions[agentId];
+      if (!projectPath || !agent || !session?.history || !session.meta) return;
+      const state = get();
+      if (
+        state.running.includes(agentId) ||
+        state.compacting.includes(agentId) ||
+        hasQueuedJob(state.queue, agentId)
+      ) return;
+
+      // Reserve the agent before the first await. send/retry/pump all read this
+      // flag, so no generation can enter the async setup window beside us.
+      const controller = new AbortController();
+      set((st) => ({
+        compacting: [...st.compacting, agentId],
+        aborts: { ...st.aborts, [agentId]: controller },
+      }));
+      try {
+        const [{ useAiStore }, { useAppStore }] = await Promise.all([
+          import("./aiStore"), import("./appStore"),
+        ]);
+        const { models, providers, activeModelId, subAgents } = useAiStore.getState();
+        const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
+        if (!resolved.ok) {
+          patchSession(agentId, (s) => ({ ...s, error: resolved.error }));
+          return;
+        }
+        const { model, provider } = resolved;
+        // 同 runJob 的天花板，同一个函数算——手动折叠和自动折叠不能对预算各执一词。
+        const messageCeiling = messageCeilingFor(
+          model.contextSize,
+          useAppStore.getState().contextUtilization,
+          presetFor(agent.kind),
+          subAgentsFor(agent.kind, withSessionOverrides(subAgents, session.disabledSubAgents)),
+          models,
+        );
+
+        const apiKey = (await loadApiKey(provider.id)) ?? "";
+        const out = await compactSceneNow({
+          projectPath, agent,
+          history: session.history, meta: session.meta,
+          ceilingTokens: messageCeiling,
+          summarize: (input) =>
+            summarizeForCompaction(connOptions({ provider, model, apiKey }), input, controller.signal),
+        });
+        if (out.status === "nothing") return;
+        if (out.status === "failed") {
+          patchSession(agentId, (s) => ({ ...s, error: i18n.t("ai.chat.compactFailed") }));
+          return;
+        }
+        patchSession(agentId, (s) => {
+          // 事件挂在最近一轮的日志上：日志记的是「折叠发生在哪一轮之后」，而
+          // 「就在那一轮之后」正是现在。没有轮就没有落点，事件只留在历史里。
+          const last = s.turns.length ? s.turns[s.turns.length - 1] : null;
+          return {
+            ...s,
+            history: out.history,
+            memory: out.memoryRecords,
+            memoryStale: false,
+            contextVersion: s.contextVersion + 1,
+            log: last
+              ? { ...s.log, [last.index]: appendAgentEventTo(s.log[last.index] ?? [], out.event) }
+              : s.log,
+          };
+        });
+        if (out.summaryToSave) void saveSummary(projectPath, agentId, out.summaryToSave);
+        // 历史刚换了形状——丢会话的那种崩溃从不提前打招呼（同 runJob 的 finally）。
+        const s = get().sessions[agentId];
+        if (s?.history && s.meta) {
+          void saveSession(projectPath, agentId, {
+            history: s.history,
+            snapshot: { turns: [], history: s.history, meta: s.meta, usage: null, taskId: s.workspace?.taskId ?? null },
+            boundBlock: s.meta.boundBlock,
+            memoryBlock: s.meta.memoryBlock,
+          });
+        }
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") {
+          patchSession(agentId, (s) => ({ ...s, error: String(e) }));
+        }
+      } finally {
+        set((st) => {
+          const aborts = { ...st.aborts };
+          if (aborts[agentId] === controller) delete aborts[agentId];
+          return { compacting: st.compacting.filter((x) => x !== agentId), aborts };
+        });
+        // send() may have started its transcript write just before compaction
+        // reserved the agent and joined the queue while we were summarizing.
+        // pump skipped it while `compacting` was set; releasing the slot must
+        // wake that otherwise-stranded job.
+        void pump();
+      }
+    },
+
     stop: (agentId) => {
       const controller = get().aborts[agentId];
       controller?.abort();
@@ -1410,8 +1546,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     retry: (agentId) => {
       const job = get().sessions[agentId]?.lastJob;
       if (!job) return;
-      const { running, queue } = get();
-      if (running.includes(agentId) || queue.some((j) => j.agentId === agentId)) return;
+      const { running, compacting, queue } = get();
+      if (
+        running.includes(agentId) ||
+        compacting.includes(agentId) ||
+        hasQueuedJob(queue, agentId)
+      ) return;
       patchSession(agentId, (s) => ({ ...s, error: null, stopped: false }));
       set((st) => ({ queue: [...st.queue, job] }));
       void pump();
@@ -1439,7 +1579,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       if (!projectPath || !agent) return null;
-      if (get().running.includes(agentId) || get().queue.some((j) => j.agentId === agentId)) return null;
+      const { running, compacting, queue } = get();
+      if (
+        running.includes(agentId) ||
+        compacting.includes(agentId) ||
+        hasQueuedJob(queue, agentId)
+      ) return null;
 
       const turns = get().sessions[agentId]?.turns ?? [];
       const target = turns.find((t) => t.index === turnIndex);
@@ -1518,6 +1663,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       if (!projectPath || !agent) return;
+      if (get().compacting.includes(agentId)) return;
 
       const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
@@ -1585,6 +1731,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     refreshMemory: async (agentId) => {
       const { projectPath } = get();
       if (!projectPath) return;
+      if (get().compacting.includes(agentId)) return;
       const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
       const session = get().sessions[agentId];
       // 没有活的历史就不用刷——下一次发送会重新播种，那时读的就是磁盘上的新内容。

@@ -1,7 +1,7 @@
 /**
  * 记事本 —— 一个 agent 记下的约定 / 待办 / 事件 / 关系。
  *
- * 设计稿 08 TURN 1 没有画这一屏，所以这里的判断是我做的，理由如下：
+ * 设计稿 04a 没有画这一屏，所以这里的判断是我做的，理由如下：
  *
  * **可收起的第三栏，默认收起。** 对话稿面固定 640px（与编辑器正文同宽，那是
  * 整个面板不肯让步的一条），抽屉 1180px 减去 272 的花名册只剩 908——一栏常驻的
@@ -162,6 +162,7 @@ export function MemoryPanel({
 }) {
   const { t } = useTranslation();
   const session = useRoleplayStore((s) => s.sessions[agentId]);
+  const compacting = useRoleplayStore((s) => s.compacting.includes(agentId));
   const refreshMemory = useRoleplayStore((s) => s.refreshMemory);
   const [adding, setAdding] = useState(false);
   const [browsing, setBrowsing] = useState(false);
@@ -216,7 +217,12 @@ export function MemoryPanel({
           <span className={styles.staleText}>
             {t("roleplay.memory.stale", { defaultValue: "记事本改过了，本次对话用的还是旧的。" })}
           </span>
-          <button type="button" className={styles.staleBtn} onClick={() => void refreshMemory(agentId)}>
+          <button
+            type="button"
+            className={styles.staleBtn}
+            onClick={() => void refreshMemory(agentId)}
+            disabled={compacting}
+          >
             {t("roleplay.memory.refresh", { defaultValue: "刷新记忆" })}
           </button>
         </div>

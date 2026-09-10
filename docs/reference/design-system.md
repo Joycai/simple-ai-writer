@@ -4,11 +4,18 @@
 
 ## Theming
 
-- **System** — CSS variables (dark/light modes) set via `data-theme` attribute
-- **Tokens** — `src/styles/tokens.css` (all design tokens: color/space/radius/shadow/easing/glass)
+- **Two attributes on `<html>`** (`lib/theme/scheme.ts`): `data-theme` = `paper` | `night` (later: a theme file's id) is the **cascade key**; `data-scheme` = `light` | `dark` is the **polarity**, and `color-scheme` follows it. Anything that needs "is this dark?" — Mermaid, an image's fallback border — reads `data-scheme` via `currentScheme()` / `useScheme()`; **nothing reads `data-theme`'s value** (`themeContract.test.ts` guards it), because once theme files exist it is an arbitrary id.
+- **Tokens** — `src/styles/tokens.css`, five cascade layers declared once, `@layer tokens.scale, tokens.derive, tokens.scheme, tokens.theme, tokens.user`, and the blocks appear in the file in that same order (LightningCSS rewrites the statement into first-occurrence order when it bundles):
+  - `tokens.scale` — L0 scales (spacing, radius, fonts, easing, layout, `--glass-blur`). Theme-independent; a theme file may not touch them.
+  - `tokens.scheme` — the **core contract**, 37 tokens per `[data-scheme]`: the six grounds, five text tiers, sienna/amber, three borders, success/warning/error, the eight model-type hues, five shadows, glass. This is what a theme file is expected to write.
+  - `tokens.derive` — the **default of every other token** (176 of them: the extended `--color-*` roles, `--stg`, `--lore`, `--sync`, `--rp`, `--snip`, `--writer`), spelled as `var()` / `color-mix()` over the core, on `:root` or in both `[data-scheme]` blocks when the direction flips ("a lighter card" on paper is "a darker input" at night). A `@supports not (color-mix)` block aliases the mixed ones flat.
+  - `tokens.theme` — two kinds of block, both keyed by `data-theme`. **The bases' hand-tunes**: `paper` / `night`'s values for derived tokens (139, identical sets), a token being hand-tuned only when its formula fails to reproduce the designer's value exactly in both schemes — that rule, not taste, decides which block it lives in. And **the built-ins that are not bases**: `stone` / `ink` (石 / 墨, 设计稿 05j「石墨」 — cold grey, 青黛 accent) and `frost` / `indigo` (霜 / 靛, the same 稿's「靛」 — indigo ink, 靛青 accent) declare the 37 **core** tokens here and no hand-tune at all, because the base layer is keyed by polarity and has nowhere to put a third light theme. A theme sets its own `data-theme`, so no hand-tune reaches anything but `paper` / `night` — every other theme's derived tokens fall back to `tokens.derive`, which is why the 青黛 accent recolours the settings switches, the knowledge-base category dots and the sync risk rail instead of leaving them sienna. `contract.ts` therefore subtracts core from `derived`: the tier is `tokens.scheme`'s to decide, never a layer's.
+  - `tokens.user` — the author's theme files, installed at runtime by `lib/theme/install.ts` as one `<style id="theme-user">` holding `[data-theme="<id>"] { … }` per usable file (validated by `lib/theme/validate.ts` against the contract in `lib/theme/contractData.ts`: core and derived tokens only, one selector, no at-rules). A file that writes twelve lines stands on `tokens.scheme` + `tokens.derive` for the rest.
+- **Adding a token**: core → both `tokens.scheme` blocks; derived → a formula in `tokens.derive` **and**, if the designer gave exact values, both `tokens.theme` blocks. `themeContract.test.ts` pins parity in each layer, and its dangling-reference guard fails on any `var(--x)` no file declares — three PRs in 2026-09 fixed exactly that bug class (`--color-danger`, `--color-red`, `--color-text`) with nothing catching it.
 - **Global** — `src/styles/global.css` (resets, scrollbar, focus ring, reusable keyframes, reduced-motion)
-- **Components** — CSS Modules per component (`*.module.css`); read from tokens, never raw values
-- **Theme Modes** — dark, light, system (auto-detect)
+- **Components** — CSS Modules per component (`*.module.css`); read from tokens, never raw values. The editor's syntax colours are tokens too: `lib/editor/highlight.ts` hands CodeMirror stable `.tok-*` class names and nothing else, and `CodeEditor.module.css` colours them.
+- **Theme Modes** — dark, light, system (auto-detect); `app:theme` is the mode, `app:themeLight` / `app:themeDark` name the theme for each polarity (a file's id, or one of the six built-ins — `paper` / `stone` / `frost` light, `night` / `ink` / `indigo` dark), and `lib/theme/install.ts` resolves which one actually applies — the file, or the built-in when the file is absent or unusable — before `applyThemeId()` writes both attributes.
+- **Drawing a theme's own colours** (the settings swatch, 设计稿 05i): give the element `data-theme` + `data-scheme` itself. `tokens.scheme` and `tokens.user` then declare the core tokens *on that element*, which beats the settings page's `--stg-*` remap arriving by inheritance — no values are read in JS, and built-ins and user themes are drawn by the same rule. Use only **core** tokens inside such an element: a derived token defaulted on `:root` resolves there, with the page's polarity, and inherits down wrong.
 
 ## Visual Language (视觉规范)
 
@@ -24,7 +31,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 ### 令牌速查 (Token reference — `tokens.css`)
 - **Easing**: `--ease-out` (enter/expand, default), `--ease-spring` (brief pop accents only), `--ease-in-out` (symmetric size/position).
 - **Transitions**: `--transition-fast` (120ms, hover/press), `--transition-base` (200ms), `--transition-slow` (320ms, panels/drawers). All pre-bound to `--ease-out`. **侧栏折叠 is a decision change from this**: `.sidebar` (`Sidebar.module.css`) animates *nothing* when it collapses. `width` is a layout property on a flex child that never unmounts (`App.tsx` only swaps the class), so every frame of a 320ms collapse hands the `flex: 1` content column a new width and makes CodeMirror re-measure wrapping — ~19 forced relayouts of the whole document column per toggle — and the trigger is re-clicking an already-active IconRail tab, i.e. the same button as a 100+/day tab switch. It is deliberately zero-transition (`plans/031-sidebar-collapse-no-transition.md`); don't "fix" it back, and don't shorten it to 120ms instead — there is no compositor-only way to collapse a flex sibling. The token itself is unchanged and still right for drawers and panels.
-- **Radius**: **all zero** (设计稿 01/04 收紧为全局无圆角 — the manuscript reads as cut paper, not rounded cards). The whole `--radius-*` scale is 0 in `tokens.css`; modules keep reading the tokens so a future turn of the dial is still one edit. The only sanctioned circles are dot indicators, spinners and radio marks — `border-radius: 50%` or `--radius-round`. Switch knobs are **square** (设计稿 04 draws the settings toggle as a flat square block — see 设置页色系 below). Never write any other literal radius, and don't "fix" a square control back to round.
+- **Radius**: **all zero** (设计稿 01a/05a 收紧为全局无圆角 — the manuscript reads as cut paper, not rounded cards). The whole `--radius-*` scale is 0 in `tokens.css`; modules keep reading the tokens so a future turn of the dial is still one edit. The only sanctioned circles are dot indicators, spinners and radio marks — `border-radius: 50%` or `--radius-round`. Switch knobs are **square** (设计稿 05a draws the settings toggle as a flat square block — see 设置页色系 below). Never write any other literal radius, and don't "fix" a square control back to round.
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
 - **Tags**: `--color-tag-bg` / `--color-tag-text` for the neutral badge. Model-type tags get one hue each — `--color-type-{text,multimodal,image,video}-{bg,fg}` — so a model list is scannable without reading the labels.
@@ -49,7 +56,9 @@ Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (U
 
 Every rendered-markdown surface — the editor preview pane, lore entry/facet previews, exported HTML and print/PDF — shares one look, picked in Settings → 通用 → 外观. Implementation: `src/lib/theme/markdownThemes.ts`.
 
-Why CSS-in-TS instead of a `.module.css`: exported HTML is self-contained, so the same rules must be serialised into a `<style>` tag with no build step and no `tokens.css` around them (`EXPORT_TOKEN_CSS` re-declares the light palette there). One generator means the printed file matches what the author read; a stylesheet plus a hand-kept export copy would drift on the first tweak. This is the **only** sanctioned CSS-in-TS in the app.
+Why CSS-in-TS instead of a `.module.css`: exported HTML is self-contained, so the same rules must be serialised into a `<style>` tag with no build step and no `tokens.css` around them (the palette is generated into the file by `lib/theme/export.ts`). One generator means the printed file matches what the author read; a stylesheet plus a hand-kept export copy would drift on the first tweak. This is the **only** sanctioned CSS-in-TS in the app.
+
+**Typography theme files** sit beside the built-ins (`docs/feature/theme-system-plan.md` §5): a `.css` with `--theme-kind: markdown` in `appDataDir/themes/` or a project's `.ai-writer/themes/`, fenced to `.md-body` by `lib/theme/validate.ts` (every selector starts there; `@font-face` / `@keyframes` allowed; `url()` relative or `data:` only, inlined as `data:` on install and export). The file is installed as a second `<style>` after the generator's, its selectors prefixed `html[data-md-theme]` so it wins over the built-in it extends, and `data-md-theme` names that built-in. The settings samples are sandboxed `<iframe srcdoc>` frames carrying the export's stylesheet (`lib/theme/sample.ts`) — never `allow-same-origin`. **Downloadable examples** live in [`themes/`](../../themes/README.md) at the repo root (学报 / Journal: numbered sections, booktabs tables) with the author-facing guide — the knob table, the fence, the assets convention; `themeExamples.test.ts` holds every file there to the runtime's own fence predicates, so a sample can never teach a rule the validator would drop.
 
 | `data-md-theme` | 名称 | 观感 |
 |-----------------|------|------|
@@ -62,10 +71,10 @@ Why CSS-in-TS instead of a `.module.css`: exported HTML is self-contained, so th
 Rules of the road:
 
 - A theme is a bag of `--md-*` custom properties consumed by shared base rules, plus an optional `rules` string (`&` = container selector) for signature touches. **Colours stay in design tokens** — that's what makes every theme follow dark/light for free.
-- Containers carry the global `md-body` class (`MD_BODY_CLASS`); the theme comes from `data-md-theme` on `<html>` (state in `appStore.markdownTheme`, persisted as `localStorage["app:markdownTheme"]`). A container may set the attribute on *itself* to pin one theme regardless of the app setting — the settings picker's live samples do this, which is why the generator emits pinned blocks after inherited ones.
+- Containers carry the global `md-body` class (`MD_BODY_CLASS`); the theme comes from `data-md-theme` on `<html>` (state in `appStore.markdownTheme` — a built-in id or a theme file's id, persisted as the `app:markdownTheme` preference in `config.db` — see `lib/prefs`; for a file, the attribute names the built-in it extends). Nothing pins a theme to one container any more: the settings samples are frames of their own, and a theme file could not have been pinned that way.
 - **Size belongs to the surface, not the theme.** Surfaces set `--md-size` (preview pane 17px, lore entry 15px, facet field 14px, picker sample 10px); themes may only nudge it via `--md-scale`. The base defaults sit in `:where()` (zero specificity) because the stylesheet is injected *after* the app's CSS modules and would otherwise beat a plain surface class.
 - **Preview zoom is not a `--md-size` change.** The editor preview's zoom control (`components/editor/Preview.tsx`, ladder + snapping in `lib/editor/previewZoom.ts`, persisted as `appStore.previewZoom` / `app:previewZoom`) sets CSS `zoom` on `.page` instead. Scaling `--md-size` would move type and leave every illustration, table and code block at its old size, because those are sized in px or in percentages of the measure — a "zoom" that only grows the words is the wrong feature. `zoom` also re-lays-out at the new scale rather than painting a transform, so glyphs stay crisp and the scrollbar reports the real height. It comes with one obligation: `zoom` scales the *used* width too, so the measure must divide it back out (`max-width: calc(var(--editor-max-width) / var(--preview-zoom))`) or a zoomed page grows wider than its pane and the manuscript scrolls sideways. Verified in-engine across 0.5×–3×: page width pins to the measure, images scale, no horizontal overflow.
-- To **add a theme**: append an entry to `MARKDOWN_THEMES` (id, zh/en label + desc, vars, optional rules) and extend the `MarkdownThemeId` union + `MARKDOWN_THEME_IDS`. The settings picker, persistence and export pick it up with no further wiring.
+- To **add a built-in theme**: append an entry to `MARKDOWN_THEMES` (id, zh/en label + desc, vars, optional rules), extend the `MarkdownThemeId` union + `MARKDOWN_THEME_IDS`, and add the id to `BUILTIN_MARKDOWN_IDS` in `lib/theme/manifest.ts` (it becomes a reserved file name). The settings picker, persistence and export pick it up with no further wiring. An author adds a theme by dropping a file in the folder instead.
 
 ### 组件模式 (Required patterns)
 - **Primary button**: solid `--color-accent`; hover → `--color-accent-hover` + `translateY(-1px)` + `--shadow-sm`; active → `translateY(0) scale(0.98)`; disabled → reduced opacity. Never opacity-only hover.
@@ -82,16 +91,16 @@ Rules of the road:
 
 ### 设置页色系 (Settings surface — `src/components/settings/**`)
 
-设计稿 04 gives the settings page its **own warm-paper family** — same hues as the workspace but one step lighter (page `#FBF7EE`, inputs `#FFFDF6`, its own sienna `#A9512B`) — and its own heading serif (Source Serif 4 / Noto Serif SC via `--font-serif-settings`). Implementation decisions:
+设计稿 05a gives the settings page its **own warm-paper family** — same hues as the workspace but one step lighter (page `#FBF7EE`, inputs `#FFFDF6`, its own sienna `#A9512B`) — and its own heading serif (Source Serif 4 / Noto Serif SC via `--font-serif-settings`). Implementation decisions:
 
 - **Tokens**: the palette lives in `tokens.css` as `--stg-*`, defined per theme. The mockup only specifies light; the night block maps each `--stg-*` role onto the existing night ramp so dark mode follows without a second design pass.
 - **One remap, not eighteen restyles**: every settings module consumes the same `--color-*` vocabulary as the rest of the app, so `SettingsPage.module.css` re-points those roles at `--stg-*` **once on `.page`** (custom properties resolve at use time, so the whole subtree — panes, drawers, probe panel — follows). Element-level exceptions that the mapping can't express (kbd 键帽, stat cards `#F7F1E2`, usage bar `#C68B5A`, hint blocks `#F8F2E3`) read their `--stg-*` token directly.
 - **Portals escape the remap** on purpose: `ConfirmDialog` renders through `ModalShell`'s portal and keeps the app-wide manuscript palette — a modal is app chrome, not settings furniture.
-- **Toggle switch** (`settingsUi.module.css .toggle`, the app's only switch): 42×22 track with a 1px border and a flat 14×14 **square** knob — no radius, no shadow, per 设计稿 04. OFF is a paper inset (`--stg-card-head` / `--stg-border-menu`, knob `--stg-knob`), ON dyes track+border `--stg-accent` with a `--stg-bg-input` knob. `--stg-knob` is the one palette entry the mockup adds for it (`#A99C7F`; night `#8E8271`, picked from the same warm-gray step as `--stg-text-faint` since the mockup is light-only). Native checkboxes in settings get `accent-color: var(--color-sienna)` to match.
+- **Toggle switch** (`settingsUi.module.css .toggle`, the app's only switch): 42×22 track with a 1px border and a flat 14×14 **square** knob — no radius, no shadow, per 设计稿 05a. OFF is a paper inset (`--stg-card-head` / `--stg-border-menu`, knob `--stg-knob`), ON dyes track+border `--stg-accent` with a `--stg-bg-input` knob. `--stg-knob` is the one palette entry the mockup adds for it (`#A99C7F`; night `#8E8271`, picked from the same warm-gray step as `--stg-text-faint` since the mockup is light-only). Native checkboxes in settings get `accent-color: var(--color-sienna)` to match.
 
 ### 知识库设计语言 (Lore surfaces — `src/components/lore/**`)
 
-设计稿 03（claude.ai/design 项目 → `03 设定集 Lore`）给知识库一套**索引卡**语汇：网格纸墙上的微旋转硬阴影卡片、六色分类系统、880×760 的成对模态。实现为 `tokens.css` 里的 `--lore-*` 族（per theme；夜间是把每个角色映射到既有夜色阶的推导，设计稿只给了纸色）。
+设计稿 03a（claude.ai/design 项目 → `03a 设定集 · 条目与类型 Lore A` / `03b 设定集 · 集合 Lore B`）给知识库一套**索引卡**语汇：网格纸墙上的微旋转硬阴影卡片、六色分类系统、880×760 的成对模态。实现为 `tokens.css` 里的 `--lore-*` 族（per theme；夜间是把每个角色映射到既有夜色阶的推导，设计稿只给了纸色）。
 
 - **分类六色** `--lore-cat-{character,location,item,event,faction,concept}`：分类圆点、实体头像底、候选徽标共用。映射入口是 `src/components/lore/catColor.ts`（墙与详情共用；未知分类 id 哈希进同一调色板，保证跨会话稳定）。**不要**在组件里再写分类→颜色的字典。
 - **卡片墙**：墙底 `--lore-wall-bg` + 36px 网格线 `--lore-wall-grid`；索引卡硬阴影三档 `--lore-card-shadow{,-lg,-hover}`（硬偏移阴影是索引卡的"纸感"，不是海拔——不要换成模糊阴影）。卡片微旋转 ±0.4deg 由实体 id 哈希得出，悬停回正。
@@ -114,7 +123,7 @@ Rules of the road:
 - **墙上的卡片**（屏 14，`LoreWall`）：标签行是**特征名**（`◈` 前缀），不再是别名的第二次复读（别名已经在名字下面那行）；卡片底部虚线上一条 `N 特征 · M 配图`。头像在 v2 稿里是方块——全局零圆角，`cardFeatured` 上遗留的三处 `border-radius:50%` 一并去掉。
 - **术语**：UI 一律 **特征**（不是"分面"）。i18n 里 `lore.facet.*` 的 key 名保留（磁盘 frontmatter 字段仍叫 `facet`），只有文案改了；三种模式的中文是 自动 / 常驻 / 手动。
 
-#### v3 · 条目阅读模式（设计稿 16 屏 1a–1f，`LoreReadView`）
+#### v3 · 条目阅读模式（设计稿 03c 屏 1a–1f，`LoreReadView`）
 
 条目详情的第二种看法（与三栏管理台并列，crumbBar 两态 segmented `阅读 | 管理`，快捷键 R，
 全局偏好 `app:loreDetailMode` 缺席即阅读；编辑表单压在两种看法之上）。核心一句：**卡片放大成
@@ -212,6 +221,15 @@ Rules of the road:
   省掉了图片描述，而描述正是纯文本模型唯一能读到的东西，为省高度丢信息不值当；配图卡在
   所有段里保持同一种。
 
+#### 分类操作与词典标准化（设计稿 03f 屏 1a–1g，`CategoryDeleteModal` / `CategoryMoveMenu` / `LoreDictNormalizeModal`）
+
+- **两张并列出口卡，不是复选框**：删除分类的「搬走」和「留在原地退化成未声明」结果差得很远，复选框会让「没勾」也变成一个默认后果。卡 + 单选标记 + 默认不选 + 确认键禁用；降级到只剩一条出口时形制不变。选中卡＝赭石 tint（`--color-bg-tinted`）+ 左侧 3px 赭石竖条（画成 `inset` 阴影，宽度不跳）+ 4px 环的单选标记。「保留」的代价用正文的灰，不用任何警示色——它是合法的选择。
+- **危险不用红**：不可逆的确认键是**深中性填色**——`--color-btn-neutral`（浅 `#5C5346` / 深 `#9A8E7A`）+ `--color-on-accent` 的字，悬停 `--color-btn-neutral-hover`。赭石是「这是你要的那个」，不能用来确认删除；眉题、计数句、出口卡已经把不可逆说了三遍，⚠ 不留。禁用退成 `--color-bg-inset` 底 + `--color-text-faint` 字，不靠 opacity。05f 屏 1l 的排版格式删除确认是同一形制。
+- **移到分类 vs 归集清单**：两块板子颜色一模一样、并排出现在同一条动作条上，分辨它们的是「有没有确认键」——色点 · 点一下就搬 · 页脚常驻脚注（虚线上边），对 方框勾（含「部分」三态）· 攒一串 · 「应用」键。头部那句「当前：人物 3 · 地点 2」是数字，mono，紧贴标题；脚注那句是机制，10px，常驻。搬家过程留在浮层里（转圈 + 「搬到「术语」…」+ 3/5，整层禁手），失败只写一行，不弹窗。
+- **「请核对」不是错误**：`--lore-check-bg` / `-line` / `-text`（浅 `#F8F2E2` / `#B08A3C` / `#8A6B2E`，深 `#2C2517` / `#C9A24A` / `#C9A24A`）——一枚 mono 眉签 + 2px 赭黄竖线 + 同色浅底，和「选中」的赭石分得开，也不喊叫。报数之外要**点出那几行**（行号 + 行底色 + 「原文里找不到」签 + 「只看这 N 条」），启发式挡不住所有幻觉，但作者的眼睛只需要落在那几行上。待核不禁用「应用」。
+- **分工写在头部**：「搬运 · 不生成」是词典标准化和别的 AI 模态的本质区别（别的是生成，这个是搬运），所以是一枚眉签 + 一句话贴在副题下、2px 赭石竖线站住——不是通栏横幅，宽度跟着正文走。结果态默认按 03c 屏 1e 的三栏词表**预览**（就是应用后条目里会看到的形制），编辑切回原文 textarea，两态共用一段草稿。
+- 禁用的右键项写「为什么禁用、去哪儿解」：`ContextMenu` 的 `hint` 是标签下一行 mono 小字（「来自能力包 · 到设置 → 工作台关掉整包」）。
+
 #### v2 · AI 流程与进度指示（设计稿屏 08–13/17/18）
 
 设计稿又一轮重画了知识库的全部 AI 流程屏，核心是屏 17「AI 执行进度 · 思维链」给出的**统一进度词汇**。此前六个 lore AI 模态各说各话（三个渐变点 + 轮播文案 / 裸 JSON 流 / 只换按钮文字 / AgentLog），本轮统一为三个积木（`src/components/lore/ai/LoreRunProgress.tsx`）：
@@ -228,7 +246,7 @@ Rules of the road:
 
 ### 文件面板设计语言 (Files panel — `components/layout/FileTree*`, `ProjectRow`)
 
-设计稿 17。整块面板由**一条主干决定**推出来：**把「选中」交给几何，把赭石留给唯一那一个。**
+设计稿 01b。整块面板由**一条主干决定**推出来：**把「选中」交给几何，把赭石留给唯一那一个。**
 
 - **三个互不占用的通道，组合不需要额外规则**：**A 底色** —— 悬停 `--color-bg-elevated`（中性），
   当前打开 `--color-accent-tint`，悬停在打开的那一行上 `--color-accent-tint-strong`；
@@ -244,9 +262,9 @@ Rules of the road:
 - **右列一列两义**：分组＝其下任意深度的 `.md` 篇数（10px mono），文档＝大写后缀标签
   （9.5px，`.md` 除外——它的后缀已经从名字里吃掉了）。`assets/<组>` 显示「插图」，而它的文档
   被改名后换成一枚 10px `alert-triangle`（`--color-text-muted`，**不是 danger**：没有东西正在坏
-  掉，只是链接指不到了）。判据全在 `lib/fs/rowMeta.ts`，一次树遍历，不读文件、不测量。
+  掉，只是链接指不到了）。作者自己的、**只装图片**的目录显示「图片」，与「插图」共用同一枚 `Images`：两者说的是同一件事，区别落在那个词上——**插图绑着一份文档、有修复动作，图片就是个目录**。三种情况都是「这一列被一个固定词占掉」，不是第三义；改成数图片张数才是。判据全在 `lib/fs/rowMeta.ts`，一次树遍历，不读文件、不测量（图片目录因此取「全部是图片」而不是「大部分是」）。
 - **文件种类不给颜色**，只给图标与两级灰：能写能读的（`.md/.txt/.html`）用 `--color-text-secondary`，
-  躺在目录里的（导入原件 / 图片 / `assets/`）用 `--color-text-muted`。分组图标**实心**
+  躺在目录里的（导入原件 / 图片 / `assets/` / 图片目录）用 `--color-text-muted`。分组图标**实心**
   （`fill-opacity: .2` 的 currentColor）、文档描边 —— 容器与叶子的区别交给填充，不交给色相；
   琥珀色文件夹取消，它是事实上的第二强调色。
 - **密度分档一律是 `@container`**，并且**必须写在 CSS 文件末尾**：容器查询不改变特异性，
@@ -280,13 +298,32 @@ Rules of the road:
   「再点一次＝全部展开」的说明，反向动作因此在同一个位置、同一个手指。唯一的禁用条件是
   「树里没有任何分组」（`opacity .4`、无 hover、**不给 tooltip**）。
 
+### 全局搜索 (⌘K — `components/command/CommandPalette*`)
+
+设计稿 01d。主干一句：**让组头先说「↵ 会把你带到哪」**——同一个词命中文档和条目时，不给两类不同的颜色
+（赭石已经给了当前项），靠三条既有通道叠加：① 组头右端 9.5 mono faint 写目的地（↵ 编辑器 / ↵ 知识库 /
+↵ 第 N 行）；② 行的左端形状——文档是 16px 描边图标 + 10.5 mono 路径（两级灰同文件面板），条目是 24px
+分类色块（有头像用图，否则分类色 18% 底 + 1px 边 + 首字，色来自 `catColor.ts`）+ 11 serif italic 副行；
+③ 当前项的动词（打开 / 前往条目 / 跳到第 N 行），脚线的 ↵ 那一格跟着变。
+
+- 面板 660 · 顶 14vh · `--color-bg-surface` + `--color-border-strong` + `--shadow-xl`，**零动画**（只有 80ms 遮罩淡入）。
+  输入行 52，组头 10/18/4，文档行 8/18、条目行 7/18、正文行 6/18、AI 行 9/18，脚线 30。
+- **作用域是 chip，不是前缀**：输入行右端四枚（全部 / 文档 / 条目 / 正文），Tab 轮换，档位组同一语法
+  （idle `--color-text-dim` + `--color-border-panel` · hover `--color-bg-elevated` · 选中 `--color-accent-text` /
+  `--color-bg-selected` / 赭石边）。AI 不占 chip——它不是可搜的集合，是对词的动作，两行永远压底。
+- 顺序 文档 → 条目 → 正文 → AI；正文只搜当前这一篇，所以放第三且组头点名篇名。「全部」档上限 6/5/4，
+  超出写一行 mono 事实「还有 N 篇 · Tab 切到「文档」」（Tab 赭石），不写「更多…」按钮；单档时组头消失（正文档例外）。
+- 右列只放一样：后缀 / 已打开 / ⌘↵，当前项时被动作提示替换。命中片段 `--color-mention-bg` 底 + 赭石字，名字与路径都可高亮。
+- 空查询 = 本会话「最近去过」混排 8 行，不标类型（行的形状已经说了）；没打开项目 = 最近项目选择器。
+  无命中的空句 12.5 serif italic 居中，单档时第二行报别的档里有多少、可点＝切档。
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
 
 **Why a dialect**: the panel used to stack card-in-card-in-input (three nested borders); the redesign expresses hierarchy with **background depth + 1px hairlines** instead, so the drawer reads as part of the manuscript rather than as a foreign toolbox.
 
-- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. (The AI panel pioneered this; 设计稿 01/04 later made zero radius the global rule — see 令牌速查 above.)
+- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. (The AI panel pioneered this; 设计稿 01a/05a later made zero radius the global rule — see 令牌速查 above.)
 - **Surface ladder** (per theme): `--color-bg-stream` (run column, tool lists) → `--color-bg-inset` (headers, footers, inputs, card interiors) → `--color-bg-base` (drawer body) → `--color-bg-raised` (user bubble, send stamp) → `--color-bg-selected` / `--color-bg-accent-wash` (selected 档位 / active chips).
 - **Composer send/stop slot (1b/2d 输入框两态)**: one 34px block, three looks — ready = solid `--color-sienna` + `--color-on-accent` ↑ arrow (14px, stroke 2.2); empty = the same block muted (`--color-bg-raised` + `--color-text-hint` arrow, 置灰 not hidden); running = the raised block framed in `--color-border-accent` holding the 11px sienna square — **the ink square means stop, not send** (2d reversed the original TURN-1 stamp-as-send). While running: the composer frame also turns `--color-border-accent` (outranking focus sienna), the footer leads with three 4px squares (`--color-border-accent`/`--color-accent-mid`/`--color-sienna`) + mono `正在生成 · mm:ss` in `--color-accent-mid`, the kbd hint becomes `Esc 停止`, and Enter queues the draft to send when the run settles (manual stop clears the queue). Muted states keep a `--color-border-input` hairline the mockup doesn't show: on paper `--color-bg-raised` is nearly the composer's own bg, and a frameless block vanishes.
 - **Ochre ramp** (accent steps, light→deep): `--color-accent-text` → `--color-sienna` → `--color-accent-mid` → `--color-accent-deep` → `--color-border-accent`. `--color-accent-mid` (#B3764A) is the mockup's shared mid tone — 注入条目/摘要 bar segments, the 正在生成 note — and is **the same hex in both themes** on purpose: on paper it lands within 2 units of the exact midpoint of `--color-sienna`↔`--color-border-accent`, so it is already the middle step there. Mind that in the light theme `--color-accent-deep` collapses onto `--color-sienna` (both #A0522D), so it cannot serve as a *distinct step* from sienna — reach for `--color-accent-mid` when a ramp has to stay legible as steps in both themes.
@@ -310,6 +347,10 @@ The AI drawer and every surface it spawns (panels, cards, modals, the inline bub
 - **代价写在三处，没有一处需要点掉 (2a)**: 输入框上那条线常驻「每轮 2 次请求」；单轮的耗时/token/金额只在**悬停**回复时出现；累计口径落在设置卡上。三处都是陈述，不是警告横幅。
 - **写手跑不起来时不写正文 (1a 轮 4)**: 那一轮的 `turn.text` 保持为空，运行时**不往阅读列里塞应用文案**（这正是署名设计禁止的东西：一段没有任何模型写过的文字）。原因走 `handoff-done` 事件，界面渲染成一条 2px 左边框 + 「应用」标签的通知块，带「去设置」与「本次关掉写手」两个出口。
 - **写入确认卡上的那一行 (7a)**: `ProposalBase.fromWriter` 为真时，卡片按钮行开头出现一句等宽小字「与上面读到的一字不差」。它成立的原因是几何的（字节从写手的流直接进提案，没有经过任何模型的输出），**哪天有模型转写了这段字，这个标记就必须摘掉**。
+- **多个会话 (23 · 助手多会话)**: 会话没有身份，并排时靠「叫什么」和「现在怎样」区分。**标签条** 38px 夹在模式 tab 和对话区之间（`SessionTabs`，底 `--color-bg-tabstrip`——抽屉最暗的一条带，比头部还暗一档，当前标签才贴得出来；这个 token 只此一用）：当前标签底色＝对话区底色 + `inset 0 2px 0 var(--color-sienna)` 顶线 + 压掉下边发丝线，其它标签只有一根右侧发丝线；悬停灰底、选中赭石顶线，两者不同源。标签 120–220px，放不下的收进右端等宽「+N」；右端是花名册同款读数 `并发 ▮▮▯ 2 / 3 · 排队 1`。标签上只有记号、字、×——用量不上标签。**两种字**（`lib/agent/chatLabel`）：作者起的名衬线 500 亮一档；第一句话的截断 400 暗一档、前带开引号“；没有第一句的写「未命名」最淡一档、无引号。**三家记号**（`ChatMark`，一个色）：圆＝在跑（5px 实心脉动 / 空心环），方＝有结果（7px 实心未读 / 空心出错），两根 2×9 竖条＝停住等你；模式 tab 只挂最急的一个（竖条 > 方块 > 圆，竖条缩到 7px），当前标签不画未读方块。**历史下拉**三节：已打开（唯一用 `--color-accent-text` 写小标签的一节，行尾「切到 ›」；当前那一行＝左缘 2px 赭石竖条 + `--color-bg-selected`，名字**不**染色）/ 已固定 / 最近（脚注写规则）；没有「已命名」一节——命名体现在字上。行尾悬停三个图标 + 右键同一套；删除就地确认，「删除」赭石不用红；等作者那一栏是唯一用赭石字的等宽状态。**头部大字是会话名**不是产品名，四态就地（悬停铅笔 / 1px 赭石框编辑 / `n / 60` 计数到顶变赭石 / 空名「未命名会话」虚线底）。**等作者的那一段**：转录 55% 透明度往上退，卡片是这段对话里唯一带顶上 2px 赭石线的东西，输入框变成一句说明而不是灰掉。**新会话的芯片回到默认**：「+ 选区」是禁用的幽灵芯片，「自动批准 —」是虚线芯片（`AutoApproveChip absent`，只在对话助手）；排队卡＝槽里空心环 + 卡内转圈 + 有分隔线的「正在跑的」一行，与扮演同构。
+- **助手输入区的四类控件 (02g · 屏 1c)**: 输入框上方那一行曾经平铺十六个等大方框，里面混着四类本质不同的东西。现在四类各有一件衣服，**框内 / 框外**是最硬的一道边：**A 材料**（选区、@引用、+ 引用）有框、在左、唯一带 ×——它是「发出去就没了」的东西；**B 会话**（计划模式 + 「能力」）无框、在右、7px 方块或带 ▾ 的词，在输入框**外**；**C 模型**（思考档位）等宽 11px 带 ▾，在输入框**内**的页脚，浮层顶上写「写进模型行」——它是这里唯一不随会话走的值（同一个值在 `05c 模型编辑` 里）；**D 指示**（自动批准）同样在页脚、等宽、**不带 ▾**，因为它不是控件：授权在确认卡上给出，这里只能撤销。框外改的是这段对话，框内是「这条消息会怎么被送出去」。
+- **收起可以，隐身不行 (02g · 屏 1c/1e)**: 六个子代理开关和 状态记忆 收进「能力」一个词，代价是一条硬规矩——任何一项处在非默认（本次停用、状态记忆开着）就在词后面**点名**，回到默认就消失；全默认时只写「能力 6」，有停用时写「能力 4/6 · 联网、PDF 已停」。没有悬停才出现的状态，数字**不能**代替名字。窄栏（960）下 B 整组作为一个单位掉到下一行并**仍靠右**（右对齐就是它的身份），名字宁可换行也不截断。这一行里**唯一允许截断的是 @引用芯片**（320px，中段省略、扩展名钉在右端不省，`middleEllipsis`）——那是标签，不是状态。计划模式留在「能力」外面，因为它是这一类里作者翻得最勤的一个。
+- **等待态保住页脚 (02g · 屏 1g-4)**: 停在确认卡上时，输入框**不再被一条独立的说明行替换**——框、页脚、停止方块全部留着，整体浅一档（`bg-elevated` 再降半档）。理由是「自动批准 —」现在住在页脚：作者按下上面那张卡的「本次都批准」，这个词立刻亮成「自动批准中」，而它必须在场才看得见这件事。B 类此时字还在但不响应点击（运行中改开关只影响下一轮，不值得在这里允诺），片段与思考一并浅掉；原来那句「↑ 卡就在输入框上方」随之取消——卡就压在一个明显停止收字的框上面。
 - **Known deltas from the global rules**: the drawer is **opaque ink** (`--color-bg-base`), not glass — the hairline hierarchy would be muddied by blur; depth inside the panel comes from background steps and borders, with shadows only on true overlays (分层海拔 applies to overlays only here); TaskPanel's done-pips are success green (progress semantics), not accent tint.
 
 ### 提示词库 (Snippet library — the picker, the save menu, 设置 → Prompt)

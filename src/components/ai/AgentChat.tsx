@@ -14,7 +14,8 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, ChevronDown, ChevronRight, ChevronsDown, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, FolderOpen, Image as ImageIcon, X } from "lucide-react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
@@ -33,15 +34,21 @@ import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
+import { isAsrEnabled } from "../../lib/asr/flag";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
-import { useAgentStore, type ChatTurn } from "../../stores/agentStore";
+import {
+  activeChat, chatQueuePosition, chatSurface, useActiveChat, useAgentStore, type ChatTurn,
+} from "../../stores/agentStore";
+import { MAX_CONCURRENT_RUNS } from "../../lib/agent/scheduler";
+import { liveLabel } from "../../lib/agent/chatLabel";
+import { ChatMark } from "./ChatMark";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
-import { useComposerStore } from "../../stores/composerStore";
+import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
@@ -52,7 +59,10 @@ import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
+import type { TurnExport } from "../../lib/agent/chatSession";
+import { middleEllipsis, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
+import { rewindableTurnIds } from "../../lib/agent/rewind";
 import { splitMentions } from "../../lib/agent/mentionText";
 import {
   computeContextBreakdown,
@@ -61,7 +71,7 @@ import { chatAgentPreset } from "../../lib/agent/packs";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
-import { SubAgentChips } from "./SubAgentChips";
+import { CapabilityMenu } from "./CapabilityMenu";
 import {
   findHandoff, handoffFailed, WorkOrder, WriterGutter, WriterUnavailable,
   type TurnHandoff,
@@ -69,10 +79,12 @@ import {
 import { markWriterIntroSeen, WriterIntro, WriterStrip, writerIntroSeen } from "./WriterStrip";
 import writer from "./WriterTurn.module.css";
 import { ContextBar } from "./ContextBar";
+import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
-import { CHAT_AUTO_APPROVE_KEY } from "../../lib/agent/autoApprove";
+import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
+import type { AttachedItem } from "../../lib/lore/aiTask";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -100,9 +112,29 @@ export function AgentChat() {
   // Field selectors — the store is written on every streamed flush, and a
   // whole-store subscription would also re-render this on writes it never
   // reads (usage totals, other surfaces' bookkeeping).
-  const turns = useAgentStore((s) => s.turns);
-  const chatRunning = useAgentStore((s) => s.chatRunning);
-  const chatError = useAgentStore((s) => s.chatError);
+  // The conversation on screen. Everything per-conversation is read through
+  // useActiveChat — the seam that kept these per-field subscriptions when the
+  // store went multi-session (docs/feature/agent/chat-sessions-plan.md §4.1).
+  const activeKey = useAgentStore((s) => s.activeChatKey);
+  const turns = useActiveChat((c) => c.turns);
+  const chatRunning = useAgentStore((s) => s.runningChats.includes(s.activeChatKey));
+  // Waiting for a slot (three conversations already generating): busy like
+  // running, drawn differently.
+  const chatQueued = useAgentStore((s) => s.chatQueue.some((j) => j.key === s.activeChatKey));
+  const queuePos = useAgentStore((s) => chatQueuePosition(s, s.activeChatKey));
+  // Who holds the slots — names only, joined into one string so this is a
+  // primitive subscription. The one place conversations "see" each other, and
+  // what they see is a name (设计稿 02b 屏 1h).
+  const runningLabels = useAgentStore((s) => s.runningChats
+    .map((k) => { const c = s.chats[k]; return c ? liveLabel(c).text : ""; })
+    .filter(Boolean)
+    .join(" · "));
+  const otherTabs = useAgentStore((s) => s.chatOrder.length - 1);
+  const lastClosedLabel = useAgentStore((s) => s.lastClosedLabel);
+  const hasHistory = useAgentStore((s) => s.chatSessions.length > 0);
+  const dequeueChat = useAgentStore((s) => s.dequeueChat);
+  const promoteChat = useAgentStore((s) => s.promoteChat);
+  const chatError = useActiveChat((c) => c.error);
   const allPending = useAgentStore((s) => s.pending);
   const allPlans = useAgentStore((s) => s.pendingPlans);
   const allRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
@@ -113,20 +145,30 @@ export function AgentChat() {
   const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
   const openSettings = useAppStore((s) => s.openSettings);
   const openModelPicker = useAppStore((s) => s.openModelPicker);
-  const chatCompacting = useAgentStore((s) => s.chatCompacting);
+  const chatCompacting = useAgentStore((s) => s.compactingChats.includes(s.activeChatKey));
   const compactChatNow = useAgentStore((s) => s.compactChatNow);
-  // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
-  // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
-  // 规则与理由见 lib/agent/approvalRouting。
-  const pending = cardsForSurface(allPending, null);
-  const pendingPlans = cardsForSurface(allPlans, null);
-  const pendingRoundLimits = cardsForSurface(allRoundLimits, null);
-  const pendingTruncations = cardsForSurface(allTruncations, null);
-  const pendingQuestions = cardsForSurface(allQuestions, null);
+  const rewindChat = useAgentStore((s) => s.rewindChat);
+  const chatMeta = useActiveChat((c) => c.meta);
+  const chatSessionId = useActiveChat((c) => c.sessionId);
+  const chatContextVersion = useActiveChat((c) => c.contextVersion);
+  const stateMemory = useActiveChat((c) => c.stateMemory);
+  // 只渲染标着**这一段对话**的卡片。别的对话（另一个标签）、扮演面板、任务面板
+  // 的卡各归各处——一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者
+  // 看不见的地方。规则与理由见 lib/agent/approvalRouting。
+  const surface = chatSurface(activeKey);
+  const pending = cardsForSurface(allPending, surface);
+  const pendingPlans = cardsForSurface(allPlans, surface);
+  const pendingRoundLimits = cardsForSurface(allRoundLimits, surface);
+  const pendingTruncations = cardsForSurface(allTruncations, surface);
+  const pendingQuestions = cardsForSurface(allQuestions, surface);
+  // Stopped at a card (设计稿 02b 屏 1i): the transcript steps back, the card is
+  // the one thing with a top line, and the composer becomes a sentence.
+  const waiting = pending.length + pendingPlans.length + pendingRoundLimits.length
+    + pendingTruncations.length + pendingQuestions.length > 0;
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const subAgents = useAiStore((s) => s.subAgents);
-  const disabledSubAgents = useAgentStore((s) => s.disabledSubAgents);
+  const disabledSubAgents = useActiveChat((c) => c.disabledSubAgents);
   const models = useAiStore((s) => s.models);
   const effectiveSubs = useMemo(
     () => withSessionOverrides(subAgents, disabledSubAgents),
@@ -135,13 +177,23 @@ export function AgentChat() {
   // Whether the model chain (either the active model directly or via vision subagent)
   // can consume pictures for the live session.
   const canSeeImages = chainCanSeeImages(activeModel, effectiveSubs, models);
+  // A recording can be @-mentioned only when the run will hold transcribe_audio
+  // (Beta on + an `asr` binding, routing.ts's rule): offering it otherwise
+  // attaches a file the message can neither carry nor hand to a tool.
+  const canTranscribe = isAsrEnabled() && subAgentModel("asr", models, effectiveSubs) !== null;
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
   // Held in composerStore, not useState: closing the drawer unmounts this
   // component, and a half-typed question must survive that.
-  const draft = useComposerStore((s) => s.chatDraft);
-  const setDraft = useComposerStore((s) => s.setChatDraft);
+  // Per conversation (keyed like roleplay's): a question half-written for one
+  // tab must not appear under the next.
+  const draft = useComposerStore((s) => chatComposerOf(s, activeKey).draft);
+  const setChatDraft = useComposerStore((s) => s.setChatDraft);
+  const setDraft = useCallback(
+    (update: string | ((prev: string) => string)) => setChatDraft(activeKey, update),
+    [setChatDraft, activeKey],
+  );
   // Mirrors `draft` for the handlers that read it after an await — reading a
   // large file takes long enough for the author to have kept typing.
   const draftRef = useRef(draft);
@@ -164,9 +216,15 @@ export function AgentChat() {
   // From the sidebar's tree, so a file that appeared after the project opened
   // is pickable as soon as the tree knows about it — no separate snapshot.
   const projectFiles = useProjectFiles();
-  const refs = useComposerStore((s) => s.chatRefs);
-  const setRefs = useComposerStore((s) => s.setChatRefs);
-  const clearComposer = useComposerStore((s) => s.clearChatComposer);
+  const refs = useComposerStore((s) => chatComposerOf(s, activeKey).refs);
+  const setChatRefs = useComposerStore((s) => s.setChatRefs);
+  const setRefs = useCallback(
+    (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) =>
+      setChatRefs(activeKey, update),
+    [setChatRefs, activeKey],
+  );
+  const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
+  const clearComposer = useCallback(() => clearChatComposer(activeKey), [clearChatComposer, activeKey]);
   const mention = useMentionState();
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();
@@ -200,9 +258,9 @@ export function AgentChat() {
     // carry — the author would see a chip and the assistant would answer as if
     // nothing were there.
     ...projectFiles
-      .filter((f) => f.kind === "text" || canSeeImages)
+      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages) || (f.kind === "media" && canTranscribe))
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, projectFiles, canSeeImages]);
+  ], [loreIndex, projectFiles, canSeeImages, canTranscribe]);
 
   const mentionItems = filterMentions(
     pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
@@ -218,7 +276,7 @@ export function AgentChat() {
    * typed mention would, instead of becoming a second kind of attachment the
    * message has to carry separately.
    */
-  const openMentionFor = (kind: PickKind) => {
+  const openMentionFor = (kind: PickKind | null) => {
     const el = inputRef.current;
     const caret = el?.selectionStart ?? draftRef.current.length;
     const before = draftRef.current.slice(0, caret);
@@ -293,6 +351,45 @@ export function AgentChat() {
     () => turns.slice(0, foldAt).filter((t) => t.role === "user").length,
     [turns, foldAt],
   );
+
+  // ── 回到这里重说 (docs/feature/agent/chat-memory-plan.md §12) ──
+  // Which questions can be rewound to is a property of the wire history (a
+  // folded question cannot), and the meta is mutated in place — so this
+  // recomputes on chatContextVersion, the store's "the history changed shape"
+  // signal, not on the meta reference.
+  const rewindable = useMemo(
+    () => rewindableTurnIds(turns, chatMeta),
+    [turns, chatMeta, chatContextVersion],
+  );
+  /** The question the author is about to rewind to, awaiting confirmation. */
+  const [rewindTo, setRewindTo] = useState<string | null>(null);
+  const rewindBarRef = useRef<HTMLDivElement>(null);
+  // The question the author clicked may sit right at the viewport's bottom
+  // edge, with the confirm bar growing below the fold — `nearest` scrolls only
+  // when it is actually out of sight.
+  useEffect(() => {
+    if (rewindTo !== null) rewindBarRef.current?.scrollIntoView({ block: "nearest" });
+  }, [rewindTo]);
+  // A turn starting, or a switch to another session, withdraws the question:
+  // the id it names may not even exist any more.
+  useEffect(() => { setRewindTo(null); }, [chatRunning, chatSessionId]);
+  const firstQuestionAt = turns.findIndex((tn) => tn.role === "user");
+  const rewindIndex = rewindTo === null ? -1 : turns.findIndex((tn) => tn.id === rewindTo);
+  const rewindExchanges = rewindIndex < 0
+    ? 0
+    : turns.slice(rewindIndex).filter((tn) => tn.role === "user").length;
+  const canRewind = !chatRunning && !chatCompacting && rewindTo === null;
+  const askRewind = useCallback((id: string) => setRewindTo(id), []);
+  const confirmRewind = () => {
+    const id = rewindTo;
+    if (id === null) return;
+    setRewindTo(null);
+    void rewindChat(id).then((text) => {
+      if (text === null) return;
+      setDraft(text);
+      inputRef.current?.focus();
+    });
+  };
   // Toggling the fold adds or removes content *above* the viewport, which
   // would visually teleport the transcript. Compensate by the height delta —
   // before paint, so the reader never sees the jump.
@@ -333,7 +430,7 @@ export function AgentChat() {
   // The handle's `taskId` is a getter on a stable object, so it is read through
   // a selector rather than off the object: the store's turns change on every
   // agent event, which is exactly when a workspace comes into being.
-  const chatTaskId = useAgentStore((s) => s.chatTaskWorkspace?.taskId ?? null);
+  const chatTaskId = useActiveChat((c) => c.taskWorkspace?.taskId ?? null);
   const turnLogs = useMemo(() => turns.map((tn) => tn.log), [turns]);
   const taskRevision = useMemo(() => taskDocRevision(turnLogs), [turnLogs]);
   const taskTokens = useMemo(() => sumTokens(turnLogs), [turnLogs]);
@@ -341,7 +438,7 @@ export function AgentChat() {
   const attachedQuote = !detached && selection ? selection : undefined;
   // chatCompacting too: a manual compaction is swapping the history a send
   // would append onto, so the composer waits it out (agentStore guards as well).
-  const canSend = !!draft.trim() && !chatRunning && !chatCompacting && !!activeModelId;
+  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -444,7 +541,7 @@ export function AgentChat() {
   // a changed prop there, i.e. the whole transcript reconciling per chunk, so
   // these have to be stable even though each is a one-liner.
   const disableWriterForSession = useCallback(() => {
-    if (!useAgentStore.getState().disabledSubAgents.includes("writer")) toggleSubAgent("writer");
+    if (!activeChat(useAgentStore.getState()).disabledSubAgents.includes("writer")) toggleSubAgent("writer");
   }, [toggleSubAgent]);
   const openSubAgentSettings = useCallback(() => openSettings("subagents"), [openSettings]);
 
@@ -507,10 +604,12 @@ export function AgentChat() {
   // event is a mid-turn snapshot, zero before the first run and one turn stale
   // afterwards. See lib/agent/contextBreakdown.ts for the other two corrections
   // (the ceiling as denominator, and counting the tool schemas).
-  const chatHistory = useAgentStore((s) => s.chatHistory);
-  const chatMeta = useAgentStore((s) => s.chatMeta);
-  const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
+  const chatHistory = useActiveChat((c) => c.history);
+  // chatMeta / chatContextVersion: selected up top, shared with the rewind.
   const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const autoCompact = useAppStore((s) => s.autoCompact);
+  const compactTriggerTokens = useAppStore((s) => s.compactTriggerTokens);
+  const compactTriggerRatio = useAppStore((s) => s.compactTriggerRatio);
   // Measured off the *routed* toolset — what sendChat actually puts on the wire
   // (agentStore routeTools with the session's sub-agent overrides), not the raw
   // preset: routing strips read_image/generate_image and appends delegate, and
@@ -538,11 +637,18 @@ export function AgentChat() {
         toolTokens,
         inputCeilingFor(activeModel?.contextSize, contextUtilization),
         activeModel?.contextSize ?? 0,
+        {
+          autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
+          // The mode as the *next* send will see it: the chip's value, gated on
+          // the Beta the same way sendChat gates it.
+          stateMode: stateMemory && isSkillStateEnabled(),
+        },
       ),
     // `chatContextVersion` is the real trigger — the history array is mutated
     // in place, so its reference alone would never announce a change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization],
+    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization,
+      autoCompact, compactTriggerTokens, compactTriggerRatio, stateMemory],
   );
   // The 立即归纳 affordance appears only when a forced fold would actually fold
   // something. Read off the breakdown rather than re-derived here: this used to
@@ -554,7 +660,7 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
-      {/* 取材范围的骑缝带（设计稿 03 屏 26-B）。围栏在**运行发生的地方**必须看得见
+      {/* 取材范围的骑缝带（设计稿 03b 屏 26-B）。围栏在**运行发生的地方**必须看得见
           ——知识库墙上写着一遍不够，作者写作时看的是这一栏。同一个控件的窄栏形态：
           省掉分类分布，只留条目数。 */}
       {loreScope !== null && (
@@ -582,11 +688,32 @@ export function AgentChat() {
           belongs to the bottom of the *scroller*, and the chrome below it
           (approval cards, task band, composer) changes height constantly. */}
       <div className={styles.viewport}>
-        <div ref={messagesRef} className={styles.messages}>
+        <div ref={messagesRef} className={`${styles.messages} ${waiting ? styles.messagesDim : ""}`}>
           {turns.length === 0 && (
-            <div className={styles.emptyHint}>
-              {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
-            </div>
+            // 设计稿 02b 屏 1g/1j: two lines, no sample prompts — the other tabs are
+            // still working, this one need not be loud. The one exception is the
+            // author's very first conversation, with nothing open or saved: then
+            // the old guidance is the only thing that says what this is.
+            otherTabs === 0 && !hasHistory && !lastClosedLabel ? (
+              <div className={styles.emptyHint}>
+                {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyTitle}>{t("ai.chat.emptyTitle", { defaultValue: "新的一段。" })}</div>
+                <div className={styles.emptyBody}>
+                  {otherTabs > 0 && (
+                    <>
+                      {t("ai.chat.emptyOthers", { n: otherTabs, defaultValue: `其余 ${otherTabs} 段照跑，回来时字都在。` })}
+                      <br />
+                    </>
+                  )}
+                  {lastClosedLabel
+                    ? t("ai.chat.emptyClosed", { name: lastClosedLabel, defaultValue: `刚关掉的「${lastClosedLabel}」在历史会话里。` })
+                    : t("ai.chat.emptyUnsaved", { defaultValue: "这一段还没存过；起个名或发第一句，它就留下了。" })}
+                </div>
+              </div>
+            )
           )}
           {foldableAt > 0 && (
             <button className={styles.foldBar} onClick={toggleFold} aria-expanded={showAll}>
@@ -599,15 +726,47 @@ export function AgentChat() {
                   })}
             </button>
           )}
-          {turns.slice(foldAt).map((turn) =>
+          {turns.slice(foldAt).map((turn, i) =>
             turn.role === "user" ? (
-              <UserTurn key={turn.id} turn={turn} onCtx={snippetSave.onMessageContextMenu} />
+              <UserTurn
+                key={turn.id}
+                turn={turn}
+                onCtx={snippetSave.onMessageContextMenu}
+                onRewind={canRewind && rewindable.has(turn.id) ? askRewind : undefined}
+                doomed={rewindIndex >= 0 && foldAt + i > rewindIndex}
+                /* The confirm grows under the question it is about, not at the
+                   foot of the transcript: that question may be screens above,
+                   and a question asked where nobody is looking goes unanswered
+                   (the roleplay panel learned this the hard way). */
+                confirm={rewindTo === turn.id ? (
+                  <div className={styles.rewindBar} ref={rewindBarRef}>
+                    <span className={styles.rewindText}>
+                      {foldAt + i === firstQuestionAt
+                        ? t("ai.chat.rewindConfirmFirst", {
+                            defaultValue: "撤销整段对话，原文回到输入框；下一次发送会重新取材。已批准落盘的修改不会跟着撤销。",
+                          })
+                        : t("ai.chat.rewindConfirm", {
+                            n: rewindExchanges,
+                            defaultValue: `撤销这一问和它之后的对话（共 ${rewindExchanges} 轮），原文回到输入框。已批准落盘的修改不会跟着撤销。`,
+                          })}
+                    </span>
+                    <button type="button" className={styles.rewindCancel} onClick={() => setRewindTo(null)}>
+                      {t("common.cancel", { defaultValue: "取消" })}
+                    </button>
+                    <button type="button" className={styles.rewindGo} onClick={confirmRewind}>
+                      {t("ai.chat.rewindGo", { defaultValue: "回退" })}
+                    </button>
+                  </div>
+                ) : undefined}
+              />
             ) : (
               <AssistantTurn
                 key={turn.id}
                 text={turn.text}
                 log={turn.log}
                 images={turn.images}
+                exports={turn.exports}
+                doomed={rewindIndex >= 0 && foldAt + i > rewindIndex}
                 isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
                 onCtx={snippetSave.onMessageContextMenu}
                 handoffOpen={handoffs.byTurn.get(turn.id)?.open ?? null}
@@ -634,6 +793,43 @@ export function AgentChat() {
           </button>
         )}
       </div>
+
+      {/* 排队 (设计稿 02b 屏 1h): the same card as the roster's, in this
+          conversation's words, plus who holds the slots. The readout stays on the
+          tab strip — it is global, the card is this conversation's. */}
+      {chatQueued && (
+        <div className={styles.queueCard}>
+          <div className={styles.queueGutter}><ChatMark state="queued" /></div>
+          <div className={styles.queueBox}>
+          <div className={styles.queueRow}>
+            <span className={styles.queueSpinner} aria-hidden />
+            <span className={styles.queueText}>
+              {t("ai.chat.queueWaiting", { n: Math.max(0, queuePos), defaultValue: `排队中 · 前面还有 ${Math.max(0, queuePos)} 段` })}
+            </span>
+            <span className={styles.queueHint}>
+              {t("ai.chat.queueHint", { max: MAX_CONCURRENT_RUNS, defaultValue: `同时最多 ${MAX_CONCURRENT_RUNS} 段会话生成` })}
+            </span>
+            <span className={styles.queueSpacer} />
+            <button
+              type="button"
+              className={styles.queueBtn}
+              onClick={() => { const text = dequeueChat(activeKey); if (text) setDraft(text); }}
+            >
+              {t("ai.chat.queueCancel", { defaultValue: "取消排队" })}
+            </button>
+            <button type="button" className={styles.queueBtnAccent} onClick={() => promoteChat(activeKey)}>
+              {t("ai.chat.queuePromote", { defaultValue: "插到最前" })}
+            </button>
+          </div>
+          {runningLabels && (
+            <div className={styles.queueRunning}>
+              <span>{t("ai.chat.queueRunning", { defaultValue: "正在跑的：" })}</span>
+              <span className={styles.queueRunningNames}>{runningLabels}</span>
+            </div>
+          )}
+          </div>
+        </div>
+      )}
 
       {chatError && <div className={styles.error}>{chatError}</div>}
 
@@ -686,7 +882,10 @@ export function AgentChat() {
         {showWriterIntro && <WriterIntro onDismiss={dismissWriterIntro} />}
         <WriterStrip composingSince={composingSince} />
 
-        <div className={styles.attachRow}>
+        {/* Waiting: the session switches keep their words but stop responding —
+            flipping one mid-turn only affects the next one, and this row is not
+            where that promise should be made (屏 1g-4). */}
+        <div className={`${styles.attachRow} ${waiting ? styles.attachRowWaiting : ""}`}>
           {attachedQuote ? (
             <button
               className={styles.attachChip}
@@ -707,9 +906,15 @@ export function AgentChat() {
               })}
             </button>
           ) : (
-            <span className={styles.attachEmpty}>
-              {t("ai.chat.noSelection", { defaultValue: "未选中正文" })}
-            </span>
+            // The slot's default, not a notice (设计稿 02b 屏 1g): the chip stays
+            // where it will light up, disabled until there is something to attach.
+            <button
+              className={styles.attachChipGhost}
+              disabled
+              title={t("ai.chat.noSelectionHint", { defaultValue: "先在正文里选中一段，它会作为选区附上" })}
+            >
+              + {t("ai.chat.selectionChipEmpty", { defaultValue: "选区" })}
+            </button>
           )}
           {/* @ references, beside the selection chip: both are "material this
               message carries", and splitting them across two rows would read
@@ -731,62 +936,85 @@ export function AgentChat() {
                 key={key}
                 className={styles.attachChip}
                 onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                title={shrunk ? `${shrunk} · ${t("ai.chat.removeRef")}` : t("ai.chat.removeRef")}
+                // The full name always reaches the author somewhere: the chip
+                // may cut its middle (屏 1g-3), the tooltip never does.
+                title={[label, shrunk, t("ai.chat.removeRef")].filter(Boolean).join(" · ")}
               >
                 {/* A picture is the one attachment whose cost the author can't
                     read off its name — mark it as what it is. */}
                 {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
-                @{label}
+                {/* A recording travels as a path, not content — the mark says so. */}
+                {r.kind === "media" && <AudioLines size={10} strokeWidth={2} />}
+                @{middleEllipsis(label)}
                 <X size={10} strokeWidth={2} />
               </button>
             );
           })}
-          {/* Standing affordances for the two things worth referencing. `@`
-              still works and is faster once known — these exist so the author
-              finds out that it does. */}
+          {/* One standing affordance, not three (设计稿 02g 屏 1c). `@` is the
+              whole mechanism and is faster once known; this exists so the
+              author finds out that it does, and splitting it per kind bought
+              three slots' worth of row for a filter the picker already has. */}
+          <button
+            className={styles.attachChipGhost}
+            onClick={() => openMentionFor(null)}
+            disabled={candidates.length === 0}
+            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
+          >
+            + {t("ai.chat.addRef", { defaultValue: "引用" })}
+          </button>
+
+          {/* The row's grammar (屏 1c · 1z §3): everything left of this spacer
+              is material *this message* carries and wears a frame; everything
+              right of it changes *this conversation* and wears none. The two
+              never mix, and at narrow widths the right group wraps as one unit
+              (see .attachSession in the stylesheet). */}
           <span className={styles.attachSpacer} />
-          <button
-            className={styles.attachChipGhost}
-            onClick={() => openMentionFor("lore")}
-            disabled={!candidates.some((c) => c.type === "lore")}
-            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-          >
-            + {terms.entry}
-          </button>
-          <button
-            className={styles.attachChipGhost}
-            onClick={() => openMentionFor("text")}
-            disabled={!candidates.some((c) => matchesKind(c, "text"))}
-            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-          >
-            + {terms.doc}
-          </button>
-          {/* Only when the model chain can see images: on a text-only setup without
-              vision subagent the chip would be permanently dead. */}
-          {canSeeImages && (
-            <button
-              className={styles.attachChipGhost}
-              onClick={() => openMentionFor("image")}
-              disabled={!candidates.some((c) => matchesKind(c, "image"))}
-              title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
-            >
-              + {t("ai.chat.imageRef", { defaultValue: "图片" })}
-            </button>
-          )}
-          {/* Subagent session toggles (search, vision, longread) */}
-          <SubAgentChips />
-          {/* Same family of session switch: how the assistant works, not what
-              the message carries. */}
-          <PlanModeChip />
-          {/* Only while 本次对话都批准 is live — see AutoApproveChip. */}
-          <AutoApproveChip owner={CHAT_AUTO_APPROVE_KEY} />
-          {/* Trailing edge, past the `+ …` affordances: this one doesn't add
-              material to the message, it changes how the model answers it. */}
-          <ReasoningControls variant="compact" />
+          <div className={styles.attachSession}>
+            {/* Outside 能力 on purpose: the one the author flips most. */}
+            <PlanModeChip />
+            <span className={styles.attachDivider} aria-hidden />
+            {/* The six subagent switches and 状态记忆, collapsed into one word
+                that names anything not in its default state. */}
+            <CapabilityMenu stateMemory />
+          </div>
         </div>
 
         {refError && <div className={styles.refError}>{refError}</div>}
 
+        {waiting ? (
+          // 设计稿 02g 屏 1g-4. The frame stays, one shade down — not struck
+          // out, not replaced by a bare line: the footer is where 自动批准 lives
+          // now, and this is the state where its placeholder earns its keep,
+          // because the card offering 本次都批准 is directly above and pressing
+          // it lights this word up. The stop stamp stays live too: the turn can
+          // still be called off wholesale.
+          <div className={`${styles.inputRow} ${styles.inputRowWaiting}`}>
+            <div className={styles.waitingLine}>
+              <ChatMark state="waiting" />
+              <span className={styles.waitingText}>
+                {t("ai.chat.waitingLine", { defaultValue: "这段停在上面那张卡。批准或拒绝之后才能继续说话。" })}
+              </span>
+            </div>
+            <div className={styles.inputFooter}>
+              {/* Inert, not gone: 片段 inserts into an input nobody can type in,
+                  and 思考 would look like it changed *this* turn (屏 1z §6). */}
+              <span className={styles.footerInert} aria-hidden>
+                <SnippetPicker value={draft} onInsert={setDraft} />
+              </span>
+              <span className={styles.footerSpacer} />
+              <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent variant="footer" />
+              <span className={styles.footerInert} aria-hidden>
+                <ReasoningControls variant="footer" />
+              </span>
+              <span className={styles.inputHint}>
+                {t("ai.chat.waitingClock", { defaultValue: "已停 {{clock}}", clock: runClock })}
+              </span>
+              <button className={`${styles.sendBtn} ${styles.stopBtn}`} onClick={handleStop} title={t("ai.chat.stop")}>
+                <span className={styles.sendGlyph} aria-hidden />
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
           <textarea
             ref={inputRef}
@@ -830,12 +1058,31 @@ export function AgentChat() {
                 {t("ai.chat.generating", { defaultValue: "正在生成" })} · {runClock}
               </span>
             )}
+            {/* 设计稿 02g 屏 1c: the footer is where "how this message gets
+                sent" is read — who nods for the writes, how hard the model
+                thinks, which key sends. Both of these used to sit in the chip
+                row above, where they wore the shape of session switches and
+                were neither. */}
+            <span className={styles.footerSpacer} />
+            <AutoApproveChip owner={chatAutoApproveKey(activeKey)} absent variant="footer" />
+            <ReasoningControls variant="footer" />
             <span className={styles.inputHint}>
-              {chatRunning
-                ? queued
+              {chatRunning ? (
+                queued
                   ? t("ai.chat.queuedHint", { defaultValue: "已排队 · 本轮结束后发送" })
                   : t("ai.chat.stopHint", { defaultValue: "Esc 停止" })
-                : t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
+              ) : (
+                <>
+                  {/* 屏 1e: the only thing in this footer allowed to abbreviate
+                      when the drawer is squeezed — the others are state. */}
+                  <span className={styles.hintLong}>
+                    {t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
+                  </span>
+                  <span className={styles.hintShort}>
+                    {t("ai.chat.sendHintShort", { defaultValue: "Enter ↵" })}
+                  </span>
+                </>
+              )}
             </span>
             {chatRunning ? (
               // 2d: the ink square is the *stop* mark — same slot, the raised
@@ -850,6 +1097,7 @@ export function AgentChat() {
             )}
           </div>
         </div>
+        )}
       </div>
       {/* The right-click menu / naming popover for every surface in this panel. */}
       {snippetSave.node}
@@ -893,6 +1141,67 @@ function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end
 }
 
 /**
+ * 一次导出的回执（设计稿 05f 屏 1k）。
+ *
+ * 它答的是四件事：落盘了、落在哪、按哪套格式排的、有没有东西没能原样带过去。
+ * 前三件助手也会在正文里说一遍，但第四件它历来说不准——降级是转换器数出来的，
+ * 不是模型看出来的，所以这张卡由**批准那一步**填，和图片同一条约定。
+ *
+ * 语气全在这里：绿勾和降级清单同处一张卡而不互相否定。没有红色、没有感叹号、
+ * 没有「警告」——文件是对的，只是有几处东西换了形式，作者需要知道但不需要被拦住。
+ */
+function TurnExports({ items }: { items?: TurnExport[] }) {
+  const { t } = useTranslation();
+  const projectPath = useProjectStore((s) => s.projectPath);
+  if (!items?.length) return null;
+  return (
+    <>
+      {items.map((x, i) => (
+        <div key={`${x.path}-${i}`} className={styles.exportCard}>
+          <div className={styles.exportHead}>
+            <Check size={13} className={styles.exportTick} />
+            <span className={styles.exportTitle}>{t("ai.chat.export.title")}</span>
+            <span className={styles.exportMeta}>
+              {t("ai.chat.export.meta", { n: x.blocks, s: (x.ms / 1000).toFixed(1) })}
+            </span>
+          </div>
+          <div className={styles.exportPathRow}>
+            <span className={styles.exportPath}>
+              {(projectPath ? projectRel(projectPath, x.path) : null) ?? toPosixPath(x.path)}
+            </span>
+            <button
+              className={styles.exportReveal}
+              onClick={() => { void revealItemInDir(x.path).catch(() => { /* best-effort */ }); }}
+            >
+              <FolderOpen size={11} />
+              {t("ai.chat.export.reveal")}
+            </button>
+          </div>
+          <div className={styles.exportFormat}>
+            {t("ai.chat.export.format", { line: x.formatLine })}
+            {x.degraded.length === 0 && ` · ${t("ai.chat.export.clean")}`}
+          </div>
+          {x.degraded.length > 0 && (
+            <div className={styles.exportDegraded}>
+              <div className={styles.exportDegradedHead}>
+                {t("ai.chat.export.degradedHead", { n: x.degraded.length })}
+              </div>
+              {x.degraded.map((d) => (
+                <div key={d} className={styles.exportDegradedItem}>
+                  <span className={styles.exportDegradedMark} />
+                  {d}
+                </div>
+              ))}
+              <div className={styles.exportDegradedNote}>{t("ai.chat.export.degradedNote")}</div>
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/**
  * A sent message's text with its `@[名称]` references in the accent color —
  * the same amber the ref chips wore before sending, so the bubble reads as the
  * record of that composition. Plain spans keep `.userTurn`'s pre-wrap intact.
@@ -915,13 +1224,26 @@ function MentionText({ text }: { text: string }) {
  * every earlier turn keeps its identity, so memoized turns skip entirely and
  * a stream only ever re-renders the one turn it is writing into.
  */
-const UserTurn = memo(function UserTurn({ turn, onCtx }: {
+const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed }: {
   turn: ChatTurn;
   onCtx: SnippetSave["onMessageContextMenu"];
+  /**
+   * 回到这里重说 — given only for a question that can be rewound to, and only
+   * while nothing is running. Takes the id (rather than closing over it) so the
+   * same callback serves every turn and the memo above keeps holding.
+   */
+  onRewind?: (turnId: string) => void;
+  /** The rewind confirm, when this is the question being rewound to. */
+  confirm?: React.ReactNode;
+  /** This turn would go with the pending rewind: dimmed, so "N exchanges" is visible. */
+  doomed?: boolean;
 }) {
   const { t } = useTranslation();
   return (
-    <div className={styles.userBlock} onContextMenu={(e) => onCtx(e, turn.text)}>
+    <div
+      className={`${styles.userBlock} ${doomed ? styles.turnDoomed : ""}`}
+      onContextMenu={(e) => onCtx(e, turn.text)}
+    >
       {turn.quote && (
         <div className={styles.quote}>
           <div className={styles.quoteLabel}>
@@ -935,7 +1257,17 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
           prose is a caption for the image, here it is the instruction
           the image came with. */}
       <TurnImages paths={turn.images} align="end" />
-      <div className={styles.turnTime}>{formatTime(turn.at)}</div>
+      <div className={styles.turnFoot}>
+        {/* Hover-revealed: it is an undo, and an undo should not stand with
+            its hand up on every line of the transcript. */}
+        {onRewind && (
+          <button type="button" className={styles.rewindBtn} onClick={() => onRewind(turn.id)}>
+            {t("ai.chat.rewindHere", { defaultValue: "回到这里重说" })}
+          </button>
+        )}
+        <span className={styles.turnTime}>{formatTime(turn.at)}</span>
+      </div>
+      {confirm}
     </div>
   );
 });
@@ -951,13 +1283,17 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
  * callbacks being `useCallback`'d up there.
  */
 const AssistantTurn = memo(function AssistantTurn({
-  text, log, images, isLive, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
+  text, log, images, exports, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
   onDisableWriter, onOpenSettings, onChangeModel,
 }: {
   text: string;
   log: AgentEvent[];
   images?: string[];
+  /** Files this turn exported. Written by the approval, like `images`. */
+  exports?: TurnExport[];
   isLive: boolean;
+  /** Would go with the pending rewind — see UserTurn. */
+  doomed?: boolean;
   onCtx: SnippetSave["onMessageContextMenu"];
   /** This turn's handoff events, when the writer produced its text. */
   handoffOpen: TurnHandoff["open"] | null;
@@ -990,7 +1326,7 @@ const AssistantTurn = memo(function AssistantTurn({
     // Nested, one of those two would be indented — and the rule's whole claim is
     // that it measures the writer's text exactly.
     <div
-      className={`${styles.assistantTurn} ${handoff ? writer.turn : ""}`}
+      className={`${styles.assistantTurn} ${handoff ? writer.turn : ""} ${doomed ? styles.turnDoomed : ""}`}
       onContextMenu={(e) => onCtx(e, text)}
     >
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
@@ -1012,6 +1348,9 @@ const AssistantTurn = memo(function AssistantTurn({
             </div>
           )
         ))}
+        {/* 导出回执在正文**之后**：助手先说它做了什么，回执确认它落在哪、有没有
+            折损。图片反过来（正文是图的说明），所以两者不共用位置。 */}
+        <TurnExports items={exports} />
         {/* The writer could not run: an app notice, not a reply. It gets no
             gutter and no rule — nothing was authored, so there is no boundary
             to mark. See lib/agent/runtime, which deliberately leaves the turn's

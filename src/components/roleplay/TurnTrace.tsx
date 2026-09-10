@@ -1,5 +1,5 @@
 /**
- * 本轮取材条（设计稿 13 · TURN 2）。
+ * 本轮取材条（设计稿 04c · TURN 2）。
  *
  * 回答一个问题：**这一轮，模型眼前有哪些条目和特征，为什么。**
  *
@@ -48,7 +48,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 import {
-  blockedChars, budgetPressed, dropRows, foldHits, hitRows, keywordLine,
+  budgetPressed, dropRows, foldHits, hitRows, keywordLine,
   residentRows, summarize, type DropRow, type FacetRow, type HitRow, type LayerChip,
   type ResidentRow,
 } from "../../lib/roleplay/traceView";
@@ -231,7 +231,12 @@ function Chips({ chips, facetCount }: { chips: LayerChip[]; facetCount: number }
     <>
       <div className={styles.chipRow}>
         {chips.map((c, i) => (
-          <span key={`${c.kind}-${i}`} className={styles.chip}>{label(c)}</span>
+          <span
+            key={`${c.kind}-${i}`}
+            className={`${styles.chip} ${c.kind === "core" && c.truncated ? styles.chipTruncated : ""}`}
+          >
+            {label(c)}
+          </span>
         ))}
         {facetCount > 0 && (
           <span className={styles.chip}>
@@ -262,9 +267,9 @@ function FacetLine({ facet }: { facet: FacetRow }) {
           {t("roleplay.trace.layerFacet", { defaultValue: "特征" })}
         </span>
         <span className={styles.spacer} />
-        <span className={styles.facetTk}>
-          {num(facet.chars)}<span className={styles.tkUnit}> 字</span>
-        </span>
+        {/* 特征行不带单位（设计稿 04c 屏 2c）：段头是段合计、条目行是条合计、特征行
+            只留数——三级靠右成一列，能比大小又不挡条目名。 */}
+        <span className={styles.facetTk}>{num(facet.chars)}</span>
       </div>
       {facet.ridesAlong ? (
         // 这一行必须存在：留空会被读成「不知道为什么进来的」，而它恰恰是最确定的一类。
@@ -338,13 +343,23 @@ function HitBlock({ row }: { row: HitRow }) {
 // ─── 常驻的一行 ──────────────────────────────────────────────────────────────
 
 /** 三种 kind 用**位置**分——它住在哪，不是又一种色标。 */
-function ResidentLine({ row }: { row: ResidentRow }) {
-  const { t } = useTranslation();
-  const where = row.kind === "primary"
+function whereLabel(t: ReturnType<typeof useTranslation>["t"], kind: ResidentRow["kind"]): string {
+  return kind === "primary"
     ? t("roleplay.trace.whereSystem", { defaultValue: "系统提示" })
-    : row.kind === "bound-facet"
+    : kind === "bound-facet"
       ? t("roleplay.trace.whereBoundFacet", { defaultValue: "绑定块 · 特征" })
       : t("roleplay.trace.whereBound", { defaultValue: "绑定块" });
+}
+
+/** `lore/地理/雪原三月`——引用的落点，只留知识库之内的那一段。 */
+function lorePathTail(dirPath: string): string {
+  const i = dirPath.lastIndexOf("/lore/");
+  return i >= 0 ? dirPath.slice(i + 1) : dirPath;
+}
+
+function ResidentLine({ row, onEditBindings }: { row: ResidentRow; onEditBindings?: () => void }) {
+  const { t } = useTranslation();
+  const where = whereLabel(t, row.kind);
   return (
     <div className={styles.residentRow}>
       <div className={styles.rowTop}>
@@ -362,11 +377,23 @@ function ResidentLine({ row }: { row: ResidentRow }) {
       </div>
       {/* 清单里有它、正文却不在上下文里——不说出来，作者永远查不到这件事。 */}
       {row.unexpanded && (
-        <div className={styles.note}>
-          {t("roleplay.trace.unexpandedNote", {
-            defaultValue: "正文不在上下文里 · 超出绑定块预算",
-          })}
-        </div>
+        <>
+          <div className={styles.note}>
+            {t("roleplay.trace.unexpandedNote", {
+              defaultValue: "正文不在上下文里 · 超出绑定块预算",
+            })}
+          </div>
+          {/* 稿上（设计稿 04c 屏 2b）还有一枚「提高绑定块预算」：绑定块的上限是常量
+              BOUND_BLOCK_CHAR_CAP，没有一个设置可以开，所以只给能兑现的那一枚——
+              改成只绑那一条特征，它落在编辑抽屉里。 */}
+          {onEditBindings && (
+            <div className={styles.actRow}>
+              <button type="button" className={styles.actLink} onClick={onEditBindings}>
+                {t("roleplay.trace.rebindFacet", { defaultValue: "改成绑定某条特征" })}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -374,6 +401,11 @@ function ResidentLine({ row }: { row: ResidentRow }) {
 
 // ─── 没进去 ──────────────────────────────────────────────────────────────────
 
+/**
+ * 一行落选。原因芯片之外，行尾写的是**去处**（设计稿 04c 屏 2f）：「没命中」列它
+ * 现有的关键字（作者最常改的就是这一条）、「同组挤掉」写出是哪一组、谁赢了、
+ * 「超预算」写差多少字、没装下的配图写清单里装下了几张。
+ */
 function DropLine({ row }: { row: DropRow }) {
   const { t } = useTranslation();
   const reasonText = {
@@ -384,18 +416,38 @@ function DropLine({ row }: { row: DropRow }) {
     resident: "",
   }[row.reason];
 
+  const label = row.kind === "images"
+    ? t("roleplay.trace.dropImages", {
+        name: row.label, n: row.imageCount ?? 0,
+        defaultValue: `${row.label} · 配图 ${row.imageCount ?? 0} 张`,
+      })
+    : row.label;
+
   const detail =
-    row.reason === "group-lost" && row.winner
-      ? t("roleplay.trace.dropGroupDetail", {
-          winner: row.winner, defaultValue: `「${row.winner}」优先`,
+    row.kind === "images"
+      ? t("roleplay.trace.dropImagesDetail", {
+          k: row.imagesKept ?? 0, defaultValue: `配图清单只装下 ${row.imagesKept ?? 0} 张`,
         })
-      : row.reason === "budget" && row.neededChars
-        ? t("roleplay.trace.dropBudgetDetail", {
-            n: num(row.neededChars), defaultValue: `差 ${num(row.neededChars)} 字`,
-          })
-        : row.reason === "manual-only"
-          ? t("roleplay.trace.dropManualDetail", { defaultValue: "不参与自动命中" })
-          : "";
+      : row.reason === "group-lost" && row.winner
+        ? row.group
+          ? t("roleplay.trace.dropGroupDetailFull", {
+              group: row.group, winner: row.winner,
+              defaultValue: `互斥组 ${row.group} ·「${row.winner}」优先`,
+            })
+          : t("roleplay.trace.dropGroupDetail", {
+              winner: row.winner, defaultValue: `「${row.winner}」优先`,
+            })
+        : row.reason === "budget" && row.neededChars
+          ? t("roleplay.trace.dropBudgetDetail", {
+              n: num(row.neededChars), defaultValue: `差 ${num(row.neededChars)} 字`,
+            })
+          : row.reason === "manual-only"
+            ? t("roleplay.trace.dropManualDetail", { defaultValue: "不参与自动命中" })
+            : row.reason === "no-key" && row.keys.length > 0
+              ? t("roleplay.trace.dropNoKeyDetail", {
+                  keys: row.keys.join("、"), defaultValue: `关键字：${row.keys.join("、")}`,
+                })
+              : "";
 
   return (
     <div className={styles.drop}>
@@ -403,7 +455,7 @@ function DropLine({ row }: { row: DropRow }) {
       <span className={`${styles.reasonChip} ${row.reason === "budget" ? styles.reasonWarn : ""}`}>
         {reasonText}
       </span>
-      <span className={styles.dropName}>{row.label}</span>
+      <span className={styles.dropName}>{label}</span>
       {detail && <span className={styles.dropDetail}>{detail}</span>}
     </div>
   );
@@ -429,11 +481,15 @@ function ResidentDropLine({ row }: { row: DropRow }) {
 
 // ─── 展开态 ──────────────────────────────────────────────────────────────────
 
-export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
+export function TraceBody({ trace, onRaiseBudget, onOpenArea, onUnbind, onEditBindings }: {
   trace: TurnContextTrace;
   /** 「提高预算」——只在有 `budget` 落选时出现。 */
   onRaiseBudget?: () => void;
   onOpenArea?: () => void;
+  /** 失效绑定那一行的「解除绑定」：摘掉这一条路径。 */
+  onUnbind?: (path: string) => void;
+  /** 「另选条目」/「改成绑定某条特征」：打开这个角色的编辑抽屉。 */
+  onEditBindings?: () => void;
 }) {
   const { t } = useTranslation();
   const resident = residentRows(trace);
@@ -442,8 +498,12 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
   const drops = [...dropRows(trace.lore), ...dropRows(trace.area)];
   const fails = drops.filter((d) => d.reason !== "resident");
   const residents = drops.filter((d) => d.reason === "resident");
+  const budgetCount = fails.filter((d) => d.reason === "budget").length;
+  const otherCount = fails.length - budgetCount;
   const folded = foldHits(lore);
   const [showRest, setShowRest] = useState(false);
+  // 窄档「没进去」先给数，点「看原因」才逐条展开（设计稿 04c 屏 2i）。
+  const [showReasons, setShowReasons] = useState(false);
   const shown = showRest ? lore : folded.shown;
   const residentTotal = resident.reduce((n, r) => n + r.chars, 0);
 
@@ -472,9 +532,30 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
             {t("roleplay.trace.residentNone", { defaultValue: "这个角色没有绑定任何条目" })}
           </div>
         ) : (
-          resident.map((r) => (
-            <ResidentLine key={`${r.dirPath}-${r.facetTitle ?? ""}`} row={r} />
-          ))
+          <>
+            <div className={styles.residentRows}>
+              {resident.map((r) => (
+                <ResidentLine key={`${r.dirPath}-${r.facetTitle ?? ""}`} row={r} onEditBindings={onEditBindings} />
+              ))}
+            </div>
+            {/* 窄档收成名单（设计稿 04c 屏 2i）：用「／」连成一段正文，kind 降成行内小字；
+                「只进了标题」的标记留着——它是这一段唯一会害人的东西。两份都渲染，
+                显隐交给容器查询，和阅读模式的边注同一手法。 */}
+            <div className={styles.residentList} aria-hidden>
+              {resident.map((r, i) => (
+                <span key={`${r.dirPath}-${r.facetTitle ?? ""}`}>
+                  {i > 0 && <span className={styles.residentListSep}>／</span>}
+                  <span className={styles.residentName}>{r.label}</span>
+                  <span className={styles.residentListKind}>{whereLabel(t, r.kind)}</span>
+                  {r.unexpanded && (
+                    <span className={`${styles.chipSm} ${styles.chipWarn}`}>
+                      {t("roleplay.trace.unexpanded", { defaultValue: "只进了标题" })}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </>
         )}
         {trace.stalePaths.length > 0 && (
           <div className={styles.staleGroup}>
@@ -488,6 +569,20 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
                 </div>
                 {/* 失效的绑定留在原位、留着删除线，不悄悄抹掉——你得看见你绑过它。 */}
                 <div className={styles.stalePath}>{p}</div>
+                {(onUnbind || onEditBindings) && (
+                  <div className={styles.actRow}>
+                    {onUnbind && (
+                      <button type="button" className={styles.actLink} onClick={() => onUnbind(p)}>
+                        {t("roleplay.trace.unbind", { defaultValue: "解除绑定" })}
+                      </button>
+                    )}
+                    {onEditBindings && (
+                      <button type="button" className={styles.actLink} onClick={onEditBindings}>
+                        {t("roleplay.trace.rebind", { defaultValue: "另选条目" })}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -578,15 +673,18 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
           />
           {trace.refs.map((r) => (
             <div key={r.dirPath} className={styles.refRow}>
-              <span className={styles.residentName}>{r.name}</span>
-              <span className={styles.chipSm}>
-                {t("roleplay.trace.refWhole", { defaultValue: "全文" })}
-              </span>
+              <div className={styles.rowTop}>
+                <span className={styles.residentName}>{r.name}</span>
+                <span className={styles.chipSm}>
+                  {t("roleplay.trace.refInline", { defaultValue: "已内联在问句里" })}
+                </span>
+              </div>
+              <div className={styles.refPath}>{lorePathTail(r.dirPath)}</div>
             </div>
           ))}
           <div className={styles.marginNote}>
             {t("roleplay.trace.refsNote", {
-              defaultValue: "你在输入里写的 @ · 不看关键字，也不被同组挤掉",
+              defaultValue: "正文已经写进你这句话里，不单独占块，也不算进本轮字数",
             })}
           </div>
         </section>
@@ -595,48 +693,67 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea }: {
       {/* ── 没进去 · 不装订 ──
           它不是第五种来源，是一种状态，而装订线在这一稿里只表示「进了上下文」。 */}
       {drops.length > 0 && (
-        <section className={styles.drops}>
+        <section className={`${styles.drops} ${showReasons ? styles.dropsForced : ""}`}>
+          {/* 段头右端不读数（TURN 2 屏 2b）：被挡下多少字写在段底的预算条里，只在有解时出现。 */}
           <SectionHead
             label={t("roleplay.trace.dropped", { n: drops.length, defaultValue: `没进去 · ${drops.length}` })}
-            right={blockedChars(fails)
-              ? t("roleplay.trace.blocked", {
-                  n: num(blockedChars(fails)),
-                  defaultValue: `${num(blockedChars(fails))} 字被挡下`,
-                })
-              : undefined}
           />
-          {fails.map((d, i) => <DropLine key={`${d.label}-${i}`} row={d} />)}
-          {/* resident 单独排在一道细线之下：它不是失败。 */}
-          {residents.length > 0 && (
-            <div className={styles.dropResidentGroup}>
-              {residents.map((d, i) => <ResidentDropLine key={`${d.label}-${i}`} row={d} />)}
-            </div>
-          )}
-          {/* 预算条只在有 `budget` 落选时带按钮——预算没满却摆个亮按钮劝你调它，
-              是在制造焦虑。 */}
-          {budgetPressed(fails) && trace.lore && (
-            <div className={styles.budget}>
-              <div className={styles.budgetText}>
-                <div className={styles.budgetLine}>
-                  {t("roleplay.trace.budgetFull", {
-                    used: num(trace.lore.usedChars), cap: num(trace.lore.budgetChars),
-                    defaultValue: `检索预算 ${num(trace.lore.usedChars)} / ${num(trace.lore.budgetChars)} 字 已满`,
-                  })}
-                </div>
-                <div className={styles.budgetSub}>
-                  {t("roleplay.trace.budgetBlocked", {
-                    n: fails.filter((d) => d.reason === "budget").length,
-                    defaultValue: `${fails.filter((d) => d.reason === "budget").length} 项因此被挡在外面`,
-                  })}
-                </div>
+          {/* 窄档先给数（设计稿 04c 屏 2i）：只列原因计数芯片加一个「看原因」。超预算
+              单独成芯片（唯一带动作的一类）；「已在上下文」也单独出现且不带框——它不是
+              失败，不该被折进「其它」。 */}
+          <div className={styles.dropsCompact}>
+            {budgetCount > 0 && (
+              <span className={`${styles.reasonChip} ${styles.reasonWarn}`}>
+                {t("roleplay.trace.compactBudget", { n: budgetCount, defaultValue: `超预算 ${budgetCount}` })}
+              </span>
+            )}
+            {otherCount > 0 && (
+              <span className={styles.reasonChip}>
+                {t("roleplay.trace.compactOther", { n: otherCount, defaultValue: `其它 ${otherCount}` })}
+              </span>
+            )}
+            {residents.length > 0 && (
+              <span className={styles.compactResident}>
+                {t("roleplay.trace.compactResident", { n: residents.length, defaultValue: `已在上下文 ${residents.length}` })}
+              </span>
+            )}
+            <button type="button" className={styles.actLink} onClick={() => setShowReasons(true)}>
+              {t("roleplay.trace.seeReasons", { defaultValue: "看原因" })}
+            </button>
+          </div>
+          <div className={styles.dropsFull}>
+            {fails.map((d, i) => <DropLine key={`${d.label}-${i}`} row={d} />)}
+            {/* resident 单独排在一道细线之下：它不是失败。 */}
+            {residents.length > 0 && (
+              <div className={styles.dropResidentGroup}>
+                {residents.map((d, i) => <ResidentDropLine key={`${d.label}-${i}`} row={d} />)}
               </div>
-              {onRaiseBudget && (
-                <button type="button" className={styles.budgetBtn} onClick={onRaiseBudget}>
-                  {t("roleplay.trace.raiseBudget", { defaultValue: "提高预算" })}
-                </button>
-              )}
-            </div>
-          )}
+            )}
+            {/* 预算条只在有 `budget` 落选时带按钮——预算没满却摆个亮按钮劝你调它，
+                是在制造焦虑。 */}
+            {budgetPressed(fails) && trace.lore && (
+              <div className={styles.budget}>
+                <div className={styles.budgetText}>
+                  <div className={styles.budgetLine}>
+                    {t("roleplay.trace.budgetFull", {
+                      used: num(trace.lore.usedChars), cap: num(trace.lore.budgetChars),
+                      defaultValue: `检索预算 ${num(trace.lore.usedChars)} / ${num(trace.lore.budgetChars)} 字 已满`,
+                    })}
+                  </div>
+                  <div className={styles.budgetSub}>
+                    {t("roleplay.trace.budgetBlocked", {
+                      n: budgetCount, defaultValue: `${budgetCount} 项因此被挡在外面`,
+                    })}
+                  </div>
+                </div>
+                {onRaiseBudget && (
+                  <button type="button" className={styles.budgetBtn} onClick={onRaiseBudget}>
+                    {t("roleplay.trace.raiseBudget", { defaultValue: "提高预算" })}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </section>
       )}
     </div>

@@ -45,6 +45,7 @@ import { compareFreshness, type Freshness } from "../lib/sync/status";
 import { runSync, type SyncRunResult } from "../lib/sync/run";
 import { clearBinding, loadBinding, saveBinding } from "../lib/sync/store";
 import { useLoreStore } from "./loreStore";
+import { readPref, writePref } from "../lib/prefs";
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
@@ -65,6 +66,11 @@ interface SyncState {
   /** Which project the last hydrate ran for — `ensureReady`'s guard. */
   hydratedFor: string | null;
   connection: ConnectionState;
+  /**
+   * When this machine last reached the server (ms epoch), persisted as a pref —
+   * the offline strip reads 「连不上 · 上次连通 今天 09:12」 after a restart too.
+   */
+  lastConnectedAt: number | null;
   /** Why the last connect attempt failed; also used for pane-level errors. */
   error: string | null;
   /** Knowledge bases on the server; empty until connected. */
@@ -120,6 +126,15 @@ interface SyncState {
   setAcknowledged: (on: boolean) => void;
   confirmRun: (projectPath: string) => Promise<void>;
   closeModal: () => void;
+  /**
+   * The preview modal put away by the author while a run is in flight. Nothing
+   * about the run changes; the wall widget keeps showing progress and offers
+   * 「查看」 to bring the modal back. Cleared when the run finishes or the modal
+   * is really closed.
+   */
+  modalHidden: boolean;
+  hideModal: () => void;
+  showModal: () => void;
 }
 
 /**
@@ -148,6 +163,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   device: "",
   hydratedFor: null,
   connection: "disconnected",
+  lastConnectedAt: readLastConnectedAt(),
   error: null,
   kbs: [],
   binding: null,
@@ -157,6 +173,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   records: [],
   checking: null,
   phase: "idle",
+  modalHidden: false,
   direction: "push",
   plan: null,
   planLocal: {},
@@ -259,7 +276,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       client = next;
       setServerUrl(url);
       await saveToken(url, token);
-      set({ connection: "connected", kbs, serverUrl: url });
+      const now = Date.now();
+      writePref("app:kbLastConnectedAt", String(now));
+      set({ connection: "connected", kbs, serverUrl: url, lastConnectedAt: now });
     } catch (e) {
       client = null;
       set({ connection: "error", error: e instanceof Error ? e.message : String(e), kbs: [] });
@@ -437,7 +456,9 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         onProgress: (done, total, path) => set({ progress: { done, total, path } }),
       });
       await saveBinding(projectPath, result.binding);
-      set({ phase: "done", result, binding: result.binding, progress: null });
+      // A run the author had put away comes back with its result: the backup
+      // location and the failures are shown nowhere else.
+      set({ phase: "done", result, binding: result.binding, progress: null, modalHidden: false });
       // Report the run to the server's per-base sync log — the record another
       // machine will read to learn this one synced. Best-effort: the sync
       // itself already landed, and an older server without the endpoint
@@ -467,8 +488,17 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
-  closeModal: () => set({ phase: "idle", plan: null, result: null, progress: null, acknowledged: false }),
+  closeModal: () =>
+    set({ phase: "idle", plan: null, result: null, progress: null, acknowledged: false, modalHidden: false }),
+  hideModal: () => set({ modalHidden: true }),
+  showModal: () => set({ modalHidden: false }),
 }));
+
+function readLastConnectedAt(): number | null {
+  const raw = readPref("app:kbLastConnectedAt");
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** Test seam: drop the connected client between cases. */
 export function resetSyncClientForTest(): void {

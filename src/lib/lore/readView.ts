@@ -72,7 +72,7 @@ export function entityReadStats(entity: LoreEntity, indexBodyChars: number): Ent
   };
 }
 
-/** 词典正文拆成「词表 + 其余行」（设计稿 16 屏 1e）。 */
+/** 词典正文拆成「词表 + 其余行」（设计稿 03c 屏 1e）。 */
 export interface DictSplit {
   entries: GlossaryEntry[];
   /** 解析不成词对的非空行，按原样 markdown 落在词表下方——不吞掉内容。 */

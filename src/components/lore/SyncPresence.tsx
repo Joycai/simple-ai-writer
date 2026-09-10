@@ -8,7 +8,7 @@ import { baseName } from "../../lib/paths";
 import s from "./SyncPresence.module.css";
 
 /**
- * 墙上的同步状态件 —— 设置页锚点卡的缩写(设计稿 14)。
+ * 墙上的同步状态件 —— 设置页锚点卡的缩写(设计稿 03d)。
  *
  * 同一枚判定圆点、同样带省略号的两个动作,压到一行,坐在头部工具带最右侧。
  * **它不做任何执行**:推送…/拉取… 都是「带方向打开既有的同步预览模态」,
@@ -23,6 +23,9 @@ export function SyncPresence() {
   const sync = useSyncStore();
   const openSettings = useAppStore((st) => st.openSettings);
   const [open, setOpen] = useState(false);
+  // 从这枚件上点「重连」失败了才浮出错误行（设计稿 03d 屏 1k 交互衔接）；静默准备
+  // 那一次失败只落成「连不上」——它没有被作者按下，不该弹一行字出来。
+  const [reconnectFailed, setReconnectFailed] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // 一次静默准备:补水、必要时连一次、刷新对比。失败落在 connection:"error",
@@ -58,9 +61,9 @@ export function SyncPresence() {
   };
   const reconnect = async () => {
     await sync.connect();
-    if (useSyncStore.getState().connection === "connected") {
-      await sync.refreshCounts(projectPath);
-    }
+    const ok = useSyncStore.getState().connection === "connected";
+    setReconnectFailed(!ok);
+    if (ok) await sync.refreshCounts(projectPath);
   };
 
   if (running) {
@@ -77,6 +80,18 @@ export function SyncPresence() {
             {p.done} / {p.total}
           </span>
         )}
+        {/* 两个动作合并成「查看」（设计稿 03d 屏 1j）：点开就是执行中的那张模态——作者
+            用 × 把它收起后，进度留在这枚件上，模态从这里回来。 */}
+        <span className={s.sep} />
+        <button
+          className={`${s.action} ${s.actionOn}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            sync.showModal();
+          }}
+        >
+          {t("sync.wView")}
+        </button>
         <div className={s.progress}>
           <div className={s.progressFill} style={{ width: `${pct}%` }} />
         </div>
@@ -165,6 +180,23 @@ export function SyncPresence() {
             {t("sync.wReconnect")}
           </button>
         </>
+      )}
+
+      {/* 重连失败：浮出一行错误并给「去设置改地址 →」（设计稿 03d 屏 1k）。成功则就地
+          变回判定态，这一行随 connected 一起消失。 */}
+      {!connected && reconnectFailed && sync.error && (
+        <div className={s.errLine} onClick={(ev) => ev.stopPropagation()}>
+          <span className={s.errText}>{sync.error}</span>
+          <button
+            className={s.errGo}
+            onClick={() => {
+              setOpen(false);
+              openSettings("sync");
+            }}
+          >
+            {t("sync.wGoSettings")}
+          </button>
+        </div>
       )}
 
       {open && (

@@ -421,6 +421,37 @@ function sniffImageMime(base64: string, fallback = "image/png"): string {
 }
 
 /**
+ * A picture from a base64 payload, typed by its bytes.
+ *
+ * The declared mime is only the fallback: a relay's `inlineData.mimeType` says
+ * `image/png` over JPEG bytes (hk.chenmoai.com, 2026-09), and a file saved
+ * under the declared extension then lies about its contents.
+ */
+function imageFromBase64(base64: string, declared?: string): GeneratedImage {
+  const mime = sniffImageMime(base64, declared || "image/png");
+  return { dataUrl: dataUrlOf(mime, base64), mime };
+}
+
+/** Same rule for a data URL already assembled by the endpoint. */
+function imageFromDataUrl(dataUrl: string): GeneratedImage {
+  const comma = dataUrl.indexOf(",");
+  if (comma === -1) return { dataUrl, mime: mimeOfDataUrl(dataUrl) };
+  const payload = dataUrl.slice(comma + 1);
+  const declared = mimeOfDataUrl(dataUrl);
+  const mime = sniffImageMime(payload, declared);
+  return mime === declared ? { dataUrl, mime } : { dataUrl: dataUrlOf(mime, payload), mime };
+}
+
+/** A whole string that is nothing but a picture — a bare link or bare base64. */
+function classifyBareText(text: string): { kind: "link" | "base64"; value: string } | undefined {
+  const t = text.trim();
+  if (/^https?:\/\/\S+$/.test(t)) return { kind: "link", value: t };
+  // 64 chars is well past any prose; the signature check is what decides.
+  if (t.length >= 64 && /^[A-Za-z0-9+/]+=*$/.test(t) && sniffImageMime(t, "")) return { kind: "base64", value: t };
+  return undefined;
+}
+
+/**
  * Fetch an image URL and inline it as a data URL.
  *
  * Endpoints that answer with links (xAI's default, most relays) hand back
@@ -460,7 +491,7 @@ async function downloadImage(url: string, signal?: AbortSignal): Promise<Generat
     for (let i = 0; i < bytes.length; i += 0x8000) {
       binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     }
-    return { dataUrl: dataUrlOf(mime, btoa(binary)), mime };
+    return imageFromBase64(btoa(binary), mime);
   } finally {
     deadline.done();
   }
@@ -552,7 +583,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
     } else if (entry.url?.startsWith("data:")) {
       // Some relays put the base64 in `url`. Fetching that as a link happens
       // to work in a browser and does not in Tauri's reqwest transport.
-      images.push({ dataUrl: entry.url, mime: mimeOfDataUrl(entry.url) });
+      images.push(imageFromDataUrl(entry.url));
     } else if (entry.url) {
       images.push(await urlToDataUrl(entry.url, signal));
     }
@@ -715,14 +746,19 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
         model: conn.modelId,
         messages: [{
           role: "user",
-          // An edit is just a multimodal message here — the same `image_url`
-          // parts a vision request uses, which is why relays accept it.
-          content: req.images?.length
-            ? [
-                { type: "text", text: prompt },
-                ...req.images.map((url) => ({ type: "image_url", image_url: { url } })),
-              ]
-            : prompt,
+          // Always the parts array, even with no input image. An edit is just
+          // a multimodal message here — the same `image_url` parts a vision
+          // request uses, which is why relays accept it — and the relay that
+          // translates this call into an image request answers a plain string
+          // with `400 images[0] must be an http/https URL or image data URI`
+          // while taking the one-part array (hk.chenmoai.com `[R]gpt-image-2`,
+          // 2026-09; it had accepted the string an hour earlier, so the two
+          // spellings reach different channels). The array is valid Chat
+          // Completions everywhere; the string is the one that costs a route.
+          content: [
+            { type: "text", text: prompt },
+            ...(req.images ?? []).map((url) => ({ type: "image_url", image_url: { url } })),
+          ],
         }],
         stream: false,
         // Same "only when it isn't the default" rule as the other routes. Most
@@ -742,41 +778,76 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
   const json = (await readJson(res, "Image API error")) as {
     choices?: { message?: {
       content?: string | { type?: string; text?: string; image_url?: { url?: string } }[];
-      images?: ({ image_url?: { url?: string }; url?: string } | string)[];
+      images?: ({ image_url?: { url?: string }; url?: string; b64_json?: string } | string)[];
+      image_b64_json?: string;
     } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
     error?: { message?: string } | string;
   };
   if (json.error) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: json.error }));
 
+  // There is no one shape here — the protocol has no image field, so every
+  // relay invents its own, and one answer often carries the same picture in
+  // several places at once. Seen so far (each is a real endpoint, not a guess):
+  //   - `images[].image_url.url` (OpenRouter-style, data URL or link)
+  //   - `content` with markdown `![](…)` (newAPI serving Gemini image models)
+  //   - `content` as a multimodal part array
+  //   - `images[].b64_json` + `image_b64_json` + `content` = the same bare
+  //     base64 string three times, and an *edit* answered with a bare signed
+  //     URL as `content` (hk.chenmoai.com, `[R]gpt-image-2`, 2026-09)
+  // Everything found is deduplicated by value, so a picture repeated across
+  // fields comes out once; links are downloaded in the order they appeared.
   const message = json.choices?.[0]?.message;
-  const urls: string[] = [];
+  const found: (GeneratedImage | { link: string })[] = [];
+  const seen = new Set<string>();
   const texts: string[] = [];
+  const addBase64 = (b64: string, declared?: string) => {
+    if (seen.has(b64)) return;
+    seen.add(b64);
+    found.push(imageFromBase64(b64, declared));
+  };
+  const addUrl = (u: string) => {
+    if (u.startsWith("data:")) {
+      const payload = u.slice(u.indexOf(",") + 1);
+      if (seen.has(payload)) return;
+      seen.add(payload);
+      found.push(imageFromDataUrl(u));
+    } else if (!seen.has(u)) {
+      seen.add(u);
+      found.push({ link: u });
+    }
+  };
+  const addText = (text: string) => {
+    const bare = classifyBareText(text);
+    if (!bare) texts.push(text.trim());
+    else if (bare.kind === "link") addUrl(bare.value);
+    else addBase64(bare.value);
+  };
 
   for (const entry of message?.images ?? []) {
-    const u = typeof entry === "string" ? entry : entry.image_url?.url ?? entry.url;
-    if (u) urls.push(u);
+    if (typeof entry === "string") addUrl(entry);
+    else if (entry.b64_json) addBase64(entry.b64_json);
+    else {
+      const u = entry.image_url?.url ?? entry.url;
+      if (u) addUrl(u);
+    }
   }
+  if (message?.image_b64_json) addBase64(message.image_b64_json);
   if (typeof message?.content === "string") {
-    for (const m of message.content.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) urls.push(m[1]);
-    // Strip the markdown images so the leftover prose reads as commentary.
+    for (const m of message.content.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) addUrl(m[1]);
+    // Strip the markdown images so the leftover prose reads as commentary —
+    // unless the leftover *is* the picture (bare base64 or a bare link).
     const prose = message.content.replace(/!\[[^\]]*\]\([^)\s]+\)/g, "").trim();
-    if (prose) texts.push(prose);
+    if (prose) addText(prose);
   } else if (Array.isArray(message?.content)) {
     for (const part of message.content) {
-      if (part.image_url?.url) urls.push(part.image_url.url);
-      else if (part.text) texts.push(part.text);
+      if (part.image_url?.url) addUrl(part.image_url.url);
+      else if (part.text) addText(part.text);
     }
   }
 
   const images: GeneratedImage[] = [];
-  for (const u of urls) {
-    if (u.startsWith("data:")) {
-      images.push({ dataUrl: u, mime: mimeOfDataUrl(u) });
-    } else {
-      images.push(await urlToDataUrl(u, req.signal));
-    }
-  }
+  for (const f of found) images.push("link" in f ? await urlToDataUrl(f.link, req.signal) : f);
   if (!images.length) {
     // The model replying in words is the usual symptom of a text model being
     // configured as an image one — say so with its own words attached.
@@ -875,8 +946,8 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
     if (candidate.finishReason && candidate.finishReason !== "STOP") blocked = candidate.finishReason;
     for (const part of candidate.content?.parts ?? []) {
       if (part.inlineData?.data) {
-        const mime = part.inlineData.mimeType || "image/png";
-        images.push({ dataUrl: dataUrlOf(mime, part.inlineData.data), mime });
+        // Typed by the bytes, not the declared mime — see imageFromBase64.
+        images.push(imageFromBase64(part.inlineData.data, part.inlineData.mimeType));
       } else if (part.text) {
         texts.push(part.text);
       }

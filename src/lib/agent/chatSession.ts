@@ -22,6 +22,7 @@
 import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { createSessionMeta, type ChatSessionMeta } from "./compact";
+import { validateSkillState, type SkillState } from "./skillState";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { toPosixPath } from "../paths";
 
@@ -53,6 +54,29 @@ function withoutImageData(history: StreamMessage[]): StreamMessage[] {
   );
 }
 
+/**
+ * One finished export, recorded on the turn that produced it (设计稿 05f 屏 1k).
+ *
+ * Filled by the approval, not by the model — same reason `images` is: the app
+ * knows exactly what landed and what fell back to a simpler form, and asking
+ * the assistant to restate it produced turns that either omitted a degradation
+ * or invented one. What the author needs after a Word export is not prose but
+ * four facts: it is on disk, here, laid out by that, and these bits could not
+ * carry across.
+ */
+export interface TurnExport {
+  /** Absolute path of the file written. */
+  path: string;
+  /** How many markdown blocks were converted — page count needs Word's layout. */
+  blocks: number;
+  /** Wall-clock of the conversion itself, ms. */
+  ms: number;
+  /** 「默认格式（手稿）」/「预设：公文（改了 2 项）」 — already composed. */
+  formatLine: string;
+  /** What fell back to a simpler form. Facts, not errors — never styled as one. */
+  degraded: string[];
+}
+
 /** Structural mirror of agentStore's ChatTurn (lib must not import stores). */
 export interface PersistedTurn {
   id: string;
@@ -62,6 +86,7 @@ export interface PersistedTurn {
   at: number;
   quote?: string;
   images?: string[];
+  exports?: TurnExport[];
 }
 
 export interface PersistedUsage {
@@ -119,6 +144,16 @@ interface SerializedChat {
      * session was.
      */
     briefingTier?: "assist" | "orchestrator";
+    /**
+     * Additive — 状态记忆 (lib/agent/skillState). `stateMode` is whether this
+     * conversation runs on the structured execution state; `state` is that
+     * state as last committed. Older rows restore as off / null, which is what
+     * every session written before the mode existed was. `state` is
+     * re-validated on the way in — a blob that outlives the schema must not
+     * hand the model a shape the validator would refuse.
+     */
+    stateMode?: boolean;
+    state?: SkillState | null;
   };
   usage: PersistedUsage | null;
   /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
@@ -155,6 +190,8 @@ export function serializeChatSession(snap: ChatSnapshot): string {
       lastDocPath: snap.meta.lastDocPath,
       bodyDocPath: snap.meta.bodyDocPath,
       briefingTier: snap.meta.briefingTier,
+      ...(snap.meta.stateMode ? { stateMode: true } : {}),
+      ...(snap.meta.state ? { state: snap.meta.state } : {}),
     },
     usage: snap.usage,
     ...(snap.taskId ? { taskId: snap.taskId } : {}),
@@ -257,6 +294,11 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
   meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? toPosixPath(data.meta.lastDocPath) : null;
   meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? toPosixPath(data.meta.bodyDocPath) : null;
   meta.briefingTier = data.meta.briefingTier === "orchestrator" ? "orchestrator" : "assist";
+  meta.stateMode = data.meta.stateMode === true;
+  if (data.meta.state) {
+    const checked = validateSkillState(data.meta.state);
+    meta.state = checked.ok ? checked.state : null;
+  }
 
   return {
     turns: normalizeTurns(data.turns),

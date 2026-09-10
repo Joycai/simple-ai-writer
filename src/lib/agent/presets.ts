@@ -55,7 +55,7 @@ export interface TaskPreset {
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */
 export const CONTINUE_PRESET: TaskPreset = {
   id: "continue",
-  tools: ["list_lore_entities", "read_lore_entity", "read_lore_image", "read_image", "list_files", "read_file", "read_slides", "search_text"],
+  tools: ["list_lore_entities", "read_lore_entity", "read_lore_image", "read_image", "list_files", "read_file", "read_slides", "read_document", "search_text"],
   maxRounds: 8,
   finishPolicy: "force-text",
 };
@@ -146,6 +146,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "list_files",
     "read_file",
     "read_slides",
+    "read_document",
     "inspect_html",
     "search_text",
     "read_memory",
@@ -165,7 +166,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_lore_image",
     "manage_collection",
     "file_lore_entries",
-    "create_lore_category",
+    "manage_category",
     "set_lore_avatar",
     "copy_lore_file",
     "move_lore_entity",
@@ -190,6 +191,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "export_docx",
     "export_xlsx",
     "read_doc_format",
+    "convert_document",
     "task_plan",
     "task_progress",
     "write_note",
@@ -231,6 +233,7 @@ export const WRITE_PRESET: TaskPreset = {
     "list_files",
     "read_file",
     "read_slides",
+    "read_document",
     "search_text",
     "list_lore_entities",
     "read_lore_entity",
@@ -272,6 +275,55 @@ export const WRITER_PRESET: TaskPreset = {
   maxRounds: 6,
   finishPolicy: "force-text",
   serverTools: "off",
+};
+
+/**
+ * 一致性检查的核对运行 —— 助手的 preset 去掉全部写工具，再加两个收集器。
+ *
+ * 一段文档对着知识库读一遍。规划权在模型手里：种子里只列了标题的条目它自己
+ * `read_lore_entity`，「第三章说过他左手受伤」它自己 `search_text` 回头查，前面几章
+ * 太长它派 `longread`（`delegate` 不在字面量里，和助手一样由 `routeTools` 按设置和
+ * 芯片装上）。写工具一个都没有——核对不改任何东西，所以 lore 写工具、正文写工具、
+ * 生图、导出对这条任务都是永远走不到的岔路（`WRITE_PRESET` 那条「收窄的依据是任务
+ * 真的会调什么」）。
+ *
+ * 结果不走结尾一次 JSON，走 `report_issue` / `report_pass` 收集器（lib/consistency/
+ * reviewTools）：一条发现一次调用，引文在工具里当场校验，轮数到顶或作者中止时已记
+ * 的一条都不丢——`LORE_SPLIT_PRESET` 的论证原样适用。
+ *
+ * `serverTools: "off"`：联网走 search 子代理，主模型不直接搜——同助手。
+ * `scratchpad: "offered"` 而不是 required：一段核对通常不需要存档，给它便签是为了
+ * 派了子代理之后有地方落摘要（`delegate` 的契约就是「摘要 + note 路径」）。
+ * maxRounds 12：一段的形状是「翻几条条目 → 搜几次前文（可能派一次子代理）→ 逐条
+ * 记录 → 总评」；到顶 force-text 收尾，不接轮数上限卡——核对是封闭任务。
+ *
+ * 设计：docs/feature/consistency-review-plan.md §6。
+ */
+export const CONSISTENCY_PRESET: TaskPreset = {
+  id: "consistency",
+  tools: [
+    "list_lore_entities",
+    "read_lore_entity",
+    "read_lore_image",
+    "list_files",
+    "read_file",
+    "read_slides",
+    "search_text",
+    "read_memory",
+    "read_workflow",
+    "read_image",
+    "task_plan",
+    "task_progress",
+    "write_note",
+    "read_note",
+    "list_notes",
+    "report_issue",
+    "report_pass",
+  ],
+  maxRounds: 12,
+  finishPolicy: "force-text",
+  serverTools: "off",
+  scratchpad: "offered",
 };
 
 /**

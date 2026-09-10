@@ -47,12 +47,23 @@ pub const WINDOW_MENU_ID: &str = "saw:window-menu";
 /// Prefix of a window item's id; the rest is the target pid.
 const ITEM_PREFIX: &str = "saw:window:";
 
+/// 「关闭窗口」的 id —— 这一项**不能**用 `PredefinedMenuItem::close_window`。
+///
+/// 预置项在 macOS 上固定带着 ⌘W 的 key equivalent，而原生菜单先于 webview 处理
+/// 按键：这个应用一个窗口就是一个工作区，于是作者按 ⌘W 想关掉**当前文档**，实际
+/// 关掉的是整个项目窗口。⌘W 让回页面（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS`），
+/// 关窗口挪到 ⌥⌘W —— macOS 上 Close All Windows 的那个位置，语义相邻。红灯、
+/// ⌘Q 与菜单项本身都不受影响。
+const CLOSE_WINDOW_ID: &str = "saw:close-window";
+
 /// The app menu: Tauri's default, with our own Window submenu in place of the
 /// one AppKit would claim. Installed via `Builder::menu`, which runs before
 /// `setup` — so the list starts empty here and `refresh` fills it once the
 /// focus channel exists.
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
-    use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID};
+    use tauri::menu::{
+        AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
+    };
 
     let pkg = app.package_info();
     let config = app.config();
@@ -63,6 +74,19 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<
         authors: config.bundle.publisher.clone().map(|p| vec![p]),
         ..Default::default()
     };
+
+    // 一个实例只有一个窗口，所以这一项在 File 和 Window 两处是**同一个** item
+    // （muda 的菜单项可以挂在多个菜单下），两处的启用态和快捷键因此不可能说两套话。
+    let close_window = MenuItem::with_id(
+        app,
+        CLOSE_WINDOW_ID,
+        "Close Window",
+        true,
+        Some("CmdOrCtrl+Alt+W"),
+    )
+    // 加速键解析不了就退成一枚没有快捷键的菜单项，而不是让整份菜单构建失败：
+    // `.menu(build)` 的 Err 拦在应用启动之前，为一个加速键赔上整个 mac 版不值当。
+    .or_else(|_| MenuItem::with_id(app, CLOSE_WINDOW_ID, "Close Window", true, None::<&str>))?;
 
     // The static head. What follows it is the window list, appended by
     // `refresh` and recognisable there by `ITEM_PREFIX` — no count of these
@@ -77,7 +101,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<
             &PredefinedMenuItem::minimize(app, None)?,
             &PredefinedMenuItem::maximize(app, None)?,
             &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
+            &close_window,
             &PredefinedMenuItem::separator(app)?,
         ],
     )?;
@@ -100,12 +124,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<
                     &PredefinedMenuItem::quit(app, None)?,
                 ],
             )?,
-            &Submenu::with_items(
-                app,
-                "File",
-                true,
-                &[&PredefinedMenuItem::close_window(app, None)?],
-            )?,
+            &Submenu::with_items(app, "File", true, &[&close_window])?,
             &Submenu::with_items(
                 app,
                 "Edit",
@@ -177,6 +196,15 @@ pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
 /// A click on a window item: raise the instance it names. Ids that are not
 /// ours (every other menu item) fall straight through.
 pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: &tauri::menu::MenuEvent) {
+    // 自己的「关闭窗口」（见 CLOSE_WINDOW_ID）：`close()` 走的是正常的关闭请求，
+    // 和预置项、红灯、⌘Q 到达的是同一条路径——落盘那一套挂在 CloseRequested 上。
+    if event.id.as_ref() == CLOSE_WINDOW_ID {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.close();
+        }
+        return;
+    }
+
     let Some(pid) = event
         .id
         .as_ref()

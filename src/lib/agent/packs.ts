@@ -34,6 +34,7 @@ import { costFor, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
+import { withCurrentTime } from "../context/clock";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
 import { applyExportFlags } from "./routing";
 import { isOrchestratorEnabled } from "./packFlag";
@@ -59,6 +60,7 @@ const PACK_READS: readonly ToolId[] = [
   "list_files",
   "read_file",
   "read_slides",
+  "read_document",
   "search_text",
   "list_lore_entities",
   "read_lore_entity",
@@ -92,6 +94,7 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "create_file",
       "create_directory",
       "move_chapter",
+      "convert_document",
       "copy_file",
       "delete_chapter",
       "delete_directory",
@@ -115,13 +118,21 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "rewrite_lore_lines",
       "update_facet_meta",
       "delete_lore_file",
+      // The gallery tier. Without these, "add this picture to that entry" is
+      // a job the pack cannot do at all: the orchestrator holds no write
+      // tool by design, so nothing on either side can file an image. All
+      // three sit in the deferred lore_write group, so listing them costs
+      // the resident half nothing.
+      "add_lore_image",
+      "update_lore_image",
+      "delete_lore_image",
       "set_lore_avatar",
       "copy_lore_file",
       "move_lore_entity",
       "delete_lore_entity",
       "manage_collection",
       "file_lore_entries",
-      "create_lore_category",
+      "manage_category",
     ],
     maxRounds: 24,
     finishPolicy: "force-text",
@@ -167,6 +178,7 @@ export const ORCHESTRATOR_PRESET: TaskPreset = {
     "list_files",
     "read_file",
     "read_slides",
+    "read_document",
     "search_text",
     "read_memory",
     "read_workflow",
@@ -303,7 +315,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     : i18n.t("ai.instructions.subagentTask", { task });
 
   const messages: StreamMessage[] = [
-    { role: "system", content: i18n.t(`ai.instructions.pack.${pack}`) },
+    { role: "system", content: withCurrentTime(i18n.t(`ai.instructions.pack.${pack}`)) },
     { role: "user", content: userContent },
   ];
 

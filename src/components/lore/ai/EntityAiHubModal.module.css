@@ -1,4 +1,4 @@
-/* Entity-level AI task chooser (设计稿 03 · 实体 AI 中心): 2×2 动作格，
+/* Entity-level AI task chooser (设计稿 03a · 实体 AI 中心): 2×2 动作格，
    1px #ECE2CE 缝隙线。 Overlay/panel chrome reused from
    LoreImproveModal.module.css; this file styles header + grid. */
 
@@ -21,6 +21,15 @@
 }
 
 .spacer { flex: 1; }
+
+/* 头部的身份签：这条是翻译词典，所以下面多出一格。 */
+.tag {
+  padding: 3px 8px;
+  background: var(--color-bg-inset);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
 
 .grid {
   display: grid;
@@ -52,4 +61,27 @@
   font: 400 11px/1.6 var(--font-sans);
   color: var(--color-text-label);
   margin-top: 6px;
+}
+
+/* ── 第五格 · 词典标准化（设计稿 03f 屏 1g）──────────────────────────────
+   独占第三行整宽，赭石 tint + 左侧 3px 竖条：它不生成内容，只搬格式——排版顺手把这件事说了。 */
+.cellDict {
+  grid-column: 1 / -1;
+  background: var(--color-bg-tinted);
+  box-shadow: inset 3px 0 0 var(--color-sienna);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.cellDict:hover:not(:disabled) { background: var(--color-bg-base); }
+.dictMain { flex: 1; min-width: 0; }
+.nameRow { display: flex; align-items: center; gap: 9px; }
+/* 「仅词典条目」写在格子上：别的条目根本看不到这一格，这行小字是给看得到它的人一句解释。 */
+.dictOnly { font: 400 9.5px/1 var(--font-mono); color: var(--color-sienna); }
+.dictStats {
+  flex-shrink: 0;
+  text-align: right;
+  white-space: nowrap;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-faint);
 }

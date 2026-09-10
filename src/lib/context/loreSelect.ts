@@ -174,6 +174,15 @@ export interface FacetDrop {
    * budget would buy back.
    */
   neededChars?: number;
+  /**
+   * `no-key` only: the keywords the facet has today.
+   *
+   * 「没命中」is the drop the author most often fixes, and the fix is one of
+   * these words — listing them turns the reason into the edit (设计稿 04c 屏 2f).
+   */
+  keys?: string[];
+  /** `group-lost` only: the mutual-exclusion group the winner took. */
+  group?: string;
 }
 
 export interface LoreEntityReport {
@@ -727,7 +736,7 @@ export async function selectLore(
       if (matchedKeys.length > 0) {
         active.push({ sel: s, facet, matchedKeys, pinned: false, resident: false, entityIdx });
       } else {
-        s.report.droppedFacets.push({ file: facet.file, title: facet.title, reason: "no-key" });
+        s.report.droppedFacets.push({ file: facet.file, title: facet.title, reason: "no-key", keys: [...facet.keys] });
       }
     }
 
@@ -776,6 +785,7 @@ export async function selectLore(
         } else {
           m.sel.report.droppedFacets.push({
             file: m.facet.file, title: m.facet.title, reason: "group-lost", winner: winnerTitle,
+            group: m.facet.group ?? undefined,
           });
         }
       }

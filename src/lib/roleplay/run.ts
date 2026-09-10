@@ -11,7 +11,7 @@
 
 import i18n from "../../i18n";
 import {
-  coreDoneFor, excludeDirsFor, injectedFacetsFor, noteTurnStart, recordInjections,
+  coreDoneFor, excludeDirsFor, injectedFacetsFor, noteTurnStart, planFold, recordInjections,
   recordInjectionsFromReport,
 } from "../agent/compact";
 import { compactChatHistory, type SummarizeInput } from "../agent/compactRun";
@@ -352,6 +352,70 @@ export interface ContinueOutcome {
 }
 
 /**
+ * 一次压缩落地之后必须跟着做的两件事——**自动和手动两条路共用**：
+ *
+ * 1. 折叠出来的摘要要落盘：旁白的 `read_scene_summary` 读的就是它，而这是它唯一
+ *    被写出来的时刻——压缩本来就在生成这段文字，再要一次是白花钱。
+ * 2. 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块必须重新灌
+ *    一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，缓存本来就作废了）。
+ *
+ * 第二条是正确性边界（05 §2 / 09 §9.1）：漏掉它的症状是**沉默的**——角色下一轮忘
+ * 掉刚记下的约定，没有任何报错。所以手动归纳（`compactSceneNow`）不许自己抄一份，
+ * 只能调这里。
+ */
+export async function afterCompaction(
+  projectPath: string,
+  agent: RoleplayAgent,
+  meta: RoleplaySessionMeta,
+): Promise<{ summaryToSave: string | null; memoryRecords: MemoryRecord[] }> {
+  const summaryToSave = meta.summaryText;
+  const fresh = await loadMemoryDoc(memoryPath(projectPath, agent.id));
+  refreshMemoryBlock(meta, fresh.records);
+  return { summaryToSave, memoryRecords: fresh.records };
+}
+
+export type CompactSceneOutcome =
+  /** 少于 MIN_KEEP_TURNS + 1 轮：没有可折叠的轮，什么都没发生。 */
+  | { status: "nothing" }
+  /** 摘要请求失败：历史与 meta 原样，作者按了按钮，应当看到一句错误而不是沉默。 */
+  | { status: "failed" }
+  | {
+      status: "ok";
+      history: StreamMessage[];
+      event: AgentEvent;
+      summaryToSave: string | null;
+      memoryRecords: MemoryRecord[];
+    };
+
+/**
+ * 作者的「立即归纳」（扮演页）：force 档折叠——不看自动归纳开关、不看阈值，折到只留
+ * `MIN_KEEP_TURNS` 轮逐字（同 agentStore.compactChatNow 的理由：按下按钮就是在说
+ * 「我要空间胜过要逐字」）。落地后的两步走 {@link afterCompaction}。
+ */
+export async function compactSceneNow(opts: {
+  projectPath: string;
+  agent: RoleplayAgent;
+  history: StreamMessage[];
+  meta: RoleplaySessionMeta;
+  ceilingTokens: number;
+  summarize: (input: SummarizeInput) => Promise<string>;
+}): Promise<CompactSceneOutcome> {
+  const { history, meta } = opts;
+  // 同续跑分支：一轮被按停在工具调用中间留下的配对，折叠不能建在它上面。
+  repairToolCallPairing(history);
+  if (!planFold(history, meta, opts.ceilingTokens, { force: true })) return { status: "nothing" };
+  const compacted = await compactChatHistory({
+    history, meta,
+    ceilingTokens: opts.ceilingTokens,
+    force: true,
+    summarize: opts.summarize,
+  });
+  if (!compacted) return { status: "failed" };
+  const after = await afterCompaction(opts.projectPath, opts.agent, meta);
+  return { status: "ok", history: compacted.history, event: compacted.event, ...after };
+}
+
+/**
  * runJob 的续跑分支：有活历史时，把这一问接进去。
  *
  * 排序是这个函数存在的理由，逐条钉在测试里（run.test.ts）：
@@ -380,6 +444,10 @@ export async function prepareContinuedHistory(opts: {
   loreBudgetChars: number;
   areaBudgetChars: number;
   ceilingTokens: number;
+  /** 自动归纳开关（设置 → 上下文与记忆）。缺席 = 开。关着时这一步整个跳过。 */
+  autoCompact?: boolean;
+  /** 自动折叠的触发线（compactTriggerFor）；缺席 = 经典的 0.7 × ceiling。 */
+  triggerTokens?: number;
   /** 连接绑定的摘要器，store 用 connOptions 闭包好传进来——lib 不碰密钥。 */
   summarize: (input: SummarizeInput) => Promise<string>;
 }): Promise<ContinueOutcome> {
@@ -391,22 +459,21 @@ export async function prepareContinuedHistory(opts: {
   let summaryToSave: string | null = null;
   let memoryRecords: MemoryRecord[] | null = null;
 
-  const compacted = await compactChatHistory({
-    history, meta,
-    ceilingTokens: opts.ceilingTokens,
-    summarize: opts.summarize,
-  });
+  const compacted = opts.autoCompact === false
+    ? null
+    : await compactChatHistory({
+        history, meta,
+        ceilingTokens: opts.ceilingTokens,
+        triggerTokens: opts.triggerTokens,
+        summarize: opts.summarize,
+      });
   if (compacted) {
     history = compacted.history;
     compactedEvent = compacted.event;
-    // 折叠出来的摘要要落盘：旁白的 read_scene_summary 读的就是它，而这是它唯一
-    // 被写出来的时刻——压缩本来就在生成这段文字，再要一次是白花钱。
-    summaryToSave = meta.summaryText;
-    // 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块必须重新
-    // 灌一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，缓存本来就作废了）。
-    const fresh = await loadMemoryDoc(memoryPath(projectPath, agent.id));
-    refreshMemoryBlock(meta, fresh.records);
-    memoryRecords = fresh.records;
+    // 摘要落盘 + 记忆块刷新——两条路共用的那一步，理由在它的注释里。
+    const after = await afterCompaction(projectPath, agent, meta);
+    summaryToSave = after.summaryToSave;
+    memoryRecords = after.memoryRecords;
   }
 
   // 逐轮注入：还没进过上下文的那些层。账本按层记，所以「绑了一段特征」不再等于

@@ -5,6 +5,7 @@ import {
   assembleContext, bundleToMessages, profileSystemPrompt, resolveAppendAnchor,
   type TaskExtras,
 } from "../lib/context/rag";
+import { withCurrentTime } from "../lib/context/clock";
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { taskLabel } from "../lib/profile";
 import { notify } from "../lib/notify";
@@ -166,15 +167,15 @@ interface AiTaskState {
 }
 
 /**
- * The OS ping for "this task is over", sent once the run has actually let go
- * of the store. A clause batch drives this store once per clause and mutes
+ * The OS ping for "this task is over" — `done` or `error` by outcome — sent
+ * once the run has actually let go of the store. A clause batch drives this store once per clause and mutes
  * these for the duration, announcing the whole job itself (batchStore).
  */
 function notifyRunFinished(kind: TaskKind, failure: string | null): void {
   const def = findTask(kind);
   const label = def ? taskLabel(def, i18n.language === "zh-CN", (k) => i18n.t(k)) : kind;
   notify(
-    "done",
+    failure ? "error" : "done",
     i18n.t(failure ? "notify.failedTitle" : "notify.doneTitle"),
     failure
       ? i18n.t("notify.taskFailed", { task: label, error: failure })
@@ -263,7 +264,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       task.tools,
       promptParams(i18n.language === "zh-CN", task.packId),
     );
-    const systemPrompt = briefing ? `${basePrompt}\n\n${briefing}` : basePrompt;
+    // Single-shot run: the clock closes the system layer (lib/context/clock).
+    const systemPrompt = withCurrentTime(briefing ? `${basePrompt}\n\n${briefing}` : basePrompt);
 
     // Snapshot the writing focus and the committed selection together, here —
     // before the keyring read below and every other await further down (memory
@@ -632,13 +634,18 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             loreScope,
             organize: loreOrganizer(),
             multimodal: model.type === "multimodal",
+            // 同 agentStore：读图的是谁，只在 routeTools 判一次。
+            visionDelegate: routed.visionDelegate,
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).
             // Awaited, and returns the fresh index, so the run's own snapshot
             // can resolve an entity the run itself just created — see
             // writeTools.syncLore.
-            onLoreChanged: async () => {
-              await useLoreStore.getState().scanProject(projectPath);
+            onLoreChanged: async (changed) => {
+              const lore = useLoreStore.getState();
+              if (Array.isArray(changed)) await lore.refreshEntities(projectPath, changed);
+              else if (changed) await lore.refreshEntity(projectPath, changed);
+              else await lore.scanProject(projectPath);
               return useLoreStore.getState().index;
             },
             onMemoryChanged: () => {

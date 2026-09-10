@@ -1,0 +1,950 @@
+{
+  "file_url": "oss://dashscope-instant/<account>/<date>/<request>/long.wav",
+  "properties": {
+    "audio_format": "pcm_s16le",
+    "channels": [
+      0
+    ],
+    "original_sampling_rate": 22050,
+    "original_duration_in_milliseconds": 55245
+  },
+  "transcripts": [
+    {
+      "channel_id": 0,
+      "content_duration_in_milliseconds": 47800,
+      "text": "第一章 雨夜林小满推开旧书店的门，铃铛在头顶叮当作响。店主陈伯从柜台后抬起头，眯着眼睛打量她。你回来了，他说，比我想的要早。小满把湿透的伞靠在门边，从背包里掏出一本封面发黄的笔记本。这是我在阁楼找到的，上面有我母亲的名字。陈伯接过笔记本，手指微微颤抖。他翻到第三页，那里夹着一张1998年的火车票。这件事，我本来打算带进坟墓的。窗外的雨越下越大，街灯在水洼里碎成一片片橙色。小满在柜台前的椅子上坐下，等着他开口。",
+      "sentences": [
+        {
+          "begin_time": 200,
+          "end_time": 7480,
+          "text": "第一章 雨夜林小满推开旧书店的门，铃铛在头顶叮当作响。",
+          "sentence_id": 1,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 200,
+              "end_time": 840,
+              "text": "第一章",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 840,
+              "end_time": 1240,
+              "text": " ",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 1240,
+              "end_time": 1400,
+              "text": "雨",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 1400,
+              "end_time": 2000,
+              "text": "夜",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 2560,
+              "end_time": 2800,
+              "text": "林",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 2800,
+              "end_time": 3000,
+              "text": "小",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 3000,
+              "end_time": 3320,
+              "text": "满",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 3320,
+              "end_time": 3800,
+              "text": "推开",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 3800,
+              "end_time": 4040,
+              "text": "旧",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 4040,
+              "end_time": 4160,
+              "text": "书",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 4160,
+              "end_time": 4560,
+              "text": "店的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 4560,
+              "end_time": 4840,
+              "text": "门",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 5280,
+              "end_time": 5400,
+              "text": "铃",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 5400,
+              "end_time": 5760,
+              "text": "铛",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 5760,
+              "end_time": 6000,
+              "text": "在",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 6000,
+              "end_time": 6520,
+              "text": "头顶",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 6520,
+              "end_time": 6640,
+              "text": "叮",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 6640,
+              "end_time": 7040,
+              "text": "当作",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 7040,
+              "end_time": 7480,
+              "text": "响",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 8310,
+          "end_time": 13070,
+          "text": "店主陈伯从柜台后抬起头，眯着眼睛打量她。",
+          "sentence_id": 2,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 8310,
+              "end_time": 8790,
+              "text": "店主",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 8790,
+              "end_time": 8990,
+              "text": "陈",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 8990,
+              "end_time": 9270,
+              "text": "伯",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 9270,
+              "end_time": 9550,
+              "text": "从",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 9550,
+              "end_time": 9950,
+              "text": "柜台",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 9950,
+              "end_time": 10230,
+              "text": "后",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 10230,
+              "end_time": 10990,
+              "text": "抬起头",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 11350,
+              "end_time": 11550,
+              "text": "眯",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 11550,
+              "end_time": 12190,
+              "text": "着眼睛",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 12190,
+              "end_time": 12630,
+              "text": "打量",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 12630,
+              "end_time": 13070,
+              "text": "她",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 13750,
+          "end_time": 17270,
+          "text": "你回来了，他说，比我想的要早。",
+          "sentence_id": 3,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 13750,
+              "end_time": 13950,
+              "text": "你",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 13950,
+              "end_time": 14630,
+              "text": "回来了",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 14990,
+              "end_time": 15510,
+              "text": "他说",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 15870,
+              "end_time": 16070,
+              "text": "比",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 16070,
+              "end_time": 16430,
+              "text": "我想",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 16430,
+              "end_time": 16830,
+              "text": "的要",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 16830,
+              "end_time": 17270,
+              "text": "早",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 18030,
+          "end_time": 24630,
+          "text": "小满把湿透的伞靠在门边，从背包里掏出一本封面发黄的笔记本。",
+          "sentence_id": 4,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 18030,
+              "end_time": 18270,
+              "text": "小",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 18270,
+              "end_time": 18550,
+              "text": "满",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 18550,
+              "end_time": 18790,
+              "text": "把",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 18790,
+              "end_time": 18950,
+              "text": "湿",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 18950,
+              "end_time": 19150,
+              "text": "透",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 19150,
+              "end_time": 19270,
+              "text": "的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 19270,
+              "end_time": 19590,
+              "text": "伞",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 19590,
+              "end_time": 20030,
+              "text": "靠在",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 20030,
+              "end_time": 20230,
+              "text": "门",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 20230,
+              "end_time": 20550,
+              "text": "边",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 20950,
+              "end_time": 21270,
+              "text": "从",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 21270,
+              "end_time": 21630,
+              "text": "背包",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 21630,
+              "end_time": 21870,
+              "text": "里",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 21870,
+              "end_time": 22110,
+              "text": "掏",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 22110,
+              "end_time": 22510,
+              "text": "出一",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 22510,
+              "end_time": 22750,
+              "text": "本",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 22750,
+              "end_time": 23190,
+              "text": "封面",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 23190,
+              "end_time": 23350,
+              "text": "发",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 23350,
+              "end_time": 23870,
+              "text": "黄的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 23870,
+              "end_time": 24630,
+              "text": "笔记本",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 25350,
+          "end_time": 29550,
+          "text": "这是我在阁楼找到的，上面有我母亲的名字。",
+          "sentence_id": 5,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 25350,
+              "end_time": 25790,
+              "text": "这是",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 25790,
+              "end_time": 26190,
+              "text": "我在",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 26190,
+              "end_time": 26630,
+              "text": "阁楼",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 26630,
+              "end_time": 26790,
+              "text": "找",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 26790,
+              "end_time": 27270,
+              "text": "到的",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 27670,
+              "end_time": 28110,
+              "text": "上面",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 28110,
+              "end_time": 28510,
+              "text": "有我",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 28510,
+              "end_time": 28870,
+              "text": "母亲",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 28870,
+              "end_time": 29550,
+              "text": "的名字",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 30400,
+          "end_time": 33840,
+          "text": "陈伯接过笔记本，手指微微颤抖。",
+          "sentence_id": 6,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 30400,
+              "end_time": 30600,
+              "text": "陈",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 30600,
+              "end_time": 30920,
+              "text": "伯",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 30920,
+              "end_time": 31280,
+              "text": "接过",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 31280,
+              "end_time": 31920,
+              "text": "笔记本",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 32320,
+              "end_time": 32800,
+              "text": "手指",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 32800,
+              "end_time": 33200,
+              "text": "微微",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 33200,
+              "end_time": 33840,
+              "text": "颤抖",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 34560,
+          "end_time": 39600,
+          "text": "他翻到第三页，那里夹着一张1998年的火车票。",
+          "sentence_id": 7,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 34560,
+              "end_time": 34840,
+              "text": "他",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 34840,
+              "end_time": 35080,
+              "text": "翻",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 35080,
+              "end_time": 35320,
+              "text": "到",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 35320,
+              "end_time": 35680,
+              "text": "第三",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 35680,
+              "end_time": 36000,
+              "text": "页",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 36360,
+              "end_time": 36760,
+              "text": "那里",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 36760,
+              "end_time": 36960,
+              "text": "夹",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 36960,
+              "end_time": 37280,
+              "text": "着一",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 37280,
+              "end_time": 37640,
+              "text": "张",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 37640,
+              "end_time": 37880,
+              "text": "1",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 37880,
+              "end_time": 38120,
+              "text": "9",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 38120,
+              "end_time": 38220,
+              "text": "9",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 38220,
+              "end_time": 38320,
+              "text": "8",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 38320,
+              "end_time": 38760,
+              "text": "年的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 38760,
+              "end_time": 39600,
+              "text": "火车票",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 40320,
+          "end_time": 43640,
+          "text": "这件事，我本来打算带进坟墓的。",
+          "sentence_id": 8,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 40320,
+              "end_time": 41040,
+              "text": "这件事",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 41440,
+              "end_time": 41720,
+              "text": "我",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 41720,
+              "end_time": 42080,
+              "text": "本来",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 42080,
+              "end_time": 42560,
+              "text": "打算",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 42560,
+              "end_time": 42760,
+              "text": "带",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 42760,
+              "end_time": 42960,
+              "text": "进",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 42960,
+              "end_time": 43320,
+              "text": "坟墓",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 43320,
+              "end_time": 43640,
+              "text": "的",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 44360,
+          "end_time": 49600,
+          "text": "窗外的雨越下越大，街灯在水洼里碎成一片片橙色。",
+          "sentence_id": 9,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 44360,
+              "end_time": 45000,
+              "text": "窗外的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 45000,
+              "end_time": 45240,
+              "text": "雨",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 45240,
+              "end_time": 45440,
+              "text": "越",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 45440,
+              "end_time": 45640,
+              "text": "下",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 45640,
+              "end_time": 46160,
+              "text": "越大",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 46480,
+              "end_time": 46680,
+              "text": "街",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 46680,
+              "end_time": 46920,
+              "text": "灯",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 46920,
+              "end_time": 47320,
+              "text": "在水",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 47320,
+              "end_time": 47560,
+              "text": "洼",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 47560,
+              "end_time": 47840,
+              "text": "里",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 47840,
+              "end_time": 48040,
+              "text": "碎",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 48040,
+              "end_time": 48320,
+              "text": "成",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 48320,
+              "end_time": 49000,
+              "text": "一片片",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 49000,
+              "end_time": 49600,
+              "text": "橙色",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        },
+        {
+          "begin_time": 50390,
+          "end_time": 54790,
+          "text": "小满在柜台前的椅子上坐下，等着他开口。",
+          "sentence_id": 10,
+          "speaker_id": 0,
+          "words": [
+            {
+              "begin_time": 50390,
+              "end_time": 50630,
+              "text": "小",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 50630,
+              "end_time": 50910,
+              "text": "满",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 50910,
+              "end_time": 51150,
+              "text": "在",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 51150,
+              "end_time": 51550,
+              "text": "柜台",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 51550,
+              "end_time": 51910,
+              "text": "前的",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 51910,
+              "end_time": 52510,
+              "text": "椅子上",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 52510,
+              "end_time": 53030,
+              "text": "坐下",
+              "punctuation": "，",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 53350,
+              "end_time": 53790,
+              "text": "等着",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 53790,
+              "end_time": 54070,
+              "text": "他",
+              "punctuation": "",
+              "confidence": 1.0
+            },
+            {
+              "begin_time": 54070,
+              "end_time": 54790,
+              "text": "开口",
+              "punctuation": "。",
+              "confidence": 1.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

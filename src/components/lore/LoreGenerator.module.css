@@ -1,4 +1,4 @@
-/* 设定生成器 (设计稿 03 · 提取生成器): 880 宽两栏 — 左 320px 纸底选项栏，
+/* 设定生成器 (设计稿 03a · 提取生成器): 880 宽两栏 — 左 320px 纸底选项栏，
    右侧描述/结果；#F1E8D5 footer 条。 */
 
 .overlay {
@@ -177,7 +177,7 @@
 .textarea:focus { border-color: var(--color-sienna); }
 .textarea::placeholder { color: var(--color-text-faint); font-style: italic; }
 
-/* ── 分类范围 chips (设计稿 08): 选中实底 sienna，未选描边 ── */
+/* ── 分类范围 chips (设计稿 03a 屏 08): 选中实底 sienna，未选描边 ── */
 .catChips {
   display: flex;
   flex-wrap: wrap;
@@ -317,7 +317,7 @@
 .footerNote b { color: var(--color-sienna); font-weight: 500; }
 .footer .spacer { flex: 1; }
 
-/* ── Button tiers (设计稿 03): 主实底 / 次 #C9966A 描边 / 轻透明 ── */
+/* ── Button tiers (设计稿 03a): 主实底 / 次 #C9966A 描边 / 轻透明 ── */
 
 /* 按钮不参与压缩: 中文标签被压到字宽以下会逐字折行成「取 消」。窄 footer 里
    让位的是模型选择器和斜体说明，不是动作。 */

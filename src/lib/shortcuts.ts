@@ -10,6 +10,16 @@ import type { AppScreen } from "../stores/appStore";
 export interface Combo {
   /** metaKey (Mac) or ctrlKey (other platforms) — the app's one "mod" key. */
   mod?: boolean;
+  /**
+   * The Control key *as a modifier of its own* — meaningful on Mac only, where
+   * `mod` is ⌘ and Control is still free. Elsewhere Control **is** `mod`, so a
+   * combo asking for both names a chord that platform cannot produce.
+   *
+   * No binding currently sets it. It stays because `matchesCombo` needs the
+   * field to *reject* a ⌃⌘ chord on a plain-⌘ binding — which is what makes
+   * "exact modifier match" below true rather than approximately true.
+   */
+  ctrl?: boolean;
   shift?: boolean;
   alt?: boolean;
   /** KeyboardEvent.key, compared case-insensitively (e.g. "k", "Escape"). */
@@ -23,15 +33,23 @@ export function matchesCombo(e: KeyboardEvent, combo: Combo): boolean {
   if (!!combo.mod !== mod) return false;
   if (!!combo.shift !== e.shiftKey) return false;
   if (!!combo.alt !== e.altKey) return false;
+  // Mac only: ⌃⌘K and ⌘K are two different chords, and `mod` above says true
+  // for both (it ORs the two keys), so without this line every plain-⌘ binding
+  // also answers to its ⌃⌘ variant. Off-Mac the two keys are the same key, so
+  // the check is skipped rather than made false: requiring `ctrlKey === false`
+  // there would kill every Windows/Linux binding at once.
+  if (IS_MAC && !!combo.ctrl !== e.ctrlKey) return false;
   return e.key.toLowerCase() === combo.key.toLowerCase();
 }
 
 /** Display label for a combo, e.g. "⌘⇧K" on Mac, "Ctrl+Shift+K" elsewhere. */
 export function comboLabel(combo: Combo): string {
   if (IS_MAC) {
-    const mods = `${combo.mod ? "⌘" : ""}${combo.shift ? "⇧" : ""}${combo.alt ? "⌥" : ""}`;
+    const mods = `${combo.mod ? "⌘" : ""}${combo.ctrl ? "⌃" : ""}${combo.shift ? "⇧" : ""}${combo.alt ? "⌥" : ""}`;
     return `${mods}${displayKey(combo.key)}`;
   }
+  // `ctrl` is deliberately not rendered off-Mac: it never fires there, and
+  // "Ctrl+Ctrl+W" is the only thing it could print.
   const parts = [
     combo.mod && "Ctrl",
     combo.shift && "Shift",
@@ -65,6 +83,25 @@ export const NAV_BACK_COMBOS: Combo[] = IS_MAC
 export const NAV_FORWARD_COMBOS: Combo[] = IS_MAC
   ? [{ mod: true, key: "]" }, { mod: true, key: "ArrowRight" }]
   : [{ alt: true, key: "ArrowRight" }];
+
+/**
+ * 「关闭」这一族，三层，三平台同一套（VS Code 的分法）：
+ *
+ * | 动作 | 键 | 实现在哪 |
+ * |---|---|---|
+ * | 关闭**文档** | `⌘W` / `Ctrl+W` | 这里 → `useGlobalShortcuts` |
+ * | 关闭**项目** | `⇧⌘W` / `Ctrl+Shift+W` | `components/layout/ProjectRow.tsx`（项目开着时才挂） |
+ * | 关闭**窗口** | `⌥⌘W`（仅 mac） | `src-tauri/src/windowmenu.rs` 的菜单项 |
+ *
+ * ⌘W 落在最轻的那一档，是因为作者按它的频率也是最高的——而这三个动作里，只有
+ * 关文档是随手可撤的（⌘← 回得去）。
+ *
+ * 这一族曾经不是这样：mac 的菜单原先挂 `PredefinedMenuItem::close_window`，那个
+ * 预置项固定带着 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是
+ * 「关文档」的 ⌘W 实际关掉的是整个项目窗口。修法是把关窗口挪到 ⌥⌘W（macOS 上
+ * Close All Windows 的位置），⌘W 让回页面；短暂存在过的 ⌃⌘W 后备随之撤掉。
+ */
+export const CLOSE_DOC_COMBOS: Combo[] = [{ mod: true, key: "w" }];
 
 /** Combos that must yield to a caret — see NAV_BACK_COMBOS. */
 export function comboNeedsIdleCaret(combo: Combo): boolean {
@@ -129,6 +166,7 @@ export interface ShortcutDef {
 export const SHORTCUTS: ShortcutDef[] = [
   // ─── Global ───────────────────────────────────────────────────────────
   { id: "commandPalette", category: "global", combo: { mod: true, key: "k" }, labelKey: "commandPalette", scope: "dispatch" },
+  { id: "commandPaletteDocs", category: "global", combo: { mod: true, key: "p" }, labelKey: "commandPaletteDocs", scope: "dispatch" },
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
   { id: "aiPanel", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiPanel", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },
@@ -144,6 +182,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },
+  // 「关闭」三层里的第一层（见 CLOSE_DOC_COMBOS 的表）。面包屑末尾的 ×、⌘W、
+  // 文件树右键的「关闭」走的是同一个 `closeDocument()`。
+  { id: "closeDoc", category: "file", combo: CLOSE_DOC_COMBOS[0], labelKey: "closeDoc", scope: "dispatch" },
   // 文件面板自己的绑定（components/layout/FileTree.tsx + ProjectRow.tsx）。它们
   // 只在「文件」标签页挂着时监听——动作说的是「这个面板里的东西」，而面板不在，
   // 折叠什么、定位到哪里就都无从谈起。⌥⌘L 而不是设计稿写的 ⇧⌘L：后者已经是
@@ -152,6 +193,10 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "filesRevealCurrent", category: "file", combo: { mod: true, alt: true, key: "l" }, labelKey: "filesRevealCurrent", scope: "info" },
   { id: "filesSwitchProject", category: "file", combo: { mod: true, shift: true, key: "o" }, labelKey: "filesSwitchProject", scope: "info" },
   { id: "filesCloseProject", category: "file", combo: { mod: true, shift: true, key: "w" }, labelKey: "filesCloseProject", scope: "info" },
+  // 第三层，只有 mac 有：菜单项本身在 `windowmenu.rs`，这一行只是让快捷键表说全。
+  ...(IS_MAC
+    ? [{ id: "closeWindow", category: "file", combo: { mod: true, alt: true, key: "w" }, labelKey: "closeWindow", scope: "info" } as ShortcutDef]
+    : []),
   // 树自己的键盘操作：焦点在文件树里时才生效（点过任意一行就有焦点）。
   { id: "filesNewDoc", category: "file", combo: { mod: true, key: "n" }, labelKey: "filesNewDoc", scope: "info" },
   { id: "filesNewGroup", category: "file", combo: { mod: true, shift: true, key: "n" }, labelKey: "filesNewGroup", scope: "info" },
@@ -166,6 +211,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "aiPolish", category: "ai", combo: { mod: true, shift: true, key: "l" }, labelKey: "aiPolish", scope: "dispatch" },
   { id: "aiSummary", category: "ai", combo: { mod: true, shift: true, key: "m" }, labelKey: "aiSummary", scope: "dispatch" },
   { id: "aiBubbleDismiss", category: "ai", combo: { key: "Escape" }, labelKey: "aiBubbleDismiss", scope: "info" },
+  // Bound by AiDrawer while it is open on 对话助手: ⌘N there is a new conversation
+  // (the file tree's ⌘N needs the tree focused, which the drawer never is).
+  { id: "aiNewChat", category: "ai", combo: { mod: true, key: "n" }, labelKey: "aiNewChat", scope: "info" },
 
   // ─── Editor (CodeMirror keymap — implemented in CodeEditor.tsx) ────────
   { id: "editorBold", category: "editor", combo: { mod: true, key: "b" }, labelKey: "editorBold", scope: "info" },

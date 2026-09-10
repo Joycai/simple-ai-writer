@@ -263,6 +263,14 @@ export interface DocFormatPreset {
    * 的临时预设，作者点「存为预设」才会落盘——审批卡靠它说出「照 X 模仿」。
    */
   imitatedFrom?: string;
+  /**
+   * 模仿来的格式里，**不是那份文件自己写死的**项数（Word 出厂值补的 + 文件里
+   * 根本没出现的）。审批卡③底下那一行括注就是它（设计稿 05f 屏 1j）。
+   *
+   * 只活在内存里，不落盘：它说的是「这一套是刚从某份文件读出来的」，而作者一旦
+   * 点了「存为预设」，那套格式就是他自己的资产，来历只剩「读自 X.docx」那一句。
+   */
+  filledDefaults?: number;
   format: DocFormat;
 }
 
@@ -412,7 +420,9 @@ const THESIS: DocFormat = {
     headerRule: true,
     differentFirstPage: true,
   },
-  headingNumbering: { enabled: true, levels: ["chinese", "decimalDotted", "decimalDotted", "decimalDotted"] },
+  // 1. 1.1 1.1.1 1.1.1.1——H1 必须是阿拉伯数字：含上级的写法把 %1 原样带进来，%1 按
+  // 第一级的格式渲染，第一级若是中文计数，Word 会把 H2 排成「一.1」。
+  headingNumbering: { enabled: true, levels: ["decimal", "decimalDotted", "decimalDotted", "decimalDotted"] },
 };
 
 /** 投标：仿宋四号，行距固定 24 磅，标题不分页（评标要连续翻）。 */
@@ -471,6 +481,9 @@ export function formatSummary(f: DocFormat): string[] {
   if (f.page.grid) {
     lines.push(`文档网格 每页 ${f.page.grid.linesPerPage} 行 · 每行 ${f.page.grid.charsPerLine} 字`);
   }
+  const x = formatExtras(f);
+  if (x.pageNumber) lines.push(`页码 ${x.pageNumber}`);
+  if (x.numbering) lines.push(`标题编号 ${x.numbering}`);
   return lines;
 }
 
@@ -502,9 +515,68 @@ export function formatOneLine(f: DocFormat): string {
   ].join(" · ");
 }
 
+/**
+ * 页码写法的样例：`1` / `— 1 —` / `1 / 12`。它就是写进文件的那个字符串，所以三处摘要
+ * 和纸样上都直接用它，不另起一个名字。
+ */
+export function pageNumberSample(style: PageNumberStyle): string {
+  switch (style) {
+    case "plain": return "1";
+    case "dashed": return "— 1 —";
+    case "ofTotal": return "1 / 12";
+    default: return "";
+  }
+}
+
+/** 「一、」「（一）」「1.1」——写法名认不出来，样子一眼就认得。`none` 写 —。 */
+export function headingNumberSample(kind: HeadingNumberFormat, level: number): string {
+  switch (kind) {
+    case "chinese": return "一、";
+    case "chineseParen": return "（一）";
+    case "decimal": return "1.";
+    case "decimalParen": return "（1）";
+    case "decimalDotted": return Array.from({ length: level + 1 }, () => "1").join(".");
+    default: return "—";
+  }
+}
+
+/** 四级样例连成一串：`一、（一）1.（1）` / `1. 1.1 1.1.1 1.1.1.1`——数字挨着数字才加空格。 */
+export function headingNumberingLine(n: HeadingNumbering): string {
+  let out = "";
+  n.levels.forEach((k, i) => {
+    const sample = headingNumberSample(k, i);
+    if (out && /[0-9.]$/.test(out) && /^[0-9]/.test(sample)) out += " ";
+    out += sample;
+  });
+  return out;
+}
+
+const ALIGN_SHORT: Record<Align, string> = { left: "左", center: "中", right: "右", justify: "两端" };
+
+/**
+ * 三处摘要（预设列表 / 读取模态 / 审批卡）末尾追加的那一段，**有值才有**：
+ * `— 1 — 右` 和 `编号 一、（一）1.（1）`。「不写页码 · 编号关」是噪声，不进摘要——
+ * 五套内置里两套追不出东西，那两行就该和原来一样长（设计稿 05h 屏 1e）。
+ */
+export function formatExtras(f: DocFormat): { pageNumber: string | null; numbering: string | null } {
+  const hf = f.headerFooter;
+  const num = f.headingNumbering;
+  return {
+    pageNumber: hf.pageNumber === "none" ? null : `${pageNumberSample(hf.pageNumber)} ${ALIGN_SHORT[hf.pageNumberAlign]}`,
+    numbering: num.enabled && num.levels.some((l) => l !== "none") ? headingNumberingLine(num) : null,
+  };
+}
+
+/** 列表行 / 读取模态用的整句：`formatOneLine` + 有值才追加的页码与编号。 */
+export function formatOneLineFull(f: DocFormat): string {
+  const x = formatExtras(f);
+  const tail = [x.pageNumber, x.numbering ? `编号 ${x.numbering}` : null].filter(Boolean);
+  return tail.length ? `${formatOneLine(f)} · ${tail.join(" · ")}` : formatOneLine(f);
+}
+
 /** 规格表的一行。`key` 让调用方能标出「这一行这次被改过」。 */
 export interface SpecRow {
-  key: "font" | "size" | "line" | "indent" | "page";
+  key: "font" | "size" | "line" | "indent" | "page" | "extras";
   label: string;
   value: string;
 }
@@ -530,6 +602,12 @@ export function formatSpecRows(f: DocFormat): SpecRow[] {
       label: "纸张 / 边距",
       value: `${f.page.size}（${trimNum(widthMm)}×${trimNum(heightMm)}mm）· 上${trimNum(m.top)} 右${trimNum(m.right)} 下${trimNum(m.bottom)} 左${trimNum(m.left)} mm`,
     },
+    // 第 6 行，上限就是 6 行：两组合成一行「页码 / 编号」，有值才出现（05h 屏 1e）。
+    ...(() => {
+      const x = formatExtras(f);
+      const value = [x.pageNumber, x.numbering].filter(Boolean).join(" · ");
+      return value ? [{ key: "extras" as const, label: "页码 / 编号", value }] : [];
+    })(),
   ];
 }
 
@@ -661,3 +739,37 @@ export const PAGE_NUMBER_STYLES: readonly PageNumberStyle[] = ["none", "plain", 
 export const HEADING_NUMBER_FORMATS: readonly HeadingNumberFormat[] = [
   "none", "chinese", "chineseParen", "decimal", "decimalParen", "decimalDotted",
 ];
+
+/** 中文计数的两种写法——含上级的 `%1` 落在它们身上，Word 会排出「一.1」。 */
+export function isChineseNumbering(k: HeadingNumberFormat): boolean {
+  return k === "chinese" || k === "chineseParen";
+}
+
+/** 抽屉里一个下拉项为什么选不了。 */
+export type NumberingBlock = "upperChinese" | "lowerDotted";
+
+/**
+ * 这一级能不能选这种写法——抽屉里下拉项禁用的依据。
+ *
+ * 含上级的写法（1.1）把上面每一级的序号按**那一级的格式**带进来（lvlText `%1.%2`，
+ * `%1` 按第一级的 numFmt 渲染），所以中文计数不能出现在它之上：上面有「一、」就
+ * 不能选 1.1（`upperChinese`）；下面已经是 1.1，这里就不能选「一、」（`lowerDotted`）。
+ * null ＝ 可选。夹在中间的「不编号」不算数——它不参与那串 `%`。
+ */
+export function numberingPickBlocked(
+  levels: readonly HeadingNumberFormat[],
+  level: number,
+  kind: HeadingNumberFormat,
+): NumberingBlock | null {
+  if (kind === "decimalDotted" && levels.slice(0, level).some(isChineseNumbering)) return "upperChinese";
+  if (isChineseNumbering(kind) && levels.slice(level + 1).includes("decimalDotted")) return "lowerDotted";
+  return null;
+}
+
+/**
+ * 已经存下的坏组合（#505 之前复制出去的论文预设、手改过的 JSON）：下拉拦得住**选**，
+ * 拦不住存过的值，只能指出来。回含上级写法、且上面有中文计数的那些级（0 起）。
+ */
+export function numberingConflicts(levels: readonly HeadingNumberFormat[]): number[] {
+  return levels.flatMap((k, i) => (numberingPickBlocked(levels, i, k) === "upperChinese" ? [i] : []));
+}

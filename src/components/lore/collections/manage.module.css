@@ -1,8 +1,8 @@
-/* 集合管理（设计稿 03 屏 29）。沿用设定集模态的纸面外壳。 */
+/* 集合管理（设计稿 03b 屏 29）。沿用设定集模态的纸面外壳。 */
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(42, 37, 32, 0.4);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -127,7 +127,7 @@
 .confirmLayer {
   position: fixed;
   inset: 0;
-  background: rgba(42, 37, 32, 0.35);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;

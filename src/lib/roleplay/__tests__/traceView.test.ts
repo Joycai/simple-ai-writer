@@ -2,7 +2,7 @@
  * 取材条的取数层。
  *
  * 这一层错了**不会报错**——它只会让作者对着一个错的数字去改一份没问题的设定。
- * 所以设计稿 13 里每一条「几条算一条」的口径都在这里各占一条用例。
+ * 所以设计稿 04c 里每一条「几条算一条」的口径都在这里各占一条用例。
  */
 
 import { describe, expect, it } from "vitest";
@@ -87,8 +87,9 @@ describe("收起行的三个数", () => {
     expect(summarize(t).turnCount).toBe(2);
     expect(summarize(t).turnChars).toBe(40);
     const rows = hitRows(t.lore);
-    expect(rows.map((r) => [r.name, r.chars])).toEqual([["真命中", 40], ["已常驻", 0]]);
-    expect(rows[1].coreResident).toBe(true);
+    // 顺序是报告的顺序：0 字的那条在报告里排第一，就排第一，不往后沉。
+    expect(rows.map((r) => [r.name, r.chars])).toEqual([["已常驻", 0], ["真命中", 40]]);
+    expect(rows[0].coreResident).toBe(true);
   });
 
   /** 引用**算一条**（它确实在上下文里），但 refs 没有 chars，所以不加字数。 */
@@ -184,12 +185,12 @@ describe("命中的一条", () => {
     expect(by["钉住的"]).toBe(false); // pin 有自己的记号
   });
 
-  /** 窄栏折叠留下的应当是最大的那几条，宽窄两种读法必须是同一个顺序。 */
-  it("按注入量从大到小", () => {
+  /** 顺序是上下文的顺序（设计稿 04c 屏 2b/2i）：作者在核对模型看到了什么，不是在看排行榜。 */
+  it("按报告里的次序，不按字数重排", () => {
     const mk = (name: string, chars: number) =>
       entity({ name, dirPath: `/lore/${name}`, layers: [{ kind: "core", chars }] });
     expect(hitRows(report([mk("小", 100), mk("大", 900), mk("中", 500)])).map((r) => r.name))
-      .toEqual(["大", "中", "小"]);
+      .toEqual(["小", "大", "中"]);
   });
 });
 
@@ -228,6 +229,32 @@ describe("没进去", () => {
     expect(row.label).toBe("铁鳞甲 · 产地");
   });
 
+  /** 「没命中」要带现有关键字，「同组挤掉」要带组名——不然作者不知道去调谁（设计稿 04c 屏 2f）。 */
+  it("原因带着它要的细节", () => {
+    const rows = dropRows(report([entity({
+      droppedFacets: [
+        { file: "a.md", title: "左手旧伤", reason: "no-key", keys: ["伤", "疤"] },
+        { file: "b.md", title: "产地", reason: "group-lost", winner: "战甲", group: "装备" },
+      ],
+    })]));
+    expect(rows[0].keys).toEqual(["伤", "疤"]);
+    expect(rows[1].group).toBe("装备");
+    expect(rows[1].winner).toBe("战甲");
+  });
+
+  /** 收起行的「N 没进去」数着配图，展开的清单就也得列它——否则一展开数字就对不上。 */
+  it("没装下的配图是一行「超预算」", () => {
+    const rows = dropRows(report([entity({
+      name: "铁鳞甲",
+      layers: [{ kind: "gallery", chars: 60, count: 2 }],
+      droppedFacets: [],
+      droppedImages: 1,
+    })]));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "images", reason: "budget", label: "铁鳞甲", imageCount: 1, imagesKept: 2 });
+    expect(summarize({ resident: [], stalePaths: [], lore: report([entity({ droppedImages: 1 })]), area: null, refs: [], charsPerToken: 1 }).droppedCount).toBe(1);
+  });
+
   it("被挡下的合计 = 提高预算能拿回多少", () => {
     const rows = dropRows(report([entity({
       droppedFacets: [
@@ -258,11 +285,11 @@ describe("窄栏折叠", () => {
   const many = (n: number) => Array.from({ length: n }, (_, i) =>
     entity({ name: `e${i}`, dirPath: `/lore/e${i}`, layers: [{ kind: "core", chars: (n - i) * 100 }] }));
 
-  it("超过 6 条才折，折起来的是最小的那些", () => {
+  it("超过 6 条才折，折起来的是报告里靠后的那些", () => {
     const folded = foldHits(hitRows(report(many(9))));
     expect(folded.shown).toHaveLength(6);
     expect(folded.restCount).toBe(3);
-    // 剩下三条是 300 + 200 + 100。
+    // 报告的后三条是 300 + 200 + 100（顺序不动，所以恰好也是最小的）。
     expect(folded.restChars).toBe(600);
   });
 

@@ -8,9 +8,17 @@
 
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { readFile as readTextFile } from "./fileio";
+import { transcribeExtOf } from "../asr/formats";
 import type { FileNode } from "../project";
 
-export type ProjectFileKind = "image" | "text";
+/**
+ * `media` is a recording or video: attachable as a *mention* only — no model
+ * API takes the bytes, so the message carries its path and points at the
+ * transcription tool (lib/agent/chatRefs). Kept in this union rather than in
+ * `lib/asr` so the `@` picker, the file tree's 发送到助手 and the chips all
+ * classify one file the same way.
+ */
+export type ProjectFileKind = "image" | "text" | "media";
 
 export interface ProjectFile {
   name: string;
@@ -138,6 +146,7 @@ export function classifyProjectFile(name: string, path: string): ProjectFile | n
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (IMAGE_EXTS.has(ext)) return { name, path, kind: "image" };
   if (TEXT_EXTS.has(ext)) return { name, path, kind: "text" };
+  if (transcribeExtOf(name)) return { name, path, kind: "media" };
   return null;
 }
 

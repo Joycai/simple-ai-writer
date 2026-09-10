@@ -1,6 +1,6 @@
 /**
  * 输入框上方的记忆条：下一次请求的上下文由什么构成，离压缩折叠最早的对话还有
- * 多远。设计稿 02 屏 2c。
+ * 多远。设计稿 02a 屏 2c。
  *
  * 从 `AgentChat` 里抽出来给扮演面板共用，**样式仍然借 `AgentChat.module.css`**
  * ——把 `ctx*` 那十几条规则搬家只会给一个正在用的界面凭空加一次回归风险，而
@@ -251,7 +251,15 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
   // Two reasons to warn, one appearance: crossing the fold line, or outgrowing
   // the ceiling with no fold available to fix it. They used to be one flag; the
   // sentence the legend prints is what forced them apart.
-  const warned = context.willCompact || context.over;
+  //
+  // With 自动归纳 off, crossing the line is no longer "something is about to
+  // happen": the frame stays calm (the warn tone is reserved for consequences
+  // the next turn brings), but the legend still explains what the line now
+  // means — so the sentence keys on a wider condition than the colour.
+  const warned = (context.willCompact && context.autoCompact) || context.over;
+  // 状态记忆 has no line to cross, but the legend still owes one sentence: the
+  // fold this bar is used to promising at a mark now happens every turn.
+  const explained = context.willCompact || context.over || context.stateMode;
 
   return (
     <div className={styles.ctx}>
@@ -291,7 +299,7 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
             nothing to fold (fresh session, or fewer turns than planFold keeps
             verbatim): a line promising a consequence that cannot happen is the
             same lie the pre-flight bar drops it to avoid. */}
-        {context.compactMarkerPct !== null && (
+        {context.compactMarkerPct !== null && context.autoCompact && (
           <span
             className={styles.ctxMark}
             style={{ left: `${context.compactMarkerPct}%` }}
@@ -299,6 +307,19 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           />
         )}
       </button>
+      {/* 设计稿 02e: with 自动归纳 off the line stays where it was but drops
+          from a promise to a reference — a 1×4px grey tick hung *under* the
+          bar rather than through it (the bar clips its overflow, so it sits
+          beside the bar in the wrapper). Dotted and doubled lines already
+          mean other things in this app; "hung below" was the free position. */}
+      {context.compactMarkerPct !== null && !context.autoCompact && (
+        <span
+          className={styles.ctxMarkOff}
+          style={{ left: `${context.compactMarkerPct}%` }}
+          title={t("ai.chat.ctxCompactAtOff", { defaultValue: "归纳线——自动归纳已关，越过后需手动归纳" })}
+          aria-hidden
+        />
+      )}
 
       <div className={styles.ctxMeter}>
         <span>
@@ -323,12 +344,18 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
             className={styles.ctxCompactBtn}
             onClick={onCompact}
             disabled={compacting || !onCompact}
-            title={t("ai.chat.ctxCompactNowTitle", {
-              defaultValue: "现在就把较早的对话归纳成摘要，腾出上下文空间",
-            })}
+            title={context.stateMode
+              ? t("ai.chat.ctxStateNowTitle", {
+                  defaultValue: "现在就把上一轮之前的对话折进执行状态",
+                })
+              : t("ai.chat.ctxCompactNowTitle", {
+                  defaultValue: "现在就把较早的对话归纳成摘要，腾出上下文空间",
+                })}
           >
             {compacting
               ? t("ai.chat.ctxCompacting", { defaultValue: "归纳中…" })
+              : context.stateMode
+              ? t("ai.chat.ctxStateNow", { defaultValue: "更新状态" })
               : t("ai.chat.ctxCompactNow", { defaultValue: "立即归纳" })}
           </button>
         )}
@@ -358,9 +385,22 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           true while there is something to fold; when the request is simply past
           the ceiling and compaction can't reach it, saying that would send the
           author to wait for a fold that never comes. */}
-      {showLegend && warned && (
+      {showLegend && explained && (
         <div className={styles.ctxExplain}>
-          {context.willCompact
+          {/* Three sentences, not two: past the line with 自动归纳 off is its own
+              news — the fold the line used to promise is now the author's to
+              press for. */}
+          {context.stateMode && !context.over
+            ? t("ai.chat.ctxStateExplain", {
+                defaultValue:
+                  "状态记忆已开启：每次发送前，上一轮之前的对话都折进一份结构化的执行状态（目标 / 决定 / 事实 / 进展 / 文件 / 待决），只有上一轮保留原文——执行日志里能看到每轮的状态。",
+              })
+            : context.willCompact && !context.autoCompact
+            ? t("ai.chat.ctxCompactOffExplain", {
+                defaultValue:
+                  "自动归纳已关：越过刻线不会再折叠对话，太长时只先裁掉旧的工具结果和图片——要归纳请点右边的「立即归纳」，或到 设置 → 上下文与记忆 打开。",
+              })
+            : context.willCompact
             ? t("ai.chat.ctxCompactExplain", {
                 defaultValue:
                   "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",

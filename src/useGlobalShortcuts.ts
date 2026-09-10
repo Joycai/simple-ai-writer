@@ -6,6 +6,7 @@
  */
 import { useEffect } from "react";
 import {
+  CLOSE_DOC_COMBOS,
   comboNeedsIdleCaret,
   inTextEntry,
   matchesCombo,
@@ -16,7 +17,7 @@ import {
 } from "./lib/shortcuts";
 import { navBack, navForward } from "./stores/navStore";
 import { screenNeedsProject, useAppStore } from "./stores/appStore";
-import { useEditorStore } from "./stores/editorStore";
+import { closeDocument, useEditorStore } from "./stores/editorStore";
 import { useProjectStore } from "./stores/projectStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
 import { findTask } from "./lib/profile";
@@ -40,6 +41,13 @@ export function useGlobalShortcuts() {
       if (matchesCombo(e, { mod: true, key: "k" })) {
         e.preventDefault();
         setShowCommandPalette(!showCommandPalette);
+        return;
+      }
+      // ⌘P ＝ 打开面板并落到「文档」档（VS Code / IDEA 的「按文件名跳」）；面板已开着时
+      // 直接切档。它从不像 ⌘K 那样 toggle：肌肉记忆里 ⌘P 是「去找文件」，不是「关掉」。
+      if (matchesCombo(e, { mod: true, key: "p" })) {
+        e.preventDefault();
+        useAppStore.getState().openCommandPalette("files");
         return;
       }
       if (matchesCombo(e, { mod: true, key: "l" })) {
@@ -86,6 +94,14 @@ export function useGlobalShortcuts() {
       if (matchesCombo(e, { mod: true, key: "s" })) {
         e.preventDefault();
         useEditorStore.getState().saveNow();
+        return;
+      }
+      // 关闭当前文档——「关闭」三层里的第一层（⌘W 文档 / ⇧⌘W 项目 / ⌥⌘W 窗口，
+      // 表在 CLOSE_DOC_COMBOS 上）。三条都在 W 上，靠 matchesCombo 的精确修饰键
+      // 匹配分开。落盘在 closeDocument() 里，所以这里不需要先 ⌘S。
+      if (matchesAny(e, CLOSE_DOC_COMBOS)) {
+        e.preventDefault();
+        void closeDocument();
         return;
       }
       if (matchesAny(e, NAV_BACK_COMBOS)) {

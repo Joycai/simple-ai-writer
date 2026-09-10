@@ -62,6 +62,14 @@ export interface RoundGroup {
   estInputTokens: number;
   /** The tool schemas this round carried on top of that; 0 on older logs. */
   toolTokens: number;
+  /**
+   * What the endpoint charged for this round, from `round-done`. Undefined on
+   * a round still in flight, on logs persisted before the event existed, and
+   * whenever the two numbers would not describe the same bytes (see
+   * `incomparable` on the event) — in every one of those cases the log shows
+   * the estimate alone rather than a gap it cannot explain.
+   */
+  actualInputTokens?: number;
   at: number;
   /**
    * Everything this round produced, in order — dispatch steps included. A
@@ -234,6 +242,22 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
         at: event.at,
         events: [],
       });
+      continue;
+    }
+
+    // Folded into the round it measures rather than kept as a row: it is the
+    // second half of that round's header, not something that happened in it.
+    // Matched from the end — a resumed session can hold two runs' rounds under
+    // the same numbers, and the live one is the later.
+    if (event.kind === "round-done") {
+      if (!event.incomparable) {
+        for (let i = rounds.length - 1; i >= 0; i--) {
+          if (rounds[i].round === event.round) {
+            rounds[i].actualInputTokens = event.actualInputTokens;
+            break;
+          }
+        }
+      }
       continue;
     }
 
@@ -415,7 +439,7 @@ export function roundRows(group: RoundGroup, carded: ReadonlySet<string>): Agent
       // The handoff has no row here at all: it is not a step inside the run,
       // it is the seam where the run changes hands, so it renders on the turn
       // itself (components/ai/WriterTurn) with the work order attached to it.
-      // 设计稿 12 · 屏 3a：「执行日志里不再有工单卡」。
+      // 设计稿 04d · 屏 3a：「执行日志里不再有工单卡」。
       e.kind !== "handoff" &&
       e.kind !== "handoff-done",
   );

@@ -1,7 +1,7 @@
 # 互动式角色扮演创作
 
 > **状态：已实现**（Beta 开关后面，Settings → AI 配置 → 实验室），含角色记忆。
-> UI 设计稿：claude.ai/design 的 `08 扮演 Roleplay.dc.html`（TURN 1，1a–1i 九屏）；
+> UI 设计稿：claude.ai/design 的 `04a 扮演 · 主界面 Roleplay A.dc.html`（TURN 1，1a–1i 九屏）；
 > 记事本面板设计稿里没有，是按现有视觉语言自己定的，理由见
 > [05-implementation-notes.md](05-implementation-notes.md)。
 
@@ -22,7 +22,7 @@
 | [09-runjob-refactor-lld.md](09-runjob-refactor-lld.md) | `runJob` 的历史准备路径抽进 `lib/roleplay/run.ts`：只动形状，不动行为 | 改 `runJob` 的排序前 |
 | [10-memory-system.html](10-memory-system.html) | **记忆系统全景图**（浏览器打开）：五张图讲清哪三块永不出上下文、压缩在什么时刻按什么阈值触发、角色私有记忆的四个刷新时刻、转场沉降与记忆区检索 | 想一次看懂记忆系统时；改 `context.ts` / `memory.ts` / `compact.ts` 之前 |
 | [11-lore-binding-lld.md](11-lore-binding-lld.md) | **绑定与自动注入的粒度**（`shipped`）：主角条目正文常驻、勾中的特征常驻、**其余照常自动注入**——账本下沉到特征级、`selectLore` 的 `coreDone` / `excludeFacets`、四片 PR 与逐条验收 | 改绑定语义、`selectLore` 的入参、或 `lib/agent/compact.ts` 的注入账本之前 |
-| [12-context-trace-plan.md](12-context-trace-plan.md) | **取材事实**（`shipped`，含设计稿 13 的界面）：每一轮命中了哪些条目/特征、被什么关键字激活、什么没进去；以及首轮发送之前的**预估**（`history` 还是 null 时构成条只画得出工具 schema）。含「常驻与本轮为何必须分栏」「记忆区为何不能并栏」「`BoundContent` 为何长出第二个字段」 | 改 `lib/roleplay/trace.ts` / `traceView.ts`、`components/roleplay/TurnTrace.tsx`、`ContinueOutcome` / `SeedOutcome` 的出口、或 `checkBindings` 的跳过条件之前——**四种装订的口径在 §7.1，三句不能混的话在 §7.2** |
+| [12-context-trace-plan.md](12-context-trace-plan.md) | **取材事实**（`shipped`，含设计稿 04c 的界面）：每一轮命中了哪些条目/特征、被什么关键字激活、什么没进去；以及首轮发送之前的**预估**（`history` 还是 null 时构成条只画得出工具 schema）。含「常驻与本轮为何必须分栏」「记忆区为何不能并栏」「`BoundContent` 为何长出第二个字段」 | 改 `lib/roleplay/trace.ts` / `traceView.ts`、`components/roleplay/TurnTrace.tsx`、`ContinueOutcome` / `SeedOutcome` 的出口、或 `checkBindings` 的跳过条件之前——**四种装订的口径在 §7.1，三句不能混的话在 §7.2** |
 | [13-scene-memory-and-narrator-archive-plan.md](13-scene-memory-and-narrator-archive-plan.md) | **场次记忆与旁白归档**（`shipped`）：作者预期与实现的七处差异，其中两处语义装反——「另起一场」实际没丢弃任何东西、`none` 身份是陌生人而非导演。含**场次地址 `<agentId>#<N>`** 的定义、`MemoryRecord.scene` 这一个字段为何同时是三条需求的地基、六片 PR 的切分与逐条验收、以及八条「不做什么」的围栏 | 改 `sceneTools.ts` / `conversationTools.ts` / `newSession` 的分拣分支 / `AuthorPersona` / `renderMemoryBlock` 之前——**「另起一场」＝作废、废弃场次默认不可见、记忆区只走显式读路径，这三条在 §2/§3** |
 
 ## 一分钟版本

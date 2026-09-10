@@ -109,7 +109,17 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   const family = familyOf(target.standard);
   if (family === "anthropic") return "off";
   if (target.structuredOutput) return target.structuredOutput;
-  return target.modelId && knownJsonSchemaModel(target.modelId) ? "json_schema" : "json_object";
+  // The Responses family is OpenAI's own second wire: the same models, and
+  // the table's OpenAI rows were verified there (docs/api/responses.md §2.2).
+  // Gemini joins them from 2.5 on (`generationConfig.responseJsonSchema`, see
+  // the id table above) — but the lift stays keyed to a *family*, not to the id
+  // alone: a relay serving `gpt-4o` over `openai_compat` is a different endpoint
+  // with its own idea of what it accepts, and it earns the strict tier by
+  // declaration or not at all.
+  const lifts = family === "openai" || family === "responses" || family === "gemini";
+  return lifts && target.modelId && knownJsonSchemaModel(target.modelId)
+    ? "json_schema"
+    : "json_object";
 }
 
 // ─── Shaping ──────────────────────────────────────────────────────────────────
@@ -211,6 +221,37 @@ export function jsonModeShaping(
         extraBody: { generationConfig: { responseMimeType: "application/json" } },
         cue: JSON_ONLY_CUE,
       };
+    case "responses":
+      // Same two modes as Chat Completions, spelled under `text.format` with
+      // the schema's `name` and `schema` at the same level as `type` (no
+      // `json_schema` wrapper). Two things about `strict` are deliberate:
+      //
+      //   - The key is **not sent**. Omitted, the endpoint upgrades to
+      //     `strict: true` on its own (docs/api/responses.md §2.2), which is
+      //     the enforcement wanted here — while an explicit `strict: true` is
+      //     what the New API relay drops the whole format for (landscape.md
+      //     §7 第八个样本). Leaving it out gets strict on the official endpoint
+      //     and a schema that survives the relay.
+      //   - The schema is still `strictify`-ed, because the upgrade above
+      //     means the endpoint will hold it to strict mode's rules
+      //     (all-required, additionalProperties:false) whether or not the
+      //     word appears in the request.
+      //
+      // The `json_object` precondition is the same "the word json must
+      // appear" as ①, so the cue rule is the same.
+      if (mode === "json_schema" && schema) {
+        return {
+          mode,
+          extraBody: {
+            text: { format: { type: "json_schema", name: schema.name, schema: strictify(schema.parameters) } },
+          },
+        };
+      }
+      return {
+        mode: "json_object",
+        extraBody: { text: { format: { type: "json_object" } } },
+        ...(mentionsJson(promptText) ? {} : { cue: JSON_ONLY_CUE }),
+      };
     default:
       // Includes the unrecognised-DB-value case, which familyOf maps to the
       // OpenAI family — the same place the dispatch would send it.
@@ -290,13 +331,22 @@ export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMo
  * 'response_format'` precondition error. A DashScope sample is still owed
  * (`docs/api/structured-output-plan.md` §11.3); until it arrives this is the
  * OpenAI spelling, which the compatible endpoints have so far reproduced.
+ *
+ * The Responses family names its parameter `text.format` — the precondition
+ * error there reads `… to use 'text.format' of type 'json_object'`
+ * (docs/api/responses.md §2.2). Whether a Responses endpoint that lacks the
+ * parameter (Qianwen's, per landscape.md §7 第六个样本) says so in those words
+ * or ignores it silently is unverified; a silent ignore is the one case this
+ * cannot learn from, and then the cue is still there to catch the fall.
  */
 export function isJsonModeRejection(err: unknown): boolean {
   if (err instanceof DOMException && err.name === "AbortError") return false;
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  // ① names `response_format`; ③ names the generationConfig field it did not
-  // recognise (`Unknown name "responseJsonSchema"`), in either casing.
-  return /response_format|response_?json_?schema/i.test(msg);
+  // Three spellings, because three wires: `response_format` (chat completions),
+  // `text.format` (the Responses API), and the generationConfig field a Gemini
+  // endpoint names when it does not recognise it (`Unknown name
+  // "responseJsonSchema"`), in either casing.
+  return /response_format|text\.format|response_?json_?schema/i.test(msg);
 }
 
 /** One endpoint+model; the standard is in the key because one host can serve several families. */

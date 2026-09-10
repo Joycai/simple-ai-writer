@@ -29,10 +29,14 @@ import type {
   PptxProposal,
   DocxProposal,
   XlsxProposal,
+  ConvertProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
 import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
+import type { TranscribeProposal } from "../../lib/agent/registry";
+import { groupLint } from "../../lib/pptx/lint";
+import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -82,6 +86,10 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleDocx");
     case "xlsx":
       return t("ai.approval.titleXlsx", { defaultValue: "导出 Excel" });
+    case "convert":
+      return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
+    case "transcribe":
+      return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
   }
 }
 
@@ -138,6 +146,14 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
         n: proposal.summaries.length,
         defaultValue: "{{n}} 个工作表",
       });
+    case "convert":
+      // How much text came out — for a scan that is the number that says
+      // "nothing", which the body then explains.
+      return `${kilo(proposal.chars)} ${chars}`;
+    case "transcribe":
+      // The size of what is about to be uploaded — the only number known
+      // before the paid step (设计稿 02f 屏 1e: mono right column "2.4 MB").
+      return formatBytes(proposal.bytes);
   }
 }
 
@@ -316,8 +332,14 @@ function MoveBody({ proposal }: { proposal: MoveProposal }) {
  * would ask them to review the same thing twice. What is new is that a file
  * appears — so the card says which file, from what.
  */
+/** Lines named per rule on the pptx card before the rest are counted. */
+const LINT_LINES_SHOWN = 4;
+
 function PptxBody({ proposal }: { proposal: PptxProposal }) {
   const { t } = useTranslation();
+  // 源码里查出来的、导出时会丢或走样的写法（lib/pptx/lint），按规则折叠成一行一
+  // 条。和「整页压成一张」一样：不拦着，说清楚——作者可能就是要这份不完美的。
+  const lint = groupLint(proposal.lint);
   return (
     <>
       <div className={styles.moveBlock}>
@@ -346,6 +368,24 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
         </div>
       )}
 
+      {lint.length > 0 && (
+        <div className={styles.pptxLint}>
+          <div className={styles.pptxLintHead}>
+            {t("ai.approval.pptxLintHead", { n: proposal.lint.length })}
+          </div>
+          {lint.map((g) => (
+            <div key={g.rule} className={g.level === "lost" ? styles.pptxLintLost : styles.pptxLintRow}>
+              <span>{t(`ai.approval.pptxLint.${g.rule}`)}</span>
+              <span className={styles.pptxLintLines}>
+                {t("ai.approval.pptxLintLines", { lines: g.lines.slice(0, LINT_LINES_SHOWN).join("、") })}
+                {g.lines.length > LINT_LINES_SHOWN &&
+                  t("ai.approval.pptxLintMore", { n: g.lines.length - LINT_LINES_SHOWN })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className={styles.emptyNote}>{t("ai.approval.pptxNote")}</div>
     </>
   );
@@ -365,7 +405,8 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
  */
 function DocxBody({ proposal }: { proposal: DocxProposal }) {
   const { t } = useTranslation();
-  const changedKeys = new Set((proposal.changed ?? []).map((c) => c.key));
+  // 「页码 / 编号」那一行永远不会被改过：overrides 只有六项，不含这两组（05h 1z · C3）。
+  const changedKeys = new Set<string>((proposal.changed ?? []).map((c) => c.key));
   const quiet = proposal.originKind === "default";
 
   return (
@@ -443,6 +484,11 @@ function DocxBody({ proposal }: { proposal: DocxProposal }) {
               </div>
             ))}
           </div>
+        )}
+        {/* 「未在文件里出现的项按 Word 默认值补（2 项）」——只有照文件模仿时才有话可说。
+            它在带子里面、贴着底边：说的是这条来源本身的成色，不是导出的结果。 */}
+        {proposal.originFootnote && (
+          <div className={styles.docxOriginFoot}>{proposal.originFootnote}</div>
         )}
       </div>
 
@@ -545,6 +591,47 @@ function CopyBody({ proposal }: { proposal: CopyProposal }) {
         <span className={styles.movePath}>{to || "/"}</span>
       </div>
       <div className={styles.emptyNote}>{t("ai.approval.copyNote")}</div>
+    </>
+  );
+}
+
+/**
+ * 把项目里的 Office / PDF 文件转成旁边的一份 markdown。
+ *
+ * 转换在提卡片时就跑完了，所以卡上给作者看的是**真会落盘的那份**的开头，而不是
+ * 「将要转换」的承诺——一份转出来全是乱码或全是空白的文档，在这里就该看见。
+ * 扫描件单独说：字数为 0 不是转换失败，是原件没有文本层。
+ */
+function ConvertBody({ proposal }: { proposal: ConvertProposal }) {
+  const { t } = useTranslation();
+  const html = useMemo(
+    () => (proposal.excerpt.trim() ? renderMarkdown(proposal.excerpt) : ""),
+    [proposal.excerpt],
+  );
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+      {proposal.scanned ? (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.convertScanned", { defaultValue: "这份 PDF 没有文本层（扫描件）：转出来只有页面图片，没有文字。" })}
+        </div>
+      ) : html ? (
+        <div className={styles.previewBlockClipped} dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <div className={styles.emptyNote}>{t("ai.approval.convertEmpty", { defaultValue: "转换结果为空。" })}</div>
+      )}
+      {proposal.pictures > 0 && (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.convertPictures", { n: proposal.pictures, defaultValue: "抽出 {{n}} 张图片，落在文档旁的 assets/ 里。" })}
+        </div>
+      )}
+      <div className={styles.emptyNote}>
+        {t("ai.approval.convertNote", { defaultValue: "原件保留不动；重名时新文件自动编号，不会覆盖任何文件。" })}
+      </div>
     </>
   );
 }
@@ -727,7 +814,98 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <DocxBody proposal={proposal} />;
     case "xlsx":
       return <XlsxBody proposal={proposal} />;
+    case "convert":
+      return <ConvertBody proposal={proposal} />;
+    case "transcribe":
+      return <TranscribeBody proposal={proposal} />;
   }
+}
+
+/**
+ * 「要不要花这笔钱」——和 `convert` 那张「已经转好了，看一眼再落盘」相反，这张卡
+ * 出现时什么都还没跑（设计稿 02f 屏 1e）。四行按「是什么 → 花多少 → 去哪里 →
+ * 落在哪」排；估价只有 WAV 算得出时长且模型行填了单价时才有数，否则虚线 + 一句
+ * 「转写完成后按实际秒数计」。「去处」那句是隐私事实，陈述句、不加色、不进 tooltip。
+ *
+ * 说话人分离是**本次**的值：默认来自子代理里的偏好，作者在卡上改的只管这一次。
+ * 直接写回 `proposal.diarization`——apply 读的就是这个对象，而不是这张卡的 state。
+ */
+function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
+  const { t } = useTranslation();
+  const [dia, setDia] = useState(proposal.diarization);
+  const video = isVideoExt(proposal.ext);
+  const sizeLine = proposal.seconds !== null
+    ? `${formatBytes(proposal.bytes)} · ${formatClock(proposal.seconds * 1000)}`
+    : t("ai.approval.transcribeNoLength", { size: formatBytes(proposal.bytes), ext: proposal.ext, defaultValue: "{{size}} · {{ext}} 上传前算不出时长" });
+  const estimate = proposal.estimate !== null && proposal.seconds !== null
+    ? {
+        v: `¥ ${proposal.estimate.toFixed(2)}`,
+        sub: t("ai.approval.transcribeEstimateSub", {
+          s: Math.round(proposal.seconds).toLocaleString(),
+          p: proposal.pricePerSecond,
+          defaultValue: "{{s}} 秒 × ¥{{p}} / 秒",
+        }),
+        dash: false,
+      }
+    : {
+        v: t("ai.approval.transcribeEstimateUnknown", { defaultValue: "转写完成后按实际秒数计" }),
+        sub: proposal.pricePerSecond === undefined
+          ? t("ai.approval.transcribeNoPrice", { defaultValue: "模型行没填每秒单价 · 用量页记不了这笔钱" })
+          : t("ai.approval.transcribeRate", { defaultValue: "约 ¥0.8 / 小时" }),
+        dash: true,
+      };
+  const rows: { k: string; v: string; sub?: string; dash?: boolean }[] = [
+    { k: t("ai.approval.transcribeFile", { defaultValue: "文件" }), v: proposal.sourceLabel, sub: sizeLine },
+    { k: t("ai.approval.transcribeEstimate", { defaultValue: "估价" }), ...estimate },
+    {
+      k: t("ai.approval.transcribeGoesTo", { defaultValue: "去处" }),
+      v: video
+        ? t("ai.approval.transcribeGoesToVideo", { defaultValue: "上传到阿里云临时存储（会抽取音轨），48 小时后自动清理。由千问录音文件识别模型处理。" })
+        : t("ai.approval.transcribeGoesToText", { defaultValue: "上传到阿里云临时存储，48 小时后自动清理。由千问录音文件识别模型处理。" }),
+    },
+    {
+      k: t("ai.approval.transcribeWrites", { defaultValue: "写到" }),
+      v: projectRelative(proposal.path),
+      sub: t("ai.approval.transcribeWritesSub", { defaultValue: "已有同名则加序号" }),
+    },
+  ];
+  return (
+    <>
+      <div className={styles.emptyNote}>
+        {t("ai.approval.transcribeLead", { defaultValue: "这一步会上传文件并按秒计费；任务提交后不能取消。" })}
+      </div>
+      <div className={styles.specRows}>
+        {rows.map((r) => (
+          <div key={r.k} className={styles.specRow}>
+            <span className={styles.specKey}>{r.k}</span>
+            <span className={styles.specBody}>
+              <span className={r.dash ? styles.specValDash : styles.specVal}>{r.v}</span>
+              {r.sub && <span className={styles.specSub}>{r.sub}</span>}
+            </span>
+          </div>
+        ))}
+        <label className={styles.specRow}>
+          <span className={styles.specKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
+          <span className={styles.specBody}>
+            <span className={styles.specToggleLine}>
+              <input
+                type="checkbox"
+                checked={dia}
+                onChange={(e) => {
+                  proposal.diarization = e.target.checked;
+                  setDia(e.target.checked);
+                }}
+              />
+              <span className={styles.specVal}>{t("ai.approval.transcribeDiarization", { defaultValue: "说话人分离" })}</span>
+            </span>
+            <span className={styles.specSub}>
+              {t("ai.approval.transcribeDiarizationSrc", { defaultValue: "默认来自 子代理 → 音频转写 · 只改这一次 · 开了多约 2 秒，多一列「说话人 N」" })}
+            </span>
+          </span>
+        </label>
+      </div>
+    </>
+  );
 }
 
 export function ApprovalCard({ item }: { item: PendingApproval }) {
@@ -854,7 +1032,9 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           onClick={() => { setDeciding(true); void approve(proposal.id); }}
           disabled={deciding}
         >
-          {t("ai.approval.approve")}
+          {proposal.kind === "transcribe"
+            ? t("ai.approval.approveTranscribe", { defaultValue: "批准并转写" })
+            : t("ai.approval.approve")}
         </button>
       </div>
     </div>

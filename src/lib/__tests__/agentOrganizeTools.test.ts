@@ -14,12 +14,12 @@ import {
   type PlanGate,
 } from "../agent/plan";
 import {
-  createLoreCategoryTool,
   fileLoreEntriesTool,
+  manageCategoryTool,
   manageCollectionTool,
 } from "../agent/organizeTools";
 import type { LoreOrganizer, ToolContext } from "../agent/registry";
-import type { LoreEntity, LoreIndex } from "../lore";
+import type { LoreEntity, LoreEntityAddress, LoreIndex } from "../lore";
 
 function entity(name: string, collections: string[] = []): LoreEntity {
   return {
@@ -41,16 +41,28 @@ const INDEX: LoreIndex = {
   characters: [entity("Aria", ["小说A"]), entity("Bran"), entity("Cass")],
 };
 
+const addressOf = (dirPath: string): LoreEntityAddress =>
+  ({ category: "characters", id: dirPath.split("/").pop() ?? "", dirPath });
+
+/** 真实实现里 `refileCollection` 交回的那份名单：归入这个集合的成员。 */
+const membersOf = (collection: string): LoreEntityAddress[] =>
+  (INDEX.characters ?? [])
+    .filter((e) => (e.collections ?? []).includes(collection))
+    .map((e) => addressOf(e.dirPath));
+
 interface Calls {
   created: string[];
   renamed: [string, string][];
   deleted: string[];
   filed: { dirs: string[]; add: string[]; remove: string[] }[];
   categories: string[];
+  renamedCategories: [string, string][];
+  deletedCategories: string[];
 }
 
 let calls: Calls;
 let declared: string[];
+let userCategories: string[];
 
 function organizer(): LoreOrganizer {
   return {
@@ -59,14 +71,26 @@ function organizer(): LoreOrganizer {
       return declared;
     },
     createCollection: async (n) => { declared = [...declared, n]; calls.created.push(n); },
-    renameCollection: async (a, b) => { calls.renamed.push([a, b]); },
-    deleteCollection: async (n) => { calls.deleted.push(n); },
-    file: async (dirs, add, remove) => { calls.filed.push({ dirs, add, remove }); },
+    // 三条写入都交回真的改过的条目地址——工具拿它回灌运行快照，见下面「快照回灌」。
+    renameCollection: async (a, b) => { calls.renamed.push([a, b]); return membersOf(a); },
+    deleteCollection: async (n) => { calls.deleted.push(n); return membersOf(n); },
+    file: async (dirs, add, remove) => {
+      calls.filed.push({ dirs, add, remove });
+      return dirs.map((d) => addressOf(d));
+    },
     createCategory: async (label) => { calls.categories.push(label); return "contract"; },
+    // 「作者自建」这一层是改名/删除的授权边界，所以 mock 里它是可变的：默认
+    // characters 是包带来的（改不了），测试要覆盖时自己往里加。
+    get userCategories() { return userCategories; },
+    renameCategory: async (id, label) => { calls.renamedCategories.push([id, label]); },
+    deleteCategory: async (id) => { calls.deletedCategories.push(id); },
   };
 }
 
-function ctxWith(steps: LorePlanStep[], opts?: { organize?: boolean }): ToolContext {
+function ctxWith(
+  steps: LorePlanStep[],
+  opts?: { organize?: boolean; onLoreChanged?: ToolContext["onLoreChanged"] },
+): ToolContext {
   const gate: PlanGate = createPlanGate();
   gate.steps = steps;
   gate.asked = steps.length > 0;
@@ -76,6 +100,7 @@ function ctxWith(steps: LorePlanStep[], opts?: { organize?: boolean }): ToolCont
     multimodal: false,
     lorePlan: gate,
     organize: opts?.organize === false ? undefined : organizer(),
+    onLoreChanged: opts?.onLoreChanged,
   };
 }
 
@@ -83,8 +108,9 @@ const collectionStep = (p: Partial<LorePlanStep> & { action: LorePlanStep["actio
   ({ target: "collection", detail: "—", ...p });
 
 beforeEach(() => {
-  calls = { created: [], renamed: [], deleted: [], filed: [], categories: [] };
+  calls = { created: [], renamed: [], deleted: [], filed: [], categories: [], renamedCategories: [], deletedCategories: [] };
   declared = ["小说A", "小说B"];
+  userCategories = [];
   vi.clearAllMocks();
 });
 
@@ -194,17 +220,17 @@ describe("file_lore_entries", () => {
   });
 });
 
-describe("create_lore_category", () => {
-  it("批准了才建，并说明为什么没有改名/删除的对应工具", async () => {
+describe("manage_category · create", () => {
+  it("批准了才建", async () => {
     const ctx = ctxWith([{ target: "category", action: "create", entity: "合同", detail: "—" }]);
-    const r = await createLoreCategoryTool("c1", { label: "合同" }, ctx);
+    const r = await manageCategoryTool("c1", { op: "create", category: "合同" }, ctx);
     expect(calls.categories).toEqual(["合同"]);
-    expect(r.content).toContain("no tool to rename or delete a category");
+    expect(r.content).toContain("Created category");
   });
 
   it("集合步骤授权不了建分类", async () => {
     const ctx = ctxWith([collectionStep({ action: "create", entity: "合同" })]);
-    const r = await createLoreCategoryTool("c1", { label: "合同" }, ctx);
+    const r = await manageCategoryTool("c1", { op: "create", category: "合同" }, ctx);
     expect(r.content).toContain("does not cover");
     expect(calls.categories).toEqual([]);
   });
@@ -216,7 +242,7 @@ describe("create_lore_category", () => {
    */
   it("label 撞上现有分类的标签时幂等返回、点名该用的 id，绝不新建", async () => {
     const ctx = ctxWith([{ target: "category", action: "create", entity: "人物", detail: "—" }]);
-    const r = await createLoreCategoryTool("c1", { label: "人物" }, ctx);
+    const r = await manageCategoryTool("c1", { op: "create", category: "人物" }, ctx);
     expect(r.content).toContain("already exists");
     expect(r.content).toContain('"characters"');
     expect(calls.categories).toEqual([]);
@@ -225,22 +251,103 @@ describe("create_lore_category", () => {
   it("id 与英文标签同样命中查重，忽略大小写与首尾空白", async () => {
     for (const label of ["Characters", "  CHARACTERS  ", "characters"]) {
       const ctx = ctxWith([{ target: "category", action: "create", entity: label, detail: "—" }]);
-      const r = await createLoreCategoryTool("c1", { label }, ctx);
+      const r = await manageCategoryTool("c1", { op: "create", category: label }, ctx);
       expect(r.content).toContain("already exists");
     }
     expect(calls.categories).toEqual([]);
   });
 
   it("查重先于方案门——「它已存在」是只读事实，不需要方案就能说", async () => {
-    const r = await createLoreCategoryTool("c1", { label: "人物" }, ctxWith([]));
+    const r = await manageCategoryTool("c1", { op: "create", category: "人物" }, ctxWith([]));
     expect(r.content).toContain("already exists");
     expect(r.content).not.toContain("approved plan");
     expect(calls.categories).toEqual([]);
   });
 });
 
+describe("manage_category · rename", () => {
+  // 这一组存在的理由：改名曾被当成「会让每个成员条目搬家」而拒绝提供，而那条理由
+  // 是错的——分类的 id 就是文件夹名，改名改的是标签，id 一个字都不动。
+  it("批准了就改标签，并说清 id 没变、引用与置顶都还有效", async () => {
+    userCategories = ["style"];
+    const ctx = ctxWith([{ target: "category", action: "move", entity: "style", detail: "改叫《文体》" }]);
+    const r = await manageCategoryTool("c1", { op: "rename", category: "style", new_label: "文体" }, ctx);
+    expect(calls.renamedCategories).toEqual([["style", "文体"]]);
+    expect(r.content).toContain("folder id stays");
+    expect(r.content).toContain("style");
+  });
+
+  it("能力包带来的分类改不了，并说清去掉它的正确办法", async () => {
+    userCategories = [];
+    const ctx = ctxWith([{ target: "category", action: "move", entity: "characters", detail: "—" }]);
+    const r = await manageCategoryTool("c1", { op: "rename", category: "人物", new_label: "角色" }, ctx);
+    expect(r.content).toContain("capability pack");
+    expect(calls.renamedCategories).toEqual([]);
+  });
+
+  it("孤儿文件夹说的是「没有声明可改」，而不是「不存在」", async () => {
+    // 说成「不存在」，模型就会去建一个同名分类，而那会「收养」这个文件夹——
+    // 完全不同的一次改动。
+    userCategories = [];
+    const ctx = ctxWith([{ target: "category", action: "move", entity: "legacy", detail: "—" }]);
+    ctx.loreIndex = { ...ctx.loreIndex, legacy: [] };
+    const r = await manageCategoryTool("c1", { op: "rename", category: "legacy", new_label: "旧" }, ctx);
+    expect(r.content).toContain("no enabled pack declares");
+    expect(calls.renamedCategories).toEqual([]);
+  });
+
+  it("改成另一个分类已有的名字会被拒绝", async () => {
+    userCategories = ["style"];
+    const ctx = ctxWith([{ target: "category", action: "move", entity: "style", detail: "—" }]);
+    const r = await manageCategoryTool("c1", { op: "rename", category: "style", new_label: "人物" }, ctx);
+    expect(r.content).toContain("already");
+    expect(calls.renamedCategories).toEqual([]);
+  });
+
+  it("没有方案就改不了名", async () => {
+    userCategories = ["style"];
+    const r = await manageCategoryTool("c1", { op: "rename", category: "style", new_label: "文体" }, ctxWith([]));
+    expect(r.content).toContain("approved plan");
+    expect(calls.renamedCategories).toEqual([]);
+  });
+});
+
+describe("manage_category · delete", () => {
+  it("空分类才删得掉，并说清条目一条没动", async () => {
+    userCategories = ["style"];
+    const ctx = ctxWith([{ target: "category", action: "delete", entity: "style", detail: "不用了" }]);
+    const r = await manageCategoryTool("c1", { op: "delete", category: "style" }, ctx);
+    expect(calls.deletedCategories).toEqual(["style"]);
+    expect(r.content).toContain("no entry was affected");
+  });
+
+  it("还有成员就拒绝，并点名是哪几条、该先搬去哪一步", async () => {
+    // 摘掉声明不删任何东西，但会让整个分类退化成孤儿——那不是「删掉」这个词让
+    // 作者预期的结果，所以搬家必须单独占一个方案步骤。
+    userCategories = ["characters"];
+    const ctx = ctxWith([{ target: "category", action: "delete", entity: "characters", detail: "—" }]);
+    const r = await manageCategoryTool("c1", { op: "delete", category: "characters" }, ctx);
+    expect(r.content).toContain("still holds 3 entries");
+    expect(r.content).toContain("Aria");
+    expect(r.content).toContain("move_lore_entity");
+    expect(calls.deletedCategories).toEqual([]);
+  });
+
+  it("成员检查先于方案门——「它还有 3 条」是只读事实", async () => {
+    userCategories = ["characters"];
+    const r = await manageCategoryTool("c1", { op: "delete", category: "characters" }, ctxWith([]));
+    expect(r.content).toContain("still holds");
+    expect(r.content).not.toContain("does not cover");
+  });
+
+  it("不认识的 op 直接说清三个合法值", async () => {
+    const r = await manageCategoryTool("c1", { op: "archive", category: "style" }, ctxWith([]));
+    expect(r.content).toContain("create, rename, delete");
+  });
+});
+
 describe("agent 指令与工具的说法一致", () => {
-  it("指令不再宣称「分类没有增删工具」，而是指向 create_lore_category 的复用优先流程", async () => {
+  it("指令不再宣称「分类没有增删工具」，而是指向 manage_category 的复用优先流程", async () => {
     const zh = (await import("../../i18n/locales/zh-CN.json")).default as {
       ai: { instructions: { agent: string } };
     };
@@ -248,8 +355,66 @@ describe("agent 指令与工具的说法一致", () => {
       ai: { instructions: { agent: string } };
     };
     expect(zh.ai.instructions.agent).not.toContain("分类本身没有增删工具");
-    expect(zh.ai.instructions.agent).toContain("create_lore_category");
+    expect(zh.ai.instructions.agent).toContain("manage_category");
     expect(en.ai.instructions.agent).not.toContain("No tool creates or deletes categories");
-    expect(en.ai.instructions.agent).toContain("create_lore_category");
+    expect(en.ai.instructions.agent).toContain("manage_category");
+  });
+});
+
+describe("快照回灌", () => {
+  // 不回灌的后果不是「界面慢一拍」，而是数据丢失：同一次运行里紧接着的
+  // update_lore_meta 会拿快照上那份旧的 collections 覆写回磁盘（saveEntityMetaAndBody
+  // 缺席即沿用手上这份 entity），把刚归好的集合静静撤销。
+  it("归集之后按地址回灌，而不是要求全量重扫", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "update", entity: "小说B", members: ["Bran"] })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    const r = await fileLoreEntriesTool("f1", { entities: ["Bran"], add: ["小说B"] }, ctx);
+    expect(r.content).toContain("Filed 1 entry");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/bran")]);
+  });
+
+  it("集合改名回灌的是成员，不是全库", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "move", entity: "小说A" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "rename", collection: "小说A", new_name: "雪原书" }, ctx);
+    // Aria 是唯一的成员；Bran / Cass 一个字节都没变，不该跟着重读。
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/aria")]);
+  });
+
+  it("删除集合同样只回灌成员", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "delete", entity: "小说A" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "delete", collection: "小说A" }, ctx);
+    expect(seen[0]).toEqual([addressOf("/p/.ai-writer/lore/characters/aria")]);
+  });
+
+  it("新建集合不碰任何条目，所以一次刷新都不发", async () => {
+    const seen: (unknown)[] = [];
+    const ctx = ctxWith(
+      [collectionStep({ action: "create", entity: "雪原书" })],
+      { onLoreChanged: (changed) => { seen.push(changed); } },
+    );
+    await manageCollectionTool("c1", { op: "create", collection: "雪原书" }, ctx);
+    expect(seen).toEqual([]);
+  });
+
+  it("回灌失败不会把已经落盘的归集报成失败", async () => {
+    // syncLore 从不抛：写已经成功了，报错只会让模型再归一次。
+    const ctx = ctxWith(
+      [collectionStep({ action: "update", entity: "小说B", members: ["Bran"] })],
+      { onLoreChanged: () => { throw new Error("rescan blew up"); } },
+    );
+    const r = await fileLoreEntriesTool("f1", { entities: ["Bran"], add: ["小说B"] }, ctx);
+    expect(r.content).toContain("Filed 1 entry");
   });
 });

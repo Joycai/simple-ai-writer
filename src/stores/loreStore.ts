@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   scanLore,
+  scanEntity,
   createEntity,
   loadPinnedLore,
   moveEntitiesToCategory,
@@ -13,6 +14,7 @@ import {
   type CategoryMove,
   type LoreIndex,
   type LoreEntity,
+  type LoreEntityAddress,
   type CategoryId,
   type LoreDetailMode,
 } from "../lib/lore";
@@ -73,6 +75,24 @@ interface LoreState {
   scope: LoreScope;
 
   scanProject: (projectPath: string) => Promise<void>;
+  /**
+   * 只重读**一个条目**的文件夹并换进索引——代理的写工具在一次改动没离开条目
+   * 文件夹时走这条（`ToolContext.onLoreChanged` 带着条目地址来）。全量
+   * `scanProject` 对几百个条目是上千次串行 IPC，而它跟在**每一次**写工具调用
+   * 后面；改一句话不该付整个知识库的账。
+   *
+   * 与全量扫描排在同一条队列里，所以 `await` 到的保证不变：索引至少和调用那一刻
+   * 的磁盘一样新。排队中尚未开始的全量扫描顺带就读到这次写入，直接共用；索引不是
+   * 这个项目的、或条目不在快照说的位置（快照与磁盘对不上），退回全量扫描——多走
+   * 一遍总好过拼错。
+   */
+  refreshEntity: (projectPath: string, target: LoreEntityAddress) => Promise<void>;
+  /**
+   * 同一件事的批量版：一次归集、一次集合改名/删除会改到 N 条，而它们仍然全在自己
+   * 的文件夹里。逐条调 `refreshEntity` 会排 N 次队（每次一个 `set`，界面重渲染
+   * N 次）；这里一次读完、一次换进去。N 为 0 时什么都不做。
+   */
+  refreshEntities: (projectPath: string, targets: readonly LoreEntityAddress[]) => Promise<void>;
   /** 切换取材范围并记住（null 或空 ＝ 全部）。 */
   setScope: (projectPath: string | null, scope: LoreScope) => void;
   /** Ask the lore wall to open AI-extract seeded with this passage. */
@@ -99,6 +119,7 @@ interface LoreState {
     projectPath: string,
     entities: readonly LoreEntity[],
     category: CategoryId,
+    onProgress?: (done: number, total: number) => void,
   ) => Promise<{ moves: CategoryMove[]; skipped: number; failed: string[] }>;
 }
 
@@ -127,6 +148,28 @@ let queuedToken: object | null = null;
 let queuedPath: string | null = null;
 /** Scans scheduled and not yet finished, so `isLoading` doesn't flicker between them. */
 let activeScans = 0;
+/** Which project the installed index describes — `refreshEntity` must not patch another's. */
+let scannedPath: string | null = null;
+
+/**
+ * The full walk, under the loading flag. Only ever run from inside the queue
+ * (`scanProject`'s walk, or `refreshEntity` falling back to it).
+ */
+async function walkProject(projectPath: string): Promise<void> {
+  activeScans++;
+  useLoreStore.setState({ isLoading: true });
+  try {
+    // 范围随索引一起装载：扫描是「换项目了」唯一必经的地方，而范围是按项目存的。
+    // 反复扫描同一个项目读到的是同一个值（setScope 同时写盘与写 state），所以
+    // 这里不会把会话中途的切换覆盖掉。`parseScopePref` 兼容旧的单集合裸字符串。
+    const scope = parseScopePref(readPref(`${LORE_SCOPE_PREFIX}${projectPath}`));
+    const index = await scanLore(projectPath);
+    scannedPath = projectPath;
+    useLoreStore.setState({ index, scope });
+  } finally {
+    if (--activeScans === 0) useLoreStore.setState({ isLoading: false });
+  }
+}
 
 export const useLoreStore = create<LoreState>((set, get) => ({
   index: {},
@@ -167,22 +210,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (queued && queuedPath === projectPath) return queued;
 
     const token = {};
-    activeScans++;
-    set({ isLoading: true });
-
-    const walk = async () => {
+    const walk = () => {
       // Claimed here, not when scheduled: this scan's view of disk is fixed
       // from now on, so a caller arriving later must schedule its own.
       if (queuedToken === token) { queued = null; queuedToken = null; queuedPath = null; }
-      try {
-        // 范围随索引一起装载：扫描是「换项目了」唯一必经的地方，而范围是按项目存的。
-        // 反复扫描同一个项目读到的是同一个值（setScope 同时写盘与写 state），所以
-        // 这里不会把会话中途的切换覆盖掉。`parseScopePref` 兼容旧的单集合裸字符串。
-        const scope = parseScopePref(readPref(`${LORE_SCOPE_PREFIX}${projectPath}`));
-        set({ index: await scanLore(projectPath), scope });
-      } finally {
-        if (--activeScans === 0) set({ isLoading: false });
-      }
+      return walkProject(projectPath);
     };
 
     // `.then(walk, walk)` rather than `.then(walk)`: a scan that failed must not
@@ -193,6 +225,51 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     queued = promise;
     queuedToken = token;
     queuedPath = projectPath;
+    return promise;
+  },
+
+  refreshEntity: (projectPath, target) => get().refreshEntities(projectPath, [target]),
+
+  refreshEntities: (projectPath, targets) => {
+    // 同一条目被列两次（归入 A 又移出 B 这种）只读一遍。
+    const wanted = new Map<string, LoreEntityAddress>();
+    for (const t of targets) wanted.set(t.dirPath, t);
+    if (wanted.size === 0) return Promise.resolve();
+
+    // A full scan that is queued but not yet reading disk will see this write
+    // too — same sharing rule as scanProject, same reason it is safe.
+    if (queued && queuedPath === projectPath) return queued;
+
+    const patch = async () => {
+      // Decided here, inside the queue, not when scheduled: a project switch
+      // ahead of us in the chain would otherwise be patched with the previous
+      // project's entity. And `walkProject` directly rather than `scanProject`
+      // — scheduling behind `chain` from inside it would wait on itself.
+      if (scannedPath !== projectPath) return walkProject(projectPath);
+      // 全部读完再动索引，`get().index` 才只在 await 之后读一次——和单条版本
+      // 一样的理由，只是这里有 N 个 await 要跨过去。
+      const fresh: { target: LoreEntityAddress; entity: LoreEntity }[] = [];
+      for (const target of wanted.values()) {
+        fresh.push({ target, entity: await scanEntity(target.category, target.id, target.dirPath) });
+      }
+      const index = get().index;
+      const patched: LoreIndex = {};
+      for (const { target, entity } of fresh) {
+        const list = patched[target.category] ?? index[target.category];
+        // The run's snapshot and the index disagree on where this entity is:
+        // one more walk is cheaper than being wrong about a folder.
+        if (!list) return walkProject(projectPath);
+        const at = list.findIndex((e) => e.dirPath === target.dirPath);
+        if (at < 0) return walkProject(projectPath);
+        const next = patched[target.category] ?? list.slice();
+        next[at] = entity;
+        patched[target.category] = next;
+      }
+      set({ index: { ...index, ...patched } });
+    };
+
+    const promise = chain.then(patch, patch);
+    chain = promise.catch(() => {});
     return promise;
   },
 
@@ -303,8 +380,8 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     }
   },
 
-  moveToCategory: async (projectPath, entities, category) => {
-    const { moves, skipped, failed } = await moveEntitiesToCategory(projectPath, entities, category);
+  moveToCategory: async (projectPath, entities, category, onProgress) => {
+    const { moves, skipped, failed } = await moveEntitiesToCategory(projectPath, entities, category, onProgress);
     // 置顶跟着搬。顺序是「先重指、再重扫」：墙上的置顶记号是按 `index` 重算的
     // （LoreWall 的 pinnedDirs），扫描在后，作者就不会看见中间那一帧「置顶没了」。
     if (moves.length > 0) {

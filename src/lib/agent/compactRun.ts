@@ -49,12 +49,16 @@ export async function compactChatHistory(opts: {
   history: StreamMessage[];
   meta: ChatSessionMeta;
   ceilingTokens: number;
+  /** Where the automatic fold fires (compactTriggerFor); absent = classic line. */
+  triggerTokens?: number;
   /** Author-requested compact: skip the trigger and fold maximally (planFold). */
   force?: boolean;
   summarize: (input: SummarizeInput) => Promise<string>;
 }): Promise<CompactOutcome | null> {
   const { history, meta } = opts;
-  const plan = planFold(history, meta, opts.ceilingTokens, { force: opts.force });
+  const plan = planFold(history, meta, opts.ceilingTokens, {
+    force: opts.force, triggerTokens: opts.triggerTokens,
+  });
   if (!plan) return null;
 
   const fromTokens = estimateMessagesTokens(history);

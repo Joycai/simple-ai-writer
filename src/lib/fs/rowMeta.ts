@@ -1,23 +1,26 @@
 /**
- * What one file-tree row *is* — the pure half of 设计稿 17's row anatomy.
+ * What one file-tree row *is* — the pure half of 设计稿 01b's row anatomy.
  *
- * The panel has a single accent colour, and 设计稿 17 spends it on "the open
+ * The panel has a single accent colour, and 设计稿 01b spends it on "the open
  * document" and "the selection". File kinds therefore get no colour of their
  * own: they are told apart by an icon and by the right-hand column, and by two
  * levels of grey — things the author writes (`.md` `.txt` `.html`) against
  * things that merely live in the folder (imported originals, pictures, an
- * `assets/` group). Everything here is derived from the node's own name and
- * its siblings; nothing reads a file, and nothing measures.
+ * `assets/` group). Everything here is derived from names — a node's own, its
+ * siblings', and the ones in its subtree; nothing reads a file, and nothing
+ * measures.
  */
 
 import { ASSETS_DIR, safeAssetName } from "../image/assets";
 
-/** The six row kinds 设计稿 17 draws. */
+/** The seven row kinds 设计稿 01b draws. */
 export type RowKind =
   /** A folder the author made. */
   | "folder"
   /** One document's illustration folder — `assets/<文档名>/`. */
   | "assets"
+  /** A folder of the author's own that holds pictures and nothing else. */
+  | "pictures"
   /** Something the author writes: .md / .txt. */
   | "doc"
   /** An AI-authored deliverable: .html. */
@@ -38,11 +41,16 @@ export function extOf(name: string): string {
 }
 
 /**
- * Which of the six kinds this row is.
+ * Which kind this row is, as far as one name and its parent's can say.
  *
  * `parentName` decides `assets` — a folder is an illustration group because of
  * *where* it sits, not what it is called (the author is free to have a folder
  * called 插图 that is an ordinary group).
+ *
+ * Never returns `pictures`: that one needs the folder's subtree, which is why
+ * it is decided by {@link pictureFolders} in one walk and joined back on by
+ * {@link resolveRowKind}. Call sites that only classify *files* can keep using
+ * this directly.
  */
 export function rowKind(name: string, isDir: boolean, parentName: string | null): RowKind {
   if (isDir) return parentName === ASSETS_DIR ? "assets" : "folder";
@@ -58,7 +66,7 @@ export function rowKind(name: string, isDir: boolean, parentName: string | null)
  * — one step back, so a scan for the next chapter isn't slowed by the props.
  */
 export function isSecondary(kind: RowKind): boolean {
-  return kind === "original" || kind === "image" || kind === "assets";
+  return kind === "original" || kind === "image" || kind === "assets" || kind === "pictures";
 }
 
 /**
@@ -67,11 +75,11 @@ export function isSecondary(kind: RowKind): boolean {
  * the name, so printing MD would put it back).
  *
  * One column, two meanings: folders show their document count instead. Neither
- * is ever hidden — 设计稿 17 §2e removed the hover buttons precisely so this
+ * is ever hidden — 设计稿 01b §2e removed the hover buttons precisely so this
  * column never has to yield.
  */
 export function extLabel(name: string, kind: RowKind): string | null {
-  if (kind === "assets" || kind === "folder") return null;
+  if (kind === "assets" || kind === "pictures" || kind === "folder") return null;
   const ext = extOf(name);
   if (!ext || ext === "md" || ext === "markdown") return null;
   return ext.toUpperCase();
@@ -169,9 +177,91 @@ export function relinkCandidates(
   return found;
 }
 
+/**
+ * Folder names that mean "pictures" when the folder holds no files to judge by.
+ *
+ * A fallback, never the first word: a folder called `images` full of chapters
+ * is a folder of chapters, and mislabelling it is worse than missing it — the
+ * author would read the icon as "no manuscript in here". Latin names are
+ * matched lower-cased; the Chinese ones are unaffected by case.
+ */
+const PICTURE_NAMES = new Set([
+  "image", "images", "img", "imgs", "pic", "pics", "picture", "pictures",
+  "photo", "photos", "screenshot", "screenshots", "gallery", "media",
+  "图片", "图", "配图", "插图", "插画", "截图", "图集", "素材",
+]);
+
+/** What one subtree holds, as far as `pictures` needs to know. */
+interface Tally {
+  /** Any file at all, at any depth. */
+  hasFile: boolean;
+  /** Every file is an image. Vacuously true for a subtree with no files. */
+  allImages: boolean;
+}
+
+/**
+ * Every folder of the author's own that holds pictures and nothing else.
+ *
+ * **Content first, name second.** A folder qualifies when its subtree has at
+ * least one file and *all* of them are images; only when there is no file to
+ * judge by does the name get a say ({@link PICTURE_NAMES}). Deciding by name
+ * alone would both miss the folders nobody thought to list (`截图`, `素材`,
+ * `pics_v2`) and mislabel an `images/` that happens to hold the manuscript.
+ *
+ * "All, not most" is deliberate: "most" would mean counting, and this module
+ * doesn't count. One stray `.pdf` therefore drops the whole folder back to an
+ * ordinary one — the cheap failure, chosen over the expensive one.
+ *
+ * `assets/` and its `assets/<组>` groups are left out: they are their own kind,
+ * with a repair action attached that must not be offered for a folder the
+ * author made. One bottom-up walk, same shape as {@link orphanedAssetGroups};
+ * nothing reads the disk.
+ */
+export function pictureFolders(nodes: readonly NamedNode[]): Set<string> {
+  const marked = new Set<string>();
+  const walk = (list: readonly NamedNode[], parentName: string | null): Tally => {
+    const tally: Tally = { hasFile: false, allImages: true };
+    for (const node of list) {
+      if (!node.is_dir) {
+        tally.hasFile = true;
+        if (rowKind(node.name, false, parentName) !== "image") tally.allImages = false;
+        continue;
+      }
+      const sub = walk(node.children ?? [], node.name);
+      if (sub.hasFile) tally.hasFile = true;
+      if (!sub.allImages) tally.allImages = false;
+      // `rowKind` already excludes `assets/<组>`; the `assets/` folder itself
+      // is the one case it calls "folder" that must not be marked.
+      if (rowKind(node.name, true, parentName) !== "folder" || node.name === ASSETS_DIR) continue;
+      // `allImages` with a file present already implies "at least one image".
+      const isPictures = sub.hasFile ? sub.allImages : PICTURE_NAMES.has(node.name.toLowerCase());
+      if (isPictures) marked.add(node.path);
+    }
+    return tally;
+  };
+  walk(nodes, null);
+  return marked;
+}
+
+/**
+ * The row's kind, name-derived part joined with the subtree-derived one.
+ *
+ * The single call site for a *row*: keeping the join here rather than in the
+ * component is what stops "what counts as a picture folder" from living in two
+ * files. `pictureDirs` is one {@link pictureFolders} walk over the whole tree.
+ */
+export function resolveRowKind(
+  node: NamedNode,
+  parentName: string | null,
+  pictureDirs: ReadonlySet<string>,
+): RowKind {
+  const kind = rowKind(node.name, node.is_dir, parentName);
+  return kind === "folder" && pictureDirs.has(node.path) ? "pictures" : kind;
+}
+
 /*
  * A row's left padding lives in CSS, not here — see FileTree.module.css's
- * `.node`. 设计稿 17 §2g: levels 1–4 step by the density tier's width and from
+ * `.node`. 设计稿 01b §2g: levels 1–4 step by the density tier's width and from
  * level 5 the step drops to 4px for good (seven levels at 12px would spend
  * 84px on indentation alone, and at that depth indentation only has to say
  * "further right than the line above"). The step *is* the tier, and the tier

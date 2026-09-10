@@ -1,6 +1,6 @@
 [package]
 name = "simple-ai-writer"
-version = "1.43.0"
+version = "1.50.0"
 description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"
@@ -16,7 +16,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
+# `watch`: the themes folders are watched while Settings is open (lib/theme
+# → stores/themeStore), so an author editing a theme file sees it land
+# without pressing 重新载入. Not a default feature of the plugin.
+tauri-plugin-fs = { version = "2", features = ["watch"] }
 # `unsafe-headers` is what lets the frontend set an Origin header (src/lib/http.ts
 # rewrites it for local model servers). Without it the plugin silently drops every
 # "forbidden" header per the fetch spec and then appends the webview's own origin —

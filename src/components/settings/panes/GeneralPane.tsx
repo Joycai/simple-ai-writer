@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
 import { useProjectStore } from "../../../stores/projectStore";
-import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
@@ -11,6 +10,7 @@ import {
 } from "../../../lib/notify";
 import { ResetAppDialog } from "../ResetAppDialog";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
+import { AppearanceThemeGrid, MarkdownThemeGrid } from "./AppearanceThemes";
 import ui from "../settingsUi.module.css";
 
 const THEMES: { value: ThemeMode; labelKey: string }[] = [
@@ -39,16 +39,14 @@ interface Props {
 }
 
 export function GeneralPane({ onEscapeInterceptChange }: Props) {
-  const { t, i18n: i18nInst } = useTranslation();
-  const isZh = i18nInst.language.startsWith("zh");
+  const { t } = useTranslation();
   const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
-  const markdownTheme = useAppStore((s) => s.markdownTheme);
-  const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
 
   const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
   const [notifyApproval, setNotifyApprovalOn] = useState(isNotifyKindEnabled("approval"));
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
+  const [notifyError, setNotifyErrorOn] = useState(isNotifyKindEnabled("error"));
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
@@ -154,6 +152,9 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
           </ChipRow>
         </Row>
 
+        {/* 外观主题：模式解出明暗、明暗选出一张主题文件（设计稿 05i）。 */}
+        <AppearanceThemeGrid />
+
         <div className={ui.rowStacked}>
           <div className={ui.rowTitle}>{t("systemSettings.general.fontLabel")}</div>
           <div className={ui.rowDesc}>{t("systemSettings.general.fontHint")}</div>
@@ -171,28 +172,9 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
           </div>
         </div>
 
-        <div className={`${ui.rowStacked} ${ui.rowLast}`}>
-          <div className={ui.rowTitle}>{t("systemSettings.general.mdThemeLabel")}</div>
-          <div className={ui.rowDesc}>{t("systemSettings.general.mdThemeHint")}</div>
-          <div className={`${ui.cardGrid} ${ui.cardGridWide}`}>
-            {MARKDOWN_THEMES.map((mt) => (
-              <button
-                key={mt.id}
-                className={`${ui.card} ${markdownTheme === mt.id ? ui.cardActive : ""}`}
-                onClick={() => setMarkdownTheme(mt.id)}
-              >
-                {/* A real md-body sample, pinned by data-md-theme to this card's
-                    theme whatever the app-wide setting currently is. */}
-                <div className={`${ui.mdSample} md-body`} data-md-theme={mt.id} aria-hidden>
-                  <h2>{isZh ? "标题" : "Heading"}</h2>
-                  <p>{isZh ? "正文示例，字体与间距如此。" : "Body text, set in this theme."}</p>
-                </div>
-                <div className={ui.cardName}>{isZh ? mt.label.zh : mt.label.en}</div>
-                <div className={ui.cardDesc}>{isZh ? mt.desc.zh : mt.desc.en}</div>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* 排版主题：内置 + 装机级 + 本项目的文件，样张是各自的沙箱小窗；作者
+            三动作长在整节的网格底下（两种主题文件住同一个文件夹）。 */}
+        <MarkdownThemeGrid />
       </Section>
 
       <Section label={t("systemSettings.general.languageSection")}>
@@ -235,6 +217,16 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
                 on={notifyDone}
                 onChange={(next) => { setNotifyKindEnabled("done", next); setNotifyDoneOn(next); }}
                 label={t("systemSettings.general.notifyDoneLabel")}
+              />
+            </Row>
+            <Row
+              title={t("systemSettings.general.notifyErrorLabel")}
+              desc={t("systemSettings.general.notifyErrorHint")}
+            >
+              <Toggle
+                on={notifyError}
+                onChange={(next) => { setNotifyKindEnabled("error", next); setNotifyErrorOn(next); }}
+                label={t("systemSettings.general.notifyErrorLabel")}
               />
             </Row>
             <Row desc={t("systemSettings.general.notifyPlatformHint")} last>

@@ -10,7 +10,7 @@
  */
 
 import i18n from "../../i18n";
-import { formatOneLine, type DocFormatPreset } from "./format";
+import { formatOneLineFull, type DocFormatPreset } from "./format";
 import { isDocxExportEnabled } from "./flag";
 
 /** 清单最多几行。再多模型也读不出重点，而这是每一轮都付的固定成本。 */
@@ -23,7 +23,7 @@ export function docxRoster(presets: readonly DocFormatPreset[], defaultId: strin
       const name = p.id === defaultId
         ? i18n.t("ai.instructions.docxFormatDefault", { label: p.label })
         : p.label;
-      return `- ${p.id} · ${name} — ${formatOneLine(p.format)}`;
+      return `- ${p.id} · ${name} — ${formatOneLineFull(p.format)}`;
     })
     .join("\n");
 }

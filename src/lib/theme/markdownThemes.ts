@@ -11,8 +11,9 @@
  * Shape of a theme: a set of `--md-*` custom properties consumed by the shared
  * base rules, plus an optional `rules` string for its signature touches (the
  * magazine drop cap, the 公众号 heading bar). Colours stay in design tokens, so
- * every theme follows light/dark automatically; `EXPORT_TOKEN_CSS` re-declares
- * the light values for documents that leave the app.
+ * every theme follows light/dark automatically; for documents that leave the
+ * app the palette is generated from the author's appearance themes
+ * (`lib/theme/export`).
  */
 
 export type MarkdownThemeId = "manuscript" | "clean" | "magazine" | "wechat" | "typewriter";
@@ -195,8 +196,10 @@ export function findMarkdownTheme(id: string | null | undefined): MarkdownTheme 
 }
 
 /**
- * The theme currently applied to the app. Read off the DOM rather than the
- * store so lib-layer callers (export) don't have to reach into React state.
+ * The built-in theme currently applied to the app — for a theme file, the
+ * one it extends. Read off the DOM rather than the store so lib-layer
+ * callers don't have to reach into React state; the file itself is
+ * `lib/theme/install`'s `resolvedMarkdownTheme()`.
  */
 export function currentMarkdownThemeId(): MarkdownThemeId {
   const raw = document.documentElement.getAttribute(MD_THEME_ATTR);
@@ -391,46 +394,20 @@ export function markdownThemeCss(id: MarkdownThemeId, scope: string): string {
 }
 
 /**
- * Every theme at once. Normally the `data-md-theme` attribute sits on `<html>`
- * and applies to every `.md-body` below it; a container may also carry the
- * attribute itself to pin one theme regardless of the app setting (the settings
- * picker's samples do this). Both selectors have the same specificity, so the
- * self-scoped pass is emitted last — later wins, and a pinned container is
- * never overridden by whichever theme happens to come later in the list.
+ * Every built-in theme at once. The `data-md-theme` attribute sits on `<html>`
+ * and applies to every `.md-body` below it. For a theme *file* the attribute
+ * names the built-in it extends and the file's own CSS is installed after
+ * this sheet (`lib/theme/install`); the settings samples are sandboxed
+ * frames with a sheet each (`lib/theme/sample`), so nothing pins a theme to
+ * one container any more.
  */
 export function markdownThemesCss(): string {
   const base = baseCss(`.${MD_BODY_CLASS}`);
   const inherited = MARKDOWN_THEMES
     .map((t) => themeBlock(t, `[${MD_THEME_ATTR}="${t.id}"] .${MD_BODY_CLASS}`))
     .join("\n\n");
-  const pinned = MARKDOWN_THEMES
-    .map((t) => themeBlock(t, `.${MD_BODY_CLASS}[${MD_THEME_ATTR}="${t.id}"]`))
-    .join("\n\n");
-  return `${base}\n\n${inherited}\n\n${pinned}`;
+  return `${base}\n\n${inherited}`;
 }
-
-/**
- * Light-mode design tokens for documents that leave the app. Exported HTML has
- * no `tokens.css`, so the themes' `var(--color-*)` references are declared here
- * instead — same CSS text, self-supplied palette. Bundled webfonts don't travel
- * with the file; every stack falls back to system faces.
- */
-export const EXPORT_TOKEN_CSS = `:root {
-  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
-  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
-  --color-text-primary: #2A2520;
-  --color-text-secondary: #5C5346;
-  --color-text-muted: #8B7E6A;
-  --color-text-ghost: #C0B49E;
-  --color-sienna: #A0522D;
-  --color-bg-base: #F7F2E8;
-  --color-bg-surface: #FBF8F0;
-  --color-bg-elevated: #F1E8D5;
-  --color-border: #E5DCC9;
-  --color-border-soft: #ECE2CE;
-  --color-accent-tint: rgba(160, 82, 45, 0.10);
-}`;
 
 let installed: HTMLStyleElement | null = null;
 

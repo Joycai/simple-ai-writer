@@ -20,6 +20,10 @@ vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
 
+/** Same, for the transcription Beta. */
+const asrBeta = { on: false };
+vi.mock("../../asr/flag", () => ({ isAsrEnabled: () => asrBeta.on }));
+
 /** Same, for the 助手工具包模式 (orchestrator) Beta. */
 const orchestratorBeta = { on: false };
 vi.mock("../packFlag", () => ({
@@ -41,11 +45,14 @@ const MODELS = [
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
   { id: "m-sakura", providerId: "p", modelId: "sakura", name: "Sakura", type: "text",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, translateFormat: "sakura" },
+  { id: "m-asr", providerId: "p", modelId: "qwen-audio-3.0-asr-flash-filetrans", name: "ASR", type: "text",
+    priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, asrFormat: "dashscope-filetrans" },
 ] as never;
 
 /** Stand-in handle: routeTools only tests it for presence. */
 const WS: TaskWorkspaceHandle = { taskId: null, ensure: async () => ({ taskId: "t", dir: "/d" }) };
 import { AGENT_ASSIST_PRESET } from "../presets";
+import { ROLEPLAY_PRESET, subAgentsFor } from "../../roleplay/presets";
 import { withSessionOverrides, type SubAgentConfig, type SubAgentKind } from "../subagent";
 
 describe("routeTools", () => {
@@ -58,6 +65,7 @@ describe("routeTools", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
@@ -268,6 +276,7 @@ describe("the PPTX export Beta gate", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("withholds export_pptx entirely while the switch is off", () => {
@@ -352,6 +361,7 @@ describe("the translation gate", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
@@ -424,11 +434,13 @@ describe("routeTools — writer handoff", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
     writer: { kind: "writer", modelId: "m-long", enabled: true },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("keeps the preset's own ending when the surface has not opted in", () => {
@@ -456,6 +468,7 @@ describe("routeTools — writer handoff", () => {
         ...allDisabled,
         writer: { kind: "writer", modelId, enabled: true },
         retrieval: { kind: "retrieval", modelId: null, enabled: false },
+        asr: { kind: "asr", modelId: null, enabled: false },
       };
       expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS, { handoff: true }).finishPolicy)
         .toBe("force-text");
@@ -496,6 +509,7 @@ describe("routeTools — ask_author", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("is absent unless the surface says it can render the question card", () => {
@@ -529,6 +543,7 @@ describe("routeTools — run_pack", () => {
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
     retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
   };
 
   it("is absent while the Beta is off, even for an opted-in surface", () => {
@@ -569,5 +584,175 @@ describe("routeTools — run_pack", () => {
     } finally {
       orchestratorBeta.on = false;
     }
+  });
+});
+
+/**
+ * The roleplay character's allowlist, end to end through `routeTools`.
+ *
+ * Its own unit test lives beside the preset; this one is here because the leak
+ * it guards against was a property of THIS function — `DELEGATE_KINDS.some(live)`
+ * is four-of-a-kind, so a longread subagent the author turned on for the chat
+ * assistant handed a roleplay character `delegate`, whose longread sub-preset is
+ * `read_file` / `search_text` / `list_files`: the one thing that preset's own
+ * comment says a character must never do, one level of indirection down.
+ */
+describe("routeTools for a roleplay character", () => {
+  const off: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+  const routeCharacter = (subs: Record<SubAgentKind, SubAgentConfig>) =>
+    routeTools(ROLEPLAY_PRESET, subAgentsFor("character", subs), WS, MODELS);
+
+  it("gets no delegate from a longread or search subagent", () => {
+    const res = routeCharacter({
+      ...off,
+      longread: { kind: "longread", modelId: "m-long", enabled: true },
+      search: { kind: "search", modelId: "m-search", enabled: true },
+    });
+    expect(res.tools).not.toContain("delegate");
+    // The main model keeps its own browsing: nothing took it over.
+    expect(res.serverTools).toBe("off");
+  });
+
+  /**
+   * Vision is the one kind on the allowlist, and this is why it is there:
+   * 02-design §8 — vision live strips `read_image`, so without `delegate` the
+   * character's ability to look at a picture would vanish rather than move.
+   */
+  it("still gets delegate from vision — the whole reason the allowlist has one entry", () => {
+    const res = routeCharacter({
+      ...off,
+      vision: { kind: "vision", modelId: "m-vision", enabled: true },
+    });
+    expect(res.tools).toContain("delegate");
+    expect(res.tools).not.toContain("read_image");
+  });
+
+  it("is never handed the translate tool", () => {
+    translateBeta.on = true;
+    try {
+      const res = routeCharacter({
+        ...off,
+        translate: { kind: "translate", modelId: "m-sakura", enabled: true },
+      });
+      expect(res.tools).not.toContain("translate");
+    } finally {
+      translateBeta.on = false;
+    }
+  });
+
+  // The narrator is the control: reading and researching is its job.
+  it("leaves the narrator's own delegate alone", () => {
+    const subs = {
+      ...off,
+      longread: { kind: "longread" as const, modelId: "m-long", enabled: true },
+    };
+    const res = routeTools(ROLEPLAY_PRESET, subAgentsFor("narrator", subs), WS, MODELS);
+    expect(res.tools).toContain("delegate");
+  });
+});
+
+/**
+ * 「谁来读图」只判一次——摘掉 `read_image` 的同一处，也把答案交出去。消费者是
+ * `ToolContext.visionDelegate`：一份**清单**要说出真正走得通的那条路，而
+ * `multimodal` 在识图子代理开着时，是错的那个模型的属性。
+ */
+describe("routeTools.visionDelegate", () => {
+  const off: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+
+  it("is false with no vision subagent", () => {
+    expect(routeTools(AGENT_ASSIST_PRESET, off, WS, MODELS).visionDelegate).toBe(false);
+  });
+
+  it("is true exactly when the image tools were stripped", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, {
+      ...off,
+      vision: { kind: "vision", modelId: "m-vision", enabled: true },
+    }, WS, MODELS);
+    expect(res.visionDelegate).toBe(true);
+    expect(res.tools).not.toContain("read_lore_image");
+  });
+
+  // 开着但绑的模型读不了图 —— 工具没被摘，就不该说有人接手了。
+  it("is false for an enabled vision subagent bound to a text-only model", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, {
+      ...off,
+      vision: { kind: "vision", modelId: "m-long", enabled: true },
+    }, WS, MODELS);
+    expect(res.visionDelegate).toBe(false);
+    expect(res.tools).toContain("read_lore_image");
+  });
+});
+
+/**
+ * `transcribe_audio` is appended on translate's rule — a Beta flag AND a bound
+ * `asr` model — and, like translate, the raw preset never lists it, so the
+ * routed set is the only place a test can see it (routing.ts).
+ */
+describe("routeTools — transcribe_audio (audio transcription Beta)", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+  const bound: Record<SubAgentKind, SubAgentConfig> = {
+    ...allDisabled,
+    asr: { kind: "asr", modelId: "m-asr", enabled: true },
+  };
+  const withBeta = (on: boolean, run: () => void) => {
+    asrBeta.on = on;
+    try { run(); } finally { asrBeta.on = false; }
+  };
+
+  it("needs BOTH the Beta switch and a binding", () => {
+    withBeta(false, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("transcribe_audio");
+    });
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("transcribe_audio");
+    });
+  });
+
+  it("offers it when both are in place, to the planner too", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).toContain("transcribe_audio");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, bound, MODELS).tools).toContain("transcribe_audio");
+    });
+  });
+
+  it("ignores a binding to an ordinary model, and never adds delegate for asr alone", () => {
+    withBeta(true, () => {
+      const subs: Record<SubAgentKind, SubAgentConfig> = {
+        ...allDisabled,
+        asr: { kind: "asr", modelId: "m-long", enabled: true },
+      };
+      expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS).tools).not.toContain("transcribe_audio");
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("delegate");
+    });
   });
 });

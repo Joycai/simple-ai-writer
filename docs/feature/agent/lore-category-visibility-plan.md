@@ -1,5 +1,10 @@
 # Agent 建重复分类的修复：让模型看见分类全貌 + create_lore_category 查重
 
+> **后续**：`create_lore_category` 已折成 `manage_category(op: create | rename | delete)`
+> （见 [`../lore/lore-category-manage-plan.md`](../lore/lore-category-manage-plan.md) §8）。
+> 本文写于那次改名之前，下面的工具名一律读作 `manage_category` 的 create 分支；这里
+> 记下的查重行为一条没变。
+
 > **状态：`shipped`** —— 2026-08-29 定案（同日两次对照 main 更新，最终对照 56f374e——
 > 分类管理面三片全部落地，含 agent 方案卡的 category-target 轴），当日两片实现完毕：
 > PR-A（读侧对照 + 预算放宽）、PR-B（查重 + 文案纠偏），实现出入已回写各节。

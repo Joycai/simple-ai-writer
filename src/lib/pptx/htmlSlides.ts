@@ -1,12 +1,19 @@
 /**
- * Reading an `.html` deck **by slide** — the counterpart to `read_slides`'s
- * .pptx path, in pure text.
+ * Reading an `.html` file **by structure** — by slide when it is a deck
+ * (`read_slides`' HTML path, the counterpart to its .pptx one), by landmark
+ * when it is not (`landmarkIndex`, the map `read_file` puts in front of a
+ * page the selectors cannot divide). Pure text either way.
  *
  * Why this exists: the model writes decks as HTML (see `./index.ts`), but the
  * only way to read one back was `read_file`, which pages by 4000 characters of
  * source. Finding slide 7 of a 60k-character deck therefore meant a dozen
  * blind reads before any edit could start — and once found, a targeted
  * `propose_edit` still needs the *exact* source of that one slide to quote.
+ * The same argument reaches the pages that are not decks at all: a long
+ * landing page or report had no map of any kind, because the markdown indexes
+ * find nothing in markup. Both halves live here because both need the one tag
+ * scanner and the one offset-to-line map — see
+ * `docs/feature/agent/html-read-edit-plan.md` D4.
  *
  * **The slide convention is shared with `harvester.js`, deliberately.** That
  * file's `SLIDE_SELECTORS` is what the exporter treats as a slide; if this
@@ -161,13 +168,35 @@ function matchesTier(tag: Tag, tier: (typeof SLIDE_TIERS)[number]): boolean {
 }
 
 /**
+ * Elements HTML closes for you — they have no end tag, ever.
+ *
+ * `elementEnd` depth-counts for a closing tag and falls back to the end of the
+ * file when it finds none. That fallback is right for a container someone
+ * forgot to close and catastrophically wrong here: `</img>` does not exist, so
+ * without this list an `<img id="logo">` reports a range running to the last
+ * line of the document, and a model asked to change the logo hands
+ * `rewrite_lines` a range covering everything below it.
+ *
+ * The list is the HTML spec's void elements. `<br>`/`<hr>`/`<meta>`/`<link>`
+ * are here as well as in `NEVER_LANDMARK` — that one decides what is worth
+ * *listing*, this one decides where an element *ends*, and the second question
+ * is asked by the slide splitter too (`[data-slide]` and `.slide` match any
+ * tag, an `<img data-slide="1">` included).
+ */
+const VOID_TAGS = new Set([
+  "area", "base", "br", "col", "embed", "hr", "img", "input",
+  "link", "meta", "param", "source", "track", "wbr",
+]);
+
+/**
  * Where the element opened by `tags[at]` ends, by depth-counting its own tag
  * name. An element that is never closed runs to the end of the file — the
  * same thing a browser does with it, and better than dropping the slide.
+ * A void element ends at its own `>`, because it has no closing tag to find.
  */
 function elementEnd(html: string, tags: Tag[], at: number): number {
   const open = tags[at];
-  if (open.selfClosing) return open.end;
+  if (open.selfClosing || VOID_TAGS.has(open.name)) return open.end;
   let depth = 1;
   for (let k = at + 1; k < tags.length; k++) {
     const tag = tags[k];
@@ -219,7 +248,12 @@ export interface HtmlDeck {
  * converted — see `export_pptx`'s approval card.
  */
 export function splitHtmlDeck(html: string): HtmlDeck {
-  const raw = splitRaw(html);
+  return deckFrom(html, scanTags(html));
+}
+
+/** {@link splitHtmlDeck} on a scan the caller already has. */
+function deckFrom(html: string, tags: Tag[]): HtmlDeck {
+  const raw = splitRaw(html, tags);
   return { tier: raw.tier, slides: withLines(html, raw.slides) };
 }
 
@@ -229,8 +263,7 @@ interface RawSplit {
 }
 
 /** The split itself; {@link splitHtmlDeck} adds the line numbers. */
-function splitRaw(html: string): RawSplit {
-  const tags = scanTags(html);
+function splitRaw(html: string, tags: Tag[]): RawSplit {
   for (const tier of SLIDE_TIERS) {
     const hits = tags
       .map((tag, at) => ({ tag, at }))
@@ -299,6 +332,14 @@ function withLines(
 }
 
 /**
+ * Longest index emitted before it is sampled instead of listed. Same number as
+ * the heading and paragraph maps use on the markdown side, for the same
+ * reason: an index that approaches the size of the thing it describes has
+ * defeated its own purpose.
+ */
+const INDEX_MAX_ROWS = 60;
+
+/**
  * A short label for a slide, for the index — the first heading's text, or
  * failing that the first text of any kind.
  *
@@ -351,11 +392,26 @@ export function readHtmlSlideRange(
     // could not divide (so "slide 1" is the entire body). Returning it whole
     // would spend the run's context on one call, so it is cut here and handed
     // to read_file, which is the tool for reading a long file in order.
+    //
+    // The hand-off names the line the cut fell ON, not the slide's first line:
+    // `start_line=${slide.startLine}` sent the model back to the top of the
+    // very thing it had just been shown, so following the instruction re-read
+    // the same 4000 characters. A whole-page slide opens at `<body>`, which
+    // made that the entire journey wasted.
+    //
+    // A line number rather than read_file's mid-line cursor: the fraction's
+    // denominator is that tool's page budget, and this module must not import
+    // the agent layer to learn it — the dependency runs the other way. When
+    // the cut lands inside one enormous line, `start_line=N` re-reads that
+    // line's first page and read_file's own trailer carries on from there:
+    // one page of overlap, and no dead end.
     if (n === from && slide.html.length > maxChars) {
+      const cutOffset = slide.start + maxChars;
+      const cutAt = lineMapFor(html, [cutOffset]).get(cutOffset) ?? slide.startLine;
       parts.push(
         `${head}${slide.html.slice(0, maxChars)}\n` +
           `[... slide ${slide.index} is ${slide.html.length} chars and was cut at ${maxChars}; ` +
-          `read the rest with read_file (start_line=${slide.startLine}) ...]`,
+          `read the rest with read_file (start_line=${cutAt}) — that is the line this cut falls on ...]`,
       );
       chars += maxChars;
       break;
@@ -389,13 +445,190 @@ export function readHtmlSlideRange(
  * finding the thing rather than on doing it.
  */
 export function slideIndex(slides: readonly HtmlSlide[]): string {
-  const rows = slides.map(
+  // Sampled rather than truncated once the deck is bigger than the cap, for
+  // the reason `paragraphIndex` gives (agent/tools.ts): the first sixty rows
+  // of a two-hundred-section page map its first third, so the model would
+  // still have to page through the rest and the index would have bought
+  // nothing. Every row sampled is a real slide with a real line range, so a
+  // coarse map of all of it beats a precise map of the beginning.
+  const step = Math.ceil(slides.length / INDEX_MAX_ROWS);
+  const shown = step > 1 ? slides.filter((_, i) => i % step === 0) : slides;
+  const rows = shown.map(
     (s) =>
       `${s.index}. ${slideTitle(s.html)} (lines ${s.startLine}-${s.endLine}, ` +
       `${s.html.length >= 1000 ? `${(s.html.length / 1000).toFixed(1)}k` : s.html.length} chars)`,
   );
   return [
-    `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
+    step > 1
+      ? `This deck has ${slides.length} slide(s); every ${step}th one is listed below ` +
+        "with the lines it occupies, which is what rewrite_lines takes:"
+      : `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
     ...rows,
   ].join("\n");
+}
+
+/**
+ * Elements that are a place on a page even without an `id` — the ones an
+ * author would name when they say "the nav" or "the pricing table".
+ *
+ * `section` / `article` are in the list although a page with either would have
+ * been split into slides before reaching here: a page with exactly ONE of them
+ * is not a deck (`slideIndex` needs two to be a map of anything) and still
+ * wants its one landmark listed.
+ */
+const LANDMARK_TAGS = new Set([
+  "header", "nav", "main", "footer", "aside", "section", "article", "figure", "table", "form",
+]);
+
+/**
+ * Tags that are never a landmark, however they are decorated. An `id` on a
+ * `<style>` is a stylesheet's name, not a place in the document.
+ */
+const NEVER_LANDMARK = new Set([
+  "html", "head", "body", "script", "style", "link", "meta", "title", "br", "hr", "base",
+]);
+
+/** Longest element prefix scanned for a landmark's label. */
+const LABEL_SCAN_CHARS = 2_000;
+
+/** Landmarks a page needs before an index of them earns its tokens. */
+const LANDMARK_MIN = 2;
+
+/**
+ * An element's `id`, quoted or bare — the same shape `hasClass` reads, and a
+ * literal pattern for the same reason: a built one has to survive two levels
+ * of escaping to say `\s`, and when it does not it silently matches the letter
+ * "s" instead and every id in the page disappears.
+ */
+function idOf(attrs: string): string | null {
+  const m = /(^|\s)id\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs);
+  if (!m) return null;
+  const value = m[3] ?? m[4] ?? m[5] ?? "";
+  return value.trim() || null;
+}
+
+/** One place on a page, with where it sits in the source. */
+interface Landmark {
+  /** How the row names it: `<h2>` or `<section id="hero">`. */
+  what: string;
+  /** Whether this is a heading — headings survive the row cap first. */
+  heading: boolean;
+  start: number;
+  end: number;
+  label: string;
+}
+
+/**
+ * The map a page with no slide sections gets — its landmarks, and the lines
+ * each one occupies.
+ *
+ * This is the other half of the `read_file` gap `htmlIndex` closes. A deck
+ * gets `slideIndex`; a long landing page or report gets nothing at all today,
+ * because `headingIndex` matches markdown ATX headings (never present in HTML)
+ * and `paragraphIndex` rarely clears its two-paragraph floor on markup. So the
+ * one shape of `.html` the splitter cannot divide was also the one with no map
+ * — and "rewrite the 三个季度 section" began by paging 4000 characters at a
+ * time until that section went past.
+ *
+ * The structure that IS there is the markup, so that is what gets offered:
+ * every heading, every element carrying an `id` (the anchors an author names),
+ * and the handful of tags that are a place on their own. Same appearance rule
+ * as every other index here — only when the response could not carry the whole
+ * file — and no parameter, for the reason edit-loop-plan.md §D2 gives.
+ */
+export function landmarkIndex(html: string): string {
+  return landmarkFrom(html, scanTags(html));
+}
+
+/**
+ * The structural map of one page, whichever kind it is — what `read_file` puts
+ * in front of a paged `.html`.
+ *
+ * One entry point rather than two calls, because the caller's two questions
+ * ("is this a deck?" and "then what does its map look like?") are answered by
+ * the same tag scan, and asking them separately scanned the whole file twice
+ * on every page of every non-deck read.
+ *
+ * `isDeck` comes back rather than being folded into the string: whether to
+ * name `read_slides` alongside the map depends on the running toolset, and
+ * that is the agent layer's decision, not this module's
+ * (docs/reference/tool-presence.md).
+ */
+export function htmlPageIndex(html: string): { isDeck: boolean; index: string } {
+  const tags = scanTags(html);
+  const deck = deckFrom(html, tags);
+  // One slide the size of the whole page is not a deck, and "this deck has 1
+  // slide" maps nothing — that page gets the landmark map instead.
+  if (deck.tier !== WHOLE_PAGE_TIER && deck.slides.length >= 2) {
+    return { isDeck: true, index: slideIndex(deck.slides) };
+  }
+  return { isDeck: false, index: landmarkFrom(html, tags) };
+}
+
+/** {@link landmarkIndex} on a scan the caller already has. */
+function landmarkFrom(html: string, tags: Tag[]): string {
+  const found: Landmark[] = [];
+
+  for (let i = 0; i < tags.length; i++) {
+    const tag = tags[i];
+    if (tag.closing || NEVER_LANDMARK.has(tag.name)) continue;
+
+    const heading = /^h[1-6]$/.test(tag.name);
+    const id = idOf(tag.attrs);
+    if (!heading && id === null && !LANDMARK_TAGS.has(tag.name)) continue;
+
+    const end = elementEnd(html, tags, i);
+    found.push({
+      what: id ? `<${tag.name} id="${id}">` : `<${tag.name}>`,
+      heading,
+      start: tag.start,
+      end,
+      // Bounded: the label is 40 characters and the first text of an element
+      // is at its front, so scanning a 200 KB <main> to the end would be work
+      // thrown away — and there can be sixty of them.
+      label: slideTitle(html.slice(tag.start, Math.min(end, tag.start + LABEL_SCAN_CHARS))),
+    });
+  }
+
+  // One landmark is not a map of anything; fall through to whatever the caller
+  // has next (the paragraph map).
+  if (found.length < LANDMARK_MIN) return "";
+
+  // Headings first when the cap bites, then the rest in source order. Not
+  // every-Nth sampling the way paragraphIndex does it: paragraphs are
+  // interchangeable and headings are not, so dropping half the headings to
+  // make room for `<div id="...">`s would throw away the good rows to keep the
+  // weak ones.
+  let shown = found;
+  let omitted = 0;
+  if (found.length > INDEX_MAX_ROWS) {
+    const headings = found.filter((f) => f.heading);
+    const rest = found.filter((f) => !f.heading);
+    const kept = new Set(
+      [...headings.slice(0, INDEX_MAX_ROWS), ...rest].slice(0, INDEX_MAX_ROWS),
+    );
+    shown = found.filter((f) => kept.has(f));
+    omitted = found.length - shown.length;
+  }
+
+  const lines = lineMapFor(
+    html,
+    shown.flatMap((f) => [f.start, Math.max(f.start, f.end - 1)]),
+  );
+  const rows = shown.map(
+    (f, n) =>
+      `${n + 1}. ${f.what} ${f.label} (lines ${lines.get(f.start) ?? 1}-${
+        lines.get(Math.max(f.start, f.end - 1)) ?? 1
+      })`,
+  );
+
+  return [
+    "This page has no slide sections. Its landmarks and the lines they occupy — " +
+      "the line ranges are what rewrite_lines takes, so a part of it can be named " +
+      "without paging to it:",
+    ...rows,
+    omitted > 0 ? `[... ${omitted} more landmark(s) not listed ...]` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

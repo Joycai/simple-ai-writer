@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal, ImageOff } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
@@ -27,6 +27,7 @@ import {
   updateLoreImageSlot,
   removeLoreImage,
   saveEntityMetaAndBody,
+  clearEntityAvatar,
   setEntityAvatar,
 } from "../../lib/lore";
 import {
@@ -60,6 +61,7 @@ import cs from "./collections/collections.module.css";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { LoreDictNormalizeModal } from "./LoreDictNormalizeModal";
+import { parseDictBody } from "../../lib/translate/glossary";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
@@ -84,6 +86,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const { setActiveFilePath, projectPath } = useProjectStore();
   const loreIndex = useLoreStore((s) => s.index);
   const scanProject = useLoreStore((s) => s.scanProject);
+  const refreshEntity = useLoreStore((s) => s.refreshEntity);
   const deleteEntity = useLoreStore((s) => s.deleteEntity);
   const openDetail = useLoreStore((s) => s.openDetail);
   const detailMode = useLoreStore((s) => s.detailMode);
@@ -122,7 +125,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [facetModal, setFacetModal] = useState<{ file: string | null; slot?: string | null } | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   // The hero's ⋯ button opens the secondary actions (open in editor / reveal /
-  // delete) as a menu instead of a button row — 设计稿 03's three-button hero.
+  // delete) as a menu instead of a button row — 设计稿 03a's three-button hero.
   const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Previous/next entity in wall order, for the breadcrumb's pager. Uses the
@@ -177,7 +180,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // entity.images), or null when the lightbox is closed.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
-  // 阅读模式「改完那节」的一次性淡染（设计稿 16 屏 1d）：保存回调点名要闪的
+  // 阅读模式「改完那节」的一次性淡染（设计稿 03c 屏 1d）：保存回调点名要闪的
   // 锚点，动画由 CSS 播一次，超时清掉以免模式切换回来时重播。管理台没有这个
   // 记号，所以只在阅读态点亮。
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -217,7 +220,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     return () => window.removeEventListener("keydown", onKey);
   }, [previewIndex, entity.images.length]);
 
-  // R 在阅读/管理两态间来回（设计稿 16 屏 1d）。编辑表单、任何模态/菜单开着、
+  // R 在阅读/管理两态间来回（设计稿 03c 屏 1d）。编辑表单、任何模态/菜单开着、
   // 或焦点在输入框里时不生效——一个字母键必须让位于正在打字的人。
   const anyOverlayOpen =
     showAiHub || showImprove || showMetaImprove || showDictNormalize ||
@@ -314,7 +317,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     [loreIndex, collections],
   );
 
-  // ── The category's type schema, as this entry sees it (设计稿 03 屏 19–23) ──
+  // ── The category's type schema, as this entry sees it (设计稿 03a 屏 19–23) ──
   // Facets grouped per slot, gallery grouped per image slot, and the coverage
   // note. All three are empty for a category with no schema — a user-defined
   // one, the `custom` bucket, or one whose pack is disabled — and then every
@@ -390,7 +393,21 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       const bytes = await readBinaryFile(picked);
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
-      await scanProject(projectPath);
+      await refreshEntity(projectPath, entity);
+      setAvatarVersion((v) => v + 1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 在它之前头像只能换不能摘：作者设错一次就再也回不到「这条没有头像」，而卡片会
+  // 一直挂着那张错的图。
+  const handleAvatarRemove = async () => {
+    if (!projectPath || busy) return;
+    setBusy(true);
+    try {
+      await clearEntityAvatar(entity.dirPath);
+      await refreshEntity(projectPath, entity);
       setAvatarVersion((v) => v + 1);
     } finally {
       setBusy(false);
@@ -445,7 +462,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         summary: dSummary.trim(),
         dict: dDict,
       }, dBody);
-      await scanProject(projectPath);
+      // 改名或换分类会把文件夹搬走，索引里的分类键也跟着变——那才要全量重扫。
+      // 只改了简介 / 触发词 / 正文的那一次（常见得多）只重读一个文件夹。
+      if (moved.dirPath === entity.dirPath) await refreshEntity(projectPath, moved);
+      else await scanProject(projectPath);
       // Follow the entity to its (possibly new) folder, and refresh the local
       // body copy — the read-back effect only reruns when dirPath changes.
       setLoc({ category: moved.category, id: moved.id });
@@ -462,11 +482,16 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     }
   };
 
+  // Every caller of this changed something *inside* this entity's folder — a
+  // picture, the cover, a facet file, a description — so one folder is
+  // re-read rather than the whole knowledge base. Saving the edit form takes
+  // the same path unless the save actually relocated the folder (a rename or
+  // a category change), which is the one case the walk is for.
   const refresh = async () => {
-    if (projectPath) await scanProject(projectPath);
+    if (projectPath) await refreshEntity(projectPath, entity);
   };
 
-  // 设为 / 取消档案头图（设计稿 16 屏 1z/1f 的建议入口，落在 lightbox——
+  // 设为 / 取消档案头图（设计稿 03c 屏 1z/1f 的建议入口，落在 lightbox——
   // 两种看法都从这里放大图片，一个入口两处可达）。同一张再点一次即取消。
   const handleSetCover = async (file: string) => {
     if (!projectPath || busy) return;
@@ -837,6 +862,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           entityName={entity.name}
           imageGenReady={imageGenReady}
           dictEntry={entity.dict === true}
+          dictStats={entity.dict === true
+            ? { parsed: parseDictBody(content).length, lines: content.split("\n").filter((l) => l.trim()).length }
+            : undefined}
           onClose={() => setShowAiHub(false)}
           onPick={(task) => {
             setShowAiHub(false);
@@ -1001,7 +1029,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           <>
             <span className={styles.crumbId}>id: {entity.id}</span>
             <span className={styles.crumbDivider} />
-            {/* 两态写字不用图标：一个扭转的图标要靠记忆（设计稿 16 屏 1d）。
+            {/* 两态写字不用图标：一个扭转的图标要靠记忆（设计稿 03c 屏 1d）。
                 快捷键 R 来回；hover 未选那格是中性底，绝不赭石。 */}
             <div
               className={styles.modeSwitch}
@@ -1207,7 +1235,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </div>
       )}
 
-      {/* 设计稿 03 · 屏 15 — 三段结构直接对应数据模型:
+      {/* 设计稿 03a · 屏 15 — 三段结构直接对应数据模型:
           主条目 index.md | 特征 *.md | 配图 images.md */}
       <div className={styles.cols}>
 
@@ -1220,11 +1248,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </div>
 
           <div className={styles.indexScroll}>
-            <div
-              className={styles.avatarWrap}
-              onClick={handleAvatarPick}
-              title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
-            >
+            <div className={styles.avatarWrap}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
               ) : (
@@ -1232,8 +1256,30 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                   {entity.name.charAt(0)}
                 </div>
               )}
+              {/* 两个动作分成两个按钮，而不是整块可点 + 某处一个角标：「摘掉头像」
+                  和「换一张」都是明确的动作，作者不该靠试出来哪块区域是哪个。摘的
+                  那个只在真有头像时出现。 */}
               <div className={styles.avatarOverlay}>
-                <Camera size={18} strokeWidth={1.8} />
+                <button
+                  type="button"
+                  className={styles.avatarAction}
+                  onClick={handleAvatarPick}
+                  disabled={busy}
+                  title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
+                >
+                  <Camera size={18} strokeWidth={1.8} />
+                </button>
+                {entity.avatarPath && (
+                  <button
+                    type="button"
+                    className={styles.avatarAction}
+                    onClick={handleAvatarRemove}
+                    disabled={busy}
+                    title={t("lore.wall.removeAvatar")}
+                  >
+                    <ImageOff size={18} strokeWidth={1.8} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1261,7 +1307,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               </button>
             </div>
             {/* 集合落在元信息区，**不做面包屑**：多归属没有单一路径，把两条归属
-                串成一行面包屑会读成一条层级，而它们是并列的（设计稿 03 屏 30）。 */}
+                串成一行面包屑会读成一条层级，而它们是并列的（设计稿 03b 屏 30）。 */}
             <div className={cs.detailBlock}>
               <div className={cs.detailHead}>
                 <span className={cs.detailLabel}>

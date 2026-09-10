@@ -436,6 +436,48 @@ describe("append_lore_file", () => {
   });
 });
 
+// ─── the onLoreChanged hint ──────────────────────────────────────────────────
+
+describe("onLoreChanged is told which entity an in-place write stayed inside", () => {
+  const AVA = {
+    category: "characters",
+    id: "ava",
+    dirPath: `${PROJECT}/.ai-writer/lore/characters/ava`,
+  };
+
+  it("names the entity for a body edit, so the surface re-reads one folder", async () => {
+    const onLoreChanged = vi.fn();
+    await run("edit_lore_file", {
+      entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+    }, makeCtx({ onLoreChanged }));
+    expect(onLoreChanged).toHaveBeenCalledWith(AVA);
+  });
+
+  it("names it for a facet, a picture and the avatar too", async () => {
+    const onLoreChanged = vi.fn();
+    const ctx = makeCtx({ onLoreChanged });
+    await run("create_lore_facet", {
+      entity: "Ava", title: "童年", keys: ["童年"], content: "她生在海边。",
+    }, ctx);
+    await run("update_lore_meta", { entity: "Ava", summary: "the heroine" }, ctx);
+    fs.set(`${PROJECT}/face.png`, "png bytes");
+    await run("set_lore_avatar", { entity: "Ava", file: `${PROJECT}/face.png` }, ctx);
+    expect(onLoreChanged).toHaveBeenCalledTimes(3);
+    for (const call of onLoreChanged.mock.calls) expect(call[0]).toEqual(AVA);
+  });
+
+  it("names nothing when the write changed what exists — the surface must walk", async () => {
+    const onLoreChanged = vi.fn();
+    const ctx = makeCtx({ onLoreChanged });
+    await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+    await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(onLoreChanged).toHaveBeenCalledTimes(2);
+    for (const call of onLoreChanged.mock.calls) expect(call[0]).toBeUndefined();
+  });
+});
+
 describe("edit_lore_file", () => {
   const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
   const AVA = `${PROJECT}/.ai-writer/lore/characters/ava/index.md`;
@@ -2622,5 +2664,162 @@ describe("run snapshot stays in step with disk", () => {
     await run("move_lore_entity", { entity: "Ava", new_category: "world" }, ctx);
 
     expect(JSON.stringify(makeLoreIndex())).toBe(before);
+  });
+});
+
+// ─── 归属与封面：不是正文，任何整份重写都不能顺手抹掉 ────────────────────────
+
+/** 盘上写着归属和封面的 index.md；快照故意留旧，好证明读的是盘不是快照。 */
+function withFiling(ctx: ReturnType<typeof makeCtx>) {
+  fs.set(
+    `${AVA_DIR}/index.md`,
+    [
+      "---",
+      'name: "Ava"',
+      "aliases: []",
+      "category: characters",
+      'summary: "the protagonist"',
+      'cover: "portrait.png"',
+      'collections: ["小说A", "共享设定"]',
+      "---",
+      "",
+      "# Ava",
+      "",
+    ].join("\n"),
+  );
+  // 运行快照停在归集之前——正是「同一次运行里先归集、后改简介」的那一刻。
+  ctx.loreIndex.characters[0].collections = [];
+  ctx.loreIndex.characters[0].cover = null;
+  return ctx;
+}
+
+describe("update_lore_meta 不抹掉归属与封面", () => {
+  it("改简介之后，盘上的 collections / cover 原样还在（而不是退回快照那份旧值）", async () => {
+    const ctx = withFiling(makeCtx());
+    const res = await run("update_lore_meta", { entity: "Ava", summary: "now a queen" }, ctx);
+    expect(res.content).not.toContain("Error");
+    const written = fs.get(`${AVA_DIR}/index.md`)!;
+    expect(written).toContain('collections: ["小说A", "共享设定"]');
+    expect(written).toContain('cover: "portrait.png"');
+    expect(written).toContain("now a queen");
+    // 快照也跟着对齐，否则同一次运行里的下一次写入又会把旧值带回来。
+    expect(ctx.loreIndex.characters[0].collections).toEqual(["小说A", "共享设定"]);
+    expect(ctx.loreIndex.characters[0].cover).toBe("portrait.png");
+  });
+
+  it("盘上没有归属时也不会凭空写出一行", async () => {
+    const ctx = makeCtx();
+    await run("update_lore_meta", { entity: "Ava", summary: "x" }, ctx);
+    expect(fs.get(`${AVA_DIR}/index.md`)).not.toContain("collections:");
+  });
+});
+
+describe("update_lore_file 守住归属与封面", () => {
+  const body = (extra: string[]) =>
+    [
+      "---",
+      'name: "Ava"',
+      "aliases: []",
+      "category: characters",
+      'summary: "the protagonist"',
+      ...extra,
+      "---",
+      "",
+      "# Ava",
+      "",
+      "新的正文。",
+      "",
+    ].join("\n");
+
+  it("漏掉 collections 一行会被拒绝，并把该照抄的那一行原样交回去", async () => {
+    const ctx = withFiling(makeCtx());
+    const before = fs.get(`${AVA_DIR}/index.md`)!;
+    const res = await run("update_lore_file", { entity: "Ava", content: body(['cover: "portrait.png"']) }, ctx);
+    expect(res.content).toContain("would change the entry's collections");
+    expect(res.content).toContain('collections: ["小说A", "共享设定"]');
+    expect(res.content).toContain("file_lore_entries");
+    // 拒绝发生在任何写盘之前。
+    expect(fs.get(`${AVA_DIR}/index.md`)).toBe(before);
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  it("照抄了两行就照常写", async () => {
+    const ctx = withFiling(makeCtx());
+    const res = await run("update_lore_file", {
+      entity: "Ava",
+      content: body(['cover: "portrait.png"', 'collections: ["小说A", "共享设定"]']),
+    }, ctx);
+    expect(res.content).not.toContain("Error");
+    expect(fs.get(`${AVA_DIR}/index.md`)).toContain("新的正文。");
+  });
+
+  it("改掉 cover 同样被拒绝——那是作者在 lightbox 里设的", async () => {
+    const ctx = withFiling(makeCtx());
+    const res = await run("update_lore_file", {
+      entity: "Ava",
+      content: body(['cover: "battle.png"', 'collections: ["小说A", "共享设定"]']),
+    }, ctx);
+    expect(res.content).toContain("cover");
+    expect(res.content).toContain('Keep `cover: "portrait.png"`');
+  });
+
+  it("本来就未归集的条目，不写这一行是对的", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_lore_file", { entity: "Ava", content: body([]) }, ctx);
+    expect(res.content).not.toContain("Error");
+  });
+});
+
+describe("delete_lore_image 摘掉头像", () => {
+  it("把头像移进 backups、清空 avatarPath，图库一张不动", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${AVA_DIR}/avatar.png`, "OLD_AVATAR");
+    ctx.loreIndex.characters[0].avatarPath = `${AVA_DIR}/avatar.png`;
+
+    const res = await run("delete_lore_image", { entity: "Ava", file: "avatar", reason: "设错了" }, ctx);
+    expect(res.content).toContain('Removed the avatar of entity "Ava"');
+    expect(fs.has(`${AVA_DIR}/avatar.png`)).toBe(false);
+    expect(backupsOf().some((p) => fs.get(p) === "OLD_AVATAR")).toBe(true);
+    expect(ctx.loreIndex.characters[0].avatarPath).toBe(null);
+    // 图库是另一回事：摘头像不该顺手动 images.md。
+    expect(fs.get(`${AVA_DIR}/images.md`)).toBe(IMAGES_MD);
+    expect(ctx.loreIndex.characters[0].images.map((i) => i.file)).toEqual(["portrait.png", "battle.png"]);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("认那个真文件名，不只认 avatar 这个词", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${AVA_DIR}/avatar.webp`, "OLD");
+    ctx.loreIndex.characters[0].avatarPath = `${AVA_DIR}/avatar.webp`;
+    const res = await run("delete_lore_image", { entity: "Ava", file: "avatar.webp" }, ctx);
+    expect(res.content).toContain("Removed the avatar");
+    expect(fs.has(`${AVA_DIR}/avatar.webp`)).toBe(false);
+  });
+
+  it("本来就没有头像时说清楚，而不是静静成功", async () => {
+    const ctx = withGallery(makeCtx());
+    const res = await run("delete_lore_image", { entity: "Ava", file: "avatar" }, ctx);
+    expect(res.content).toContain("has no avatar");
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  it("图库里真有一张叫这个名字的图时，删的还是那张图", async () => {
+    // 兼容性：图库项先认，所以这条路上的老行为一个字都没变。
+    const ctx = withGallery(makeCtx());
+    fs.set(`${AVA_DIR}/avatar.png`, "GALLERY_PIC");
+    ctx.loreIndex.characters[0].images.push(
+      { file: "avatar.png", desc: "同名的图库图", slot: null, absPath: `${AVA_DIR}/avatar.png` },
+    );
+    fs.set(`${AVA_DIR}/images.md`, `${IMAGES_MD}\n## avatar.png\n同名的图库图\n`);
+    const res = await run("delete_lore_image", { entity: "Ava", file: "avatar.png" }, ctx);
+    expect(res.content).toContain("Deleted gallery image avatar.png");
+  });
+
+  it("找不到的文件名，在这条有头像时顺带指出摘头像的写法", async () => {
+    const ctx = withGallery(makeCtx());
+    ctx.loreIndex.characters[0].avatarPath = `${AVA_DIR}/avatar.png`;
+    const res = await run("delete_lore_image", { entity: "Ava", file: "ghost.png" }, ctx);
+    expect(res.content).toContain("not in the gallery");
+    expect(res.content).toContain('file: "avatar"');
   });
 });

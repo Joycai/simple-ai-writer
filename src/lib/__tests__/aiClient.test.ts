@@ -574,7 +574,7 @@ describe("streamCompletion — per-vendor OpenAI thinking categories", () => {
       chunks: done, standard: "openai_compat", thinkingCategory: "deepseek", reasoningEffort: "high",
     });
     expect(calls[0].body.reasoning_effort).toBe("high");
-    expect(calls[0].body).not.toHaveProperty("extra_body");
+    expect(calls[0].body).not.toHaveProperty("thinking");
   });
 
   it("DeepSeek: turns thinking off with the disable switch, not reasoning_effort", async () => {
@@ -583,7 +583,11 @@ describe("streamCompletion — per-vendor OpenAI thinking categories", () => {
     });
     // "off" is not reasoning_effort:"none" here — that field only tunes depth
     // while on; the documented way to stop thinking is the disable switch.
-    expect(calls[0].body.extra_body).toEqual({ thinking: { type: "disabled" } });
+    // It lives at the top level: the SDK docs' `extra_body` is a pass-through
+    // bag, and a literal `extra_body` key is ignored by the endpoint (the
+    // request used to be exactly that, and thinking stayed on).
+    expect(calls[0].body.thinking).toEqual({ type: "disabled" });
+    expect(calls[0].body).not.toHaveProperty("extra_body");
     expect(calls[0].body).not.toHaveProperty("reasoning_effort");
   });
 

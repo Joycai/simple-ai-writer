@@ -8,8 +8,8 @@
  * into paid-for failures.
  */
 import { describe, it, expect } from "vitest";
-import { gptImageSize, imageDialect, wanImageSize, IMAGE_DIALECTS } from "../ai/imageDialects";
-import { imageRequestParams } from "../image";
+import { gptImageSize, imageDialect, qwenImageSize, wanImageSize, IMAGE_DIALECTS } from "../ai/imageDialects";
+import { imageRequestParams, inputImageSize } from "../image";
 
 describe("gptImageSize", () => {
   it("reproduces the documented presets exactly at 1K", () => {
@@ -120,6 +120,46 @@ describe("dialect params", () => {
     expect(wanImageSize("21:9", "1K")).toBe("1792*768");
   });
 
+  it("qwen-image always sends 宽*高 and defaults to the 1K area", () => {
+    // Live-probed 2026-09-04: "1K" is a 400 here, and no size means 2K billing.
+    const spec = imageDialect("qwen-image")!;
+    expect(spec.resolutions[0]).toBe("1K");
+    expect(spec.params({})).toEqual({ size: "1024*1024" });
+    expect(spec.params({ aspect: "16:9" })).toEqual({ aspect: "16:9", size: "1360*768" });
+    expect(spec.params({ aspect: "16:9", resolution: "2K" })).toEqual({ aspect: "16:9", size: "2720*1536" });
+    for (const p of [spec.params({}), spec.params({ aspect: "9:16", resolution: "2K" })]) {
+      expect(p.size).toMatch(/^\d+\*\d+$/);
+    }
+  });
+
+  it("qwenImageSize keeps every tier and aspect inside the 2048² pixel ceiling", () => {
+    const spec = imageDialect("qwen-image")!;
+    for (const aspect of spec.aspects) {
+      for (const tier of spec.resolutions) {
+        const [w, h] = qwenImageSize(aspect, tier).split("*").map(Number);
+        expect(w % 16, `${aspect}@${tier} width`).toBe(0);
+        expect(h % 16, `${aspect}@${tier} height`).toBe(0);
+        expect(w * h, `${aspect}@${tier} area`).toBeLessThanOrEqual(2048 * 2048);
+        expect(w * h, `${aspect}@${tier} area`).toBeGreaterThanOrEqual(512 * 512);
+        // The 2K tier sits on the ceiling, so it must land close beneath it.
+        if (tier === "2K") expect(w * h).toBeGreaterThan(2048 * 2048 * 0.94);
+      }
+    }
+  });
+
+  it("qwen-image edits: a requested aspect wins, else the input's framing at the tier, else nothing", () => {
+    const spec = imageDialect("qwen-image")!;
+    expect(spec.params({ aspect: "1:1" }, { edit: true })).toEqual({ aspect: "1:1", size: "1024*1024" });
+    // A 768×1376 portrait input keeps its ratio at the 1K area rather than
+    // being re-rendered (and billed) at the endpoint's 2K default.
+    const followed = spec.params({}, { edit: true, inputSize: { width: 768, height: 1376 } });
+    const [w, h] = followed.size!.split("*").map(Number);
+    expect(h).toBeGreaterThan(w);
+    expect(Math.abs(w / h - 768 / 1376)).toBeLessThan(0.03);
+    expect(w * h).toBeLessThanOrEqual(1024 * 1024);
+    expect(spec.params({}, { edit: true })).toEqual({});
+  });
+
   it("every dialect's aspect list stays within the shared vocabulary", () => {
     for (const spec of IMAGE_DIALECTS) {
       for (const a of spec.aspects) expect(a).toMatch(/^\d+:\d+$/);
@@ -162,5 +202,32 @@ describe("imageRequestParams", () => {
     // Generic models resolve identically for edits — the pre-dialect behaviour.
     expect(imageRequestParams({ sizes: ["1024x1024"] }, { aspect: "1:1" }, { edit: true }))
       .toEqual({ aspect: "1:1", size: "1024x1024" });
+  });
+});
+
+describe("inputImageSize", () => {
+  /** A PNG header with the given IHDR dimensions, as a data URL. */
+  function png(w: number, h: number): string {
+    const b = new Uint8Array(33);
+    b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(b.buffer).setUint32(16, w);
+    new DataView(b.buffer).setUint32(20, h);
+    b[24] = 8; b[25] = 6;
+    return `data:image/png;base64,${btoa(String.fromCharCode(...b))}`;
+  }
+
+  it("reads the size off the head of a data URL", () => {
+    expect(inputImageSize(png(768, 1376))).toEqual({ width: 768, height: 1376 });
+  });
+
+  it("answers undefined for links and unknown bytes rather than guessing", () => {
+    expect(inputImageSize("https://example.com/a.png")).toBeUndefined();
+    expect(inputImageSize("data:image/bmp;base64,Qk0=")).toBeUndefined();
+  });
+
+  it("feeds an edit's framing through imageRequestParams", () => {
+    const p = imageRequestParams({ dialect: "qwen-image" }, {}, { edit: true, inputSize: inputImageSize(png(768, 1376)) });
+    // The input's ratio re-spelled at the 1K area (floored to 16), not its pixels.
+    expect(p.size).toBe("752*1360");
   });
 });

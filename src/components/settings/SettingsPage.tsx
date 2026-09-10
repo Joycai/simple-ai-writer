@@ -46,7 +46,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   // the 实验室 pane, and the author flipping it should see this item arrive
   // (or leave) at once, not on the next open.
   const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
-  // 设计稿 18: the frame the Word switch goes on, the item expands from zero
+  // 设计稿 05b: the frame the Word switch goes on, the item expands from zero
   // height and its background is dyed accent-tint, fading out within ~500ms —
   // "highlight for one beat" so the author sees *where* the switch acted.
   // Off collapses in reverse with no flash.
@@ -81,7 +81,15 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
 
   const pageVariants = useMotionPreset(panelFade);
 
-  const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string, extra = "") => (
+  const navBtn = (
+    id: SettingsTab,
+    icon: React.ReactNode,
+    labelKey: string,
+    extra = "",
+    // 行尾的成色小标。今天只有排版格式挂着它（设计稿 05e 屏 1a / 05f 屏 1n）——
+    // 那一项本身就是一个开关开出来的，导航里不说，作者只能在页内标题上才看见。
+    badge?: string,
+  ) => (
     <button
       key={id}
       className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""} ${extra}`}
@@ -89,6 +97,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
     >
       <span className={styles.navIcon}>{icon}</span>
       {t(labelKey)}
+      {badge && <span className={styles.navBadge}>{badge}</span>}
     </button>
   );
 
@@ -121,13 +130,13 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             inert={!docxOn}
           >
             {navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat",
-              docxFlash ? styles.navItemFlash : "")}
+              docxFlash ? styles.navItemFlash : "", "BETA")}
           </div>
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
-          {/* Scroll (设计稿 18): what a conversation reads into the model is
+          {/* Scroll (设计稿 05b): what a conversation reads into the model is
               "one roll" — both the text being read and the thing remembered. */}
           {navBtn("context-memory", <Scroll size={15} />, "systemSettings.tabs.contextMemory")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}

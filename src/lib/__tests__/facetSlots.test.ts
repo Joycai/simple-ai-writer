@@ -142,7 +142,7 @@ describe("withSlotDefaults", () => {
 });
 
 /**
- * The detail pane's view models (设计稿 03 屏 19/20/22). Pure on purpose: the
+ * The detail pane's view models (设计稿 03a 屏 19/20/22). Pure on purpose: the
  * ordering rules and the "which section does this land in" decisions are what
  * break silently, and they should be checkable without rendering a column.
  */

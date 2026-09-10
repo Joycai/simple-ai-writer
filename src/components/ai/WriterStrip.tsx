@@ -1,5 +1,5 @@
 /**
- * 输入框上边那条线（设计稿 12 · 屏 5a / 8a）。
+ * 输入框上边那条线（设计稿 04d · 屏 5a / 8a）。
  *
  * 前六个子代理开关是「这个能力可用」——一排等大的方框，开着也不一定用得上。写手
  * 是「从现在起每句话都由它写」：它一定会生效，而且改变每一轮的成本和时长。第七个
@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../stores/aiStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { useAppStore } from "../../stores/appStore";
 import { subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { readPref, writePref } from "../../lib/prefs";
@@ -51,7 +51,7 @@ export function WriterStrip({ composingSince }: {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  const disabled = useAgentStore((s) => s.disabledSubAgents);
+  const disabled = useActiveChat((c) => c.disabledSubAgents);
   const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
   const openSettings = useAppStore((s) => s.openSettings);
   const elapsed = useElapsed(composingSince);

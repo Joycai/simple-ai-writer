@@ -88,8 +88,15 @@ safetySettings }`，顺手提成具名类型（`aiTaskStore`/`LoreDetail`/`visio
 | `openai` / `openai_compat` | 生成 `POST /v1/images/generations`（JSON）；编辑 `POST /v1/images/edits`（**multipart**，字段 `image[]`/`mask`/`prompt`）。响应 `data[].b64_json`，部分实现返回 `data[].url` | 有（官方端点）；中转与 xAI 常缺 |
 | `gemini` | 生成与编辑同为 `POST /v1beta/models/{id}:generateContent`，`generationConfig.responseModalities: ["TEXT","IMAGE"]`；输入图走 `contents[].parts[].inline_data`。响应在 `candidates[0].content.parts[].inlineData` | 有，且**天然多轮**——把历史整段回灌 `contents` 即可 |
 | xAI（走 `openai_compat`） | `POST /v1/images/generations`，OpenAI 形状；无 size/quality 参数，`response_format` 支持 `url`/`b64_json` | 目前**无编辑端点** → 降级 |
+| `chat` 路由（`ImageRoute`，任何 ① 族供应商上显式声明） | `POST /v1/chat/completions`，user 消息**恒为 part 数组**（文本 + `image_url` data URL）。回包没有约定形状，目前收四种：`images[].image_url.url` / `images[].b64_json`（+ 同值的 `image_b64_json`）、`content` 里的 markdown `![](…)`、`content` 整段是裸 base64 或裸 URL、part 数组——按值去重。实测记录：[`landscape.md`](../api/landscape.md) 第九个样本 | 有（同一调用多带图） |
 
-三点实现注意：
+四点实现注意：
+
+- **mime 读字节，不信声明**。中转站的 `inlineData.mimeType` 写 png 给 JPEG
+  字节（2026-09 实测），`b64_json` 根本没有 mime 字段，下载回来的 `content-type`
+  也只是链接那头的说法。`image.ts` 的 `imageFromBase64` / `imageFromDataUrl`
+  对每一种来源都嗅探魔数，声明只作兜底——存成 `.png` 的 JPEG 在应用里能显示，
+  在作者的其它工具里不能。
 
 - **`url` 响应要落地成字节**。`response_format` 能指定就指定 `b64_json`；不能
   的（xAI 默认 url、多数中转）就用 `lib/http.ts` 的 fetch 取回 `arrayBuffer()`

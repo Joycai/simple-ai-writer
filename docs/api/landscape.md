@@ -71,39 +71,50 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 
 ## 3. ② OpenAI Responses
 
+> 2026-09 按 GPT-5.4 / 5.5 / 5.6 的参考页与实测重写（此前是 o 系列时代的口径）。
+> 逐字段的实测记录在 [`responses.md`](responses.md)，这里只留骨架与分水岭。
+
 **世界观**：一条**条目（item）流**，而不是消息数组。推理、消息、工具调用是并列的
 item 类型；服务端可以替你存住上一轮。
 
 ```jsonc
 POST /v1/responses
 {
-  "model": "…",
-  "instructions": "…",                 // system 在这里，不在 input 里
+  "model": "gpt-5.6-sol",
+  "instructions": "…",                 // system 在这里，不在 input 里；不发则用端点默认
   "input": [
-    { "role": "user", "content": [{ "type": "input_text", "text": "…" }] },
+    { "role": "user", "content": [{ "type": "input_text", "text": "…" }, { "type": "input_image", "image_url": "data:…" }] },
     { "type": "function_call_output", "call_id": "call_1", "output": "…" }
   ],
-  "tools": [{ "type": "function", "name": "f", "parameters": { /* … */ } }],  // 扁平，无 function 包装
-  "reasoning": { "effort": "medium", "summary": "auto" },
-  "text": { "format": { "type": "json_schema", /* … */ } },
+  "tools": [{ "type": "function", "name": "f", "parameters": { /* … */ }, "strict": false }],  // 扁平；strict 省略＝自动 strict
+  "tool_choice": "auto" | "required" | { "type": "function", "name": "f" },
+  "reasoning": { "effort": "medium", "summary": "auto", "context": "auto", "mode": "standard" },
+  "text": { "format": { "type": "json_schema", "name": "x", "schema": { /* … */ } }, "verbosity": "medium" },
   "max_output_tokens": 4096,
-  "store": false,
-  "previous_response_id": "resp_…",
+  "store": false,                      // 默认 true
+  "previous_response_id": "resp_…",   // 或 conversation；二者互斥
   "stream": true
 }
 ```
 
-响应的 `output[]` 是 item 数组，常见类型：`reasoning`（含 `summary[]`，无状态模式下
-还有 `encrypted_content`）、`message`（`content[]` 里是 `output_text` 或 `refusal`）、
-`function_call`（带 `call_id`）。
+响应的 `output[]` 是 item 数组：`reasoning`（`summary[]`，`store:false` 时**默认带
+`encrypted_content`**）、`message`（`content[]` 里是 `output_text` 或 `refusal`，
+5.x 的助手消息带 `phase: "commentary"|"final_answer"`）、`function_call`（带 `call_id`）。
+
+**思考控制按模型裁剪**：`reasoning.effort` 的七档词表每款只认子集，越界是 400 而不是
+折叠（5.4 到 `xhigh`，5.6 到 `max`）；默认值也按模型（5.4 `none`，5.5 / 5.6 `medium`）。
+`summary` 不发就没有思维链事件；`context`（5.5 / 5.6 默认 `all_turns`）决定往轮推理
+渲不渲染回下一轮；`mode: "pro"` 是 5.6 独有的深推理档。
 
 流式是**类型化命名事件**（`response.output_text.delta`、
-`response.function_call_arguments.delta`、`response.completed` 等），
-不需要客户端猜哪个字段是增量——这是它相对 Chat Completions 的主要工程改善，
-也是两族无法合并的主要原因。
+`response.function_call_arguments.delta`、`response.reasoning_summary_text.delta`、
+`response.completed` 等），不需要客户端猜哪个字段是增量——这是它相对 Chat Completions
+的主要工程改善，也是两族无法合并的主要原因。`response.output_item.done` 带的就是
+回传用的完整条目。
 
-**有状态**是另一个分水岭：`store: true` + `previous_response_id` 让客户端不必
-回传完整历史。代价是历史存在服务端，且这条路径在任何第三方兼容层都不存在。
+**有状态**是另一个分水岭：`store: true`（默认）+ `previous_response_id` 让客户端不必
+回传完整历史。代价是历史存在服务端，且这条路径在任何第三方兼容层都不存在。无状态
+（`store:false`）下回传 `output[]` 原样即可；**少回传不报错**，代价只在质量上。
 
 ## 4. ③ Google GenAI
 
@@ -409,35 +420,118 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 **由此得出一条可移植的规则：面向兼容层时，在"官方两种都收"的地方要选中继
 文档写的那一种。** 官方的宽容不是中继的宽容。
 
-### 第六个样本：阿里 DashScope 的 ① 族兼容层（截至 2026-08，未实测）
+### 第六个样本：阿里千问AI平台（百炼 / DashScope）（截至 2026-09-03，① ④ 两族已实测）
 
-千问（Qwen）的 OpenAI 兼容端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-（国际部署 `dashscope-intl.aliyuncs.com`，独立的 host 与 key），`Bearer` 鉴权，
-`/chat/completions` + 标准 SSE。响应侧扩展与 DeepSeek 同名：思维链在
-`delta.reasoning_content`，多轮工具调用要求把它回传。请求侧的差异集中在思考控制：
+一个 host（`dashscope.aliyuncs.com`）、一把 key，挂着**四种**接口面：
 
-- **思考开关是顶层 `enable_thinking: bool`，另有 `thinking_budget`（数值）。**
-  官方 SDK 示例写在 `extra_body` 里，但那只是 OpenAI SDK 的透传机制——落到
-  wire 上就是 body 顶层字段。
-- **新款模型（Qwen3.7+）同时接受标准 `reasoning_effort`**，且文档写明与
-  `thinking_budget` 互斥。也就是说同一个端点上，两代模型的思考控制字段不同。
-- **默认值按模型代分裂**：Qwen3.5+ / Qwen3.7+ 思考默认开，Qwen3-Max/Plus/Flash
-  等商业款默认关——后者不发开关就永远不思考。这是通用规律里"同一段代码在
-  两代模型上行为相反且都不报错"的又一例。
-- **部分开源模型的思考模式强制 `stream: true`**，非流式直接报错。
-- **`response_format: {type:"json_object"}` 要求 prompt 里出现 "JSON" 字样**，
-  否则 400（`'messages' must contain the word 'json'`）——这是 ① 族官方就有的
-  隐藏前置条件（见 [`structured.md`](structured.md)），DashScope 原样继承。
-  `json_schema` strict 仅新款（Qwen3.7-Max/Plus、3.8-Max）支持。
+| 面 | 路径 | 本项目 |
+| --- | --- | --- |
+| ① Chat Completions | `/compatible-mode/v1/chat/completions` | `openai_compat`，预设「通义千问 (DashScope)」 |
+| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | 未接（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4） |
+| ④ Anthropic Messages | `/apps/anthropic/v1/messages` | `anthropic_compat` 可直接用，尚无预设 |
+| DashScope 原生 | `/api/v1/services/aigc/{text,multimodal}-generation/generation` | 只用于出图（见下一小节） |
 
-工具调用与随请求跑的能力（2026-08-17 补，同样未实测）：
+目录只有 ① 面有：`GET /compatible-mode/v1/models` 返回 OpenAI 形态、249 条（2026-09-03），
+同一模型常有 `kimi-k3` / `kimi/kimi-k3`、`glm-5.2` / `ZHIPU/GLM-5.2` 两种 id——不带前缀的是
+「阿里云直供」，带前缀的是第三方直供，二者参数支持面不同。国际部署
+`dashscope-intl.aliyuncs.com` 是独立 host 与 key。
 
-- **思考开启时 `tool_choice` 枚举只剩 `auto` | `none`**——强制单个工具与
-  `required` 都不支持，发了就是 400。思考关闭时强制档合法。这与 MiniMax
-  `/anthropic` 端点砍档（第四个样本）是同一现象落在两个族上，差别在于千问的
-  砍档**随开关动态出现**，不是端点常态。思考模型的 `reasoning_content` 必须
-  在后续 assistant 消息里原样回传（DeepSeek 同款规则），否则报错。
-  `parallel_tool_calls` 默认关：不发则每轮最多回一个工具调用。
+实测方法：用仓库里的真实 adapter（`streamOpenAI` / `streamAnthropic` / `streamCompletion` /
+`testProviderConnection`）跑 `src/lib/__tests__/live.qianwen.test.ts`（设 `QIANWEN_KEY`
+才运行），外加 curl 矩阵。模型：qwen3.8-flash、qwen3.7-flash、deepseek-v4-pro-0813、
+kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
+
+#### ① 面：本项目现有 adapter 逐字节可用
+
+- **流式形状与 DeepSeek 同名**：思维链在 `delta.reasoning_content`，首块带
+  `role`+空 `content`+空 `reasoning_content`，usage 在末块（`stream_options.include_usage`
+  被尊重），`completion_tokens_details.reasoning_tokens` 有值。7 个模型全部如此，
+  `REASONING_CONTENT_FIELDS` 无需新增。
+- **默认思考按模型分裂**：除 qwen3-vl-plus 外 6 个模型**默认开**。这和文档里
+  「商业款默认关」的旧说法相反——3.7/3.8 代全部默认开。
+- **关闭思考有三种拼法，都被认**：`enable_thinking:false`、`reasoning_effort:"none"`、
+  以及**文档没写的顶层 `thinking:{type:"disabled"}`**（DeepSeek 拼法）。三种在 6 个
+  思考模型上都生效。例外 **MiniMax-M2.5：任何一种都 400**
+  （`The value of the enable_thinking parameter is restricted to True`）。
+- **`thinking_budget`**：kimi-k3 直接 400（`Parameter thinking_budget is not supported`），
+  两个面都是；其余模型接受。
+- **`reasoning_effort` 只有 3.8 代真的分档**（low/medium/xhigh）；3.7-flash 接受但
+  无视（low 仍思考 1000+ 字）。DeepSeek/GLM/Kimi 认 `high`/`max`，其余值被折叠。
+- **GLM 档的固定片段 `thinking:{clear_thinking:false}` 在非 GLM 模型上 400**
+  （`'type' must be in thinking`）——这个端点把顶层 `thinking` 解析成 DeepSeek 形状，
+  缺 `type` 就拒；glm-5.2 与 kimi-k3 接受（大概率忽略）。千问自己的 `clear_thinking`
+  是顶层布尔，不在 `thinking` 里。
+- **思考中强制 `tool_choice`**：qwen3.8-flash 与 MiniMax-M2.5 400
+  （`The tool_choice parameter does not support being set to required or object in thinking mode`），
+  **其余 5 个接受**——文档说的「思考模式不支持强制」并非全端点常态。报文含
+  `tool_choice` 字样，`streamCompletion` 的一次性重试（`lib/ai/toolChoice.ts`）能接住，
+  7 个模型的 forced 请求最终都拿到了工具调用。并行工具调用**默认就发生**
+  （不发 `parallel_tool_calls` 也回两个调用），与文档「默认关」不符。
+- **工具轮回传 `reasoning_content`**：带与不带都 200，6 个思考模型均如此——这里
+  没有 DeepSeek 官方那种 400。
+- **结构化输出**：`json_object` 与 `json_schema`（strict 与否）在 Qwen / DeepSeek /
+  Kimi / GLM 上都出合法 JSON，思考开着也照常分流。`json_object` 缺 "json" 字样的
+  400 只有 **Qwen 与 DeepSeek** 执行，Kimi / GLM / MiniMax 不检查。
+  **MiniMax-M2.5 对 `response_format` 基本无视**：同一请求两次分别回了带 ```` ```json ````
+  围栏的 JSON 和纯散文，只靠 prompt 里的 JSON 字样约束。
+- **图片**：`image_url` 收 `data:` URL；qwen3.8/3.7-flash、qwen3-vl-plus、kimi-k3 看得见；
+  deepseek 与 glm **不报错但无视图片**（答错颜色）；MiniMax 回「看不到图片」。
+  **小于 10px 的图 400**（`height:1 or width:1 must be larger than 10`）。
+- **错误信封是 OpenAI 形状**（`{error:{message,type,code}}` + 顶层 `request_id`），
+  探测模型 404 + `model_not_found`，坏 key 401，与连接测试的判据一致。
+- **`max_tokens` 的含义随模型不同**：DeepSeek V4 与 qwen3.8-max 上是正文+思维链之和，
+  glm-5.2 上取决于有没有发 `thinking_budget`，其余模型只算正文；`max_completion_tokens`
+  一律含思维链。本项目 ① 面不发上限，暂不受影响。
+
+#### ④ 面：`/apps/anthropic`，本项目 `anthropic_compat` 直接可用
+
+- **Base 是根地址** `https://dashscope.aliyuncs.com/apps/anthropic`（客户端补 `/v1/messages`），
+  正是 `anthropicUrl` 的约定。`x-api-key` 与 `Authorization: Bearer` 都收，
+  `anthropic-version` 可省。**没有 `/v1/models`**（404，文档明说），连接测试靠
+  `probeCompletionEndpoint` 降级：假模型名答 400 + `{"code":"InvalidParameter","message":…,"request_id":…}`
+  ——**不是 Anthropic 的 `{type:"error",error:{…}}` 信封**，`apiErrorMessage` 的裸
+  `message` 分支接住了它。坏 key 是 **403** `{"message":"invalid api-key","type":"authentication_error"}`。
+  流式错误走 `event:error` + 同样的裸 `{code,message}`。
+- **本项目发出的每种 `thinking` 形状都被接受**：`{type:"adaptive",display:"summarized"}`
+  （默认 `claude-adaptive` 档，文档枚举只有 enabled/disabled）、`{type:"enabled",budget_tokens}`
+  （kimi-k3 除外，400）、`{type:"disabled"}`（MiniMax-M2.5 除外，400）。`output_config.effort`
+  接受 low…max。**`budget_tokens` 必须小于 `max_tokens`**（报文写的是
+  `max_completion_tokens [N] must be greater than thinking_budget [M]`），与官方规则同向。
+- **thinking block 的 `signature` 恒为空串**；工具轮把上一轮 `content` 原样带回（含空签名
+  的 thinking block）或删掉 thinking block，两种都 200。关掉思考时响应里仍有一个
+  `{type:"thinking",thinking:"",signature:""}` 空块，adapter 已能容忍。
+- **事件序列**：`ping` 先于 `message_start`；`message_start.usage` 只有两个字段，完整
+  usage（含 `cache_*`，另塞了一个非标准的 `prompt_tokens_details`）在 `message_delta`。
+- **强制 `tool_choice`**：`{type:"tool"}` 在 qwen3.8-flash 与 MiniMax-M2.5 思考中 400，
+  `{type:"any"}` MiniMax 接受、qwen3.8-flash 仍拒；glm-5.2 都接受。报文同样含
+  `tool_choice`，重试逻辑通用。
+- **`output_config.format`（json_schema）**：Qwen / DeepSeek / Kimi 出 JSON，
+  MiniMax 出散文。本项目 ④ 族的结构化输出仍走强制工具，不用它。
+- **温度范围是 [0, 2)**，与 Anthropic 官方的 [0, 1] 不同；本项目 clamp 到 1，只是少了半段。
+
+#### ② 面：Responses（只探了一次，未接）
+
+`POST /compatible-mode/v1/responses` 对 qwen3.8-flash 可用：`output[]` 里是
+`reasoning`（`summary[{type:"summary_text",text}]`）+ `message`（`content[{type:"output_text"}]`），
+`reasoning.effort` 有 7 档。**MiniMax-M2.5 上 400（`<500> InternalError.Algo: 'agent_api_metadata'`）**
+——文档的支持面只列 Qwen / DeepSeek / GLM / Kimi。文档没有 `text.format`（无结构化输出），
+不支持 `background`，流式事件表里**没有 `response.function_call_arguments.delta`**
+（参数可能整块到达），有 `response.reasoning_text.delta`。接入评估见
+[`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4。
+
+#### 文档与实测不符之处（截至 2026-09-03）
+
+| 文档说 | 实测 |
+| --- | --- |
+| kimi-k3 `enable_thinking` 只能 `true` | `false` 与 `reasoning_effort:"none"` 都关得掉 |
+| `parallel_tool_calls` 默认 `false` | 不发也并行回两个调用 |
+| 思考模式不支持强制 `tool_choice` | 只有 qwen3.8-flash、MiniMax-M2.5 拒；其余 5 个接受 |
+| ④ 面 `thinking.type` 只有 enabled/disabled | `adaptive`（含 `display`）被接受 |
+| `json_object` 要求 "json" 字样 | 只有 Qwen / DeepSeek 执行 |
+| 3.7 代接受 `reasoning_effort` | 接受但无视，只认 `thinking_budget` |
+
+工具调用与随请求跑的能力（2026-08-17 补，**未实测**部分）：
+
 - **服务端联网搜索是顶层 `enable_search: true`**（可选 `search_options` 配
   `search_strategy: turbo|max|agent|agent_max` 等）。关键限制文档明载：
   **Chat Completions 模式不返回搜索来源、不支持角标引用**——搜索对客户端完全
@@ -450,8 +544,11 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
   300s；计费两段：抽取出的文本图片按输入 token + 处理费 ¥0.02/页。
   Responses API 暂不支持该能力。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
   输入）同形，是镜像而非私有发明。
+- **`preserve_thinking`**（qwen3.8-max 默认开）要求把历史 `reasoning_content`
+  **完整**回传；本项目只在工具轮回传上一轮的思维链，纯对话轮不回传——3.8-max
+  上是否因此报错未验。
 
-#### DashScope 的图片模型：不在兼容层上，走原生协议（截至 2026-08，未实测）
+#### DashScope 的图片模型：不在兼容层上，走原生协议（2026-09-04 已实测 qwen-image-3.0-pro 与 wan2.7-image-pro）
 
 qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图走原生
 `/api/v1`（同 host、同 key，只是路径不同；本项目在 `lib/ai/image.ts` 的
@@ -477,7 +574,30 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
 
-#### 出图参数的三套方言（2026-08 对官方文档校准）
+**2026-09-04 实测**（`src/lib/__tests__/live.dashscope-image.test.ts`，驱动真实的
+`generateImage`，`DASHSCOPE_IMAGE_KEY` 才跑；key 是千问AI平台的 `sk-ws-…` 工作空间 key，
+打的仍是 `dashscope.aliyuncs.com`）——本项目的 body **一个字节没改就通了**，上面的
+协议事实全部成立，另外几条文档没写的：
+
+- **qwen-image-3.0-pro 的 `size` 只收 `宽*高`**：发 `"1K"` 答 400
+  `InvalidParameter: Expected format: '<width>*<height>'`（0.2s，不计费）；
+  **省略 `size` 默认出 2048×2048，按 2K 计费（¥0.5，1K 是 ¥0.25）**。本项目对
+  qwen-image 没有方言，尺寸来自作者手填的框——不填就是双倍价，值得补一个方言。
+  wan2.7 两种写法都收（`"1K"` 与 `768*1376` 都实测通过）。
+- **输入图收 data URL**：qwen 改图与 wan 参考图都用 `data:image/png;base64,…`
+  直接过（wan 同一请求里混一张 https 也行）。wan 的参考图按 token 计入 `usage`
+  （两张 1024² 参考图 `input_tokens: 18790`），qwen 报 `input_image_count` 与
+  `input_image_type: qima_input_1k`。
+- **wan2.7-image-pro 同步与异步都在**：同步 `multimodal-generation` 14–20s 一张；
+  异步 `image-generation` + `X-DashScope-Async` 提交 0.16s 返回 `PENDING`，之后
+  `RUNNING` 约 24s 后 `SUCCEEDED`，**成功的任务也用 `output.choices[].message.content[].image`**
+  （不是 `results[].url`——本项目两种都认）。wan 的 part 多一个 `type:"image"` 键。
+- qwen-image-3.0-pro 一张 40s；`output.rewrite_status: "success"` 说明它改写了提示词，
+  但改写后的文本不回传。
+- 图片 URL 在 `dashscope-*.oss-accelerate.aliyuncs.com`，`content-type: image/png`，
+  字节确实是 PNG。
+
+#### 出图参数的四套方言（2026-08 对官方文档校准；Qwen-Image 3.0 于 2026-09-04 实测）
 
 同一件事——"这张图多大、什么画幅"——各家族用完全不同的参数说：
 
@@ -505,11 +625,226 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   同步/异步两个端点都在（wan2.7 文生图两者皆可，与 PR5 时"文生图仅异步"
   的口径已不同）。
 
+- **Qwen-Image 3.0（DashScope 原生，2026-09-04 实测）**：`parameters.size` **只收**
+  `宽*高`——发 `"1K"` 答 `400 InvalidParameter: Expected format: '<width>*<height>'`；
+  约束是**总像素**在 512²~2048² 之间而不是边长（2720*1536 被接受）；计费按**面积**分
+  `qima_output_1k` / `qima_output_2k` 两档（¥0.25 / ¥0.5），**省略 `size` 出 2048² 并按
+  2K 收费**；改图不发 size 时画幅跟随输入图但同样放大到 2K 面积（768×1376 输入出
+  1520×2736）。所以这套方言永远发尺寸、默认 1K 面积，改图在作者没点画幅时按输入图
+  自己的比例在所选档位重算（`ImageParamOptions.inputSize`，调用点从 data URL 头部
+  读尺寸）——「跟随输入」在这个端点上没有不花双倍钱的写法。
+
 本项目把这几套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
 `ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
 方言算出该端点真正认识的字段。
 
-### 兼容层文档的通用规律（六个样本的共同点）
+#### 输出格式能不能选（2026-09-05 查官方文档）
+
+四套方言里**只有 GPT-Image 系能选输出格式**；其余三家要么固定 PNG，要么参数只在
+另一个 surface 上生效。之前在中转站 ③ 路由上看到的 JPEG 字节（第九个样本）是那条
+渠道自己转的，不是模型的设置——这也是「mime 读字节、声明只作兜底」不能撤的原因。
+
+| 模型 | 能否选 | 参数 | 默认 | 备注 |
+| --- | --- | --- | --- | --- |
+| gpt-image-2（`/images/generations` 与 `/images/edits`） | **能** | `output_format` ∈ `png` / `jpeg` / `webp`；`output_compression` 0–100（仅 jpeg / webp）；`background: transparent` 仅 png / webp | png | 官方指南：「`jpeg` 比 `png` 快，在意延迟就优先 jpeg」。但 openai-node #1850（2026-04-28，未见回复）实测 gpt-image-2 **对 `webp` 静默忽略、返回 PNG 字节**，`jpeg` 正常。走 chat 路由时没有任何格式参数 |
+| Gemini 3.1 Flash Image（`generateContent`） | **开发者 API 不能** | SDK 类型里有 `imageConfig.outputMimeType` / `outputCompressionQuality` / `imageOutputOptions`，但 js-genai 文档逐条标注 "This field is not supported in Gemini API"，**只在 Vertex AI 上生效**（Google 自己的 3.1 Flash Image 笔记本用的就是 Vertex 的 `output_mime_type="image/png"`） | `inlineData.mimeType` 为 `image/png` | 新的 Interactions API 另有 `response_format.mime_type`（`image/jpeg` / `image/png`），是另一个 surface。顺带：js-genai #1461（2026-04，未解决）报 3.1-flash-image-preview **无视 `imageSize`，永远 1K** |
+| wan2.7-image / -pro（DashScope） | **不能** | `parameters` 只有 size / n / seed / watermark / thinking_mode / enable_sequential / color_palette / bbox_list | PNG | 文档原话：「生成图像的 URL，图像格式为PNG。链接有效期为24小时」；2026-09-04 实测字节确是 PNG |
+| qwen-image-3.0 / -pro（DashScope） | **不能** | prompt_extend / prompt_extend_mode / enable_thinking / n（1–6）/ size / negative_prompt / seed / watermark | PNG | 文档写「图像格式：png」，24 小时过期；输入图收 JPG / PNG / BMP / TIFF / WEBP / GIF |
+
+**推论**：GPT-Image 方言若要暴露输出格式，只给 png / jpeg 两档（webp 在官方端点上是假的）；
+Gemini 路由不加格式字段，加了在 Gemini API 上也不生效。
+
+来源：OpenAI 图像生成指南（developers.openai.com/api/docs/guides/image-generation）、
+openai/openai-node#1850、js-genai `ImageConfig` 接口文档与 googleapis/js-genai#1461、
+GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`、
+阿里云百炼「万相-图像生成与编辑2.7 API参考」与「Qwen-Image-3.0 文生图/图像编辑 API参考」。
+
+### 第七个样本：OrcaRouter，一台主机上的三个族（截至 2026-09，探测与免费档已实测）
+
+[OrcaRouter](https://docs.orcarouter.ai/zh/introduction) 是与 New API 同类的
+中继，但它把 ①③④ 三族**都**挂在同一个主机、同一把 key、同一份目录上：
+
+| 族 | 端点 | 文档 |
+| --- | --- | --- |
+| ① | `POST https://api.orcarouter.ai/v1/chat/completions`（另有 `/v1/responses`） | [openai-compat](https://docs.orcarouter.ai/zh/native-formats/openai-compat) |
+| ④ | `POST https://api.orcarouter.ai/v1/messages` | [anthropic](https://docs.orcarouter.ai/zh/native-formats/anthropic) |
+| ③ | `POST https://api.orcarouter.ai/v1beta/models/{model}:generateContent` / `:streamGenerateContent` | [gemini](https://docs.orcarouter.ai/zh/native-formats/gemini) |
+
+对照本目录已有的样本，它的知识形态如下：
+
+- **body 三族都自称与官方逐字相同**，① 族是翻译层（任何模型都能从这里
+  调，跨族的请求由它翻成上游原生形态），③④ 是"直接透传"。这印证了
+  New API 一节的结论——兼容层不配拥有独立协议族——所以本项目**没有新增
+  `ApiStandard`**，只在 `PROVIDER_PRESETS` 加了三行（一族一行，与 MiniMax
+  相同）。
+- **鉴权统一 `Authorization: Bearer sk-orca-…`**，密钥页说"所有端点、所有 SDK"
+  都用这一种。`x-api-key` 只承诺在 Anthropic 形态的路径上识别、
+  `x-goog-api-key` 与 `?key=` 只承诺在 `/v1beta/…` 上识别——而 `/v1/models`
+  两者都不是。按第五个样本得出的规则（官方两种都收的地方选中继写的那种），
+  ③④ 两行 preset 的 `authMode` 都是 `bearer`；① 族本来就是 Bearer。
+- **模型 id 带厂商前缀**（`openai/gpt-4o-mini`、`anthropic/claude-sonnet-4.6`、
+  `google/gemini-2.5-flash`、`deepseek/…`、`grok/…`、`qwen/…`、`kimi/…`、
+  `minimax/…`、`z-ai/…`），裸名只在管理员配了别名时才可能有。`normalizeModelId`
+  剥前缀之后，输出上限表与 strict json_schema 名单照常命中。③ 族的路径因此
+  是 `/v1beta/models/google/gemini-2.5-flash:…`——id 里的斜杠**原样进路径**，
+  与它文档的 curl 一致，`geminiUrl` 不做编码。
+- **一份目录，三种形态，按鉴权头挑（实测）。** `GET /v1/models` 带 Bearer
+  返回 OpenAI 形态（191 条，每条带 `supported_endpoint_types`，如 Claude 是
+  `["openai","anthropic"]`、GPT 只有 `["openai","openai-response"]`），带
+  `x-api-key` 返回 **Anthropic 形态**（`display_name` / `created_at` /
+  `has_more`，**没有** `supported_endpoint_types`）；`?limit=1` 被忽略。
+  `GET /v1beta/models` **存在**——文档说 `generateContent` 之外的操作"目前不
+  通过本接口路由"，已过时——返回 Gemini 形态、同样 191 条、`name` 不带
+  `models/` 前缀、150 条带 `inputTokenLimit`/`outputTokenLimit`（Claude 全系
+  1M / 64K–128K），Bearer 与 `x-goog-api-key` 都收；但单条
+  `/v1beta/models/{id}` 404 `Invalid URL`。`/v1/models/{id}`（OpenAI 形态）
+  带 `context_length` / `max_completion_tokens` / `architecture` / `pricing`，
+  与 OpenRouter 同形，本项目的能力探测 Step-0 本来就读这两个键。
+  `fetchRemoteModels` 的 ④ 分支据 `supported_endpoint_types` 把不在本面上的
+  模型滤掉（缺省即保留），所以 Claude 格式那行**只在 `bearer` 模式下**拿到
+  过滤后的 20 条——这也是 preset 选 Bearer 的又一个理由。
+- **思考强度在 ① 族有统一语法**：`reasoning_effort`（`low`/`medium`/`high`，
+  部分模型多 `minimal`/`max`）或模型名后缀 `-high`，网关翻成各家原生字段
+  （Claude → `thinking.budget_tokens` 1280/2048/4096，`claude-opus-4.6` →
+  adaptive + `output_config.effort`；Gemini → `thinkingConfig`）。思维链在上游
+  给 `reasoning_content` 时透出到 chat-completion 响应上，与 DeepSeek 同名。
+- **结构化输出**：① 族 `json_object` 与 `json_schema` 都接（Gemini 翻成
+  `responseMimeType` + `responseSchema`，DeepSeek 的 `json_schema` 标为"请核对"），
+  Anthropic 模型两者都 ❌——与本项目 `resolveStructuredOutput` 对 ④ 族恒为
+  `off` 的处理一致，但注意这里是**① 族端点上的 Claude 模型**也不接，网关不
+  会替它翻成 tool_use。
+- **图片输入**：`image_url` 的 base64 data URL 只保证对 OpenAI 与 Gemini 目标
+  有效，**Claude 与 Grok 建议改用 https 托管图或原生格式**。本项目发的全部是
+  data URL，所以给 Claude 看图要走 Claude 格式那行——这是三行 preset 里
+  ④ 那行存在的最实际的理由。
+- **图片生成分两条路**，与 New API 相同：`/v1/images/generations` 收
+  gpt-image / Imagen / Grok Imagine，`/v1/images/edits` 只写了 `gpt-image-2`；
+  Gemini 的 image 系列（`google/gemini-2.5-flash-image` 等）**只能**走
+  `/v1/chat/completions`，回包形态文档自己都写"data URL 或 inline_data 块，
+  取决于 SDK"——需要实测再定 `ImageCaps.route`。
+- **服务端联网搜索**：① 族上 `web_search_options` 对 OpenAI search-preview
+  与 Claude 模型有效（后者翻成 Anthropic 的 `web_search` 服务端工具），Gemini
+  靠一个**保留函数名** `googleSearch`（还有 `codeExecution` / `urlContext`）
+  ——发一个没有 parameters 的 function 工具，网关换成原生内置工具。这三种都
+  是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具，目前**没有接**。
+- **错误信封是 OpenAI 形态**（`error.{message,type,code}`），`type` 区分网关
+  自身（`orcarouter_api_error`）与上游透传（`upstream_error` / `claude_error` /
+  `gemini_error`）。**流中错误**：① 族是 `data: {"error":…}` 后接 `[DONE]`，
+  ④ 族是 `event: error`——两种拼法本项目的 adapter 都已处理。403 有五种
+  互不相同的原因（周期花费上限 / 余额 / 单 key 额度 / 模型不在白名单 / 免费档
+  耗尽），文档建议按 `error.code` 加消息前缀匹配，消息会本地化。
+- **每个响应带 `X-Orca-Request-Id`**，回退链触发时另有 `X-Orca-Fallback-*`。
+  它刻意**不**暴露哪家上游承接了请求。
+
+**实测记录（2026-09-03，作者的 key，账户余额为零）：**
+
+- **§5 的降级探测三面全过**：`__connection_probe__` 在 `/v1/chat/completions`、
+  `/v1/messages`（Bearer 与 `x-api-key` 都行）、`/v1beta/…:generateContent`
+  上一律 **404 + `{"error":{"code":"model_not_found","message":…}}`**，
+  `apiErrorMessage` 读得出来，连接测试判为连通。坏 key 是 401。
+- **402 是余额闸**（文档的状态码表里没有）：账户没钱时任何真实模型的任何
+  一面都先答 `402 {"error":{"code":"insufficient_user_quota","message":"You're
+  out of credits — this request needs $0.000074…"}}`，先于模型解析。它带完整
+  的 JSON error，按 §5 原来的规则会被判成"连通、模型被拒"——于是
+  `probeCompletionEndpoint` 现在把 402 单独报成失败并原样转出那句话。
+- **免费档三个模型在 `/v1/chat/completions` 上真实出流**
+  （`deepseek/deepseek-v4-flash-free` 1M 上下文 / 384K 输出、
+  `qwen/qwen3.8-27b-free` 64K、`tencent/hy3-free` 262K；限流时 429，用量不扣
+  钱包）：思维链走 `delta.reasoning_content`（DeepSeek 与混元先出一段再出
+  正文），usage 在 `[DONE]` 前的末块、`completion_tokens_details.reasoning_tokens`
+  在；Qwen 由 vLLM 直接托管（`system_fingerprint: vllm-0.27.1`），usage 是一个
+  `choices: []` 的独立块——都是 ① 族 adapter 已经认识的形状。它们在目录里
+  `supported_endpoint_types` 为 **null**。这三条现在是 OrcaRouter preset 的
+  **starter models**：保存新供应商时顺带建行。
+- **跨面翻译是真的**：DeepSeek 免费模型打 `/v1/messages` 回来的是完整的
+  Anthropic message，**含 `thinking` block**（`signature` 就是 message id）；
+  Qwen 免费模型打 `/v1beta/…:generateContent` 回 Gemini 形态（40 个 token
+  全被思考吃掉，`parts: []` + `MAX_TOKENS`，`thoughtsTokenCount` 报 0）。
+  付费的 GPT 打 `/v1beta` 与 `/v1/messages` 都走到了余额闸并**算出了价格**，
+  说明路由已接受——`supported_endpoint_types` 看起来是建议而非硬限制，但没
+  有余额无法确证。
+- **未测**：付费模型的任何生成（含 Claude 原生的 thinking / `output_config`、
+  Gemini 原生的 `thinkingConfig`）、工具调用流、`web_search_options`、
+  Gemini image 系列在 chat 上的回包形态。
+
+### 第八个样本：New API 中转站上的 ② 族（`[Pro]` 档 GPT-5.4 / 5.5 / 5.6-sol，2026-09-03 实测）
+
+协议事实本身在 [`responses.md`](responses.md)，这里只记**中转站自己干的事**。样本是
+`hk.chenmoai.com`，New API 软件，`[Pro]` 档＝ChatGPT Pro 账号背后的 Codex 后端；同一
+host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同名模型不同后端。
+目录 `GET /v1/models` 是 OpenAI 形态并带 `supported_endpoint_types`（与 OrcaRouter 同款，
+第七个样本）。
+
+- **不发 `instructions` 就注入 Codex 的系统提示**（"You are Codex, a coding agent based on
+  GPT-5…"，响应的 `instructions` 字段原样回显），一次请求输入 **4.4K–7.5K token**；发了
+  自己的 `instructions` 则只有自己的（15 token）。这是本目录里最贵的一条静默行为：
+  不报错、不影响输出、只影响账单和上下文。**规则：对这类中转站永远显式发 system。**
+- **`text.format` 显式 `strict: true` 时整个 `format` 被丢掉**（回显 `{type:"text"}`，
+  输出不按 schema）；省略 `strict` 则正常透传并被官方自动升成 strict。同一中转站上
+  ① 族的 `response_format: json_schema` strict 正常。
+- **`reasoning.mode: "pro"` 回显 `standard`**（5.6-sol）；是这一档不给 pro 还是中转站
+  吞了字段，分不清。
+- **`stream_options.include_obfuscation: false` 无效**，delta 里仍有 `obfuscation`。
+- **上游 60s 超时**：nginx 504 HTML 页，或 `{error:{message:"bad response status code 502"}}`；
+  约 90 次请求里 9 次，5.6-sol 最多（多轮回传两次都没跑成）。**HTML 404/504 不是 API
+  错误信封**，探测逻辑不能把它读成"端点在说话"。
+- **假模型名答 503**（`{error:{code:"model_not_found", type:"new_api_error"}}`，流式请求
+  也是 HTTP 503 + JSON），不是 404；坏 key 401 `Invalid token`。
+- **① 族是翻译出来的**：同一批模型打 `/chat/completions`，`delta.reasoning_content`
+  有内容（官方 ① 族没有这个字段）、思考开着也能带工具（官方文档说 5.4 起不行）——
+  中转站把 ① 翻成 ② 再打后端。**在这种中转站上验不了"官方 ① 族对 5.4+ 的限制"**。
+- 未知顶层键被忽略（与官方 ② 族一致）。
+
+### 第九个样本：同一中转站上的两条生图路由（`[R]gpt-image-2` 经 ①、`[R]gemini-3.1-flash-image-preview` 经 ③，2026-09-04 实测）
+
+生图没有协议——① 族的 Chat Completions 根本没有图片字段，③ 族有（`inlineData`）但
+中转站照样各自发挥。实测工具是 `src/lib/__tests__/live.relay-image.test.ts`（驱动真实的
+`generateImage`，`RELAY_IMAGE_KEY` 才跑），每条用例一张图；结论已回填 `lib/ai/image.ts`
+与 `imageClient.test.ts`。样本仍是 `hk.chenmoai.com`（第八个样本那台）。
+
+**`[R]gpt-image-2` 走 `/chat/completions`（本项目的 `chat` 路由）：**
+
+- **同一个模型名背后不止一条渠道，回包形状随渠道变。** 第一小时：生成回包把**同一串裸
+  base64 放了三处**——`message.content`（不带 `data:` 前缀、不带 markdown）、
+  `message.images[0].b64_json`、`message.image_b64_json`；一小时后同一请求改答**一条裸的
+  S3 预签名 URL**（`X-Amz-Expires=86400`）当 `content`，别的字段都没有。本项目原先只认
+  `images[].image_url.url`、markdown `![](…)` 和 part 数组，这两种都解析成「模型只回了
+  文字」——NoImageError，还把 base64 当模型的原话截 200 字挂在错误里。现在四种都收，
+  且**按值去重**（三处同一张图只算一张）。
+- **字符串 `content` 会 400。** 同一条 curl，`content: "…"` 在 14:2x 返回 200，14:38 起
+  一律 `400 images[0] must be an http/https URL or image data URI`；换成一元 part 数组
+  `[{type:"text",text:"…"}]` 就 200。是中转站把这条 chat 翻成 images 请求时的 bug，
+  但没有别的办法绕：**`chat` 路由现在无论有没有输入图都发 part 数组**。
+- **`[R]` 之外的档位不走 chat**：`gpt-image-2` / `[C]gpt-image-2` / `[原生4k]gpt-image-2`
+  答 `400 This model is not supported on the Chat Completions endpoint`；`[codex]` 同 `[R]`
+  的 400。**`/v1/images/generations` 上 `[R]gpt-image-2` 正常**（`data[].url`，OpenAI 形状
+  的 usage 带 `output_tokens_details.image_tokens`），所以这台机器上 `openai_compat` 的
+  默认路由也能用；chat 路由的意义在别的中转站（newAPI 上 `/images` 只认 Imagen）。
+- **`n: 2` 撞 60s 上游超时**：nginx 504 HTML（第八个样本的同一堵墙）。一张 45–52s，
+  两张就超。本项目发 `n` 只在 > 1 时，界面已注明多数中转返回一张。
+- 参考图（两张 `image_url` data URL part）和图生图（一张）都 200；编辑回包是 URL 形。
+- 一次生成 1024×1024，`completion_tokens: 1756`，`prompt_tokens` 7–14。
+
+**`[R]gemini-3.1-flash-image-preview` 走 `/v1beta/models/{id}:generateContent`（`gemini` 路由）：**
+
+- **`inlineData.mimeType` 说谎**：写 `image/png`，字节是 JPEG（`/9j/`）。原先直接信
+  `mimeType`，存盘就是一个内容是 JPEG 的 `.png`。现在 `inlineData`、`b64_json`、data URL
+  和下载回来的字节**一律嗅探魔数**，声明的类型只作兜底（`sniffImageMime`）。
+- `x-goog-api-key` 与 `Authorization: Bearer` 都通（同第五个样本，但这台两种都收）。
+- `imageConfig.aspectRatio` / `imageSize` 接受不报错，比例被遵守（默认出 1408×768，`9:16`+`1K` 出 768×1376）；
+  `candidateCount: 2` 不报错但**只回一个候选**。
+- 图生图与两张参考图（`inlineData` part）都 200，14–19s 一张，`candidatesTokenCount`
+  1070–1176。
+- **`[C]` 档 503**：`{code:"model_not_found", type:"new_api_error", message:"No available
+  channel for model 「CS」gemini-3.1-flash-image-preview"}`——中转站把 `[C]` 前缀映射到
+  一个当时没有可用渠道的组，chat 与 gemini 两个端点上一样；`[K]` 档 60s 504。所以
+  同名模型换个前缀就是换后端，可用性要逐个前缀试。
+- 路径里的 `[R]` 不用编码，编码成 `%5BR%5D` 也认。
+
+**可移植的规则**：`chat` 路由的回包**没有**约定形状，只有"目前见过的形状"——每接一台
+新中转都要跑一遍 live 文件，而不是照文档写解析；生图的 mime 永远读字节。
+
+### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

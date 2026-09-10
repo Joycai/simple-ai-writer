@@ -1,5 +1,5 @@
 /**
- * 知识库同步 · 预览 / 执行 / 结果（设计稿 06）。
+ * 知识库同步 · 预览 / 执行 / 结果（设计稿 03c）。
  *
  * One modal, four phases, because they are one decision the author is walking
  * through: what will happen → it is happening → what happened. Splitting them
@@ -63,6 +63,8 @@ export function SyncPreviewModal() {
   const confirmRun = useSyncStore((p) => p.confirmRun);
   const setDecision = useSyncStore((p) => p.setDecision);
   const closeModal = useSyncStore((p) => p.closeModal);
+  const modalHidden = useSyncStore((p) => p.modalHidden);
+  const hideModal = useSyncStore((p) => p.hideModal);
   const startPreview = useSyncStore((p) => p.startPreview);
   const checking = useSyncStore((p) => p.checking);
 
@@ -71,7 +73,10 @@ export function SyncPreviewModal() {
   const [showUnchanged, setShowUnchanged] = useState(false);
   const shellCloseRef = useRef<(() => void) | null>(null);
 
-  if (phase === "idle") return null;
+  // Hidden ≠ closed: a run the author put away with × keeps going, the wall's
+  // status widget shows its progress and its 「查看」 brings this back (设计稿
+  // 03d 屏 1j). Only the run itself finishing, or a real close, ends it.
+  if (phase === "idle" || modalHidden) return null;
 
   const isPush = direction === "push";
   const projectName = baseName(projectPath ?? "");
@@ -87,7 +92,7 @@ export function SyncPreviewModal() {
   return (
     <ModalShell
       overlayClassName={s.overlay}
-      onClose={close}
+      onClose={phase === "running" ? hideModal : close}
       // A run in flight cannot be dismissed by a stray backdrop click: the
       // filesystem is being written to, and the modal is the only place the
       // progress and the backup location are shown.
@@ -99,11 +104,11 @@ export function SyncPreviewModal() {
         <div className={s.head}>
           <div className={s.headTitle}>{headTitle(t, phase, isPush, binding?.kbName ?? "", result)}</div>
           <span className={s.spacer} />
-          {phase !== "running" && (
-            <button className={s.close} onClick={requestClose} aria-label={t("common.close")}>
-              ×
-            </button>
-          )}
+          {/* During a run × puts the modal away without stopping anything — the
+              backdrop and Esc stay inert so a stray click cannot do the same. */}
+          <button className={s.close} onClick={requestClose} aria-label={t("common.close")}>
+            ×
+          </button>
         </div>
 
         {phase === "planning" && (

@@ -26,15 +26,12 @@ describe("markdown themes", () => {
     for (const id of MARKDOWN_THEME_IDS) expect(css).toContain(`[data-md-theme="${id}"]`);
   });
 
-  it("emits the pinned scope after the inherited one so a pinned container wins", () => {
-    // Both selectors have the same specificity, so source order is what keeps a
-    // container that names its own theme (the settings samples) from being
-    // overridden by whichever theme happens to come later in the list.
+  it("no longer pins a theme to a container — the settings samples are frames of their own", () => {
+    // A theme *file* cannot be pinned this way (nothing prefixes its
+    // selectors), so the built-ins stopped being pinned too: one rule for
+    // both, and one less selector shape to keep in step.
     const css = markdownThemesCss();
-    for (const id of MARKDOWN_THEME_IDS) {
-      expect(css.indexOf(`.md-body[data-md-theme="${id}"]`))
-        .toBeGreaterThan(css.indexOf(`[data-md-theme="${id}"] .md-body`));
-    }
+    expect(css).not.toMatch(/\.md-body\[data-md-theme=/);
   });
 
   it("keeps the base defaults at zero specificity so surfaces can size themselves", () => {

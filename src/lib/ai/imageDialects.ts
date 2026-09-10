@@ -36,10 +36,18 @@
  *   computed 宽*高 that would fight the input's framing. No negative_prompt
  *   on 2.7, and the endpoint's default n is 4 (!) — the dashscope route
  *   always sends n explicitly for exactly that reason.
+ * - Qwen-Image 3.0 (DashScope, live-probed 2026-09-04): `parameters.size` takes
+ *   **only** `宽*高` — the tier shorthand answers `400 InvalidParameter` — with
+ *   the total pixel count in 512²..2048² (a side may exceed 2048: 2720*1536
+ *   was accepted). Billing is by *area* tier (1K ≈ 1024², 2K ≈ 2048², at
+ *   double the price), and an omitted size renders — and bills — at 2K. So
+ *   this dialect always sends a size, defaulting to the 1K area; an edit
+ *   without a requested aspect takes its ratio from the input image, because
+ *   the endpoint's own "follow the input" (no size) is also its 2K default.
  */
 
 /** The declared dialect ids. Absent = generic (free-form size list). */
-export type ImageDialect = "nanobanana" | "gpt-image-2" | "wan2.7";
+export type ImageDialect = "nanobanana" | "gpt-image-2" | "wan2.7" | "qwen-image";
 
 /** The generic wire fields a dialect resolves the author's choices into. */
 export interface ImageWireParams {
@@ -86,7 +94,20 @@ export interface ImageDialectSpec {
    * image anyway, so the edit variant sends less rather than gamble on a
    * value the endpoint may reject or fight over.
    */
-  params(sel: ImageParamSelection, opts?: { edit?: boolean }): ImageWireParams;
+  params(sel: ImageParamSelection, opts?: ImageParamOptions): ImageWireParams;
+}
+
+/** Facts about the call that are not the author's choices. */
+export interface ImageParamOptions {
+  /** An image-conditioned call (edit, or a generation with references). */
+  edit?: boolean;
+  /**
+   * Pixel size of the image being edited, when the caller could read it off
+   * the bytes. Lets a dialect whose endpoint has no "follow the input" spelling
+   * (qwen-image: omitting size means 2K) keep the input's framing at the
+   * requested tier. Absent ⇒ the dialect sends what it can without it.
+   */
+  inputSize?: { width: number; height: number };
 }
 
 /** The one aspect list both current dialects accept in full (Gemini's ten). */
@@ -212,7 +233,58 @@ const WAN_2_7: ImageDialectSpec = {
   },
 };
 
-export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2, WAN_2_7];
+/** Side of the square each Qwen-Image tier names; the tier is an *area*. */
+const QWEN_TIER_SIDE: Record<string, number> = { "1K": 1024, "2K": 2048 };
+/** The endpoint's hard ceiling on total pixels (2048²) — the 2K tier sits exactly on it. */
+const QWEN_MAX_PIXELS = 2048 * 2048;
+
+const floor16 = (n: number): number => Math.max(16, Math.floor(n / 16) * 16);
+
+/**
+ * Compute the Qwen-Image `宽*高` for an aspect ratio and tier: the tier's area
+ * at the requested ratio. Sides are floored to 16 rather than rounded, because
+ * the 2K tier *is* the endpoint's pixel ceiling and rounding up on both sides
+ * lands 21:9 a few thousand pixels over it — a paid-for 400.
+ */
+export function qwenImageSize(aspect: string, tier: string): string {
+  const side = QWEN_TIER_SIDE[tier] ?? QWEN_TIER_SIDE["1K"];
+  const [aw, ah] = aspect.split(":").map(Number);
+  if (!aw || !ah) return `${side}*${side}`;
+  const ratio = Math.max(aw, ah) / Math.min(aw, ah);
+  let long = floor16(side * Math.sqrt(ratio));
+  let short = floor16(side / Math.sqrt(ratio));
+  while (long * short > QWEN_MAX_PIXELS) {
+    long -= 16;
+    short = floor16(long / ratio);
+  }
+  return aw >= ah ? `${long}*${short}` : `${short}*${long}`;
+}
+
+const QWEN_IMAGE: ImageDialectSpec = {
+  id: "qwen-image",
+  aspects: WIDE_ASPECTS,
+  // 1K first and no "default" entry: the endpoint's default is the 2K tier at
+  // twice the price, so "send nothing" is the one choice this dialect never
+  // offers.
+  resolutions: ["1K", "2K"],
+  params: (sel, opts) => {
+    const tier = sel.resolution || "1K";
+    const aspect = sel.aspect ? { aspect: sel.aspect } : {};
+    if (sel.aspect) return { ...aspect, size: qwenImageSize(sel.aspect, tier) };
+    if (opts?.edit) {
+      // No aspect asked for on an edit means "keep the input's framing". The
+      // endpoint spells that as "omit size" — which also means 2K — so the
+      // input's own ratio is re-spelled at the requested tier instead. With no
+      // dimensions to hand, omitting is the only honest option left.
+      const input = opts.inputSize;
+      if (!input?.width || !input?.height) return {};
+      return { size: qwenImageSize(`${input.width}:${input.height}`, tier) };
+    }
+    return { size: qwenImageSize("1:1", tier) };
+  },
+};
+
+export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2, WAN_2_7, QWEN_IMAGE];
 
 /** The spec for a declared dialect, or null for generic / unknown values. */
 export function imageDialect(id: string | undefined): ImageDialectSpec | null {

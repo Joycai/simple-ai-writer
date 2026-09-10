@@ -1,18 +1,18 @@
 /*
- * 「删除分类」的确认面板。
+ * 「删除分类」的确认面板（设计稿 03f 屏 1a/1b）。
  *
- * 几何和知识库墙上的「新建分类」是同一块板子（LoreWall.module.css 的 .modal*）——
- * 建和删是同一处的一对动作，尺寸不一致只会显得是两个功能。自带一份而不是去 import
- * 那个模块，是因为这块板子有第二个调用方（设置 → 工作台），而 LoreWall 的样式表
- * 里装的是整面墙。
+ * 500 宽居中模态，三段：头（眉题 / 分类名 + mono id / 计数句）、两张出口卡、脚
+ * （「未选择」小字 + 取消 + 确认）。自带一份样式而不是 import LoreWall 的，是因为这
+ * 块板子有第二个调用方（设置 → 工作台），而 LoreWall 的样式表里装的是整面墙。
  *
- * 这里唯一多出来的语汇是**两个出口**：一条会搬走条目、一条不会，所以它们是两张
- * 可选的卡而不是一个复选框——复选框会让「没勾」也成为一个默认后果。
+ * 语汇：分类只有色点，一根装订线都没有；选中卡＝赭石 tint + 左侧 3px 竖条（这套语言
+ * 里「选中」的写法）；确认键是**深中性填色**——赭石是「这是你要的那个」，不能用来确认
+ * 删除，而这套语言里没有红；眉题、计数句、出口卡已经把不可逆说了三遍，⚠ 图标不留。
  */
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(42, 37, 32, 0.4);
+  background: var(--color-bg-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -20,112 +20,172 @@
   animation: fadeIn 200ms var(--ease-out);
 }
 .modal {
+  width: 500px;
+  max-width: calc(100vw - 32px);
   background: var(--color-card);
   border: 1px solid var(--color-border);
   box-shadow: var(--lore-shadow-modal);
-  min-width: 440px;
-  max-width: 520px;
-  padding: 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
   animation: scaleIn 240ms var(--ease-out);
 }
-.header { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── 头 ──────────────────────────────────────────────────────────────── */
+.header { padding: 20px 26px 16px; border-bottom: 1px solid var(--color-border-soft); }
+/* 眉题是中性的：赭石在这张卡上只给「选中」。 */
 .eyebrow {
   font: 500 10px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
+  letter-spacing: 0.22em;
+  color: var(--color-text-label);
   text-transform: uppercase;
 }
-.title {
-  font: 300 22px/1.1 var(--font-serif);
+.title { margin-top: 11px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.titleName {
+  font: 300 23px/1.2 var(--font-serif);
   color: var(--color-text-primary);
   letter-spacing: -0.012em;
-  display: flex;
-  align-items: center;
-  gap: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-
-.body { display: flex; flex-direction: column; gap: 12px; }
+.titleId { font: 400 11px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+.orphanTag {
+  padding: 3px 8px;
+  background: var(--color-bg-inset);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
 /* 影响面那一句。作者要数它，所以数字走等宽。 */
-.count { font: 400 13px/1.6 var(--font-serif); color: var(--color-text-secondary); }
-.countNum { font: 500 13px/1 var(--font-mono); color: var(--color-text-primary); }
+.count {
+  margin-top: 12px;
+  font: 400 13px/1.8 var(--font-serif);
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+.num { font: 400 12px/1 var(--font-mono); color: var(--color-text-primary); }
 
-/* ── 两个出口 ─────────────────────────────────────────────────────────── */
+/* ── 两条出口 ─────────────────────────────────────────────────────────── */
+.body { padding: 16px 26px 18px; display: flex; flex-direction: column; gap: 10px; }
+.exitsLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-text-label);
+  text-transform: uppercase;
+}
 .choice {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 12px 14px;
-  background: var(--lore-bg-input);
+  background: var(--color-card);
   border: 1px solid var(--color-border);
   cursor: pointer;
-  text-align: left;
-  width: 100%;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  outline: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 .choice:hover { border-color: var(--color-border-strong); }
-.choiceOn { border-color: var(--color-sienna); background: var(--color-card); }
-.choiceHead { display: flex; align-items: center; gap: 8px; }
+.choice:focus-visible { box-shadow: 0 0 0 1px var(--color-sienna); }
+/* 选中：赭石 tint + 左侧 3px 竖条。竖条画成内阴影而不是加宽边框——宽度不变，文字不跳。 */
+.choiceOn,
+.choiceOn:hover {
+  border-color: var(--color-amber);
+  background: var(--color-bg-tinted);
+  box-shadow: inset 3px 0 0 var(--color-sienna);
+}
+.choiceOn:focus-visible { box-shadow: inset 3px 0 0 var(--color-sienna), 0 0 0 1px var(--color-sienna); }
+/* 禁用的那张卡仍占位：它解释了为什么只剩一条路。 */
+.choiceDisabled, .choiceDisabled:hover { opacity: 0.55; cursor: not-allowed; border-color: var(--color-border); }
+
+.choiceHead { padding: 13px 15px; display: flex; align-items: flex-start; gap: 11px; }
 .radio {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   border: 1px solid var(--lore-neutral-line);
+  background: var(--lore-bg-input);
+  box-sizing: border-box;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-top: 2px;
+  transition: border var(--transition-fast);
 }
-.radioOn { border-color: var(--color-sienna); }
-.radioDot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-sienna); }
-.choiceName { font: 500 13px/1.2 var(--font-sans); color: var(--color-text-primary); }
-/* 后果写在选项里，而不是等作者点了才说。 */
-.choiceNote { font: italic 400 11px/1.5 var(--font-serif); color: var(--color-text-muted); padding-left: 19px; }
+.radioOn { border: 4px solid var(--color-sienna); background: var(--color-card); }
+.choiceText { flex: 1; min-width: 0; }
+.choiceName { font: 400 14.5px/1.4 var(--font-serif); color: var(--color-text-primary); }
+.choiceOn .choiceName { font-weight: 500; }
+.choiceName .num { font: 500 13px/1 var(--font-mono); }
+/* 后果写在选项里，而不是等作者点了才说。「保留」的代价用正文的灰——它是合法的选择，
+   不是警告（1z · A2）。 */
+.choiceNote {
+  margin-top: 5px;
+  font: 400 11.5px/1.65 var(--font-serif);
+  color: var(--color-text-label);
+  text-wrap: pretty;
+}
+/* 文件夹名是磁盘上真实存在的那个字符串。 */
+.mono { font: 400 10.5px/1 var(--font-mono); color: var(--color-text-secondary); }
 
-.targets { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 0 19px; }
+.targets { padding: 0 15px 14px 39px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .target {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 9px;
+  gap: 7px;
+  padding: 5px 11px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
-  font: 400 12px/1 var(--font-serif);
+  font: 400 12.5px/1 var(--font-serif);
   color: var(--color-text-secondary);
   cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast),
+    color var(--transition-fast);
 }
-.targetOn { border-color: var(--color-sienna); color: var(--color-text-primary); }
-.targetDot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.target:hover { border-color: var(--color-border-strong); }
+.targetOn,
+.targetOn:hover {
+  background: var(--color-sienna);
+  border-color: var(--color-sienna);
+  color: var(--color-on-accent);
+  font-weight: 500;
+}
+.targetDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.pathLine { margin-top: 9px; font: 400 10.5px/1.6 var(--font-mono); color: var(--color-text-faint); overflow-wrap: anywhere; }
 
-.error { font: 400 12px/1.5 var(--font-sans); color: var(--color-red, #b91c1c); }
+.error { font: 400 12px/1.5 var(--font-sans); color: var(--color-danger-text); }
 
-.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.btnSecondary {
-  padding: 8px 14px;
+/* ── 脚 ──────────────────────────────────────────────────────────────── */
+.actions {
+  border-top: 1px solid var(--color-border-soft);
+  padding: 13px 26px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.unchosen { font: 400 10px/1.5 var(--font-mono); color: var(--color-text-faint); }
+.grow { flex: 1; }
+.btnGhost {
+  padding: 10px 18px;
   background: var(--color-card);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-sienna);
-  font: 500 12px/1 var(--font-sans);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font: 400 12.5px/1 var(--font-sans);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast),
+  transition: border-color var(--transition-fast), color var(--transition-fast),
     transform var(--transition-fast);
 }
-.btnSecondary:hover { background: var(--color-bg-hover); }
-.btnSecondary:active { transform: scale(0.98); }
-/* 删除是不可逆那一侧，所以按钮不是 sienna 而是红——全应用只有这一类动作用它。 */
-.btnDanger {
-  padding: 8px 14px;
-  background: var(--color-red, #b91c1c);
-  color: var(--color-card);
+.btnGhost:hover:not(:disabled) { border-color: var(--color-border-strong); color: var(--color-text-primary); }
+.btnGhost:active:not(:disabled) { transform: scale(0.98); }
+/* 深中性填色：--color-btn-neutral（浅 #5C5346 / 深 #9A8E7A）+ 纸色字。与 05f 屏 1l 的
+   删除确认同一形制。禁用时退成头脚条的底色 + 淡字，不靠 opacity——半透明的墨底看着像坏了。 */
+.btnConfirm {
+  padding: 11px 20px;
+  background: var(--color-btn-neutral);
+  color: var(--color-on-accent);
   border: none;
-  font: 500 12px/1 var(--font-sans);
+  font: 500 12.5px/1 var(--font-sans);
   cursor: pointer;
-  transition: filter var(--transition-fast), transform var(--transition-fast),
+  transition: background var(--transition-fast), transform var(--transition-fast),
     box-shadow var(--transition-fast);
 }
-.btnDanger:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
-.btnDanger:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
-.btnDanger:disabled, .btnSecondary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btnConfirm:hover:not(:disabled) { background: var(--color-btn-neutral-hover); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btnConfirm:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
+.btnConfirm:disabled { background: var(--color-bg-inset); color: var(--color-text-faint); cursor: not-allowed; }
+.btnGhost:disabled { opacity: 0.5; cursor: not-allowed; }

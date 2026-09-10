@@ -4,6 +4,7 @@ import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { clearTarget, markTargetEnd, markTargetStart } from "../../lib/editor/aiTarget";
 import { MOD_KEY } from "../../lib/platform";
+import { docKindOf, isTextKind } from "../../lib/fs/docKind";
 import styles from "./EditorBottomStrip.module.css";
 
 interface Props {
@@ -16,6 +17,7 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
   const { t, i18n } = useTranslation();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const wordCount = useProjectStore((s) => s.wordCount);
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const editorView = useEditorStore((s) => s.editorView);
   const aiTarget = useEditorStore((s) => s.aiTarget);
   const terms = useTerms();
@@ -81,11 +83,17 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
           : ""}
       </span>
       <span className={styles.right}>
-        <span>
-          {isZh ? "累计 " : "Total "}
-          <span className={styles.value}>{wordCount.toLocaleString()}</span>
-          {isZh ? " 字" : " words"}
-        </span>
+        {/* Same rule as the title bar's 字数: the count belongs to the editor
+            buffer, which keeps the last document while an image (or anything
+            unreadable) is on screen — so it drops out rather than report that
+            document's length under another file. */}
+        {!!activeFilePath && isTextKind(docKindOf(activeFilePath)) && (
+          <span>
+            {isZh ? "累计 " : "Total "}
+            <span className={styles.value}>{wordCount.toLocaleString()}</span>
+            {isZh ? " 字" : " words"}
+          </span>
+        )}
         <span>
           {isZh ? "引用 " : ""}
           <span className={styles.value}>{refsCount}</span>

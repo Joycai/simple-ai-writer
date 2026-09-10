@@ -126,6 +126,20 @@ describe("tool packs", () => {
       expect(resident).toContain("propose_lore_plan");
     });
 
+    it("lore_edit carries the gallery tier — filing a picture is a knowledge-base write", () => {
+      // Regression: the pack once listed every lore write EXCEPT the three
+      // gallery tools, so with the orchestrator on (no write tools by design)
+      // "add these two jpgs to the entry" had no tool on either side and the
+      // sub-run reported an approved plan it could not execute. Deferred
+      // group, so the resident budget is untouched.
+      const { resident, deferred } = partitionByGroup(PACK_PRESETS.lore_edit.tools);
+      for (const t of ["add_lore_image", "update_lore_image", "delete_lore_image"] as const) {
+        expect(PACK_PRESETS.lore_edit.tools).toContain(t);
+        expect(deferred.lore_write).toContain(t);
+        expect(resident).not.toContain(t);
+      }
+    });
+
     it("no pack carries the drawing arm — 生图不进 pack (plan §3.1)", () => {
       for (const id of PACK_IDS) {
         expect(PACK_PRESETS[id].tools).not.toContain("generate_image" as never);

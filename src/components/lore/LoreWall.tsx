@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -21,6 +21,7 @@ import {
   relocationTargets,
   savePinnedLore,
   scopeHas,
+  clearEntityAvatar,
   setEntityAvatar,
   slugifyEntityId,
   stageLoreImport,
@@ -72,7 +73,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
+  const { index, scanProject, refreshEntity, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
   const scope = useLoreStore((s) => s.scope);
   const setScope = useLoreStore((s) => s.setScope);
   const { projectPath } = useProjectStore();
@@ -186,7 +187,20 @@ export function LoreWall() {
       const bytes = await readBinaryFile(picked);
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
-      await scanProject(projectPath);
+      // One folder, not the wall: the avatar is the only thing that changed.
+      await refreshEntity(projectPath, entity);
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
+  const handleAvatarRemove = async (entity: LoreEntity) => {
+    if (!projectPath || avatarBusy) return;
+    setAvatarBusy(entity.id);
+    try {
+      await clearEntityAvatar(entity.dirPath);
+      // 同 handleAvatarPick：只有这一个文件夹变了。
+      await refreshEntity(projectPath, entity);
     } finally {
       setAvatarBusy(null);
     }
@@ -238,12 +252,15 @@ export function LoreWall() {
    * 置顶的条目（AI 面板里勾的那份）。围栏生效时它们**越栏**——显式指定＝作者坚持
    * ——所以墙上不能把它们翻面，否则界面在说 AI 看不见，而 AI 其实看得见。
    *
-   * 依赖里带上 `index` 是有意的：置顶存在 prefs 里（不是 React 状态），扫描是这个
-   * 组件能观察到的、离「作者刚在别处改过东西」最近的一个信号。
+   * 依赖里带上 `index` 是有意的：置顶存在 prefs 里（不是 React 状态），而扫描是这个
+   * 组件能观察到的、离「作者刚在别处改过东西」最近的一个信号。`pinRev` 管的是
+   * **本组件自己**改的那一次：右键「越栏」只写了一行 prefs，磁盘上知识库一个字节
+   * 都没变，靠重扫全库来逼一次重渲染是几百个条目、上千次 IPC 换一个计数器。
    */
+  const [pinRev, setPinRev] = useState(0);
   const pinnedDirs = useMemo(
     () => pinnedEntityDirs(loadPinnedLore(projectPath)),
-    [projectPath, index],
+    [projectPath, index, pinRev],
   );
 
   const unfiled = useMemo(() => ungroupedCount(index), [index]);
@@ -346,11 +363,18 @@ export function LoreWall() {
    * 只有失败才弹窗。成功是墙上看得见的——卡片换了颜色、分类计数变了——而每次成功都
    * 弹一次的提示，第三次就变成了下意识点掉的东西。
    */
-  const moveSelectedToCategory = async (category: string) => {
-    if (!projectPath || selectedEntities.length === 0) return;
+  /**
+   * 搬多选的这一批到 `category`。进度和「N 条已搬，M 条未动 · 重试」都由 `CategoryMoveMenu`
+   * 自己画（设计稿 03f 屏 1c），这里只回数字——失败不再弹 alert。
+   */
+  const moveSelectedToCategory = async (
+    category: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ moved: number; failed: number }> => {
+    if (!projectPath || selectedEntities.length === 0) return { moved: 0, failed: 0 };
     const targets = selectedEntities;
     try {
-      const { moves, failed } = await moveToCategory(projectPath, targets, category);
+      const { moves, failed } = await moveToCategory(projectPath, targets, category, onProgress);
       if (moves.length > 0) {
         const byFrom = new Map(moves.map((m) => [m.from, m.to]));
         setSelected((cur) => new Set([...cur].map((p) => byFrom.get(p) ?? p)));
@@ -358,12 +382,11 @@ export function LoreWall() {
           ? (byFrom.get(anchorRef.current) ?? anchorRef.current)
           : null;
       }
-      if (failed.length > 0) {
-        window.alert(t("lore.categoryMove.failed", { list: failed.join("、") }));
-      }
+      if (failed.length > 0) console.warn("[lore] category move: not moved:", failed);
+      return { moved: moves.length, failed: failed.length };
     } catch (e) {
       console.warn("[lore] category move failed:", e);
-      window.alert(t("lore.categoryMove.failed", { list: targets.map((x) => x.name).join("、") }));
+      return { moved: 0, failed: targets.length };
     }
   };
 
@@ -419,7 +442,8 @@ export function LoreWall() {
     if (!isUserCategory(cat.id)) {
       // 藏掉菜单项会让作者以为自己点错了地方。留着、禁用、把理由写在标签上。
       return [
-        { kind: "item", label: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
+        { kind: "item", icon: <Trash2 size={13} />, label: t("lore.categoryDelete.menu"),
+          hint: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
       ];
     }
     return [
@@ -533,7 +557,7 @@ export function LoreWall() {
   const buildMenuItems = (m: { entity: LoreEntity | null; header?: boolean }): ContextMenuEntry[] => {
     const e = m.entity;
     if (m.header) {
-      // AI 提取从第一行下沉到这里(设计稿 14 屏 1k):它是每周一次的动作,
+      // AI 提取从第一行下沉到这里(设计稿 03d 屏 1k):它是每周一次的动作,
       // 不是每天,腾出的位置给同步状态件。未绑定时,绑定入口也只在这里留一项
       // ——工具带上不放「去绑定」的常驻广告。
       const items: ContextMenuEntry[] = [
@@ -572,6 +596,16 @@ export function LoreWall() {
         action: () => openDetail(e.dirPath, true) },
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
+      // 只在真有头像时出现：「移除」一个不存在的东西是空动作，留着只会让作者点一下
+      // 才发现什么也没发生。在这之前头像只能换不能摘，设错一次就再也回不去。
+      ...(e.avatarPath
+        ? [{
+            kind: "item" as const,
+            icon: <ImageOff size={13} />,
+            label: t("lore.wall.removeAvatar"),
+            action: () => void handleAvatarRemove(e),
+          }]
+        : []),
       { kind: "divider" },
       // 不进多选也能改一条：右键 → 归入集合。菜单项本身弹出同一个勾选清单，
       // 所以「多选一条」和「右键一条」得到的是同一个界面。
@@ -591,7 +625,7 @@ export function LoreWall() {
             action: () => {
               const cur = loadPinnedLore(projectPath);
               if (!cur.includes(e.dirPath)) savePinnedLore(projectPath, [...cur, e.dirPath]);
-              void scanProject(projectPath!);
+              setPinRev((n) => n + 1);
             },
           }]
         : []),
@@ -743,7 +777,7 @@ export function LoreWall() {
             {t("lore.panel.newEntry")}
           </button>
           {/* 一根 1px 竖线把「操作这面墙的内容」与「这面墙和服务器的关系」切开;
-              状态件只在项目绑定后存在(设计稿 14 屏 1i/1k)。 */}
+              状态件只在项目绑定后存在(设计稿 03d 屏 1i/1k)。 */}
           <span className={styles.headDivider} />
           <SyncPresence />
           <button
@@ -765,7 +799,7 @@ export function LoreWall() {
 
       {/* 两根轴的分工写在布局里：**装订栏在左**（集合＝这条属于哪一摊活），
           **分类 chips 在右上**（分类＝这条是什么）。墙本身从不按集合分区——
-          一个条目属于几个集合，墙上都只出现一次（设计稿 03 屏 24 的 Q1）。 */}
+          一个条目属于几个集合，墙上都只出现一次（设计稿 03b 屏 24 的 Q1）。 */}
       <div className={styles.body}>
         <CollectionRail
           index={index}
@@ -800,7 +834,7 @@ export function LoreWall() {
                   }}
                   // Orphans look like any other chip on purpose: their entries are
                   // intact, so an alarming treatment would misreport the state. The
-                  // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
+                  // dedicated presentation is 设计稿 03a 屏 23 (plan phase 4).
                   title={cat.orphan
                     ? (isZh
                         ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建 · 右键可把条目搬走"
@@ -878,7 +912,7 @@ export function LoreWall() {
 
                 // 围栏外的条目**翻面**而不是消失：作者仍然看得见、点得开、搜得到，
                 // 只是这次运行 AI 不会自己找到它。筛选让卡片消失，围栏让卡片翻面
-                // ——两者永远不长成一个样子（设计稿 03 屏 25 的 Q2）。
+                // ——两者永远不长成一个样子（设计稿 03b 屏 25 的 Q2）。
                 if (out) {
                   return (
                     <div
@@ -1145,7 +1179,8 @@ export function LoreWall() {
         <CategoryMoveMenu
           entities={selectedEntities}
           anchor={catMove}
-          onPick={(category) => void moveSelectedToCategory(category)}
+          onPick={moveSelectedToCategory}
+          onNewCategory={() => setShowNewCategory(true)}
           onClose={() => setCatMove(null)}
         />
       )}
@@ -1179,8 +1214,8 @@ export function LoreWall() {
           onClose={() => setShowManage(false)}
           onReorder={(next) => useProjectStore.getState().setCollections(next)}
           onCreate={(name) => useProjectStore.getState().setCollections([...collections, name])}
-          onRename={(from, to) => useProjectStore.getState().renameCollection(from, to)}
-          onDelete={(name) => useProjectStore.getState().deleteCollection(name)}
+          onRename={async (from, to) => { await useProjectStore.getState().renameCollection(from, to); }}
+          onDelete={async (name) => { await useProjectStore.getState().deleteCollection(name); }}
         />
       )}
 
@@ -1271,7 +1306,7 @@ function NewCategoryModal({
             autoFocus
           />
           {error && (
-            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-red, #b91c1c)" }}>
+            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-error)" }}>
               {error}
             </div>
           )}

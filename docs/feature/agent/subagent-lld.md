@@ -23,7 +23,20 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
-**2026-08-18 · 子代理设置页对齐设计稿 04（§7.4 改写）。** 原实现把每个 kind 摊成
+**2026-09-06 · 图集清单说出真正走得通的那条路（§6.1.4 新增）。** `read_lore_entity`
+的图集抬头原来只看 `ToolContext.multimodal`，识图子代理一开就两头说错：多模态主模型
+上点名一个刚被摘掉的 `read_lore_image`（一轮 Unknown tool），纯文本主模型上说「本模型
+读不了图」而图其实读得到——后者是**能力静默消失**，作者打开的开关没有任何效果。现在
+`routeTools` 交出 `visionDelegate`，registry 的 `galleryViewer` 定 here / delegate /
+none 三档，两条臂都查 `allowedTools`（`WRITER_PRESET` 本来就没有 `read_lore_image`，
+这个错与子代理无关）。
+
+**2026-09-04 · vision 的图片随第一条消息发出（§6.1.3 新增）。** 派单时只给路径、
+指望子代理自己 `read_image` 的做法，在不会主动推断工具调用的模型上得到的是一份
+诚实的「未接收到图像数据」；现在图片 refs 与 pdf 同样是载荷，在 `executeDelegate`
+里读好附上，解析规则从 `read_image` 抽成 `loadProjectImage` 共用。
+
+**2026-08-18 · 子代理设置页对齐设计稿 05a（§7.4 改写）。** 原实现把每个 kind 摊成
 一个 section + 两行（启用 / 选择模型），读起来是五组互不相干的开关；但子代理从来
 是一个**对**——专家和跑它的模型，缺一半就等于零。改为一 kind 一张卡（`SubAgents.module.css`），
 卡头一眼给出这对能不能用：状态点 + 名称 + 「需 web_search」这类前置条件芯片 +
@@ -582,7 +595,7 @@ ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 | kind | 定位 | `tools` | `maxRounds` | `serverTools` 策略 | 产出 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `search` | 联网检索与查证 | `[]` | 2 | **`"always"`** | `notes/search-*.md`：结论 + 事实 + **原始 URL** |
-| `vision` | 图像理解 | `["read_image", "read_lore_image"]` | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
+| `vision` | 图像理解 | `["read_image", "read_lore_image"]`；refs 里的图片**在派单时就读进第一条消息**（§6.1.3） | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
 | `longread` | 长文精读提要 | `["read_file", "search_text", "list_files"]` | 4 | `"off"` | `notes/read-*.md`：大纲 + 关键细节 |
 | `pdf` | PDF 原件精读（2026-08-17 加） | `[]` | 1 | `"off"` | `notes/pdf-*.md`：结构 + 关键内容 |
 | `imagegen` | 图片生成（2026-08-17 加）| —（非会话型，见下） | — | — | 文档 `assets/` 或条目图库里的一张图 |
@@ -945,6 +958,81 @@ export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, S
 （`buildChatMessage` 的 `visionDelegate` 选项）。只给文件名时，模型看得见缺了什么，
 却没有任何办法去取。
 
+### 6.1.3 vision 的 refs 是载荷，不是阅读清单（2026-09-04 定）
+
+第一版把 `delegate(kind:"vision", refs:[path])` 的图片当**路径文字**交给子代理，
+指望它自己调 `read_image` 取图——和 longread 拿到文档路径去 `read_file` 是一个
+模式。实机上它坏在一个很具体的地方：子代理的 system 提示说「观察和解析参考图片」，
+而它手里只有一个文件名和一个工具；一个不会主动推断「我得先调工具」的模型（Qwen
+一类）会**如实**回答「未接收到有效的图像数据，无法完成任务」——不是幻觉，是诚实地
+描述了它的上下文。作者看到的是一份写着「无法访问 `arcana_shadow_combined.jpg`」的
+笔记，而文件就在项目里。
+
+改法照 `pdf` 的先例：refs 里凡是图片路径（`isImagePath`）的，在 `executeDelegate`
+里经 `loadProjectImage` 读出来，作为 `image_url` part 放在指令**前面**，指令末尾按顺序
+列出每张图的文件名与路径（`subagentTaskWithImages`），非图片的 refs 仍走原来的
+「参考资源」段（`subagentRefsList`，且只在有东西可列时出现）。第一次请求就是整个活。
+
+三条边界：
+
+- **解析规则只有一份。** `loadProjectImage` 是从 `readProjectImage` 里抽出来的——
+  相对路径对项目根解析、`%` 编码的链接再试一次解码、包含性检查、`imageForModel`
+  的缩放和 12MB 上限——所以派单时能读到的图和工具能读到的图是严格同一批，报的
+  错也是同一句（「no image at … 路径来自 list_files」），只是把 `Error:` 前缀换成
+  `delegate` 自己的。
+- **点名了却不存在的图片让派单当场失败**，而不是发起一个注定失败的子运行——一个
+  只给文件名、文件其实在子目录里的调用，主模型拿到的是「按 list_files 的路径重发」，
+  不是一份「看不到图」的笔记。**不做**按文件名在整棵树里搜的兜底：那是把一个明确
+  的路径契约改成猜（同 `read_document` / `read_file` 互相拒绝而不是猜后缀的理由）。
+- **没有图片 refs 的派单照常运行。** 条目图库里的图走 `read_lore_image`（条目 + 文件名，
+  不是路径），所以 vision 的工具集不动；system 提示改为说明「图通常已附上，点名了
+  却没附的用工具取」——这句话现在描述的是真实情况。上限 `MAX_VISION_IMAGES = 8`，
+  超过让主模型拆单，同 `MAX_PDF_FILES`。
+
+### 6.1.4 清单要说出真正走得通的那条路（2026-09-06 定）
+
+§6.1 说 `ToolContext.multimodal` 的语义一个字不改，那是对的——但**它不该是清单
+末尾那句话的依据**。`read_lore_entity` 的图集清单原来只看这个布尔值：
+
+```
+=== images === (descriptions; call read_lore_image(entity: "X", file: ...) to view one; …)
+=== images === (text descriptions only — current model is text-only; …)
+```
+
+识图子代理一开，两句同时说错，而且是反着错的：
+
+- **多模态主模型 + 识图子代理**：`routeTools` 刚把 `read_lore_image` 摘掉（§6.2），
+  清单还在教模型调它——一轮 Unknown tool。
+- **纯文本主模型 + 识图子代理**：清单说「本模型是纯文本」，于是那次运行**再也没去
+  要那张图**。而图是读得到的，只是要换一条路。这一条更贵：作者打开了一个开关，
+  得到的效果是能力消失，且没有任何报错。
+
+第二种是这一节存在的理由。`multimodal` 在这种运行里是**错的那个模型**的属性，而
+清单说的是「你能不能打开我列出的这些」——那是运行的属性，不是当前模型的。
+
+改法：`routeTools` 把 `live("vision")` 一并交出去（`RoutedTools.visionDelegate`），
+四个 surface 原样塞进 `ToolContext.visionDelegate`，registry 的 `galleryViewer(ctx)`
+定三档——`here` / `delegate` / `none`，`readLoreEntity` 收的是这个三态而不再是布尔。
+判定在**摘工具的同一处**算，理由同 `resolveVisionConn` 的注释：「谁在这里读图」
+只该有一个答案。
+
+三条值得记下来的：
+
+- **两条臂都查 `allowedTools`，这才是修复本身，不是保险。** `WRITER_PRESET` 带
+  `read_lore_entity` 却不带 `read_lore_image`——多模态模型上，它从来就在被教着调
+  一个不存在的工具，和识图子代理无关。同 `rewrite_lore_lines` 那条行号提示的写法。
+- **`delegate` 那一档把整句调用连全路径一起拼出来**（`references: ["<dirPath>/<文件名>"]`）。
+  §6.1.3 刚说过 refs 是**载荷**不是阅读清单——派单时就把图读进第一条消息，比指望子
+  运行自己去调 `read_lore_image` 可靠；而 `references` 要全路径，清单下面那几行却是
+  光秃秃的文件名，所以这个参数必须由抬头给出。`loadProjectImage` 的包含性检查覆盖
+  整个项目、**`.ai-writer` 在内**（见 `tools.ts` 那段注释），所以条目图库的路径本来
+  就通得过。子代理自己的 `read_lore_image` 仍在，作为跟进再看一眼的路。
+- **工具 schema 那句话跟着一起改了。** `read_lore_entity` 的描述原来写着「Call
+  read_lore_image afterwards」——静态字符串，八个 preset 上都不成立。改成让它指向
+  清单本身（「the listing says whether anything on this run can open one, and how」），
+  规则就在它生效的那一刻到达，而不是几千 token 之前。注意 `agentToolBudget.test.ts`
+  的棘轮量的就是这些描述：这句话必须**不比它替换掉的那句长**。
+
 ### 6.2 路由 = 改工具集，不是改提示词也不是改返回值
 
 作者的规则是「主模型也支持、子代理也支持时，**优先子代理**」。
@@ -1099,7 +1187,7 @@ if (event.kind === "reasoning") {
 
 ### 7.4 设置 → 子代理（`panes/SubAgentsPane.tsx`）
 
-对齐设计稿 04「系统设置 · 子代理」（2026-08-18）。**一个 kind 一张卡**，因为一个
+对齐设计稿 05a「系统设置 · 子代理」（2026-08-18）。**一个 kind 一张卡**，因为一个
 子代理就是一个对（专家 + 跑它的模型），把它拆成「启用」和「选择模型」两行，作者
 要在两行之间自己合成「这东西现在能不能用」——那正是这张页面唯一要回答的问题。
 

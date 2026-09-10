@@ -42,7 +42,7 @@
   font-family: var(--font-serif);
 }
 
-/* 缺摘要 / 缺别名 badges (设计稿 03 待完善黄) */
+/* 缺摘要 / 缺别名 badges (设计稿 03a 待完善黄) */
 .badges {
   display: flex;
   gap: 5px;
@@ -63,7 +63,7 @@
 
 /* 生成中的展示由共享进度词汇承担（LoreRunProgress: 状态行/步骤列/思维链）。 */
 
-/* AI 建议改动过的概要 — 与新增别名同一张 diff 绿 (设计稿 12) */
+/* AI 建议改动过的概要 — 与新增别名同一张 diff 绿 (设计稿 03a 屏 12) */
 .gChanged {
   background: var(--lore-add-bg);
   color: var(--lore-add-text);
