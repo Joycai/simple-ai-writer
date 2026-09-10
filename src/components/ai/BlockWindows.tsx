@@ -30,6 +30,7 @@ export function BlockWindows({
   windows,
   lineNumbers,
   expandable = true,
+  clip = false,
 }: {
   windows: readonly BlockWindow[];
   lineNumbers: boolean;
@@ -38,6 +39,12 @@ export function BlockWindows({
    * two were never kept, so a fold there is a count, not a door.
    */
   expandable?: boolean;
+  /**
+   * Each row cut to one line until its window is opened — the rail (设计稿 02h
+   * 1k), where one wrapped paragraph is a screen. The window's head then carries
+   * 「展开」, because a clipped row is only honest if the rest is one click away.
+   */
+  clip?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<readonly number[]>([]);
@@ -76,11 +83,17 @@ export function BlockWindows({
                   {t("ai.approval.collapse")}
                 </button>
               )}
+              {clip && expandable && !expanded && (
+                <button className={styles.headAction} onClick={() => setOpen([...open, i])}>
+                  {t("ai.approval.expand")}
+                </button>
+              )}
             </div>
             <WindowRows
               rows={rows}
               lineNumbers={lineNumbers}
               onFold={expandable ? () => setOpen([...open, i]) : undefined}
+              clip={clip && !expanded}
             />
           </div>
         );

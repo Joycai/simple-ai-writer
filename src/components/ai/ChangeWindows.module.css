@@ -47,6 +47,14 @@
   padding-right: 10px;
 }
 
+/* A rewrite window in the rail (设计稿 02h 1k): one line a row until opened. */
+.windowClip .text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .context {
   color: var(--color-text-muted);
 }

@@ -46,15 +46,18 @@ export function WindowRows({
   lineNumbers,
   whitespace,
   onFold,
+  clip = false,
 }: {
   rows: readonly WindowRow[];
   lineNumbers: boolean;
   whitespace?: boolean;
   /** Called when a fold row is pressed; without it a fold row is just a count. */
   onFold?: () => void;
+  /** One line per row, ellipsised — see BlockWindows' `clip`. */
+  clip?: boolean;
 }) {
   return (
-    <div className={styles.window}>
+    <div className={clip ? `${styles.window} ${styles.windowClip}` : styles.window}>
       {rows.map((row, i) => (
         <Row key={i} row={row} lineNumbers={lineNumbers} whitespace={whitespace} onFold={onFold} />
       ))}
