@@ -18,7 +18,7 @@
  */
 
 import type { ToolDefinition } from "../ai/types";
-import type { Insertion } from "./editApply";
+import type { EditMatch, Insertion } from "./editApply";
 import type { DocxOutline } from "../docx";
 import type { LintFinding } from "../pptx/lint";
 import type { DocFormat, SpecRow } from "../docx/format";
@@ -165,6 +165,21 @@ export interface EditProposal extends ProposalBase {
    */
   occurrences: number;
   /**
+   * Where each occurrence sits, in document order, with the line either side.
+   *
+   * `matches[i]` is occurrence `i+1`, so `target` indexes straight into it —
+   * and `matches.length` is `occurrences` by construction, both being read off
+   * the same scan of the file. The pair is kept rather than collapsed because
+   * `occurrences` is what the apply step re-checks the document against, and a
+   * safety count is not something to make a card's display data responsible
+   * for.
+   *
+   * This is what lets an edit card say *where* the change lands. Before it,
+   * only an edit that came from `rewrite_lines` could — the model had named a
+   * range there, and everywhere else the card knew the text and not the place.
+   */
+  matches: EditMatch[];
+  /**
    * Which occurrence to replace — a 1-based index, or "all". Absent means the
    * only one, which is the shape every edit had before targeting existed.
    */
@@ -187,16 +202,21 @@ export interface EditProposal extends ProposalBase {
  * `edit`'s uniqueness rule, and a document-wide pass would be dozens of cards
  * besides. One card for the whole file is the honest unit of review here.
  *
- * `originalChars` rides along so the card can lead with the size delta — the
- * one number that catches the failure mode this kind introduces, a rewrite
- * composed from a partial read that would silently truncate the document.
+ * The text being replaced rides along in `original`. The size delta computed
+ * from it is the one number that catches the failure mode this kind introduces
+ * — a rewrite composed from a partial read, silently truncating the document —
+ * and the text itself is what lets a card show *which* passage a shrinking
+ * rewrite dropped. It is already in hand when the proposal is built (the tool
+ * has to read the file to compare), so carrying it costs a reference; pending
+ * proposals live in memory for as long as the card is on screen and are never
+ * persisted.
  */
 export interface RewriteProposal extends ProposalBase {
   kind: "rewrite";
   /** Full new file body, replacing everything currently there. */
   content: string;
-  /** Length of the file at proposal time. */
-  originalChars: number;
+  /** The file's body at proposal time — what `content` replaces. */
+  original: string;
 }
 
 /**
@@ -284,6 +304,24 @@ export interface DeleteProposal extends ProposalBase {
   isDir?: true;
   /** Recursive file count, the folder card's headline number. */
   fileCount?: number;
+  /**
+   * A file's opening text, so the card can show what is about to go — a
+   * deletion card that says only "3,042 字" is asking the author to authorise
+   * a number. Absent for a folder, and for a file that could not be read
+   * (still proposable: it exists, it is listed, it just cannot be shown).
+   *
+   * An excerpt rather than the whole body: the file is still on disk while the
+   * card waits, so a surface that wants more can read it, and every other kind
+   * of file in a project — a pasted book, a saved page — would otherwise ride
+   * on a proposal whole.
+   */
+  excerpt?: string;
+  /**
+   * A folder's contents, project-relative, capped — `fileCount` stays the true
+   * total, so a card can say "and N more" without the list having to be
+   * complete. Absent when the folder could not be listed.
+   */
+  files?: string[];
 }
 
 /**

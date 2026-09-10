@@ -107,7 +107,7 @@ const ALL_TOOLS: ToolId[] = [
   "create_lore_facet", "update_facet_meta", "delete_lore_file",
   "add_lore_image", "update_lore_image", "delete_lore_image",
   "set_lore_avatar", "copy_lore_file", "move_lore_entity", "delete_lore_entity",
-  "update_memory", "propose_edit", "append_file", "rewrite_lines",
+  "update_memory", "propose_edit", "append_file", "rewrite_lines", "rewrite_document",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
   "delete_directory",
 ];
@@ -1621,6 +1621,36 @@ describe("read_memory / update_memory", () => {
   });
 });
 
+// ─── rewrite_document ────────────────────────────────────────────────────────
+
+describe("rewrite_document", () => {
+  const DOC = `${PROJECT}/writing/ch1.md`;
+
+  beforeEach(() => {
+    fs.set(DOC, "第一段。\n第二段。\n第三段。\n");
+  });
+
+  it("carries the text it replaces, not only its length", async () => {
+    const proposals: object[] = [];
+    const ctx = makeCtx({
+      requestApproval: async (p) => {
+        proposals.push(p);
+        return { approved: true };
+      },
+    });
+    await run("rewrite_document", { path: DOC, content: "第一段。\n第三段。\n", reason: "合并" }, ctx);
+
+    // "少了 5 字" is what the card can say without this; which five is what it
+    // cannot, and that is the whole failure mode of a whole-file rewrite.
+    expect(proposals[0]).toMatchObject({
+      kind: "rewrite",
+      path: DOC,
+      content: "第一段。\n第三段。\n",
+      original: "第一段。\n第二段。\n第三段。\n",
+    });
+  });
+});
+
 // ─── propose_edit ────────────────────────────────────────────────────────────
 
 describe("propose_edit", () => {
@@ -1646,6 +1676,11 @@ describe("propose_edit", () => {
     // The approver dispatches on `kind`; an untagged proposal would never apply.
     expect(approvals[0]).toMatchObject({
       kind: "edit", path: DOC, find: "She waited.", replace: "She ran.", reason: "pacing",
+    });
+    // Where it lands, not only what it says — an edit card without this can
+    // show the replacement and not the place it goes.
+    expect(approvals[0]).toMatchObject({
+      matches: [{ line: 1, endLine: 1, before: "", after: "" }],
     });
     expect(res.content).toContain("approved and applied");
     expect(res.content).toContain("/proj/.ai-writer/backups/x");
@@ -2251,6 +2286,9 @@ describe("chapter structure tools", () => {
         kind: "delete",
         path: CH1,
         chars: "第一章的正文。".length,
+        // The card has to be able to show what goes; a size is not something
+        // an author can check a deletion against.
+        excerpt: "第一章的正文。",
         reason: "与第2章重复",
       });
       expect(res.content).toContain("backups");
@@ -2509,6 +2547,9 @@ describe("chapter structure tools", () => {
         path: `${PROJECT}/writing/卷一`,
         isDir: true,
         fileCount: 3, // 第1章 + 第2章 + 番外/彩蛋
+        // Folder-relative, so the header's folder name is not repeated on
+        // every row; nested files keep their sub-path.
+        files: ["第1章.md", "第2章.md", "番外/彩蛋.md"],
         reason: "整卷废弃",
       });
       expect(res.content).toContain("backups");

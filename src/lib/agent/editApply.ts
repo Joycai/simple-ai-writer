@@ -133,6 +133,89 @@ export function countLines(text: string): number {
 }
 
 /**
+ * Longest neighbouring line kept on a proposal.
+ *
+ * Context is orientation, not content: it answers "where does this land", and a
+ * card that quotes four hundred characters of the next paragraph to say so has
+ * buried the change it exists to show.
+ */
+export const CONTEXT_LINE_CHARS = 80;
+
+/** One neighbouring line, trimmed and clipped; "" when there is no such line. */
+export function clipContextLine(line: string | undefined): string {
+  const text = (line ?? "").trim();
+  return text.length > CONTEXT_LINE_CHARS ? `${text.slice(0, CONTEXT_LINE_CHARS)}…` : text;
+}
+
+/** Where one occurrence of `find` sits in the file, and what surrounds it. */
+export interface EditMatch {
+  /** 1-based line the match starts on. */
+  line: number;
+  /** 1-based line the match ends on — the same line unless `find` spans several. */
+  endLine: number;
+  /** The line above the match, "" at the top of the file. */
+  before: string;
+  /** The line below the match, "" at the end of the file. */
+  after: string;
+}
+
+/**
+ * Locate every occurrence, in document order.
+ *
+ * An edit card can say what a change replaces but not *where* it lands — unless
+ * the edit came from `rewrite_lines`, which names a range because the model did.
+ * Everything needed to fix that is already in hand when the proposal is built
+ * (the file's text and the offsets), so it is recorded there rather than
+ * re-derived later against a file that may have moved on in the meantime.
+ *
+ * `positions` comes from {@link findOccurrences}, so entry *i* is occurrence
+ * *i+1* — which is exactly what `EditProposal.target` counts.
+ */
+export function locateMatches(
+  text: string,
+  find: string,
+  positions: readonly number[],
+): EditMatch[] {
+  if (positions.length === 0) return [];
+  const starts = lineStarts(text);
+  const lines = countLines(text);
+
+  /** 1-based line containing `offset`, by binary search over the line starts. */
+  const lineAt = (offset: number): number => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (starts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    // Clamped, because a trailing newline gives `lineStarts` one entry more
+    // than the file has lines — the same phantom `countLines` exists to deny.
+    return Math.min(lo + 1, lines);
+  };
+
+  const lineText = (n: number): string | undefined => {
+    if (n < 1 || n > lines) return undefined;
+    const from = starts[n - 1];
+    const to = n < starts.length ? starts[n] : text.length;
+    return text.slice(from, to).replace(/\r?\n$/, "");
+  };
+
+  return positions.map((pos) => {
+    const line = lineAt(pos);
+    // The match's last character, not the one past it: a `find` ending in a
+    // newline ends on that line, not on the one the newline introduces.
+    const endLine = lineAt(pos + Math.max(find.length - 1, 0));
+    return {
+      line,
+      endLine,
+      before: clipContextLine(lineText(line - 1)),
+      after: clipContextLine(lineText(endLine + 1)),
+    };
+  });
+}
+
+/**
  * Slice a line range out of a file. Returns null when `from` is past the end —
  * the one case the caller must refuse rather than clamp, since there is no
  * region to rewrite at all.
@@ -265,8 +348,11 @@ export function insertionLanding(
 export function occurrenceAt(text: string, slice: string, offset: number): {
   occurrences: number;
   index: number;
+  /** Every occurrence's offset — handed back so a caller that wants to locate
+      them (see {@link locateMatches}) does not scan the file a second time. */
+  positions: number[];
 } {
   const positions = findOccurrences(text, slice);
   const at = positions.indexOf(offset);
-  return { occurrences: positions.length, index: at < 0 ? 1 : at + 1 };
+  return { occurrences: positions.length, index: at < 0 ? 1 : at + 1, positions };
 }

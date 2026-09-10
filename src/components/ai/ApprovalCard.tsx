@@ -102,7 +102,7 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
     case "rewrite":
       // Whole-file scale, so the delta is the header's whole job: it is what
       // tells the author at a glance that a "reformat" is quietly dropping text.
-      return `${proposal.originalChars} → ${proposal.content.length} ${chars}`;
+      return `${proposal.original.length} → ${proposal.content.length} ${chars}`;
     case "append":
       // Both ends, like a rewrite: what matters is that the file *grew* by this
       // much and lost nothing — an append that reads as a replacement would be
@@ -237,7 +237,7 @@ function HtmlProposalBody({ path, content }: { path: string; content: string }) 
 function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const delta = proposal.content.length - proposal.originalChars;
+  const delta = proposal.content.length - proposal.original.length;
   // A whole chapter's markdown — parsed once, not on every parent re-render
   // (approvals sit next to surfaces that re-render while other runs stream).
   const html = useMemo(() => renderMarkdown(proposal.content), [proposal.content]);

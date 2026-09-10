@@ -34,7 +34,10 @@ function proposal(
   occurrences = 1,
   target?: number | "all",
 ): EditProposal {
-  return { kind: "edit", id: "e1", path: "/proj/writing/a.md", find, replace, occurrences, target };
+  return {
+    kind: "edit", id: "e1", path: "/proj/writing/a.md", find, replace, occurrences, target,
+    matches: [{ line: 1, endLine: 1, before: "", after: "" }],
+  };
 }
 
 describe("agentStore.approve — applyEdit uniqueness", () => {

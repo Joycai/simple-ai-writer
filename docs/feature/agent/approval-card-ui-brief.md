@@ -4,6 +4,8 @@
 >
 > 起因：作者反馈「审批卡片（尤其是编辑类的，如修改文件、修改知识库条目）看不到编辑的具体内容」。
 >
+> 前置切片（不等设计稿、无论稿子怎么答都要做的）：**切片 1** diff 核 `src/lib/diff/`（#558）；**切片 2** 把已在手上的数据接到提案上——`RewriteProposal.original`、`EditProposal.matches`（每处命中的行号 + 上下文行）、`DeleteProposal.excerpt` / `files`。
+>
 > 本文 `---` 以下是**发给 Claude Design 的任务书原文**，可整段粘贴。落地后请照 `composer-chips-ui-brief.md` 的样子，在本文上半部分补「设计稿怎么答的 / 落地清单 / 与稿子的出入 / 真机没验到的」。
 
 ## 起草时查到的事实（发稿前的底稿，不必粘贴）

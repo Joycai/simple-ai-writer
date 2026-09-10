@@ -68,8 +68,8 @@ import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile, backupFileByMove } from "./backup";
 import {
-  applyFindReplace, countLines, describeEditTarget, findOccurrences, insertionLanding,
-  occurrenceAt, sliceLines,
+  applyFindReplace, clipContextLine, countLines, describeEditTarget, findOccurrences,
+  insertionLanding, locateMatches, occurrenceAt, sliceLines,
   type EditTarget, type Insertion,
 } from "./editApply";
 import { echoRegion, lineOfOffset, shiftNote } from "./lineEcho";
@@ -2709,8 +2709,11 @@ export async function deleteChapterTool(
   }
 
   let chars = 0;
+  let excerpt: string | undefined;
   try {
-    chars = (await readFile(target.path)).length;
+    const body = await readFile(target.path);
+    chars = body.length;
+    excerpt = body.slice(0, DELETE_EXCERPT_CHARS);
   } catch {
     // Unreadable but listed — still proposable; the card just cannot size it.
   }
@@ -2720,6 +2723,7 @@ export async function deleteChapterTool(
     id: `delete-${++proposalCounter}`,
     path: target.path,
     chars,
+    excerpt,
     reason,
   });
   return reportDecision(
@@ -2729,6 +2733,24 @@ export async function deleteChapterTool(
   );
 }
 
+/**
+ * Opening text kept on a file's delete card.
+ *
+ * Enough to recognise the file by — the first heading and a paragraph or two.
+ * The decision is "is this the thing I meant", not "is every line of it
+ * expendable", and the file is still on disk while the card waits.
+ */
+const DELETE_EXCERPT_CHARS = 600;
+
+/**
+ * Names listed on a folder's delete card before it says "and N more".
+ *
+ * `fileCount` carries the true total, so the list is allowed to be a sample —
+ * but a sample of nothing is what the card shows today, and "12 个文件" is not
+ * something an author can check.
+ */
+const DELETE_FILES_LISTED = 50;
+
 /** Files inside a directory tree, recursively — the number the delete card leads with. */
 function countFiles(nodes: FileNode[]): number {
   let n = 0;
@@ -2736,6 +2758,23 @@ function countFiles(nodes: FileNode[]): number {
     n += node.is_dir ? countFiles(node.children ?? []) : 1;
   }
   return n;
+}
+
+/**
+ * Paths inside the tree, folder-relative, depth-first, stopping at `limit`.
+ *
+ * Folder-relative rather than project-relative because every entry would
+ * otherwise repeat the folder the card's header already names.
+ */
+function listFiles(nodes: FileNode[], limit: number, prefix = ""): string[] {
+  const out: string[] = [];
+  for (const node of nodes) {
+    if (out.length >= limit) break;
+    const rel = prefix ? `${prefix}/${node.name}` : node.name;
+    if (node.is_dir) out.push(...listFiles(node.children ?? [], limit - out.length, rel));
+    else out.push(rel);
+  }
+  return out;
 }
 
 /**
@@ -2774,8 +2813,11 @@ export async function deleteDirectoryTool(
   }
 
   let fileCount = 0;
+  let files: string[] | undefined;
   try {
-    fileCount = countFiles(await readDirRecursive(target.path));
+    const tree = await readDirRecursive(target.path);
+    fileCount = countFiles(tree);
+    files = listFiles(tree, DELETE_FILES_LISTED);
   } catch {
     // Unlistable but present — still proposable; the card just cannot size it.
   }
@@ -2787,6 +2829,7 @@ export async function deleteDirectoryTool(
     chars: 0,
     isDir: true,
     fileCount,
+    files,
     reason,
   });
   return reportDecision(
@@ -2903,7 +2946,8 @@ export async function proposeEditTool(
   } catch (e) {
     return { toolCallId, content: `Error reading file: ${String(e)}` };
   }
-  const occurrences = findOccurrences(content, args.find).length;
+  const positions = findOccurrences(content, args.find);
+  const occurrences = positions.length;
   if (occurrences === 0) {
     return {
       toolCallId,
@@ -2953,6 +2997,7 @@ export async function proposeEditTool(
     find: args.find,
     replace: args.replace,
     occurrences,
+    matches: locateMatches(content, args.find, positions),
     target,
     reason: args.reason?.trim() || undefined,
   });
@@ -3056,7 +3101,7 @@ export async function rewriteLinesTool(
     return { toolCallId, content: `Lines ${from}-${slice.to} already read exactly like that — nothing to do.` };
   }
 
-  const { occurrences, index } = occurrenceAt(original, slice.text, slice.start);
+  const { occurrences, index, positions } = occurrenceAt(original, slice.text, slice.start);
   const decision = await ctx.requestApproval!({
     kind: "edit",
     id: `edit-${++proposalCounter}`,
@@ -3064,6 +3109,7 @@ export async function rewriteLinesTool(
     find: slice.text,
     replace: replacement,
     occurrences,
+    matches: locateMatches(original, slice.text, positions),
     target: occurrences === 1 ? undefined : index,
     range: { from, to: slice.to },
     reason: args.reason?.trim() || undefined,
@@ -3102,19 +3148,11 @@ export async function rewriteLinesTool(
  */
 const MAX_INSERTIONS = 100;
 
-/** Longest context line kept for the card; a whole paragraph would bury it. */
-const INSERT_CONTEXT_CHARS = 80;
-
 /** Rows of "old line → new line" the receipt prints before it summarises. */
 const INSERT_RECEIPT_ROWS = 40;
 
 /** Insertions echoed with their surrounding lines; past this, numbers only. */
 const INSERT_ECHO_MAX = 3;
-
-function clipLine(line: string | undefined): string {
-  const text = (line ?? "").trim();
-  return text.length > INSERT_CONTEXT_CHARS ? `${text.slice(0, INSERT_CONTEXT_CHARS)}…` : text;
-}
 
 /**
  * Add structure to a document without re-sending it.
@@ -3215,8 +3253,8 @@ export async function insertLinesTool(
 
   const landing = insertionLanding(insertions);
   const context = landing.map((l) => ({
-    before: clipLine(lines[l.line - 2]),
-    after: clipLine(lines[l.line - 1]),
+    before: clipContextLine(lines[l.line - 2]),
+    after: clipContextLine(lines[l.line - 1]),
   }));
 
   const decision = await ctx.requestApproval!({
@@ -3443,7 +3481,7 @@ export async function rewriteDocumentTool(
     id: `rewrite-${++proposalCounter}`,
     path,
     content: args.content,
-    originalChars: original.length,
+    original,
     reason: args.reason?.trim() || undefined,
   });
 
