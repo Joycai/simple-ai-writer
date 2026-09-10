@@ -34,7 +34,8 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
-import type { TranscribeProposal } from "../../lib/agent/registry";
+import type { CommandProposal, TranscribeProposal } from "../../lib/agent/registry";
+import { shellLabel, shellSyntax } from "../../lib/cli/shell";
 import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
@@ -90,6 +91,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleConvert", { defaultValue: "转换为 Markdown" });
     case "transcribe":
       return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
+    case "command":
+      return t("ai.approval.titleCommand", { defaultValue: "运行命令" });
   }
 }
 
@@ -154,6 +157,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // The size of what is about to be uploaded — the only number known
       // before the paid step (设计稿 02f 屏 1e: mono right column "2.4 MB").
       return formatBytes(proposal.bytes);
+    case "command":
+      // The one number known before it runs: how long it may take before the
+      // app kills it. Not the shell — that sits in the body next to the line.
+      return t("ai.approval.commandTimeout", { s: Math.round(proposal.timeoutMs / 1000), defaultValue: "≤ {{s}} 秒" });
   }
 }
 
@@ -818,7 +825,59 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <ConvertBody proposal={proposal} />;
     case "transcribe":
       return <TranscribeBody proposal={proposal} />;
+    case "command":
+      return <CommandBody proposal={proposal} />;
   }
+}
+
+/**
+ * 「要不要让它跑」。这张卡是命令行工具**唯一**的防线，所以正文的第一件事是
+ * 命令原文——等宽、不折行省略、横向可滚（shell-command-plan §1 不变量 2）；
+ * 引导句说清它以作者的账户权限运行，「危险形状」命中时只在引导句前加一个
+ * 告警词、给命令块一道色边，不整卡换色（§5 第二个张力：`git push` 也会命中）。
+ * 下面两行是运行于哪里、用哪个 shell——后者也告诉作者助手写的是哪种语法。
+ * 没有「本次都批准」（`isAutoApprovable("command")` 为假），按程序名的窄授权
+ * 在 PR 3。
+ */
+function CommandBody({ proposal }: { proposal: CommandProposal }) {
+  const { t } = useTranslation();
+  const danger = proposal.danger;
+  const syntax = shellSyntax(proposal.shell) === "powershell" ? "PowerShell" : "POSIX";
+  return (
+    <>
+      <div className={danger ? styles.commandLeadWarn : styles.emptyNote}>
+        {danger && (
+          <span className={styles.commandDangerWord}>
+            {t(`ai.approval.commandDanger.${danger}`, { defaultValue: "看起来会删改或推送" })} ·{" "}
+          </span>
+        )}
+        {t("ai.approval.commandLead", { defaultValue: "这条命令以你的账户权限运行，能做你在终端里能做的一切；批准即运行。" })}
+      </div>
+      <pre className={danger ? styles.commandBlockWarn : styles.commandBlock}>{proposal.command}</pre>
+      <div className={styles.specRows}>
+        <div className={styles.specRow}>
+          <span className={styles.specKey}>{t("ai.approval.commandCwd", { defaultValue: "运行于" })}</span>
+          <span className={styles.specBody}>
+            <span className={styles.specVal}>{proposal.cwdLabel}</span>
+            {proposal.compound && (
+              <span className={styles.specSub}>
+                {t("ai.approval.commandCompound", { defaultValue: "复合命令：含分隔、管道、重定向或替换，请整行读完" })}
+              </span>
+            )}
+          </span>
+        </div>
+        <div className={styles.specRow}>
+          <span className={styles.specKey}>{t("ai.approval.commandShell", { defaultValue: "用" })}</span>
+          <span className={styles.specBody}>
+            <span className={styles.specVal}>{shellLabel(proposal.shell)}</span>
+            <span className={styles.specSub}>
+              {t("ai.approval.commandShellSub", { syntax, defaultValue: "{{syntax}} 语法 · 标准输入已关闭，要交互的命令会立刻失败" })}
+            </span>
+          </span>
+        </div>
+      </div>
+    </>
+  );
 }
 
 /**
@@ -1034,7 +1093,9 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
         >
           {proposal.kind === "transcribe"
             ? t("ai.approval.approveTranscribe", { defaultValue: "批准并转写" })
-            : t("ai.approval.approve")}
+            : proposal.kind === "command"
+              ? t("ai.approval.approveCommand", { defaultValue: "批准并运行" })
+              : t("ai.approval.approve")}
         </button>
       </div>
     </div>

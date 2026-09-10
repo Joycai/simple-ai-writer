@@ -1,6 +1,6 @@
 # 命令行工具 · `run_command`
 
-> 状态：`partial`——PR 1（地基）已建：`src-tauri/src/cmd.rs` + `src/lib/cli/` + 实验室开关；PR 2（工具与卡）、PR 3（授权与体验）未建。
+> 状态：`partial`——PR 1（地基，[#561](https://github.com/Joycai/simple-ai-writer/pull/561)）与 PR 2（工具与卡：`run_command` + `CommandProposal` + 路由 + apply）已建；PR 3（按程序名的窄授权、日志清扫已在 PR 1、可选流式）未建。实现出入：进度秒表在 PR 2 就带上了（`run.ts` 的 `onTick`），因为没有它一条 40 秒的命令看着像卡死；description 的平台化走 `RegisteredTool.describe` 而不是改 `getToolDefinitions` 的签名。
 > 一句话：给 agent 一个能跑本机命令的 L2 工具——Windows 走 PowerShell，macOS / Linux 走系统自带的 shell——每一条命令都先过一张审批卡，卡上是命令原文。
 > 前置阅读：[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（工具在场性）· [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（棘轮）· [`../asr/01-execution-plan.md`](../asr/01-execution-plan.md)（「付费之前先点头」的那张卡，本方案的样板）· [`../latex-pdf-plan.md`](../latex-pdf-plan.md) §5（为什么不装 `tauri-plugin-shell`，本方案沿用其结论）
 

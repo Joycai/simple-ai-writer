@@ -85,6 +85,7 @@
 | `registry.ts` `unloadedToolMessage` | 延迟组未装载时报「还没装 + 怎么装上」，预设里没有的名字才报 `Unknown tool` |
 | `tools.ts` `formatLoreIndex` 集合抬头 | 有集合的项目才多一句「归集要在方案里写一条 collection 步骤」——它只对有集合的项目成立，也只在模型真的去看清单时计费 |
 | `routing.ts` `transcribe_audio` · `tools.ts` 音频改口 | 追加规则同 `translate`（Beta 开 **且** `asr` 档位绑了 `isAsrOnly` 的模型）；`read_file` 遇到音视频文件时按 `allowedTools` 判：有就点名 `transcribe_audio`，没有就说要作者去实验室开开关并绑模型——不点一个本次运行没有的工具 |
+| `routing.ts` `run_command` · `registry.ts` `describe` | 三个条件缺一即缺席：surface 能渲染审批卡（`RouteOptions.commands`，chat 与非批量任务面板）、命令行 Beta 开、在 Tauri 里（浏览器没有 shell）。description 在交出定义时才生成（`RegisteredTool.describe`）——它点名这台机器**真正**会用的 shell，模型据此写 PowerShell 还是 POSIX 语法；失败的结果文本再点一次名，教模型改写而不是重试。见 [shell-command-plan §1 不变量 4、5、11](../feature/agent/shell-command-plan.md) |
 
 ## 一个例外：跨工具改口
 

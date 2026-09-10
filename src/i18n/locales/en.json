@@ -1675,7 +1675,24 @@
       "transcribeThisRun": "This run",
       "transcribeDiarization": "Speaker diarization",
       "transcribeDiarizationSrc": "default from Sub-agents → Audio transcription · this run only · adds ~2 s and a “Speaker N” column",
-      "imageNegative": "Avoid: {{text}}"
+      "imageNegative": "Avoid: {{text}}",
+      "titleCommand": "Run a command",
+      "approveCommand": "Approve and run",
+      "commandTimeout": "≤ {{s}} s",
+      "commandLead": "This command runs with your account's permissions and can do anything you could do in a terminal; approving runs it.",
+      "commandCwd": "Runs in",
+      "commandCompound": "Compound line: separators, pipes, redirections or substitution — read the whole line",
+      "commandShell": "With",
+      "commandShellSub": "{{syntax}} syntax · stdin is closed, so anything interactive fails at once",
+      "commandRunning": "Running · {{s}} s",
+      "commandDanger": {
+        "delete": "Looks like a bulk delete",
+        "history-rewrite": "Looks like it rewrites git history or force-pushes",
+        "elevate": "Looks like it elevates privileges",
+        "pipe-to-shell": "Looks like it executes something downloaded",
+        "eval": "Looks like it runs text as code",
+        "disk": "Looks like it touches a whole disk"
+      }
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",

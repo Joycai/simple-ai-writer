@@ -24,6 +24,9 @@ import { clampSidebarWidth, useAppStore } from "./stores/appStore";
 // whether or not Settings has ever been opened.
 import "./stores/themeStore";
 import { useAiStore } from "./stores/aiStore";
+import { IS_TAURI } from "./lib/platform";
+import { isCliEnabled } from "./lib/cli/flag";
+import { shellInfo } from "./lib/cli/shell";
 import { useMainView, useProjectStore } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
@@ -99,6 +102,11 @@ export default function App() {
 
   useEffect(() => {
     loadConfig();
+    // The command tool's description names the machine's shell, and tool
+    // definitions are built synchronously — so the probe runs once at boot,
+    // and only when the Beta is on: an author who never opened it never pays
+    // it (lib/cli/shell, docs/feature/agent/shell-command-plan.md §3.3).
+    if (IS_TAURI && isCliEnabled()) void shellInfo();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

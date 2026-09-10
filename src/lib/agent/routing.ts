@@ -9,6 +9,7 @@
  * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
  * - If the surface opts in (it can render the question card): append ask_author
+ * - If the surface opts in AND the 命令行 Beta is on AND we run inside Tauri: append run_command
  * - If the surface opts in AND a usable writer is bound: finishPolicy → "handoff"
  */
 
@@ -21,6 +22,8 @@ import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
 import { isAsrEnabled } from "../asr/flag";
+import { isCliEnabled } from "../cli/flag";
+import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
@@ -77,6 +80,14 @@ export interface RouteOptions {
    * 助手工具包模式 Beta (`packFlag`) — off means absent.
    */
   packs?: boolean;
+  /**
+   * May this surface run shell commands (`run_command`)? Opt-in for the
+   * `askAuthor` reason — the tool blocks on an approval card, and a batch run
+   * blocked on a card nobody can see hangs the sweep. Gated further on the
+   * 命令行 Beta (`lib/cli/flag`) and on running inside Tauri, where a shell
+   * exists at all; any one no means absent, never a tool that refuses.
+   */
+  commands?: boolean;
 }
 
 /**
@@ -217,6 +228,16 @@ function route(
     !tools.includes("run_pack")
   ) {
     tools.push("run_pack");
+  }
+
+  // Three yeses, like run_pack: the surface can render the card, the author
+  // turned the Beta on, and there is a shell to run in (the browser dev server
+  // has none). Appended rather than listed on a preset for the usual reason —
+  // none of the three is knowable where presets are declared — and so the raw
+  // preset ratchet cannot see it; agentToolBudget.test.ts prices it in the
+  // routed-tools assertion. docs/feature/agent/shell-command-plan.md §3.5.
+  if (options?.commands && isCliEnabled() && IS_TAURI && !tools.includes("run_command")) {
+    tools.push("run_command");
   }
 
   // Search subagent takes over web search: withhold serverTools from main agent.

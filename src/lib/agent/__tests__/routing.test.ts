@@ -30,6 +30,16 @@ vi.mock("../packFlag", () => ({
   isOrchestratorEnabled: () => orchestratorBeta.on,
 }));
 
+/** Same, for the 命令行 Beta — plus whether we are inside Tauri at all. */
+const cliBeta = { on: false };
+vi.mock("../../cli/flag", () => ({ isCliEnabled: () => cliBeta.on }));
+const platform = { tauri: true };
+vi.mock("../../platform", () => ({
+  get IS_TAURI() { return platform.tauri; },
+  IS_WINDOWS: false,
+  IS_MAC: false,
+}));
+
 import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
 
@@ -753,6 +763,75 @@ describe("routeTools — transcribe_audio (audio transcription Beta)", () => {
       };
       expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS).tools).not.toContain("transcribe_audio");
       expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("delegate");
+    });
+  });
+});
+
+/**
+ * run_command needs THREE yeses too (shell-command-plan §1 不变量 4–5): the
+ * surface can render the approval card, the author turned the Beta on, and
+ * there is a shell to run in — the browser dev server has none. Any single no
+ * must mean absent; a tool that is visible and always refuses reads as broken.
+ */
+describe("routeTools — run_command", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+    asr: { kind: "asr", modelId: null, enabled: false },
+  };
+  const withBeta = (on: boolean, run: () => void) => {
+    cliBeta.on = on;
+    try { run(); } finally { cliBeta.on = false; }
+  };
+
+  it("is absent while the Beta is off, even for an opted-in surface", () => {
+    withBeta(false, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { commands: true }).tools)
+        .not.toContain("run_command");
+    });
+  });
+
+  it("is absent for a surface that did not opt in, even with the Beta on", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("run_command");
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { commands: false }).tools)
+        .not.toContain("run_command");
+    });
+  });
+
+  it("is absent outside Tauri — the browser has no shell", () => {
+    platform.tauri = false;
+    try {
+      withBeta(true, () => {
+        expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { commands: true }).tools)
+          .not.toContain("run_command");
+      });
+    } finally {
+      platform.tauri = true;
+    }
+  });
+
+  it("is appended when all three hold — in the planning view too, and without a workspace", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { commands: true }).tools)
+        .toContain("run_command");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { commands: true }).tools)
+        .toContain("run_command");
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, undefined, MODELS, { commands: true }).tools)
+        .toContain("run_command");
+    });
+  });
+
+  it("never reaches the roleplay preset — no surface there opts in", () => {
+    withBeta(true, () => {
+      expect(routeTools(ROLEPLAY_PRESET, subAgentsFor("character", allDisabled), WS, MODELS).tools)
+        .not.toContain("run_command");
     });
   });
 });
