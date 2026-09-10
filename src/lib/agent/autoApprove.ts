@@ -120,6 +120,11 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   // A markdown copy of a file the author already has, beside it, numbered on
   // collision: like copy, the only question is "should this exist twice".
   "convert",
+  // NOT `command`: a shell line can do anything the author's account can, and
+  // "keep fixing my prose" must never quietly become "keep running things".
+  // The only grant it will ever get is the per-program one (PR 3 of
+  // docs/feature/agent/shell-command-plan.md), which names one program and
+  // excludes compound and dangerous-looking lines — never this boolean.
 ]);
 
 /** Whether this kind of proposal may skip its card under an active grant. */

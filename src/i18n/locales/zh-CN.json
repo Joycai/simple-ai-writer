@@ -1673,7 +1673,24 @@
       "transcribeThisRun": "本次",
       "transcribeDiarization": "说话人分离",
       "transcribeDiarizationSrc": "默认来自 子代理 → 音频转写 · 只改这一次 · 开了多约 2 秒，多一列「说话人 N」",
-      "imageNegative": "不要出现：{{text}}"
+      "imageNegative": "不要出现：{{text}}",
+      "titleCommand": "运行命令",
+      "approveCommand": "批准并运行",
+      "commandTimeout": "≤ {{s}} 秒",
+      "commandLead": "这条命令以你的账户权限运行，能做你在终端里能做的一切；批准即运行。",
+      "commandCwd": "运行于",
+      "commandCompound": "复合命令：含分隔、管道、重定向或替换，请整行读完",
+      "commandShell": "用",
+      "commandShellSub": "{{syntax}} 语法 · 标准输入已关闭，要交互的命令会立刻失败",
+      "commandRunning": "运行中 · {{s}} 秒",
+      "commandDanger": {
+        "delete": "看起来会成片删除",
+        "history-rewrite": "看起来会改写 git 历史或强推",
+        "elevate": "看起来要提权",
+        "pipe-to-shell": "看起来会把网上下载的内容直接执行",
+        "eval": "看起来会把文本当代码执行",
+        "disk": "看起来会动整块磁盘"
+      }
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",

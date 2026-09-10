@@ -233,6 +233,34 @@
   color: var(--color-text-hint);
 }
 
+/* 运行命令：命令原文是这张卡的全部——等宽、不折行、横向可滚，绝不省略
+   （shell-command-plan §1 不变量 2）。「像终端又不是终端」：深一档的底、没有
+   提示符没有光标，因为它不能交互。危险形状命中只加一道色边和一个告警词，
+   不整卡换色——`git push` 也会命中，每次都红等于没有红。 */
+.commandBlock,
+.commandBlockWarn {
+  margin: 0;
+  font: 400 12px/1.7 var(--font-mono);
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--color-bg-inset);
+  color: var(--color-text-primary);
+  padding: 10px 12px;
+  border-left: 3px solid transparent;
+  max-height: 180px;
+}
+.commandBlockWarn {
+  border-left-color: var(--color-error-node);
+}
+.commandLeadWarn {
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-hint);
+}
+.commandDangerWord {
+  color: var(--color-error-text-strong);
+  font-weight: 500;
+}
+
 .originalToggle {
   display: inline-flex;
   align-items: center;

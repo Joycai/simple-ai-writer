@@ -807,6 +807,24 @@ async function applyProposal(
       };
     }
 
+    case "command": {
+      // Like `transcribe`: nothing has run yet, and approval is what starts
+      // the process. The runner owns the abort → kill wiring and the log; the
+      // tool row gets a once-a-second elapsed label so a long command reads as
+      // running rather than hung (docs/feature/agent/shell-command-plan.md §3.7).
+      const { runCommand } = await import("../lib/cli/run");
+      const outcome = await runCommand({
+        projectPath: useProjectStore.getState().projectPath ?? "",
+        command: proposal.command,
+        cwd: proposal.path,
+        timeoutMs: proposal.timeoutMs,
+        signal,
+        onTick: (ms) =>
+          onProgress?.({ label: i18n.t("ai.approval.commandRunning", { s: Math.round(ms / 1000), defaultValue: "运行中 · {{s}} 秒" }) }),
+      });
+      return { report: outcome.report };
+    }
+
     case "transcribe": {
       // The opposite of `convert`: nothing has run yet. Approval *is* the
       // paid step — upload, submit, poll, write — and the three stages report
@@ -2652,7 +2670,8 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // askAuthor: the question card renders in the approvals area below.
       // packs: chat is the surface that threads the approval channels and
       // selfConn through ToolContext — see run_pack's guards (agent/packs).
-      { handoff: true, askAuthor: true, packs: true },
+      // commands: same area renders the command card (lib/cli).
+      { handoff: true, askAuthor: true, packs: true, commands: true },
     );
     const effectivePreset = {
       ...chatPreset,

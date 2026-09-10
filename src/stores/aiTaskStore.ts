@@ -611,7 +611,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         const { useBatchStore } = await import("./batchStore");
         const canAsk =
           preset === AGENT_ASSIST_PRESET && !useBatchStore.getState().running;
-        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk });
+        // commands: the same variable on purpose — a run that can show the
+        // question card is exactly a run that can show a command's card.
+        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk });
         const effectivePreset = {
           ...preset!,
           tools: routed.tools,

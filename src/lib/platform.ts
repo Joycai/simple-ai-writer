@@ -8,6 +8,11 @@
 export const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+/** Windows — for the one place a guess at the shell is better than none
+ *  (`cliTools.describeRunCommand`, before `cmd_shell_info` has answered). */
+export const IS_WINDOWS =
+  typeof navigator !== "undefined" && /Win(dows|32|64)/i.test(navigator.userAgent);
+
 /** Running inside a Tauri window (vs the plain Vite dev server / a browser).
  *  Same check http.ts and useWindowCloseFlush use. */
 export const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

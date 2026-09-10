@@ -47,6 +47,9 @@ import { exportPptxTool } from "./pptxTools";
 import { readDocumentFile } from "./documentTools";
 import { convertDocumentTool } from "./convertTools";
 import { transcribeAudioTool } from "../asr/tool";
+import { describeRunCommand, runCommandTool } from "./cliTools";
+import type { ShellInfo } from "../cli/shell";
+import type { DangerKind } from "../cli/command";
 import type { ConvertExt } from "../import";
 import { inspectHtmlTool } from "./htmlTools";
 import {
@@ -534,6 +537,34 @@ export interface TranscribeProposal extends ProposalBase {
 }
 
 /**
+ * Run one shell command on the author's machine (lib/cli, the `run_command`
+ * tool). Like `transcribe`, the card comes *before* the action: nothing has
+ * run when it is raised, and approval is what starts the process. The card
+ * shows `command` verbatim — it is the only thing between the model and the
+ * author's account (docs/feature/agent/shell-command-plan.md §1 不变量 1–3).
+ *
+ * The three judgements `lib/cli/command` makes are computed here, once, and
+ * carried on the proposal: the card reads them, and so will the per-program
+ * grant (PR 3) — both must see the same answer for the same line.
+ */
+export interface CommandProposal extends ProposalBase {
+  kind: "command";
+  /** The line, exactly as it will be handed to the shell. `path` is the cwd. */
+  command: string;
+  /** Project-relative spelling of the cwd, for the card (`.` = the root). */
+  cwdLabel: string;
+  timeoutMs: number;
+  /** The shell it will run in — the card says so, next to the syntax. */
+  shell: ShellInfo;
+  /** `programNameOf(command)`: the key a per-program grant would be made on. */
+  program: string;
+  /** `isCompound(command)`: separators, pipes, redirections, substitution. */
+  compound: boolean;
+  /** `looksDangerous(command)`: changes the card's face, never blocks. */
+  danger: DangerKind | null;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -556,7 +587,8 @@ export type Proposal =
   | DocxProposal
   | XlsxProposal
   | ConvertProposal
-  | TranscribeProposal;
+  | TranscribeProposal
+  | CommandProposal;
 
 export type ApprovalDecision =
   | {
@@ -868,6 +900,14 @@ export type ToolGroup = "lore_write" | "lore_organize";
 
 export interface RegisteredTool {
   definition: ToolDefinition;
+  /**
+   * A description computed when the definitions are handed out, replacing
+   * `definition.function.description`. For the one tool whose right wording
+   * depends on the machine: `run_command` names the shell it will actually
+   * run in, which nothing knows at import. Same reason `profileCategoryParams`
+   * exists — this registry is a module constant, the world is not.
+   */
+  describe?: () => string;
   access: ToolAccess;
   execute: (call: ToolCall, ctx: ToolContext) => Promise<ToolResult>;
   /** Deferred group this tool belongs to; absent = resident. See {@link ToolGroup}. */
@@ -978,7 +1018,8 @@ export type ToolId =
   | "delegate"
   | "run_pack"
   | "translate"
-  | "transcribe_audio";
+  | "transcribe_audio"
+  | "run_command";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -2902,6 +2943,32 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => transcribeAudioTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  run_command: {
+    access: "write-approval",
+    // The description is `describe` (cliTools.describeRunCommand): it names
+    // the shell this computer runs, which decides the syntax the model must
+    // write. This literal is the import-time placeholder the ratchet measures.
+    describe: describeRunCommand,
+    definition: {
+      type: "function",
+      function: {
+        name: "run_command",
+        description: "Run ONE shell command on the author's computer. (Replaced at run time by a description naming the machine's shell.)",
+        parameters: {
+          type: "object",
+          properties: {
+            command: { type: "string", description: "The command line, exactly as it will be typed into the shell" },
+            cwd: { type: "string", description: "Project-relative working directory; omit for the project root" },
+            timeout_seconds: { type: "integer", description: "Kill after this many seconds (default 60, max 600)" },
+            reason: { type: "string", description: "One line for the approval card: what this is for" },
+          },
+          required: ["command", "reason"],
+        },
+      },
+    },
+    execute: (call, ctx) => runCommandTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   read_doc_format: {
     access: "read",
     definition: {
@@ -3815,7 +3882,10 @@ export function toolNeedsProject(id: ToolId): boolean {
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
   return ids.map((id) => {
     const tool = REGISTRY[id];
-    return withProfileCategories(tool.definition, tool.profileCategoryParams);
+    const definition = tool.describe
+      ? { ...tool.definition, function: { ...tool.definition.function, description: tool.describe() } }
+      : tool.definition;
+    return withProfileCategories(definition, tool.profileCategoryParams);
   });
 }
 

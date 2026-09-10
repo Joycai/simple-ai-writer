@@ -417,6 +417,17 @@ describe("tool schema budget", () => {
     // and answer.
     const appended = estimateToolsTokens(getToolDefinitions(["delegate", "translate", "ask_author"]));
     expect(appended).toBeLessThanOrEqual(1_000);
+    // run_command rides the same route (Beta + surface + Tauri), and its
+    // description is built at hand-out time to name the machine's shell —
+    // measured here in the no-probe fallback, which is the longer wording.
+    // Pinned on its own because it is the one tool whose schema the author
+    // can switch off entirely: what it costs is what the Beta costs.
+    // Measured 308 at PR 2 (docs/feature/agent/shell-command-plan.md): four
+    // parameters and a description whose sentences each stop a wrong call —
+    // the syntax it must write, that reading/editing text has its own tools,
+    // one thing per call. All four appends together measured 1,268.
+    const command = estimateToolsTokens(getToolDefinitions(["run_command"]));
+    expect(command).toBeLessThanOrEqual(340);
   });
 
   it("keeps each tool pack's resident half inside the plan's budget", () => {
@@ -456,7 +467,7 @@ describe("tool schema budget", () => {
   it("gives every tool a description worth its place", () => {
     // A tool the model can see but can't tell apart from its neighbours is
     // worse than no tool: it costs schema tokens *and* buys a wrong call.
-    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate", "ask_author", "run_pack"])) {
+    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate", "ask_author", "run_pack", "run_command"])) {
       expect(def.function.description.trim().length).toBeGreaterThan(40);
       // The category placeholder is substituted per call — one that survives
       // into the wire means the model is being shown literal `{{…}}`.
