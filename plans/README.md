@@ -645,3 +645,142 @@ writerPulse 在产物中已不存在 · pulseDeep 引用 3 → 4
 - 选中项的字仍应比未选中项重一点点。若看起来完全一样，把 `text-shadow` 的
   模糊值 0.4px 调到 0.5px；若发糊，调到 0.3px。**不要**改回 `font-weight`。
 - 042：图库里按住一张图，只有**图片**缩、图注文字不动。
+
+## 第十批（044–050，基准 484fe4b）
+
+来源：2026-09-10 一次全应用 `review-animations`（判定 Block）→ 作者要求「全部问题」立案 →
+`improve-animations` 逐条回到 `file:line` 复核、**并对照 001–043 的既有决策**。审查给出 21 条，
+**立案 7 份（合并后覆盖 13 条），撤回 8 条**（撤回理由见下，均有据可查）。
+
+与前几批不同，本批**两份是决策变更**（044、047），推翻的依据都是「事实在决策之后变了」，不是品味变了：
+
+- **044** 推翻方案 004 的「不动 App.tsx 顶层视图切换」与侧栏标签的 enter-only 入场。004 定于 08-22；
+  `677db8d`（08-24）才把 ⌘1‥⌘5 接上——⌘1/⌘2 切侧栏标签，⌘3/⌘4 切主视图。两处从鼠标动作变成了键盘高频动作。
+- **047** 重开方案 009 的「全局一刀切保持不动」。第六批 README 已把它记为「一处未解决的观察」（归零而非变柔），
+  此后 035 又补了两个 spinner 豁免，`ImageLightbox`（09-01）则已经漏掉——补丁模式在漏。
+
+| # | 方案 | 严重度 | 状态 |
+| --- | --- | --- | --- |
+| 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检待作者） |
+| 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检待作者） |
+| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（抽屉一条目检待作者） |
+| 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（WKWebView 目检待作者） |
+| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE |
+| 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE |
+| 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（A 的发虚判据待作者） |
+
+- **045** 与方案 033 的验收判据**直接矛盾**：033 要求「换条目只有 opacity 在变，不应有任何 X 方向位移」，
+  而 `LoreWall.tsx` 的推进层 `key` 绑的是条目，每次换条目都是旧页右退、新页右进的反向交叉。修法只是把 `key` 从推进层挪到 `LoreDetail`。
+- **046** 尊重方案 014 把 AiDrawer / SettingsPage 定为「低频、适用标准动画」的判断，**只改退场**：这三个 Motion 浮层是全库唯一
+  出场与入场一样长的浮层（其余都是 160ms，`ModalShell.tsx:43`）。只动 `motion.ts` 的三个 `exit`。
+- **049** 让 022/033 的「`tokens.css` 之外零手写 `cubic-bezier`」不变量回到零（当前 10 处，同一条设计稿曲线，给它令牌名 `--ease-settle`，**不改值**）。
+
+### 推荐执行顺序与依赖
+
+1. **048**（1 个文件，零风险，可随时做）
+2. **044**（HIGH；决策变更，建议单独审阅、单独成 PR）
+3. **045**（1 个文件；可与 044 并行）
+4. **046**（**必须在 044 之后**——两者都改 `lib/motion.ts`，相邻行）
+5. **049**（`tokens.css` + 重新生成 `contractData.ts`）
+6. **047**（**必须在 049 之后**——同改 `tokens.css` / 生成文件 / `ContextMemory` / `Lab` / `AgentChat` / `design-system.md`；决策变更，建议单独审阅、单独成 PR）
+7. **050**（与 047 同改 `AgentChat.module.css`；两者都已写成「谁先谁后都成立」，但顺序执行更省事）
+
+| 方案 | 触碰的文件 |
+|---|---|
+| 044 | `App.tsx`、`layout/Sidebar.tsx`、`lib/motion.ts`、`docs/reference/design-system.md` |
+| 045 | `lore/LoreWall.tsx` |
+| 046 | `lib/motion.ts` |
+| 047 | `styles/tokens.css`、`lib/theme/contractData.ts`（生成）、`styles/global.css`、`settings/panes/ContextMemory.module.css`、`settings/panes/Lab.module.css`、`ai/SnippetPicker.module.css`、`roleplay/SceneTransition.module.css`、`settings/panes/ProvidersModels.module.css`、`ai/AiPanel.module.css`、`lore/ai/LoreRunProgress.module.css`、`ai/WriterTurn.module.css`、`ai/AgentChat.module.css`、`lore/LoreReadView.module.css`、`lib/__tests__/cssKeyframeNames.test.ts`、`docs/reference/design-system.md` |
+| 048 | `common/ImageLightbox.module.css` |
+| 049 | `styles/tokens.css`、`lib/theme/contractData.ts`（生成）、`settings/SettingsPage.module.css`、`settings/panes/ModelDrawer.module.css`、`settings/panes/Lab.module.css`、`settings/panes/ContextMemory.module.css`、`common/Slider.module.css`、`lore/CategoryMoveMenu.module.css`、`ai/ChatMark.module.css`、`ai/SessionTabs.module.css`、`ai/AgentChat.module.css`、`docs/reference/design-system.md` |
+| 050 | `layout/ResizeHandle.module.css`、`ai/AgentChat.module.css` |
+
+**本批不新增、不删除任何 `@keyframes`**（047 与 050 只改关键帧体），也不新增 Motion 预设（044 净删 `viewSlide`）。
+
+### 三条执行时最容易踩空的地方
+
+1. **044 不要删 `key`。** 去掉的是动效，不是「换视图 / 换标签 = 整棵子树重挂」的语义。回到编辑器时仍有 160ms 窗格淡入（方案 011）、
+   进知识库时仍有 200ms 整墙淡入（方案 025）——都是既定决策，**不是遗漏**。
+2. **049 不要把 `cubic-bezier(0.2, 0.8, 0.2, 1)` 换成 `--ease-out`。** 它是设计稿给的值（`design-system.md:378` 原文），
+   换掉就是改设计。本方案只起名字，不改值。
+3. **047 改完 `tokens.css` 必须跑 `node scripts/gen-theme-contract.ts`**，不要手改 `contractData.ts`；且第 10 步的**反向验证**不能省——
+   新测试若从未红过，就证明不了它守得住。
+
+### 撤回的 8 条（不要「顺手补上」）
+
+- **`CommandPalette` 的 80ms 遮罩淡入** —— 方案 014 的既定决策，design-system.md:396 原文「deliberately zero-animation (except an 80ms scrim fade-in)」。
+- **`AiPanel` 任务切换删动效** —— enter-only 是 `AiPanel.tsx:1417-1425` 注释 + 方案 004 / 017 / 023 反复确认的既定模式；
+  `springPanel` 约 0.25s 落定，在预算内；且只有鼠标入口。
+- **`EditorArea` 窗格 `fadeIn` 删除** —— 方案 011 的加法项；审查指出的「与主视图滑动叠播」随 044 删掉滑动自然消失。
+- **`@media (hover: hover)` 门** —— 第八批已否（Tauri 桌面应用，触摸假 hover 不是真实故障模式）。
+- **一致性检查结果错峰** —— 方案 027 已按实测撤回（`ignore()` 让位次前移，基于位次的 delay 会集体重放）。
+- **`AiDrawer` 键盘开关不动画** —— 方案 014 已把抽屉定为低频表面；本批只收快它的退场（046）。
+- **`RecentProjects` `.pinBtn` 的 `width` 过渡**（第八批 LOW 清单里的一条）—— 唯一的合成层替代写法是把按钮浮在行尾，
+  而它会盖住路径的**尾部**（文件夹名本身，`RecentProjects.module.css:161-163` 刻意保留的那一段）。行宽让位就是设计，代价是一行文字 120ms 的重排，**不值得**。
+- **`Slider` 吸附时的 `left` / `width` 70ms** —— 14px 绝对定位元素、70ms、仅在松手吸附时发生；改成 transform 需要按像素测量轨道宽度，杠杆接近零。
+  （它的曲线仍由 049 收进令牌。）
+
+另有两处**只改注释、不改行为**的，已并入 049：`AgentChat` 排队圈在减动效下停转是对的（009：只恢复首要工作信号），注释写反了；
+`SessionTabs` 的 `tabFlash` 注释写 120ms、代码 240ms。
+
+### 该动而没动（本轮只发现一处，未立案）
+
+- `settings/panes/DocFormat.module.css:1282` —— 窄屏（≤720px）下纸样的展开钮 `.previewChevronOpen { transform: rotate(180deg); }`
+  没有 `transition`，一帧翻转；全应用其余 8 处展开 chevron（`Select`、`FileTree`、`settingsUi`、`Prompts`、`ProvidersModels`、`ModelDrawer`、`LoreImproveModal`、`LoreRunProgress`）都是 120–200ms。
+  修法是给 `DocFormatPane.tsx:230` 的 `ChevronDown` 基态加 `transition: transform var(--transition-fast)`。量太小，未单独成方案。
+
+### 已知的后续清理（不在任何方案范围内）
+
+- 047 落地后，12 个模块里 spinner 豁免块头上的注释「压过 global.css 的一刀切兜底」会变得不准确（块本身仍正确：从「复活」变成「减速」）。
+- `global.css` 的 `.cursor-blink` 全库零消费者（死类）。
+
+### 执行记录（2026-09-10，基准 484fe4b）
+
+七份按推荐顺序全部落地：048 → 044 → 045 → 046 → 049 → 047 → 050。未提交。
+
+门禁：`node_modules/.bin/tsc --noEmit` 无诊断（直跑二进制，绕开 pnpm 的安装摘要）·
+`pnpm test` **284 文件 / 4191 用例全绿**（含 `themeContract.test.ts` 与 `cssKeyframeNames.test.ts` 的新断言）· `pnpm build` 成功。
+
+**047 的反向验证已做**：临时把 `slideUp` 改回写死的 `6px`，新断言如实报出 `slideUp — src/styles/global.css`；已还原。
+
+产物核验（`dist/assets/*.css`）：
+
+```
+var(--motion-shift)                    → 13（方案预期 13）
+--motion-shift:0（减动效声明）          → 1
+animation-duration:.001ms              → 0（一刀切的 animation 部分已消失）
+transition-duration:.001ms             → 1（保留，如方案要求）
+var(--ease-settle)                     → 10；字面 cubic-bezier(.2,.8,.2,1) 只剩令牌声明 1 处
+animation-duration:1.6s!important      → 12（048 +1）
+@keyframes shimmer                     → {0%{transform:translate(-100%)}to{transform:translate(100%)}}
+带作用域后缀的动画引用                    → 0
+```
+
+**浏览器实测**（worktree 的 `simple-ai-writer-worktree` dev server，已确认服务的是本 worktree 的文件；预览面板本身报告 `prefers-reduced-motion: reduce` 为真）：
+
+- 047：同步探针（手动把 `currentTime` 拨到 0 读计算样式，不依赖 rAF）——
+  减动效下 `dropIn` / `riseIn` / `slideInRight` / `scaleIn` 首帧一律 `matrix(1,0,0,1,0,0)`、`opacity 0`（位移没了、淡入还在）；
+  把 `--motion-shift` 强制设回 1 后分别是 `matrix(0.98,0,0,0.98,0,-4)` / `(…,0,4)` / `(1,0,0,1,24,0)` / `matrix(0.96,…)`——**与改动前的写死数值逐一相同**。
+- 046：设置页退场读到一条 WAAPI 动画，`duration 160`、只有 `opacity`（transform 被减动效剥掉）——证实 variant 级 `transition` 压过组件 prop。
+  另查了 `motion-dom@13.1.1` 源码 `animation/interfaces/visual-element-target.mjs:23-27`：variant 自带的 `transition` 优先于 `getDefaultTransition()`。
+
+**执行中的一处更正**：`global.css` 新写的注释里有一句 `` `animation: none` ``，被方案 019 的悬空引用守卫当成关键帧引用——
+**它连 CSS 注释一起扫**，于是报出 `in` / `their` / `own` / `modules` … 八个「悬空名字」。已改写注释（不再出现 animation 加冒号），并在注释里写明原因。
+以后在任何 `.css` 注释里写 `animation:` 都会撞上这条，这是守卫的已知盲区，不是缺陷。
+
+**两处与方案判据的出入**（均不影响行为）：
+- 044 的判据「`grep -rn viewSlide src` 必须为空」命中 1 处：`App.tsx` 新注释里解释「为什么删」时提到了 `viewSlide`。
+- 050 的 A 步已落地，但判据（125% / 150% 缩放下 2px 线是否发虚）需要真窗口，未测。
+
+**没能验证的**：
+- 抽屉的 200ms 退场。预览面板在这一段被节流：600ms 内 rAF 不触发、`document.timeline` 不前进（尽管 `visibilityState` 报 `visible`），
+  抽屉与设置页的 Motion 退场都卡在 DOM 里——与 `docs/issues/motion-enter-only-hidden-tab.md` 记录的是同一个测量陷阱，不是本批改坏的。
+
+**目检清单（待作者，真 Tauri 窗口）**：
+
+1. **044** ⌘1 / ⌘2 连按，侧栏一帧到位；⌘1 ↔ ⌘3 ↔ ⌘4 无横滑、无叠影（011 的窗格淡入、025 的整墙淡入仍在，属预期）。
+2. **045** 详情里连点「下一条」零位移；**在 A 进编辑态后跳到 B，B 必须是全新状态**；网格 ↔ 详情推进不变。
+3. **046** ⌘J 开抽屉（弹簧不变），Esc 关明显利落；关到一半再 ⌘J 从当前位置折返。
+4. **047** 打开系统「减弱动态效果」：模态、下拉、供应商抽屉只淡不滑；spinner 半速仍转；脉冲点与闪烁光标静止。有 Mac 的话在 WKWebView 上确认普通模式下拉仍有 4px 下落。
+5. **049** 设置页各处折叠 / 标签 / 滑杆吸附手感与改动前一致；`SessionTabs` 的 120ms vs 240ms 二选一。
+6. **050** 分隔柄悬停线在 125% / 150% 缩放下不发虚（发虚就按方案第 3 步撤回 A）；对话图片占位扫光开 Paint flashing 不再持续闪绿。

@@ -13,7 +13,7 @@
   height: 5px;
   border-radius: 50%;
   background: var(--color-accent);
-  animation: pulseDeep 1.4s ease-in-out infinite;
+  animation: pulseDeep 1.4s infinite;
 }
 .queued {
   width: 5px;

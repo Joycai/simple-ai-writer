@@ -23,7 +23,7 @@
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms;
+  transition: grid-template-rows 200ms var(--ease-settle), opacity 160ms;
 }
 .foldOpen {
   grid-template-rows: 1fr;
@@ -130,7 +130,7 @@
 .chevron {
   flex: none;
   color: var(--color-text-faint);
-  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 200ms var(--ease-settle);
 }
 .chevronOpen { transform: rotate(180deg); }
 

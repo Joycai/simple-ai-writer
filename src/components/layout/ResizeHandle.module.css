@@ -18,11 +18,11 @@
   width: 1px;
   height: 100%;
   background: var(--color-border);
-  transition: width var(--transition-fast), background var(--transition-fast);
+  transition: transform var(--transition-fast), background var(--transition-fast);
 }
 
 .handle:hover::after,
 .handle:active::after {
-  width: 2px;
+  transform: translateX(-50%) scaleX(2);
   background: var(--color-accent);
 }

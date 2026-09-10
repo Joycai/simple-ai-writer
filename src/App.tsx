@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import { AnimatePresence, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
 import { WebviewCapsNotice } from "./components/common/WebviewCapsNotice";
@@ -36,7 +36,7 @@ import { useWindowTitle } from "./useWindowTitle";
 import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
-import { fillLayer, springScreen, useMotionPreset, viewSlide } from "./lib/motion";
+import { fillLayer } from "./lib/motion";
 
 export default function App() {
   const {
@@ -150,8 +150,6 @@ export default function App() {
   // …and this window names itself, so the other instances can list it.
   useWindowTitle();
 
-  const viewVariants = useMotionPreset(viewSlide);
-
   return (
     <MotionConfig reducedMotion="user">
     <div
@@ -187,21 +185,15 @@ export default function App() {
         )}
 
         <div style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>
-          <AnimatePresence initial={false}>
-            <motion.div
-              key={view}
-              variants={viewVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              transition={springScreen}
-              style={fillLayer}
-            >
-              {view === "editor" && <EditorArea />}
-              {view === "lore-wall" && <LoreWall />}
-              {view === "library" && <LibraryView />}
-            </motion.div>
-          </AnimatePresence>
+          {/* 主视图切换不做转场（方案 044）：⌘1‥⌘5（lib/shortcuts.ts SCREEN_COMBOS）
+              直达，属键盘高频动作，AUDIT §1「永不动画」。原先的 AnimatePresence +
+              viewSlide 让退场层在弹簧落定（约 0.3s）前与新视图同时挂载——编辑器与
+              知识库两棵重树叠在一起。key 保留：换视图仍是整棵重挂。 */}
+          <div key={view} style={fillLayer}>
+            {view === "editor" && <EditorArea />}
+            {view === "lore-wall" && <LoreWall />}
+            {view === "library" && <LibraryView />}
+          </div>
         </div>
 
         <AiRail />

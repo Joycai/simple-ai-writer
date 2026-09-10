@@ -10,7 +10,7 @@
   animation: transitionGrow 160ms var(--ease-out);
 }
 @keyframes transitionGrow {
-  from { opacity: 0.85; transform: translateY(4px); }
+  from { opacity: 0.85; transform: translateY(calc(4px * var(--motion-shift))); }
   to { opacity: 1; transform: none; }
 }
 
@@ -404,4 +404,5 @@
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
   }
+  .stepLive { animation: none; }
 }

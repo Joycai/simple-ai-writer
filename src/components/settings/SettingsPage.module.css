@@ -181,17 +181,17 @@
   opacity: 0;
   overflow: hidden;
   transition:
-    max-height 240ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    max-height 240ms var(--ease-settle),
+    opacity 240ms var(--ease-settle);
 }
 .navCollapseOpen {
   max-height: 48px;
   opacity: 1;
 }
 /* The flash: the item arrives dyed accent-tint (no transition in), then the
-   class is dropped and this 500ms ease-out carries the tint back to paper. */
+   class is dropped and this 500ms fade (设计稿 05b) carries the tint back to paper. */
 .navCollapse .navItem {
-  transition: background 500ms ease-out, color var(--transition-fast),
+  transition: background 500ms var(--ease-out), color var(--transition-fast),
     transform var(--transition-fast);
 }
 .navItemFlash {

@@ -643,12 +643,12 @@ export function LoreWall() {
   return (
     <div style={{ position: "relative", flex: 1, minWidth: 0, height: "100%", display: "flex", overflow: "hidden" }}>
       <AnimatePresence initial={false}>
-        {/* Keyed by entity: LoreDetail seeds internal state from the entity it
-            mounted with, so going straight from one entry to another (a
-            citation click, a history step) has to remount it. */}
         {detailEntity ? (
           <motion.div
-            key={`detail:${detailEntity.dirPath}`}
+            // 键固定为 "detail"（方案 045）：推入/推出只属于「网格 ↔ 详情」这一次空间
+            // 跳转。条目 → 条目（上一条/下一条、引用、前进后退）不再换这一层——否则旧页
+            // 向右退、新页从右进，两张同形的纸反向交叉滑过，还盖掉阅读态自己的淡入。
+            key="detail"
             variants={forwardVariants}
             initial="initial"
             animate="animate"
@@ -656,7 +656,12 @@ export function LoreWall() {
             transition={springScreen}
             style={fillLayer}
           >
+            {/* Keyed by entity: LoreDetail seeds internal state from the entity it
+                mounted with, so going straight from one entry to another (a
+                citation click, a history step) has to remount it. The key sits on
+                LoreDetail, not on the motion layer, so that remount is not a push. */}
             <LoreDetail
+              key={detailEntity.dirPath}
               entity={detailEntity}
               initialEditing={detailEditing}
               onBack={() => openDetail(null)}

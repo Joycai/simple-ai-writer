@@ -59,8 +59,8 @@
 }
 
 /* Only the landing on a tick animates — 70ms "clicks in"; leaving has none. */
-.thumb.snapping { transition: left 70ms cubic-bezier(0.2, 0.8, 0.2, 1), background var(--transition-fast); }
-.fill.snapping { transition: width 70ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.thumb.snapping { transition: left 70ms var(--ease-settle), background var(--transition-fast); }
+.fill.snapping { transition: width 70ms var(--ease-settle); }
 
 .ticks {
   position: relative;

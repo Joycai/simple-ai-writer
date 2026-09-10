@@ -18,12 +18,9 @@
      两个方向也终于对称了——管理台那半本来就没有入场。 */
   animation: fadeIn 120ms var(--ease-out);
 }
-/* 这里**没有** prefers-reduced-motion 本地豁免，是故意的：全局 global.css:138
-   会用 !important 把 animation-duration 压到 0.001ms，一条不带 !important 的本地
-   规则压不过它。而这次动效是纯 opacity、不承载信息，瞬时呈现是可接受的降级。
-   （对比 AgentLog.module.css:377 那种**带 !important** 的豁免——那是给 spinner
-   用的，静止的残环与卡死无法区分。）不要在这里补一个空的 @media 壳：读者会以为
-   此处已经温和降级了。 */
+/* 这里**没有** prefers-reduced-motion 本地块，是故意的：这次入场是纯 opacity，
+   而全局兜底（global.css，方案 047）在减动效下只去位移、保留淡入——它原样播放
+   就是正确的降级。不要在这里补 @media 块。 */
 
 .stage {
   display: flex;
