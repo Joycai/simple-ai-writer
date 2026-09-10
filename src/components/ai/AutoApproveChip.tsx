@@ -44,7 +44,8 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
   const blanket = !!mine && (mine.proposals || mine.plans);
   const appendCount = mine ? mine.appendPaths.length : 0;
   const illustrateLeft = mine ? mine.illustrateLeft : 0;
-  if (!mine || (!blanket && appendCount === 0 && illustrateLeft === 0)) {
+  const programs = mine ? mine.commandPrograms : [];
+  if (!mine || (!blanket && appendCount === 0 && illustrateLeft === 0 && programs.length === 0)) {
     if (!absent) return null;
     // Not a control: a grant is given on a card, never from here.
     return (
@@ -75,6 +76,12 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
     illustrateLeft > 0
       ? t("ai.autoApprove.chipIllustrate", { defaultValue: "配图连批 · 剩 {{n}} 张", n: illustrateLeft })
       : "",
+    // The programs are *named* rather than counted: "commands auto-approved"
+    // would overstate a grant the author gave for `git`, and the name is
+    // what they need to see to know what they let through.
+    programs.length > 0
+      ? t("ai.autoApprove.chipCommands", { defaultValue: "命令免审 · {{programs}}", programs: programs.join("、") })
+      : "",
   ].filter(Boolean);
   const label = parts.join(" · ");
 
@@ -86,12 +93,19 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
       title={
         blanket
           ? t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })
-          : t("ai.autoApprove.offAppend", {
-              defaultValue: "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
-              files: autoApprove.appendPaths
-                .map((p) => baseName(p) || p)
-                .join("、"),
-            })
+          : appendCount > 0
+            ? t("ai.autoApprove.offAppend", {
+                defaultValue: "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
+                files: autoApprove.appendPaths
+                  .map((p) => baseName(p) || p)
+                  .join("、"),
+              })
+            : programs.length > 0
+              ? t("ai.autoApprove.offCommands", {
+                  defaultValue: "以这些程序开头的单条命令不再询问：{{programs}}（点击恢复逐条审批）",
+                  programs: programs.join("、"),
+                })
+              : t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })
       }
     >
       {/* The footer is a line of words, not a row of chips: the shield would be

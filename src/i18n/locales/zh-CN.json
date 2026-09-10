@@ -1683,6 +1683,9 @@
       "commandShell": "用",
       "commandShellSub": "{{syntax}} 语法 · 标准输入已关闭，要交互的命令会立刻失败",
       "commandRunning": "运行中 · {{s}} 秒",
+      "commandAlways": "{{program}} 都批准",
+      "commandAlwaysHint": "本次对话里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
+      "commandAlwaysHintRun": "本次任务里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
       "commandDanger": {
         "delete": "看起来会成片删除",
         "history-rewrite": "看起来会改写 git 历史或强推",
@@ -1700,7 +1703,9 @@
       "off": "点击恢复逐条审批",
       "chipAppend": "自动追加 {{n}} 个文件",
       "chipIllustrate": "配图连批 · 剩 {{n}} 张",
-      "offAppend": "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）"
+      "offAppend": "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
+      "chipCommands": "命令免审 · {{programs}}",
+      "offCommands": "以这些程序开头的单条命令不再询问：{{programs}}（点击恢复逐条审批）"
     },
     "roundLimit": {
       "title": "已达轮数上限",
