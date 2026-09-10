@@ -74,7 +74,7 @@ import type { WritingFocus } from "./editorStore";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
-  chatAutoApproveKey, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsIllustrate,
+  chatAutoApproveKey, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate,
   isAutoApprovable, isChatAutoApproveKey, type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
 import type { SurfaceTagged } from "../lib/agent/approvalRouting";
@@ -461,6 +461,13 @@ interface AgentState {
    * AutoApproveState.illustrateRun.
    */
   grantIllustrations: (key: unknown, runId: RunId, count: number) => void;
+  /**
+   * Author pressed 「git 都批准」 on a command card: further *single, ordinary*
+   * lines starting with that program apply without a card (lib/agent/
+   * autoApprove `grantsCommand` re-checks the line each time). Per
+   * conversation in chat, per run in the panel — the append grant's scope.
+   */
+  grantCommandProgram: (key: unknown, program: string) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
@@ -1199,6 +1206,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           appendPaths: held?.appendPaths ?? [],
           illustrateLeft: held?.illustrateLeft ?? 0,
           illustrateRun: held?.illustrateRun,
+          commandPrograms: held?.commandPrograms ?? [],
         },
       };
     }),
@@ -1218,6 +1226,27 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             : [...(held?.appendPaths ?? []), path],
           illustrateLeft: held?.illustrateLeft ?? 0,
           illustrateRun: held?.illustrateRun,
+          commandPrograms: held?.commandPrograms ?? [],
+        },
+      };
+    }),
+
+  grantCommandProgram: (key, program) =>
+    set((s) => {
+      // The append grant's shape exactly: same displacement rule, same merge
+      // within a surface, one more name on the list.
+      const held = s.autoApprove?.key === key ? s.autoApprove : null;
+      return {
+        autoApprove: {
+          key,
+          proposals: !!held?.proposals,
+          plans: !!held?.plans,
+          appendPaths: held?.appendPaths ?? [],
+          illustrateLeft: held?.illustrateLeft ?? 0,
+          illustrateRun: held?.illustrateRun,
+          commandPrograms: held?.commandPrograms.includes(program)
+            ? held.commandPrograms
+            : [...(held?.commandPrograms ?? []), program],
         },
       };
     }),
@@ -1235,6 +1264,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // card just now, and that number is the whole authorisation.
           illustrateLeft: Math.max(1, Math.min(ILLUSTRATE_GRANT_MAX, Math.floor(count))),
           illustrateRun: runId,
+          commandPrograms: held?.commandPrograms ?? [],
         },
       };
     }),
@@ -1251,7 +1281,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           && isAutoApprovable(proposal.kind))
         // The narrow grant: this one file, appends only.
         || (proposal.kind === "append"
-          && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path));
+          && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path))
+        // The other narrow grant: this one program, single ordinary lines
+        // only — `grantsCommand` re-judges the line, so a compound or
+        // dangerous-looking `git …` still gets its card.
+        || (proposal.kind === "command"
+          && grantsCommand(get().autoApprove, item.autoApproveKey, proposal));
       if (covered) {
         void settleApproval(item, set, true);
         return;
