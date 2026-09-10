@@ -30,7 +30,7 @@ import {
 import { extractHeadings } from "../fs/markdown";
 import { readDirRecursive, type FileNode } from "../project";
 import { numberLines } from "./lineEcho";
-import type { ChangeRecord, ToolProgress } from "./events";
+import type { ChangeRecord, PlanRecord, ToolProgress } from "./events";
 import i18n from "../../i18n";
 
 export interface ToolCall {
@@ -51,6 +51,8 @@ export interface ToolResult {
    * the author's eyes only and never enters the conversation.
    */
   change?: ChangeRecord;
+  /** `propose_lore_plan`, approved: the plan the ledger is built on. */
+  plan?: PlanRecord;
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

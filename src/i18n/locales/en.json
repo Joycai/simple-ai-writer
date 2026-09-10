@@ -1794,7 +1794,17 @@
         "category": "category"
       },
       "members": "{{count}} entries",
-      "membersMore": " +{{n}} more"
+      "membersMore": " +{{n}} more",
+      "ledger": {
+        "title": "{{entry}} plan · approved",
+        "progress": "{{done}} of {{total}} steps written",
+        "written": "Written",
+        "notYet": "Not written",
+        "refused": "Refused · not in the plan",
+        "tooBig": "Too large to keep in the log; the previous version is at {{path}}",
+        "noText": "No text comparison was kept for this write",
+        "unchanged": "No change in content"
+      }
     },
     "mention": {
       "badgeImage": "image",

@@ -54,7 +54,7 @@ import i18n from "../../i18n";
 import { sameCollection, type LoreEntity } from "../lore";
 import { loreCategories } from "../profile/active";
 import { categoryRef } from "../profile/model";
-import { checkPlan, type LorePlanAction } from "./plan";
+import { checkPlan, recordMatch, recordRefusal, type LorePlanAction } from "./plan";
 import type { LoreOrganizer, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 import { findEntityByName } from "./tools";
@@ -79,7 +79,12 @@ function gate(
   member?: string,
 ): { refusal: ToolResult } | { ok: true } {
   const check = checkPlan(ctx.lorePlan, ctx.loreIndex, action, name, undefined, { target, member });
-  return check.ok ? { ok: true } : { refusal: { toolCallId, content: check.message } };
+  if (!check.ok) {
+    recordRefusal(ctx.lorePlan, toolCallId);
+    return { refusal: { toolCallId, content: check.message } };
+  }
+  recordMatch(ctx.lorePlan, toolCallId, check.step);
+  return { ok: true };
 }
 
 // ─── manage_collection ───────────────────────────────────────────────────────

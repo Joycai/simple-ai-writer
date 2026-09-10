@@ -42,6 +42,8 @@ import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
+import { buildPlanLedgers } from "../../lib/agent/planLedger";
+import { PlanLedgerBand } from "./PlanLedger";
 import {
   buildLogModel,
   roundRows,
@@ -1128,6 +1130,10 @@ export function AgentLog({
 }) {
   const { t } = useTranslation();
   const model = useMemo(() => buildLogModel(log, isRunning), [log, isRunning]);
+  // Approved lore plans and their receipts (设计稿 02h 1i). Built from the same
+  // persisted log, so a restarted session still has its account of what the
+  // plan turned into.
+  const ledgers = useMemo(() => buildPlanLedgers(log), [log]);
   const ownHeadline = useHeadline(model);
   const headline = headlineOverride && model.summary.state === "running" ? headlineOverride : ownHeadline;
   // The live round's own start, not the run's: a run is long for honest reasons
@@ -1277,6 +1283,11 @@ export function AgentLog({
           ))}
         </ul>
       )}
+
+      {/* The plan band sits above the rounds, not inside the round that
+          approved it: finished rounds are collapsed, and an account that has to
+          be dug out of an accordion is not one anybody reads. */}
+      <PlanLedgerBand ledgers={ledgers} />
 
       {(visible.length > 0 || model.roundLimits.length > 0) && (
         <ul className={styles.list}>

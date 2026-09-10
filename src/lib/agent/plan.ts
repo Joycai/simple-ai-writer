@@ -143,10 +143,32 @@ export interface PlanGate {
   fulfilled: Set<number>;
   /** True once any plan has been put to the author, approved or not. */
   asked: boolean;
+  /**
+   * Tool call id → the index of the step that call satisfied.
+   *
+   * Keyed by call rather than kept as "the last match" because tool calls in a
+   * round can run concurrently, and a shared slot is how one write's receipt
+   * would end up under another write's step.
+   */
+  matched: Map<string, number>;
+  /** Tool call ids the gate refused. */
+  refused: Set<string>;
 }
 
 export function createPlanGate(): PlanGate {
-  return { steps: [], fulfilled: new Set(), asked: false };
+  return { steps: [], fulfilled: new Set(), asked: false, matched: new Map(), refused: new Set() };
+}
+
+/** Note which approved step a call satisfied, for the run's ledger. */
+export function recordMatch(gate: PlanGate | undefined, toolCallId: string, step: LorePlanStep): void {
+  if (!gate) return;
+  const index = gate.steps.indexOf(step);
+  if (index >= 0) gate.matched.set(toolCallId, index);
+}
+
+/** Note that the gate turned a call away. */
+export function recordRefusal(gate: PlanGate | undefined, toolCallId: string): void {
+  gate?.refused.add(toolCallId);
 }
 
 /**

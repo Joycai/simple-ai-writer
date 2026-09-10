@@ -1,0 +1,179 @@
+/* The approved plan as the run's ledger (设计稿 02h 1i). A band of the execution
+   log, not a card of its own: it wears the log's type and spacing, and only the
+   receipts carry colour. */
+
+.band {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px var(--space-3);
+  border-top: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline);
+  /* The change windows inside degrade on the ledger's own width, the same way
+     they do on an approval card's — a media query cannot tell the rail from
+     the drawer. */
+  container-type: inline-size;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.title {
+  font: 500 12px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
+}
+
+.progress {
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.meta {
+  margin-left: auto;
+  font: 400 11px/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.add { color: var(--color-diff-add-text); }
+.del { color: var(--color-diff-del-text); }
+
+.summary {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepHead,
+.stepHeadButton {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-soft);
+}
+
+/* A step that wrote nothing has nothing to open, so it is not a control. */
+.stepHead:disabled { cursor: default; }
+
+.stepHeadButton { cursor: pointer; }
+.stepHeadButton:hover { background: var(--color-bg-hover); }
+
+.action {
+  flex-shrink: 0;
+  font: 500 11px/1.6 var(--font-sans);
+}
+
+.actionCreate { color: var(--color-diff-add-text); }
+.actionUpdate { color: var(--color-sienna); }
+.actionMove { color: var(--color-text-secondary); }
+.actionDelete { color: var(--color-diff-del-text); }
+
+.entity {
+  color: var(--color-text-primary);
+}
+
+.kind,
+.file {
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.kind { margin-right: 4px; }
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-muted);
+}
+
+.receipt,
+.receiptPending {
+  flex-shrink: 0;
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+/* Not yet written is not a problem, it is where the run has got to. */
+.receiptPending { color: var(--color-text-hint); }
+
+.chevron {
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  color: var(--color-text-hint);
+}
+
+.stepHeadButton:hover .chevron { color: var(--color-sienna); }
+
+.changes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 4px 0 8px;
+}
+
+.change {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.changePath {
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+  word-break: break-all;
+}
+
+.note {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-hint);
+}
+
+/* The gate working: a write the author never approved, turned away. */
+.refused {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 4px 0;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.refusedMark {
+  flex-shrink: 0;
+  color: var(--color-diff-del-text);
+}
+
+.refusedCall {
+  min-width: 0;
+}

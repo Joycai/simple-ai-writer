@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   checkPlan,
   createPlanGate,
+  recordMatch,
+  recordRefusal,
   planLoadsEntityWrites,
   planLoadsOrganize,
   type LorePlanStep,
@@ -15,6 +17,42 @@ function gateWith(steps: LorePlanStep[]) {
   gate.steps.push(...steps);
   return gate;
 }
+
+describe("recordMatch / recordRefusal", () => {
+  it("remembers which step each call satisfied, keyed by the call", () => {
+    const gate = gateWith([
+      { action: "update", entity: "Ava", detail: "a" },
+      { action: "delete", entity: "Kael", detail: "b" },
+    ]);
+    const second = checkPlan(gate, emptyIndex, "delete", "Kael");
+    const first = checkPlan(gate, emptyIndex, "update", "Ava", "index.md");
+    if (!second.ok || !first.ok) throw new Error("both calls should pass the gate");
+
+    // Recorded out of order on purpose: calls in one round can finish in any
+    // order, and a "last match" slot would hand one write the other's step.
+    recordMatch(gate, "call-2", second.step);
+    recordMatch(gate, "call-1", first.step);
+    expect(gate.matched.get("call-1")).toBe(0);
+    expect(gate.matched.get("call-2")).toBe(1);
+  });
+
+  it("does not record a step the gate never approved", () => {
+    const gate = gateWith([{ action: "update", entity: "Ava", detail: "a" }]);
+    // Same shape, different object: only the gate's own steps have an index.
+    recordMatch(gate, "stray", { action: "update", entity: "Ava", detail: "a" });
+    expect(gate.matched.has("stray")).toBe(false);
+  });
+
+  it("notes a refusal, and does nothing on a surface without a gate", () => {
+    const gate = createPlanGate();
+    recordRefusal(gate, "call-9");
+    expect(gate.refused.has("call-9")).toBe(true);
+    expect(() => {
+      recordRefusal(undefined, "x");
+      recordMatch(undefined, "x", { action: "update", entity: "A", detail: "d" });
+    }).not.toThrow();
+  });
+});
 
 describe("checkPlan", () => {
   it("passes an update call against a matching update step", () => {

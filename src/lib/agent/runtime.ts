@@ -1226,6 +1226,11 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           argsTruncated,
           resultTruncated: result.content.length > TOOL_RESULT_DETAIL_CHARS,
           change: result.change,
+          plan: result.plan,
+          // A call can pass the gate and still fail afterwards (a write error, a
+          // missing file); only a call that went through carried its step out.
+          planStep: isError ? undefined : callContext.lorePlan?.matched.get(tc.id),
+          planRefused: callContext.lorePlan?.refused.has(tc.id) ? true : undefined,
         },
         at: Date.now(),
       });
