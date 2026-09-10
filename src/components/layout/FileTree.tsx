@@ -8,7 +8,7 @@ import { AudioLines,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
   ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
-  Monitor, Presentation,
+  Monitor, Presentation, X,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
@@ -40,7 +40,7 @@ import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useAgentStore } from "../../stores/agentStore";
-import { useEditorStore } from "../../stores/editorStore";
+import { closeDocument, useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { loreEntityCount } from "../../lib/lore";
@@ -1583,6 +1583,15 @@ export function FileTree() {
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
           action: () => { treeOpenedRef.current = node.path; setActiveFilePath(node.path); } },
       );
+      // 「关闭」只长在**当前打开的**那一行上（设计稿 01e 屏 1e-1）：关闭一个没
+      // 打开的文件不是一个动作。与面包屑末尾的 × 和 ⌘W 是同一个 closeDocument()。
+      if (isSamePath(node.path, activeFilePath)) {
+        items.push({
+          kind: "item", icon: <X size={13} />, label: t("titleBar.closeDoc"),
+          shortcut: comboLabel({ mod: true, key: "w" }),
+          action: () => void closeDocument(),
+        });
+      }
       // 「预览」指的是**另开的预览窗口**，不是编辑器右边那半 —— 打开这份文件本来
       // 就会显示预览面板，菜单里再放一个同义的项没有意义。那个窗口有自己的自定义
       // 协议、不在应用的 CSP 底下，是页面里的脚本**真正跑起来**的唯一地方。

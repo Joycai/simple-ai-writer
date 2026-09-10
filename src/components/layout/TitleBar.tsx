@@ -1,17 +1,22 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { AlertTriangle, Check, MoreHorizontal, Sparkles } from "lucide-react";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useEditorStore, type ViewMode } from "../../stores/editorStore";
+import { closeDocument, useEditorStore } from "../../stores/editorStore";
 import { IS_TAURI, MOD_K } from "../../lib/platform";
-import { ExportMenu } from "./ExportMenu";
+import { comboLabel } from "../../lib/shortcuts";
+import { docKindOf, isTextKind } from "../../lib/fs/docKind";
+import { ContextMenu } from "../common/ContextMenu";
+import { DocActions } from "./DocActions";
 import { useWindowControls } from "./useWindowControls";
 import styles from "./TitleBar.module.css";
 import { baseName, toPosixPath } from "../../lib/paths";
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
-const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
+/** ⌘W / Ctrl+W — the same binding useGlobalShortcuts dispatches. */
+const CLOSE_KEY = comboLabel({ mod: true, key: "w" });
 
 function basename(p: string | null): string | null {
   return p ? baseName(p) || null : null;
@@ -44,15 +49,24 @@ export function TitleBar() {
   const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
   const projectPath = useProjectStore((s) => s.projectPath);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
-  const wordCount = useProjectStore((s) => s.wordCount);
   const isDirty = useEditorStore((s) => s.isDirty);
-  const viewMode = useEditorStore((s) => s.viewMode);
-  const setViewMode = useEditorStore((s) => s.setViewMode);
+  const closeNotice = useEditorStore((s) => s.closeNotice);
   const chrome = useWindowControls();
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
 
   const projectName = basename(projectPath) ?? t("titleBar.noProject");
   const fileName = basename(activeFilePath)?.replace(/\.md$/i, "") ?? null;
   const volumeName = volumeOf(activeFilePath, projectPath);
+  /**
+   * 打开的这个文件属于哪一类——文档段的整张名单都从它长出来（设计稿 01e 表 B）。
+   *
+   * 「已修改」跟着 `isTextKind`：它说的是**编辑器缓冲区**，而作者打开一张图片
+   * （或任何编辑器读不出来的文件）时缓冲区有意停在上一篇文档上（AI 那一侧靠
+   * `WritingFocus` 判断「还没就绪」）。不跟着分类走，这四个字就会挂在另一个文件
+   * 的名字旁边。
+   */
+  const kind = activeFilePath ? docKindOf(activeFilePath) : null;
+  const hasTextDoc = isTextKind(kind);
 
   const cycleTheme = () => {
     const idx = THEME_ORDER.indexOf(theme);
@@ -84,84 +98,121 @@ export function TitleBar() {
           <span className={styles.sep} />
         </>
       ) : null}
-      <span className={styles.brandIcon}>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-          <path d="M12 2 L22 8 L12 14 L2 8 Z M2 16 L12 22 L22 16" />
-        </svg>
-      </span>
-      <div className={styles.crumb} data-tauri-drag-region>
-        <span className={fileName ? styles.crumbMid : styles.crumbCurrent}>{projectName}</span>
-        {volumeName && (
-          <>
-            <span className={styles.crumbSlash}>/</span>
-            <span className={styles.crumbMid}>{volumeName}</span>
-          </>
-        )}
-        {fileName && (
-          <>
-            <span className={styles.crumbSlash}>/</span>
-            <span className={styles.crumbCurrent}>{fileName}</span>
-            {isDirty && <span className={styles.crumbState}>{t("titleBar.modified")}</span>}
-          </>
-        )}
-      </div>
-
-      <div className={styles.spacer} data-tauri-drag-region />
-
-      <div className={styles.right}>
-        {activeFilePath && (
-          <div className={styles.viewToggle}>
-            {VIEW_MODES.map((m) => (
+      {/* 让位的量程就是这一格（设计稿 01e 表 A）：三档量的是顶栏**可用内容宽**，
+          所以平台让位（mac 的 56px 红绿灯位、无边框 Windows 右端的 138px 三键）
+          留在容器外面。按窗口宽判会让同一台机器上的两种边框形态在不同的窗口宽度
+          上跳档。 */}
+      <div className={styles.flow} data-tauri-drag-region>
+        <div className={styles.crumb} data-tauri-drag-region>
+          <span className={styles.brandIcon}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <path d="M12 2 L22 8 L12 14 L2 8 Z M2 16 L12 22 L22 16" />
+            </svg>
+          </span>
+          <span className={fileName ? styles.crumbProject : styles.crumbCurrent}>{projectName}</span>
+          {volumeName && (
+            <span className={styles.wideOnly}>
+              <span className={styles.crumbSlash}>/</span>
+              <span className={styles.crumbMid}>{volumeName}</span>
+            </span>
+          )}
+          {fileName && (
+            <>
+              <span className={styles.crumbSlash}>/</span>
+              <span className={styles.crumbCurrent}>{fileName}</span>
+              {isDirty && hasTextDoc && (
+                <span className={`${styles.crumbState} ${styles.wideOnly}`}>{t("titleBar.modified")}</span>
+              )}
+              {/* 常驻，不是悬停才现身（屏 1e-1）：作者的问题是「没有地方关闭」，
+                  藏起来等于没解决。⌘W 与文件树右键的「关闭」是同一个动作。 */}
               <button
-                key={m}
-                className={`${styles.viewBtn} ${viewMode === m ? styles.viewBtnActive : ""}`}
-                onClick={() => setViewMode(m)}
+                className={styles.closeBtn}
+                onClick={() => void closeDocument()}
+                title={`${t("titleBar.closeDoc")} · ${CLOSE_KEY}`}
+                aria-label={t("titleBar.closeDoc")}
               >
-                {t(`editor.viewMode.${m}`)}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.3">
+                  <path d="M1 1 L9 9 M9 1 L1 9" />
+                </svg>
               </button>
-            ))}
-          </div>
-        )}
-
-        {/* Document-scoped, so it sits with the view toggle's audience rather
-            than the app-wide controls — and hides itself when nothing is open. */}
-        <ExportMenu />
-
-        <span className={styles.sepThin} />
-
-        <button className={styles.ctrl} onClick={cycleTheme} title={t("titleBar.themeCycle")}>
-          {t(`settings.${theme}`)}
-        </button>
-        <button className={styles.ctrl} onClick={cycleLang} title={t("settings.language")}>
-          {language === "zh-CN" ? t("language.chinese") : t("language.english")}
-        </button>
-
-        {projectPath && (
-          <>
-            <span className={styles.sepThin} />
-            <span className={styles.wordCount}>
-              <strong>{wordCount.toLocaleString()}</strong> {t("statusBar.words")}
+            </>
+          )}
+          {/* 关掉一篇脏文档后原地留两秒（屏 1e-3）——和导出按钮变成「✓ 已复制」
+              是同一种回执、同一个时长。干净文档关掉不留痕迹。 */}
+          {closeNotice && (
+            <span className={`${styles.crumbTrace} ${closeNotice.failed ? styles.crumbTraceFail : ""}`}>
+              {closeNotice.failed ? <AlertTriangle size={11} /> : <Check size={11} />}
+              {t(closeNotice.failed ? "titleBar.closeFailed" : "titleBar.closedTrace", {
+                name: closeNotice.name,
+              })}
             </span>
-            <span className={styles.sepThin} />
-            <span className={styles.saveState}>
-              <span className={`${styles.saveDot} ${isDirty ? styles.saveDotDirty : styles.saveDotSaved}`} />
-              {isDirty ? t("titleBar.modified") : t("titleBar.saved")}
-            </span>
-          </>
-        )}
+          )}
+        </div>
 
-        <span className={styles.sepThin} />
+        <div className={styles.right}>
+          {/* 文档段：跟着当前文档走，按扩展名决定谁在场；关掉后整段消失。 */}
+          {kind && activeFilePath && (
+            <>
+              <DocActions kind={kind} path={activeFilePath} />
+              <span className={styles.sepThin} />
+            </>
+          )}
 
-        {/* No mode passed: the generic summon button reopens the drawer on
-            whatever tab was last used. */}
-        <button
-          className={styles.aiBtn}
-          onClick={() => setShowAiDrawer(true)}
-          title={t("titleBar.summonAi")}
-        >
-          <Sparkles size={11} />
-          AI · {MOD_K}
-        </button>
+          {/* 全局段：右锚，永不动（除了窄档里前两件并进 ⋯）。 */}
+          <button
+            className={`${styles.ctrl} ${styles.notNarrow}`}
+            onClick={cycleTheme}
+            title={t("titleBar.themeCycle")}
+          >
+            {t(`settings.${theme}`)}
+          </button>
+          <button
+            className={`${styles.ctrl} ${styles.notNarrow}`}
+            onClick={cycleLang}
+            title={t("settings.language")}
+          >
+            {language === "zh-CN" ? t("language.chinese") : t("language.english")}
+          </button>
+
+          <span className={`${styles.sepThin} ${styles.notNarrow}`} />
+
+          {/* No mode passed: the generic summon button reopens the drawer on
+              whatever tab was last used. */}
+          <button
+            className={styles.aiBtn}
+            onClick={() => setShowAiDrawer(true)}
+            title={t("titleBar.summonAi")}
+          >
+            <Sparkles size={11} />
+            AI · {MOD_K}
+          </button>
+
+          <button
+            className={`${styles.ctrl} ${styles.narrowOnly}`}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMoreAt({ x: r.left, y: r.bottom + 4 });
+            }}
+            title={`${t("settings.theme")} · ${t("settings.language")}`}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          {moreAt && (
+            <ContextMenu
+              x={moreAt.x}
+              y={moreAt.y}
+              items={[
+                { kind: "item", label: `${t("settings.theme")} · ${t(`settings.${theme}`)}`, action: cycleTheme },
+                {
+                  kind: "item",
+                  label: `${t("settings.language")} · ${language === "zh-CN" ? t("language.chinese") : t("language.english")}`,
+                  action: cycleLang,
+                },
+              ]}
+              onClose={() => setMoreAt(null)}
+            />
+          )}
+        </div>
       </div>
 
       {/* Undecorated Windows: our own caption buttons, Segoe-style strokes.

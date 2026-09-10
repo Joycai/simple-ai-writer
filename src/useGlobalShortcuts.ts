@@ -16,7 +16,7 @@ import {
 } from "./lib/shortcuts";
 import { navBack, navForward } from "./stores/navStore";
 import { screenNeedsProject, useAppStore } from "./stores/appStore";
-import { useEditorStore } from "./stores/editorStore";
+import { closeDocument, useEditorStore } from "./stores/editorStore";
 import { useProjectStore } from "./stores/projectStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
 import { findTask } from "./lib/profile";
@@ -93,6 +93,18 @@ export function useGlobalShortcuts() {
       if (matchesCombo(e, { mod: true, key: "s" })) {
         e.preventDefault();
         useEditorStore.getState().saveNow();
+        return;
+      }
+      // 关闭当前文档（设计稿 01e）。⌘⇧W 是关闭项目，两者靠 matchesCombo 的
+      // 精确修饰键匹配分开。落盘在 closeDocument() 里，所以这里不需要先 ⌘S。
+      //
+      // macOS 上这一条**可能到不了这里**：`windowmenu.rs` 挂的是
+      // `PredefinedMenuItem::close_window`，原生菜单的 key equivalent 先于
+      // webview 处理，⌘W 会去关窗口。未在 mac 上实测（本机是 Windows）。真被吃掉
+      // 时另外两个入口照常——面包屑末尾的 × 和文件树右键的「关闭」。
+      if (matchesCombo(e, { mod: true, key: "w" })) {
+        e.preventDefault();
+        void closeDocument();
         return;
       }
       if (matchesAny(e, NAV_BACK_COMBOS)) {

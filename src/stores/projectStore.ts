@@ -298,6 +298,16 @@ interface ProjectState {
    * store got notified twice per character typed.
    */
   setDocCounts: (words: number, chars: number) => void;
+  /**
+   * 打开的图片的原始像素尺寸——顶栏在图片这一类里唯一有的读数（设计稿 01e 屏
+   * 1d-3）。由 `ImagePreview` 在 `img.onload` 时报上来：它手里已经有解好的那张
+   * 图，顶栏自己再解一次等于把一张 12MB 的图读两遍。
+   *
+   * 带着 `path` 一起存，读的一方比对当前文件后再显示——和 `WritingFocus` 防的是
+   * 同一件事：一张图的尺寸绝不能挂在另一张图的名字下面。
+   */
+  imageSize: { path: string; width: number; height: number } | null;
+  setImageSize: (size: { path: string; width: number; height: number } | null) => void;
 }
 
 /**
@@ -792,6 +802,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }),
   setDocCounts: (words, chars) =>
     set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
+  imageSize: null,
+  setImageSize: (size) => set({ imageSize: size }),
 }));
 
 /**

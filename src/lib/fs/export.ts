@@ -45,6 +45,18 @@ function docLang(): string {
 async function inlineImages(html: string, baseDir?: string): Promise<string> {
   if (!baseDir) return html;
   const doc = new DOMParser().parseFromString(html, "text/html");
+  await inlineImagesIn(doc, baseDir);
+  return doc.body.innerHTML;
+}
+
+/**
+ * The same rewrite against a whole parsed document, for the files that *are*
+ * one already — an `.html` deliverable carries its own `<head>` and styles, so
+ * taking `body.innerHTML` out of it (what {@link inlineImages} returns) would
+ * print the page stripped of everything that made it look like itself.
+ */
+async function inlineImagesIn(doc: Document, baseDir?: string): Promise<void> {
+  if (!baseDir) return;
   const imgs = [...doc.querySelectorAll("img")]
     .filter((img) => needsInlining(img.getAttribute("src")));
   await Promise.all(imgs.map(async (img) => {
@@ -61,7 +73,6 @@ async function inlineImages(html: string, baseDir?: string): Promise<string> {
       console.warn(`[export] could not inline image ${src}:`, e);
     }
   }));
-  return doc.body.innerHTML;
 }
 
 /**
@@ -73,6 +84,31 @@ async function inlineImages(html: string, baseDir?: string): Promise<string> {
  */
 export function needsInlining(src: string | null): boolean {
   return !!src && !/^(https?:|data:|blob:|ai-writer-asset:)/i.test(src);
+}
+
+
+/**
+ * The files these three exports are actually right for.
+ *
+ * All three paths start with `renderMarkdown(source)`, so the predicate is
+ * "would rendering this file as markdown be the truth?" — which is narrower
+ * than "the editor can open it":
+ *   - `.html` / `.htm` is edited as text but previewed in a sandboxed iframe;
+ *     running its source through the markdown renderer produced an escaped,
+ *     double-rendered copy of the page, not the page.
+ *   - an image (and anything the editor can't read) has no text at all here —
+ *     the buffer still holds the *previous* document, and exporting it wrote
+ *     that document out under the picture's name.
+ * Deliberately not `isChapterFile`: that one decides what enters the outline
+ * and the spine, and widening it for an outline reason must not silently
+ * widen what claims to export correctly.
+ */
+const EXPORT_EXTS = new Set(["md", "markdown", "txt"]);
+
+/** True when {@link exportMarkdown} / {@link exportHtml} / {@link exportPdf} apply. */
+export function isExportableDocument(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return EXPORT_EXTS.has(ext);
 }
 
 
@@ -190,6 +226,39 @@ body { background: #fff; }
 <body>${body}${macHint}</body>
 </html>`;
 
+  await printPage(html, title);
+}
+
+/**
+ * Print an `.html` deliverable — the author's own page, not a rendering of it.
+ *
+ * This is the only export an HTML file gets (设计稿 01e 表 B): the other two
+ * run the source through `renderMarkdown`, which turns a page into an escaped
+ * copy of its own markup. Here the document is parsed, its pictures inlined in
+ * place (the print sheet has no base URL to resolve `assets/…` against) and
+ * handed to the same print path as the PDF export.
+ *
+ * `<script>` elements are dropped first. A print rendering has nothing to run
+ * them for, and the two print surfaces disagree about whether they *would*
+ * run: the in-app iframe is same-origin and the app's CSP would refuse them,
+ * while the macOS print window is a webview of its own. Removing them makes
+ * the printed page the same on both, and keeps this away from the deliberate
+ * rule that the standalone preview window is the one place a page's scripts
+ * really run (docs/feature/html-artifact-plan.md).
+ */
+export async function printHtmlDocument(
+  source: string,
+  title: string,
+  baseDir?: string,
+): Promise<void> {
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  doc.querySelectorAll("script").forEach((s) => s.remove());
+  await inlineImagesIn(doc, baseDir);
+  await printPage(`<!DOCTYPE html>\n${doc.documentElement.outerHTML}`, title);
+}
+
+/** Hand a complete HTML page to the system print dialog. */
+async function printPage(html: string, title: string): Promise<void> {
   // macOS has no `window.print()`. WebKit forwards a JS print request to the
   // host app through the WKUIDelegate print callback, and wry doesn't implement
   // it — the call returns silently having done nothing, which is what made this
