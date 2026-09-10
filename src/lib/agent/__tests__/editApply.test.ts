@@ -9,11 +9,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CONTEXT_LINE_CHARS,
   applyFindReplace,
   applyInsertions,
   describeEditTarget,
   findOccurrences,
   insertionLanding,
+  locateMatches,
   occurrenceAt,
   sliceLines,
 } from "../editApply";
@@ -124,17 +126,78 @@ describe("sliceLines", () => {
   });
 });
 
+describe("locateMatches", () => {
+  it("gives an occurrence its line and the lines either side", () => {
+    const doc = "第一行\n第二行\n第三行\n第四行\n";
+    const [match] = locateMatches(doc, "第三行", findOccurrences(doc, "第三行"));
+    expect(match).toEqual({ line: 3, endLine: 3, before: "第二行", after: "第四行" });
+  });
+
+  it("indexes alongside the occurrence count the proposal records", () => {
+    // matches[i] is occurrence i+1 — which is what EditProposal.target counts.
+    const doc = "x\nT\ny\nT\nz\nT\n";
+    const positions = findOccurrences(doc, "T");
+    const matches = locateMatches(doc, "T", positions);
+    expect(matches).toHaveLength(positions.length);
+    expect(matches.map((m) => m.line)).toEqual([2, 4, 6]);
+  });
+
+  it("ends a multi-line find on its last line, not the one its newline introduces", () => {
+    const doc = "a\nb\nc\nd\n";
+    const find = "b\nc\n";
+    const [match] = locateMatches(doc, find, findOccurrences(doc, find));
+    expect(match.line).toBe(2);
+    expect(match.endLine).toBe(3);
+    expect(match.after).toBe("d");
+  });
+
+  it("has no context to give at the edges of the file", () => {
+    const [match] = locateMatches("only", "only", findOccurrences("only", "only"));
+    expect(match).toEqual({ line: 1, endLine: 1, before: "", after: "" });
+  });
+
+  it("does not invent a line out of a trailing newline", () => {
+    const doc = "a\nb\n";
+    const [match] = locateMatches(doc, "b", findOccurrences(doc, "b"));
+    expect(match.line).toBe(2);
+    expect(match.after).toBe("");
+  });
+
+  it("keeps a CRLF file's carriage return out of the context lines", () => {
+    const doc = "a\r\nb\r\nc\r\n";
+    const [match] = locateMatches(doc, "b", findOccurrences(doc, "b"));
+    expect(match.before).toBe("a");
+    expect(match.after).toBe("c");
+  });
+
+  it("clips a context line rather than quoting a whole paragraph", () => {
+    const long = "字".repeat(CONTEXT_LINE_CHARS + 20);
+    const doc = `${long}\n目标\n`;
+    const [match] = locateMatches(doc, "目标", findOccurrences(doc, "目标"));
+    expect(match.before).toHaveLength(CONTEXT_LINE_CHARS + 1); // the clip plus its ellipsis
+    expect(match.before.endsWith("…")).toBe(true);
+  });
+
+  it("returns nothing when there is nothing to locate", () => {
+    expect(locateMatches("a\nb\n", "zzz", [])).toEqual([]);
+  });
+});
+
 describe("occurrenceAt", () => {
   it("says which of the identical regions this one is", () => {
     // Two identical slides: the proposal has to record that it took the
     // second, or applying would re-locate to the first.
     const doc = "<s>x</s>\n<s>x</s>\n";
     const second = sliceLines(doc, 2, 2)!;
-    expect(occurrenceAt(doc, second.text, second.start)).toEqual({ occurrences: 2, index: 2 });
+    expect(occurrenceAt(doc, second.text, second.start)).toEqual({
+      occurrences: 2,
+      index: 2,
+      positions: [0, 9],
+    });
   });
 
   it("reports a unique region as the only one", () => {
-    expect(occurrenceAt("a\nb\n", "b\n", 2)).toEqual({ occurrences: 1, index: 1 });
+    expect(occurrenceAt("a\nb\n", "b\n", 2)).toEqual({ occurrences: 1, index: 1, positions: [2] });
   });
 });
 

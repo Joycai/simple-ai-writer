@@ -30,7 +30,7 @@ import { withCurrentTime } from "../context/clock";
 import { normalizeChapterFileName } from "../context/outline";
 import { baseName, dirName, joinPath, resolveWorkspacePath } from "../paths";
 import type { AgentEvent } from "./events";
-import { occurrenceAt, sliceLines } from "./editApply";
+import { locateMatches, occurrenceAt, sliceLines } from "./editApply";
 import { WRITER_PRESET } from "./presets";
 import type { ToolContext } from "./registry";
 import { runAgent } from "./runtime";
@@ -522,7 +522,7 @@ async function deliverWriterOutput(
     }
     if (deliverTo.mode === "rewrite") {
       const decision = await ctx.requestApproval({
-        kind: "rewrite", id, path, content: text, originalChars: original.length, ...fromWriterFlag,
+        kind: "rewrite", id, path, content: text, original, ...fromWriterFlag,
       });
       return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
     }
@@ -536,7 +536,7 @@ async function deliverWriterOutput(
     // terminator, so a replacement without one runs the next line onto this text.
     let replace = text;
     if (slice.text.endsWith("\n") && replace !== "" && !replace.endsWith("\n")) replace += "\n";
-    const { occurrences, index } = occurrenceAt(original, slice.text, slice.start);
+    const { occurrences, index, positions } = occurrenceAt(original, slice.text, slice.start);
     const decision = await ctx.requestApproval({
       kind: "edit",
       id,
@@ -544,6 +544,7 @@ async function deliverWriterOutput(
       find: slice.text,
       replace,
       occurrences,
+      matches: locateMatches(original, slice.text, positions),
       target: occurrences === 1 ? undefined : index,
       range: { from, to: slice.to },
       ...fromWriterFlag,
