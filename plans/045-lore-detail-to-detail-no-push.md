@@ -1,6 +1,6 @@
 # 045 — 知识库「条目 → 条目」不再推入推出
 
-- **Status**: DONE（2026-09-10，门禁已过；目检待作者——换条目零位移与 LoreDetail 状态重置回归需真项目）
+- **Status**: DONE（2026-09-10，PR #575；作者真窗口目检通过，含 LoreDetail 状态重置回归）
 - **Commit**: 484fe4b
 - **Severity**: MEDIUM
 - **Category**: 5 起点与物理感 / 1 目的与频率

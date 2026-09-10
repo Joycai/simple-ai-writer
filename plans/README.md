@@ -661,13 +661,13 @@ writerPulse 在产物中已不存在 · pulseDeep 引用 3 → 4
 
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检待作者） |
-| 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检待作者） |
-| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（抽屉一条目检待作者） |
-| 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（WKWebView 目检待作者） |
-| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE |
-| 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE |
-| 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（A 的发虚判据待作者） |
+| 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检通过） |
+| 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检通过） |
+| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（目检通过） |
+| 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（目检通过） |
+| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE（目检未复现加载态） |
+| 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE（目检通过，tabFlash 定 240ms） |
+| 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（目检通过，A 保留） |
 
 - **045** 与方案 033 的验收判据**直接矛盾**：033 要求「换条目只有 opacity 在变，不应有任何 X 方向位移」，
   而 `LoreWall.tsx` 的推进层 `key` 绑的是条目，每次换条目都是旧页右退、新页右进的反向交叉。修法只是把 `key` 从推进层挪到 `LoreDetail`。
@@ -784,3 +784,17 @@ animation-duration:1.6s!important      → 12（048 +1）
 4. **047** 打开系统「减弱动态效果」：模态、下拉、供应商抽屉只淡不滑；spinner 半速仍转；脉冲点与闪烁光标静止。有 Mac 的话在 WKWebView 上确认普通模式下拉仍有 4px 下落。
 5. **049** 设置页各处折叠 / 标签 / 滑杆吸附手感与改动前一致；`SessionTabs` 的 120ms vs 240ms 二选一。
 6. **050** 分隔柄悬停线在 125% / 150% 缩放下不发虚（发虚就按方案第 3 步撤回 A）；对话图片占位扫光开 Paint flashing 不再持续闪绿。
+
+### 目检结果（2026-09-10，PR #575 合入之后，作者在真 Tauri 窗口里跑过）
+
+| 方案 | 结果 |
+| --- | --- |
+| 044 | 通过 |
+| 045 | 通过（含「A 进编辑态后跳到 B，B 是全新状态」那条回归） |
+| 046 | 通过（补上了预览面板里读不到的抽屉退场） |
+| 047 | 通过 |
+| 048 | **未复现**：灯箱加载态一闪而过，没能看到 spinner。改动与方案 035 的豁免块逐字同形，风险低；遇到再按方案 Verification 验 |
+| 049 | 通过；`SessionTabs` 的 `tabFlash` **定为 240ms**（不改回设计稿的 120ms），注释已改为记录该决定 |
+| 050 | 通过；A（分隔柄 `scaleX`）不发虚，保留，不撤回 |
+
+至此第十批（044–050）落地并验收完毕，仅 048 的加载态留待偶遇时补验。

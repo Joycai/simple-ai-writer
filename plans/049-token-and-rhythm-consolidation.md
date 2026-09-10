@@ -1,6 +1,6 @@
 # 049 — 令牌与节奏收敛（041 的漏网之鱼）
 
-- **Status**: DONE（2026-09-10，门禁已过；tokens.css 之外 cubic-bezier 回零，产物 var(--ease-settle) = 10；SessionTabs 120/240ms 待作者二选一）
+- **Status**: DONE（2026-09-10，门禁已过；tokens.css 之外 cubic-bezier 回零，产物 var(--ease-settle) = 10；作者目检通过；SessionTabs 定为 240ms，注释已改为记录该决定）
 - **Commit**: 484fe4b
 - **Severity**: LOW
 - **Category**: 7 内聚与令牌
