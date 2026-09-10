@@ -176,7 +176,7 @@ describe("closing", () => {
   it("closes an idle tab, activates the neighbour on the left, and ends its grant", async () => {
     seed([withTurns("c0"), withTurns("c1"), withTurns("c2")], "c1");
     useAgentStore.setState({
-      autoApprove: { key: chatAutoApproveKey("c1"), proposals: true, plans: false, appendPaths: [], illustrateLeft: 0 },
+      autoApprove: { key: chatAutoApproveKey("c1"), proposals: true, plans: false, appendPaths: [], illustrateLeft: 0, commandPrograms: [] },
     });
     expect(await state().closeChat("c1")).toBe(true);
     expect(state().chatOrder).toEqual(["c0", "c2"]);

@@ -34,7 +34,7 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import type { EditMatch } from "../../lib/agent/editApply";
-import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
+import { ILLUSTRATE_GRANT_MAX, autoApproveScope, canGrantCommand, isAutoApprovable } from "../../lib/agent/autoApprove";
 import type { CommandProposal, TranscribeProposal } from "../../lib/agent/registry";
 import { shellLabel, shellSyntax } from "../../lib/cli/shell";
 import { groupLint } from "../../lib/pptx/lint";
@@ -1105,7 +1105,7 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
 export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations } = useAgentStore();
+  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations, grantCommandProgram } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
   /** How many follow-up pictures 批准并连批 covers. */
@@ -1206,6 +1206,36 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
             })}
           >
             {t("ai.approval.appendAlways", { defaultValue: "本文件都追加" })}
+          </button>
+        )}
+        {/* The command card's grant is the append grant's shape — one program,
+            single ordinary lines only — and it is the only grant a command
+            ever gets. The row is *absent*, not disabled, for a compound or
+            dangerous-looking line: `canGrantCommand` decides here and again at
+            match time (shell-command-plan §3.4). The program name sits in the
+            label so the author reads what they are letting through. */}
+        {proposal.kind === "command" && autoApproveKey !== undefined && canGrantCommand(proposal) && (
+          <button
+            className={styles.btnApproveAlways}
+            onClick={() => {
+              setDeciding(true);
+              grantCommandProgram(autoApproveKey, proposal.program);
+              void approve(proposal.id);
+            }}
+            disabled={deciding}
+            title={
+              autoApproveScope(autoApproveKey) === "session"
+                ? t("ai.approval.commandAlwaysHint", {
+                    program: proposal.program,
+                    defaultValue: "本次对话里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
+                  })
+                : t("ai.approval.commandAlwaysHintRun", {
+                    program: proposal.program,
+                    defaultValue: "本次任务里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
+                  })
+            }
+          >
+            {t("ai.approval.commandAlways", { program: proposal.program, defaultValue: "{{program}} 都批准" })}
           </button>
         )}
         {/* The counted grant an illustrate card gets INSTEAD of 本次都批准:

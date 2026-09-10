@@ -1684,6 +1684,9 @@
       "commandShell": "With",
       "commandShellSub": "{{syntax}} syntax · stdin is closed, so anything interactive fails at once",
       "commandRunning": "Running · {{s}} s",
+      "commandAlways": "Approve all {{program}}",
+      "commandAlwaysHint": "Single {{program}} commands in this conversation no longer ask; lines with separators, pipes, redirections or that look dangerous still get a card",
+      "commandAlwaysHintRun": "Single {{program}} commands in this run no longer ask; lines with separators, pipes, redirections or that look dangerous still get a card",
       "commandDanger": {
         "delete": "Looks like a bulk delete",
         "history-rewrite": "Looks like it rewrites git history or force-pushes",
@@ -1714,7 +1717,9 @@
       "off": "Click to review each change again",
       "chipAppend": "auto-appending to {{n}} file(s)",
       "chipIllustrate": "image batch · {{n}} left",
-      "offAppend": "Appends to these files no longer ask: {{files}} (click to go back to asking)"
+      "offAppend": "Appends to these files no longer ask: {{files}} (click to go back to asking)",
+      "chipCommands": "commands pre-approved · {{programs}}",
+      "offCommands": "Single commands starting with these programs no longer ask: {{programs}} (click to go back to asking)"
     },
     "roundLimit": {
       "title": "Round cap reached",
