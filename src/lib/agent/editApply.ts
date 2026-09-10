@@ -18,6 +18,8 @@
  * is refused rather than landing somewhere they never approved.
  */
 
+import { headingsOf, sectionAt } from "../diff/sections";
+
 /** Which occurrence(s) of `find` an approved edit replaces. */
 export type EditTarget = number | "all" | undefined;
 
@@ -208,7 +210,7 @@ export function locateMatches(
   if (positions.length === 0) return [];
   const starts = lineStarts(text);
   const lines = countLines(text);
-  const sections = sectionIndex(text, lines);
+  const sections = headingsOf(text, lines);
 
   /** 1-based line containing `offset`, by binary search over the line starts. */
   const lineAt = (offset: number): number => {
@@ -264,39 +266,7 @@ function clipDiffLine(line: string): string {
   return text.length > DIFF_CONTEXT_CHARS ? `${text.slice(0, DIFF_CONTEXT_CHARS)}…` : text;
 }
 
-/**
- * Every heading in the file, with the line it sits on.
- *
- * Fences are tracked because a `# comment` inside a code block is not a
- * section — and a locator that names one is worse than a locator that names
- * nothing, since the author would go looking for it.
- */
-function sectionIndex(text: string, lines: number): { line: number; title: string }[] {
-  const out: { line: number; title: string }[] = [];
-  const src = text.split("\n");
-  let inFence = false;
-  for (let i = 0; i < Math.min(src.length, lines); i++) {
-    const line = src[i].replace(/\r$/, "");
-    if (line.startsWith("```")) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) out.push({ line: i + 1, title: heading[2].trim() });
-  }
-  return out;
-}
 
-/** The last heading at or above `line`. */
-function sectionAt(sections: readonly { line: number; title: string }[], line: number): string | undefined {
-  let found: string | undefined;
-  for (const section of sections) {
-    if (section.line > line) break;
-    found = section.title;
-  }
-  return found;
-}
 
 /**
  * Slice a line range out of a file. Returns null when `from` is past the end —

@@ -28,15 +28,26 @@ import { INLINE_MIN_SIMILARITY, dice, diffDocument, diffInline, type DiffLine, t
 
 /** One drawn line. */
 export interface WindowRow {
-  type: "context" | "del" | "add" | "gap";
+  type: "context" | "del" | "add" | "gap" | "fold";
   /** The line's text; "" for a gap. */
   text: string;
   /** Line number to print — absent on a gap. */
   line?: number;
   /** Token-level detail, only on a lit window's del/add rows. */
   inline?: DiffSeg[];
-  /** Gap only: unchanged lines it stands for. */
+  /** Gap and fold only: the lines they stand for. */
   hidden?: number;
+  /** Fold only: which side's lines are behind it. */
+  side?: "del" | "add";
+  /**
+   * Past the window's per-side cap: drawn only once the author opens the
+   * window (设计稿 02h 1z A).
+   *
+   * Marked rather than omitted so the model stays the one place that decides
+   * *what* a window contains, while the component decides how much of it is on
+   * screen — the alternative is two places that both have to be told the cap.
+   */
+  overflow?: true;
 }
 
 /** One window onto one changed place. */

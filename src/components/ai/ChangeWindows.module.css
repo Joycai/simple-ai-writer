@@ -89,6 +89,21 @@
   color: var(--color-text-hint);
 }
 
+/* A fold that opens: the same row, wearing a button's affordances and none of
+   its chrome — a bordered control here would cut the window in half. */
+.gapButton {
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gapButton:hover .gapText { color: var(--color-text-secondary); }
+
+.foldAction { color: var(--color-sienna); }
+
 /* ── The rail (设计稿 1k) ────────────────────────────────────────────────────
    The number column is 15% of a 280px rail, so it goes and the line moves into
    the locator. The mark column stays: it is what makes a row readable at a

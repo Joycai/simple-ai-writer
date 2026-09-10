@@ -4,8 +4,8 @@
  * A window is the changed place plus enough of the file either side to know
  * where it is: line numbers down the left, a − / + column, removed lines above
  * added ones. What it is *not* is a reading surface — the model that decides
- * how much fits (`lib/diff/windows`) has already folded away everything that
- * would turn this into one.
+ * how much fits (`lib/diff/windows`, `lib/diff/blocks`) has already folded away
+ * everything that would turn this into one.
  *
  * Whitespace only shows itself when that is the whole change: ␣ for a space,
  * ↵ for an empty line, → for a tab. Marking them always would put a symbol on
@@ -30,11 +30,33 @@ export function ChangeWindows({
   return (
     <div className={styles.windows}>
       {windows.map((window, i) => (
-        <div key={i} className={styles.window}>
-          {window.rows.map((row, j) => (
-            <Row key={j} row={row} lineNumbers={lineNumbers} whitespace={whitespace} />
-          ))}
-        </div>
+        <WindowRows key={i} rows={window.rows} lineNumbers={lineNumbers} whitespace={whitespace} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * One window's rows. Shared with the rewrite card, which wraps the same rows in
+ * a header — the geometry has to be identical or the two cards stop reading as
+ * one vocabulary.
+ */
+export function WindowRows({
+  rows,
+  lineNumbers,
+  whitespace,
+  onFold,
+}: {
+  rows: readonly WindowRow[];
+  lineNumbers: boolean;
+  whitespace?: boolean;
+  /** Called when a fold row is pressed; without it a fold row is just a count. */
+  onFold?: () => void;
+}) {
+  return (
+    <div className={styles.window}>
+      {rows.map((row, i) => (
+        <Row key={i} row={row} lineNumbers={lineNumbers} whitespace={whitespace} onFold={onFold} />
       ))}
     </div>
   );
@@ -44,22 +66,40 @@ function Row({
   row,
   lineNumbers,
   whitespace,
+  onFold,
 }: {
   row: WindowRow;
   lineNumbers: boolean;
   whitespace?: boolean;
+  onFold?: () => void;
 }) {
   const { t } = useTranslation();
 
-  if (row.type === "gap") {
-    return (
-      <div className={styles.gap}>
+  if (row.type === "gap" || row.type === "fold") {
+    const label =
+      row.type === "gap"
+        ? t("ai.approval.gapUnchanged", { n: row.hidden, defaultValue: "⋯ 中间 {{n}} 行没有改动" })
+        : row.side === "del"
+          ? t("ai.approval.foldRemoved", { n: row.hidden, defaultValue: "⋯ 还有 {{n}} 行删掉的" })
+          : t("ai.approval.foldAdded", { n: row.hidden, defaultValue: "⋯ 还有 {{n}} 行新增的" });
+    const body = (
+      <>
         {lineNumbers && <span className={styles.line} />}
         <span className={styles.mark} />
         <span className={styles.gapText}>
-          {t("ai.approval.gapUnchanged", { n: row.hidden, defaultValue: "⋯ 中间 {{n}} 行没有改动" })}
+          {label}
+          {row.type === "fold" && onFold && (
+            <span className={styles.foldAction}> {t("ai.approval.expand")}</span>
+          )}
         </span>
-      </div>
+      </>
+    );
+    return row.type === "fold" && onFold ? (
+      <button type="button" className={`${styles.gap} ${styles.gapButton}`} onClick={onFold}>
+        {body}
+      </button>
+    ) : (
+      <div className={styles.gap}>{body}</div>
     );
   }
 
