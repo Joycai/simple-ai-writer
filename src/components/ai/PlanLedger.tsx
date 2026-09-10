@@ -217,7 +217,7 @@ function LedgerStepRow({
 }
 
 /** Why an undo did not happen, in the author's words. */
-function refusalText(t: TFunction, undo: UndoEvent, terms: ResolvedTerms): string {
+export function refusalText(t: TFunction, undo: UndoEvent, terms: ResolvedTerms): string {
   if (undo.reason === "changedByLaterWrite") {
     return t("ai.plan.ledger.undo.changedByLaterWrite", {
       tool: t(`ai.agent.tool.${undo.byTool}`, { defaultValue: undo.byTool, doc: terms.doc, entry: terms.entry }),
@@ -230,7 +230,7 @@ function refusalText(t: TFunction, undo: UndoEvent, terms: ResolvedTerms): strin
  * One write's change, as paragraph windows — the knowledge base is compared at
  * the same grain as a whole-document rewrite (1z B), since an entry is prose.
  */
-function ChangeView({ change }: { change: ChangeRecord }) {
+export function ChangeView({ change }: { change: ChangeRecord }) {
   const { t } = useTranslation();
   // What the record kept decides what can be drawn: a create has only an after,
   // a delete only a before, and anything past the cap has neither.
@@ -251,7 +251,17 @@ function ChangeView({ change }: { change: ChangeRecord }) {
   return (
     <div className={styles.change}>
       <div className={styles.changePath}>{change.path}</div>
-      {!model ? (
+      {!model && change.diff && change.diff.windows.length > 0 ? (
+        // The texts were too long to keep, so the record kept the windows.
+        <>
+          <BlockWindows windows={change.diff.windows} lineNumbers expandable={false} />
+          {change.diff.hiddenTotal > 0 && (
+            <div className={styles.note}>
+              {t("ai.agent.writes.moreStored", { n: change.diff.hiddenTotal })}
+            </div>
+          )}
+        </>
+      ) : !model ? (
         <div className={styles.note}>
           {change.dir
             ? t("ai.plan.ledger.undo.folderMoved")

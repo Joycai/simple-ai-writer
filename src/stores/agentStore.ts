@@ -73,6 +73,7 @@ import { sessionLabel } from "../lib/agent/sessionDb";
 import type { WritingFocus } from "./editorStore";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { undoWrites } from "../lib/agent/undo";
+import { turnWrites } from "../lib/agent/planLedger";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
   chatAutoApproveKey, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate,
@@ -135,7 +136,7 @@ import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
 import { connOptions, resolveConn, type ConnPair } from "../lib/ai/conn";
 import { notify } from "../lib/notify";
-import { baseName, isSamePath } from "../lib/paths";
+import { baseName, isSamePath, joinPath } from "../lib/paths";
 
 /**
  * Identifies which run created a queued approval — in practice each run's own
@@ -623,6 +624,19 @@ const compactAborts: Record<string, AbortController> = {};
 // ─── Applying an approved proposal ───────────────────────────────────────────
 
 /**
+ * Put a change that went through the open editor on disk now, not in two
+ * seconds. Everything after an approval reads the file back — the write
+ * receipt's line echo, the log's change record and its fingerprint — and a
+ * debounced save hands all three the text from before the change: a diff that
+ * says nothing happened, and an undo that later refuses because the file
+ * "changed after" the write. A failed save is logged by the store and retried
+ * on the next edit; the change is in the buffer either way.
+ */
+async function flushEditor(editor: { saveNow: () => Promise<void> }): Promise<void> {
+  await editor.saveNow().catch(() => {});
+}
+
+/**
  * Apply an approved edit. Returns the pre-write backup path.
  *
  * The find text is re-located at apply time rather than trusting the offset the
@@ -648,6 +662,7 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
     const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(rewrite(content));
+    await flushEditor(useEditorStore.getState());
   } else {
     await writeFile(proposal.path, rewrite(await readFile(proposal.path)));
   }
@@ -672,6 +687,7 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
     // and autosaved rather than being clobbered by the open buffer on next save.
     const { useEditorStore } = await import("./editorStore");
     useEditorStore.getState().setContent(proposal.content);
+    await flushEditor(useEditorStore.getState());
   } else {
     await writeFile(proposal.path, proposal.content);
   }
@@ -698,6 +714,7 @@ async function applyAppend(proposal: AppendProposal): Promise<string | null> {
     const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(content + proposal.content);
+    await flushEditor(useEditorStore.getState());
   } else {
     const raw = await readFile(proposal.path);
     await writeFile(proposal.path, raw + proposal.content);
@@ -728,6 +745,7 @@ async function applyInsert(proposal: InsertProposal): Promise<string | null> {
     const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(splice(content));
+    await flushEditor(useEditorStore.getState());
   } else {
     await writeFile(proposal.path, splice(await readFile(proposal.path)));
   }
@@ -1921,6 +1939,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const { useProjectStore } = await import("./projectStore");
     const projectPath = useProjectStore.getState().projectPath;
     if (!turn || !projectPath) return;
+    // A document open in the editor may hold typing that is not on disk yet.
+    // Saved first, so "is the file still what the write left" sees it and
+    // refuses — rather than restoring underneath the buffer, whose next
+    // autosave would put the undone text straight back.
+    const { useEditorStore } = await import("./editorStore");
+    const editor = useEditorStore.getState();
+    if (editor.isDirty && editor.filePath) await flushEditor(editor);
     const events = await undoWrites(projectPath, turn.log, toolCallIds);
     if (events.length === 0) return;
     patchChat(set, key, (c) => ({
@@ -1928,11 +1953,32 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         tn.id === turnId ? { ...tn, log: events.reduce((log, e) => appendAgentEventTo(log, e), tn.log) } : tn),
     }));
     void get().persistChat(key);
-    // What came back are knowledge-base files: the index has to see them before
-    // the next turn resolves a name against it.
-    if (events.some((e) => e.outcome === "undone")) {
+
+    const undone = new Set(events.filter((e) => e.outcome === "undone").map((e) => e.toolCallId));
+    if (undone.size === 0) return;
+    const paths = turnWrites(turn.log).filter((w) => undone.has(w.toolCallId)).map((w) => w.change.path);
+    // What came back into the knowledge base has to be in the index before the
+    // next turn resolves a name against it.
+    if (paths.some((p) => p.startsWith(".ai-writer/lore/"))) {
       const { useLoreStore } = await import("./loreStore");
       await useLoreStore.getState().scanProject(projectPath);
+    }
+    // A document: the tree shows what was restored or removed, and the open
+    // buffer becomes the file as it now stands, not the text just undone.
+    const documents = paths.filter((p) => !p.startsWith(".ai-writer/"));
+    if (documents.length === 0) return;
+    await useProjectStore.getState().refreshFileTree();
+    const open = useEditorStore.getState().filePath;
+    if (!open || !documents.some((p) => isSamePath(joinPath(projectPath, p), open))) return;
+    if (await fileExists(open)) {
+      await useEditorStore.getState().loadFile(open);
+    } else {
+      // Undoing a create removed the open file. Same teardown as deleteEntry,
+      // or a pending autosave would recreate it.
+      const { saveTimer } = useEditorStore.getState();
+      if (saveTimer) clearTimeout(saveTimer);
+      useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
+      useProjectStore.getState().setActiveFilePath(null);
     }
   },
 

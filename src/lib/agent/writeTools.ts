@@ -2659,11 +2659,40 @@ async function statEntry(path: string): Promise<{ isDir: boolean } | null> {
   }
 }
 
+/**
+ * What an approved manuscript write hands the execution log (设计稿 02h 1j): the
+ * change as it landed — read back, because the approval applied it and the log
+ * should show what is on disk, not what was proposed — and whether a standing
+ * grant let it through unread.
+ *
+ * Out of band from the result text, like the lore writes' records: the model
+ * does not need a second copy of what it just wrote, and the author does.
+ */
+async function writeReceipt(
+  ctx: ToolContext,
+  decision: ApprovalDecision,
+  path: string,
+  before?: string,
+): Promise<Pick<ToolResult, "change" | "autoApproved">> {
+  if (!decision.approved) return {};
+  return {
+    change: await changeAfterWrite({
+      projectPath: ctx.projectPath,
+      path,
+      before,
+      backupPath: decision.backupPath,
+    }),
+    ...(decision.auto ? { autoApproved: true as const } : {}),
+  };
+}
+
 /** Turn an approval decision into the result text the model reads. */
 function reportDecision(
   toolCallId: string,
   decision: ApprovalDecision,
   done: string,
+  /** An approved write's record, for the log. */
+  extra?: Pick<ToolResult, "change">,
 ): ToolResult {
   if (!decision.approved) {
     return {
@@ -2675,6 +2704,8 @@ function reportDecision(
   }
   return {
     toolCallId,
+    ...extra,
+    ...(decision.auto ? { autoApproved: true as const } : {}),
     content:
       `${done}` +
       (decision.backupPath ? ` The previous state was backed up to ${decision.backupPath}.` : "") +
@@ -2752,7 +2783,10 @@ export async function createChapterTool(
     reason: args.reason?.trim() || undefined,
   });
   const done = `Created ${path}.` + (decision.approved ? await createdMap(path) : "");
-  return reportDecision(toolCallId, decision, done);
+  return reportDecision(
+    toolCallId, decision, done,
+    decision.approved ? { change: await changeAfterWrite({ projectPath: ctx.projectPath, path }) } : undefined,
+  );
 }
 
 /**
@@ -2809,7 +2843,12 @@ export async function createFileTool(
     reason: args.reason?.trim() || undefined,
   });
   const done = `Created ${target.path}.` + (decision.approved ? await createdMap(target.path) : "");
-  return reportDecision(toolCallId, decision, done);
+  return reportDecision(
+    toolCallId, decision, done,
+    decision.approved
+      ? { change: await changeAfterWrite({ projectPath: ctx.projectPath, path: target.path }) }
+      : undefined,
+  );
 }
 
 /** Create an empty folder — a volume, a materials directory, any grouping. */
@@ -2997,8 +3036,11 @@ export async function deleteChapterTool(
   let chars = 0;
   let lines = 0;
   let excerpt: string | undefined;
+  // Kept whole for the log's record: the file is gone once this is approved,
+  // and the record is the only place its text is still shown.
+  let body: string | undefined;
   try {
-    const body = await readFile(target.path);
+    body = await readFile(target.path);
     chars = body.length;
     lines = countLines(body);
     excerpt = body.slice(0, DELETE_EXCERPT_CHARS);
@@ -3026,6 +3068,16 @@ export async function deleteChapterTool(
     toolCallId,
     decision,
     `Deleted ${target.path}. It was moved to .ai-writer/backups and can be restored.`,
+    decision.approved
+      ? {
+          change: changeOf({
+            projectPath: ctx.projectPath,
+            path: target.path,
+            before: body ?? "",
+            backupPath: decision.backupPath,
+          }),
+        }
+      : undefined,
   );
 }
 
@@ -3357,6 +3409,7 @@ export async function proposeEditTool(
   const scope = describeEditTarget(occurrences, target);
   return {
     toolCallId,
+    ...(await writeReceipt(ctx, decision, path, content)),
     content:
       `Edit approved and applied${scope ? ` (${scope})` : ""}.` +
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : "") +
@@ -3470,6 +3523,7 @@ export async function rewriteLinesTool(
   const grew = replacement.length - slice.text.length;
   return {
     toolCallId,
+    ...(await writeReceipt(ctx, decision, target.path, original)),
     content:
       `Rewrote lines ${from}-${slice.to} of ${target.path} (${slice.text.length} → ${replacement.length} chars, ` +
       `${grew >= 0 ? "+" : ""}${grew}). The rest of the file is untouched.` +
@@ -3630,6 +3684,7 @@ export async function insertLinesTool(
   const added = landing.reduce((n, l) => n + l.added, 0);
   return {
     toolCallId,
+    ...(await writeReceipt(ctx, decision, target.path, original)),
     content:
       `Inserted ${landing.length} piece(s) into ${target.path}, ${added} new line(s) in all. ` +
       "Nothing that was already in the file changed." +
@@ -3773,6 +3828,7 @@ export async function appendFileTool(
   const endLine = await appendedEndLine(target.path);
   return {
     toolCallId,
+    ...(await writeReceipt(ctx, decision, target.path, original)),
     content:
       `Appended ${args.content.length} chars to ${target.path} (now ${original.length + args.content.length}).` +
       (endLine ? ` The file now ends at line ${endLine}; nothing before the addition moved.` : "") +
@@ -3839,6 +3895,7 @@ export async function rewriteDocumentTool(
   }
   return {
     toolCallId,
+    ...(await writeReceipt(ctx, decision, path, original)),
     content:
       `Rewrite approved and applied (${original.length} → ${args.content.length} chars).` +
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),

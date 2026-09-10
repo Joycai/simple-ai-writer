@@ -1232,6 +1232,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           planStep: isError ? undefined : callContext.lorePlan?.matched.get(tc.id),
           planRefused: callContext.lorePlan?.refused.has(tc.id) ? true : undefined,
           planSkipped: callContext.lorePlan?.skipped.has(tc.id) ? true : undefined,
+          autoApproved: result.autoApproved,
         },
         at: Date.now(),
       });

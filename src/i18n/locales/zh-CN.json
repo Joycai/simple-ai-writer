@@ -1487,7 +1487,21 @@
         "task_progress": "更新任务进度",
         "write_note": "写入笔记",
         "read_note": "读取笔记",
-        "list_notes": "列举笔记"
+        "list_notes": "列举笔记",
+        "insert_lines": "插入行段",
+        "append_file": "追加到文件末尾",
+        "rewrite_document": "重写全文"
+      },
+      "writes": {
+        "title": "本轮写入",
+        "documents": "{{n}} 个文档",
+        "entries": "{{n}} 条条目",
+        "unitChars": "字",
+        "deletedBlocks": "删 {{n}} 段",
+        "autoApproved": "自动批准",
+        "undoAll": "撤回本轮全部",
+        "openInEditor": "在编辑器里打开",
+        "moreStored": "还有 {{n}} 处改动没存进日志"
       }
     },
     "writer": {
