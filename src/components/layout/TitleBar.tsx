@@ -5,7 +5,7 @@ import { useAppStore, type ThemeMode, type Language } from "../../stores/appStor
 import { useProjectStore } from "../../stores/projectStore";
 import { closeDocument, useEditorStore } from "../../stores/editorStore";
 import { IS_TAURI, MOD_K } from "../../lib/platform";
-import { comboLabel } from "../../lib/shortcuts";
+import { CLOSE_DOC_COMBOS, combosLabel } from "../../lib/shortcuts";
 import { docKindOf, isTextKind } from "../../lib/fs/docKind";
 import { ContextMenu } from "../common/ContextMenu";
 import { DocActions } from "./DocActions";
@@ -15,8 +15,8 @@ import { baseName, toPosixPath } from "../../lib/paths";
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
-/** ⌘W / Ctrl+W — the same binding useGlobalShortcuts dispatches. */
-const CLOSE_KEY = comboLabel({ mod: true, key: "w" });
+/** 与 useGlobalShortcuts 派发的是同一份绑定；mac 上是两条（见 CLOSE_DOC_COMBOS）。 */
+const CLOSE_KEY = combosLabel(CLOSE_DOC_COMBOS);
 
 function basename(p: string | null): string | null {
   return p ? baseName(p) || null : null;

@@ -10,6 +10,13 @@ import type { AppScreen } from "../stores/appStore";
 export interface Combo {
   /** metaKey (Mac) or ctrlKey (other platforms) — the app's one "mod" key. */
   mod?: boolean;
+  /**
+   * The Control key *as a modifier of its own* — meaningful on Mac only, where
+   * `mod` is ⌘ and Control is still free. Elsewhere Control **is** `mod`, so a
+   * combo asking for both names a chord that platform cannot produce; the
+   * binding is simply not offered there (see CLOSE_DOC_COMBOS).
+   */
+  ctrl?: boolean;
   shift?: boolean;
   alt?: boolean;
   /** KeyboardEvent.key, compared case-insensitively (e.g. "k", "Escape"). */
@@ -23,15 +30,24 @@ export function matchesCombo(e: KeyboardEvent, combo: Combo): boolean {
   if (!!combo.mod !== mod) return false;
   if (!!combo.shift !== e.shiftKey) return false;
   if (!!combo.alt !== e.altKey) return false;
+  // Mac only: ⌃⌘W and ⌘W are two different chords, and `mod` above says true
+  // for both (it ORs the two keys). Without this line the plain-⌘ binding
+  // would also answer to the ⌃⌘ one — which is exactly the pair we need to
+  // tell apart. Off-Mac the two keys are the same key, so the check is skipped
+  // rather than made false: requiring `ctrlKey === false` there would kill
+  // every Windows/Linux binding at once.
+  if (IS_MAC && !!combo.ctrl !== e.ctrlKey) return false;
   return e.key.toLowerCase() === combo.key.toLowerCase();
 }
 
 /** Display label for a combo, e.g. "⌘⇧K" on Mac, "Ctrl+Shift+K" elsewhere. */
 export function comboLabel(combo: Combo): string {
   if (IS_MAC) {
-    const mods = `${combo.mod ? "⌘" : ""}${combo.shift ? "⇧" : ""}${combo.alt ? "⌥" : ""}`;
+    const mods = `${combo.mod ? "⌘" : ""}${combo.ctrl ? "⌃" : ""}${combo.shift ? "⇧" : ""}${combo.alt ? "⌥" : ""}`;
     return `${mods}${displayKey(combo.key)}`;
   }
+  // `ctrl` is deliberately not rendered off-Mac: it never fires there, and
+  // "Ctrl+Ctrl+W" is the only thing it could print.
   const parts = [
     combo.mod && "Ctrl",
     combo.shift && "Shift",
@@ -65,6 +81,23 @@ export const NAV_BACK_COMBOS: Combo[] = IS_MAC
 export const NAV_FORWARD_COMBOS: Combo[] = IS_MAC
   ? [{ mod: true, key: "]" }, { mod: true, key: "ArrowRight" }]
   : [{ alt: true, key: "ArrowRight" }];
+
+/**
+ * 关闭当前文档（设计稿 01e 屏 1e）。
+ *
+ * mac 上多一条 **⌃⌘W**，因为 ⌘W 那一条很可能到不了 webview：应用菜单挂的是
+ * `PredefinedMenuItem::close_window`（`src-tauri/src/windowmenu.rs`），原生菜单的
+ * key equivalent 先于页面处理，⌘W 会去关窗口。两条都留着——⌘W 是这个动作的肌肉
+ * 记忆，真被菜单吃掉时 ⌃⌘W 顶上；系统菜单以后若不再占用它，作者也不必改手指。
+ *
+ * 为什么是 ⌃⌘W 而不是 ⌥⌘W：后者在 mac 上是「关闭全部窗口」的通用绑定，拿它做
+ * 「关闭这一篇」会和系统里所有其他应用对着来。
+ *
+ * 非 mac 不给第二条：那里 Control 就是 mod 本身，⌃⌘W 是个敲不出来的和弦。
+ */
+export const CLOSE_DOC_COMBOS: Combo[] = IS_MAC
+  ? [{ mod: true, key: "w" }, { mod: true, ctrl: true, key: "w" }]
+  : [{ mod: true, key: "w" }];
 
 /** Combos that must yield to a caret — see NAV_BACK_COMBOS. */
 export function comboNeedsIdleCaret(combo: Combo): boolean {
@@ -146,8 +179,9 @@ export const SHORTCUTS: ShortcutDef[] = [
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },
   // 关闭**文档**，与 ⌘⇧W 的关闭**项目**成对（设计稿 01e 屏 1e）。面包屑末尾的 ×
-  // 和文件树右键的「关闭」走的是同一个 `closeDocument()`。
-  { id: "closeDoc", category: "file", combo: { mod: true, key: "w" }, labelKey: "closeDoc", scope: "dispatch" },
+  // 和文件树右键的「关闭」走的是同一个 `closeDocument()`。mac 上是两条绑定，所以
+  // 这一行报 keysLabel 而不是单个 combo（与 navBack / navForward 同一写法）。
+  { id: "closeDoc", category: "file", keysLabel: combosLabel(CLOSE_DOC_COMBOS), labelKey: "closeDoc", scope: "dispatch" },
   // 文件面板自己的绑定（components/layout/FileTree.tsx + ProjectRow.tsx）。它们
   // 只在「文件」标签页挂着时监听——动作说的是「这个面板里的东西」，而面板不在，
   // 折叠什么、定位到哪里就都无从谈起。⌥⌘L 而不是设计稿写的 ⇧⌘L：后者已经是

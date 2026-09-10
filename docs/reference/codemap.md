@@ -30,7 +30,7 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 - **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/editorStore`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。
 - **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
 
-**关闭文档只有一处实现**：`editorStore` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
+**关闭文档只有一处实现**：`editorStore` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用；mac 上还多一条 ⌃⌘W，因为 ⌘W 会被应用菜单的「关闭窗口」先吃掉——绑定与那条 mac 专属的修饰键规则都在 `lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS`）。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
 
 ### `src/components/editor/`
 
