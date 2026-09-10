@@ -1,6 +1,6 @@
 # 046 — Motion 浮层退场收快：AI 抽屉、抽屉遮罩、设置页（不对称时长）
 
-- **Status**: DONE（2026-09-10，门禁已过；浏览器实测设置页退场 WAAPI 时长 160ms、只动 opacity，证实 variant 级 transition 生效；抽屉 200ms 那条因预览面板 rAF 被节流未能读到，待作者在真窗口目检）
+- **Status**: DONE（2026-09-10，门禁已过；浏览器实测设置页退场 WAAPI 时长 160ms、只动 opacity，证实 variant 级 transition 生效；抽屉 200ms 那条预览面板里读不到，已由作者在真窗口目检通过）
 - **Commit**: 484fe4b
 - **Severity**: MEDIUM
 - **Category**: 4 可打断与时序

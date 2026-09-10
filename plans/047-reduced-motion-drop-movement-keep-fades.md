@@ -1,6 +1,6 @@
 # 047 — reduced-motion 全局兜底：去位移、留淡入（决策变更，重开 009）
 
-- **Status**: DONE（2026-09-10，门禁已过；Chromium 下同步探针实测减动效只剩淡入、普通模式数值不变；WKWebView 与真窗口目检待作者）
+- **Status**: DONE（2026-09-10，门禁已过；Chromium 下同步探针实测减动效只剩淡入、普通模式数值不变；作者真窗口目检通过）
 - **Commit**: 484fe4b
 - **Severity**: MEDIUM
 - **Category**: 6 无障碍

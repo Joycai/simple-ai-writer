@@ -46,7 +46,7 @@
 /* 新会话 pressed while an empty tab already existed: that tab flashes its top
    line once (设计稿 02b 屏 1g), instead of a second blank tab appearing. 稿上标
    120ms，实现取 240ms——120ms 分到升、降两段各 60ms，2px 的线几乎看不出来。
-   作者目检后二选一：改这里的时长，或删掉这半句。 */
+   240ms 已由作者目检确认（2026-09-10，方案 049）。 */
 .tabFlash { animation: tabFlash 240ms var(--ease-out); }
 @keyframes tabFlash {
   0% { box-shadow: inset 0 2px 0 var(--color-sienna); }

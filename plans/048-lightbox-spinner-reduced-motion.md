@@ -1,6 +1,6 @@
 # 048 — 图片灯箱 spinner 补 reduced-motion 豁免并收敛到 0.8s（035 的漏网之鱼）
 
-- **Status**: DONE（2026-09-10，门禁已过；产物里 1.6s 豁免声明 11 → 12）
+- **Status**: DONE（2026-09-10，门禁已过；产物里 1.6s 豁免声明 11 → 12；目检时加载态未复现，遇到再按 Verification 验）
 - **Commit**: 484fe4b
 - **Severity**: MEDIUM
 - **Category**: 6 无障碍 / 7 内聚
