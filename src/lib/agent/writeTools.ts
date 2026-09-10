@@ -66,7 +66,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
-import { backupFile, backupFileByMove } from "./backup";
+import { backupFile, backupFileByMove, changeAfterWrite, changeOf, snapshotFile } from "./backup";
 import {
   applyFindReplace, clipContextLine, countLines, describeEditTarget, findOccurrences,
   insertionLanding, locateMatches, occurrenceAt, sliceLines,
@@ -369,6 +369,13 @@ export async function createLoreEntityTool(
     content:
       `Created lore entity "${name}" (category: ${category}) at ${dirPath}. ` +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+    // The entry as it actually landed: the frontmatter around the model's text
+    // is composed down in the lore layer, so nothing up here holds the file.
+    change: await changeAfterWrite({
+      projectPath: ctx.projectPath,
+      path: `${dirPath}/index.md`,
+      entity: name,
+    }),
   };
 }
 
@@ -538,7 +545,8 @@ export async function updateLoreFileTool(
   if ("refusal" in gated) return gated.refusal;
 
   const targetPath = `${entity.dirPath}/${file}`;
-  const backupPath = await backupFile(ctx.projectPath, targetPath);
+  const snap = await snapshotFile(ctx.projectPath, targetPath);
+  const backupPath = snap?.path ?? null;
   await writeEntityFile(entity.dirPath, file, content);
 
   await syncLore(ctx, entity);
@@ -559,6 +567,14 @@ export async function updateLoreFileTool(
     content:
       `Wrote ${file} of entity "${entity.name}". ${suffix}` + inert + " " +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+    change: changeOf({
+      projectPath: ctx.projectPath,
+      path: targetPath,
+      entity: entity.name,
+      before: snap?.text,
+      after: content,
+      backupPath,
+    }),
   };
 }
 
@@ -747,7 +763,9 @@ export async function updateLoreMetaTool(
   const gated = gate(toolCallId, ctx, "update", entity.name, "index.md");
   if ("refusal" in gated) return gated.refusal;
 
-  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/index.md`);
+  const indexPath = `${entity.dirPath}/index.md`;
+  const snap = await snapshotFile(ctx.projectPath, indexPath);
+  const backupPath = snap?.path ?? null;
   await saveEntityMetaAndBody(
     ctx.projectPath,
     entity,
@@ -776,6 +794,15 @@ export async function updateLoreMetaTool(
       `Updated the frontmatter of "${entity.name}": ${changed.join(", ")}. The body was left untouched.` +
       (backupPath ? ` Previous index.md backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+    // Read back rather than composed here: the frontmatter block is regenerated
+    // down in the lore layer, and the record is meant to say what landed.
+    change: await changeAfterWrite({
+      projectPath: ctx.projectPath,
+      path: indexPath,
+      entity: entity.name,
+      before: snap?.text,
+      backupPath,
+    }),
   };
 }
 
@@ -847,6 +874,14 @@ export async function appendLoreFileTool(
       (endLine ? ` It now ends at line ${endLine}.` : "") +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}.`,
+    change: changeOf({
+      projectPath: ctx.projectPath,
+      path: `${entity.dirPath}/${file}`,
+      entity: entity.name,
+      before: raw,
+      after: next,
+      backupPath,
+    }),
   };
 }
 
@@ -951,6 +986,14 @@ export async function editLoreFileTool(
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}.` +
       (await loreEditReceipt(entity.dirPath, file, raw, head.length, find, positions, target)),
+    change: changeOf({
+      projectPath: ctx.projectPath,
+      path: `${entity.dirPath}/${file}`,
+      entity: entity.name,
+      before: raw,
+      after: next,
+      backupPath,
+    }),
   };
 }
 
@@ -1134,6 +1177,14 @@ export async function rewriteLoreLinesTool(
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}.` +
       (await appliedReceipt(`${entity.dirPath}/${file}`, raw, from, slice.to)),
+    change: changeOf({
+      projectPath: ctx.projectPath,
+      path: `${entity.dirPath}/${file}`,
+      entity: entity.name,
+      before: raw,
+      after: next,
+      backupPath,
+    }),
   };
 }
 
@@ -1316,9 +1367,10 @@ export async function createLoreFacetTool(
   if ("refusal" in gated) return gated.refusal;
 
   // Only a promotion has a previous version to keep.
-  const backupPath = existingBody === null
+  const snap = existingBody === null
     ? null
-    : await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+    : await snapshotFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  const backupPath = snap?.path ?? null;
   await saveFacetFile(entity.dirPath, file, meta, body);
 
   if (!(entity.mdFiles ?? []).includes(file)) (entity.mdFiles ??= []).push(file);
@@ -1338,6 +1390,13 @@ export async function createLoreFacetTool(
       (inert ? " NOTE: with mode=auto and no keys this facet will never be injected — give it trigger words with update_facet_meta." : "") +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+    change: await changeAfterWrite({
+      projectPath: ctx.projectPath,
+      path: `${entity.dirPath}/${file}`,
+      entity: entity.name,
+      before: snap?.text,
+      backupPath,
+    }),
   };
 }
 
@@ -1472,6 +1531,16 @@ export async function updateFacetMetaTool(
       (inert ? " NOTE: with mode=auto and no keys this facet will never be injected." : "") +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}.`,
+    // Only the frontmatter moved, and that is exactly what the record shows —
+    // the body being byte-identical either side is the claim worth being able
+    // to check.
+    change: await changeAfterWrite({
+      projectPath: ctx.projectPath,
+      path: `${entity.dirPath}/${file}`,
+      entity: entity.name,
+      before: raw,
+      backupPath,
+    }),
   };
 }
 
@@ -1504,7 +1573,8 @@ export async function deleteLoreFileTool(
   // rather than a no-op — silently "succeeding" would let the model report a
   // deletion the author can never inspect.
   const targetPath = `${entity.dirPath}/${file}`;
-  const backupPath = await backupFile(ctx.projectPath, targetPath);
+  const snap = await snapshotFile(ctx.projectPath, targetPath);
+  const backupPath = snap?.path ?? null;
   if (!backupPath) {
     const known = (entity.mdFiles ?? []).filter((f) => !RESERVED_ENTITY_FILES.includes(f));
     return {
@@ -1521,6 +1591,13 @@ export async function deleteLoreFileTool(
     content:
       `Deleted ${file} from entity "${entity.name}". Backed up to ${backupPath} first, so it can be restored. ` +
       `Plan step: ${gated.step.detail}.`,
+    change: changeOf({
+      projectPath: ctx.projectPath,
+      path: targetPath,
+      entity: entity.name,
+      before: snap?.text,
+      backupPath,
+    }),
   };
 }
 
@@ -2313,9 +2390,9 @@ export async function updateMemoryTool(
 
   // Backup the memory file before the rewrite (when it exists).
   const rel = projectRelativePath(ctx.projectPath, checked);
-  const backupPath = rel
-    ? await backupFile(ctx.projectPath, memoryFilePath(ctx.projectPath, rel))
-    : null;
+  const memPath = rel ? memoryFilePath(ctx.projectPath, rel) : null;
+  const snap = memPath ? await snapshotFile(ctx.projectPath, memPath) : null;
+  const backupPath = snap?.path ?? null;
 
   // rewriteMemorySegment throws model-readable errors (no memory / bad index);
   // the registry's catch turns them into an error result for the model.
@@ -2330,6 +2407,17 @@ export async function updateMemoryTool(
     content:
       `Updated memory segment ${args.segment_index} (chars ${seg.from}–${seg.to}).` +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : ""),
+    // No entity: the memory file belongs to a document, and `path` names it.
+    ...(memPath
+      ? {
+          change: await changeAfterWrite({
+            projectPath: ctx.projectPath,
+            path: memPath,
+            before: snap?.text,
+            backupPath,
+          }),
+        }
+      : {}),
   };
 }
 

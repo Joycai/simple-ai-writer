@@ -1225,6 +1225,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           resultSummary: result.content.slice(0, TOOL_RESULT_DETAIL_CHARS),
           argsTruncated,
           resultTruncated: result.content.length > TOOL_RESULT_DETAIL_CHARS,
+          change: result.change,
         },
         at: Date.now(),
       });

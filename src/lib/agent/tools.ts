@@ -30,7 +30,7 @@ import {
 import { extractHeadings } from "../fs/markdown";
 import { readDirRecursive, type FileNode } from "../project";
 import { numberLines } from "./lineEcho";
-import type { ToolProgress } from "./events";
+import type { ChangeRecord, ToolProgress } from "./events";
 import i18n from "../../i18n";
 
 export interface ToolCall {
@@ -43,6 +43,14 @@ export interface ToolResult {
   toolCallId: string;
   content: string;
   imageDataUrls?: string[];
+  /**
+   * What this call did to a file, for the execution log to show.
+   *
+   * Out of band from `content` on purpose: `content` is what the model reads
+   * and every character of it is paid for on the next round, while this is for
+   * the author's eyes only and never enters the conversation.
+   */
+  change?: ChangeRecord;
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
