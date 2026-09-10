@@ -24,12 +24,12 @@
 - **新分类器** `lib/fs/docKind.ts`：`DocKind` 的五个值就是表 B 的五行，`isTextKind()` 决定字数 / 保存点 / 「已修改」在不在。刻意与 `isChapterFile`（大纲、书脊用的那个）分开：为大纲的理由放宽它，不该顺手给一个文件发一枚导出按钮。
 - **文档段拆成 `DocActions.tsx`**：视图切换（宽/中三格连体 + 窄档一格下拉）、导出 / 打印 · PDF、图片尺寸、转换文档、用默认应用打开、字数 + 保存点。窄档的成色与宽档的成色**都渲染出来**、由容器查询藏掉一种——查询能换布局，换不了词（`design-system.md`）。
 - **`TitleBar.tsx`**：`.flow` 那一格是让位的量程（平台让位留在它外面）；面包屑末尾的 ×、两秒痕迹、窄档的 ⋯ 菜单（主题 · 语言）。
-- **`closeDocument()`（`editorStore`）**：三个入口共用；`⌘W` 进了 `useGlobalShortcuts` + `SHORTCUTS` 注册表（与 `⌘⇧W` 关闭项目成对），文件树右键的「关闭」只长在当前打开的那一行上。**mac 上是两条绑定**：`⌘W` 很可能被应用菜单的 `PredefinedMenuItem::close_window` 先吃掉，`⌃⌘W` 是那时顶上的那一条（`CLOSE_DOC_COMBOS`，2026-09-10 补）。选 `⌃⌘W` 而不是 `⌥⌘W`：后者在 mac 上是「关闭全部窗口」的通用绑定。代价是 `matchesCombo` 在 mac 上要把 Control 当独立修饰键严格比对——它的 `mod` 是 `metaKey || ctrlKey`，不严格的话 plain-⌘ 那条会连 `⌃⌘W` 一起接下，两条就分不开了；非 mac 必须**跳过**这条检查，那里 Control 就是 mod 本身。
+- **`closeDocument()`（`editorStore`）**：三个入口共用；`⌘W` 进了 `useGlobalShortcuts` + `SHORTCUTS` 注册表（与 `⌘⇧W` 关闭项目成对），文件树右键的「关闭」只长在当前打开的那一行上。**mac 上 `⌘W` 起初到不了 webview**——菜单挂的 `PredefinedMenuItem::close_window` 固定带着它，而一个窗口就是一个工作区，于是「关文档」按下去关掉的是整个项目窗口。先补过一条 `⌃⌘W` 后备（2026-09-10），随后按 VS Code 的分层整理成三层并撤掉了它：**文档 ⌘W · 项目 ⇧⌘W · 窗口 ⌥⌘W**（窗口那一项在 `windowmenu.rs` 换成自定义菜单项，把 ⌘W 让回页面）。表在 `CLOSE_DOC_COMBOS` 的注释里。
 - **`printHtmlDocument()`（`lib/fs/export`）**：`.html` 的唯一导出。整份文档解析、图片就地内联（打印稿没有 base URL）、**先摘掉 `<script>`**——打印稿没什么要跑的，而两个打印面（应用内同源 iframe 受 CSP 管、macOS 是自己的一个 webview）对「脚本会不会跑」的答案不一致；摘掉它，两边印出来的是同一页，也不碰「独立预览窗口是页面脚本真正跑起来的唯一地方」那条规矩。
 - **图片尺寸**：`ImagePreview` 在 `img.onload` 时把 `naturalWidth × naturalHeight` 连同**路径**一起报进 `projectStore.imageSize`，顶栏比对路径后才显示——和 `WritingFocus` 防的是同一件事：一张图的尺寸绝不能挂在另一张图的名字下面。
 - **单位词**：顶栏原来读的是「3,124 字数」/「3,124 Words」（`statusBar.words` 是个**栏目名**）。新增 `titleBar.words` / `titleBar.chars`，读成「3,124 字」/「12,480 字符」。
 - **测试**：`docKind` 的五行 + 与导出口径不漂移（`exportScope.test.ts`）；`closeDocument` 的四条——干净直接关 · 脏的先落盘再关并留两秒痕迹 · 写盘失败不关 · 关图片时不碰缓冲区里那篇待写的文档（`editorStoreCloseDocument.test.ts`）。
-- **浏览器里核过的**（vite dev，store 直接喂状态）：三档在 1440 / 1100 / 900 上各让掉哪几件、四类文件各自的名单、空态、英文窄档不折行不溢出、⌘W 与 × 的两条路径、窄档两个菜单。**没核到的**：Tauri 里才有的那两件——macOS 上 `⌘W` 到底会不会被系统菜单吃掉（本机是 Windows，没法实测；已经为此补了 `⌃⌘W` 这条后备，真被吃掉时 × 与文件树右键也照常），以及 `.html` 的「打印 · PDF」真去调打印对话框那一步。Windows 侧核过：`Ctrl+W` 关文档、`Ctrl+Shift+W` 仍然是关项目、`Ctrl+Alt+W` 什么都不做。
+- **浏览器里核过的**（vite dev，store 直接喂状态）：三档在 1440 / 1100 / 900 上各让掉哪几件、四类文件各自的名单、空态、英文窄档不折行不溢出、⌘W 与 × 的两条路径、窄档两个菜单。**没核到的**：Tauri 里才有的那两件——mac 菜单让位后 `⌘W` 是不是真的落到页面上了（本机是 Windows，`windowmenu.rs` 连编译都轮不到：应用的 CI 只跑 ubuntu，那个模块是 `cfg(target_os = "macos")`），以及 `.html` 的「打印 · PDF」真去调打印对话框那一步。Windows 侧核过：`Ctrl+W` 关文档、`Ctrl+Shift+W` 仍然是关项目、`Ctrl+Alt+W` 什么都不做。
 
 ## 发出去之前先核对过的事实
 

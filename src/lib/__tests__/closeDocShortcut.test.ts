@@ -1,11 +1,12 @@
 /**
- * 关闭文档的绑定，以及它逼出来的那条修饰键规则。
+ * 「关闭」这一族的三层分工，以及它们互不串台。
  *
- * mac 的 ⌘W 很可能到不了 webview——应用菜单挂着 `PredefinedMenuItem::close_window`，
- * 原生菜单的 key equivalent 先于页面处理。所以 mac 上多给一条 ⌃⌘W。麻烦在于
- * `matchesCombo` 的 `mod` 是 `metaKey || ctrlKey`：⌃⌘W 按下时它同样为真，plain-⌘
- * 那一条会**一起**答应，两条就分不开了。于是 mac 上把 Control 当成独立修饰键严格
- * 比对；非 mac 不能这么做——那里 Control 就是 mod 本身。
+ * 关文档 ⌘W · 关项目 ⇧⌘W · 关窗口 ⌥⌘W（仅 mac，实现在 `windowmenu.rs`，注册表里
+ * 只留一行说明）。三条都在 W 上，所以这里逐条钉住「谁答应谁不答应」——它们错起来
+ * 的样子是作者想关一篇稿子、结果整个项目没了。
+ *
+ * `matchesCombo` 在 mac 上把 Control 当独立修饰键严格比对，这条也一并测：没有它，
+ * 每个 plain-⌘ 绑定都会顺带答应自己的 ⌃⌘ 变体。
  */
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,7 +18,7 @@ vi.mock("../platform", () => ({
   MOD_K: "⌘K",
 }));
 
-const { CLOSE_DOC_COMBOS, combosLabel, matchesCombo } = await import("../shortcuts");
+const { CLOSE_DOC_COMBOS, SHORTCUTS, combosLabel, matchesCombo } = await import("../shortcuts");
 
 /** A keydown as the global listener would see it. */
 function press(p: { meta?: boolean; ctrl?: boolean; shift?: boolean; alt?: boolean; key: string }): KeyboardEvent {
@@ -30,47 +31,68 @@ function press(p: { meta?: boolean; ctrl?: boolean; shift?: boolean; alt?: boole
   } as KeyboardEvent;
 }
 
-const fires = (e: KeyboardEvent) => CLOSE_DOC_COMBOS.some((c) => matchesCombo(e, c));
+const closesDoc = (e: KeyboardEvent) => CLOSE_DOC_COMBOS.some((c) => matchesCombo(e, c));
+/** ProjectRow 挂的那一条，原样抄在这里——它是这一族的第二层。 */
+const CLOSE_PROJECT = { mod: true, shift: true, key: "w" } as const;
+/** windowmenu.rs 的菜单项，注册表里那一行是它的影子。 */
+const CLOSE_WINDOW = { mod: true, alt: true, key: "w" } as const;
 
-describe("关闭文档的绑定（mac）", () => {
-  it("⌘W 与 ⌃⌘W 都关文档", () => {
-    expect(fires(press({ meta: true, key: "w" }))).toBe(true);
-    expect(fires(press({ meta: true, ctrl: true, key: "w" }))).toBe(true);
+describe("关闭三层（mac）", () => {
+  it("⌘W 只关文档", () => {
+    const e = press({ meta: true, key: "w" });
+    expect(closesDoc(e)).toBe(true);
+    expect(matchesCombo(e, CLOSE_PROJECT)).toBe(false);
+    expect(matchesCombo(e, CLOSE_WINDOW)).toBe(false);
   });
 
-  it("两条绑定各自只答应自己那一个和弦", () => {
-    const [plain, withCtrl] = CLOSE_DOC_COMBOS;
-    // 这一条是整个改动的支点：没有它，plain-⌘ 那条会连 ⌃⌘W 一起接下，
-    // 「多给一条绑定」就成了空话。
-    expect(matchesCombo(press({ meta: true, ctrl: true, key: "w" }), plain)).toBe(false);
-    expect(matchesCombo(press({ meta: true, key: "w" }), withCtrl)).toBe(false);
+  it("⇧⌘W 只关项目", () => {
+    const e = press({ meta: true, shift: true, key: "w" });
+    expect(closesDoc(e)).toBe(false);
+    expect(matchesCombo(e, CLOSE_PROJECT)).toBe(true);
+    expect(matchesCombo(e, CLOSE_WINDOW)).toBe(false);
   });
 
-  it("不碰关闭**项目**的 ⌘⇧W，也不碰单独的 W", () => {
-    expect(fires(press({ meta: true, shift: true, key: "w" }))).toBe(false);
-    expect(fires(press({ meta: true, alt: true, key: "w" }))).toBe(false);
-    expect(fires(press({ key: "w" }))).toBe(false);
+  it("⌥⌘W 只关窗口", () => {
+    const e = press({ meta: true, alt: true, key: "w" });
+    expect(closesDoc(e)).toBe(false);
+    expect(matchesCombo(e, CLOSE_PROJECT)).toBe(false);
+    expect(matchesCombo(e, CLOSE_WINDOW)).toBe(true);
   });
 
-  it("严格比对不会误伤别的绑定：⌃⌘K 不再当作 ⌘K", () => {
+  it("⌃⌘W 谁也不关", () => {
+    // 上一版给 mac 加过这条后备（那时 ⌘W 被系统菜单占着）。菜单让位之后它就该消失，
+    // 而不是留成一个没人记得的第二绑定。
+    const e = press({ meta: true, ctrl: true, key: "w" });
+    expect(closesDoc(e)).toBe(false);
+    expect(matchesCombo(e, CLOSE_PROJECT)).toBe(false);
+    expect(matchesCombo(e, CLOSE_WINDOW)).toBe(false);
+  });
+
+  it("严格比对：⌃⌘K 不再被当作 ⌘K", () => {
     expect(matchesCombo(press({ meta: true, ctrl: true, key: "k" }), { mod: true, key: "k" })).toBe(false);
     expect(matchesCombo(press({ meta: true, key: "k" }), { mod: true, key: "k" })).toBe(true);
   });
 
-  it("标签把两条都写出来", () => {
-    expect(combosLabel(CLOSE_DOC_COMBOS)).toBe("⌘W / ⌘⌃W");
+  it("快捷键表里三层都在，标签各写各的", () => {
+    const rows = Object.fromEntries(
+      SHORTCUTS.filter((s) => ["closeDoc", "filesCloseProject", "closeWindow"].includes(s.id))
+        .map((s) => [s.id, s.combo ? combosLabel([s.combo]) : s.keysLabel]),
+    );
+    expect(rows).toEqual({ closeDoc: "⌘W", filesCloseProject: "⌘⇧W", closeWindow: "⌘⌥W" });
   });
 });
 
-describe("关闭文档的绑定（非 mac）", () => {
-  it("只有一条 Ctrl+W —— 那里 Control 就是 mod，⌃⌘W 是敲不出来的和弦", async () => {
+describe("关闭三层（非 mac）", () => {
+  it("只有前两层，且关窗口那一行不出现在表里", async () => {
     platform.isMac = false;
     vi.resetModules();
     const m = await import("../shortcuts");
     try {
-      expect(m.CLOSE_DOC_COMBOS).toHaveLength(1);
+      expect(m.CLOSE_DOC_COMBOS).toEqual([{ mod: true, key: "w" }]);
       expect(m.combosLabel(m.CLOSE_DOC_COMBOS)).toBe("Ctrl+W");
-      // 关键的反面：ctrl 那条规则在这里必须**跳过**而不是判false，
+      // 关窗口是 mac 菜单的事；Windows/Linux 上窗口按钮和 Alt+F4 各就各位。
+      expect(m.SHORTCUTS.some((s) => s.id === "closeWindow")).toBe(false);
+      // 关键的反面：ctrl 那条规则在这里必须**跳过**而不是判 false，
       // 否则每一个 Windows 绑定都会当场失灵。
       expect(m.matchesCombo(press({ ctrl: true, key: "w" }), { mod: true, key: "w" })).toBe(true);
       expect(m.matchesCombo(press({ ctrl: true, key: "k" }), { mod: true, key: "k" })).toBe(true);
