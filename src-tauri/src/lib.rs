@@ -1,4 +1,5 @@
 mod blocking;
+mod cmd;
 mod commands;
 mod docx;
 mod instance;
@@ -49,6 +50,10 @@ pub fn run() {
 
             // Holds the document handed to the print window (see print.rs).
             app.manage(print::PendingPrint::default());
+
+            // The agent's live shell commands, so `cmd_kill` can find one by
+            // its id (see cmd.rs).
+            app.manage(cmd::Running::default());
 
             // Multi-instance support (see instance.rs): the workspace locks
             // this window holds, the folder argv[1] may have named, and the
@@ -119,6 +124,9 @@ pub fn run() {
             pptx::pptx_read_slides,
             print::print_document,
             preview::preview_html_window,
+            cmd::cmd_shell_info,
+            cmd::cmd_run,
+            cmd::cmd_kill,
         ]);
 
     // The window menu is macOS-only. There, replacing Tauri's default menu is

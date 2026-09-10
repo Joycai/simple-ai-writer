@@ -171,7 +171,10 @@ pub async fn fs_write_text_file(
 ///
 /// Whatever the source encoding, the result is a Rust `String` — UTF-8 — so
 /// the next save through `fs_write_text_file` rewrites the file as UTF-8.
-fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
+///
+/// `pub(crate)` for `cmd.rs`: what a shell command prints is text in whatever
+/// code page the program chose, which is exactly this problem again.
+pub(crate) fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
     const BOMS: [&[u8]; 3] = [&[0xEF, 0xBB, 0xBF], &[0xFF, 0xFE], &[0xFE, 0xFF]];
     if BOMS.iter().any(|bom| bytes.starts_with(bom)) {
         let (text, _, _) = encoding_rs::UTF_8.decode(&bytes);
