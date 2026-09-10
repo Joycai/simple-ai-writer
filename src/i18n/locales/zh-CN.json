@@ -1791,7 +1791,17 @@
         "category": "分类"
       },
       "members": "{{count}} 条",
-      "membersMore": " 等 {{n}} 条"
+      "membersMore": " 等 {{n}} 条",
+      "ledger": {
+        "title": "{{entry}}方案 · 已批准",
+        "progress": "已写 {{done}}/{{total}} 步",
+        "written": "已写入",
+        "notYet": "未写",
+        "refused": "被拒 · 不在方案里",
+        "tooBig": "改动太大，正文没有随日志保存；完整的旧版在 {{path}}",
+        "noText": "这次写入没有留下正文对照",
+        "unchanged": "写入前后内容一致"
+      }
     },
     "mention": {
       "badgeImage": "图片",

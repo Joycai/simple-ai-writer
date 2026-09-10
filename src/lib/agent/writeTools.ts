@@ -79,6 +79,8 @@ import {
   LORE_PLAN_TARGETS,
   checkPlan,
   describeStep,
+  recordMatch,
+  recordRefusal,
   outstandingSteps,
   type LorePlanAction,
   type LorePlanStep,
@@ -170,8 +172,9 @@ export async function proposeLorePlanTool(
   }
 
   ctx.lorePlan.asked = true;
+  const planId = `plan-${++planCounter}`;
   const decision = await ctx.requestPlanApproval({
-    id: `plan-${++planCounter}`,
+    id: planId,
     summary: args.summary?.trim() || undefined,
     steps,
   });
@@ -201,6 +204,9 @@ export async function proposeLorePlanTool(
         ? `\nStill outstanding from earlier:\n${leftover.map((s) => `  - ${describeStep(s)}`).join("\n")}`
         : "") +
       "\nAnything outside this list will be refused. Propose again if the plan needs to change.",
+    // The ledger's head: the plan as approved, and where its steps sit among the
+    // run's — never re-read from this call's arguments, which the log clips.
+    plan: { id: planId, summary: args.summary?.trim() || undefined, steps, offset },
   };
 }
 
@@ -298,7 +304,12 @@ function gate(
   file?: string,
 ): { refusal: ToolResult } | { step: LorePlanStep } {
   const check = checkPlan(ctx.lorePlan, ctx.loreIndex, action, entity, file);
-  return check.ok ? { step: check.step } : { refusal: { toolCallId, content: check.message } };
+  if (!check.ok) {
+    recordRefusal(ctx.lorePlan, toolCallId);
+    return { refusal: { toolCallId, content: check.message } };
+  }
+  recordMatch(ctx.lorePlan, toolCallId, check.step);
+  return { step: check.step };
 }
 
 // ─── create_lore_entity ──────────────────────────────────────────────────────

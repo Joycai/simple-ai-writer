@@ -1418,6 +1418,48 @@ describe("lore plan gate", () => {
     expect(ctx.loreChanged).toBe(0);
   });
 
+  it("hands back the approved plan, with where its steps sit in the run", async () => {
+    const ctx = unplanned({ requestPlanApproval: async () => ({ approved: true }) });
+    const first = await run("propose_lore_plan", {
+      summary: "整理",
+      steps: [
+        { action: "update", entity: "Ava", file: "index.md", detail: "改简介" },
+        { action: "delete", entity: "Ava", file: "armor.md", detail: "删旧战甲" },
+      ],
+    }, ctx);
+    expect(first.plan).toMatchObject({ summary: "整理", offset: 0 });
+    expect(first.plan?.steps).toHaveLength(2);
+
+    // A second plan appends to the gate, so its steps are numbered after the
+    // first's — which is how a write's step index finds the right ledger.
+    const second = await run("propose_lore_plan", {
+      steps: [{ action: "create", entity: "Kael", detail: "补一条" }],
+    }, ctx);
+    expect(second.plan?.offset).toBe(2);
+  });
+
+  it("hands back no plan when the author rejected it", async () => {
+    const ctx = unplanned({ requestPlanApproval: async () => ({ approved: false, reason: "不要" }) });
+    const res = await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava", detail: "x" }],
+    }, ctx);
+    expect(res.plan).toBeUndefined();
+  });
+
+  it("records the step a write carried out, and the write it turned away", async () => {
+    const ctx = unplanned({ requestPlanApproval: async () => ({ approved: true }) });
+    await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava", file: "index.md", detail: "改简介" }],
+    }, ctx);
+
+    await run("update_lore_file", { entity: "Ava", content: NEW_INDEX }, ctx);
+    expect(ctx.lorePlan!.matched.get("t1")).toBe(0);
+    expect(ctx.lorePlan!.refused.has("t1")).toBe(false);
+
+    await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(ctx.lorePlan!.refused.has("t1")).toBe(true);
+  });
+
   it("lets exactly the approved steps through and refuses the rest", async () => {
     const seen: LorePlan[] = [];
     const ctx = unplanned({

@@ -14,6 +14,7 @@
 
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
 import type { HandoffBrief } from "./handoff";
+import type { LorePlanStep } from "./plan";
 
 /**
  * What the author chose when a run hit its round cap.
@@ -110,6 +111,27 @@ export interface ChangeRecord {
   backupPath?: string;
 }
 
+/**
+ * A lore plan the author approved, as it stood at that moment — the head of the
+ * run's ledger (设计稿 02h 1i, `agent/planLedger`).
+ *
+ * Carried on the approving call's tool step rather than rebuilt from its
+ * arguments: those are clipped to 400 characters for the log, and a ten-step
+ * plan does not survive that.
+ */
+export interface PlanRecord {
+  id: string;
+  summary?: string;
+  steps: LorePlanStep[];
+  /**
+   * Where this plan's first step sits among the run's approved steps. A second
+   * plan mid-run appends to the gate rather than replacing it (plan.ts), so a
+   * write's `planStep` is a run-wide index and this is how a ledger finds its
+   * own slice of them.
+   */
+  offset: number;
+}
+
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
 export interface ToolStep {
   round: number;
@@ -144,6 +166,17 @@ export interface ToolStep {
    * and every event already on disk predates the field.
    */
   change?: ChangeRecord;
+  /** `propose_lore_plan`, once approved: the plan, for the ledger. */
+  plan?: PlanRecord;
+  /**
+   * A gated lore write that went through: the index of the approved step it
+   * carried out. Recorded by the gate at the moment it matched (plan.ts
+   * `recordMatch`), so the ledger never has to guess which step a write was for
+   * — a second matcher in the UI would, sooner or later, disagree with the gate.
+   */
+  planStep?: number;
+  /** A lore write the gate turned away: no approved step covered it. */
+  planRefused?: true;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
