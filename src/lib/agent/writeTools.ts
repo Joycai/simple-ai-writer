@@ -2497,6 +2497,18 @@ export async function deleteLoreEntityTool(
       `Deleted lore entity "${entity.name}" (category: ${entity.category}). ` +
       `Its folder was moved to ${trashPath} and can be restored by moving it back. ` +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+    // A folder, not a text: the record says where it went so the ledger can
+    // bring it back — the whole folder was moved, so the whole folder returns.
+    change: {
+      ...changeOf({
+        projectPath: ctx.projectPath,
+        path: entity.dirPath,
+        entity: entity.name,
+        before: "",
+        backupPath: trashPath,
+      }),
+      dir: true,
+    },
   };
 }
 

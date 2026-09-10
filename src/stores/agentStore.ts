@@ -72,6 +72,7 @@ import { chatState, mostUrgent, type ChatState } from "../lib/agent/chatState";
 import { sessionLabel } from "../lib/agent/sessionDb";
 import type { WritingFocus } from "./editorStore";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
+import { undoWrites } from "../lib/agent/undo";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
   chatAutoApproveKey, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate,
@@ -576,6 +577,12 @@ interface AgentState {
 
   /** Save one open conversation to the project DB (best-effort, never throws). */
   persistChat: (key?: string) => Promise<void>;
+  /**
+   * Undo writes from a finished turn's plan ledger (设计稿 02h 1h / 1i). Every
+   * attempt — done or refused — is appended to that turn's log and persisted,
+   * so the ledger keeps saying what happened.
+   */
+  undoTurnWrites: (key: string, turnId: string, toolCallIds: string[]) => Promise<void>;
   /**
    * Open a saved conversation: focus its tab if it is already open, else load
    * it into the active tab when that is empty, else into a new tab.
@@ -1906,6 +1913,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set((s) => ({ compactingChats: s.compactingChats.filter((x) => x !== k) }));
       // A job that queued while the fold held this conversation may run now.
       pump(set, get);
+    }
+  },
+
+  undoTurnWrites: async (key, turnId, toolCallIds) => {
+    const turn = get().chats[key]?.turns.find((tn) => tn.id === turnId);
+    const { useProjectStore } = await import("./projectStore");
+    const projectPath = useProjectStore.getState().projectPath;
+    if (!turn || !projectPath) return;
+    const events = await undoWrites(projectPath, turn.log, toolCallIds);
+    if (events.length === 0) return;
+    patchChat(set, key, (c) => ({
+      turns: c.turns.map((tn) =>
+        tn.id === turnId ? { ...tn, log: events.reduce((log, e) => appendAgentEventTo(log, e), tn.log) } : tn),
+    }));
+    void get().persistChat(key);
+    // What came back are knowledge-base files: the index has to see them before
+    // the next turn resolves a name against it.
+    if (events.some((e) => e.outcome === "undone")) {
+      const { useLoreStore } = await import("./loreStore");
+      await useLoreStore.getState().scanProject(projectPath);
     }
   },
 

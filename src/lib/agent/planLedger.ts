@@ -23,7 +23,7 @@
  */
 
 import { diffInline } from "../diff";
-import type { AgentEvent, ChangeRecord, PlanRecord, ToolStep } from "./events";
+import type { AgentEvent, ChangeRecord, PlanRecord, ToolStep, UndoEvent } from "./events";
 import type { LorePlanStep } from "./plan";
 
 /** One approved step and what the run did about it. */
@@ -37,6 +37,8 @@ export interface LedgerStep {
   removed: number;
   /** The author skipped this step at its card (a destructive step, 1g). */
   skipped: boolean;
+  /** The latest undo attempt on any of this step's writes. */
+  undo?: UndoEvent;
 }
 
 export interface PlanLedger {
@@ -60,8 +62,13 @@ export interface PlanLedger {
 /** Every approved plan in a turn's log, each with its receipts. */
 export function buildPlanLedgers(log: readonly AgentEvent[]): PlanLedger[] {
   const ledgers: PlanLedger[] = [];
+  const undos = new Map<string, UndoEvent>();
 
   for (const event of log) {
+    if (event.kind === "undo") {
+      undos.set(event.toolCallId, event);
+      continue;
+    }
     if (event.kind !== "tool-step" || event.parentStep) continue;
     const step = event.step;
 
@@ -114,11 +121,52 @@ export function buildPlanLedgers(log: readonly AgentEvent[]): PlanLedger[] {
   }
 
   for (const ledger of ledgers) {
+    for (const entry of ledger.steps) {
+      const attempts = entry.writes
+        .map((w) => undos.get(w.toolCallId))
+        .filter((u): u is UndoEvent => u !== undefined)
+        .sort((a, b) => b.at - a.at);
+      if (attempts[0]) entry.undo = attempts[0];
+    }
     ledger.written = ledger.steps.filter((s) => s.writes.length > 0).length;
     ledger.added = ledger.steps.reduce((n, s) => n + s.added, 0);
     ledger.removed = ledger.steps.reduce((n, s) => n + s.removed, 0);
   }
   return ledgers;
+}
+
+/** One write of a turn that left a record — what an undo acts on. */
+export interface TurnWrite {
+  toolCallId: string;
+  toolName: string;
+  change: ChangeRecord;
+}
+
+/**
+ * Every write in a turn that left a change record, in order.
+ *
+ * Top-level only, and only the ones that went through: a skipped step wrote
+ * nothing, and an errored call's record (if any) describes a write that did not
+ * finish.
+ */
+export function turnWrites(log: readonly AgentEvent[]): TurnWrite[] {
+  const out: TurnWrite[] = [];
+  for (const event of log) {
+    if (event.kind !== "tool-step" || event.parentStep) continue;
+    const { step } = event;
+    if (step.status !== "done" || step.planSkipped || !step.change) continue;
+    out.push({ toolCallId: step.toolCallId, toolName: step.name, change: step.change });
+  }
+  return out;
+}
+
+/** Tool calls whose write has been undone. */
+export function undoneIds(log: readonly AgentEvent[]): Set<string> {
+  const ids = new Set<string>();
+  for (const event of log) {
+    if (event.kind === "undo" && event.outcome === "undone") ids.add(event.toolCallId);
+  }
+  return ids;
 }
 
 /**

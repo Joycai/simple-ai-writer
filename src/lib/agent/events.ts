@@ -109,6 +109,14 @@ export interface ChangeRecord {
   afterChars: number;
   /** Where the previous version went, in full. */
   backupPath?: string;
+  /**
+   * Fingerprint of the text after the write (`backup.hashText`). Survives the
+   * cap that drops `after`, so an undo can still tell whether the file is the
+   * one this write left — the whole of the undo rule rests on that question.
+   */
+  afterHash?: string;
+  /** The record is of a whole folder — an entry deleted — not of one file. */
+  dir?: true;
 }
 
 /**
@@ -182,6 +190,37 @@ export interface ToolStep {
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
+/** Why an undo did not happen (`agent/undo`). */
+export type UndoRefusal =
+  /** The file is not what the write left: edited since, most likely by hand. */
+  | "changedAfter"
+  /** A later write in the same turn touched the file; undo that one first. */
+  | "changedByLaterWrite"
+  /** Something is back at a deleted file's or entry's old path. */
+  | "recreated"
+  /** The write left no backup to restore from. */
+  | "noBackup"
+  /** The record predates fingerprints and kept no text: nothing to check against. */
+  | "cannotVerify"
+  /** Reading or writing a file failed. */
+  | "failed";
+
+/**
+ * The author undid, or tried to undo, one write from the plan ledger
+ * (设计稿 02h 1h / 1i). Appended to the turn's log after the run, so the ledger
+ * — which is built from that log — still says 「已撤回」 after a restart.
+ */
+export interface UndoEvent {
+  kind: "undo";
+  /** The tool call whose write this was. */
+  toolCallId: string;
+  outcome: "undone" | "refused";
+  reason?: UndoRefusal;
+  /** `changedByLaterWrite`: the later write's tool, so the sentence can name it. */
+  byTool?: string;
+  at: number;
+}
+
 export interface AgentEventScope {
   /** The parent delegate step's toolCallId, if this event occurred inside a subagent run. */
   parentStep?: string;
@@ -502,6 +541,7 @@ export type AgentEvent = AgentEventScope & (
       error?: string;
       at: number;
     }
+  | UndoEvent
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number });
 

@@ -43,7 +43,7 @@ import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import { buildPlanLedgers } from "../../lib/agent/planLedger";
-import { PlanLedgerBand } from "./PlanLedger";
+import { PlanLedgerBand, type UndoHandler } from "./PlanLedger";
 import {
   buildLogModel,
   roundRows,
@@ -1113,7 +1113,7 @@ function SubAgentCard({
 // ─── The card ─────────────────────────────────────────────────────────────────
 
 export function AgentLog({
-  log, isRunning, flat = false, compact = false, headline: headlineOverride, subRunsLabel,
+  log, isRunning, flat = false, compact = false, headline: headlineOverride, subRunsLabel, onUndo,
 }: {
   log: AgentEvent[];
   isRunning: boolean;
@@ -1127,6 +1127,12 @@ export function AgentLog({
   headline?: string;
   /** The band ③ label, when the sub-runs are not subagents (段, not 子代理). */
   subRunsLabel?: string;
+  /**
+   * Undo writes from this log's plan ledger. Only surfaces that keep the log
+   * (and can rescan the knowledge base) pass it; without it the ledger is
+   * read-only.
+   */
+  onUndo?: UndoHandler;
 }) {
   const { t } = useTranslation();
   const model = useMemo(() => buildLogModel(log, isRunning), [log, isRunning]);
@@ -1287,7 +1293,10 @@ export function AgentLog({
       {/* The plan band sits above the rounds, not inside the round that
           approved it: finished rounds are collapsed, and an account that has to
           be dug out of an accordion is not one anybody reads. */}
-      <PlanLedgerBand ledgers={ledgers} />
+      {/* No undo while the run is live: the next write could land on the very
+          file being restored, and the undo rule's "later write" check only sees
+          writes that have already finished. */}
+      <PlanLedgerBand ledgers={ledgers} onUndo={isRunning ? undefined : onUndo} />
 
       {(visible.length > 0 || model.roundLimits.length > 0) && (
         <ul className={styles.list}>
