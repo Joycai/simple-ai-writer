@@ -41,7 +41,7 @@ import {
   SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import {
-  knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
+  jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import {
@@ -338,12 +338,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
 
   // The structured-output options this family can honour (lib/ai/jsonMode.ts).
-  const soChoices: StructuredOutputMode[] = family === "anthropic"
-    ? ["off"]
-    : family === "gemini"
-      ? STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema")
-      : STRUCTURED_OUTPUT_MODES;
-  const soAutoLifted = (family === "openai" || family === "responses") && knownJsonSchemaModel(form.modelId);
+  // Gemini 从 2.5 起也收严格档（generationConfig.responseJsonSchema），所以这里
+  // 不再把 json_schema 从它的选项里筛掉；只有 anthropic 仍然只有一档。
+  const soChoices: StructuredOutputMode[] = family === "anthropic" ? ["off"] : STRUCTURED_OUTPUT_MODES;
+  // 与 jsonMode.ts 的 `lifts` 同一份名单：自动档的抬升按**族**给，不按 id 单发。
+  const soAutoLifted =
+    (family === "openai" || family === "responses" || family === "gemini")
+    && knownJsonSchemaModel(form.modelId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
 
@@ -554,7 +555,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard)
+      }, provider.apiStandard, provider.baseUrl)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────
@@ -573,11 +574,25 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     : family === "gemini"
       ? t("aiConfig.models.briefSoGemini")
       : t("aiConfig.models.briefSoOpenai");
-  const soNote = form.structuredOutput !== "auto" || family === "anthropic"
-    ? undefined
-    : soAutoLifted
-      ? { note: t("aiConfig.models.noteSoSchema"), noteTone: "ok" as const }
-      : { note: t("aiConfig.models.noteSoJson"), noteTone: "muted" as const };
+  // What this endpoint has refused this session (lib/ai/jsonMode.ts memo): a
+  // measurement, so it outranks the resolved-config note — the author sees
+  // what is actually being sent, and that their pick did not take.
+  const soCeiling = provider
+    ? jsonModeCeiling({ standard: provider.apiStandard, baseUrl: provider.baseUrl, modelId: form.modelId })
+    : undefined;
+  const soNote = soCeiling
+    ? {
+        note: t("aiConfig.models.noteSoCeiling", {
+          refused: t(SO_LABEL_KEY[soCeiling === "off" ? "json_object" : "json_schema"]),
+          mode: t(SO_LABEL_KEY[soCeiling]),
+        }),
+        noteTone: "faint" as const,
+      }
+    : form.structuredOutput !== "auto" || family === "anthropic"
+      ? undefined
+      : soAutoLifted
+        ? { note: t("aiConfig.models.noteSoSchema"), noteTone: "ok" as const }
+        : { note: t("aiConfig.models.noteSoJson"), noteTone: "muted" as const };
 
   const inputCls = (unset: boolean, extra = "") => `${s.input} ${unset ? s.unset : ""} ${extra}`;
 

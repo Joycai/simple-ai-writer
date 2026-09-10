@@ -78,6 +78,8 @@ const KNOWN_JSON_SCHEMA: ReadonlyArray<string> = [
   "qwen3.8-max", "qwen3.8-flash",
   // ── OpenAI ──
   "gpt-5", "gpt-4.1", "gpt-4o",
+  // ── Google — `responseJsonSchema` is documented from Gemini 2.5 on ──
+  "gemini-2.5", "gemini-3",
 ];
 
 /** Whether this model id is documented to accept strict `json_schema` mode. */
@@ -97,7 +99,7 @@ export interface JsonModeTarget {
 }
 
 /**
- * The mode this request will actually use.
+ * The mode this request will actually use, as far as the config can tell.
  *
  * The Anthropic family has no JSON parameter, so it resolves to `off` whatever
  * the row says — there is nothing else it *could* send, and a declaration that
@@ -109,7 +111,12 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   if (target.structuredOutput) return target.structuredOutput;
   // The Responses family is OpenAI's own second wire: the same models, and
   // the table's OpenAI rows were verified there (docs/api/responses.md §2.2).
-  const lifts = family === "openai" || family === "responses";
+  // Gemini joins them from 2.5 on (`generationConfig.responseJsonSchema`, see
+  // the id table above) — but the lift stays keyed to a *family*, not to the id
+  // alone: a relay serving `gpt-4o` over `openai_compat` is a different endpoint
+  // with its own idea of what it accepts, and it earns the strict tier by
+  // declaration or not at all.
+  const lifts = family === "openai" || family === "responses" || family === "gemini";
   return lifts && target.modelId && knownJsonSchemaModel(target.modelId)
     ? "json_schema"
     : "json_object";
@@ -176,8 +183,7 @@ export function jsonModeShaping(
   schema?: JsonSchemaSource,
 ): JsonModeShaping {
   const t: JsonModeTarget = typeof target === "string" ? { standard: target } : target;
-  // What the config says, capped by what this endpoint has already refused.
-  const mode = capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  const mode = effectiveStructuredOutput(t);
 
   if (mode === "off") {
     // No native enforcement anywhere — the cue is the whole mechanism. On
@@ -188,10 +194,28 @@ export function jsonModeShaping(
 
   switch (familyOf(t.standard)) {
     case "gemini":
+      if (mode === "json_schema" && schema) {
+        // `responseJsonSchema` (Gemini 2.5+) takes a standard JSON Schema —
+        // type unions for nullable, `additionalProperties`, `anyOf` — so the
+        // same strictified schema the OpenAI branch sends goes here verbatim.
+        // Not the older `responseSchema`, whose OpenAPI dialect wants
+        // `nullable: true` and rejects `additionalProperties`; the two fields
+        // are mutually exclusive and the newer one is the documented input
+        // for every model this app's Gemini support starts at. An endpoint
+        // that lacks the field says so with a 400 naming it (see
+        // `isJsonModeRejection`), and the memo steps down to JSON mode.
+        return {
+          mode,
+          extraBody: {
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseJsonSchema: strictify(schema.parameters),
+            },
+          },
+        };
+      }
       // The cue is belt-and-suspenders here: some models silently ignore
-      // responseMimeType. `json_schema` is not yet spelled for this family
-      // (`responseSchema` speaks a different dialect — no additionalProperties,
-      // `nullable` as a field) and rides on JSON mode until it is verified.
+      // responseMimeType.
       return {
         mode: "json_object",
         extraBody: { generationConfig: { responseMimeType: "application/json" } },
@@ -288,6 +312,16 @@ function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode |
 }
 
 /**
+ * The mode a request to this endpoint+model will actually use: what the config
+ * says (`resolveStructuredOutput`), capped by what the endpoint has refused this
+ * session. The one answer the shaping, the 「将发送」 line and the "is the forced
+ * tool attempt worth making" check all read — so they cannot disagree.
+ */
+export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMode {
+  return capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+}
+
+/**
  * Whether this error is the endpoint rejecting the JSON-mode parameter itself.
  *
  * Narrow on purpose, like `isForcedToolChoiceRejection`: the parameter's own
@@ -308,7 +342,11 @@ function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode |
 export function isJsonModeRejection(err: unknown): boolean {
   if (err instanceof DOMException && err.name === "AbortError") return false;
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  return /response_format|text\.format/i.test(msg);
+  // Three spellings, because three wires: `response_format` (chat completions),
+  // `text.format` (the Responses API), and the generationConfig field a Gemini
+  // endpoint names when it does not recognise it (`Unknown name
+  // "responseJsonSchema"`), in either casing.
+  return /response_format|text\.format|response_?json_?schema/i.test(msg);
 }
 
 /** One endpoint+model; the standard is in the key because one host can serve several families. */

@@ -13,7 +13,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  __resetJsonModeMemo, downgradeJsonMode, isJsonModeRejection, JSON_ONLY_CUE, jsonModeCeiling,
+  __resetJsonModeMemo, downgradeJsonMode, effectiveStructuredOutput, isJsonModeRejection, JSON_ONLY_CUE, jsonModeCeiling,
   jsonModeShaping, knownJsonSchemaModel, noteJsonModeRefused, parseStructuredOutputMode,
   resolveStructuredOutput, withJsonModeFallback,
 } from "../ai/jsonMode";
@@ -76,14 +76,14 @@ describe("resolveStructuredOutput", () => {
   it("defaults an undeclared model to the family's JSON mode", () => {
     expect(resolveStructuredOutput({ standard: "openai", modelId: "qwen-plus" })).toBe("json_object");
     expect(resolveStructuredOutput({ standard: "openai_compat", modelId: "deepseek-v4-flash" })).toBe("json_object");
-    expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-2.5-pro" })).toBe("json_object");
+    expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-2.0-flash" })).toBe("json_object");
   });
 
-  it("lifts a model id documented to take strict mode to json_schema, on the OpenAI family only", () => {
+  it("lifts a model id documented to take strict mode to json_schema", () => {
     expect(resolveStructuredOutput({ standard: "openai_compat", modelId: "qwen3.8-max" })).toBe("json_schema");
     expect(resolveStructuredOutput({ standard: "openai", modelId: "gpt-5" })).toBe("json_schema");
-    // The Gemini spelling of strict mode is a different dialect, not yet sent.
-    expect(resolveStructuredOutput({ standard: "gemini", modelId: "gpt-5" })).toBe("json_object");
+    expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-3-pro" })).toBe("json_schema");
+    expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-2.0-flash" })).toBe("json_object");
   });
 
   it("lets the author's declaration win over the table", () => {
@@ -174,10 +174,25 @@ describe("jsonModeShaping · per-model modes", () => {
     }
   });
 
-  it("rides json_schema on JSON mode for the Gemini family until its dialect is verified", () => {
-    const s = jsonModeShaping({ standard: "gemini", modelId: "x", structuredOutput: "json_schema" }, WITH, SCHEMA);
-    expect(s.mode).toBe("json_object");
-    expect(s.extraBody).toEqual({ generationConfig: { responseMimeType: "application/json" } });
+  it("spells json_schema as responseJsonSchema on the Gemini family, same strictified schema, no cue", () => {
+    const s = jsonModeShaping({ standard: "gemini", modelId: "gemini-3-flash" }, WITHOUT, SCHEMA);
+    expect(s.mode).toBe("json_schema");
+    expect(s.cue).toBeUndefined();
+    expect(s.extraBody).toEqual({
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseJsonSchema: {
+          type: "object",
+          properties: { name: { type: "string" }, note: { type: ["string", "null"] } },
+          required: ["name", "note"],
+          additionalProperties: false,
+        },
+      },
+    });
+    // Without a schema there is nothing to enforce: JSON mode, cue and all.
+    const bare = jsonModeShaping({ standard: "gemini", modelId: "gemini-3-flash" }, WITH);
+    expect(bare.mode).toBe("json_object");
+    expect(bare.extraBody).toEqual({ generationConfig: { responseMimeType: "application/json" } });
   });
 
   it("is byte-identical to the pre-declaration behaviour for an undeclared, unlisted model", () => {
@@ -256,6 +271,13 @@ describe("json-mode refusal memo", () => {
     expect(jsonModeShaping(qwen, WITH, SCHEMA)).toEqual({ mode: "off", cue: JSON_ONLY_CUE });
   });
 
+  it("is what effectiveStructuredOutput reads, so every consumer sees the same capped answer", () => {
+    expect(effectiveStructuredOutput(qwen)).toBe("json_schema");
+    noteJsonModeRefused(qwen, "json_schema");
+    expect(effectiveStructuredOutput(qwen)).toBe("json_object");
+    expect(effectiveStructuredOutput({ ...qwen, structuredOutput: "off" })).toBe("off");
+  });
+
   it("caps an explicit declaration too — a wrong pick costs the mode, not the feature", () => {
     noteJsonModeRefused(qwen, "json_schema");
     expect(jsonModeShaping({ ...qwen, structuredOutput: "json_schema" }, WITH, SCHEMA).mode).toBe("json_object");
@@ -282,6 +304,10 @@ describe("json-mode refusal memo", () => {
     // The Responses family's name for the same parameter (docs/api/responses.md §2.2).
     expect(isJsonModeRejection(new Error(
       "400 Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.",
+    ))).toBe(true);
+    // Gemini names the generationConfig field it did not recognise.
+    expect(isJsonModeRejection(new Error(
+      "Invalid JSON payload received. Unknown name \"responseJsonSchema\" at 'generation_config': Cannot find field.",
     ))).toBe(true);
     expect(isJsonModeRejection(new Error("400 This model does not support json output"))).toBe(false);
     expect(isJsonModeRejection(new Error("401 invalid api key"))).toBe(false);

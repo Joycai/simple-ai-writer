@@ -18,7 +18,7 @@
 | | ① Chat Completions | ② Responses | ③ Google GenAI | ④ Anthropic |
 | --- | --- | --- | --- | --- |
 | **JSON 模式** | `response_format:{type:"json_object"}` | `text.format` | `generationConfig.responseMimeType:"application/json"` | **无此参数**，发了是 400 |
-| **Schema 严格模式** | `response_format:{type:"json_schema", json_schema:{name,schema,strict:true}}` | `text.format.type:"json_schema"` | `generationConfig.responseSchema` | 无 |
+| **Schema 严格模式** | `response_format:{type:"json_schema", json_schema:{name,schema,strict:true}}` | `text.format.type:"json_schema"` | `generationConfig.responseJsonSchema`（Gemini 2.5+，接标准 JSON Schema）；旧字段 `responseSchema` 是 OpenAPI 方言，两者互斥 | 无 |
 | **强制工具调用** | `tool_choice:{type:"function",function:{name}}` | 同形 | `functionCallingConfig.mode:"ANY"` | `tool_choice:{type:"tool",name}` |
 
 **Anthropic 没有 JSON 模式**，只有工具调用一条路。给它发 `response_format`

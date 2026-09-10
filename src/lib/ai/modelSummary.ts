@@ -17,7 +17,7 @@
  */
 
 import type { Model } from "./configDb";
-import { resolveStructuredOutput } from "./jsonMode";
+import { effectiveStructuredOutput } from "./jsonMode";
 import {
   reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
 } from "./reasoning";
@@ -60,8 +60,14 @@ function flatten(body: Record<string, unknown>, prefix = ""): WireItem[] {
 /** Fields the adapters always pair with another and that say nothing on their own. */
 const NOISE = new Set(["thinking.display", "generationConfig.thinkingConfig.includeThoughts"]);
 
-/** What this row adds to a request beyond `model` and the messages. */
-export function wireSummary(m: WireInput, standard: ApiStandard): WireItem[] {
+/**
+ * What this row adds to a request beyond `model` and the messages.
+ *
+ * `baseUrl` names the endpoint for the session memo of refused JSON modes: with
+ * it, the structured-output item is what will *actually* be sent, not what the
+ * config alone would say.
+ */
+export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: string): WireItem[] {
   const out: WireItem[] = [];
   const family = familyOf(standard);
 
@@ -101,10 +107,14 @@ export function wireSummary(m: WireInput, standard: ApiStandard): WireItem[] {
     else out.push(...flatten(openaiServerToolsBody(standard, m.serverTools)));
   }
 
-  const so = resolveStructuredOutput({ standard, modelId: m.modelId, structuredOutput: m.structuredOutput });
+  const so = effectiveStructuredOutput({ standard, baseUrl, modelId: m.modelId, structuredOutput: m.structuredOutput });
   if (so !== "off") {
+    // 三条线三个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
+    // 否则只是 responseMimeType）、Responses 的 text.format、其余的 response_format。
     out.push(family === "gemini"
-      ? { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
+      ? so === "json_schema"
+        ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
+        : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
       : family === "responses"
         ? { key: "text.format", value: so, scope: "structured" }
         : { key: "response_format", value: so, scope: "structured" });
