@@ -1,3 +1,13 @@
+//! The custom filesystem commands.
+//!
+//! Every one of them is `async` and does its work through `crate::blocking`:
+//! a sync command runs on the main thread, and these are called hundreds of
+//! times in a row by a knowledge-base scan, each stalling the window's event
+//! loop for one canonicalize plus one syscall. The scope check goes into the
+//! blocking task with the rest — it canonicalizes too, twice for a path that
+//! does not exist — which is why `FsScope` is `Clone` (an `Arc` inside).
+
+use crate::blocking::blocking;
 use crate::scope::FsScope;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -57,36 +67,40 @@ fn valid_category(name: &str) -> bool {
 /// is additive: switching a project's profile creates the new profile's folders
 /// and leaves the old ones (and the entities in them) untouched on disk.
 #[command]
-pub fn scaffold_project(
+pub async fn scaffold_project(
     project_path: String,
     categories: Option<Vec<String>>,
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
-    scope.check(&project_path)?;
-    let root = Path::new(&project_path);
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&project_path)?;
+        let root = Path::new(&project_path);
 
-    let categories = categories.filter(|c| !c.is_empty()).unwrap_or_else(|| {
-        DEFAULT_LORE_CATEGORIES
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    });
+        let categories = categories.filter(|c| !c.is_empty()).unwrap_or_else(|| {
+            DEFAULT_LORE_CATEGORIES
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        });
 
-    if let Some(bad) = categories.iter().find(|c| !valid_category(c)) {
-        return Err(format!("Invalid lore category name: {bad}"));
-    }
+        if let Some(bad) = categories.iter().find(|c| !valid_category(c)) {
+            return Err(format!("Invalid lore category name: {bad}"));
+        }
 
-    // Only the app's own data tree. The workspace root itself is where the
-    // author's documents live, organised however they like — no scaffolded
-    // writing/ (or the never-read output/) directory dictating a layout.
-    let lore_root = root.join(".ai-writer").join("lore");
-    let dirs: Vec<_> = categories.iter().map(|c| lore_root.join(c)).collect();
+        // Only the app's own data tree. The workspace root itself is where the
+        // author's documents live, organised however they like — no scaffolded
+        // writing/ (or the never-read output/) directory dictating a layout.
+        let lore_root = root.join(".ai-writer").join("lore");
+        let dirs: Vec<_> = categories.iter().map(|c| lore_root.join(c)).collect();
 
-    for dir in &dirs {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
+        for dir in &dirs {
+            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
 
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
 /// Write raw bytes to a file, creating it if it does not exist.
@@ -98,33 +112,41 @@ pub fn scaffold_project(
 /// image editing writes every candidate of every round, so this is the hot
 /// path it looks like it isn't.
 #[command]
-pub fn fs_write_binary_file(
+pub async fn fs_write_binary_file(
     path: String,
     data: String,
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
-    scope.check(&path)?;
-    let bytes = BASE64
-        .decode(data.as_bytes())
-        .map_err(|e| format!("not valid base64: {e}"))?;
-    if let Some(parent) = Path::new(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&path, bytes).map_err(|e| e.to_string())
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let bytes = BASE64
+            .decode(data.as_bytes())
+            .map_err(|e| format!("not valid base64: {e}"))?;
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&path, bytes).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Write UTF-8 text to a file, creating it if it does not exist.
 #[command]
-pub fn fs_write_text_file(
+pub async fn fs_write_text_file(
     path: String,
     content: String,
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
-    scope.check(&path)?;
-    if let Some(parent) = Path::new(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&path, content).map_err(|e| e.to_string())
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&path, content).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Decode file bytes into text, guessing the encoding the way an editor does.
@@ -215,80 +237,109 @@ fn read_head_bytes(path: &Path, max_bytes: u64) -> std::io::Result<(u64, Vec<u8>
 }
 
 #[command]
-pub fn fs_read_head(
+pub async fn fs_read_head(
     path: String,
     max_bytes: u64,
     scope: State<'_, FsScope>,
 ) -> Result<FileHead, String> {
-    scope.check(&path)?;
-    let (size, buf) = read_head_bytes(Path::new(&path), max_bytes).map_err(|e| e.to_string())?;
-    Ok(FileHead {
-        size,
-        head: BASE64.encode(&buf),
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let (size, buf) =
+            read_head_bytes(Path::new(&path), max_bytes).map_err(|e| e.to_string())?;
+        Ok(FileHead {
+            size,
+            head: BASE64.encode(&buf),
+        })
     })
+    .await
 }
 
 /// Read text from a file, guessing the encoding when it isn't UTF-8 —
 /// see [`decode_text`].
 #[command]
-pub fn fs_read_text_file(path: String, scope: State<'_, FsScope>) -> Result<String, String> {
-    scope.check(&path)?;
-    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-    decode_text(bytes)
+pub async fn fs_read_text_file(path: String, scope: State<'_, FsScope>) -> Result<String, String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+        decode_text(bytes)
+    })
+    .await
 }
 
 /// Append UTF-8 text to a file, creating it (and parent dirs) if missing.
 #[command]
-pub fn fs_append_text_file(
+pub async fn fs_append_text_file(
     path: String,
     content: String,
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
-    use std::io::Write;
-    scope.check(&path)?;
-    if let Some(parent) = Path::new(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|e| e.to_string())?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| e.to_string())
+    let scope = scope.inner().clone();
+    blocking(move || {
+        use std::io::Write;
+        scope.check(&path)?;
+        if let Some(parent) = Path::new(&path).parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        file.write_all(content.as_bytes())
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Create a directory and all missing parent directories.
 #[command]
-pub fn fs_create_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
-    scope.check(&path)?;
-    fs::create_dir_all(&path).map_err(|e| e.to_string())
+pub async fn fs_create_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        fs::create_dir_all(&path).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Check whether a path exists.
 #[command]
-pub fn fs_exists(path: String, scope: State<'_, FsScope>) -> Result<bool, String> {
-    scope.check(&path)?;
-    Ok(Path::new(&path).exists())
+pub async fn fs_exists(path: String, scope: State<'_, FsScope>) -> Result<bool, String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        Ok(Path::new(&path).exists())
+    })
+    .await
 }
 
 /// Remove a directory and all its contents.
 #[command]
-pub fn fs_remove_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
-    scope.check(&path)?;
-    fs::remove_dir_all(&path).map_err(|e| e.to_string())
+pub async fn fs_remove_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        fs::remove_dir_all(&path).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Rename / move a file or directory. Missing parent dirs of the target are
 /// created so callers can move entities into not-yet-scaffolded folders.
 #[command]
-pub fn fs_rename(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
-    scope.check(&from)?;
-    scope.check(&to)?;
-    if let Some(parent) = Path::new(&to).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::rename(&from, &to).map_err(|e| e.to_string())
+pub async fn fs_rename(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&from)?;
+        scope.check(&to)?;
+        if let Some(parent) = Path::new(&to).parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::rename(&from, &to).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// True when `target` is `base` itself or lives inside it, compared on whole
@@ -308,30 +359,34 @@ fn is_within(base: &Path, target: &Path) -> bool {
 /// `src/lib/fs/moveCopy.ts`), so silently merging into or overwriting an
 /// existing entry is never what was meant.
 #[command]
-pub fn fs_copy(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
-    scope.check(&from)?;
-    scope.check(&to)?;
-    let src = Path::new(&from);
-    let dst = Path::new(&to);
+pub async fn fs_copy(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&from)?;
+        scope.check(&to)?;
+        let src = Path::new(&from);
+        let dst = Path::new(&to);
 
-    if !src.exists() {
-        return Err(format!("Source does not exist: {from}"));
-    }
-    if dst.exists() {
-        return Err(format!("Destination already exists: {to}"));
-    }
-    if src.is_dir() && is_within(src, dst) {
-        return Err("Cannot copy a folder into itself.".to_string());
-    }
+        if !src.exists() {
+            return Err(format!("Source does not exist: {from}"));
+        }
+        if dst.exists() {
+            return Err(format!("Destination already exists: {to}"));
+        }
+        if src.is_dir() && is_within(src, dst) {
+            return Err("Cannot copy a folder into itself.".to_string());
+        }
 
-    if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    if src.is_dir() {
-        copy_dir_all(src, dst)
-    } else {
-        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
-    }
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        if src.is_dir() {
+            copy_dir_all(src, dst)
+        } else {
+            fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
+        }
+    })
+    .await
 }
 
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
@@ -350,50 +405,62 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
 
 /// Remove a single file. Missing files are a no-op so callers can be tolerant.
 #[command]
-pub fn fs_remove_file(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
-    scope.check(&path)?;
-    let p = Path::new(&path);
-    if !p.exists() {
-        return Ok(());
-    }
-    fs::remove_file(p).map_err(|e| e.to_string())
+pub async fn fs_remove_file(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let p = Path::new(&path);
+        if !p.exists() {
+            return Ok(());
+        }
+        fs::remove_file(p).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// List one level of a directory (name + is_dir). Returns [] if path doesn't exist.
 #[command]
-pub fn fs_read_dir(path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNode>, String> {
-    scope.check(&path)?;
-    let p = Path::new(&path);
-    if !p.exists() {
-        return Ok(vec![]);
-    }
-    let mut entries: Vec<FileNode> = fs::read_dir(p)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .map(|e| {
-            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            let name = e.file_name().to_string_lossy().to_string();
-            let full_path = e.path().to_string_lossy().to_string();
-            FileNode {
-                name,
-                path: full_path,
-                is_dir,
-                children: None,
-            }
-        })
-        .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(entries)
+pub async fn fs_read_dir(path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNode>, String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let p = Path::new(&path);
+        if !p.exists() {
+            return Ok(vec![]);
+        }
+        let mut entries: Vec<FileNode> = fs::read_dir(p)
+            .map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok())
+            .map(|e| {
+                let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                let name = e.file_name().to_string_lossy().to_string();
+                let full_path = e.path().to_string_lossy().to_string();
+                FileNode {
+                    name,
+                    path: full_path,
+                    is_dir,
+                    children: None,
+                }
+            })
+            .collect();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(entries)
+    })
+    .await
 }
 
 /// Recursively list files under a directory (max depth 5).
 #[command]
-pub fn read_dir_recursive(
+pub async fn read_dir_recursive(
     dir_path: String,
     scope: State<'_, FsScope>,
 ) -> Result<Vec<FileNode>, String> {
-    scope.check(&dir_path)?;
-    read_dir_inner(Path::new(&dir_path), 0)
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&dir_path)?;
+        read_dir_inner(Path::new(&dir_path), 0)
+    })
+    .await
 }
 
 fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {

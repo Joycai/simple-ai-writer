@@ -23,18 +23,24 @@
 //! `allow_for_plugin_fs`.
 
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::command;
 
 /// Managed state holding the allowed root directories.
+///
+/// `Clone` shares the one list (an `Arc`), it does not copy it: the `fs_*`
+/// commands run their work on the blocking pool (`crate::blocking`), which
+/// needs an owned handle to move into the task, and a root allowed after the
+/// clone must still count — the handle is the same scope, not a snapshot.
+#[derive(Clone)]
 pub struct FsScope {
-    roots: Mutex<Vec<PathBuf>>,
+    roots: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 impl FsScope {
     pub fn new() -> Self {
         Self {
-            roots: Mutex::new(Vec::new()),
+            roots: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
