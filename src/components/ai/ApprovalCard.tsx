@@ -40,11 +40,11 @@ import { shellLabel, shellSyntax } from "../../lib/cli/shell";
 import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
-import { editWindows, type EditWindows } from "../../lib/diff/windows";
+import { editWindows, type EditWindows, type WindowRow } from "../../lib/diff/windows";
 import { rewriteWindows, type BlockChangeKind, type RewriteWindows } from "../../lib/diff/blocks";
 import { BlockWindows } from "./BlockWindows";
 import { useNarrow } from "../common/useNarrow";
-import { ChangeWindows } from "./ChangeWindows";
+import { ChangeWindows, WindowRows } from "./ChangeWindows";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
@@ -54,8 +54,11 @@ import { baseName, dirName, projectRelative as projectRel, toPosixPath } from ".
 /** Above this, a new chapter's preview is clipped behind a toggle. */
 const CLIP_CHARS = 600;
 
-/** Insertion rows shown before the list collapses behind a toggle. */
-const INSERT_ROWS_CLIPPED = 12;
+/** Opening lines of a file its deletion card shows before the count stands in. */
+const DELETE_LINES_SHOWN = 3;
+
+/** Files a folder's deletion card names before it says "and N more" (设计稿 1c). */
+const DELETE_ROWS_SHOWN = 8;
 
 /**
  * Card width at which the rail's degradations take over (设计稿 02h 1k).
@@ -145,10 +148,8 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
     case "copy":
       return "";
     case "delete":
-      // A folder's stake is how many files it takes with it, not characters.
-      return proposal.isDir
-        ? t("ai.approval.fileCount", { n: proposal.fileCount ?? 0 })
-        : `${proposal.chars} ${chars}`;
+      // Drawn by DeleteMeta: the number is a loss, and it is coloured like one.
+      return "";
     case "illustrate":
       // The price is the metric here — it is what makes this decision
       // different from every other card.
@@ -245,6 +246,33 @@ function RewriteMeta({ proposal }: { proposal: RewriteProposal }) {
             })}
           </span>
         </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * What a deletion costs (1z D): 「−3 042 字」, or a folder's 「12 个文档 · −41 200 字」.
+ *
+ * Signed and coloured, unlike every other card's metric. Nothing else here
+ * removes the author's words outright, and the minus is the difference between
+ * a number they read and a number they check.
+ */
+function DeleteMeta({ proposal }: { proposal: DeleteProposal }) {
+  const { t } = useTranslation();
+  const chars = t("ai.panel.unitChars", { defaultValue: "字" });
+  return (
+    <span className={styles.headerDelta}>
+      {proposal.isDir && (
+        <>
+          {t("ai.approval.docCount", { n: proposal.fileCount ?? 0 })}
+          {proposal.chars > 0 ? " · " : ""}
+        </>
+      )}
+      {(!proposal.isDir || proposal.chars > 0) && (
+        <span className={styles.metaDel}>
+          −{proposal.chars} {chars}
+        </span>
       )}
     </span>
   );
@@ -899,17 +927,121 @@ function ConvertBody({ proposal }: { proposal: ConvertProposal }) {
   );
 }
 
-function DeleteBody({ proposal }: { proposal: DeleteProposal }) {
+/**
+ * A deletion the author can recognise (设计稿 02h 1c).
+ *
+ * What this replaced said 「3 042 字」 and nothing else — a number, and a
+ * request to authorise it. The opening lines are what tells an author *which*
+ * draft this is, and the backlink line is the only fact on the card that stops
+ * being knowable the moment the file is gone: afterwards those links are
+ * simply broken, and nobody remembers they were whole.
+ */
+function DeleteBody({ proposal, narrow }: { proposal: DeleteProposal; narrow: boolean }) {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  if (proposal.isDir) return <DeleteFolderBody proposal={proposal} />;
+
+  const lines = (proposal.excerpt ?? "").split("\n");
+  const shown = expanded ? lines : lines.slice(0, DELETE_LINES_SHOWN);
+  const rows = shown.map((text, i) => ({ type: "del" as const, text, line: i + 1 }));
+  const more = lines.length > shown.length;
+  const locator = [
+    proposal.lines ? t("ai.approval.lineCount", { n: proposal.lines }) : null,
+    backlinkLine(proposal, t),
+  ].filter(Boolean);
+
   return (
-    <div className={styles.deleteBlock}>
-      <div className={styles.movePath}>{projectRelative(proposal.path)}</div>
-      <div className={styles.emptyNote}>
-        {proposal.isDir
-          ? t("ai.approval.deleteFolderRecoverable", { n: proposal.fileCount ?? 0 })
-          : t("ai.approval.deleteRecoverable")}
+    <>
+      <div className={proposal.backlinks?.length ? styles.locatorWarn : styles.locator}>
+        {locator.join(" · ")}
       </div>
-    </div>
+      {rows.length > 0 && <WindowRows rows={rows} lineNumbers={!narrow} />}
+      {(more || (proposal.lines ?? 0) > shown.length) && (
+        <button
+          className={styles.foldRow}
+          onClick={() => setExpanded(true)}
+          disabled={!more}
+        >
+          <ChevronRight size={10} />
+          {t("ai.approval.deleteAllLines", { n: proposal.lines ?? lines.length })}
+          {more && <span className={styles.foldAction}>{t("ai.approval.expand")}</span>}
+        </button>
+      )}
+      <div className={styles.emptyNote}>{t("ai.approval.deleteRecoverable")}</div>
+    </>
+  );
+}
+
+/** The sentence about inbound links, in the author's terms. */
+function backlinkLine(proposal: DeleteProposal, t: TFunction): string {
+  const links = proposal.backlinks ?? [];
+  if (links.length > 0) {
+    return t("ai.approval.linkedBy", { n: links.length, who: links.slice(0, 3).join(" · ") });
+  }
+  // A capped scan cannot claim "nothing links to it" — only that nothing it
+  // looked at does, which is a different sentence and has to read like one.
+  return proposal.backlinksPartial
+    ? t("ai.approval.noLinksFound")
+    : t("ai.approval.noLinks");
+}
+
+/**
+ * A folder takes everything inside it, so the card is the list — biggest first,
+ * because what an author checks a bulk deletion against is whether something
+ * large is in it that they did not expect.
+ */
+function DeleteFolderBody({ proposal }: { proposal: DeleteProposal }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const entries = proposal.entries ?? [];
+  const shown = expanded ? entries : entries.slice(0, DELETE_ROWS_SHOWN);
+  const restCount = (proposal.fileCount ?? entries.length) - shown.length;
+  const restChars = proposal.chars - shown.reduce((n, e) => n + e.chars, 0);
+  const linked = entries.filter((e) => e.backlinks?.length).length;
+  const locator = [
+    proposal.dirCount ? t("ai.approval.subfolderCount", { n: proposal.dirCount }) : null,
+    linked > 0 ? t("ai.approval.linkedCount", { n: linked }) : null,
+  ].filter(Boolean);
+
+  return (
+    <>
+      {locator.length > 0 && (
+        <div className={linked > 0 ? styles.locatorWarn : styles.locator}>{locator.join(" · ")}</div>
+      )}
+      <div className={styles.deleteList}>
+        {shown.map((entry) => (
+          <div key={entry.path} className={styles.deleteRow}>
+            <span className={styles.deleteMark}>−</span>
+            <span className={styles.deleteName}>
+              {entry.path}
+              {entry.backlinks?.length ? (
+                <span className={styles.deleteRef}>
+                  {t("ai.approval.linkedFrom", { who: entry.backlinks[0] })}
+                </span>
+              ) : null}
+            </span>
+            <span className={styles.deleteSize}>
+              {entry.chars > 0 ? t("ai.approval.charCount", { n: entry.chars }) : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+      {restCount > 0 && (
+        <button className={styles.foldRow} onClick={() => setExpanded(true)} disabled={entries.length <= shown.length}>
+          <ChevronRight size={10} />
+          {restChars > 0
+            ? t("ai.approval.deleteRestSized", { n: restCount, chars: restChars })
+            : t("ai.approval.deleteRest", { n: restCount })}
+          {entries.length > shown.length && (
+            <span className={styles.foldAction}>{t("ai.approval.expand")}</span>
+          )}
+        </button>
+      )}
+      <div className={styles.emptyNote}>
+        {t("ai.approval.deleteFolderRecoverable", { n: proposal.fileCount ?? 0 })}
+      </div>
+    </>
   );
 }
 
@@ -1007,37 +1139,41 @@ function AppendBody({ proposal }: { proposal: AppendProposal }) {
  * it. Each row instead carries only the inserted text and the line it lands
  * before, with that line quoted so "here" means something without scrolling.
  */
-function InsertBody({ proposal }: { proposal: InsertProposal }) {
+function InsertBody({ proposal, narrow }: { proposal: InsertProposal; narrow: boolean }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const rows = expanded ? proposal.insertions : proposal.insertions.slice(0, INSERT_ROWS_CLIPPED);
-  const hidden = proposal.insertions.length - rows.length;
+  const limit = expanded ? proposal.insertions.length : narrow ? WINDOWS_NARROW : WINDOWS_WIDE;
+  const shown = proposal.insertions.slice(0, limit);
+  const hidden = proposal.insertions.length - shown.length;
+
+  // One window per place, the same rows the other cards draw. The line above
+  // is new here: 「before line 120」 reads better with the sentence that comes
+  // before it than with the one that comes after alone.
+  const windows = shown.map((ins, i) => {
+    const rows: WindowRow[] = [];
+    const around = proposal.context[i];
+    if (around?.before) rows.push({ type: "context", text: around.before, line: ins.line - 1 });
+    ins.text.replace(/\n+$/, "").split("\n").forEach((text, k) => {
+      rows.push({ type: "add", text, line: ins.line + k });
+    });
+    // Numbered by its own side: the line it lands in front of still has its old
+    // number until the write happens.
+    if (around?.after) rows.push({ type: "context", text: around.after, line: ins.line });
+    return { rows, wholesale: false };
+  });
 
   return (
     <>
-      <div className={styles.insertList}>
-        {rows.map((ins, i) => (
-          <div key={i} className={styles.insertRow}>
-            <span className={styles.insertLine}>L{ins.line}</span>
-            <div className={styles.insertPiece}>
-              <pre className={styles.insertText}>{ins.text.replace(/\n+$/, "")}</pre>
-              {/* The line it lands in front of — what makes "before line 120"
-                  reviewable without opening the file. */}
-              {proposal.context[i]?.after && (
-                <div className={styles.insertContext}>{proposal.context[i].after}</div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      <ChangeWindows windows={windows} lineNumbers={!narrow} />
       {hidden > 0 && (
-        <button className={styles.originalToggle} onClick={() => setExpanded(true)}>
+        <button className={styles.foldRow} onClick={() => setExpanded(true)}>
           <ChevronRight size={10} />
-          {t("ai.approval.insertMore", { n: hidden, defaultValue: "还有 {{n}} 处" })}
+          {t("ai.approval.moreOccurrences", { n: hidden })}
+          <span className={styles.foldAction}>{t("ai.approval.showAll")}</span>
         </button>
       )}
-      {expanded && proposal.insertions.length > INSERT_ROWS_CLIPPED && (
-        <button className={styles.originalToggle} onClick={() => setExpanded(false)}>
+      {expanded && (
+        <button className={styles.foldRow} onClick={() => setExpanded(false)}>
           <ChevronDown size={10} />
           {t("ai.approval.collapse")}
         </button>
@@ -1069,7 +1205,7 @@ function ProposalBody({
     case "append":
       return <AppendBody proposal={proposal} />;
     case "insert":
-      return <InsertBody proposal={proposal} />;
+      return <InsertBody proposal={proposal} narrow={narrow} />;
     case "create":
       return <CreateBody proposal={proposal} />;
     case "move":
@@ -1077,7 +1213,7 @@ function ProposalBody({
     case "copy":
       return <CopyBody proposal={proposal} />;
     case "delete":
-      return <DeleteBody proposal={proposal} />;
+      return <DeleteBody proposal={proposal} narrow={narrow} />;
     case "illustrate":
       return <IllustrateBody proposal={proposal} />;
     case "pptx":
@@ -1288,6 +1424,8 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           <EditMeta proposal={proposal} model={editModel} />
         ) : proposal.kind === "rewrite" ? (
           <RewriteMeta proposal={proposal} />
+        ) : proposal.kind === "delete" ? (
+          <DeleteMeta proposal={proposal} />
         ) : (
           <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
         )}

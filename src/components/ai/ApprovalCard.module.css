@@ -175,58 +175,6 @@
   color: var(--color-diff-add-text);
 }
 
-/* Insertions: a list of places, not a diff. Each row is a line number in the
-   gutter and the incoming text beside it, so the eye runs down the structure
-   being proposed — which is the actual decision — instead of down a document
-   the author already wrote. The gutter is mono and dim for the same reason
-   read_file's is: a coordinate, not content. */
-.insertList {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 320px;
-  overflow-y: auto;
-}
-
-.insertRow {
-  display: grid;
-  grid-template-columns: 44px 1fr;
-  gap: 8px;
-  align-items: start;
-}
-
-.insertLine {
-  font: 400 11px/1.9 var(--font-mono);
-  color: var(--color-text-hint);
-  text-align: right;
-  padding-top: 2px;
-}
-
-.insertPiece {
-  min-width: 0;
-}
-
-.insertText {
-  margin: 0;
-  font: 400 12px/1.8 var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--color-diff-add-bg);
-  color: var(--color-diff-add-text);
-  padding: 6px 10px;
-}
-
-/* The line it lands in front of. Quoted, dimmed and single-line: it is here to
-   answer "where is that", so it must never read as part of what is inserted. */
-.insertContext {
-  font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-text-hint);
-  padding: 3px 10px 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* An appended section, folded: same add tint (it IS incoming text), but faded
    out at the bottom rather than scrollable — a section is read to decide, not
    scrolled through, and the fade says "there is more" without a scrollbar to
@@ -303,12 +251,49 @@
 }
 .moveArrow { flex-shrink: 0; color: var(--color-text-hint); }
 
-.deleteBlock {
+/* A folder's contents, one row per file (设计稿 02h 1c). Not a diff — nothing
+   is being compared — but the same del tint, because the whole list is what
+   goes. Biggest first, so a name the author does not recognise sits at the top
+   rather than at the bottom of a scroll. */
+.deleteList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
   background: var(--color-diff-del-bg);
-  padding: 10px 12px;
+}
+
+.deleteRow {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 10px 2px 0;
+  font: 400 12px/1.8 var(--font-mono);
+  color: var(--color-diff-del-text);
+}
+
+.deleteMark {
+  text-align: center;
+  opacity: 0.75;
+}
+
+.deleteName {
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* Which document points at this file. In the row rather than in a footnote:
+   the file that something links to is the one worth stopping on, and a note
+   under the list would be read after the decision. */
+.deleteRef {
+  margin-left: 8px;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+.deleteSize {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
 }
 
 .emptyNote {

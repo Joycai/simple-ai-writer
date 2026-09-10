@@ -66,6 +66,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
+import { backlinksOf } from "../fs/links";
 import { backupFile, backupFileByMove, changeAfterWrite, changeOf, snapshotFile } from "./backup";
 import {
   applyFindReplace, clipContextLine, countLines, describeEditTarget, findOccurrences,
@@ -83,7 +84,7 @@ import {
   type LorePlanStep,
   type LorePlanTarget,
 } from "./plan";
-import type { ApprovalDecision, ToolContext } from "./registry";
+import type { ApprovalDecision, DeleteEntry, ToolContext } from "./registry";
 import {
   isPathWithin,
   isStrictDescendant,
@@ -2819,21 +2820,31 @@ export async function deleteChapterTool(
   }
 
   let chars = 0;
+  let lines = 0;
   let excerpt: string | undefined;
   try {
     const body = await readFile(target.path);
     chars = body.length;
+    lines = countLines(body);
     excerpt = body.slice(0, DELETE_EXCERPT_CHARS);
   } catch {
     // Unreadable but listed — still proposable; the card just cannot size it.
   }
+
+  // Costs a pass over the workspace, and a deletion is rare enough to pay for
+  // it: this is the only question on the card that cannot be answered once the
+  // file is gone.
+  const links = await backlinksOf(ctx.projectPath, [target.path]);
 
   const decision = await ctx.requestApproval!({
     kind: "delete",
     id: `delete-${++proposalCounter}`,
     path: target.path,
     chars,
+    lines,
     excerpt,
+    backlinks: links.byTarget.get(target.path) ?? [],
+    ...(links.complete ? {} : { backlinksPartial: true as const }),
     reason,
   });
   return reportDecision(
@@ -2861,11 +2872,29 @@ const DELETE_EXCERPT_CHARS = 600;
  */
 const DELETE_FILES_LISTED = 50;
 
+/**
+ * Files read to size them before the folder card gives up on a total.
+ *
+ * Sizing means reading, and a folder someone has pasted a library into is not
+ * worth the wait — past this the card leads with the file count alone, which
+ * is what it did before any of this existed.
+ */
+const DELETE_SIZE_MAX_FILES = 200;
+
 /** Files inside a directory tree, recursively — the number the delete card leads with. */
 function countFiles(nodes: FileNode[]): number {
   let n = 0;
   for (const node of nodes) {
     n += node.is_dir ? countFiles(node.children ?? []) : 1;
+  }
+  return n;
+}
+
+/** Sub-folders inside it — 「含 1 个子文件夹」 is how deep the deletion goes. */
+function countDirs(nodes: FileNode[]): number {
+  let n = 0;
+  for (const node of nodes) {
+    if (node.is_dir) n += 1 + countDirs(node.children ?? []);
   }
   return n;
 }
@@ -2923,11 +2952,41 @@ export async function deleteDirectoryTool(
   }
 
   let fileCount = 0;
-  let files: string[] | undefined;
+  let dirCount = 0;
+  let totalChars = 0;
+  let entries: DeleteEntry[] | undefined;
+  let partial = false;
   try {
     const tree = await readDirRecursive(target.path);
     fileCount = countFiles(tree);
-    files = listFiles(tree, DELETE_FILES_LISTED);
+    dirCount = countDirs(tree);
+    const paths = listFiles(tree, Number.MAX_SAFE_INTEGER);
+    const sized = paths.length <= DELETE_SIZE_MAX_FILES;
+    const links = await backlinksOf(
+      ctx.projectPath,
+      sized ? paths.map((rel) => `${target.path}/${rel}`) : [],
+    );
+    partial = !links.complete;
+    const measured: DeleteEntry[] = [];
+    for (const rel of paths.slice(0, sized ? paths.length : DELETE_FILES_LISTED)) {
+      const abs = `${target.path}/${rel}`;
+      let chars = 0;
+      if (sized) {
+        try {
+          chars = (await readFile(abs)).length;
+        } catch {
+          // Unreadable: it still goes, and the row still names it.
+        }
+      }
+      totalChars += chars;
+      const backlinks = links.byTarget.get(abs) ?? [];
+      measured.push({ path: rel, chars, ...(backlinks.length ? { backlinks } : {}) });
+    }
+    // Biggest first: what an author checks a bulk deletion against is whether
+    // something *large* is in it, and a name they do not recognise at the top
+    // is the whole point of the list.
+    measured.sort((a, b) => b.chars - a.chars);
+    entries = measured.slice(0, DELETE_FILES_LISTED);
   } catch {
     // Unlistable but present — still proposable; the card just cannot size it.
   }
@@ -2936,10 +2995,12 @@ export async function deleteDirectoryTool(
     kind: "delete",
     id: `delete-${++proposalCounter}`,
     path: target.path,
-    chars: 0,
+    chars: totalChars,
     isDir: true,
     fileCount,
-    files,
+    dirCount,
+    entries,
+    ...(partial ? { backlinksPartial: true as const } : {}),
     reason,
   });
   return reportDecision(

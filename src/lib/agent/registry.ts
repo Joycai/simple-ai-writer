@@ -320,11 +320,39 @@ export interface DeleteProposal extends ProposalBase {
    */
   excerpt?: string;
   /**
-   * A folder's contents, project-relative, capped — `fileCount` stays the true
-   * total, so a card can say "and N more" without the list having to be
-   * complete. Absent when the folder could not be listed.
+   * A folder's contents, capped — `fileCount` stays the true total, so a card
+   * can say "and N more" without the list having to be complete. Absent when
+   * the folder could not be listed.
    */
-  files?: string[];
+  entries?: DeleteEntry[];
+  /** Sub-folders inside it, so the card can say the deletion goes deeper. */
+  dirCount?: number;
+  /** Lines in the file, for a card that shows only its opening. */
+  lines?: number;
+  /**
+   * Documents that link to this file, project-relative.
+   *
+   * The one fact about a deletion that cannot be established afterwards: the
+   * text is in the backup and the size is on the log, but once the file is
+   * gone its inbound links are just broken, and nobody knows they were whole.
+   * Absent for a folder — its files carry their own.
+   */
+  backlinks?: string[];
+  /**
+   * The backlink scan stopped at its cap, so the list is a floor rather than a
+   * total. The card has to say so: "no other document links to it" is a much
+   * stronger claim than "none of the 600 I looked at".
+   */
+  backlinksPartial?: true;
+}
+
+/** One file inside a folder that is about to go. */
+export interface DeleteEntry {
+  /** Path relative to the deleted folder — its name is already on the card. */
+  path: string;
+  chars: number;
+  /** Documents outside linking to it, project-relative. */
+  backlinks?: string[];
 }
 
 /**
