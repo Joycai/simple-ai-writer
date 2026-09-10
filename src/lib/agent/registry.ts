@@ -330,6 +330,12 @@ export interface DeleteProposal extends ProposalBase {
   /** Lines in the file, for a card that shows only its opening. */
   lines?: number;
   /**
+   * When the file last changed, ms since the epoch — the card's 「最后改于」.
+   * Absent for a folder (its time moves only with its direct children, which
+   * would say the wrong thing) and where the filesystem keeps none.
+   */
+  modifiedAt?: number;
+  /**
    * Documents that link to this file, project-relative.
    *
    * The one fact about a deletion that cannot be established afterwards: the

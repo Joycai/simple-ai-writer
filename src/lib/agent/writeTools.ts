@@ -66,6 +66,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
+import { modifiedAt } from "../fs/modified";
 import { backlinksOf } from "../fs/links";
 import { citingDocuments, isMajorRewrite, rewriteRatio } from "./destructive";
 import { CHANGE_TEXT_CHARS, backupFile, backupFileByMove, changeAfterWrite, changeOf, snapshotFile } from "./backup";
@@ -3047,6 +3048,8 @@ export async function deleteChapterTool(
   } catch {
     // Unreadable but listed — still proposable; the card just cannot size it.
   }
+  // 「最后改于 8 月 3 日」 (1c): the abandoned draft or this morning's work.
+  const modifiedMs = await modifiedAt(target.path);
 
   // Costs a pass over the workspace, and a deletion is rare enough to pay for
   // it: this is the only question on the card that cannot be answered once the
@@ -3060,6 +3063,7 @@ export async function deleteChapterTool(
     chars,
     lines,
     excerpt,
+    ...(modifiedMs !== undefined ? { modifiedAt: modifiedMs } : {}),
     backlinks: links.byTarget.get(target.path) ?? [],
     ...(links.complete ? {} : { backlinksPartial: true as const }),
     reason,

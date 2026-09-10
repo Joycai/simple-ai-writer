@@ -18,7 +18,8 @@
  */
 
 import { useMemo, useState } from "react";
-import type { TFunction } from "i18next";
+import i18next, { type TFunction } from "i18next";
+import { modifiedLabel } from "../../lib/fs/modified";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { rewriteWindows } from "../../lib/diff/blocks";
@@ -221,6 +222,11 @@ export function refusalText(t: TFunction, undo: UndoEvent, terms: ResolvedTerms)
   if (undo.reason === "changedByLaterWrite") {
     return t("ai.plan.ledger.undo.changedByLaterWrite", {
       tool: t(`ai.agent.tool.${undo.byTool}`, { defaultValue: undo.byTool, doc: terms.doc, entry: terms.entry }),
+    });
+  }
+  if (undo.reason === "changedAfter" && undo.changedAt !== undefined) {
+    return t("ai.plan.ledger.undo.changedAfterAt", {
+      when: modifiedLabel(t, undo.changedAt, { locale: i18next.language, withTime: true }),
     });
   }
   return t(`ai.plan.ledger.undo.${undo.reason ?? "failed"}`);

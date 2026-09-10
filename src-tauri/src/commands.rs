@@ -307,6 +307,47 @@ pub async fn fs_create_dir(path: String, scope: State<'_, FsScope>) -> Result<()
     .await
 }
 
+/// What [`fs_stat`] reports about one path.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileStat {
+    pub is_dir: bool,
+    pub size: u64,
+    /// Last modification, in milliseconds since the Unix epoch. `None` where the
+    /// filesystem keeps no such time.
+    pub modified_ms: Option<u64>,
+}
+
+/// One path's kind, size and last modification; `None` when nothing is there.
+///
+/// Asked per path, by the one card and the one refusal that need it — not carried
+/// on every [`FileNode`]: the tree is read whole on every project open, and a
+/// metadata call per entry would be paid for two sentences that each concern a
+/// single file.
+#[command]
+pub async fn fs_stat(path: String, scope: State<'_, FsScope>) -> Result<Option<FileStat>, String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let meta = match fs::metadata(&path) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(e.to_string()),
+        };
+        let modified_ms = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+        Ok(Some(FileStat {
+            is_dir: meta.is_dir(),
+            size: meta.len(),
+            modified_ms,
+        }))
+    })
+    .await
+}
+
 /// Check whether a path exists.
 #[command]
 pub async fn fs_exists(path: String, scope: State<'_, FsScope>) -> Result<bool, String> {

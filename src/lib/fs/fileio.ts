@@ -99,6 +99,18 @@ export async function fileExists(path: string): Promise<boolean> {
   return invoke("fs_exists", { path });
 }
 
+/** One path's kind, size and last modification (ms since the epoch; null where not kept). */
+export interface FileStat {
+  isDir: boolean;
+  size: number;
+  modifiedMs: number | null;
+}
+
+/** `null` when nothing is at `path`. */
+export async function statPath(path: string): Promise<FileStat | null> {
+  return invoke("fs_stat", { path });
+}
+
 export async function removeDir(path: string): Promise<void> {
   return invoke("fs_remove_dir", { path });
 }

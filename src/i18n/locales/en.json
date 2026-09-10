@@ -1777,7 +1777,8 @@
         "tooLong": "Too long to carry on the card; the file is untouched until you approve.",
         "note": "Approving writes it as planned; skipping leaves the rest of the plan standing.",
         "skip": "Skip this step"
-      }
+      },
+      "modifiedAt": "last modified {{when}}"
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",
@@ -1847,7 +1848,8 @@
           "recreated": "Not undone: something with the same name is already at the old location.",
           "noBackup": "Not undone: this write left no backup.",
           "cannotVerify": "Not undone: there is no way to confirm the file is as the write left it (the record predates undo).",
-          "failed": "Undo failed: a file could not be read or written."
+          "failed": "Undo failed: a file could not be read or written.",
+          "changedAfterAt": "Not undone: the file has changed since this write — last modified {{when}} (perhaps by hand)."
         }
       }
     },
@@ -2201,6 +2203,13 @@
       "body": "The model's output has been cut off by the per-reply cap {{n}} times in a row; the first few were resumed automatically. Continue retries the same number of times again; or stop here and either raise 'max output' in the model settings, or have it build large files in pieces (create_file for the skeleton, append_file per section).",
       "stop": "Stop here",
       "continue": "Keep trying"
+    },
+    "when": {
+      "today": "today {{time}}",
+      "yesterday": "yesterday {{time}}",
+      "date": "{{monthName}} {{day}}",
+      "dateYear": "{{monthName}} {{day}}, {{year}}",
+      "dateTime": "{{date}}, {{time}}"
     }
   },
   "aiConfig": {

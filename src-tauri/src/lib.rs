@@ -89,6 +89,7 @@ pub fn run() {
             commands::fs_copy,
             commands::fs_create_dir,
             commands::fs_exists,
+            commands::fs_stat,
             commands::fs_read_dir,
             commands::fs_remove_dir,
             commands::fs_remove_file,

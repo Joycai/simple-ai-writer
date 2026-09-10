@@ -22,6 +22,8 @@ vi.mock("../fs/fileio", () => ({
   }),
   fileExists: vi.fn(async (p: string) => files.has(p) || [...files.keys()].some((k) => k.startsWith(`${p}/`))),
   makeDir: vi.fn(async () => {}),
+  statPath: vi.fn(async (p: string) =>
+    files.has(p) ? { isDir: false, size: files.get(p)!.length, modifiedMs: 1_725_000_000_000 } : null),
   renamePath: vi.fn(async (from: string, to: string) => {
     for (const key of [...files.keys()]) {
       if (key === from || key.startsWith(`${from}/`)) {
@@ -126,7 +128,8 @@ describe("undoWrites", () => {
 
     const [event] = await undoWrites(P, log, ["t1"], now);
 
-    expect(event).toMatchObject({ outcome: "refused", reason: "changedAfter" });
+    // Who edited it cannot be known; when it was last changed can.
+    expect(event).toMatchObject({ outcome: "refused", reason: "changedAfter", changedAt: 1_725_000_000_000 });
     expect(files.get(ABS)).toBe("银发，我自己又改了一句");
   });
 
