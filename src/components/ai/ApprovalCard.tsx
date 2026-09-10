@@ -41,6 +41,8 @@ import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { editWindows, type EditWindows } from "../../lib/diff/windows";
+import { rewriteWindows, type BlockChangeKind, type RewriteWindows } from "../../lib/diff/blocks";
+import { BlockWindows } from "./BlockWindows";
 import { useNarrow } from "../common/useNarrow";
 import { ChangeWindows } from "./ChangeWindows";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
@@ -121,9 +123,9 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // (+12 −2), and the colours are half of what it says.
       return "";
     case "rewrite":
-      // Whole-file scale, so the delta is the header's whole job: it is what
-      // tells the author at a glance that a "reformat" is quietly dropping text.
-      return `${proposal.original.length} → ${proposal.content.length} ${chars}`;
+      // Drawn by RewriteMeta: the delta is this card's whole headline, and the
+      // direction it went is carried by colour as much as by the word.
+      return "";
     case "append":
       // Both ends, like a rewrite: what matters is that the file *grew* by this
       // much and lost nothing — an append that reads as a replacement would be
@@ -214,6 +216,34 @@ function EditMeta({ proposal, model }: { proposal: EditProposal; model: EditWind
         <>
           <span className={styles.metaAdd}>+{model.addedChars}</span>{" "}
           <span className={styles.metaDel}>−{model.removedChars}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/**
+ * A rewrite's headline: both sizes, then which way it went (1z D).
+ *
+ * Shrinking is the direction that loses the author's words, so it is the one
+ * that takes the warning colour — 「少了 812 字」 is the sentence this whole
+ * card exists to make answerable.
+ */
+function RewriteMeta({ proposal }: { proposal: RewriteProposal }) {
+  const { t } = useTranslation();
+  const chars = t("ai.panel.unitChars", { defaultValue: "字" });
+  const delta = proposal.content.length - proposal.original.length;
+  return (
+    <span className={styles.headerDelta}>
+      {proposal.original.length} → {proposal.content.length} {chars}
+      {delta !== 0 && (
+        <>
+          {" · "}
+          <span className={delta < 0 ? styles.metaDel : styles.metaAdd}>
+            {t(delta < 0 ? "ai.approval.rewriteShrink" : "ai.approval.rewriteGrow", {
+              n: Math.abs(delta),
+            })}
+          </span>
         </>
       )}
     </span>
@@ -369,36 +399,134 @@ function HtmlProposalBody({ path, content }: { path: string; content: string }) 
  * chapter is, with the size change called out above it because that is the one
  * signal that a formatting pass has quietly eaten a section.
  */
-function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
+/** The summary line: what happened to the document, in one row of figures. */
+function RewriteSummaryRow({ model }: { model: RewriteWindows }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const delta = proposal.content.length - proposal.original.length;
+  const s = model.summary;
+  const parts = [
+    s.deletedBlocks > 0 &&
+      t("ai.approval.sumDeleted", { n: s.deletedBlocks, chars: s.deletedChars }),
+    s.mergeCount > 0 && t("ai.approval.sumMerge", { n: s.mergeCount }),
+    s.replaceCount > 0 && t("ai.approval.sumReplace", { n: s.replaceCount }),
+    s.addedBlocks > 0 && t("ai.approval.sumAdd", { n: s.addedBlocks }),
+    s.punctCount > 0 && t("ai.approval.sumPunct", { n: s.punctCount }),
+  ].filter(Boolean) as string[];
+  if (parts.length === 0) return null;
+  return (
+    <div className={styles.summaryRow}>
+      {parts.map((part, i) => (
+        <span key={i} className={i === 0 && s.deletedBlocks > 0 ? styles.summaryLead : undefined}>
+          {part}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A rewrite replaces everything, so the question is never "is this good prose"
+ * — it is 「少了 812 字」，**哪 812 字**. The card opens on the answer: the
+ * removed paragraphs first, each with its section and its weight, and the
+ * finished text one tab away for when the author does want to read it.
+ *
+ * The old card was that second tab alone: the new text rendered, with a size
+ * delta above it. A formatting pass that quietly ate a section looked exactly
+ * like one that did not.
+ */
+function RewriteBody({ proposal, narrow }: { proposal: RewriteProposal; narrow: boolean }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"changes" | "prose">("changes");
+  const [expandedProse, setExpandedProse] = useState(false);
+  const [allWindows, setAllWindows] = useState(false);
   // A whole chapter's markdown — parsed once, not on every parent re-render
   // (approvals sit next to surfaces that re-render while other runs stream).
   const html = useMemo(() => renderMarkdown(proposal.content), [proposal.content]);
+  const model = useMemo(
+    () =>
+      rewriteWindows(proposal.original, proposal.content, {
+        context: narrow ? 1 : 2,
+        maxWindows: allWindows ? Number.MAX_SAFE_INTEGER : narrow ? WINDOWS_NARROW : WINDOWS_WIDE,
+      }),
+    [proposal.original, proposal.content, narrow, allWindows],
+  );
+
+  const hiddenParts = (Object.keys(model.hidden) as BlockChangeKind[])
+    .filter((kind) => model.hidden[kind] > 0)
+    .map((kind) => t(`ai.approval.hiddenOf.${kind}`, { n: model.hidden[kind] }));
+
+  const prose = isHtmlPath(proposal.path) ? (
+    <HtmlProposalBody path={proposal.path} content={proposal.content} />
+  ) : (
+    <>
+      <div
+        className={expandedProse ? styles.previewBlock : styles.previewBlockClipped}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {proposal.content.length > CLIP_CHARS && (
+        <button className={styles.originalToggle} onClick={() => setExpandedProse((v) => !v)}>
+          {expandedProse ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          {expandedProse
+            ? t("ai.approval.collapse")
+            : t("ai.approval.proseClip", { shown: CLIP_CHARS, total: proposal.content.length })}
+        </button>
+      )}
+    </>
+  );
 
   return (
     <>
-      {delta !== 0 && (
-        <div className={delta < 0 ? styles.rewriteDeltaWarn : styles.rewriteDelta}>
-          {t(delta < 0 ? "ai.approval.rewriteShrink" : "ai.approval.rewriteGrow", {
-            n: Math.abs(delta),
-          })}
-        </div>
-      )}
-      {isHtmlPath(proposal.path) ? (
-        <HtmlProposalBody path={proposal.path} content={proposal.content} />
-      ) : (
-        <div
-          className={expanded ? styles.previewBlock : styles.previewBlockClipped}
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      )}
-      {!isHtmlPath(proposal.path) && proposal.content.length > CLIP_CHARS && (
-        <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>
-          {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-          {expanded ? t("ai.approval.collapse") : t("ai.approval.expand")}
+      {/* 看成文 is hidden in the rail: 600 characters of rendered markdown is a
+          screen and a half there, which is the "card as reader" failure the
+          whole design is against. */}
+      <div className={styles.tabs}>
+        <button
+          className={tab === "changes" ? styles.tabOn : styles.tab}
+          onClick={() => setTab("changes")}
+        >
+          {t("ai.approval.tabChanges")}
         </button>
+        {!narrow && (
+          <button
+            className={tab === "prose" ? styles.tabOn : styles.tab}
+            onClick={() => setTab("prose")}
+          >
+            {t("ai.approval.tabProse")}
+          </button>
+        )}
+      </div>
+
+      <RewriteSummaryRow model={model} />
+
+      {tab === "prose" ? (
+        prose
+      ) : model.empty ? (
+        <div className={styles.emptyNote}>{t("ai.approval.editNoChange")}</div>
+      ) : model.degraded ? (
+        // Past the diff's ceilings there is no readable set of windows; the
+        // finished text is the honest fallback, and it is one tab away anyway.
+        <div className={styles.emptyNote}>{t("ai.approval.rewriteTooBig")}</div>
+      ) : (
+        <>
+          <BlockWindows windows={model.windows} lineNumbers={!narrow} />
+          {model.hiddenTotal > 0 && (
+            <button className={styles.foldRow} onClick={() => setAllWindows(true)}>
+              <ChevronRight size={10} />
+              {t("ai.approval.hiddenKinds", { what: hiddenParts.join("、") })}
+              <span className={styles.foldAction}>
+                {t("ai.approval.showAllWindows", { n: model.windows.length + model.hiddenTotal })}
+              </span>
+            </button>
+          )}
+          {allWindows && (
+            <button className={styles.foldRow} onClick={() => setAllWindows(false)}>
+              <ChevronDown size={10} />
+              {t("ai.approval.collapse")}
+            </button>
+          )}
+          {model.summary.punctCount > 0 && (
+            <div className={styles.emptyNote}>{t("ai.approval.punctNote")}</div>
+          )}
+        </>
       )}
     </>
   );
@@ -926,16 +1054,18 @@ function InsertBody({ proposal }: { proposal: InsertProposal }) {
 function ProposalBody({
   proposal,
   edit,
+  narrow,
 }: {
   proposal: Proposal;
   /** Everything the edit card's frame and body share; null for every other kind. */
   edit: EditView | null;
+  narrow: boolean;
 }) {
   switch (proposal.kind) {
     case "edit":
       return edit ? <EditBody proposal={proposal} {...edit} /> : null;
     case "rewrite":
-      return <RewriteBody proposal={proposal} />;
+      return <RewriteBody proposal={proposal} narrow={narrow} />;
     case "append":
       return <AppendBody proposal={proposal} />;
     case "insert":
@@ -1156,6 +1286,8 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
         <span className={styles.headerFile} title={proposal.path}>{fileName}</span>
         {editModel && proposal.kind === "edit" ? (
           <EditMeta proposal={proposal} model={editModel} />
+        ) : proposal.kind === "rewrite" ? (
+          <RewriteMeta proposal={proposal} />
         ) : (
           <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
         )}
@@ -1163,7 +1295,7 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
 
       <div className={styles.body}>
         {proposal.reason && <div className={styles.reason}>{proposal.reason}</div>}
-        <ProposalBody proposal={proposal} edit={editView} />
+        <ProposalBody proposal={proposal} edit={editView} narrow={narrow} />
       </div>
 
       <div className={styles.footer}>

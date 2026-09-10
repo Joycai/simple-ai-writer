@@ -1,0 +1,72 @@
+/* The rewrite card's windows (设计稿 02h 1b). The rows come from
+   ChangeWindows.module.css — only the header each window wears lives here. */
+
+.blockWindows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.blockWindow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+/* The kind leads and carries the colour: 删 is what the reading order exists
+   to put first, so it has to be findable without reading the line. */
+.kind {
+  font: 500 11px/1.6 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+
+.kindDel { color: var(--color-diff-del-text); }
+.kindAdd { color: var(--color-diff-add-text); }
+.kindMerge,
+.kindReplace { color: var(--color-sienna); }
+.kindPunct { color: var(--color-text-hint); }
+
+.section {
+  color: var(--color-text-muted);
+}
+
+.range {
+  font-variant-numeric: tabular-nums;
+}
+
+.weight {
+  color: var(--color-text-muted);
+}
+
+.headAction {
+  margin-left: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-sienna);
+  font: 400 10px/1.6 var(--font-mono);
+  cursor: pointer;
+}
+
+.headAction:hover { text-decoration: underline; }
+
+/* Narrow: the header wraps to two lines rather than shrinking its own words —
+   「删」 and the section title are the two things worth keeping legible. */
+@container (max-width: 479px) {
+  .head {
+    gap: 6px;
+  }
+
+  .weight {
+    width: 100%;
+  }
+}

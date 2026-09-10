@@ -92,6 +92,47 @@
   color: var(--color-error);
 }
 
+/* 看改动 / 看成文 (设计稿 02h 1b). Two readings of the same proposal, not two
+   places: they share the summary row below, and switching does not change how
+   tall the card can get. The default is 看改动 — before approving, what the
+   author has to judge is the difference, not the prose. */
+.tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.tab,
+.tabOn {
+  padding: 4px 0;
+  margin-bottom: -1px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--color-text-hint);
+  font: 400 11px/1.6 var(--font-sans);
+  cursor: pointer;
+}
+
+.tabOn {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-sienna);
+}
+
+.tab:hover { color: var(--color-text-secondary); }
+
+/* What happened to the document, in one row of figures. The removals lead and
+   keep the del colour: they are the reason this card is worth reading. */
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.summaryLead { color: var(--color-diff-del-text); }
+
 /* 「1 处改动 · 整段替换」 — how many windows follow, and whether looking for a
    word-level difference in them is a waste of the author's attention. */
 .changeCount {
@@ -778,5 +819,18 @@
 @container (max-width: 479px) {
   .body {
     max-height: 40vh;
+  }
+
+  /* The header wraps rather than clipping. `headerDelta` does not shrink — the
+     numbers are the headline — and `headerFile` gives up its width first, so
+     without this a long metric ellipsises the filename away to nothing and
+     still runs off the edge. Two lines is also where 设计稿 1k takes it. */
+  .header {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .headerDelta {
+    margin-left: 0;
   }
 }
