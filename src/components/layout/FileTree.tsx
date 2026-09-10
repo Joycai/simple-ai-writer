@@ -35,7 +35,7 @@ import { subAgentModel } from "../../lib/agent/subagent";
 import { useAiStore } from "../../stores/aiStore";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
-import { comboLabel, matchesCombo } from "../../lib/shortcuts";
+import { CLOSE_DOC_COMBOS, comboLabel, combosLabel, matchesCombo } from "../../lib/shortcuts";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
@@ -1588,7 +1588,7 @@ export function FileTree() {
       if (isSamePath(node.path, activeFilePath)) {
         items.push({
           kind: "item", icon: <X size={13} />, label: t("titleBar.closeDoc"),
-          shortcut: comboLabel({ mod: true, key: "w" }),
+          shortcut: combosLabel(CLOSE_DOC_COMBOS),
           action: () => void closeDocument(),
         });
       }
