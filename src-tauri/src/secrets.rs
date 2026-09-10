@@ -9,6 +9,7 @@
 //! keychain item, the other platforms keep one credential per id. Both `store`
 //! modules below carry the reasoning for their own half.
 
+use crate::blocking::blocking;
 use keyring::Entry;
 use tauri::command;
 
@@ -46,22 +47,10 @@ fn entry(account: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, account).map_err(|e| e.to_string())
 }
 
-/// Run keychain work on the blocking pool instead of an async-runtime worker.
-///
-/// One call can block for as long as it takes the author to answer a macOS
-/// Keychain dialog, and the one-time migration below answers a whole row of
-/// them — that does not belong on a tokio worker shared with every other
-/// command.
-async fn blocking<T, F>(work: F) -> Result<T, String>
-where
-    F: FnOnce() -> Result<T, String> + Send + 'static,
-    T: Send + 'static,
-{
-    match tauri::async_runtime::spawn_blocking(work).await {
-        Ok(result) => result,
-        Err(e) => Err(e.to_string()),
-    }
-}
+// Keychain work runs on the blocking pool (`crate::blocking`), never on an
+// async-runtime worker: one call can block for as long as it takes the author
+// to answer a macOS Keychain dialog, and the one-time migration below answers
+// a whole row of them.
 
 /// Save (or overwrite) the API key for a provider.
 #[command]
