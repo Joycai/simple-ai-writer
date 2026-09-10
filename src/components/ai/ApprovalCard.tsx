@@ -10,7 +10,7 @@
  * kind means adding a body and a case to each switch, not reshaping the frame.
  */
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
@@ -33,12 +33,16 @@ import type {
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
+import type { EditMatch } from "../../lib/agent/editApply";
 import { ILLUSTRATE_GRANT_MAX, autoApproveScope, canGrantCommand, isAutoApprovable } from "../../lib/agent/autoApprove";
 import type { CommandProposal, TranscribeProposal } from "../../lib/agent/registry";
 import { shellLabel, shellSyntax } from "../../lib/cli/shell";
 import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
+import { editWindows, type EditWindows } from "../../lib/diff/windows";
+import { useNarrow } from "../common/useNarrow";
+import { ChangeWindows } from "./ChangeWindows";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
@@ -50,6 +54,18 @@ const CLIP_CHARS = 600;
 
 /** Insertion rows shown before the list collapses behind a toggle. */
 const INSERT_ROWS_CLIPPED = 12;
+
+/**
+ * Card width at which the rail's degradations take over (设计稿 02h 1k).
+ *
+ * Measured on the card, not the window: the same card is 1100 wide in the
+ * drawer and 240 in the rail, and a media query cannot tell those apart.
+ */
+const NARROW_CARD = 480;
+
+/** Windows drawn at each width before the rest fold into a sentence (1z A). */
+const WINDOWS_WIDE = 6;
+const WINDOWS_NARROW = 2;
 
 /** Drop the project prefix — the author knows which project they are in. */
 function projectRelative(path: string): string {
@@ -101,7 +117,9 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
   const chars = t("ai.panel.unitChars", { defaultValue: "字" });
   switch (proposal.kind) {
     case "edit":
-      return `${proposal.find.length} → ${proposal.replace.length} ${chars}`;
+      // Drawn by EditMeta instead: this metric carries two coloured numbers
+      // (+12 −2), and the colours are half of what it says.
+      return "";
     case "rewrite":
       // Whole-file scale, so the delta is the header's whole job: it is what
       // tells the author at a glance that a "reformat" is quietly dropping text.
@@ -170,39 +188,149 @@ function kilo(n: number): string {
 }
 
 /**
- * An edit reads as a suggestion, so the replacement leads and the original is
- * one click away rather than stacked above it — that keeps the card the size of
- * a suggestion instead of a diff view.
+ * How big the change is, and which way it went (1z D).
+ *
+ * Two numbers, coloured: the size of the passage either side, then what the
+ * change added and removed. When the tokens are lit those counts are
+ * token-level (「金」→「银」 is +1 −1, not +17 −16); when the passage was
+ * rewritten they are the whole lines, which is the honest answer for a
+ * replacement nobody can read character by character.
  */
-function EditBody({ proposal }: { proposal: EditProposal }) {
+function EditMeta({ proposal, model }: { proposal: EditProposal; model: EditWindows }) {
   const { t } = useTranslation();
-  const [showOriginal, setShowOriginal] = useState(false);
+  const chars = t("ai.panel.unitChars", { defaultValue: "字" });
+  const scale =
+    proposal.target === "all"
+      ? t("ai.approval.placeCount", { n: proposal.occurrences })
+      : `${proposal.find.length} → ${proposal.replace.length} ${chars}`;
+  return (
+    <span className={styles.headerDelta}>
+      {scale} ·{" "}
+      {model.empty ? (
+        "±0"
+      ) : model.whitespaceOnly ? (
+        t("ai.approval.whitespaceOnly")
+      ) : (
+        <>
+          <span className={styles.metaAdd}>+{model.addedChars}</span>{" "}
+          <span className={styles.metaDel}>−{model.removedChars}</span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Everything the edit card's frame and body share, computed once per render. */
+interface EditView {
+  model: EditWindows;
+  narrow: boolean;
+  expanded: boolean;
+  onExpand: (v: boolean) => void;
+}
+
+/**
+ * The occurrences this edit actually touches — one, the Nth, or all of them.
+ *
+ * `matches[i]` is occurrence `i+1` (agent/editApply), so `target` indexes
+ * straight into it.
+ */
+function editAnchors(proposal: EditProposal): EditMatch[] {
+  if (proposal.target === "all") return proposal.matches;
+  const at = typeof proposal.target === "number" ? proposal.target - 1 : 0;
+  const match = proposal.matches[at] ?? proposal.matches[0];
+  // The fallback cannot happen — a proposal with no match was never proposable
+  // — but a card that throws is worse than a card without line numbers.
+  return match ? [match] : [{ line: 1, endLine: 1, before: [], after: [] }];
+}
+
+/**
+ * An edit is a window onto the changed place (设计稿 02h 1a).
+ *
+ * What this replaced: the new text in full with the original folded away
+ * behind a toggle. Two blocks of prose, and the author had to align them in
+ * their head to find out whether one word or the whole paragraph had moved —
+ * which is the question the card exists to answer.
+ *
+ * The locator above the window is the other half of that answer: which lines,
+ * which occurrence of how many, and which section. A line number says where in
+ * the file; a section title says where in the book.
+ */
+function EditBody({
+  proposal,
+  model,
+  narrow,
+  expanded,
+  onExpand,
+}: {
+  proposal: EditProposal;
+  model: EditWindows;
+  narrow: boolean;
+  expanded: boolean;
+  onExpand: (v: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const anchors = editAnchors(proposal);
+  const first = anchors[0];
+  const last = anchors[anchors.length - 1] ?? first;
   const all = proposal.target === "all";
-  // What the author is being asked to authorise, beyond the diff itself: which
-  // region of the file, and — when `find` repeats — which of its matches. A
-  // rewrite_lines edit is scoped by both, so they read as one line.
-  const scope = [
-    proposal.range && t("ai.approval.editLines", { from: proposal.range.from, to: proposal.range.to }),
-    proposal.occurrences > 1 &&
-      (all
-        ? t("ai.approval.editAll", { n: proposal.occurrences })
-        : t("ai.approval.editNth", {
-            n: typeof proposal.target === "number" ? proposal.target : 1,
-            total: proposal.occurrences,
-          })),
-  ].filter(Boolean);
+
+  if (model.empty) {
+    return <div className={styles.emptyNote}>{t("ai.approval.editNoChange")}</div>;
+  }
+
+  // `rewrite_lines` names its own range; a find/replace has one looked up when
+  // the proposal was built. Either way the author reads the same thing.
+  const range = proposal.range
+    ? t("ai.approval.editLines", { from: proposal.range.from, to: proposal.range.to })
+    : t("ai.approval.editLines", { from: first.line, to: all ? last.line : first.endLine });
+  const sections = new Set(anchors.map((a) => a.section).filter(Boolean));
+  const section =
+    sections.size > 1
+      ? t("ai.approval.editSections", { n: sections.size })
+      : first.section
+        ? t("ai.approval.editSection", { title: first.section })
+        : null;
+  const nth = all
+    ? t("ai.approval.editAll", { n: proposal.occurrences })
+    : proposal.occurrences > 1
+      ? t("ai.approval.editNth", {
+          n: typeof proposal.target === "number" ? proposal.target : 1,
+          total: proposal.occurrences,
+        })
+      : null;
+  // "All 40 of them" is the headline when it applies; otherwise the range is.
+  const locator = (all ? [nth, range, section] : [range, nth, section]).filter(Boolean);
+  if (model.whitespaceOnly) locator.push(t("ai.approval.editSameLength"));
 
   return (
     <>
-      {scope.length > 0 && (
-        <div className={all ? styles.editScopeWarn : styles.editScope}>{scope.join(" · ")}</div>
+      <div className={all ? styles.locatorWarn : styles.locator}>{locator.join(" · ")}</div>
+      {!model.uniform && (
+        <div className={styles.changeCount}>
+          {t("ai.approval.changeCount", { n: model.windows.length })}
+          {model.windows[0]?.wholesale ? ` · ${t("ai.approval.editWholesale")}` : ""}
+        </div>
       )}
-      <pre className={styles.replaceBlock}>{proposal.replace}</pre>
-      <button className={styles.originalToggle} onClick={() => setShowOriginal((v) => !v)}>
-        {showOriginal ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-        {t("ai.approval.findLabel")}
-      </button>
-      {showOriginal && <pre className={styles.findBlock}>{proposal.find}</pre>}
+      <ChangeWindows
+        windows={model.windows}
+        lineNumbers={!narrow}
+        whitespace={model.whitespaceOnly}
+      />
+      {model.hidden > 0 && (
+        <button className={styles.foldRow} onClick={() => onExpand(true)}>
+          <ChevronRight size={10} />
+          {model.uniform
+            ? t("ai.approval.moreUniform", { n: model.hidden })
+            : t("ai.approval.moreOccurrences", { n: model.hidden })}
+          <span className={styles.foldAction}>{t("ai.approval.showAll")}</span>
+        </button>
+      )}
+      {expanded && (
+        <button className={styles.foldRow} onClick={() => onExpand(false)}>
+          <ChevronDown size={10} />
+          {t("ai.approval.collapse")}
+        </button>
+      )}
     </>
   );
 }
@@ -795,10 +923,17 @@ function InsertBody({ proposal }: { proposal: InsertProposal }) {
   );
 }
 
-function ProposalBody({ proposal }: { proposal: Proposal }) {
+function ProposalBody({
+  proposal,
+  edit,
+}: {
+  proposal: Proposal;
+  /** Everything the edit card's frame and body share; null for every other kind. */
+  edit: EditView | null;
+}) {
   switch (proposal.kind) {
     case "edit":
-      return <EditBody proposal={proposal} />;
+      return edit ? <EditBody proposal={proposal} {...edit} /> : null;
     case "rewrite":
       return <RewriteBody proposal={proposal} />;
     case "append":
@@ -976,24 +1111,59 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
   /** How many follow-up pictures 批准并连批 covers. */
   const [batchCount, setBatchCount] = useState(3);
 
+  const cardRef = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow(cardRef, NARROW_CARD);
+  /** Whether the folded-away windows are showing (edit cards only). */
+  const [expanded, setExpanded] = useState(false);
+
   const { proposal, autoApproveKey } = item;
   const fileName = baseName(proposal.path) || proposal.path;
+
+  // Built once for the whole card: the header's numbers, the body's windows and
+  // the footer's buttons are three readings of the same model, and computing it
+  // three times is how they would come to disagree.
+  const editProposal = proposal.kind === "edit" ? proposal : null;
+  const editModel = useMemo(
+    () =>
+      editProposal
+        ? editWindows(editProposal.find, editProposal.replace, editAnchors(editProposal), {
+            context: narrow ? 1 : 2,
+            maxWindows: expanded
+              ? Number.MAX_SAFE_INTEGER
+              : narrow
+                ? WINDOWS_NARROW
+                : WINDOWS_WIDE,
+          })
+        : null,
+    [editProposal, narrow, expanded],
+  );
+  const editView: EditView | null = editModel
+    ? { model: editModel, narrow, expanded, onExpand: setExpanded }
+    : null;
+  /** An edit whose replacement is the text it replaces: nothing to authorise. */
+  const nothingToDo = editModel?.empty ?? false;
   // Absent on a surface that cannot hold a grant, and never offered for the
   // two kinds a grant may not cover — so 删除 and 配图 cards simply don't grow
   // a third button, which needs no explaining.
-  const canGrant = autoApproveKey !== undefined && isAutoApprovable(proposal.kind);
+  // A card with nothing to authorise does not offer a standing grant either:
+  // "approve everything like this" means nothing when this one is a no-op.
+  const canGrant = autoApproveKey !== undefined && isAutoApprovable(proposal.kind) && !nothingToDo;
 
   return (
-    <div className={styles.card}>
+    <div ref={cardRef} className={nothingToDo ? `${styles.card} ${styles.cardQuiet}` : styles.card}>
       <div className={styles.header}>
         <span className={styles.headerTitle}>{headerTitle(proposal, t, terms)}</span>
         <span className={styles.headerFile} title={proposal.path}>{fileName}</span>
-        <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
+        {editModel && proposal.kind === "edit" ? (
+          <EditMeta proposal={proposal} model={editModel} />
+        ) : (
+          <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
+        )}
       </div>
 
       <div className={styles.body}>
         {proposal.reason && <div className={styles.reason}>{proposal.reason}</div>}
-        <ProposalBody proposal={proposal} />
+        <ProposalBody proposal={proposal} edit={editView} />
       </div>
 
       <div className={styles.footer}>
@@ -1117,15 +1287,17 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           </button>
         )}
         <button
-          className={styles.btnApprove}
+          className={nothingToDo ? styles.btnSkip : styles.btnApprove}
           onClick={() => { setDeciding(true); void approve(proposal.id); }}
           disabled={deciding}
         >
-          {proposal.kind === "transcribe"
-            ? t("ai.approval.approveTranscribe", { defaultValue: "批准并转写" })
-            : proposal.kind === "command"
-              ? t("ai.approval.approveCommand", { defaultValue: "批准并运行" })
-              : t("ai.approval.approve")}
+          {nothingToDo
+            ? t("ai.approval.skip")
+            : proposal.kind === "transcribe"
+              ? t("ai.approval.approveTranscribe", { defaultValue: "批准并转写" })
+              : proposal.kind === "command"
+                ? t("ai.approval.approveCommand", { defaultValue: "批准并运行" })
+                : t("ai.approval.approve")}
         </button>
       </div>
     </div>

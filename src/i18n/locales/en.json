@@ -1570,7 +1570,7 @@
       "writerRangeGone": "Lines {{from}}-{{to}} are no longer there — nothing was written."
     },
     "approval": {
-      "title": "Pending edit",
+      "title": "Edit",
       "titleRewrite": "Pending full rewrite of {{doc}}",
       "titleAppend": "Append to file",
       "titleInsert": "Pending insertions",
@@ -1611,10 +1611,9 @@
       "imageMeta": "Files into {{destination}} · drawn by {{model}}",
       "titleDelete": "Pending {{doc}} deletion",
       "titleDeleteVolume": "Whole-folder deletion pending review",
-      "editLines": "Lines {{from}}–{{to}}",
-      "editNth": "Occurrence {{n}} of {{total}}",
-      "editAll": "Replaces all {{n}} occurrences",
-      "findLabel": "Original",
+      "editLines": "L{{from}}–{{to}}",
+      "editNth": "{{n}} of {{total}}",
+      "editAll": "all {{n}}",
       "replaceLabel": "Replace with",
       "emptyChapter": "(empty {{doc}})",
       "emptyFolder": "(a new empty folder)",
@@ -1695,7 +1694,20 @@
         "pipe-to-shell": "Looks like it executes something downloaded",
         "eval": "Looks like it runs text as code",
         "disk": "Looks like it touches a whole disk"
-      }
+      },
+      "editSection": "§ {{title}}",
+      "editSections": "across {{n}} sections",
+      "editWholesale": "whole passage replaced",
+      "editSameLength": "same length",
+      "editNoChange": "New text is identical. Approving changes nothing.",
+      "changeCount": "{{n}} change(s)",
+      "placeCount": "{{n}} place(s)",
+      "whitespaceOnly": "whitespace only",
+      "moreOccurrences": "{{n}} more not shown",
+      "moreUniform": "{{n}} more not shown · all the same replacement",
+      "showAll": "Show all",
+      "gapUnchanged": "… {{n}} unchanged lines",
+      "skip": "Skip"
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",

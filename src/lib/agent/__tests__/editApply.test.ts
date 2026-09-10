@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CONTEXT_LINE_CHARS,
+  DIFF_CONTEXT_CHARS,
   applyFindReplace,
   applyInsertions,
   describeEditTarget,
@@ -130,7 +130,34 @@ describe("locateMatches", () => {
   it("gives an occurrence its line and the lines either side", () => {
     const doc = "第一行\n第二行\n第三行\n第四行\n";
     const [match] = locateMatches(doc, "第三行", findOccurrences(doc, "第三行"));
-    expect(match).toEqual({ line: 3, endLine: 3, before: "第二行", after: "第四行" });
+    // Two lines above where there are two, in document order; one below,
+    // because that is all the file has left.
+    expect(match).toEqual({
+      line: 3,
+      endLine: 3,
+      before: ["第一行", "第二行"],
+      after: ["第四行"],
+    });
+  });
+
+  it("names the section the match sits in", () => {
+    const doc = "# 第三章 潮声\n\n## 二 · 灯笼\n她把灯笼举高了些。\n";
+    const [match] = locateMatches(doc, "灯笼举高", findOccurrences(doc, "灯笼举高"));
+    // The nearest heading above, not the outermost one: an author navigates by
+    // the section they are in.
+    expect(match.section).toBe("二 · 灯笼");
+  });
+
+  it("does not mistake a fenced # line for a section", () => {
+    const doc = "## 真的标题\n\n```\n# 这是注释\n```\n\n目标句。\n";
+    const [match] = locateMatches(doc, "目标句", findOccurrences(doc, "目标句"));
+    expect(match.section).toBe("真的标题");
+  });
+
+  it("leaves the section out when the file has no headings", () => {
+    const doc = "只有正文。\n第二行。\n";
+    const [match] = locateMatches(doc, "第二行", findOccurrences(doc, "第二行"));
+    expect(match.section).toBeUndefined();
   });
 
   it("indexes alongside the occurrence count the proposal records", () => {
@@ -148,34 +175,40 @@ describe("locateMatches", () => {
     const [match] = locateMatches(doc, find, findOccurrences(doc, find));
     expect(match.line).toBe(2);
     expect(match.endLine).toBe(3);
-    expect(match.after).toBe("d");
+    expect(match.after).toEqual(["d"]);
   });
 
   it("has no context to give at the edges of the file", () => {
     const [match] = locateMatches("only", "only", findOccurrences("only", "only"));
-    expect(match).toEqual({ line: 1, endLine: 1, before: "", after: "" });
+    expect(match).toEqual({ line: 1, endLine: 1, before: [], after: [] });
   });
 
   it("does not invent a line out of a trailing newline", () => {
     const doc = "a\nb\n";
     const [match] = locateMatches(doc, "b", findOccurrences(doc, "b"));
     expect(match.line).toBe(2);
-    expect(match.after).toBe("");
+    expect(match.after).toEqual([]);
   });
 
   it("keeps a CRLF file's carriage return out of the context lines", () => {
     const doc = "a\r\nb\r\nc\r\n";
     const [match] = locateMatches(doc, "b", findOccurrences(doc, "b"));
-    expect(match.before).toBe("a");
-    expect(match.after).toBe("c");
+    expect(match.before).toEqual(["a"]);
+    expect(match.after).toEqual(["c"]);
   });
 
-  it("clips a context line rather than quoting a whole paragraph", () => {
-    const long = "字".repeat(CONTEXT_LINE_CHARS + 20);
+  it("clips a context line rather than quoting a whole chapter", () => {
+    const long = "字".repeat(DIFF_CONTEXT_CHARS + 20);
     const doc = `${long}\n目标\n`;
     const [match] = locateMatches(doc, "目标", findOccurrences(doc, "目标"));
-    expect(match.before).toHaveLength(CONTEXT_LINE_CHARS + 1); // the clip plus its ellipsis
-    expect(match.before.endsWith("…")).toBe(true);
+    expect(match.before[0]).toHaveLength(DIFF_CONTEXT_CHARS + 1); // the clip plus its ellipsis
+    expect(match.before[0].endsWith("…")).toBe(true);
+  });
+
+  it("keeps a context line's indentation — it is drawn as part of the change", () => {
+    const doc = "    缩进的一行\n目标\n";
+    const [match] = locateMatches(doc, "目标", findOccurrences(doc, "目标"));
+    expect(match.before).toEqual(["    缩进的一行"]);
   });
 
   it("returns nothing when there is nothing to locate", () => {

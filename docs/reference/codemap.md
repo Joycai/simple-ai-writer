@@ -38,7 +38,7 @@ CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, ico
 
 ### `src/components/ai/`
 
-AiPanel (task UI, streaming output), ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)
+AiPanel (task UI, streaming output)，编辑类审批卡共用的那扇改动窗 `ChangeWindows.tsx`（行号列 40px、符号列 14px、删/加各用 diff 令牌、字级高亮是同色更深一档的 color-mix 而不是第五个令牌；空白只在「整窗差异全是空白」时显形成 ␣ ↵ →。窄栏降级走**容器查询**不是媒体查询——同一张卡在抽屉里 1100、在栏里 240；行号列在 CSS 里也 display:none，它和 JS 那侧的 lineNumbers 不许有分歧，两列网格里多出来的那个格子会把正文挤成一行一个字，那正是 resize 后第一帧的样子）, ConsistencyCheck, 提示词库 (`SnippetPicker` 取用 + `SnippetSaveMenu` 右键存入 + `snippetTrace` 的确认痕迹)
 
 ### `src/components/lore/`
 
@@ -76,7 +76,7 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 ### `src/lib/diff/`
 
-「改了什么」的纯计算层，为审批卡片而建（`docs/feature/agent/approval-card-ui-brief.md`）。`myers.ts` 是**带上限**的 Myers 贪心搜索：先掐掉公共前后缀（一处小改在三千行里就只搜那几行），超过 `MAX_LINE_DISTANCE` 返回 `null` 而不是给一份读不动的答案——两份毫不相干的文档「diff」出来是三千行红压着三千行绿，比一句「整篇替换」说得**更少**，所以算力上限和可读性上限在这里是同一条线。`tokens.ts` 是行内切分，**中日韩逐字、拉丁逐词、空白成串**：通用 diff 库按空白切词，一整段中文只切出一个 token，于是「金发→银发」退化成「整句被替换」，那正是今天卡片给作者的答案。`index.ts` 出 `diffInline`（find/replace 那种短文本）与 `diffDocument`（行级 + hunk + 成对行的行内详情）；**折叠阈值 `context` 是参数不是规矩**——这一层只回答「改了什么」，「显示多少」是卡片的事。两条边界值得记住：行内详情只配给**等长**的删/增行对（跨长度配对是另一个会出错的问题，而它出的错是把两行无关的句子画成一次改写），`stats.whitespaceOnly` 单独一条（只动缩进/换行/行尾的改动要一眼可辨，而「格式整理」里**不是**纯空白的那部分恰恰是这个功能要抓的东西）。行号按 `editApply.countLines` 的算法数：末尾换行不制造一个空的末行。
+「改了什么」的纯计算层，为审批卡片而建（`docs/feature/agent/approval-card-ui-brief.md`）。`myers.ts` 是**带上限**的 Myers 贪心搜索：先掐掉公共前后缀（一处小改在三千行里就只搜那几行），超过 `MAX_LINE_DISTANCE` 返回 `null` 而不是给一份读不动的答案——两份毫不相干的文档「diff」出来是三千行红压着三千行绿，比一句「整篇替换」说得**更少**，所以算力上限和可读性上限在这里是同一条线。`tokens.ts` 是行内切分，**中日韩逐字、拉丁逐词、空白成串**：通用 diff 库按空白切词，一整段中文只切出一个 token，于是「金发→银发」退化成「整句被替换」，那正是今天卡片给作者的答案。`index.ts` 出 `diffInline`（find/replace 那种短文本）与 `diffDocument`（行级 + hunk + 成对行的行内详情）；**折叠阈值 `context` 是参数不是规矩**——这一层只回答「改了什么」，「显示多少」是卡片的事。两条边界值得记住：行内详情只配给**等长**的删/增行对（跨长度配对是另一个会出错的问题，而它出的错是把两行无关的句子画成一次改写），`stats.whitespaceOnly` 单独一条（只动缩进/换行/行尾的改动要一眼可辨，而「格式整理」里**不是**纯空白的那部分恰恰是这个功能要抓的东西）。行号按 `editApply.countLines` 的算法数：末尾换行不制造一个空的末行。`windows.ts` 是卡片那一层的模型（设计稿 02h 1z A/B）：一处改动一扇窗，窗里前后各两行原文做定位，**删行永远在加行上面**（视线先过要失去的），字级高亮是**有条件的点亮**——改动行 ≤ 3 且 Dice 相似度 ≥ 0.5，低于就写「整段替换」并熄灯（marking 两句不相干的话共有的那几个字，是噪音穿了信息的衣服）；同一种替换重复 ≥ 10 处时只画 2 扇、上下文收成 0 行并报数。宽度相关的数（上下文行数、窗数上限）由调用方传，改动相关的判断在模块里——前者是布局，后者是关于这次改动的判断。`windows.ts` 是卡片那一层的模型（设计稿 02h 1z A/B）：一处改动一扇窗，窗里前后各两行原文做定位，**删行永远在加行上面**（视线先过要失去的），字级高亮是**有条件的点亮**——改动行 ≤ 3 且 Dice 相似度 ≥ 0.5，低于就写「整段替换」并熄灯（marking 两句不相干的话共有的那几个字，是噪音穿了信息的衣服）；同一种替换重复 ≥ 10 处时只画 2 扇、上下文收成 0 行并报数。宽度相关的数（上下文行数、窗数上限）由调用方传，改动相关的判断在模块里——前者是布局，后者是关于这次改动的判断。
 
 ### `src/lib/comfy/`
 

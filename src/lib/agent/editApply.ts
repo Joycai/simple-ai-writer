@@ -147,16 +147,45 @@ export function clipContextLine(line: string | undefined): string {
   return text.length > CONTEXT_LINE_CHARS ? `${text.slice(0, CONTEXT_LINE_CHARS)}…` : text;
 }
 
+/**
+ * Lines kept either side of a match.
+ *
+ * Two, because that is what the card draws at full width (设计稿 02h 1z A); the
+ * narrow rail draws one and takes the nearer of them. Kept on the proposal
+ * rather than read back at draw time for the same reason the occurrence count
+ * is: this is what the author was shown, and the file may move on while the
+ * card waits.
+ */
+export const CONTEXT_LINES_KEPT = 2;
+
+/**
+ * Longest context line kept for a diff face.
+ *
+ * Much longer than {@link CONTEXT_LINE_CHARS}, whose job is a one-line quote in
+ * a locator: these lines are drawn as part of the change, in the same mono face
+ * as the change, and a paragraph of prose cut at eighty characters reads as if
+ * the file itself were truncated.
+ */
+export const DIFF_CONTEXT_CHARS = 240;
+
 /** Where one occurrence of `find` sits in the file, and what surrounds it. */
 export interface EditMatch {
   /** 1-based line the match starts on. */
   line: number;
   /** 1-based line the match ends on — the same line unless `find` spans several. */
   endLine: number;
-  /** The line above the match, "" at the top of the file. */
-  before: string;
-  /** The line below the match, "" at the end of the file. */
-  after: string;
+  /** Up to {@link CONTEXT_LINES_KEPT} lines above, in document order (nearest last). */
+  before: string[];
+  /** Up to {@link CONTEXT_LINES_KEPT} lines below, in document order. */
+  after: string[];
+  /**
+   * Nearest heading at or above the match, without its `#`s.
+   *
+   * The third thing a locator needs after "which lines" and "which occurrence":
+   * a line number says where in the file, and a section title says **where in
+   * the book** — which is the one an author actually navigates by.
+   */
+  section?: string;
 }
 
 /**
@@ -179,6 +208,7 @@ export function locateMatches(
   if (positions.length === 0) return [];
   const starts = lineStarts(text);
   const lines = countLines(text);
+  const sections = sectionIndex(text, lines);
 
   /** 1-based line containing `offset`, by binary search over the line starts. */
   const lineAt = (offset: number): number => {
@@ -201,18 +231,71 @@ export function locateMatches(
     return text.slice(from, to).replace(/\r?\n$/, "");
   };
 
+  /** `count` lines ending at `last`, or starting at `first`, in document order. */
+  const span = (from: number, count: number): string[] => {
+    const out: string[] = [];
+    for (let n = from; n < from + count; n++) {
+      const line = lineText(n);
+      if (line !== undefined) out.push(clipDiffLine(line));
+    }
+    return out;
+  };
+
   return positions.map((pos) => {
     const line = lineAt(pos);
     // The match's last character, not the one past it: a `find` ending in a
     // newline ends on that line, not on the one the newline introduces.
     const endLine = lineAt(pos + Math.max(find.length - 1, 0));
+    const above = Math.max(1, line - CONTEXT_LINES_KEPT);
+    const section = sectionAt(sections, line);
     return {
       line,
       endLine,
-      before: clipContextLine(lineText(line - 1)),
-      after: clipContextLine(lineText(endLine + 1)),
+      before: span(above, line - above),
+      after: span(endLine + 1, CONTEXT_LINES_KEPT),
+      ...(section ? { section } : {}),
     };
   });
+}
+
+/** A context line: kept whole (indentation included), only cut if it is enormous. */
+function clipDiffLine(line: string): string {
+  const text = line.replace(/\r$/, "");
+  return text.length > DIFF_CONTEXT_CHARS ? `${text.slice(0, DIFF_CONTEXT_CHARS)}…` : text;
+}
+
+/**
+ * Every heading in the file, with the line it sits on.
+ *
+ * Fences are tracked because a `# comment` inside a code block is not a
+ * section — and a locator that names one is worse than a locator that names
+ * nothing, since the author would go looking for it.
+ */
+function sectionIndex(text: string, lines: number): { line: number; title: string }[] {
+  const out: { line: number; title: string }[] = [];
+  const src = text.split("\n");
+  let inFence = false;
+  for (let i = 0; i < Math.min(src.length, lines); i++) {
+    const line = src[i].replace(/\r$/, "");
+    if (line.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) out.push({ line: i + 1, title: heading[2].trim() });
+  }
+  return out;
+}
+
+/** The last heading at or above `line`. */
+function sectionAt(sections: readonly { line: number; title: string }[], line: number): string | undefined {
+  let found: string | undefined;
+  for (const section of sections) {
+    if (section.line > line) break;
+    found = section.title;
+  }
+  return found;
 }
 
 /**
