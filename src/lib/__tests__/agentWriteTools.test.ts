@@ -95,7 +95,7 @@ vi.mock("../project", () => ({
 
 import { serializeMemory, type DocMemory } from "../context/memory";
 import { scanLore, type LoreIndex } from "../lore";
-import { backupFile } from "../agent/backup";
+import { CHANGE_TEXT_CHARS, backupFile, changeOf } from "../agent/backup";
 import { createPlanGate, type LorePlan, type LorePlanStep } from "../agent/plan";
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 
@@ -208,6 +208,128 @@ describe("backupFile", () => {
 
   it("returns null for a file that does not exist yet", async () => {
     expect(await backupFile(PROJECT, `${PROJECT}/nope.md`)).toBeNull();
+  });
+});
+
+describe("changeOf", () => {
+  const path = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+
+  it("derives the action from which side is there", () => {
+    expect(changeOf({ projectPath: PROJECT, path, after: "new" }).action).toBe("create");
+    expect(changeOf({ projectPath: PROJECT, path, before: "old", after: "new" }).action).toBe("update");
+    expect(changeOf({ projectPath: PROJECT, path, before: "old" }).action).toBe("delete");
+  });
+
+  it("keeps the path project-relative and the entity name out of it", () => {
+    // The handlers speak English to the model; naming the entry in the author's
+    // words is the UI's job, and it needs the two apart to do it.
+    const rec = changeOf({ projectPath: PROJECT, path, entity: "Ava", before: "a", after: "b" });
+    expect(rec.path).toBe(".ai-writer/lore/characters/ava/armor.md");
+    expect(rec.entity).toBe("Ava");
+  });
+
+  it("drops both texts past the cap and keeps the sizes", () => {
+    const huge = "x".repeat(CHANGE_TEXT_CHARS + 1);
+    const rec = changeOf({ projectPath: PROJECT, path, before: "short", after: huge });
+    // Keeping the side that fits would render as "everything was added" — a
+    // claim about the author's entry, not a shortage of room.
+    expect(rec.before).toBeUndefined();
+    expect(rec.after).toBeUndefined();
+    expect(rec.beforeChars).toBe(5);
+    expect(rec.afterChars).toBe(huge.length);
+  });
+
+  it("carries the backup path only when there is one", () => {
+    expect(changeOf({ projectPath: PROJECT, path, after: "new" }).backupPath).toBeUndefined();
+    expect(
+      changeOf({ projectPath: PROJECT, path, before: "a", after: "b", backupPath: "/proj/.ai-writer/backups/x" })
+        .backupPath,
+    ).toBe("/proj/.ai-writer/backups/x");
+  });
+});
+
+/**
+ * 知识库写入把「改成什么」交出来。
+ *
+ * 这些写入是 L1：调用即落盘，作者的那一票发生在更早的方案卡上，而方案上只有模型
+ * 自己写的一句打算。所以在此之前，**没有任何地方**给作者看过真正写进去的字——
+ * 执行日志那一行只有工具名和截断到 400 字的原始 JSON。
+ *
+ * 每个 handler 本来就读了旧文（为了备份）、也握着新文（那就是它要写的东西），
+ * 缺的只是一个交出去的地方。
+ */
+describe("写入交回 change 记录", () => {
+  it("update_lore_file：整份替换，前后两份都在", async () => {
+    const ctx = makeCtx();
+    const next = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "改过的简介"\n---\n\n# Ava\n新的正文\n`;
+    const res = await run("update_lore_file", { entity: "Ava", file: "index.md", content: next }, ctx);
+
+    expect(res.change).toMatchObject({
+      path: ".ai-writer/lore/characters/ava/index.md",
+      entity: "Ava",
+      action: "update",
+      before: INDEX_MD,
+      after: next,
+    });
+    expect(res.change?.backupPath).toContain(".ai-writer/backups/");
+  });
+
+  it("append_lore_file：after 是拼好的整份，不是追加的那一段", async () => {
+    // 卡片/日志要能显示「这份条目现在长什么样」，而不是只显示新来的一句。
+    const ctx = makeCtx();
+    const res = await run("append_lore_file", { entity: "Ava", file: "index.md", content: "新的一段。" }, ctx);
+
+    expect(res.change?.before).toBe(INDEX_MD);
+    expect(res.change?.after).toContain("新的一段。");
+    expect(res.change?.after?.startsWith("---")).toBe(true);
+  });
+
+  it("edit_lore_file：改一处，前后各是改前改后的整份", async () => {
+    const ctx = makeCtx();
+    fs.set(`${PROJECT}/.ai-writer/lore/characters/ava/armor.md`, FACET_MD);
+    const res = await run(
+      "edit_lore_file",
+      { entity: "Ava", file: "armor.md", find: "黑色", replace: "银色" },
+      ctx,
+    );
+
+    expect(res.change?.before).toContain("黑色");
+    expect(res.change?.after).toContain("银色");
+    expect(res.change?.after).not.toContain("黑色");
+  });
+
+  it("update_lore_meta：after 从盘上读回来——正文由 lore 层拼", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_lore_meta", { entity: "Ava", summary: "改过的简介" }, ctx);
+
+    expect(res.change?.action).toBe("update");
+    expect(res.change?.after).toContain("改过的简介");
+    // 正文原样带过去，这一点正是这个工具的承诺，也是记录让人能核对的那件事。
+    expect(res.change?.after).toContain("# Ava");
+  });
+
+  it("delete_lore_file：只有 before，并指着备份", async () => {
+    const ctx = makeCtx();
+    fs.set(`${PROJECT}/.ai-writer/lore/characters/ava/armor.md`, FACET_MD);
+    const res = await run("delete_lore_file", { entity: "Ava", file: "armor.md" }, ctx);
+
+    expect(res.change).toMatchObject({ action: "delete", before: FACET_MD, afterChars: 0 });
+    expect(res.change?.after).toBeUndefined();
+    expect(res.change?.backupPath).toContain(".ai-writer/backups/");
+  });
+
+  it("create_lore_entity：只有 after，没有备份可指", async () => {
+    const ctx = makeRescanCtx();
+    const res = await run(
+      "create_lore_entity",
+      { name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n" },
+      ctx,
+    );
+
+    expect(res.change).toMatchObject({ action: "create", entity: "Kael", beforeChars: 0 });
+    expect(res.change?.path).toBe(".ai-writer/lore/characters/kael/index.md");
+    expect(res.change?.after).toContain("# Kael");
+    expect(res.change?.backupPath).toBeUndefined();
   });
 });
 
@@ -1603,6 +1725,16 @@ describe("read_memory / update_memory", () => {
     expect(raw).toContain("Ava leaves home."); // other segment untouched
     expect(raw).toContain('"hash":"bbbb1111"'); // protocol preserved
     expect(fs.get(backupsOf()[0])).toContain("Ava meets Kael."); // original recoverable
+
+    // And the same write hands the log what it changed. No entity name: a
+    // memory file belongs to a document, which `path` is already naming.
+    expect(res.change).toMatchObject({
+      path: ".ai-writer/memory/writing/ch1.md",
+      action: "update",
+    });
+    expect(res.change?.entity).toBeUndefined();
+    expect(res.change?.before).toContain("Ava meets Kael.");
+    expect(res.change?.after).toContain("Ava befriends Kael instead.");
   });
 
   it("update_memory errors on a bad index and on documents without memory", async () => {

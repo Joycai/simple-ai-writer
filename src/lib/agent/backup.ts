@@ -13,6 +13,7 @@
 
 import { fileExists, makeDir, readFile, renamePath, writeFile } from "../fs/fileio";
 import { baseName, projectRelative } from "../paths";
+import type { ChangeRecord } from "./events";
 
 /** The flat backup destination for `absPath`, shared by both backup flavours. */
 async function backupDest(projectPath: string, absPath: string): Promise<string> {
@@ -23,16 +24,104 @@ async function backupDest(projectPath: string, absPath: string): Promise<string>
 }
 
 /**
- * Snapshot `absPath` before an agent write. Returns the backup's absolute path,
- * or null when the source doesn't exist yet (creating a new file needs none).
- * Throws on read/write failure — callers must treat a failed backup as a
- * failed write, never write anyway.
+ * Snapshot `absPath` before an agent write, handing back both the backup's path
+ * and the text that went into it. Null when the source doesn't exist yet
+ * (creating a new file needs no backup).
+ *
+ * The text comes free: making the backup means reading the file. Callers that
+ * want to record what the write changed (see {@link changeOf}) would otherwise
+ * read the same bytes a second time to get the "before" they just copied.
+ *
+ * Throws on read/write failure — callers must treat a failed backup as a failed
+ * write, never write anyway.
  */
-export async function backupFile(projectPath: string, absPath: string): Promise<string | null> {
+export async function snapshotFile(
+  projectPath: string,
+  absPath: string,
+): Promise<{ path: string; text: string } | null> {
   if (!(await fileExists(absPath))) return null;
+  const text = await readFile(absPath);
   const dest = await backupDest(projectPath, absPath);
-  await writeFile(dest, await readFile(absPath));
-  return dest;
+  await writeFile(dest, text);
+  return { path: dest, text };
+}
+
+/** {@link snapshotFile} for the callers that only need to know where it went. */
+export async function backupFile(projectPath: string, absPath: string): Promise<string | null> {
+  return (await snapshotFile(projectPath, absPath))?.path ?? null;
+}
+
+/**
+ * Longest text kept inline on a {@link ChangeRecord}, per side.
+ *
+ * Comfortably past a knowledge-base entry — an entity's index.md and a facet
+ * both run to a few thousand characters at the outside — and short of the
+ * things that also live in a project and would ride into the session database
+ * on every write.
+ *
+ * Past it both sides are dropped rather than one: a record with only the new
+ * text renders as "everything was added", which is a claim, not a shortage.
+ */
+export const CHANGE_TEXT_CHARS = 4_000;
+
+/**
+ * Record what a write did to one file.
+ *
+ * `before` absent means the file did not exist (a create); `after` absent means
+ * it no longer does (a delete). Both present is an update — including the case
+ * where they are equal, which the caller is free to decide is worth recording
+ * (a write that changed nothing is worth seeing at least once).
+ */
+export function changeOf(params: {
+  projectPath: string;
+  /** Absolute path of the file that changed. */
+  path: string;
+  entity?: string;
+  before?: string;
+  after?: string;
+  backupPath?: string | null;
+}): ChangeRecord {
+  const { before, after } = params;
+  const action = before === undefined ? "create" : after === undefined ? "delete" : "update";
+  const fits =
+    (before?.length ?? 0) <= CHANGE_TEXT_CHARS && (after?.length ?? 0) <= CHANGE_TEXT_CHARS;
+  return {
+    path: projectRelative(params.projectPath, params.path) || params.path,
+    ...(params.entity ? { entity: params.entity } : {}),
+    action,
+    ...(fits && before !== undefined ? { before } : {}),
+    ...(fits && after !== undefined ? { after } : {}),
+    beforeChars: before?.length ?? 0,
+    afterChars: after?.length ?? 0,
+    ...(params.backupPath ? { backupPath: params.backupPath } : {}),
+  };
+}
+
+/**
+ * {@link changeOf} for a write whose new text nobody holds — the lore layer
+ * composes frontmatter and body itself, so the file that landed is the only
+ * place the result exists.
+ *
+ * Reading it back is also the more honest answer, and for the same reason the
+ * write receipts re-read rather than echo what was sent (`lineEcho`): the point
+ * of a record is what is on disk, not what was meant to be. A file that cannot
+ * be read back is recorded as an empty after rather than not at all — the write
+ * happened either way, and a missing record would read as "nothing was written".
+ */
+export async function changeAfterWrite(params: {
+  projectPath: string;
+  path: string;
+  entity?: string;
+  before?: string;
+  backupPath?: string | null;
+}): Promise<ChangeRecord> {
+  let after = "";
+  try {
+    after = await readFile(params.path);
+  } catch {
+    // Recorded as empty; see above.
+  }
+  return changeOf({ ...params, after });
 }
 
 /**

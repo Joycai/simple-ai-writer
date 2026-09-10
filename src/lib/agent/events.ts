@@ -63,6 +63,53 @@ export interface ToolProgress {
   ratio?: number;
 }
 
+/**
+ * What a write actually did to one file — the before and the after.
+ *
+ * Knowledge-base writes are L1: they land the moment the model calls them, with
+ * a backup as the only safety valve, and the author's say happens earlier, on a
+ * plan whose steps carry the model's *intention* in a sentence. So nothing
+ * anywhere has ever shown the author the text that went in. The log's row
+ * carries the tool's name and its arguments clipped to 400 characters of raw
+ * JSON, which answers "something was written to 莉安/外貌.md" and not one word
+ * of what.
+ *
+ * This is that missing half, recorded where it is free: every one of those
+ * handlers already reads the old file (to back it up) and already holds the new
+ * one (it is what they write). What was missing was somewhere to put it.
+ *
+ * It also answers the case a card could never reach — 本次对话都批准. Once the
+ * author turns approvals off, the cards stop appearing and the execution log is
+ * the only place left where "what changed" can be read at all.
+ *
+ * Persisted with the rest of the session's events, so the two texts are capped
+ * ({@link CHANGE_TEXT_CHARS}) and dropped together when either side is past it.
+ * Nothing is lost when they are: `backupPath` is the whole of the old version
+ * and `path` is the whole of the new one, both on disk, and the character
+ * counts stay whatever happens.
+ */
+export interface ChangeRecord {
+  /** The file, project-relative: `.ai-writer/lore/角色/莉安/外貌.md`. */
+  path: string;
+  /**
+   * The entity the file belongs to, when it has one. Kept apart from `path` so
+   * the UI can name it in the author's words — the handlers speak to the model,
+   * in English, and none of their strings should reach a person.
+   */
+  entity?: string;
+  /** What happened to the file itself. */
+  action: "create" | "update" | "delete";
+  /** The text before, capped; absent on a create, or past the cap. */
+  before?: string;
+  /** The text after, capped; absent on a delete, or past the cap. */
+  after?: string;
+  /** Sizes, which survive the cap that the texts do not. */
+  beforeChars: number;
+  afterChars: number;
+  /** Where the previous version went, in full. */
+  backupPath?: string;
+}
+
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
 export interface ToolStep {
   round: number;
@@ -89,6 +136,14 @@ export interface ToolStep {
    * settled step that replaces this one carries the result instead.
    */
   progress?: ToolProgress;
+  /**
+   * What this call did to a file, when it wrote one. See {@link ChangeRecord}.
+   *
+   * Optional and always will be: only the writes that produce a text before and
+   * after set it (a filing pass changes membership, an avatar changes bytes),
+   * and every event already on disk predates the field.
+   */
+  change?: ChangeRecord;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
