@@ -106,6 +106,15 @@ describe("buildPlanLedgers", () => {
     expect(ledger.refused.map((r) => r.toolCallId)).toEqual(["late"]);
   });
 
+  it("marks a step the author skipped, without counting it as written", () => {
+    const [ledger] = buildPlanLedgers([
+      stepEvent({ toolCallId: "p", name: "propose_lore_plan", plan: PLAN }),
+      stepEvent({ toolCallId: "d", name: "delete_lore_entity", planStep: 2, planSkipped: true }),
+    ]);
+    expect(ledger.steps[2]).toMatchObject({ skipped: true, writes: [] });
+    expect(ledger.written).toBe(0);
+  });
+
   it("builds nothing for a plan that was not approved", () => {
     // A rejection returns no plan record, so there is nothing to keep an account of.
     const log: AgentEvent[] = [stepEvent({ toolCallId: "p", name: "propose_lore_plan" })];

@@ -153,10 +153,15 @@ export interface PlanGate {
   matched: Map<string, number>;
   /** Tool call ids the gate refused. */
   refused: Set<string>;
+  /** Tool call ids whose destructive step the author chose to skip. */
+  skipped: Set<string>;
 }
 
 export function createPlanGate(): PlanGate {
-  return { steps: [], fulfilled: new Set(), asked: false, matched: new Map(), refused: new Set() };
+  return {
+    steps: [], fulfilled: new Set(), asked: false,
+    matched: new Map(), refused: new Set(), skipped: new Set(),
+  };
 }
 
 /** Note which approved step a call satisfied, for the run's ledger. */
@@ -169,6 +174,16 @@ export function recordMatch(gate: PlanGate | undefined, toolCallId: string, step
 /** Note that the gate turned a call away. */
 export function recordRefusal(gate: PlanGate | undefined, toolCallId: string): void {
   gate?.refused.add(toolCallId);
+}
+
+/**
+ * Note that the author skipped this call's step.
+ *
+ * The match stays: the ledger still has to know *which* step was skipped, and
+ * that answer came from the gate like every other.
+ */
+export function recordSkip(gate: PlanGate | undefined, toolCallId: string): void {
+  gate?.skipped.add(toolCallId);
 }
 
 /**

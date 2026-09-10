@@ -67,7 +67,8 @@ import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, ren
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
 import { backlinksOf } from "../fs/links";
-import { backupFile, backupFileByMove, changeAfterWrite, changeOf, snapshotFile } from "./backup";
+import { citingDocuments, isMajorRewrite, rewriteRatio } from "./destructive";
+import { CHANGE_TEXT_CHARS, backupFile, backupFileByMove, changeAfterWrite, changeOf, snapshotFile } from "./backup";
 import {
   applyFindReplace, clipContextLine, countLines, describeEditTarget, findOccurrences,
   insertionLanding, locateMatches, occurrenceAt, sliceLines,
@@ -81,12 +82,13 @@ import {
   describeStep,
   recordMatch,
   recordRefusal,
+  recordSkip,
   outstandingSteps,
   type LorePlanAction,
   type LorePlanStep,
   type LorePlanTarget,
 } from "./plan";
-import type { ApprovalDecision, DeleteEntry, ToolContext } from "./registry";
+import type { ApprovalDecision, DeleteEntry, LoreStepProposal, ToolContext } from "./registry";
 import {
   isPathWithin,
   isStrictDescendant,
@@ -310,6 +312,127 @@ function gate(
   }
   recordMatch(ctx.lorePlan, toolCallId, check.step);
   return { step: check.step };
+}
+
+// ─── destructive steps stop and ask (设计稿 02h 1g / 1i) ────────────────────
+
+/** Files of an entry named on its deletion card before the rest are counted. */
+const LORE_STEP_FILES_SHOWN = 8;
+
+/** Longest opening line quoted per file on that card. */
+const LORE_STEP_HEAD_CHARS = 80;
+
+/**
+ * Put an approved-but-destructive step to the author before writing it.
+ *
+ * Returns null to go ahead, or the result to hand back when the author skipped.
+ * A skip is not a rejection of the plan: the other steps stand, and the model is
+ * told so in as many words — "the author rejected" is what it would otherwise
+ * generalise to, and it would stop the whole pass.
+ *
+ * A surface with no card to show keeps today's behaviour rather than refusing:
+ * every surface that runs a plan gate can show one (the chat, the task panel,
+ * and a pack dispatched from either, which inherits the parent's channel).
+ */
+async function pauseForStep(
+  toolCallId: string,
+  ctx: ToolContext,
+  step: LorePlanStep,
+  preview: Omit<LoreStepProposal, "kind" | "id" | "detail" | "stepNumber" | "stepTotal">,
+): Promise<ToolResult | null> {
+  if (!ctx.requestApproval || !ctx.lorePlan) return null;
+  const decision = await ctx.requestApproval({
+    ...preview,
+    kind: "loreStep",
+    id: `lore-step-${++proposalCounter}`,
+    detail: step.detail,
+    stepNumber: ctx.lorePlan.steps.indexOf(step) + 1,
+    stepTotal: ctx.lorePlan.steps.length,
+  });
+  if (decision.approved) return null;
+  recordSkip(ctx.lorePlan, toolCallId);
+  return {
+    toolCallId,
+    content:
+      `The author SKIPPED this step ("${step.detail}")${decision.reason ? ` — reason: ${decision.reason}` : ""}. ` +
+      "Nothing was written. The rest of the approved plan still stands: carry on with the other steps, " +
+      "and do not retry this one unless the author asks for it.",
+  };
+}
+
+/** What a 删条目 card shows: the entry's files, their weight, and who cites it. */
+async function entityDeletionPreview(
+  ctx: ToolContext,
+  entity: LoreEntity,
+): Promise<Omit<LoreStepProposal, "kind" | "id" | "detail" | "stepNumber" | "stepTotal">> {
+  const names = (entity.mdFiles?.length ? entity.mdFiles : ["index.md"]).filter(
+    (name) => !isGalleryManifest(name),
+  );
+  const files: { name: string; chars: number; head: string }[] = [];
+  let totalChars = 0;
+  for (const name of names) {
+    let raw = "";
+    try {
+      raw = await readEntityFile(entity.dirPath, name);
+    } catch {
+      // Listed but unreadable: it still goes, and the row still names it.
+    }
+    const body = parseFrontmatter(raw).content;
+    totalChars += body.length;
+    if (files.length < LORE_STEP_FILES_SHOWN) {
+      files.push({ name, chars: body.length, head: openingLine(body) });
+    }
+  }
+  const cited = await citingDocuments(ctx.projectPath, entity, ctx.loreIndex);
+  return {
+    path: entity.dirPath,
+    trigger: "deleteEntity",
+    entity: entity.name,
+    category: entity.category,
+    files,
+    totalChars,
+    fileCount: names.length,
+    citedBy: cited.documents,
+    ...(cited.complete ? {} : { citedPartial: true as const }),
+  };
+}
+
+/** What a 替换超过六成 card shows: the two texts when they fit, and the ratio. */
+function rewritePreview(
+  path: string,
+  entity: LoreEntity,
+  file: string,
+  before: string,
+  after: string,
+): Omit<LoreStepProposal, "kind" | "id" | "detail" | "stepNumber" | "stepTotal"> {
+  const ratio = rewriteRatio(before, after);
+  const fits = before.length <= CHANGE_TEXT_CHARS && after.length <= CHANGE_TEXT_CHARS;
+  return {
+    path,
+    trigger: "majorRewrite",
+    entity: entity.name,
+    category: entity.category,
+    file,
+    ...(fits ? { before, after } : {}),
+    originalChars: ratio.original,
+    removedChars: ratio.removed,
+  };
+}
+
+/** The first line of prose in a body: a heading names the file, it does not quote it. */
+function openingLine(body: string): string {
+  const lines = body.split("\n").map((l) => l.trim()).filter(Boolean);
+  const prose = lines.find((l) => !l.startsWith("#")) ?? lines[0] ?? "";
+  return prose.length > LORE_STEP_HEAD_CHARS ? `${prose.slice(0, LORE_STEP_HEAD_CHARS)}…` : prose;
+}
+
+/** An entry file's current text, or null when there is none yet. */
+async function currentText(dirPath: string, file: string): Promise<string | null> {
+  try {
+    return await readEntityFile(dirPath, file);
+  } catch {
+    return null;
+  }
 }
 
 // ─── create_lore_entity ──────────────────────────────────────────────────────
@@ -555,6 +678,16 @@ export async function updateLoreFileTool(
   // Gated last, so a step only counts as fulfilled once a write really happens.
   const gated = gate(toolCallId, ctx, "update", entity.name, file);
   if ("refusal" in gated) return gated.refusal;
+
+  // A whole-file write is the one that can quietly replace an entry wholesale.
+  const replacing = await currentText(entity.dirPath, file);
+  if (replacing !== null && isMajorRewrite(replacing, content)) {
+    const skipped = await pauseForStep(
+      toolCallId, ctx, gated.step,
+      rewritePreview(`${entity.dirPath}/${file}`, entity, file, replacing, content),
+    );
+    if (skipped) return skipped;
+  }
 
   const targetPath = `${entity.dirPath}/${file}`;
   const snap = await snapshotFile(ctx.projectPath, targetPath);
@@ -984,6 +1117,13 @@ export async function editLoreFileTool(
   // applying happen in the same call here, with no card in between for the
   // author to invalidate.
   const next = head + applyFindReplace(body, find, replace, positions.length, target);
+  if (isMajorRewrite(raw, next)) {
+    const skipped = await pauseForStep(
+      toolCallId, ctx, gated.step,
+      rewritePreview(`${entity.dirPath}/${file}`, entity, file, raw, next),
+    );
+    if (skipped) return skipped;
+  }
   const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
@@ -1177,6 +1317,13 @@ export async function rewriteLoreLinesTool(
   if ("refusal" in gated) return gated.refusal;
 
   const next = raw.slice(0, slice.start) + replacement + raw.slice(slice.start + slice.text.length);
+  if (isMajorRewrite(raw, next)) {
+    const skipped = await pauseForStep(
+      toolCallId, ctx, gated.step,
+      rewritePreview(`${entity.dirPath}/${file}`, entity, file, raw, next),
+    );
+    if (skipped) return skipped;
+  }
   const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
@@ -2325,6 +2472,11 @@ export async function deleteLoreEntityTool(
 
   const gated = gate(toolCallId, ctx, "delete", entity.name);
   if ("refusal" in gated) return gated.refusal;
+
+  // 删条目 always stops (1z B): the backup keeps the folder, not the author's
+  // memory of what was in it or which chapters leaned on it.
+  const skippedDelete = await pauseForStep(toolCallId, ctx, gated.step, await entityDeletionPreview(ctx, entity));
+  if (skippedDelete) return skippedDelete;
 
   // Not an unlink: the folder is *moved* into .ai-writer/backups, which keeps
   // the L1 "auto-apply, always recoverable" bargain intact even for the binary

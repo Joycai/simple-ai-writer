@@ -1231,6 +1231,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           // missing file); only a call that went through carried its step out.
           planStep: isError ? undefined : callContext.lorePlan?.matched.get(tc.id),
           planRefused: callContext.lorePlan?.refused.has(tc.id) ? true : undefined,
+          planSkipped: callContext.lorePlan?.skipped.has(tc.id) ? true : undefined,
         },
         at: Date.now(),
       });

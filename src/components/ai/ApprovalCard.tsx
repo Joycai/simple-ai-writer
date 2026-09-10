@@ -31,6 +31,7 @@ import type {
   XlsxProposal,
   ConvertProposal,
   MoveProposal,
+  LoreStepProposal,
   Proposal,
 } from "../../lib/agent/registry";
 import type { EditMatch } from "../../lib/agent/editApply";
@@ -114,6 +115,10 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titleTranscribe", { defaultValue: "请求转写" });
     case "command":
       return t("ai.approval.titleCommand", { defaultValue: "运行命令" });
+    case "loreStep":
+      return proposal.trigger === "deleteEntity"
+        ? t("ai.approval.loreStep.titleDelete")
+        : t("ai.approval.loreStep.titleRewrite");
   }
 }
 
@@ -182,6 +187,9 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // The one number known before it runs: how long it may take before the
       // app kills it. Not the shell — that sits in the body next to the line.
       return t("ai.approval.commandTimeout", { s: Math.round(proposal.timeoutMs / 1000), defaultValue: "≤ {{s}} 秒" });
+    case "loreStep":
+      // Drawn by LoreStepMeta: which step of the plan, and what it costs.
+      return "";
   }
 }
 
@@ -275,6 +283,107 @@ function DeleteMeta({ proposal }: { proposal: DeleteProposal }) {
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * Which step of the approved plan this is, and what it costs (1z D):
+ * 「方案第 3 / 3 步 · −2 个文件 · 380 字」, or 「方案第 2 / 3 步 · 替换 18 / 19 字」.
+ */
+function LoreStepMeta({ proposal }: { proposal: LoreStepProposal }) {
+  const { t } = useTranslation();
+  return (
+    <span className={styles.headerDelta}>
+      {t("ai.approval.loreStep.stepOf", { n: proposal.stepNumber, total: proposal.stepTotal })}
+      {" · "}
+      <span className={styles.metaDel}>
+        {proposal.trigger === "deleteEntity"
+          ? t("ai.approval.loreStep.deleteMeta", {
+              n: proposal.fileCount ?? 0,
+              chars: proposal.totalChars ?? 0,
+            })
+          : t("ai.approval.loreStep.rewriteMeta", {
+              removed: proposal.removedChars ?? 0,
+              original: proposal.originalChars ?? 0,
+            })}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * An approved lore step that stopped before it was written (设计稿 02h 1g).
+ *
+ * The locator leads with *why* it stopped — the plan was already approved, so
+ * a card appearing mid-pass needs to say what makes this step different from
+ * the ones that went through without asking. Then the plan's own sentence for
+ * the step, then what would go.
+ */
+function LoreStepBody({ proposal, narrow }: { proposal: LoreStepProposal; narrow: boolean }) {
+  const { t } = useTranslation();
+  const deleting = proposal.trigger === "deleteEntity";
+  const model = useMemo(
+    () =>
+      !deleting && proposal.before !== undefined && proposal.after !== undefined
+        ? rewriteWindows(proposal.before, proposal.after, {
+            context: narrow ? 1 : 2,
+            maxWindows: narrow ? WINDOWS_NARROW : WINDOWS_WIDE,
+          })
+        : null,
+    [deleting, proposal.before, proposal.after, narrow],
+  );
+
+  const cited = proposal.citedBy ?? [];
+  const locator = deleting
+    ? [
+        t("ai.approval.loreStep.whyDelete"),
+        cited.length > 0
+          ? t("ai.approval.loreStep.citedBy", { n: cited.length, who: cited.slice(0, 3).join(" · ") })
+          : proposal.citedPartial
+            ? t("ai.approval.loreStep.notCitedPartial")
+            : t("ai.approval.loreStep.notCited"),
+      ]
+    : [
+        t("ai.approval.loreStep.rewriteMeta", {
+          removed: proposal.removedChars ?? 0,
+          original: proposal.originalChars ?? 0,
+        }),
+        t("ai.approval.loreStep.whyRewrite"),
+      ];
+  const files = proposal.files ?? [];
+  const moreFiles = (proposal.fileCount ?? files.length) - files.length;
+
+  return (
+    <>
+      <div className={styles.locatorWarn}>{locator.join(" · ")}</div>
+      <div className={styles.reason}>{proposal.detail}</div>
+      {deleting ? (
+        <>
+          <div className={styles.deleteList}>
+            {files.map((file) => (
+              <div key={file.name} className={styles.deleteRow}>
+                <span className={styles.deleteMark}>−</span>
+                <span className={styles.deleteName}>
+                  {file.name}
+                  {file.head && <span className={styles.deleteRef}>{file.head}</span>}
+                </span>
+                <span className={styles.deleteSize}>
+                  {t("ai.approval.charCount", { n: file.chars })}
+                </span>
+              </div>
+            ))}
+          </div>
+          {moreFiles > 0 && (
+            <div className={styles.emptyNote}>{t("ai.approval.loreStep.moreFiles", { n: moreFiles })}</div>
+          )}
+        </>
+      ) : model && !model.empty ? (
+        <BlockWindows windows={model.windows} lineNumbers={!narrow} />
+      ) : (
+        <div className={styles.emptyNote}>{t("ai.approval.loreStep.tooLong")}</div>
+      )}
+      <div className={styles.emptyNote}>{t("ai.approval.loreStep.note")}</div>
+    </>
   );
 }
 
@@ -1228,6 +1337,8 @@ function ProposalBody({
       return <TranscribeBody proposal={proposal} />;
     case "command":
       return <CommandBody proposal={proposal} />;
+    case "loreStep":
+      return <LoreStepBody proposal={proposal} narrow={narrow} />;
   }
 }
 
@@ -1426,6 +1537,8 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           <RewriteMeta proposal={proposal} />
         ) : proposal.kind === "delete" ? (
           <DeleteMeta proposal={proposal} />
+        ) : proposal.kind === "loreStep" ? (
+          <LoreStepMeta proposal={proposal} />
         ) : (
           <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
         )}
@@ -1456,7 +1569,7 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           onClick={() => { setDeciding(true); reject(proposal.id, rejectReason.trim() || undefined); }}
           disabled={deciding}
         >
-          {t("ai.approval.reject")}
+          {proposal.kind === "loreStep" ? t("ai.approval.loreStep.skip") : t("ai.approval.reject")}
         </button>
         {/* Building one deliverable is a dozen appends to the same file, and a
             dozen identical cards is how an author learns to stop reading them.

@@ -57,7 +57,7 @@ export async function backlinksOf(
 
   let files: string[] = [];
   try {
-    files = documentsIn(await readDirRecursive(projectPath));
+    files = await workspaceDocuments(projectPath);
   } catch {
     return { byTarget, complete: false };
   }
@@ -83,6 +83,15 @@ export async function backlinksOf(
   }
 
   return { byTarget, complete };
+}
+
+/**
+ * Every text document in the workspace, recursively. Shared by the scans that
+ * ask "who points at this" — file links here, knowledge-base citations in
+ * `agent/destructive` — so both mean the same set of documents.
+ */
+export async function workspaceDocuments(projectPath: string): Promise<string[]> {
+  return documentsIn(await readDirRecursive(projectPath));
 }
 
 /** Text documents only — a picture cannot link to anything. */

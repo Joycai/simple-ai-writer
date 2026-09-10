@@ -4,6 +4,7 @@ import {
   createPlanGate,
   recordMatch,
   recordRefusal,
+  recordSkip,
   planLoadsEntityWrites,
   planLoadsOrganize,
   type LorePlanStep,
@@ -41,6 +42,16 @@ describe("recordMatch / recordRefusal", () => {
     // Same shape, different object: only the gate's own steps have an index.
     recordMatch(gate, "stray", { action: "update", entity: "Ava", detail: "a" });
     expect(gate.matched.has("stray")).toBe(false);
+  });
+
+  it("keeps the match when a step is skipped, so the ledger still knows which step it was", () => {
+    const gate = gateWith([{ action: "delete", entity: "Kael", detail: "b" }]);
+    const check = checkPlan(gate, emptyIndex, "delete", "Kael");
+    if (!check.ok) throw new Error("the call should pass the gate");
+    recordMatch(gate, "call-1", check.step);
+    recordSkip(gate, "call-1");
+    expect(gate.skipped.has("call-1")).toBe(true);
+    expect(gate.matched.get("call-1")).toBe(0);
   });
 
   it("notes a refusal, and does nothing on a surface without a gate", () => {
