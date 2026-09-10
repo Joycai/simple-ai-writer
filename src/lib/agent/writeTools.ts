@@ -36,6 +36,8 @@ import {
   facetFileName,
   isGalleryManifest,
   isPlainEntityFilename,
+  normalizeCollections,
+  sameCollection,
   parseFacetMeta,
   readEntityFile,
   saveEntityMetaAndBody,
@@ -397,6 +399,11 @@ function checkEntityFilename(toolCallId: string, raw: unknown): ToolResult | str
   return file;
 }
 
+/** 一行能读的归属，给拒绝信息用；未归集说成 none 而不是一对空方括号。 */
+function collectionLine(names: readonly string[]): string {
+  return names.length ? names.map((c) => `"${c}"`).join(", ") : "none";
+}
+
 export async function updateLoreFileTool(
   toolCallId: string,
   args: { entity?: string; file?: string; content?: string },
@@ -424,6 +431,16 @@ export async function updateLoreFileTool(
   // ── Structural validation before any disk write ──
   if (file === "index.md") {
     const { data } = parseFrontmatter(content);
+    // 盘上现在写着什么，是这三条纪律（改名 / 换分类 / 归属与封面）的唯一依据：
+    // `ctx.loreIndex` 是运行开始时的快照，同一次运行里的 file_lore_entries、或者
+    // 作者在别处的一次归集，改的都是盘上这一行。读不出来就退回快照——没有 index.md
+    // 的条目照样存在（扫描器允许），不该因此拒绝一次写入。
+    let onDisk: Record<string, unknown> = {};
+    try {
+      onDisk = parseFrontmatter(await readEntityFile(entity.dirPath, "index.md")).data;
+    } catch {
+      onDisk = { collections: entity.collections ?? [], cover: entity.cover ?? null };
+    }
     if (typeof data.name !== "string" || !data.name.trim()) {
       return {
         toolCallId,
@@ -455,6 +472,36 @@ export async function updateLoreFileTool(
       return {
         toolCallId,
         content: `Error: the \`dict\` flag is set by the author in the entry editor and cannot be changed by the agent — ${entity.dict ? "keep `dict: true`" : "omit the `dict` line"}.`,
+      };
+    }
+    // 归属和封面不是正文，agent 也没有在这里改它们的正当路子：归属走方案门下的
+    // file_lore_entries，封面只有作者在 lightbox 里设。而重发整份 frontmatter 时
+    // 漏掉一行是最容易发生的事——漏掉的后果是这一条静静掉出它所有的集合。所以照
+    // `dict` 的老规矩拒绝，并把该照抄的那一行原样交回去。
+    const diskCollections = normalizeCollections(onDisk.collections);
+    const sentCollections = normalizeCollections(data.collections);
+    if (
+      sentCollections.length !== diskCollections.length ||
+      !diskCollections.every((c, i) => sameCollection(c, sentCollections[i]))
+    ) {
+      return {
+        toolCallId,
+        content:
+          `Error: this write would change the entry's collections (${collectionLine(diskCollections)} → ${collectionLine(sentCollections)}). ` +
+          "Filing is the author's, and it goes through file_lore_entries under an approved plan step — never through a whole-file write. " +
+          (diskCollections.length
+            ? `Resend the file with this line in the frontmatter, exactly: \`collections: [${diskCollections.map((c) => JSON.stringify(c)).join(", ")}]\``
+            : "Resend the file with no `collections` line at all."),
+      };
+    }
+    const diskCover = typeof onDisk.cover === "string" && onDisk.cover.trim() ? onDisk.cover.trim() : null;
+    const sentCover = typeof data.cover === "string" && data.cover.trim() ? data.cover.trim() : null;
+    if (diskCover !== sentCover) {
+      return {
+        toolCallId,
+        content:
+          `Error: \`cover\` names the entry's header picture and is set by the author in the gallery lightbox — this tool cannot change it. ` +
+          (diskCover ? `Keep \`cover: ${JSON.stringify(diskCover)}\`.` : "Omit the `cover` line."),
       };
     }
     // Same rule as update_lore_meta: only the aliases this write introduces are
@@ -633,6 +680,12 @@ export async function updateLoreMetaTool(
   let name = entity.name;
   let aliases = entity.aliases ?? [];
   let summary = entity.summary;
+  // 归属与封面同样从盘上读，而不是让 `saveEntityMetaAndBody` 从手上这份 entity 补
+  // 默认值：`ctx.loreIndex` 是运行开始时的快照，而同一次运行里的 `file_lore_entries`
+  // （以及作者在别处的一次归集）都改的是盘上这一行。信快照的话，改一句简介就会把
+  // 那次归集静静写回旧值——作者收不到任何提示。
+  let collections = entity.collections ?? [];
+  let cover = entity.cover ?? null;
   try {
     const parsed = parseFrontmatter(await readEntityFile(entity.dirPath, "index.md"));
     body = parsed.content;
@@ -641,6 +694,10 @@ export async function updateLoreMetaTool(
       aliases = parsed.data.aliases.map((a) => String(a).trim()).filter(Boolean);
     }
     if (typeof parsed.data.summary === "string") summary = parsed.data.summary;
+    collections = normalizeCollections(parsed.data.collections);
+    cover = typeof parsed.data.cover === "string" && parsed.data.cover.trim()
+      ? parsed.data.cover.trim()
+      : null;
   } catch {
     // no index.md — rebuilt below from the scanned metadata
   }
@@ -695,11 +752,17 @@ export async function updateLoreMetaTool(
     entity,
     // dict is carried through, never set here: marking a dictionary is the
     // author's explicit act in the entity editor (see EntityMeta.dict).
-    { name, aliases, category: entity.category, summary, dict: entity.dict },
+    // collections / cover are passed **explicitly** from what disk says rather
+    // than left to `saveEntityMetaAndBody`'s default: that default reads them
+    // off `entity`, which is this run's snapshot and may predate a filing made
+    // since it was taken.
+    { name, aliases, category: entity.category, summary, dict: entity.dict, collections, cover },
     body,
   );
   entity.aliases = aliases;
   entity.summary = summary;
+  entity.collections = collections;
+  entity.cover = cover;
 
   await syncLore(ctx, entity);
   const changed = [
@@ -1656,6 +1719,53 @@ export async function updateLoreImageTool(
   };
 }
 
+/**
+ * 这个名字指的是这条的头像吗——`avatar` 这个词本身，或者扫描器记下的那个真文件名
+ * （`avatar.png` / 大小写照磁盘的拼法）。图库里同名的条目已经在调用处先认过了，
+ * 所以这里不会把一张恰好叫 avatar.png 的图库图误判成头像。
+ */
+function isAvatarTarget(raw: string, entity: LoreEntity): boolean {
+  const want = raw.toLowerCase();
+  if (want === "avatar") return true;
+  if (!entity.avatarPath) return false;
+  const name = entity.avatarPath.slice(entity.avatarPath.lastIndexOf("/") + 1).toLowerCase();
+  return want === name;
+}
+
+/** delete_lore_image 的头像分支：方案门、移进 backups、回灌，和删一张图同一条路。 */
+async function deleteLoreAvatar(
+  toolCallId: string,
+  entity: LoreEntity,
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  if (!entity.avatarPath) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entity.name}" has no avatar, so there is nothing to remove. Set one with set_lore_avatar.`,
+    };
+  }
+  const gated = gate(toolCallId, ctx, "delete", entity.name, "avatar");
+  if ("refusal" in gated) return gated.refusal;
+
+  // 四个后缀全走一遍，理由同 clearEntityAvatar：手工建的文件夹里可能不止一张，
+  // 只摘扫描器挑中的那张，下一次扫描头像又回来了。
+  let moved: string | null = null;
+  for (const e of AVATAR_EXTS) {
+    moved ??= await backupFileByMove(ctx.projectPath, `${entity.dirPath}/avatar.${e}`);
+  }
+  entity.avatarPath = null;
+
+  await syncLore(ctx, entity);
+  return {
+    toolCallId,
+    content:
+      `Removed the avatar of entity "${entity.name}"; its card falls back to the initial again.` +
+      (moved ? ` The picture was moved to ${moved} and can be restored.` : "") +
+      " Its gallery is untouched." +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
 export async function deleteLoreImageTool(
   toolCallId: string,
   args: { entity?: string; file?: string; reason?: string },
@@ -1665,6 +1775,16 @@ export async function deleteLoreImageTool(
   if ("toolCallId" in found) return found;
   const entity = found;
 
+  // 头像先认，因为它连文件名都可以不给：`avatar` 就是方案卡上 `file` 字段说的那个
+  // 词（见 propose_lore_plan 的 file 描述）。在这之前头像只能换不能摘——作者设错
+  // 一次就再也回不到「这条没有头像」，而这条路上的每一步（方案门、移进 backups）
+  // 和删一张图完全一样，所以是同一个工具多认一种目标，不是第 22 个工具。
+  const raw = (args.file ?? "").trim();
+  const inGallery = (entity.images ?? []).some((i) => i.file.toLowerCase() === raw.toLowerCase());
+  if (!inGallery && isAvatarTarget(raw, entity)) {
+    return deleteLoreAvatar(toolCallId, entity, ctx);
+  }
+
   const checked = checkImageFilename(toolCallId, args.file ?? undefined);
   if (typeof checked !== "string") return checked;
   const file = checked;
@@ -1673,7 +1793,9 @@ export async function deleteLoreImageTool(
   if (!listed) {
     return {
       toolCallId,
-      content: `Error: "${file}" is not in the gallery of entity "${entity.name}". Its gallery images are: ${galleryFileList(entity)}.`,
+      content:
+        `Error: "${file}" is not in the gallery of entity "${entity.name}". Its gallery images are: ${galleryFileList(entity)}.` +
+        (entity.avatarPath ? " To remove its avatar instead, pass file: \"avatar\"." : ""),
     };
   }
 

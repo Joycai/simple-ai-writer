@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -21,6 +21,7 @@ import {
   relocationTargets,
   savePinnedLore,
   scopeHas,
+  clearEntityAvatar,
   setEntityAvatar,
   slugifyEntityId,
   stageLoreImport,
@@ -187,6 +188,18 @@ export function LoreWall() {
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
       // One folder, not the wall: the avatar is the only thing that changed.
+      await refreshEntity(projectPath, entity);
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
+  const handleAvatarRemove = async (entity: LoreEntity) => {
+    if (!projectPath || avatarBusy) return;
+    setAvatarBusy(entity.id);
+    try {
+      await clearEntityAvatar(entity.dirPath);
+      // 同 handleAvatarPick：只有这一个文件夹变了。
       await refreshEntity(projectPath, entity);
     } finally {
       setAvatarBusy(null);
@@ -583,6 +596,16 @@ export function LoreWall() {
         action: () => openDetail(e.dirPath, true) },
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
+      // 只在真有头像时出现：「移除」一个不存在的东西是空动作，留着只会让作者点一下
+      // 才发现什么也没发生。在这之前头像只能换不能摘，设错一次就再也回不去。
+      ...(e.avatarPath
+        ? [{
+            kind: "item" as const,
+            icon: <ImageOff size={13} />,
+            label: t("lore.wall.removeAvatar"),
+            action: () => void handleAvatarRemove(e),
+          }]
+        : []),
       { kind: "divider" },
       // 不进多选也能改一条：右键 → 归入集合。菜单项本身弹出同一个勾选清单，
       // 所以「多选一条」和「右键一条」得到的是同一个界面。

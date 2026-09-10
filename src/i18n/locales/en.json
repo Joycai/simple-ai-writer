@@ -2634,6 +2634,7 @@
     },
     "wall": {
       "changeAvatar": "Change avatar",
+      "removeAvatar": "Remove avatar",
       "cardCounts": "{{facets}} facets · {{images}} images"
     },
     "transfer": {
