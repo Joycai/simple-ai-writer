@@ -24,6 +24,14 @@ Rules when touching this: components derive the task menu and categories from th
 
 Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一行 + 它的菜单 + 搜索), FileTree (设计稿 01b：行的三个通道、容器查询分档、脚线；口径在 `docs/reference/design-system.md` → 文件面板设计语言), RecentProjects — the sidebar's no-project panel: 已固定 / 最近打开 两节，固定＝换节住而不是行上的标记，见 `docs/feature/file-panel-pin-ui-brief.md` — EditorArea, EditorBottomStrip, AiRail)
 
+**顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言 / AI）右锚不动。三条：
+
+- **谁在场由扩展名决定，不在场就不渲染**——一张名单一类文件，`lib/fs/docKind.ts` 的 `DocKind` 五个值就是设计稿表 B 的五行（`markdown` / `html` / `image` / `convertible` / `opaque`）。`.html` 的导出只剩「打印 · PDF」（三条导出都先 `renderMarkdown`，把页面源码再渲染一遍不是导出，见 `printHtmlDocument`）；图片与读不出来的没有视图切换、没有字数，空位换成「用默认应用打开」/「转换文档」。
+- **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/editorStore`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。
+- **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
+
+**关闭文档只有一处实现**：`editorStore` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
+
 ### `src/components/editor/`
 
 CodeMirror wrapper, the markdown formatting strip above it (`EditorToolbar`, icon-only and stateless on purpose — reflecting the caret's formatting would cost a store write per keystroke, so only the heading dropdown reads state, and only when it opens), preview renderer + its zoom control

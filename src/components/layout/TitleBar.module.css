@@ -49,12 +49,28 @@
 .brandIcon {
   color: var(--color-sienna);
   display: flex;
+  flex-shrink: 0;
+}
+
+/* 让位的量程（设计稿 01e 表 A）。
+   三档量的是顶栏**可用内容宽**——所以平台让位（mac 56px 红绿灯位、无边框
+   Windows 右端 138px 三键、两侧内边距）留在这一格外面，同一台机器上的两种边框
+   形态才会在同一个可用宽度上跳档，而不是在同一个窗口宽度上。
+   容器查询而不是 JS 断点：宽度在拖窗口时逐帧变，store 里没有它。 */
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  container: topbar / inline-size;
 }
 
 .crumb {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-sans);
 }
@@ -64,6 +80,14 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 项目名：宽 / 中档写全，窄档放不下时先尾省（表 A ⑧——名字是最后才让的一件，
+   排在所有控件后面）。 */
+.crumbProject {
+  font-weight: 400;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .crumbMid {
   font-weight: 400;
@@ -79,16 +103,60 @@
   margin-left: 6px;
 }
 
-.spacer {
-  flex: 1;
-}
-
+/* 右侧两段（文档段 + 全局段）一件都不让宽：整条顶栏里唯一 shrink 的是面包屑。
+   中文标签一旦被压到字宽以下会**逐字折行**成「编 辑」，那是这条 strip 唯一不能
+   出的错，所以 nowrap + flex-shrink:0 先于任何阈值。 */
 .right {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-shrink: 0;
   font: 400 12px/1 var(--font-sans);
   color: var(--color-text-dim);
+}
+.right > * {
+  flex-shrink: 0;
+}
+
+/* 关闭文档：常驻，20×20 的真按钮，笔画只有 10px（设计稿 01e 屏 1e-1）。
+   与「已修改」同一层灰——它不是主动作，所以悬停也不上赭石，只上墨 + 高亮底。 */
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.closeBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+}
+.closeBtn:focus-visible {
+  outline: 1px solid var(--color-text-primary);
+  outline-offset: 0;
+}
+
+/* 关闭脏文档后原地留两秒（屏 1e-3）。淡入，不淡出——2 秒后的复位不携带信息。 */
+.crumbTrace {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  color: var(--color-success);
+  font-size: var(--font-size-xs);
+  animation: fadeIn var(--transition-base);
+}
+/* 落盘失败那一格（设计稿没画，见 editorStore.closeNotice）：文档没关，所以这句
+   不是回执而是解释——琥珀，与保存点脏态同一个色。 */
+.crumbTraceFail {
+  color: var(--color-warning);
 }
 
 .wordCount {
@@ -210,4 +278,56 @@
 .captionClose:hover {
   background: #e81123;
   color: #fff;
+}
+
+/* 窄档的视图切换：三格收成一格下拉，留的那一格就是当前档，仍是实底赭石 + 纸色字
+   （设计稿 01e 表 A ④）——收窄的是宽度，不是「作者知不知道自己在哪一档」。 */
+.viewPick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px 5px 11px;
+  background: var(--color-sienna);
+  border: none;
+  color: var(--color-card);
+  font: 500 11px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* 图片那一类里唯一的读数：原始像素尺寸（屏 1d-3）。 */
+.dims {
+  font: 500 var(--font-size-sm)/1 var(--font-mono);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+/* 转换文档 —— 读不出来的那一类里唯一有产出的动作，所以是文档段里唯一的赭石字。 */
+.ctrlAccent {
+  color: var(--color-sienna);
+  font-weight: 500;
+}
+
+/* ── 三档 ──────────────────────────────────────────────────────────────────
+   ≥1160 宽 / 900–1159 中 / <900 窄，量的是 .flow 的宽度（见它的注释）。
+   阈值是按**英文**那一串量出来的：英文宽档右侧比中文长约 84px，中文在同一道阈值
+   下自然成立，所以不为英文另设一档（设计稿 01e 屏 1f）。
+   让位顺序 = 表 A：先走三件文字（分组段 · 已修改 · 保存态的字），再走三件控件
+   （视图切换收下拉 · 导出收图标 · 主题/语言并进 ⋯）外加字数的单位，名字最后才让。 */
+@container topbar (max-width: 1159px) {
+  .wideOnly { display: none !important; }
+}
+@container topbar (max-width: 899px) {
+  .notNarrow { display: none !important; }
+  .right { gap: 12px; }
+  /* 项目名先尾省，文档名靠 .crumbCurrent 自己的省略号——两者都省之前，右侧已经
+     让完了七件。 */
+  .crumbProject {
+    max-width: 10em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@container topbar (min-width: 900px) {
+  .narrowOnly { display: none !important; }
 }

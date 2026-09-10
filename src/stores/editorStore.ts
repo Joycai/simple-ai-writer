@@ -5,7 +5,7 @@ import { readFile, writeFile } from "../lib/fs/fileio";
 import { isImagePath } from "../lib/fs/images";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
 import { useProjectStore } from "./projectStore";
-import { isSamePath } from "../lib/paths";
+import { baseName, isSamePath } from "../lib/paths";
 
 export type ViewMode = "split" | "editor" | "preview";
 
@@ -44,6 +44,15 @@ interface EditorState {
    * Authoritative copy lives in editor state — see lib/editor/aiTarget.
    */
   aiTarget: AiTargetRange | null;
+  /**
+   * 关闭一篇**脏**文档后，面包屑尾巴上那两秒的痕迹（设计稿 01e 屏 1e-3）。干净
+   * 文档关掉不留痕迹——本来就没什么可说的。由 `closeDocument()` 写入并自行清掉，
+   * 所以三个入口（×、⌘W、文件树右键）留下的是同一道痕迹。
+   *
+   * `failed` 是设计稿没画的那一格：落盘失败时**文档不关**（缓冲区是那几行字唯一
+   * 的副本），于是作者按下 × 却什么都没发生——这道痕迹是它唯一的解释。
+   */
+  closeNotice: { name: string; failed: boolean } | null;
 
   loadFile: (path: string) => Promise<void>;
   setContent: (content: string) => void;
@@ -68,6 +77,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   editorView: null,
   aiTarget: null,
   loadError: null,
+  closeNotice: null,
 
   loadFile: async (path) => {
     // Flush any pending autosave for the previously open file before switching.
@@ -146,6 +156,67 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setAiTarget: (range) => set({ aiTarget: range }),
 }));
+
+// ─── Closing the open document ────────────────────────────────────────────────
+
+/** How long the breadcrumb keeps the trace of a closed dirty document. */
+const CLOSE_NOTICE_MS = 2000;
+let closeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 关掉当前文档：先落盘，再置空，回到空稿页（设计稿 01e 屏 1e）。
+ *
+ * 三个入口共用它——面包屑末尾的 ×、⌘W、文件树右键的「关闭」——所以留下的痕迹
+ * 与写盘时机只有一处定义。**没有模态**：这个应用一直在自动保存，「丢弃」不是它
+ * 有的概念，所以脏文档的正确做法是 flush 完再关，而不是问一句。
+ *
+ * 缓冲区里正好停着要关的那一篇时才动它。作者关掉的如果是一张图片，缓冲区里是
+ * 上一篇文档（有意为之，见 {@link WritingFocus}），那次待写的自动保存不能被这
+ * 次关闭顺手取消掉。
+ */
+export async function closeDocument(): Promise<void> {
+  const closing = useProjectStore.getState().activeFilePath;
+  if (!closing) return;
+
+  const { isDirty, filePath, saveTimer } = useEditorStore.getState();
+  const holdsIt = isSamePath(filePath, closing);
+  const flushed = holdsIt && isDirty && !!filePath;
+  const name = (baseName(closing) || closing).replace(/\.md$/i, "");
+
+  if (holdsIt) {
+    if (saveTimer) clearTimeout(saveTimer);
+    if (flushed) {
+      try {
+        await useEditorStore.getState().saveNow();
+      } catch {
+        // 写盘失败（磁盘满、文件被占用、权限）：**不关**。缓冲区是这几行字唯一
+        // 的副本，关掉等于替作者丢稿；saveNow 已经把 isDirty 留成 true，下一次
+        // 编辑或 ⌘S 还会重试。
+        flashCloseNotice({ name, failed: true });
+        return;
+      }
+    }
+    useEditorStore.setState({
+      content: "", filePath: null, headings: [], isDirty: false,
+      saveTimer: null, loadError: null,
+    });
+    useProjectStore.getState().setDocCounts(0, 0);
+  }
+  useProjectStore.getState().setActiveFilePath(null);
+
+  flashCloseNotice(flushed ? { name, failed: false } : null);
+}
+
+/** 面包屑尾巴上那一道痕迹：写上去，两秒后自己收走。 */
+function flashCloseNotice(notice: { name: string; failed: boolean } | null): void {
+  if (closeNoticeTimer) clearTimeout(closeNoticeTimer);
+  useEditorStore.setState({ closeNotice: notice });
+  if (!notice) return;
+  closeNoticeTimer = setTimeout(
+    () => useEditorStore.setState({ closeNotice: null }),
+    CLOSE_NOTICE_MS,
+  );
+}
 
 // ─── Writing focus ────────────────────────────────────────────────────────────
 

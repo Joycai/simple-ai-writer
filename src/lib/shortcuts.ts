@@ -145,6 +145,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },
+  // 关闭**文档**，与 ⌘⇧W 的关闭**项目**成对（设计稿 01e 屏 1e）。面包屑末尾的 ×
+  // 和文件树右键的「关闭」走的是同一个 `closeDocument()`。
+  { id: "closeDoc", category: "file", combo: { mod: true, key: "w" }, labelKey: "closeDoc", scope: "dispatch" },
   // 文件面板自己的绑定（components/layout/FileTree.tsx + ProjectRow.tsx）。它们
   // 只在「文件」标签页挂着时监听——动作说的是「这个面板里的东西」，而面板不在，
   // 折叠什么、定位到哪里就都无从谈起。⌥⌘L 而不是设计稿写的 ⇧⌘L：后者已经是
