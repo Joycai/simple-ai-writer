@@ -8,7 +8,7 @@
  * the characters that changed rather than the size of the entry.
  */
 import { describe, expect, it } from "vitest";
-import { buildPlanLedgers, receiptOf } from "../agent/planLedger";
+import { buildPlanLedgers, receiptOf, turnWrites, undoneIds } from "../agent/planLedger";
 import type { AgentEvent, ChangeRecord, PlanRecord, ToolStep } from "../agent/events";
 
 let clock = 1_700_000_000_000;
@@ -113,6 +113,34 @@ describe("buildPlanLedgers", () => {
     ]);
     expect(ledger.steps[2]).toMatchObject({ skipped: true, writes: [] });
     expect(ledger.written).toBe(0);
+  });
+
+  it("shows the latest undo attempt on a step", () => {
+    const log: AgentEvent[] = [
+      stepEvent({ toolCallId: "p", name: "propose_lore_plan", plan: PLAN }),
+      stepEvent({ toolCallId: "w", name: "edit_lore_file", planStep: 1, change: update("a", "b") }),
+      { kind: "undo", toolCallId: "w", outcome: "refused", reason: "changedAfter", at: at() },
+      { kind: "undo", toolCallId: "w", outcome: "undone", at: at() },
+    ];
+    const [ledger] = buildPlanLedgers(log);
+    expect(ledger.steps[1].undo).toMatchObject({ outcome: "undone" });
+    // Undoing does not rewrite history: the step was still written.
+    expect(ledger.written).toBe(1);
+  });
+
+  it("lists a turn's writes in order, leaving out skipped and failed ones", () => {
+    const log: AgentEvent[] = [
+      stepEvent({ toolCallId: "a", name: "update_lore_file", change: update("x", "y") }),
+      stepEvent({ toolCallId: "s", name: "delete_lore_entity", planSkipped: true, change: update("x", "") }),
+      stepEvent({ toolCallId: "e", name: "edit_lore_file", status: "error", change: update("y", "z") }),
+      stepEvent({ toolCallId: "r", name: "read_lore_entity" }),
+      stepEvent({ toolCallId: "b", name: "edit_lore_file", change: update("y", "z") }),
+      { kind: "undo", toolCallId: "a", outcome: "refused", reason: "changedAfter", at: at() },
+      { kind: "undo", toolCallId: "b", outcome: "undone", at: at() },
+    ];
+    expect(turnWrites(log).map((w) => w.toolCallId)).toEqual(["a", "b"]);
+    // Only an undo that happened counts; a refused attempt leaves the write standing.
+    expect([...undoneIds(log)]).toEqual(["b"]);
   });
 
   it("builds nothing for a plan that was not approved", () => {

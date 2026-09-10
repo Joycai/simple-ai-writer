@@ -762,6 +762,8 @@ export function AgentChat() {
             ) : (
               <AssistantTurn
                 key={turn.id}
+                chatKey={activeKey}
+                turnId={turn.id}
                 text={turn.text}
                 log={turn.log}
                 images={turn.images}
@@ -1283,9 +1285,12 @@ const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed
  * callbacks being `useCallback`'d up there.
  */
 const AssistantTurn = memo(function AssistantTurn({
-  text, log, images, exports, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
-  onDisableWriter, onOpenSettings, onChangeModel,
+  chatKey, turnId, text, log, images, exports, isLive, doomed, onCtx, handoffOpen, handoffDone, firstHandoff,
+  degradedOrdinal, onDisableWriter, onOpenSettings, onChangeModel,
 }: {
+  /** Which conversation and turn this is — strings, so the memo holds. */
+  chatKey: string;
+  turnId: string;
   text: string;
   log: AgentEvent[];
   images?: string[];
@@ -1331,7 +1336,14 @@ const AssistantTurn = memo(function AssistantTurn({
     >
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
       <div className={styles.turnContent}>
-        {log.length > 0 && <AgentLog log={log} isRunning={isLive} compact />}
+        {log.length > 0 && (
+          <AgentLog
+            log={log}
+            isRunning={isLive}
+            compact
+            onUndo={(ids) => useAgentStore.getState().undoTurnWrites(chatKey, turnId, ids)}
+          />
+        )}
         {/* Pictures this turn produced, above the prose: the assistant's text
             is a caption for them, and reading the caption first is backwards. */}
         <TurnImages paths={images} />

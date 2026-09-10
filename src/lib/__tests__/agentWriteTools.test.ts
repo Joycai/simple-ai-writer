@@ -95,7 +95,7 @@ vi.mock("../project", () => ({
 
 import { serializeMemory, type DocMemory } from "../context/memory";
 import { scanLore, type LoreIndex } from "../lore";
-import { CHANGE_TEXT_CHARS, backupFile, changeOf } from "../agent/backup";
+import { CHANGE_TEXT_CHARS, backupFile, changeOf, hashText } from "../agent/backup";
 import { createPlanGate, type LorePlan, type LorePlanStep } from "../agent/plan";
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 
@@ -237,6 +237,18 @@ describe("changeOf", () => {
     expect(rec.after).toBeUndefined();
     expect(rec.beforeChars).toBe(5);
     expect(rec.afterChars).toBe(huge.length);
+  });
+
+  it("fingerprints the after text, even when the text itself is dropped", () => {
+    // An undo asks whether the file is still what the write left, and has to be
+    // able to ask it about a file whose text the record could not keep.
+    expect(changeOf({ projectPath: PROJECT, path, before: "a", after: "b" }).afterHash).toBe(hashText("b"));
+    const huge = "x".repeat(CHANGE_TEXT_CHARS + 1);
+    const rec = changeOf({ projectPath: PROJECT, path, before: "a", after: huge });
+    expect(rec.after).toBeUndefined();
+    expect(rec.afterHash).toBe(hashText(huge));
+    expect(changeOf({ projectPath: PROJECT, path, before: "a" }).afterHash).toBeUndefined();
+    expect(hashText("金发")).not.toBe(hashText("银发"));
   });
 
   it("carries the backup path only when there is one", () => {
@@ -1497,6 +1509,14 @@ describe("lore plan gate", () => {
 
     expect(cards).toHaveLength(1);
     expect(res.content).toContain("Deleted lore entity");
+    // A folder record the ledger can undo: where it was, where it went.
+    expect(res.change).toMatchObject({
+      path: ".ai-writer/lore/characters/ava",
+      entity: "Ava",
+      action: "delete",
+      dir: true,
+    });
+    expect(res.change?.backupPath).toContain(".ai-writer/backups/deleted-");
   });
 
   it("keeps today's behaviour on a surface that cannot show the card", async () => {

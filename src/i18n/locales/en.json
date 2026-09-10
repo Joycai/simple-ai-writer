@@ -1820,7 +1820,21 @@
         "tooBig": "Too large to keep in the log; the previous version is at {{path}}",
         "noText": "No text comparison was kept for this write",
         "unchanged": "No change in content",
-        "skipped": "Skipped"
+        "skipped": "Skipped",
+        "undo": {
+          "button": "Undo",
+          "all": "Undo all {{n}} steps",
+          "undone": "Undone",
+          "eachBackedUp": "One backup per step · only files untouched since the write come back",
+          "backupLine": "Backup {{path}} · undo restores this one file",
+          "folderMoved": "The whole entry folder went into the backups; undo moves it back as it was",
+          "changedAfter": "Not undone: the file has changed since this write (perhaps edited by hand).",
+          "changedByLaterWrite": "Not undone: a later \"{{tool}}\" in this turn touched the file — undo that step first.",
+          "recreated": "Not undone: something with the same name is already at the old location.",
+          "noBackup": "Not undone: this write left no backup.",
+          "cannotVerify": "Not undone: there is no way to confirm the file is as the write left it (the record predates undo).",
+          "failed": "Undo failed: a file could not be read or written."
+        }
       }
     },
     "mention": {

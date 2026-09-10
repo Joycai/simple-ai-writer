@@ -177,3 +177,66 @@
 .refusedCall {
   min-width: 0;
 }
+
+/* ── 撤回 (设计稿 02h 1h / 1i) ────────────────────────────────────────────── */
+
+/* The step's head and its undo sit side by side: a button cannot live inside
+   the head, which is a button itself. */
+.stepLine {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stepLine > .stepHead,
+.stepLine > .stepHeadButton {
+  flex: 1;
+  min-width: 0;
+}
+
+.undoButton,
+.undoAll {
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-sienna);
+  font: 400 10px/1.6 var(--font-mono);
+  cursor: pointer;
+}
+
+.undoButton:hover:not(:disabled),
+.undoAll:hover:not(:disabled) { text-decoration: underline; }
+.undoButton:disabled,
+.undoAll:disabled { opacity: 0.4; cursor: default; }
+
+/* Came back: quieter than a receipt, because nothing of this write is left. */
+.receiptUndone {
+  flex-shrink: 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+}
+
+/* An undo that did not happen says why, under the step it was for — the
+   author pressed a button, and silence would read as success. */
+.refusal {
+  padding: 0 0 4px;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-diff-del-text);
+}
+
+.footer {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--color-hairline);
+}
+
+.footerNote {
+  flex: 1;
+  min-width: 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
+}

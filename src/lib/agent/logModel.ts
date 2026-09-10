@@ -233,6 +233,9 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
       roundLimits.push(event);
       continue;
     }
+    // Recorded after the run by the plan ledger's 撤回; the ledger reads it, and
+    // as a row in whichever round happened to be last it would describe nothing.
+    if (event.kind === "undo") continue;
     if (event.kind === "round-start") {
       rounds.push({
         round: event.round,
