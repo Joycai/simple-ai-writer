@@ -246,7 +246,23 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../agent/packs";
  * `create_file`, which is how a document gets paraphrased under a card that
  * says "create".
  */
-const AGENT_ASSIST_CAP = 16_800;
+/**
+ * **16,873** (cap 16,800 → 16,900) when `create_lore_category` became
+ * `manage_category` and grew rename and delete. Measured against main's
+ * **16,743**, so the capability costs **+130** — and every one of them is
+ * deferred: the tool is in `lore_organize`, so a run pays it only after the
+ * author has approved a plan that reorganises the knowledge base. The
+ * resident half is unmoved, which the assertion below still pins at 12,000.
+ *
+ * This is the case §5 asks for before a bigger number, and it is already
+ * satisfied — the answer there is deferred loading, and this tool is deferred.
+ * What was bought: the two axes' management surfaces now match
+ * (`manage_collection` had create/rename/delete from the start), and the
+ * asymmetry that justified the gap turned out to rest on a wrong premise —
+ * a category's id *is* its folder, and a rename only rewrites the label, so
+ * nothing moves on disk. See `agent/organizeTools`' header.
+ */
+const AGENT_ASSIST_CAP = 16_900;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),

@@ -132,7 +132,7 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "delete_lore_entity",
       "manage_collection",
       "file_lore_entries",
-      "create_lore_category",
+      "manage_category",
     ],
     maxRounds: 24,
     finishPolicy: "force-text",

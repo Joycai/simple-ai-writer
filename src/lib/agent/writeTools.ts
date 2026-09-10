@@ -282,7 +282,7 @@ const MERGE_ALIAS_HINT =
  * plan rather than retrying invented ids.
  */
 const NO_CATEGORY_TOOL_HINT =
-  "Categories are not invented on the fly — if a new one is genuinely needed, put a plan step with target 'category' in propose_lore_plan and create it with create_lore_category once the author approves. To group entries by which project they serve, use a collection instead (manage_collection / file_lore_entries).";
+  "Categories are not invented on the fly — if a new one is genuinely needed, put a plan step with target 'category' in propose_lore_plan and create it with manage_category once the author approves. To group entries by which project they serve, use a collection instead (manage_collection / file_lore_entries).";
 
 /**
  * Gate helper for the write tools: returns the refusal result to hand straight

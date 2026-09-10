@@ -355,6 +355,21 @@ export function loreOrganizer(): LoreOrganizer {
       ]);
       return id;
     },
+    get userCategories() {
+      return st().customCategories.map((c) => c.id);
+    },
+    // 和设置 → 工作区的改名同一条路（WorkspacePane.handleRename）：只换标签，
+    // `id` 原样留着。id 就是文件夹名，所以磁盘上什么都没动。
+    renameCategory: async (id, label) => {
+      await st().setCustomCategories(
+        st().customCategories.map((c) => (c.id === id ? { ...c, labelZh: label, labelEn: label } : c)),
+      );
+    },
+    // 同墙上分类右键的「删除」：摘掉声明，文件夹留在原地。工具那一侧已经先确认
+    // 过它是空的，所以这里不会有条目退化成孤儿。
+    deleteCategory: async (id) => {
+      await st().setCustomCategories(st().customCategories.filter((c) => c.id !== id));
+    },
   };
 }
 

@@ -206,7 +206,7 @@ AI 模态。
 |---|---|
 | `manage_collection` | `op: create / rename / delete` |
 | `file_lore_entries` | `entities[]` + `add[]` / `remove[]`，一次一批 |
-| `create_lore_category` | 只有 create |
+| `manage_category` | create / rename / delete（删除拒绝非空；见 lore-category-manage-plan.md §8） |
 
 **分类只给 create** 是唯一保留的不对称，不是嘴硬：分类是磁盘上的文件夹，新建只是建
 目录，而改名/删除会让每个成员条目的文件夹搬家，并让 `[[lore:分类/id]]` 路径引用和特征
