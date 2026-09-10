@@ -611,10 +611,15 @@ export interface LoreOrganizer {
   /** 当前声明的集合，按作者排的顺序。 */
   collections: string[];
   createCollection: (name: string) => Promise<void>;
-  renameCollection: (from: string, to: string) => Promise<void>;
-  deleteCollection: (name: string) => Promise<void>;
-  /** 把条目（按 dirPath）归入 / 移出集合。 */
-  file: (dirPaths: string[], add: string[], remove: string[]) => Promise<void>;
+  /**
+   * 改名与删除都改写**成员条目的 frontmatter**（集合的 id 就是它的名字），所以
+   * 两者都交回真的动过的那几条地址——调用方拿它回灌运行快照。空数组＝这个集合
+   * 一个成员都没有，不是失败。
+   */
+  renameCollection: (from: string, to: string) => Promise<LoreEntityAddress[]>;
+  deleteCollection: (name: string) => Promise<LoreEntityAddress[]>;
+  /** 把条目（按 dirPath）归入 / 移出集合；同样交回真的动过的那几条。 */
+  file: (dirPaths: string[], add: string[], remove: string[]) => Promise<LoreEntityAddress[]>;
   /** 新建分类，传作者能读的标签，返回真正落成的 id。 */
   createCategory: (label: string) => Promise<string>;
 }
@@ -687,14 +692,17 @@ export interface ToolContext {
    * write (see `presets.ts`). Any context whose preset carries a lore *write*
    * tool must supply it.
    *
-   * `changed` names the one entity a write stayed inside of — a body edit, a
-   * facet, a gallery picture — so the surface can re-read that folder alone
-   * (`loreStore.refreshEntity`) instead of walking the whole knowledge base,
-   * which is what a full rescan costs after *every* write call. Omitted when
-   * the write changed what entities exist or where (create / move / delete /
-   * pack runs): those need the walk. A surface may ignore the hint and rescan.
+   * `changed` names the entities a write stayed inside of — a body edit, a
+   * facet, a gallery picture, or the N entries one filing call re-tagged — so
+   * the surface can re-read those folders alone (`loreStore.refreshEntities`)
+   * instead of walking the whole knowledge base, which is what a full rescan
+   * costs after *every* write call. Omitted when the write changed what
+   * entities exist or where (create / move / delete / pack runs): those need
+   * the walk. A surface may ignore the hint and rescan.
    */
-  onLoreChanged?: (changed?: LoreEntityAddress) => LoreIndex | void | Promise<LoreIndex | void>;
+  onLoreChanged?: (
+    changed?: LoreEntityAddress | LoreEntityAddress[],
+  ) => LoreIndex | void | Promise<LoreIndex | void>;
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
   /**

@@ -48,7 +48,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const { models, providers, activeModelId } = useAiStore();
   // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
   const [modelId, setModelId] = useState(activeModelId ?? "");
-  const { scanProject } = useLoreStore();
+  const { scanProject, refreshEntity } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
   const [body, setBody] = useState("");
@@ -225,8 +225,11 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         summary: pSummary.trim(),
       };
       // dict 原样带过去：AI 的元数据建议不该顺手抹掉词典标记。
-      await saveEntityMetaAndBody(projectPath, entity, { ...meta, dict: entity.dict }, body);
-      await scanProject(projectPath);
+      const moved = await saveEntityMetaAndBody(projectPath, entity, { ...meta, dict: entity.dict }, body);
+      // 建议里可能含改名或换分类——那两样会把文件夹搬走，索引里的位置也跟着变，
+      // 只有落点没动时才重读一个文件夹。
+      if (moved.dirPath === entity.dirPath) await refreshEntity(projectPath, moved);
+      else await scanProject(projectPath);
       requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

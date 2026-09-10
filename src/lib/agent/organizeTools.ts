@@ -23,6 +23,17 @@
  *
  * ## 这一组是 deferred 的
  *
+ * ## 每一处写入都要回灌运行快照
+ *
+ * 这三个工具改的是**条目 frontmatter 上的字段**（集合归属），而 `ctx.loreIndex` 是
+ * 运行开始时克隆的一份快照。不回灌的话，同一次运行里紧接着的 `update_lore_meta`
+ * 会拿快照上那份**旧的** `collections` 覆写回磁盘（`saveEntityMetaAndBody` 缺席即
+ * 沿用手上这份 entity），把刚归好的集合静静撤销——作者收不到任何提示。所以每条
+ * 成功路径都以 `syncLore(ctx, touched)` 收尾，`touched` 是 store 交回来的真改动
+ * 名单，于是刷新范围也正好是这几条而不是全库。
+ *
+ * ## 这一组是 deferred 的
+ *
  * 全部挂 `group: "lore_organize"`，方案批准之前根本不下发（`runtime.ts`）。而且是
  * **按方案形状**装载：批准一个「整理」方案才装载它们，批准一个「改写条目正文」的
  * 方案不装。这是 `agent-tool-context-lld.md` §6 认可的那条路——由运行状态自动装载，
@@ -37,6 +48,7 @@ import { checkPlan, type LorePlanAction } from "./plan";
 import type { LoreOrganizer, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 import { findEntityByName } from "./tools";
+import { syncLore } from "./writeTools";
 
 /** 缺能力时的统一说明——工具直接说清楚，而不是静默无操作。 */
 const NO_ORGANIZER =
@@ -94,7 +106,7 @@ export async function manageCollectionTool(
     if (!exists) return { toolCallId, content: unknownCollection(name, org) };
     const g = gate(toolCallId, ctx, "move", name, "collection");
     if ("refusal" in g) return g.refusal;
-    await org.renameCollection(name, to);
+    await syncLore(ctx, await org.renameCollection(name, to));
     return {
       toolCallId,
       content: `Renamed collection "${name}" to "${to}". Every member entry's frontmatter was rewritten, so the name in the files matches what the author sees.`,
@@ -105,7 +117,7 @@ export async function manageCollectionTool(
     if (!exists) return { toolCallId, content: unknownCollection(name, org) };
     const g = gate(toolCallId, ctx, "delete", name, "collection");
     if ("refusal" in g) return g.refusal;
-    await org.deleteCollection(name);
+    await syncLore(ctx, await org.deleteCollection(name));
     return {
       toolCallId,
       content: `Deleted collection "${name}". No entry was deleted — they only lost that membership; any entry that had no other collection is now unfiled.`,
@@ -171,7 +183,9 @@ export async function fileLoreEntriesTool(
     }
   }
 
-  await org.file(resolved.map((e) => e.dirPath), add, remove);
+  // 名字在快照回灌之前先取下来：回灌会把 `resolved` 里的 entity 对象换掉。
+  const filed = resolved.map((e) => e.name);
+  await syncLore(ctx, await org.file(resolved.map((e) => e.dirPath), add, remove));
 
   const parts: string[] = [];
   if (add.length) parts.push(`into ${add.map((c) => `"${c}"`).join(", ")}`);
@@ -179,8 +193,8 @@ export async function fileLoreEntriesTool(
   return {
     toolCallId,
     content:
-      `Filed ${resolved.length} ${resolved.length === 1 ? "entry" : "entries"} ${parts.join(" and ")}: ` +
-      `${resolved.map((e) => e.name).join(", ")}. Memberships are additive — an entry keeps every other collection it was in.`,
+      `Filed ${filed.length} ${filed.length === 1 ? "entry" : "entries"} ${parts.join(" and ")}: ` +
+      `${filed.join(", ")}. Memberships are additive — an entry keeps every other collection it was in.`,
   };
 }
 
@@ -221,11 +235,14 @@ export async function createLoreCategoryTool(
   const g = gate(toolCallId, ctx, "create", label, "category");
   if ("refusal" in g) return g.refusal;
 
+  // 这一条不回灌快照：新分类是空的，`ctx.loreIndex` 至多少一个空键，而
+  // `setCustomCategories` 那一侧已经全量重扫过 store 了——再 `syncLore(ctx)` 只会
+  // 紧接着再扫一遍全库。真往里放条目的 `create_lore_entity` 本来就走全量刷新。
   const id = await org.createCategory(label);
   return {
     toolCallId,
     content:
       `Created category "${label}" (id: ${id}). New entries can go in it via create_lore_entity, and existing ones via move_lore_entity. ` +
-      "There is no tool to rename or delete a category: a category is a folder on disk, so either would relocate every member entry and stale its `[[lore:…]]` path citations. Ask the author to do it in the app — right-clicking a category on the knowledge-base wall offers exactly that.",
+      "There is no tool to rename or delete a category: a category is a folder on disk, so either would relocate every member entry and stale its `[[lore:…]]` path citations. Ask the author to do it in the app — renaming a user-defined category is in Settings → 工作区, and deleting one is on its right-click menu on the knowledge-base wall.",
   };
 }

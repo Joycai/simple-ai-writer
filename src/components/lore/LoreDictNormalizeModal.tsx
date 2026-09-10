@@ -117,7 +117,7 @@ export function LoreDictNormalizeModal({ entity, onClose }: Props) {
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId } = useAiStore();
   const [modelId, setModelId] = useState(activeModelId ?? "");
-  const { scanProject } = useLoreStore();
+  const { refreshEntity } = useLoreStore();
 
   const [body, setBody] = useState("");
   const [phase, setPhase] = useState<Phase>("input");
@@ -284,7 +284,8 @@ export function LoreDictNormalizeModal({ entity, onClose }: Props) {
         },
         draft.trim() + "\n",
       );
-      await scanProject(projectPath);
+      // 名字与分类原样带回去，条目不搬家——重读这一个文件夹就够了。
+      await refreshEntity(projectPath, entity);
       requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

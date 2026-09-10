@@ -87,6 +87,12 @@ interface LoreState {
    * 一遍总好过拼错。
    */
   refreshEntity: (projectPath: string, target: LoreEntityAddress) => Promise<void>;
+  /**
+   * 同一件事的批量版：一次归集、一次集合改名/删除会改到 N 条，而它们仍然全在自己
+   * 的文件夹里。逐条调 `refreshEntity` 会排 N 次队（每次一个 `set`，界面重渲染
+   * N 次）；这里一次读完、一次换进去。N 为 0 时什么都不做。
+   */
+  refreshEntities: (projectPath: string, targets: readonly LoreEntityAddress[]) => Promise<void>;
   /** 切换取材范围并记住（null 或空 ＝ 全部）。 */
   setScope: (projectPath: string | null, scope: LoreScope) => void;
   /** Ask the lore wall to open AI-extract seeded with this passage. */
@@ -222,7 +228,14 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     return promise;
   },
 
-  refreshEntity: (projectPath, target) => {
+  refreshEntity: (projectPath, target) => get().refreshEntities(projectPath, [target]),
+
+  refreshEntities: (projectPath, targets) => {
+    // 同一条目被列两次（归入 A 又移出 B 这种）只读一遍。
+    const wanted = new Map<string, LoreEntityAddress>();
+    for (const t of targets) wanted.set(t.dirPath, t);
+    if (wanted.size === 0) return Promise.resolve();
+
     // A full scan that is queued but not yet reading disk will see this write
     // too — same sharing rule as scanProject, same reason it is safe.
     if (queued && queuedPath === projectPath) return queued;
@@ -233,16 +246,26 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       // project's entity. And `walkProject` directly rather than `scanProject`
       // — scheduling behind `chain` from inside it would wait on itself.
       if (scannedPath !== projectPath) return walkProject(projectPath);
-      const fresh = await scanEntity(target.category, target.id, target.dirPath);
+      // 全部读完再动索引，`get().index` 才只在 await 之后读一次——和单条版本
+      // 一样的理由，只是这里有 N 个 await 要跨过去。
+      const fresh: { target: LoreEntityAddress; entity: LoreEntity }[] = [];
+      for (const target of wanted.values()) {
+        fresh.push({ target, entity: await scanEntity(target.category, target.id, target.dirPath) });
+      }
       const index = get().index;
-      const list = index[target.category] ?? [];
-      const at = list.findIndex((e) => e.dirPath === target.dirPath);
-      // The run's snapshot and the index disagree on where this entity is:
-      // one more walk is cheaper than being wrong about a folder.
-      if (at < 0) return walkProject(projectPath);
-      const next = list.slice();
-      next[at] = fresh;
-      set({ index: { ...index, [target.category]: next } });
+      const patched: LoreIndex = {};
+      for (const { target, entity } of fresh) {
+        const list = patched[target.category] ?? index[target.category];
+        // The run's snapshot and the index disagree on where this entity is:
+        // one more walk is cheaper than being wrong about a folder.
+        if (!list) return walkProject(projectPath);
+        const at = list.findIndex((e) => e.dirPath === target.dirPath);
+        if (at < 0) return walkProject(projectPath);
+        const next = patched[target.category] ?? list.slice();
+        next[at] = entity;
+        patched[target.category] = next;
+      }
+      set({ index: { ...index, ...patched } });
     };
 
     const promise = chain.then(patch, patch);

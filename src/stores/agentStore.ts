@@ -2702,10 +2702,11 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         // 的那一处）。图集清单据此说出真正走得通的那条路。
         visionDelegate: routed.visionDelegate,
         onLoreChanged: async (changed) => {
-          // One folder re-read when the write stayed inside an entity; the
+          // Those folders re-read when the write stayed inside them; the
           // whole walk only when what exists changed (see ToolContext).
           const lore = useLoreStore.getState();
-          if (changed) await lore.refreshEntity(projectPath, changed);
+          if (Array.isArray(changed)) await lore.refreshEntities(projectPath, changed);
+          else if (changed) await lore.refreshEntity(projectPath, changed);
           else await lore.scanProject(projectPath);
           // Re-read rather than returning scanProject's own result: if a
           // later scan won the store's queue, that is the one we want.

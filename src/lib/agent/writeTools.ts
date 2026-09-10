@@ -219,19 +219,29 @@ export async function proposeLorePlanTool(
  * Invariant for callers: resync **last**, and never touch disk through an
  * entity resolved before it — those objects are detached once this returns.
  *
- * Pass `changed` when the write stayed inside that entity's folder — a body
- * edit, a facet, a picture, the avatar. The surface then re-reads that one
- * folder (`loreStore.refreshEntity`) instead of walking every entry, which
- * is what a rescan after *each* write call used to cost. Leave it out when
- * the write changed what exists or where: create, move, delete, a pack run.
- * The address is copied out before the await, because the entity object is
- * exactly what the resync detaches.
+ * Pass `changed` when the write stayed inside those entities' folders — a body
+ * edit, a facet, a picture, the avatar, or the N entries one filing call
+ * re-tagged. The surface then re-reads those folders alone
+ * (`loreStore.refreshEntities`) instead of walking every entry, which is what
+ * a rescan after *each* write call used to cost. Leave it out when the write
+ * changed what exists or where: create, move, delete, a pack run. An empty
+ * array is not the same as omitting it — it means "nothing changed on disk",
+ * and asks for no rescan at all.
+ *
+ * The addresses are copied out before the await, because the entity objects
+ * are exactly what the resync detaches.
  */
-export async function syncLore(ctx: ToolContext, changed?: LoreEntity): Promise<void> {
+export async function syncLore(
+  ctx: ToolContext,
+  changed?: LoreEntity | LoreEntityAddress[],
+): Promise<void> {
   try {
-    const address: LoreEntityAddress | undefined = changed
-      ? { category: changed.category, id: changed.id, dirPath: changed.dirPath }
-      : undefined;
+    let address: LoreEntityAddress | LoreEntityAddress[] | undefined;
+    if (Array.isArray(changed)) {
+      address = changed.map((a) => ({ category: a.category, id: a.id, dirPath: a.dirPath }));
+    } else if (changed) {
+      address = { category: changed.category, id: changed.id, dirPath: changed.dirPath };
+    }
     const fresh = await ctx.onLoreChanged?.(address);
     if (!fresh) return;
     for (const key of Object.keys(ctx.loreIndex)) delete ctx.loreIndex[key];
