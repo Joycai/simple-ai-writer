@@ -556,7 +556,12 @@
       "asrLabel": "Audio transcription (Beta)",
       "asrHint": "Turn recordings or videos in the project into timestamped transcripts: right-click a file → “Transcribe…”, or ask the assistant in chat. Files are uploaded to Alibaba Cloud temporary storage (auto-deleted after 48 h) and processed by Qwen's file-transcription model, billed per audio second at roughly ¥0.8 / hour.",
       "asrOffHint": "While off, the item is absent from the context menu and transcribe_audio is absent from the assistant's tools — it won't propose a transcription it cannot run.",
-      "goAsrHint": "bind a transcription model · set timestamp / diarization defaults"
+      "goAsrHint": "bind a transcription model · set timestamp / diarization defaults",
+      "cliLabel": "Command line (Beta)",
+      "cliHint": "The assistant may propose running one command on this computer — git, converters and scripts you have installed, file inventories. Every command is shown to you verbatim first and runs only once you approve; it runs with your account's permissions and can do anything you could do in a terminal. PowerShell on Windows, the system shell on macOS / Linux.",
+      "cliOffHint": "While off, run_command is absent from the assistant's tools — it won't propose a run it cannot perform.",
+      "cliShell": "Runs with {{shell}} on this computer.",
+      "cliShellUnknown": "The shell is detected only in the desktop app; the browser has no such tool."
     },
     "backup": {
       "section": "Config Backup",

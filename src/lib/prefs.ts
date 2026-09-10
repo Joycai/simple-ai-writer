@@ -118,6 +118,8 @@ export const PREF_KEYS = [
   "app:asrBeta",
   "ai:asr:timestamps",
   "ai:asr:diarization",
+  // 命令行（Beta）— lib/cli/flag：助手能不能提议在这台电脑上跑一条命令。
+  "app:cliBeta",
   // 写手的一次性说明看过没有。设置卡上的「再看一次说明」清掉它。
   "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。

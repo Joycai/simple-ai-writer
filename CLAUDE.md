@@ -140,7 +140,7 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - `src/lib/profile/` — capability packs (model / resolve / file / active / store)
 - `src/lib/context/` — RAG assembly, clock, doc focus, story memory, book spine, collection digests
 - `src/lib/batch/`, `src/lib/workflow/` — clause splitting; workflow cards (built-ins + project overrides, two-level disclosure)
-- Beta subsystems, each behind Settings → AI 配置 → 实验室 (`flag.ts`): `src/lib/comfy/` (ComfyUI image route), `pptx/` (HTML → PPTX, no model in the loop), `xlsx/` (markdown tables → workbook), `roleplay/` (first-person scenes, narrator, character memory), `translate/` (Sakura 日中), `asr/` (千问 audio transcription)
+- Beta subsystems, each behind Settings → AI 配置 → 实验室 (`flag.ts`): `src/lib/comfy/` (ComfyUI image route), `pptx/` (HTML → PPTX, no model in the loop), `xlsx/` (markdown tables → workbook), `roleplay/` (first-person scenes, narrator, character memory), `translate/` (Sakura 日中), `asr/` (千问 audio transcription), `cli/` (one shell command per approval card; PowerShell on Windows, `$SHELL` elsewhere)
 - `src/lib/consistency/` — 一致性检查 on the agent loop; windowing is code's, findings verified at record time
 - `src/lib/configsync/` — app-config backup to the sync server (encrypted whenever API keys ride along)
 - `src/lib/fs/` — Tauri file I/O, markdown, images / `@` candidates, pptx reading, export, project backup, the sidebar's move/copy + selection logic

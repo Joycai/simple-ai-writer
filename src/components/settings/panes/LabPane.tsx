@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SettingsTab } from "../../../stores/appStore";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
@@ -10,6 +10,8 @@ import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
 import { isAsrEnabled, setAsrEnabled } from "../../../lib/asr/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
 import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
+import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
+import { cachedShellInfo, shellInfo, shellLabel, type ShellInfo } from "../../../lib/cli/shell";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import styles from "./Lab.module.css";
@@ -52,6 +54,17 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
   const [asrOn, setAsrOn] = useState(isAsrEnabled());
+  const [cliOn, setCliOn] = useState(isCliEnabled());
+  // The shell is probed once per process (Rust side); this row only asks once
+  // the switch is on, so an author who never opens the Beta never pays the
+  // probe — and the browser dev server, which has no shell, answers null.
+  const [shell, setShell] = useState<ShellInfo | null>(cachedShellInfo());
+  useEffect(() => {
+    if (!cliOn || shell) return;
+    let live = true;
+    void shellInfo().then((info) => { if (live) setShell(info); });
+    return () => { live = false; };
+  }, [cliOn, shell]);
 
   const toggleDocx = (enabled: boolean) => {
     setDocxExportEnabled(enabled);
@@ -119,11 +132,36 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             label={t("systemSettings.lab.toolPackLabel")}
           />
         </Row>
-        <Row top title={t("systemSettings.lab.skillStateLabel")} desc={t("systemSettings.lab.skillStateHint")} last>
+        <Row top title={t("systemSettings.lab.skillStateLabel")} desc={t("systemSettings.lab.skillStateHint")}>
           <Toggle
             on={skillStateOn}
             onChange={(next) => { setSkillStateEnabled(next); setSkillStateOn(next); }}
             label={t("systemSettings.lab.skillStateLabel")}
+          />
+        </Row>
+        {/* 命令行（docs/feature/agent/shell-command-plan.md §3.6）：住在工作方式里，
+            因为它改变的是助手能提议什么，不是多一种文件。开着时的脚注报这台电脑
+            检测到的 shell——作者据此知道助手会用哪种语法；关着时的补充句说的是
+            入口**不存在**（不是禁用），句式同音频转写。 */}
+        <Row
+          top
+          title={t("systemSettings.lab.cliLabel")}
+          desc={t("systemSettings.lab.cliHint")}
+          foot={
+            <div className={ui.rowDesc}>
+              {cliOn
+                ? shell
+                  ? t("systemSettings.lab.cliShell", { shell: shellLabel(shell) })
+                  : t("systemSettings.lab.cliShellUnknown")
+                : t("systemSettings.lab.cliOffHint")}
+            </div>
+          }
+          last
+        >
+          <Toggle
+            on={cliOn}
+            onChange={(next) => { setCliEnabled(next); setCliOn(next); }}
+            label={t("systemSettings.lab.cliLabel")}
           />
         </Row>
       </Section>
