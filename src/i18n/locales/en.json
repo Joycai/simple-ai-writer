@@ -361,6 +361,7 @@
         "filesRevealCurrent": "Files panel: reveal current document",
         "filesSwitchProject": "Switch project",
         "filesCloseProject": "Close project",
+        "closeWindow": "Close the window",
         "filesNewDoc": "File tree: new document",
         "filesNewGroup": "File tree: new group",
         "filesCut": "File tree: cut selection",

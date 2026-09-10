@@ -96,12 +96,9 @@ export function useGlobalShortcuts() {
         useEditorStore.getState().saveNow();
         return;
       }
-      // 关闭当前文档（设计稿 01e）。⌘⇧W 是关闭项目，两者靠 matchesCombo 的
-      // 精确修饰键匹配分开。落盘在 closeDocument() 里，所以这里不需要先 ⌘S。
-      //
-      // mac 上是两条：⌘W 很可能被应用菜单的「关闭窗口」先吃掉，⌃⌘W 是那时顶上
-      // 的那一条（见 CLOSE_DOC_COMBOS）。真两条都失灵也还有另外两个入口——面包屑
-      // 末尾的 × 和文件树右键的「关闭」。
+      // 关闭当前文档——「关闭」三层里的第一层（⌘W 文档 / ⇧⌘W 项目 / ⌥⌘W 窗口，
+      // 表在 CLOSE_DOC_COMBOS 上）。三条都在 W 上，靠 matchesCombo 的精确修饰键
+      // 匹配分开。落盘在 closeDocument() 里，所以这里不需要先 ⌘S。
       if (matchesAny(e, CLOSE_DOC_COMBOS)) {
         e.preventDefault();
         void closeDocument();

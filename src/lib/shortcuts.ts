@@ -13,8 +13,11 @@ export interface Combo {
   /**
    * The Control key *as a modifier of its own* — meaningful on Mac only, where
    * `mod` is ⌘ and Control is still free. Elsewhere Control **is** `mod`, so a
-   * combo asking for both names a chord that platform cannot produce; the
-   * binding is simply not offered there (see CLOSE_DOC_COMBOS).
+   * combo asking for both names a chord that platform cannot produce.
+   *
+   * No binding currently sets it. It stays because `matchesCombo` needs the
+   * field to *reject* a ⌃⌘ chord on a plain-⌘ binding — which is what makes
+   * "exact modifier match" below true rather than approximately true.
    */
   ctrl?: boolean;
   shift?: boolean;
@@ -30,12 +33,11 @@ export function matchesCombo(e: KeyboardEvent, combo: Combo): boolean {
   if (!!combo.mod !== mod) return false;
   if (!!combo.shift !== e.shiftKey) return false;
   if (!!combo.alt !== e.altKey) return false;
-  // Mac only: ⌃⌘W and ⌘W are two different chords, and `mod` above says true
-  // for both (it ORs the two keys). Without this line the plain-⌘ binding
-  // would also answer to the ⌃⌘ one — which is exactly the pair we need to
-  // tell apart. Off-Mac the two keys are the same key, so the check is skipped
-  // rather than made false: requiring `ctrlKey === false` there would kill
-  // every Windows/Linux binding at once.
+  // Mac only: ⌃⌘K and ⌘K are two different chords, and `mod` above says true
+  // for both (it ORs the two keys), so without this line every plain-⌘ binding
+  // also answers to its ⌃⌘ variant. Off-Mac the two keys are the same key, so
+  // the check is skipped rather than made false: requiring `ctrlKey === false`
+  // there would kill every Windows/Linux binding at once.
   if (IS_MAC && !!combo.ctrl !== e.ctrlKey) return false;
   return e.key.toLowerCase() === combo.key.toLowerCase();
 }
@@ -83,21 +85,23 @@ export const NAV_FORWARD_COMBOS: Combo[] = IS_MAC
   : [{ alt: true, key: "ArrowRight" }];
 
 /**
- * 关闭当前文档（设计稿 01e 屏 1e）。
+ * 「关闭」这一族，三层，三平台同一套（VS Code 的分法）：
  *
- * mac 上多一条 **⌃⌘W**，因为 ⌘W 那一条很可能到不了 webview：应用菜单挂的是
- * `PredefinedMenuItem::close_window`（`src-tauri/src/windowmenu.rs`），原生菜单的
- * key equivalent 先于页面处理，⌘W 会去关窗口。两条都留着——⌘W 是这个动作的肌肉
- * 记忆，真被菜单吃掉时 ⌃⌘W 顶上；系统菜单以后若不再占用它，作者也不必改手指。
+ * | 动作 | 键 | 实现在哪 |
+ * |---|---|---|
+ * | 关闭**文档** | `⌘W` / `Ctrl+W` | 这里 → `useGlobalShortcuts` |
+ * | 关闭**项目** | `⇧⌘W` / `Ctrl+Shift+W` | `components/layout/ProjectRow.tsx`（项目开着时才挂） |
+ * | 关闭**窗口** | `⌥⌘W`（仅 mac） | `src-tauri/src/windowmenu.rs` 的菜单项 |
  *
- * 为什么是 ⌃⌘W 而不是 ⌥⌘W：后者在 mac 上是「关闭全部窗口」的通用绑定，拿它做
- * 「关闭这一篇」会和系统里所有其他应用对着来。
+ * ⌘W 落在最轻的那一档，是因为作者按它的频率也是最高的——而这三个动作里，只有
+ * 关文档是随手可撤的（⌘← 回得去）。
  *
- * 非 mac 不给第二条：那里 Control 就是 mod 本身，⌃⌘W 是个敲不出来的和弦。
+ * 这一族曾经不是这样：mac 的菜单原先挂 `PredefinedMenuItem::close_window`，那个
+ * 预置项固定带着 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是
+ * 「关文档」的 ⌘W 实际关掉的是整个项目窗口。修法是把关窗口挪到 ⌥⌘W（macOS 上
+ * Close All Windows 的位置），⌘W 让回页面；短暂存在过的 ⌃⌘W 后备随之撤掉。
  */
-export const CLOSE_DOC_COMBOS: Combo[] = IS_MAC
-  ? [{ mod: true, key: "w" }, { mod: true, ctrl: true, key: "w" }]
-  : [{ mod: true, key: "w" }];
+export const CLOSE_DOC_COMBOS: Combo[] = [{ mod: true, key: "w" }];
 
 /** Combos that must yield to a caret — see NAV_BACK_COMBOS. */
 export function comboNeedsIdleCaret(combo: Combo): boolean {
@@ -178,10 +182,9 @@ export const SHORTCUTS: ShortcutDef[] = [
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },
-  // 关闭**文档**，与 ⌘⇧W 的关闭**项目**成对（设计稿 01e 屏 1e）。面包屑末尾的 ×
-  // 和文件树右键的「关闭」走的是同一个 `closeDocument()`。mac 上是两条绑定，所以
-  // 这一行报 keysLabel 而不是单个 combo（与 navBack / navForward 同一写法）。
-  { id: "closeDoc", category: "file", keysLabel: combosLabel(CLOSE_DOC_COMBOS), labelKey: "closeDoc", scope: "dispatch" },
+  // 「关闭」三层里的第一层（见 CLOSE_DOC_COMBOS 的表）。面包屑末尾的 ×、⌘W、
+  // 文件树右键的「关闭」走的是同一个 `closeDocument()`。
+  { id: "closeDoc", category: "file", combo: CLOSE_DOC_COMBOS[0], labelKey: "closeDoc", scope: "dispatch" },
   // 文件面板自己的绑定（components/layout/FileTree.tsx + ProjectRow.tsx）。它们
   // 只在「文件」标签页挂着时监听——动作说的是「这个面板里的东西」，而面板不在，
   // 折叠什么、定位到哪里就都无从谈起。⌥⌘L 而不是设计稿写的 ⇧⌘L：后者已经是
@@ -190,6 +193,10 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "filesRevealCurrent", category: "file", combo: { mod: true, alt: true, key: "l" }, labelKey: "filesRevealCurrent", scope: "info" },
   { id: "filesSwitchProject", category: "file", combo: { mod: true, shift: true, key: "o" }, labelKey: "filesSwitchProject", scope: "info" },
   { id: "filesCloseProject", category: "file", combo: { mod: true, shift: true, key: "w" }, labelKey: "filesCloseProject", scope: "info" },
+  // 第三层，只有 mac 有：菜单项本身在 `windowmenu.rs`，这一行只是让快捷键表说全。
+  ...(IS_MAC
+    ? [{ id: "closeWindow", category: "file", combo: { mod: true, alt: true, key: "w" }, labelKey: "closeWindow", scope: "info" } as ShortcutDef]
+    : []),
   // 树自己的键盘操作：焦点在文件树里时才生效（点过任意一行就有焦点）。
   { id: "filesNewDoc", category: "file", combo: { mod: true, key: "n" }, labelKey: "filesNewDoc", scope: "info" },
   { id: "filesNewGroup", category: "file", combo: { mod: true, shift: true, key: "n" }, labelKey: "filesNewGroup", scope: "info" },

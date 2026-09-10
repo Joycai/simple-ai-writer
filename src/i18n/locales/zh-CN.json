@@ -361,6 +361,7 @@
         "filesRevealCurrent": "文件面板：定位当前文档",
         "filesSwitchProject": "切换项目",
         "filesCloseProject": "关闭项目",
+        "closeWindow": "关闭窗口",
         "filesNewDoc": "文件树：新建文档",
         "filesNewGroup": "文件树：新建分组",
         "filesCut": "文件树：剪切选中项",
