@@ -53,7 +53,15 @@
   border: 2px solid rgba(255, 255, 255, 0.25);
   border-top-color: rgba(255, 255, 255, 0.85);
   border-radius: 50%;
-  animation: spin 720ms linear infinite;
+  animation: spin 0.8s linear infinite;
+}
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分（方案 009 / 035 / 048）。
+   本地类 + !important 压过 global.css 的兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* Filename, top-left — a quiet label so the viewer knows what it is looking at. */

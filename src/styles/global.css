@@ -69,15 +69,15 @@ body {
   to   { opacity: 1; }
 }
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
+  from { opacity: 0; transform: scale(calc(1 - 0.04 * var(--motion-shift))); }
   to   { opacity: 1; transform: scale(1); }
 }
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(calc(6px * var(--motion-shift))); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(24px); }
+  from { opacity: 0; transform: translateX(calc(24px * var(--motion-shift))); }
   to   { opacity: 1; transform: translateX(0); }
 }
 @keyframes blink {
@@ -100,11 +100,11 @@ body {
 /* 触发器锚定的弹出层入场：下挂用 dropIn（从触发器落下），上挂用 riseIn。
    配合各自的 transform-origin 使用。 */
 @keyframes dropIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  from { opacity: 0; transform: translateY(calc(-4px * var(--motion-shift))) scale(calc(1 - 0.02 * var(--motion-shift))); }
   to   { opacity: 1; transform: none; }
 }
 @keyframes riseIn {
-  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  from { opacity: 0; transform: translateY(calc(4px * var(--motion-shift))) scale(calc(1 - 0.02 * var(--motion-shift))); }
   to   { opacity: 1; transform: none; }
 }
 
@@ -112,7 +112,7 @@ body {
   to { opacity: 0; }
 }
 @keyframes scaleOut {
-  to { opacity: 0; transform: scale(0.97); }
+  to { opacity: 0; transform: scale(calc(1 - 0.03 * var(--motion-shift))); }
 }
 
 /* ModalShell 关闭中：整层淡出、面板轻微收缩；期间吞掉输入。 */
@@ -134,14 +134,23 @@ body {
   animation-timing-function: var(--ease-in-out);
 }
 
-/* Respect reduced-motion preference */
+/* Respect reduced-motion preference — fewer and gentler, not zero (plan 047).
+   · Movement: --motion-shift → 0, so every entrance/exit keyframe keeps its
+     opacity fade and loses its translate/scale. A keyframe that moves things
+     must multiply its offset by var(--motion-shift) (cssKeyframeNames.test.ts).
+   · Transitions (hover, press, folds) still collapse to instant, as before.
+   · Infinite decorations (pulses, blinking carets, shimmer) are switched off in
+     their own modules (animation set to none). Loading spinners keep turning; the
+     local 1.6s !important duration blocks now only slow them down.
+   (No "animation" followed by a colon in this comment: cssKeyframeNames.test.ts
+   reads every such occurrence, comments included, as a keyframe reference.) */
 @media (prefers-reduced-motion: reduce) {
+  :root { --motion-shift: 0; }
   *, *::before, *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  .cursor-blink { animation: none; }
 }
 
 /* Type-role utilities */

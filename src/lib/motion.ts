@@ -69,13 +69,6 @@ export const springPanel: Transition = {
   mass: 0.7,
 };
 
-/** Horizontal slide + fade — top-level view switches (crossfade over each other). */
-export const viewSlide: Variants = {
-  initial: { opacity: 0, transform: "translateX(26px)" },
-  animate: { opacity: 1, transform: "translateX(0px)" },
-  exit: { opacity: 0, transform: "translateX(-22px)" },
-};
-
 /** Forward "push" (drill-down): enters from the right, and on back-nav leaves
  *  to the right — the parent it reveals feels like it was underneath. */
 export const pushForward: Variants = {
@@ -93,11 +86,15 @@ export const pushBackdrop: Variants = {
   exit: { opacity: 0, transform: "translateX(-30px)" },
 };
 
-/** Light vertical fade for in-flow panel content (sidebar tabs). */
+/** Light vertical fade for in-flow panel content (the AI panel's task switch) and the settings page. */
 export const panelFade: Variants = {
   initial: { opacity: 0, transform: "translateY(6px)" },
   animate: { opacity: 1, transform: "translateY(0px)" },
-  exit: { opacity: 0, transform: "translateY(-6px)" },
+  // Exits carry their own, shorter transition (plan 046): closing is the
+  // system's response and snaps at the app's 160ms exit (ModalShell EXIT_MS,
+  // .modal-closing). A variant-level transition wins over the component's
+  // `transition` prop, so the enter timing at each call site is untouched.
+  exit: { opacity: 0, transform: "translateY(-6px)", transition: { duration: 0.16, ease: EASE_OUT } },
 };
 
 /** Fill the (position:relative) parent so stacked layers overlap for a crossfade. */
@@ -118,15 +115,17 @@ export const fillLayer: CSSProperties = {
 export const overlayFade: Variants = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  exit: { opacity: 0 },
+  exit: { opacity: 0, transition: { duration: 0.16, ease: EASE_OUT } },
 };
 export const overlayFadeTransition: Transition = { duration: 0.2, ease: EASE_OUT };
 
-/** Right-side drawer slide-over (AI assistant panel). */
+/** Right-side drawer slide-over (AI assistant panel). Enters on `springDrawer`;
+ *  leaves on a 200ms tween — a dismissal should not trail a spring's tail across
+ *  a 1180px panel (plan 046). */
 export const drawerSlide: Variants = {
   initial: { transform: "translateX(100%)" },
   animate: { transform: "translateX(0%)" },
-  exit: { transform: "translateX(100%)" },
+  exit: { transform: "translateX(100%)", transition: { duration: 0.2, ease: EASE_OUT } },
 };
 export const springDrawer: Transition = {
   type: "spring",

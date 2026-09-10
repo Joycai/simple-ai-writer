@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import { motion } from "motion/react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -7,7 +6,6 @@ import { FileTree } from "./FileTree";
 import { ProjectRow } from "./ProjectRow";
 import { RecentProjects } from "./RecentProjects";
 import { OutlinePanel } from "../editor/OutlinePanel";
-import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
 
 /**
@@ -35,8 +33,6 @@ export function Sidebar() {
   const activeSideTab = useAppStore((s) => s.activeSideTab);
   const projectPath = useProjectStore((s) => s.projectPath);
 
-  const contentVariants = useMotionPreset(panelFade);
-
   const isTree = activeSideTab === "files";
   const isOutline = activeSideTab === "outline";
 
@@ -53,15 +49,13 @@ export function Sidebar() {
         <div className={styles.headerLabel}>{t(`sidebar.${activeSideTab}`)}</div>
       )}
 
-      {/* Enter-only（照 AiPanel.tsx:1384 的注释与先例）：标签切换是直接操纵，
-          新面板应立即落位；keyed motion.div 仍会重置子树。 */}
-      <motion.div
+      {/* 标签切换不做入场（方案 044）：⌘1/⌘2（lib/shortcuts.ts SCREEN_COMBOS）与
+          IconRail 是同一个动作，100+/天，AUDIT §1「永不动画」——与 Sidebar.module.css
+          顶部注释给折叠定的是同一档。方案 004 的 enter-only 入场定于 ⌘1‥⌘5 出现之前。
+          key 保留：换标签仍重置子树。 */}
+      <div
         key={projectPath ? activeSideTab : "empty"}
         className={projectPath && isTree ? styles.contentFlush : styles.content}
-        variants={contentVariants}
-        initial="initial"
-        animate="animate"
-        transition={springPanel}
       >
         {!projectPath ? (
           <RecentProjects />
@@ -76,7 +70,7 @@ export function Sidebar() {
             )}
           </>
         )}
-      </motion.div>
+      </div>
     </div>
   );
 }

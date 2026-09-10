@@ -46,7 +46,7 @@
   border-radius: 50%;
   align-self: center;
   flex-shrink: 0;
-  animation: spin 900ms linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 .progress { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
 @media (prefers-reduced-motion: reduce) {

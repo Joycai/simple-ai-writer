@@ -75,11 +75,20 @@
     --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    /* In-place folds, chips and snaps in settings (设计稿 05b/05c/18): fast
+       start, soft landing, no overshoot. design-system.md 「只动被点控件下方」. */
+    --ease-settle: cubic-bezier(0.2, 0.8, 0.2, 1);
 
     /* Transitions */
     --transition-fast: 120ms var(--ease-out);
     --transition-base: 200ms var(--ease-out);
     --transition-slow: 320ms var(--ease-out);
+
+    /* Motion distance multiplier. Shared entrance/exit keyframes multiply their
+       translate/scale offsets by this; global.css sets it to 0 under
+       prefers-reduced-motion, so those animations keep their opacity fade and
+       drop the movement (plan 047). Not a theme knob. */
+    --motion-shift: 1;
 
     /* Layout */
     --titlebar-height: 48px;

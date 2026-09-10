@@ -489,7 +489,7 @@
    哈希（vite.config.ts），模块可以直接引用全局 keyframes。模块内声明的
    keyframes 与全局共用一个命名空间，起名要全局唯一。 */
 @keyframes slideOutRight {
-  to { opacity: 0; transform: translateX(24px); }
+  to { opacity: 0; transform: translateX(calc(24px * var(--motion-shift))); }
 }
 
 /* Wrapper so the pane can put both scrim and drawer into a closing state with

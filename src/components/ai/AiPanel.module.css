@@ -949,4 +949,5 @@
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
   }
+  .cursor { animation: none; }
 }

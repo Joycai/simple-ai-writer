@@ -83,6 +83,29 @@ const KEYWORDS = new Set([
   "forwards", "backwards", "both", "running", "paused",
 ]);
 
+/** `@keyframes name { … }` 的名字与花括号体（逐字符配平，关键帧里有嵌套的 from/to 块）。 */
+function keyframeBodies(text: string): { name: string; body: string }[] {
+  const out: { name: string; body: string }[] = [];
+  for (const m of text.matchAll(/@(?:-\w+-)?keyframes\s+([\w-]+)\s*\{/g)) {
+    const start = (m.index ?? 0) + m[0].length;
+    let depth = 1;
+    let i = start;
+    while (i < text.length && depth > 0) {
+      if (text[i] === "{") depth++;
+      else if (text[i] === "}") depth--;
+      i++;
+    }
+    out.push({ name: m[1], body: text.slice(start, i - 1) });
+  }
+  return out;
+}
+
+/**
+ * 不靠乘数的例外。`shimmer` 是加载占位的扫光：减动效下由 AgentChat.module.css 的
+ * `animation: none` 整个关掉，不是「保留淡入去位移」那一类。
+ */
+const SHIFT_EXEMPT = new Set(["shimmer"]);
+
 describe("CSS @keyframes 的全局命名空间", () => {
   it("每个名字全库只定义一次", () => {
     const seen = new Map<string, string[]>();
@@ -109,5 +132,19 @@ describe("CSS @keyframes 的全局命名空间", () => {
     }
     // 这条是 docs/issues/css-modules-global-keyframes.md 的回归测试。
     expect([...dangling].sort()).toEqual([]);
+  });
+
+  it("会位移的关键帧都乘了 --motion-shift", () => {
+    // reduced-motion 下全局只把 --motion-shift 置 0（global.css，方案 047）：关键帧照播
+    // opacity、位移归零。写死偏移量的关键帧会在减动效下照样滑动，而且不报任何错。
+    const offenders = files
+      .flatMap((f) =>
+        keyframeBodies(f.text)
+          .filter((k) => !SHIFT_EXEMPT.has(k.name))
+          .filter((k) => /translate|scale\(/.test(k.body) && !k.body.includes("var(--motion-shift)"))
+          .map((k) => `${k.name} — ${f.path}`),
+      )
+      .sort();
+    expect(offenders).toEqual([]);
   });
 });

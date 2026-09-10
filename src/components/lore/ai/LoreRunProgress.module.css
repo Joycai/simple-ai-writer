@@ -221,4 +221,6 @@
     animation-duration: 1.6s !important;
     animation-iteration-count: infinite !important;
   }
+  .stepActive,
+  .thinkingCursor { animation: none; }
 }

@@ -390,6 +390,9 @@
   animation: pulseDeep 1.4s infinite;
   flex-shrink: 0;
 }
+@media (prefers-reduced-motion: reduce) {
+  .stripPulse { animation: none; }
+}
 
 /* ── 首次引导 ─────────────────────────────────────────────────────── */
 
