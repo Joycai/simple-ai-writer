@@ -57,6 +57,9 @@ vi.mock("../fs/fileio", () => ({
       isDirectory,
     }));
   }),
+  // Every file in the map was last changed at the same instant.
+  statPath: vi.fn(async (p: string) =>
+    fs.has(p) ? { isDir: false, size: fs.get(p)!.length, modifiedMs: 1_725_000_000_000 } : null),
 }));
 
 /**
@@ -2606,6 +2609,11 @@ describe("chapter structure tools", () => {
       });
       expect(res.content).toContain("backups");
       expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("says when the file last changed — the card's 最后改于", async () => {
+      await run("delete_chapter", { path: CH1, reason: "重复" }, approving());
+      expect(proposals[0]).toMatchObject({ kind: "delete", modifiedAt: 1_725_000_000_000 });
     });
 
     it("hands the log what it deleted, with the backup the approval made", async () => {

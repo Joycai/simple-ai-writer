@@ -10,9 +10,9 @@
  *
  * So the rule, agreed 2026-09-10, is strict: undo only a file that is still
  * exactly what the write left, and refuse everything else with a sentence that
- * says why — naming the later write when it was one in this turn. What cannot
- * be said is *when* a hand edit happened: the file layer has no modification
- * times, and the sentence says "可能是你手动改的" rather than guessing.
+ * says why — naming the later write when it was one in this turn, and otherwise
+ * saying when the file last changed (`fs_stat`). *Who* made that change is not
+ * knowable, and the sentence says "可能是你手动改的" rather than guessing.
  *
  * Undo is itself an overwrite, so it keeps the bargain the writes keep: the
  * state it replaces goes into the backups first.
@@ -23,6 +23,7 @@ import { backupFileByMove, hashText, snapshotFile } from "./backup";
 import { turnWrites, undoneIds, type TurnWrite } from "./planLedger";
 import { fileExists, makeDir, readFile, renamePath, writeFile } from "../fs/fileio";
 import { dirName, joinPath } from "../paths";
+import { modifiedAt } from "../fs/modified";
 
 /** What undoing one write would do, or why it will not. */
 export type UndoPlan =
@@ -104,6 +105,7 @@ export async function undoWrites(
       outcome: result.ok ? "undone" : "refused",
       ...(result.ok ? {} : { reason: result.reason }),
       ...(!result.ok && result.byTool ? { byTool: result.byTool } : {}),
+      ...(!result.ok && result.changedAt !== undefined ? { changedAt: result.changedAt } : {}),
       at: now(),
     });
   }
@@ -114,7 +116,7 @@ async function undoOne(
   projectPath: string,
   change: ChangeRecord,
   later: readonly TurnWrite[],
-): Promise<{ ok: true } | { ok: false; reason: UndoRefusal; byTool?: string }> {
+): Promise<{ ok: true } | { ok: false; reason: UndoRefusal; byTool?: string; changedAt?: number }> {
   const abs = joinPath(projectPath, change.path);
   let current: FileState;
   try {
@@ -126,7 +128,14 @@ async function undoOne(
   }
 
   const plan = planUndo(change, current, later);
-  if (!plan.ok) return plan;
+  if (!plan.ok) {
+    // Who changed it cannot be known; when is on the file itself.
+    if (plan.reason === "changedAfter" && current.exists) {
+      const changedAt = await modifiedAt(abs);
+      if (changedAt !== undefined) return { ...plan, changedAt };
+    }
+    return plan;
+  }
 
   try {
     switch (plan.op) {

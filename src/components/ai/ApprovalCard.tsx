@@ -45,6 +45,7 @@ import { editWindows, type EditWindows, type WindowRow } from "../../lib/diff/wi
 import { rewriteWindows, type BlockChangeKind, type RewriteWindows } from "../../lib/diff/blocks";
 import { BlockWindows } from "./BlockWindows";
 import { useNarrow } from "../common/useNarrow";
+import { modifiedLabel } from "../../lib/fs/modified";
 import { ChangeWindows, WindowRows } from "./ChangeWindows";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -1082,7 +1083,7 @@ function ConvertBody({ proposal }: { proposal: ConvertProposal }) {
  * simply broken, and nobody remembers they were whole.
  */
 function DeleteBody({ proposal, narrow }: { proposal: DeleteProposal; narrow: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   if (proposal.isDir) return <DeleteFolderBody proposal={proposal} />;
@@ -1093,6 +1094,9 @@ function DeleteBody({ proposal, narrow }: { proposal: DeleteProposal; narrow: bo
   const more = lines.length > shown.length;
   const locator = [
     proposal.lines ? t("ai.approval.lineCount", { n: proposal.lines }) : null,
+    proposal.modifiedAt !== undefined
+      ? t("ai.approval.modifiedAt", { when: modifiedLabel(t, proposal.modifiedAt, { locale: i18n.language }) })
+      : null,
     backlinkLine(proposal, t),
   ].filter(Boolean);
 

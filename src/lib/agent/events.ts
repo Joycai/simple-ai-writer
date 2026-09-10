@@ -241,6 +241,8 @@ export interface UndoEvent {
   reason?: UndoRefusal;
   /** `changedByLaterWrite`: the later write's tool, so the sentence can name it. */
   byTool?: string;
+  /** `changedAfter`: when the file last changed, ms since the epoch, if the filesystem said. */
+  changedAt?: number;
   at: number;
 }
 
