@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal, ImageOff } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
@@ -27,6 +27,7 @@ import {
   updateLoreImageSlot,
   removeLoreImage,
   saveEntityMetaAndBody,
+  clearEntityAvatar,
   setEntityAvatar,
 } from "../../lib/lore";
 import {
@@ -392,6 +393,20 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       const bytes = await readBinaryFile(picked);
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
+      await refreshEntity(projectPath, entity);
+      setAvatarVersion((v) => v + 1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // 在它之前头像只能换不能摘：作者设错一次就再也回不到「这条没有头像」，而卡片会
+  // 一直挂着那张错的图。
+  const handleAvatarRemove = async () => {
+    if (!projectPath || busy) return;
+    setBusy(true);
+    try {
+      await clearEntityAvatar(entity.dirPath);
       await refreshEntity(projectPath, entity);
       setAvatarVersion((v) => v + 1);
     } finally {
@@ -1229,11 +1244,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </div>
 
           <div className={styles.indexScroll}>
-            <div
-              className={styles.avatarWrap}
-              onClick={handleAvatarPick}
-              title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
-            >
+            <div className={styles.avatarWrap}>
               {avatarUrl ? (
                 <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
               ) : (
@@ -1241,8 +1252,30 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                   {entity.name.charAt(0)}
                 </div>
               )}
+              {/* 两个动作分成两个按钮，而不是整块可点 + 某处一个角标：「摘掉头像」
+                  和「换一张」都是明确的动作，作者不该靠试出来哪块区域是哪个。摘的
+                  那个只在真有头像时出现。 */}
               <div className={styles.avatarOverlay}>
-                <Camera size={18} strokeWidth={1.8} />
+                <button
+                  type="button"
+                  className={styles.avatarAction}
+                  onClick={handleAvatarPick}
+                  disabled={busy}
+                  title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
+                >
+                  <Camera size={18} strokeWidth={1.8} />
+                </button>
+                {entity.avatarPath && (
+                  <button
+                    type="button"
+                    className={styles.avatarAction}
+                    onClick={handleAvatarRemove}
+                    disabled={busy}
+                    title={t("lore.wall.removeAvatar")}
+                  >
+                    <ImageOff size={18} strokeWidth={1.8} />
+                  </button>
+                )}
               </div>
             </div>
 

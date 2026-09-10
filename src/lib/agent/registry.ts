@@ -2011,7 +2011,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "delete_lore_image",
         description:
-          "Remove ONE picture from an entity's gallery. The image file is moved into .ai-writer/backups/ rather than erased, and its images.md entry is dropped, so the author can restore both. The avatar cannot be removed this way — set_lore_avatar replaces it.",
+          "Remove ONE picture from an entity's gallery, or its avatar. The file is moved into .ai-writer/backups/ rather than erased — for a gallery picture the images.md entry is dropped too — so the author can restore it. Pass file: \"avatar\" to take the portrait off an entry entirely (its card falls back to the initial, and its gallery is untouched); set_lore_avatar only ever REPLACES one, so this is the only way back to no avatar at all.",
         parameters: {
           type: "object",
           properties: {
@@ -2021,7 +2021,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             file: {
               type: "string",
-              description: "The image filename exactly as listed in read_lore_entity's gallery block",
+              description:
+                "The image filename exactly as listed in read_lore_entity's gallery block, or the word \"avatar\" to remove the entity's portrait.",
             },
             reason: {
               type: "string",
@@ -2043,7 +2044,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "set_lore_avatar",
         description:
-          "Set an entity's avatar (its card portrait) from a picture that already exists — one of its own gallery filenames, or the path of an image in the project. The source is copied, not moved, and the previous avatar goes into .ai-writer/backups/ first. To draw a brand-new portrait, generate_image into the gallery first, then promote it with this.",
+          "Set an entity's avatar (its card portrait) from a picture that already exists — one of its own gallery filenames, or the path of an image in the project. The source is copied, not moved, and the previous avatar goes into .ai-writer/backups/ first. To draw a brand-new portrait, generate_image into the gallery first, then promote it with this. This tool only ever replaces a portrait; taking one off is delete_lore_image(file: \"avatar\").",
         parameters: {
           type: "object",
           properties: {

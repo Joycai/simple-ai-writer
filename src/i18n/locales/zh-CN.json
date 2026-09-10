@@ -2615,6 +2615,7 @@
     },
     "wall": {
       "changeAvatar": "更换头像",
+      "removeAvatar": "移除头像",
       "cardCounts": "{{facets}} 特征 · {{images}} 配图"
     },
     "transfer": {

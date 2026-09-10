@@ -465,8 +465,8 @@ N 个结构相同的 `<section class="slide">`，表格里同一句话出现在�
 此前 images.md 对 agent 只读，配图只能加（generate_image）不能改描述/槽位、不能删、不能设头像——而描述是纯文本模型看到的全部，槽位正是类型系统 imageSlots 的落点。新增三个 L1 工具（都在 `lore_write` 延迟组、都过 plan 门控、都有备份）：
 
 - `update_lore_image`（desc / slot，槽位按 category 的 imageSlots 校验，空串清除——与 update_facet_meta 同一套约定）
-- `delete_lore_image`（二进制**搬进** backups 而不是 unlink——`backupFileByMove`，文本备份救不了二进制，搬移本身就是备份）
-- `set_lore_avatar`（从本条目 gallery 或项目内图片提升；旧头像先搬 backups）
+- `delete_lore_image`（二进制**搬进** backups 而不是 unlink——`backupFileByMove`，文本备份救不了二进制，搬移本身就是备份）。`file: "avatar"`（或头像的真文件名）走**摘头像**那一支：同样过 delete 方案门、同样搬进 backups，图库一张不动。图库里恰好有同名图时先认图库，所以老行为一字未变。
+- `set_lore_avatar`（从本条目 gallery 或项目内图片提升；旧头像先搬 backups）。它只**换**不**摘**——回到「这条没有头像」是上面那一支，界面侧对应知识库墙卡片右键的「移除头像」和详情页头像上的第二个按钮（`clearEntityAvatar`）。在这之前作者设错一次头像就再也回不去。
 
 读侧同步：`read_lore_entity` 的 gallery 行带 `[slot: …]`，新增 `=== image slots ===` 清单（`imageSlotChecklistText`）；`generate_image` 新增 `slot` 参数、`edit_image` 的重绘继承原图槽位（`IllustrateProposal.dest.slot` → `illustrate.ts` 落盘）。
 
