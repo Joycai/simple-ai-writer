@@ -815,7 +815,76 @@
     row-gap: 2px;
   }
 
+  /* Two lines (1k): the title and the one number on the first, the file and
+     the sizes moved off the first line on the second. */
+  .headerTitle {
+    order: 0;
+  }
+
   .headerDelta {
-    margin-left: 0;
+    order: 1;
+    margin-left: auto;
+  }
+
+  .headerFile {
+    order: 2;
+    flex-basis: 100%;
+  }
+
+  .summaryRow {
+    gap: 4px 8px;
+    font: 400 10px/1.4 var(--font-mono);
+  }
+
+  /* 页脚三行 (1k). The reason gets a line of its own; 拒绝 and 批准 split the
+     next, 批准 on the right; the standing grants drop to a line of small text
+     under them. In the rail they are the controls that must be hardest to hit
+     by accident — not a third button squeezed between the other two. */
+  .footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 6px;
+  }
+
+  .footer > * {
+    grid-column: 1 / -1;
+  }
+
+  .footer > .btnReject {
+    grid-column: 1;
+  }
+
+  .footer > .btnApprove,
+  .footer > .btnSkip {
+    grid-column: 2;
+  }
+
+  .btnReject,
+  .btnApprove,
+  .btnSkip {
+    padding: 8px 0;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* After the two buttons whatever their order in the markup: `order` moves them
+     past 批准 before grid placement fills the row. */
+  .footer > .btnApproveAlways,
+  .footer > .batchGroup {
+    order: 1;
+    justify-self: center;
+  }
+
+  .footer > .btnApproveAlways {
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  .footer > .btnApproveAlways:hover:not(:disabled) {
+    color: var(--color-sienna);
+    text-decoration: underline;
   }
 }

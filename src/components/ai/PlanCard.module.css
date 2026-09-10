@@ -4,6 +4,7 @@
 .card {
   border: 1px solid var(--color-border-accent);
   background: var(--color-bg-inset);
+  container-type: inline-size;
 }
 
 .header {
@@ -174,4 +175,73 @@
   font: 400 11px/1.6 var(--font-serif);
   color: var(--color-text-secondary);
   word-break: break-word;
+}
+
+/* ── The rail (设计稿 02h 1k) ────────────────────────────────────────────────
+   The approval card's degradation, on the card that gates the knowledge base.
+   **必须留在文件末尾** —— 容器查询不改变特异性。 */
+@container (max-width: 479px) {
+  .header {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  /* Verb and target on one line, the sentence under them: three columns in
+     280px leave the detail a word wide, and the detail is what is decided on. */
+  .step {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .detail {
+    grid-column: 1 / -1;
+  }
+
+  /* 页脚三行 (1k). The reason gets a line of its own; 拒绝 and 批准 split the
+     next, 批准 on the right; the standing grants drop to a line of small text
+     under them. In the rail they are the controls that must be hardest to hit
+     by accident — not a third button squeezed between the other two. */
+  .footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 6px;
+  }
+
+  .footer > * {
+    grid-column: 1 / -1;
+  }
+
+  .footer > .btnReject {
+    grid-column: 1;
+  }
+
+  .footer > .btnApprove {
+    grid-column: 2;
+  }
+
+  .btnReject,
+  .btnApprove {
+    padding: 8px 0;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* After the two buttons whatever their order in the markup: `order` moves them
+     past 批准 before grid placement fills the row. */
+  .footer > .btnApproveAlways {
+    order: 1;
+    justify-self: center;
+  }
+
+  .footer > .btnApproveAlways {
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 10px;
+    color: var(--color-text-muted);
+  }
+
+  .footer > .btnApproveAlways:hover:not(:disabled) {
+    color: var(--color-sienna);
+    text-decoration: underline;
+  }
 }

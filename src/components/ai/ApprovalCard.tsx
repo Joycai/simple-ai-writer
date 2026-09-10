@@ -207,16 +207,46 @@ function kilo(n: number): string {
  * rewritten they are the whole lines, which is the honest answer for a
  * replacement nobody can read character by character.
  */
-function EditMeta({ proposal, model }: { proposal: EditProposal; model: EditWindows }) {
-  const { t } = useTranslation();
+/**
+ * The figures a narrow header moves off its first line (设计稿 02h 1k).
+ *
+ * In the rail the first line keeps only the number the author is deciding on —
+ * 「少了 812 字」, 「+12 −2」 — and the sizes join the file name on the second.
+ * One function for both places, so the wide header and the narrow one cannot
+ * come to describe the same card in different figures.
+ */
+function headerScale(proposal: Proposal, t: TFunction): string | null {
   const chars = t("ai.panel.unitChars", { defaultValue: "字" });
-  const scale =
-    proposal.target === "all"
-      ? t("ai.approval.placeCount", { n: proposal.occurrences })
-      : `${proposal.find.length} → ${proposal.replace.length} ${chars}`;
+  switch (proposal.kind) {
+    case "edit":
+      return proposal.target === "all"
+        ? t("ai.approval.placeCount", { n: proposal.occurrences })
+        : `${proposal.find.length} → ${proposal.replace.length} ${chars}`;
+    case "rewrite":
+      return `${proposal.original.length} → ${proposal.content.length} ${chars}`;
+    case "delete":
+      // A folder's count moves only when there is a size to stay behind.
+      return proposal.isDir && proposal.chars > 0 ? t("ai.approval.docCount", { n: proposal.fileCount ?? 0 }) : null;
+    case "loreStep":
+      return t("ai.approval.loreStep.stepOf", { n: proposal.stepNumber, total: proposal.stepTotal });
+    default:
+      return null;
+  }
+}
+
+function EditMeta({
+  proposal,
+  model,
+  narrow,
+}: {
+  proposal: EditProposal;
+  model: EditWindows;
+  narrow: boolean;
+}) {
+  const { t } = useTranslation();
   return (
     <span className={styles.headerDelta}>
-      {scale} ·{" "}
+      {!narrow && <>{headerScale(proposal, t)} ·{" "}</>}
       {model.empty ? (
         "±0"
       ) : model.whitespaceOnly ? (
@@ -238,21 +268,22 @@ function EditMeta({ proposal, model }: { proposal: EditProposal; model: EditWind
  * that takes the warning colour — 「少了 812 字」 is the sentence this whole
  * card exists to make answerable.
  */
-function RewriteMeta({ proposal }: { proposal: RewriteProposal }) {
+function RewriteMeta({ proposal, narrow }: { proposal: RewriteProposal; narrow: boolean }) {
   const { t } = useTranslation();
-  const chars = t("ai.panel.unitChars", { defaultValue: "字" });
   const delta = proposal.content.length - proposal.original.length;
+  const direction = delta !== 0 && (
+    <span className={delta < 0 ? styles.metaDel : styles.metaAdd}>
+      {t(delta < 0 ? "ai.approval.rewriteShrink" : "ai.approval.rewriteGrow", { n: Math.abs(delta) })}
+    </span>
+  );
   return (
     <span className={styles.headerDelta}>
-      {proposal.original.length} → {proposal.content.length} {chars}
-      {delta !== 0 && (
+      {narrow ? (
+        direction || "±0"
+      ) : (
         <>
-          {" · "}
-          <span className={delta < 0 ? styles.metaDel : styles.metaAdd}>
-            {t(delta < 0 ? "ai.approval.rewriteShrink" : "ai.approval.rewriteGrow", {
-              n: Math.abs(delta),
-            })}
-          </span>
+          {headerScale(proposal, t)}
+          {direction && <>{" · "}{direction}</>}
         </>
       )}
     </span>
@@ -266,12 +297,15 @@ function RewriteMeta({ proposal }: { proposal: RewriteProposal }) {
  * removes the author's words outright, and the minus is the difference between
  * a number they read and a number they check.
  */
-function DeleteMeta({ proposal }: { proposal: DeleteProposal }) {
+function DeleteMeta({ proposal, narrow }: { proposal: DeleteProposal; narrow: boolean }) {
   const { t } = useTranslation();
   const chars = t("ai.panel.unitChars", { defaultValue: "字" });
+  // In the rail a folder's count goes to the file line — unless it is the only
+  // figure the card has (a folder of empty files).
+  const showCount = proposal.isDir && (!narrow || proposal.chars === 0);
   return (
     <span className={styles.headerDelta}>
-      {proposal.isDir && (
+      {showCount && (
         <>
           {t("ai.approval.docCount", { n: proposal.fileCount ?? 0 })}
           {proposal.chars > 0 ? " · " : ""}
@@ -290,12 +324,11 @@ function DeleteMeta({ proposal }: { proposal: DeleteProposal }) {
  * Which step of the approved plan this is, and what it costs (1z D):
  * 「方案第 3 / 3 步 · −2 个文件 · 380 字」, or 「方案第 2 / 3 步 · 替换 18 / 19 字」.
  */
-function LoreStepMeta({ proposal }: { proposal: LoreStepProposal }) {
+function LoreStepMeta({ proposal, narrow }: { proposal: LoreStepProposal; narrow: boolean }) {
   const { t } = useTranslation();
   return (
     <span className={styles.headerDelta}>
-      {t("ai.approval.loreStep.stepOf", { n: proposal.stepNumber, total: proposal.stepTotal })}
-      {" · "}
+      {!narrow && <>{headerScale(proposal, t)}{" · "}</>}
       <span className={styles.metaDel}>
         {proposal.trigger === "deleteEntity"
           ? t("ai.approval.loreStep.deleteMeta", {
@@ -378,7 +411,7 @@ function LoreStepBody({ proposal, narrow }: { proposal: LoreStepProposal; narrow
           )}
         </>
       ) : model && !model.empty ? (
-        <BlockWindows windows={model.windows} lineNumbers={!narrow} />
+        <BlockWindows windows={model.windows} lineNumbers={!narrow} clip={narrow} />
       ) : (
         <div className={styles.emptyNote}>{t("ai.approval.loreStep.tooLong")}</div>
       )}
@@ -575,6 +608,8 @@ function RewriteBody({ proposal, narrow }: { proposal: RewriteProposal; narrow: 
   const [tab, setTab] = useState<"changes" | "prose">("changes");
   const [expandedProse, setExpandedProse] = useState(false);
   const [allWindows, setAllWindows] = useState(false);
+  // Narrowed while on 看成文: that tab is gone, so the card is back on the changes.
+  const showing = narrow ? "changes" : tab;
   // A whole chapter's markdown — parsed once, not on every parent re-render
   // (approvals sit next to surfaces that re-render while other runs stream).
   const html = useMemo(() => renderMarkdown(proposal.content), [proposal.content]);
@@ -614,27 +649,28 @@ function RewriteBody({ proposal, narrow }: { proposal: RewriteProposal; narrow: 
     <>
       {/* 看成文 is hidden in the rail: 600 characters of rendered markdown is a
           screen and a half there, which is the "card as reader" failure the
-          whole design is against. */}
-      <div className={styles.tabs}>
-        <button
-          className={tab === "changes" ? styles.tabOn : styles.tab}
-          onClick={() => setTab("changes")}
-        >
-          {t("ai.approval.tabChanges")}
-        </button>
-        {!narrow && (
+          whole design is against. With one tab left the row goes too — a lone
+          tab is a label pretending to be a choice, and 1k draws none. */}
+      {!narrow && (
+        <div className={styles.tabs}>
           <button
-            className={tab === "prose" ? styles.tabOn : styles.tab}
+            className={showing === "changes" ? styles.tabOn : styles.tab}
+            onClick={() => setTab("changes")}
+          >
+            {t("ai.approval.tabChanges")}
+          </button>
+          <button
+            className={showing === "prose" ? styles.tabOn : styles.tab}
             onClick={() => setTab("prose")}
           >
             {t("ai.approval.tabProse")}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <RewriteSummaryRow model={model} />
 
-      {tab === "prose" ? (
+      {showing === "prose" ? (
         prose
       ) : model.empty ? (
         <div className={styles.emptyNote}>{t("ai.approval.editNoChange")}</div>
@@ -644,7 +680,7 @@ function RewriteBody({ proposal, narrow }: { proposal: RewriteProposal; narrow: 
         <div className={styles.emptyNote}>{t("ai.approval.rewriteTooBig")}</div>
       ) : (
         <>
-          <BlockWindows windows={model.windows} lineNumbers={!narrow} />
+          <BlockWindows windows={model.windows} lineNumbers={!narrow} clip={narrow} />
           {model.hiddenTotal > 0 && (
             <button className={styles.foldRow} onClick={() => setAllWindows(true)}>
               <ChevronRight size={10} />
@@ -1495,6 +1531,7 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
 
   const { proposal, autoApproveKey } = item;
   const fileName = baseName(proposal.path) || proposal.path;
+  const scale = headerScale(proposal, t);
 
   // Built once for the whole card: the header's numbers, the body's windows and
   // the footer's buttons are three readings of the same model, and computing it
@@ -1530,15 +1567,18 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
     <div ref={cardRef} className={nothingToDo ? `${styles.card} ${styles.cardQuiet}` : styles.card}>
       <div className={styles.header}>
         <span className={styles.headerTitle}>{headerTitle(proposal, t, terms)}</span>
-        <span className={styles.headerFile} title={proposal.path}>{fileName}</span>
+        <span className={styles.headerFile} title={proposal.path}>
+          {fileName}
+          {narrow && scale ? ` · ${scale}` : ""}
+        </span>
         {editModel && proposal.kind === "edit" ? (
-          <EditMeta proposal={proposal} model={editModel} />
+          <EditMeta proposal={proposal} model={editModel} narrow={narrow} />
         ) : proposal.kind === "rewrite" ? (
-          <RewriteMeta proposal={proposal} />
+          <RewriteMeta proposal={proposal} narrow={narrow} />
         ) : proposal.kind === "delete" ? (
-          <DeleteMeta proposal={proposal} />
+          <DeleteMeta proposal={proposal} narrow={narrow} />
         ) : proposal.kind === "loreStep" ? (
-          <LoreStepMeta proposal={proposal} />
+          <LoreStepMeta proposal={proposal} narrow={narrow} />
         ) : (
           <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
         )}
