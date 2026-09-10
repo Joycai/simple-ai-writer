@@ -25,7 +25,7 @@ vi.mock("../../stores/projectStore", () => ({
   },
 }));
 vi.mock("../../stores/loreStore", () => ({
-  useLoreStore: { getState: () => ({ scanProject: vi.fn() }) },
+  useLoreStore: { getState: () => ({ index: {}, scanProject: vi.fn(), refreshEntity: vi.fn() }) },
 }));
 
 const { useAgentStore, activeChat, emptyChat } = await import("../../stores/agentStore");

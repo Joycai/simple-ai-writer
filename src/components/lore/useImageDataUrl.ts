@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { imageToDataUrl, imageToThumbnailDataUrl } from "../../lib/fs/images";
 
 /**
@@ -33,7 +33,52 @@ export function useImageDataUrl(path: string | null | undefined, refreshKey?: un
  * showing the right picture for each entry.
  */
 export function useImageDataUrls(paths: string[]): Record<string, string> {
+  return useLoadedByPath(paths, "useImageDataUrls", null, (path) =>
+    imageToDataUrl(path).then(({ dataUrl }) => dataUrl));
+}
+
+/**
+ * What one change of the path list means for the map: which held entries
+ * survive (every one still asked for) and which paths need a read (every one
+ * asked for that is not held). Pure, so the rule is testable without a DOM.
+ */
+export function planImageReads(
+  held: Record<string, string>,
+  paths: string[],
+): { kept: Record<string, string>; toLoad: string[] } {
+  const wanted = new Set(paths);
+  const kept: Record<string, string> = {};
+  for (const [p, url] of Object.entries(held)) if (wanted.has(p)) kept[p] = url;
+  // De-duplicated: a list naming one file twice must not read it twice.
+  const toLoad = [...wanted].filter((p) => !kept[p]);
+  return { kept, toLoad };
+}
+
+/**
+ * The shared body of {@link useImageDataUrls} and {@link useImageThumbnails}:
+ * a path → data URL map that reads **only the paths it does not hold yet**.
+ *
+ * It used to re-read every path whenever the list changed and throw the
+ * result away on arrival if the map already had it. That is not a cache, it
+ * is a delay: adding the 21st picture to a gallery read, decoded and
+ * re-encoded all 21, and setting one avatar on the wall did the same for
+ * every avatar on it. Deciding *before* the read is the whole fix.
+ *
+ * `variant` (the thumbnail size) is part of what a held entry means, so a
+ * change of it empties the map — an entry encoded at another size is not the
+ * one asked for.
+ */
+function useLoadedByPath(
+  paths: string[],
+  tag: string,
+  variant: unknown,
+  load: (path: string) => Promise<string>,
+): Record<string, string> {
   const [urls, setUrls] = useState<Record<string, string>>({});
+  // What the effect reads to decide what to skip. A ref rather than `urls` in
+  // the dependency list, which would re-run the effect on every arrival.
+  const held = useRef<{ urls: Record<string, string>; variant: unknown }>({ urls, variant });
+  held.current.urls = urls;
   // Effects compare dependencies by identity, and callers build this array
   // inline on every render — join it so the reads re-run on real changes only.
   const key = paths.join("|");
@@ -43,27 +88,25 @@ export function useImageDataUrls(paths: string[]): Record<string, string> {
     // grew: four 2048×2048 candidates per round is tens of megabytes of base64
     // sitting in React state for as long as the component lives, copied whole
     // on every arrival.
-    setUrls((prev) => {
-      const wanted = new Set(paths);
-      const kept = Object.keys(prev).filter((p) => wanted.has(p));
-      if (kept.length === Object.keys(prev).length) return prev;
-      return Object.fromEntries(kept.map((p) => [p, prev[p]]));
-    });
-    for (const path of paths) {
-      imageToDataUrl(path)
-        .then(({ dataUrl }) => {
-          if (!cancelled) setUrls((prev) => (prev[path] ? prev : { ...prev, [path]: dataUrl }));
+    const prev = held.current.variant === variant ? held.current.urls : {};
+    held.current.variant = variant;
+    const { kept, toLoad } = planImageReads(prev, paths);
+    if (Object.keys(kept).length !== Object.keys(held.current.urls).length) setUrls(kept);
+    for (const path of toLoad) {
+      load(path)
+        .then((dataUrl) => {
+          if (!cancelled) setUrls((now) => (now[path] ? now : { ...now, [path]: dataUrl }));
         })
         .catch((e) => {
           // Left out; the caller renders a placeholder — but that placeholder
           // then sits there forever with no visible cause, so at least this
           // makes the failure findable in devtools instead of purely silent.
-          console.warn(`[useImageDataUrls] failed to read ${path}:`, e);
+          console.warn(`[${tag}] failed to read ${path}:`, e);
         });
     }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, variant]);
   return urls;
 }
 
@@ -76,27 +119,6 @@ export function useImageDataUrls(paths: string[]): Record<string, string> {
  * pixels themselves are being reviewed (an edit's source image, a lore cover).
  */
 export function useImageThumbnails(paths: string[], maxDim = 320): Record<string, string> {
-  const [urls, setUrls] = useState<Record<string, string>>({});
-  const key = paths.join("|");
-  useEffect(() => {
-    let cancelled = false;
-    setUrls((prev) => {
-      const wanted = new Set(paths);
-      const kept = Object.keys(prev).filter((p) => wanted.has(p));
-      if (kept.length === Object.keys(prev).length) return prev;
-      return Object.fromEntries(kept.map((p) => [p, prev[p]]));
-    });
-    for (const path of paths) {
-      imageToThumbnailDataUrl(path, maxDim)
-        .then((dataUrl) => {
-          if (!cancelled) setUrls((prev) => (prev[path] ? prev : { ...prev, [path]: dataUrl }));
-        })
-        .catch((e) => {
-          console.warn(`[useImageThumbnails] failed to read ${path}:`, e);
-        });
-    }
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, maxDim]);
-  return urls;
+  return useLoadedByPath(paths, "useImageThumbnails", maxDim, (path) =>
+    imageToThumbnailDataUrl(path, maxDim));
 }

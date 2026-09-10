@@ -72,7 +72,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
+  const { index, scanProject, refreshEntity, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
   const scope = useLoreStore((s) => s.scope);
   const setScope = useLoreStore((s) => s.setScope);
   const { projectPath } = useProjectStore();
@@ -186,7 +186,8 @@ export function LoreWall() {
       const bytes = await readBinaryFile(picked);
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
-      await scanProject(projectPath);
+      // One folder, not the wall: the avatar is the only thing that changed.
+      await refreshEntity(projectPath, entity);
     } finally {
       setAvatarBusy(null);
     }

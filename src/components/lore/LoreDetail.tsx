@@ -85,6 +85,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const { setActiveFilePath, projectPath } = useProjectStore();
   const loreIndex = useLoreStore((s) => s.index);
   const scanProject = useLoreStore((s) => s.scanProject);
+  const refreshEntity = useLoreStore((s) => s.refreshEntity);
   const deleteEntity = useLoreStore((s) => s.deleteEntity);
   const openDetail = useLoreStore((s) => s.openDetail);
   const detailMode = useLoreStore((s) => s.detailMode);
@@ -391,7 +392,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       const bytes = await readBinaryFile(picked);
       const ext = (picked.split(".").pop() ?? "png").toLowerCase();
       await setEntityAvatar(entity.dirPath, bytes, ext);
-      await scanProject(projectPath);
+      await refreshEntity(projectPath, entity);
       setAvatarVersion((v) => v + 1);
     } finally {
       setBusy(false);
@@ -463,8 +464,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     }
   };
 
+  // Every caller of this changed something *inside* this entity's folder — a
+  // picture, the cover, a facet file, a description — so one folder is
+  // re-read rather than the whole knowledge base. Saving the edit form stays
+  // on scanProject: a rename or a category change relocates the folder.
   const refresh = async () => {
-    if (projectPath) await scanProject(projectPath);
+    if (projectPath) await refreshEntity(projectPath, entity);
   };
 
   // 设为 / 取消档案头图（设计稿 03c 屏 1z/1f 的建议入口，落在 lightbox——
