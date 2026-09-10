@@ -74,6 +74,10 @@ lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), knowledge-base *
 
 clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
+### `src/lib/diff/`
+
+「改了什么」的纯计算层，为审批卡片而建（`docs/feature/agent/approval-card-ui-brief.md`）。`myers.ts` 是**带上限**的 Myers 贪心搜索：先掐掉公共前后缀（一处小改在三千行里就只搜那几行），超过 `MAX_LINE_DISTANCE` 返回 `null` 而不是给一份读不动的答案——两份毫不相干的文档「diff」出来是三千行红压着三千行绿，比一句「整篇替换」说得**更少**，所以算力上限和可读性上限在这里是同一条线。`tokens.ts` 是行内切分，**中日韩逐字、拉丁逐词、空白成串**：通用 diff 库按空白切词，一整段中文只切出一个 token，于是「金发→银发」退化成「整句被替换」，那正是今天卡片给作者的答案。`index.ts` 出 `diffInline`（find/replace 那种短文本）与 `diffDocument`（行级 + hunk + 成对行的行内详情）；**折叠阈值 `context` 是参数不是规矩**——这一层只回答「改了什么」，「显示多少」是卡片的事。两条边界值得记住：行内详情只配给**等长**的删/增行对（跨长度配对是另一个会出错的问题，而它出的错是把两行无关的句子画成一次改写），`stats.whitespaceOnly` 单独一条（只动缩进/换行/行尾的改动要一眼可辨，而「格式整理」里**不是**纯空白的那部分恰恰是这个功能要抓的东西）。行号按 `editApply.countLines` 的算法数：末尾换行不制造一个空的末行。
+
 ### `src/lib/comfy/`
 
 本地 ComfyUI 生图（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：第五条 `ImageRoute`（`"comfyui"`），一个 image Model = 一张作者导出的 **API 格式**工作流（存 `ImageCaps.comfy`，UI 保存格式被专门识别并拒绝）。`workflow.ts` 是全部纯逻辑——解析、占位识别（标题约定**负面先于正面**判定 → 采样器回溯）、注入（提示词/负面/seed/尺寸/张数/LoadImage 图名），识别在**读取时**做、绝不在导入时固化 node id；HTTP adapter 在 `lib/ai/image.ts`（提交-轮询-取图 + `/upload/image` 参考图，seed 与上传名默认每次随机化否则命中 ComfyUI 的节点缓存不出新图；取消先 queue delete、核对 queue_running 才 interrupt）。`caps.edit`/`maxRefs` 从工作流的 LoadImage 数**推导**而非声明；负面提示词是这条路由独有的 wire 字段——没有负面节点就丢弃，**绝不**折进正面（SD 会画出它读到的东西）；图生图编辑发累积描述不发增量指令。人设校准循环在 `lib/image/calibrate.ts`（清单 → vision 评审双诊断 revisedPrompt/seedOnly → 修正重试，纯循环可单测；硬轮数上限 + 历史最佳兜底，UI 在 ImageGenModal 随同一开关显隐）。应用绝不自己构造节点图。设计：`docs/feature/comfyui-plan.md`
