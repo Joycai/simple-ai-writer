@@ -129,6 +129,32 @@ const TAIL_ROWS = 6;
 const ROUND_TIMER_FLOOR_S = 5;
 
 /**
+ * The sentence for a truncation the run did not recover from.
+ *
+ * Four, because the remedies differ — a thinking setting, a larger window, a
+ * larger output cap — and the one sentence there used to be sent everyone to
+ * the output cap, which helps neither of the first two
+ * (docs/feature/agent/window-edge-plan.md M3).
+ */
+function unrecoveredTruncation(
+  event: Extract<AgentEvent, { kind: "output-truncated" }>,
+): { key: string; defaultValue: string } {
+  if (event.thinkingOnly) {
+    if (event.cause === "window") {
+      return { key: "ai.agent.log.truncatedThinkingWindow", defaultValue: "思考写满了上下文窗口，没有写出回答" };
+    }
+    if (event.cause === "output-cap") {
+      return { key: "ai.agent.log.truncatedThinkingCap", defaultValue: "思考用完了单次输出上限，没有写出回答" };
+    }
+    return { key: "ai.agent.log.truncatedThinking", defaultValue: "还在思考就被截断了，没有写出回答" };
+  }
+  if (event.cause === "window") {
+    return { key: "ai.agent.log.truncatedWindowFull", defaultValue: "上下文窗口满了，回答没写完" };
+  }
+  return { key: "ai.agent.log.outputTruncated", defaultValue: "输出被上限截断，回答未写完" };
+}
+
+/**
  * How long the live round has been going, `M:SS`, ticking once a second.
  *
  * Null when no round is live, and until the floor above is crossed. The
@@ -673,9 +699,10 @@ function AgentLogRow({ row, showTime, runStatus }: {
                     n: event.recovery.attempt,
                   },
                 )
-              : t("ai.agent.log.outputTruncated", {
-                  defaultValue: "输出被上限截断，回答未写完",
-                })}
+              : (() => {
+                  const sentence = unrecoveredTruncation(event);
+                  return t(sentence.key, { defaultValue: sentence.defaultValue });
+                })()}
             {event.stopReason && ` · ${event.stopReason}`}
           </span>
         </li>
@@ -897,8 +924,12 @@ function useHeadline(model: AgentLogModel): string {
       return t(current.final ? "ai.agent.log.turnResumedFinal" : "ai.agent.log.turnResumed", {
         leg: current.leg,
       });
-    case "output-truncated":
-      return t("ai.agent.log.outputTruncated", { defaultValue: "输出被上限截断，回答未写完" });
+    case "output-truncated": {
+      const sentence = current.recovery
+        ? { key: "ai.agent.log.outputTruncated", defaultValue: "输出被上限截断，回答未写完" }
+        : unrecoveredTruncation(current);
+      return t(sentence.key, { defaultValue: sentence.defaultValue });
+    }
     case "handoff":
       return t("ai.agent.log.handoffRunning", { defaultValue: "写手正在成文" });
     case "handoff-done":

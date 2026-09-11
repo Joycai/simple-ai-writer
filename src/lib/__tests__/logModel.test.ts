@@ -63,6 +63,35 @@ describe("buildLogModel — banding", () => {
     expect(model.currentRound).toBeNull();
   });
 
+  it("headlines a cut-off the run ended on, not run-done", () => {
+    // "完成 · 32,000 tokens" over a run that thought until the window was full
+    // and wrote nothing is the misreport this exists to stop
+    // (docs/feature/agent/window-edge-plan.md M3).
+    const log: AgentEvent[] = [
+      runStart(),
+      roundStart(1),
+      { kind: "reasoning", round: 1, text: "或者更戏剧……", done: true, elapsedMs: 307_000, at: at() },
+      { kind: "output-truncated", round: 1, cause: "window", thinkingOnly: true, at: at() },
+      { kind: "run-done", inputTokens: 4_800, outputTokens: 27_200, at: at() },
+    ];
+
+    const model = buildLogModel(log, false);
+
+    expect(model.current).toMatchObject({ kind: "output-truncated", thinkingOnly: true });
+  });
+
+  it("keeps run-done as the headline when the cut-off was recovered from", () => {
+    const log: AgentEvent[] = [
+      runStart(),
+      roundStart(1),
+      { kind: "output-truncated", round: 1, cause: "output-cap", recovery: { kind: "text", attempt: 1 }, at: at() },
+      roundStart(2),
+      { kind: "run-done", inputTokens: 900, outputTokens: 400, at: at() },
+    ];
+
+    expect(buildLogModel(log, false).current?.kind).toBe("run-done");
+  });
+
   it("keeps a non-agentic run readable — no rounds, just a header", () => {
     const log: AgentEvent[] = [
       runStart(),

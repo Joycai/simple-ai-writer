@@ -147,8 +147,99 @@ describe("truncated prose", () => {
 
     const result = await runAgent(opts);
 
-    expect(result.outcome).toBe("completed");
+    // Ended on a cut-off it did not recover from — which is not "completed".
+    expect(result.outcome).toBe("truncated");
     expect(result.rounds).toBe(4);
+  });
+});
+
+describe("what ran out", () => {
+  // docs/feature/agent/window-edge-plan.md M3: the context window and the
+  // per-reply cap want opposite remedies, and a round of pure thinking wants
+  // neither.
+  const WINDOW = 1_000;
+
+  it("does not ask for the rest when the context window itself filled", async () => {
+    queueRound([
+      { text: "写到一半" },
+      { done: true, inputTokens: 900, outputTokens: 100, truncated: true, stopReason: "length" },
+    ]);
+    const opts = makeOptions({ contextSize: WINDOW });
+
+    const result = await runAgent(opts);
+
+    // One request: a continuation would carry more than the one that ran out.
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe("truncated");
+    const [cut] = truncations(opts.events);
+    expect(cut).toMatchObject({ cause: "window" });
+    expect(cut.recovery).toBeUndefined();
+    // What did arrive is still the author's to read.
+    expect(opts.output[opts.output.length - 1]).toBe("写到一半");
+  });
+
+  it("still asks for the rest when it was the per-reply cap", async () => {
+    queueRound([
+      { text: "第一段。" },
+      { done: true, inputTokens: 100, outputTokens: 100, truncated: true, stopReason: "length" },
+    ]);
+    queueRound([{ text: "第二段。" }, { done: true, inputTokens: 300, outputTokens: 50 }]);
+    const opts = makeOptions({ contextSize: WINDOW });
+
+    const result = await runAgent(opts);
+
+    expect(result.outcome).toBe("completed");
+    expect(truncations(opts.events)[0]).toMatchObject({
+      cause: "output-cap",
+      recovery: { kind: "text", attempt: 1 },
+    });
+  });
+
+  it("reports a round of pure thinking as unanswered rather than completed", async () => {
+    queueRound([
+      { reasoning: "或者更戏剧……可以写现实悬疑……" },
+      { done: true, inputTokens: 300, outputTokens: 700, truncated: true, stopReason: "length" },
+    ]);
+    const opts = makeOptions({ contextSize: WINDOW });
+
+    const result = await runAgent(opts);
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe("truncated");
+    expect(truncations(opts.events)[0]).toMatchObject({ thinkingOnly: true, cause: "window" });
+    // Nothing was said, so nothing enters the transcript.
+    expect(opts.messages.filter((m) => m.role === "assistant")).toHaveLength(0);
+  });
+
+  it("does not retry a cut tool call when the window is full", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "cut", name: "read_file", arguments: '{"path":"/p/a.md' }] },
+      { done: true, inputTokens: 950, outputTokens: 50, truncated: true, stopReason: "length" },
+    ]);
+    const opts = makeOptions({ contextSize: WINDOW });
+
+    const result = await runAgent(opts);
+
+    expect(mockStream).toHaveBeenCalledTimes(1);
+    expect(result.outcome).toBe("truncated");
+    expect(truncations(opts.events)).toEqual([expect.objectContaining({ cause: "window" })]);
+    // No "write it in pieces" nudge — it could not have helped.
+    expect(opts.messages.some((m) => m.role === "user" && typeof m.content === "string" && m.content.includes("read_file"))).toBe(false);
+  });
+
+  it("names no cause, and recovers as before, when the window size is unknown", async () => {
+    queueRound([
+      { text: "半句" },
+      { done: true, inputTokens: 900, outputTokens: 100, truncated: true, stopReason: "length" },
+    ]);
+    queueRound([{ text: "完。" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions(); // no contextSize
+
+    await runAgent(opts);
+
+    const [cut] = truncations(opts.events);
+    expect(cut.cause).toBeUndefined();
+    expect(cut.recovery).toEqual({ kind: "text", attempt: 1 });
   });
 });
 

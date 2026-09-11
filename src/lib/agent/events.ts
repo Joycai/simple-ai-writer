@@ -42,6 +42,12 @@ export type RoundLimitDecision =
  */
 export type TruncationDecision = { action: "continue" } | { action: "stop" };
 
+/**
+ * Which limit cut a reply short — see the `output-truncated` event. The two want
+ * opposite remedies, which is the whole reason to tell them apart.
+ */
+export type TruncationCause = "window" | "output-cap";
+
 export type ToolStepStatus = "running" | "done" | "error";
 
 /**
@@ -482,6 +488,20 @@ export type AgentEvent = AgentEventScope & (
       round: number;
       /** The endpoint's own stop reason, when it named one. */
       stopReason?: string;
+      /**
+       * Which limit it was, when the runtime could tell — it needs the model's
+       * window size and the endpoint's usage figures. `window`: prompt plus
+       * reply filled the context window, so asking for the rest cannot work.
+       * `output-cap`: the per-reply cap. Absent when unknowable, which is also
+       * every event from before the distinction existed
+       * (docs/feature/agent/window-edge-plan.md M3).
+       */
+      cause?: TruncationCause;
+      /**
+       * Nothing but thinking arrived before the cut: no answer was started. The
+       * one truncation whose remedy is a thinking setting rather than a limit.
+       */
+      thinkingOnly?: true;
       /**
        * What the runtime did about it, when it did something.
        *

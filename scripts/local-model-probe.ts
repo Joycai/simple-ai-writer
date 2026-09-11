@@ -419,7 +419,7 @@ async function runScenario(s: Scenario) {
         } else if (e.kind === "context-trimmed") {
           progress(`  context-trimmed ${e.count}`);
         } else if (e.kind === "output-truncated") {
-          progress(`  output-truncated`);
+          progress(`  output-truncated cause=${e.cause ?? "-"}${e.thinkingOnly ? " thinkingOnly" : ""}${e.recovery ? ` recovery=${e.recovery.kind}#${e.recovery.attempt}` : ""}`);
         }
       },
       onOutputText: (t) => {

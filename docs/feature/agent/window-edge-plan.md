@@ -1,6 +1,6 @@
 # 窗口边缘：卡死、重读循环与「完成了却什么都没写」
 
-> 状态：`partial`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行。✅ PR-1 已实施）
+> 状态：`partial`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行。✅ PR-1 · PR-2 已实施）
 > 起因：作者报告本地小模型（qwen3.8-27b，LM Studio，32k）「经常卡死、死循环、突然中断」。拿真实运行时对着真实端点量了一遍，三个症状对应到六个机制——其中五个**跟窗口走，不跟模型走**：同样的上限压到 DeepSeek 上，它一样重读、一样把轮次花在记账上，只是每轮快十倍，所以看不出来。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（「省一轮 ≈ 一整份工具表」的量纲）· [`agent-tool-context.md`](agent-tool-context.md)（常驻工具的成本账）· [`compact-threshold-plan.md`](compact-threshold-plan.md)（归纳触发线）· [`../../api/streaming.md`](../../api/streaming.md)（失败怎么送达）
 > 台架：`scripts/local-model-probe.ts`（§7）
@@ -62,6 +62,7 @@
 | `longform` · **思考关** | qwen | — | 1 | **32s** | — | 写出（2,716 字），输出 1,669 token，未截断 |
 | `chat-bigdoc` · **PR-1 之后** | qwen | 50% | 7 | **55s** | 2 | 改成。读完 105 行之后估算停在 5,767（上限 5,172 之上）——那次读取的结果留下了，只裁掉更早的两条；之前同一设置是 223 秒零产出 |
 | `chat-bigdoc` · **PR-1 之后** | deepseek | 50% | **4** | **14s** | 2 | 改成。之前是 13 轮 / 55 秒、四次重读 |
+| `continue` · **PR-2 之后**（思考开） | qwen | 50% | 4 | 330s | 0 | 仍然零产出（第 4 轮思考 112,042 字写满窗口——那是 PR-6 的事），但结局从 `completed` 变成 **`truncated`**，事件带 `cause=window` + `thinkingOnly`，日志说「思考写满了上下文窗口，没有写出回答」并指向「思考」档位 |
 
 两条直接用 curl 打的端点探针：
 
@@ -146,6 +147,11 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 - `window-full` 不走自动「接着写」，直接出截断卡——续写只会让它更满。
 - 不改线上字段：OpenAI 兼容这边照旧不发 `max_tokens`（「未设置的模型请求体不变」这条不变量不动）。
 
+> **落地时的两处调整（PR-2）**
+> - **预检的输出预留挪到 PR-4。** 估算器把一个汉字算一个 token，而 Qwen 实测约 0.6——在发送闸门上硬扣一份预留，会把其实装得下的中文请求挡在门外，而且报的是 `ContextSizeError`，比截断更难懂。PR-4 的上限保底本来就封顶在 `窗口 − 输出预留`，那是规划侧的软版本，同一件事只做一处。
+> - **窗口满了不出截断卡，直接以 `truncated` 结束。** 卡上的「继续」在窗口满时只会再截一次，把一个注定失败的按钮递给作者不是询问；部分正文照样留在输出里，日志那一行说清是窗口满了、该调什么。作者下一轮自己说「继续」时，对话归纳有机会先腾出位置。
+> - 归因需要窗口大小和端点的 usage：`input + output ≥ 窗口 − max(64, 3%)` 记为 `window`，装得下记为 `output-cap`，**两者缺一就不下结论**、按原来的路恢复——没声明窗口的模型行为与今天完全一致。3% 的余量盖住「作者声明 32,768 / 服务端实际加载 32,000」这种常见落差。
+
 **D6 思考：开关已经存在，缺的是让作者找得到、以及开着时的兜底。** 同一句短提示（上限 600 token）在 LM Studio 的 qwen 上逐个试开关：
 
 | 请求体 | 思考字数 | 正文 | 结论 |
@@ -158,9 +164,9 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 | `thinking: {type: "disabled"}` | 201 | 70 | 被忽略 |
 | 提示词末尾 `/no_think` | 107 | 46 | 减半，不可靠 |
 
-`reasoning_effort: "none"` 正是应用里「通用」思考类别（`openai-generic`，OpenAI 兼容端点的默认类别）选「关」时 `reasoningBody` 发出去的东西（`OPENAI_EFFORT.off = "none"`）。所以**作者今天就能把它关掉**，而且开关并不深：`ReasoningControls` 就在对话输入框底栏（`AgentChat`）、AiPanel 设置行和一致性检查里，档位菜单里有「关」（它改的是模型本身的设置，不是单次覆盖）。缺的是**动机**：档位显示「默认」、什么都不发，作者没有任何理由怀疑五分钟的空转是它造成的。
+`reasoning_effort: "none"` 正是应用里「通用」思考类别（`openai-generic`，OpenAI 兼容端点的默认类别）档位选「关闭」时 `reasoningBody` 发出去的东西（`OPENAI_EFFORT.off = "none"`）。所以**作者今天就能把它关掉**，而且开关并不深：`ReasoningControls` 就在对话输入框底栏（`AgentChat`）、AiPanel 设置行和一致性检查里，档位菜单里有「关闭」（它改的是模型本身的设置，不是单次覆盖）。缺的是**动机**：档位显示「默认」、什么都不发，作者没有任何理由怀疑五分钟的空转是它造成的。
 
-还有一个字面陷阱：思考**类别**里有一项就叫「关闭」，说明是「不发送任何思考参数，由服务端自行决定」——在 LM Studio 上它的效果是**思考照开**。真正管用的是「通用 (reasoning_effort)」类别下的**档位**「关」。一个想关思考的作者，最自然的那一下点的是错的那个。关掉之后，经应用自己的 `reasoningBody` 重跑那两个零产出的写作场景（台架 `LOCAL_LLM_EFFORT=off`）：`continue` 315 秒 → **20 秒**写出 819 字，`longform` 358 秒 → **32 秒**写出 2,716 字，都没有截断（§2.3 末两行）。代价是不思考的 qwen 更爱一轮只发一个工具调用——`continue` 用满了 8 轮，是最后那个强制成文的轮次写出的正文。
+还有一个字面陷阱：**两个控件都叫「关闭」**。模型设置里的思考**类别**有一项「关闭」，说明是「不发送任何思考参数，由服务端自行决定」——在 LM Studio 上它的效果是**思考照开**；真正管用的是「通用 (reasoning_effort)」类别下、输入框底栏那个**档位**里的「关闭」。一个想关思考的作者在模型设置里点到的那个「关闭」，是不管用的那个。关掉之后，经应用自己的 `reasoningBody` 重跑那两个零产出的写作场景（台架 `LOCAL_LLM_EFFORT=off`）：`continue` 315 秒 → **20 秒**写出 819 字，`longform` 358 秒 → **32 秒**写出 2,716 字，都没有截断（§2.3 末两行）。代价是不思考的 qwen 更爱一轮只发一个工具调用——`continue` 用满了 8 轮，是最后那个强制成文的轮次写出的正文。
 
 所以这一片分两半：①让关得掉这件事被看见（M3 的新截断归因里，「只有思考、没有正文」那一类直接指向思考设置）；②开着思考时的兜底——思考超过预算就中止本轮、带一句「直接作答」重试一次，预算默认取窗口剩余的一半。第二半等第一半落地、作者真机用过再定要不要做。
 
@@ -175,7 +181,7 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 | PR | 内容 | 主要文件 | 怎么验 |
 |---|---|---|---|
 | **PR-1** ✅ | D2 本轮结果不裁 + 旧写参数瘦身（跳过自带重放副本的调用：Gemini parts / Responses items / Anthropic 签名思考）；D4 检查点限频 | `agent/runtime.ts`、`agentRuntime.test.ts`、`agentRuntimeCheckpoint.test.ts` | 单测：本轮不裁、答完一轮后不再保护、占位参数仍是合法 JSON 且短字段保留、自带副本的调用不动、提示不隔轮出现但长任务仍会再提醒；台架 `chat-bigdoc` 50%：qwen 223 秒零产出 → 55 秒改成，DeepSeek 13 轮 → 4 轮（§2.3） |
-| **PR-2** | D5 输出预留 + 截断归因 + 只思考截断不再算完成 | `ai/index.ts`、`agent/runtime.ts`、`agent/events.ts`、`AgentLog.tsx`、两份 locale | 单测；台架 `longform` 结局应为新的截断类而不是 `completed` |
+| **PR-2** ✅ | D5 截断归因 + 只思考的截断不再算完成（输出预留挪到 PR-4，见 D5「落地时的调整」） | `agent/runtime.ts`、`agent/events.ts`、`agent/logModel.ts`、`AgentLog.tsx`、两份 locale | 单测：窗口满不续写、输出上限照常续写、只思考标 `thinkingOnly`、窗口满时截断的工具调用不重发、窗口大小未知时行为不变、日志标题优先显示截断行；台架 `continue`（思考开）结局 `truncated` · `cause=window` · `thinkingOnly`（§2.3） |
 | **PR-3** | D7 流看门狗 | `ai/index.ts`、locale | 假流单测（首字超时 / 中途静默 / 思考 chunk 续命） |
 | **PR-4** | D3 消息上限保底（**待作者选 a/b/c**） | `agent/toolCost.ts`、`context/budget.ts`、上下文条文案 | `contextForecast.test.ts` 会动，同步改它的叙述 |
 | **PR-5** | D8 归纳回差 | `agent/compact.ts` | 单测 + **作者真机**：32k 模型连续对话五轮，看是否每轮都有「已归纳」 |
