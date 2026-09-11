@@ -1576,6 +1576,8 @@
       "modelNotFound": "找不到选中的模型",
       "providerNotFound": "找不到供应商",
       "contextExceeded": "本次请求内容约 {{estimated}} tokens，超过了模型设置的上下文大小（{{limit}} tokens），已停止发送。请减少正文或引用内容，或在「设置 → 模型」中调大上下文大小；本地模型（如 Ollama）还需同时调大服务端的上下文限制（num_ctx），否则请求会被静默截断。",
+      "streamNoFirstChunk": "模型 {{seconds}} 秒没有返回任何内容，已停止等待。本地模型请确认服务还在运行、模型已经加载；冷启动加载大模型、或者排在别的请求后面时会更久，可以重试一次。",
+      "streamStalled": "输出中断：{{seconds}} 秒没有收到新内容，已停止等待。连接可能已经断开，可以重试一次。",
       "focusNotReady": "编辑器尚未载入当前文档，请稍候再试",
       "noVisionModel": "没有可读图的模型：请把当前模型换成多模态模型，或在 设置 → 子代理 里启用「图像理解」并绑定一个多模态模型。",
       "noApiKey": "「{{provider}}」还没有保存 API 密钥，请到 设置 → 供应商与模型 里填写。",

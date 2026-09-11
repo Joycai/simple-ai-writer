@@ -476,6 +476,27 @@ export class ContextSizeError extends Error {
 }
 
 /**
+ * Thrown when a stream stays silent past its deadline — `streamCompletion`'s
+ * watchdog (docs/feature/agent/window-edge-plan.md D7).
+ *
+ * A named error rather than an `AbortError`, on purpose: the agent runtime reads
+ * an AbortError as "the author pressed stop", and a stream the endpoint stopped
+ * feeding is a failure the author has to be told about, not a stop they made.
+ */
+export class StreamStallError extends Error {
+  constructor(
+    /** `first-chunk`: nothing ever arrived. `idle`: output started, then stopped. */
+    public readonly phase: "first-chunk" | "idle",
+    public readonly waitedMs: number,
+  ) {
+    super(i18n.t(phase === "first-chunk" ? "ai.errors.streamNoFirstChunk" : "ai.errors.streamStalled", {
+      seconds: Math.round(waitedMs / 1000),
+    }));
+    this.name = "StreamStallError";
+  }
+}
+
+/**
  * Merge `prefix` into the head of `messages` as a leading system instruction.
  * If the first message is already a system message, the prefix is prepended to
  * its text content; otherwise a new system message is inserted at index 0.

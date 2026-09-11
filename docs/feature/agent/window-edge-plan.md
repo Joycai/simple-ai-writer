@@ -1,6 +1,6 @@
 # 窗口边缘：卡死、重读循环与「完成了却什么都没写」
 
-> 状态：`partial`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行。✅ PR-1 · PR-2 · PR-6 已实施）
+> 状态：`partial`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行。✅ PR-1 · PR-2 · PR-6 · PR-3 已实施）
 > 起因：作者报告本地小模型（qwen3.8-27b，LM Studio，32k）「经常卡死、死循环、突然中断」。拿真实运行时对着真实端点量了一遍，三个症状对应到六个机制——其中五个**跟窗口走，不跟模型走**：同样的上限压到 DeepSeek 上，它一样重读、一样把轮次花在记账上，只是每轮快十倍，所以看不出来。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（「省一轮 ≈ 一整份工具表」的量纲）· [`agent-tool-context.md`](agent-tool-context.md)（常驻工具的成本账）· [`compact-threshold-plan.md`](compact-threshold-plan.md)（归纳触发线）· [`../../api/streaming.md`](../../api/streaming.md)（失败怎么送达）
 > 台架：`scripts/local-model-probe.ts`（§7）
@@ -66,6 +66,7 @@
 | `longform` · **PR-6 兜底**（思考开） | qwen | — | 2 | **222s** | — | **写出（3,138 字）**。第 1 轮思考 15,936 字、186 秒时被中止，关思考的重答 36 秒写完。之前 358 秒、0 字 |
 | `continue` · PR-6 **初版**（只有重答那一次关思考） | qwen | 50% | 6 | 543s | 0 | **比没有兜底还久**。第 4 轮 155 秒被中止；关思考的重答恰好是个工具轮（又读一章）；第 6 轮思考照开，又打转 383 秒、75,235 字写满窗口，结局 `truncated`。据此改成「这次运行余下的请求都关思考」（D6 落地说明） |
 | `continue` · **PR-6 定稿**（运行余下的请求都关思考） | qwen | 50% | 9 | **143s** | 0 | **写出（1,068 字）**。第 4 轮思考 31,908 字、124 秒时被中止；之后每轮关思考、约 1 秒一轮，第 9 轮（强制成文，重来那一轮不占作者的轮数）写出正文。副作用：不思考的 qwen 把第三章同一页连读了三次（第 6–8 轮，各约 1 秒）——重复读检测按 D2 的取舍没有做 |
+| 挂起的端点 · **PR-3 之后** | 本地假服务（回 200 + SSE 头之后一个字节都不发） | — | 1 | **123s** | — | 以前会永远等下去；现在 123 秒报 `StreamStallError`：「模型 123 秒没有返回任何内容，已停止等待。本地模型请确认服务还在运行、模型已经加载……」，假服务那一侧同时看到连接被关闭 |
 
 两条直接用 curl 打的端点探针：
 
@@ -185,6 +186,13 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 
 **D7 看门狗放在 `streamCompletion` 一处。** 四个适配器共用：任何 chunk（正文、思考、`toolArgs`）都重置计时；「等首字」和「流中断」分两个阈值，首字的那个按估算输入放大（本地冷预填充量级 ≈ 1.5k tok/s）；超时抛一个带原因的错误，文案说清是哪一种。LM Studio 的工具参数静默是正常形态，所以间隔阈值要以分钟计，不以秒计。
 
+> **PR-3 落地**
+> - **量过再定阈值。** LM Studio 上让 qwen 用 `create_file` 写 2,826 字：工具名在 0.8 秒到达，之后**整整 32.6 秒一个字节都没有**，参数一次到齐——约每字 11.5 毫秒的静默。一章 15k 字的改写就是几分钟，一份 60k 字的 HTML 页面十几分钟。所以间隔阈值不能拍脑袋定紧。
+> - **首字**：`120 秒 + 估算输入 ÷ 150 tok/s`（假设慢硬件的预填充；32k 满窗约 333 秒）。**首字之后**：任意两个 chunk 之间 10 分钟（按上面的速度约 5 万字的工具参数）。看门狗是给**死掉的流**的，不是给慢的流的。
+> - 放在 `streamCompletion` 一处，任何 chunk（正文、思考、`toolArgs`、服务端工具）都算活着；自己的 `AbortController` 转发调用方的 signal，一个按需重排的计时器而不是每个 token 一次 `setTimeout`。
+> - 超时抛 `StreamStallError`（`first-chunk` / `idle`），**不是** `AbortError`——运行时把 AbortError 读作「作者按了停止」，而一个端点不再供货的流是要告诉作者的失败。PR-6 的思考中止与作者的停止都照旧走 AbortError。
+> - 阈值是常量，不进设置：作者没有理由调它，而调紧了会误杀本地模型的正常长静默。
+
 **D8 归纳要有回差。** `planFold` 在「折完预计仍不低于触发线」时拒绝折叠，改为出一次说明（「窗口太小，归纳帮不上这一轮」）——和 `contextBreakdown` 里 `over` 与 `willCompact` 分家是同一个道理。
 
 ## 5. 分阶段 PR
@@ -195,7 +203,7 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 |---|---|---|---|
 | **PR-1** ✅ | D2 本轮结果不裁 + 旧写参数瘦身（跳过自带重放副本的调用：Gemini parts / Responses items / Anthropic 签名思考）；D4 检查点限频 | `agent/runtime.ts`、`agentRuntime.test.ts`、`agentRuntimeCheckpoint.test.ts` | 单测：本轮不裁、答完一轮后不再保护、占位参数仍是合法 JSON 且短字段保留、自带副本的调用不动、提示不隔轮出现但长任务仍会再提醒；台架 `chat-bigdoc` 50%：qwen 223 秒零产出 → 55 秒改成，DeepSeek 13 轮 → 4 轮（§2.3） |
 | **PR-2** ✅ | D5 截断归因 + 只思考的截断不再算完成（输出预留挪到 PR-4，见 D5「落地时的调整」） | `agent/runtime.ts`、`agent/events.ts`、`agent/logModel.ts`、`AgentLog.tsx`、两份 locale | 单测：窗口满不续写、输出上限照常续写、只思考标 `thinkingOnly`、窗口满时截断的工具调用不重发、窗口大小未知时行为不变、日志标题优先显示截断行；台架 `continue`（思考开）结局 `truncated` · `cause=window` · `thinkingOnly`（§2.3） |
-| **PR-3** | D7 流看门狗 | `ai/index.ts`、locale | 假流单测（首字超时 / 中途静默 / 思考 chunk 续命） |
+| **PR-3** ✅ | D7 流看门狗：首字 `120 秒 + 估算输入 ÷ 150 tok/s`，首字之后两个 chunk 之间 10 分钟，超时抛 `StreamStallError` | `ai/index.ts`、`ai/types.ts`、两份 locale、`streamWatchdog.test.ts` | 假计时器单测：首字超时且不提前、开始输出后中断、慢而活着的流（首字 90 秒、之后每 5 分钟一块）不被误杀、作者停止仍是 AbortError、首字期限随输入放大；阈值依据是 LM Studio 实测工具参数前 32.6 秒零字节；本地挂起端点实测 123 秒报错并断开连接（§2.3） |
 | **PR-4** | D3 消息上限保底（**待作者选 a/b/c**） | `agent/toolCost.ts`、`context/budget.ts`、上下文条文案 | `contextForecast.test.ts` 会动，同步改它的叙述 |
 | **PR-5** | D8 归纳回差 | `agent/compact.ts` | 单测 + **作者真机**：32k 模型连续对话五轮，看是否每轮都有「已归纳」 |
 | **PR-6** ✅ | D6 两半都做：「关闭」同名陷阱改名；思考超「窗口剩余一半」且未开始作答时中止本轮，这次运行余下的请求都不再思考（档位有「关闭」就发 off，否则每轮带一条即撤的提示） | `agent/runtime.ts`、`agent/events.ts`、`AgentLog.tsx`、两份 locale、`agentRuntimeThinkingGuard.test.ts` | 单测：中止并关思考重来且不占轮数、关思考延续到工具轮之后、无「关闭」档位时走提示且提示不留在历史里、每次运行至多一次、窗口未知不启用、预算内不中止、作者停止仍是停止；台架（思考开）`longform` 358 秒 0 字 → 222 秒 3,138 字，`continue` 330 秒 0 字 → 143 秒 1,068 字（§2.3） |

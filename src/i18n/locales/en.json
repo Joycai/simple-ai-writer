@@ -1578,6 +1578,8 @@
       "modelNotFound": "Selected model not found",
       "providerNotFound": "Provider not found",
       "contextExceeded": "This request is roughly {{estimated}} tokens, exceeding the model's configured context size ({{limit}} tokens), so it was not sent. Trim the document or referenced content, or raise the context size in Settings → Models; for local models (e.g. Ollama) also raise the server-side context limit (num_ctx), otherwise the request gets silently truncated.",
+      "streamNoFirstChunk": "The model returned nothing for {{seconds}} seconds, so the app stopped waiting. For a local model, check that the server is still running and the model is loaded — loading a large model cold, or waiting behind another request, takes longer. Try again.",
+      "streamStalled": "Output stalled: nothing new arrived for {{seconds}} seconds, so the app stopped waiting. The connection may have dropped. Try again.",
       "focusNotReady": "The editor has not loaded the current document yet — try again in a moment",
       "noVisionModel": "No model here can read images. Switch the active model to a multimodal one, or enable Image analysis in Settings → Subagents and bind a multimodal model to it.",
       "noApiKey": "No API key stored for \"{{provider}}\" — add it in Settings → Providers & Models.",
