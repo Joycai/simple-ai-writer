@@ -6,6 +6,12 @@
   border: 1px solid var(--color-border-accent);
   background: var(--color-bg-inset);
   container-type: inline-size;
+  /* A column so that, in a host that runs short of height (the chat's approvals
+     band), the body is what gives way and the header and footer keep their
+     size. In a host with room this lays out exactly like blocks. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* An edit whose replacement is the text it replaces. Not an error and not
@@ -17,6 +23,7 @@
 
 .header {
   display: flex;
+  flex-shrink: 0;
   align-items: baseline;
   gap: var(--space-2);
   padding: 10px var(--space-3);
@@ -50,13 +57,16 @@
 
 /* Capped and scrolled, so the card's maximum height is a constant: forty
    changed places and a 60,000-character rewrite make the same-sized card, and
-   the decision — the footer — is always on screen (设计稿 02h 1l). */
+   the decision — the footer — is always on screen (设计稿 02h 1l). 60vh is the
+   ceiling, not a promise: where the host has less than that to spare, the body
+   shrinks under it (`min-height: 0`) rather than pushing the conversation out. */
 .body {
   padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
   max-height: 60vh;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -347,6 +357,7 @@
 
 .footer {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3) var(--space-3);
