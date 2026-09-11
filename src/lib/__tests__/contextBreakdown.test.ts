@@ -55,6 +55,24 @@ function session(turns = 1) {
 /** More turns than `planFold` keeps verbatim — i.e. compaction is possible. */
 const FOLDABLE_TURNS = 3;
 
+describe("computeContextBreakdown — a raised ceiling", () => {
+  // docs/feature/agent/window-edge-plan.md D3: when the working floor raised the
+  // ceiling above the author's 窗口占用, the bar says so — and only then.
+  it("reports the author's own ceiling when the working floor raised this one", () => {
+    const { meta, history } = session();
+    const context = computeContextBreakdown(history, meta, 10_000, 22_000, 32_000, undefined, 16_000);
+    expect(context.raisedFromTokens).toBe(16_000);
+    expect(context.ceilingTokens).toBe(22_000);
+  });
+
+  it("says nothing when the ceiling is the author's own, or the caller didn't say", () => {
+    const { meta, history } = session();
+    expect(computeContextBreakdown(history, meta, 10_000, 16_000, 32_000, undefined, 16_000).raisedFromTokens)
+      .toBeNull();
+    expect(computeContextBreakdown(history, meta, 10_000, 16_000, 32_000).raisedFromTokens).toBeNull();
+  });
+});
+
 describe("computeContextBreakdown", () => {
   it("splits the history by the identities chatMeta records", () => {
     const { meta, history, seed, system } = session();

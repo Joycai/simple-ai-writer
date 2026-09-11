@@ -17,7 +17,7 @@
  * （docs/feature/agent/context-meters.md §5），因为它们穿的是同一件衣服。
  */
 
-import { ASSUMED_INPUT_CEILING_TOKENS, inputCeilingFor } from "../context/budget";
+import { ASSUMED_INPUT_CEILING_TOKENS, effectiveInputCeiling } from "../context/budget";
 
 /** Share of the ceiling held back for tool results the loop drags in. */
 export const GROWTH_SHARE = 0.25;
@@ -95,7 +95,7 @@ export function planReview(input: ReviewPlanInput): ReviewPlan {
   const assumed = !input.contextSize || input.contextSize <= 0;
   const ceilingTokens = assumed
     ? ASSUMED_INPUT_CEILING_TOKENS
-    : inputCeilingFor(input.contextSize, input.utilization);
+    : effectiveInputCeiling(input.contextSize, input.utilization, input.toolTokens);
   const ceilingChars = Math.floor(ceilingTokens * cpt);
 
   const systemChars = Math.min(ceilingChars, Math.round(input.toolTokens * cpt) + input.fixedChars);

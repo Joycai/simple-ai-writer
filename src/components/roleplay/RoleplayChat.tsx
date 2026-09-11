@@ -37,7 +37,7 @@ import {
   computeContextBreakdown, computePreflightBreakdown,
 } from "../../lib/agent/contextBreakdown";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
-import { inputCeilingFor } from "../../lib/context/budget";
+import { effectiveInputCeiling, inputCeilingFor } from "../../lib/context/budget";
 import { presetFor, subAgentsFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
 import { recalledNames, type TurnContextTrace } from "../../lib/roleplay/trace";
@@ -471,9 +471,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       session?.history ?? null,
       session?.meta ?? null,
       toolTokens,
-      inputCeilingFor(boundModel?.contextSize, contextUtilization),
+      effectiveInputCeiling(boundModel?.contextSize, contextUtilization, toolTokens),
       boundModel?.contextSize ?? 0,
       { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
+      inputCeilingFor(boundModel?.contextSize, contextUtilization),
     ),
     // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -495,7 +496,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       pre: computePreflightBreakdown(
         preflight,
         toolTokens,
-        inputCeilingFor(boundModel?.contextSize, contextUtilization),
+        effectiveInputCeiling(boundModel?.contextSize, contextUtilization, toolTokens),
         boundModel?.contextSize ?? 0,
       ),
       resident: preflight.resident.filter((p) => p.kind === "primary").map((p) => p.name),

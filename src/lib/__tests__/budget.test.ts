@@ -11,6 +11,10 @@ import {
   STATIC_LORE_BUDGET_MAX_TOKENS,
   CONTEXT_UTILIZATION_MAX,
   CONTEXT_UTILIZATION_MIN,
+  FLOOR_CAP_SHARE,
+  WORKING_FLOOR_SHARE,
+  effectiveInputCeiling,
+  inputCeilingFor,
   type ContextBudgetInput,
 } from "../context/budget";
 import { estimateTextTokens } from "../ai/tokenEstimate";
@@ -318,6 +322,41 @@ describe("fixedContextChars", () => {
   });
 });
 
+describe("effectiveInputCeiling — the working floor", () => {
+  // docs/feature/agent/window-edge-plan.md D3, option a. On a 32k model at the
+  // default 50%, the assistant tier's ~10.8k of schemas left 5,172 tokens for the
+  // system layer and the whole conversation; every read was trimmed on arrival.
+  const ASSIST_TOOLS = 10_828;
+
+  it("raises a small window whose tool schemas crowd the author's share", () => {
+    expect(effectiveInputCeiling(32_000, 0.5, ASSIST_TOOLS))
+      .toBe(ASSIST_TOOLS + Math.ceil(32_000 * WORKING_FLOOR_SHARE));
+  });
+
+  it("never lowers what the author set", () => {
+    expect(effectiveInputCeiling(32_000, 0.9, ASSIST_TOOLS)).toBe(28_800);
+    expect(effectiveInputCeiling(128_000, 0.5, ASSIST_TOOLS)).toBe(64_000);
+  });
+
+  it("leaves a toolless run exactly at the author's share, even at the lowest setting", () => {
+    expect(effectiveInputCeiling(32_000, CONTEXT_UTILIZATION_MIN, 0))
+      .toBe(inputCeilingFor(32_000, CONTEXT_UTILIZATION_MIN));
+  });
+
+  it("stops at the cap, leaving the rest of the window for the reply and its thinking", () => {
+    expect(effectiveInputCeiling(16_000, 0.5, ASSIST_TOOLS)).toBe(Math.floor(16_000 * FLOOR_CAP_SHARE));
+  });
+
+  it("uses the assumed ceiling, unraised, when the model declares no window", () => {
+    expect(effectiveInputCeiling(undefined, 0.5, 50_000)).toBe(inputCeilingFor(undefined, 0.5));
+  });
+
+  it("is what the panel's plan starts from, before the reply reserve comes off", () => {
+    const plan = planContextBudget(input({ contextSize: 32_000, toolSchemaTokens: ASSIST_TOOLS }));
+    expect(plan.inputCeilingTokens).toBe(effectiveInputCeiling(32_000, 0.5, ASSIST_TOOLS) - 2_000);
+  });
+});
+
 describe("tool schemas as a budget layer", () => {
   it("comes off the message ceiling, not the input ceiling", () => {
     const plan = planContextBudget(input({ toolSchemaTokens: 8_000 }));
@@ -349,7 +388,10 @@ describe("tool schemas as a budget layer", () => {
     // it doesn't have.
     const plan = planContextBudget(input({ toolSchemaTokens: 500_000 }));
     expect(plan.messageCeilingTokens).toBe(0);
-    expect(plan.toolSchemaTokens).toBe(CEILING);
+    // The working floor raises the ceiling as far as it goes — the cap share of
+    // the window, minus the reply reserve — before the toolset is clamped to it.
+    // Still a configuration this planner cannot fix; it just fails at the cap.
+    expect(plan.toolSchemaTokens).toBe(Math.floor(128_000 * FLOOR_CAP_SHARE) - 2_000);
     expect(plan.loreChars).toBe(0);
     expect(plan.memoryChars).toBe(0);
     expect(plan.bookPriorChars).toBe(0);

@@ -13,8 +13,9 @@
  *
  * 1. **The denominator is the input ceiling, not the model's window.** Both
  *    `compactChatHistory` and `runAgent` plan against `contextSize ×
- *    utilization` (lib/context/budget.ts → inputCeilingFor). Drawn against the
- *    raw window, compaction fires at 35% of the bar with nothing to explain it.
+ *    utilization`, raised by the working floor when the tool schemas crowd it
+ *    (lib/context/budget.ts → effectiveInputCeiling). Drawn against the raw
+ *    window, compaction fires at 35% of the bar with nothing to explain it.
  * 2. **Tool schemas count — for the axis, but not for the trigger.** The
  *    pre-flight `ContextSizeError` gate weighs messages *plus* tool definitions,
  *    and the assistant preset's toolset runs to thousands of tokens on every
@@ -154,6 +155,16 @@ export interface ContextBreakdown {
    */
   over: boolean;
   /**
+   * The ceiling at the author's own 窗口占用, when the working floor raised this
+   * one above it (lib/context/budget `effectiveInputCeiling`,
+   * docs/feature/agent/window-edge-plan.md D3) — otherwise null.
+   *
+   * The bar says so in a sentence. A denominator that differs from the setting
+   * the author chose, without a word, is exactly the quiet disagreement these
+   * meters exist to prevent (docs/feature/agent/context-meters.md).
+   */
+  raisedFromTokens: number | null;
+  /**
    * Whether the app folds on its own past the mark, or only when the author
    * presses 立即归纳. Off does not move the mark — it changes what the mark
    * promises, and the bar's sentence has to say so.
@@ -266,6 +277,11 @@ export function computeContextBreakdown(
   contextSize: number,
   /** Absent = the classic line and automatic folding (tests, older callers). */
   compact?: CompactPrefs,
+  /**
+   * The ceiling at the author's own 窗口占用 (`inputCeilingFor`), so the bar can
+   * tell when `ceilingTokens` was raised above it. Absent = never reported raised.
+   */
+  authorCeilingTokens?: number,
 ): ContextBreakdown {
   const totals: Record<Exclude<ContextSegmentKey, "free">, number> = {
     // A session that hasn't run yet still pays for the tool schemas the moment
@@ -372,6 +388,8 @@ export function computeContextBreakdown(
     over,
     autoCompact: compact?.autoCompact ?? true,
     compactBoundBy: trigger.boundBy,
+    raisedFromTokens:
+      authorCeilingTokens !== undefined && authorCeilingTokens < ceiling ? authorCeilingTokens : null,
     stateMode,
   };
 }

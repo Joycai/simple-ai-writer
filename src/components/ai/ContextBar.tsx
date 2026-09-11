@@ -385,6 +385,21 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           true while there is something to fold; when the request is simply past
           the ceiling and compaction can't reach it, saying that would send the
           author to wait for a fold that never comes. */}
+      {/* The ceiling is not the author's 窗口占用 — the working floor raised it
+          because the tool schemas crowded that share (window-edge-plan.md D3).
+          Said beside the legend like every other "why", and on its own line:
+          it is true independently of anything the fold sentences say. */}
+      {showLegend && context.raisedFromTokens !== null && (
+        <div className={styles.ctxExplain}>
+          {t("ai.chat.ctxRaisedExplain", {
+            defaultValue:
+              "「窗口占用」设的是 {{set}}%，但工具说明占掉了其中大半——为了给对话留出工作空间，本次按 {{now}}% 计。",
+            set: Math.round((context.raisedFromTokens * 100) / context.contextSize),
+            now: Math.round((context.ceilingTokens * 100) / context.contextSize),
+          })}
+        </div>
+      )}
+
       {showLegend && explained && (
         <div className={styles.ctxExplain}>
           {/* Three sentences, not two: past the line with 自动归纳 off is its own
