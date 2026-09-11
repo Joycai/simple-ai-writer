@@ -15,8 +15,8 @@
 import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
-import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { NativeReasoning } from "../ai/reasoning";
+import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
+import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
@@ -89,6 +89,33 @@ export function truncationCause(
   if (!contextSize || contextSize <= 0 || inputTokens <= 0) return undefined;
   const slack = Math.max(64, Math.floor(contextSize * 0.03));
   return inputTokens + outputTokens >= contextSize - slack ? "window" : "output-cap";
+}
+
+/**
+ * Share of the room left in the window a round's thinking may use before the
+ * runtime cuts the round (docs/feature/agent/window-edge-plan.md D6).
+ *
+ * Half, because past that line a model that stopped thinking at once would
+ * still have less room for its answer than it had already spent — and the
+ * measured failure is a model that never stops: 42k–117k characters of
+ * deliberation on a 32k local model, then a truncation with nothing written.
+ * On a 200k window the line sits ~100k tokens out, which no ordinary run
+ * reaches, so the guard only ever acts where the window is actually at stake.
+ */
+const THINKING_BUDGET_SHARE = 0.5;
+/** Floor, so a nearly full window doesn't cut a model that has barely begun. */
+const THINKING_BUDGET_MIN_TOKENS = 512;
+
+/** Tokens of thinking a round may spend, or undefined when the window size is unknown. */
+export function thinkingBudgetTokens(
+  contextSize: number | undefined,
+  inputTokens: number,
+): number | undefined {
+  if (!contextSize || contextSize <= 0) return undefined;
+  return Math.max(
+    THINKING_BUDGET_MIN_TOKENS,
+    Math.floor((contextSize - inputTokens) * THINKING_BUDGET_SHARE),
+  );
 }
 
 /** Whether a tool call's arguments survived the response intact. */
@@ -597,6 +624,22 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   let maxRounds = preset.maxRounds;
   /** Output-cap recoveries spent in this run — reset when the author grants more. */
   let truncationRecoveries = 0;
+  /** Whether this run has already cut a round for its thinking budget — at most once. */
+  let thinkingCutUsed = false;
+  /**
+   * After a thinking cut, how every remaining request of this run goes: `off`
+   * sends the model's own thinking-off, `nudge` carries a notice (retracted after
+   * each request) to act without deliberating. Null until a cut happens.
+   *
+   * For the rest of the run, not only the retry. Measured on a 32k local model:
+   * the retry happened to be a tool round, the round after it went back to full
+   * thinking, and that spiralled for another 383 s and ended with nothing
+   * written — longer than no guard at all. Never written to the model's
+   * settings: the next run starts from the author's own choice again.
+   */
+  let thinkingFallback: "off" | "nudge" | null = null;
+  /** The round right after a cut — the round-limit card is not asked twice for it. */
+  let retryingAfterCut = false;
   /**
    * May the run recover from one more truncation?
    *
@@ -700,6 +743,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     if (
       isLastRound &&
       round > 1 &&
+      // A retry after a thinking cut is the runtime's doing: the author was not
+      // asked when the cut round started, and is not asked twice for it.
+      !retryingAfterCut &&
       (preset.finishPolicy === "force-text" || preset.finishPolicy === "handoff") &&
       preset.tools.length > 0 &&
       opts.onRoundLimit
@@ -889,24 +935,57 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       trimmedSinceCheckpoint = true;
     }
 
+    // After a thinking cut, for the rest of the run. `off` rides on the request
+    // below; `nudge` is for a category with no way to say "off", and is
+    // retracted after each request like the notices above.
+    retryingAfterCut = false;
+    let answerNowNotice: StreamMessage | null = null;
+    if (thinkingFallback === "nudge") {
+      answerNowNotice = {
+        role: "user",
+        content: i18n.t("ai.instructions.thinkingBudgetAnswerNow", {
+          defaultValue:
+            "【系统提示】这次任务里你在思考阶段用掉了太多上下文，已经被中止过一次。接下来不要展开思考，直接调用工具或给出回答。",
+        }),
+      };
+      history.push(answerNowNotice);
+    }
+
+    const estInputTokens = estimateMessagesTokens(history);
+    // The handoff round carries one hand-written definition rather than the
+    // preset's toolset, so the run's usual figure would overstate it wildly.
+    const roundToolTokens = forceHandoff
+      ? handoffToolTokens()
+      : withholdTools
+        ? 0
+        : toolTokensOf(activeTools) + (handoffPreset ? handoffToolTokens() : 0);
     opts.onEvent({
       kind: "round-start",
       round,
       maxRounds,
-      estInputTokens: estimateMessagesTokens(history),
-      // The handoff round carries one hand-written definition rather than the
-      // preset's toolset, so the run's usual figure would overstate it wildly.
-      toolTokens: forceHandoff
-        ? handoffToolTokens()
-        : withholdTools
-          ? 0
-          : toolTokensOf(activeTools) + (handoffPreset ? handoffToolTokens() : 0),
+      estInputTokens,
+      toolTokens: roundToolTokens,
       at: Date.now(),
     });
+
+    // The thinking guard (docs/feature/agent/window-edge-plan.md D6): once this
+    // round's thinking alone has used half the room left in the window, with no
+    // answer and no tool call started, the round is cut and retried once below.
+    // Its own controller, forwarding the run's, so the cut is this request's
+    // and an author's stop is still the run's.
+    const thinkingBudget = thinkingCutUsed
+      ? undefined
+      : thinkingBudgetTokens(opts.contextSize, estInputTokens + roundToolTokens);
+    let thinkingTokens = 0;
+    let thinkingCut = false;
+    const roundAbort = new AbortController();
+    const forwardAbort = () => roundAbort.abort();
+    opts.signal.addEventListener("abort", forwardAbort, { once: true });
 
     try {
       await streamCompletion({
         ...pickConnOptions(opts),
+        ...(thinkingFallback === "off" ? { reasoningEffort: "off" as const } : {}),
         messages: history,
         extraBody: opts.extraBody,
         tools: forceHandoff
@@ -928,12 +1007,24 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // Separate from local tools because search subagent has no local tools
         // (preset.tools: []) but requires serverTools enabled on every round.
         serverTools: withholdServerTools ? undefined : opts.serverTools,
-        signal: opts.signal,
+        signal: roundAbort.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {
             if (!reasoningText) reasoningStart = Date.now();
             reasoningText += chunk.reasoning;
             reportReasoning(false);
+            thinkingTokens += estimateTextTokens(chunk.reasoning);
+            if (
+              thinkingBudget !== undefined &&
+              !thinkingCut &&
+              thinkingTokens > thinkingBudget &&
+              !roundText &&
+              !argsRow.last &&
+              roundToolCalls.length === 0
+            ) {
+              thinkingCut = true;
+              roundAbort.abort();
+            }
           } else if ("turnResumed" in chunk) {
             opts.onEvent({
               kind: "turn-resumed",
@@ -1024,20 +1115,25 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         },
       });
     } catch (err) {
-      // A stop mid-prose: the text already streamed stays on screen, so it
-      // must also stay in the transcript — otherwise the next turn's model
-      // never saw what the author is replying to. Tool-round narration keeps
-      // its rollback: commit only when no tool call had been emitted.
-      if (
-        err instanceof DOMException &&
-        err.name === "AbortError" &&
-        roundToolCalls.length === 0 &&
-        roundText.trim()
-      ) {
-        history.push({ role: "assistant", content: roundText });
+      // The runtime's own thinking cut is not a failure: nothing was written,
+      // so nothing enters the transcript, and the run carries on below.
+      if (!(thinkingCut && !opts.signal.aborted)) {
+        // A stop mid-prose: the text already streamed stays on screen, so it
+        // must also stay in the transcript — otherwise the next turn's model
+        // never saw what the author is replying to. Tool-round narration keeps
+        // its rollback: commit only when no tool call had been emitted.
+        if (
+          err instanceof DOMException &&
+          err.name === "AbortError" &&
+          roundToolCalls.length === 0 &&
+          roundText.trim()
+        ) {
+          history.push({ role: "assistant", content: roundText });
+        }
+        throw err;
       }
-      throw err;
     } finally {
+      opts.signal.removeEventListener("abort", forwardAbort);
       // A round that called a tool without ever emitting prose, or one that
       // failed part-way: the thinking that did happen is still worth showing,
       // and leaving it marked in-progress would strand a spinner in the log.
@@ -1074,6 +1170,36 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         const at = history.indexOf(taskNudgeNotice);
         if (at >= 0) history.splice(at, 1);
       }
+      if (answerNowNotice) {
+        const at = history.indexOf(answerNowNotice);
+        if (at >= 0) history.splice(at, 1);
+      }
+    }
+
+    // ── The thinking cut: retry, and stop deliberating for the rest of the run ──
+    //
+    // Checked whether or not the adapter threw — one that ends its stream
+    // quietly on abort must not fall through into "a text round with no text".
+    // Thinking off is sent only where the model's own dial offers it (a level
+    // menu with "off", or an on/off switch), so the run never sends a value the
+    // author could not have picked; elsewhere each request carries a notice.
+    if (thinkingCut && !opts.signal.aborted) {
+      thinkingCutUsed = true;
+      retryingAfterCut = true;
+      const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+      thinkingFallback = category.menu.includes("off") || isOnOffCategory(category) ? "off" : "nudge";
+      opts.onEvent({
+        kind: "output-truncated",
+        round,
+        cause: "thinking-budget",
+        thinkingOnly: true,
+        recovery: { kind: thinkingFallback === "off" ? "thinking-off" : "answer-now", attempt: 1 },
+        at: Date.now(),
+      });
+      // The author's round cap does not pay for the runtime's retry.
+      maxRounds++;
+      opts.onOutputText(committedText);
+      continue;
     }
 
     // ── The handoff: this model does not write the answer ──
