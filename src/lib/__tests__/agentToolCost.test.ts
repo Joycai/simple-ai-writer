@@ -35,6 +35,7 @@ import {
   plannedToolTokens,
   toolTokensOf,
 } from "../agent/toolCost";
+import { WORKING_FLOOR_SHARE } from "../context/budget";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, LORE_GENERATE_PRESET } from "../agent/presets";
 import { partitionByGroup } from "../agent/registry";
 import { routePlannedTools } from "../agent/routing";
@@ -128,6 +129,15 @@ describe("messageCeilingFor", () => {
    */
   it("floors at 1 on a window smaller than the toolset — 0 would read as 'no ceiling'", () => {
     expect(messageCeilingFor(1_000, 0.5, AGENT_ASSIST_PRESET, NO_SUBS, [])).toBe(1);
+  });
+
+  it("keeps a working share for messages on a small window the toolset crowds", () => {
+    // docs/feature/agent/window-edge-plan.md D3: 32k at the default 50% used to
+    // leave about five thousand tokens of message ceiling under these schemas.
+    expect(messageCeilingFor(32_000, 0.5, AGENT_ASSIST_PRESET, NO_SUBS, []))
+      .toBe(Math.ceil(32_000 * WORKING_FLOOR_SHARE));
+    expect(messageCeilingForTools(32_000, 0.5, AGENT_ASSIST_PRESET.tools))
+      .toBe(Math.ceil(32_000 * WORKING_FLOOR_SHARE));
   });
 
   it("leaves a toolless run's ceiling untouched", () => {

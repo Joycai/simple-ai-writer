@@ -57,7 +57,7 @@ describe("预估读的是**会跑的那个任务**", () => {
    * 原来的实现在组件里取了作者点的那个格子。两份数字差得不是一点：面板承诺
    * 4,000 tk 的条目，运行注入 **零**，参考窗口从五千多字塌到两百出头。
    */
-  it("Agent 模式：工具集占了位置，知识库因此拿不到预算", () => {
+  it("Agent 模式：工具集算进了系统段，工具挤掉工作区时上限随之抬高", () => {
     const shown = planForecast(input({ runTask: taskById("custom") }))!;
     const real = planForecast(input({ runTask: taskById("agent") }))!;
 
@@ -66,11 +66,14 @@ describe("预估读的是**会跑的那个任务**", () => {
     // 工具折进「系统+工具」段，所以看差值：真正跑的那个多带了助手工具集的**常驻**
     // 那半（延迟组在方案批准前不上线，预估不再把它算满——§13）。
     expect(seg(real, "system") - seg(shown, "system")).toBeGreaterThan(5_000);
-    // 知识库和参考窗口都被工具集挤小了——这正是取错任务对象时面板骗人的方式。
-    expect(seg(real, "lore")).toBeLessThan(seg(shown, "lore"));
-    expect(seg(real, "recent")).toBeLessThan(seg(shown, "recent") / 2);
-    // 上限没变——变的是这条上限里还剩下什么。
-    expect(real.ceilingTokens).toBe(shown.ceilingTokens);
+    // 参考窗口被工具集挤小了——取错任务对象时面板正是这样骗人的。
+    expect(seg(real, "recent")).toBeLessThan(seg(shown, "recent"));
+    // 这条用例原先还钉着「知识库被挤到比承诺少」和「上限没变」。32k × 50% 在助手
+    // 档的工具之后只剩五千出头，那正是 window-edge-plan.md D3 的工作区保底要修的
+    // 状态：真正跑的任务上限被抬高、知识库拿回全额。上限两边不同本身就证明预估读
+    // 的是会跑的那个任务——取错对象的话两边会一样。
+    expect(real.ceilingTokens).toBeGreaterThan(shown.ceilingTokens);
+    expect(seg(real, "lore")).toBe(seg(shown, "lore"));
   });
 
   /** 续写与否也只由这一个对象决定：它决定要不要给【全书前情】留位置。 */
@@ -197,19 +200,25 @@ describe("条的几何", () => {
    *
    * 同一个模型、同一份指令，只有档位不同：`write` 档不带知识库写工具、生图、
    * memory 和另外两条导出线，于是它的工具段明显更短。预估改按常驻算之后
-   * （§13）full 档在 32k 上不再直接爆表，但差距仍然是真金白银：full 把 14k 的
-   * 上限用到一字不剩（free=0，知识库被挤小），write 还真的剩下余量、知识库拿到
-   * 完整的一层。
+   * （§13）full 档在 32k 上不再直接爆表，但差距仍然是真金白银。
+   *
+   * 这里原先钉的是「full 把 14k 的上限用到一字不剩、知识库被挤小」。
+   * window-edge-plan.md D3 的工作区保底之后，那个状态不再出现——full 的上限被抬到
+   * 约 69%，知识库拿回全额——所以差距换了一种说法：**write 在作者自己设的 50%
+   * 里就装得下，full 要靠保底把上限抬高才装得下**。收窄工具集省下的，正是那一截
+   * 本该留给回复和思考的窗口。
    */
-  it("write 档的工具段明显小于 full 档，而且没有把预算吃光", () => {
+  it("write 档的工具段明显小于 full 档，在作者设的占用里就装得下", () => {
     const write = planForecast(input({ runTask: taskById("htmlArtifact") }))!;
     const full = planForecast(input({ runTask: taskById("agent") }))!;
+    const none = planForecast(input({ runTask: taskById("custom") }))!;
 
     expect(write.usedTokens).toBeLessThan(full.usedTokens);
     expect(seg(write, "system")).toBeLessThan(seg(full, "system"));
-    expect(seg(full, "free")).toBe(0);
     expect(seg(write, "free")).toBeGreaterThan(0);
-    expect(seg(write, "lore")).toBeGreaterThan(seg(full, "lore"));
+    // write 的上限就是作者的 50%（和无工具的任务一样）；full 的被保底抬高了。
+    expect(write.ceilingTokens).toBe(none.ceilingTokens);
+    expect(full.ceilingTokens).toBeGreaterThan(write.ceilingTokens);
   });
 
   /** 工具段走 token→字→token 的往返，必须原样回来（提示词里印的就是回来那个数）。 */

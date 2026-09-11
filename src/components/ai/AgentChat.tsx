@@ -69,7 +69,7 @@ import {
 } from "../../lib/agent/contextBreakdown";
 import { chatAgentPreset } from "../../lib/agent/packs";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
-import { inputCeilingFor } from "../../lib/context/budget";
+import { effectiveInputCeiling, inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { CapabilityMenu } from "./CapabilityMenu";
 import {
@@ -635,7 +635,10 @@ export function AgentChat() {
         chatHistory,
         chatMeta,
         toolTokens,
-        inputCeilingFor(activeModel?.contextSize, contextUtilization),
+        // The ceiling the run actually trims to — raised when the tool schemas
+        // crowd the author's share — with the author's own beside it, so the bar
+        // can say when the two differ.
+        effectiveInputCeiling(activeModel?.contextSize, contextUtilization, toolTokens),
         activeModel?.contextSize ?? 0,
         {
           autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
@@ -643,6 +646,7 @@ export function AgentChat() {
           // the Beta the same way sendChat gates it.
           stateMode: stateMemory && isSkillStateEnabled(),
         },
+        inputCeilingFor(activeModel?.contextSize, contextUtilization),
       ),
     // `chatContextVersion` is the real trigger — the history array is mutated
     // in place, so its reference alone would never announce a change.

@@ -21,7 +21,7 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
 import { handoffToolDefinition } from "./handoff";
 import type { Model } from "../ai/configDb";
 import { loreCategoryIds } from "../profile/active";
-import { inputCeilingFor } from "../context/budget";
+import { effectiveInputCeiling } from "../context/budget";
 import type { TaskPreset } from "./presets";
 import { getToolDefinitions, partitionByGroup, type ToolId } from "./registry";
 import { routePlannedTools, type RouteOptions } from "./routing";
@@ -136,8 +136,8 @@ export function messageCeilingFor(
   models: Model[],
   options?: RouteOptions,
 ): number {
-  const ceiling = inputCeilingFor(contextSize, utilization);
-  return flooredCeiling(ceiling, plannedToolTokens(preset, subs, models, options));
+  const toolTokens = plannedToolTokens(preset, subs, models, options);
+  return flooredCeiling(effectiveInputCeiling(contextSize, utilization, toolTokens), toolTokens);
 }
 
 /**
@@ -153,7 +153,8 @@ export function messageCeilingForTools(
   tools: readonly ToolId[],
 ): number {
   const { resident } = partitionByGroup(tools);
-  return flooredCeiling(inputCeilingFor(contextSize, utilization), toolTokensOf(resident));
+  const toolTokens = toolTokensOf(resident);
+  return flooredCeiling(effectiveInputCeiling(contextSize, utilization, toolTokens), toolTokens);
 }
 
 /** Test seam — the memo is keyed on live profile state. */

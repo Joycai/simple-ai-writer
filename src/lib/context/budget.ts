@@ -141,6 +141,52 @@ export function inputCeilingFor(contextSize: number | undefined, utilization: nu
     : ASSUMED_INPUT_CEILING_TOKENS;
 }
 
+/**
+ * Least share of the window a tool run keeps for its **messages**, whatever the
+ * 窗口占用 setting works out to (docs/feature/agent/window-edge-plan.md D3, the
+ * author's option a).
+ *
+ * The setting means "how much of the window one request may use". When the tool
+ * schemas alone eat most of that, what it actually delivers is a run that cannot
+ * work: the assistant tier's schemas are ~10.8k tokens, so a 32k model at the
+ * default 50% had 5,172 tokens for the system layer *and* the conversation, and
+ * every file it read was trimmed before it could be read — measured, 223 s and no
+ * edit at 50% against 49 s and the edit made at 90%, same model, same task.
+ */
+export const WORKING_FLOOR_SHARE = 0.35;
+
+/**
+ * The working floor never raises the ceiling past this share of the window: the
+ * rest stays for the reply and its thinking, which on a thinking model is the
+ * part that runs out first (window-edge-plan.md M3/M6).
+ */
+export const FLOOR_CAP_SHARE = 0.75;
+
+/**
+ * The input ceiling a run plans against: the author's 窗口占用, raised — never
+ * lowered — when the tool schemas would otherwise leave the messages less than
+ * {@link WORKING_FLOOR_SHARE} of the window, and never past
+ * {@link FLOOR_CAP_SHARE}.
+ *
+ * One function for every producer (the chat and roleplay runs and bars, the AI
+ * panel's plan, pack sub-runs, the consistency review), because the bar that
+ * draws a ceiling and the loop that trims to it must agree to the token.
+ * A window the model doesn't declare gets the assumed ceiling, unraised.
+ */
+export function effectiveInputCeiling(
+  contextSize: number | undefined,
+  utilization: number,
+  toolTokens: number,
+): number {
+  const set = inputCeilingFor(contextSize, utilization);
+  if (!contextSize || contextSize <= 0) return set;
+  const floor = Math.min(
+    Math.max(0, toolTokens) + Math.ceil(contextSize * WORKING_FLOOR_SHARE),
+    Math.floor(contextSize * FLOOR_CAP_SHARE),
+  );
+  return Math.max(set, floor);
+}
+
 /** Floor for the reply reserve, in tokens. */
 const OUTPUT_RESERVE_MIN_TOKENS = 2_000;
 
@@ -236,8 +282,9 @@ export interface ContextBudgetPlan {
   /** False when the model declared no context size and constants were used. */
   dynamic: boolean;
   /**
-   * The whole request's input ceiling (window × utilization − output reserve),
-   * tool schemas included (0 when static).
+   * The whole request's input ceiling (window × utilization, raised by the
+   * working floor when the tool schemas crowd it — see effectiveInputCeiling —
+   * minus the output reserve), tool schemas included (0 when static).
    *
    * Deliberately *not* reduced by the tool schemas: this is the denominator the
    * AI panel's budget bar draws against, and the schemas are meant to read as
@@ -300,9 +347,11 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     charsPerToken,
     input.maxOutputTokens,
   );
+  // The author's share, raised by the working floor when the tool schemas crowd
+  // it (effectiveInputCeiling) — then the reply's reserve comes off, as before.
   const inputCeilingTokens = Math.max(
     0,
-    Math.floor(input.contextSize * util) - reservedOutputTokens,
+    effectiveInputCeiling(input.contextSize, util, input.toolSchemaTokens ?? 0) - reservedOutputTokens,
   );
   // Clamped to the ceiling rather than allowed to go negative: a toolset larger
   // than the whole window is a configuration the planner cannot fix, and the
