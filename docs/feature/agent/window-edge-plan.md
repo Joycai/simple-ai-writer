@@ -1,6 +1,6 @@
 # 窗口边缘：卡死、重读循环与「完成了却什么都没写」
 
-> 状态：`implemented`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行，六片全部实施；PR-5 待合并与真机）
+> 状态：`implemented`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行，六片全部合并：#577 / #578 / #580 / #581 / #582 / #583；待作者真机验证后改 `shipped`）
 > 起因：作者报告本地小模型（qwen3.8-27b，LM Studio，32k）「经常卡死、死循环、突然中断」。拿真实运行时对着真实端点量了一遍，三个症状对应到六个机制——其中五个**跟窗口走，不跟模型走**：同样的上限压到 DeepSeek 上，它一样重读、一样把轮次花在记账上，只是每轮快十倍，所以看不出来。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（「省一轮 ≈ 一整份工具表」的量纲）· [`agent-tool-context.md`](agent-tool-context.md)（常驻工具的成本账）· [`compact-threshold-plan.md`](compact-threshold-plan.md)（归纳触发线）· [`../../api/streaming.md`](../../api/streaming.md)（失败怎么送达）
 > 台架：`scripts/local-model-probe.ts`（§7）
