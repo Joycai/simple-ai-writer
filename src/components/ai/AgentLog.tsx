@@ -154,6 +154,32 @@ function unrecoveredTruncation(
   return { key: "ai.agent.log.outputTruncated", defaultValue: "输出被上限截断，回答未写完" };
 }
 
+type TruncationRecovery = NonNullable<Extract<AgentEvent, { kind: "output-truncated" }>["recovery"]>;
+
+/** The sentence for a truncation the runtime did something about. */
+function recoverySentence(t: TFunction, recovery: TruncationRecovery): string {
+  switch (recovery.kind) {
+    case "text":
+      return t("ai.agent.log.truncatedContinued", {
+        defaultValue: "输出被上限截断，已让它接着写（第 {{n}} 次）",
+        n: recovery.attempt,
+      });
+    case "tool-args":
+      return t("ai.agent.log.truncatedRetried", {
+        defaultValue: "工具调用被上限截断并丢弃，已要求分段重写（第 {{n}} 次）",
+        n: recovery.attempt,
+      });
+    case "thinking-off":
+      return t("ai.agent.log.thinkingBudgetOff", {
+        defaultValue: "思考用掉了窗口剩余空间的一半，还没开始作答 —— 已中止这一轮，关掉思考重答一次",
+      });
+    case "answer-now":
+      return t("ai.agent.log.thinkingBudgetAnswerNow", {
+        defaultValue: "思考用掉了窗口剩余空间的一半，还没开始作答 —— 已中止这一轮，要求直接作答重试一次",
+      });
+  }
+}
+
 /**
  * How long the live round has been going, `M:SS`, ticking once a second.
  *
@@ -687,18 +713,7 @@ function AgentLogRow({ row, showTime, runStatus }: {
           <span className={styles.rowIndent} />
           <span className={styles.rowMetaText}>
             {event.recovery
-              ? t(
-                  event.recovery.kind === "text"
-                    ? "ai.agent.log.truncatedContinued"
-                    : "ai.agent.log.truncatedRetried",
-                  {
-                    defaultValue:
-                      event.recovery.kind === "text"
-                        ? "输出被上限截断，已让它接着写（第 {{n}} 次）"
-                        : "工具调用被上限截断并丢弃，已要求分段重写（第 {{n}} 次）",
-                    n: event.recovery.attempt,
-                  },
-                )
+              ? recoverySentence(t, event.recovery)
               : (() => {
                   const sentence = unrecoveredTruncation(event);
                   return t(sentence.key, { defaultValue: sentence.defaultValue });
@@ -925,9 +940,8 @@ function useHeadline(model: AgentLogModel): string {
         leg: current.leg,
       });
     case "output-truncated": {
-      const sentence = current.recovery
-        ? { key: "ai.agent.log.outputTruncated", defaultValue: "输出被上限截断，回答未写完" }
-        : unrecoveredTruncation(current);
+      if (current.recovery) return recoverySentence(t, current.recovery);
+      const sentence = unrecoveredTruncation(current);
       return t(sentence.key, { defaultValue: sentence.defaultValue });
     }
     case "handoff":

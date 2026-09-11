@@ -46,7 +46,7 @@ export type TruncationDecision = { action: "continue" } | { action: "stop" };
  * Which limit cut a reply short — see the `output-truncated` event. The two want
  * opposite remedies, which is the whole reason to tell them apart.
  */
-export type TruncationCause = "window" | "output-cap";
+export type TruncationCause = "window" | "output-cap" | "thinking-budget";
 
 export type ToolStepStatus = "running" | "done" | "error";
 
@@ -492,7 +492,9 @@ export type AgentEvent = AgentEventScope & (
        * Which limit it was, when the runtime could tell — it needs the model's
        * window size and the endpoint's usage figures. `window`: prompt plus
        * reply filled the context window, so asking for the rest cannot work.
-       * `output-cap`: the per-reply cap. Absent when unknowable, which is also
+       * `output-cap`: the per-reply cap. `thinking-budget`: the runtime itself cut
+       * the round, because thinking alone had used half the room left in the
+       * window with no answer started (window-edge-plan.md D6). Absent when unknowable, which is also
        * every event from before the distinction existed
        * (docs/feature/agent/window-edge-plan.md M3).
        */
@@ -514,8 +516,13 @@ export type AgentEvent = AgentEventScope & (
        * `attempt` counts recoveries in this run, so the log shows a pattern
        * rather than three identical lines. Absent on older events, and on the
        * surfaces that only report truncation without recovering from it.
+       *
+       * `thinking-off` / `answer-now` — the runtime cut a round for its thinking
+       * budget (`cause: "thinking-budget"`) and retried it once, with thinking
+       * switched off for that one request where the model's category can say
+       * so, else with a notice to answer directly.
        */
-      recovery?: { kind: "text" | "tool-args"; attempt: number };
+      recovery?: { kind: "text" | "tool-args" | "thinking-off" | "answer-now"; attempt: number };
       at: number;
     }
   | {
