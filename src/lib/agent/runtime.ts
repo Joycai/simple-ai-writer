@@ -147,6 +147,20 @@ async function runLanes<T>(
 const CHECKPOINT_RATIO = 0.85;
 
 /**
+ * Fewest rounds between two checkpoint notices.
+ *
+ * A notice re-arms after trimming really dropped something — a long task that
+ * checkpointed once and then kept losing results gained nothing from the first
+ * note (docs/feature/agent/subagent-lld.md). But on a small window trimming
+ * happens nearly every round and the estimate never falls back under the 85%
+ * line, so "re-arm on every trim" meant a notice every other round: measured
+ * runs spent 2 of 6 and 5 of 8 rounds writing notes and ticking checklists
+ * (docs/feature/agent/window-edge-plan.md M2). The spacing keeps the first
+ * behaviour and caps the second.
+ */
+const CHECKPOINT_MIN_GAP_ROUNDS = 4;
+
+/**
  * Tool rounds of checklist silence tolerated before the runtime reminds the
  * model to bring task.md up to date. A nudge, not a verification: only the
  * model knows which tool call finished which step, so the enforceable half is
@@ -197,6 +211,66 @@ function elideOldImageResults(history: StreamMessage[]): number {
 }
 
 /**
+ * Earlier tool-call argument strings at least this long may be elided when the
+ * ceiling needs the room. Paths, slugs and short find strings stay: they cost
+ * little, and they are how the model recognises its own earlier call.
+ */
+const ELIDE_ARGUMENT_MIN_CHARS = 300;
+
+function elidedArgument(chars: number): string {
+  return `[${chars} characters dropped to stay within the model's context window]`;
+}
+
+/**
+ * The same arguments with every long string replaced by a placeholder, or null
+ * when nothing was long enough to be worth it.
+ *
+ * Walks the parsed object rather than cutting the raw text, because the result
+ * must stay valid JSON: the Anthropic and Gemini adapters re-parse every past
+ * call's arguments, and one that no longer parses breaks every later request.
+ * Arguments that don't parse are left alone — a broken call never reaches
+ * history (see `argumentsUsable`), and this is not the place to find out.
+ */
+function shrinkToolArguments(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  let changed = false;
+  const walk = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      if (value.length < ELIDE_ARGUMENT_MIN_CHARS) return value;
+      changed = true;
+      return elidedArgument(value.length);
+    }
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
+    }
+    return value;
+  };
+  const next = walk(parsed);
+  return changed ? JSON.stringify(next) : null;
+}
+
+/**
+ * Where the round in progress starts: the index of the last assistant message
+ * when it carries tool calls. When the last assistant message is an answer
+ * instead — a finished turn, a fresh question after it — nothing is in flight,
+ * and the whole history is `history.length` away from being protected.
+ */
+function roundInProgressStart(history: StreamMessage[]): number {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "assistant") continue;
+    return "tool_calls" in m && m.tool_calls.length > 0 ? i : history.length;
+  }
+  return history.length;
+}
+
+/**
  * Keep the growing history inside the planned input ceiling.
  *
  * The first turn is budgeted to fill the window up to the author's utilization
@@ -223,7 +297,30 @@ function elideOldImageResults(history: StreamMessage[]): number {
  * *text* are never touched; if those alone overflow, that is a planning bug and
  * the pre-flight check should say so rather than this quietly hiding it.
  *
- * Returns how many results were elided so the caller can log it.
+ * **The round in progress is never trimmed** (docs/feature/agent/window-edge-plan.md
+ * M1). From the last assistant message onward, when that message is a tool
+ * call, is what the model is about to read for the first time: the results,
+ * their picture follow-ups, the receipt of its own approved write. On a small
+ * window those used to be the first thing to go — the untrimmable part (system
+ * layer, questions, arguments) already sat at the ceiling — so the model saw a
+ * placeholder, read the file again, and saw the placeholder again until the
+ * round cap. Measured: a 32k run that made no edit in 223 s made it in 49 s
+ * with room to spare, and DeepSeek under the same ceiling re-read four times.
+ * When the ceiling cannot be met without touching the round in progress, the
+ * request goes out over it: the pre-flight check then reports a real overflow,
+ * which is honest where a silently deleted result is not.
+ *
+ * After earlier results and pictures, the **long string arguments of earlier
+ * tool calls** go, oldest first — a chapter passed to `create_file`, the
+ * analysis a `write_note` carried, a `propose_edit`'s find text. They are the
+ * part of a tool-heavy history that only grows, and nothing reclaimed them, so
+ * once they alone filled the ceiling every later result was elided on arrival.
+ * The call itself stays, with its short fields and valid JSON. Skipped on calls
+ * whose provider replays its own copy (Gemini's model parts, Responses items,
+ * Anthropic's signed thinking): shrinking ours would lower the estimate without
+ * changing the wire — or, for a signed block, break it.
+ *
+ * Returns how many messages it changed so the caller can log it.
  */
 export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
   // Images first, and unconditionally. The token estimate charges a flat rate
@@ -235,8 +332,18 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   let dropped = elideOldImageResults(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
   if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
-  for (const m of history) {
-    if (m.role === "tool" && m.content !== ELIDED_TOOL_RESULT) {
+  const protectedFrom = roundInProgressStart(history);
+
+  for (let i = 0; i < protectedFrom; i++) {
+    const m = history[i];
+    // A result no longer than its placeholder stays: replacing "Note saved."
+    // with a sentence about dropping it buys nothing and loses the fact.
+    if (
+      m.role === "tool" &&
+      typeof m.content === "string" &&
+      m.content !== ELIDED_TOOL_RESULT &&
+      m.content.length > ELIDED_TOOL_RESULT.length
+    ) {
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
     } else if (hasImageParts(m)) {
@@ -245,7 +352,24 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     } else {
       continue;
     }
-    if (estimateMessagesTokens(history) <= ceilingTokens) break;
+    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
+  }
+
+  for (let i = 0; i < protectedFrom; i++) {
+    const m = history[i];
+    if (m.role !== "assistant" || !("tool_calls" in m)) continue;
+    if (m._geminiModelParts || m._responseItems || m._thinkingBlocks) continue;
+    let changed = false;
+    const calls = m.tool_calls.map((tc) => {
+      const next = shrinkToolArguments(tc.function.arguments);
+      if (next === null) return tc;
+      changed = true;
+      return { ...tc, function: { ...tc.function, arguments: next } };
+    });
+    if (!changed) continue;
+    m.tool_calls = calls;
+    dropped++;
+    if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
   }
   return dropped;
 }
@@ -469,7 +593,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     truncationRecoveries = 0;
     return true;
   };
-  let checkpointArmed = false;
+  /** Round of the last checkpoint notice; 0 = none yet this run. */
+  let lastCheckpointRound = 0;
+  /** Whether trimming has dropped anything since that notice — what re-arms it. */
+  let trimmedSinceCheckpoint = false;
   /** Tool rounds since the model last wrote to the checklist — see TASK_NUDGE_ROUNDS. */
   let roundsSinceTaskTouch = 0;
   /**
@@ -676,7 +803,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // the ceiling as group loads shrink it.
       messageCeiling &&
       estimateMessagesTokens(history) > messageCeiling * CHECKPOINT_RATIO &&
-      !checkpointArmed
+      (lastCheckpointRound === 0 ||
+        (trimmedSinceCheckpoint && round - lastCheckpointRound >= CHECKPOINT_MIN_GAP_ROUNDS))
     ) {
       checkpointNotice = {
         role: "user",
@@ -686,7 +814,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         }),
       };
       history.push(checkpointNotice);
-      checkpointArmed = true;
+      lastCheckpointRound = round;
+      trimmedSinceCheckpoint = false;
     }
 
     // The checklist staleness nudge. task.md only advances when the model
@@ -725,7 +854,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     const dropped = trimHistory(history, messageCeiling);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
-      checkpointArmed = false;
+      // Re-arms the checkpoint notice, but only past CHECKPOINT_MIN_GAP_ROUNDS.
+      trimmedSinceCheckpoint = true;
     }
 
     opts.onEvent({
