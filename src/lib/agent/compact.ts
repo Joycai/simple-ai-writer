@@ -48,6 +48,22 @@ export const FOLD_RESULT_CLIP = 200;
  */
 export const FOLD_TEXT_CLIP = 2000;
 
+/**
+ * A fold that cannot bring the history back under its own trigger waits until
+ * the history reaches this share of the message ceiling
+ * (docs/feature/agent/window-edge-plan.md D8).
+ *
+ * Without it, once the fixed part — the system layer, the summary's budget and
+ * the {@link MIN_KEEP_TURNS} turns always kept verbatim — sits above the
+ * trigger, every send folds one turn, lands back above the line, and folds
+ * again on the next. Measured on a 32k local model with the line forced below
+ * that floor: three sends, three folds, reclaiming 976 → 549 → 396 tokens while
+ * each summarize request took 9 → 15 → 19 s, two to three times the turn it
+ * preceded. Deferring to near the ceiling keeps the fold that is actually
+ * needed and drops the ones that only cost a request.
+ */
+export const FOLD_DEFER_CEILING_SHARE = 0.9;
+
 // ── Author-set trigger (docs/feature/agent/compact-threshold-plan.md §B.0) ────
 
 /**
@@ -461,7 +477,10 @@ export interface FoldPlan {
  * turns). Folds oldest-first until the projection reaches the retain target,
  * always keeping the last {@link MIN_KEEP_TURNS} turns verbatim; when even the
  * maximum fold misses the target it still returns that best effort, because
- * freeing most of the room beats freeing none.
+ * freeing most of the room beats freeing none — except while that best effort
+ * would leave the history at or above the trigger and the history is still well
+ * under the ceiling: then it returns null, and the fold waits
+ * ({@link FOLD_DEFER_CEILING_SHARE}).
  *
  * `force` is the author's "compact now" button: the trigger check is skipped
  * (they asked, however full the bar is) and the fold is maximal — everything
@@ -500,7 +519,8 @@ export function planFold(
   const force = opts?.force ?? false;
   if (ceilingTokens <= 0) return null;
   const trigger = opts?.triggerTokens ?? ceilingTokens * COMPACT_TRIGGER;
-  if (!force && estimateMessagesTokens(history) <= trigger) return null;
+  const currentTokens = estimateMessagesTokens(history);
+  if (!force && currentTokens <= trigger) return null;
 
   const { prelude, turns } = segmentHistory(history, meta);
   const keepTurns = Math.max(1, opts?.keepTurns ?? MIN_KEEP_TURNS);
@@ -530,6 +550,16 @@ export function planFold(
     if (kept + candidate > target) break;
     kept += candidate;
     foldCount--;
+  }
+
+  // The hysteresis (FOLD_DEFER_CEILING_SHARE). The walk-back above only ever
+  // un-folds while the projection stays under the target, so when the maximum
+  // fold already lands at or above the trigger, `kept` is that maximum fold's
+  // projection. Folding now would buy one summarize request and a history that
+  // crosses the line again on the next send; wait until the ceiling forces it.
+  // A forced fold is the author's explicit request and is never deferred.
+  if (!force && kept >= trigger && currentTokens < ceilingTokens * FOLD_DEFER_CEILING_SHARE) {
+    return null;
   }
 
   return {

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  createSessionMeta, noteTurnStart, planFold, recordInjections, COMPACT_TRIGGER,
+  createSessionMeta, noteTurnStart, planFold, recordInjections, COMPACT_TRIGGER, FOLD_DEFER_CEILING_SHARE,
 } from "../agent/compact";
 import {
   computeContextBreakdown, computePreflightBreakdown, floorMarkPct,
@@ -34,18 +34,18 @@ function entity(dirPath: string): LoreEntity {
  * verbatim however full the bar is, so below that there is nothing to fold and
  * the bar deliberately draws no line at all.
  */
-function session(turns = 1) {
+function session(turns = 1, answerRepeat = 30) {
   const meta = createSessionMeta();
   const system: StreamMessage = { role: "system", content: "系统提示".repeat(20) };
   const seed: StreamMessage = { role: "user", content: "【知识库】".repeat(40) };
   const question: StreamMessage = { role: "user", content: "接着写" };
-  const answer: StreamMessage = { role: "assistant", content: "好的".repeat(30) };
+  const answer: StreamMessage = { role: "assistant", content: "好的".repeat(answerRepeat) };
   meta.seedContext = seed;
   recordInjections(meta, [entity("lore/characters/a")], seed);
   const history: StreamMessage[] = [system, seed];
   for (let i = 0; i < turns; i++) {
     const q = i === 0 ? question : { role: "user" as const, content: "再写" };
-    const a = i === 0 ? answer : { role: "assistant" as const, content: "好的".repeat(30) };
+    const a = i === 0 ? answer : { role: "assistant" as const, content: "好的".repeat(answerRepeat) };
     noteTurnStart(meta, q);
     history.push(q, a);
   }
@@ -139,7 +139,11 @@ describe("computeContextBreakdown", () => {
   });
 
   it("warns the moment the mark is crossed, not once the bar is packed", () => {
-    const { meta, history } = session(FOLDABLE_TURNS);
+    // Turns big enough that a fold actually gets back under the line. With toy
+    // turns the fold's own floor (the summary's budget) sits above the trigger,
+    // and planFold's hysteresis rightly declines — that case has its own tests
+    // below ("a fold that would not help").
+    const { meta, history } = session(6, 750);
     const used = computeContextBreakdown(history, meta, 0, 100_000, 128_000).usedTokens;
 
     // Below the trigger: calm on both counts.
@@ -273,14 +277,55 @@ describe("折叠线 vs planFold 的真实触发点", () => {
  * `AgentChat` 早就算出了这个条件（`canCompact`，管着「立即归纳」按钮的显隐）：
  * 按钮消失了，线还在，框还是黄的。
  */
+/**
+ * window-edge-plan.md D8. Past the line, but no fold could bring the history
+ * back under it (the fold keeps the system layer, the summary's budget and two
+ * turns), and the history is still well under the ceiling: the store waits,
+ * so the bar must not promise a fold at this line.
+ */
+describe("a fold that would not help", () => {
+  // Toy turns: the summary's budget alone outweighs them.
+  function deferredCase() {
+    const { history, meta } = session(FOLDABLE_TURNS);
+    const messages = estimateMessagesTokens(history);
+    const ceiling = Math.floor(messages / 0.8);
+    expect(messages).toBeGreaterThan(ceiling * COMPACT_TRIGGER);
+    expect(messages).toBeLessThan(ceiling * FOLD_DEFER_CEILING_SHARE);
+    return { history, meta, ceiling };
+  }
+
+  it("says the fold is deferred and draws no promise while there is room below the ceiling", () => {
+    const { history, meta, ceiling } = deferredCase();
+    const bar = computeContextBreakdown(history, meta, 0, ceiling, 128_000);
+    expect(planFold(history, meta, ceiling)).toBeNull();
+    expect(bar.foldDeferred).toBe(true);
+    expect(bar.willCompact).toBe(false);
+    expect(bar.compactMarkerPct).toBeNull();
+    expect(bar.over).toBe(false);
+  });
+
+  it("is not deferred with automatic folding off — nothing automatic is waiting", () => {
+    const { history, meta, ceiling } = deferredCase();
+    const bar = computeContextBreakdown(history, meta, 0, ceiling, 128_000, {
+      autoCompact: false, triggerTokens: 1_000_000, triggerRatio: 0.8,
+    });
+    expect(bar.foldDeferred).toBe(false);
+    // The 自动归纳已关 sentence keys on this: the author's button would fold.
+    expect(bar.willCompact).toBe(true);
+  });
+});
+
 describe("没有可折的东西时不画线", () => {
+  // 每轮 600 + 600 字：一轮要比折叠自带的那份摘要预算（SUMMARY_BUDGET_TOKENS）
+  // 大，折掉一轮才真的能回到线下——否则 planFold 的回差会（正确地）不折，这组
+  // 用例要钉的「门开在 MIN_KEEP_TURNS 上」就测不到了。
   function turnsOf(n: number) {
     const meta = createSessionMeta();
     const history: StreamMessage[] = [{ role: "system", content: "系统提示" }];
     for (let i = 0; i < n; i++) {
-      const q: StreamMessage = { role: "user", content: "问".repeat(400) };
+      const q: StreamMessage = { role: "user", content: "问".repeat(600) };
       noteTurnStart(meta, q);
-      history.push(q, { role: "assistant", content: "答".repeat(400) });
+      history.push(q, { role: "assistant", content: "答".repeat(600) });
     }
     return { history, meta };
   }

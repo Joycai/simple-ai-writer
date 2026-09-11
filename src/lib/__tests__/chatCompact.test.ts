@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   COMPACT_TRIGGER,
+  FOLD_DEFER_CEILING_SHARE,
   FOLD_RESULT_CLIP,
   MIN_KEEP_TURNS,
   RETAIN_TARGET,
@@ -176,6 +177,45 @@ describe("planFold", () => {
     expect(plan!.fold).toHaveLength(1);
     expect(plan!.keep).toHaveLength(MIN_KEEP_TURNS);
     expect(plan!.projectedTokens).toBeGreaterThan(20_000 * RETAIN_TARGET);
+  });
+
+  /**
+   * The hysteresis (window-edge-plan.md D8). Measured before it existed: with
+   * the line below what a fold can reach, every send folded one turn, landed
+   * back above the line, and folded again — 9, 15, 19 s of summarizing for
+   * 976, 549, 396 tokens reclaimed.
+   */
+  it("defers a fold that would land back above its own trigger while there is room", () => {
+    const { history, meta } = makeSession({
+      turns: [
+        [q(cjkBlock(500)), a(cjkBlock(500))],
+        [q(cjkBlock(3500)), a(cjkBlock(3500))],
+        [q(cjkBlock(3500)), a(cjkBlock(3500))],
+      ],
+    });
+    const ceiling = 20_000; // trigger 14,000; room until 18,000
+    expect(estimateMessagesTokens(history)).toBeGreaterThan(ceiling * COMPACT_TRIGGER);
+    expect(estimateMessagesTokens(history)).toBeLessThan(ceiling * FOLD_DEFER_CEILING_SHARE);
+    // The two kept turns alone are above the line, so no fold could get under it.
+    expect(planFold(history, meta, ceiling)).toBeNull();
+    // The author's button is never deferred.
+    expect(planFold(history, meta, ceiling, { force: true })).not.toBeNull();
+  });
+
+  it("still folds that best effort once the history nears the ceiling", () => {
+    const { history, meta } = makeSession({
+      turns: [
+        [q(cjkBlock(2000)), a(cjkBlock(2000))],
+        [q(cjkBlock(3500)), a(cjkBlock(3500))],
+        [q(cjkBlock(3500)), a(cjkBlock(3500))],
+      ],
+    });
+    const ceiling = 20_000;
+    expect(estimateMessagesTokens(history)).toBeGreaterThanOrEqual(ceiling * FOLD_DEFER_CEILING_SHARE);
+    const plan = planFold(history, meta, ceiling);
+    expect(plan).not.toBeNull();
+    expect(plan!.fold).toHaveLength(1);
+    expect(plan!.projectedTokens).toBeGreaterThanOrEqual(ceiling * COMPACT_TRIGGER);
   });
 
   it("force: folds under the trigger, maximally", () => {
