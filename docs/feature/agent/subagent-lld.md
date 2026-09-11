@@ -418,6 +418,7 @@ if (
 
 - `CHECKPOINT_RATIO = 0.85`。必须**早于** `trimHistory` 的触发点（后者在 `> inputCeilingTokens` 时才动手），否则提醒发出时内容已经被删了。
 - `checkpointArmed` 在**每次 `trimHistory` 真正丢弃了内容之后重新置回 `false`**（`dropped > 0` 时）。第一版只置一次，等于整段运行只 checkpoint 一次，长任务照样丢。
+  - **2026-09-11 修订**（[`window-edge-plan.md`](window-edge-plan.md) M2 / PR-1）：重新布防保留，但两次提示之间至少隔 `CHECKPOINT_MIN_GAP_ROUNDS`（4）轮，变量改为 `lastCheckpointRound` + `trimmedSinceCheckpoint`。原因是小窗口上几乎每轮都裁、估算永远在 85% 之上，「每裁一次就重新布防」退化成隔轮一次——实测 2/6、5/8 的轮次花在写笔记和勾清单上。同一片 PR 起 `trimHistory` 也不再裁**本轮刚到**的结果，所以提醒发出之前模型至少读到过一次内容。
 
 `preset.scratchpad` 新增于 `TaskPreset`：
 

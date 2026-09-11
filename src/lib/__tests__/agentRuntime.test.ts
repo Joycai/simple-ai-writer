@@ -777,6 +777,95 @@ describe("trimHistory", () => {
     expect(trimHistory(history, undefined)).toBe(2);
     expect(history[0].content).toBe("y".repeat(4000));
   });
+
+  const call = (id: string, name: string, args: string): StreamMessage => ({
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id, type: "function", function: { name, arguments: args } }],
+  });
+
+  it("never elides the round in progress, even when that leaves the history over the ceiling", () => {
+    // The shape a 32k window is in from round one: the part nothing may trim
+    // already fills the ceiling. Eliding the result the model is about to read
+    // is what turned that into a re-read loop (window-edge-plan.md M1).
+    const history: StreamMessage[] = [
+      { role: "system", content: "s".repeat(4000) },
+      { role: "user", content: "go" },
+      call("c1", "read_file", '{"path":"a.md"}'),
+      { role: "tool", tool_call_id: "c1", content: "y".repeat(800) },
+    ];
+
+    expect(trimHistory(history, 100)).toBe(0);
+    expect(history[3].content).toBe("y".repeat(800));
+  });
+
+  it("elides an earlier round's result but not the one just read", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      call("c1", "read_file", '{"path":"a.md"}'),
+      { role: "tool", tool_call_id: "c1", content: "a".repeat(800) },
+      call("c2", "read_file", '{"path":"b.md"}'),
+      { role: "tool", tool_call_id: "c2", content: "b".repeat(800) },
+    ];
+
+    trimHistory(history, 300);
+
+    expect(history[3].content).not.toBe("a".repeat(800));
+    expect(history[5].content).toBe("b".repeat(800));
+  });
+
+  it("protects nothing once the last assistant message is an answer rather than a call", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      call("c1", "read_file", '{"path":"a.md"}'),
+      { role: "tool", tool_call_id: "c1", content: "a".repeat(800) },
+      { role: "assistant", content: "done" },
+      { role: "user", content: "next question" },
+    ];
+
+    expect(trimHistory(history, 60)).toBe(1);
+    expect(history[2].content).not.toBe("a".repeat(800));
+  });
+
+  it("shrinks an earlier call's long arguments to valid JSON when results alone are not enough", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      call("c1", "write_note", JSON.stringify({ slug: "plan", content: "章".repeat(1200) })),
+      { role: "tool", tool_call_id: "c1", content: "Note saved." },
+      call("c2", "read_file", '{"path":"a.md"}'),
+      { role: "tool", tool_call_id: "c2", content: "b".repeat(400) },
+    ];
+
+    expect(trimHistory(history, 400)).toBe(1);
+
+    const old = history[2] as Extract<StreamMessage, { tool_calls: unknown }>;
+    const args = JSON.parse(old.tool_calls[0].function.arguments);
+    expect(args.slug).toBe("plan"); // the short field that names the call stays
+    expect(args.content).not.toContain("章");
+    // Shorter than its placeholder, so eliding it would have bought nothing.
+    expect(history[3].content).toBe("Note saved.");
+    expect(history[5].content).toBe("b".repeat(400));
+  });
+
+  it("leaves arguments alone on a call whose provider replays its own copy", () => {
+    const replayed = {
+      ...call("c1", "write_note", JSON.stringify({ slug: "p", content: "x".repeat(2000) })),
+      _geminiModelParts: [{}],
+    } as StreamMessage;
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      replayed,
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+      call("c2", "read_file", '{"path":"a.md"}'),
+      { role: "tool", tool_call_id: "c2", content: "fine" },
+    ];
+
+    expect(trimHistory(history, 50)).toBe(0);
+    const args = JSON.parse((history[1] as Extract<StreamMessage, { tool_calls: unknown }>).tool_calls[0].function.arguments);
+    expect(args.content).toBe("x".repeat(2000));
+  });
 });
 
 describe("repairToolCallPairing", () => {
