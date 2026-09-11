@@ -22,7 +22,7 @@ import type {
 } from "../ai/types";
 import {
   createServerToolLog, type AgentEvent, type RoundLimitDecision, type ToolStep,
-  type TruncationDecision,
+  type TruncationCause, type TruncationDecision,
 } from "./events";
 
 // Re-exported: callers reach the round-cap contract through the runtime that
@@ -67,6 +67,29 @@ const ABORTED_TOOL_RESULT = "[not run — the user stopped the task]";
  * 继续 grants the same allowance again.
  */
 const TRUNCATION_RECOVERY_LIMIT = 3;
+
+/**
+ * Which limit a truncated round ran into, or undefined when that can't be told.
+ *
+ * The context window and the per-reply cap want opposite remedies. A capped
+ * reply is resumed by asking for the rest; a full window cannot be, because the
+ * continuation request carries a longer history than the one that just ran out.
+ * Telling them apart needs the window size and the endpoint's usage figures,
+ * and without either the answer is "don't know" rather than a guess.
+ *
+ * The slack absorbs framing tokens the usage figures leave out, and the common
+ * gap between a window the author declared (32,768) and the one the server
+ * actually loaded — LM Studio reported exactly 32,000 when it ran out.
+ */
+export function truncationCause(
+  inputTokens: number,
+  outputTokens: number,
+  contextSize: number | undefined,
+): TruncationCause | undefined {
+  if (!contextSize || contextSize <= 0 || inputTokens <= 0) return undefined;
+  const slack = Math.max(64, Math.floor(contextSize * 0.03));
+  return inputTokens + outputTokens >= contextSize - slack ? "window" : "output-cap";
+}
 
 /** Whether a tool call's arguments survived the response intact. */
 function argumentsUsable(raw: string): boolean {
@@ -422,8 +445,14 @@ export interface AgentRunResult {
    * How the run ended.
    * - "completed": the model produced prose (normal finish).
    * - "paused": the author chose 存盘暂停 at the round cap.
+   * - "truncated": the run ended on a cut-off it did not recover from — the
+   *   context window filled, the whole reply went to thinking, or the
+   *   recoveries were stopped. Whatever text arrived is still the output; the
+   *   log's last `output-truncated` row says which. Before this existed such a
+   *   run reported "completed", with nothing written
+   *   (docs/feature/agent/window-edge-plan.md M3).
    */
-  outcome: "completed" | "paused";
+  outcome: "completed" | "paused" | "truncated";
 }
 
 export interface AgentRuntimeOptions extends ConnOptions {
@@ -762,6 +791,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
      */
     let roundUsedServerTools = false;
     let roundStopReason: string | undefined;
+    /** Which limit cut this round off, when the runtime could tell. */
+    let roundTruncationCause: TruncationCause | undefined;
     let roundGeminiModelParts: unknown[] | undefined;
     let roundReasoning: NativeReasoning | undefined;
     let roundThinkingBlocks: ThinkingBlockCarry | undefined;
@@ -985,6 +1016,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             if (chunk.truncated) {
               roundTruncated = true;
               roundStopReason = chunk.stopReason;
+              roundTruncationCause = truncationCause(
+                chunk.inputTokens, chunk.outputTokens, opts.contextSize,
+              );
             }
           }
         },
@@ -1163,11 +1197,21 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // assistant messages side by side, and the Anthropic protocol requires
       // the roles to alternate. It is also simply true: the model was asked to
       // continue, and the next turn should see that it was.
-      if (roundTruncated && roundText.trim() && (await mayRecoverFromTruncation())) {
+      //
+      // Not when the window itself is full: the continuation would carry this
+      // round's text on top of the history that just ran out, so it can only be
+      // cut again, sooner (docs/feature/agent/window-edge-plan.md M3).
+      if (
+        roundTruncated &&
+        roundText.trim() &&
+        roundTruncationCause !== "window" &&
+        (await mayRecoverFromTruncation())
+      ) {
         opts.onEvent({
           kind: "output-truncated",
           round,
           stopReason: roundStopReason,
+          ...(roundTruncationCause ? { cause: roundTruncationCause } : {}),
           recovery: { kind: "text", attempt: truncationRecoveries },
           at: Date.now(),
         });
@@ -1183,8 +1227,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         continue;
       }
       if (roundTruncated) {
+        // Nothing but thinking before the cut: no answer was started, and
+        // "continue" cannot start one — the model would think again from the
+        // same place. Measured on a 32k local model: 307 s and 117k characters
+        // of reasoning, none of prose, reported as completed.
+        const thinkingOnly = !roundText.trim() && reasoningText.length > 0;
         opts.onEvent({
-          kind: "output-truncated", round, stopReason: roundStopReason, at: Date.now(),
+          kind: "output-truncated",
+          round,
+          stopReason: roundStopReason,
+          ...(roundTruncationCause ? { cause: roundTruncationCause } : {}),
+          ...(thinkingOnly ? { thinkingOnly: true as const } : {}),
+          at: Date.now(),
         });
       }
       return {
@@ -1192,7 +1246,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         cachedTokens: totalCachedTokens,
-        outcome: "completed",
+        outcome: roundTruncated ? "truncated" : "completed",
       };
     }
 
@@ -1422,19 +1476,30 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // ones the cap ate. Placed after the tool replies rather than instead of
     // them so a round that got one call through keeps that work.
     if (brokenCalls.length > 0) {
-      if (!(await mayRecoverFromTruncation())) {
+      // Writing it in smaller pieces is the remedy for the per-reply cap only:
+      // on a full window every piece rides on the same history, so the retry is
+      // cut off again before it gets anywhere.
+      if (roundTruncationCause === "window" || !(await mayRecoverFromTruncation())) {
+        opts.onEvent({
+          kind: "output-truncated",
+          round,
+          stopReason: roundStopReason,
+          ...(roundTruncationCause ? { cause: roundTruncationCause } : {}),
+          at: Date.now(),
+        });
         return {
           rounds: round,
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           cachedTokens: totalCachedTokens,
-          outcome: "completed",
+          outcome: "truncated",
         };
       }
       opts.onEvent({
         kind: "output-truncated",
         round,
         stopReason: roundStopReason,
+        ...(roundTruncationCause ? { cause: roundTruncationCause } : {}),
         recovery: { kind: "tool-args", attempt: truncationRecoveries },
         at: Date.now(),
       });

@@ -334,6 +334,13 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
   };
 }
 
+/** The last round's unrecovered `output-truncated`, if the run ended on one. */
+function endingTruncation(rounds: readonly RoundGroup[]): AgentEvent | null {
+  const events = rounds.length > 0 ? rounds[rounds.length - 1].events : [];
+  const cut = findLast(events, (e) => e.kind === "output-truncated");
+  return cut && cut.kind === "output-truncated" && !cut.recovery ? cut : null;
+}
+
 function pickCurrent({
   isRunning, top, preamble, rounds, done, error,
 }: {
@@ -346,7 +353,11 @@ function pickCurrent({
 }): AgentEvent | null {
   // Finished: the outcome is the headline, and a run that ended without one
   // (aborted, window closed) falls back to whatever it last managed to say.
-  if (!isRunning) return error ?? done ?? top[top.length - 1] ?? null;
+  // A cut-off the run ended on outranks `run-done`: "完成 · 32,000 tokens" over
+  // a run that wrote nothing is exactly the misreport the event exists to stop
+  // (docs/feature/agent/window-edge-plan.md M3). A recovered one is part of the
+  // story, not its ending.
+  if (!isRunning) return error ?? endingTruncation(rounds) ?? done ?? top[top.length - 1] ?? null;
 
   const events = rounds.length > 0 ? rounds[rounds.length - 1].events : preamble;
 
