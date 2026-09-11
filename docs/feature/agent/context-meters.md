@@ -89,6 +89,11 @@
 在图例展开时多一句「本次按 N% 计」（`ContextBreakdown.raisedFromTokens`），分配条
 暂时不说。
 
+**越过归纳线也不一定会归纳。** 折完仍会高于归纳线、而历史离上限还远时，`planFold` 先
+不折（`FOLD_DEFER_CEILING_SHARE`，[`window-edge-plan.md`](window-edge-plan.md) D8）。
+构成条不自己判断，直接问 `planFold`：这时 `foldDeferred` 为真，不画归纳线、不说「下一轮
+会归纳」，图例展开时解释为什么先不折。
+
 两处都记着同一类教训：**取错的那个值不会报错**。构成条曾经把折叠线画在
 `上限 × 0.7` 而真实触发点在 `上限 × 0.7 + 工具 × 0.3`；分配条曾经在 Agent 模式下
 把工具开销记成 0，于是承诺了 4,000 tk 的条目而实际注入零。两次都是测试全绿。

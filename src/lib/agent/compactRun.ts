@@ -14,7 +14,7 @@
 
 import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
-import type { ConnOptions } from "../ai/conn";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import {
@@ -117,15 +117,14 @@ export async function summarizeForCompaction(
 
   let text = "";
   await streamCompletion({
-    baseUrl: config.baseUrl,
-    apiKey: config.apiKey,
-    standard: config.standard,
-    modelId: config.modelId,
-    prefix: config.prefix,
-    contextSize: config.contextSize,
-    maxOutput: config.maxOutput,
-    safetySettings: config.safetySettings,
-    authMode: config.authMode,
+    // The whole connection, not a hand-picked subset. The list this used to be
+    // left out the model's thinking and temperature settings, so a model the
+    // author had set to 思考「关闭」 still thought through every fold — the one
+    // request in the app that ignored the setting, and it runs before the turn
+    // the author is waiting on (docs/feature/agent/window-edge-plan.md PR-5).
+    // Same shape as `structured.ts`: no server tools, a summary searches nothing.
+    ...pickConnOptions(config),
+    serverTools: undefined,
     messages: [
       { role: "system", content: i18n.t("ai.instructions.chatCompact") },
       { role: "user", content: parts.join("\n\n") },

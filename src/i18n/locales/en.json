@@ -1912,6 +1912,7 @@
       "ctxCompactExplain": "Past the tick, the next turn folds the oldest conversation into a summary — the log shows \"Compacted first N rounds\" and the summary segment widens.",
       "ctxOverExplain": "Already past this request's ceiling, and compacting can't reach it — the last two turns are never folded and the tool schemas can't be dropped. Raise Window usage, or start a new conversation.",
       "ctxRaisedExplain": "Window usage is set to {{set}}%, but the tool schemas take most of that — so this request uses {{now}}% to leave the conversation room to work.",
+      "ctxFoldDeferredExplain": "The conversation is long enough to fold, but folding wouldn't help yet — it would land back above the fold line, so every send would pay for another summary. It waits until the conversation nears the ceiling.",
       "ctxCompactNow": "Compact now",
       "ctxCompacting": "Compacting…",
       "ctxCompactNowTitle": "Fold the earlier conversation into a summary now, freeing context room",

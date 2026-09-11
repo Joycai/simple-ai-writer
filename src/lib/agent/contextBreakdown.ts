@@ -47,7 +47,7 @@
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import {
-  COMPACT_TRIGGER, MIN_KEEP_TURNS, compactTriggerFor, injectionCarriers, segmentHistory,
+  COMPACT_TRIGGER, MIN_KEEP_TURNS, compactTriggerFor, injectionCarriers, planFold, segmentHistory,
   type ChatSessionMeta, type CompactTriggerBound,
 } from "./compact";
 import { STATE_KEEP_TURNS } from "./skillState";
@@ -164,6 +164,17 @@ export interface ContextBreakdown {
    * meters exist to prevent (docs/feature/agent/context-meters.md).
    */
   raisedFromTokens: number | null;
+  /**
+   * Past the line, but the automatic fold is waiting: no fold could bring the
+   * history back under it, and the history is still well under the ceiling
+   * (`planFold`'s hysteresis, docs/feature/agent/window-edge-plan.md D8).
+   *
+   * Asked of `planFold` itself rather than re-derived, for the reason every
+   * other fold flag here gives: two copies of one rule drift. While true,
+   * `willCompact` is false and no mark is drawn — the mark promises a fold at
+   * this line, and the store will not make one there.
+   */
+  foldDeferred: boolean;
   /**
    * Whether the app folds on its own past the mark, or only when the author
    * presses 立即归纳. Off does not move the mark — it changes what the mark
@@ -366,9 +377,16 @@ export function computeContextBreakdown(
   const canFold = messageCeiling > 0 && foldableTurns > 0;
 
   const over = usedTokens > ceiling;
+  const autoCompact = compact?.autoCompact ?? true;
+  // Past the line with automatic folding on, but `planFold` declines: its
+  // hysteresis is waiting for the ceiling. Only asked when everything else says
+  // a fold is due, so the common case never pays for the planning walk.
+  const foldDeferred =
+    !stateMode && autoCompact && canFold && messageTokens > trigger.tokens && !!history && !!meta &&
+    planFold(history, meta, messageCeiling, { triggerTokens: trigger.tokens }) === null;
   // In state mode there is no line to cross: the fold is unconditional, so the
   // mark would promise a threshold that plays no part.
-  const willCompact = !stateMode && canFold && messageTokens > trigger.tokens;
+  const willCompact = !stateMode && canFold && messageTokens > trigger.tokens && !foldDeferred;
 
   return {
     segments: [
@@ -383,10 +401,11 @@ export function computeContextBreakdown(
     ceilingTokens: ceiling,
     contextSize,
     canFold,
-    compactMarkerPct: canFold && !stateMode ? Math.min(100, (compactAtTokens * 100) / span) : null,
+    compactMarkerPct: canFold && !stateMode && !foldDeferred ? Math.min(100, (compactAtTokens * 100) / span) : null,
     willCompact,
     over,
-    autoCompact: compact?.autoCompact ?? true,
+    foldDeferred,
+    autoCompact,
     compactBoundBy: trigger.boundBy,
     raisedFromTokens:
       authorCeilingTokens !== undefined && authorCeilingTokens < ceiling ? authorCeilingTokens : null,

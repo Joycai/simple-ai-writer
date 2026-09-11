@@ -115,6 +115,10 @@ import {
 import type { ApprovalDecision, Proposal } from "../src/lib/agent/registry";
 import { runAgent, type AgentRunResult } from "../src/lib/agent/runtime";
 import { createTaskWorkspace } from "../src/lib/agent/taskWorkspace";
+import { compactTriggerFor, createSessionMeta, noteTurnStart } from "../src/lib/agent/compact";
+import { compactChatHistory, summarizeForCompaction } from "../src/lib/agent/compactRun";
+import { estimateMessagesTokens } from "../src/lib/ai/tokenEstimate";
+import { COMPACT_TRIGGER_RATIO_DEFAULT, COMPACT_TRIGGER_TOKENS_DEFAULT } from "../src/lib/context/budget";
 import { messageCeilingForTools } from "../src/lib/agent/toolCost";
 import { promptParams } from "../src/lib/profile/active";
 
@@ -482,10 +486,190 @@ async function runScenario(s: Scenario) {
   return summary;
 }
 
+/**
+ * A conversation of several turns, compacted between turns the way the chat
+ * store does it (stores/agentStore.sendChat): fold if due, then the question,
+ * then the run. What it measures is how often a small window folds — each fold
+ * is one summarize request to the same model, paid before the turn starts
+ * (docs/feature/agent/window-edge-plan.md M5). Differences from the real store,
+ * kept on purpose so the numbers stay attributable: no seed block and no
+ * per-turn lore injection (this project has no knowledge base).
+ */
+interface ChatSession {
+  id: string;
+  turns: string[];
+}
+
+const CHAT_SESSIONS: ChatSession[] = [
+  {
+    id: "chat-session",
+    turns: [
+      "请读一下「第一章 雨夜.md」，告诉我码头那一段写了什么。",
+      "把码头那一段改得更有画面感，直接修改文件。",
+      "再读一下「第二章 旧账.md」，概括苏晚这个人物。",
+      "「第三章 周启明.md」里提到的钥匙，前面哪里出现过？",
+      "给「第三章 周启明.md」的结尾加一句制造悬念的话，直接修改文件。",
+      "总结一下这几轮我们一起改了哪些地方。",
+    ],
+  },
+];
+
+async function runChatSession(s: ChatSession) {
+  seedProject({});
+  const stamp = Date.now();
+  const progress = (line: string) => {
+    if (!LOG_DIR) return;
+    mkdirSync(LOG_DIR, { recursive: true });
+    appendFileSync(`${LOG_DIR}/${s.id}-${stamp}.progress.log`, `+${Math.round((Date.now() - stamp) / 1000)}s ${line}\n`);
+  };
+  const conn = {
+    baseUrl: BASE,
+    apiKey: KEY,
+    standard: "openai_compat" as const,
+    modelId: MODEL,
+    contextSize: CTX,
+    ...(EFFORT ? { thinkingCategory: "openai-generic" as const, reasoningEffort: EFFORT } : {}),
+  };
+  const preset = AGENT_ASSIST_PRESET;
+  const messageCeiling = messageCeilingForTools(CTX, UTIL, preset.tools);
+  const trigger = compactTriggerFor({
+    contextSize: CTX,
+    messageCeiling,
+    // LIVE_TRIGGER_TOKENS forces folds for measuring what one costs. The app's
+    // own slider stops at 8,192, above a 32k assistant's ceiling line, so this
+    // is a probe-only lever — never a setting an author can reach.
+    triggerTokens: Number(process.env.LIVE_TRIGGER_TOKENS ?? COMPACT_TRIGGER_TOKENS_DEFAULT),
+    triggerRatio: COMPACT_TRIGGER_RATIO_DEFAULT,
+  });
+  progress(`start ctx=${CTX} util=${UTIL} messageCeiling=${messageCeiling} trigger=${trigger.tokens} (${trigger.boundBy})`);
+
+  let history: StreamMessage[] = [{ role: "system", content: agentSystem() }];
+  const meta = createSessionMeta();
+  const workspace = createTaskWorkspace(ROOT, MODEL);
+  const approvals: string[] = [];
+  const turns: Array<{
+    turn: number;
+    beforeTokens: number;
+    folded: boolean;
+    foldedTurns?: number;
+    toTokens?: number;
+    foldMs: number;
+    runMs: number;
+    afterTokens: number;
+    rounds: number | null;
+    error: string | null;
+  }> = [];
+  const ctrl = new AbortController();
+  let hung = false;
+  const wall = setTimeout(() => {
+    hung = true;
+    ctrl.abort();
+  }, WALL_MS);
+
+  try {
+    for (const [i, question] of s.turns.entries()) {
+      const n = i + 1;
+      const beforeTokens = estimateMessagesTokens(history);
+      const foldStart = Date.now();
+      const compacted = await compactChatHistory({
+        history,
+        meta,
+        ceilingTokens: messageCeiling,
+        triggerTokens: trigger.tokens,
+        // LIVE_FOLD_FORCE=1 folds every turn it can, the way 立即归纳 does —
+        // for timing one summarize request when the hysteresis would otherwise
+        // (correctly) decline to fold at all.
+        force: process.env.LIVE_FOLD_FORCE === "1",
+        summarize: (input) => summarizeForCompaction(conn, input, ctrl.signal),
+      });
+      const foldMs = Date.now() - foldStart;
+      const folded = compacted?.event.kind === "context-compacted" ? compacted.event : null;
+      if (compacted) {
+        history = compacted.history;
+        progress(`turn ${n}: FOLDED ${folded?.foldedTurns} turns ${folded?.fromTokens} -> ${folded?.toTokens} in ${foldMs}ms`);
+      } else {
+        progress(`turn ${n}: no fold (history ${beforeTokens}, trigger ${trigger.tokens})`);
+      }
+
+      const q: StreamMessage = { role: "user", content: question };
+      noteTurnStart(meta, q);
+      history.push(q);
+      const runStart = Date.now();
+      let rounds: number | null = null;
+      let error: string | null = null;
+      try {
+        const r = await runAgent({
+          ...conn,
+          inputCeilingTokens: messageCeiling,
+          preset,
+          messages: history,
+          toolContext: {
+            projectPath: ROOT,
+            loreIndex: {},
+            multimodal: false,
+            requestApproval: (p) => approve(p, approvals),
+            taskWorkspace: workspace,
+          },
+          signal: ctrl.signal,
+          onEvent: (e) => {
+            if (e.kind === "context-trimmed") progress(`  turn ${n} context-trimmed ${e.count}`);
+            else if (e.kind === "tool-step" && e.step.status !== "running") progress(`  turn ${n} ${e.step.status} ${e.step.name}`);
+          },
+          onOutputText: () => {},
+        });
+        rounds = r.rounds;
+      } catch (e) {
+        error = String(e);
+      }
+      const afterTokens = estimateMessagesTokens(history);
+      progress(`  turn ${n} done in ${Math.round((Date.now() - runStart) / 1000)}s, rounds ${rounds}, history ${afterTokens}${error ? ` error=${error}` : ""}`);
+      turns.push({
+        turn: n,
+        beforeTokens,
+        folded: !!compacted,
+        ...(folded ? { foldedTurns: folded.foldedTurns, toTokens: folded.toTokens } : {}),
+        foldMs,
+        runMs: Date.now() - runStart,
+        afterTokens,
+        rounds,
+        error,
+      });
+      if (error) break;
+    }
+  } finally {
+    clearTimeout(wall);
+  }
+
+  const summary = {
+    scenario: s.id,
+    model: MODEL,
+    ctx: CTX,
+    util: UTIL,
+    messageCeiling,
+    trigger,
+    hung,
+    folds: turns.filter((t) => t.folded).length,
+    turns,
+    approvals,
+    wallSeconds: Math.round((Date.now() - stamp) / 1000),
+  };
+  progress(`end folds=${summary.folds}/${turns.length} hung=${hung}`);
+  if (LOG_DIR) {
+    writeFileSync(`${LOG_DIR}/${s.id}-${stamp}.json`, JSON.stringify({ ...summary, messages: history }, null, 2));
+  }
+  return summary;
+}
+
 describe.skipIf(!BASE)("LIVE local model", () => {
   for (const s of SCENARIOS.filter((x) => !ONLY || x.id === ONLY)) {
     it(s.id, async () => {
       const summary = await runScenario(s);
+      expect(summary.hung).toBe(false);
+    }, WALL_MS + 60_000);
+  }
+  for (const s of CHAT_SESSIONS.filter((x) => !ONLY || x.id === ONLY)) {
+    it(s.id, async () => {
+      const summary = await runChatSession(s);
       expect(summary.hung).toBe(false);
     }, WALL_MS + 60_000);
   }

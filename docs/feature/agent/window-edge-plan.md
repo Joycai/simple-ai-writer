@@ -1,6 +1,6 @@
 # 窗口边缘：卡死、重读循环与「完成了却什么都没写」
 
-> 状态：`partial`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行。✅ PR-1 · PR-2 · PR-6 · PR-3 · PR-4 已实施）
+> 状态：`implemented`（2026-09-11 实测；方案经作者批准，按 PR-1 → PR-2 → PR-6 → PR-3 → PR-4(a) → PR-5 执行，六片全部实施；PR-5 待合并与真机）
 > 起因：作者报告本地小模型（qwen3.8-27b，LM Studio，32k）「经常卡死、死循环、突然中断」。拿真实运行时对着真实端点量了一遍，三个症状对应到六个机制——其中五个**跟窗口走，不跟模型走**：同样的上限压到 DeepSeek 上，它一样重读、一样把轮次花在记账上，只是每轮快十倍，所以看不出来。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（「省一轮 ≈ 一整份工具表」的量纲）· [`agent-tool-context.md`](agent-tool-context.md)（常驻工具的成本账）· [`compact-threshold-plan.md`](compact-threshold-plan.md)（归纳触发线）· [`../../api/streaming.md`](../../api/streaming.md)（失败怎么送达）
 > 台架：`scripts/local-model-probe.ts`（§7）
@@ -70,6 +70,11 @@
 | `chat-longdoc` · **PR-4 之后** | deepseek | 50%（按保底实际约 69%） | **4** | **13s** | **0** | 改成。消息上限 5,172 → 11,200：读两页、改、答，**没有一轮花在笔记或清单上**。之前同一设置 8 轮 / 28 秒、裁 4 次、5/8 轮记账 |
 | `chat-longdoc` · **PR-4 之后** | qwen | 50%（按保底实际约 69%） | 5 | 55s | **0** | 改成。**没有一轮花在笔记上**，也没裁过。用时和之前（6 轮 / 56 秒、裁 2 次、2/6 轮记账）差不多——大头是第 4 轮 32 秒的思考，省下的是那两轮记账 |
 | `chat-bigdoc` · **PR-4 之后** | qwen | 50%（按保底实际约 69%） | 5 | **48s** | **0** | 改成。105 行整篇读进来一次也没被裁，**在默认设置下追平了手动调到 90% 的那组对照**（4 轮 / 49 秒）。这个场景的全过程：PR-1 之前 223 秒零产出 → PR-1 之后 55 秒 → PR-4 之后 48 秒且零裁剪、零记账 |
+| `chat-session` 六轮对话 · 默认线（PR-4 之后） | qwen · 思考关 | 50% | — | 33s | — | 触发线 7,839，**一次都没归纳**（历史 3,368 → 7,214） |
+| `chat-session` 六轮对话 · 默认线（PR-4 之后） | deepseek | 50% | — | 44s | — | 第 5 轮归纳一次 8,102 → 6,374（落回线下，4.2 秒），之后不再归纳 |
+| `chat-session` · 线压到 4,000 · **PR-5 之前** | qwen · 思考关 | 50% | — | 80s | — | **第 4、5、6 轮每次都归纳**，回收 976 / 549 / 396 token，归纳请求 9.2 / 15.4 / 19.2 秒——归纳请求没带上「思考关」 |
+| `chat-session` · 线压到 4,000 · **PR-5 之后** | qwen · 思考关 | 50% | — | 59s | — | **一次都没归纳**：折不回线下、历史（最高 8,677）又没到上限的 90%（10,080），全部延后 |
+| `chat-session` · 线压到 4,000 · 强制归纳 · **PR-5 之后** | qwen · 思考关 | 50% | — | 68s | — | 三次归纳各 **3.9 / 3.9 / 4.0 秒**，不再逐次变长——归纳请求带上了「思考关」 |
 
 两条直接用 curl 打的端点探针：
 
@@ -122,6 +127,11 @@
 `compactTriggerFor` 的第三条线是 `0.7 × 消息上限` = 3,620（32k、50%），这个数**包含系统层**。`planFold` 折叠后保留 `prelude + SUMMARY_BUDGET_TOKENS(1000) + 最近 2 轮`，光前两项就 ≈ 4.4k，已经高于触发线——而 `planFold` 不检查「折完之后是否回到触发线以下」。于是对话一旦超过两轮，**每次发送前都先让同一个本地模型做一次总结**，折完仍在线上，下一次再折。
 
 对作者来说是「点了发送，很久没有反应」。台架不跑对话归纳，这一条要在真应用里确认（§5 PR-5）。
+
+> **2026-09-11 实测（PR-5 动手前，台架加了按 `sendChat` 顺序逐轮归纳的多轮对话 `chat-session`）**
+> - **默认 32k 上 PR-4 之后已经不复现。** 消息上限 11,200、触发线 7,839：qwen 六轮一次都没归纳（历史 3,368 → 7,214），DeepSeek 在第 5 轮归纳一次（8,102 → 6,374，落回线下），之后不再归纳。
+> - **机制本身是真的**，只是需要触发线低于「折完剩下的固定部分」（系统层 + 1,000 的摘要预算 + 保留原文的两轮）：把线压到 4,000，六轮里第 4、5、6 轮**每次发送都归纳**，回收 976 → 549 → 396 token，归纳请求却要 9.2 → 15.4 → 19.2 秒，是它前面那一轮本身的两到三倍。更小的窗口、更重的种子块、或者大模型上把 token 滑块拉低，都能走到这里。
+> - **顺带查到一个更直接的原因**：`summarizeForCompaction` 手抄了一份连接字段，漏掉思考档位、思考预算和温度——作者把思考调成「关闭」，归纳请求照样思考。全应用只有这一处手抄（其余调用点都展开 `connOptions` / `pickConnOptions`）。
 
 ### M6 思考打转（模型侧）
 
@@ -205,6 +215,12 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 
 **D8 归纳要有回差。** `planFold` 在「折完预计仍不低于触发线」时拒绝折叠，改为出一次说明（「窗口太小，归纳帮不上这一轮」）——和 `contextBreakdown` 里 `over` 与 `willCompact` 分家是同一个道理。
 
+> **PR-5 落地**
+> - **不是一律拒绝，是延后。** 按原文「拒绝」会让历史一路长到超窗——`planFold` 那条「折不到目标也尽力折」的保证正是为历史真的装不下时存在的。所以规则是：最大程度的折叠仍落在触发线之上、**且**历史还不到消息上限的 90%（`FOLD_DEFER_CEILING_SHARE`）时先不折；到了 90% 照折。作者手动的「立即归纳」（`force`）永不延后。对话和扮演的自动归纳都走这条；状态记忆本来就是 `force`，不受影响。
+> - **计量条直接问 `planFold`**，不另抄一份规则：延后时 `foldDeferred` 为真，不画归纳线、不说「下一轮会归纳」，展开图例解释为什么先不折。
+> - **顺带修归纳请求的连接字段**（M5 实测里查到的）：改用 `...pickConnOptions(config), serverTools: undefined`，与 `structured.ts` 同形。
+> - 两条计量条测试原先用的玩具尺寸（每轮几十到几百 token）正好落进「折不回线下」，按「折一轮就能回到线下」的尺寸重写，另加两条专测延后。
+
 ## 5. 分阶段 PR
 
 每片从 `main` 切，不叠分支；每片合并、真机试过再开下一片。
@@ -215,7 +231,7 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 | **PR-2** ✅ | D5 截断归因 + 只思考的截断不再算完成（输出预留挪到 PR-4，见 D5「落地时的调整」） | `agent/runtime.ts`、`agent/events.ts`、`agent/logModel.ts`、`AgentLog.tsx`、两份 locale | 单测：窗口满不续写、输出上限照常续写、只思考标 `thinkingOnly`、窗口满时截断的工具调用不重发、窗口大小未知时行为不变、日志标题优先显示截断行；台架 `continue`（思考开）结局 `truncated` · `cause=window` · `thinkingOnly`（§2.3） |
 | **PR-3** ✅ | D7 流看门狗：首字 `120 秒 + 估算输入 ÷ 150 tok/s`，首字之后两个 chunk 之间 10 分钟，超时抛 `StreamStallError` | `ai/index.ts`、`ai/types.ts`、两份 locale、`streamWatchdog.test.ts` | 假计时器单测：首字超时且不提前、开始输出后中断、慢而活着的流（首字 90 秒、之后每 5 分钟一块）不被误杀、作者停止仍是 AbortError、首字期限随输入放大；阈值依据是 LM Studio 实测工具参数前 32.6 秒零字节；本地挂起端点实测 123 秒报错并断开连接（§2.3） |
 | **PR-4** ✅ | D3 消息上限保底，作者选 **a**：`effectiveInputCeiling` = `max(窗口×占用, min(工具 + 窗口×35%, 窗口×75%))`，所有生产者共用；计量条图例说明「本次按 N% 计」 | `context/budget.ts`、`agent/toolCost.ts`、`consistency/budget.ts`、`agent/contextBreakdown.ts`、`AgentChat.tsx`、`RoleplayChat.tsx`、`ContextBar.tsx`、两份 locale | 单测：抬高、只抬不降、无工具不变、封顶 75%、无窗口不抬、面板规划从它起算、32k 助手档消息上限恰为 35%、`raisedFromTokens` 只在抬高时有值；`contextForecast.test.ts` 两条原先钉着「被挤光」的用例按保底后的事实改写；台架 50% 默认：DeepSeek `chat-longdoc` 8 轮 → 4 轮、记账 5 → 0，qwen `chat-longdoc` 记账 2 → 0，qwen `chat-bigdoc` 48 秒零裁剪、追平 90% 对照（§2.3） |
-| **PR-5** | D8 归纳回差 | `agent/compact.ts` | 单测 + **作者真机**：32k 模型连续对话五轮，看是否每轮都有「已归纳」 |
+| **PR-5** ✅ | D8 归纳回差（折不回线下且离上限还远时延后）+ 归纳请求带上模型的思考设置 | `agent/compact.ts`、`agent/compactRun.ts`、`agent/contextBreakdown.ts`、`ContextBar.tsx`、两份 locale | 单测：延后、接近上限照折、手动归纳不延后、计量条 `foldDeferred` 与关闭自动归纳时不延后；台架 `chat-session`（线压到 4,000）：归纳 3/6 → **0/6**；强制归纳时每次摘要 9–19 秒 → **约 4 秒**（§2.3）。作者真机：连续对话，执行日志不应每轮都有「已归纳」 |
 | **PR-6** ✅ | D6 两半都做：「关闭」同名陷阱改名；思考超「窗口剩余一半」且未开始作答时中止本轮，这次运行余下的请求都不再思考（档位有「关闭」就发 off，否则每轮带一条即撤的提示） | `agent/runtime.ts`、`agent/events.ts`、`AgentLog.tsx`、两份 locale、`agentRuntimeThinkingGuard.test.ts` | 单测：中止并关思考重来且不占轮数、关思考延续到工具轮之后、无「关闭」档位时走提示且提示不留在历史里、每次运行至多一次、窗口未知不启用、预算内不中止、作者停止仍是停止；台架（思考开）`longform` 358 秒 0 字 → 222 秒 3,138 字，`continue` 330 秒 0 字 → 143 秒 1,068 字（§2.3） |
 
 顺序的理由：
@@ -242,7 +258,8 @@ qwen 在 `longform` 里写了 42k 字的思考、在 `chat-bigdoc` 第 7 轮写�
 LOCAL_LLM_URL=http://192.168.2.206:11234/v1 LOCAL_LLM_CTX=32000 LOCAL_LLM_UTIL=0.5 LIVE_SCENARIO=chat-bigdoc LIVE_LOG_DIR=/tmp/live pnpm exec vitest run --config scripts/local-model.vitest.config.ts
 ```
 
-- 场景：`chat-edit` / `chat-longdoc` / `chat-bigdoc` / `chat-survey`（助手档）、`continue`（续写档）、`longform`（无工具）。
+- 场景：`chat-edit` / `chat-longdoc` / `chat-bigdoc` / `chat-survey`（助手档）、`continue`（续写档）、`longform`（无工具）；`chat-session` 是六轮对话，每轮之前按 `sendChat` 的顺序调真的 `compactChatHistory`，量归纳频率与每次归纳的耗时。
+- 旋钮：`LOCAL_LLM_EFFORT=off`（经应用自己的 `reasoningBody` 关思考）；`LIVE_TRIGGER_TOKENS`（把归纳线压到滑块够不着的位置，强制出现归纳）；`LIVE_FOLD_FORCE=1`（每轮都像「立即归纳」那样强制折，量单次摘要请求）。
 - 托管模型做对照：再加 `LOCAL_LLM_KEY` 与 `LOCAL_LLM_MODEL`，`LOCAL_LLM_CTX` 照样压到 32000。**key 只走环境变量，不写进任何文件。**
 - vitest 吞掉控制台输出，所以一切都落文件：`<场景>-<时间戳>.progress.log` 在运行中逐行增长（用来分辨「慢」和「挂了」），`.json` 在结束时写出完整 transcript、每个请求的首字 / 最长静默、每轮思考长度、重复调用数。
 - LM Studio 串行处理请求：同时跑两个场景，两边的计时都不可信。

@@ -259,7 +259,7 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
   const warned = (context.willCompact && context.autoCompact) || context.over;
   // 状态记忆 has no line to cross, but the legend still owes one sentence: the
   // fold this bar is used to promising at a mark now happens every turn.
-  const explained = context.willCompact || context.over || context.stateMode;
+  const explained = context.willCompact || context.over || context.stateMode || context.foldDeferred;
 
   return (
     <div className={styles.ctx}>
@@ -419,6 +419,11 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
             ? t("ai.chat.ctxCompactExplain", {
                 defaultValue:
                   "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
+              })
+            : context.foldDeferred
+            ? t("ai.chat.ctxFoldDeferredExplain", {
+                defaultValue:
+                  "对话已经长到该归纳的程度，但现在归纳帮不上忙——折完仍会高于归纳线，每次发送都归纳只会多花一次请求。先不归纳，等对话接近上限时再折叠。",
               })
             : t("ai.chat.ctxOverExplain", {
                 defaultValue:
