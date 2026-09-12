@@ -5,6 +5,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
+import { imagePart } from "../../lib/ai/imagePart";
 import {
   assignableCategories, readEntityFile, saveEntityMetaAndBody,
   type CategoryId, type LoreEntity,
@@ -150,10 +151,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       const userContent = imageDataUrls.length
         ? [
             { type: "text" as const, text: userText },
-            ...imageDataUrls.map((url) => ({
-              type: "image_url" as const,
-              image_url: { url },
-            })),
+            ...imageDataUrls.map((url) => imagePart(url)),
           ]
         : userText;
 

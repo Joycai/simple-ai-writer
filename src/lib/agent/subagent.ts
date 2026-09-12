@@ -10,6 +10,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import { imagePart } from "../ai/imagePart";
 import { costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
@@ -480,7 +481,7 @@ export async function executeDelegate(
         const loaded = await loadProjectImage(ctx.projectPath, ref);
         if ("error" in loaded) return fail(loaded.error.replace(/^Error:\s*/, ""));
         captions.push(`- ${loaded.name} — ${loaded.path}${shrunkNote(loaded.downscaled)}`);
-        parts.push({ type: "image_url", image_url: { url: loaded.dataUrl } });
+        parts.push(imagePart(loaded.dataUrl));
       }
       // Same two-template rule as above: a 「参考资源」 heading appears only
       // when there is something under it.

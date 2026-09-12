@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../../stores/appStore";
 import { useAiStore } from "../../../stores/aiStore";
 import { IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN } from "../../../lib/image/downscalePlan";
+import { IMAGE_DETAIL_CHOICES } from "../../../lib/ai/imagePart";
 import {
   ASSUMED_INPUT_CEILING_TOKENS,
   COMPACT_TRIGGER_RATIO_MAX, COMPACT_TRIGGER_RATIO_MIN,
@@ -13,6 +14,7 @@ import { compactTriggerFor } from "../../../lib/agent/compact";
 import { messageCeilingFor } from "../../../lib/agent/toolCost";
 import { chatAgentPreset } from "../../../lib/agent/packs";
 import { Slider, type SliderTick } from "../../common/Slider";
+import { Select } from "../../common/Select";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import common from "../settingsCommon.module.css";
 import styles from "./ContextMemory.module.css";
@@ -147,6 +149,14 @@ export function ContextMemoryPane() {
     setImageMaxLongEdge(next);
     setEdgeDraft(next ? String(next) : "");
   };
+
+  // The second half of the same trade as the long edge above: that one decides
+  // how many pixels leave this machine, this one decides how many the endpoint
+  // agrees to look at. Kept as a separate control because they fail
+  // differently — a long edge that is too small loses the pixels for good,
+  // while `detail` is a per-request hint the endpoint may read as it likes.
+  const imageDetail = useAppStore((s) => s.imageDetail);
+  const setImageDetail = useAppStore((s) => s.setImageDetail);
 
   const exampleBody = (() => {
     if (!autoCompact) {
@@ -368,7 +378,6 @@ export function ContextMemoryPane() {
           top
           title={t("systemSettings.contextMemory.imageLongEdgeLabel")}
           desc={t("systemSettings.contextMemory.imageLongEdgeHint")}
-          last
         >
           <div className={styles.field}>
             <div className={styles.fieldRow}>
@@ -395,6 +404,22 @@ export function ContextMemoryPane() {
               })}
             </div>
           </div>
+        </Row>
+        <Row
+          top
+          last
+          title={t("systemSettings.contextMemory.imageDetailLabel")}
+          desc={t("systemSettings.contextMemory.imageDetailHint")}
+        >
+          <Select
+            value={imageDetail}
+            onChange={(v) => setImageDetail(v as "" | "low" | "high")}
+            options={IMAGE_DETAIL_CHOICES.map((v) => ({
+              value: v,
+              label: t(`systemSettings.contextMemory.imageDetail_${v || "auto"}`),
+            }))}
+            ariaLabel={t("systemSettings.contextMemory.imageDetailLabel")}
+          />
         </Row>
       </Section>
 

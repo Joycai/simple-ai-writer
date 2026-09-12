@@ -13,6 +13,7 @@
 | **system 放法** | `messages[0].role = "system"`（新模型用 `"developer"`） | 顶层 `instructions` | 顶层 `systemInstruction` | 顶层 `system` |
 | **文本载体** | `content` 为字符串或 part 数组 | 输入 `input_text` / 输出 `output_text` | `parts[].text` | `content` 为字符串或 block 数组 |
 | **图片载体** | `{type:"image_url", image_url:{url}}` | `{type:"input_image"}` | `{inline_data:{mime_type,data}}` | `{type:"image", source:{type:"base64",media_type,data}}` |
+| **图片细节档** | `image_url.detail`（**在对象里**） | `detail`（**与 image_url 平级**） | 无 | 无 |
 | **工具定义** | `tools[].function.{name,description,parameters}`（**嵌套**） | `tools[].{type,name,description,parameters}`（**扁平**） | `tools[].functionDeclarations[]` | `tools[].{name,description,input_schema}` |
 | **工具选择** | `tool_choice` | `tool_choice` | `toolConfig.functionCallingConfig.mode`<br>`AUTO`/`ANY`/`NONE` | `tool_choice.type`<br>`auto`/`any`/`tool`/`none` |
 | **模型发起调用** | `assistant.tool_calls[]`（带 `id`） | output item `type:"function_call"`（带 `call_id`） | `parts[].functionCall`（**无 id**） | content block `type:"tool_use"`（带 `id`） |
@@ -23,6 +24,13 @@
 | **usage 字段** | `prompt_tokens` / `completion_tokens` | `input_tokens` / `output_tokens` | `promptTokenCount` / `candidatesTokenCount` / `thoughtsTokenCount` | `input_tokens` / `output_tokens` + `cache_read_input_tokens` / `cache_creation_input_tokens` |
 | **缓存计数口径** | cached 是 input 的**子集** | 同左 | 同左 | **三桶不重叠**，需相加才可比 |
 | **服务端状态** | 无 | `store` + `previous_response_id` | 无 | 无 |
+
+`detail` 只有 ① ② 两族有，且**位置不同**：① 是 `image_url` 对象的成员，
+② 是 `input_image` 的兄弟字段。取值 OpenAI 与 DeepSeek 都认 `low`（端点先缩到
+512×512）/ `high` / `auto`；DeepSeek 另有 `original`，但它自己的表里写明
+`high` 等价于 `original`，所以本项目只发 low/high 两个值就够覆盖。**不发这个
+字段与发 `auto` 是同一个请求**，因此 `lib/ai/imagePart.ts` 的默认是不发——没碰
+过设置的作者，请求与这个字段存在之前逐字节相同。
 
 三处最容易在跨族移植时静默出错的地方：
 
