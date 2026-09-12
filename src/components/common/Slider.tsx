@@ -147,11 +147,14 @@ export function Slider({
         onPointerCancel={onPointerUp}
       >
         <div className={styles.rail} />
-        <div className={`${styles.fill} ${snapping ? styles.snapping : ""}`} style={{ width: `${pct}%` }} />
+        <div
+          className={`${styles.fill} ${snapping ? styles.snapping : ""}`}
+          style={{ transform: `scaleX(${pct / 100})` }}
+        />
         <div
           ref={thumbRef}
           className={`${styles.thumb} ${snapping ? styles.snapping : ""} ${dragging ? styles.dragging : ""}`}
-          style={{ left: `calc(${pct}% - 7px)` }}
+          style={{ transform: `translateX(calc(var(--track-w) * ${pct} / 100 - 7px))` }}
           role="slider"
           tabIndex={disabled ? -1 : 0}
           aria-label={ariaLabel}

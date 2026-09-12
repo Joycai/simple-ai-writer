@@ -12,7 +12,12 @@
    (SettingsPage remaps them once on .page). */
 
 .slider {
-  width: 276px;
+  /* 轨道宽度 = 本体宽度 − 左右各 8px 留白（文件头 anatomy：① track 260 × 2px）。
+     拇指改用 transform 定位后这个值要参与计算，所以从「两处写死」改成一处派生：
+     改 --slider-w 时轨道宽度自动跟上，不会留下第二个需要同步的数字（方案 052）。 */
+  --slider-w: 276px;
+  --track-w: calc(var(--slider-w) - 16px);
+  width: var(--slider-w);
   padding: 8px 8px 0;
   box-sizing: border-box;
   flex: none;
@@ -38,13 +43,16 @@
   position: absolute;
   left: 0;
   top: 6px;
+  width: 100%;
   height: 2px;
   background: var(--color-accent);
+  transform-origin: left center;
 }
 
 .thumb {
   position: absolute;
   top: 0;
+  left: 0;
   width: 14px;
   height: 14px;
   background: var(--color-accent);
@@ -58,9 +66,11 @@
   box-shadow: 0 0 0 2px var(--color-bg-base), 0 0 0 4px var(--color-accent-ring);
 }
 
-/* Only the landing on a tick animates — 70ms "clicks in"; leaving has none. */
-.thumb.snapping { transition: left 70ms var(--ease-settle), background var(--transition-fast); }
-.fill.snapping { transition: width 70ms var(--ease-settle); }
+/* Only the landing on a tick animates — 70ms "clicks in"; leaving has none.
+   走 transform 而不是 left/width：本仓「动效只动 transform/opacity」的不变量
+   （方案 005/010/050）——这两条是 050 盘点时漏掉的最后例外（方案 052）。 */
+.thumb.snapping { transition: transform 70ms var(--ease-settle), background var(--transition-fast); }
+.fill.snapping { transition: transform 70ms var(--ease-settle); }
 
 .ticks {
   position: relative;

@@ -72,9 +72,11 @@ export default function App() {
     if (rafId.current === null) rafId.current = requestAnimationFrame(flushWidth);
   };
   const onResizeEnd = () => {
-    // The last move's frame may not have run yet, and the next line puts the
-    // 320ms collapse transition back — leaving the gap unwritten would let the
-    // sidebar drift on for a third of a second after the button came up.
+    // 最后一次 move 排的那一帧可能还没跑。不取消就直接走下去的话，它会在释放
+    // 之后再写一次已经过时的 --sidebar-width，把宽度弹回上一个采样点。所以这里
+    // 先取消、再同步 flush 一次，让释放那一刻的值就是最终值。
+    // （注：侧栏折叠**没有**过渡——方案 031 删掉了那条 320ms，理由见
+    //  Sidebar.module.css 的 .sidebar 注释。别照着旧注释把它补回来。）
     if (rafId.current !== null) {
       cancelAnimationFrame(rafId.current);
       rafId.current = null;

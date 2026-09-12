@@ -623,7 +623,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   );
 
   const jumpToTurn = (turn: number) => {
-    document.getElementById(`rp-turn-${turn}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // 显式 behavior 会压过 global.css 的 `scroll-behavior: auto !important`（方案 051），
+    // 所以减动效要在这里自己判一次。体例同 LoreReadView.tsx:205。
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    document
+      .getElementById(`rp-turn-${turn}`)
+      ?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
   };
   // 归纳中不发：store 会拒绝，这里让按钮先说清楚。
   const canSend = draft.trim().length > 0 && !compacting;
