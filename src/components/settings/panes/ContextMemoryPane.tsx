@@ -134,8 +134,11 @@ export function ContextMemoryPane() {
 
   // The hard cap is now the first section of this very page, so the signpost
   // scrolls rather than navigates.
-  const goToUtilization = () =>
-    utilSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const goToUtilization = () => {
+    // 显式 behavior 会压过 global.css 的 `scroll-behavior: auto !important`（方案 051）。
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    utilSectionRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
+  };
 
   // ── 图片 ──
   const imageMaxLongEdge = useAppStore((s) => s.imageMaxLongEdge);

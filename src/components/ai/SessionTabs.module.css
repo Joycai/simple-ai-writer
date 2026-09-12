@@ -31,6 +31,22 @@
 }
 .tab:hover { background: var(--color-bg-hover); }
 
+/* 顶线是一条独立的伪元素，不是 inset 阴影：闪一下走 transform（合成层），
+   不必逐帧重栅格化阴影；而且 scaleY 能乘 --motion-shift，减动效下自然只剩
+   颜色那一档（方案 047 的契约 / 方案 053）。基态 scaleY(0) = 不画。 */
+.tab::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-sienna);
+  transform: scaleY(0);
+  transform-origin: top;
+  pointer-events: none;
+}
+
 /* The current tab: the conversation's own background, a 2px sienna top line,
    and it swallows the strip's bottom hairline — a slip of paper actually stuck
    to the manuscript. It also gets a left hairline, since its neighbour's right
@@ -38,20 +54,20 @@
 .tabActive,
 .tabActive:hover {
   background: var(--color-bg-base);
-  box-shadow: inset 0 2px 0 var(--color-sienna);
   margin-bottom: -1px;
   border-left: 1px solid var(--color-border-panel);
 }
+.tabActive::after { transform: scaleY(1); }
 
 /* 新会话 pressed while an empty tab already existed: that tab flashes its top
    line once (设计稿 02b 屏 1g), instead of a second blank tab appearing. 稿上标
    120ms，实现取 240ms——120ms 分到升、降两段各 60ms，2px 的线几乎看不出来。
    240ms 已由作者目检确认（2026-09-10，方案 049）。 */
-.tabFlash { animation: tabFlash 240ms var(--ease-out); }
+.tabFlash::after { animation: tabFlash 240ms var(--ease-out); }
 @keyframes tabFlash {
-  0% { box-shadow: inset 0 2px 0 var(--color-sienna); }
-  50% { box-shadow: inset 0 4px 0 var(--color-sienna-hover); }
-  100% { box-shadow: inset 0 2px 0 var(--color-sienna); }
+  0%   { transform: scaleY(1); }
+  50%  { transform: scaleY(calc(1 + 1 * var(--motion-shift))); background: var(--color-sienna-hover); }
+  100% { transform: scaleY(1); }
 }
 
 .label {
