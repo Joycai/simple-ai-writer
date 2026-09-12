@@ -6,26 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-### Frontend Development
 ```bash
-pnpm dev                 # Run Tauri dev server with hot reload (Vite on port 1420)
-pnpm build              # Type-check + bundle frontend (tsc && vite build)
-pnpm tsc --noEmit       # Type-check frontend without emitting
+pnpm install            # Dependencies (pnpm only — the lockfile is pnpm's)
+pnpm tauri dev          # The app: Rust backend + webview, hot reload. This is the dev loop
+pnpm dev                # Vite alone on :1420 — UI in a browser, no Tauri IPC, so files / DB / keyring all fail
 pnpm test               # Vitest
+pnpm exec tsc --noEmit  # Type-check — this project's lint gate (strict, no unused locals/params)
+pnpm build              # tsc && vite build
+pnpm tauri build        # Release binaries for the current platform
 ```
+From `src-tauri/` (and again in `server/`, its own crate): `cargo fmt --all -- --check` · `cargo clippy --all-targets --all-features -- -D warnings` · `cargo test --all-features` · `cargo build`.
 
-### Backend (Tauri/Rust)
-```bash
-pnpm tauri dev          # Start dev app (combines frontend + Rust build)
-pnpm tauri build        # Create release binaries for current platform
-cargo build             # Build Rust backend only (from src-tauri/)
-cargo test              # Run Rust tests (from src-tauri/)
-```
-
-### Full Build
-```bash
-pnpm install            # Install dependencies (pnpm required)
-```
+The merge gate runs exactly these — [`docs/reference/ci.md`](docs/reference/ci.md) has the copy-paste local run.
 
 ## Architecture Overview
 
@@ -60,6 +52,11 @@ All in `src/stores/`:
 - **agentStore** — Chat sessions (several at once), approval / plan / question cards, run queue
 - **navStore** — Back / forward history, recorded by *observing* the other stores — no call site registers anything
 - **batchStore** — Batch clause runs (`batch: true` tasks): sequential loop over `runTask`, results appended to an output file
+- **composerStore** — what the author typed but hasn't sent. Per-session, never persisted: the AI drawer unmounts on close, and a half-written instruction belongs to the author, not to the surface showing it
+- **memoryStore** — per-document story memory segments (`lib/context/memory`): coverage, freshness, the summarizing run
+- **imageStore** — one conversational image session; the turn chain is a **tree, not a line**, and which provider path ran is recorded per turn
+- **docFormatStore** — .docx 排版格式 presets. Install-level, not project-level (built-ins in code, author's in `config.db`, one read from a .docx lives only for the session)
+- **syncStore** — knowledge-base sync: connection, binding, plan→run. **A direction is never executed without a plan the author has seen** — there is deliberately no "sync now"
 - **roleplayStore**, **consistencyStore**, **configSyncStore**, **themeStore**, **digestStore** — one per Beta / subsystem; see their `lib/` directory in `codemap.md`
 
 ### Data Flow: AI Writing Task
@@ -115,6 +112,7 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 **Export & theming**
 - `src/lib/pptx/harvester.js`: **never** add `allow-same-origin` to the sandbox frame, and never edit it without updating **both** the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list (`pptxHarvesterCsp.test.ts`).
 - xlsx export: a cell that can't be typed with certainty stays text — mis-typing text as a number is silent data loss.
+- docx export: the model writes **markdown only** — **the format is a reference, not a parameter**, resolved by pure functions from three sources (`lib/docx/resolve`). Nothing about the layout goes through a model (`docs/feature/docx/01-agent-design.md`).
 - `lib/theme/scheme.ts` is the **only** writer of `data-theme` / `data-scheme`. A refused theme rule carries a `ThemeReasonCode`; the sentences live only in the locale files, in both languages.
 
 ## Project Structure
@@ -131,7 +129,7 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - `src/components/editor/` — CodeMirror wrapper, `EditorToolbar` (icon-only and stateless on purpose), preview renderer + zoom
 - `src/components/ai/` — AiPanel, AgentChat, the card family (approval / plan / question / round-limit / proposals), AgentLog, ConsistencyCheck, 提示词库
 - `src/components/lore/` — browser, wall, read mode (R), `collections/` (分类用颜色，集合用装订), facet / dict modals, generator
-- `src/components/settings/` — full-window settings, one file per pane under `panes/`; 实验室 holds **every** Beta switch; 上下文与记忆; 同步与备份; the model drawer (设计稿 05c: unset = dashed edge)
+- `src/components/settings/` — full-window settings, one file per pane under `panes/`; 实验室 holds **every** Beta switch; 工作台 · 上下文与记忆 · 子代理 · 用量 · 排版格式 · 同步与备份; the model drawer (设计稿 05c: unset = dashed edge)
 - `src/components/common/` — shared primitives (`Slider` is the app's one slider)
 - `src/components/command/`, `onboarding/`, `library/`, `roleplay/`, `sync/` — palette + global search, onboarding, 文库, roleplay UI, sync modals
 - `src/lib/ai/` — streaming client for four protocol families, `conn.ts`, JSON-mode / tool-choice shaping learned per endpoint, server-side tools, probing, output caps, drafts, snippets, usage
@@ -150,7 +148,7 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - `src/lib/theme/` — scheme, contract, validator, registry, install, export, typography themes
 - `src/lib/image/` — document illustrations (`assets/<文档名>/`, relative links, relink repair), model-bound image reader (downscale instead of refuse), illustrate step
 - `src/lib/import/` — docx / xlsx / pdf / pptx → markdown (+ extracted rasters), copy-as-is for txt/md/html/images, conversion cache, materialize
-- `src/lib/` root — `project.ts`, `keyStore.ts`, `instance.ts` (multi-instance), `prefs.ts`, `appReset.ts`, `sqlTx.ts`, `notify.ts`, `http.ts`, `paths.ts`, `platform.ts`, `webviewCaps.ts`
+- `src/lib/` root — `project.ts`, `keyStore.ts`, `instance.ts` (multi-instance), `prefs.ts`, `appReset.ts`, `sqlTx.ts`, `notify.ts`, `http.ts`, `paths.ts`, `platform.ts`, `webviewCaps.ts`, `recentProjects.ts` (the pin set + the multi-instance merge), `shortcuts.ts` (the one registry every shortcut is listed in, dispatched or not), `staleRefs.ts` (清理失效数据 — what the app stored about files that are no longer there), `motion.ts`
 - `src/stores/` (one paragraph each under [State Management](#state-management-zustand-stores) above), `src/styles/` (`tokens.css` + `global.css` — the five `@layer` cascade), `src/i18n/locales/` (en, zh-CN) — these three have no `codemap.md` section on purpose; `design-system.md` and `terminology.md` cover the latter two
 - `src-tauri/` — Rust side: `commands` + `blocking` (every `fs_*` off the main thread) behind `scope`'s path fence, `protocol` (`ai-writer-asset:`), `secrets` (OS credential manager), `sqltx` (one transaction on one connection), `transfer` (zip bundles + config backup, dialogs Rust-side), `lorehash` (an entry directory → one digest, the sync wire format), `instance` + `windowmenu` (multi-instance), `preview` + `print`, and the Office readers/writers `xlsx` / `xlsx_write` / `pptx` / `docx` (zip + XML stays here; markdown dialect stays in TS), `cmd` (`run_command`, deliberately not `tauri-plugin-shell`)
 - `server/` — **not part of the app**: a standalone Rust/axum binary for knowledge-base sync (`/v1/kbs`), app-config backups (`/v1/configs`, stored encrypted) and an admin console (`/admin`); own crate, CI job, `server/README.md` + `server/DEPLOY.md`
@@ -173,21 +171,21 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/feature/lore/lore-entry-type-plan.md`](docs/feature/lore/lore-entry-type-plan.md)** — the entry type system (slots as a category's schema; the three invariants that let entries degrade rather than vanish). Read before changing `ProfileCategory`, facet frontmatter or `scanLore`'s category enum.
 - **[`docs/feature/roleplay/`](docs/feature/roleplay/README.md)** — roleplay design, transcript / context layering, memory (`10-memory-system.html`), transitions. Read before touching `src/lib/roleplay/`, `roleplayStore`, `lib/roleplay/context.ts`, `memory.ts`, or `compact.ts`'s ceiling.
 - **[`docs/feature/translate/`](docs/feature/translate/01-execution-plan.md)** — Sakura 日中翻译: twelve live measurements and six invariants. Read before touching `src/lib/translate/`, `SUBAGENT_KINDS`, or any model picker.
+- **[`docs/feature/docx/01-agent-design.md`](docs/feature/docx/01-agent-design.md)** — markdown → .docx: the invariants that shape it (the format is a reference not a parameter, three-source pure-function resolve, Beta off = the tool is absent from the run). Read before touching `src/lib/docx/`, `docFormatStore`, or `src-tauri/src/docx.rs`.
 - **[`docs/feature/pptx-plan.md`](docs/feature/pptx-plan.md)** — .pptx read (Rust) and write (HTML → PPTX). Read before touching `src-tauri/src/pptx.rs`, `read_slides` or `src/lib/pptx/`.
 - **[`docs/feature/knowledge-base/kb-admin-console.md`](docs/feature/knowledge-base/kb-admin-console.md)** — the server's admin console. Read before touching `server/src/config.rs`, `server/src/admin.rs` or `server/admin/*`.
+- **[`docs/reference/macos-signing.md`](docs/reference/macos-signing.md)** (`planned`) — self-signed codesigning so updates stop re-asking for the login password. Read when cutting a macOS release, or when the Keychain starts prompting again.
 
 ## Local Skills
 
-`.claude/skills/` (tracked in `skills-lock.json`) holds Claude Code skills installed via `npx skills add`:
+`.claude/skills/` (installed via `npx skills add`, tracked in `skills-lock.json` at the repo root):
 
-- **`bump-version`** — bump the app version across all four Tauri manifests in lockstep; use this instead of hand-editing version strings.
-- **`tauri`** — router/index skill for Tauri v2 development; start here for anything Tauri-related, it points to the right sub-skill below.
-- **`tauri-development`**, **`tauri-concept`**, **`tauri-ipc`**, **`tauri-config`**, **`tauri-window`**, **`tauri-app-develop`**, **`tauri-build`**, **`tauri-security`**, **`tauri-framework-security`**, **`tauri-app-plugin-permissions`** — Tauri v2 core/architecture/build/security guidance.
-- **`tauri-app-opener`**, **`tauri-app-dialog`**, **`tauri-app-file-system`**, **`tauri-app-http-client`**, **`tauri-app-sql`** — guidance for the specific Tauri plugins this project uses (`tauri-plugin-opener`/`-dialog`/`-fs`/`-http`/`-sql` in `src-tauri/Cargo.toml`).
+- **`bump-version`** — moves the app version across all four Tauri manifests in lockstep. Use it instead of hand-editing any version string; they must move together or the running app reports a different version than the installer that shipped it.
+- **`tauri`** — the router for everything Tauri v2. Start here; it points at the right sub-skill (`tauri-concept` / `-ipc` / `-config` / `-window` / `-build` / `-security` / `-framework-security` / `-development` / `-app-develop` / `-app-plugin-permissions`, plus one per plugin this project actually uses: `-app-opener` / `-app-dialog` / `-app-file-system` / `-app-http-client` / `-app-sql`).
 
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
-- Frontend tests: Vitest (`pnpm test`) — regression/unit tests under `src/lib/__tests__/` and `src/lib/agent/__tests__/`, one file per module. Several are **source-scanning guards** (system-prompt seam, retired vocabulary, clock, tool budget ratchet, harvester CSP hash) — when one fails, the rule above is what it is enforcing
-- Rust tests: `cargo test` (from `src-tauri/`) — inline in `commands.rs`, `lorehash.rs`, `pptx.rs`, `preview.rs`, `protocol.rs`, `scope.rs`, `secrets.rs`, `sqltx.rs`, `transfer.rs`, `xlsx.rs`
+- Frontend tests: Vitest (`pnpm test`) — one file per module in the nearest `__tests__/`: `src/lib/__tests__/` and `src/lib/agent/__tests__/` plus a per-subsystem one under `asr/`, `cli/`, `comfy/`, `docx/`, `roleplay/`, `translate/`, `workflow/`, `xlsx/`. Several are **source-scanning guards** (system-prompt seam, retired vocabulary, clock, tool budget ratchet, harvester CSP hash) — when one fails, a Hard Rule above is what it is enforcing
+- Rust tests: `cargo test` (from `src-tauri/`) — inline `mod tests` in `cmd.rs`, `commands.rs`, `docx.rs`, `instance.rs`, `lorehash.rs`, `pptx.rs`, `preview.rs`, `protocol.rs`, `scope.rs`, `secrets.rs`, `sqltx.rs`, `transfer.rs`, `xlsx.rs`, `xlsx_write.rs`
 - CI gate on PRs to `main` runs frontend (type-check + vitest + build) and Rust (fmt/clippy/test/build) — see [`docs/reference/ci.md`](docs/reference/ci.md)
