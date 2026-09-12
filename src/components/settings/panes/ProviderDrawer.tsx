@@ -58,16 +58,25 @@ interface ProviderPreset {
    *
    * For a relay with a 190-entry catalogue, "which of these can I even
    * call?" is the first thing an author hits after saving, and the answer is
-   * not in the list. A preset that knows the relay can name its free tier and
-   * hand the author a working model before they have read anything. Only on
-   * creation — editing an existing provider never adds rows.
+   * not in the list. A preset that knows the catalogue can hand the author a
+   * working model before they have read anything — the relay's free tier, or
+   * a vendor's own two models with their windows and capabilities already
+   * filled in. Only on creation — editing an existing provider never adds rows.
    */
   starterModels?: StarterModel[];
 }
 
-/** The fields a starter row declares; everything else takes the row default. */
+/**
+ * The fields a starter row declares; everything else takes the row default.
+ *
+ * `type` is here because a capability the author has to *discover* is one most
+ * of them never turn on: nothing in a model id says whether the endpoint will
+ * look at a picture, and a row left at the "text" default has `read_image`,
+ * the vision subagent and chat attachments all silently unavailable. A preset
+ * that already knows the answer for its own catalogue should answer it.
+ */
 type StarterModel = Pick<Model, "modelId" | "name"> &
-  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory">>;
+  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type">>;
 
 /**
  * OrcaRouter's free tier (2026-09): rate-limited, billed at $0, and — verified
@@ -85,6 +94,27 @@ const ORCAROUTER_FREE_MODELS: StarterModel[] = [
   { modelId: "tencent/hy3-free", name: "Hunyuan Hy3 (Free)", contextSize: 262_144 },
 ];
 
+/**
+ * DeepSeek's own catalogue (api-docs.deepseek.com 模型 & 价格, 2026-09): two
+ * models, both 1M window / 384K cap, both on the `deepseek` thinking dialect
+ * (`thinking:{type:disabled}` to turn it off — the Flash page calls this
+ * "非思考模式").
+ *
+ * The row that matters is `deepseek-flash` (DeepSeek-V4.1-Flash) being
+ * **multimodal**: it reads pictures through the plain OpenAI `image_url` part
+ * this app already sends, so the entire gap between "the app can do this" and
+ * "the author can do this" was one type chip nobody knew to click. `-pro` has
+ * no vision and stays text — the same measurement that says so is quoted in
+ * docs/api/landscape.md §千问 (which probed `deepseek-v4-pro-0813`).
+ *
+ * The older `deepseek-chat` / `deepseek-reasoner` ids are deliberately absent:
+ * they still resolve, but a starter list is a recommendation, not an archive.
+ */
+const DEEPSEEK_MODELS: StarterModel[] = [
+  { modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash", contextSize: 1_048_576, maxOutput: 393_216, thinkingCategory: "deepseek", type: "multimodal" },
+  { modelId: "deepseek-v4-pro", name: "DeepSeek V4 Pro", contextSize: 1_048_576, maxOutput: 393_216, thinkingCategory: "deepseek" },
+];
+
 const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
   // Same vendor, second protocol (`/responses`) — the one OpenAI's own docs
@@ -94,7 +124,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // E/F/G, so a row on this preset gets prose answers until they land.
   { name: "OpenAI (Responses)", apiStandard: "openai_responses", baseUrl: STANDARD_ENDPOINTS.openai_responses },
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
-  { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
+  { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com", starterModels: DEEPSEEK_MODELS },
   // DashScope's OpenAI compatible-mode; the base already carries /v1, which
   // openaiUrl requires (it appends paths verbatim). Two rows because the
   // domestic and international deployments are separate hosts with separate
@@ -278,7 +308,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             providerId: newId,
             modelId: m.modelId,
             name: m.name,
-            type: "text",
+            type: m.type ?? "text",
             priceIn: 0,
             priceCachedIn: 0,
             priceOut: 0,
