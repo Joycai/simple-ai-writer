@@ -33,7 +33,7 @@ const MIME: Record<string, string> = {
   svg: "image/svg+xml",
 };
 
-export function assetMime(path: string): string {
+function assetMime(path: string): string {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   return MIME[ext] ?? "application/octet-stream";
 }

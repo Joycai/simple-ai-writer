@@ -120,7 +120,7 @@ function splitRef(raw: string): { path: string; tail?: string } {
   return { path: raw.slice(0, at), tail: raw.slice(at + 1).trim() || undefined };
 }
 
-export function WorkOrderCard({ brief, degraded }: { brief: HandoffBrief; degraded: boolean }) {
+function WorkOrderCard({ brief, degraded }: { brief: HandoffBrief; degraded: boolean }) {
   const { t } = useTranslation();
   return (
     <div className={styles.card}>

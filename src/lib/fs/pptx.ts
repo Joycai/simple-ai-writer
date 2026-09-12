@@ -24,7 +24,7 @@ import { fromBase64, toBase64 } from "./fileio";
  * with photographs, not a data dump. Still capped: the whole request body is
  * built in webview memory on the UI thread.
  */
-export const MAX_PPTX_BYTES = 32 * 1024 * 1024;
+const MAX_PPTX_BYTES = 32 * 1024 * 1024;
 
 /** One range of slides, as `pptx_read_slides` returns it. */
 export interface SlideRange {

@@ -65,7 +65,7 @@ export function parseReviewScope(raw: string | null | undefined): ReviewScope {
   return ALL_SCOPE;
 }
 
-export function dedupePins(pins: readonly LorePin[]): LorePin[] {
+function dedupePins(pins: readonly LorePin[]): LorePin[] {
   const seen = new Set<string>();
   const out: LorePin[] = [];
   for (const p of pins) {

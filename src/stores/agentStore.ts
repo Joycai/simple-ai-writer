@@ -3152,7 +3152,7 @@ export function chatSurface(key: string): string {
 }
 
 /** Whether a card is blocking this conversation's run (any of the five kinds). */
-export function chatWaiting(s: ChatStateInputs, key: string): boolean {
+function chatWaiting(s: ChatStateInputs, key: string): boolean {
   const surface = chatSurface(key);
   return s.pending.some((p) => p.surface === surface)
     || s.pendingPlans.some((p) => p.surface === surface)

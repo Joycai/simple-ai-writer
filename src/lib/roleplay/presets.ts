@@ -116,7 +116,7 @@ export function presetFor(kind: "character" | "narrator"): TaskPreset {
  * 三个数会各说各的：`routeTools` 给的工具集、`plannedToolTokens` 估的 schema
  * 开销、`resolveSubAgent` 真正放行的 kind。
  */
-export const CHARACTER_SUBAGENT_KINDS: readonly SubAgentKind[] = ["vision"];
+const CHARACTER_SUBAGENT_KINDS: readonly SubAgentKind[] = ["vision"];
 
 export function subAgentsFor(
   kind: "character" | "narrator",

@@ -52,7 +52,7 @@
 import type { ConfigBackup } from "../ai/configTransfer";
 
 export const ENVELOPE_KIND = "ai-writer-config-envelope";
-export const ENVELOPE_VERSION = 1;
+const ENVELOPE_VERSION = 1;
 
 /**
  * PBKDF2-SHA256 rounds for a new envelope. OWASP's floor for this KDF.

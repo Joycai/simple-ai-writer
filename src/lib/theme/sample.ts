@@ -26,7 +26,7 @@ import { markdownThemeCss, type MarkdownThemeId } from "./markdownThemes";
 import type { ThemeEntry } from "./registry";
 import type { ColorScheme } from "./scheme";
 
-export const SAMPLE_TEXT = {
+const SAMPLE_TEXT = {
   zh: { h: "第三章 · 渡口", p: "船到渡口时天还没亮，河面浮着一层白气。", q: "那年的水位比现在高三尺。" },
   en: { h: "Chapter Three", p: "The boat reached the ferry before dawn; a white mist lay on the river.", q: "The water stood three feet higher that year." },
 } as const;

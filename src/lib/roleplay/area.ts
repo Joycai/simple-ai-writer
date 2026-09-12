@@ -25,7 +25,7 @@ import { scanEntityFolder } from "../lore/entity";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 
 /** 区内唯一的分类。平铺——记忆区的导航靠搜索和关键字，不靠分类（06 §9）。 */
-export const AREA_CATEGORY = "history";
+const AREA_CATEGORY = "history";
 
 const AREA_ID_RE = /^rp-area-[a-z0-9-]{1,60}$/;
 
@@ -37,11 +37,11 @@ export function generateAreaId(now: number, rand: number): string {
   return `rp-area-${now.toString(36)}${Math.floor(rand * 1296).toString(36).padStart(2, "0")}`;
 }
 
-export function areasRoot(projectPath: string): string {
+function areasRoot(projectPath: string): string {
   return `${projectPath}/.ai-writer/roleplay/areas`;
 }
 
-export function areaDir(projectPath: string, areaId: string): string {
+function areaDir(projectPath: string, areaId: string): string {
   if (!isValidAreaId(areaId)) throw new Error(`invalid area id: ${areaId}`);
   return `${areasRoot(projectPath)}/${areaId}`;
 }

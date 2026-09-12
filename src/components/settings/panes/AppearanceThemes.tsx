@@ -423,7 +423,7 @@ type Trace =
   | { kind: "exported"; fileName: string; dir: string; path: string }
   | { kind: "error"; text: string };
 
-export function ThemeActions() {
+function ThemeActions() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const reload = useThemeStore((st) => st.reload);

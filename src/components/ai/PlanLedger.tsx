@@ -67,7 +67,7 @@ export function PlanLedgerBand({
   );
 }
 
-export function PlanLedgerBlock({ ledger, onUndo }: { ledger: PlanLedger; onUndo?: UndoHandler }) {
+function PlanLedgerBlock({ ledger, onUndo }: { ledger: PlanLedger; onUndo?: UndoHandler }) {
   const { t } = useTranslation();
   const terms = useTerms();
   const [busy, setBusy] = useState(false);

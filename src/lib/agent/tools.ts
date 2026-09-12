@@ -231,7 +231,7 @@ const PART_SCALE = 10_000;
  * Always produced here and copied back by the model, never composed by it —
  * the same contract `start_line=21` has had all along.
  */
-export function pageCursor(line: number, part: number): string {
+function pageCursor(line: number, part: number): string {
   return part === 0 ? String(line) : `${line}.${String(part).padStart(4, "0")}`;
 }
 

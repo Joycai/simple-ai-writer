@@ -141,7 +141,7 @@ export function countLines(text: string): number {
  * card that quotes four hundred characters of the next paragraph to say so has
  * buried the change it exists to show.
  */
-export const CONTEXT_LINE_CHARS = 80;
+const CONTEXT_LINE_CHARS = 80;
 
 /** One neighbouring line, trimmed and clipped; "" when there is no such line. */
 export function clipContextLine(line: string | undefined): string {
@@ -158,7 +158,7 @@ export function clipContextLine(line: string | undefined): string {
  * is: this is what the author was shown, and the file may move on while the
  * card waits.
  */
-export const CONTEXT_LINES_KEPT = 2;
+const CONTEXT_LINES_KEPT = 2;
 
 /**
  * Longest context line kept for a diff face.
@@ -317,7 +317,7 @@ function terminate(text: string): string {
 }
 
 /** How many lines an insertion adds to the file. */
-export function insertedLineCount(text: string): number {
+function insertedLineCount(text: string): number {
   return terminate(text).split("\n").length - 1;
 }
 

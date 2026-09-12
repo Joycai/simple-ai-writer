@@ -38,7 +38,7 @@ import { createReviewSink, reportIssueTool, reportPassTool } from "./reviewTools
 import { scopeForRun, type ReviewScope } from "./scope";
 
 /** The synthetic step name each window rides under when N > 1. */
-export const CHECK_WINDOW_STEP = "check_window";
+const CHECK_WINDOW_STEP = "check_window";
 
 const SYSTEM_PROMPT = [
   "You are a continuity editor for a long-form writing project.",

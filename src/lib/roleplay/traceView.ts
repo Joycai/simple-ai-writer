@@ -28,10 +28,10 @@ import type { LoreActivationReport, LoreEntityReport } from "../context/loreSele
 import type { ResidentPiece, TurnContextTrace } from "./trace";
 
 /** 设计稿 2e：关键字最多平铺三个，其余折成一个数。 */
-export const KEYWORDS_INLINE_CAP = 3;
+const KEYWORDS_INLINE_CAP = 3;
 
 /** 设计稿 2i：命中超过这个数才折叠，保留报告里的前几条——顺序不动，不按字数重排。 */
-export const NARROW_HIT_CAP = 6;
+const NARROW_HIT_CAP = 6;
 
 // ─── 收起行 ──────────────────────────────────────────────────────────────────
 

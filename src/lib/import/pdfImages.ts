@@ -198,9 +198,9 @@ export function hasAlpha(rgba: Uint8ClampedArray): boolean {
 // ─── Keep/drop rules ─────────────────────────────────────────────────────────
 
 /** Rendered size below this (either axis, pt) is a bullet/border tile. */
-export const MIN_RENDER_PT = 24;
+const MIN_RENDER_PT = 24;
 /** Native size below this (either axis, px) is scan noise or a glyph. */
-export const MIN_NATIVE_PX = 32;
+const MIN_NATIVE_PX = 32;
 
 /** True for decoration-sized images the import drops outright. */
 export function isNegligible(
@@ -215,8 +215,8 @@ export function isNegligible(
   );
 }
 
-export const DECORATION_MIN_PAGES = 3;
-export const DECORATION_PAGE_SHARE = 0.3;
+const DECORATION_MIN_PAGES = 3;
+const DECORATION_PAGE_SHARE = 0.3;
 
 /**
  * Content hashes that behave like page furniture — the same image on ≥3 pages

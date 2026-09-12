@@ -14,7 +14,7 @@
  */
 
 /** Hard ceiling for any number we accept out of a provider response. */
-export const PROBE_VALUE_MAX = 10_000_000;
+const PROBE_VALUE_MAX = 10_000_000;
 
 /**
  * Keys that carry a context window, most authoritative first. Names differ per

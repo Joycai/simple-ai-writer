@@ -411,7 +411,7 @@ function statusText(
   }
 }
 
-export function formatSessionTime(unixSeconds: number): string {
+function formatSessionTime(unixSeconds: number): string {
   const d = new Date(unixSeconds * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;

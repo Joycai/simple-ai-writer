@@ -26,7 +26,7 @@ const APPROX_CHARS_PER_TOKEN = 3; // rough CJK-aware estimate
  * Re-exported from the budget planner, which owns the constant so the planner,
  * this assembler and the AI panel can't drift apart.
  */
-export const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
+const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {
@@ -197,7 +197,7 @@ function normalizeWithMap(s: string): { norm: string; map: number[] } {
  * to a word-character-only match so a rendered/preview selection (missing
  * markdown markup and typographic transforms) still resolves to the source.
  */
-export function locateSelectionOffset(documentText: string, selection: string): number {
+function locateSelectionOffset(documentText: string, selection: string): number {
   const exact = documentText.lastIndexOf(selection);
   if (exact >= 0) return exact;
 

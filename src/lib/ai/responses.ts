@@ -162,7 +162,7 @@ export function toResponsesInput(
 }
 
 /** Tool definitions in this wire's flat spelling, explicitly non-strict. */
-export function toResponsesTools(tools: ToolDefinition[]): Record<string, unknown>[] {
+function toResponsesTools(tools: ToolDefinition[]): Record<string, unknown>[] {
   return tools.map((t) => ({
     type: "function",
     name: t.function.name,

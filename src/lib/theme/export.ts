@@ -27,7 +27,7 @@ import type { ColorScheme } from "./scheme";
  * `tokens.css` itself (`contract.fontSchemes`) — they name system faces
  * first, so they travel as they are.
  */
-export const EXPORT_FONT_CSS = `  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+const EXPORT_FONT_CSS = `  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
   --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;`;
 

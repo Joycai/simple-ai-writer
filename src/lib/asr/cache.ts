@@ -15,7 +15,7 @@
  * 文字稿：它会被写进项目，抬头还盖着另一个模型的名字。
  */
 
-export const ASR_CACHE_DIR = ".ai-writer/tmp/asr";
+const ASR_CACHE_DIR = ".ai-writer/tmp/asr";
 
 /**
  * 结果 JSON 的解析或渲染规则变了就 +1，整批作废。目录名的算法变了也算——旧格式

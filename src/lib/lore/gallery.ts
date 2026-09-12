@@ -85,7 +85,7 @@ export function serializeImagesMd(
  * Persist the gallery list. Writes images.md, or removes it when the list is
  * empty so we don't leave an empty header file behind.
  */
-export async function writeImagesMd(
+async function writeImagesMd(
   dirPath: string,
   images: { file: string; desc: string; slot?: string | null }[],
 ): Promise<void> {

@@ -82,7 +82,7 @@ const DRAFT_COUNT_KEY = "app:draftCount";
  */
 export const LORE_BUDGET_MIN = 200;
 export const LORE_BUDGET_MAX = 128_000;
-export const LORE_BUDGET_DEFAULT = 600;
+const LORE_BUDGET_DEFAULT = 600;
 
 /**
  * 预算的档位。**「提高预算」跨的就是这一档。**

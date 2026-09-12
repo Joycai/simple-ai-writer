@@ -21,7 +21,7 @@ import { renderTurn } from "./transcript";
 import type { MemoryRecord, SceneTurn } from "./model";
 
 /** 一场戏最多喂多少字给摘要。超出取**最近的**——转场关心的是「刚发生了什么」。 */
-export const RECAP_INPUT_CHAR_CAP = 24000;
+const RECAP_INPUT_CHAR_CAP = 24000;
 
 export interface SceneRecap {
   title: string;

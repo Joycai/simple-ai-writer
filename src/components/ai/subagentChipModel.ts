@@ -26,7 +26,7 @@ import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agen
  */
 export type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval" | "asr">;
 const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval", "asr"];
-export const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
+const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
 
 /**
  * Last resort if a locale ever lacks a kind's key. `Record<ChipKind, …>` on

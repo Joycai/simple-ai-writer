@@ -138,7 +138,7 @@ export const SCREEN_COMBOS: { screen: AppScreen; combo: Combo }[] = [
 ];
 
 /** Settings answers to its own ⌘, as well as its screen digit. */
-export const SETTINGS_COMBOS: Combo[] = [
+const SETTINGS_COMBOS: Combo[] = [
   { mod: true, key: "," },
   { mod: true, key: "5" },
 ];

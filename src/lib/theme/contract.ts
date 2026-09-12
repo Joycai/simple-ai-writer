@@ -74,7 +74,7 @@ export function cssBlocks(css: string): CssBlock[] {
 }
 
 /** `--name: value;` pairs declared directly in `body` (nested blocks removed). */
-export function declaredValues(body: string): Record<string, string> {
+function declaredValues(body: string): Record<string, string> {
   const direct = body.replace(/[^{};]*\{[^{}]*\}/g, "");
   const out: Record<string, string> = {};
   for (const m of direct.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();

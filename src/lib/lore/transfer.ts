@@ -24,8 +24,8 @@ import { CATEGORY_ID_RE } from "../profile/model";
 import { uniqueEntityId } from "./entity";
 import { baseName } from "../paths";
 
-export const LORE_BUNDLE_KIND = "ai-writer-lore-bundle";
-export const LORE_BUNDLE_VERSION = 1;
+const LORE_BUNDLE_KIND = "ai-writer-lore-bundle";
+const LORE_BUNDLE_VERSION = 1;
 
 /** Staging dir name under `.ai-writer/`. A constant so an aborted import is overwritten by the next one. */
 const STAGING_DIR = "lore-import-tmp";

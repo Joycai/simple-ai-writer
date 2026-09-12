@@ -38,7 +38,7 @@ export function applyThemeId(id: string, scheme: ColorScheme): void {
 }
 
 /** The polarity currently on `<html>`; dark until something has applied one. */
-export function currentScheme(): ColorScheme {
+function currentScheme(): ColorScheme {
   return document.documentElement.getAttribute(SCHEME_ATTR) === "light" ? "light" : "dark";
 }
 

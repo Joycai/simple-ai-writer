@@ -166,7 +166,7 @@ function blocksOf(content: MessageContent): AnthropicBlock[] {
  * across: a system message with `ContentPart[]` content would otherwise
  * serialize as `[object Object]`.
  */
-export function extractSystem(messages: StreamMessage[]): string | undefined {
+function extractSystem(messages: StreamMessage[]): string | undefined {
   const parts = messages
     .filter((m) => m.role === "system")
     .map((m) => textOf((m as { content: MessageContent }).content))

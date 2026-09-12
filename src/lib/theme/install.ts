@@ -92,7 +92,7 @@ function validateFile(f: ThemeFileText): ScannedThemeFile {
 }
 
 /** Rebuild the registry and the installed sheets from the files under `selected`. */
-export function rebuildRegistry(selected: SelectedThemes): Registry {
+function rebuildRegistry(selected: SelectedThemes): Registry {
   selection = selected;
   current = buildRegistry(userFiles, projectFiles, selected, { user: userDir, project: projectDir });
   setStyle(
@@ -163,7 +163,7 @@ async function installMarkdownSheet(): Promise<void> {
  * in a real browser, a future watcher) uses directly. `replace` swaps the
  * whole set of that folder; otherwise files not yet known are added.
  */
-export function loadThemeFiles(
+function loadThemeFiles(
   texts: ThemeFileText[],
   selected: SelectedThemes,
   opts: { replace?: boolean; dir?: string; project?: boolean } = {},

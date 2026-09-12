@@ -22,11 +22,11 @@ import { ASSUMED_INPUT_CEILING_TOKENS, effectiveInputCeiling } from "../context/
 /** Share of the ceiling held back for tool results the loop drags in. */
 export const GROWTH_SHARE = 0.25;
 /** Knowledge-base share of the usable window when discovery is automatic. */
-export const LORE_SHARE = 0.35;
+const LORE_SHARE = 0.35;
 /** Entries mode: the pins may take up to this much, never more. */
-export const PINNED_LORE_CAP = 0.5;
+const PINNED_LORE_CAP = 0.5;
 /** Recap (story memory) share, hard-capped. */
-export const RECAP_SHARE = 0.1;
+const RECAP_SHARE = 0.1;
 /** Tail of the previous window carried into the next, in chars. */
 export const WINDOW_TAIL_CHARS = 600;
 /** Beyond this the document is cut short and the report says so. */

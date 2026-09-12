@@ -21,7 +21,7 @@ import { dirName, toPosixPath } from "../paths";
 const FILE_VERSION = 1;
 
 /** Scratch directory the sync engine unpacks into; never part of a backup. */
-export const SYNC_STAGING_DIR = "sync-tmp";
+const SYNC_STAGING_DIR = "sync-tmp";
 
 function syncPath(projectPath: string): string {
   return `${toPosixPath(projectPath)}/.ai-writer/sync.json`;

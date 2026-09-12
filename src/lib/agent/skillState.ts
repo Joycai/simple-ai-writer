@@ -94,7 +94,7 @@ const STEP_STATUSES: readonly StepStatus[] = ["todo", "doing", "done"];
  * 是给模型看的字段说明，随 `ai.instructions.stateUpdate` 的语言走会更好，但
  * schema 是常量而指令是 i18n 键；两处都写清楚含义，模型看哪一份都够。
  */
-export const SKILL_STATE_SCHEMA: Record<string, unknown> = {
+const SKILL_STATE_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
     goal: { type: "string", description: "作者当前在做什么，一句话" },
@@ -136,7 +136,7 @@ export const SKILL_STATE_SCHEMA: Record<string, unknown> = {
   required: ["goal", "decisions", "facts", "progress", "files", "open", "last"],
 };
 
-export const STATE_UPDATE_TOOL_NAME = "update_state";
+const STATE_UPDATE_TOOL_NAME = "update_state";
 
 export function stateUpdateTool(description: string): ToolDefinition {
   return {
