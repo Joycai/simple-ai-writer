@@ -48,7 +48,7 @@
              ~12,300 token / 每轮
 ```
 
-`AGENT_ASSIST_PRESET.maxRounds = 40`，且 `runtime.ts:308` 只在开跑时算一次
+`AGENT_ASSIST_PRESET.maxRounds = 40`，且 `runtime.ts` 只在开跑时算一次
 `toolDefinitions`、之后**每一轮原样重发**。一次跑满 20 轮的整理任务，光这段不变的头部就重复
 计费 ~246k input token。
 
@@ -76,7 +76,7 @@ pre-flight 闸门比的是 `contextSize` 而不是 ceiling，所以它只在彻�
 ### 2.2 上下文条与压缩触发用的是两个口径
 
 `contextBreakdown.ts` 明确把 `toolTokens` 算进 `system` 段（注释里写了"the assistant preset
-carries 21 of them"——现在是 39 个，注释已过时），但 `compact.ts:239` 的触发判断
+carries 21 of them"——现在是 39 个，注释已过时），但 `compact.ts` 的触发判断
 `estimateMessagesTokens(history) <= ceilingTokens * COMPACT_TRIGGER` 不含工具。于是条子已经
 越过 70% 的刻度线并变黄，压缩却不会启动。两边应该统一到"含工具"的口径。
 
@@ -89,11 +89,11 @@ carries 21 of them"——现在是 39 个，注释已过时），但 `compact.ts
 第三方中转则未必；而 **④ 族不打断点就一定不缓存**，于是 Anthropic 官方和 MiniMax-M3 的 ④ 族端点
 每一轮都在按全价重付这 12k。
 
-更巧的是**读的那一半已经写好了**：`anthropic.ts:410` 的 `readUsage` 已经在解析
+更巧的是**读的那一半已经写好了**：`anthropic.ts` 的 `readUsage` 已经在解析
 `cache_read_input_tokens` / `cache_creation_input_tokens` 并折进 `cachedTokens`，
 `token_usage` 表也有 `cached_tokens` 列。缺的只有写的那一半。
 
-**做法**：在 `streamAnthropic` 组 body 的地方（`anthropic.ts:517` 附近），给 `tools[]`
+**做法**：在 `streamAnthropic` 组 body 的地方（`anthropic.ts` 附近），给 `tools[]`
 最后一项加 `cache_control: { type: "ephemeral" }`，再给 `system` 加一个断点。
 
 **代价**：一次改动 ~10 行；缓存写入按 1.25 倍计费、TTL 5 分钟——agent 循环的相邻两轮间隔
@@ -160,7 +160,7 @@ OpenAI-compatible / Gemini / 各种中转，**必须自己在客户端实现等�
 
 常驻 15.2k 字符（~3.8k token）vs 现在的 33.9k（~8.5k token）——**默认场景省掉约 55%**。
 
-**实现**：`runtime.ts:308` 那行 `const toolDefinitions = getToolDefinitions(preset.tools)` 移进
+**实现**：`runtime.ts` 那行 `const toolDefinitions = getToolDefinitions(preset.tools)` 移进
 循环，改成读一个随运行推进的 `activeTools` 集合；registry 每个工具加一个 `group?: ToolGroup`
 字段；再加一个 `load_tools({ groups })` 元工具，description 里带一份**分组目录**（每组一行
 不超过 15 词，总共 ~300 字符）。批准 lore 方案时由 `plan.ts` 侧自动装载 `lore_write`——那一组

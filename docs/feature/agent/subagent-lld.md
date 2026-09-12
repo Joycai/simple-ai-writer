@@ -66,7 +66,7 @@ none 三档，两条臂都查 `allowedTools`（`WRITER_PRESET` 本来就没有 `
 
 当前 Agent Runtime（`lib/agent/runtime.ts`）的记忆完全依赖内存态的 wire message history（`StreamMessage[]`）。处理长任务（多次联网搜索、多文件阅读、图片理解）时存在三个结构缺陷：
 
-1. **上下文膨胀与破坏性裁剪**：`trimHistory`（`runtime.ts:90`）为避免超窗，把旧工具结果整体替换为 `[earlier tool result dropped…]`，模型丢失中间结论后**重复搜索/阅读**，很快又填满；
+1. **上下文膨胀与破坏性裁剪**：`trimHistory`（`runtime.ts`）为避免超窗，把旧工具结果整体替换为 `[earlier tool result dropped…]`，模型丢失中间结论后**重复搜索/阅读**，很快又填满；
 2. **缺乏状态恢复**：撞到 `maxRounds` 时只有「继续加轮」与「强制收尾」两个出口，无法存档；
 3. **主上下文污染**：搜索网页正文、图片 base64、长文切片直接灌进主模型上下文（观测到单次运行 8 次搜索 / 123k input token，见 `lib/ai/serverTools.ts` 的 `TRANSCRIPT_CHARS` 注释）。
 
@@ -123,7 +123,7 @@ none 三档，两条臂都查 `allowedTools`（`WRITER_PRESET` 本来就没有 `
 ```
 
 - **`taskId` 格式**：`YYYYMMDD-HHmmss-<6 位随机>`，严格时间序 + 唯一。
-- **不进文档树**，不出现在文件树，不参与导出；**进 `projectBackup`**（不在 `PROJECT_BACKUP_EXCLUDES` 里，`projectBackup.ts:41`）。
+- **不进文档树**，不出现在文件树，不参与导出；**进 `projectBackup`**（不在 `PROJECT_BACKUP_EXCLUDES` 里，`projectBackup.ts`）。
 
 #### 3.1.1 `activeTaskId` 从哪来 —— 懒创建
 
@@ -145,11 +145,11 @@ export interface TaskWorkspaceHandle {
 - `AgentChat` 的会话把 handle 绑在 session 上（同一会话多轮共用一个任务），`AiPanel` 的单次任务绑在这一次 run 上；
 - **可选字段**。lore modal、generator、splitter 等不传，此时 scratchpad 工具返回
   `"Error: this surface has no task workspace — do not call this tool here."`
-  —— 与 `checkPlan` 在 `gate` 缺失时的措辞策略一致（`plan.ts:108`）。
+  —— 与 `checkPlan` 在 `gate` 缺失时的措辞策略一致（`plan.ts`）。
 
 ### 3.2 `task.md` 协议格式
 
-沿用 `context/memory.ts` **实际**的格式（`memory.ts:131` / `140`）：三行式注释头，`<!--` 与 `-->` 各自独占一行。
+沿用 `context/memory.ts` **实际**的格式（`memory.ts` / `140`）：三行式注释头，`<!--` 与 `-->` 各自独占一行。
 
 > 第一版写成单行 `<!-- ai-writer-task {json} -->`。这既与先例不符，也会在一个「邀请作者手改」的文件里产生一条几千字符的长行。
 
@@ -330,7 +330,7 @@ export function parseSteps(body: string): TaskStep[] {
 4. **大小熔断**：note 正文 ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
 5. **不做备份**。`write-auto` 在别处意味着「自动应用 + 写前备份」（`agent/backup.ts`），但工作区是 agent 自己的草稿纸：备份它只会让 `.ai-writer/backups/` 翻倍增长，而没有任何可恢复价值。这一点要写进工具注释，否则下一个人会以为是漏了。
 6. **不过任何审批门**：不经 `PlanGate`，不经 `requestApproval`。理由同上 —— 那两道门是为「改作者的内容」设的。
-7. **写入串行化**：模型可以在同一轮发出多个 tool call（`runtime.ts:465` 的循环），两个 `task_progress` 并发读改写 `task.md` 会丢更新。模块内维护一条 `writeChain: Promise<void>`，所有 `task.md` 写入串上去 —— 与 `apiLog.ts:51` 的做法相同。
+7. **写入串行化**：模型可以在同一轮发出多个 tool call（`runtime.ts` 的循环），两个 `task_progress` 并发读改写 `task.md` 会丢更新。模块内维护一条 `writeChain: Promise<void>`，所有 `task.md` 写入串上去 —— 与 `apiLog.ts` 的做法相同。
 
 ```ts
 // scratchpadTools.ts — 所有 task.md 写入的唯一入口
@@ -345,7 +345,7 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 ### 3.4 GC 与保留策略
 
-- **上限** `MAX_SAVED_TASKS = 20`（对照 `MAX_CHAT_SESSIONS = 5`，`sessionDb.ts:15`；任务目录比会话轻，且断点续跑的价值窗口更长，故放宽）。
+- **上限** `MAX_SAVED_TASKS = 20`（对照 `MAX_CHAT_SESSIONS = 5`，`sessionDb.ts`；任务目录比会话轻，且断点续跑的价值窗口更长，故放宽）。
 - **排序键**：先按「是否已收尾」（`completed`/`failed`/`aborted` 排前面，优先被淘汰，判定收在 `isFinishedStatus()` 一处），再按 `updatedAt` 倒序；保留前 20 个。
 
   > 第一版写的是「未完成的不清理」，那样一个永不收尾的任务序列会无界增长。上面的排序保证「未完成的优先留下，但不豁免」。
@@ -356,7 +356,7 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 ### 3.5 项目备份
 
-`projectBackup.ts` 的 `PROJECT_BACKUP_EXCLUDES`（`projectBackup.ts:41`）**不加** `.ai-writer/tasks`，即默认包含。理由与 `.ai-writer/tmp` 被排除恰好相反：tmp 是 scratch，tasks 是可恢复状态。
+`projectBackup.ts` 的 `PROJECT_BACKUP_EXCLUDES`（`projectBackup.ts`）**不加** `.ai-writer/tasks`，即默认包含。理由与 `.ai-writer/tmp` 被排除恰好相反：tmp 是 scratch，tasks 是可恢复状态。
 
 需要在 `projectBackup.ts` 的模块注释里补一句说明，否则下次有人清理 `.ai-writer/` 时会顺手把它加进排除表。
 
@@ -390,7 +390,7 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
 在 `runtime.ts` 的轮循环顶部、`trimHistory` **之前**插入。关键是**发出即撤**：
 
 ```ts
-// runtime.ts —— 与 forcedTextNotice（runtime.ts:276-283 / 410-413）完全同构
+// runtime.ts —— 与 forcedTextNotice（runtime.ts / 410-413）完全同构
 let checkpointNotice: StreamMessage | null = null;
 if (
   preset.scratchpad === "required" &&
@@ -446,7 +446,7 @@ scratchpad?: "off" | "offered" | "required";
 
 ### 4.3 轮数上限：新增「存盘暂停」
 
-现契约是 `onRoundLimit: (roundsUsed: number) => Promise<number>`（`runtime.ts:203`）与 `resolveRoundLimit(runId, granted: number)`（`agentStore.ts:207`）。一个 `number` 表达不了「暂停」，**必须换契约**：
+现契约是 `onRoundLimit: (roundsUsed: number) => Promise<number>`（`runtime.ts`）与 `resolveRoundLimit(runId, granted: number)`（`agentStore.ts`）。一个 `number` 表达不了「暂停」，**必须换契约**：
 
 ```ts
 // lib/agent/runtime.ts
@@ -465,7 +465,7 @@ export interface AgentRunResult {
 }
 ```
 
-runtime 的处理（替换 `runtime.ts:250-264` 那一段）：
+runtime 的处理（替换 `runtime.ts` 那一段）：
 
 ```ts
 if (isLastRound && round > 1 && preset.finishPolicy === "force-text"
@@ -485,13 +485,13 @@ if (isLastRound && round > 1 && preset.finishPolicy === "force-text"
 }
 ```
 
-> 为什么在轮首暂停是干净的：`runtime.ts:440-521` 的不变式是「一轮结束时，每个 `tool_call` 都有配对的 `tool` 回复」，`abortedMidRound` 那段专门维护它。轮首退出天然满足，所以暂停不会像中途 abort 那样把会话写坏。
+> 为什么在轮首暂停是干净的：`runtime.ts` 的不变式是「一轮结束时，每个 `tool_call` 都有配对的 `tool` 回复」，`abortedMidRound` 那段专门维护它。轮首退出天然满足，所以暂停不会像中途 abort 那样把会话写坏。
 
 配套改动：
 
 - `AgentEvent` 的 `round-limit` 成员：`granted: number` → `decision: RoundLimitDecision`；
 - `agentStore.requestRoundExtension(...) => Promise<RoundLimitDecision>`，`resolveRoundLimit(runId, decision)`；
-- `rejectAll` 里 `item.resolve(0)` → `item.resolve({ action: "finish" })`（`agentStore.ts:456`）；
+- `rejectAll` 里 `item.resolve(0)` → `item.resolve({ action: "finish" })`（`agentStore.ts`）；
 - `RoundLimitCard.tsx` 三个按钮：`就此收尾` / `存盘并暂停` / `继续（再 N 轮）`。
   中间那个的可见性由 **`PendingRoundLimit.canPause`** 决定，由发起 run 的一方在
   撞上限的那一刻求值（`!!workspace.taskId`）。**不要让卡片去读 chat 的状态**：
@@ -587,7 +587,7 @@ ai:subagent:longread:modelId  ai:subagent:longread:enabled
 ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 ```
 
-`aiStore` 提供 `subAgents: Record<SubAgentKind, SubAgentConfig>` 与 `setSubAgent(kind, patch)`，并**必须**接进既有的两处清理逻辑（`aiStore.ts:148-155` 模型表刷新、`aiStore.ts:231` 单个模型删除）—— 否则删掉一个模型后，子代理会指向一个不存在的行。`aiStoreRemoval.test.ts` 已经为 `memoryModelId` 立过这个规矩。
+`aiStore` 提供 `subAgents: Record<SubAgentKind, SubAgentConfig>` 与 `setSubAgent(kind, patch)`，并**必须**接进既有的两处清理逻辑（`aiStore.ts` 模型表刷新、`aiStore.ts` 单个模型删除）—— 否则删掉一个模型后，子代理会指向一个不存在的行。`aiStoreRemoval.test.ts` 已经为 `memoryModelId` 立过这个规矩。
 
 > **绝不要用 `localStorage`**：加键到 `PREF_KEYS`（CLAUDE.md 明令）。
 
@@ -639,12 +639,12 @@ ModelDrawer 仅 openai 族显示）：与 `serverTools` 同一哲学——这是
 
 #### 5.2.1 致命修正：`serverTools` 必须脱离 `withholdTools`
 
-`runtime.ts:266` 现状：
+`runtime.ts` 现状：
 
 ```ts
 const withholdTools = preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
 …
-serverTools: withholdTools ? undefined : opts.serverTools,   // runtime.ts:340
+serverTools: withholdTools ? undefined : opts.serverTools,   // runtime.ts
 ```
 
 `search` 子代理没有任何本地工具（搜索发生在端点内部），`preset.tools.length === 0` 恒真 ⇒ `withholdTools` 恒真 ⇒ **`web_search` 每一轮都被撤掉，子代理开机即哑**。
@@ -695,7 +695,7 @@ serverTools: withholdServerTools ? undefined : opts.serverTools,
 **密钥缺失同理**：`resolveSubAgentConn` 不得把取不到的密钥降级成空串——
 那会发出一个无钥请求，401 回来被包装成「子代理坏了」，而真正的修法是去粘一个 key。
 
-`search` 子代理绑定的模型若没有配 `serverTools: ["web_search"]`（`Model.serverTools`，`configDb.ts:156`），它就是个不能上网的普通模型。`delegate` 执行前检查，并给出可操作的错误：
+`search` 子代理绑定的模型若没有配 `serverTools: ["web_search"]`（`Model.serverTools`，`configDb.ts`），它就是个不能上网的普通模型。`delegate` 执行前检查，并给出可操作的错误：
 
 ```
 Error: the search subagent's model "<name>" has no server-side web_search enabled.
@@ -713,7 +713,7 @@ Tell the author to turn it on in Settings → Models, or answer without searchin
 
 #### 5.3.1 `ToolContext` 扩展
 
-`delegate` 需要三样 `ToolContext` 今天没有的东西。全部**可选**，这样 `run.ts:41` 与两个 lore modal 的三字段构造不用改：
+`delegate` 需要三样 `ToolContext` 今天没有的东西。全部**可选**，这样 `run.ts` 与两个 lore modal 的三字段构造不用改：
 
 ```ts
 // registry.ts — ToolContext 追加
@@ -734,7 +734,7 @@ export interface ToolContext {
 }
 ```
 
-> 第一版把 `parentSignal` / `onParentEvent` 写成 `executeDelegate` 的额外形参，但注册表的执行器签名是 `execute(call, ctx)`（`registry.ts:189`），多出来的参数无处传入。走 `ToolContext` 是唯一的口子。
+> 第一版把 `parentSignal` / `onParentEvent` 写成 `executeDelegate` 的额外形参，但注册表的执行器签名是 `execute(call, ctx)`（`registry.ts`），多出来的参数无处传入。走 `ToolContext` 是唯一的口子。
 >
 > `resolveSubAgent` 做成回调而不是 `ctx.models` / `ctx.providers`，是为了不把 `lib/agent` 变成 store 的下游 —— `agentStore` 已经因为循环依赖被迫全用 `await import()`（见其模块注释），不该再加一条。
 
@@ -823,8 +823,8 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
   ];
 
   // 产出经 onOutputText 捕获 —— runtime 在成文轮**直接 return，那段文本
-  // 从不进 history**（runtime.ts:417-425），所以事后翻 messages 一定是空的。
-  // 它是累积快照而非增量，赋值即可（runtime.ts:220）。
+  // 从不进 history**（runtime.ts），所以事后翻 messages 一定是空的。
+  // 它是累积快照而非增量，赋值即可（runtime.ts）。
   let output = "";
 
   let result: AgentRunResult;
@@ -893,14 +893,14 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
 const DELEGATE_SUMMARY_CHARS = 800;
 ```
 
-关于 `persistUsage`：**今天没有可复用的函数**。三份逐字相同的私有副本分别在 `aiTaskStore.ts:670`、`memoryStore.ts:369`、`agentStore.ts:241`。`lib/agent` 不该再抄第四份，也不该反向 import store。**PR-C 的前置改动**：把它提到 `lib/ai/usage.ts`（用量的读侧已经在那里），三个 store 改为 import。这是纯搬运，独立可测。
+关于 `persistUsage`：**今天没有可复用的函数**。三份逐字相同的私有副本分别在 `aiTaskStore.ts`、`memoryStore.ts`、`agentStore.ts`。`lib/agent` 不该再抄第四份，也不该反向 import store。**PR-C 的前置改动**：把它提到 `lib/ai/usage.ts`（用量的读侧已经在那里），三个 store 改为 import。这是纯搬运，独立可测。
 
 ### 5.4 四条硬约束的落实点
 
 | 约束 | 落实处 | 为什么这里够 |
 | :--- | :--- | :--- |
-| **深度 1** | `SUB_PRESETS[kind].tools` 不含 `"delegate"` | `executeRegisteredTool`（`registry.ts:1003`）按 `allowed` 白名单查表，不在名单里直接返回 `Unknown tool` |
-| **只读** | 子 `ToolContext` 的 `requestApproval` / `requestPlanApproval` / `lorePlan` / `taskWorkspace` 全部不传 | L2 提案工具在缺 `requestApproval` 时自报错（`imageTools.ts:51`），lore 写工具在缺 `lorePlan` 时被 `checkPlan` 挡下（`plan.ts:108`）。**两道独立的闸，工具集是第三道** |
+| **深度 1** | `SUB_PRESETS[kind].tools` 不含 `"delegate"` | `executeRegisteredTool`（`registry.ts`）按 `allowed` 白名单查表，不在名单里直接返回 `Unknown tool` |
+| **只读** | 子 `ToolContext` 的 `requestApproval` / `requestPlanApproval` / `lorePlan` / `taskWorkspace` 全部不传 | L2 提案工具在缺 `requestApproval` 时自报错（`imageTools.ts`），lore 写工具在缺 `lorePlan` 时被 `checkPlan` 挡下（`plan.ts`）。**两道独立的闸，工具集是第三道** |
 | **零上下文渗透** | `messages` 只有 2 条，现场构造 | —— |
 | **共享 signal** | `ctx.signal` 直接透传给 `runAgent`；`AbortError` 向上重抛而不转成 tool error | 转成 tool error 会让主模型以为「搜索失败」并重试，而作者其实是按了停止 |
 
@@ -916,7 +916,7 @@ const DELEGATE_SUMMARY_CHARS = 800;
 
 ### 6.1 `ToolContext.multimodal` 的语义不动
 
-`multimodal` 在 `tools.ts:130` 与 `tools.ts:205` 里决定的是 **「要不要把 base64 塞进当前这次请求的模型」**，由 `run.ts:45` 从 `model.type === "multimodal"` 得出。
+`multimodal` 在 `tools.ts` 与 `tools.ts` 里决定的是 **「要不要把 base64 塞进当前这次请求的模型」**，由 `run.ts` 从 `model.type === "multimodal"` 得出。
 
 把它改成「链路上有人能看图」会让纯文本主模型收到它读不了的 base64 —— 烧 token，还可能被端点 400。**所以这个字段一个字不改。**
 
@@ -1080,7 +1080,7 @@ export function routeTools(
 
 ### 6.3 模型幻觉调用被拿掉的工具
 
-主模型若仍调 `read_image`，`executeRegisteredTool` 返回 `Unknown tool: read_image`（`registry.ts:1014`）。这条信息偏弱但可自纠。**不**为此加特例分支：路由一旦开始按名字打补丁，就得为每一对「被谁接管」维护映射表。真观察到模型反复撞墙，再在 `delegate` 的描述里点名它接管了什么。
+主模型若仍调 `read_image`，`executeRegisteredTool` 返回 `Unknown tool: read_image`（`registry.ts`）。这条信息偏弱但可自纠。**不**为此加特例分支：路由一旦开始按名字打补丁，就得为每一对「被谁接管」维护映射表。真观察到模型反复撞墙，再在 `delegate` 的描述里点名它接管了什么。
 
 ---
 
@@ -1088,7 +1088,7 @@ export function routeTools(
 
 ### 7.1 `AgentEvent` 加 `parentStep`
 
-`AgentEvent` 是 13 个内联对象字面量的联合（`events.ts:31-165`），**没有** `AgentEventBase` 可以继承。最小改动是把整个联合包一层交叉类型 —— 联合与对象类型的交叉会分配到每个成员，`kind` 的判别式收窄与穷尽检查都不受影响：
+`AgentEvent` 是 13 个内联对象字面量的联合（`events.ts`），**没有** `AgentEventBase` 可以继承。最小改动是把整个联合包一层交叉类型 —— 联合与对象类型的交叉会分配到每个成员，`kind` 的判别式收窄与穷尽检查都不受影响：
 
 ```ts
 // events.ts

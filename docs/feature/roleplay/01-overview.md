@@ -38,7 +38,7 @@
 
 ### 不变量二：绑定内容进 prelude，永不进 seed 块
 
-`buildCompactedHistory`（`lib/agent/compact.ts:349`）压缩时丢弃 `meta.seedContext` 指向的那条消息，但 **prelude 里其余消息原样保留**；`trimHistory`（`lib/agent/runtime.ts:156`）只裁剪 tool 结果和图片，不动普通消息。
+`buildCompactedHistory`（`lib/agent/compact.ts`）压缩时丢弃 `meta.seedContext` 指向的那条消息，但 **prelude 里其余消息原样保留**；`trimHistory`（`lib/agent/runtime.ts`）只裁剪 tool 结果和图片，不动普通消息。
 
 所以扮演会话的历史必须这样播种：
 
@@ -107,7 +107,7 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-**改动集中在上三层，最下层一行不动。** 这是这个功能能做的根本原因：`AgentRuntimeOptions`（`runtime.ts:233`）只要求 `messages + preset + toolContext + 回调`，它不知道 store，也不假设「只有一个会话」。
+**改动集中在上三层，最下层一行不动。** 这是这个功能能做的根本原因：`AgentRuntimeOptions`（`runtime.ts`）只要求 `messages + preset + toolContext + 回调`，它不知道 store，也不假设「只有一个会话」。
 
 ## 5. 磁盘布局
 

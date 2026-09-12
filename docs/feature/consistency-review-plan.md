@@ -25,7 +25,7 @@
 | `runStructuredTask` 一次调用：文档 + `selectLore` 24k 字 + 前情 → 强制 tool_choice 出一份 JSON | **模型看不到没被子串命中的条目**。一个特征没写 key、一个别名没登记，那条设定就不在它眼前，而它也没有 `read_lore_entity` 可以去翻 |
 | 文档超过 40,000 字取**尾部** | 长文档的前半永远没被查过，界面上却没有任何提示 |
 | 范围 = 全局取材范围（`loreStore.scope`） | 作者想「只对着林辰这一条查」做不到；想「查小说 A 的设定但我现在围栏切在 B」也做不到 |
-| 没有「查什么」的入口 | 命令面板明明有「核对一致性 · 关于 “{{q}}”」，点下去只是打开抽屉，`q` 被丢掉（`CommandPalette.tsx:353`） |
+| 没有「查什么」的入口 | 命令面板明明有「核对一致性 · 关于 “{{q}}”」，点下去只是打开抽屉，`q` 被丢掉（`CommandPalette.tsx`） |
 | 进度 = 原始 JSON 流的最后 400 字 + 思维链 | 和执行日志（轮次 / 工具行 / 子运行）是两套语言；子代理一个都用不上 |
 | 没有上下文条 | 作者不知道文档和知识库各占了多少、有没有被截 |
 | `quote` 只在渲染时校验 | 模型抄错一个标点，发现就变成「这段原文已找不到」——钱花了，按钮没了 |
@@ -377,7 +377,7 @@ summary: string;               // 总评（§7.3）
 - `components/ai/ConsistencyCheck.tsx` + css — 设置区（范围三档 + 集合选择复用
   `ScopePicker` 的弹层、条目选择复用 AI 面板的固定条目选择器）、分配条、段条、日志、发现流
 - `components/ai/AiPanel.tsx` — `ContextAllocation` 抽成独立文件供两处用
-- `components/command/CommandPalette.tsx:353` — 带 `term` 过去
+- `components/command/CommandPalette.tsx` — 带 `term` 过去
 - `docs/feature/agent/context-meters.md` — 表加一行；`docs/README.md` — 状态行
 - i18n：`ai.consistency.*` 新增键，中英各一份；**不出现 章/卷/设定**，段名用 `useTerms()`
 

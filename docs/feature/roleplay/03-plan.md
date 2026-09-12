@@ -170,5 +170,5 @@
 
 - `registry.ts` 的 `ToolId` 联合类型加了成员 → `Record<ToolId, RegisteredTool>` 是全量映射，漏一个不会编译，安全。
 - `ToolContext` 加可选字段 → 不影响既有调用方。
-- `appStore.AiDrawerMode` 加成员 → `storedAiDrawerMode()`（`appStore.ts:118`）要能处理旧 pref 值，且**开关关掉时存着 `"roleplay"` 的 pref 必须降级回 `"generate"`**，否则关开关后抽屉打开是空白。这是个真会踩的坑。
+- `appStore.AiDrawerMode` 加成员 → `storedAiDrawerMode()`（`appStore.ts`）要能处理旧 pref 值，且**开关关掉时存着 `"roleplay"` 的 pref 必须降级回 `"generate"`**，否则关开关后抽屉打开是空白。这是个真会踩的坑。
 - `AiDrawer` 的 header 逻辑里有若干 `aiDrawerMode === "chat"` 的分支（历史会话、新建会话、任务按钮），加第四个 mode 时要确认这些分支的 else 分支行为正确。

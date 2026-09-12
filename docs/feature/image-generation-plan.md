@@ -22,12 +22,12 @@
 
 | 已有能力 | 位置 | 对本方案的意义 |
 | --- | --- | --- |
-| `ModelType` 含 `"image" \| "video"` | `lib/ai/configDb.ts:11` | 模型表与设置 UI 已能登记生图模型 —— **目前无任何代码消费，是死配置** |
+| `ModelType` 含 `"image" \| "video"` | `lib/ai/configDb.ts` | 模型表与设置 UI 已能登记生图模型 —— **目前无任何代码消费，是死配置** |
 | 「图 → 文」描述器 | `lib/lore/vision.ts` | 反向链路已通；生成的新图可复用它自动写描述 |
-| 多模态消息协议 `ContentPart.image_url` | `lib/ai/types.ts:14` | 图片进 prompt 的表示法已定，改图请求可直接复用 |
+| 多模态消息协议 `ContentPart.image_url` | `lib/ai/types.ts` | 图片进 prompt 的表示法已定，改图请求可直接复用 |
 | 图集存储 `images.md` + `addLoreImage` / `setEntityAvatar` | `lib/lore/gallery.ts` | 落盘与索引现成，PR1 不需要新存储格式 |
 | 请求走 Rust reqwest | `lib/http.ts` | 无 webview CORS 限制，可直连各家图像端点 |
-| 预览自动把相对路径 `<img>` 内联成 data URL | `components/editor/Preview.tsx:27` | 正文里的 `![](assets/x.png)` 无需额外工作即可渲染 |
+| 预览自动把相对路径 `<img>` 内联成 data URL | `components/editor/Preview.tsx` | 正文里的 `![](assets/x.png)` 无需额外工作即可渲染 |
 | 结构化输出（强制 tool_choice + JSON 兜底） | `lib/agent/structured.ts` | 提示词生成直接复用，无需新引擎 |
 | 角色化模型选择先例 `memoryModelId` | `stores/aiStore.ts` | `imageModelId` 照抄这一模式即可 |
 
@@ -118,7 +118,7 @@ safetySettings }`，顺手提成具名类型（`aiTaskStore`/`LoreDetail`/`visio
 
 链路上三层各自的行为：
 
-1. **JS 侧** `plugin-http/dist-js/index.js:66-75` 自己不序列化 body —— 它
+1. **JS 侧** `plugin-http/dist-js/index.js` 自己不序列化 body —— 它
    `new Request(input, init)` 交给 webview 序列化，`arrayBuffer()` 取字节，
    再把浏览器生成的 header 复制进去（**仅当调用方没声明同名 header**）。
 2. **WebView2（Chromium）实测**：FormData 正确序列化为 multipart，

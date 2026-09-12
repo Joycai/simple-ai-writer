@@ -22,9 +22,9 @@ _contentFlush_1wdy8_102  →  computedOpacity "0"   239×672
 ## 为什么这个归因立不住
 
 **内联样式里 `transform: translateY(6px)` 还在。** 而
-`useMotionPreset()`（`src/lib/motion.ts:41-54`）在减动效下的**唯一职责**就是把
+`useMotionPreset()`（`src/lib/motion.ts`）在减动效下的**唯一职责**就是把
 `transform` 从每个 variant 里剥掉，两处 enter-only 表面都调用了它
-（`Sidebar.tsx:86`、`AiPanel.tsx:1359`）。若减动效那条路径当时真的生效了，这串
+（`Sidebar.tsx`、`AiPanel.tsx`）。若减动效那条路径当时真的生效了，这串
 内联样式不可能存在。也就是说：那次读数里 Motion 根本没走到减动效分支，
 「reduced-motion 导致停在 initial」是没有证据支撑的。
 

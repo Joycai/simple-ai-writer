@@ -89,7 +89,7 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 **Packs & vocabulary**
 - Resolve the system prompt only through `profileSystemPrompt()` — never `ai.instructions.system` (test-enforced). Resolve tasks with `findTask()` and handle the null; a task id can outlive its pack.
 - Read `loreCategories()` / `profileTasks()` **at call time, never at module scope**; components subscribe to `projectStore.workspace` (the `lib/profile/active` singleton isn't reactive).
-- Never hardcode 章/卷/设定 in a component or an i18n value — pass `useTerms()` words into parametrized strings. Don't write 「设定」「词条」「前情记忆」 (`localeTerms.test.ts` ratchets the retired words shut).
+- Never hardcode 章/卷/设定 in a component or an i18n value — pass `useTerms()` words into parametrized strings. Don't write 「设定」「词条」「主词条」「前情记忆」「前情摘要」「思维链」「底稿」「图像生成」「生成插图」「修改插图」 — the retired set, held shut by `localeTerms.test.ts` (it scans locale values *and* the `defaultValue` literals in components; `docs/reference/terminology.md` §3 says which word won).
 
 **Storage & state**
 - Every preference goes through `lib/prefs.ts` `PREF_KEYS`. **Never add a `localStorage` call.**
@@ -140,7 +140,10 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - `src/lib/profile/` — capability packs (model / resolve / file / active / store)
 - `src/lib/context/` — RAG assembly, clock, doc focus, story memory, book spine, collection digests
 - `src/lib/batch/`, `src/lib/workflow/` — clause splitting; workflow cards (built-ins + project overrides, two-level disclosure)
-- Beta subsystems, each behind Settings → AI 配置 → 实验室 (`flag.ts`): `src/lib/comfy/` (ComfyUI image route), `pptx/` (HTML → PPTX, no model in the loop), `xlsx/` (markdown tables → workbook), `roleplay/` (first-person scenes, narrator, character memory), `translate/` (Sakura 日中), `asr/` (千问 audio transcription), `cli/` (one shell command per approval card; PowerShell on Windows, `$SHELL` elsewhere)
+- Beta subsystems, each behind Settings → AI 配置 → 实验室 (`flag.ts`): `src/lib/comfy/` (ComfyUI image route), `pptx/` (HTML → PPTX, no model in the loop), `xlsx/` (markdown tables → workbook), `docx/` (markdown → .docx; 版面全来自 `DocFormat`, no model in the loop), `roleplay/` (first-person scenes, narrator, character memory), `translate/` (Sakura 日中), `asr/` (千问 audio transcription), `cli/` (one shell command per approval card; PowerShell on Windows, `$SHELL` elsewhere)
+- `src/lib/editor/` — the editing surface's pure logic + CodeMirror extensions: the explicit AI target range (mapped through edits, not a DOM selection), markdown commands for both CodeMirror and plain textareas, `manuscriptHighlight` (class names only, so a theme can reach the editor), insert / caret landing flashes, split-view scroll linking **by source line**, the preview zoom ladder
+- `src/lib/format/`, `src/lib/diff/`, `src/lib/search/` — paragraph tidying (the mechanical half of "give this document shape"; guesses toward doing nothing); the capped Myers diff behind approval cards; ⌘K global search (substring > prefix > subsequence, and subsequence **only** on names)
+- `src/lib/sync/` — knowledge-base sync against `server/`: one direction, whole tree, no merge, and every run goes through a **three-way plan** (local × remote × last-sync snapshot) because comparing two sides cannot say *who moved*
 - `src/lib/consistency/` — 一致性检查 on the agent loop; windowing is code's, findings verified at record time
 - `src/lib/configsync/` — app-config backup to the sync server (encrypted whenever API keys ride along)
 - `src/lib/fs/` — Tauri file I/O, markdown, images / `@` candidates, pptx reading, export, project backup, the sidebar's move/copy + selection logic
@@ -148,8 +151,8 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - `src/lib/image/` — document illustrations (`assets/<文档名>/`, relative links, relink repair), model-bound image reader (downscale instead of refuse), illustrate step
 - `src/lib/import/` — docx / xlsx / pdf / pptx → markdown (+ extracted rasters), copy-as-is for txt/md/html/images, conversion cache, materialize
 - `src/lib/` root — `project.ts`, `keyStore.ts`, `instance.ts` (multi-instance), `prefs.ts`, `appReset.ts`, `sqlTx.ts`, `notify.ts`, `http.ts`, `paths.ts`, `platform.ts`, `webviewCaps.ts`
-- `src/stores/`, `src/styles/` (`tokens.css` + `global.css`), `src/i18n/locales/` (en, zh-CN)
-- `src-tauri/` — Rust side: commands, secrets, pptx / xlsx readers, `xlsx_write`, `instance` + `windowmenu`, `sqltx`
+- `src/stores/` (one paragraph each under [State Management](#state-management-zustand-stores) above), `src/styles/` (`tokens.css` + `global.css` — the five `@layer` cascade), `src/i18n/locales/` (en, zh-CN) — these three have no `codemap.md` section on purpose; `design-system.md` and `terminology.md` cover the latter two
+- `src-tauri/` — Rust side: `commands` + `blocking` (every `fs_*` off the main thread) behind `scope`'s path fence, `protocol` (`ai-writer-asset:`), `secrets` (OS credential manager), `sqltx` (one transaction on one connection), `transfer` (zip bundles + config backup, dialogs Rust-side), `lorehash` (an entry directory → one digest, the sync wire format), `instance` + `windowmenu` (multi-instance), `preview` + `print`, and the Office readers/writers `xlsx` / `xlsx_write` / `pptx` / `docx` (zip + XML stays here; markdown dialect stays in TS), `cmd` (`run_command`, deliberately not `tauri-plugin-shell`)
 - `server/` — **not part of the app**: a standalone Rust/axum binary for knowledge-base sync (`/v1/kbs`), app-config backups (`/v1/configs`, stored encrypted) and an admin console (`/admin`); own crate, CI job, `server/README.md` + `server/DEPLOY.md`
 
 ## Detailed References

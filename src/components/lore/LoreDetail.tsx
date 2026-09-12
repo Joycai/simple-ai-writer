@@ -190,7 +190,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (flashTimer.current) clearTimeout(flashTimer.current);
     // 先置 null 再下一帧设回，否则连续两次保存同一节时 setFlashId 拿到相同值、
     // React 跳过重渲染，.flash 类从未离开元素，sectFlash 不重播——第二次保存
-    // 静默无回执。同 ProvidersModelsPane.tsx:90 的既有处方。
+    // 静默无回执。同 ProvidersModelsPane.tsx 的 flashId 的既有处方。
     setFlashId(null);
     requestAnimationFrame(() => setFlashId(id));
     flashTimer.current = setTimeout(() => setFlashId(null), 1500);

@@ -514,8 +514,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   // 生成中的计时。1000ms 而不是 100ms：seconds 只有一个消费者（:985 的名标），
   // 但本组件 1500+ 行且无 memo，每次 setSeconds 都会连整条 transcript 一起重渲——
-  // 而那正是流式追加正在进行的时刻。整秒与 AgentChat.tsx:457 / WriterStrip.tsx:41 /
-  // LoreRunProgress.tsx:28 三处计时器一致。
+  // 而那正是流式追加正在进行的时刻。整秒与 AgentChat.tsx / WriterStrip.tsx /
+  // LoreRunProgress.tsx 三处计时器一致。
   useEffect(() => {
     if (!isRunning) { setSeconds(0); return; }
     const started = Date.now();
@@ -624,7 +624,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const jumpToTurn = (turn: number) => {
     // 显式 behavior 会压过 global.css 的 `scroll-behavior: auto !important`（方案 051），
-    // 所以减动效要在这里自己判一次。体例同 LoreReadView.tsx:205。
+    // 所以减动效要在这里自己判一次。体例同 LoreReadView.tsx 里 scrollTo 前那次 reduced 判断。
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     document
       .getElementById(`rp-turn-${turn}`)

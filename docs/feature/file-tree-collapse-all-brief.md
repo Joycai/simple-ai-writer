@@ -16,14 +16,14 @@
 
 | 面 | 落点 |
 |---|---|
-| 工具栏 | [`FileTree.tsx:1048`](../../src/components/layout/FileTree.tsx:1048) —— 项目名（已 `display:none`）+ 右侧 7 个 22×22 图标按钮：切换项目 · 新窗口 · 关闭项目 · 新建文件 · 新建文件夹 · 导入 · 刷新 |
-| 按钮样式 | [`FileTree.module.css:39`](../../src/components/layout/FileTree.module.css:39) `.toolbarBtn`（22×22、透明底、hover 上色描边） |
-| 展开状态 | `projectStore.expandedDirs: Record<string, boolean>`（[`projectStore.ts:165`](../../src/stores/projectStore.ts:165)），写入口只有 `setDirExpanded(path, open)`（[:698](../../src/stores/projectStore.ts:698)） |
-| 默认值 | [`lib/fs/selection.ts:37`](../../src/lib/fs/selection.ts:37) `isDirOpen(stored, depth) = stored ?? depth === 0` —— **顶层目录默认展开，深层默认折叠** |
-| 渲染 | `TreeNode` 每行订阅 `s.expandedDirs[node.path]` 单键（[:252](../../src/components/layout/FileTree.tsx:252)）；`FileTree` 顶层订阅整个 `expandedDirs`（[:380](../../src/components/layout/FileTree.tsx:380)） |
-| 选区 | `selected` / `anchor` 是 `FileTree` 的本地 state（[:404](../../src/components/layout/FileTree.tsx:404)、[:408](../../src/components/layout/FileTree.tsx:408)）；`visibleRows = flattenVisible(fileTree, expandedDirs)` 是 shift 范围走的行 |
-| 根右键菜单 | [`FileTree.tsx:890`](../../src/components/layout/FileTree.tsx:890)（右键树的空白处）：新建文件 / 新建文件夹 / 导入 / 粘贴 —— 分隔线 —— 在文件浏览器中显示 / 刷新 |
-| 侧栏宽度 | 160–500，默认 240（`SIDEBAR_MIN`/`MAX`，[`appStore.ts:119`](../../src/stores/appStore.ts:119)） |
+| 工具栏 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) —— 项目名（已 `display:none`）+ 右侧 7 个 22×22 图标按钮：切换项目 · 新窗口 · 关闭项目 · 新建文件 · 新建文件夹 · 导入 · 刷新 |
+| 按钮样式 | [`FileTree.module.css`](../../src/components/layout/FileTree.module.css) `.toolbarBtn`（22×22、透明底、hover 上色描边） |
+| 展开状态 | `projectStore.expandedDirs: Record<string, boolean>`（[`projectStore.ts`](../../src/stores/projectStore.ts)），写入口只有 `setDirExpanded(path, open)` |
+| 默认值 | [`lib/fs/selection.ts`](../../src/lib/fs/selection.ts) `isDirOpen(stored, depth) = stored ?? depth === 0` —— **顶层目录默认展开，深层默认折叠** |
+| 渲染 | `TreeNode` 每行订阅 `s.expandedDirs[node.path]` 单键；`FileTree` 顶层订阅整个 `expandedDirs` |
+| 选区 | `selected` / `anchor` 是 `FileTree` 的本地 state；`visibleRows = flattenVisible(fileTree, expandedDirs)` 是 shift 范围走的行 |
+| 根右键菜单 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx)（右键树的空白处）：新建文件 / 新建文件夹 / 导入 / 粘贴 —— 分隔线 —— 在文件浏览器中显示 / 刷新 |
+| 侧栏宽度 | 160–500，默认 240（`SIDEBAR_MIN`/`MAX`，[`appStore.ts`](../../src/stores/appStore.ts)） |
 
 `expandedDirs` 是**会话内状态**：不进 `prefs`，`openProject`/`closeProject` 时整个清空。
 折叠状态本来就不跨重启保留，本需求不改这条。
@@ -51,7 +51,7 @@
 
 `pruneSelection` 只按「路径还在不在树里」过滤（`everyRow`），**不按可见性**。
 折叠之后，深层的选中项仍在 `selected` 里，作者却看不见它们。这正是
-`openMenu` 那条注释已经在防的事（[:799](../../src/components/layout/FileTree.tsx:799)）：
+`openMenu` 那条注释已经在防的事：
 
 > Right-clicking outside the selection retargets it, the way every file manager
 > does — otherwise 删除 5 项 could appear over a row that is not one of the five.
@@ -62,7 +62,7 @@
 
 → 折叠之后把 `selected` 收敛到**折叠后仍可见的行**（也就是顶层行）。
 `anchor` 不用动：`rangeBetween` 已经为「锚点所在文件夹被折叠掉」降级过
-（[`selection.ts:63`](../../src/lib/fs/selection.ts:63) 的注释就写着这条）。
+（[`selection.ts`](../../src/lib/fs/selection.ts) 的注释就写着这条）。
 
 ## 3. 决策与被否掉的方案
 
@@ -196,9 +196,9 @@ const collapseAll = () => {
 |---|---|---|
 | 折叠后**新建**一个顶层文件夹 | 它是展开的 | `expandedDirs` 里没有它的键 → `depth === 0` 默认展开。接受：新出现的东西展开是合理的（而且新建会走 `creatingIn` 的自动展开）。压住它需要一个粘性标志，见 §3 最后一行 |
 | 折叠后点「刷新」 | 已有目录保持折叠 | 键是按路径存的，`refreshFileTree` 不动 `expandedDirs`；只有**新出现**的顶层目录展开，同上一行 |
-| 折叠时正拖着一个条目 | 不冲突 | 拖拽的 spring-open（悬停 `SPRING_OPEN_MS` 自动展开，[:484](../../src/components/layout/FileTree.tsx:484)）之后照常生效，只是它展开的那一个又是"作者显式开的" |
-| 折叠期间有内联新建输入框（`creatingIn`） | 该文件夹立刻重新展开 | `TreeNode` 的 `useEffect`（[:263](../../src/components/layout/FileTree.tsx:263)）在 `creatingIn === node.path` 时写 `true`。正确：输入框不能被藏起来。按钮禁用态随即变回可用 |
-| 当前打开的文档在深层 | 行被藏起，编辑区不受影响 | `activeFilePath` 的选区同步 effect 只在 `activeFilePath` **变化时**跑（[:454](../../src/components/layout/FileTree.tsx:454)），不会因折叠而把选区又拉回来 |
+| 折叠时正拖着一个条目 | 不冲突 | 拖拽的 spring-open（悬停 `SPRING_OPEN_MS` 自动展开）之后照常生效，只是它展开的那一个又是"作者显式开的" |
+| 折叠期间有内联新建输入框（`creatingIn`） | 该文件夹立刻重新展开 | `TreeNode` 的 `useEffect`在 `creatingIn === node.path` 时写 `true`。正确：输入框不能被藏起来。按钮禁用态随即变回可用 |
+| 当前打开的文档在深层 | 行被藏起，编辑区不受影响 | `activeFilePath` 的选区同步 effect 只在 `activeFilePath` **变化时**跑，不会因折叠而把选区又拉回来 |
 | 切换到「大纲」标签页再切回 | 仍是全折叠 | `expandedDirs` 在 store 不在组件——这正是它当初住进 store 的理由 |
 | 关闭项目再打开 | 回到默认（顶层展开） | `openProject` 清空 `expandedDirs`；折叠状态本就不跨会话 |
 

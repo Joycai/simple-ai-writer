@@ -89,7 +89,7 @@
 | 文件 | 性质 |
 |---|---|
 | `lib/lore/entity.ts` | 扫描/创建/改名/搬迁/facet 读写 —— 8 处,**主战场** |
-| `lib/context/loreSelect.ts:371,381` | 注入取正文 —— **只有 2 处,且是整条注入链路的唯一读盘点** |
+| `lib/context/loreSelect.ts` | 注入取正文 —— **只有 2 处,且是整条注入链路的唯一读盘点** |
 | `lib/lore/gallery.ts` | 图库 + avatar 二进制 —— 6 处 |
 | `lib/agent/writeTools.ts` | agent 写工具 —— 引用 `dirPath` 29 处 |
 | `components/lore/{LoreDetail,LoreSplitModal,LoreGenerator}.tsx`、`ai/LoreImageGenModal.tsx` | 组件直接调 fs —— 4 处 |

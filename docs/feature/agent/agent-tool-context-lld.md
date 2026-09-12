@@ -27,7 +27,7 @@
 
 ### 1.1 `lib/agent/toolCost.ts`（新文件）
 
-现在 `AgentChat.tsx:413` 手写了一遍"路由 → 取定义 → 估 token"，PR1 之后还会有三个调用点需要同一个数。抽出来：
+现在 `AgentChat.tsx` 手写了一遍"路由 → 取定义 → 估 token"，PR1 之后还会有三个调用点需要同一个数。抽出来：
 
 ```ts
 /**
@@ -90,12 +90,12 @@ const ceilingChars = floor(messageCeilingTokens * charsPerToken);   // ← 改�
 
 | 文件 | 现在 | 改成 |
 | --- | --- | --- |
-| `stores/aiTaskStore.ts:504` | `plan.inputCeilingTokens \|\| ASSUMED_…` | `plan.messageCeilingTokens \|\| ASSUMED_…` |
-| `stores/agentStore.ts:1174` | `inputCeilingFor(model.contextSize, util)` | 同上再减 `plannedToolTokens(AGENT_ASSIST_PRESET, …)` |
-| `stores/agentStore.ts:1067`（压缩触发） | 同上 | 同上——**必须和 1174 用同一个数**，否则压缩阈值和裁剪阈值再次错位 |
-| `stores/roleplayStore.ts:549` | 同上 | 同上（用 `presetFor(agent.kind)`） |
+| `stores/aiTaskStore.ts` | `plan.inputCeilingTokens \|\| ASSUMED_…` | `plan.messageCeilingTokens \|\| ASSUMED_…` |
+| `stores/agentStore.ts` | `inputCeilingFor(model.contextSize, util)` | 同上再减 `plannedToolTokens(AGENT_ASSIST_PRESET, …)` |
+| `stores/agentStore.ts`（压缩触发） | 同上 | 同上——**必须和 1174 用同一个数**，否则压缩阈值和裁剪阈值再次错位 |
+| `stores/roleplayStore.ts` | 同上 | 同上（用 `presetFor(agent.kind)`） |
 
-`aiTaskStore.ts:358` 和 `AiPanel.tsx:222` 的 `planContextBudget(...)` 调用各加一个
+`planContextBudget(...)` 的两个调用点（`aiTaskStore.ts`，以及当时在 `AiPanel.tsx`、现已收进 `lib/context/forecast.ts` 的那一处）各加一个
 `toolSchemaTokens: plannedToolTokens(presetForTools(task.tools) ?? …)`；`presetForTools`
 返回 `null`（`tools: "none"`）时传 0。
 
@@ -127,7 +127,7 @@ const messageCeiling = (contextSize, util, preset) =>
     at: number }
 ```
 
-`runtime.ts:513` 填 `withholdTools ? 0 : toolTokensOf(activeToolIds)`。
+`runtime.ts` 填 `withholdTools ? 0 : toolTokensOf(activeToolIds)`。
 `components/ai/AgentLog.tsx` 在轮次行上显示 `估 12.3k（工具 8.5k）`——**这是验证后面四个
 PR 收益的唯一手段**，先有它再动别的。
 

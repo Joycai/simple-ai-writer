@@ -13,7 +13,7 @@
   background-size: 36px 36px;
   container-type: inline-size;
   /* 入场只是一次淡入，不是位移：这块 .wall 由「进入阅读态」和「换条目」两件事
-     挂载，而前者的触发器是无修饰键的 R（LoreDetail.tsx:224），一整张 820px 的
+     挂载，而前者的触发器是无修饰键的 R（LoreDetail.tsx 的 anyOverlayOpen 那个 keydown），一整张 820px 的
      纸每次都从右边滑进来属 AUDIT §1「大幅减弱」那一档。换成纯 opacity 之后，
      两个方向也终于对称了——管理台那半本来就没有入场。 */
   animation: fadeIn 120ms var(--ease-out);

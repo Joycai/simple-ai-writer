@@ -35,12 +35,12 @@
 
 证据：
 
-- 适配器**只在流结束时**交出工具调用：`ai/openai.ts:245,264`（两处 `emitToolCalls()`，都在读流之后）、`ai/anthropic.ts:611` 同形。增量本来就在 `toolCallMap` / `toolBlocks` 里逐片累加，缺的只是往外发一次。
-- **Gemini 拿不到增量**：`ai/gemini.ts:288` 的注释写着 "Gemini sends complete functionCall objects (not streamed fragments)"。这条对 Gemini 家族只能退化成「已用时」。
-- `search_text` 是**逐文件串行读**：`agent/tools.ts:917` 对每份文档 `await readFile`，`:934` 起再对知识库每个条目的每份 md 读一遍。300 章 + 50 条目 ≈ 350+ 次 IPC。
-- 生图轮询上限：`ai/image.ts:1013` `DASHSCOPE_TASK_TIMEOUT_MS = 600_000`、`:1109` ComfyUI 同值，轮询间隔 1–5 秒。
-- 导出与生图**在批准之后**才干活：`stores/agentStore.ts:551` `applyProposal` 的 `illustrate` / `pptx` / `docx` / `xlsx` 分支，由 `settleApproval` 调用，**之后**才 `item.resolve()` 放行那次工具调用。所以工具步一直是 running，而工具本身早已阻塞在 `requestApproval` 里。
-- harvest 上限：`pptx/harvest.ts:68` `TIMEOUT_MS = 20_000`。
+- 适配器**只在流结束时**交出工具调用：`ai/openai.ts`（两处 `emitToolCalls()`，都在读流之后）、`ai/anthropic.ts` 同形。增量本来就在 `toolCallMap` / `toolBlocks` 里逐片累加，缺的只是往外发一次。
+- **Gemini 拿不到增量**：`ai/gemini.ts` 的注释写着 "Gemini sends complete functionCall objects (not streamed fragments)"。这条对 Gemini 家族只能退化成「已用时」。
+- `search_text` 是**逐文件串行读**：`agent/tools.ts` 对每份文档 `await readFile`，同一个循环再用 `readEntityFile` 对知识库每个条目的每份 md 读一遍。300 章 + 50 条目 ≈ 350+ 次 IPC。
+- 生图轮询上限：`ai/image.ts` `DASHSCOPE_TASK_TIMEOUT_MS = 600_000`、`COMFY_TASK_TIMEOUT_MS` 同值，轮询间隔 1–5 秒。
+- 导出与生图**在批准之后**才干活：`stores/agentStore.ts` `applyProposal` 的 `illustrate` / `pptx` / `docx` / `xlsx` 分支，由 `settleApproval` 调用，**之后**才 `item.resolve()` 放行那次工具调用。所以工具步一直是 running，而工具本身早已阻塞在 `requestApproval` 里。
+- harvest 上限：`pptx/harvest.ts` `TIMEOUT_MS = 20_000`。
 
 ---
 
@@ -99,7 +99,7 @@
   `done: true` —— 否则那一行会永远转着圈停在它自己产出的那个工具步上面。
 - **参数一开始到，思考就结束了**：`toolArgs` 到达时和 `text` 到达时一样把 reasoning 标 done。
   少了这条，思考模型的标题行会在一章正文流过去的整段时间里停在「正在思考」。
-- Gemini 家族拿不到增量（`gemini.ts:288`），退化成 A 的秒表。
+- Gemini 家族拿不到增量（`gemini.ts`），退化成 A 的秒表。
 
 ### 2.3 已做（生图那一半）· 缝不在工具这边（PR #425）
 
@@ -123,9 +123,9 @@
 
 ### 3.1 `run_pack` 的整段子运行在日志里不存在
 
-`packs.ts:351` 用和 `subagent.ts:472` **一模一样**的方式转发（`{...e, parentStep: call.id}`），但 `run_pack` 不叫 `delegate`，所以那些轮次、工具步、`run-done` 一条都不显示。开着「助手工具包模式」Beta 时，**每一次写入都发生在一个看不见的子运行里**。
+`packs.ts` 用和 `subagent.ts` **一模一样**的方式转发（`{...e, parentStep: call.id}`），但 `run_pack` 不叫 `delegate`，所以那些轮次、工具步、`run-done` 一条都不显示。开着「助手工具包模式」Beta 时，**每一次写入都发生在一个看不见的子运行里**。
 
-token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，带 `parentStep` 的 `run-done` 照样计入 subInput/subOutput。丢的只有卡片。
+token 账没丢：`sumTokens`（`logModel.ts`）读的是**原始 log**，带 `parentStep` 的 `run-done` 照样计入 subInput/subOutput。丢的只有卡片。
 
 这三条**跑过**（临时 vitest，未入库）：同一段事件流只把工具名从 `delegate` 换成 `run_pack`，`subagents` 从 1 张卡变成 0 张，且整个 model 里再也找不到任何带 `parentStep` 的事件；`sumTokens` 仍然算出 700/300。
 
@@ -135,7 +135,7 @@ token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，�
 
 ### 3.2 写手（handoff）—— 查下来**不是** bug，故意不修
 
-`handoff.ts:408` 确实同样转发，但它的 `parentStep` 是 `handoff-<round>`，一个**合成 id**：那次工具调用在 `runtime.ts:857` 就被截走了，从来没有 tool-step 事件。所以结构规则天然够不着它 —— 而这正合设计：设计稿 04d · 屏 3a 写的是「执行日志里不再有工单卡」，交接渲染在**回合本身**上（`WriterTurn`），`handoff-done` 带着字数、耗时、token 和费用。
+`handoff.ts` 确实同样转发，但它的 `parentStep` 是 `handoff-<round>`，一个**合成 id**：那次工具调用在 `runtime.ts` 就被截走了，从来没有 tool-step 事件。所以结构规则天然够不着它 —— 而这正合设计：设计稿 04d · 屏 3a 写的是「执行日志里不再有工单卡」，交接渲染在**回合本身**上（`WriterTurn`），`handoff-done` 带着字数、耗时、token 和费用。
 
 改前的判断（「按 §3.1 会顺带修好」）是错的，在此更正：写手少的是内部轮次那一层细节，而它的状态和账都在作者看得见的地方。
 
@@ -145,7 +145,7 @@ token 账没丢：`sumTokens`（`logModel.ts:320`）读的是**原始 log**，�
 
 - **毫秒级工具的进度条。** 给一个三毫秒的调用画进度条只是噪音，而噪音会让真正在动的那根线变得不值得看。
 - **「等待作者批准」的进度。** 那是作者自己的时间，卡片就在眼前，还有系统通知（`lib/notify`）。把它画成进度，等于把一个决定伪装成一段处理。
-- **导入（docx / pdf / pptx）。** 它确实是长文件操作，也确实逐页跑（`import/pdf.ts:274` 的 `for i <= numPages`，一页一次文本 + 图片抽取），但它**根本不在工具卡片上** —— 那是文件树的一次对话框操作。要做是另一条线，不该混进这份清单。
+- **导入（docx / pdf / pptx）。** 它确实是长文件操作，也确实逐页跑（`import/pdf.ts` 的 `for i <= numPages`，一页一次文本 + 图片抽取），但它**根本不在工具卡片上** —— 那是文件树的一次对话框操作。要做是另一条线，不该混进这份清单。
 
 ---
 

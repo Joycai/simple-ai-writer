@@ -68,7 +68,7 @@ CREATE TABLE chat_sessions (
 `lib/agent/approvalRouting.ts`：没有 `surface` 的卡属于默认界面（对话助手 + 任务面板），
 带 `surface` 的只由同名界面渲染。扮演用 agentId 打标，于是三个并发的 agent 各看各的。
 **对话助手今天从不打标**，`CHAT_AUTO_APPROVE_KEY = "chat"` 也是一个全局字面量——两段
-对话一起跑，A 的「本次都批准」会覆盖到 B（`roleplayStore.ts:747-759` 的注释就是防这个）。
+对话一起跑，A 的「本次都批准」会覆盖到 B（`roleplayStore.ts` 的注释就是防这个）。
 
 ## 2. 目标与非目标
 
@@ -274,7 +274,7 @@ store 版本：`AgentChat.tsx` 里的 `queued` state 和它的 effect 删掉，�
 会话不需要另一个后台缓冲，切回来时 `AgentChat` 重挂、读到的就是累积到那一刻的 turns。
 
 **停止只停自己**：`stopChat(key)` 只 abort 那一个 controller，`rejectAll` 按 controller
-身份只清它的卡（`agentStore.ts:1091` 的比较本来就是 `===` controller）。
+身份只清它的卡（`agentStore.ts` 的比较本来就是 `===` controller）。
 
 ### 4.3 并发闸
 

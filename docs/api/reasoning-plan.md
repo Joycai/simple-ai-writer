@@ -111,7 +111,7 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
 
 4. **采样参数冲突 —— 本项目天然躲过了，别把它捡回来。** DeepSeek 思考模式不支持
    `temperature`/`top_p`/`presence_penalty`/`frequency_penalty`，OpenAI 推理模型
-   同样不支持 `temperature`。而 `openai.ts:19` 与 `gemini.ts:113` 的 body 里
+   同样不支持 `temperature`。而 `openai.ts` 与 `gemini.ts` 的 body 里
    本来就没有这些字段。**加思考强度的这一版，不要顺手加"温度"设置**，否则两个
    功能会在同一批模型上互相打架。
 
@@ -129,13 +129,13 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
 
 ### 3.1 本项目现状
 
-- `gemini.ts:207` 用 `part.text && !part.thought` 过滤掉思考文本；`thoughtSignature`
+- `gemini.ts` 用 `part.text && !part.thought` 过滤掉思考文本；`thoughtSignature`
   已经通过 `geminiAllModelParts` → `StreamChunk._geminiModelParts` →
   `StreamMessage._geminiModelParts` 原样回传。**Gemini 的回传合规性已经做完了**，
   缺的只是"把思考文本显示出来"。
-- `anthropic.ts:442` 明确丢弃 `thinking_delta` / `signature_delta`，注释理由是
+- `anthropic.ts` 明确丢弃 `thinking_delta` / `signature_delta`，注释理由是
   "本 app 没有展示推理文本的界面，且 token 已计入 usage"。**回传合规性没做** ——
-  今天不出问题，是因为 `thinkingFor`（`anthropic.ts:240`）在 forced tool 时禁用了
+  今天不出问题，是因为 `thinkingFor`（`anthropic.ts`）在 forced tool 时禁用了
   思考，而普通 agent 轮次里 Claude 的 thinking block 缺失暂时被服务端容忍。
   这是新代模型的行为，不是可以依赖的契约。
 - ~~`openai.ts` 只读 `delta.content`，`reasoning_content` 被静默丢弃。~~ **已修**，
@@ -144,7 +144,7 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
   `reasoning_content`，API 400。思考默认是开的，所以这是默认路径。
   单次流式任务（润色/改写/摘要）不受影响：它们不回传 assistant 消息。
 - token 计数三家都已经对齐：Gemini 手动把 `thoughtsTokenCount` 折进 output
-  （`gemini.ts:230`），Anthropic 的 `output_tokens` 本就含 thinking，OpenAI 的
+  （`gemini.ts`），Anthropic 的 `output_tokens` 本就含 thinking，OpenAI 的
   `completion_tokens` 也含 reasoning。**成本核算不需要改。**
 
 ---
@@ -153,7 +153,7 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
 
 ### 4.1 数据
 
-配置粒度是 **per-model**，落在 `configDb.ts:86` 的 `Model` 上 ——
+配置粒度是 **per-model**，落在 `configDb.ts` 的 `Model` 上 ——
 `contextSize` / `maxOutput` / `probedAt` 已经是这个粒度，且同一 provider 下
 reasoner 与普通模型混在一起，per-provider 粒度表达不了。
 
@@ -192,19 +192,19 @@ adapter 只调用它拿一段 body 片段合并进去，永远不自己写档位
 
 ### 4.3 读侧的形状
 
-`StreamChunk`（`types.ts:133`）新增一个变体：
+`StreamChunk`（`types.ts`）新增一个变体：
 
 ```ts
 | { reasoning: string }
 ```
 
-**纯加法。** 现有 8 处 `"text" in chunk` 的消费者（`aiTaskStore.ts:563`、
-`agent/runtime.ts:328`、`agent/structured.ts:108,132`、`agent/compactRun.ts:141`、
-`lore/vision.ts:99`、`memoryStore.ts:121`、`ai/apiLog.ts:180`）全部不受影响，
+**纯加法。** 现有 8 处 `"text" in chunk` 的消费者（`aiTaskStore.ts`、
+`agent/runtime.ts`、`agent/structured.ts`、`agent/compactRun.ts`、
+`lore/vision.ts`、`memoryStore.ts`、`ai/apiLog.ts`）全部不受影响，
 只有需要展示的地方去接新变体。
 
 附带好处：`lib/ai/json.ts` 与 `agent/structured.ts` 今天靠"从推理散文里抠 JSON"
-兜底（`json.ts:3` 的注释就是为此写的），思维链从正文里分离出来之后，那条
+兜底（`json.ts` 的注释就是为此写的），思维链从正文里分离出来之后，那条
 兜底路径会干净很多。
 
 ### 4.4 回传（已实现，形状与原计划不同）
@@ -242,7 +242,7 @@ interface NativeReasoning { field: string; text: string }
    `lib/ai/modelHealth.ts` 与 `lib/ai/probeAnalysis.ts` 已有"读错误信息做判断"
    的先例可复用。
 
-3. **`anthropic.ts:240` `thinkingFor` 的优先级保持最高。** forced tool 时依然
+3. **`anthropic.ts` `thinkingFor` 的优先级保持最高。** forced tool 时依然
    无条件 disable 思考 —— 否则 `agent/structured.ts` 那批结构化任务（一致性
    检查、lore improve、条目拆分）全部退化到 JSON fallback，静默丢掉 schema 约束。
    该函数的注释里已经预警过这件事，实现时不要绕开它。
