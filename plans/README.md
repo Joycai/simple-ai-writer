@@ -5,6 +5,10 @@
 
 ## 方案一览
 
+> 本表覆盖全部十一批（001–054）。状态与严重度以各批表格为准，两处不一致时改这里。
+> **唯一仍未执行的是 017**；其余 53 份均已落地，保留是因为源码注释与 `docs/` 以
+> 「方案 NNN」/`plans/NNN-*.md` 引用它们（当前 28 处），删文件会把这些引用打成死链。
+
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
 | 001 | [拖拽侧栏宽度时禁用 width 过渡](001-sidebar-resize-drag.md) | HIGH | DONE |
@@ -37,6 +41,30 @@
 | 028 | [生成图落位时淡入显影](028-generated-image-reveal.md) | LOW | DONE |
 | 029 | [提示词库痕迹行补上退场淡出](029-snippet-trace-exit.md) | MEDIUM | DONE |
 | 030 | [「跳到结尾」的光标落点提示](030-caret-landing-flash.md) | LOW | DONE（目检待作者） |
+| 031 | [侧栏折叠不再过渡 width](031-sidebar-collapse-no-transition.md) | HIGH | DONE |
+| 032 | [「移到分类」浮层补入场与锚定](032-category-move-menu-entrance.md) | HIGH | DONE |
+| 033 | [阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器](033-lore-read-entrance-token-and-trigger.md) | HIGH | DONE |
+| 034 | [分屏滚动联动合并到 rAF](034-scrollsync-raf-coalesce.md) | MEDIUM | DONE |
+| 035 | [两个同步 spinner 补 reduced-motion 豁免](035-sync-spinners-reduced-motion.md) | MEDIUM | DONE |
+| 036 | [AgentLog 进度条改用 transform: scaleX](036-agentlog-progress-composite.md) | MEDIUM | DONE |
+| 037 | [删除分类确认框补入场与按压](037-category-delete-modal-entrance.md) | MEDIUM | DONE |
+| 038 | [扮演计时从 10Hz 降到 1Hz](038-roleplay-timer-rerender.md) | MEDIUM | DONE |
+| 039 | [最近项目行补按压反馈](039-recent-projects-row-press.md) | MEDIUM | DONE |
+| 040 | [两处一次性闪烁在重复触发时静默失效](040-one-shot-flash-retrigger.md) | LOW-MED | DONE |
+| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
+| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
+| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
+| 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检通过） |
+| 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检通过） |
+| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（目检通过） |
+| 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（目检通过） |
+| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE（目检未复现加载态） |
+| 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE（目检通过，tabFlash 定 240ms） |
+| 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（目检通过，A 保留） |
+| 051 | [两处 JS 平滑滚动绕过了 reduced-motion](051-smooth-scroll-reduced-motion.md) | MEDIUM | DONE（目检待作者） |
+| 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测） |
+| 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者） |
+| 054 | [App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡](054-stale-sidebar-transition-comment.md) | LOW | DONE |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。

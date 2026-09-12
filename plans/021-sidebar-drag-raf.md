@@ -1,6 +1,6 @@
 # 021 — 侧栏拖拽按帧合并写入
 
-- **Status**: TODO
+- **Status**: DONE（2026-08-26，PR #332；`mousemove` 已合并到 rAF，作者真窗口拖拽目检通过。**本方案对代价的描述说重了**，CDP 实测更正见下，随 PR #334 记入）
 - **Commit**: 93eb7de
 - **Severity**: MEDIUM
 - **Category**: 性能
