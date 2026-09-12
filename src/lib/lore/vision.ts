@@ -8,6 +8,7 @@
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { StreamMessage } from "../ai/types";
+import { imagePart } from "../ai/imagePart";
 
 export interface DescribeLoreImageOptions extends ConnOptions {
   /** base64 data URL of the image to describe. */
@@ -66,7 +67,7 @@ export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise
       role: "user",
       content: [
         { type: "text", text: userLines.join("\n\n") },
-        { type: "image_url", image_url: { url: opts.dataUrl } },
+        imagePart(opts.dataUrl),
       ],
     },
   ];

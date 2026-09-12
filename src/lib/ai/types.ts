@@ -155,10 +155,29 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  */
 export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui";
 
+/**
+ * The optional processing hint that rides beside an image URL.
+ *
+ * `low` asks the endpoint to scale the picture to 512x512 before looking at
+ * it; `high` asks for full resolution. Absence means "endpoint's choice",
+ * which is also what the `auto` both vendors document already means — so this
+ * app never sends that string. Lives here rather than beside the builder
+ * because it is a wire vocabulary, and `lib/ai/imagePart.ts` is what decides
+ * when to use it. See that file for the vendor table.
+ */
+export type ImageDetail = "low" | "high";
+
 /** A single part inside a multimodal user message. */
 export type ContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } } // url = data:<mime>;base64,<data>
+  /**
+   * A picture. `url` is a `data:<mime>;base64,<data>`; `detail` is the
+   * optional processing hint OpenAI and DeepSeek both accept (`low` = the
+   * endpoint scales to 512x512 first). Build these with `imagePart()` rather
+   * than by hand — it is what applies the author's default. Protocols with no
+   * spelling for `detail` (Anthropic, Gemini) drop it in their own adapters.
+   */
+  | { type: "image_url"; image_url: { url: string; detail?: ImageDetail } }
   /**
    * A whole document handed to the model as a file — the OpenAI Chat
    * Completions file part, which DashScope mirrors for Qwen's PDF

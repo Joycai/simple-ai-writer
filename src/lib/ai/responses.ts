@@ -83,13 +83,23 @@ function textOf(content: StreamMessage["content"]): string {
  * slice H is where both get their tests. Mapping them here rather than
  * dropping them keeps a picture the author attached from vanishing silently
  * on this family.
+ *
+ * `detail` sits *beside* `image_url` on this wire rather than inside it — the
+ * one shape difference from Chat Completions, where it is a sibling of `url`
+ * within the object. Spelled out because the field is only ever present when
+ * the author asked for it, so getting it wrong would be invisible to everyone
+ * who left the setting alone.
  */
 function toInputPart(part: ContentPart): Record<string, unknown> {
   switch (part.type) {
     case "text":
       return { type: "input_text", text: part.text };
     case "image_url":
-      return { type: "input_image", image_url: part.image_url.url };
+      return {
+        type: "input_image",
+        image_url: part.image_url.url,
+        ...(part.image_url.detail ? { detail: part.image_url.detail } : {}),
+      };
     case "file":
       return { type: "input_file", filename: part.file.filename, file_data: part.file.file_data };
   }

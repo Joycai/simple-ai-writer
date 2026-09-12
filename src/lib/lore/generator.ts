@@ -13,6 +13,8 @@ import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { withJsonModeFallback, type JsonSchemaSource } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
+import { imagePart } from "../ai/imagePart";
+import type { ContentPart } from "../ai/types";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
 
@@ -90,12 +92,9 @@ export async function generateLore(opts: ConnOptions & {
     promptText = cleanDesc || "请根据附图创建一个设定条目。";
   }
 
-  const baseUserParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [
+  const baseUserParts: ContentPart[] = [
     { type: "text", text: promptText },
-    ...opts.images.map((img) => ({
-      type: "image_url" as const,
-      image_url: { url: img.dataUrl },
-    })),
+    ...opts.images.map((img) => imagePart(img.dataUrl)),
   ];
 
   // The extraction prompt — built-in or author-overridden — enumerates the
