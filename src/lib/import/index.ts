@@ -64,7 +64,7 @@ export const CONVERT_EXTENSIONS = ["docx", "xlsx", "pdf", "pptx"] as const;
  * HTML preview and the `@` picker can already open is exactly what there is no
  * reason to convert.
  */
-export const COPY_TEXT_EXTENSIONS = TEXT_EXTENSIONS;
+const COPY_TEXT_EXTENSIONS = TEXT_EXTENSIONS;
 /**
  * Pictures, plus recordings and video: the audio-transcription tools
  * (`lib/asr`) read those off disk, so a file the author wants transcribed has
@@ -72,14 +72,14 @@ export const COPY_TEXT_EXTENSIONS = TEXT_EXTENSIONS;
  * for a media file. Not gated on the ASR Beta: a project may hold its source
  * recordings whether or not it transcribes them.
  */
-export const COPY_BINARY_EXTENSIONS: readonly string[] = [
+const COPY_BINARY_EXTENSIONS: readonly string[] = [
   ...IMAGE_EXTENSIONS,
   ...ASR_AUDIO_EXTENSIONS,
   ...ASR_VIDEO_EXTENSIONS,
 ];
 
 /** Everything the picker offers, convert and copy alike. */
-export const IMPORT_EXTENSIONS: readonly string[] = [
+const IMPORT_EXTENSIONS: readonly string[] = [
   ...CONVERT_EXTENSIONS,
   ...COPY_TEXT_EXTENSIONS,
   ...COPY_BINARY_EXTENSIONS,

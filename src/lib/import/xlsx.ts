@@ -23,7 +23,7 @@ import { invoke } from "@tauri-apps/api/core";
  * rather than a document, and the row cap in xlsx.rs would discard most of it
  * on arrival anyway.
  */
-export const MAX_XLSX_BYTES = 16 * 1024 * 1024;
+const MAX_XLSX_BYTES = 16 * 1024 * 1024;
 
 export async function xlsxToMarkdown(data: Uint8Array): Promise<string> {
   if (data.byteLength > MAX_XLSX_BYTES) {

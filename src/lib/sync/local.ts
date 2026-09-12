@@ -77,7 +77,7 @@ export async function hashEntryDir(dir: string): Promise<string> {
 }
 
 /** The archive subtree name. One plain component, as the Rust side requires. */
-export const ENTRY_ZIP_PREFIX = "entry";
+const ENTRY_ZIP_PREFIX = "entry";
 
 /** Pack one entry directory into `destZip`. Returns the file count. */
 export async function zipEntry(srcDir: string, destZip: string): Promise<number> {

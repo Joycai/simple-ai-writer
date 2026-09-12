@@ -271,7 +271,7 @@ function entryFromFile(id: string, f: ScannedThemeFile, source: "user" | "projec
   };
 }
 
-export function findEntry(entries: readonly ThemeEntry[], id: string): ThemeEntry | undefined {
+function findEntry(entries: readonly ThemeEntry[], id: string): ThemeEntry | undefined {
   return entries.find((e) => e.id === id);
 }
 

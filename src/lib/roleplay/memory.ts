@@ -82,7 +82,7 @@ export interface MemoryDoc {
   next: number;
 }
 
-export const EMPTY_MEMORY: MemoryDoc = { records: [], next: 1 };
+const EMPTY_MEMORY: MemoryDoc = { records: [], next: 1 };
 
 /**
  * 解析 `memory.md`。**永不抛异常**——作者手改这个文件是被允许的行为。

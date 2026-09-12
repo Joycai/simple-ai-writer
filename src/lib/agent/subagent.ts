@@ -140,7 +140,7 @@ export const MAX_PDF_FILES = 3;
  * Each one is a full image payload on a request that is rebuilt every round,
  * so a wide job is split rather than sent as one.
  */
-export const MAX_VISION_IMAGES = 8;
+const MAX_VISION_IMAGES = 8;
 
 /**
  * Read one project PDF for a delegation, or say exactly why not.

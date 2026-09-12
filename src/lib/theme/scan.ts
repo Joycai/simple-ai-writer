@@ -14,7 +14,7 @@ import { fileExists, makeDir, readDir, readFile } from "../fs/fileio";
 import { dirName, joinPath } from "../paths";
 import { THEME_FILE_EXT } from "./manifest";
 
-export const THEMES_DIR_NAME = "themes";
+const THEMES_DIR_NAME = "themes";
 export const PROJECT_THEMES_DIR = `.ai-writer/${THEMES_DIR_NAME}`;
 
 let cachedDir: string | null = null;

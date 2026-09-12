@@ -183,7 +183,7 @@ export async function expandQuery(args: ExpandQueryArgs): Promise<string[]> {
  * 它挡在首字之前——一次续写的等待里，这一秒是加上去的。绑一个局域网小模型时
  * 这个数远远够；绑了一个卡住的地址时，作者付出的是三秒而不是一次失败的运行。
  */
-export const EXPAND_TIMEOUT_MS = 3000;
+const EXPAND_TIMEOUT_MS = 3000;
 
 /**
  * 一次完整的扩展：建名单 → 跑 → 滤。没配、没意图、超时、出错，一律空数组。

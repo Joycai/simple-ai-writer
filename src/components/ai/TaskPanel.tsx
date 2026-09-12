@@ -95,7 +95,7 @@ export function TaskPanel({
 }
 
 /** The panel itself, given a plan. Split from the loading so it can be looked at. */
-export function TaskPlanCard({ plan, tokens }: { plan: Plan; tokens: TokenTotals }) {
+function TaskPlanCard({ plan, tokens }: { plan: Plan; tokens: TokenTotals }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 

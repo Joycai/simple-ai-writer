@@ -20,7 +20,7 @@ export function setApiLogEnabled(enabled: boolean): void {
   writePref(ENABLED_KEY, enabled ? "1" : "0");
 }
 
-export async function getApiLogDir(): Promise<string> {
+async function getApiLogDir(): Promise<string> {
   return join(await appLogDir(), "api");
 }
 
@@ -30,7 +30,7 @@ function todayStamp(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export async function getCurrentApiLogFile(): Promise<string> {
+async function getCurrentApiLogFile(): Promise<string> {
   return join(await getApiLogDir(), `api-${todayStamp()}.jsonl`);
 }
 

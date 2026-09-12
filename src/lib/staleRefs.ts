@@ -48,7 +48,7 @@ export interface StaleSweep {
   sessionImages: number;
 }
 
-export const NOTHING_STALE: StaleSweep = {
+const NOTHING_STALE: StaleSweep = {
   pinnedProjects: 0,
   pinnedEntries: 0,
   rosterRefs: 0,

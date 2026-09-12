@@ -142,7 +142,7 @@ export const MAX_LINE_DISTANCE = 1_000;
 /** Longest line that gets token-level detail, per side. */
 export const MAX_INLINE_CHARS = 4_000;
 /** Most changed tokens inside one line before its inline detail is dropped. */
-export const MAX_INLINE_DISTANCE = 600;
+const MAX_INLINE_DISTANCE = 600;
 
 /**
  * How much of a line must survive for it to count as "this line, rewritten".

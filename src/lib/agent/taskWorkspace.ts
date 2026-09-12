@@ -29,7 +29,7 @@ import {
 export type TaskStatus = "in_progress" | "paused" | "completed" | "failed" | "aborted";
 export type StepStatus = "pending" | "in_progress" | "done" | "skipped";
 
-export const MAX_SAVED_TASKS = 20;
+const MAX_SAVED_TASKS = 20;
 
 /** Machine-only metadata in task.md header. Steps are stored in body text only. */
 export interface TaskMeta {
@@ -206,7 +206,7 @@ export function taskTitle(body: string): string | null {
 }
 
 /** Format a list of step titles into Markdown checkbox list. */
-export function formatInitialSteps(steps: string[]): string {
+function formatInitialSteps(steps: string[]): string {
   return steps.map((s) => `- [ ] ${s.trim()}`).join("\n");
 }
 
@@ -310,7 +310,7 @@ function logHeading(): string {
 }
 
 /** The body a brand-new workspace starts with: a title and two empty sections. */
-export function initialTaskBody(title: string): string {
+function initialTaskBody(title: string): string {
   const heading = title.trim() || i18n.t("ai.taskDoc.untitled");
   return `# ${heading}\n\n${stepsHeading()}\n\n${logHeading()}\n`;
 }
@@ -331,7 +331,7 @@ export function withSteps(body: string, steps: string[]): string {
 
 // ─── Paths & ID ──────────────────────────────────────────────────────────────
 
-export function generateTaskId(): string {
+function generateTaskId(): string {
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
@@ -339,15 +339,15 @@ export function generateTaskId(): string {
   return `${stamp}-${rand}`;
 }
 
-export function taskWorkspaceDir(projectPath: string, taskId: string): string {
+function taskWorkspaceDir(projectPath: string, taskId: string): string {
   return `${projectPath}/.ai-writer/tasks/${taskId}`;
 }
 
-export function taskDocPath(projectPath: string, taskId: string): string {
+function taskDocPath(projectPath: string, taskId: string): string {
   return `${taskWorkspaceDir(projectPath, taskId)}/task.md`;
 }
 
-export function taskNotesDir(projectPath: string, taskId: string): string {
+function taskNotesDir(projectPath: string, taskId: string): string {
   return `${taskWorkspaceDir(projectPath, taskId)}/notes`;
 }
 

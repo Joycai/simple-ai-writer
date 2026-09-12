@@ -16,7 +16,7 @@ import { dataUrlToBytes } from "../fs/images";
 const SCRATCH_ROOT = ".ai-writer/tmp/imagegen";
 
 /** Where one session's candidates live. */
-export function sessionDir(projectPath: string, sessionId: string): string {
+function sessionDir(projectPath: string, sessionId: string): string {
   return `${projectPath}/${SCRATCH_ROOT}/${sessionId}`;
 }
 

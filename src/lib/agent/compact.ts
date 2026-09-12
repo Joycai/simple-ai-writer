@@ -46,7 +46,7 @@ export const FOLD_RESULT_CLIP = 200;
  * the conversation itself is what the summary is *of* — but bounded, so one
  * pasted chapter doesn't dominate the summarize request.
  */
-export const FOLD_TEXT_CLIP = 2000;
+const FOLD_TEXT_CLIP = 2000;
 
 /**
  * A fold that cannot bring the history back under its own trigger waits until

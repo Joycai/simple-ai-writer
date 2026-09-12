@@ -16,7 +16,7 @@
 import type { ConvertExt } from "./index";
 
 /** Project-relative root; every entry is one directory under it. */
-export const CONVERT_CACHE_DIR = ".ai-writer/tmp/convert";
+const CONVERT_CACHE_DIR = ".ai-writer/tmp/convert";
 
 /**
  * Bump when any converter's output changes shape (a new image-extraction
@@ -106,7 +106,7 @@ export function isCurrentMeta(meta: ConvertCacheMeta | null): meta is ConvertCac
  * a document with any text at all clears it while a figure caption or a page
  * number that slipped through does not; tune against real scans (plan §8).
  */
-export const SCANNED_TEXT_THRESHOLD = 20;
+const SCANNED_TEXT_THRESHOLD = 20;
 
 /**
  * Does the converted markdown carry (almost) no text? For a PDF that means a

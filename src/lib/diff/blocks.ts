@@ -89,13 +89,13 @@ export interface RewriteWindows {
  * two paragraphs but rewrites the seam, so each source survives in it only
  * partly. Below this the group is an ordinary replacement, which claims less.
  */
-export const MERGE_MIN_SIMILARITY = 0.3;
+const MERGE_MIN_SIMILARITY = 0.3;
 
 /** Lines drawn per side inside one window before the rest fold (1z A). */
 export const WINDOW_ROWS_PER_SIDE = 2;
 
 /** Unchanged lines between two groups that still make them one window (1z A). */
-export const ADJACENT_MERGE_LINES = 4;
+const ADJACENT_MERGE_LINES = 4;
 
 /** Draw order. Replacements and merges share a tier and keep document order. */
 const TIER: Record<BlockChangeKind, number> = {

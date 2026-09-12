@@ -74,7 +74,7 @@ export function useRunTelemetry() {
 }
 
 /** `14s · 2.1k tok` — omits whichever half is unknown. */
-export function runMeta(elapsedSec: number | null, tokens: number | null): string {
+function runMeta(elapsedSec: number | null, tokens: number | null): string {
   const parts: string[] = [];
   if (elapsedSec !== null && elapsedSec > 0) parts.push(`${elapsedSec}s`);
   if (tokens !== null && tokens > 0) parts.push(`${formatTokenCount(tokens)} tok`);

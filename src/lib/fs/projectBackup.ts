@@ -38,7 +38,7 @@ import { getDb, openProjectFolder } from "../project";
 import { baseName } from "../paths";
 
 export const PROJECT_BUNDLE_KIND = "ai-writer-project-bundle";
-export const PROJECT_BUNDLE_VERSION = 1;
+const PROJECT_BUNDLE_VERSION = 1;
 
 /** The zip subtree the payload is stored under. */
 const PAYLOAD_PREFIX = "project";

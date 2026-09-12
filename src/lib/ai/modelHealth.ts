@@ -86,14 +86,14 @@ export function blockedModelIds(): Set<string> {
   return new Set(readList(BLOCKED_KEY));
 }
 
-export function markModelBlocked(id: string): void {
+function markModelBlocked(id: string): void {
   const ids = readList(BLOCKED_KEY);
   if (ids.includes(id)) return;
   writePrefMerged(BLOCKED_KEY, JSON.stringify([...ids, id]), mergeBlockedModels);
 }
 
 /** Overwritten rather than merged — see the note above `mergeRecentModels`. */
-export function clearModelBlocked(id: string): void {
+function clearModelBlocked(id: string): void {
   const ids = readList(BLOCKED_KEY);
   if (!ids.includes(id)) return;
   writeList(BLOCKED_KEY, ids.filter((x) => x !== id));

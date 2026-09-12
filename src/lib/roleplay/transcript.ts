@@ -31,7 +31,7 @@ const AUTHOR_TOKEN = "我";
 
 const HEADING_RE = /^##\s*\[(\d+)\]\s*(.+?)\s*$/;
 
-export function transcriptHeader(agentId: string): string {
+function transcriptHeader(agentId: string): string {
   return `<!-- roleplay-transcript v1 agent=${agentId} -->\n`;
 }
 

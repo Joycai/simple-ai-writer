@@ -22,7 +22,7 @@ export interface StreamThrottle {
   flush(): void;
 }
 
-export const STREAM_FLUSH_MS = 80;
+const STREAM_FLUSH_MS = 80;
 
 export function createStreamThrottle(
   apply: () => void,

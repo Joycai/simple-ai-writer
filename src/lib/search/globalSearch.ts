@@ -42,7 +42,7 @@ export type SearchScope = "all" | "lore" | "files" | "text" | "ai";
  * 首字符 → 作用域。`/` 与 `?` 是旧面板界面上早已画着的两枚 chip（此前从未真的
  * 解析过）；`#` 文档是**暂定**，等设计稿定字——改这一张表就够了。
  */
-export const SCOPE_PREFIXES: Readonly<Record<string, SearchScope>> = {
+const SCOPE_PREFIXES: Readonly<Record<string, SearchScope>> = {
   "/": "lore",
   "#": "files",
   "?": "ai",

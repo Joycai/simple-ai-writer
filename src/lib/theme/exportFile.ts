@@ -65,7 +65,7 @@ const ROLES: Record<string, { zh: string; en: string }> = {
   "--glass-border": { zh: "毛玻璃边", en: "glass edge" },
 };
 
-export const COPY_SUFFIX = { zh: "副本", en: "copy" } as const;
+const COPY_SUFFIX = { zh: "副本", en: "copy" } as const;
 
 /** The full text of the file `entry` exports to. */
 export function themeFileText(entry: ThemeEntry, contract: TokenContract, isZh: boolean): string {
@@ -95,7 +95,7 @@ ${rest.join("\n")}
 }
 
 /** `<name>-副本.css`, numbered when taken: `纸-副本 2.css`. */
-export async function freeThemeFileName(dir: string, base: string): Promise<string> {
+async function freeThemeFileName(dir: string, base: string): Promise<string> {
   let fileName = `${base}${THEME_FILE_EXT}`;
   for (let n = 2; await fileExists(joinPath(dir, fileName)); n++) {
     fileName = `${base} ${n}${THEME_FILE_EXT}`;

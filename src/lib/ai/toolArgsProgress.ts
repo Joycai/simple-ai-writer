@@ -24,7 +24,7 @@ import type { StreamChunk } from "./types";
  * report is a store write that re-renders the log; 200ms is far above reading
  * speed for a number that only ever grows.
  */
-export const TOOL_ARGS_PROGRESS_MS = 200;
+const TOOL_ARGS_PROGRESS_MS = 200;
 
 /**
  * A reporter that fires at most every `TOOL_ARGS_PROGRESS_MS`.

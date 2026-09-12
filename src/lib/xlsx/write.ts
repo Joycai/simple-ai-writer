@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { fromBase64, writeBinaryFile } from "../fs/fileio";
 import type { SheetSpec } from "./sheets";
 
-export async function workbookBytes(sheets: SheetSpec[]): Promise<Uint8Array> {
+async function workbookBytes(sheets: SheetSpec[]): Promise<Uint8Array> {
   const data = await invoke<string>("xlsx_write_workbook", { sheets });
   return fromBase64(data);
 }

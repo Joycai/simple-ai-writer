@@ -36,7 +36,7 @@ export const REF_CHAR_CAP = 6000;
  * rest of the session. Past this, references are named rather than inlined —
  * the assistant still knows they exist and can read them on demand.
  */
-export const REF_TOTAL_CHAR_BUDGET = 18_000;
+const REF_TOTAL_CHAR_BUDGET = 18_000;
 
 /**
  * Most pictures one message may carry.

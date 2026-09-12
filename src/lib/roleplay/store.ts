@@ -32,17 +32,17 @@ import {
   isValidAgentId, NO_PERSONA, type AuthorPersona, type RoleplayAgent,
 } from "./model";
 
-export function roleplayDir(projectPath: string): string {
+function roleplayDir(projectPath: string): string {
   return `${projectPath}/.ai-writer/roleplay`;
 }
 
-export function agentDir(projectPath: string, agentId: string): string {
+function agentDir(projectPath: string, agentId: string): string {
   if (!isValidAgentId(agentId)) throw new Error(`invalid agent id: ${agentId}`);
   return `${roleplayDir(projectPath)}/${agentId}`;
 }
 
 export const rosterPath = (p: string) => `${roleplayDir(p)}/agents.json`;
-export const personaPath = (p: string, id: string) => `${agentDir(p, id)}/agent.md`;
+const personaPath = (p: string, id: string) => `${agentDir(p, id)}/agent.md`;
 export const transcriptPath = (p: string, id: string) => `${agentDir(p, id)}/transcript.md`;
 export const summaryPath = (p: string, id: string) => `${agentDir(p, id)}/summary.md`;
 export const memoryPath = (p: string, id: string) => `${agentDir(p, id)}/memory.md`;

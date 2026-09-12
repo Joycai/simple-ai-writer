@@ -71,7 +71,7 @@ export function isThemeSelector(selector: string, id: string): boolean {
   return s === ":root" || s === `[data-theme="${id}"]` || s === `[data-theme='${id}']`;
 }
 
-export const MD_ROOT = ".md-body";
+const MD_ROOT = ".md-body";
 
 /**
  * Every kept selector is emitted behind this prefix. A theme file sits on a
@@ -111,7 +111,7 @@ export const REASON = {
  * accepted on `:root` as well as on `.md-body` so both kinds of file can
  * start the same way.
  */
-export function readMetaPairs(rules: ArrayLike<RuleLike>): Record<string, string> {
+function readMetaPairs(rules: ArrayLike<RuleLike>): Record<string, string> {
   const meta: Record<string, string> = {};
   for (let i = 0; i < rules.length; i++) {
     const rule = rules[i];
@@ -219,7 +219,7 @@ export function uiThemeCss(id: string, tokens: Record<string, string>): string {
 }
 
 /** An id inside a double-quoted attribute selector. */
-export function cssString(s: string): string {
+function cssString(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
@@ -277,7 +277,7 @@ export function splitSelectors(selectorText: string): string[] {
 const MD_ROOT_RE = new RegExp(`^${MD_ROOT.replace(".", "\\.")}(?![\\w-])`);
 
 /** Does it *start* at `.md-body` — the first half of the fence. */
-export function startsAtMdRoot(selector: string): boolean {
+function startsAtMdRoot(selector: string): boolean {
   return MD_ROOT_RE.test(selector.trim());
 }
 
@@ -299,7 +299,7 @@ export function startsAtMdRoot(selector: string): boolean {
  * `~=` in an attribute selector are not combinators, and `.md-body:has(+ .x)`
  * still has `.md-body` as its subject.
  */
-export function staysInsideMdRoot(selector: string): boolean {
+function staysInsideMdRoot(selector: string): boolean {
   let depth = 0;
   for (const ch of selector) {
     if (ch === "(" || ch === "[") depth++;
@@ -465,7 +465,7 @@ function atRuleHead(rule: RuleLike): string {
  * it is removed before this returns. The rules are copied into an array so
  * the caller never holds a reference into a detached sheet.
  */
-export function parseCssRules(text: string): RuleLike[] {
+function parseCssRules(text: string): RuleLike[] {
   const el = document.createElement("style");
   el.media = "not all";
   el.textContent = text;

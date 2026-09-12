@@ -12,7 +12,7 @@ import { normalizeParagraphs, type NormalizeResult } from "../format/paragraphs"
 import type { EditorView } from "@codemirror/view";
 
 /** Wrap (or unwrap) each selection range with an inline marker like `**`. */
-export function toggleInlineWrap(view: EditorView, marker: string, end = marker): boolean {
+function toggleInlineWrap(view: EditorView, marker: string, end = marker): boolean {
   const { state } = view;
   const tr = state.changeByRange((range) => {
     const { from, to } = range;
@@ -110,7 +110,7 @@ export function toggleHeading(view: EditorView, level: number): boolean {
  * rather than clears, which is what makes dragging over a ragged region do
  * the obvious thing.
  */
-export function toggleLineMarker(
+function toggleLineMarker(
   view: EditorView,
   detect: RegExp,
   make: (index: number) => string,
@@ -157,7 +157,7 @@ function reEscape(s: string): string {
 }
 
 /** Add or remove a line prefix (e.g. `> ` for quotes, `- ` for bullets) per line. */
-export function toggleLinePrefix(view: EditorView, prefix: string): boolean {
+function toggleLinePrefix(view: EditorView, prefix: string): boolean {
   return toggleLineMarker(view, new RegExp(`^${reEscape(prefix)}`), () => prefix);
 }
 
@@ -275,7 +275,7 @@ export function toggleCodeBlock(view: EditorView, lang = ""): boolean {
  * at the raw cursor offset: it takes over the caret's line if that line is
  * blank, and otherwise opens a new paragraph below it.
  */
-export function insertBlock(view: EditorView, text: string): boolean {
+function insertBlock(view: EditorView, text: string): boolean {
   const { state } = view;
   const line = state.doc.lineAt(state.selection.main.to);
   const head = line.text.trim() === "" ? "" : line.text + "\n\n";

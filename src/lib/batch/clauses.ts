@@ -40,7 +40,7 @@ export interface SplitResult {
  * split level; a document that exceeds it is being split at the wrong depth,
  * and a 1000-item batch run is a mistake the author should make on purpose.
  */
-export const MAX_CLAUSES = 300;
+const MAX_CLAUSES = 300;
 
 const HEADING_RE = /^(#{1,6})\s+\S/;
 /**

@@ -15,10 +15,10 @@ import { SNIPPET_SCENE, type Prompt } from "./configDb";
 
 /** At or below this many snippets the picker drops its search box, chips and
  *  section headers — "三行还要搜，是给列表加仪式" (设计稿 1b). */
-export const SIMPLE_MAX = 5;
+const SIMPLE_MAX = 5;
 
 /** How many recently-used snippets the 「常用」 section carries. */
-export const FREQUENT_MAX = 5;
+const FREQUENT_MAX = 5;
 
 /** The chip row. Groups are sections, never chips — the chip row is a filter,
  *  not the organising axis (设计稿 1a). */
@@ -66,7 +66,7 @@ export function frequentSnippets(snips: Prompt[], max = FREQUENT_MAX): Prompt[] 
     .slice(0, max);
 }
 
-export function ungroupedSnippets(snips: Prompt[]): Prompt[] {
+function ungroupedSnippets(snips: Prompt[]): Prompt[] {
   return snips.filter((s) => !(s.group ?? "").trim());
 }
 

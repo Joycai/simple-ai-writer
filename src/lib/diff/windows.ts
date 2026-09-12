@@ -103,7 +103,7 @@ export const LIT_MAX_CHANGED_LINES = 3;
  * a window whose lines each light up while the window as a whole calls itself
  * a wholesale replacement would be two rules disagreeing in one card.
  */
-export const LIT_MIN_SIMILARITY = INLINE_MIN_SIMILARITY;
+const LIT_MIN_SIMILARITY = INLINE_MIN_SIMILARITY;
 
 /** Occurrences of one identical replacement past which the card stops repeating itself (1z A). */
 export const UNIFORM_MIN_OCCURRENCES = 10;

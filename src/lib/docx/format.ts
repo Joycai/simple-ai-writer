@@ -237,7 +237,7 @@ export interface DocFormat {
 }
 
 /** 什么都不写的页眉页脚。默认就该是这个：没设过就不该出现任何东西。 */
-export const NO_HEADER_FOOTER: HeaderFooter = {
+const NO_HEADER_FOOTER: HeaderFooter = {
   headerText: "",
   headerAlign: "center",
   pageNumber: "none",
@@ -248,7 +248,7 @@ export const NO_HEADER_FOOTER: HeaderFooter = {
   restartEachChapter: false,
 };
 
-export const NO_HEADING_NUMBERING: HeadingNumbering = {
+const NO_HEADING_NUMBERING: HeadingNumbering = {
   enabled: false,
   levels: ["none", "none", "none", "none"],
 };
@@ -558,7 +558,7 @@ const ALIGN_SHORT: Record<Align, string> = { left: "左", center: "中", right: 
  * `— 1 — 右` 和 `编号 一、（一）1.（1）`。「不写页码 · 编号关」是噪声，不进摘要——
  * 五套内置里两套追不出东西，那两行就该和原来一样长（设计稿 05h 屏 1e）。
  */
-export function formatExtras(f: DocFormat): { pageNumber: string | null; numbering: string | null } {
+function formatExtras(f: DocFormat): { pageNumber: string | null; numbering: string | null } {
   const hf = f.headerFooter;
   const num = f.headingNumbering;
   return {

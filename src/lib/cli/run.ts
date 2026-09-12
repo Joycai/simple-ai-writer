@@ -21,12 +21,12 @@ import { makeDir, readDir, removeFile, writeFile } from "../fs/fileio";
 import { joinPath } from "../paths";
 import { CLIP_HEAD, CLIP_TAIL, formatResult, type CmdResult } from "./output";
 
-export const CMD_LOG_DIR = ".ai-writer/tmp/cmd";
+const CMD_LOG_DIR = ".ai-writer/tmp/cmd";
 /** Logs kept in that folder; older ones are removed after each write. */
 export const CMD_LOGS_KEPT = 50;
 
 export const DEFAULT_TIMEOUT_MS = 60_000;
-export const MIN_TIMEOUT_MS = 1_000;
+const MIN_TIMEOUT_MS = 1_000;
 export const MAX_TIMEOUT_MS = 600_000;
 
 /** The timeout as sent — the Rust side clamps to the same bounds. */

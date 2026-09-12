@@ -21,7 +21,7 @@ import { collectCiteTargets, resolveCitation } from "../lore/citations";
 import { projectRelative } from "../paths";
 
 /** Share of an entry's text a write may replace before the step stops (1z B). */
-export const MAJOR_REWRITE_RATIO = 0.6;
+const MAJOR_REWRITE_RATIO = 0.6;
 
 /**
  * Entries shorter than this never stop, however much of them is replaced.

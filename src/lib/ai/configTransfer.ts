@@ -46,7 +46,7 @@ import { sqlTransaction } from "../sqlTx";
 import { openTextFileDialog, saveTextFileDialog } from "../fs/transfer";
 
 export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
-export const CONFIG_BACKUP_VERSION = 1;
+const CONFIG_BACKUP_VERSION = 1;
 
 interface ProviderBackup extends Provider {
   /** Present only when the backup was exported with "include API keys". */

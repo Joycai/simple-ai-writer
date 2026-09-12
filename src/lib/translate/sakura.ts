@@ -47,7 +47,7 @@ export const FREQ_LADDER = [0.1, 0.2] as const;
  * 而是让「被截断」保持是一个**有意义的报警**：卡得太紧的话
  * 每一块都会撞上限，真正的退化就淹没在噪音里。
  */
-export const MAX_TOKENS_PER_LINE = 32;
+const MAX_TOKENS_PER_LINE = 32;
 
 /** 一次请求的输出下限。极短的块按行数算会得到一个荒谬的小数字。 */
 const MIN_MAX_TOKENS = 256;
@@ -60,7 +60,7 @@ export function maxTokensFor(lineCount: number): number {
 /**
  * tok/行 的退化阈值。正常 19–22，退化 65–120 —— 中间的裕度大到几乎不可能误判。
  */
-export const TOK_PER_LINE_LIMIT = 35;
+const TOK_PER_LINE_LIMIT = 35;
 
 /**
  * 低于这个行数就不做 tok/行 判定。

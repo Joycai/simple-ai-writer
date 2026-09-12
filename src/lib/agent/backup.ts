@@ -66,10 +66,10 @@ export async function backupFile(projectPath: string, absPath: string): Promise<
 export const CHANGE_TEXT_CHARS = 4_000;
 
 /** Windows kept for a change whose texts were too long to keep. */
-export const STORED_WINDOWS = 6;
+const STORED_WINDOWS = 6;
 
 /** Longest line kept inside a stored window. */
-export const STORED_ROW_CHARS = 300;
+const STORED_ROW_CHARS = 300;
 
 /**
  * The change as windows, for a record that cannot keep its texts.

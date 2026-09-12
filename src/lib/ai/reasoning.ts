@@ -39,7 +39,7 @@ export type ReasoningEffort =
  * the categories that actually accept them — Gemini's `minimal`, Qwen-Max's
  * `xhigh` — instead of on every model or none.
  */
-export const REASONING_EFFORTS: ReasoningEffort[] = [
+const REASONING_EFFORTS: ReasoningEffort[] = [
   "default", "off", "minimal", "low", "medium", "high", "xhigh", "max",
 ];
 
@@ -85,7 +85,7 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
  */
 export type ThinkingDialect = "adaptive" | "extended" | "switch" | "none";
 
-export const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "switch", "none"];
+const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "switch", "none"];
 
 export function parseThinkingDialect(v: unknown): ThinkingDialect | undefined {
   return typeof v === "string" && (THINKING_DIALECTS as string[]).includes(v)
@@ -263,7 +263,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
 };
 
 /** Every category id, for narrowing a free-text DB column. */
-export const THINKING_CATEGORY_IDS = Object.keys(THINKING_CATEGORIES) as ThinkingCategoryId[];
+const THINKING_CATEGORY_IDS = Object.keys(THINKING_CATEGORIES) as ThinkingCategoryId[];
 
 /** Narrow a stored string to a category id — the DB column is free text. */
 export function parseThinkingCategory(v: unknown): ThinkingCategoryId | undefined {
@@ -698,7 +698,7 @@ export interface NativeReasoning {
  * Adding a name here is the whole cost of supporting another endpoint's
  * spelling — deliberately, so it never becomes a per-vendor branch.
  */
-export const REASONING_CONTENT_FIELDS = ["reasoning_content", "reasoning"] as const;
+const REASONING_CONTENT_FIELDS = ["reasoning_content", "reasoning"] as const;
 
 /**
  * Pull a reasoning fragment off one streamed delta, or null if it carries none.

@@ -82,7 +82,7 @@ const TRUNCATION_RECOVERY_LIMIT = 3;
  * gap between a window the author declared (32,768) and the one the server
  * actually loaded — LM Studio reported exactly 32,000 when it ran out.
  */
-export function truncationCause(
+function truncationCause(
   inputTokens: number,
   outputTokens: number,
   contextSize: number | undefined,
@@ -108,7 +108,7 @@ const THINKING_BUDGET_SHARE = 0.5;
 const THINKING_BUDGET_MIN_TOKENS = 512;
 
 /** Tokens of thinking a round may spend, or undefined when the window size is unknown. */
-export function thinkingBudgetTokens(
+function thinkingBudgetTokens(
   contextSize: number | undefined,
   inputTokens: number,
 ): number | undefined {
