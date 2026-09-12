@@ -132,7 +132,7 @@ objc2-web-kit = { version = "0.3", default-features = false, features = ["std", 
 tempfile = "3"
 # `tauri::test::mock_app`, so scope.rs can assert what `tauri-plugin-fs`'s own
 # glob scope actually allows — the leading-dot rule there is invisible in our
-# code and cost a release to find (see docs/image-generation-plan.md §8).
+# code and cost a release to find (see docs/feature/image-generation-plan.md §8).
 tauri = { version = "2", features = ["test"] }
 # `#[tokio::test]` for the sqltx.rs transaction tests — sqlx's async API needs a
 # runtime, and every other test in the tree is synchronous.

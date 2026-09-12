@@ -17,7 +17,7 @@
 | `src/lib/roleplay/presets.ts` | `ROLEPLAY_PRESET` / `NARRATOR_PRESET` | 90 |
 | `src/lib/roleplay/memoryTools.ts` | `remember` / `revise_memory` / `recall` 三个工具处理器 | 200 |
 | `src/lib/roleplay/sceneTools.ts` | 旁白的 5 个只读 scene 工具处理器 | 280 |
-| `src/lib/roleplay/summary.ts` | 滚动摘要的生成与更新 | 120 |
+| ~~`src/lib/roleplay/summary.ts`~~ | 滚动摘要的生成与更新——**没有单独建这个文件**：扮演直接用了 agent 侧的 `lib/agent/compact.ts`，摘要落盘在 `store.ts`（`summary.md`）、回放在 `context.ts` | — |
 | `src/lib/roleplay/flag.ts` | Beta 开关（照抄 `lib/pptx/flag.ts`） | 25 |
 | `src/stores/roleplayStore.ts` | agent 花名册 + 活会话 + 并发闸 | 750 |
 | `src/components/roleplay/RoleplayPanel.tsx` | 面板外壳：花名册 + 对话区 | 380 |

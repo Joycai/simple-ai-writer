@@ -3,10 +3,11 @@
  *
  * Not a test — it talks to a live model and there is nothing deterministic
  * about the answer. It exists because the one change in this area that can
- * actually break things (trimming the agent briefing, docs/agent-tool-context-
- * lld.md §4) is invisible to every unit test we have: the schemas still
- * validate, the loop still runs, and the only symptom is a smaller model
- * picking the wrong tool a bit more often than it used to.
+ * actually break things (trimming the agent briefing,
+ * docs/feature/agent/agent-tool-context-lld.md §4) is invisible to every unit
+ * test we have: the schemas still validate, the loop still runs, and the only
+ * symptom is a smaller model picking the wrong tool a bit more often than it
+ * used to.
  *
  * Small local models are the point. Frontier models infer the discipline from
  * the schemas alone and would report no difference at all — the same finding

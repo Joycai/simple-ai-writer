@@ -64,9 +64,11 @@ Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out co
 
 ## Add a new language
 1. Copy `src/i18n/locales/en.json` → `src/i18n/locales/[lang].json`
-2. Translate all values
-3. Update `src/i18n/config.ts` languages array (if exists)
-4. Restart dev server
+2. Translate all values. Read [`terminology.md`](terminology.md) first — the 词表 decides which word a key may use, and `localeTerms.test.ts` fails the retired ones.
+3. `src/i18n/index.ts`: add the `import` and one entry in i18next's `resources` map. There is no languages array — the map *is* the list, and `fallbackLng` stays `en`.
+4. `src/stores/appStore.ts`: widen the `Language` union; `src/components/settings/panes/GeneralPane.tsx`: add the option to the picker. The stored value goes through `lib/prefs` (`app:language`), read once at module init — see the comment in `i18n/index.ts` about why `hydratePrefs()` must finish first.
+5. `src/lib/__tests__/localeParity.test.ts` imports `zh-CN.json` and `en.json` by name — a third locale is not covered until you add it there. That test is the only checklist for "did I translate all of it": a missing key is invisible at runtime, i18next silently falls back.
+6. Restart the dev server (the JSON is imported at build time).
 
 ## Modify lore entity format
 1. Edit expected folder structure in `src/lib/lore/entity.ts` / `src/lib/lore/gallery.ts` (filename patterns)

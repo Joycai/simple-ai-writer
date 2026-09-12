@@ -1,9 +1,11 @@
 # 思考强度与思维链方案（reasoning effort / reasoning content）
 
-> **状态：三族（OpenAI / Gemini / Anthropic）写侧、读侧、回传、面板控件均已实现。**
-> 2026-09 起写侧从"一套抽象六值词表 + 一个 dialect"升级为**按厂商的思考参数
-> 类目（thinking category）**，见 §0。**未做**：OpenAI Responses 族；对真实端点
-> 的逐一验证（见 [`../issues/thinking-verification.md`](../issues/thinking-verification.md)）。
+> **状态：`shipped` `unverified`——四族（OpenAI / Gemini / Anthropic / Responses）写侧、
+> 读侧、回传、面板控件均已实现。** 2026-09 起写侧从"一套抽象六值词表 + 一个 dialect"
+> 升级为**按厂商的思考参数类目（thinking category）**，见 §0；Responses 族的
+> `responses-effort` 类目随 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §6 的 F 片落地（#474）。
+> **未做**：对真实端点的逐一验证（见
+> [`../issues/thinking-verification.md`](../issues/thinking-verification.md)）。
 >
 > 本文是动手前的协议对比与取舍记录 —— 四家 API 在这件事上的分歧比表面看起来
 > 大得多，且大部分分歧无法在代码里"事后发现"，只能提前决定怎么取舍。

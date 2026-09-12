@@ -207,8 +207,8 @@ export function judgeChunk(r: {
 
 ### 测试
 
-- `src/lib/__tests__/routing.test.ts` 扩展：Beta 关 → 无 `translate`；Beta 开但无绑定 → 无；两者齐备 → 有。
-- `src/lib/__tests__/subagent.test.ts` 扩展：`subAgentModel("translate", …)` 对无 `translateFormat` 的模型返回 null；`DELEGATE_KINDS` 不含 `translate`（这条是不变量 1 的守卫）。
+- `src/lib/agent/__tests__/routing.test.ts` 扩展：Beta 关 → 无 `translate`；Beta 开但无绑定 → 无；两者齐备 → 有。
+- `src/lib/agent/__tests__/subagent.test.ts` 扩展：`subAgentModel("translate", …)` 对无 `translateFormat` 的模型返回 null；`DELEGATE_KINDS` 不含 `translate`（这条是不变量 1 的守卫）。
 - 新增 routed-toolset token 断言。
 
 ### 验收

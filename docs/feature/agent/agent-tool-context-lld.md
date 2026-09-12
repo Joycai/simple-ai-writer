@@ -2,7 +2,14 @@
 
 > 前置阅读：[`agent-tool-context.md`](agent-tool-context.md)（现状测量与选项评估）。
 > 本文是**拍板后的执行方案**：分几个 PR、每个 PR 动哪些文件哪些函数、怎么测、怎么回滚。
-> 状态：待实施。全部落地后把 §7 的结论并进 `CLAUDE.md`。
+> 状态：`shipped`——**PR1–PR5a 全部落地，PR5b 决定不做**（理由在 §6）：
+> PR1 `827175d`（`lib/agent/toolCost.ts` + `messageCeilingTokens` + `round-start.toolTokens`，
+> 1.22 起的事件都带）· PR2 `c092a5d`（官方 Anthropic 端点的缓存断点）·
+> PR3 `fee7cc8`（四个预设的 schema 体积棘轮 `agentToolBudget.test.ts`）·
+> PR4（briefing 与 schema 去重，实测两格 3/3=3/3，见 §6 开头）·
+> PR5a `05c658e`（知识库写工具随已批准的方案装载 + `agentRuntimeToolGroups.test.ts`）。
+> 之后又加了一格 5c（按已批准方案的**形状**分组装载），收益与实测全在 §7。
+> §7 的结论已并进 `CLAUDE.md`。
 
 ## 0. 定下来的取舍
 
@@ -569,5 +576,6 @@ briefing (zh)        3,400               1,389
 没先量就报数。这一栏的数字是 `estimateToolsTokens` / `estimateTextTokens` 跑出来的，
 不是算的。
 
-> **实测数据待填**（PR1 的 `round-start.toolTokens` 上线后逐个 PR 记在这里，
-> 包括 PR4 的对照结果——不达标的那一格尤其要记，它是后人重开这个话题时唯一有用的东西）。
+> 上面每一格都是 `round-start.toolTokens`（PR1）上线后逐个 PR 量出来的，不是算出来的。
+> 再动这块之前先跑一遍现值：`estimateToolsTokens` 的口径由
+> `src/lib/__tests__/agentToolBudget.test.ts` 的棘轮盯着。
