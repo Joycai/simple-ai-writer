@@ -19,7 +19,7 @@
  *    session. Folding user+assistant+tools together can never open a gap.
  */
 
-import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
+import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 import { facetKey, type LoreActivationReport } from "../context/loreSelect";
@@ -616,11 +616,6 @@ export function renderTurnsForSummary(
     }
   }
   return lines.join("\n");
-}
-
-/** True when the summary's own size calls for folding it into itself (PR2). */
-export function summaryOverBudget(summaryText: string): boolean {
-  return estimateTextTokens(summaryText) > SUMMARY_BUDGET_TOKENS * 1.5;
 }
 
 // ── Rebuild ─────────────────────────────────────────────────────────

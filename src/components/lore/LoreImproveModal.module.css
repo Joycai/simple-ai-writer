@@ -101,12 +101,6 @@
   max-width: 200px;
 }
 
-/* The improve target picker fills its rail instead of hugging the header. */
-.targetSelect.targetSelect {
-  max-width: none;
-  width: 100%;
-}
-
 .closeBtn {
   width: 26px;
   height: 26px;
@@ -135,39 +129,6 @@
 }
 
 /* ── Current content ── */
-
-.currentSection {
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.currentToggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  background: var(--color-bg-inset);
-  font: 500 11px/1 var(--font-sans);
-  color: var(--color-text-muted);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-.currentToggle:hover { background: var(--color-bg-hover); }
-
-.toggleChevron {
-  flex-shrink: 0;
-  transition: transform var(--transition-fast);
-}
-.toggleChevronOpen { transform: rotate(180deg); }
-
-.currentBytes {
-  margin-left: auto;
-  font: 400 10px/1 var(--font-mono);
-  color: var(--color-text-label);
-}
 
 .currentPre {
   padding: 12px;

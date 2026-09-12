@@ -578,42 +578,11 @@
   font-style: italic;
 }
 
-.ctxExact {
-  width: 92px;
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  padding: var(--space-1) var(--space-2);
-  background: var(--stg-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-primary);
-  outline: none;
-  transition: border-color var(--transition-fast);
-}
-.ctxExact:focus { border-color: var(--color-accent); }
-
 /* A prompt body is long — give it real room and a monospace-free reading size. */
 .promptArea {
   line-height: 1.8;
   min-height: 280px;
 }
-
-/* A model's prefix prompt is prose too, just short — reading leading, and
-   deliberately not `.mono`: it is an instruction, not an identifier. */
-.proseArea {
-  line-height: 1.6;
-}
-
-.checkLabel {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-.checkLabel input { accent-color: var(--color-sienna); }
 
 @media (max-width: 900px) {
   .head { padding: var(--space-4) var(--space-4) 0; }

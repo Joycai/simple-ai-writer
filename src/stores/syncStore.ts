@@ -499,8 +499,3 @@ function readLastConnectedAt(): number | null {
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
 }
-
-/** Test seam: drop the connected client between cases. */
-export function resetSyncClientForTest(): void {
-  client = null;
-}

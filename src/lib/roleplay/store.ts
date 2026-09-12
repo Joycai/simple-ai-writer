@@ -54,8 +54,6 @@ export interface Roster {
   agents: RoleplayAgent[];
 }
 
-export const EMPTY_ROSTER: Roster = { authorPersona: NO_PERSONA, agents: [] };
-
 // ─── 花名册 ──────────────────────────────────────────────────────────────────
 
 function coercePersona(raw: unknown): AuthorPersona {

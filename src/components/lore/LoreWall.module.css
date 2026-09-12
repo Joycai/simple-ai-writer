@@ -97,7 +97,7 @@
 }
 
 /* Overflow (⋯) — same height rhythm as the two buttons beside it, quieter than
-   both. Mirrors LoreDetail's .heroBtnGhost. */
+   both. */
 .btnGhost {
   padding: 8px 12px;
   background: transparent;
@@ -244,16 +244,6 @@
   letter-spacing: 0.2em;
   color: var(--color-sienna);
   text-transform: uppercase;
-}
-.cardStars {
-  display: flex;
-  gap: 2px;
-}
-.cardStar {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--color-sienna);
 }
 
 .cardHeader {

@@ -246,21 +246,3 @@ export async function deleteAreaEntry(
   await makeDir(backups);
   await renamePath(src, `${backups}/roleplay-entry-${now}-${areaId}-${entryId}`);
 }
-
-/**
- * 删一个区：整个目录移进 `.ai-writer/backups/`，和删 agent、删条目一致。
- *
- * 不真删，因为里面是攒了很多场的东西——而它最可能被删的时刻，恰恰是作者以为
- * 自己不再需要它的时刻。
- */
-export async function deleteAreaDir(
-  projectPath: string, areaId: string, now: number,
-): Promise<string | null> {
-  const src = areaDir(projectPath, areaId);
-  if (!(await fileExists(src))) return null;
-  const backups = `${projectPath}/.ai-writer/backups`;
-  await makeDir(backups);
-  const dest = `${backups}/roleplay-area-${now}-${areaId}`;
-  await renamePath(src, dest);
-  return dest;
-}

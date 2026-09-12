@@ -252,7 +252,6 @@
   line-height: 1.5;
   color: var(--color-text-dim);
 }
-.chipGhost { border-style: dashed; color: var(--color-text-kbd); }
 /* 截断用虚线边框加一行原字数，不用颜色（设计稿 04c 屏 2b）。 */
 .chipTruncated { border-style: dashed; }
 

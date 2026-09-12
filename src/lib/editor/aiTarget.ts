@@ -95,13 +95,6 @@ export function aiTargetExtension(className: string): Extension {
   ];
 }
 
-/** The marked range, only once both ends are placed. */
-export function completeAiTarget(view: EditorView): { from: number; to: number } | null {
-  const range = view.state.field(aiTargetField, false);
-  if (!range || range.to === null || range.to <= range.from) return null;
-  return { from: range.from, to: range.to };
-}
-
 /**
  * Mark the start of the target at the cursor.
  *

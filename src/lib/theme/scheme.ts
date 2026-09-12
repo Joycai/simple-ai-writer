@@ -37,11 +37,6 @@ export function applyThemeId(id: string, scheme: ColorScheme): void {
   root.setAttribute(SCHEME_ATTR, scheme);
 }
 
-/** Write both attributes for a built-in theme of the given polarity. */
-export function applyScheme(scheme: ColorScheme): void {
-  applyThemeId(BUILTIN_THEME_FOR_SCHEME[scheme], scheme);
-}
-
 /** The polarity currently on `<html>`; dark until something has applied one. */
 export function currentScheme(): ColorScheme {
   return document.documentElement.getAttribute(SCHEME_ATTR) === "light" ? "light" : "dark";
