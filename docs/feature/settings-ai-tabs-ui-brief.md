@@ -177,10 +177,10 @@ Prompt
 | `src/components/settings/panes/ContextMemoryPane.tsx`（新） | 搬「图片」一节：`imageMaxLongEdge` / `edgeDraft` / `commitEdge` 三样和那个 `<input>`，以及「committed on blur」那条注释 |
 | `src/components/settings/panes/GeneralPane.tsx` | 删掉两节及其 import（七个 flag 模块、`IMAGE_LONG_EDGE_*`）；删掉「Sits before 通知 rather than in 实验功能」那段注释 |
 | `src/i18n/locales/zh-CN.json` + `en.json` | `systemSettings.tabs.lab` / `.contextMemory`；两页各一个 `paneSub`；把 `systemSettings.general.{betaSection,pptx*,docx*,xlsx*,roleplay*,translate*,comfyui*,toolPack*,imageSection,imageLongEdge*}` **迁到** `systemSettings.lab.*` / `systemSettings.contextMemory.*`（留在 `general` 下会是下一个人的困惑；`localeParity.test.ts` 会盯着两份 locale 同步）。「通用」的 `paneSub`「外观、语言与本地数据」仍然成立，不改 |
-| `src/lib/agent/packs.ts:279` | **模型看得见的字符串**：`Settings → 通用 → 实验功能` → `设置 → AI 配置 → 实验室`。这条不改，orchestrator 会把作者指到一个不存在的地方 |
+| `src/lib/agent/packs.ts` | **模型看得见的字符串**：`Settings → 通用 → 实验功能` → `设置 → AI 配置 → 实验室`。这条不改，orchestrator 会把作者指到一个不存在的地方 |
 | `src/lib/{pptx,docx,xlsx,roleplay,translate,comfy}/flag.ts` + `src/lib/agent/packFlag.ts` | 文件头注释里的路径 |
 | `CLAUDE.md` | `src/lib/` 下六处「Settings → 通用 → 实验功能 的 Beta 开关」；`src/components/settings/` 那段加两个 pane 的一句话 |
-| `docs/` | `reference/architecture.md:812`、`feature/{comfyui-plan,pptx-plan,xlsx-export-plan,image-normalize-plan}.md`、`feature/agent/tool-pack-plan.md`、`feature/roleplay/{README,03-plan}.md`、`feature/docx/02-ui-brief.md` 里的路径（用 grep `通用 → 实验功能\|通用 → 图片` 扫，别手数） |
+| `docs/` | `reference/architecture.md` → 读 .pptx、`feature/{comfyui-plan,pptx-plan,xlsx-export-plan,image-normalize-plan}.md`、`feature/agent/tool-pack-plan.md`、`feature/roleplay/{README,03-plan}.md`、`feature/docx/02-ui-brief.md` 里的路径（用 grep `通用 → 实验功能\|通用 → 图片` 扫，别手数） |
 
 验收：
 - `pnpm tsc --noEmit`、`pnpm test`（`localeParity` / `localeTerms` 必过；新文案不得含「设定 / 词条」）

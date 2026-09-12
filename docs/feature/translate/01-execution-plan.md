@@ -192,7 +192,7 @@ export function judgeChunk(r: {
 必须逐一确认下列列表已排除 `translateFormat` 模型：
 
 - `SubAgentsPane.textCandidates`（`type !== "image"` → 再加 `&& !m.translateFormat`）
-- `LibraryView.tsx:370` 的 `enabledModels`
+- `LibraryView.tsx` 的 `enabledModels`
 - 主模型选择器 / 记忆模型 / 图像模型的候选来源（PR 期间 `grep -rn "\.enabled" src/components --include=*.tsx` 复核一遍）
 
 建议把这个过滤收成 `lib/ai/configDb.ts` 里一个导出函数 `conversationalModels(models)`，让"哪些模型能当对话模型用"只有一个答案——否则下一个能力字段进来时同样的清单要再走一遍。

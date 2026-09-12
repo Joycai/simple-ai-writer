@@ -292,14 +292,14 @@ mode: auto
    `LoreWall` 三处 + `LoreDetail` 翻页 + `CommandPalette` + `AiPanel` 清单改走
    `indexCategories(index)`；新建条目的分类选择器**保持** `loreCategories()`，
    两个分类选择器改走 `assignableCategories(entity.category)`。
-   原因留档：`selectLore` 走的是 `Object.values(loreIndex)`（`loreSelect.ts:149`），
+   原因留档：`selectLore` 走的是 `Object.values(loreIndex)`（`loreSelect.ts`），
    `scanLore` 一旦产出孤儿键，**注入立刻覆盖到它们，UI 却看不见**——
    错的方向，作者看不见的条目悄悄进了 prompt。新增循环时照此二分。
 2. **槽位默认值必须写进文件**（§4 不变量二）。
 3. **跨包共享分类的槽位合并要显式定**（§3.2）。否则「启用第二个包」会静默改掉一个已有分类的 schema；
    合并时忘了复制数组则会污染内置包单例。
-4. **改类型 = 搬目录**，会断 `dirPath#facetFile` 形式的 pin（`loreSelect.ts:56`）和
-   `category/id` 形式的引用（`citations.ts:16`）。这是今天改分类**已有**的行为，
+4. **改类型 = 搬目录**，会断 `dirPath#facetFile` 形式的 pin（`loreSelect.ts`）和
+   `category/id` 形式的引用（`citations.ts`）。这是今天改分类**已有**的行为，
    写在这里是为了别以后被当成新 bug 重新发现（也是方案 A 唯一有力的论据，见 §2）。
 5. ~~**`images.md` 是唯一必须改格式的存储**~~（第 4 期已改，就按这条做的）：描述块首行的
    `slot: portrait` 被 parser 吃掉，**只认第一行**，所以正文里再出现 "slot:" 不受影响；

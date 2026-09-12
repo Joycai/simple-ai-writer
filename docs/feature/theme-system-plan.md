@@ -20,13 +20,13 @@
 | Markdown 排版是 **CSS-in-TS 生成器**：`baseCss` 全部写成 `--md-*`，五个主题只是变量包 + 可选 `rules`；同一份文本进 `<style id="md-themes">` 和导出的 HTML | `src/lib/theme/markdownThemes.ts` | 这个「一个生成器喂两处」的结构是方案的核心资产，不能丢；用户主题必须也能进导出 |
 | 生成器额外发一遍 `.md-body[data-md-theme=x]` 的**钉住**块，给设置页的样张用 | 同上 `markdownThemesCss()` | 用户主题无法这样钉住（没有解析器给它加前缀）；样张改成沙箱 iframe 之后这个机制退役（§7.3） |
 | 导出的 HTML 自带 `EXPORT_TOKEN_CSS`——**手抄的一份浅色调色板** | 同上，`export.ts` 拼进 `<style>` | 这是应用里唯一一份会漂移的令牌副本；导出应从注册表生成（§9） |
-| 编辑器语法高亮用 `defaultHighlightStyle`（浅色写死），只有 heading / emphasis / link 被模块 CSS 改成令牌 | `CodeEditor.tsx:185`, `CodeEditor.module.css` `.tok-*` | 主题盲区之一：代码、引用等 token 在夜间是浅色配色 |
-| Mermaid 按 `data-theme === "light"` 二选一，`securityLevel: "strict"` | `Preview.tsx:151` | 只认字面 `light`；主题 id 可变之后这里必须读**明暗**而不是主题名 |
+| 编辑器语法高亮用 `defaultHighlightStyle`（浅色写死），只有 heading / emphasis / link 被模块 CSS 改成令牌 | 当时在 `CodeEditor.tsx`；**已换成** `src/lib/editor/highlight.ts` 的 `manuscriptHighlight`——只发 `.tok-*` 类名、不带颜色，颜色全在 `CodeEditor.module.css` 里读令牌 | 曾是主题盲区之一（代码、引用等 token 在夜间是浅色配色）；`highlight.ts` 的文件注释就是这条的记录 |
+| Mermaid 按 `data-theme === "light"` 二选一，`securityLevel: "strict"` | `Preview.tsx` | 只认字面 `light`；主题 id 可变之后这里必须读**明暗**而不是主题名 |
 | 模块 CSS 里 `data-theme` 只出现 2 处，硬编码色值 36 处（多数是 `#fff` 和遮罩） | `grep` | 迁移面很小，值得一次收干净 |
 | 设置页整体做了一次 `--color-* → --stg-*` 的重映射 | `SettingsPage.module.css` `.page` | 主题样张放在设置页里会被这次重映射染色——样张必须隔离（§7.3） |
 | 偏好存 `config.db`（`PREF_KEYS`），主题是**装机级**口味 | `lib/prefs.ts` 第 165 行的注释 | 外观主题文件也应是装机级；`design-system.md` 里「persisted as `localStorage[...]`」那句已经过时，落地时顺手改掉 |
 | CSP：`style-src 'self' 'unsafe-inline'`，`img-src` 含 `ai-writer-asset:`，`font-src` 只有 `'self' data:` | `tauri.conf.json` | 主题带字体要给 `font-src` 加 `ai-writer-asset:`；**绝不**给 `img-src` / `font-src` 开远程（§11） |
-| 自定义 fs 命令只认 `scope.rs` 里登记过的根 | `src-tauri/src/lib.rs:35` | 装机级 `themes/` 目录要在启动时登记为根，一行 |
+| 自定义 fs 命令只认 `scope.rs` 里登记过的根 | `src-tauri/src/lib.rs` | 装机级 `themes/` 目录要在启动时登记为根，一行 |
 | 项目级「文件覆盖内置」已有先例：`.ai-writer/workflows/*.md`，同 id 整张覆盖 | `lib/workflow/scan.ts` | 排版主题的项目级目录照抄这个形状 |
 
 ## 2. 目标与非目标

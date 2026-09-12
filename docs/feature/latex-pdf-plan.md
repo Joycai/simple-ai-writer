@@ -130,7 +130,7 @@ LaTeX 这条线不是替代那条，是**另一档**：交出去要印的东西�
 | **数学** | **原样透传** | 见下 |
 | `[[lore:…]]` | 显示文字 | 同 docx，报一条降级 |
 
-**数学是这条线相对 docx 的净胜。** 这个 app 的 markdown 已经挂了 KaTeX（`lib/fs/markdown.ts`），`$…$` / `$$…$$` 解析成 `math_inline` / `math_block` token，而 `lib/docx/blocks.ts:142` 只能记一句「数学公式退回成了原始文本」。到了 LaTeX 这边它**本来就是 LaTeX**——原样搬过去，不转义，编译出来是排版级的公式。这一条单独就值一条导出线。
+**数学是这条线相对 docx 的净胜。** 这个 app 的 markdown 已经挂了 KaTeX（`lib/fs/markdown.ts`），`$…$` / `$$…$$` 解析成 `math_inline` / `math_block` token，而 `lib/docx/blocks.ts` 只能记一句「数学公式退回成了原始文本」。到了 LaTeX 这边它**本来就是 LaTeX**——原样搬过去，不转义，编译出来是排版级的公式。这一条单独就值一条导出线。
 
 图片的降级（同 docx 的 `loadImages` 措辞，逐条给作者看）：
 

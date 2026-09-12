@@ -33,9 +33,9 @@
 |---|---|
 | `src/lib/agent/registry.ts` | `ToolId` 加 3 个记忆工具 + 5 个 scene 工具；`REGISTRY` 加 8 项；`ToolContext` 加 2 个可选字段 |
 | `src/lib/prefs.ts` | `PREF_KEYS` 加 `app:roleplayBeta`、`app:roleplayActiveAgent` |
-| `src/stores/appStore.ts` | `AiDrawerMode` 加 `"roleplay"`（`appStore.ts:142`） |
+| `src/stores/appStore.ts` | `AiDrawerMode` 加 `"roleplay"`（`appStore.ts`） |
 | `src/components/ai/AiDrawer.tsx` | 第四个 tab + 分支渲染 |
-| `src/components/settings/panes/GeneralPane.tsx` | 实验功能区加一个开关（`GeneralPane.tsx:255` 的 `betaSection`） |
+| `src/components/settings/panes/GeneralPane.tsx` | 实验功能区加一个开关（落地时在 `GeneralPane.tsx` 的实验功能区；那一段后来整体搬成了 `LabPane.tsx`，开关走 `lib/roleplay/flag.ts`） |
 | `src/i18n/locales/{zh-CN,en}.json` | 新键，见 §13 |
 | `CLAUDE.md` | 目录地图 + Detailed References 各加一行 |
 
@@ -92,7 +92,7 @@
 
 **为什么花名册是一个文件而不是每个 agent 一份元数据**：显示顺序、并发状态、「有哪些 agent」这三件事都需要一次性读全，扫目录再逐个读 frontmatter 是 N 次 IO 换零收益。人设卡和记忆（会变长、作者要编辑）才独立成文件。
 
-**`boundPaths` 直接复用 `lib/context/loreSelect.ts` 的 pin 语法**（`dirPath` 或 `dirPath#facetFile`，见 `loreSelect.ts:49-58` 的 `parsePins`）。这不是巧合而是设计：绑定条目 = 永久钉住，和 AiPanel 的 `selectedLorePaths`（`AiPanel.tsx:1108`）是同一个概念，只是作用域从「一次任务」变成「一个 agent 的一生」。
+**`boundPaths` 直接复用 `lib/context/loreSelect.ts` 的 pin 语法**（`dirPath` 或 `dirPath#facetFile`，见 `loreSelect.ts` 的 `parsePins`）。这不是巧合而是设计：绑定条目 = 永久钉住，和 AiPanel 的 `selectedLorePaths`（`AiPanel.tsx`）是同一个概念，只是作用域从「一次任务」变成「一个 agent 的一生」。
 
 ### 2.3 `agent.md` — 人设卡
 
@@ -258,15 +258,15 @@ export interface RoleplaySessionMeta extends ChatSessionMeta {
 
 按**对象身份**而不是下标持有，理由和 `ChatSessionMeta.seedContext` 完全一样：`repairToolCallPairing` 会 splice，下标不可靠（`chatSession.ts` 开头的注释把这件事说透了）。序列化时转下标、反序列化重新链接，复用同一套做法。
 
-实现方式：调 `assembleContext(...)` 拿 bundle（`documentText` 传 `""`、`selection` 传 `""`、`contextChars: 0`——扮演不关心编辑器里开着什么），再调 `bundleToChatMessages(bundle, firstMessage)`（`rag.ts:663`），然后**把绑定块和记忆块 splice 到 index 1、2**。
+实现方式：调 `assembleContext(...)` 拿 bundle（`documentText` 传 `""`、`selection` 传 `""`、`contextChars: 0`——扮演不关心编辑器里开着什么），再调 `bundleToChatMessages(bundle, firstMessage)`（`rag.ts`），然后**把绑定块和记忆块 splice 到 index 1、2**。
 
 不改 `bundleToChatMessages` 而是在外面 splice：那个函数是对话助手和写作任务共用的，为一个新调用方增加参数会让两个既有调用方都要理解一个它们用不到的概念。
 
-> **验证过的关键事实**：`buildCompactedHistory`（`compact.ts:344-352`）遍历 prelude，只跳过 `meta.seedContext` 和 `meta.summary`，其余原样 push。`trimHistory`（`runtime.ts:156-179`）只把 `role: "tool"` 的内容和图片 part 替换掉，不动 `role: "user"` 的文本消息。**所以 `[1]` 和 `[2]` 在两条裁剪路径下都永久存活，无需给压缩加任何白名单。**
+> **验证过的关键事实**：`buildCompactedHistory`（`compact.ts`）遍历 prelude，只跳过 `meta.seedContext` 和 `meta.summary`，其余原样 push。`trimHistory`（`runtime.ts`）只把 `role: "tool"` 的内容和图片 part 替换掉，不动 `role: "user"` 的文本消息。**所以 `[1]` 和 `[2]` 在两条裁剪路径下都永久存活，无需给压缩加任何白名单。**
 
 ### 4.2 逐轮注入
 
-复用 `assembleTurnInjection`（`rag.ts:578`），`matchTarget` = 作者本轮输入（不含文档尾巴——扮演没有「当前文档」的概念），`excludeDirs` = `excludeDirsFor(meta)`（现成的注入账本，`compact.ts`）。
+复用 `assembleTurnInjection`（`rag.ts`），`matchTarget` = 作者本轮输入（不含文档尾巴——扮演没有「当前文档」的概念），`excludeDirs` = `excludeDirsFor(meta)`（现成的注入账本，`compact.ts`）。
 
 **绑定条目必须预先写进账本**，否则第一次提到「塔」时会把已经在 `[1]` 里的塔重新注入一遍。播种时：
 
@@ -280,7 +280,7 @@ recordInjections(meta, boundEntities, pinnedMessage);
 
 绑定条目在知识库里被改了之后，`[1]` 是旧的。**不自动刷新**——原地重写会让 prompt 缓存前缀作废，长会话里这是真金白银。
 
-做法：`roleplayStore` 记录播种时**静态上下文**的 hash（`contextSignature` + `hashText`，`lib/context/memory.ts:60`），与磁盘上的现状比对，不一致时在对话区顶部显示一条「绑定内容已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
+做法：`roleplayStore` 记录播种时**静态上下文**的 hash（`contextSignature` + `hashText`，`lib/context/memory.ts`），与磁盘上的现状比对，不一致时在对话区顶部显示一条「绑定内容已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
 
 > 实现时这个范围扩大了：基线不只覆盖绑定块，还覆盖 system 层里全部由作者改动的输入（角色名、扮演指令、主角条目正文、作者身份），而「刷新」也会一并重写 `[0]`。原因和当初漏掉它们的后果，见 05 §2.16。
 
@@ -447,7 +447,7 @@ if (compacted) {
 }
 ```
 
-命名刻意避开既有的 `read_memory` / `update_memory`——那两个是**文档的**故事记忆（滚动摘要，`registry.ts:670` / `registry.ts:1050`），语义完全不同，同名会让模型混淆。
+命名刻意避开既有的 `read_memory` / `update_memory`——那两个是**文档的**故事记忆（滚动摘要，`registry.ts` / `registry.ts`），语义完全不同，同名会让模型混淆。
 
 ### 5.10 `ToolContext` 的接线
 
@@ -519,7 +519,7 @@ export const NARRATOR_PRESET: TaskPreset = {
 
 ## 7. 旁白的 scene 工具
 
-五个，全部 `access: "read"`。注册进 `REGISTRY`（`registry.ts:435`），处理器在 `lib/roleplay/sceneTools.ts`。
+五个，全部 `access: "read"`。注册进 `REGISTRY`（`registry.ts`），处理器在 `lib/roleplay/sceneTools.ts`。
 
 ### 7.1 `list_scenes`
 
@@ -621,7 +621,7 @@ export interface SceneReader {
 
 组合起来：**一个没有 workspace 的 agent，在作者开了 vision 子代理之后，既不能自己看图、也不能委派给会看图的——看图能力凭空消失。**
 
-对策：**每个 roleplay agent 都要有 workspace handle**，v1 直接懒创建标准的 task workspace（`createTaskWorkspace(projectPath, modelId)`，`taskWorkspace.ts:810`），`taskId` 存进花名册。
+对策：**每个 roleplay agent 都要有 workspace handle**，v1 直接懒创建标准的 task workspace（`createTaskWorkspace(projectPath, modelId)`，`taskWorkspace.ts`），`taskId` 存进花名册。
 
 **但这条对策必须配一份白名单，否则它自己就是第三条规则。** `routeTools` 里那句是
 `DELEGATE_KINDS.some(live)`——**四选一**，不是按 kind 给。上面的论证从头到尾只讲
@@ -645,7 +645,7 @@ vision，可 workspace 一建，作者为对话助手开的 longread 或 search 
 - `MAX_SAVED_TASKS = 20` 的清理**可能删掉某个 agent 的 notes 目录**。可接受，因为 notes 是辅助产物；**资产是 transcript 和 memory.md，都不在 `tasks/` 下**（不变量一在这里第二次救场）。清理后 `taskId` 悬空，`ensure()` 会重新建一个。
 - 后续优化：把 `taskWorkspaceDir` 参数化，让 roleplay 的 workspace 落在 `.ai-writer/roleplay/<agentId>/notes/`。纯重构，不改行为，不进 v1。
 
-模型切换无需额外工作：`_thinkingBlocks` 已经携带 `modelId` 且换模型时会被排除（`lib/ai/types.ts:264-275`），「某个 agent 聊到一半换模型」是既有机制已经覆盖的。
+模型切换无需额外工作：`_thinkingBlocks` 已经携带 `modelId` 且换模型时会被排除（`lib/ai/types.ts`），「某个 agent 聊到一半换模型」是既有机制已经覆盖的。
 
 ## 9. 并发与运行生命周期
 
@@ -673,7 +673,7 @@ send(agentId, text)
 - **记忆写入是即时落盘的**，不等本轮结束——`remember` 的处理器直接写文件。中途 abort 不该让已经记下的约定消失。
 - **`persistUsage`（`lib/ai/usage.ts`）照常写**，`task` 字段用 `roleplay:character` / `roleplay:narrator`，Settings → 用量 里能看出扮演花了多少钱。并发跑三个时这个可见性是必要的，不是锦上添花。
 - **审批**：只有旁白会产生审批。走现有 `agentStore.requestApproval(proposal, runId, binding)`，`runId` 传该 agent 的 controller（`agentStore` 对 runId 只做 `===`）。审批卡渲染在扮演面板内。
-- **自动批准的 key 必须是 agent 自己的 controller，不能是字面量。** `CHAT_AUTO_APPROVE_KEY = "chat"`（`autoApprove.ts:65`）是对话助手专用；多个 roleplay agent 共用一个字面量会让 A 的「本次都批准」覆盖到 B。用 controller 对象，`autoApproveScope()` 会自动判定为 `"run"` 级。
+- **自动批准的 key 必须是 agent 自己的 controller，不能是字面量。** `CHAT_AUTO_APPROVE_KEY = "chat"`（`autoApprove.ts`）是对话助手专用；多个 roleplay agent 共用一个字面量会让 A 的「本次都批准」覆盖到 B。用 controller 对象，`autoApproveScope()` 会自动判定为 `"run"` 级。
 - **切走的 agent 继续跑。** 运行状态在 store 里，不在组件里。
 
 ## 10. `roleplayStore` 状态形状
@@ -769,7 +769,7 @@ systemSettings.general.roleplayBeta / roleplayBetaDesc
 
 | 情况 | 行为 |
 |---|---|
-| 绑定的 lore 条目被删了 | 播种时跳过（pin 解析已经会跳过失效 pin，`loreSelect.ts:157`），UI 上把该绑定标灰 + 一键移除 |
+| 绑定的 lore 条目被删了 | 播种时跳过（pin 解析已经会跳过失效 pin，`loreSelect.ts`），UI 上把该绑定标灰 + 一键移除 |
 | 主角条目被删了 | agent 保留、可读、不可发新消息；提示作者重新绑定 |
 | `agents.json` 损坏 | 扫目录用各 `agent.md` 的 frontmatter 重建，写回并提示作者 |
 | `session.json` 损坏 | 从 transcript + memory.md 重建（§11） |

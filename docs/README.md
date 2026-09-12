@@ -41,7 +41,7 @@ reaching for is one of the states above, plus a modifier if it needs one.
 | [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
-| [terminology.md](reference/terminology.md) | `living` (词表) · `planned` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. Also holds the six-batch plan for the 78 一词多译 / 49 一译多词 found in the 2026-08 sweep |
+| [terminology.md](reference/terminology.md) | `living` (词表) · `shipped` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. The 2026-08 sweep found 78 一词多译 / 49 一译多词; all six calibration batches landed (§7), the retired words are held shut by `localeTerms.test.ts`, and §9 records the full-tree review that followed |
 | [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——三种失败形状、判据取哪个变量、九条先例 |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
 | [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
@@ -184,3 +184,4 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 3. **Add a row here.** This file is the only place a reader can see everything at once.
 4. **Link it from `CLAUDE.md`'s Detailed References only if it must be read before touching code.** `CLAUDE.md` enters context every session; a `proposal` does not earn that seat.
 5. **Cite it from the code** where the reasoning matters — `see docs/feature/lore/lore-facet-plan.md`. Those citations are the reason paths here are treated as an interface, not as filing.
+6. **Cite source by name, never by line number.** `configDb.ts` 的 `defaultImageCaps`, never that path with a line number stuck on the end. Line numbers rot silently and keep looking valid: of the 346 `文件:行号` citations this tree carried in 2026-09, only 80 still landed on the right line. `src/lib/__tests__/docSourceRefs.test.ts` holds the line shut for `docs/` and for source comments; `design/` and `plans/` are outside it on purpose — they are dated records, and the coordinates in them were the scene at the time.

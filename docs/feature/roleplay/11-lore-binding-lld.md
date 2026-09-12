@@ -38,13 +38,13 @@
 |---|---|---|---|
 | G1 | 特征的自动激活是两级 AND：先用 name/alias 命中**条目**，才比对 facet keys。扮演里作者写「你」不写名字，条目永不进候选 | `loreSelect.ts` 的 `autoDirs`；实测「你穿着那件外套做什么？」→ `seedContext` 为 `null` | P2 |
 | G2 | 一旦命中，注入的是 L0 摘要 + L1 正文 + L2 特征——主条目正文和 system 层重复一份 | `loreSelect.ts` L0/L1 无条件执行；实测 | P1 |
-| G3 | 主条目绑了整条 = 同一个文件读两遍，system 层一份、绑定块一份 | `run.ts:53` 与 `context.ts:100` 读的是同一个 `index.md`；实测两处内容相同 | P1 |
-| G4 | 账本按 `dirPath` 记：绑了**任何一段**特征，整条退出自动检索 | `context.ts:356` + `run.ts:337`；实测：绑整条后 key 命中的 `mode:auto` 特征也进不来 | P4 |
-| G5 | 绑定器不知道谁是主条目：index 行可点、「整条绑定」可按、`countFor` 分母含 index | `AgentComposer.tsx:349/359` | P5 |
-| G6 | 绑定项超出 `BOUND_BLOCK_CHAR_CAP` 时只写一行占位，**却照样记进账本** → 正文既不在块里、也永远不会被检索补上 | `context.ts:110-118` 的占位分支仍 `entities.push(entity)` | P3 |
-| G7 | `@` 引用无条件内联 `index.md`，从不查账本 | `chatRefs.ts:53-57`；实测：绑定 + `@` 同一条目 → 同一次请求两份 | P6 |
+| G3 | 主条目绑了整条 = 同一个文件读两遍，system 层一份、绑定块一份 | `run.ts` 与 `context.ts` 读的是同一个 `index.md`；实测两处内容相同 | P1 |
+| G4 | 账本按 `dirPath` 记：绑了**任何一段**特征，整条退出自动检索 | `context.ts` + `run.ts`；实测：绑整条后 key 命中的 `mode:auto` 特征也进不来 | P4 |
+| G5 | 绑定器不知道谁是主条目：index 行可点、「整条绑定」可按、`countFor` 分母含 index | `AgentComposer.tsx/359` | P5 |
+| G6 | 绑定项超出 `BOUND_BLOCK_CHAR_CAP` 时只写一行占位，**却照样记进账本** → 正文既不在块里、也永远不会被检索补上 | `context.ts` 的占位分支仍 `entities.push(entity)` | P3 |
+| G7 | `@` 引用无条件内联 `index.md`，从不查账本 | `chatRefs.ts`；实测：绑定 + `@` 同一条目 → 同一次请求两份 | P6 |
 
-G4 与 G7 在**主聊天**里同样存在（`agentStore.ts:1279` 用的是同一个
+G4 与 G7 在**主聊天**里同样存在（`agentStore.ts` 用的是同一个
 `excludeDirsFor`）：第 2 轮提过沈砚、第 8 轮问「他的外套」，`outfit.md` 永远
 拿不到。这决定了 §8 方案 A 被否——修在共享层，两处一起好。
 
@@ -109,7 +109,7 @@ export async function selectLore(
 6. 报告：`LoreEntityReport` 加 `coreResident?: boolean`，让 AiPanel 的注入报告
    能说清「这条只补了特征，正文早在上下文里」。
 
-配套改动：`FacetDropReason` 加 `"resident"`；`AiPanel.tsx:678` 的 `dropReason`
+配套改动：`FacetDropReason` 加 `"resident"`；`AiPanel.tsx` 的 `dropReason`
 加一条分支 + `ai.panel.loreDropResident` 的 en / zh-CN 两份文案（现在的 fallback
 会把它显示成「仅手动」，纯误导）。
 
@@ -117,7 +117,7 @@ export async function selectLore(
 
 > 这一节**破了 01-overview 的「`lib/agent/*` 一行不改」**。那条原则是初次搭建时
 > 「扮演完全复用现成运行时」的自我约束，不是长期不变量；而 G4 / G7 本来就同时
-> 长在主聊天里（`agentStore.ts:1279` 用的是同一个 `excludeDirsFor`）。在共享层修，
+> 长在主聊天里（主聊天用的是同一个 `excludeDirsFor`，在共享的 `lib/agent/compact.ts`）。在共享层修，
 > 两处一起好；在扮演侧另起一本账，只会多一份迟早漂移的真相（§8 方案 A）。
 
 `lib/agent/compact.ts`：

@@ -39,7 +39,7 @@
 
 照搬 `executeDelegate` 会二选一，两条都坏：
 
-- **主模型复述一遍** → 付两次 output token，而且必然被悄悄改写。这正是 `copy_lore_file` 的描述里已经写下的那句话——「the content never passes through you: reading a file and re-sending it with `update_lore_file` risks silently reworded prose, a copy cannot」（[`registry.ts:1338`](../../../src/lib/agent/registry.ts)）。
+- **主模型复述一遍** → 付两次 output token，而且必然被悄悄改写。这正是 `copy_lore_file` 的描述里已经写下的那句话——「the content never passes through you: reading a file and re-sending it with `update_lore_file` risks silently reworded prose, a copy cannot」（[`registry.ts`](../../../src/lib/agent/registry.ts)）。
 - **主模型说「写好了，见 notes/xxx.md」** → 让作者去打开一个不进文件树、不参与导出的内部目录。
 
 而且"开关一开就委托"意味着它**不能是一个工具**：工具要模型自己决定调不调，那就是判断。
@@ -144,7 +144,7 @@ interface HandoffBrief {
 
 第三条：**主模型在交接单里声明落盘意图，字节由 runtime 搬。**
 
-写手吐完之后，runtime 用「写手的输出 + `deliverTo`」组一张普通的 `CreateProposal` / `AppendProposal` / `EditProposal`（[`registry.ts:121`](../../../src/lib/agent/registry.ts) 起），交给**父 surface** 的审批卡。
+写手吐完之后，runtime 用「写手的输出 + `deliverTo`」组一张普通的 `CreateProposal` / `AppendProposal` / `EditProposal`（[`registry.ts`](../../../src/lib/agent/registry.ts) 起），交给**父 surface** 的审批卡。
 
 - 不需要新的 Proposal 类型——它们的 `content` 本来就是字符串，区别只在于**这一次没有任何模型打过这些字**；
 - 卡上显示的是真实内容，作者审的是要落盘的那段字，不是「插入笔记 X」这种没法审的东西；
@@ -159,7 +159,7 @@ interface HandoffBrief {
 
 这是本设计**唯一一个会让功能悄悄失效**的点，从代码里读出来的：
 
-MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 `auto`**——OpenAI 适配器（[`openai.ts:63`](../../../src/lib/ai/openai.ts) `toolChoiceFor`）和 Anthropic 适配器（[`anthropic.ts:364`](../../../src/lib/ai/anthropic.ts) `toolChoiceBody`）各有一份。两处注释都写着这是安全的，理由是「唯一会强制的调用方是 `structured.ts`，它本来就把『模型没调工具』当成降级到 JSON 模式的信号」。
+MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 `auto`**——OpenAI 适配器（[`openai.ts`](../../../src/lib/ai/openai.ts) `toolChoiceFor`）和 Anthropic 适配器（[`anthropic.ts`](../../../src/lib/ai/anthropic.ts) `toolChoiceBody`）各有一份。两处注释都写着这是安全的，理由是「唯一会强制的调用方是 `structured.ts`，它本来就把『模型没调工具』当成降级到 JSON 模式的信号」。
 
 **本设计让那句话不再成立。** 如果收尾轮的 `handoff` 被降级成 `auto`，主模型可以直接写正文，写手根本不会跑——作者打开了开关，看到的却是主模型的输出，而且**没有任何报错**。
 
@@ -171,7 +171,7 @@ MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 
 
 ### 5.2 交接单发出即撤
 
-`handoff` 的 tool_call 与 tool_result **不进持久 history**。chat 的 history 跨轮存在还要过 `compact`：留在里面就是下一轮的噪音，会被折叠进摘要变成常驻指令，并训练模型把"写交接单"当成回答本身。这与 `forcedTextNotice` 修过的是同一个坑（[`runtime.ts:529`](../../../src/lib/agent/runtime.ts)）。
+`handoff` 的 tool_call 与 tool_result **不进持久 history**。chat 的 history 跨轮存在还要过 `compact`：留在里面就是下一轮的噪音，会被折叠进摘要变成常驻指令，并训练模型把"写交接单"当成回答本身。这与 `forcedTextNotice` 修过的是同一个坑（[`runtime.ts`](../../../src/lib/agent/runtime.ts)）。
 
 进 history 的只有写手的文本——那也正是作者看到、并在回复的那一段。
 

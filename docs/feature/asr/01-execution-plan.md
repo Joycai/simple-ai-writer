@@ -129,7 +129,7 @@ interface Transcript {
 
 ## 5. PR 3 — `transcribe_audio`
 
-照 `convertTools.ts` 的六步，但**第 3 步换位**：提案时不转写，只读文件头（大小、能算出的时长、估价），批准后在 apply 阶段调 `transcribeFile`，进度走 `requestApproval(proposal, onApplyProgress)`。`ToolId` / `Proposal` 联合 / `ApprovalCard` 三臂 / `agentStore` apply / `autoApprove` 拒绝，五处。路由 `routing.ts:189` 旁边同款一行；`agentToolBudget.test.ts` 看不见追加，routed-set 测试里单独断言。`read_file` 对 `transcribeExtOf(path)` 非空的文件：工具在 `allowedTools` 里 → 点名 `transcribe_audio`；不在 → 「这是音频/视频文件，当前没有转写能力，请作者在实验室开启并绑定模型」。
+照 `convertTools.ts` 的六步，但**第 3 步换位**：提案时不转写，只读文件头（大小、能算出的时长、估价），批准后在 apply 阶段调 `transcribeFile`，进度走 `requestApproval(proposal, onApplyProgress)`。`ToolId` / `Proposal` 联合 / `ApprovalCard` 三臂 / `agentStore` apply / `autoApprove` 拒绝，五处。路由 `routing.ts` 旁边同款一行；`agentToolBudget.test.ts` 看不见追加，routed-set 测试里单独断言。`read_file` 对 `transcribeExtOf(path)` 非空的文件：工具在 `allowedTools` 里 → 点名 `transcribe_audio`；不在 → 「这是音频/视频文件，当前没有转写能力，请作者在实验室开启并绑定模型」。
 
 ## 5.5 真机第一次跑之后的三处补（2026-09-06）
 

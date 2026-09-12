@@ -14,11 +14,11 @@
 | 面 | 落点 |
 |---|---|
 | 面板容器 | [`Sidebar.tsx`](../../src/components/layout/Sidebar.tsx) —— 项目头 + 搜索框 + 节标题 + `contentFlush`；`activeSideTab === "files"` 时挂 `<FileTree />` |
-| 树 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) 1162 行：工具栏 `:1048` · 行 `TreeNode :239` · 右键菜单 `buildMenuItems :870` · 拖拽/多选/剪贴板 |
+| 树 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) —— 工具栏（`styles.toolbar` 那一段 JSX）· 行 `TreeNode` · 右键菜单 `buildMenuItems` · 拖拽/多选/剪贴板 |
 | 样式 | [`FileTree.module.css`](../../src/components/layout/FileTree.module.css) · [`Sidebar.module.css`](../../src/components/layout/Sidebar.module.css) |
 | 纯逻辑 | [`lib/fs/selection.ts`](../../src/lib/fs/selection.ts)（`isDirOpen` / `flattenVisible` / `rangeBetween` / `pruneNested` / `pruneSelection` / `allRows`）· [`lib/fs/moveCopy.ts`](../../src/lib/fs/moveCopy.ts)（放置拒绝、副本编号） |
 | 数据 | `projectStore.fileTree: FileNode[]`（`{name, path, is_dir, children}` —— **没有**时间/大小/字数）· `expandedDirs` · `clipboard` · `activeFilePath` |
-| 宽度 | 160–500，默认 240（`appStore.ts:119`） |
+| 宽度 | 160–500，默认 240（`appStore.ts` 的 `SIDEBAR_MIN` / `SIDEBAR_MAX`） |
 
 顶部四层的**垂直预算**（实测自 CSS，240px 宽时）：项目头 `24+16` padding + 眉标 17 +
 名 22 + 计数行 22 ≈ **102** · 搜索框 `margin-top 16` + 盒 30 ≈ **46** · 节标题

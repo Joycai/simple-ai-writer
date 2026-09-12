@@ -12,21 +12,21 @@
 
 | 面 | 落点 |
 |---|---|
-| 六种行 | [`rowMeta.ts:16`](../../src/lib/fs/rowMeta.ts:16) `RowKind = folder \| assets \| doc \| deliverable \| image \| original` |
-| 种类判定 | [`rowMeta.ts:47`](../../src/lib/fs/rowMeta.ts:47) `rowKind(name, isDir, parentName)` —— 目录只看**父级叫不叫 `assets`**，不看自己叫什么 |
-| 两级灰 | [`rowMeta.ts:60`](../../src/lib/fs/rowMeta.ts:60) `isSecondary`：`original` / `image` / `assets` 退一档 |
-| 右列文字 | [`rowMeta.ts:73`](../../src/lib/fs/rowMeta.ts:73) `extLabel` —— 目录一律 `null`，让位给篇数或固定词 |
-| 失配判定 | [`rowMeta.ts:118`](../../src/lib/fs/rowMeta.ts:118) `orphanedAssetGroups`：`assets/<组>` 旁边没有同名文档 = 图片链接已断 |
-| 修复候选 | [`rowMeta.ts:148`](../../src/lib/fs/rowMeta.ts:148) `relinkCandidates` |
-| 图标 | [`FileTree.tsx:196`](../../src/components/layout/FileTree.tsx:196) `assets` → `Images`，失配 → `Link2` |
-| 右列渲染 | [`FileTree.tsx:451`](../../src/components/layout/FileTree.tsx:451) `assets` → `fileTree.assetsLabel` |
-| 一次走查 | [`FileTree.tsx:691`](../../src/components/layout/FileTree.tsx:691) `docCounts`、[:706](../../src/components/layout/FileTree.tsx:706) `orphanAssets` —— 整棵树各走一遍，不是每行查一次 |
-| 右键「重新关联到…」 | [`FileTree.tsx:1563`](../../src/components/layout/FileTree.tsx:1563) |
-| 目录常量 | [`image/assets.ts:21`](../../src/lib/image/assets.ts:21) `ASSETS_DIR = "assets"` |
-| 文案 | [`zh-CN.json:3264`](../../src/i18n/locales/zh-CN.json:3264) `插图` / [`en.json:3271`](../../src/i18n/locales/en.json:3271) `Images` |
-| 视觉规范 | [`design-system.md:262`](../reference/design-system.md:262) 设计稿 01b「右列一列两义」那一段 |
+| 六种行 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `RowKind = folder \| assets \| doc \| deliverable \| image \| original` |
+| 种类判定 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `rowKind(name, isDir, parentName)` —— 目录只看**父级叫不叫 `assets`**，不看自己叫什么 |
+| 两级灰 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `isSecondary`：`original` / `image` / `assets` 退一档 |
+| 右列文字 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `extLabel` —— 目录一律 `null`，让位给篇数或固定词 |
+| 失配判定 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `orphanedAssetGroups`：`assets/<组>` 旁边没有同名文档 = 图片链接已断 |
+| 修复候选 | [`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) `relinkCandidates` |
+| 图标 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) `assets` → `Images`，失配 → `Link2` |
+| 右列渲染 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) `assets` → `fileTree.assetsLabel` |
+| 一次走查 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) `docCounts`、`orphanAssets` —— 整棵树各走一遍，不是每行查一次 |
+| 右键「重新关联到…」 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) |
+| 目录常量 | [`image/assets.ts`](../../src/lib/image/assets.ts) `ASSETS_DIR = "assets"` |
+| 文案 | [`zh-CN.json`](../../src/i18n/locales/zh-CN.json) `插图` / [`en.json`](../../src/i18n/locales/en.json) `Images` |
+| 视觉规范 | [`design-system.md`](../reference/design-system.md) → 文件面板设计语言，设计稿 01b「右列一列两义」那一条 |
 
-树是**一次性整棵读完**的（[`commands.rs:399`](../../src-tauri/src/commands.rs:399)，深度上限 12，跳过点开头），
+树是**一次性整棵读完**的（[`commands.rs`](../../src-tauri/src/commands.rs)，深度上限 12，跳过点开头），
 所以渲染时每个目录的子树都已经在内存里 —— 按内容判定不需要读磁盘，也不需要多一次 IPC。
 
 ## 2. 「插图」这个标记现在是什么意思
@@ -74,7 +74,7 @@ photo  photos  screenshot  screenshots  gallery  media
 
 ### 4.4 这条推翻了一句旧注释（需要作者点头）
 
-[`rowMeta.ts:43`](../../src/lib/fs/rowMeta.ts:43) 写着「作者尽可以有一个叫插图的普通分组」。
+[`rowMeta.ts`](../../src/lib/fs/rowMeta.ts) 写着「作者尽可以有一个叫插图的普通分组」。
 按 §4.1，一个**空的**、叫「插图」的目录会被标成图片目录。推翻的范围仅限外观，且只在
 目录里一个文件都没有时发生——里面一旦有章节，它立刻变回普通分组。
 
@@ -106,15 +106,15 @@ photo  photos  screenshot  screenshots  gallery  media
 - **`lib/image/assets.ts` 一行不动**：改名 / 复制 / 删除都不跟随，作者的目录归作者管。
 - **`context/outline.ts` 不动**：`pictures` 目录里没有 `.md`，本来就不进卷分组。
 - **`LibraryView.tsx` 不动。**
-- **`CommandPalette.tsx` 不动**：它只对文件调 `rowKind(name, false, null)`（[:442](../../src/components/command/CommandPalette.tsx:442)），
-  拿不到目录种类；`KindIcon`（[:114](../../src/components/command/CommandPalette.tsx:114)）有 `default` 分支，加一种不会漏。
+- **`CommandPalette.tsx` 不动**：它只对文件调 `rowKind(name, false, null)`，
+  拿不到目录种类；`KindIcon`有 `default` 分支，加一种不会漏。
 
 ## 7. 落点
 
 | 文件 | 改动 |
 |---|---|
 | `src/lib/fs/rowMeta.ts` | `RowKind` 加 `pictures`；`isSecondary` 加一项；`extLabel` 对 `pictures` 返回 `null`；新增 `pictureFolders(nodes)` 与 `resolveRowKind(node, parentName, pictureDirs)`；更新文件头与 §4.4 那句注释 |
-| `src/components/layout/FileTree.tsx` | `useMemo` 加一次 `pictureFolders(fileTree)`；`TreeCtx` 加一个 `ReadonlySet<string>`；[:411](../../src/components/layout/FileTree.tsx:411) 改调 `resolveRowKind`；`RowIcon` 加一个 case；`rightCol` 加一个分支 |
+| `src/components/layout/FileTree.tsx` | `useMemo` 加一次 `pictureFolders(fileTree)`；`TreeCtx` 加一个 `ReadonlySet<string>`；改调 `resolveRowKind`；`RowIcon` 加一个 case；`rightCol` 加一个分支 |
 | `src/i18n/locales/{zh-CN,en}.json` | 新增 `fileTree.picturesLabel` = 「图片」/ `Pictures` |
 | `docs/reference/design-system.md` | §01b 右列那段补一句 `pictures` |
 | `docs/reference/codemap.md` | `lib/fs` 一节补一句判据 |
