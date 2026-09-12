@@ -57,11 +57,6 @@ export interface CachedDocument {
 /** Projects swept this launch. Module state on purpose: one sweep per launch is the contract. */
 const swept = new Set<string>();
 
-/** Test seam: forget which projects were swept. */
-export function __resetConvertCacheSweep(): void {
-  swept.clear();
-}
-
 async function readMeta(dir: string): Promise<ConvertCacheMeta | null> {
   try {
     return parseCacheMeta(await readFile(`${dir}/${CACHE_META_NAME}`));

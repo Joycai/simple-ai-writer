@@ -6,65 +6,79 @@
 ## 方案一览
 
 > 本表覆盖全部十一批（001–054）。状态与严重度以各批表格为准，两处不一致时改这里。
-> **唯一仍未执行的是 017**；其余 53 份均已落地，保留是因为源码注释与 `docs/` 以
-> 「方案 NNN」/`plans/NNN-*.md` 引用它们（当前 28 处），删文件会把这些引用打成死链。
+> **唯一仍未执行的是 017**；其余 53 份均已落地。
+>
+> **2026-09-12：38 份方案文件已删，本表与各批记录原样保留。**
+> 方案文件是一次性的施工单（改哪几行、怎么验），执行完就没有读者；真正留得住的
+> 是本文件——状态、执行顺序、阻断复盘、**撤回记录**与验收笔记都在这里，一个字
+> 没动。删除判据是「有没有人从外面指着它」：源码注释与 `docs/` 以
+> 「方案 NNN」/`plans/NNN-*.md` 引用的有 16 份（003 004 005 009 010 017 020 031
+> 044 045 047 049 050 051 052 053，分布在 14 个文件里共 27 处），**这 16 份连同
+> 017 全部留下**，所以全树没有一条引用被打断；其余 38 份外部零引用，已删。
+>
+> 表里那 38 行的标题**不再是链接**（改成纯文字，正文一字未改），批次记录里提到
+> 它们的地方照旧按编号称呼——编号指的是这张表里的一行，不是一个文件。
+>
+> 再删下去就要动本文件的正文了，那正是 `docs/reference/terminology.md`
+> 「`design/` 与 `plans/` 整体不动」说的「会毁掉时间线」——**不要**。
+> 需要读某份已删方案的原文时：`git log --diff-filter=D -- plans/`。
 
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 001 | [拖拽侧栏宽度时禁用 width 过渡](001-sidebar-resize-drag.md) | HIGH | DONE |
-| 002 | [修复失效的 rp-pulse 并收敛克隆关键帧](002-shared-keyframes-dead-pulse.md) | HIGH | DONE |
+| 001 | 拖拽侧栏宽度时禁用 width 过渡 | HIGH | DONE |
+| 002 | 修复失效的 rp-pulse 并收敛克隆关键帧 | HIGH | DONE |
 | 003 | [删掉高频/键盘表面的入场动画](003-quiet-high-frequency-surfaces.md) | HIGH | DONE |
 | 004 | [侧栏标签切换去掉 mode="wait"](004-sidebar-tab-enter-only.md) | MEDIUM | DONE |
 | 005 | [合成层友好属性 + 令牌归位](005-composite-props-and-tokens.md) | MEDIUM | DONE |
-| 006 | [弹出层锚定与出场方向](006-popover-anchoring.md) | MEDIUM | DONE |
-| 007 | [按压反馈统一](007-press-feedback.md) | MEDIUM | DONE |
-| 008 | [模态退出动画（ModalShell 单点）](008-modal-exit-via-shell.md) | MEDIUM | DONE |
+| 006 | 弹出层锚定与出场方向 | MEDIUM | DONE |
+| 007 | 按压反馈统一 | MEDIUM | DONE |
+| 008 | 模态退出动画（ModalShell 单点） | MEDIUM | DONE |
 | 009 | [reduced-motion 保住工作信号](009-reduced-motion-keep-progress.md) | MEDIUM | DONE |
 | 010 | [仪表条合成层化](010-meters-composite.md) | MEDIUM | DONE |
-| 011 | [状态变化软化（保存/视图/草稿）](011-state-change-softening.md) | LOW | DONE |
-| 012 | [插入到文档落点反馈](012-insert-flash.md) | LOW | DONE |
-| 013 | [剩余非壳模态表面的退出动画](013-remaining-modal-surfaces.md) | LOW | DONE |
-| 014 | [⌘K 命令面板去动画（决策变更）](014-command-palette-instant.md) | MEDIUM | DONE |
-| 015 | [右键菜单入场（006 的漏网之鱼）](015-context-menu-entrance.md) | MEDIUM | DONE（阻断 A 已解除） |
-| 016 | [审批卡入场](016-approval-card-entrance.md) | MEDIUM | DONE（阻断 A 已解除） |
+| 011 | 状态变化软化（保存/视图/草稿） | LOW | DONE |
+| 012 | 插入到文档落点反馈 | LOW | DONE |
+| 013 | 剩余非壳模态表面的退出动画 | LOW | DONE |
+| 014 | ⌘K 命令面板去动画（决策变更） | MEDIUM | DONE |
+| 015 | 右键菜单入场（006 的漏网之鱼） | MEDIUM | DONE（阻断 A 已解除） |
+| 016 | 审批卡入场 | MEDIUM | DONE（阻断 A 已解除） |
 | 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | TODO（阻断 B 已澄清解除） |
-| 018 | [导出按钮回执淡入](018-export-feedback-fade.md) | LOW | DONE（阻断 A 已解除） |
-| 019 | [模块内 @keyframes 的全局唯一性守卫](019-keyframe-namespace-guard.md) | LOW | DONE |
+| 018 | 导出按钮回执淡入 | LOW | DONE（阻断 A 已解除） |
+| 019 | 模块内 @keyframes 的全局唯一性守卫 | LOW | DONE |
 | 020 | [集合/装订子系统补齐悬停过渡](020-collections-transitions.md) | MEDIUM | DONE |
-| 021 | [侧栏拖拽按帧合并写入](021-sidebar-drag-raf.md) | MEDIUM | DONE |
-| 022 | [令牌归位与关键帧去重（005 的漏网之鱼）](022-token-and-keyframe-cleanup.md) | LOW | DONE |
-| 023 | [阻断 B 重新归因](023-blocker-b-reattribute.md) | HIGH | DONE — 结论「不是缺陷」，走分支 A |
-| 024 | [「回到最新」气泡去掉入场动画](024-jump-latest-no-entrance.md) | LOW | DONE |
-| 025 | [取材范围切换的墙面软化（加法项）](025-wall-scope-switch-softening.md) | LOW | DONE（第 2 步已按判据撤回） |
-| 026 | [审批卡入场：补齐 016 漏掉的两个挂载点](026-approval-card-entrance-remaining.md) | MEDIUM | DONE |
-| 027 | [一致性检查结果统一淡入落位](027-consistency-findings-stagger.md) | MEDIUM | DONE |
-| 028 | [生成图落位时淡入显影](028-generated-image-reveal.md) | LOW | DONE |
-| 029 | [提示词库痕迹行补上退场淡出](029-snippet-trace-exit.md) | MEDIUM | DONE |
-| 030 | [「跳到结尾」的光标落点提示](030-caret-landing-flash.md) | LOW | DONE（目检待作者） |
+| 021 | 侧栏拖拽按帧合并写入 | MEDIUM | DONE |
+| 022 | 令牌归位与关键帧去重（005 的漏网之鱼） | LOW | DONE |
+| 023 | 阻断 B 重新归因 | HIGH | DONE — 结论「不是缺陷」，走分支 A |
+| 024 | 「回到最新」气泡去掉入场动画 | LOW | DONE |
+| 025 | 取材范围切换的墙面软化（加法项） | LOW | DONE（第 2 步已按判据撤回） |
+| 026 | 审批卡入场：补齐 016 漏掉的两个挂载点 | MEDIUM | DONE |
+| 027 | 一致性检查结果统一淡入落位 | MEDIUM | DONE |
+| 028 | 生成图落位时淡入显影 | LOW | DONE |
+| 029 | 提示词库痕迹行补上退场淡出 | MEDIUM | DONE |
+| 030 | 「跳到结尾」的光标落点提示 | LOW | DONE（目检待作者） |
 | 031 | [侧栏折叠不再过渡 width](031-sidebar-collapse-no-transition.md) | HIGH | DONE |
-| 032 | [「移到分类」浮层补入场与锚定](032-category-move-menu-entrance.md) | HIGH | DONE |
-| 033 | [阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器](033-lore-read-entrance-token-and-trigger.md) | HIGH | DONE |
-| 034 | [分屏滚动联动合并到 rAF](034-scrollsync-raf-coalesce.md) | MEDIUM | DONE |
-| 035 | [两个同步 spinner 补 reduced-motion 豁免](035-sync-spinners-reduced-motion.md) | MEDIUM | DONE |
-| 036 | [AgentLog 进度条改用 transform: scaleX](036-agentlog-progress-composite.md) | MEDIUM | DONE |
-| 037 | [删除分类确认框补入场与按压](037-category-delete-modal-entrance.md) | MEDIUM | DONE |
-| 038 | [扮演计时从 10Hz 降到 1Hz](038-roleplay-timer-rerender.md) | MEDIUM | DONE |
-| 039 | [最近项目行补按压反馈](039-recent-projects-row-press.md) | MEDIUM | DONE |
-| 040 | [两处一次性闪烁在重复触发时静默失效](040-one-shot-flash-retrigger.md) | LOW-MED | DONE |
-| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
-| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
-| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
+| 032 | 「移到分类」浮层补入场与锚定 | HIGH | DONE |
+| 033 | 阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器 | HIGH | DONE |
+| 034 | 分屏滚动联动合并到 rAF | MEDIUM | DONE |
+| 035 | 两个同步 spinner 补 reduced-motion 豁免 | MEDIUM | DONE |
+| 036 | AgentLog 进度条改用 transform: scaleX | MEDIUM | DONE |
+| 037 | 删除分类确认框补入场与按压 | MEDIUM | DONE |
+| 038 | 扮演计时从 10Hz 降到 1Hz | MEDIUM | DONE |
+| 039 | 最近项目行补按压反馈 | MEDIUM | DONE |
+| 040 | 两处一次性闪烁在重复触发时静默失效 | LOW-MED | DONE |
+| 041 | 令牌归位与关键帧去重 | LOW | DONE |
+| 042 | 阅读模式补齐悬停过渡与按压 | LOW | DONE |
+| 043 | 阅读/管理切换器消除 3px 几何跳动 | LOW | DONE |
 | 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检通过） |
 | 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检通过） |
-| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（目检通过） |
+| 046 | Motion 浮层退场收快（不对称时长） | MEDIUM | DONE（目检通过） |
 | 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（目检通过） |
-| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE（目检未复现加载态） |
+| 048 | 图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼） | MEDIUM | DONE（目检未复现加载态） |
 | 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE（目检通过，tabFlash 定 240ms） |
 | 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（目检通过，A 保留） |
 | 051 | [两处 JS 平滑滚动绕过了 reduced-motion](051-smooth-scroll-reduced-motion.md) | MEDIUM | DONE（目检待作者） |
 | 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测） |
 | 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者） |
-| 054 | [App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡](054-stale-sidebar-transition-comment.md) | LOW | DONE |
+| 054 | App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡 | LOW | DONE |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -470,15 +484,15 @@ reduced-motion 下色带是否仍然出现、以及 **1.6s 的整行色带会不
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
 | 031 | [侧栏折叠不再过渡 width](031-sidebar-collapse-no-transition.md) | HIGH | DONE |
-| 032 | [「移到分类」浮层补入场与锚定](032-category-move-menu-entrance.md) | HIGH | DONE |
-| 033 | [阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器](033-lore-read-entrance-token-and-trigger.md) | HIGH | DONE |
-| 034 | [分屏滚动联动合并到 rAF](034-scrollsync-raf-coalesce.md) | MEDIUM | DONE |
-| 035 | [两个同步 spinner 补 reduced-motion 豁免](035-sync-spinners-reduced-motion.md) | MEDIUM | DONE |
-| 036 | [AgentLog 进度条改用 transform: scaleX](036-agentlog-progress-composite.md) | MEDIUM | DONE |
-| 037 | [删除分类确认框补入场与按压](037-category-delete-modal-entrance.md) | MEDIUM | DONE |
-| 038 | [扮演计时从 10Hz 降到 1Hz](038-roleplay-timer-rerender.md) | MEDIUM | DONE |
-| 039 | [最近项目行补按压反馈](039-recent-projects-row-press.md) | MEDIUM | DONE |
-| 040 | [两处一次性闪烁在重复触发时静默失效](040-one-shot-flash-retrigger.md) | LOW-MED | DONE |
+| 032 | 「移到分类」浮层补入场与锚定 | HIGH | DONE |
+| 033 | 阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器 | HIGH | DONE |
+| 034 | 分屏滚动联动合并到 rAF | MEDIUM | DONE |
+| 035 | 两个同步 spinner 补 reduced-motion 豁免 | MEDIUM | DONE |
+| 036 | AgentLog 进度条改用 transform: scaleX | MEDIUM | DONE |
+| 037 | 删除分类确认框补入场与按压 | MEDIUM | DONE |
+| 038 | 扮演计时从 10Hz 降到 1Hz | MEDIUM | DONE |
+| 039 | 最近项目行补按压反馈 | MEDIUM | DONE |
+| 040 | 两处一次性闪烁在重复触发时静默失效 | LOW-MED | DONE |
 
 **031 单独审阅**：它删掉一个用户看得见的动效（侧栏折叠过渡），是**产品决策**
 而不只是代码，体例同方案 014，带一步 design-system.md 同步。
@@ -603,9 +617,9 @@ transition 里仍带 width 的规则：只剩 RecentProjects / ResizeHandle 两�
 
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
-| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
-| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
-| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
+| 041 | 令牌归位与关键帧去重 | LOW | DONE |
+| 042 | 阅读模式补齐悬停过渡与按压 | LOW | DONE |
+| 043 | 阅读/管理切换器消除 3px 几何跳动 | LOW | DONE |
 
 - **041** 体例同方案 022（005 的漏网之鱼），七处同一类修法：`--ease-out` 的控制点
   手打了三份（`motion.ts:30` 是 `const` 而非 `export const`，所以
@@ -691,9 +705,9 @@ writerPulse 在产物中已不存在 · pulseDeep 引用 3 → 4
 | --- | --- | --- | --- |
 | 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检通过） |
 | 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检通过） |
-| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（目检通过） |
+| 046 | Motion 浮层退场收快（不对称时长） | MEDIUM | DONE（目检通过） |
 | 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（目检通过） |
-| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE（目检未复现加载态） |
+| 048 | 图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼） | MEDIUM | DONE（目检未复现加载态） |
 | 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE（目检通过，tabFlash 定 240ms） |
 | 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（目检通过，A 保留） |
 
@@ -841,7 +855,7 @@ animation-duration:1.6s!important      → 12（048 +1）
 | 051 | [两处 JS 平滑滚动绕过了 reduced-motion](051-smooth-scroll-reduced-motion.md) | MEDIUM | DONE（目检待作者）|
 | 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测）|
 | 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者）|
-| 054 | [App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡](054-stale-sidebar-transition-comment.md) | LOW | DONE |
+| 054 | App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡 | LOW | DONE |
 
 ### 推荐执行顺序与依赖
 

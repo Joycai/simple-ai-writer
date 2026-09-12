@@ -30,7 +30,6 @@
 .innerNarrow { max-width: 560px; }
 .innerCompact { max-width: 860px; }
 .innerWide { max-width: 1080px; }
-.innerHub { max-width: 1160px; }
 
 /* ─── Pane header ─────────────────────────────────────────────────────────── */
 
@@ -212,7 +211,6 @@
   margin-top: var(--space-3);
 }
 .cardGridFont { grid-template-columns: repeat(4, 1fr); }
-.cardGridWide { grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); }
 .cardGridProfile { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 
 .card {
@@ -257,13 +255,6 @@
   color: var(--color-text-secondary);
 }
 .cardActive .cardName { color: var(--color-accent); }
-
-.cardDesc {
-  margin-top: var(--space-1);
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
-  color: var(--color-text-muted);
-}
 
 /* Markdown-theme card: a live md-body sample pinned to that theme */
 .mdSample {
@@ -404,16 +395,6 @@
 }
 
 /* ─── Empty states ───────────────────────────────────────────────────────── */
-
-.emptyDashed {
-  margin-top: var(--space-3);
-  padding: var(--space-6);
-  border: 1.5px dashed var(--color-border-strong);
-  border-radius: var(--radius-md);
-  text-align: center;
-  font-size: var(--font-size-md);
-  color: var(--color-text-muted);
-}
 
 .emptyNote {
   padding: var(--space-6) 0;
@@ -589,14 +570,6 @@
 
 /* ─── Collapsible list rows (Prompt pane) ────────────────────────────────── */
 
-.listCard {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
-  margin-bottom: var(--space-2);
-  overflow: hidden;
-}
-
 .listHead {
   display: flex;
   align-items: center;
@@ -618,24 +591,6 @@
 }
 .chevronOpen { transform: rotate(90deg); }
 
-.listTitle {
-  flex: none;
-  font-size: var(--font-size-md);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.listPreview {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-}
-
-.listBody { border-top: 1px solid var(--color-border-soft); }
-
 .promptText {
   padding: var(--space-4);
   background: var(--color-bg-base);
@@ -644,25 +599,6 @@
   color: var(--color-text-secondary);
   white-space: pre-wrap;
 }
-
-.listActions {
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--color-border-soft);
-}
-
-.overrideBtn {
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-  color: var(--color-accent);
-  font-size: var(--font-size-sm);
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.overrideBtn:hover { background: var(--color-accent-tint); }
-.overrideBtn:active { transform: scale(0.97); }
 
 /* A custom-prompt row: badge, preview, "overriding" note, delete */
 .customRow {

@@ -16,7 +16,7 @@
  * slide and it is parsed a slide at a time; a converted document's is the line.
  */
 
-import { convertExtOf, type ConvertExt } from "../import";
+import { convertExtOf } from "../import";
 import { convertCached } from "../import/cachedConvert";
 import { looksScanned } from "../import/cache";
 import { isPptxPath } from "../fs/pptx";
@@ -28,14 +28,6 @@ const LEGACY: Record<string, string> = {
   doc: "Word 97-2003",
   xls: "Excel 97-2003",
   ppt: "PowerPoint 97-2003",
-};
-
-/** What the converters make of each format — for the "not a text file" redirects. */
-export const DOCUMENT_KIND: Record<ConvertExt, string> = {
-  docx: "Word document",
-  xlsx: "Excel workbook",
-  pdf: "PDF document",
-  pptx: "PowerPoint presentation",
 };
 
 function extOf(path: string): string {

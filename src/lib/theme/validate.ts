@@ -490,12 +490,3 @@ export function validateThemeText(
 ): ThemeValidation {
   return validateThemeRules(parseCssRules(text), id, contract);
 }
-
-/** ui only — kept for callers that already know the kind. */
-export function validateUiThemeText(
-  text: string,
-  id: string,
-  contract: Pick<TokenContract, "scale" | "core" | "derived">,
-): UiThemeValidation {
-  return validateUiRules(parseCssRules(text), id, contract);
-}

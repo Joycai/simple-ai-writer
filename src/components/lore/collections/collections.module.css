@@ -197,16 +197,8 @@
 }
 .rowActive .rowBreakdown { color: var(--color-text-muted); }
 .rowHint { font: italic 400 10px/1.3 var(--font-serif); color: var(--color-text-faint); }
-.rowTail { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
 .rowCount { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
 .rowActive .rowCount { color: var(--color-accent); }
-.rowBadge {
-  font: 500 9px/1 var(--font-sans);
-  letter-spacing: 0.14em;
-  color: var(--color-accent);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
 
 .menuDivider { height: 1px; background: var(--color-border-soft); margin: 6px 16px; }
 
@@ -723,15 +715,6 @@
 }
 .detailFenceZh { font: 400 12px/1.5 var(--font-serif); color: var(--color-text-secondary); }
 .detailFenceEn { font: 400 10px/1 var(--font-mono); color: var(--color-accent); white-space: nowrap; }
-
-/* 面包屑上的「来自筛选」 */
-.crumbChip {
-  padding: 3px 9px;
-  background: var(--lore-bind-bg);
-  border-left: 2px solid var(--lore-bind-mark);
-  font: 400 12px/1 var(--font-serif);
-  color: var(--color-text-secondary);
-}
 
 /* 悬停才浮出「设为取材范围」，所以每一行要有自己的悬停宿主。 */
 .railRowWrap { display: flex; flex-direction: column; }

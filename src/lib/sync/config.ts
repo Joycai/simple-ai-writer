@@ -12,7 +12,7 @@
  */
 
 import { readPref, writePref } from "../prefs";
-import { deleteApiKey, loadApiKey, saveApiKey } from "../keyStore";
+import { loadApiKey, saveApiKey } from "../keyStore";
 
 /**
  * Keyring account for a server's token.
@@ -52,8 +52,4 @@ export async function loadToken(serverUrl: string): Promise<string | null> {
 
 export async function saveToken(serverUrl: string, token: string): Promise<void> {
   await saveApiKey(syncTokenAccount(serverUrl), token);
-}
-
-export async function deleteToken(serverUrl: string): Promise<void> {
-  await deleteApiKey(syncTokenAccount(serverUrl));
 }

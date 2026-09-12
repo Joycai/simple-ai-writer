@@ -135,29 +135,9 @@
 }
 
 /* Chapter header — shown above editor */
-.chapterHeader {
-  text-align: center;
-  padding: 64px 100px 32px;
-  max-width: 880px;
-  margin: 0 auto;
-  width: 100%;
-}
-.chapterEyebrow {
-  font: 500 11px/1 var(--font-sans);
-  letter-spacing: var(--letter-eyebrow);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-  margin-bottom: 22px;
-}
 .chapterTitle {
   margin: 0;
   font: 300 44px/1.18 var(--font-serif);
   color: var(--color-text-primary);
   letter-spacing: -0.012em;
-}
-.chapterOrnament {
-  margin: 32px 0 0;
-  font: 400 15px/1 var(--font-serif);
-  color: var(--color-text-ghost);
-  letter-spacing: var(--letter-ornament);
 }

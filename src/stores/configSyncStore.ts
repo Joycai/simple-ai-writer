@@ -328,8 +328,3 @@ function errorKey(e: unknown): string {
 export function slotHeader(slot: RemoteSlot): EnvelopeHeader | null {
   return decodeMeta(slot.current?.meta ?? null);
 }
-
-/** Same, for one version row. */
-export function versionHeader(version: RemoteSlotVersion): EnvelopeHeader | null {
-  return decodeMeta(version.meta);
-}

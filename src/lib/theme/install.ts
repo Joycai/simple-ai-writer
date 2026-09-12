@@ -69,11 +69,6 @@ export function subscribeRegistry(fn: () => void): () => void {
   return () => { listeners.delete(fn); };
 }
 
-/** The ids the preferences named at the last rebuild. */
-export function currentSelection(): SelectedThemes {
-  return selection;
-}
-
 /** The appearance theme that applies for `scheme` — the author's, or the built-in it fell back to. */
 export function resolvedTheme(scheme: ColorScheme): ThemeEntry {
   return resolveUiTheme(current.ui, scheme, selection[scheme]);
@@ -125,11 +120,6 @@ function setStyle(id: string, css: string): void {
     document.head.appendChild(el);
   }
   if (el.textContent !== css) el.textContent = css;
-}
-
-/** Write the user appearance sheet, replacing whatever was there. Test seam. */
-export function setUserThemeCss(css: string): void {
-  setStyle(UI_STYLE_ID, wrapLayer(css));
 }
 
 /**
@@ -291,16 +281,4 @@ export function applyResolvedMarkdownTheme(id: string): ThemeEntry {
   if (selection.markdown !== id) rebuildRegistry({ ...selection, markdown: id });
   else void installMarkdownSheet();
   return resolvedMarkdownTheme();
-}
-
-/** Test seam. */
-export function resetThemesForTest(): void {
-  current = { ui: [...BUILTIN_UI_THEMES], markdown: [...BUILTIN_MARKDOWN_THEMES] };
-  userFiles = [];
-  projectFiles = [];
-  userDir = "";
-  projectDir = undefined;
-  scanned = false;
-  selection = { light: "paper", dark: "night", markdown: "manuscript" };
-  inlined.clear();
 }

@@ -3193,9 +3193,6 @@ export function mostUrgentChatState(s: ChatStateInputs): ChatState | null {
 export const chatQueuePosition = (s: ChatStateInputs, key: string) =>
   s.chatQueue.findIndex((j) => j.key === key);
 
-export const isChatRunning = (s: ChatStateInputs, key: string) => s.runningChats.includes(key);
-export const isChatCompacting = (s: ChatStateInputs, key: string) => s.compactingChats.includes(key);
-export const isChatQueued = (s: ChatStateInputs, key: string) => s.chatQueue.some((j) => j.key === key);
 /** Generating, folding or waiting for a slot — no new exclusive work may start. */
 export const isChatBusy = (s: ChatStateInputs, key: string) =>
   ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue);

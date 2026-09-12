@@ -69,12 +69,6 @@ export function showSnippetTrace(t: Omit<SnippetTrace, "seq">): void {
   }, HOLD_MS[t.kind]);
 }
 
-export function clearSnippetTrace(): void {
-  if (timer) clearTimeout(timer);
-  current = null;
-  emit();
-}
-
 export function useSnippetTrace(): SnippetTrace | null {
   return useSyncExternalStore(
     (cb) => { listeners.add(cb); return () => listeners.delete(cb); },

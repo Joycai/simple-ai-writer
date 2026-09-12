@@ -85,11 +85,6 @@ export interface TranscribeOutcome {
 
 const swept = new Set<string>();
 
-/** 测试缝：忘掉清扫过的项目。 */
-export function __resetAsrCacheSweep(): void {
-  swept.clear();
-}
-
 async function readMeta(dir: string): Promise<AsrCacheMeta | null> {
   try {
     return parseCacheMeta(await readFile(`${dir}/${ASR_META_NAME}`));

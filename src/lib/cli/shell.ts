@@ -51,12 +51,6 @@ export function cachedShellInfo(): ShellInfo | null {
   return cached;
 }
 
-/** Test seam. */
-export function resetShellInfoForTests(): void {
-  cached = null;
-  inflight = null;
-}
-
 /** Whether commands for this shell are written in PowerShell or POSIX syntax. */
 export function shellSyntax(info: ShellInfo): "powershell" | "posix" {
   return info.kind === "pwsh" || info.kind === "powershell" ? "powershell" : "posix";
