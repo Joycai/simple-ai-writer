@@ -103,7 +103,7 @@
 - `lib/roleplay/sceneTools.ts` + `SceneReader`
 - `registry.ts` 注册 5 个 scene 工具（含 `read_scene_memory`），`ToolContext` 加 `scenes?`
 - `NARRATOR_PRESET`、`ai.instructions.narrator`
-- `lib/roleplay/summary.ts` 滚动摘要（每 N 轮或压缩时更新）
+- ~~`lib/roleplay/summary.ts`~~ 滚动摘要（每 N 轮或压缩时更新）——落地时没建这个文件，直接用了 `lib/agent/compact.ts`
 - 审批卡在扮演面板里的渲染（复用 `ApprovalCard`）
 - 旁白把场景梳理成正文写进稿子（复用 `create_chapter` / `append_file` / `propose_edit`）
 

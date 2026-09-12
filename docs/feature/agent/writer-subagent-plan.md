@@ -1,6 +1,6 @@
 # 写手子代理 设计文档（Writer Sub-Agent）
 
-> **状态**：`shipped`（PR-1 + PR-2 + PR-3，一次落地）。§3 的触发时机在实现中改过一次，原因与原方案错在哪里记在 §3.1；**实机从未验证**，见 §9 末尾。
+> **状态**：`shipped` `unverified`（PR-1 + PR-2 + PR-3，一次落地）。§3 的触发时机在实现中改过一次，原因与原方案错在哪里记在 §3.1；**实机从未验证**，见 §9 末尾。
 > **范围**：**只有对话助手**（AiDrawer chat 模式 / `components/ai/AgentChat.tsx`）。角色扮演与 AiPanel 写作任务**明确不在第一期**，理由见 §7。
 > **关联**：[`subagent-plan.md`](subagent-plan.md)（§5 的边界条款在这里被**绕开而不是推翻**，见 §5.5）、[`subagent-lld.md`](subagent-lld.md)（任务工作区就是本设计的交接地基）、[`unified-agent-plan.md`](unified-agent-plan.md)（`finishPolicy` 是本设计唯一的新缝）
 

@@ -1,5 +1,8 @@
 # Windows 托盘启动器（`aiw-kb-tray`）
 
+> 状态：`shipped`。是 `server/` crate 里的第二个二进制（`server/Cargo.toml` 的
+> `[[bin]] aiw-kb-tray`）。本文里的 `src/…` 路径都是**相对 `server/` crate** 的。
+
 `server/` 的部署故事在 Linux/NAS 一侧是完整的——`DEPLOY.md` 写了 systemd 和
 Docker，开机自启、后台常驻、日志都有归宿。Windows 一侧不是：双击
 `aiw-kb-server.exe` 得到一个黑色控制台窗口，关掉窗口服务器就停了，而首次启动

@@ -15,7 +15,7 @@
 | 三根独立的切换轴：`data-theme`（light / dark）、`data-font`（四组中西字体）、`data-md-theme`（五套排版） | `appStore.ts` 的三个 `apply*`，都写在 `<html>` 上 | 轴的划分是对的，保留；要改的是每根轴的**取值域**从枚举变成注册表 |
 | `tokens.css` = `:root` 55 个刻度令牌 + 每个主题 214 个 | `src/styles/tokens.css` | 214 里 98 个是语义层（`--color-*` 88、`--shadow-*` 6、`--glass-*` 4），**116 个是面向单个界面的手调色**（`--lore` 37 / `--stg` 35 / `--sync` 20 / `--rp` 16 / `--snip` 6 / `--writer` 2）。让作者手填 214 个值是主题文件走不通的第一道墙。这个数还在涨：本周 03f / 05h 两张设计稿落地又加了 6 个 |
 | 三个 PR（e2e1588 / 0d6f8d8 / bb5c217）修的都是同一类 bug：CSS 里引用了**不存在的令牌**（`--color-danger`、`--color-red`、`--color-text`），`var()` 静默退成 `initial`，没有任何测试抓它 | `git log` 2026-09-05/06 | 契约清单一旦成为常量，「每个 `var(--x)` 都必须解析到清单里」就是一条一行的守卫（§12）；这条守卫的价值不等主题文件，S1 就该有 |
-| 主题奇偶校验测试：一个令牌要么在 `:root`，要么两个主题**都**定义 | `src/lib/__tests__/themeTokenParity.test.ts` | 它守的是「内置主题必须完整」；将来演化成**契约测试**，第三方主题不受它约束（见 §4） |
+| 主题奇偶校验测试：一个令牌要么在 `:root`，要么两个主题**都**定义 | 当时是 `src/lib/__tests__/themeTokenParity.test.ts`；S1（`32cecee`）把它**换成了** `themeContract.test.ts`，原文件已删 | 它守的是「内置主题必须完整」；按 §4 演化成了**契约测试**，第三方主题不受它约束 |
 | 深浅切换走 View Transition 交叉淡化；`system` 模式挂 `matchMedia` 监听 | `appStore.ts` `applyThemeAnimated` | 保留原样；主题切换复用同一条路 |
 | Markdown 排版是 **CSS-in-TS 生成器**：`baseCss` 全部写成 `--md-*`，五个主题只是变量包 + 可选 `rules`；同一份文本进 `<style id="md-themes">` 和导出的 HTML | `src/lib/theme/markdownThemes.ts` | 这个「一个生成器喂两处」的结构是方案的核心资产，不能丢；用户主题必须也能进导出 |
 | 生成器额外发一遍 `.md-body[data-md-theme=x]` 的**钉住**块，给设置页的样张用 | 同上 `markdownThemesCss()` | 用户主题无法这样钉住（没有解析器给它加前缀）；样张改成沙箱 iframe 之后这个机制退役（§7.3） |

@@ -1,5 +1,7 @@
 # briefing A/B — gemma4:12b-mlx, 2026-08-21
 
+> 状态：`research`。一次台架跑分，不是一份契约——数字随模型和机器走。
+
 台架 scripts/prompt-ab.ts。判据与第三格为什么记为失效见 docs/feature/agent/agent-tool-context-lld.md §4.3。
 
 ## 现行 briefing（3,763 字符 system）

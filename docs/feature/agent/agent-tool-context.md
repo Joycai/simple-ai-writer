@@ -1,7 +1,12 @@
 # Agent 工具描述的上下文开销：现状测量与优化建议
 
-> 状态：**审阅报告 / 提案**，尚未实施。故意不写进 `CLAUDE.md` 的索引——那份文件每次会话
-> 都进上下文，一份还没定的提案不值得占那个位置。落地后再挂上去。
+> 状态：`shipped`——本文是当初的**审阅报告 / 提案**，提案被采纳，按
+> [`agent-tool-context-lld.md`](agent-tool-context-lld.md) 的 PR1–PR5a 落地（PR5b 决定不做）。
+> 保留为设计记录：下面的测量与选项评估是「为什么不是另一种做法」的出处。
+> 落地后已挂进 `CLAUDE.md` 的 Detailed References。
+>
+> **§1 的数字是提案当时（2026-08）的快照**，不是今天的读数——今天的常驻 schema 体积由
+> `src/lib/__tests__/agentToolBudget.test.ts` 的棘轮盯着，要现值就跑它。
 
 ## 1. 先量，再说
 

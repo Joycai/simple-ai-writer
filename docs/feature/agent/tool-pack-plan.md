@@ -1,6 +1,6 @@
 # 工具包（tool pack）：主控编排 + 专职子代理执行
 
-> 状态：`implemented`（四个分片全部落地——§6；「助手工具包模式」Beta **默认关**，决定与重开条件见 §6.4）
+> 状态：`shipped`（四个分片全部落地——§6；「助手工具包模式」Beta **默认关**，决定与重开条件见 §6.4）
 > 起因：2026-08-30，作者提出——项目里绝大部分任务是分类的（lore 写 / 文件写 / 杂项转换 / 读与查），真正需要常驻的只有读查和通用工具，其余都是「到了某个 task 才集中使用、且几乎不同时使用」。设想：把一类工具打成 pack，主控知道要干哪类活时唤起**只带这个 pack** 的 inline 子代理去做；主控自己负责收集材料和编排步骤。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（量纲与七期工作）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md)（§5 延迟装载机制 · §6 `load_tools` 的否决与重开条件）、[`subagent-lld.md`](subagent-lld.md)（delegate 机制）、[`writer-subagent-plan.md`](writer-subagent-plan.md)（`deliverTo` 契约）
 

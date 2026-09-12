@@ -1,5 +1,7 @@
 # 知识库服务端管理后台（`/admin`）
 
+> 状态：`shipped`。改 `server/src/config.rs`、`server/src/admin.rs` 或 `server/admin/*` 之前读它。
+
 `server/` 那个二进制原来是纯命令行的：配 token 要改环境变量再重启，想知道谁在写
 只能 `journalctl` 翻日志，删一个库、清一次 `tmp/`、做一次备份都要 ssh 上去。
 这份文档记录**为什么后台长成现在这样**，以及哪些地方和设计稿不一样、为什么。

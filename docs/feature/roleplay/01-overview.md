@@ -1,6 +1,8 @@
 # 互动式角色扮演创作 — 概要设计
 
-> 状态：设计稿（未实现）。实现前先读 [02-design.md](02-design.md)。
+> 状态：`shipped`（Beta 开关后面，Settings → AI 配置 → 实验室）——本文是当初的概要设计，
+> 保留为四条不变量的出处。实现口径见 [README.md](README.md)，设计细节见
+> [02-design.md](02-design.md)，落地出入记在 [05-implementation-notes.md](05-implementation-notes.md)。
 > 术语：本文里「扮演 agent」= 演一个角色的对话体；「旁白 agent」= 看得见所有戏、和作者讨论故事的对话体；两者合称「戏搭子」。
 
 ## 1. 这是什么

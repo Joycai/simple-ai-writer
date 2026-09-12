@@ -1,6 +1,8 @@
 # 千问AI平台实测与后续两件事：修兼容问题、接 Responses 族
 
-> **状态：调研已落地（PR #466），修复与接入均未开工；执行顺序见 §6。** 2026-09-03 用作者的 key 对千问AI平台
+> **状态：`shipped` `unverified`——§6 的 A–H 全部合并（#466 · #468 · #469 · #472–#476），
+> 只剩 I 片等 `OPENAI_KEY`：`live.openai-responses.test.ts` 的实跑与 [`responses.md`](responses.md) §9 的回填。**
+> 每片的落点见 §6 表。2026-09-03 用作者的 key 对千问AI平台
 > （百炼 / DashScope）的 ① Chat Completions 与 ④ Anthropic 两个面做了逐模型实测，
 > 协议事实已写进 [`landscape.md`](landscape.md) §7 第六个样本，本文只放**结论、问题清单
 > 与计划**。§3 是修复切片，§4 是 Responses 族的接入评估（含与 OpenAI 官方 GPT-5.4 /
