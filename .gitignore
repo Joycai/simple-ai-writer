@@ -27,3 +27,9 @@ dist-ssr
 # committed copy of a run lives under docs/feature/agent/measurements/.
 prompt-ab-report.txt
 read-cost-report.txt
+
+# Python bytecode from server/icons/build.py (the tray/app icon generator).
+# A build.cpython-*.pyc had been committed since 2026-09-02 — regenerable, and
+# being 5934 NUL bytes it made git treat it as binary noise in every clone.
+__pycache__/
+*.pyc
