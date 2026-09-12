@@ -19,6 +19,7 @@ import i18n from "../../i18n";
 import { runStructuredTask } from "../agent/structured";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { ContentPart, ToolDefinition } from "../ai/types";
+import { imagePart } from "../ai/imagePart";
 
 /** Longest slice of entity material the checklist builder reads. */
 const MAX_MATERIAL_CHARS = 12_000;
@@ -208,7 +209,7 @@ export async function reviewImageAgainstChecklist(opts: ReviewOptions): Promise<
         "Judge the image against every checklist item.",
       ].join("\n\n"),
     },
-    { type: "image_url", image_url: { url: opts.dataUrl } },
+    imagePart(opts.dataUrl),
   ];
   const raw = await runStructuredTask({
     ...pickConnOptions(opts),

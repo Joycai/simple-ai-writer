@@ -14,6 +14,7 @@ import { readEntityFile } from "./entity";
 import type { LoreEntity } from "./model";
 import { MAX_IMAGE_BYTES, readTextFileContent, type ProjectFile } from "../fs/images";
 import type { ContentPart } from "../ai/types";
+import { imagePart } from "../ai/imagePart";
 
 // ── Attachments ──────────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export function buildUserContent(textContent: string, images: AttachedImage[]): 
   if (images.length === 0) return textContent;
   return [
     { type: "text", text: textContent },
-    ...images.map((a): ContentPart => ({ type: "image_url", image_url: { url: a.dataUrl } })),
+    ...images.map((a) => imagePart(a.dataUrl)),
   ];
 }
 

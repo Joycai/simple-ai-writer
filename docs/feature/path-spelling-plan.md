@@ -1,6 +1,6 @@
 # 路径拼法归一化方案（入口归一化，已实施）
 
-> 状态：**已实施，待 Windows 真机验证**（§6）。CI 的 ubuntu 跑不出这里的拼法相关的任何一条 —— 在 Linux 上 POSIX 拼法**就是**原生拼法，那些断言都是同义反复；`staleRefs.test.ts` 是例外，它测的是「只删指不到东西的引用」，与平台无关。
+> 状态：`shipped` `unverified`——**已实施，待 Windows 真机验证**（§6）。CI 的 ubuntu 跑不出这里的拼法相关的任何一条 —— 在 Linux 上 POSIX 拼法**就是**原生拼法，那些断言都是同义反复；`staleRefs.test.ts` 是例外，它测的是「只删指不到东西的引用」，与平台无关。
 > 背景：`lib/paths.ts` 已经是唯一知道两平台差别的模块（PR #263），但路径仍以**宿主自己的拼法**进入前端。Windows 上于是全应用混着两套拼法，靠 `isSamePath` 逐点消化。这份方案把消化改成根治：**进来就归一化，全应用只有一套拼法。**
 
 ## 1. 现状盘点（规划前逐项核实）
@@ -8,12 +8,12 @@
 | 环节 | 规划前的现状 |
 |---|---|
 | 路径入口 | 三类：Rust 的对话框/目录列举命令、`plugin-dialog` 的 `open()`（5 处）、`@tauri-apps/api/path` 的 `appDataDir`/`appLogDir`（3 处） |
-| 文件树 | `read_dir_inner` 用 `e.path()`（`commands.rs:314`）。`PathBuf::push` **每层按原生分隔符拼，与父路径拼法无关** —— 传 `D:/proj` 进去出来是 `D:/proj\书\第一章.md` |
-| 自定义 `FsScope` | `Path::components()` + `starts_with`（`scope.rs:81-88`）。Windows 上 Rust 的 `Path` 把 `/` 和 `\` 一视同仁 —— 与分隔符无关 |
+| 文件树 | `read_dir_inner` 用 `e.path()`（`commands.rs`）。`PathBuf::push` **每层按原生分隔符拼，与父路径拼法无关** —— 传 `D:/proj` 进去出来是 `D:/proj\书\第一章.md` |
+| 自定义 `FsScope` | `Path::components()` + `starts_with`（`scope.rs`）。Windows 上 Rust 的 `Path` 把 `/` 和 `\` 一视同仁 —— 与分隔符无关 |
 | plugin-fs 的 glob scope | pattern 侧（`push_pattern`）和查询侧（`Scope::is_allowed`）**都过 `components().collect()`**，在 Windows 上重建成原生分隔符 —— 也与分隔符无关 |
 | `open_with_default_app` | `Cargo.toml:61` 开了 `shellexecute-on-windows`，最终走 `ShellExecuteExW`，路径**原样**当 `lpFile`。shell API 对正斜杠不可靠 —— **唯一真正会坏的地方** |
-| `preview_html_window` | `encode_path_for_url` 本来就先 `replace('\\', "/")`（`preview.rs:114`）—— 不受影响 |
-| 拖放 | `tauri.conf.json:20` `dragDropEnabled: false`，且 `src/` 里没有 `onDragDropEvent`。**不是路径入口** |
+| `preview_html_window` | `encode_path_for_url` 本来就先 `replace('\\', "/")`（`preview.rs`）—— 不受影响 |
+| 拖放 | `tauri.conf.json` `dragDropEnabled: false`，且 `src/` 里没有 `onDragDropEvent`。**不是路径入口** |
 | 路径比较 | 20 处已在 PR #263 换成 `isSamePath`；本方案又发现 4 处漏网（§4.3） |
 
 结论：**两套 scope 都与分隔符无关，我此前担心的阻塞不存在**。真正的工作量不在改拼法，在**已经落盘的、拿绝对路径当键的数据**。
@@ -26,9 +26,9 @@
 
 | 入口 | 为什么必须 |
 |---|---|
-| `openProjectFolder()`（`lib/project.ts:16`） | `projectPath` 是一切的根，且**被持久化**进 `app:recentProjects` |
-| `readDirRecursive()`（`lib/project.ts:42`） | 整棵 `fileTree`、`activeFilePath`、`expandedDirs` 的键、卷/章的 `.path` 都由它派生 |
-| `readDir()`（`lib/fs/fileio.ts:93`） | `LoreEntity.dirPath` 由它来（`lore/entity.ts:56,98,133`），而 dirPath 被**写进 `agents.json` 和 pinned lore** |
+| `openProjectFolder()`（`lib/project.ts`） | `projectPath` 是一切的根，且**被持久化**进 `app:recentProjects` |
+| `readDirRecursive()`（`lib/project.ts`） | 整棵 `fileTree`、`activeFilePath`、`expandedDirs` 的键、卷/章的 `.path` 都由它派生 |
+| `readDir()`（`lib/fs/fileio.ts`） | `LoreEntity.dirPath` 由它来（`lore/entity.ts`），而 dirPath 被**写进 `agents.json` 和 pinned lore** |
 
 **不**归一化的：`plugin-dialog` 的 5 个 `open()`、`appDataDir`/`appLogDir`、四个 zip/文本对话框命令的返回值。它们的路径读一次就扔 —— 取字节、取 basename、显示一行 —— 既不比较也不落盘，归一化买不到任何东西，却要动到 dialog 插件给那次会话的自动授权。
 
@@ -48,7 +48,7 @@
 - 不需要迁移标记，不需要"这个版本迁过了吗"的状态；
 - 盘上的字节没被改写，回滚就是回滚，没有单向门。
 
-- 弃用【写迁移】：要引入版本号和一次性标记；而且 `ai:pinnedLore:` 和 `app:recentProjects` 必须**原子地**一起改，否则启动时的 `collectOrphanedProjectPrefs`（`prefs.ts:336-350`）会拿一个精确串匹配的 `Set` 把对不上的钉住记录**自动、静默、不可撤销地**删掉。读时归一化让这个陷阱根本不存在：recents 读进来就是新拼法，钉住的键写出去也是新拼法，两边永远一致。
+- 弃用【写迁移】：要引入版本号和一次性标记；而且 `ai:pinnedLore:` 和 `app:recentProjects` 必须**原子地**一起改，否则启动时的 `collectOrphanedProjectPrefs`（`prefs.ts`）会拿一个精确串匹配的 `Set` 把对不上的钉住记录**自动、静默、不可撤销地**删掉。读时归一化让这个陷阱根本不存在：recents 读进来就是新拼法，钉住的键写出去也是新拼法，两边永远一致。
 - 老版本写下的钉住记录（旧拼法的键）会在第一次启动时被那个 collector 收走。**这是接受的代价** —— 钉住是轻量状态，作者重新钉一下就有；为它引入长期冗余或单向迁移都不划算。真正会"消失得没道理"的东西（扮演绑定、对话注入账本、配图）走的是读时归一化，不受影响。
 
 ### D4 「清理失效数据」是按钮，不是自动扫
@@ -65,7 +65,7 @@
 
 ### D4 `open_with_default_app` 在交给 OS 前转回原生拼法
 
-`commands.rs:347`，交给 opener 之前 `Path::new(&path).components().collect::<PathBuf>()`。这是全套里唯一一处**必须**转回去的地方，理由在 §1 那张表：它走 `ShellExecuteExW`。
+`commands.rs`，交给 opener 之前 `Path::new(&path).components().collect::<PathBuf>()`。这是全套里唯一一处**必须**转回去的地方，理由在 §1 那张表：它走 `ShellExecuteExW`。
 
 放在 Rust 而不是前端：交给 OS 的拼法是 OS 的事，前端不该知道有这回事。
 
@@ -83,7 +83,7 @@
 
 ### 3.1 那个会自动删数据的 collector
 
-`hydratePrefs()` 启动时会调 `collectOrphanedProjectPrefs()`，它拿 `app:recentProjects` 建一个 `Set`，然后把每一条 `ai:pinnedLore:` 的键**精确串匹配**，匹配不上就删行（`prefs.ts:345-346`）：
+`hydratePrefs()` 启动时会调 `collectOrphanedProjectPrefs()`，它拿 `app:recentProjects` 建一个 `Set`，然后把每一条 `ai:pinnedLore:` 的键**精确串匹配**，匹配不上就删行（`prefs.ts`）：
 
 ```ts
 const alive = new Set(live);
@@ -98,7 +98,7 @@ const dropped = prunePrefsWithPrefix(PINNED_LORE_PREFIX, (path) => alive.has(pat
 
 `meta.injected` 对不上 → 恢复出来的会话把每个 lore 条目**重新注入一遍**（烧 token，不坏数据）。`lastDocPath` 对不上 → 第一轮重发整篇正文。`turns[].images` 对不上 → 老对话里的图显示不出来。都不致命，但都查不出来 —— 所以要修。
 
-另外 `deserializeChatSession` 遇到任何形状意外都返回 `null`、调用方重开一个新会话（`chatSession.ts:173-186`），所以这一处即便迁错了也是优雅降级。
+另外 `deserializeChatSession` 遇到任何形状意外都返回 `null`、调用方重开一个新会话（`chatSession.ts`），所以这一处即便迁错了也是优雅降级。
 
 ## 4. 实施清单（已完成）
 

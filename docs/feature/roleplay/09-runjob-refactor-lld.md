@@ -10,7 +10,7 @@
 
 ## 1. 问题：为什么这 345 行值得动
 
-`runJob`（`stores/roleplayStore.ts:498-842`）今天揉着七件事：
+`runJob`（`stores/roleplayStore.ts`）今天揉着七件事：
 
 | # | 职责 | 行数（约） | 出过 bug 吗 |
 |---|---|---|---|

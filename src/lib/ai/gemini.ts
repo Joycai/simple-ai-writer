@@ -79,6 +79,8 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
           if (p.type === "text") return { text: p.text };
           // Images and files both travel as data URLs, and Gemini takes both as
           // inlineData — a PDF is just inlineData with an application/pdf mime.
+          // `image_url.detail` has no spelling on this wire and is dropped;
+          // Gemini decides its own tiling. Same call as the Anthropic adapter.
           const dataUrl = p.type === "file" ? p.file.file_data : p.image_url.url;
           const [meta, data] = dataUrl.split(",");
           const mimeType = meta.slice("data:".length).replace(";base64", "");

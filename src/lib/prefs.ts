@@ -60,6 +60,10 @@ export const PREF_KEYS = [
   // Longest edge a picture may have when it is sent to a model; anything
   // over it is downscaled first. 0 = never resize. See lib/image/downscalePlan.
   "app:imageMaxLongEdge",
+  // The `detail` hint sent beside a picture ("low" | "high"); absent/"" sends
+  // no field at all, which is what every endpoint reads as "your choice".
+  // See lib/ai/imagePart.
+  "app:imageDetail",
   "app:apiLogEnabled",
   "app:pptxExportBeta",
   "app:docxExportBeta",

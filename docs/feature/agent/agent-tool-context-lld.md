@@ -2,7 +2,14 @@
 
 > 前置阅读：[`agent-tool-context.md`](agent-tool-context.md)（现状测量与选项评估）。
 > 本文是**拍板后的执行方案**：分几个 PR、每个 PR 动哪些文件哪些函数、怎么测、怎么回滚。
-> 状态：待实施。全部落地后把 §7 的结论并进 `CLAUDE.md`。
+> 状态：`shipped`——**PR1–PR5a 全部落地，PR5b 决定不做**（理由在 §6）：
+> PR1 `827175d`（`lib/agent/toolCost.ts` + `messageCeilingTokens` + `round-start.toolTokens`，
+> 1.22 起的事件都带）· PR2 `c092a5d`（官方 Anthropic 端点的缓存断点）·
+> PR3 `fee7cc8`（四个预设的 schema 体积棘轮 `agentToolBudget.test.ts`）·
+> PR4（briefing 与 schema 去重，实测两格 3/3=3/3，见 §6 开头）·
+> PR5a `05c658e`（知识库写工具随已批准的方案装载 + `agentRuntimeToolGroups.test.ts`）。
+> 之后又加了一格 5c（按已批准方案的**形状**分组装载），收益与实测全在 §7。
+> §7 的结论已并进 `CLAUDE.md`。
 
 ## 0. 定下来的取舍
 
@@ -20,7 +27,7 @@
 
 ### 1.1 `lib/agent/toolCost.ts`（新文件）
 
-现在 `AgentChat.tsx:413` 手写了一遍"路由 → 取定义 → 估 token"，PR1 之后还会有三个调用点需要同一个数。抽出来：
+现在 `AgentChat.tsx` 手写了一遍"路由 → 取定义 → 估 token"，PR1 之后还会有三个调用点需要同一个数。抽出来：
 
 ```ts
 /**
@@ -83,12 +90,12 @@ const ceilingChars = floor(messageCeilingTokens * charsPerToken);   // ← 改�
 
 | 文件 | 现在 | 改成 |
 | --- | --- | --- |
-| `stores/aiTaskStore.ts:504` | `plan.inputCeilingTokens \|\| ASSUMED_…` | `plan.messageCeilingTokens \|\| ASSUMED_…` |
-| `stores/agentStore.ts:1174` | `inputCeilingFor(model.contextSize, util)` | 同上再减 `plannedToolTokens(AGENT_ASSIST_PRESET, …)` |
-| `stores/agentStore.ts:1067`（压缩触发） | 同上 | 同上——**必须和 1174 用同一个数**，否则压缩阈值和裁剪阈值再次错位 |
-| `stores/roleplayStore.ts:549` | 同上 | 同上（用 `presetFor(agent.kind)`） |
+| `stores/aiTaskStore.ts` | `plan.inputCeilingTokens \|\| ASSUMED_…` | `plan.messageCeilingTokens \|\| ASSUMED_…` |
+| `stores/agentStore.ts` | `inputCeilingFor(model.contextSize, util)` | 同上再减 `plannedToolTokens(AGENT_ASSIST_PRESET, …)` |
+| `stores/agentStore.ts`（压缩触发） | 同上 | 同上——**必须和 1174 用同一个数**，否则压缩阈值和裁剪阈值再次错位 |
+| `stores/roleplayStore.ts` | 同上 | 同上（用 `presetFor(agent.kind)`） |
 
-`aiTaskStore.ts:358` 和 `AiPanel.tsx:222` 的 `planContextBudget(...)` 调用各加一个
+`planContextBudget(...)` 的两个调用点（`aiTaskStore.ts`，以及当时在 `AiPanel.tsx`、现已收进 `lib/context/forecast.ts` 的那一处）各加一个
 `toolSchemaTokens: plannedToolTokens(presetForTools(task.tools) ?? …)`；`presetForTools`
 返回 `null`（`tools: "none"`）时传 0。
 
@@ -120,7 +127,7 @@ const messageCeiling = (contextSize, util, preset) =>
     at: number }
 ```
 
-`runtime.ts:513` 填 `withholdTools ? 0 : toolTokensOf(activeToolIds)`。
+`runtime.ts` 填 `withholdTools ? 0 : toolTokensOf(activeToolIds)`。
 `components/ai/AgentLog.tsx` 在轮次行上显示 `估 12.3k（工具 8.5k）`——**这是验证后面四个
 PR 收益的唯一手段**，先有它再动别的。
 
@@ -569,5 +576,6 @@ briefing (zh)        3,400               1,389
 没先量就报数。这一栏的数字是 `estimateToolsTokens` / `estimateTextTokens` 跑出来的，
 不是算的。
 
-> **实测数据待填**（PR1 的 `round-start.toolTokens` 上线后逐个 PR 记在这里，
-> 包括 PR4 的对照结果——不达标的那一格尤其要记，它是后人重开这个话题时唯一有用的东西）。
+> 上面每一格都是 `round-start.toolTokens`（PR1）上线后逐个 PR 量出来的，不是算出来的。
+> 再动这块之前先跑一遍现值：`estimateToolsTokens` 的口径由
+> `src/lib/__tests__/agentToolBudget.test.ts` 的棘轮盯着。

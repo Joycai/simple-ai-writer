@@ -76,15 +76,15 @@
 
 | 已有能力 | 位置 | 对本方案的意义 |
 |---|---|---|
-| DashScope 原生协议：`dashscopeNativeBase` / `dashscopeHeaders` / 提交-轮询-超时-连续 3 次失败才抛 | `src/lib/ai/image.ts:992–1211` | 轮询循环**原样抽出来共用**，ASR 只换端点、请求体和结果解析 |
-| 请求走 Rust reqwest，`FormData` + `Blob` 上传先例（**不要手设 Content-Type**） | `src/lib/http.ts` · `image.ts:658, 1300` | OSS 表单上传没有 CORS 问题；capability `http:default` 已是 `https://**` 通配，CSP `connect-src` 已放行 `https:` |
-| 读二进制文件 | `src/lib/fs/fileio.ts:30` `readBinaryFile` | 音频进 Blob 不需要新的 Rust 命令 |
-| 「专用模型不是小号 LLM」的全套先例：`translateFormat` 标记 → `isTranslateOnly` → `conversationalModels` 过滤 → 子代理档位 `translate`（进 `SUBAGENT_KINDS` 不进 `DELEGATE_KINDS`）→ `resolveTranslateConn` | `src/lib/ai/configDb.ts:305–320` · `src/lib/agent/subagent.ts:27–72, 206–235` · `src/lib/translate/tool.ts:41–60` | ASR 模型的身份、候选过滤、绑定方式全部照抄 |
-| Beta 开关的形状（10 行 flag + `PREF_KEYS` 一项 + LabPane 一行 + `goNext("subagents")` 脚注） | `src/lib/translate/flag.ts` · `src/lib/prefs.ts:64–76` · `LabPane.tsx:130–143` | |
-| 右键菜单的 Beta 门（**关着时不存在，不是禁用**）+ `flushIfOpen` + 懒加载模块 | `FileTree.tsx:1413–1424, 1053, 1073` | 转写入口同款 |
-| L2 提案工具的最干净模板：`convert_document` → `ConvertProposal` → `ApprovalCard` → `agentStore` apply → `materialize` | `src/lib/agent/convertTools.ts` · `registry.ts:473, 2743` · `ApprovalCard.tsx:86/144/779` · `agentStore.ts:774–793` | 新提案种类要改的五处已经数清（§5.3） |
+| DashScope 原生协议：`dashscopeNativeBase` / `dashscopeHeaders` / 提交-轮询-超时-连续 3 次失败才抛 | `src/lib/ai/image.ts` | 轮询循环**原样抽出来共用**，ASR 只换端点、请求体和结果解析 |
+| 请求走 Rust reqwest，`FormData` + `Blob` 上传先例（**不要手设 Content-Type**） | `src/lib/http.ts` · `image.ts, 1300` | OSS 表单上传没有 CORS 问题；capability `http:default` 已是 `https://**` 通配，CSP `connect-src` 已放行 `https:` |
+| 读二进制文件 | `src/lib/fs/fileio.ts` `readBinaryFile` | 音频进 Blob 不需要新的 Rust 命令 |
+| 「专用模型不是小号 LLM」的全套先例：`translateFormat` 标记 → `isTranslateOnly` → `conversationalModels` 过滤 → 子代理档位 `translate`（进 `SUBAGENT_KINDS` 不进 `DELEGATE_KINDS`）→ `resolveTranslateConn` | `src/lib/ai/configDb.ts` · `src/lib/agent/subagent.ts, 206–235` · `src/lib/translate/tool.ts` | ASR 模型的身份、候选过滤、绑定方式全部照抄 |
+| Beta 开关的形状（10 行 flag + `PREF_KEYS` 一项 + LabPane 一行 + `goNext("subagents")` 脚注） | `src/lib/translate/flag.ts` · `src/lib/prefs.ts` · `LabPane.tsx` | |
+| 右键菜单的 Beta 门（**关着时不存在，不是禁用**）+ `flushIfOpen` + 懒加载模块 | `FileTree.tsx, 1053, 1073` | 转写入口同款 |
+| L2 提案工具的最干净模板：`convert_document` → `ConvertProposal` → `ApprovalCard` → `agentStore` apply → `materialize` | `src/lib/agent/convertTools.ts` · `registry.ts, 2743` · `ApprovalCard.tsx/144/779` · `agentStore.ts` | 新提案种类要改的五处已经数清（§5.3） |
 | 内容哈希缓存 `.ai-writer/tmp/convert/<key>/` + 原子落盘 + 扫盘清理 | `src/lib/import/cache.ts` · `cachedConvert.ts` | 转写结果 JSON 用同一套（§4.4） |
-| 路由里「Beta 开 **且** 模型已绑」才追加工具 | `src/lib/agent/routing.ts:189` | `transcribe_audio` 同款；追加的工具要在 routed-set 测试里单独断言 |
+| 路由里「Beta 开 **且** 模型已绑」才追加工具 | `src/lib/agent/routing.ts` | `transcribe_audio` 同款；追加的工具要在 routed-set 测试里单独断言 |
 
 **缺的部件**：① 音频 / 视频文件种类（`ProjectFileKind` 只有 image / text，`ModelType` 没有 audio）；② OSS 临时上传；③ 两代模型的请求 / 结果解析；④ 结果 JSON → markdown 的渲染；⑤ 一个新的提案种类。
 
@@ -100,7 +100,7 @@
 
 ### 4.2 子代理档位 `asr`
 
-进 `SUBAGENT_KINDS`，不进 `DELEGATE_KINDS`（`subagent.ts:35–68` 那段注释说的就是这种模型：不能对话的模型得到的是**工具**不是子对话）。`subAgentModel` 加一行 `if (kind === "asr" && !isAsrOnly(model)) return null`；`SubAgentsPane` 加候选列表 `asrCandidates = models.filter(m => m.enabled && isAsrOnly(m))` 和相应的 warning。每次运行通过 `resolveAsrConn()`（克隆 `resolveTranslateConn`）拿到 `{ provider, model, apiKey }`。
+进 `SUBAGENT_KINDS`，不进 `DELEGATE_KINDS`（`subagent.ts` 那段注释说的就是这种模型：不能对话的模型得到的是**工具**不是子对话）。`subAgentModel` 加一行 `if (kind === "asr" && !isAsrOnly(model)) return null`；`SubAgentsPane` 加候选列表 `asrCandidates = models.filter(m => m.enabled && isAsrOnly(m))` 和相应的 warning。每次运行通过 `resolveAsrConn()`（克隆 `resolveTranslateConn`）拿到 `{ provider, model, apiKey }`。
 
 ### 4.3 核心模块 `src/lib/asr/`
 
@@ -118,7 +118,7 @@ run.ts         transcribeFile(path, opts, { onProgress, signal }) —— 唯一�
 `client.ts` 的三条不变量：
 1. **getPolicy 的 `model` 和 submit 的 `model` 是同一个变量**，不是两处各写一遍——凭证和模型绑定，写错的症状是轮询阶段的 `FILE_DOWNLOAD_FAILED`，和漏头一模一样，排查不出来。
 2. **`X-DashScope-OssResourceResolve: enable` 只在 `file_url` 以 `oss://` 开头时加**，并且是提交请求的头，不是 getPolicy 的。
-3. 提交返回 200 但 body 顶层带 `code` 是错误（`image.ts:1110` 的规矩）；轮询 `FAILED` 时把 `output.code` + `output.message` 原样带进错误——`SERVER_ERROR` 这种没有 message 的，就把「可能是 oss:// 没解析」作为提示附上，因为 §2.4b 证明它就是这么表现的。
+3. 提交返回 200 但 body 顶层带 `code` 是错误（`image.ts` 的规矩）；轮询 `FAILED` 时把 `output.code` + `output.message` 原样带进错误——`SERVER_ERROR` 这种没有 message 的，就把「可能是 oss:// 没解析」作为提示附上，因为 §2.4b 证明它就是这么表现的。
 
 ### 4.4 结果缓存：转写一次，落盘一次
 

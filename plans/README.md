@@ -5,6 +5,10 @@
 
 ## 方案一览
 
+> 本表覆盖全部十一批（001–054）。状态与严重度以各批表格为准，两处不一致时改这里。
+> **唯一仍未执行的是 017**；其余 53 份均已落地，保留是因为源码注释与 `docs/` 以
+> 「方案 NNN」/`plans/NNN-*.md` 引用它们（当前 28 处），删文件会把这些引用打成死链。
+
 | # | 方案 | 严重度 | 状态 |
 | --- | --- | --- | --- |
 | 001 | [拖拽侧栏宽度时禁用 width 过渡](001-sidebar-resize-drag.md) | HIGH | DONE |
@@ -37,6 +41,30 @@
 | 028 | [生成图落位时淡入显影](028-generated-image-reveal.md) | LOW | DONE |
 | 029 | [提示词库痕迹行补上退场淡出](029-snippet-trace-exit.md) | MEDIUM | DONE |
 | 030 | [「跳到结尾」的光标落点提示](030-caret-landing-flash.md) | LOW | DONE（目检待作者） |
+| 031 | [侧栏折叠不再过渡 width](031-sidebar-collapse-no-transition.md) | HIGH | DONE |
+| 032 | [「移到分类」浮层补入场与锚定](032-category-move-menu-entrance.md) | HIGH | DONE |
+| 033 | [阅读模式入场：令牌回归 + 关键帧去重 + 挂对触发器](033-lore-read-entrance-token-and-trigger.md) | HIGH | DONE |
+| 034 | [分屏滚动联动合并到 rAF](034-scrollsync-raf-coalesce.md) | MEDIUM | DONE |
+| 035 | [两个同步 spinner 补 reduced-motion 豁免](035-sync-spinners-reduced-motion.md) | MEDIUM | DONE |
+| 036 | [AgentLog 进度条改用 transform: scaleX](036-agentlog-progress-composite.md) | MEDIUM | DONE |
+| 037 | [删除分类确认框补入场与按压](037-category-delete-modal-entrance.md) | MEDIUM | DONE |
+| 038 | [扮演计时从 10Hz 降到 1Hz](038-roleplay-timer-rerender.md) | MEDIUM | DONE |
+| 039 | [最近项目行补按压反馈](039-recent-projects-row-press.md) | MEDIUM | DONE |
+| 040 | [两处一次性闪烁在重复触发时静默失效](040-one-shot-flash-retrigger.md) | LOW-MED | DONE |
+| 041 | [令牌归位与关键帧去重](041-token-and-keyframe-consolidation.md) | LOW | DONE |
+| 042 | [阅读模式补齐悬停过渡与按压](042-lore-read-hover-press.md) | LOW | DONE |
+| 043 | [阅读/管理切换器消除 3px 几何跳动](043-mode-switch-geometry.md) | LOW | DONE |
+| 044 | [⌘1‥⌘5 触发的主视图与侧栏标签切换去动画（决策变更）](044-keyboard-screen-switch-instant.md) | HIGH | DONE（目检通过） |
+| 045 | [知识库「条目 → 条目」不再推入推出](045-lore-detail-to-detail-no-push.md) | MEDIUM | DONE（目检通过） |
+| 046 | [Motion 浮层退场收快（不对称时长）](046-motion-overlay-asymmetric-exit.md) | MEDIUM | DONE（目检通过） |
+| 047 | [reduced-motion 全局兜底：去位移、留淡入（决策变更）](047-reduced-motion-drop-movement-keep-fades.md) | MEDIUM | DONE（目检通过） |
+| 048 | [图片灯箱 spinner 补 reduced-motion 豁免（035 的漏网之鱼）](048-lightbox-spinner-reduced-motion.md) | MEDIUM | DONE（目检未复现加载态） |
+| 049 | [令牌与节奏收敛（041 的漏网之鱼）](049-token-and-rhythm-consolidation.md) | LOW | DONE（目检通过，tabFlash 定 240ms） |
+| 050 | [最后两处非合成层动效](050-last-non-composite-motion.md) | LOW | DONE（目检通过，A 保留） |
+| 051 | [两处 JS 平滑滚动绕过了 reduced-motion](051-smooth-scroll-reduced-motion.md) | MEDIUM | DONE（目检待作者） |
+| 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测） |
+| 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者） |
+| 054 | [App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡](054-stale-sidebar-transition-comment.md) | LOW | DONE |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -798,3 +826,97 @@ animation-duration:1.6s!important      → 12（048 +1）
 | 050 | 通过；A（分隔柄 `scaleX`）不发虚，保留，不撤回 |
 
 至此第十批（044–050）落地并验收完毕，仅 048 的加载态留待偶遇时补验。
+
+---
+
+## 第十一批（051–054，基准 485de63）
+
+本批来自一次全仓动效复审（`review-animations` → `improve-animations`）。复审的结论是**底子很稳**：
+全库没有 `transition: all`、没有 `ease-in`、没有 `scale(0)`、没有超 320ms 的 UI 动效、没有键盘触发的动画；
+19 处浮层的 `transform-origin` 全部锚在触发器上；17 个含无限动画的模块**全部**带本地 `prefers-reduced-motion` 块。
+立案的四条都是**收口**，不是返工。
+
+| # | 方案 | 严重度 | 状态 |
+| --- | --- | --- | --- |
+| 051 | [两处 JS 平滑滚动绕过了 reduced-motion](051-smooth-scroll-reduced-motion.md) | MEDIUM | DONE（目检待作者）|
+| 052 | [滑杆吸附仍在动 left/width（050 的漏网）](052-slider-snap-composite.md) | LOW | DONE（像素等价已实测）|
+| 053 | [标签闪线改走合成层（box-shadow → 伪元素 scaleY）](053-tabflash-composite.md) | LOW | DONE（目检待作者）|
+| 054 | [App.tsx 一段注释仍在描述 031 删掉的 320ms 过渡](054-stale-sidebar-transition-comment.md) | LOW | DONE |
+
+### 推荐执行顺序与依赖
+
+**四份互不依赖，改的文件两两不相交**，可以任意顺序、也可以并行：
+
+| 方案 | 触及文件 |
+| --- | --- |
+| 051 | `roleplay/RoleplayChat.tsx`、`settings/panes/ContextMemoryPane.tsx` |
+| 052 | `common/Slider.module.css`、`common/Slider.tsx` |
+| 053 | `ai/SessionTabs.module.css` |
+| 054 | `App.tsx`（仅注释） |
+
+建议按 **051 → 053 → 052 → 054** 走：051 是唯一有真实用户影响的一条（无障碍）；
+053 收掉全库最后一个非合成层关键帧；052 需要逐像素比对，放在手上有闲心的时候做；054 是三行注释。
+
+051 与 054 可以合进同一个 PR（都不改 CSS）；052 与 053 各自的目检判据不同，建议分开提交以便回退。
+
+### 两处「重新翻案」已按既定决策撤回
+
+复审最初还提了两条，核对方案记录后**撤回**，不立案：
+
+1. **删掉零消费者的 `--ease-spring`**（`tokens.css:76`）—— 方案 041 的 Boundaries（`:155`）与方案 049 的
+   Boundaries（`:198`、`:218`）**两次**明文记过：「它确实零消费者，但它是 design-system.md 记载的设计词汇，
+   删它是设计决策不是清理。」本 README 第九批「不要删」一条（`:612`）同样在案。**保留。**
+2. **删掉已成空操作的 `:global([data-resizing]) .sidebar { transition: none; }`** —— 方案 031 在
+   「Repo conventions to follow」里已经承认它是空操作，并明确决定留着（它表达另一条不变量，方案 001 的
+   Verification 还在引用它）。**保留。** 031 留下的真正遗留只有 `App.tsx` 那段过期注释，即方案 054。
+
+### 需要回填的一处旧记录
+
+方案 052 落地后，**方案 050 的标题「最后两处非合成层动效」与第八批「transition 里仍带 width 的规则：
+只剩 RecentProjects / ResizeHandle 两处」这两句盘点都需要补一句**：当时漏了 `Slider.module.css:62-63`
+（彼时写的是字面 `cubic-bezier`、且带 `.snapping` 前缀，两次 grep 都没捞到），由方案 052 补齐。
+
+### 执行记录（2026-09-12，基准 485de63）
+
+四份一次落地。门禁：`node_modules/.bin/tsc --noEmit` 无诊断 · `pnpm test` **287 文件 / 4241 用例全绿**
+（含 `cssKeyframeNames.test.ts`）· `pnpm build` 成功。
+
+机械判据逐条核过：
+
+```
+051  显式 behavior:"smooth" 的字面命中  → 只剩 EditorScrollNav.tsx:61 的注释（方案已声明豁免）
+052  Slider 里 transition 带布局属性     → 空
+052  全库 transition 带布局属性          → 只剩 RecentProjects:195（050 已明文撤回）
+                                          + collections:311（border-left-color，是颜色，误命中）
+052  Slider.tsx 内联 left                → 只剩刻度那一行
+053  SessionTabs 的 box-shadow           → 空
+053  全库关键帧里的 box-shadow           → 空（至此没有非合成层关键帧了）
+054  "320ms collapse transition"         → 空；Sidebar 的 [data-resizing] 规则原样保留
+```
+
+**浏览器实测**（worktree 的 `simple-ai-writer-worktree` dev server，已确认服务的是本 worktree 的文件
+——`Slider.module.css` 读得到 `--track-w`）：
+
+- **052 的像素等价已坐实**。设置 → 上下文与记忆的三个滑杆，实测轨道宽 **260px**（= `--slider-w` 276 − 16，
+  与文件头 anatomy 一致），拇指与填充条的几何：
+
+  | pct | 拇指偏移（实测） | 旧公式 | 填充宽（实测） | 旧公式 |
+  | --- | --- | --- | --- | --- |
+  | 0 | −7.00 | `calc(0% − 7px)` = −7 | 0 | 0 |
+  | 2.5 | −0.50 | `calc(2.5% − 7px)` = −0.5 | 6.5 | 260×0.025 = 6.5 |
+  | 100 | 253.00 | `calc(100% − 7px)` = 253 | 260 | 260×1 = 260 |
+
+  2.5% 这一档是键盘走出来的非整数值，比方案里预设的 50% 更能说明公式线性等价。
+- **052 的过渡属性**：吸附态实测为 `transform 70ms var(--ease-settle), background …` 与
+  `transform 70ms var(--ease-settle)`，`left`/`width` 已不在其中。
+- **053 的减动效契约已坐实**（同步探针，不依赖 rAF）：`tabFlash` 的 50% 帧在
+  `--motion-shift: 1` 下计算为 `matrix(1,0,0,2,0,0)`（= `scaleY(2)`，与改动前的 2px→4px 等价），
+  在 `--motion-shift: 0` 下为 `matrix(1,0,0,1,0,0)`（= `scaleY(1)`，粗细不再变，只剩颜色那一档）。
+  这正是方案 047 的契约，也是相对改动前的行为改进。
+- 控制台无任何错误。
+
+**仍待作者在真窗口目检**（都要项目/系统设置，预览面板给不了）：
+
+1. **051** 打开系统「减弱动态效果」后：设置 → 上下文与记忆点「硬上限」指路应一帧到位；扮演对话用回退条跳轮同样一帧到位。关掉减动效则两处都应与改动前一样平滑。
+2. **053** AI 面板会话标签条：当前标签顶部那条 2px 赭线仍在、切换标签跟着走；已有空标签时按「新会话」，顶线闪一次的观感与改动前相同；标签最上沿 1–2px 处点击仍能切换会话（验 `pointer-events: none`）。
+3. **052** 三个滑杆的吸附手感、拖拽跟手、焦点环与禁用态。

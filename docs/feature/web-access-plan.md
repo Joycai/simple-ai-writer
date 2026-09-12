@@ -1,6 +1,8 @@
 # 局域网 Web 访问 — 可行性调研
 
-> 状态：**调研**（未实施）。写于 2026-08-16，基于 **v1.17.0** 的代码盘点。
+> 状态：`research` `stale`（未实施）。写于 2026-08-16，基于 **v1.17.0** 的代码盘点。
+> 下面那张「数字已漂移」的复核表本身也是 **v1.34.2** 时做的，之后没再重数——
+> 动手前按当时的代码重量一遍，别信这两代里的任何一个数。
 > 问题：桌面 App 增加一个可选的 Web 服务 —— 设置里打开开关、指定端口、对局域网暴露，用浏览器访问同一套 UI 进行操作。
 > 本文给出结论、架构建议、安全模型和分期路线。
 >
@@ -14,9 +16,9 @@
 > | 文中说法 | 2026-08-26 实测 |
 > |---|---|
 > | 26 个 `invoke()` 调用点 | **26** —— 未变 |
-> | `Database.load` 全项目 2 个调用点（`project.ts:64/93`） | **22** 处（`lib/ai/configDb.ts` 15 · `lib/project.ts` 7）—— SQL 接触面显著变宽，§2.2 的 RPC 清单要重算 |
+> | `Database.load` 全项目 2 个调用点（`project.ts/93`） | **22** 处（`lib/ai/configDb.ts` 15 · `lib/project.ts` 7）—— SQL 接触面显著变宽，§2.2 的 RPC 清单要重算 |
 > | Rust 侧 24 个 command | **39** 个 `#[command]`（`generate_handler!` 注册 43 项） |
-> | 「Rust 侧没有任何 HTTP server / 端口监听代码，桥接层是纯新增」 | **不再成立**。`src-tauri/src/instance.rs:96` 已有 `TcpListener::bind("127.0.0.1:0")`（多开的 loopback focus 通道），而 `server/` 下已经有一个独立的 axum 服务（知识库同步 + 配置备份 + `/admin` 控制台，自带鉴权与 TOML 配置）。**§2.1「不做独立 server 二进制」这个取舍应当重新评估** —— 当初「工作量翻倍」的理由，有一半已经被 `server/` 付掉了 |
+> | 「Rust 侧没有任何 HTTP server / 端口监听代码，桥接层是纯新增」 | **不再成立**。`src-tauri/src/instance.rs` 已有 `TcpListener::bind("127.0.0.1:0")`（多开的 loopback focus 通道），而 `server/` 下已经有一个独立的 axum 服务（知识库同步 + 配置备份 + `/admin` 控制台，自带鉴权与 TOML 配置）。**§2.1「不做独立 server 二进制」这个取舍应当重新评估** —— 当初「工作量翻倍」的理由，有一半已经被 `server/` 付掉了 |
 > | `useImageDataUrl.ts` 走 base64 data URL | 仍在（`src/components/lore/useImageDataUrl.ts`）；§6「图片通道顺便变优」的前提未变 |
 >
 > 此外全文未涉及 v1.17.0 之后新增的几大块（角色扮演、翻译子代理、ComfyUI 出图、
@@ -30,7 +32,7 @@
 
 - `http.ts`、`prefs.ts`、`keyStore.ts`、`TitleBar` 都已内建 `IS_TAURI` 为假时的浏览器分支；
 - 26 个 `invoke()` 调用点里 21 个已收口在 4 个封装模块（`fs/fileio.ts`、`fs/transfer.ts`、`project.ts`、`keyStore.ts`）；
-- SQLite 的接口面只有 `execute` / `select` 两个方法，`Database.load` 全项目只有 2 个调用点（`project.ts:64` 项目库、`project.ts:93` 全局库）；
+- SQLite 的接口面只有 `execute` / `select` 两个方法，`Database.load` 全项目只有 2 个调用点（`project.ts` 项目库、`project.ts` 全局库）；
 - 图片渲染早已放弃 `ai-writer-asset://` 自定义协议改走 base64 data URL（`useImageDataUrl.ts`），没有 `convertFileSrc` 依赖。
 
 但**"完全复用"不成立**，需要三块新东西：
@@ -81,8 +83,8 @@
 
 盘点结论（详见 §7 工作量表）：改造能否靠"替换封装实现"而不是全局搜索替换完成，取决于两件**现在就该做**的事：
 
-1. 把 6 处重复的 `"__TAURI_INTERNALS__" in window` 探测（`http.ts:33`、`prefs.ts:79`、`keyStore.ts:22`、`useWindowCloseFlush.ts:17`、`aiStore.ts:20`）收敛到 `platform.ts:13` 单一出口；
-2. 修掉 `fs/images.ts:7` 绕过 `fileio.ts` 直接 import `plugin-fs` 的漏点（`fileio.ts:22` 已导出同名 `readBinaryFile`）。
+1. 把 6 处重复的 `"__TAURI_INTERNALS__" in window` 探测（`http.ts`、`prefs.ts`、`keyStore.ts`、`useWindowCloseFlush.ts`、`aiStore.ts`）收敛到 `platform.ts` 单一出口；
+2. 修掉 `fs/images.ts` 绕过 `fileio.ts` 直接 import `plugin-fs` 的漏点（`fileio.ts` 已导出同名 `readBinaryFile`）。
 
 之后 bridge 模式 = 给 `fileio.ts` / `project.ts`（DB 句柄）/ `keyStore.ts` / `prefs.ts` 各换一个 fetch 实现，UI 层零改动。
 
@@ -92,7 +94,7 @@
 
 ### 3.1 现状是什么
 
-现有安全模型的锚是 `scope.rs` 的 `FsScope`：**运行时授权根**。静态 capability 里 fs scope 为空，用户通过原生对话框选中项目文件夹的那一刻（`project_open_dialog`）该绝对路径才被注册为允许根，之后所有 `fs_*` command 都做前缀校验（`scope.rs:56 is_allowed`）。agent 工具层（`lib/agent/tools.ts`）在前端还有一层路径 containment。
+现有安全模型的锚是 `scope.rs` 的 `FsScope`：**运行时授权根**。静态 capability 里 fs scope 为空，用户通过原生对话框选中项目文件夹的那一刻（`project_open_dialog`）该绝对路径才被注册为允许根，之后所有 `fs_*` command 都做前缀校验（`scope.rs is_allowed`）。agent 工具层（`lib/agent/tools.ts`）在前端还有一层路径 containment。
 
 ### 3.2 Web 模式的原则：**绝对路径不上网线**
 
@@ -139,13 +141,13 @@
 
 | 功能 | 现状 | Web 端方案 |
 |---|---|---|
-| 项目根选择（原生文件夹对话框） | `scope.rs:140`，同时是授权模型的锚 | 不提供；只能在"最近项目"里切换（§3.2） |
+| 项目根选择（原生文件夹对话框） | `scope.rs`，同时是授权模型的锚 | 不提供；只能在"最近项目"里切换（§3.2） |
 | 文件导入对话框（docx/xlsx/图片，4 处组件散点） | `plugin-dialog` | `<input type="file">` 上传 |
 | zip 导入/导出、文本导出对话框 | `transfer.rs` 4 个 command | HTTP 上传/下载，语义天然匹配 |
 | `revealItemInDir`（文件管理器中显示，5 处） | `plugin-opener` | 隐藏按钮，或降级为"复制相对路径" |
 | 打印 / PDF 导出 | `print.rs` 独立预览窗口 + macOS objc2 边距修正 | `window.print()` 新标签页，边距体验有差异；接受降级 |
 | 关窗前 flush 自动保存 | `onCloseRequested` 可 await | `beforeunload` 不能 await —— 靠现有 `scheduleSave` 缩短去抖 + `visibilitychange` 时同步 flush + `navigator.sendBeacon` 兜底 |
-| 窗口控制 / 自绘标题栏 | `useWindowControls.ts` | 已有 fallback（`TitleBar.tsx:71` 装饰性圆点），无需改动 |
+| 窗口控制 / 自绘标题栏 | `useWindowControls.ts` | 已有 fallback（`TitleBar.tsx` 装饰性圆点），无需改动 |
 | `getVersion()`（3 处，写导出 manifest） | `api/app` | 构建期注入常量（顺手把桌面端也统一） |
 | xlsx 解析 | Rust command | 上传后服务端跑同一段 calamine 代码，无损 |
 
@@ -162,7 +164,7 @@
 ### 第 0 期 — 不需要桥接层、现在就值得做的收口（半天）
 
 1. `IS_TAURI` 探测收敛到 `platform.ts` 单一出口（6 处重复）；
-2. `fs/images.ts:7` 改走 `fileio.ts` 的 `readBinaryFile`；
+2. `fs/images.ts` 改走 `fileio.ts` 的 `readBinaryFile`；
 3. `getVersion()` 改构建期注入。
 
 ### 第 1 期 — 最小可用（核心工作量，估 1~2 周）

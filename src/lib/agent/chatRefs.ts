@@ -18,6 +18,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent } from "../ai/types";
+import { imagePart } from "../ai/imagePart";
 import { readEntityFile } from "../lore/entity";
 import type { AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText } from "../lore/aiTask";
 
@@ -240,7 +241,7 @@ export async function buildChatMessage(
     content: sent.length
       ? [
           { type: "text", text },
-          ...sent.map((a): ContentPart => ({ type: "image_url", image_url: { url: a.dataUrl } })),
+          ...sent.map((a) => imagePart(a.dataUrl)),
         ]
       : text,
     imagePaths: sent.map((a) => a.file.path),

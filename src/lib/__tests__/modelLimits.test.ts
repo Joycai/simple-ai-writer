@@ -19,6 +19,15 @@ describe("knownMaxOutput", () => {
     expect(knownMaxOutput("qwen3-vl-plus-2025-12-19")).toBe(32_768);
   });
 
+  it("knows DeepSeek's own two-model catalogue, not just the relay spellings", () => {
+    // `deepseek-flash` shares no prefix with deepseek-chat/-reasoner/-v4-pro,
+    // so before its own row it answered null and the author's model fell back
+    // to the app-wide default — a silent truncation, not a visible wrong value.
+    expect(knownMaxOutput("deepseek-flash")).toBe(393_216);
+    expect(knownMaxOutput("deepseek/deepseek-flash")).toBe(393_216);
+    expect(knownMaxOutput("deepseek-chat")).toBe(8_192);
+  });
+
   it("matches the longest prefix, not the first", () => {
     // gpt-4-turbo's own cap, not the gpt-4 entry's.
     expect(knownMaxOutput("gpt-4-turbo")).toBe(4_096);

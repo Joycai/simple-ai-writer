@@ -1,6 +1,6 @@
 # Agent 直读 Office / PDF 文档（`read_document` + 转换缓存）
 
-> **Status: `implemented`** — 2026-09-03 起草并同日实现（读的一半 PR #463 已合并；写的一半 `convert_document` 随后补上，见 §10；两半都未真机验证——见 §9）。读的一半**不含 UI 变动**：新增的只有一个 agent 只读工具、一层落在 `.ai-writer/tmp/` 下的转换缓存，以及执行日志里一条工具标签字符串（§5.3）。写的一半是一张新审批卡（D11 预告的那个 UI），照 `export_xlsx` 的形状做。
+> **Status: `shipped` `unverified`** — 2026-09-03 起草并同日实现（读的一半 PR #463 已合并；写的一半 `convert_document` 随后补上，见 §10；两半都未真机验证——见 §9）。读的一半**不含 UI 变动**：新增的只有一个 agent 只读工具、一层落在 `.ai-writer/tmp/` 下的转换缓存，以及执行日志里一条工具标签字符串（§5.3）。写的一半是一张新审批卡（D11 预告的那个 UI），照 `export_xlsx` 的形状做。
 
 ## 1. 背景与现状
 

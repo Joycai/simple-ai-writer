@@ -1,6 +1,6 @@
 # 019 — 模块内 @keyframes 的全局唯一性守卫
 
-- **Status**: TODO
+- **Status**: DONE（2026-08-26，PR #332；新增 `src/lib/__tests__/cssKeyframeNames.test.ts`，两条断言。纯测试，无目检项）
 - **Commit**: 93eb7de
 - **Severity**: LOW（但防的是一类**静默**缺陷）
 - **Category**: 内聚与令牌 / 工程

@@ -42,19 +42,19 @@
 
 | 给模型（应改走 `imageForModel`） | 给人看 / 写盘（**必须原样**） |
 | --- | --- |
-| `agent/tools.ts:187` `read_lore_image` | `editor/Preview.tsx:124` 正文图内联 |
-| `agent/tools.ts:272` `read_image` | `editor/ImagePreview.tsx:26` 图片文件预览 |
-| `ai/AgentChat.tsx:235` 聊天 `@` 附件 | `lore/useImageDataUrl.ts` 图集/头像 |
-| `roleplay/RoleplayChat.tsx:568` 扮演附件 | `common/MarkdownPreview.tsx:44` |
-| `lore/ai/AttachmentTextarea.tsx:89` | `fs/export.ts:53` 导出内嵌 |
-| `lore/LoreDetail.tsx:501` 图集描述（vision） | `fs/htmlDoc.ts:26` HTML 内嵌 |
-| `lore/LoreMetaImproveModal.tsx:121` | `library/LibraryView.tsx` 书脊缩略图 |
-| `ai/ImageGenModal.tsx:372` 校准复审（vision） | **`ai/ImageGenModal.tsx:421`**（读回字节**写盘**，不是发送） |
-| `image/illustrate.ts:97` 配图参考图 | **`lore/LoreGenerator.tsx:198`**（把附件写成条目头像） |
-| `stores/imageStore.ts:184` 改图源图 | |
+| `agent/tools.ts` `read_lore_image` | `editor/Preview.tsx` 正文图内联 |
+| `agent/tools.ts` `read_image` | `editor/ImagePreview.tsx` 图片文件预览 |
+| `ai/AgentChat.tsx` 聊天 `@` 附件 | `lore/useImageDataUrl.ts` 图集/头像 |
+| `roleplay/RoleplayChat.tsx` 扮演附件 | `common/MarkdownPreview.tsx` |
+| `lore/ai/AttachmentTextarea.tsx` | `fs/export.ts` 导出内嵌 |
+| `lore/LoreDetail.tsx` 图集描述（vision） | `fs/htmlDoc.ts` HTML 内嵌 |
+| `lore/LoreMetaImproveModal.tsx` | `library/LibraryView.tsx` 书脊缩略图 |
+| `ai/ImageGenModal.tsx` 校准复审（vision） | **`ai/ImageGenModal.tsx`**（读回字节**写盘**，不是发送） |
+| `image/illustrate.ts` 配图参考图 | **`lore/LoreGenerator.tsx`**（把附件写成条目头像） |
+| `stores/imageStore.ts` 改图源图 | |
 
-右列最后两行值得单独标出来。`ImageGenModal.tsx:421` 长得和同文件的 `:372`
-一模一样，做的却是把候选图落盘；`LoreGenerator.tsx:198` 更隐蔽 —— 它取
+右列最后两行值得单独标出来。`ImageGenModal.tsx` 长得和同文件的 `:372`
+一模一样，做的却是把候选图落盘；`LoreGenerator.tsx` 更隐蔽 —— 它取
 `{ bytes, ext }` 去写 `avatar.<ext>`，一个数据 URL 建出来只是被丢掉。降采样接到
 这两处，等于**永久损坏作者存下来的图**。
 
@@ -87,8 +87,8 @@
 
 ### 2.1 语义变化：`MAX_IMAGE_BYTES` 从「拒绝」变成「目标」
 
-今天 [`AgentChat.tsx:239`](../../src/components/ai/AgentChat.tsx) 和
-[`RoleplayChat.tsx:571`](../../src/components/roleplay/RoleplayChat.tsx) 撞到 12MB
+今天 [`AgentChat.tsx`](../../src/components/ai/AgentChat.tsx) 和
+[`RoleplayChat.tsx`](../../src/components/roleplay/RoleplayChat.tsx) 撞到 12MB
 是弹一句「太大，换一张」。这是这个方案真正的收益点：作者手上那张就是要发的
 那张，「换一张」不是一个可执行的建议。
 
@@ -109,7 +109,7 @@
 **为什么不是 2048。** 各家 vision 端点内部大多会把长边压到 1500 左右
 （Anthropic 文档给的建议值是 1568），照这个逻辑 2048 更省。但省的是**服务端
 本来就会替我们做的事**，而代价落在作者身上：截图认字、扫描件读表格、看清人物
-配饰这类需求，正是降采样第一个毁掉的东西。[`LoreDetail.tsx:501`](../../src/components/lore/LoreDetail.tsx)
+配饰这类需求，正是降采样第一个毁掉的东西。[`LoreDetail.tsx`](../../src/components/lore/LoreDetail.tsx)
 的注释已经就同一件事表过态 ——「vision 模型描述一张降采样过的副本，会漏掉的
 恰好是这段描述存在的理由」。4096 的位置是：**只挡住真正异常的东西**（生图模型
 的 4096² 输出、长截图、扫描 TIFF 转来的巨图），正常照片一律放行。想更省的作者

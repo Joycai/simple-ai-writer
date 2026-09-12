@@ -15,9 +15,9 @@
 
 | 匹配面 | 代码 |
 |---|---|
-| `entity.name` | `lib/context/loreSelect.ts:403` |
+| `entity.name` | `lib/context/loreSelect.ts` |
 | `entity.aliases[]` | 同上 |
-| `facet.keys[]` | `lib/context/loreSelect.ts:561` |
+| `facet.keys[]` | `lib/context/loreSelect.ts` |
 
 判定方式是 `lower.includes(term.toLowerCase())` —— 小写化子串包含，没有分词、没有词干、没有相关度。
 
@@ -27,10 +27,10 @@
 
 | 入口 | matchTarget | 代码 |
 |---|---|---|
-| AiPanel 任务 | `选中文本` + `锚点前 500 字` | `lib/context/rag.ts:387-390` |
-| 对话首轮 | 同上 + **作者问题全文** | `stores/agentStore.ts:1165` |
-| 对话后续轮 | `问题` + `文档尾部 500 字` | `stores/agentStore.ts:1277` |
-| 角色扮演 | 作者这一句（+ 角色条目恒为 pin） | `lib/roleplay/run.ts:420-421` |
+| AiPanel 任务 | `选中文本` + `锚点前 500 字` | `lib/context/rag.ts` |
+| 对话首轮 | 同上 + **作者问题全文** | `stores/agentStore.ts` |
+| 对话后续轮 | `问题` + `文档尾部 500 字` | `stores/agentStore.ts` |
+| 角色扮演 | 作者这一句（+ 角色条目恒为 pin） | `lib/roleplay/run.ts` |
 
 `TaskExtras.extraMatchText` 全仓**只有 `agentStore` 传**。AiPanel 的自定义指令、大纲、附加要求一个字都不进靶子。
 
@@ -71,10 +71,10 @@ F1 是 bug，F3 是排序，F2 才是真问题 —— 而 F2 的解药**不是�
 贯穿三片 PR，任何一条被打破就退回重做：
 
 1. **子串通道是高精度通道，新增的一切都排在它后面。**
-   `selected` 数组的顺序就是预算优先级（`loreSelect.ts:413`）。顺序恒为 `pin → 子串命中 → 引用带入 → 扩展词命中`。新机制永远不许把已经工作正常的命中挤出预算。
+   `selected` 数组的顺序就是预算优先级（`loreSelect.ts`）。顺序恒为 `pin → 子串命中 → 引用带入 → 扩展词命中`。新机制永远不许把已经工作正常的命中挤出预算。
 
 2. **每一条进上下文的东西，作者都要能问出"为什么"，并且答案要是他能动手改的。**
-   `LoreActivationReport` 是这个系统的主反馈回路（`loreSelect.ts:17-19`）。「由「变身」命中」作者能去改 keys；「相似度 0.72」他什么也做不了。**新来源必须有自己的 `reason`，并在报告里与子串命中分列** —— 同「常驻层和本轮检索必须是两个字段」那条规矩。
+   `LoreActivationReport` 是这个系统的主反馈回路（`loreSelect.ts`）。「由「变身」命中」作者能去改 keys；「相似度 0.72」他什么也做不了。**新来源必须有自己的 `reason`，并在报告里与子串命中分列** —— 同「常驻层和本轮检索必须是两个字段」那条规矩。
 
 3. **没有静默截断。**
    凡是被上限砍掉的、被围栏挡掉的、被超时跳过的，报告里都要有数。一个安静变短的列表读起来是「这个项目就这么多条目」。
@@ -85,7 +85,7 @@ F1 是 bug，F3 是排序，F2 才是真问题 —— 而 F2 的解药**不是�
 
 ### 3.1 传什么
 
-`aiTaskStore` 在两个 `assembleContext` 调用点（`aiTaskStore.ts:525-526`、`:705`）补上：
+`aiTaskStore` 在 `runTask` 的两个 `assembleContext` 调用点补上：
 
 ```ts
 extraMatchText: [
@@ -98,16 +98,16 @@ extraMatchText: [
 
 ### 3.2 **不**传什么 —— 这条比传什么重要
 
-不要传 `instruction`。它是拼好的成品（`aiTaskStore.ts:314-333`），里面有两样东西必须挡在靶子外：
+不要传 `instruction`。它是拼好的成品（`aiTaskStore.ts`），里面有两样东西必须挡在靶子外：
 
 - **内置模板**（`i18n.t(task.instructionKey)`）—— 应用自己的字。它命中的任何条目都是噪声，而且是**每次运行都稳定复现**的噪声。
-- **工作流卡清单 + docx 格式清单**（`aiTaskStore.ts:324-332`，`tools: "full"` 的任务尾部挂着）。那两份清单里全是名词短语，跟条目名撞车只是时间问题，撞上之后表现为"某个条目莫名其妙每次都进"。
+- **工作流卡清单 + docx 格式清单**（`aiTaskStore.ts`，`tools: "full"` 的任务尾部挂着）。那两份清单里全是名词短语，跟条目名撞车只是时间问题，撞上之后表现为"某个条目莫名其妙每次都进"。
 
 规则一句话：**只有作者亲手打的字才是意图。**
 
 ### 3.3 顺带修 F3 —— 必须和 3.1 同一片 PR
 
-`loreSelect.ts:398-411` 现在是「边遍历边收，够 20 条就 `break outer`」。分类的遍历顺序（`Object.values(loreIndex)`）决定谁被砍。
+`loreSelect.ts` 现在是「边遍历边收，够 20 条就 `break outer`」。分类的遍历顺序（`Object.values(loreIndex)`）决定谁被砍。
 
 PR-A 会显著加长靶子（一份大纲可能几千字，命中几十条），**不一起修就是把一个潜在缺陷变成必现缺陷**。
 
@@ -141,7 +141,7 @@ PR-A 会显著加长靶子（一份大纲可能几千字，命中几十条），
 
 ### 4.1 采集：零额外 IO
 
-`readEntity`（`lib/lore/entity.ts:110`）扫描时**已经**把 `index.md` 和每个 facet 文件的原文读进内存了（`:123` 和 `:182`）。在这两处各加一次纯函数调用即可：
+`readEntity`（`lib/lore/entity.ts`）扫描时**已经**把 `index.md` 和每个 facet 文件的原文读进内存了（两处 `readFile`）。在这两处各加一次纯函数调用即可：
 
 ```ts
 // lib/lore/citations.ts —— 与解析同住，可单测，无 DOM
@@ -150,7 +150,7 @@ export function collectCiteTargets(markdown: string): string[]
 
 `LoreEntity` 新增 `refs: string[]`，存**原始 target 字符串**，不在扫描时解析成实体。两个理由：扫描时索引还没建完；存名字对改名更健壮（`resolveCitation` 三级回退：名字 → 别名 → `category/id` 尾）。
 
-与「Content is NOT kept in memory」（`entity.ts:176`）不冲突 —— `refs` 是几十字节的派生元数据，不是正文。
+与「Content is NOT kept in memory」（`entity.ts`）不冲突 —— `refs` 是几十字节的派生元数据，不是正文。
 
 ### 4.2 注入：降级层，一跳，排最后
 
@@ -183,12 +183,12 @@ export function collectCiteTargets(markdown: string): string[]
 ### 4.3 报告与 UI
 
 - `LoreEntityReport.reason` 加 `"ref"`，新增 `refFrom: string`
-- `AiPanel.tsx` 的 `LoreReportSection`（`:587`）今天只画 pin 图标 + 名字 + 别名 + 层 chips，**连 `matchedTerms` 都没画**。这一片要补：`ref` 来源显示为「← 渚 引用」
+- `AiPanel.tsx` 的 `LoreReportSection` 今天只画 pin 图标 + 名字 + 别名 + 层 chips，**连 `matchedTerms` 都没画**。这一片要补：`ref` 来源显示为「← 渚 引用」
 - 视觉语汇**留给设计**：`TurnTrace.tsx` 已经用「同一根线的四种终止方式」区分四种来源，第五种来源该长什么样不在这份文档里发明。3px 双线一次都不能用 —— 那已归集合所有
 
 ### 4.4 相邻问题，搭车修
 
-`readLoreEntity`（`lib/agent/tools.ts:150`）是 `found.mdFiles` 全量遍历，**不看 `group`**。模型主动读渚，两套服装同时出现，混搭是可预期的。
+`readLoreEntity`（`lib/agent/tools.ts`）是 `found.mdFiles` 全量遍历，**不看 `group`**。模型主动读渚，两套服装同时出现，混搭是可预期的。
 
 在结果文本里打出组标注即可（一行改动，且是**结果文本**、不占每轮常驻的工具 schema 预算）：
 
@@ -237,7 +237,7 @@ facet 那半截不能省 —— 名单里没有「变身」这个词，它就答
 
 ### 5.3 怎么跑
 
-- 一次 `runStructuredTask`（`lib/agent/structured.ts:82`），schema `{ terms: string[] }`
+- 一次 `runStructuredTask`（`lib/agent/structured.ts`），schema `{ terms: string[] }`
 - **不能放进 `assembleContext`** —— 那是纯装配函数，塞一个网络调用进去会让它的全部单测变成集成测试。调用方（`aiTaskStore` / `agentStore`）在装配**之前**跑，结果并进 `extraMatchText`
 - 模型绑定：`SUBAGENT_KINDS` 加 `"retrieval"`，**不进 `DELEGATE_KINDS`** —— 同 `imagegen` / `translate` 的先例（它不是对话，没有工具可循环，助手也不该能"调用"它）。作者在 设置 → 子代理 里给它绑一个本地小模型
 - 默认**关**。没绑模型 = 这一级不存在
@@ -257,7 +257,7 @@ facet 那半截不能省 —— 名单里没有「变身」这个词，它就答
 
 ### 6.1 向量 / embedding —— 推迟，不是否决
 
-**这条路走过一次。** `lib/project.ts:132-145`：
+**这条路走过一次。** `lib/project.ts`：
 
 > `lore_entities` is the remains of an earlier design where the knowledge base was indexed in SQLite (**hence `embedding_status`**) … Neither table has ever been read back by any shipped code path.
 
@@ -270,7 +270,7 @@ facet 那半截不能省 —— 名单里没有「变身」这个词，它就答
 | 难点 | 具体 |
 |---|---|
 | 供应商依赖 | Anthropic 没有 embedding API。这个特性永远只能是可选通道 |
-| 新鲜度 | `loreSelect.ts:29-32` 明写"每次调用重读磁盘，所以手改永不过期"。加缓存就是打破这条；唯一安全解是按内容 hash 作键、对不上就当没有向量 |
+| 新鲜度 | `loreSelect.ts` 明写"每次调用重读磁盘，所以手改永不过期"。加缓存就是打破这条；唯一安全解是按内容 hash 作键、对不上就当没有向量 |
 | **可解释性** | 不变量 2。余弦分数是作者无法动手改的东西，而取材报告的全部价值就在于可动手 |
 
 **还有一条判断**：对 F2（「杖还没出场」），查询扩展比向量更可靠。模型懂「变身场景通常要召唤法杖」这种叙事常识；向量只知道两段文字长得像不像 —— 而"变身场景"和杖的正文像不像，取决于作者当初写没写"变身"那两个字，那正是我们想摆脱的依赖。

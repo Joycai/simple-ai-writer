@@ -44,12 +44,12 @@
 | --- | --- | --- | --- |
 | 条目生成 / 从参考资料抽条目 | `lib/lore/generator.ts` | **1 · JSON 模式** | `jsonModeShaping` → `extraBody` 进 `runAgent`（`LORE_GENERATE_PRESET`，无工具） |
 | 拆分整理（特征拆分） | `components/lore/LoreImproveModal.tsx` → `lib/lore/splitter.ts` | **3 · 工具调用**（非强制，多次） | `splitTools.ts` 收集器，一特征一调用 |
-| 特征改写（同一弹窗的另一模式） | `LoreImproveModal.tsx:217` | 3 → 1 | `runStructuredTask` |
-| 元信息改进（名字 / 别名 / 分类 / 摘要） | `LoreMetaImproveModal.tsx:185` | 3 → 1 | `runStructuredTask` |
-| 词典标准化 | `LoreDictNormalizeModal.tsx:117` | 3 → 1 | `runStructuredTask` |
-| 一致性检查 | `lib/consistency/scan.ts:181` | 3 → 1 | `runStructuredTask` |
-| 检索词扩展 | `lib/context/expand.ts:159` | 3 → 1 | `runStructuredTask` |
-| 扮演转场前情 | `lib/roleplay/recap.ts:112` | 3 → 1 | `runStructuredTask` |
+| 特征改写（同一弹窗的另一模式） | `LoreImproveModal.tsx` | 3 → 1 | `runStructuredTask` |
+| 元信息改进（名字 / 别名 / 分类 / 摘要） | `LoreMetaImproveModal.tsx` | 3 → 1 | `runStructuredTask` |
+| 词典标准化 | `LoreDictNormalizeModal.tsx` | 3 → 1 | `runStructuredTask` |
+| 一致性检查 | `lib/consistency/scan.ts` | 3 → 1 | `runStructuredTask` |
+| 检索词扩展 | `lib/context/expand.ts` | 3 → 1 | `runStructuredTask` |
+| 扮演转场前情 | `lib/roleplay/recap.ts` | 3 → 1 | `runStructuredTask` |
 | 生图提示词 / 人设校准 | `lib/image/promptGen.ts`、`calibrate.ts` | 3 → 1 | `runStructuredTask` |
 | 集合 / 分类整理 | agent `lore_organize` 工具组 | 3（自由工具循环） | 方案卡门控，与 JSON 无关 |
 

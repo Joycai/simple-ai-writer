@@ -22,47 +22,55 @@
 > 直接动机：第三方 Anthropic 兼容端点**当前接不通**（§1.3），而修复所需的
 > 行为差异没有地方安放 —— 官方端点不能跟着一起改。
 
-## 1. 现状盘点
+## 1. 现状盘点（重构**前**的口径）
+
+下面这些文件名和符号名是 2026 年这次重构**动手之前**的样子，保留原样——它是本文
+那些取舍的输入，刷成今天的样子就看不出改过什么了。几处已经搬了家：`gemini.ts` /
+`anthropic.ts` 里的 `DEFAULT_*_BASE` 按 §7 迁进了 `lib/ai/urls.ts`（连同
+`defaultBaseFor()`，OpenAI 那个「没有默认常量」的空缺也一并补上），§1.5 的清单
+则已经是四个协议族。**今天要照着改一遍的清单在**
+[`reference/workflows.md`](../reference/workflows.md) → Add a new provider/API，
+那份逐条点名了符号，也标出了哪一处是类型强制的、哪些是手维护会静默漏掉的。
 
 ### 1.1 枚举与分发
 
-`ApiStandard = "openai" | "openai_compat" | "gemini" | "anthropic"`（`lib/ai/types.ts:11`）。
+`ApiStandard = "openai" | "openai_compat" | "gemini" | "anthropic"`（`lib/ai/types.ts`）。
 
-分发只有三条（`lib/ai/index.ts:35-41`）：`gemini` → `streamGemini`，
+分发只有三条（`lib/ai/index.ts`）：`gemini` → `streamGemini`，
 `anthropic` → `streamAnthropic`，**其余全部（含未知值）** → `streamOpenAI`。
 
 ### 1.2 三个协议族的实际差异
 
 | | 鉴权 | 流式请求 URL | 模型列表 |
 | --- | --- | --- | --- |
-| OpenAI 系 | `Authorization: Bearer`（无 key 时整个头省略，`openai.ts:16`） | `base` + `/chat/completions` | `base` + `/models` |
-| Gemini | `x-goog-api-key` 头（`gemini.ts:158`；注释明确拒绝 `?key=`，避免泄进日志） | `base` + `/models/{id}:streamGenerateContent?alt=sse` | `base` + `/models` |
-| Anthropic | `x-api-key` + `anthropic-version` + `anthropic-dangerous-direct-browser-access`（`anthropic.ts:51-58`） | `base` + `/messages` | `base` + `/models` |
+| OpenAI 系 | `Authorization: Bearer`（无 key 时整个头省略，`openai.ts`） | `base` + `/chat/completions` | `base` + `/models` |
+| Gemini | `x-goog-api-key` 头（`gemini.ts`；注释明确拒绝 `?key=`，避免泄进日志） | `base` + `/models/{id}:streamGenerateContent?alt=sse` | `base` + `/models` |
+| Anthropic | `x-api-key` + `anthropic-version` + `anthropic-dangerous-direct-browser-access`（`anthropic.ts`） | `base` + `/messages` | `base` + `/models` |
 
-各族默认 base：`DEFAULT_GEMINI_BASE`（`gemini.ts:89`）、`DEFAULT_ANTHROPIC_BASE`
-（`anthropic.ts:26`）；OpenAI **没有**默认常量，靠 `aiTaskStore.ts:663-669` 兜底。
-Gemini 的默认值还在 `providerProbe.ts:11` 和 `endpointProbe.ts:37` 各抄了一份。
+各族默认 base：`DEFAULT_GEMINI_BASE`（`gemini.ts`）、`DEFAULT_ANTHROPIC_BASE`
+（`anthropic.ts`）；OpenAI **没有**默认常量，靠 `aiTaskStore.ts` 兜底。
+Gemini 的默认值还在 `providerProbe.ts` 和 `endpointProbe.ts` 各抄了一份。
 
 ### 1.3 为什么第三方 Anthropic 端点接不通
 
 三个独立原因，都不在报文层（报文构造本身符合 Messages API 规范）：
 
-1. **baseUrl 语义与生态相反。** `anthropic.ts:304-305` 拼的是 `base + /messages`，
+1. **baseUrl 语义与生态相反。** `anthropic.ts` 拼的是 `base + /messages`，
    因此 base 必须自带 `/v1`。而生态里的 `ANTHROPIC_BASE_URL`（官方 SDK、
    Claude Code、所有第三方文档）是**根地址**，由客户端补 `/v1/messages`。用户
    照文档粘贴 `https://xxx/anthropic`，实际打到 `.../anthropic/messages` → 404。
 2. **只发 `x-api-key`。** 生态有两套约定：`ANTHROPIC_API_KEY` → `x-api-key`，
    `ANTHROPIC_AUTH_TOKEN` → `Authorization: Bearer`。大量第三方网关只认后者 → 401。
-3. **连接测试与模型列表都打 `/models`**（`providerProbe.ts:32-43,75-83`）。很多兼容
+3. **连接测试与模型列表都打 `/models`**（`providerProbe.ts`）。很多兼容
    端点只实现 `/v1/messages`，没有 `/v1/models` → 即使正文可用，"测试连接"也失败、
    模型下拉框为空。
 
 ### 1.4 `openai` 与 `openai_compat` 今天几乎没有差异
 
-全仓库两者被区别对待的地方只有 **一处**：`configDb.ts:40-60` 的图像能力默认值
+全仓库两者被区别对待的地方只有 **一处**：`configDb.ts` 的图像能力默认值
 （official `{edit:true,maxRefs:16}` / compat `{edit:false}`）。此外仅有 UI 预设地址
-（`ProviderDrawer.tsx:17-22`）和"未知值兜底成 compat"（`configDb.ts:352`）。
-`providerProbe.ts:85` 把两者写在同一个 if 里，`streamOpenAI` 完全不区分。
+（`ProviderDrawer.tsx`）和"未知值兜底成 compat"（`configDb.ts`）。
+`providerProbe.ts` 把两者写在同一个 if 里，`streamOpenAI` 完全不区分。
 
 **结论：直接扩成 6 个值而不定义 official 契约，只会得到 6 个值 + 3 种行为。**
 
@@ -72,28 +80,27 @@ Gemini 的默认值还在 `providerProbe.ts:11` 和 `endpointProbe.ts:37` 各抄
 
 | 位置 | 作用 |
 | --- | --- |
-| `lib/ai/index.ts:35-41` | 适配器分发 |
-| `lib/ai/types.ts:11` | 枚举定义 |
-| `lib/ai/jsonMode.ts:22-51` | JSON 模式：OpenAI 系 `response_format` / Gemini `responseMimeType` / Anthropic 无参数（发了 400），并决定是否追加文本提示 |
-| `lib/ai/configDb.ts:40-60` | 图像能力默认值 |
-| `lib/ai/configDb.ts:339,352` | 读取白名单 + 未知值兜底 |
-| `lib/ai/configTransfer.ts:122` | 导入白名单 |
-| `lib/ai/providerProbe.ts:19,32,64,75,85` | 模型列表 + 连接测试 |
-| `lib/ai/endpointProbe.ts:280-298,318-370,500+,606` | 端点能力探测的鉴权头/base/请求体/跳过规则 |
-| `lib/ai/image.ts:39-42,212` | 图像路由默认值 |
-| `stores/aiTaskStore.ts:663-669` | 默认 baseUrl |
-| `components/settings/panes/ProviderDrawer.tsx:17-22,30-36,69-74,102,209` | 端点预设、供应商预设、下拉选项、safetySettings 归属 |
-| `components/onboarding/Onboarding.tsx:33-35` | 引导页预设 |
+| `lib/ai/index.ts` | 适配器分发 |
+| `lib/ai/types.ts` | 枚举定义 |
+| `lib/ai/jsonMode.ts` | JSON 模式：OpenAI 系 `response_format` / Gemini `responseMimeType` / Anthropic 无参数（发了 400），并决定是否追加文本提示 |
+| `lib/ai/configDb.ts` | `defaultImageCaps` 图像能力默认值；`API_STANDARDS` 读取白名单 + `parseApiStandard` 未知值兜底 |
+| `lib/ai/configTransfer.ts` | 导入白名单 |
+| `lib/ai/providerProbe.ts` | 模型列表 + 连接测试 |
+| `lib/ai/endpointProbe.ts` | 端点能力探测的鉴权头/base/请求体/跳过规则 |
+| `lib/ai/image.ts` | 图像路由默认值 |
+| `stores/aiTaskStore.ts` | 默认 baseUrl |
+| `components/settings/panes/ProviderDrawer.tsx` | 端点预设、供应商预设、下拉选项、safetySettings 归属 |
+| `components/onboarding/Onboarding.tsx` | 引导页预设 |
 | `i18n/locales/{en,zh-CN}.json` → `aiConfig.apiStandards` | 显示名 |
 
 ### 1.6 本地服务（Ollama / LM Studio）不是枚举
 
 它的全部特殊行为都由 **"URL 指向本机"** 推导：
 
-- `ProviderDrawer.tsx:38-41,78` —— 本地则 API key 变可选
-- `lib/http.ts:46-63` —— 本地则覆盖 `Origin` 头（打包版 Windows 下 Ollama 403 的修复）
+- `ProviderDrawer.tsx` —— 本地则 API key 变可选
+- `lib/http.ts` —— 本地则覆盖 `Origin` 头（打包版 Windows 下 Ollama 403 的修复）
 - `lib/ai/endpointProbe.ts` 的 `looksLocal` —— 额外用常见本地端口做启发
-- `ProviderDrawer.tsx:35`、`Onboarding.tsx:35` —— 只是一条 `openai_compat` 预设
+- `ProviderDrawer.tsx`、`Onboarding.tsx` —— 只是一条 `openai_compat` 预设
 
 ## 2. 目标模型
 
@@ -123,13 +130,13 @@ export type ApiStandard =
 乐观值。判断依据是"这个能力有没有独立的东西可缺失"，不是"是不是 compat"。
 
 official 的 baseUrl **存空串而非常量**：域名变更时不需要数据迁移，且和
-`aiTaskStore.ts:663-669` 现有的"空串 = 让适配器用自己的默认值"约定一致。
+`aiTaskStore.ts` 现有的"空串 = 让适配器用自己的默认值"约定一致。
 读取端两种都接受（存量行存着完整 URL，照常工作）。
 
 > 待办：`streamOpenAI` 目前没有默认 base 常量，需补 `DEFAULT_OPENAI_BASE`
-> （`https://api.openai.com/v1`）并在 `openai.ts:9` 做同样的 fallback。
-> 同时把 Gemini 默认值的三份拷贝（`gemini.ts:89`、`providerProbe.ts:11`、
-> `endpointProbe.ts:37`）收敛成一处 import。
+> （`https://api.openai.com/v1`）并在 `openai.ts` 做同样的 fallback。
+> 同时把 Gemini 默认值的三份拷贝（`gemini.ts`、`providerProbe.ts`、
+> `endpointProbe.ts`）收敛成一处 import。
 
 ### 2.3 Ollama：保持 preset，不升为枚举
 
@@ -197,7 +204,7 @@ Gemini 原生协议的路径前缀没有统一惯例，猜错的代价高于收�
 
 ### 3.5 错误信息带上 URL
 
-三个适配器的 `throw new Error(...)`（`anthropic.ts:340`、`openai.ts:31`、gemini 同位置）
+三个适配器的 `throw new Error(...)`（`anthropic.ts`、`openai.ts`、gemini 同位置）
 都改为带上实际请求的 URL。§1.3 的 1 号问题只要错误里出现
 `.../anthropic/messages` 就能一眼诊断，现在用户只看到 404 和一段 HTML。
 
@@ -217,8 +224,8 @@ Gemini 原生协议的路径前缀没有统一惯例，猜错的代价高于收�
 - **OpenAI 暂不做**：方式 B 只对 Azure 有意义，而 Azure 的 URL 结构也完全不同
   （`/openai/deployments/{id}/chat/completions?api-version=`），只加一个头救不了它。
   要支持应当单独做 Azure，不在本方案范围内。
-- **Gemini 暂不做**：方式 B 是**故意**不实现的（`gemini.ts:109-110`、
-  `providerProbe.ts:21-22` 都写了原因：查询串会进代理日志和报错信息）。若将来要给，
+- **Gemini 暂不做**：方式 B 是**故意**不实现的（`gemini.ts`、
+  `providerProbe.ts` 都写了原因：查询串会进代理日志和报错信息）。若将来要给，
   必须标注风险且不得设为默认。
 
 ### 4.1 数据模型
@@ -283,13 +290,13 @@ authMode?: "default" | "bearer" | "both";
 
 ### 6.2 导入路径
 
-`configTransfer.ts:122` 的白名单加入三个新值，并调用**同一个**映射函数 —— 否则从
+`configTransfer.ts` 的白名单加入三个新值，并调用**同一个**映射函数 —— 否则从
 旧版导出的配置在新版导入后仍是 `anthropic` + 自定义地址，等于绕过迁移。
 
 ### 6.3 向下不兼容（记录，不修复）
 
 新版导出的配置在**旧版** app 导入时，`anthropic_compat` 会被
-`parseApiStandard`（`configDb.ts:352`）兜底成 `openai_compat` —— 结果是用 OpenAI
+`parseApiStandard`（`configDb.ts`）兜底成 `openai_compat` —— 结果是用 OpenAI
 报文打 Anthropic 端点。旧版代码无法改，属于已知单向兼容性损失，在 release note 提示。
 
 ## 7. 改动清单
@@ -308,7 +315,7 @@ authMode?: "default" | "bearer" | "both";
 | `lib/ai/configDb.ts` | `defaultImageCaps` 加分支；`API_STANDARDS` 扩容；新增 `auth_mode` 列 + `addColumn`；`listProviders`/`upsertProvider` 读写该列；§6.1 映射 |
 | `lib/ai/configTransfer.ts` | 白名单扩容 + 复用映射 |
 | `lib/ai/providerProbe.ts` | 用 `urls.ts`；compat 降级探测；传 `authMode` |
-| `lib/ai/endpointProbe.ts` | 同上；`:606` 的跳过条件改为按协议族判断 |
+| `lib/ai/endpointProbe.ts` | 同上；错误探测（Step 1）的跳过条件改为按协议族判断 |
 | `lib/ai/image.ts` | `resolveImageRoute` 改为 `族 === "gemini" ? "gemini" : "images-api"` |
 | `stores/aiTaskStore.ts` | `defaultBaseUrl` 改为按族返回空串 |
 | `components/settings/panes/ProviderDrawer.tsx` | 下拉 6 项；official 的 URL 输入框**只读展示**（不隐藏，用户要看得见地址才知道该不该换 compat）；compat 显示鉴权下拉；预设整理 |

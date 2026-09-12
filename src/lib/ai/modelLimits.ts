@@ -70,6 +70,12 @@ const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
   // ── DeepSeek ──
   ["deepseek-reasoner", 32_768],
   ["deepseek-chat", 8_192],
+  // DeepSeek-V4.1-Flash, the vendor's own catalogue name (api-docs.deepseek.com
+  // 模型 & 价格, 2026-09): 1M window, 384K cap. Its id shares no prefix with any
+  // row above — `deepseek-flash` matched nothing and fell through to the
+  // app-wide default, which on an author who never filled the field in is a
+  // silent truncation rather than a wrong number.
+  ["deepseek-flash", 393_216],
   // ── Qwen (DashScope) ──
   ["qwen-max", 8_192],
   ["qwen-plus", 8_192],

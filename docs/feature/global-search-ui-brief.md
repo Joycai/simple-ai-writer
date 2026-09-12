@@ -27,13 +27,13 @@
 
 | 入口 | 落点 | 何时可见 |
 |---|---|---|
-| 脚线（22px 常驻条的第三种用途） | [`FileTree.tsx:1623`](../../src/components/layout/FileTree.tsx:1623)，`Crosshair` + 当前文档名，赭石字 | **只在当前文档看不见时**：被折叠掉（可见行集合查询）或滚出视野（只给那一行挂 `IntersectionObserver`）。设计稿 01b 的决定 |
-| ⋯ 溢出菜单第一项 | [`FileTree.tsx:1462`](../../src/components/layout/FileTree.tsx:1462) | 恒在，无打开文档时禁用 |
+| 脚线（22px 常驻条的第三种用途） | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx)，`Crosshair` + 当前文档名，赭石字 | **只在当前文档看不见时**：被折叠掉（可见行集合查询）或滚出视野（只给那一行挂 `IntersectionObserver`）。设计稿 01b 的决定 |
+| ⋯ 溢出菜单第一项 | [`FileTree.tsx`](../../src/components/layout/FileTree.tsx) | 恒在，无打开文档时禁用 |
 | 快捷键 ⌥⌘L | `COMBO_REVEAL_DOC`，登记在 `lib/shortcuts.ts`（`filesRevealCurrent`，info 级） | 「文件」标签挂着时 |
 
-动作本身 `revealCurrent()`（[`FileTree.tsx:785`](../../src/components/layout/FileTree.tsx:785)）：展开祖先链 → 选中 → `requestAnimationFrame` 后 `scrollIntoView({block:"center"})`。**组件内函数**，外面调不到。
+动作本身 `revealCurrent()`（[`FileTree.tsx`](../../src/components/layout/FileTree.tsx)）：展开祖先链 → 选中 → `requestAnimationFrame` 后 `scrollIntoView({block:"center"})`。**组件内函数**，外面调不到。
 
-另一条现状：`activeFilePath` 从树外面变化时（命令面板、导航后退/前进、`[[lore:…]]` 跳转），树只把选区收到那一行（[`FileTree.tsx:620`](../../src/components/layout/FileTree.tsx:620)），**不展开祖先、不滚动**——于是从搜索打开一个深层文档，树上什么都看不到，只有脚线亮起一条「定位」。
+另一条现状：`activeFilePath` 从树外面变化时（命令面板、导航后退/前进、`[[lore:…]]` 跳转），树只把选区收到那一行（[`FileTree.tsx`](../../src/components/layout/FileTree.tsx)），**不展开祖先、不滚动**——于是从搜索打开一个深层文档，树上什么都看不到，只有脚线亮起一条「定位」。
 
 ## 需求梳理
 

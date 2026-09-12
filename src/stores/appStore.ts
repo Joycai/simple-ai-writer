@@ -19,6 +19,8 @@ import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelL
 import {
   DEFAULT_IMAGE_LONG_EDGE, IMAGE_LONG_EDGE_KEY, IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
 } from "../lib/image/downscalePlan";
+import { IMAGE_DETAIL_KEY, imageDetail } from "../lib/ai/imagePart";
+import type { ImageDetail } from "../lib/ai/types";
 import { isSamePath, toPosixPath } from "../lib/paths";
 import { docModel } from "../lib/profile/active";
 import {
@@ -254,6 +256,7 @@ function prefBackedState() {
     draftCount: storedDraftCount(),
     defaultMaxOutput: storedDefaultMaxOutput(),
     imageMaxLongEdge: storedImageMaxLongEdge(),
+    imageDetail: imageDetail() ?? ("" as const),
     aiDrawerMode: storedAiDrawerMode(),
   };
 }
@@ -361,6 +364,13 @@ interface AppState {
   defaultMaxOutput: number;
   imageMaxLongEdge: number;
   /**
+   * The `detail` hint sent beside every picture. "" = send no field, which is
+   * what the endpoints call `auto` — see lib/ai/imagePart for why the string
+   * is never sent. The authority is `imageDetail()`, read when a picture
+   * actually goes out; this copy exists for the settings control to bind to.
+   */
+  imageDetail: "" | ImageDetail;
+  /**
    * How many drafts a generative task should produce (1–`MAX_DRAFTS`).
    *
    * A user preference rather than per-run state, so "always give me three
@@ -423,6 +433,7 @@ interface AppState {
   setDraftCount: (n: number) => void;
   setDefaultMaxOutput: (tokens: number) => void;
   setImageMaxLongEdge: (px: number) => void;
+  setImageDetail: (detail: "" | ImageDetail) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   /**
@@ -690,6 +701,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = n > 0 ? clamp(n, IMAGE_LONG_EDGE_MIN, IMAGE_LONG_EDGE_MAX) : 0;
     writePref(IMAGE_LONG_EDGE_KEY, String(clamped));
     set({ imageMaxLongEdge: clamped });
+  },
+
+  setImageDetail: (detail) => {
+    writePref(IMAGE_DETAIL_KEY, detail);
+    set({ imageDetail: detail });
   },
 
   addRecentProject: (path) => {

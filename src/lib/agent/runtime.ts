@@ -16,6 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
+import { imagePart } from "../ai/imagePart";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
@@ -1585,9 +1586,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         if (result.imageDataUrls?.length) {
           const imageParts: ContentPart[] = [
             { type: "text", text: `Visual reference for ${tc.name}:\n${result.content}` },
-            ...result.imageDataUrls.map(
-              (url): ContentPart => ({ type: "image_url", image_url: { url } }),
-            ),
+            ...result.imageDataUrls.map((url) => imagePart(url)),
           ];
           history.push({ role: "user", content: imageParts });
         }

@@ -8,8 +8,8 @@
 
 | 面 | 落点 |
 |---|---|
-| 列表本身 | [`Sidebar.tsx:145`](../../src/components/layout/Sidebar.tsx:145) —— **只在未打开项目时**渲染（`!projectPath` 的空状态）。项目一打开就被文件树整个替换，全应用没有第二个入口 |
-| 样式 | [`Sidebar.module.css:139`](../../src/components/layout/Sidebar.module.css:139)（`.recent*` 一族）；空状态在 `:111` |
+| 列表本身 | [`Sidebar.tsx`](../../src/components/layout/Sidebar.tsx) —— **只在未打开项目时**渲染（`!projectPath` 的空状态）。项目一打开就被文件树整个替换，全应用没有第二个入口 |
+| 样式 | [`RecentProjects.module.css`](../../src/components/layout/RecentProjects.module.css)（`.panel` / `.sectionHead` / `.count` 一族）；侧栏那一侧的空状态是 [`Sidebar.module.css`](../../src/components/layout/Sidebar.module.css) 的 `.emptyState` |
 | 数据 | `appStore.recentProjects` ← 偏好行 `app:recentProjects`（JSON 数组），纯逻辑在 [`lib/recentProjects.ts`](../../src/lib/recentProjects.ts)。上限 `RECENT_PROJECTS_MAX = 10` |
 | 动作 | `openProject(path)` · `openInNewWindow(path)` · `removeRecentProject(path)` · `clearRecentProjects()` |
 | 尺寸 | 侧栏默认 240px，可拖 160–500（`SIDEBAR_MIN`/`MAX`） |

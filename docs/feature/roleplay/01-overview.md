@@ -1,6 +1,8 @@
 # 互动式角色扮演创作 — 概要设计
 
-> 状态：设计稿（未实现）。实现前先读 [02-design.md](02-design.md)。
+> 状态：`shipped`（Beta 开关后面，Settings → AI 配置 → 实验室）——本文是当初的概要设计，
+> 保留为四条不变量的出处。实现口径见 [README.md](README.md)，设计细节见
+> [02-design.md](02-design.md)，落地出入记在 [05-implementation-notes.md](05-implementation-notes.md)。
 > 术语：本文里「扮演 agent」= 演一个角色的对话体；「旁白 agent」= 看得见所有戏、和作者讨论故事的对话体；两者合称「戏搭子」。
 
 ## 1. 这是什么
@@ -36,7 +38,7 @@
 
 ### 不变量二：绑定内容进 prelude，永不进 seed 块
 
-`buildCompactedHistory`（`lib/agent/compact.ts:349`）压缩时丢弃 `meta.seedContext` 指向的那条消息，但 **prelude 里其余消息原样保留**；`trimHistory`（`lib/agent/runtime.ts:156`）只裁剪 tool 结果和图片，不动普通消息。
+`buildCompactedHistory`（`lib/agent/compact.ts`）压缩时丢弃 `meta.seedContext` 指向的那条消息，但 **prelude 里其余消息原样保留**；`trimHistory`（`lib/agent/runtime.ts`）只裁剪 tool 结果和图片，不动普通消息。
 
 所以扮演会话的历史必须这样播种：
 
@@ -105,7 +107,7 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-**改动集中在上三层，最下层一行不动。** 这是这个功能能做的根本原因：`AgentRuntimeOptions`（`runtime.ts:233`）只要求 `messages + preset + toolContext + 回调`，它不知道 store，也不假设「只有一个会话」。
+**改动集中在上三层，最下层一行不动。** 这是这个功能能做的根本原因：`AgentRuntimeOptions`（`runtime.ts`）只要求 `messages + preset + toolContext + 回调`，它不知道 store，也不假设「只有一个会话」。
 
 ## 5. 磁盘布局
 

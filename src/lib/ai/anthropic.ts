@@ -143,6 +143,10 @@ function blocksOf(content: MessageContent): AnthropicBlock[] {
     // part becomes a `document` block — Anthropic's own PDF-input shape — so a
     // file that ever reaches this wire arrives as something it documents rather
     // than an unknown key.
+    //
+    // `image_url.detail` is dropped on purpose: this protocol has no spelling
+    // for it (Anthropic resizes on its own terms), and inventing a key here
+    // would be an unknown field on a wire that validates its blocks.
     const dataUrl = p.type === "file" ? p.file.file_data : p.image_url.url;
     const [meta, data] = dataUrl.split(",");
     const mediaType = meta.slice("data:".length).replace(";base64", "");

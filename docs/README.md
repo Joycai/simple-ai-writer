@@ -9,7 +9,7 @@ Two axes, encoded differently on purpose.
 | [`reference/`](reference/) | Living truth about today's system. Read the relevant one **before** working in that area. |
 | [`api/`](api/) | The LLM wire-protocol domain — protocol facts that would hold in any project, plus this project's provider decisions. |
 | [`feature/`](feature/) | Per-subsystem dossiers: the design record for one part of the app, whatever stage it is at. |
-| [`issues/`](issues/) | Open, unverified, or known-broken. Something here is a claim we have **not** confirmed. |
+| [`issues/`](issues/) | Open, unverified, or known-broken. Something here is a claim we have **not** confirmed — plus the few that got closed and stayed, because `vite.config.ts` and a regression test cite them by path. Their row says `fixed` / `clarified`. |
 | `legacy/` | Superseded docs that no longer describe the system. Created when the first one earns it — an outdated file is worse than a missing one. |
 
 **Status is a field, not a folder.** Status changes; paths cited from ~90 source comments should not. Each doc states its own status in the blockquote under its title, and the tables below are the scannable roll-up. A plan landing is a one-line edit here, not a move.
@@ -22,7 +22,14 @@ Two axes, encoded differently on purpose.
 | `planned` | Decided, not built. |
 | `proposal` | Not decided. Deliberately not linked from `CLAUDE.md`. |
 | `research` | An investigation, not a commitment. |
-| `unverified` | Modifier: built, but never confirmed against a real endpoint or a real machine. |
+| `open` | `issues/` only: the claim stands and nothing has been done about it. |
+| `fixed` · `clarified` | `issues/` only: the claim is closed — fixed, or shown not to be a defect. The file stays because the code cites it; see that section. |
+| `unverified` | Modifier: built, but never confirmed against a real endpoint or a real machine. This is the spelling for "merged, waiting on a real-device check" — not `implemented`. |
+| `stale` | Modifier: the conclusions may hold but the numbers in it were measured against a version far behind `main`. Re-measure before acting on it. |
+
+The table above is the whole vocabulary. A token that is not in it (`implemented`,
+`in-progress`, `待实施`) says nothing a reader can look up — whatever state it was
+reaching for is one of the states above, plus a modifier if it needs one.
 
 ---
 
@@ -34,7 +41,7 @@ Two axes, encoded differently on purpose.
 | [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
-| [terminology.md](reference/terminology.md) | `living` (词表) · `planned` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. Also holds the six-batch plan for the 78 一词多译 / 49 一译多词 found in the 2026-08 sweep |
+| [terminology.md](reference/terminology.md) | `living` (词表) · `shipped` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. The 2026-08 sweep found 78 一词多译 / 49 一译多词; all six calibration batches landed (§7), the retired words are held shut by `localeTerms.test.ts`, and §9 records the full-tree review that followed |
 | [tool-presence.md](reference/tool-presence.md) | `living` | 改 preset、往 `routeTools` 加分支、加一种子代理，或写任何工具的 description / 结果文本。一次运行说的话必须和它能做的事一致——三种失败形状、判据取哪个变量、九条先例 |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
 | [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
@@ -47,11 +54,13 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 |---|---|---|
 | [README.md](api/README.md) · [landscape.md](api/landscape.md) | `living` | The four protocol families, deployment variants, the "OpenAI-compatible" gaps |
 | [streaming.md](api/streaming.md) · [reasoning.md](api/reasoning.md) · [tools.md](api/tools.md) · [structured.md](api/structured.md) · [usage.md](api/usage.md) | `living` | Per-topic protocol facts |
+| [responses.md](api/responses.md) | `living` | The ② Responses family's protocol facts on its own page, measured on GPT-5.4 / 5.5 / 5.6 through a relay (2026-09-03). Facts only — this project's choices are in `qianwen-compat-plan.md` §4. §9 is backfilled from a live run that still needs an `OPENAI_KEY` |
 | [provider-layering.md](api/provider-layering.md) | `living` | **Which layer a new field belongs to.** The arbitration rule for adding a provider, family, or capability |
 | [provider-standards.md](api/provider-standards.md) | `shipped` | 3 protocols × official/compat (PR #119–#122) |
 | [anthropic-plan.md](api/anthropic-plan.md) | `shipped` `unverified` | The Anthropic family, incl. MiniMax-M3's dialect (§10). §7 needs live requests |
 | [gemini-plan.md](api/gemini-plan.md) | `shipped` `unverified` | The Gemini family. §5 needs live requests |
-| [reasoning-plan.md](api/reasoning-plan.md) | `partial` | Reasoning effort + chain-of-thought. OpenAI family done; Gemini/Anthropic mapping and the display UI are not |
+| [reasoning-plan.md](api/reasoning-plan.md) | `shipped` `unverified` | Reasoning effort + chain-of-thought. All four families have the write side, the read side, the round-trip and the panel control; the write side is per-vendor **thinking categories** rather than one abstract six-value vocabulary (§0). What is left is live verification — `issues/thinking-verification.md` |
+| [qianwen-compat-plan.md](api/qianwen-compat-plan.md) | `shipped` `unverified` | 千问AI平台 (百炼/DashScope) measured model by model on the ① and ④ faces, and the decision to add the ② Responses family. §6's A–H all merged (#466 · #468 · #469 · #472–#476): the DeepSeek `thinking:{type:"disabled"}` fix, the Claude-format preset + output caps, and the whole Responses adapter (plumbing → tools → effort → JSON → images). I is the live run that needs an `OPENAI_KEY` |
 | [structured-output-plan.md](api/structured-output-plan.md) | `shipped` `unverified` | Per-model 结构化输出 declaration (自动 / 关闭 / JSON 模式 / JSON Schema). §1 audits what the lore features used before (`json_object` + forced tools, never `json_schema`); §5 the auto tier (family default → id table → learn from the 400, remembered per endpoint+model for the session). All three slices built — the model-drawer row, the lore-entity schema, skipping the forced-tool attempt where the downgrade is predictable and strict schema is available, and Gemini's `responseJsonSchema`; the five live checks in §11 are not run |
 
 ## feature/ — per-subsystem dossiers
@@ -64,15 +73,15 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [subagent-plan.md](feature/agent/subagent-plan.md) | `shipped` | High-level design. Kept for the feasibility reasoning; the LLD supersedes its detail |
 | [subagent-lld.md](feature/agent/subagent-lld.md) | `shipped` | Task workspaces + per-kind subagents (PR-A…PR-E) |
 | [chat-memory-plan.md](feature/agent/chat-memory-plan.md) | `shipped` | Layered chat memory: stable prefix → summary → verbatim turns → per-turn injection |
-| [agent-tool-context.md](feature/agent/agent-tool-context.md) | `proposal` | Measurement of what tool schemas + briefing actually cost per round |
-| [agent-tool-context-lld.md](feature/agent/agent-tool-context-lld.md) | `planned` | The PR-by-PR execution plan for the above |
+| [agent-tool-context.md](feature/agent/agent-tool-context.md) | `shipped` | Measurement of what tool schemas + briefing actually cost per round. The §1 figures are the 2026-08 snapshot the proposal was argued from; today's resident size is what `agentToolBudget.test.ts` ratchets |
+| [agent-tool-context-lld.md](feature/agent/agent-tool-context-lld.md) | `shipped` | The PR-by-PR execution plan for the above. PR1–PR5a landed (plus a later 5c), PR5b deliberately not — §7 carries the measured per-round saving, −4,553 tok (−37%) |
 | [measurements/briefing-ab-2026-08.md](feature/agent/measurements/briefing-ab-2026-08.md) | `research` | briefing A/B on gemma4:12b-mlx, 2026-08-21 |
 | [measurements/read-cost-2026-09.md](feature/agent/measurements/read-cost-2026-09.md) | `research` | search_text 与分页读的代价，2026-09-07：搜索 304 文件 / 2.32MB 只要 17ms（`fs_grep` 不写，押错的先验记在文里），分页读今天便宜但**是二次的**（200KB→10MB、1MB→256MB），拐点是「工作区出现 ≥500KB 的单文件」，真到那天修法也是 `fileio` 里一个读合并器而不是 Rust。harness `scripts/read-cost.ts`，永不进 CI |
 | [workflow-cards-plan.md](feature/agent/workflow-cards-plan.md) | `shipped` | 工作流卡：内置开箱即用、项目文件可覆盖的任务套路（best-effort 提示注入，两级渐进披露）；与 B 类"流水线进工具"的分工 |
 | [parallel-tools-plan.md](feature/agent/parallel-tools-plan.md) | `shipped` | 同轮工具调用并行执行：read 层（含 delegate）并发、写工具作屏障；history 顺序/配对不变量与 writeChain 的重入禁令 |
 | [edit-loop-plan.md](feature/agent/edit-loop-plan.md) | `partial` | agent 的编辑回路，尺子是「省一轮 ≈ 15.1k token」：①行号契约（read_file 逐行行号、read_slides 行区间、写入回执带回位移与应用后片段）②结构读（read_file 的标题索引、search_text 的命中上下文）③验证回路（`inspect_html` 把页面真渲染出来报溢出/空白页/坏图，三条导出线的提案时预检拉齐）④`write` 档（按任务收窄工具集：15,337 → 4,017，两份 roster 改成跟着工具走）|
 | [html-read-edit-plan.md](feature/agent/html-read-edit-plan.md) | `shipped` | agent 侧 `.html` 的读写效率，尺子是「改某一部分时会不会退化成 read-all」：写的一侧与 `read_slides` 那一半本来就对，断的是①走 `read_file` 进来时没人把模型引到那份幻灯片目录上（edit-loop-plan §5.1 当初就假设有人引）②`inspect_html` 的发现只有页序号没有行区间，而切分结果就在调用方手里③超长单行读不全——`cutMidLine` 不给续读坐标，单行文件读不到第 4000 字符之后，这是正确性问题④非幻灯片页面没有结构坐标，且超大单页的续读提示指回自己的起始行⑤IPC 量级先量后改。贯穿全篇的约束是 schema 棘轮实测只剩 135 / **28**（续写档，最容易被漏掉的那个）/ 86 token，所以四片一律走结果文本、schema 成本全是 0——连片 3 的续读坐标也塞进已有的 `start_line`（小数游标：整数部分是行号，四位小数是这一行的第几页），弃掉了 `start_char` 参数 |
-| [tool-pack-plan.md](feature/agent/tool-pack-plan.md) | `implemented` | 工具包：chat 主控只带读查 + 分发（常驻实测 ≈10k → ≈3.7k），写类工作经 `run_pack` 派给只带对应 pack 的子运行（跑主模型，审批通道透传）；台架过闸（gemma 级 30/30，qwen 级的失败与 pack 无关）；「助手工具包模式」Beta 默认关——分发可靠性按模型分档，默认开会让派不动的模型在 chat 里写不了任何东西 |
+| [tool-pack-plan.md](feature/agent/tool-pack-plan.md) | `shipped` | 工具包：chat 主控只带读查 + 分发（常驻实测 ≈10k → ≈3.7k），写类工作经 `run_pack` 派给只带对应 pack 的子运行（跑主模型，审批通道透传）；台架过闸（gemma 级 30/30，qwen 级的失败与 pack 无关）；「助手工具包模式」Beta 默认关——分发可靠性按模型分档，默认开会让派不动的模型在 chat 里写不了任何东西 |
 | [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
 | [approval-card-ui-brief.md](feature/agent/approval-card-ui-brief.md) | `shipped` `unverified` | 设计稿 02h 已按切片 A–F 落地（改动窗、重写 / 删除 / 插入卡、方案账本与破坏性步骤暂停、撤回、自动批准后的「本轮写入」、窄栏）；「最后改于」与撤回拒绝里的时间由后补的 `fs_stat` 补上。原任务书：编辑类的卡今天说得出「少了 812 字」却说不出少的是哪 812 字，知识库那一侧连一个字的将写入内容都不在卡上（L1 调用即落盘，方案卡只有模型自己写的一句承诺）。含发稿前查到的底稿（数据都已在手、待批准提案不落盘、仓库里没有 diff 算法）与要稿子回答的五个问题 |
@@ -83,10 +92,12 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
 | [lore-category-visibility-plan.md](feature/agent/lore-category-visibility-plan.md) | `shipped` | Agent 建重复分类的修复：模型从未见过分类标签、空分类在列表里隐形、`create_lore_category` 不查重、指令文案陈旧——PR-A 读侧 id↔标签对照（description + 结果文本，常驻预算随之放宽到 12,000），PR-B 写侧幂等查重 + 文案纠偏；与 lore-category-manage-plan 分片 3 互补 |
 | [large-doc-formatting-plan.md](feature/agent/large-doc-formatting-plan.md) | `partial` | 大文档格式化（给无标题的巨型 md 加标题/区分段落）：现状轮数 O(文件)、正文两次过模型且有 paraphrase 风险——①`insert_lines` 插入清单（正文由运行时拼装，一轮一卡）②无标题文件的段落地图（零 schema，与标题索引同构）③指令层「分页读一轮多发」④确定性段落规范化做作者侧命令⑤实测复核 |
-| [document-read-plan.md](feature/agent/document-read-plan.md) | `implemented` | Agent 直读 .docx / .xlsx / .pdf：新只读工具 `read_document`（与 `read_file` / `read_slides` 两两改口，不扩 `read_file`），转换结果按内容哈希缓存在 `.ai-writer/tmp/convert/` 而不落工作区，PDF 默认本地 pdfjs、扫描件由结果指向 pdf 子代理；写的一半 `convert_document`（§10）：提卡时就转好、批准后从缓存搬出、照导入器命名 |
+| [document-read-plan.md](feature/agent/document-read-plan.md) | `shipped` `unverified` | Agent 直读 .docx / .xlsx / .pdf：新只读工具 `read_document`（与 `read_file` / `read_slides` 两两改口，不扩 `read_file`），转换结果按内容哈希缓存在 `.ai-writer/tmp/convert/` 而不落工作区，PDF 默认本地 pdfjs、扫描件由结果指向 pdf 子代理；写的一半 `convert_document`（§10）：提卡时就转好、批准后从缓存搬出、照导入器命名 |
 | [chat-sessions-plan.md](feature/agent/chat-sessions-plan.md) | `shipped` | 对话助手的会话：①作者起的**标题**（`title` 与 `preview` 两列两种寿命，命名的行不被自动清、配带确认的删除）②**多个活会话并发**——就是 `roleplayStore` 当年没做的那次 `agentStore` 重构：`chats: Record<key, LiveChat>` + `activeChatKey` 与 `running`/`queue` 两轴正交、`scheduler` 搬到 `lib/agent/` 两边共用、对话助手的卡片改打 `surface: chat:<key>`、自动批准 key 改 controller、`unread` 在「卡在等」时也置位；PR A→D 切片，B 是零行为变化的收敛写点。A–D 全部落地（§10 记 store 侧出入：自动批准 key 是 `chat:<key>` 而非 controller、resumeTask 开新会话、composer 草稿按 key；§11 记界面：横向标签条 / 三家记号 / 两种字 / 历史下拉三节 / 头部即会话名 / 换项目确认） |
 | [chat-sessions-ui-brief.md](feature/agent/chat-sessions-ui-brief.md) | `shipped` | 上面那份的 UI 任务书（请求新开 `23 会话`）：没有身份的会话怎么并排（标签条 / 侧栏 / 升级下拉）、五个态的记号只靠实心/空心/动/静、打开-历史-固定-命名四词分清、改名的两个入口 |
-| [window-edge-plan.md](feature/agent/window-edge-plan.md) | `implemented`（六片全部合并，待真机） | 本地小模型「卡死 / 死循环 / 突然中断」的实测与方案（2026-09-11，qwen3.8-27b @ LM Studio 32k，DeepSeek 压到 32k 做对照）：六个机制里五个**跟窗口走不跟模型走**——`trimHistory` 会裁掉本轮刚到的结果（重读循环）、检查点提示每次裁剪后重新布防（轮次花在记账上）、只思考没正文的截断被报成 `completed`、流没有看门狗、小窗口上每次发送都先归纳；第六个是思考打转。同一 qwen 同一任务占用 50%→90%：223 秒零产出 → 49 秒改成。六片 PR，PR-4 上限保底要作者定。台架 `scripts/local-model-probe.ts`，永不进 CI |
+| [window-edge-plan.md](feature/agent/window-edge-plan.md) | `shipped` `unverified`（六片全部合并，待真机） | 本地小模型「卡死 / 死循环 / 突然中断」的实测与方案（2026-09-11，qwen3.8-27b @ LM Studio 32k，DeepSeek 压到 32k 做对照）：六个机制里五个**跟窗口走不跟模型走**——`trimHistory` 会裁掉本轮刚到的结果（重读循环）、检查点提示每次裁剪后重新布防（轮次花在记账上）、只思考没正文的截断被报成 `completed`、流没有看门狗、小窗口上每次发送都先归纳；第六个是思考打转。同一 qwen 同一任务占用 50%→90%：223 秒零产出 → 49 秒改成。六片 PR，PR-4 上限保底要作者定。台架 `scripts/local-model-probe.ts`，永不进 CI |
+| [composer-chips-ui-brief.md](feature/agent/composer-chips-ui-brief.md) | `shipped` | 输入区那行芯片挤成四条横带 + 十六个控件的收拾：设计稿 `02g` 的方向 1c——消息材料 / 会话开关 / 模型设置 / 状态指示器各给一件衣服，框内框外是最硬的一道边 |
+| [token-estimate-calibration-plan.md](feature/agent/token-estimate-calibration-plan.md) | `partial` | 用 API 回报的 token 数校准 `estimateTextTokens`：**只改显示**、按 (协议族, 模型 id) 粒度、prefs 里存滚动中位数。S1 落地，S2 等真机跑够轮数攒出偏差再动 |
 | [shell-command-plan.md](feature/agent/shell-command-plan.md) | `shipped` (#561 · #563 · PR 3 窄授权；可选流式未做) | `run_command`：agent 跑本机命令的 L2 工具——Windows 走 PowerShell（pwsh 优先，退 5.1 + UTF-8 序言），macOS / Linux 走 `$SHELL` 或系统 shell 且必须 `-l`（GUI 应用的 PATH 没有 Homebrew）。十一条不变量（卡在起进程之前、卡上是命令原文、stdin 关死、杀整个进程组、输出头尾截断 + 日志落 `tmp/cmd/`、`cwd` 有围栏而命令没有）；**不装** `tauri-plugin-shell`，自己写 `cmd.rs`；布尔连批永不覆盖，只有按程序名且不覆盖复合命令的窄授权；Beta + Tauri + 能渲染卡的 surface 三者缺一即缺席。三片 PR |
 
 ### feature/lore/ — the knowledge base
@@ -97,6 +108,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [lore-entry-type-plan.md](feature/lore/lore-entry-type-plan.md) | `partial` | Entry types as a category schema. Phases 1–4 built; `subtypes` deliberately dropped (§6) |
 | [lore-collection-plan.md](feature/lore/lore-collection-plan.md) | `shipped` | Collections: the second axis (which body of work an entry belongs to) + the 取材范围 fence |
 | [lore-collection-ui-brief.md](feature/lore/lore-collection-ui-brief.md) | `shipped` | The Claude Design brief for the collections UI turn (screens 24–31) |
+| [lore-multi-scope-plan.md](feature/lore/lore-multi-scope-plan.md) | `shipped` | 取材范围从单选一个集合变成**多个集合的并集**，「未归集」也成为可勾选的范围成员（PR #443）。`lore-collection-plan.md` 的增量；切换器视觉按设计稿 03 屏 26 重绘 |
 | [lore-browse-mode-ui-brief.md](feature/lore/lore-browse-mode-ui-brief.md) | `shipped` | 条目**阅读模式**（设计稿 03c → `LoreReadView`）：墙上摊开的一张纸把主条目 + 特征全文 + 配图一次排开，注入语义退成节头短线与 mono 边注（三种线靠粗细与断续区分，手动不降透明；互斥组是骑缝组边不是盒子）；只读不催。含任务书原文与八处设计稿出入 |
 | [lore-category-dict-ui-brief.md](feature/lore/lore-category-dict-ui-brief.md) | `shipped` | 补稿任务书（设计稿 `03f 设定集 · 分类操作与词典 Lore C`，已回并对齐）：三个已实装、没有设计稿的面——删除分类（两张并列出口卡 / 空分类·orphan·无处可搬三种降级 / 「不可逆」不用红）、移到分类（影响面先于动作、点一下就搬、与归集清单并排却要分得开）、词典标准化（模型只搬运格式由代码渲染这句要被看见 / 结果是词表还是文本 / 「N 条逐字找不到」不是错误）+ 条目 AI 中心的第五格；含数据边界与不要做 |
 | [lore-retrieval-plan.md](feature/lore/lore-retrieval-plan.md) | `shipped` | 取材准确度第 0–2 级：作者意图进匹配靶、`[[lore:…]]` 引用图扩展、查询扩展喂回子串匹配器。三条不变量（子串通道优先 · 每条命中都要可解释可动手 · 无静默截断）；向量通道为什么推迟，以及重启条件（§6.1）。实现出入在 §9——尤其 §9.1：引用带入的条目**不能**挂 L0 保底层，那一层不受预算限制 |
@@ -143,6 +155,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [global-search-ui-brief.md](feature/global-search-ui-brief.md) | `shipped` | ⌘K 升级成全局搜索（文档 / 条目 / 当前文档正文，↵ 直达并让文件树自动定位；条目改去知识库墙而不是在编辑器里开 index.md；假前缀要么真做要么删）+ 文件树工具栏常驻「定位当前文档」按钮（动作已有三个入口，缺的是常驻按钮）。含需求梳理、数据边界（跨文档全文搜索本期不做）与给 Claude Design 的任务书（请求新开 `21 全局搜索`） |
 | [file-tree-collapse-all-brief.md](feature/file-tree-collapse-all-brief.md) | `shipped` | 文件树工具栏加「全部折叠」：为什么**不能靠清空 `expandedDirs`**（默认值是 `stored ?? depth === 0`，清空会让顶层回弹成展开）· 为什么必须是一次 set · 折叠后选区要收敛到可见行（否则「删除 5 项」会出现在屏幕上只剩 1 项的时候）· 不做切换态 / 不做「全部展开」的理由。设计稿推翻了「不做切换态 / 不加快捷键」两条，都对（记在文首） |
 | [file-tree-picture-folder-brief.md](feature/file-tree-picture-folder-brief.md) | `shipped` | 文件树认出「图片目录」（`images/` `截图/` …）：**不能复用 `assets` 种类**——它背后挂着失配判定与「重新关联」，会给作者自建的目录改名并改写无关文档的正文；改为新增只管外观的第七种 `pictures`。判据是**内容优先、名字兜底**（名单永远不全，而一个叫 `images` 却装章节的目录错标比漏标更糟），并写明「宁可漏标不可错标」那一处让步 |
+| [topbar-doc-actions-brief.md](feature/topbar-doc-actions-brief.md) | `shipped` | 顶栏的文档动作：关闭文档、按文档类型出现的动作、窄窗时让位的顺序（设计稿 `01e`，TURN 1）。三处与稿子的出入记在文内 |
 | [prompt-snippets-ui-brief.md](feature/prompt-snippets-ui-brief.md) | `shipped` | 提示词库（快捷片段）：右键存入、模型选择器同款的取用浮层、设置页重做，以及五件明确没做的事 |
 | [model-drawer-redesign-brief.md](feature/model-drawer-redesign-brief.md) | `shipped` | 「模型」编辑抽屉重做（设计稿 05c → `ModelDrawer.tsx` + `ModelDrawerBits.tsx`）：按「有没有值」折叠 · **虚线 ＝ 什么都不发** · 实测值 vs 手填值（新增 `probedContextSize` / `probedMaxOutput`）· 两级提示 · 「将发送」用适配器自己的 body 函数算 · 列表行的声明标记。含任务书原文（24 个参数的数据边界表）与七处出入——最要紧的一处：结构化输出「自动」在未识别的模型上是 JSON 模式而不是设计稿写的「关闭」，摘要按真实解析显示 |
 | [settings-ai-tabs-ui-brief.md](feature/settings-ai-tabs-ui-brief.md) | `shipped` | 设置页「AI 配置」分组新增「实验室」（七个 Beta 开关从通用搬来）与「上下文与记忆」（图片最大长边搬来，且是将来知识库预算 / 默认最大输出 / 前情提要模型的家）：给 Claude Design 的任务书（请求新开 `18 设置 · AI 配置`）+ 两片 PR 的实施计划，含「Word 开关翻动时导航里的排版格式要即时出现」那条现有漏洞 |
@@ -171,3 +184,4 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 3. **Add a row here.** This file is the only place a reader can see everything at once.
 4. **Link it from `CLAUDE.md`'s Detailed References only if it must be read before touching code.** `CLAUDE.md` enters context every session; a `proposal` does not earn that seat.
 5. **Cite it from the code** where the reasoning matters — `see docs/feature/lore/lore-facet-plan.md`. Those citations are the reason paths here are treated as an interface, not as filing.
+6. **Cite source by name, never by line number.** `configDb.ts` 的 `defaultImageCaps`, never that path with a line number stuck on the end. Line numbers rot silently and keep looking valid: of the 346 `文件:行号` citations this tree carried in 2026-09, only 80 still landed on the right line. `src/lib/__tests__/docSourceRefs.test.ts` holds the line shut for `docs/` and for source comments; `design/` and `plans/` are outside it on purpose — they are dated records, and the coordinates in them were the scene at the time.

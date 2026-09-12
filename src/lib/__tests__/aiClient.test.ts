@@ -566,6 +566,36 @@ describe("streamCompletion — reasoning effort", () => {
   });
 });
 
+describe("streamCompletion — image parts", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const url = "data:image/png;base64,AAAA";
+
+  it("forwards image_url.detail verbatim — it is a member of image_url on this wire", async () => {
+    // The adapter has no image-specific branch: `toWireMessages` only strips
+    // the app's own `_`-prefixed fields. This test is what keeps it that way,
+    // because the field is absent unless the author asked for it and a
+    // regression here would be invisible to everyone who didn't.
+    const { calls } = await collect({
+      chunks: done,
+      messages: [{
+        role: "user",
+        content: [{ type: "image_url", image_url: { url, detail: "low" } }],
+      } as StreamMessage],
+    });
+    const messages = calls[0].body.messages as { content: unknown[] }[];
+    expect(messages[0].content[0]).toEqual({ type: "image_url", image_url: { url, detail: "low" } });
+  });
+
+  it("a part with no detail reaches the wire with no detail key", async () => {
+    const { calls } = await collect({
+      chunks: done,
+      messages: [{ role: "user", content: [{ type: "image_url", image_url: { url } }] } as StreamMessage],
+    });
+    const messages = calls[0].body.messages as { content: Record<string, unknown>[] }[];
+    expect(messages[0].content[0]).toEqual({ type: "image_url", image_url: { url } });
+  });
+});
+
 describe("streamCompletion — per-vendor OpenAI thinking categories", () => {
   const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
 

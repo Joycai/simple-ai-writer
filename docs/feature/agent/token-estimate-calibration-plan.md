@@ -1,6 +1,6 @@
 # 用 API 回报的 token 数校准估算器 · 方案
 
-> 状态：`in-progress` · 2026-09-08 起草。作者按建议定了 §4：**只改显示**、(协议族, 模型 id) 粒度、prefs 里滚动中位数。**S1 已落地**（见 §5 表），S2 等真机跑几轮攒出偏差再动。
+> 状态：`partial` · 2026-09-08 起草。作者按建议定了 §4：**只改显示**、(协议族, 模型 id) 粒度、prefs 里滚动中位数。**S1 已落地**（见 §5 表），S2 等真机跑几轮攒出偏差再动。
 >
 > 起因：作者问「计量条的上下文占用是准的吗」，答案是**结构对、数值估**——`estimateTextTokens` 是一把启发式尺子（CJK 一字 1 token，其余 4 字符 1 token，图片一口价 800），从来没有和任何真实数字对过账。而应用里**两个数都有**：条上的估算，和 API 回来的真实 token 数。缺的只是把它们对一下。
 
@@ -13,18 +13,18 @@
 | OpenAI Chat | `usage.prompt_tokens` / `completion_tokens` / `prompt_tokens_details.cached_tokens` | 直取；cached 是 prompt 的**子集** |
 | OpenAI Responses | `usage.input_tokens` / `output_tokens` / `input_tokens_details.cached_tokens` | 同上 |
 | Gemini | `usageMetadata.promptTokenCount` / `candidatesTokenCount` + `thoughtsTokenCount` / `cachedContentTokenCount` | thinking 计入**输出**；cached 是子集 |
-| Anthropic | `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens` | 三个桶**不相交**，`readUsage` 求和才可比（[anthropic.ts:404](../../../src/lib/ai/anthropic.ts) 有整段说明） |
+| Anthropic | `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens` | 三个桶**不相交**，`readUsage` 求和才可比（[anthropic.ts](../../../src/lib/ai/anthropic.ts) 有整段说明） |
 
 所以校准不需要碰任何一个客户端。`inputTokens` 在四家上都已经是「这一次请求服务端数出来的整个 prompt」，和我们的估算是同一个东西的两种数法。
 
 ## 2. 坏消息：现在存下来的那个数**不能用**
 
-`token_usage` 表存的是**一次运行的总和**（[agentStore.ts:2825](../../../src/stores/agentStore.ts)，`runAgent` 返回的 `totalInputTokens` 是各轮相加）。一次 agent 运行有 N 轮，每轮的 prompt 都比上一轮长，N 轮之和跟任何一个单独的估算都不可比。
+`token_usage` 表存的是**一次运行的总和**（[agentStore.ts](../../../src/stores/agentStore.ts)，`runAgent` 返回的 `totalInputTokens` 是各轮相加）。一次 agent 运行有 N 轮，每轮的 prompt 都比上一轮长，N 轮之和跟任何一个单独的估算都不可比。
 
 **唯一正确的配对点是「轮」**，而它已经在代码里挨着了：
 
-- 发出前：[runtime.ts:728](../../../src/lib/agent/runtime.ts) 发 `round-start`，带 `estInputTokens`（消息）和 `toolTokens`（schema）；
-- 收到后：同一轮的 `"done"` chunk 带 `chunk.inputTokens`（[runtime.ts:822](../../../src/lib/agent/runtime.ts)）。
+- 发出前：[runtime.ts](../../../src/lib/agent/runtime.ts) 发 `round-start`，带 `estInputTokens`（消息）和 `toolTokens`（schema）；
+- 收到后：同一轮的 `"done"` chunk 带 `chunk.inputTokens`（[runtime.ts](../../../src/lib/agent/runtime.ts)）。
 
 两者相隔几十行，中间就是那一次 `streamCompletion`。取样点在这里，别处都不对。
 
