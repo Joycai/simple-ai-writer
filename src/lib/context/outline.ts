@@ -57,7 +57,7 @@ export interface Volume {
 }
 
 /** Author-set chapter status (only "writing" for now; absence means done). */
-export type ChapterStatus = "writing";
+type ChapterStatus = "writing";
 
 export interface BookSpine {
   version: 1;

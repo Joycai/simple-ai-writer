@@ -35,7 +35,7 @@ export function clampTimeout(ms: number | undefined): number {
   return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, Math.round(ms)));
 }
 
-export interface RunCommandRequest {
+interface RunCommandRequest {
   projectPath: string;
   command: string;
   /** Absolute working directory, already checked to be inside the project. */
@@ -46,7 +46,7 @@ export interface RunCommandRequest {
   onTick?: (elapsedMs: number) => void;
 }
 
-export interface RunCommandOutcome {
+interface RunCommandOutcome {
   result: CmdResult;
   /** Where the full output went, when the model's copy was cut. */
   logPath: string | null;

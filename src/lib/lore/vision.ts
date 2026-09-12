@@ -10,7 +10,7 @@ import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { StreamMessage } from "../ai/types";
 import { imagePart } from "../ai/imagePart";
 
-export interface DescribeLoreImageOptions extends ConnOptions {
+interface DescribeLoreImageOptions extends ConnOptions {
   /** base64 data URL of the image to describe. */
   dataUrl: string;
   /** Name of the entity the image belongs to (context only). */

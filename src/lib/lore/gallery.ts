@@ -7,7 +7,7 @@ import { fileExists, readFile, removeFile, writeBinaryFile, writeFile } from "..
 import { safeAssetName } from "../image/assets";
 
 /** One images.md entry: the file, its description, and its image slot. */
-export interface ImageEntry {
+interface ImageEntry {
   file: string;
   desc: string;
   /** Image slot of the category's type schema; null when unclassified. */

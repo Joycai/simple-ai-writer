@@ -17,7 +17,7 @@ import {
 import { DEFAULT_MARKDOWN_THEME, MARKDOWN_THEMES } from "./markdownThemes";
 import type { ThemeValidation } from "./validate";
 
-export type ThemeSource = "builtin" | "user" | "project";
+type ThemeSource = "builtin" | "user" | "project";
 
 export interface ThemeEntry {
   id: string;
@@ -117,7 +117,7 @@ export interface Registry {
   markdown: ThemeEntry[];
 }
 
-export interface RegistryDirs {
+interface RegistryDirs {
   /** Installation-level `appDataDir/themes`. */
   user: string;
   /** The open project's `.ai-writer/themes`, when a project is open. */

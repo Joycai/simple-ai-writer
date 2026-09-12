@@ -132,7 +132,7 @@ export type UsageSortKey =
   | "hitRate"
   | "cost";
 
-export type UsageSortDir = "asc" | "desc";
+type UsageSortDir = "asc" | "desc";
 
 /** Uncached ("fresh") input — `cachedTokens` is a subset of `promptTokens`,
  *  so the input column is the difference, not the raw prompt figure. */

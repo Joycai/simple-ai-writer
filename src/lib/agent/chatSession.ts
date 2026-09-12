@@ -89,7 +89,7 @@ export interface PersistedTurn {
   exports?: TurnExport[];
 }
 
-export interface PersistedUsage {
+interface PersistedUsage {
   inputTokens: number;
   outputTokens: number;
   cost: number;

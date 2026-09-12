@@ -20,7 +20,7 @@ interface RawEntryHash {
 }
 
 /** One tick of local hashing: `done` of `total` entries, `path` = the one being read. */
-export interface HashProgress {
+interface HashProgress {
   done: number;
   total: number;
   path: string;

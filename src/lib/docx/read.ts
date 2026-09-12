@@ -33,7 +33,7 @@ import {
 const TWIP_PER_MM = 1440 / 25.4;
 
 /** Rust 侧原样报回来的属性。单位全是 OOXML 的。 */
-export interface DocxBlockInfo {
+interface DocxBlockInfo {
   fontEastAsia?: string | null;
   fontAscii?: string | null;
   sizeHalfPt?: number | null;
@@ -48,7 +48,7 @@ export interface DocxBlockInfo {
   pageBreakBefore?: boolean | null;
 }
 
-export interface DocxPageInfo {
+interface DocxPageInfo {
   width?: number | null;
   height?: number | null;
   landscape: boolean;
@@ -76,7 +76,7 @@ export interface DocxLayout {
  * 一份**全是 `default`** 的文件不是读取失败，但它也不能当格式要求用——作者
  * 必须在存成预设之前知道这件事（设计稿 1i）。
  */
-export interface ReadRow {
+interface ReadRow {
   label: string;
   value: string;
   /**

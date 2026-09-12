@@ -17,7 +17,7 @@ import type { ReviewScope } from "./scope";
 export type IssueSeverity = "conflict" | "warning";
 
 /** A resolved position in the document the report was made against. */
-export interface IssueRange {
+interface IssueRange {
   from: number;
   to: number;
 }
@@ -65,7 +65,7 @@ export interface ConsistencyPass {
   line?: number;
 }
 
-export type WindowStatus = "pending" | "running" | "done" | "failed" | "aborted";
+type WindowStatus = "pending" | "running" | "done" | "failed" | "aborted";
 
 /** One window of the document, and how its check went. */
 export interface WindowOutcome {

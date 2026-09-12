@@ -185,7 +185,7 @@ export function beginImageApiLog(req: {
   };
 }
 
-export interface ApiCallLogger {
+interface ApiCallLogger {
   /** One HTTP request body as the adapter sent it. May fire more than once. */
   requestBody(body: unknown): void;
   chunk(chunk: StreamChunk): void;

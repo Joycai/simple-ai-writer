@@ -70,7 +70,7 @@ function normalizeKey(key: string): string {
   return dot >= 0 ? lower.slice(dot + 1) : lower;
 }
 
-export interface EntryLimits {
+interface EntryLimits {
   /** Every context value found, keyed by the path it came from. */
   context: { path: string; value: number }[];
   /** Every output-length value found. */
@@ -127,7 +127,7 @@ export function parseOllamaParameters(params: unknown): { path: string; value: n
 
 // ─── Error classification ────────────────────────────────────────────────────
 
-export type ProbeErrorKind =
+type ProbeErrorKind =
   /** The server named a real context-window limit. Trustworthy. */
   | "context_limit"
   /** The server named a real max-output limit. Trustworthy. */
@@ -142,7 +142,7 @@ export type ProbeErrorKind =
   | "not_found"
   | "unknown";
 
-export interface ProbeErrorInfo {
+interface ProbeErrorInfo {
   kind: ProbeErrorKind;
   /** Limit named in the message, when one was parseable. */
   limit?: number;
@@ -234,7 +234,7 @@ export function isTransient(kind: ProbeErrorKind): boolean {
 
 // ─── Token calibration ───────────────────────────────────────────────────────
 
-export interface CalibrationSample {
+interface CalibrationSample {
   /** Characters of padding actually sent. */
   chars: number;
   /** `usage.prompt_tokens` the server reported for that request. */
@@ -277,7 +277,7 @@ export function expectedPromptTokens(chars: number, cal: Calibration): number {
 
 // ─── Silent-truncation verdict ───────────────────────────────────────────────
 
-export type TruncationVerdict = "truncated" | "not-detected" | "unknown";
+type TruncationVerdict = "truncated" | "not-detected" | "unknown";
 
 export interface TruncationResult {
   verdict: TruncationVerdict;
@@ -362,7 +362,7 @@ export function makePadding(chars: number, seed = 20240801): string {
 
 // ─── Aggregation ─────────────────────────────────────────────────────────────
 
-export type FindingSource =
+type FindingSource =
   | "models-endpoint"
   | "ollama-show"
   | "llamacpp-props"

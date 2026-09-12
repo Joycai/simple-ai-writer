@@ -45,10 +45,10 @@ export function attachedKey(a: AttachedItem): string {
 }
 
 /** Why a file could not become an attachment — the two ways a pick fails. */
-export type AttachFailure =
+type AttachFailure =
   | { ok: false; reason: "too-large"; sizeMb: string; maxMb: number }
   | { ok: false; reason: "unreadable" };
-export type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
+type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
 
 /**
  * Turn a project file into the attachment the composer carries — the one

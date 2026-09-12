@@ -138,7 +138,7 @@ const SYSTEM = [
   "Pick nothing rather than padding: an irrelevant entry costs the author context they needed for something else.",
 ].join(" ");
 
-export interface ExpandQueryArgs extends ConnOptions {
+interface ExpandQueryArgs extends ConnOptions {
   /** 作者亲手打的字——和进 matchTarget 的是同一份（见 aiTaskStore 的 authorIntent）。 */
   intent: string;
   roster: readonly string[];

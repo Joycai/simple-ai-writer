@@ -28,7 +28,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Copy, RotateCcw, X } from "lu
 import styles from "./ErrorBoundary.module.css";
 
 /** What a fallback needs in order to explain the failure and offer a way out. */
-export interface ErrorFallbackProps {
+interface ErrorFallbackProps {
   error: Error;
   /** React's "the component tree above the throw" trace; empty if unavailable. */
   componentStack: string;

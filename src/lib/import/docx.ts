@@ -31,7 +31,7 @@ const EXT_FOR_CONTENT_TYPE: Record<string, string> = {
   "image/webp": "webp",
 };
 
-export interface DocxImageCollector {
+interface DocxImageCollector {
   /** What `collect` kept, in document order. */
   assets: ConvertedAsset[];
   /** Name one image, keep its bytes, and return the `<img>` src for it. */

@@ -48,7 +48,7 @@ export const summaryPath = (p: string, id: string) => `${agentDir(p, id)}/summar
 export const memoryPath = (p: string, id: string) => `${agentDir(p, id)}/memory.md`;
 export const sessionPath = (p: string, id: string) => `${agentDir(p, id)}/session.json`;
 
-export interface Roster {
+interface Roster {
   authorPersona: AuthorPersona;
   /** 显示顺序即数组顺序。 */
   agents: RoleplayAgent[];

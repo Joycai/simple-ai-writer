@@ -19,7 +19,7 @@ import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
 import { hashText, type DocMemory } from "./memory";
 import { dirName, toPosixPath } from "../paths";
 
-export interface DigestChapterMeta {
+interface DigestChapterMeta {
   /** Chapter project-relative path. */
   rel: string;
   /** FNV-1a hash of the chapter content at generation time. */

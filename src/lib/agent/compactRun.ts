@@ -97,7 +97,7 @@ export async function compactChatHistory(opts: {
 }
 
 /** Provider plumbing for the summarize request. */
-export type SummarizeRequestConfig = ConnOptions;
+type SummarizeRequestConfig = ConnOptions;
 
 /**
  * The real summarizer: one no-tools completion on the session's own model.

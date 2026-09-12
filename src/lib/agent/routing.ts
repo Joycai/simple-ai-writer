@@ -27,7 +27,7 @@ import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model } from "../ai/configDb";
 
-export interface RoutedTools {
+interface RoutedTools {
   tools: ToolId[];
   /** Whether the main model is still allowed server-side search. */
   serverTools: "final-round-off" | "off" | "always";

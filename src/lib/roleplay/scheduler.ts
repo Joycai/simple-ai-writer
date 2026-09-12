@@ -9,7 +9,7 @@ import {
   nextRunnableJobIndex as nextRunnableJobIndexBy,
 } from "../agent/scheduler";
 
-export interface AgentJobLike {
+interface AgentJobLike {
   agentId: string;
 }
 

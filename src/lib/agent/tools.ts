@@ -670,7 +670,7 @@ export function shrunkNote(downscaled: Downscaled | undefined): string {
 const decodeLinkPath = decodeLinkSegments;
 
 /** What `loadProjectImage` hands back for a picture that resolved and loaded. */
-export interface LoadedProjectImage {
+interface LoadedProjectImage {
   /** `data:<mime>;base64,…`, already re-encoded smaller if the picture was over the ceilings. */
   dataUrl: string;
   /** Filename, for the caption the model reads. */
@@ -1200,7 +1200,7 @@ function snippetAround(line: string, at: number, matchLen: number): string {
  * was already `folder?, loreIndex?, loreScope?` and a call site passing them in
  * the wrong order still type-checks against `string | undefined`.
  */
-export interface SearchOptions {
+interface SearchOptions {
   /** Narrow to one manuscript subtree — which also skips the knowledge base. */
   folder?: string;
   loreIndex?: LoreIndex;

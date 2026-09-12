@@ -134,7 +134,7 @@ export function areaEntities(index: LoreIndex): LoreEntity[] {
   return index[AREA_CATEGORY] ?? [];
 }
 
-export interface NewAreaEntry {
+interface NewAreaEntry {
   title: string;
   body: string;
   /** 关键字。落盘成 `aliases`——`selectLore` 认的就是这个字段。 */
@@ -194,7 +194,7 @@ export async function addAreaEntry(
 }
 
 /** 一条的可改部分。标题也能改——它是 `name`，也就是命中时最先被匹配的那个词。 */
-export interface AreaEntryPatch {
+interface AreaEntryPatch {
   title?: string;
   body?: string;
   keys?: string[];

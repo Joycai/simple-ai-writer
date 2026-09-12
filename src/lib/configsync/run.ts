@@ -42,13 +42,13 @@ async function appVersion(): Promise<string> {
   }
 }
 
-export interface PushOptions {
+interface PushOptions {
   includeKeys: boolean;
   /** null seals in the clear — `sealBundle` refuses that when keys are included. */
   password: string | null;
 }
 
-export interface PushResult {
+interface PushResult {
   hash: string;
   header: EnvelopeHeader;
   /** What was actually uploaded, for the confirmation line. */

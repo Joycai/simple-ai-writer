@@ -98,7 +98,7 @@ function secretAccounts(providerIds: string[]): string[] {
   return server ? [...providerIds, syncTokenAccount(server)] : providerIds;
 }
 
-export interface ResetSummary {
+interface ResetSummary {
   inventory: ResetInventory;
   /** 钥匙串实际删掉的条数。macOS 上会超过 `inventory.secrets`——那里能清全部。 */
   secretsRemoved: number;

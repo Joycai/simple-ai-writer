@@ -60,7 +60,7 @@ const SYSTEM_PROMPT = [
   "- When you are done, answer with one or two sentences summarising this segment — in the language the text is written in.",
 ].join("\n");
 
-export interface ReviewRunArgs {
+interface ReviewRunArgs {
   conn: AiConn;
   projectPath: string;
   documentText: string;
@@ -93,7 +93,7 @@ export interface ReviewRunArgs {
   concurrency?: number;
 }
 
-export interface ReviewRunResult {
+interface ReviewRunResult {
   results: WindowResult[];
   /** What the retrieval subagent added to the match target, for the report head. */
   focusTerms: string[];

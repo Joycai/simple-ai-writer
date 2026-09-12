@@ -57,7 +57,7 @@ import { STATE_KEEP_TURNS } from "./skillState";
  * hands them to {@link compactTriggerFor} with its *own* message ceiling, so
  * the mark it draws and the fold the store runs are one computation, not two.
  */
-export interface CompactPrefs {
+interface CompactPrefs {
   autoCompact: boolean;
   triggerTokens: number;
   triggerRatio: number;

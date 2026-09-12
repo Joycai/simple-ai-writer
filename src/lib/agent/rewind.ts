@@ -30,12 +30,12 @@ import type { StreamMessage } from "../ai/types";
 import { pruneLedger, type ChatSessionMeta } from "./compact";
 
 /** The slice of a display turn this module reads (agentStore's ChatTurn). */
-export interface RewindableTurn {
+interface RewindableTurn {
   id: string;
   role: "user" | "assistant";
 }
 
-export type RewindPlan<T extends RewindableTurn> =
+type RewindPlan<T extends RewindableTurn> =
   /**
    * The target is the first question: nothing stays. The caller drops the
    * history and meta so the next send seeds a fresh context.

@@ -60,7 +60,7 @@ async function migrateLegacyKey(providerId: string): Promise<string | null> {
   }
 }
 
-export interface LegacyKeyMigration {
+interface LegacyKeyMigration {
   /** Keys moved into the keyring by this run. */
   migrated: number;
   /** Keys the keyring refused; their rows are left in place for the next run. */
@@ -178,7 +178,7 @@ export async function deleteApiKey(providerId: string): Promise<void> {
 }
 
 /** What `clearAllSecrets` managed to remove. Mirrors the Rust `SecretWipe`. */
-export interface SecretWipe {
+interface SecretWipe {
   /** Secrets actually removed. */
   removed: number;
   /** Secrets the OS keyring refused to delete. "Already gone" is not one. */

@@ -223,7 +223,7 @@ export function renderMemory(agentId: string, doc: MemoryDoc): string {
 
 // ─── 增 / 改 ─────────────────────────────────────────────────────────────────
 
-export type NewRecord =
+type NewRecord =
   Pick<MemoryRecord, "kind" | "title" | "body" | "turn" | "subject">
   & { keys?: string[]; scene?: number };
 

@@ -80,7 +80,7 @@ export interface ImageProgress {
   timeoutMs: number;
 }
 
-export interface ImageRequest {
+interface ImageRequest {
   prompt: string;
   /** Input images as base64 data URLs. Non-empty turns the call into an edit. */
   images?: string[];

@@ -97,7 +97,7 @@ md.core.ruler.push("source_line_anchors", (state) => {
   }
 });
 
-export interface RenderMarkdownOptions {
+interface RenderMarkdownOptions {
   /** Stamp data-line/data-line-end source anchors for scroll syncing. */
   lineAnchors?: boolean;
 }

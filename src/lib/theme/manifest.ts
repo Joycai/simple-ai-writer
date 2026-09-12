@@ -19,7 +19,7 @@ import { BUILTIN_THEME_FOR_SCHEME } from "./scheme";
 
 export type ThemeKind = "ui" | "markdown";
 
-export interface ThemeMeta {
+interface ThemeMeta {
   name: string;
   kind: ThemeKind;
   /** ui only. */
@@ -78,7 +78,7 @@ export function cleanMetaValue(raw: string): string {
   return v;
 }
 
-export interface MetaReading {
+interface MetaReading {
   /** Absent when the file cannot be used — the required fields are missing. */
   meta?: ThemeMeta;
   /** Why, in the words the card shows. Empty when `meta` is present and clean. */

@@ -34,7 +34,7 @@ export const MD_THEME_ATTR = "data-md-theme";
 /** Class every rendered-markdown container carries. */
 export const MD_BODY_CLASS = "md-body";
 
-export interface MarkdownTheme {
+interface MarkdownTheme {
   id: MarkdownThemeId;
   label: { zh: string; en: string };
   desc: { zh: string; en: string };

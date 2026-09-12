@@ -61,7 +61,7 @@ export type FormatOrigin =
 /** 解析不下去时抛这个，让工具把原话回给模型而不是崩在半路。 */
 export class FormatResolveError extends Error {}
 
-export interface ResolvedFormat {
+interface ResolvedFormat {
   format: DocFormat;
   origin: FormatOrigin;
 }

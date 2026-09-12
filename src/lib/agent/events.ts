@@ -252,7 +252,7 @@ export interface UndoEvent {
   at: number;
 }
 
-export interface AgentEventScope {
+interface AgentEventScope {
   /** The parent delegate step's toolCallId, if this event occurred inside a subagent run. */
   parentStep?: string;
 }

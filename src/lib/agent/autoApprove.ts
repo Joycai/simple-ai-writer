@@ -95,7 +95,7 @@ export interface AutoApproveState {
 }
 
 /** The part of a command proposal a grant is judged on. */
-export interface CommandGrantSubject {
+interface CommandGrantSubject {
   program: string;
   compound: boolean;
   danger: string | null;

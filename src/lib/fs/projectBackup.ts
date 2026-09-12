@@ -132,7 +132,7 @@ export async function exportProjectBundle(projectPath: string): Promise<string |
   );
 }
 
-export interface RestoredProject {
+interface RestoredProject {
   /** Where the project was unpacked — hand this to `openProject`. */
   path: string;
   manifest: ProjectBundleManifest | null;

@@ -72,11 +72,11 @@ const MIN_LINES_FOR_RATIO = 3;
 
 export type ChunkFailure = "degenerate" | "truncated" | "line-mismatch";
 
-export type ChunkVerdict =
+type ChunkVerdict =
   | { ok: true; lines: string[] }
   | { ok: false; reason: ChunkFailure; detail: string };
 
-export interface ChunkResult {
+interface ChunkResult {
   /** 送进模型的行数。 */
   srcLineCount: number;
   /** 模型返回的原始文本。 */

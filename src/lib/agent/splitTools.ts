@@ -26,7 +26,7 @@ import type { ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
 
 /** One facet as the model proposed it — pre-review, nothing on disk yet. */
-export interface SplitDraftFacet {
+interface SplitDraftFacet {
   title: string;
   /** Slot of the category's type schema, when the model named a declared one. */
   slot: string | null;

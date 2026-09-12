@@ -27,7 +27,7 @@ import { isPathWithin, resolveLinkPath } from "../paths";
 /** Links that are already loadable as-is — left for the webview to fetch. */
 const READY = /^(https?:|data:|blob:|ai-writer-asset:)/i;
 
-export type ChatImageSource =
+type ChatImageSource =
   /** Not ours to resolve: empty, or a URL the webview can load itself. */
   | { kind: "skip" }
   /** Read this absolute path and inline it. */

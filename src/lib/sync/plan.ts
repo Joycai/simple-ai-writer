@@ -42,7 +42,7 @@ import type {
   SyncWarning,
 } from "./model";
 
-export interface PlanInput {
+interface PlanInput {
   local: HashMap;
   remote: HashMap;
   /** Hashes as of the last completed sync. Empty on the first one. */

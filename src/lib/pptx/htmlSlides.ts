@@ -48,7 +48,7 @@ export const SLIDE_TIERS = ["[data-slide]", "section.slide", ".slide", "section"
 const RAW_TEXT_TAGS = ["script", "style", "textarea"];
 
 /** One slide's source, and where it sits in the file. */
-export interface HtmlSlide {
+interface HtmlSlide {
   /** 1-based position in the deck. */
   index: number;
   /** Offset of the element's opening `<` in the source. */
@@ -233,7 +233,7 @@ export function splitHtmlSlides(html: string): HtmlSlide[] {
 export const WHOLE_PAGE_TIER = "the whole page (no slide sections found)";
 
 /** A split page, and which selector decided the division. */
-export interface HtmlDeck {
+interface HtmlDeck {
   /** The matched selector, or {@link WHOLE_PAGE_TIER}. */
   tier: string;
   slides: HtmlSlide[];

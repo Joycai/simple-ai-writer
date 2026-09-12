@@ -24,7 +24,7 @@
  * transparent regions come out black.
  */
 
-export interface ImageHeader {
+interface ImageHeader {
   /** Stored pixel width — see the note above about EXIF rotation. */
   width: number;
   height: number;

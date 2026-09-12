@@ -53,12 +53,12 @@ export const STATE_KEEP_TURNS = 1;
 
 export type StepStatus = "todo" | "doing" | "done";
 
-export interface StateStep {
+interface StateStep {
   step: string;
   status: StepStatus;
 }
 
-export interface StateFile {
+interface StateFile {
   path: string;
   note: string;
 }
@@ -151,7 +151,7 @@ export function stateUpdateTool(description: string): ToolDefinition {
 
 // ── 校验 ─────────────────────────────────────────────────────────────────────
 
-export type StateValidation =
+type StateValidation =
   | { ok: true; state: SkillState; clipped: boolean }
   | { ok: false; error: string };
 

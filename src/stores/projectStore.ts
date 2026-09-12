@@ -83,7 +83,7 @@ export async function flushDirtyDocuments(): Promise<void> {
  * path in App.tsx closes its fresh window on `"focused-existing"`, the way
  * `code <folder>` hands off to the window that already has the folder.
  */
-export type OpenProjectOutcome = "opened" | "cancelled" | "focused-existing";
+type OpenProjectOutcome = "opened" | "cancelled" | "focused-existing";
 
 /**
  * The advisory multi-instance guard: claim the workspace, and when a live

@@ -45,7 +45,7 @@ import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { syncLore } from "./writeTools";
 
-export type PackId = "file_write" | "lore_edit" | "export";
+type PackId = "file_write" | "lore_edit" | "export";
 
 export const PACK_IDS: readonly PackId[] = ["file_write", "lore_edit", "export"];
 

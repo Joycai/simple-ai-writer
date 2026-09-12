@@ -26,7 +26,7 @@ import { categoryFacetSlots } from "../profile/active";
 import type { CategoryId, FacetMeta } from "./model";
 import { withSlotDefaults } from "./slots";
 
-export interface SplitFacetDraft {
+interface SplitFacetDraft {
   meta: FacetMeta;
   content: string;
 }

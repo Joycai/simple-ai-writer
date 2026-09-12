@@ -73,7 +73,7 @@ export const FOLD_DEFER_CEILING_SHARE = 0.9;
  */
 export type CompactTriggerBound = "tokens" | "ratio" | "ceiling" | "assumed";
 
-export interface CompactTrigger {
+interface CompactTrigger {
   /** Message tokens at which the automatic fold fires. */
   tokens: number;
   /** Which of the three lines is the lowest — what the settings readout names. */
@@ -148,7 +148,7 @@ export function retainTargetFor(triggerTokens: number): number {
  * one of them — and the wrong half then either re-injects while it is still on
  * screen, or stays suppressed after it is gone.
  */
-export interface InjectionRecord {
+interface InjectionRecord {
   /** Fingerprint of the entity as injected — {@link entityVersion}. */
   version: string;
   /**
@@ -163,7 +163,7 @@ export interface InjectionRecord {
 }
 
 /** Which layers of one entity a carrier brought in. */
-export interface InjectedLayers {
+interface InjectedLayers {
   /** The entity's **body** went in. A summary-only injection is not core. */
   core?: boolean;
   /** Facet filenames whose text went in. */
@@ -419,13 +419,13 @@ export function noteTurnStart(meta: ChatSessionMeta, msg: StreamMessage): void {
 // ── Segmentation ────────────────────────────────────────────────────
 
 /** One turn: the question that opened it plus everything up to the next one. */
-export interface WireTurn {
+interface WireTurn {
   start: StreamMessage;
   /** All of the turn's messages, `start` included. */
   messages: StreamMessage[];
 }
 
-export interface SegmentedHistory {
+interface SegmentedHistory {
   /** Everything before the first turn: system, seed context, summary. */
   prelude: StreamMessage[];
   turns: WireTurn[];
@@ -460,7 +460,7 @@ export function segmentHistory(
 
 // ── Fold planning ───────────────────────────────────────────────────
 
-export interface FoldPlan {
+interface FoldPlan {
   /** Oldest turns, to be summarized away. Never empty. */
   fold: WireTurn[];
   /** Newest turns, kept verbatim. */

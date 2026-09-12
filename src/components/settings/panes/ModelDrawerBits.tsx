@@ -68,7 +68,7 @@ export function Section({
   );
 }
 
-export interface WhyProps {
+interface WhyProps {
   /** The full explanation; absent = no 「为什么」 link. */
   why?: string;
   whyOpen?: boolean;
@@ -102,7 +102,7 @@ function Hint({ hint, why, whyOpen, onWhy }: { hint: string } & WhyProps) {
   );
 }
 
-export type NoteTone = "muted" | "ok" | "faint";
+type NoteTone = "muted" | "ok" | "faint";
 
 export function Note({ text, tone = "muted" }: { text: string; tone?: NoteTone }) {
   return (

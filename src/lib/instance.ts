@@ -19,7 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { IS_TAURI } from "./platform";
 import { toPosixPath } from "./paths";
 
-export type LockStatus =
+type LockStatus =
   | { status: "acquired" }
   | { status: "held"; pid: number; since: number };
 

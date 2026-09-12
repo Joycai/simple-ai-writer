@@ -63,7 +63,7 @@ export interface Downscaled {
 }
 
 /** A picture, ready for the wire. Same shape as `imageToDataUrl` plus the note. */
-export interface ModelImage {
+interface ModelImage {
   dataUrl: string;
   /** Extension implied by what is actually being sent, not by the source file. */
   ext: string;

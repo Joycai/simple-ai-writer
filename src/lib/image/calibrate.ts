@@ -65,7 +65,7 @@ export function parseChecklistJson(raw: string): string[] {
   return items;
 }
 
-export interface ChecklistOptions extends ConnOptions {
+interface ChecklistOptions extends ConnOptions {
   /** What the picture is of — an entity name. */
   subject: string;
   subjectKind?: string;
@@ -102,7 +102,7 @@ export async function buildImageChecklist(opts: ChecklistOptions): Promise<strin
 
 // ─── 评审 ────────────────────────────────────────────────────────────────────
 
-export interface ReviewVerdict {
+interface ReviewVerdict {
   criterion: string;
   pass: boolean;
   note?: string;
@@ -187,7 +187,7 @@ export function parseReviewJson(raw: string, checklist: string[]): CalibrationRe
   };
 }
 
-export interface ReviewOptions extends ConnOptions {
+interface ReviewOptions extends ConnOptions {
   /** The candidate, as a data URL. */
   dataUrl: string;
   checklist: string[];
@@ -226,7 +226,7 @@ export async function reviewImageAgainstChecklist(opts: ReviewOptions): Promise<
 
 // ─── 循环 ────────────────────────────────────────────────────────────────────
 
-export interface CalibrationRound {
+interface CalibrationRound {
   /** 0-based. */
   round: number;
   /** The positive prompt this round generated with. */
@@ -238,7 +238,7 @@ export interface CalibrationRound {
   total: number;
 }
 
-export interface CalibrationRun {
+interface CalibrationRun {
   rounds: CalibrationRound[];
   /** Index into `rounds` of the best round, or -1 when none completed. */
   bestIndex: number;
@@ -246,7 +246,7 @@ export interface CalibrationRun {
   passed: boolean;
 }
 
-export interface CalibrationLoopOptions {
+interface CalibrationLoopOptions {
   basePrompt: string;
   maxRounds: number;
   /**

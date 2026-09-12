@@ -69,7 +69,7 @@ interface BoxPx {
 }
 
 /** A drop shadow as OOXML states one: a distance and a direction, not a vector. */
-export interface ShadowPx {
+interface ShadowPx {
   inset: boolean;
   offsetPx: number;
   /** Degrees clockwise from the positive x axis. */
@@ -80,7 +80,7 @@ export interface ShadowPx {
 }
 
 /** A painted box: background, border, or both. */
-export interface RectBlock extends BoxPx {
+interface RectBlock extends BoxPx {
   kind: "rect";
   /** Computed CSS colour, or absent for no fill. */
   fill?: string;
@@ -100,7 +100,7 @@ export interface TextBlock extends BoxPx {
 }
 
 /** A picture, already a data URL (the zip has no other way to carry it). */
-export interface ImageBlock extends BoxPx {
+interface ImageBlock extends BoxPx {
   kind: "image";
   data: string;
 }
@@ -120,7 +120,7 @@ export interface HarvestedDeck {
 }
 
 /** Slide dimensions in inches, plus the standard name when it is one. */
-export interface SlideSize {
+interface SlideSize {
   width: number;
   height: number;
   /**
@@ -180,7 +180,7 @@ function round(n: number): number {
 }
 
 /** A colour ready for OOXML: 6-digit hex plus a transparency percentage. */
-export interface PptxColor {
+interface PptxColor {
   hex: string;
   /** 0 = opaque, 100 = invisible. pptxgenjs calls this `transparency`. */
   transparency: number;
@@ -375,7 +375,7 @@ export type Shape =
     };
 
 /** A shadow in the units pptxgenjs takes: points and degrees. */
-export interface PptxShadow {
+interface PptxShadow {
   type: "outer" | "inner";
   angle: number;
   blur: number;

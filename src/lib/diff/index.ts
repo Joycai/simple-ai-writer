@@ -32,7 +32,7 @@ export type { EditStep, EditType } from "./myers";
 export { tokenize } from "./tokens";
 
 /** Whether a piece of text is unchanged, added, or removed. */
-export type DiffType = "equal" | "add" | "del";
+type DiffType = "equal" | "add" | "del";
 
 /** One run of same-fate text inside a line. */
 export interface DiffSeg {
@@ -59,7 +59,7 @@ export interface DiffLine {
 }
 
 /** A changed region plus its context lines. */
-export interface DiffHunk {
+interface DiffHunk {
   /** 1-based first line of the hunk on each side. */
   aStart: number;
   bStart: number;
@@ -78,7 +78,7 @@ export type DiffDegradation =
   /** The two texts differ by more than {@link MAX_LINE_DISTANCE} lines. */
   | "distance";
 
-export interface DiffStats {
+interface DiffStats {
   addedLines: number;
   removedLines: number;
   /** Lines present unchanged in both texts. */
@@ -95,14 +95,14 @@ export interface DiffStats {
   whitespaceOnly: boolean;
 }
 
-export interface DocumentDiff {
+interface DocumentDiff {
   hunks: DiffHunk[];
   stats: DiffStats;
   /** Set when no hunks could be produced; the caller falls back to whole-content. */
   degraded?: DiffDegradation;
 }
 
-export interface DiffOptions {
+interface DiffOptions {
   /** Unchanged lines kept either side of a change. Default {@link CONTEXT_LINES}. */
   context?: number;
   /** Compute token-level detail inside paired lines. Default true. */

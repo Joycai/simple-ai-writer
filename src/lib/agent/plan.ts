@@ -243,7 +243,7 @@ export function describeStep(step: LorePlanStep): string {
   return `${step.action} ${target} — ${step.detail}`;
 }
 
-export type PlanCheck =
+type PlanCheck =
   | { ok: true; step: LorePlanStep }
   | { ok: false; message: string };
 

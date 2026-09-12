@@ -21,7 +21,7 @@ export async function zipExportDialog(
   return invoke("zip_export_dialog", { srcDir, prefix, manifest, defaultFileName, excludes });
 }
 
-export interface ZipImportResult {
+interface ZipImportResult {
   zip_path: string;
   manifest: string | null;
   file_count: number;
@@ -53,7 +53,7 @@ export async function saveTextFileDialog(
   return invoke("save_text_file_dialog", { content, defaultFileName, filterName, extensions });
 }
 
-export interface OpenedTextFile {
+interface OpenedTextFile {
   path: string;
   content: string;
 }

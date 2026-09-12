@@ -118,7 +118,7 @@ export function parsePins(paths: string[]): LorePin[] {
 
 // ─── Activation report ────────────────────────────────────────────────────────
 
-export interface LoreLayerReport {
+interface LoreLayerReport {
   kind: "summary" | "core" | "facet" | "gallery";
   /** Facet title (facet layers only). */
   title?: string;
@@ -153,10 +153,10 @@ export interface LoreLayerReport {
  * beside the real drops because the author's question is the same one — "why is
  * this not in there?" — and "it already is" has to be an answer the UI can give.
  */
-export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only" | "resident";
+type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only" | "resident";
 
 /** One facet that did not make it in, and the detail that makes the reason usable. */
-export interface FacetDrop {
+interface FacetDrop {
   file: string;
   title: string;
   reason: FacetDropReason;
@@ -303,7 +303,7 @@ export function contributingEntities(report: LoreActivationReport): LoreEntityRe
   return report.entities.filter((e) => e.layers.length > 0);
 }
 
-export interface LoreSelection {
+interface LoreSelection {
   /** Assembled 【知识库】 content ("" when nothing activated). */
   text: string;
   report: LoreActivationReport;

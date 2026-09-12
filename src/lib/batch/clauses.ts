@@ -28,7 +28,7 @@ export interface Clause {
   preamble?: boolean;
 }
 
-export type SplitMode = "heading" | "numbered" | "none";
+type SplitMode = "heading" | "numbered" | "none";
 
 export interface SplitResult {
   mode: SplitMode;

@@ -80,7 +80,7 @@ export type ProbeStage =
   | "binary-search"
   | "output-test";
 
-export interface ProbeTarget {
+interface ProbeTarget {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
@@ -89,7 +89,7 @@ export interface ProbeTarget {
   modelId: string;
 }
 
-export interface ProbeOptions extends ProbeTarget {
+interface ProbeOptions extends ProbeTarget {
   /** The context window currently configured, used to size the deep checks. */
   claimedContext?: number;
   /** The max-output currently configured, used to size the generation test. */
@@ -102,7 +102,7 @@ export interface ProbeOptions extends ProbeTarget {
   onProgress?: (stage: ProbeStage, detail?: string) => void;
 }
 
-export type ProbeWarningCode =
+type ProbeWarningCode =
   | "models-endpoint-failed"
   | "no-usage-reported"
   | "rate-limited"
@@ -113,12 +113,12 @@ export type ProbeWarningCode =
   | "truncation-unproven"
   | "aborted";
 
-export interface ProbeWarning {
+interface ProbeWarning {
   code: ProbeWarningCode;
   detail?: string;
 }
 
-export interface OutputTestResult {
+interface OutputTestResult {
   requested: number;
   produced: number;
   finishReason?: string;
@@ -142,7 +142,7 @@ export interface ProbeReport {
 
 // ─── Cost planning ───────────────────────────────────────────────────────────
 
-export interface ProbePlanInput {
+interface ProbePlanInput {
   claimedContext?: number;
   claimedMaxOutput?: number;
   deep?: boolean;

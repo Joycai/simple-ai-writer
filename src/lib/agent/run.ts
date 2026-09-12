@@ -17,7 +17,7 @@ import type { TaskPreset } from "./presets";
 import type { ToolContext } from "./registry";
 import { runAgent } from "./runtime";
 
-export interface LoreAgentTaskArgs extends AiConn {
+interface LoreAgentTaskArgs extends AiConn {
   preset: TaskPreset;
   systemPrompt: string;
   userContent: string | ContentPart[];

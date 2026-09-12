@@ -42,7 +42,7 @@ import {
 import { runStructuredTask } from "./structured";
 
 /** 更新器的输入：上一份状态（或接手时的散文摘要）+ 要折进去的轮次。 */
-export interface StateUpdateInput {
+interface StateUpdateInput {
   /** 上一份已提交的状态；null = 这次对话还没有过状态。 */
   prevState: SkillState | null;
   /**

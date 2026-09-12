@@ -30,7 +30,7 @@ export interface RemoteKb {
   lastDevice: string | null;
 }
 
-export interface RemoteManifestEntry {
+interface RemoteManifestEntry {
   path: string;
   hash: string;
   size: number;
@@ -61,7 +61,7 @@ export interface RemoteSyncRecord {
 }
 
 /** The counts a completed run reports — `RemoteSyncRecord` minus what the server adds. */
-export interface SyncReport {
+interface SyncReport {
   direction: SyncDirection;
   created: number;
   replaced: number;

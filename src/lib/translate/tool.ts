@@ -97,7 +97,7 @@ async function loadTranslateDict(
   return { entries, warning };
 }
 
-export interface TranslateArgs {
+interface TranslateArgs {
   text?: string;
   path?: string;
   reason?: string;

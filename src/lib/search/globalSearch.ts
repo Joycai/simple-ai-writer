@@ -48,7 +48,7 @@ const SCOPE_PREFIXES: Readonly<Record<string, SearchScope>> = {
   "?": "ai",
 };
 
-export interface ParsedQuery {
+interface ParsedQuery {
   scope: SearchScope;
   /** 去掉前缀与首尾空白之后真正拿去匹配的词。 */
   term: string;
@@ -71,13 +71,13 @@ export interface MatchRange {
   end: number;
 }
 
-export interface TextMatch {
+interface TextMatch {
   score: number;
   /** 已合并、按位置排好。 */
   ranges: MatchRange[];
 }
 
-export interface MatchOptions {
+interface MatchOptions {
   /** 找不到子串时是否退而求其次按子序列匹配。默认 true。 */
   subsequence?: boolean;
 }
@@ -173,7 +173,7 @@ export function windowAround(text: string, ranges: MatchRange[], maxLen: number)
   return { text: head + text.slice(start, end) + tail, ranges: out };
 }
 
-export interface SearchResult<T> {
+interface SearchResult<T> {
   hits: T[];
   /** 命中总数（含没进 `hits` 的），给「更多」用。 */
   total: number;
@@ -254,7 +254,7 @@ export function searchFiles(
 
 // ─── 条目 ────────────────────────────────────────────────────────────────────
 
-export interface LoreLike {
+interface LoreLike {
   name: string;
   aliases: readonly string[];
 }
@@ -320,7 +320,7 @@ export type RecentLocation =
   | { kind: "lore"; entityDir: string };
 
 /** `navStore` 的 `NavLocation` 的结构形状——文库那一类没有地址，进不了这张表。 */
-export interface NavLocationLike {
+interface NavLocationLike {
   kind: string;
   filePath?: string | null;
   entityDir?: string | null;

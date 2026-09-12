@@ -47,12 +47,12 @@ import { clearBinding, loadBinding, saveBinding } from "../lib/sync/store";
 import { useLoreStore } from "./loreStore";
 import { readPref, writePref } from "../lib/prefs";
 
-export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
+type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
 /** Which surface the preview flow is showing. `idle` = no modal. */
-export type SyncPhase = "idle" | "planning" | "preview" | "running" | "done";
+type SyncPhase = "idle" | "planning" | "preview" | "running" | "done";
 
-export interface SyncProgress {
+interface SyncProgress {
   done: number;
   total: number;
   path: string;

@@ -24,14 +24,14 @@ import { imageRequestParams, inputImageSize, recordImageUsage } from "../lib/ima
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
 /** One calibration verdict attached to a turn (lib/image/calibrate.ts). */
-export interface TurnReview {
+interface TurnReview {
   passCount: number;
   total: number;
   /** The criteria that failed, verbatim — what the author reads. */
   failed: string[];
 }
 
-export interface ImageTurn {
+interface ImageTurn {
   id: string;
   /** The turn this one edits. Null for the opening generation. */
   parentId: string | null;

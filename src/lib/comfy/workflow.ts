@@ -17,7 +17,7 @@ export interface ComfyWorkflowConfig {
 }
 
 /** API 格式里的一个节点。`inputs` 的值是常量或 `[nodeId, slot]` 连线。 */
-export interface ComfyNode {
+interface ComfyNode {
   class_type: string;
   inputs: Record<string, unknown>;
   _meta?: { title?: string };
@@ -77,7 +77,7 @@ function hasTextInput(node: ComfyNode): boolean {
   return typeof node.inputs.text === "string";
 }
 
-export interface ComfyAnalysis {
+interface ComfyAnalysis {
   nodeCount: number;
   /** 正面提示词落点，找不到则 null——这张工作流当模型没法用。 */
   positive: { nodeId: string; via: "title" | "sampler" } | null;
@@ -171,7 +171,7 @@ export function analyzeComfyWorkflow(graph: ComfyGraph): ComfyAnalysis {
   };
 }
 
-export interface ComfyInjection {
+interface ComfyInjection {
   prompt: string;
   /**
    * 负面提示词，落进识别到的负面节点。没有负面节点就**静默丢弃**而不是折进

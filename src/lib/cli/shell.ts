@@ -12,7 +12,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { IS_TAURI } from "../platform";
 
-export type ShellKind = "pwsh" | "powershell" | "zsh" | "bash" | "sh" | "fish" | "dash" | "ksh";
+type ShellKind = "pwsh" | "powershell" | "zsh" | "bash" | "sh" | "fish" | "dash" | "ksh";
 
 export interface ShellInfo {
   kind: ShellKind;

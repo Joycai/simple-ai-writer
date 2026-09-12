@@ -22,7 +22,7 @@ export const GEMINI_THRESHOLD_LEVELS = [
   "BLOCK_LOW_AND_ABOVE",
 ] as const;
 
-export type GeminiHarmThreshold = (typeof GEMINI_THRESHOLD_LEVELS)[number];
+type GeminiHarmThreshold = (typeof GEMINI_THRESHOLD_LEVELS)[number];
 
 export type GeminiSafetySettings = Partial<Record<GeminiHarmCategory, GeminiHarmThreshold>>;
 

@@ -16,7 +16,7 @@ export type ScriptSegmentKind = "action" | "speech" | "scene" | "meta";
  * 一行内的显示片段。引号被切出来单独成 run，因为设计稿要求
  * 「引号保留但降到弱化色」——保留信息，收走视觉重量。
  */
-export interface ScriptRun {
+interface ScriptRun {
   kind: "text" | "mark";
   text: string;
 }
@@ -28,7 +28,7 @@ export interface ScriptSegment {
   plain: string;
 }
 
-export interface ParseScriptOptions {
+interface ParseScriptOptions {
   /**
    * 只有**闭合**的标记才着色。输入框用 true，稿面用 false。
    *
@@ -171,7 +171,7 @@ const MARK_PAIRS: Record<Exclude<ScriptSegmentKind, "scene">, [string, string]> 
   meta: ["[", "]"],
 };
 
-export interface LineKindEdit {
+interface LineKindEdit {
   text: string;
   /** 编辑后光标该落在哪——闭合标记**之前**，作者接着往里打字。 */
   caret: number;
