@@ -69,6 +69,35 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 `function_call` → `tool_calls`、`role:"system"` → `role:"developer"`、
 推理模型加 `reasoning_effort`。旧字段大多仍被接受。
 
+### 2.1 DeepSeek 的图片理解（官方直连，2026-09 文档口径，未实测）
+
+记在这里而不是马甲层：DeepSeek 是官方端点，且它的图片面**没有任何私有扩展**
+——本项目发出去的 part 一个字都不用改。
+
+- **模型**：`deepseek-flash`（DeepSeek-V4.1-Flash）看得见图；`deepseek-v4-pro`
+  看不见。旧的 `deepseek-v4-flash-vision-exp` 已下线，请求由 Flash 承接。
+- **三种传法**，都是标准 ① 族 block 数组：base64 `data:` URL、公网 http(s)
+  URL、Files API 的 `file_id`。本项目只用第一种。
+- **`detail` 可选**：`low`（推理前缩到 512×512）/ `high` / `original` / `auto`
+  （当前等价 `original`）。本项目的 `ContentPart` 还没有这个字段。
+- **硬约束：图片只能出现在 `user` 消息里**，`system` / `assistant` 带图 400。
+  本项目天然满足——`lib/agent/imageHistory.ts` 的 `ImageMessage` 把
+  `role: "user"` 写进了类型，工具返回的图也是另起一条 user 消息
+  （`lib/agent/runtime.ts`）。
+- **限额**：格式 JPEG/PNG/GIF/WebP（按字节判定，不看文件名）；单图 32 MiB
+  （Files API 64 MiB）、请求体 48 MiB、单请求最多 600 张、单边最长 8192px
+  （≥15 张时降到 4096px）。本项目的 12 MiB / 长边 4096 都在限内。
+- **计费**：进模型前统一缩放（小于约 544² 放大，更大的缩到约 1300² 的总像素），
+  因此**每张图最多 1024 token**——`lib/ai/tokenEstimate.ts` 的 800/张是同量级。
+- **另外两族同款**：`https://api.deepseek.com/anthropic` 收 ④ 族的
+  `{type:"image",source:{type:"base64"|"url"|"file"}}`；Responses 面收
+  `input_image` + `detail`。两条本项目的适配器都已经按这个形状发
+  （`lib/ai/anthropic.ts` 的 `blocksOf`、`lib/ai/responses.ts`）。
+- **一处形状差异**：file part 官方文档写的是平铺的
+  `{type:"file", file_data, filename}`，本项目按 OpenAI 的嵌套形状发
+  `{type:"file", file:{file_data, filename}}`（`lib/ai/types.ts`）。目前只有
+  PDF 子代理造 file part，绑到 deepseek-flash 时大概率不被认。
+
 ## 3. ② OpenAI Responses
 
 > 2026-09 按 GPT-5.4 / 5.5 / 5.6 的参考页与实测重写（此前是 o 系列时代的口径）。
@@ -477,6 +506,9 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 - **图片**：`image_url` 收 `data:` URL；qwen3.8/3.7-flash、qwen3-vl-plus、kimi-k3 看得见；
   deepseek 与 glm **不报错但无视图片**（答错颜色）；MiniMax 回「看不到图片」。
   **小于 10px 的图 400**（`height:1 or width:1 must be larger than 10`）。
+  ⚠️ 这里的 deepseek 是**本平台上架的 `deepseek-v4-pro-0813`**，它本来就没有视觉；
+  别把这条读成「DeepSeek 不能看图」。官方直连的 `deepseek-flash`（DeepSeek-V4.1-Flash）
+  支持图片理解，收的正是同一个 `image_url` + `data:` URL 形状 —— 见 §2.1。
 - **错误信封是 OpenAI 形状**（`{error:{message,type,code}}` + 顶层 `request_id`），
   探测模型 404 + `model_not_found`，坏 key 401，与连接测试的判据一致。
 - **`max_tokens` 的含义随模型不同**：DeepSeek V4 与 qwen3.8-max 上是正文+思维链之和，

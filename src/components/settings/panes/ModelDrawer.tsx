@@ -649,7 +649,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 )}
               </div>
             )}
-            <input className={inputCls(false, s.mono)} placeholder="deepseek-v4-flash" value={form.modelId}
+            <input className={inputCls(false, s.mono)} placeholder="deepseek-flash" value={form.modelId}
               onChange={(e) => setForm({ ...form, modelId: e.target.value })} />
           </Field>
           <Field label={t("aiConfig.models.displayNameLabel")} hint={t("aiConfig.models.briefName")}>
