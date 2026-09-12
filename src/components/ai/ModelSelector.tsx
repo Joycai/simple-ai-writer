@@ -52,7 +52,7 @@ interface Row {
   provider: Provider | undefined;
 }
 
-export interface ModelSelectorProps {
+interface ModelSelectorProps {
   /**
    * Controlled mode (the lore modals' per-task picker): selection state lives
    * with the caller and NEVER writes back to the global active model. Without

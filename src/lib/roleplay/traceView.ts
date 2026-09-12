@@ -35,7 +35,7 @@ const NARROW_HIT_CAP = 6;
 
 // ─── 收起行 ──────────────────────────────────────────────────────────────────
 
-export interface TraceSummary {
+interface TraceSummary {
   residentCount: number;
   /** 知识库 + 记忆区 + 引用。 */
   turnCount: number;
@@ -258,7 +258,7 @@ export function budgetPressed(rows: readonly DropRow[]): boolean {
 
 // ─── 激活词 ──────────────────────────────────────────────────────────────────
 
-export interface KeywordLine {
+interface KeywordLine {
   /** 平铺出来的前几个。 */
   shown: string[];
   /** 折起来的个数，0 = 没有折叠。 */
@@ -275,7 +275,7 @@ export function keywordLine(keys: readonly string[], expanded = false): KeywordL
 
 // ─── 窄栏折叠 ────────────────────────────────────────────────────────────────
 
-export interface FoldedHits {
+interface FoldedHits {
   shown: HitRow[];
   /** 折起来的条数，0 = 没有折叠。 */
   restCount: number;

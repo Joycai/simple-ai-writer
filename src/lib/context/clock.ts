@@ -43,7 +43,7 @@
 
 import i18n from "../../i18n";
 
-export interface ClockOptions {
+interface ClockOptions {
   /** Injectable for tests; defaults to the wall clock. */
   now?: Date;
   /** BCP 47 tag for the weekday's spelling; defaults to the UI language. */

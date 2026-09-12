@@ -159,7 +159,7 @@ export function openaiServerToolsBody(
 // ─── What comes back ─────────────────────────────────────────────────────────
 
 /** One hit from a server-run web search. */
-export interface WebSearchResult {
+interface WebSearchResult {
   title: string;
   url: string;
   /** Vendor's own freshness estimate ("3 days ago"), when it sends one. */

@@ -146,7 +146,7 @@ const SETTINGS_COMBOS: Combo[] = [
 /** "dispatch" = wired into useGlobalShortcuts; "info" = implemented locally
  *  (CodeMirror keymap, a component's own listener, a form's Enter/Esc), only
  *  listed here so the Settings shortcuts tab is complete. */
-export type ShortcutScope = "dispatch" | "info";
+type ShortcutScope = "dispatch" | "info";
 
 export type ShortcutCategory = "global" | "view" | "file" | "ai" | "editor" | "contextual";
 

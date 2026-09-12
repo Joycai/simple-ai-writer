@@ -21,7 +21,7 @@ export interface TreeNodeLike {
 }
 
 /** One row as the sidebar actually renders it, in top-to-bottom order. */
-export interface TreeRow {
+interface TreeRow {
   path: string;
   isDir: boolean;
 }

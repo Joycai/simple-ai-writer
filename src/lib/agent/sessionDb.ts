@@ -47,7 +47,7 @@ export interface ChatSessionRow {
   pinned: boolean;
 }
 
-export interface UpsertChatSessionOptions {
+interface UpsertChatSessionOptions {
   /**
    * Title to store when the row is *created*. Ignored on an update — the UPDATE
    * never names `title`, so a save landing after a rename cannot undo it. This

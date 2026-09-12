@@ -13,7 +13,7 @@ import {
 } from "./outline";
 import type { FileNode } from "../project";
 
-export interface BookContext {
+interface BookContext {
   /** Ordered recap of prior chapters, from their memory files. */
   priorSummary: string;
   /** Verbatim ending of the immediately-preceding chapter (bridge). */
@@ -44,7 +44,7 @@ function chapterRecap(mem: DocMemory | null): string {
  *   - `null` — no bridge. The author declared this an independent opening.
  *   - a path — bridge with that chapter, wherever it sits in the book.
  */
-export type BridgeChoice = string | null | undefined;
+type BridgeChoice = string | null | undefined;
 
 /**
  * Which chapter's ending (if any) bridges into the one being continued.

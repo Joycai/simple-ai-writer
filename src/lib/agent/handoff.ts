@@ -40,12 +40,12 @@ import { listTaskNotes } from "./taskWorkspace";
 export const HANDOFF_TOOL_NAME = "handoff";
 
 /** 交付形态。写手的成文指令按这个分支——不分支，问一句话也会得到一篇散文。 */
-export type HandoffKind = "prose" | "analysis" | "answer";
+type HandoffKind = "prose" | "analysis" | "answer";
 
 const HANDOFF_KINDS: readonly HandoffKind[] = ["prose", "analysis", "answer"];
 
 /** 落盘意图。写手不写盘——这里声明的是**运行时**替它做的那一次写入。 */
-export interface DeliverTo {
+interface DeliverTo {
   path: string;
   mode: "create" | "append" | "rewrite" | "replace_lines";
   /** replace_lines 专用，1 起。 */
@@ -287,7 +287,7 @@ export function writerSystemPrompt(brief: HandoffBrief, inherited?: string): str
   return `${base}\n\n${byKind}${persona}`;
 }
 
-export interface WriterHandoffArgs {
+interface WriterHandoffArgs {
   brief: HandoffBrief;
   /** True when the brief came from {@link fallbackBrief} — see its comment. */
   degraded: boolean;
@@ -303,7 +303,7 @@ export interface WriterHandoffArgs {
   stepId: string;
 }
 
-export interface WriterHandoffResult {
+interface WriterHandoffResult {
   text: string;
   /** Set when the handoff could not run; the caller reports it to the author. */
   error?: string;

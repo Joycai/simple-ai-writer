@@ -86,7 +86,7 @@ const IMPORT_EXTENSIONS: readonly string[] = [
 ];
 
 /** How one file travels into the workspace. */
-export type ImportMode = "convert" | "copy-text" | "copy-binary";
+type ImportMode = "convert" | "copy-text" | "copy-binary";
 export type ConvertExt = (typeof CONVERT_EXTENSIONS)[number];
 
 /**
@@ -271,19 +271,19 @@ export async function convertProjectFile(source: string): Promise<string> {
   return target;
 }
 
-export interface ImportedDocument {
+interface ImportedDocument {
   /** Source path the author picked. */
   source: string;
   /** File written into the project (markdown for a conversion, else a copy). */
   path: string;
 }
 
-export interface ImportFailure {
+interface ImportFailure {
   source: string;
   error: string;
 }
 
-export interface ImportOutcome {
+interface ImportOutcome {
   imported: ImportedDocument[];
   failures: ImportFailure[];
 }

@@ -104,7 +104,7 @@ export function describeEditTarget(occurrences: number, target: EditTarget): str
  * original line terminators survive verbatim: a CRLF file must not silently
  * become LF in the rewritten region while the rest of it stays CRLF.
  */
-export interface LineSlice {
+interface LineSlice {
   /** The lines' source, including the terminator of the last one. */
   text: string;
   /** Character offset where the slice starts. */

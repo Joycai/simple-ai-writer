@@ -45,7 +45,7 @@ import {
   type SweepEntry,
 } from "./cache";
 
-export interface CachedDocument {
+interface CachedDocument {
   markdown: string;
   /** Absolute entry directory; pictures are under `<dir>/assets`. */
   dir: string;

@@ -24,9 +24,9 @@ const FREQUENT_MAX = 5;
  *  not the organising axis (设计稿 1a). */
 export type SnippetFilter = "all" | "frequent" | "ungrouped";
 
-export type SectionKind = "frequent" | "group" | "ungrouped";
+type SectionKind = "frequent" | "group" | "ungrouped";
 
-export interface SnippetSection {
+interface SnippetSection {
   /** Stable key for React and for keyboard-cursor maths. */
   key: string;
   kind: SectionKind;
@@ -78,7 +78,7 @@ export function matches(s: Prompt, query: string): boolean {
   return s.name.toLowerCase().includes(q) || s.content.toLowerCase().includes(q);
 }
 
-export interface SectionOptions {
+interface SectionOptions {
   filter?: SnippetFilter;
   query?: string;
   /** Set false for the settings pane, which always shows every section and
@@ -178,7 +178,7 @@ export function previewLine(content: string): string {
   return first.trim();
 }
 
-export interface HitSlice {
+interface HitSlice {
   before: string;
   hit: string;
   after: string;

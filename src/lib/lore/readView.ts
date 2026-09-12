@@ -52,7 +52,7 @@ export function activationTags(entity: Pick<LoreEntity, "name" | "aliases">): st
 }
 
 /** 档案头元数据行 / 页底落款要念的三个数（任务书 §3b）。 */
-export interface EntityReadStats {
+interface EntityReadStats {
   facetCount: number;
   imageCount: number;
   /** 主条目正文 + 全部特征正文的字数（frontmatter 不计——`charCount` 本就不含）。 */
@@ -73,7 +73,7 @@ export function entityReadStats(entity: LoreEntity, indexBodyChars: number): Ent
 }
 
 /** 词典正文拆成「词表 + 其余行」（设计稿 03c 屏 1e）。 */
-export interface DictSplit {
+interface DictSplit {
   entries: GlossaryEntry[];
   /** 解析不成词对的非空行，按原样 markdown 落在词表下方——不吞掉内容。 */
   rest: string;

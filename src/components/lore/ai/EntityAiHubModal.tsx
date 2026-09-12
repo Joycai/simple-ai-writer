@@ -13,7 +13,7 @@ import { ModalShell } from "../../common/ModalShell";
 import styles from "../LoreImproveModal.module.css";
 import hub from "./EntityAiHubModal.module.css";
 
-export type EntityAiTask = "meta" | "improve" | "image" | "split" | "dict";
+type EntityAiTask = "meta" | "improve" | "image" | "split" | "dict";
 
 interface Props {
   entityName: string;

@@ -30,7 +30,7 @@ const LORE_BUNDLE_VERSION = 1;
 /** Staging dir name under `.ai-writer/`. A constant so an aborted import is overwritten by the next one. */
 const STAGING_DIR = "lore-import-tmp";
 
-export interface LoreBundleManifest {
+interface LoreBundleManifest {
   kind: typeof LORE_BUNDLE_KIND;
   version: number;
   exportedAt: string;
@@ -39,7 +39,7 @@ export interface LoreBundleManifest {
   entities: { category: string; id: string; name: string }[];
 }
 
-export interface StagedEntity {
+interface StagedEntity {
   category: string;
   id: string;
   name: string;
@@ -56,7 +56,7 @@ export interface StagedLoreImport {
 
 export type ConflictStrategy = "overwrite" | "skip" | "keepBoth";
 
-export interface LoreImportSummary {
+interface LoreImportSummary {
   imported: number;
   skipped: number;
   /** Categories imported to disk but not part of the active profile (hidden in the UI). */

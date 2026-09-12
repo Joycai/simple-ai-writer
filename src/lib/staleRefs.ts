@@ -35,7 +35,7 @@ import {
 import { toPosixPath } from "./paths";
 
 /** What a sweep removed, by kind. All zeroes means nothing was stale. */
-export interface StaleSweep {
+interface StaleSweep {
   /** Whole `ai:pinnedLore:` rows whose project folder is gone. */
   pinnedProjects: number;
   /** Individual pinned entities/facets whose folder is gone. */

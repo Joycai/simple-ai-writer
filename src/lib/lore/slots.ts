@@ -43,7 +43,7 @@ export function categoryTypeName(category: string, isZh: boolean): string | null
 }
 
 /** One declared slot plus what the entry currently has in it. */
-export interface SlotStatus {
+interface SlotStatus {
   slot: FacetSlot;
   /** Facets whose `slot` names this one (matched case-insensitively). */
   facets: LoreFacet[];
@@ -88,7 +88,7 @@ export function unslottedFacets(entity: LoreEntity): LoreFacet[] {
  * `expected`, currently empty. It is a nudge, so nothing about it blocks or
  * warns: 设计稿 03a 屏 20 draws it as a dashed row, not an error.
  */
-export interface FacetSection {
+interface FacetSection {
   slot: FacetSlot | null;
   facets: LoreFacet[];
   missing: boolean;
@@ -117,7 +117,7 @@ export function facetSections(entity: LoreEntity): FacetSection[] {
 }
 
 /** How much of the type's suggestion an entry has taken up (屏 20's mono note). */
-export interface SlotCoverage {
+interface SlotCoverage {
   /** Slots the category declares. */
   total: number;
   /** Of those, how many have at least one facet. */
@@ -136,7 +136,7 @@ export function slotCoverage(entity: LoreEntity): SlotCoverage {
 }
 
 /** The image column's counterpart to `FacetSection` (屏 22). */
-export interface ImageSection {
+interface ImageSection {
   slot: ImageSlot | null;
   images: LoreImage[];
   missing: boolean;

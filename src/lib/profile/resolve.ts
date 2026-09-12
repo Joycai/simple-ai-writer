@@ -113,7 +113,7 @@ export interface ResolvedWorkspace {
 }
 
 /** One group of the visible task menu — `pack` is null for the base tasks. */
-export interface PackTaskGroup {
+interface PackTaskGroup {
   pack: WorkspaceProfile | null;
   tasks: ResolvedTask[];
 }

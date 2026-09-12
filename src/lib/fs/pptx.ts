@@ -47,13 +47,13 @@ export function isPptxPath(path: string): boolean {
  * `lib/import` already depends on this module and a type is not worth the
  * reversed edge.
  */
-export interface PptxAsset {
+interface PptxAsset {
   name: string;
   bytes: Uint8Array;
 }
 
 /** What a whole-file conversion yields: markdown plus its extracted pictures. */
-export interface PptxImport {
+interface PptxImport {
   markdown: string;
   assets: PptxAsset[];
 }

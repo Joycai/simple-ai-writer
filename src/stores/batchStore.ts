@@ -22,7 +22,7 @@ import type { Clause } from "../lib/batch/clauses";
 import { useAiTaskStore } from "./aiTaskStore";
 import { muteRunFinished, notify } from "../lib/notify";
 
-export type BatchItemStatus = "pending" | "running" | "done" | "failed" | "skipped";
+type BatchItemStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
 export interface BatchItem {
   /** Stable per-run id (list keys, status patching). */

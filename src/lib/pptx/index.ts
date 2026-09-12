@@ -27,7 +27,7 @@ import { dirName } from "../paths";
 
 export { isPptxExportEnabled, setPptxExportEnabled } from "./flag";
 
-export interface PptxExportResult {
+interface PptxExportResult {
   /** Where the deck was written. */
   path: string;
   slides: number;

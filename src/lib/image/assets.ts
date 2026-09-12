@@ -90,7 +90,7 @@ export function assetDirFor(docPath: string): string {
   return `${dirOf(docPath)}/${assetRelDirFor(docPath)}`;
 }
 
-export interface SavedAsset {
+interface SavedAsset {
   /** Absolute path the bytes were written to. */
   absPath: string;
   /** Path relative to the document, for the markdown link. */

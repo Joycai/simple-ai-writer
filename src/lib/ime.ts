@@ -31,7 +31,7 @@ export interface CompositionState {
 }
 
 /** The fields of a keyboard event this decision reads. Pure, so it is testable. */
-export interface KeyLike {
+interface KeyLike {
   isComposing?: boolean;
   keyCode?: number;
 }
@@ -53,7 +53,7 @@ export function imeOwnsKey(e: KeyLike, state: CompositionState, now: number): bo
   );
 }
 
-export interface ImeGuard {
+interface ImeGuard {
   /** Spread onto the input/textarea whose Enter key submits. */
   imeProps: {
     onCompositionStart: () => void;

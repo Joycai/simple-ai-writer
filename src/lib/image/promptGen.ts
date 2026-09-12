@@ -20,7 +20,7 @@ import { promptParams } from "../profile/active";
 export const IMAGE_ASPECTS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
 export type ImageAspect = (typeof IMAGE_ASPECTS)[number];
 
-export interface ImagePromptSpec {
+interface ImagePromptSpec {
   /** The prompt itself, in `promptLanguage`. */
   prompt: string;
   /** Things to keep out of the frame. Empty when the model offered none. */
@@ -32,7 +32,7 @@ export interface ImagePromptSpec {
   note: string;
 }
 
-export interface ImagePromptOptions extends ConnOptions {
+interface ImagePromptOptions extends ConnOptions {
   /** What the picture is of — an entity name, a scene title. */
   subject: string;
   /** Category/type label for the subject, e.g. 角色 / 场景 / 产品. */

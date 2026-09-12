@@ -35,12 +35,12 @@ import {
 } from "./sakura";
 import type { LoreIndex } from "../lore/model";
 
-export interface TranslateUsage {
+interface TranslateUsage {
   inputTokens: number;
   outputTokens: number;
 }
 
-export interface ChunkAttempt {
+interface ChunkAttempt {
   /** 这一次用的 frequency_penalty，进日志/事件用。 */
   freq: number;
   ok: boolean;
@@ -48,7 +48,7 @@ export interface ChunkAttempt {
   detail?: string;
 }
 
-export interface ChunkOutcome {
+interface ChunkOutcome {
   ok: boolean;
   /** 通过时的逐行译文（已落实术语表）。失败时为空 —— 调用方据此保留原文。 */
   lines: TranslatedLine[];
@@ -57,7 +57,7 @@ export interface ChunkOutcome {
   usage: TranslateUsage;
 }
 
-export interface RunChunkOptions {
+interface RunChunkOptions {
   conn: ConnOptions;
   /** 术语表来源。不给就走无术语表模板。 */
   loreIndex?: LoreIndex;
@@ -201,7 +201,7 @@ export interface DocProgress {
   totalChars: number;
 }
 
-export interface FailedChunk {
+interface FailedChunk {
   /** 这一块在文档里的首行行号，用来给失败标记定位。 */
   firstLine: number;
   lineCount: number;
@@ -209,7 +209,7 @@ export interface FailedChunk {
   detail?: string;
 }
 
-export interface DocOutcome {
+interface DocOutcome {
   /** 成品全文。失败的块在这里是**原文**加一行标记。 */
   text: string;
   chunkCount: number;
@@ -222,7 +222,7 @@ export interface DocOutcome {
   aborted: boolean;
 }
 
-export interface RunDocumentOptions extends Omit<RunChunkOptions, "carry"> {
+interface RunDocumentOptions extends Omit<RunChunkOptions, "carry"> {
   /** 每块结束时调用，给执行日志和进度条。 */
   onProgress?: (p: DocProgress) => void;
   /** 块大小。默认见 `chunk.DEFAULT_LINES_PER_CHUNK`——实测的安全区。 */

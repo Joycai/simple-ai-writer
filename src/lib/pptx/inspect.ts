@@ -43,7 +43,7 @@ export interface Overflow {
   past: string[];
 }
 
-export interface SlideReport {
+interface SlideReport {
   index: number;
   blocks: number;
   text: number;
@@ -53,7 +53,7 @@ export interface SlideReport {
   degraded: string[];
 }
 
-export interface DeckReport {
+interface DeckReport {
   canvas: { width: number; height: number };
   slides: SlideReport[];
   /** Slides with nothing on them at all. */
@@ -126,7 +126,7 @@ function hasFinding(slide: SlideReport): boolean {
  * has no business knowing `htmlSlides.ts`' types, so the caller hands over the
  * two numbers rather than the slide objects.
  */
-export interface SlideLines {
+interface SlideLines {
   startLine: number;
   endLine: number;
 }

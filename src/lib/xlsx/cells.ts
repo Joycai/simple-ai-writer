@@ -17,7 +17,7 @@ export type Cell =
   | { t: "b"; v: boolean }
   | { t: "f"; v: string };
 
-export type CellKind = "text" | "number" | "date" | "formula" | "bool";
+type CellKind = "text" | "number" | "date" | "formula" | "bool";
 
 export function cellKind(cell: Cell): CellKind {
   switch (cell.t) {

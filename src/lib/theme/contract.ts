@@ -21,7 +21,7 @@
  * line. It is not a CSS parser and must not be asked to be one.
  */
 
-export type ColorSchemeName = "light" | "dark";
+type ColorSchemeName = "light" | "dark";
 
 export interface TokenContract {
   /** L0 — theme-independent scales (`tokens.scale`). A theme may not touch these. */

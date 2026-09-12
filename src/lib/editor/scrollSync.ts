@@ -44,7 +44,7 @@ export interface ScrollMapping {
   scrollToLine(line: number): boolean;
 }
 
-export interface LinkScrollOptions {
+interface LinkScrollOptions {
   /**
    * How long after the last scroll event the driving side keeps its claim, in
    * ms. Long enough to cover the echo from the side being driven, short enough
@@ -98,7 +98,7 @@ export interface AnchorSource {
   at(i: number): LineAnchor;
 }
 
-export type Anchors = readonly LineAnchor[] | AnchorSource;
+type Anchors = readonly LineAnchor[] | AnchorSource;
 
 const at = (s: Anchors, i: number): LineAnchor => (Array.isArray(s) ? s[i] : (s as AnchorSource).at(i));
 

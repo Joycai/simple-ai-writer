@@ -150,7 +150,7 @@ type RunId = unknown;
  * What an approval carries beyond the proposal itself — supplied by the caller
  * that owns the run, because the store cannot derive either of these.
  */
-export interface ApprovalBinding {
+interface ApprovalBinding {
   /**
    * The chat turn a produced picture belongs to. An explicit binding, not
    * "whichever turn is last when the apply finishes": the apply can outlive
@@ -288,7 +288,7 @@ export interface ChatTurn {
 }
 
 /** Extras for a programmatically composed turn (today: resuming a task). */
-export interface SendChatOptions {
+interface SendChatOptions {
   /**
    * What the transcript shows in place of the sent text. The full text still
    * goes to the model — this only changes what the author reads.
@@ -296,7 +296,7 @@ export interface SendChatOptions {
   displayText?: string;
 }
 
-export interface ChatUsage {
+interface ChatUsage {
   inputTokens: number;
   outputTokens: number;
   cost: number;
@@ -367,7 +367,7 @@ export interface LiveChat {
  * A send waiting for (or holding) a slot. Everything decided at send time rides
  * here so the run does not re-read "the current" anything.
  */
-export interface ChatJob {
+interface ChatJob {
   key: string;
   projectPath: string;
   focus: WritingFocus;
@@ -388,7 +388,7 @@ export interface ChatJob {
 }
 
 /** 换项目 while conversations are busy: the question put to the author (设计稿 02b 屏 1j). */
-export interface ProjectSwitchGuard {
+interface ProjectSwitchGuard {
   /** Where the author is going — a folder name, or null for "closing the project". */
   target: string | null;
   resolve: (leave: boolean) => void;

@@ -26,7 +26,7 @@
  * an engine that the build already promises to run on.
  */
 
-export type EngineKind = "chromium" | "webkit" | "gecko" | "unknown";
+type EngineKind = "chromium" | "webkit" | "gecko" | "unknown";
 
 export interface EngineInfo {
   kind: EngineKind;

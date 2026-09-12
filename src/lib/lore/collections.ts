@@ -48,7 +48,7 @@ import type { LoreEntity, LoreIndex } from "./model";
 export type LoreScope = string[] | null;
 
 /** 一个集合在当前项目里的样子，供墙面与切换器渲染。 */
-export interface CollectionView {
+interface CollectionView {
   /** 名字，同时也是 id。显示用这份写法。 */
   name: string;
   /** 归入这个集合的条目数。 */

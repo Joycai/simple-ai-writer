@@ -122,7 +122,7 @@ export function lineSpacingToTwip(ls: LineSpacing): { line: number; lineRule: Li
  * eastAsia，英文和数字走 ascii。`hint: "eastAsia"` 不能省——没有它，半角标点
  * 和数字会按西文字体走，屏幕上像回事，但校到「标点也必须是仿宋」那条就挂了。
  */
-export interface FontPair {
+interface FontPair {
   eastAsia: string;
   ascii: string;
 }
@@ -153,7 +153,7 @@ export const PAGE_SIZES = {
 
 export type PageSizeName = keyof typeof PAGE_SIZES;
 
-export interface PageSetup {
+interface PageSetup {
   size: PageSizeName;
   /** 横向。纸张的长短边对调，版心和网格跟着一起变。 */
   landscape?: boolean;
@@ -169,7 +169,7 @@ export interface PageSetup {
 /** 页码的写法。`dashed` 是公文那种「— 1 —」。 */
 export type PageNumberStyle = "none" | "plain" | "dashed" | "ofTotal";
 
-export interface HeaderFooter {
+interface HeaderFooter {
   /** 页眉文字。空串＝不写页眉——**留空就什么都不写**，绝不填一个默认值：作者
    *  看到页眉里有字会以为自己设过。 */
   headerText: string;
@@ -208,7 +208,7 @@ export type HeadingNumberFormat =
   | "decimalParen"   // （1）（2）
   | "decimalDotted"; // 1.1  1.1.1（含上级序号）
 
-export interface HeadingNumbering {
+interface HeadingNumbering {
   enabled: boolean;
   levels: [HeadingNumberFormat, HeadingNumberFormat, HeadingNumberFormat, HeadingNumberFormat];
 }
@@ -746,7 +746,7 @@ export function isChineseNumbering(k: HeadingNumberFormat): boolean {
 }
 
 /** 抽屉里一个下拉项为什么选不了。 */
-export type NumberingBlock = "upperChinese" | "lowerDotted";
+type NumberingBlock = "upperChinese" | "lowerDotted";
 
 /**
  * 这一级能不能选这种写法——抽屉里下拉项禁用的依据。

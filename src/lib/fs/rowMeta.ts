@@ -108,7 +108,7 @@ export function assetsGroupOrphaned(
 }
 
 /** The shape `orphanedAssetGroups` needs from a node. */
-export interface NamedNode {
+interface NamedNode {
   name: string;
   path: string;
   is_dir: boolean;

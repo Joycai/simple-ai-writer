@@ -19,7 +19,7 @@ export * from "./flag";
 export * from "./format";
 export * from "./resolve";
 
-export interface DocxExportResult {
+interface DocxExportResult {
   path: string;
   /** 写出去的块数——一个「导出成功」之外能拿来核对的数字。 */
   blocks: number;

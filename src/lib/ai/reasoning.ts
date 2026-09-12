@@ -103,7 +103,7 @@ export function parseThinkingDialect(v: unknown): ThinkingDialect | undefined {
  *   - `budget` — an on/off plus a numeric token budget (Claude 4.5-, Qwen).
  *   - `none`   — no control at all (`off`): send nothing.
  */
-export type ThinkingShape = "levels" | "onoff" | "budget" | "none";
+type ThinkingShape = "levels" | "onoff" | "budget" | "none";
 
 /**
  * A named thinking-parameter preset the author picks per model.

@@ -79,7 +79,7 @@ function clip(header: string, content: string, budget: number, path: string): st
 }
 
 /** What one composed chat message contributes to the turn. */
-export interface ChatMessagePayload {
+interface ChatMessagePayload {
   /**
    * The message as text.
    *

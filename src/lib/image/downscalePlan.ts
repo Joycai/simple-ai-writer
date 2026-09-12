@@ -84,7 +84,7 @@ export interface ImageState {
   animated: boolean;
 }
 
-export type ImageStep =
+type ImageStep =
   | { kind: "as-is" }
   | { kind: "encode"; width: number; height: number; mime: string; quality?: number }
   /** The ladder is spent and it still doesn't fit. */

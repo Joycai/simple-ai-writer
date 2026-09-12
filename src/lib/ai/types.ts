@@ -204,7 +204,7 @@ export interface ToolDefinition {
   };
 }
 
-export interface AssistantToolCall {
+interface AssistantToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };

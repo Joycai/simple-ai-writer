@@ -15,7 +15,7 @@
  * *after* what is buffered (a tool-step event, the run's final usage), so the
  * store never shows a later event ahead of the text that preceded it.
  */
-export interface StreamThrottle {
+interface StreamThrottle {
   /** Ask for a flush soon. Applies immediately when the last one is old. */
   schedule(): void;
   /** Apply whatever is pending right now; no-op when nothing is. */

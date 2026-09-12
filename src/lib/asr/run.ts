@@ -238,7 +238,7 @@ export async function transcriptTargetFor(sourcePath: string): Promise<string> {
   return uniqueImportPath(dirName(sourcePath), `${stem}.md`);
 }
 
-export interface WriteTranscriptOptions {
+interface WriteTranscriptOptions {
   modelId: string;
   timestamps: boolean;
   speakers: boolean;

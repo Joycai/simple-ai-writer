@@ -62,7 +62,7 @@ export interface ImageWireParams {
 }
 
 /** What the author picked in the UI; the dialect turns it into wire fields. */
-export interface ImageParamSelection {
+interface ImageParamSelection {
   /**
    * Requested aspect ratio, or undefined when nobody asked for one. The
    * difference matters most on edits: an explicit aspect means "recompose to

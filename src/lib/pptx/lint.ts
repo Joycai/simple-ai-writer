@@ -27,7 +27,7 @@
  */
 
 /** Severity, in the order findings are reported. */
-export type LintLevel = "lost" | "shifted" | "approximated";
+type LintLevel = "lost" | "shifted" | "approximated";
 
 export interface LintFinding {
   rule: string;
@@ -309,7 +309,7 @@ export function lintDeckSource(html: string): LintFinding[] {
 }
 
 /** One rule's findings folded together — what the approval card lists. */
-export interface LintGroup {
+interface LintGroup {
   rule: string;
   level: LintLevel;
   /** Distinct lines, ascending. */

@@ -19,7 +19,7 @@
 
 export type ChatState = "waiting" | "running" | "queued" | "error" | "unread";
 
-export interface ChatStateInput {
+interface ChatStateInput {
   running: boolean;
   queued: boolean;
   /** A card (approval / plan / question / round cap / truncation) is blocking its run. */

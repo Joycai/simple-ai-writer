@@ -20,7 +20,7 @@ export type AgentKind = "character" | "narrator";
  * （`contextSignature` 的输入）。漏掉后者的样子是：作者在导演和陌生人之间切换，
  * 「设定已更新」永远不亮——一次看起来生效了、其实没有的操作。
  */
-export type PersonaMode = "lore" | "prompt" | "stranger" | "none";
+type PersonaMode = "lore" | "prompt" | "stranger" | "none";
 
 export interface AuthorPersona {
   mode: PersonaMode;

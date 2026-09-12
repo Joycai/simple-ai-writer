@@ -335,7 +335,7 @@ interface RoleplayState {
   sceneReader: () => SceneReader;
 }
 
-export interface NewSessionOptions {
+interface NewSessionOptions {
   mode: "fresh" | "continue";
   /** 仅 `fresh`：连记忆一起封存。接续不给这个选项——它明摆着要保留。 */
   clearMemory?: boolean;

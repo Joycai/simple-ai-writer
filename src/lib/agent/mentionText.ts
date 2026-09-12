@@ -12,7 +12,7 @@
  * makes the bubble trustworthy as a record.
  */
 
-export interface MentionSegment {
+interface MentionSegment {
   kind: "text" | "mention";
   text: string;
 }

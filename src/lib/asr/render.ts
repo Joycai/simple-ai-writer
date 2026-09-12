@@ -11,7 +11,7 @@
 
 import type { Transcript } from "./result";
 
-export interface RenderOptions {
+interface RenderOptions {
   /** frontmatter `source:`——源文件名（不是路径，路径会随作者搬家）。 */
   source: string;
   /** frontmatter `model:`。 */

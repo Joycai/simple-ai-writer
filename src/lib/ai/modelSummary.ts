@@ -123,7 +123,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   return out;
 }
 
-export type ModelMark = "think" | "web" | "pdf" | "translate";
+type ModelMark = "think" | "web" | "pdf" | "translate";
 
 /**
  * The explicit declarations on a conversational model, for the list row.

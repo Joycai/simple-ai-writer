@@ -26,7 +26,7 @@ let proposalCounter = 0;
 /** 只读文件头够算 WAV 时长；整个文件进内存留给批准之后。 */
 const HEADER_BYTES = 64 * 1024;
 
-export interface TranscribeArgs {
+interface TranscribeArgs {
   path?: string;
   /** 本次要不要说话人分离；缺席 = 子代理里的默认值。作者在卡上还能改。 */
   diarization?: boolean;

@@ -60,9 +60,9 @@ export function mergeWindowResults(results: readonly WindowResult[]): {
  * actually checked, taking failed / aborted / pending ones as gaps. Null when
  * every window was checked through to the document's end.
  */
-export type CoverageStatus = WindowOutcome["status"] | "unchecked";
+type CoverageStatus = WindowOutcome["status"] | "unchecked";
 
-export interface CoverageSpan {
+interface CoverageSpan {
   from: number;
   to: number;
   status: CoverageStatus;

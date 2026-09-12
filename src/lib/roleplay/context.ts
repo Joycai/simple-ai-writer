@@ -485,7 +485,7 @@ export function selectReplayTurns(
 
 // ─── 播种 ────────────────────────────────────────────────────────────────────
 
-export interface SeedResult {
+interface SeedResult {
   messages: StreamMessage[];
   meta: RoleplaySessionMeta;
   report: LoreActivationReport | null;

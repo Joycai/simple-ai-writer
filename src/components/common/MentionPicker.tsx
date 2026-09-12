@@ -92,7 +92,7 @@ export function findMention(text: string, caret: number): { start: number; query
   return { start: at, query };
 }
 
-export interface MentionState {
+interface MentionState {
   open: boolean;
   query: string;
   /** Highlighted row — hosts drive it with ↑/↓ and confirm with Enter. */

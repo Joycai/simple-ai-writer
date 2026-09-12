@@ -231,13 +231,13 @@ export async function submitTranscription(
 
 // ─── 轮询 ────────────────────────────────────────────────────────────────────
 
-export interface PollProgress {
+interface PollProgress {
   phase: "queued" | "running";
   polls: number;
   elapsedMs: number;
 }
 
-export interface PollResult {
+interface PollResult {
   transcriptionUrl: string;
   /** 平台报的计费秒数（`usage.duration` / `usage.seconds`），没报就 null。 */
   billedSeconds: number | null;

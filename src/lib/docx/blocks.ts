@@ -33,7 +33,7 @@ export type DocBlock =
   | { kind: "table"; rows: DocRun[][][]; headerRows: number }
   | { kind: "rule" };
 
-export interface ParsedDoc {
+interface ParsedDoc {
   blocks: DocBlock[];
   /** 没有原样带过去的东西，一条一句，直接给作者看。 */
   degraded: string[];

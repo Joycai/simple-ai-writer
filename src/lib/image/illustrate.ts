@@ -48,7 +48,7 @@ function imageWaitProgress(p: ImageProgress): ToolProgress {
 }
 
 /** What an applied illustration reports back to the model. */
-export interface IllustrationOutcome {
+interface IllustrationOutcome {
   /** Absolute path of the saved image. */
   path: string;
   /** For a document target, the markdown to place. Empty for lore. */

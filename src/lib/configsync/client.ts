@@ -38,7 +38,7 @@ export interface RemoteSlotVersion {
   meta: string | null;
 }
 
-export interface DownloadedConfig {
+interface DownloadedConfig {
   bytes: Uint8Array;
   hash: string;
   atMs: number;

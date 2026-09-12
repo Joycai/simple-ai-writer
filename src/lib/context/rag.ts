@@ -133,7 +133,7 @@ export interface TaskExtras {
   extraMatchText?: string;
 }
 
-export interface ContextBundle {
+interface ContextBundle {
   systemPrompt: string;
   loreSnippets: string;
   /** Why each entity/facet was (or wasn't) injected — surfaced in the UI. */
@@ -531,7 +531,7 @@ export function bundleToMessages(
 }
 
 /** What one turn's automatic retrieval produced (docs/feature/agent/chat-memory-plan.md §5). */
-export interface TurnInjection {
+interface TurnInjection {
   /** The 【…】 blocks to append as one user message; "" when nothing net-new. */
   text: string;
   /** Lore activation, for the context-seeded log event. */
@@ -660,7 +660,7 @@ export async function assembleTurnInjection(opts: {
 }
 
 /** The chat seed, with the two user messages identified for session bookkeeping. */
-export interface ChatSeedMessages {
+interface ChatSeedMessages {
   /** What actually goes on the wire, in order. */
   messages: { role: "system" | "user"; content: MessageContent }[];
   /**

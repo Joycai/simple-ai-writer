@@ -132,7 +132,7 @@ function paragraphIndexAt(text: string, offset: number): number {
  * the three answers are not distinguishable from document state alone: an
  * opening is offset 0 whether or not anything happens to be selected.
  */
-export type ContinueMode = "opening" | "end" | "expand";
+type ContinueMode = "opening" | "end" | "expand";
 
 /**
  * The mode to start from, when the author has not said.

@@ -46,9 +46,9 @@ import { getGlobalDb } from "../lib/project";
 import { useAppStore } from "./appStore";
 
 /** Where the restore flow is. `idle` = no modal on screen. */
-export type RestorePhase = "idle" | "downloading" | "password" | "preview" | "applying" | "done";
+type RestorePhase = "idle" | "downloading" | "password" | "preview" | "applying" | "done";
 
-export interface RestoreTarget {
+interface RestoreTarget {
   slot: RemoteSlot;
   version: RemoteSlotVersion | null;
   bytes: Uint8Array;

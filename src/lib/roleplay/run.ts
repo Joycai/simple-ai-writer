@@ -43,7 +43,7 @@ import { loadTranscript } from "./transcript";
 
 // ─── 静态上下文 ──────────────────────────────────────────────────────────────
 
-export interface StaticContext {
+interface StaticContext {
   primaryText: string;
   personaCard: string;
 }
@@ -374,7 +374,7 @@ export async function afterCompaction(
   return { summaryToSave, memoryRecords: fresh.records };
 }
 
-export type CompactSceneOutcome =
+type CompactSceneOutcome =
   /** 少于 MIN_KEEP_TURNS + 1 轮：没有可折叠的轮，什么都没发生。 */
   | { status: "nothing" }
   /** 摘要请求失败：历史与 meta 原样，作者按了按钮，应当看到一句错误而不是沉默。 */

@@ -15,9 +15,9 @@
 
 import { useSyncExternalStore } from "react";
 
-export type SnippetTraceKind = "inserted" | "saved";
+type SnippetTraceKind = "inserted" | "saved";
 
-export interface SnippetTrace {
+interface SnippetTrace {
   kind: SnippetTraceKind;
   /** Snippet name, for 「已插入『冷处理改写』」. */
   name: string;

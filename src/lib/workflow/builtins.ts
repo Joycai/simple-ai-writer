@@ -12,7 +12,7 @@
 
 import { isPptxExportEnabled } from "../pptx/flag";
 
-export interface BuiltinWorkflow {
+interface BuiltinWorkflow {
   id: string;
   name: string;
   /** 一行。模型判断"该不该加载这张卡"的唯一依据，写给模型看。 */

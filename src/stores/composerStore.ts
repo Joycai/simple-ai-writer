@@ -63,11 +63,11 @@ interface ComposerState {
   resetAll: () => void;
 }
 
-export interface RoleplayComposer {
+interface RoleplayComposer {
   draft: string;
   refs: AttachedItem[];
 }
-export type ChatComposer = RoleplayComposer;
+type ChatComposer = RoleplayComposer;
 
 const EMPTY_ROLEPLAY: RoleplayComposer = { draft: "", refs: [] };
 

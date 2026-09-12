@@ -28,7 +28,7 @@ import type { MessageContent, StreamMessage } from "../ai/types";
  * check proves it is: eliding *writes a string back* into this same field, and
  * a type narrow enough to describe the input exactly would refuse the output.
  */
-export type ImageMessage = { role: "user"; content: MessageContent };
+type ImageMessage = { role: "user"; content: MessageContent };
 
 /** True for a message still carrying at least one picture. */
 export function hasImageParts(m: StreamMessage): m is ImageMessage {

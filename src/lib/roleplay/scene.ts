@@ -22,7 +22,7 @@
  */
 
 /** `<agentId>#<N>` 拆开之后的样子。`scene: null` = 没写场号（＝当前这一场）。 */
-export interface SceneAddress {
+interface SceneAddress {
   agentId: string;
   scene: number | null;
 }
@@ -56,7 +56,7 @@ export function currentSceneNo(archiveNos: readonly number[]): number {
   return archiveNos.reduce((max, n) => Math.max(max, n), 0) + 1;
 }
 
-export type ResolvedScene =
+type ResolvedScene =
   | { kind: "current"; scene: number }
   | { kind: "archived"; scene: number }
   /** 编号不存在（作者手删过，或模型编了一个）。调用方要如实说出来。 */

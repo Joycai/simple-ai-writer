@@ -29,7 +29,7 @@ export interface SaveInput {
   note: string;
 }
 
-export interface SaveAction {
+interface SaveAction {
   label: string;
   run: (img: SaveInput) => Promise<string>;
 }

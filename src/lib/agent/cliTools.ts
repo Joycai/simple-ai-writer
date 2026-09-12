@@ -23,7 +23,7 @@ import { cachedShellInfo, shellInfo, shellLabel, shellSyntax } from "../cli/shel
 
 let proposalCounter = 0;
 
-export interface RunCommandArgs {
+interface RunCommandArgs {
   command?: string;
   /** Project-relative working directory; absent = the project root. */
   cwd?: string;

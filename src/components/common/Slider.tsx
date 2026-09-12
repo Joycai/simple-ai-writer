@@ -25,7 +25,7 @@ export interface SliderTick {
 }
 
 /** Step size at a value, for the arrow keys and for rounding a pointer position. */
-export type SliderStep = number | ((value: number) => number);
+type SliderStep = number | ((value: number) => number);
 
 interface Props {
   value: number;

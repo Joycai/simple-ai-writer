@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
  */
 const EDGE = 40;
 
-export interface StickToBottom {
+interface StickToBottom {
   /** False once the reader has scrolled away from the newest content. */
   pinned: boolean;
   /** Follow the newest content — a no-op while the reader is reading back. */

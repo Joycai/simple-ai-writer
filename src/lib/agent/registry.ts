@@ -128,7 +128,7 @@ import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent, ToolProgress } from "./events";
 import type { AiConn } from "../ai/conn";
 
-export type ToolAccess = "read" | "write-auto" | "write-approval";
+type ToolAccess = "read" | "write-auto" | "write-approval";
 
 /** What every proposal carries, whatever it wants done. */
 interface ProposalBase {

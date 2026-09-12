@@ -99,7 +99,7 @@ export interface SubAgentRun {
   events: AgentEvent[];
 }
 
-export interface LogSummary {
+interface LogSummary {
   state: "running" | "done" | "error" | "idle";
   /** Rounds started (not the cap) — 0 for a non-agentic single-shot run. */
   rounds: number;

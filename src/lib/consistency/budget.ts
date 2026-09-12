@@ -42,7 +42,7 @@ const MIN_WINDOW_CHARS = 800;
 
 export type ReviewSegmentKey = "system" | "input" | "lore" | "memory" | "free";
 
-export interface ReviewPlanInput {
+interface ReviewPlanInput {
   /** The model's declared window; undefined/0 = unknown (assumed ceiling). */
   contextSize: number | undefined;
   /** Author's 窗口占用 (0–1). */
@@ -62,7 +62,7 @@ export interface ReviewPlanInput {
   pinnedChars: number | null;
 }
 
-export interface ReviewPlanSegment {
+interface ReviewPlanSegment {
   key: ReviewSegmentKey;
   chars: number;
 }

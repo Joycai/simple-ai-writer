@@ -49,7 +49,7 @@ import { entryDir, hashEntryDir, loreRoot, unzipEntry, zipEntry } from "./local"
 import { advanceSnapshot, syncStagingPath } from "./store";
 import { baseName, dirName, joinPath, toPosixPath } from "../paths";
 
-export interface StepFailure {
+interface StepFailure {
   path: string;
   /** True when the server moved since the plan was drawn — re-plan and retry. */
   conflict: boolean;
@@ -80,7 +80,7 @@ function flatten(path: string): string {
   return path.replace(/[/\\]/g, "-");
 }
 
-export interface RunOptions {
+interface RunOptions {
   projectPath: string;
   binding: SyncBinding;
   client: SyncClient;

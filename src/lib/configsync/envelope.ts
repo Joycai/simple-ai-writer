@@ -66,7 +66,7 @@ export const PBKDF2_ITERATIONS = 310_000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 
-export interface EnvelopeCounts {
+interface EnvelopeCounts {
   providers: number;
   models: number;
   prompts: number;
@@ -95,7 +95,7 @@ interface Envelope extends EnvelopeHeader {
   payload: string | unknown;
 }
 
-export type EnvelopeErrorCode =
+type EnvelopeErrorCode =
   /** Not an envelope at all — wrong file, or truncated download. */
   | "not-an-envelope"
   /** Written by a newer build than this one. */
@@ -207,7 +207,7 @@ function randomBytes(n: number): Uint8Array {
 
 // ─── seal ────────────────────────────────────────────────────────────────────
 
-export interface SealOptions {
+interface SealOptions {
   /** This machine's name (`lib/sync/local`'s `deviceLabel`). "" is fine. */
   device: string;
   appVersion: string;
@@ -215,7 +215,7 @@ export interface SealOptions {
   password: string | null;
 }
 
-export interface SealedEnvelope {
+interface SealedEnvelope {
   bytes: Uint8Array;
   header: EnvelopeHeader;
   /** The header as base64url, for the server's `X-Config-Meta`. */
@@ -347,7 +347,7 @@ export function readEnvelopeHeader(bytes: Uint8Array): EnvelopeHeader {
   return validateHeader(raw);
 }
 
-export interface OpenedEnvelope {
+interface OpenedEnvelope {
   header: EnvelopeHeader;
   /** The bundle as it was sealed. Still has to go through `parseConfigBundle`. */
   bundle: unknown;

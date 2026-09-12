@@ -53,7 +53,7 @@ import { readPref, writePref } from "./prefs";
  * its answer; `error` one that ended without it (a thrown model/network error,
  * not an author's abort — a turn the author stopped is never announced).
  */
-export type NotifyKind = "approval" | "done" | "error";
+type NotifyKind = "approval" | "done" | "error";
 
 const KEY_ENABLED = "app:notifyEnabled";
 const KIND_KEY: Record<NotifyKind, string> = {

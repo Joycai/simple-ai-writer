@@ -18,7 +18,7 @@ import type { ContentPart } from "../ai/types";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
 
-export interface GeneratedLore {
+interface GeneratedLore {
   name: string;
   category: CategoryId;
   aliases: string[];

@@ -20,7 +20,7 @@
  * 行号是重组的全部依据，所以它必须一路带到译文回来为止——中途丢掉就只能靠
  * 顺序重建，而顺序在任何一次重试后都可能变。
  */
-export interface SourceLine {
+interface SourceLine {
   index: number;
   text: string;
 }
@@ -52,7 +52,7 @@ export function isTranslatable(line: string): boolean {
   return TRANSLATABLE.test(line);
 }
 
-export interface SplitOptions {
+interface SplitOptions {
   linesPerChunk?: number;
 }
 

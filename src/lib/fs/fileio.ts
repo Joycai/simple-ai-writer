@@ -33,7 +33,7 @@ export async function readBinaryFile(path: string): Promise<Uint8Array> {
 }
 
 /** A file's real length, plus as much of its head as was asked for. */
-export interface FileHead {
+interface FileHead {
   /** The whole file's size in bytes — not `head.byteLength`. */
   size: number;
   head: Uint8Array;
@@ -100,7 +100,7 @@ export async function fileExists(path: string): Promise<boolean> {
 }
 
 /** One path's kind, size and last modification (ms since the epoch; null where not kept). */
-export interface FileStat {
+interface FileStat {
   isDir: boolean;
   size: number;
   modifiedMs: number | null;

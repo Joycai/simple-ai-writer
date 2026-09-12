@@ -26,12 +26,12 @@ import { dirName, joinPath } from "../paths";
 import { modifiedAt } from "../fs/modified";
 
 /** What undoing one write would do, or why it will not. */
-export type UndoPlan =
+type UndoPlan =
   | { ok: true; op: "restore" | "remove" | "restoreDir" }
   | { ok: false; reason: UndoRefusal; byTool?: string };
 
 /** The file as it stands now. `text` only for a file that exists and was read. */
-export interface FileState {
+interface FileState {
   exists: boolean;
   text?: string;
 }

@@ -15,7 +15,7 @@
  * would mangle every row in the list.
  */
 
-export interface ModelLabel {
+interface ModelLabel {
   /** The model identity. Rendered in full — the UI wraps rather than truncates. */
   title: string;
   /** Qualifiers lifted out of the name, rendered as chips beside the title. */

@@ -40,7 +40,7 @@ const FONT_FACE_RULE = 5;
 const KEYFRAMES_RULE = 7;
 const SUPPORTS_RULE = 12;
 
-export interface StyleLike {
+interface StyleLike {
   length: number;
   item(index: number): string;
   getPropertyValue(name: string): string;
@@ -134,7 +134,7 @@ export function themeKindOf(rules: ArrayLike<RuleLike>): ThemeKind {
 
 // ─── ui themes ───────────────────────────────────────────────────────────────
 
-export interface UiThemeValidation {
+interface UiThemeValidation {
   kind: "ui";
   /** The `--theme-*` pairs, raw — `readThemeMeta` interprets them. */
   meta: Record<string, string>;
@@ -225,7 +225,7 @@ function cssString(s: string): string {
 
 // ─── markdown themes ─────────────────────────────────────────────────────────
 
-export interface MarkdownThemeValidation {
+interface MarkdownThemeValidation {
   kind: "markdown";
   meta: Record<string, string>;
   /** The kept rules, regenerated; relative `url()`s left relative (see assets.ts). */

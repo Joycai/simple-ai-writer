@@ -80,7 +80,7 @@ export interface FacetSlot {
 }
 
 /** The frontmatter a new facet of a slot starts with. See `FacetSlot.defaults`. */
-export interface FacetSlotDefaults {
+interface FacetSlotDefaults {
   mode?: "auto" | "always" | "manual";
   priority?: number;
   group?: string;
@@ -167,13 +167,13 @@ export interface DocModel {
  *   - `filesHeader` the sidebar file-panel header
  *   - `emptyEyebrow` the decorative eyebrow on an empty document
  */
-export type TermId = "doc" | "group" | "kb" | "entry" | "filesHeader" | "emptyEyebrow";
+type TermId = "doc" | "group" | "kb" | "entry" | "filesHeader" | "emptyEyebrow";
 
 /**
  * One term, per language. English needs a plural for count contexts
  * ("3 chapters"); `enPlural` defaults to `en + "s"`. Chinese has no plural.
  */
-export interface TermLabel {
+interface TermLabel {
   zh: string;
   en: string;
   enPlural?: string;
@@ -211,7 +211,7 @@ export type TaskTools = "none" | "read" | "write" | "full";
  *   - `replace`  — overwrites the selected passage (润色 / 改写)
  *   - `detached` — nothing implied; the author inserts it if they want it
  */
-export type TaskTarget = "append" | "replace" | "detached";
+type TaskTarget = "append" | "replace" | "detached";
 
 /**
  * One thing the author can ask for.
@@ -1884,7 +1884,7 @@ function parseTask(raw: unknown, issues: string[]): TaskDef | null {
   return task;
 }
 
-export interface ParsedProfile {
+interface ParsedProfile {
   profile: WorkspaceProfile;
   /** Human-readable problems found while parsing; empty when the file was clean. */
   issues: string[];

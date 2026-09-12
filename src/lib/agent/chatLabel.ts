@@ -11,7 +11,7 @@
 
 import { sessionPreview, type PersistedTurn } from "./chatSession";
 
-export type ChatLabelKind = "title" | "preview" | "none";
+type ChatLabelKind = "title" | "preview" | "none";
 
 export interface ChatLabel {
   text: string;

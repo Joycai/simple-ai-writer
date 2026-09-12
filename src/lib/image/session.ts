@@ -75,7 +75,7 @@ export async function sweepScratch(projectPath: string, keepSessionId: string): 
 // ─── Generation record ───────────────────────────────────────────────────────
 
 /** What produced one image that the author decided to keep. */
-export interface ImageRecord {
+interface ImageRecord {
   /** Path of the saved image, relative to the project root. */
   path: string;
   /** The prompt actually sent for this image. */

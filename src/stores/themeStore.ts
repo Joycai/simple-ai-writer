@@ -24,7 +24,7 @@ import { fileExists } from "../lib/fs/fileio";
 import { useAppStore } from "./appStore";
 import { useProjectStore } from "./projectStore";
 
-export interface ReloadDiff {
+interface ReloadDiff {
   /** Usable themes after the reload, by kind. */
   uiCount: number;
   mdCount: number;

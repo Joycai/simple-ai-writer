@@ -89,7 +89,7 @@ export function knownJsonSchemaModel(modelId: string): boolean {
 }
 
 /** The transport facts the resolution reads — a subset of `ConnOptions`. */
-export interface JsonModeTarget {
+interface JsonModeTarget {
   standard: ApiStandard;
   modelId?: string;
   /** The endpoint, for the session memo below; absent means "unknown endpoint". */
@@ -125,7 +125,7 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
 // ─── Shaping ──────────────────────────────────────────────────────────────────
 
 /** How to ask this endpoint for JSON. Both halves may be absent. */
-export interface JsonModeShaping {
+interface JsonModeShaping {
   /** The mode the request ended up in — for logs and tests, not for branching. */
   mode: StructuredOutputMode;
   /** Top-level request fields, or undefined when the protocol has no knob. */

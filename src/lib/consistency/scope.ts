@@ -87,13 +87,13 @@ export function samePin(a: LorePin, b: LorePin): boolean {
 }
 
 /** A pin that can no longer be honoured — its entry or facet is gone. */
-export interface StalePin {
+interface StalePin {
   pin: LorePin;
   /** Best-effort display name (the entity's, when only the facet is gone). */
   label: string;
 }
 
-export interface ResolvedReviewScope {
+interface ResolvedReviewScope {
   /** The scope with every stale item removed. */
   effective: ReviewScope;
   staleCollections: string[];
