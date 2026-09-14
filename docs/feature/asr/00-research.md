@@ -81,7 +81,7 @@
 | 大小 | 13MB wav **400** `Multimodal file size is too large`；平台文档写 ≤ 5 分钟 / ≤ 10MB |
 | 延迟 | 多数 1.3–15 秒 |
 
-同步**做不到**的：时间戳、说话人分离、分句（整段一段）；超过 5 分钟或 10MB 的文件；上传前知道 mp3 / m4a / mp4 的时长（只有 WAV 的文件头算得出——所以一段 330 秒、只有 1.3MB 的 mp3 过得了批准前的检查，由平台以「The audio is too long」拒绝，`sync.ts` 把它改口成「超过 5 分钟，请绑定录音文件识别模型」）。
+同步**做不到**的：时间戳、说话人分离、分句（整段一段）；超过 5 分钟或 10MB 的文件；（2026-09-14 已补：`duration.ts` 在批准前从容器读时长——MP3 的 Xing / Info / VBRI 头或 CBR 字节推算、FLAC 的 STREAMINFO、Ogg 末页 granule、MP4 家族的 `moov/mvhd`；头里不够时经 Rust `fs_read_range` 读几段有界区间（每段 ≤1MiB），不整个读文件。读不出的（Ogg FLAC、ADTS AAC、mkv 等）仍由平台以「The audio is too long」拒绝，`sync.ts` 改口）。
 
 落地：`lib/asr/sync.ts`（请求体 / 错误改口 / 调用）、`formats.ts`（`looksLikeSyncAsrModel`、`asrIdMismatch`、六个扩展名、`SYNC_MAX_BYTES` / `SYNC_MAX_SECONDS`、`syncRefusal`）、`result.ts`（`parseSyncTranscript`、`Transcript.timed: false`、计费秒数缺席时按 audio_tokens / 25 向上取整）、`run.ts` 按接口分支、缓存键在同步条目上带 `-sync-`（`ASR_CACHE_VERSION` 仍是 2：+1 会让清扫删掉已付费的 filetrans 结果，filetrans 目录名因此不变）。不变量见 `01-execution-plan.md` §1 第 8 条。
 

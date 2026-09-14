@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../../fs/fileio", () => ({
   fileExists: async () => true,
+  readFileRange: async () => new Uint8Array(),
   readFileHead: async () => state.head,
 }));
 vi.mock("../conn", () => ({

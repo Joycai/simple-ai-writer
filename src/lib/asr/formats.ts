@@ -90,7 +90,9 @@ export const SYNC_MAX_BYTES = 10 * 1024 * 1024;
 /**
  * The synchronous endpoint's duration ceiling. Documented as ≤5 min; measured
  * 2026-09-14 a 286s mp3 transcribes and a 330s one answers 400 "The audio is too
- * long". Only a WAV's duration is known before upload (`wavDurationSeconds`).
+ * long". The duration is read from the container before approval
+ * (`duration.ts`: WAV / MP3 / FLAC / Ogg / MP4 family); an unknown one is let
+ * through and the endpoint's 400 is reworded (`sync.ts`).
  */
 export const SYNC_MAX_SECONDS = 300;
 
@@ -101,7 +103,7 @@ export type SyncRefusal =
 
 /**
  * The pre-approval check for a synchronous row: what is knowable without reading
- * the file (extension, real size, a WAV header's duration). A file the endpoint
+ * the file (extension, real size, the container's duration when it can be read). A file the endpoint
  * would refuse must be refused here, where nothing has been sent yet.
  */
 export function syncRefusal(ext: string, bytes: number, seconds: number | null): SyncRefusal | null {
