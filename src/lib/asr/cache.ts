@@ -15,6 +15,8 @@
  * 文字稿：它会被写进项目，抬头还盖着另一个模型的名字。
  */
 
+import type { AsrFormat } from "../ai/configDb";
+
 const ASR_CACHE_DIR = ".ai-writer/tmp/asr";
 
 /**
@@ -22,6 +24,11 @@ const ASR_CACHE_DIR = ".ai-writer/tmp/asr";
  * 的条目再也不会被命中，留着只是等 TTL 到期的垃圾。
  *
  * 2：模型 id 进了目录名。
+ *
+ * 加同步接口时**刻意没有 +1**：+1 会让下一次清扫删掉作者已经付过钱的全部
+ * filetrans 结果，而它们一个字节都没变。接口只在同步条目上进目录名（`-sync-`），
+ * filetrans 的目录名与 2 版逐字相同；sidecar 缺 `format` 的旧条目按 filetrans 读
+ * （`parseCacheMeta`），所以旧缓存照旧命中。
  */
 export const ASR_CACHE_VERSION = 2;
 
@@ -45,6 +52,8 @@ export interface AsrCacheMeta {
   source: string;
   bytes: number;
   model: string;
+  /** 走的哪个接口——决定 `result.json` 用哪个解析器读。 */
+  format: AsrFormat;
   options: AsrRequestOptions;
   /** 平台报的计费秒数（`usage.duration` / `usage.seconds`），入账用它。 */
   billedSeconds: number | null;
@@ -76,9 +85,22 @@ export function modelTag(modelId: string): string {
   return tag || "model";
 }
 
-/** 目录名：内容哈希前 16 位 + 模型标签 + 参数标签。 */
-export function cacheKeyOf(sha256: string, modelId: string, options: AsrRequestOptions): string {
-  return `${sha256.slice(0, 16)}-${modelTag(modelId)}-${optionsTag(options)}`;
+/**
+ * 目录名：内容哈希前 16 位 + 模型标签 +（同步时）`sync` + 参数标签。
+ *
+ * 同步进键：一个 id 在两个接口上本来就不会都成立（`asrIdMismatch`），但结果文件
+ * 的形状取决于接口，而 `modelTag` 是清洗过的——宁可多一段，也不让一份同步响应
+ * 被当成 filetrans 的结果去解析。filetrans 不加段，目录名与 2 版一致，已付费的
+ * 旧结果继续命中（见 `ASR_CACHE_VERSION` 的注释）。
+ */
+export function cacheKeyOf(
+  sha256: string,
+  modelId: string,
+  options: AsrRequestOptions,
+  format: AsrFormat = "dashscope-filetrans",
+): string {
+  const endpoint = format === "dashscope-sync" ? "-sync" : "";
+  return `${sha256.slice(0, 16)}-${modelTag(modelId)}${endpoint}-${optionsTag(options)}`;
 }
 
 export function cacheRootFor(projectPath: string): string {
@@ -115,7 +137,11 @@ export function parseCacheMeta(text: string): AsrCacheMeta | null {
     ...(Array.isArray(o.languageHints) ? { languageHints: o.languageHints.filter((h): h is string => typeof h === "string") } : {}),
   };
   return {
-    source, bytes, model, options,
+    source, bytes, model,
+    // Only a v3+ sidecar carries it, and every v3 sidecar does; the fallback is
+    // for older ones, which `isCurrentMeta` rejects anyway.
+    format: m.format === "dashscope-sync" ? "dashscope-sync" : "dashscope-filetrans",
+    options,
     billedSeconds: num(m.billedSeconds),
     transcribedAt, lastUsedAt, version,
   };
@@ -132,8 +158,12 @@ export function isCurrentMeta(meta: AsrCacheMeta | null): meta is AsrCacheMeta {
  * 不同的 id 洗成同一个字符串那一次。清扫（`planSweep`）不看这一条：它只按版本和
  * TTL 丢，别的模型的缓存是别人的资产，不是垃圾。
  */
-export function isUsableMeta(meta: AsrCacheMeta | null, modelId: string): meta is AsrCacheMeta {
-  return isCurrentMeta(meta) && meta.model === modelId;
+export function isUsableMeta(
+  meta: AsrCacheMeta | null,
+  modelId: string,
+  format: AsrFormat = "dashscope-filetrans",
+): meta is AsrCacheMeta {
+  return isCurrentMeta(meta) && meta.model === modelId && meta.format === format;
 }
 
 export interface SweepEntry {

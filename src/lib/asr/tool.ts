@@ -17,7 +17,7 @@ import type { ToolContext, TranscribeProposal } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
 import { estimateCost, wavDurationSeconds } from "./cost";
 import { isAsrDiarizationDefault } from "./flag";
-import { transcribeExtOf, ASR_EXT_LIST } from "./formats";
+import { transcribeExtOf, ASR_EXT_LIST, syncRefusal, syncRefusalText } from "./formats";
 import { isAsrUnavailable, resolveAsrConn } from "./conn";
 import { MAX_TRANSCRIBE_BYTES, transcriptTargetFor } from "./run";
 
@@ -94,6 +94,23 @@ export async function transcribeAudioTool(
         `${MAX_TRANSCRIBE_BYTES / 1024 / 1024}MB transcription limit. Ask the author to split or re-encode it.`,
     };
   }
+  // A synchronous row: ≤10MB, ≤5 min (known only for WAV here), six formats.
+  // Refused before the card, where nothing has been sent — the endpoint's own
+  // 400 would come after the author approved. The fix is on the settings side,
+  // so the text names the setting, not a tool.
+  const sync = conn.format === "dashscope-sync";
+  if (sync) {
+    const refusal = syncRefusal(ext, bytes, seconds);
+    if (refusal) {
+      return {
+        toolCallId,
+        content:
+          `Error: "${source}" ${syncRefusalText(refusal)}. The bound transcription model (${conn.model.name}) uses that ` +
+          `endpoint. Do not retry; ask the author to bind a file-transcription (*-filetrans) model to the 音频转写 subagent ` +
+          `(Settings → 子代理), or to trim or re-encode the file.`,
+      };
+    }
+  }
   const price = conn.model.pricePerSecond;
   const hints = (args.language_hints ?? []).filter((h): h is string => typeof h === "string" && !!h).slice(0, 4);
 
@@ -108,9 +125,12 @@ export async function transcribeAudioTool(
     seconds,
     pricePerSecond: price,
     estimate: seconds === null ? null : estimateCost(seconds, price),
-    diarization: args.diarization ?? isAsrDiarizationDefault(),
-    ...(args.speaker_count && args.speaker_count >= 2 ? { speakerCount: Math.floor(args.speaker_count) } : {}),
+    // The synchronous endpoint has no speakers: the switch would be a promise
+    // the result cannot keep, so it starts (and stays) off.
+    diarization: sync ? false : args.diarization ?? isAsrDiarizationDefault(),
+    ...(!sync && args.speaker_count && args.speaker_count >= 2 ? { speakerCount: Math.floor(args.speaker_count) } : {}),
     ...(hints.length ? { languageHints: hints } : {}),
+    ...(sync ? { sync: true } : {}),
     modelName: conn.model.name,
     reason: args.reason,
   };
@@ -122,5 +142,13 @@ export async function transcribeAudioTool(
       content: `The user REJECTED this transcription${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry it; the audio cannot be read any other way, so work without it or ask the author.`,
     };
   }
-  return { toolCallId, content: decision.backupPath ?? `Transcribed to ${decision.resultPath ?? proposal.path}. Read it with read_file.` };
+  const done = decision.backupPath ?? `Transcribed to ${decision.resultPath ?? proposal.path}. Read it with read_file.`;
+  if (!sync) return { toolCallId, content: done };
+  const askedSpeakers = args.diarization === true || (args.speaker_count ?? 0) >= 2;
+  return {
+    toolCallId,
+    content:
+      `${done}\nThe bound model returns plain text: the transcript has no timestamps and no speaker labels.` +
+      (askedSpeakers ? " The diarization / speaker_count arguments were ignored for that reason." : ""),
+  };
 }

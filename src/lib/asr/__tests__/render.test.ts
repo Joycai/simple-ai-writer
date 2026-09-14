@@ -59,6 +59,30 @@ describe("transcriptToMarkdown", () => {
     expect(plain).not.toMatch(/说话人/);
   });
 
+  it("不带时间的稿（同步接口）：偏好开着也不写 [mm:ss] 与说话人，frontmatter 说明 timestamps: none", () => {
+    const untimed: Transcript = {
+      durationMs: 6000,
+      speakers: false,
+      timed: false,
+      sentences: [{ beginMs: 0, endMs: 6000, text: "今天杭州天气晴朗。", language: "zh", emotion: "neutral" }],
+    };
+    const md = transcriptToMarkdown(untimed, { source: "a.wav", model: "qwen3-asr-flash", timestamps: true, speakers: true, transcribedAt: "t" });
+    expect(md).toBe([
+      "---",
+      'source: "a.wav"',
+      "transcribed: t",
+      'model: "qwen3-asr-flash"',
+      "duration: 00:06",
+      "timestamps: none",
+      "---",
+      "",
+      "今天杭州天气晴朗。",
+      "",
+    ].join("\n"));
+    // 带时间的稿 frontmatter 不变——不多这一行。
+    expect(transcriptToMarkdown(base, { source: "a", model: "m", timestamps: true, speakers: true, transcribedAt: "t" })).not.toMatch(/timestamps:/);
+  });
+
   it("说话人的措辞可替换（i18n）", () => {
     const md = transcriptToMarkdown(base, { source: "a", model: "m", timestamps: false, speakers: true, transcribedAt: "t", speakerWord: "Speaker" });
     expect(md).toMatch(/^Speaker 1：第一章/m);

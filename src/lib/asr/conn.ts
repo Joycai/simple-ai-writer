@@ -3,17 +3,21 @@
  *
  * 照 `lib/translate/tool.ts` 的 `resolveTranslateConn`：动态 import aiStore，因为
  * `lib/` 不反向依赖 `stores/`，而这里确实要读作者在设置里绑了什么。
+ *
+ * 走哪条路由**模型行**决定（`asrFormat`），不在两个模型之间自动挑：返回值带上
+ * `format`，调用方据此分支。
  */
 
-import type { Model, Provider } from "../ai/configDb";
+import type { AsrFormat, Model, Provider } from "../ai/configDb";
 import { loadApiKey } from "../keyStore";
 import { subAgentModel } from "../agent/subagent";
 import type { AsrConn } from "./client";
-import { looksLikeFiletransModel } from "./formats";
+import { asrIdMismatch, looksLikeFiletransModel } from "./formats";
 
 export interface ResolvedAsr extends AsrConn {
   provider: Provider;
   model: Model;
+  format: AsrFormat;
 }
 
 /** 为什么用不了，给作者看的（i18n 在 UI 层做，这里是给模型 / 日志的英文）。 */
@@ -21,7 +25,8 @@ export type AsrUnavailable =
   | { reason: "unbound"; error: string }
   | { reason: "provider-gone"; error: string }
   | { reason: "no-key"; error: string }
-  | { reason: "not-filetrans"; error: string };
+  | { reason: "not-filetrans"; error: string }
+  | { reason: "not-sync"; error: string };
 
 export { looksLikeFiletransModel };
 
@@ -38,13 +43,27 @@ export async function resolveAsrConn(): Promise<ResolvedAsr | AsrUnavailable> {
         "and bind a model whose 转写模型格式 is set (Settings → 供应商与模型).",
     };
   }
-  if (!looksLikeFiletransModel(model.modelId)) {
+  // `normalizeAsrIdentity` fills the format on every row read; the fallback is
+  // for a row constructed in memory without one.
+  const format: AsrFormat = model.asrFormat ?? "dashscope-filetrans";
+  const mismatch = asrIdMismatch(format, model.modelId);
+  if (mismatch === "not-filetrans") {
     return {
       reason: "not-filetrans",
       error:
         `the bound transcription model's id "${model.modelId}" is not a *-filetrans model, and the file-transcription ` +
         `endpoint rejects every other id. Tell the author to set the model row's id to e.g. qwen-audio-3.0-asr-flash-filetrans ` +
         `(Settings → 供应商与模型).`,
+    };
+  }
+  if (mismatch === "not-sync") {
+    return {
+      reason: "not-sync",
+      error:
+        `the bound transcription model's id "${model.modelId}" is not a synchronous ASR model, but its row uses the ` +
+        `synchronous endpoint. Only the qwen3-asr-flash family answers there (qwen-audio-3.0-asr-flash and fun-asr-flash ` +
+        `return "format is empty"; *-filetrans and *-realtime ids are other endpoints'). Tell the author to set the id to ` +
+        `qwen3-asr-flash, or switch the row's 转写接口 to file transcription (Settings → 供应商与模型).`,
     };
   }
   const provider = providers.find((p) => p.id === model.providerId);
@@ -57,7 +76,7 @@ export async function resolveAsrConn(): Promise<ResolvedAsr | AsrUnavailable> {
   if (!apiKey) {
     return { reason: "no-key", error: `the provider serving "${model.name}" has no API key. Tell the author to set one.` };
   }
-  return { provider, model, apiKey, baseUrl: provider.baseUrl, modelId: model.modelId };
+  return { provider, model, format, apiKey, baseUrl: provider.baseUrl, modelId: model.modelId };
 }
 
 export function isAsrUnavailable(r: ResolvedAsr | AsrUnavailable): r is AsrUnavailable {

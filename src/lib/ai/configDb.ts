@@ -50,7 +50,14 @@ export type TranslateFormat = "sakura";
  * A second entry (a local Whisper server, say) would arrive as a second
  * client in `lib/asr/`, not as a branch elsewhere.
  */
-export type AsrFormat = "dashscope-filetrans";
+/**
+ * Which transcription endpoint an `asr` row speaks — the model row picks the
+ * path, there is no routing between two rows. `dashscope-filetrans` is the
+ * async upload → submit → poll one (any length, timestamps, speakers);
+ * `dashscope-sync` is compatible-mode `/chat/completions` with the audio inline
+ * (≤5 min / ≤10MB, one plain string back). docs/feature/asr/00-research.md §1.3.
+ */
+export type AsrFormat = "dashscope-filetrans" | "dashscope-sync";
 
 /**
  * What an image model's endpoint can actually do. Declared rather than probed:
@@ -421,7 +428,8 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * 类型是身份、`asrFormat` 是接口，两者必须同时成立：
  * - 带 `asrFormat` 的行一律是 `asr` 类型 —— 这是「转写模型 = 类型」之前的数据
  *   （当时身份在 `asrFormat` 上，类型存的是 `text`），不升级它就会回到对话列表里；
- * - `asr` 类型缺格式时补上唯一的格式 —— 否则转写连接无从选接口。
+ * - `asr` 类型缺格式时补上默认格式（filetrans，`ASR_FORMATS[0]`）—— 否则转写连接无从选接口；
+ *   同步格式是后来加的，缺格式的行只可能来自那之前。
  * 反方向（`asrFormat` 留在非 `asr` 行上）由保存路径清掉，这里不必管。
  */
 export function normalizeAsrIdentity(m: Model): Model {
@@ -1000,8 +1008,13 @@ export function parseTranslateFormat(raw: unknown): TranslateFormat | undefined 
   return TRANSLATE_FORMATS.includes(raw as TranslateFormat) ? (raw as TranslateFormat) : undefined;
 }
 
-/** Every declared transcription format, for the settings drawer to render. */
-export const ASR_FORMATS: readonly AsrFormat[] = ["dashscope-filetrans"];
+/**
+ * Every declared transcription format, for the settings drawer to render.
+ * The first one is the default `normalizeAsrIdentity` fills into a formatless
+ * `asr` row — it stays filetrans, because every such row predates the sync
+ * format and was bound to a *-filetrans id.
+ */
+export const ASR_FORMATS: readonly AsrFormat[] = ["dashscope-filetrans", "dashscope-sync"];
 
 /**
  * Same direction as `parseTranslateFormat`: an unrecognised value must read as

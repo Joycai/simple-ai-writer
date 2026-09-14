@@ -705,19 +705,31 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 - 默认 fps 约 **2**；token 与 fps 成正比，每帧像素折算（约每 32×32 一个 token）在 720p 附近封顶（每两帧约 594）。
 - 复现以上每个点的规律：帧 = round(时长×fps)，至少 4、取偶；每两帧 min(round(宽/32)×round(高/32), 594)；+2。**这是反推，不是文档**，本项目只把它当估算（≈）。
 
-**音频走 ① 面**（本项目的转写走原生面 filetrans 异步，见 [`../feature/asr/00-research.md`](../feature/asr/00-research.md)；这里只记事实）
+**音频走 ① 面**（本项目的转写有两条：原生面 filetrans 异步，和这条同步——模型行 `asrFormat: "dashscope-sync"`，
+`lib/asr/sync.ts`；设计与取舍见 [`../feature/asr/00-research.md`](../feature/asr/00-research.md) §1.3 补记。2026-09-14 实测）
 
 | 模型 | 请求 | 结果 |
 | --- | --- | --- |
-| qwen3-asr-flash-2026-02-10 | 只一个 `{type:"input_audio", input_audio:{data:"data:audio/wav;base64,…", format:"wav"}}`（mp3 同） | 逐字转写正确 |
-| 同上 | 再加一个 text part | **400** `The dedicated task \`asr\` corresponding to the current service does not support this input.` |
+| qwen3-asr-flash（别名） | 只一个 `{type:"input_audio", input_audio:{data:"data:audio/wav;base64,…", format:"wav"}}` | 逐字转写正确；`message.annotations: [{type:"audio_info", language:"zh", emotion:"neutral"}]`；`usage: {seconds: 6, prompt_tokens_details:{audio_tokens:169}}` |
+| qwen3-asr-flash-2026-02-10（日期快照） | 同上（mp3 同） | 逐字转写正确，但**没有 `annotations`、没有 `usage.seconds`**，只有 `audio_tokens`（25 token / 秒）——计费秒数只能反推 |
+| 同上 | user 消息再加一个 text part | **400** `The dedicated task \`asr\` corresponding to the current service does not support this input.` |
+| qwen3-asr-flash | 前置 `system` 消息（text part，「专有名词：西湖、杭州」） | 接受，`text_tokens: 7` |
+| qwen3-asr-flash | 顶层 `asr_options: {language:"zh", enable_itn:true}` | 接受，`text_tokens: 3` |
+| qwen3-asr-flash | `stream: true` + `stream_options.include_usage` | 可用；每个 delta 都带 `annotations`，`usage.seconds` 在最后一块 |
+| qwen3-asr-flash | m4a / ogg / flac | 都正确；mp4（视频容器）读音轨，3 秒 |
+| qwen3-asr-flash | 286 秒 mp3（1.1MB） | 200，`seconds: 286`，`audio_tokens: 7169` |
+| qwen3-asr-flash | 330 秒 mp3（1.3MB） | **400** `InternalError.Algo.InvalidParameter: The audio is too long` |
+| qwen3-asr-flash | 13MB wav | **400** `InternalError.Algo.InvalidParameter: Multimodal file size is too large`（文档口径 ≤ 5 分钟 / ≤ 10MB） |
 | qwen-audio-3.0-asr-flash、fun-asr-flash-2026-06-15 | 同一形状 | **400** `format is empty`（`UNSUPPORTED_FORMAT`）——不在这条线上 |
 | qwen3.5-omni-flash | text + `input_audio` | 听懂并概括了内容 |
+
+延迟：6 秒音频多数 1.3–15 秒。响应 `content` 是整段纯文字——没有时间戳、没有说话人，这是同步路径做不到的部分。
 
 **本项目据此做了什么**：模型类型加「视觉理解」与「音频 ASR」两类（v1.57.0）；图片发出前按每边 10px
 下限处理；模型可声明 `vl_high_resolution_images`（v1.57.0 加入；上表说明默认档多数时候已够读小字，开它是按需加钱）。
 视频输入（2026-09-14）：模型可声明「视频输入」与抽帧频率，对话里 `@` 视频作为 `video_url` 发出，只走 ① 面（[`../feature/video-input.md`](../feature/video-input.md)）。
-**没做**：① 面同步 ASR（转写仍只走 filetrans 一条路径）。
+① 面同步 ASR（2026-09-14）：`asrFormat` 加 `dashscope-sync`，user 消息只放音频，≤10MB / ≤5 分钟 / 六个格式在批准前拦，
+上面三句 400 原话改口成作者能照做的话（`sync.ts` 的 `syncErrorOf`），日期快照缺 `seconds` 时按 audio_tokens / 25 向上取整。
 
 #### 文档与实测不符之处（截至 2026-09-03）
 

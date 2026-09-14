@@ -35,6 +35,7 @@ describe("asr model invariants", () => {
 
   it("parseAsrFormat：未知值 → undefined（当普通模型，不藏）", () => {
     expect(parseAsrFormat("dashscope-filetrans")).toBe("dashscope-filetrans");
+    expect(parseAsrFormat("dashscope-sync")).toBe("dashscope-sync");
     expect(parseAsrFormat("whisper")).toBeUndefined();
     expect(parseAsrFormat(null)).toBeUndefined();
   });
