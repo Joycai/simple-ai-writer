@@ -1,3 +1,4 @@
+import { canSeeImages } from "../../lib/ai/configDb";
 import { useState, useRef, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
@@ -126,7 +127,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
       const loreScenePrompt = prompts.find((p) => p.scene === "lore");
       // Only multimodal models can consume images; sending them to a text model
       // either errors or is silently dropped, so omit them here.
-      const supportsImages = model.type === "multimodal";
+      const supportsImages = canSeeImages(model);
 
       // Referenced lore entities + text files both become reference material.
       const loreRefs = await Promise.all(
@@ -209,7 +210,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
     }
   };
 
-  const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
+  const multimodalModels = models.filter((m) => m.type === "text" || canSeeImages(m));
 
   // Unsaved once the user has typed a description, attached refs, or generated.
   const dirty = phase !== "input" || description.trim().length > 0 || attached.length > 0;

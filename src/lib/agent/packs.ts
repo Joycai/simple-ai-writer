@@ -30,7 +30,7 @@
 
 import i18n from "../../i18n";
 import type { StreamMessage } from "../ai/types";
-import { costFor, type Model } from "../ai/configDb";
+import { canSeeImages, costFor, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
@@ -299,7 +299,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   // condition is the model's own capability: on a text-only conn the tool
   // could only ever answer "cannot accept images" — absent, not refused, the
   // same rule as every Beta above.
-  if (ctx.selfConn.model.type !== "multimodal") {
+  if (!canSeeImages(ctx.selfConn.model)) {
     tools = tools.filter((t) => t !== "read_lore_image" && t !== "read_image");
   }
   const preset: TaskPreset = { ...PACK_PRESETS[pack], tools };
@@ -345,7 +345,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
         // 围栏跟着子运行走——把活派给 pack 不能成为绕过取材范围的方法（同 delegate）。
         loreScope: ctx.loreScope,
         organize: ctx.organize,
-        multimodal: conn.model.type === "multimodal",
+        multimodal: canSeeImages(conn.model),
         onLoreChanged: ctx.onLoreChanged,
         onMemoryChanged: ctx.onMemoryChanged,
         // D3: the parent's channels, not copies. The cards render on the main

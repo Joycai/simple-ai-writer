@@ -204,6 +204,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | 键 | 现在 | 改成 |
 |---|---|---|
 | `aiConfig.modelTypes.image` | Image Generation / 图像生成 | 图片生成 |
+| `aiConfig.modelTypes.vision` / `asr`（2026-09-14 新增）| — | 视觉理解 / 音频 ASR（能力名；「视觉理解」与子代理的「图像理解」刻意不同名：前者是模型的类型，后者是一个档位） |
 | `aiConfig.models.capsEditLabel` | 支持图像编辑 | 支持修改图片 |
 | `systemSettings.usage.kinds.image-gen` / `image-edit` | 生成插图 / 修改插图 | 生成图片 / 修改图片 |
 | `systemSettings.subagents.imagegenSub` | 为文档和知识库条目生成插图 | …生成配图 |

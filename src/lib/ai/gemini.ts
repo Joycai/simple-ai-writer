@@ -77,6 +77,14 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
     const parts: GeminiPart[] = Array.isArray(regularMsg.content)
       ? regularMsg.content.map((p) => {
           if (p.type === "text") return { text: p.text };
+          // A part of any other type (from persisted history, never from typed
+          // code) used to be read as an image and die on `p.image_url.url` —
+          // loud, but naming nothing. Say what the part was.
+          if (p.type !== "file" && p.type !== "image_url") {
+            throw new Error(
+              `Gemini adapter: unsupported content part type "${String((p as { type?: unknown }).type)}"`,
+            );
+          }
           // Images and files both travel as data URLs, and Gemini takes both as
           // inlineData — a PDF is just inlineData with an application/pdf mime.
           // `image_url.detail` has no spelling on this wire and is dropped;

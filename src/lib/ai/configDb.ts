@@ -20,7 +20,14 @@ import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 
-export type ModelType = "text" | "multimodal" | "image" | "video";
+/**
+ * What a model row *is*, for the app's forms and candidate lists — never sent.
+ *
+ * `multimodal` and `vision` both read pictures (`canSeeImages`); `vision` is the
+ * specialist that is not offered as a writer. `image` / `video` *generate*.
+ * `asr` transcribes and never converses (`isAsrOnly`).
+ */
+export type ModelType = "text" | "multimodal" | "vision" | "image" | "video" | "asr";
 
 /**
  * The fixed prompt format a dedicated translation model was trained on.
@@ -282,6 +289,18 @@ export interface Model {
    */
   pdfInput?: boolean;
   /**
+   * Ask DashScope to read pictures at high resolution —
+   * `vl_high_resolution_images: true` on the Chat Completions wire.
+   *
+   * Measured on qwen3-vl-plus (docs/api/landscape.md §6): an image costs about
+   * one token per 32×32 pixels, capped near 2,500 tokens by default; with this
+   * on the cap rises to 16,384 (a 4096² picture: 2,502 → 16,386 tokens). Worth
+   * it for dense small text, expensive everywhere else, so it is declared per
+   * model and off by default. Only a model that can see and only the `openai`
+   * family carry it; `detail` does nothing on this endpoint (same measurement).
+   */
+  vlHighResolution?: boolean;
+  /**
    * How long and expansive the answer should be — the Responses family's
    * `text.verbosity` (GPT-5.x; measured on gpt-5.6-terra, `low` visibly
    * shortens the same answer — docs/api/responses.md §10).
@@ -309,14 +328,14 @@ export interface Model {
    */
   translateFormat?: TranslateFormat;
   /**
-   * Which transcription protocol this model speaks, if it is a dedicated
-   * speech-to-text model rather than a general one.
+   * Which transcription protocol an `asr`-type model speaks.
    *
-   * The same narrowing as `translateFormat`: a model carrying this cannot
-   * hold a conversation — the endpoint takes an audio URL, not messages — so
-   * it must never appear as a candidate for the main model or for any
-   * subagent other than `asr`. See docs/feature/asr/01-execution-plan.md §1
-   * 不变量 1. Absent means "an ordinary model".
+   * The *identity* — "this row cannot hold a conversation, keep it out of
+   * every chat picker" — is `type: "asr"` (`isAsrOnly`); this field only picks
+   * the endpoint. The two always travel together: `normalizeAsrIdentity`
+   * upgrades a row saved before the type existed (format set, type `text`)
+   * and fills the format on an `asr` row missing one. See
+   * docs/feature/asr/01-execution-plan.md §1 不变量 1.
    */
   asrFormat?: AsrFormat;
   /**
@@ -350,10 +369,44 @@ export function isTranslateOnly(m: Model): boolean {
 
 /**
  * 这个模型是不是一个只会转写的模型（docs/feature/asr/01-execution-plan.md §1
- * 不变量 1）。同 `isTranslateOnly`：一个有名字的判据，不是散在各处的 `!m.asrFormat`。
+ * 不变量 1）。同 `isTranslateOnly`：一个有名字的判据，不是散在各处的类型比较。
+ *
+ * 判据是**类型**，不是 `asrFormat`：00-research.md §4.1 原先只加标记、不加类型，
+ * 后来为了列表能按类型筛、徽标能一眼认出而改成了类型即身份（同文 §4.1 补记）。
+ * `asrFormat` 仍在，但只回答「走哪种转写接口」。
  */
-export function isAsrOnly(m: Model): boolean {
-  return m.asrFormat !== undefined;
+export function isAsrOnly(m: Pick<Model, "type">): boolean {
+  return m.type === "asr";
+}
+
+/**
+ * 这个模型能不能看图 —— 请求里能不能放 base64 图片、读图工具能不能在场、看图
+ * 子代理能不能绑它，问的都是这一个问题。
+ *
+ * 两个类型都算：「多模态」是会看图的通用对话模型（qwen3.8-flash、deepseek-flash），
+ * 「视觉理解」是专门看图的模型（qwen3-vl-*、qwen-vl-ocr）。两者在线上完全一样
+ * （同一个 `image_url` 片段，docs/api/landscape.md §6），区别只在 app 里：视觉
+ * 理解模型不当写手（`subAgentModel` 的 writer 分支）。一个有名字的判据而不是散在
+ * 二十处的 `type === "multimodal"`，因为漏改一处就是一个看得见图却被当成纯文本
+ * 的模型，而且什么都不报。
+ */
+export function canSeeImages(m: Pick<Model, "type">): boolean {
+  return m.type === "multimodal" || m.type === "vision";
+}
+
+/**
+ * 读进来的一行（数据库或备份）在「转写身份」上的规范形。
+ *
+ * 类型是身份、`asrFormat` 是接口，两者必须同时成立：
+ * - 带 `asrFormat` 的行一律是 `asr` 类型 —— 这是「转写模型 = 类型」之前的数据
+ *   （当时身份在 `asrFormat` 上，类型存的是 `text`），不升级它就会回到对话列表里；
+ * - `asr` 类型缺格式时补上唯一的格式 —— 否则转写连接无从选接口。
+ * 反方向（`asrFormat` 留在非 `asr` 行上）由保存路径清掉，这里不必管。
+ */
+export function normalizeAsrIdentity(m: Model): Model {
+  if (m.asrFormat !== undefined && m.type !== "asr") return { ...m, type: "asr" };
+  if (m.type === "asr" && m.asrFormat === undefined) return { ...m, asrFormat: ASR_FORMATS[0] };
+  return m;
 }
 
 /**
@@ -543,6 +596,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "probed_context_size", "INTEGER");
   await addColumn(db, modelCols, "models", "probed_max_output", "INTEGER");
   await addColumn(db, modelCols, "models", "text_verbosity", "TEXT");
+  await addColumn(db, modelCols, "models", "vl_high_resolution", "INTEGER");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -785,9 +839,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null],
   };
 }
 
@@ -847,7 +901,7 @@ export async function deletePrompt(
 }
 
 function rowToModel(r: Record<string, unknown>): Model {
-  return {
+  return normalizeAsrIdentity({
     id: r.id as string,
     providerId: r.provider_id as string,
     modelId: r.model_id as string,
@@ -876,15 +930,22 @@ function rowToModel(r: Record<string, unknown>): Model {
     // Absent for anything but an explicit 1 — the column is free-typed like
     // the rest, and "no declaration" must stay one representation.
     pdfInput: r.pdf_input === 1 ? true : undefined,
+    vlHighResolution: r.vl_high_resolution === 1 ? true : undefined,
     textVerbosity: parseTextVerbosity(r.text_verbosity),
     translateFormat: parseTranslateFormat(r.translate_format),
     structuredOutput: parseStructuredOutputMode(r.structured_output),
     asrFormat: parseAsrFormat(r.asr_format),
     pricePerSecond: typeof r.price_per_second === "number" ? r.price_per_second : undefined,
-  };
+  });
 }
 
-const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
+/**
+ * Every type, in the order the drawer's chips and the list filter show them.
+ * One list: the drawer, the filter and both readers (this file, configTransfer)
+ * used to keep their own copies, and a type added to one of four is a row that
+ * saves fine and reads back as "text".
+ */
+export const MODEL_TYPES: readonly ModelType[] = ["text", "multimodal", "vision", "image", "video", "asr"];
 
 /**
  * Narrow a stored `type` to the union instead of asserting it, for the same
@@ -892,8 +953,12 @@ const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
  * unrecognised value made the model vanish from *both* the text and the image
  * pickers with nothing on screen to say why. "text" is where a model with no
  * declared type belonged before the column existed.
+ *
+ * An older build reading a newer row therefore sees `vision` as `text` (it
+ * loses image input until retyped) and `asr` as `text` — which stays out of the
+ * chat pickers there anyway, because that build still keys on `asrFormat`.
  */
-function parseModelType(raw: unknown): ModelType {
+export function parseModelType(raw: unknown): ModelType {
   return MODEL_TYPES.includes(raw as ModelType) ? (raw as ModelType) : "text";
 }
 

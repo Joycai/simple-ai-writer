@@ -103,6 +103,15 @@ function toInputPart(part: ContentPart): Record<string, unknown> {
       };
     case "file":
       return { type: "input_file", filename: part.file.filename, file_data: part.file.file_data };
+    default:
+      // Unreachable in typed code, reachable from persisted history or
+      // extraBody. Falling out of the switch used to yield `undefined`, i.e.
+      // an input item with an empty part — live, DashScope answered a
+      // `video_url` that way by streaming nothing, and the run finished as an
+      // empty answer with no error anywhere. Refusing names the actual cause.
+      throw new Error(
+        `Responses adapter: unsupported content part type "${String((part as { type?: unknown }).type)}"`,
+      );
   }
 }
 

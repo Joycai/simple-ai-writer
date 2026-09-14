@@ -4,6 +4,7 @@
  * verified is the app's own request bodies, not a hand-written imitation.
  */
 import { describe, expect, it } from "vitest";
+import zlib from "node:zlib";
 import { streamOpenAI } from "../ai/openai";
 import { streamAnthropic } from "../ai/anthropic";
 import { streamCompletion } from "../ai";
@@ -206,12 +207,117 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
     }, 120_000);
   });
 
-  it("vision: data-URL image on qwen3-vl-plus via openai wire", async () => {
-    // 16x16 solid red PNG — the endpoint rejects anything under 10px a side.
-    const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGO4IyJCEmIY1TCqQWTYagAAAnEEEPBHj2sAAAAASUVORK5CYII=";
-    const c = await oa("qwen3-vl-plus", {
-      messages: [{ role: "user", content: [{ type: "text", text: "这张图是什么颜色？用一个词回答" }, { type: "image_url", image_url: { url: `data:image/png;base64,${png}` } }] } as unknown as StreamMessage],
-    });
-    expect(c.text).toMatch(/红/);
-  }, 60_000);
+  // Image understanding (landscape.md §7 第六个样本「视觉理解」, 2026-09-14). Every
+  // fixture is built here — solid-colour PNGs from a ten-line encoder, plus two
+  // tiny webp / gif constants — so the file needs no binary fixtures.
+  describe("vision: qwen3-vl-plus", () => {
+    const VL = "qwen3-vl-plus";
+    const RED: RGB = [255, 0, 0];
+    const BLUE: RGB = [0, 0, 255];
+    const GRAY: RGB = [128, 128, 128];
+    const WEBP_RED16 = "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoQABAAAUAmJaACdLoB+AADsAD+8ut//NgVzXPv9//S4P0uD9Lg/9KQAAA=";
+    const GIF_RED16 = "R0lGODdhEAAQAIEAAP8AAAAAAAAAAAAAACwAAAAAEAAQAEAIHQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFgQEBADs=";
+
+    const img = (dataUrl: string, detail?: string) => ({ type: "image_url", image_url: { url: dataUrl, ...(detail ? { detail } : {}) } });
+    const ask = (text: string, ...parts: unknown[]) => [{ role: "user", content: [{ type: "text", text }, ...parts] } as unknown as StreamMessage];
+    const vl = async (messages: StreamMessage[], extra: Partial<StreamOptions> = {}) => {
+      const c: Collected = { text: "", reasoning: "", toolCalls: [], bodies: [] };
+      await streamCompletion({
+        standard: "openai_compat", baseUrl: OPENAI_BASE, apiKey: KEY, modelId: VL, messages,
+        onChunk: (chunk) => {
+          const k = chunk as Record<string, unknown>;
+          if (typeof k.text === "string") c.text += k.text;
+          if (typeof k.reasoning === "string") c.reasoning += k.reasoning;
+          if (Array.isArray(k.toolCalls)) c.toolCalls.push(...k.toolCalls);
+          if (k.done) c.done = k;
+        },
+        _onRequestBody: (b) => c.bodies.push(b),
+        ...extra,
+      } as StreamOptions);
+      return c;
+    };
+    const inTok = (c: Collected) => c.done!.inputTokens as number;
+    const COLOR = "这张图是什么颜色？用一个词回答";
+
+    it.each([
+      ["png", pngDataUrl(16, 16, RED)],
+      ["webp", `data:image/webp;base64,${WEBP_RED16}`],
+      ["gif", `data:image/gif;base64,${GIF_RED16}`],
+    ])("chat compat reads a %s data URL", async (_fmt, url) => {
+      expect((await vl(ask(COLOR, img(url)))).text).toMatch(/红|赤/);
+    }, 60_000);
+
+    it("two images keep their order", async () => {
+      const c = await vl(ask("按顺序说出两张图的颜色，格式：A,B", img(pngDataUrl(16, 16, RED)), img(pngDataUrl(16, 16, BLUE))));
+      expect(c.text).toMatch(/红.*蓝/s);
+    }, 60_000);
+
+    it("9px is refused with a 400; 10px and 200x10 pass", async () => {
+      await expect(vl(ask(COLOR, img(pngDataUrl(9, 9, RED))))).rejects.toThrow(/larger than 10/);
+      expect((await vl(ask(COLOR, img(pngDataUrl(10, 10, RED))))).text.length).toBeGreaterThan(0);
+      expect((await vl(ask(COLOR, img(pngDataUrl(200, 10, RED))))).text.length).toBeGreaterThan(0);
+    }, 90_000);
+
+    it("image_url.detail is ignored: low and high cost the same input tokens", async () => {
+      const url = pngDataUrl(512, 512, GRAY);
+      const [low, high] = await Promise.all([vl(ask("回答OK", img(url, "low"))), vl(ask("回答OK", img(url, "high")))]);
+      expect(inTok(low)).toBeGreaterThan(200);
+      expect(inTok(low)).toBe(inTok(high));
+    }, 90_000);
+
+    it("vl_high_resolution_images raises the ~2500-token image cap on a 2048² image", async () => {
+      const url = pngDataUrl(2048, 2048, GRAY);
+      const [def, hi] = await Promise.all([
+        vl(ask("回答OK", img(url))),
+        vl(ask("回答OK", img(url)), { extraBody: { vl_high_resolution_images: true } }),
+      ]);
+      // Measured 2512 vs 4108: ≈ pixels/1024 until the default cap bites.
+      expect(inTok(def)).toBeGreaterThan(2300);
+      expect(inTok(def)).toBeLessThan(2800);
+      expect(inTok(hi)).toBeGreaterThan(inTok(def) * 1.4);
+    }, 120_000);
+
+    it("image + tools + qwen-budget thinking: reasons, then calls the tool with what it saw", async () => {
+      const c = await vl(ask("用工具记录这张图的主色", img(pngDataUrl(16, 16, RED))), {
+        tools: [{ type: "function", function: { name: "record_color", description: "记录一张图的主色", parameters: { type: "object", properties: { color: { type: "string" } }, required: ["color"] } } }] as StreamOptions["tools"],
+        thinkingCategory: "qwen-budget", reasoningEffort: "high", thinkingBudget: 1024,
+      });
+      expect(c.reasoning.length).toBeGreaterThan(0);
+      const call = c.toolCalls[0] as { name: string; arguments: string } | undefined;
+      expect(call?.name).toBe("record_color");
+      expect(call?.arguments).toMatch(/红|red/i);
+    }, 120_000);
+
+    it("responses compat does not serve qwen3-vl-plus at all", async () => {
+      await expect(vl(ask(COLOR, img(pngDataUrl(16, 16, RED))), { standard: "openai_responses_compat" }))
+        .rejects.toThrow(/Unsupported model/);
+    }, 60_000);
+
+    it("anthropic compat reads the image (and thinks by default)", async () => {
+      const c = await vl(ask(COLOR, img(pngDataUrl(16, 16, RED))), { standard: "anthropic_compat", baseUrl: ANTHROPIC_BASE });
+      expect(c.text).toMatch(/红|赤/);
+      expect(c.reasoning.length).toBeGreaterThan(0);
+    }, 90_000);
+  });
 });
+
+type RGB = [number, number, number];
+/** A solid-colour 8-bit RGB PNG as a data URL. Uniform rows deflate to almost nothing, so 2048² stays small. */
+function pngDataUrl(w: number, h: number, [r, g, b]: RGB): string {
+  const row = Buffer.alloc(1 + w * 3);
+  for (let x = 0; x < w; x++) row.set([r, g, b], 1 + x * 3);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td));
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr.set([8, 2, 0, 0, 0], 8);
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0)),
+  ]);
+  return `data:image/png;base64,${png.toString("base64")}`;
+}

@@ -133,7 +133,7 @@ import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
 import { loadApiKey } from "../lib/keyStore";
 import { expandAuthorIntent } from "../lib/context/expand";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
-import { costFor } from "../lib/ai/configDb";
+import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { connOptions, resolveConn, type ConnPair } from "../lib/ai/conn";
 import { notify } from "../lib/notify";
 import { baseName, isSamePath, joinPath } from "../lib/paths";
@@ -1700,7 +1700,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       {
         // Unchanged and deliberately narrow: base64 goes only to a model that
         // can read it. What widened is the *fallback* — see visionDelegate.
-        allowImages: model.type === "multimodal",
+        allowImages: canSeeImages(model),
         visionDelegate: visionSubAgentModel(
           useAiStore.getState().models, effectiveSubs,
         ) !== null,
@@ -2830,7 +2830,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         loreIndex: useLoreStore.getState().index,
         loreScope: useLoreStore.getState().scope,
         organize: loreOrganizer(),
-        multimodal: model.type === "multimodal",
+        multimodal: canSeeImages(model),
         // 谁来读图，由 routeTools 一处判定（它同时也是摘掉 read_lore_image
         // 的那一处）。图集清单据此说出真正走得通的那条路。
         visionDelegate: routed.visionDelegate,

@@ -12,6 +12,7 @@
  * works even on an unsaved / brand-new facet.
  */
 
+import { canSeeImages } from "../../../lib/ai/configDb";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle, PlusCircle, Wand2, Tags, Minimize2 } from "lucide-react";
@@ -146,7 +147,7 @@ export function FacetAiAssistantModal({
 
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
-      const supportsImages = model.type === "multimodal";
+      const supportsImages = canSeeImages(model);
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 
       const defaultInstruction = kind === "append"
@@ -211,7 +212,7 @@ export function FacetAiAssistantModal({
     requestClose();
   };
 
-  const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
+  const multimodalModels = models.filter((m) => m.type === "text" || canSeeImages(m));
 
   const dirty = phase !== "input" || instruction.trim().length > 0 || attached.length > 0;
 

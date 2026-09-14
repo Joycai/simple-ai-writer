@@ -52,6 +52,13 @@
 
 `qwen3-asr-flash` 同步接口接受 `data:audio/wav;base64,…`，2.4MB 的 WAV 一次请求 2 秒回文本，不用上传。但它 5 分钟 / 10MB 的上限意味着**要维护两条路径**，而异步 + 上传那条实测同样只要 3 秒。**建议只做异步一条**（§7 问题 1）。
 
+**补测：OpenAI 兼容形态（2026-09-14）。** `/compatible-mode/v1/chat/completions` 上，
+`qwen3-asr-flash-2026-02-10` 收一条只含 `{type:"input_audio", input_audio:{data:"data:audio/wav;base64,…", format:"wav"}}`
+的 user 消息，wav 与 mp3 都逐字转写正确；**同一条消息再加一个 text part 就 400**
+（`The dedicated task \`asr\` corresponding to the current service does not support this input.`）。
+`qwen-audio-3.0-asr-flash` 与 `fun-asr-flash-2026-06-15` 在同一形状上 400 `format is empty`——这条线只有 qwen3-asr 一代。
+同步路径**仍未实现**，上面的取舍不变；明细见 [`landscape.md`](../../api/landscape.md) §7 第六个样本「视觉理解」的音频表。
+
 ---
 
 ## 2. 实机实测记录（2026-09-06，作者提供的测试 key）
@@ -95,6 +102,8 @@
 ### 4.1 模型行：一个标记，不是一个新 `ModelType`
 
 给 `Model` 加 `asrFormat?: "dashscope-filetrans"`（照 `translateFormat` 的先例：**是联合类型不是布尔，因为格式就是身份**），`isAsrOnly(m) = m.asrFormat !== undefined`，并入 `conversationalModels` 的排除条件。不新增 `ModelType = "audio"`——那要动 `modelUpsert` / `rowToModel` / 抽屉的类型选择器和每一处 `type !== "image"` 过滤，而 ASR 模型除了「不能对话」以外和 text 行没有任何共同行为需要区分。
+
+> **补记（2026-09-14，推翻上一段的一半）**：新增了 `ModelType = "asr"`（界面叫「音频 ASR」），与「视觉理解」`vision` 同一次加入。**身份改由类型承担**：`isAsrOnly(m) = m.type === "asr"`；`asrFormat` 保留，只回答「走哪种转写接口」。理由是上一段没算到的两件事：① 模型列表按类型筛选、类型徽标一眼认出——转写行存成 `text` 时，筛「文本」会把它筛出来，列表里也看不出它为什么不在对话选择器里；② 类型芯片本身就是「它离开对话列表」的可见说明，原先藏在「能力声明」段里的格式标记做不到。代价按上一段列的清单付了：`MODEL_TYPES` 收成 `configDb` 一份（抽屉、筛选器、两个读取器共用），每一处 `=== "multimodal"` 换成 `canSeeImages`。**旧数据**：`normalizeAsrIdentity` 在读数据库行和读备份时把「有 `asrFormat` 的 `text` 行」升级成 `asr`、给缺格式的 `asr` 行补上唯一格式；旧版本读到新行时 `asr` 会降级成 `text`，但那一版仍按 `asrFormat` 排除它，不会回到对话列表。
 
 模型抽屉里选了这个格式，就折叠掉和它无关的分节（思考、结构化输出、上下文探测……都不适用），只留：模型 id（默认 `qwen-audio-3.0-asr-flash-filetrans`）、每秒单价（进 `token_usage` 的成本列）。供应商仍是现有的 DashScope `openai_compat` 行，`dashscopeNativeBase` 把 `/compatible-mode/v1` 换回 `/api/v1`——**一行供应商、一份钥匙串条目，文本 / 生图 / 转写共用**。
 

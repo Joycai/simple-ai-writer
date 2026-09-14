@@ -266,6 +266,15 @@ describe("Responses adapter — request shape", () => {
     ]);
   });
 
+  it("refuses a part type it has no spelling for, instead of sending an empty item", () => {
+    // Live: a `video_url` part became `undefined` here, DashScope streamed
+    // nothing, and the run ended as an empty answer with no error at all.
+    const history = [
+      { role: "user", content: [{ type: "video_url", video_url: { url: "https://x/v.mp4" } }] },
+    ] as unknown as StreamMessage[];
+    expect(() => toResponsesInput(history)).toThrow(/unsupported content part type "video_url"/);
+  });
+
   it("crosses a tool round from another provider over as bare function_call / function_call_output items", () => {
     const { input } = toResponsesInput([
       { role: "user", content: "read it" },

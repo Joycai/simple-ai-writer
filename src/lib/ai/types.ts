@@ -510,6 +510,8 @@ export interface StreamOptions {
   structuredOutput?: StructuredOutputMode;
   /** Responses family: `text.verbosity`, merged beside any `text.format`. */
   textVerbosity?: TextVerbosity;
+  /** Chat Completions (DashScope): `vl_high_resolution_images: true`. */
+  vlHighResolution?: boolean;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

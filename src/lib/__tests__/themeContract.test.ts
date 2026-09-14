@@ -125,7 +125,8 @@ describe("contractData.ts is the current parse of tokens.css", () => {
   });
 
   it("carries the three tiers the validator needs", () => {
-    expect(TOKEN_CONTRACT.core.length).toBe(37);
+    // 37 + the vision / asr model-type tag pairs.
+    expect(TOKEN_CONTRACT.core.length).toBe(41);
     expect(TOKEN_CONTRACT.core).toContain("--color-bg-base");
     expect(TOKEN_CONTRACT.scale).toContain("--radius-md");
     expect(TOKEN_CONTRACT.derived).toContain("--stg-accent");

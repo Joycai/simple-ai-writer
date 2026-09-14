@@ -18,10 +18,10 @@ function subs(kind: SubAgentKind, modelId: string): Record<SubAgentKind, SubAgen
 }
 
 describe("asr model invariants", () => {
-  const asr = model({ id: "asr", asrFormat: "dashscope-filetrans", modelId: "qwen-audio-3.0-asr-flash-filetrans" });
+  const asr = model({ id: "asr", type: "asr", asrFormat: "dashscope-filetrans", modelId: "qwen-audio-3.0-asr-flash-filetrans" });
   const chat = model({ id: "chat" });
 
-  it("conversationalModels 无条件排除 asrFormat 行", () => {
+  it("conversationalModels 无条件排除 asr 类型的行", () => {
     expect(isAsrOnly(asr)).toBe(true);
     expect(conversationalModels([asr, chat]).map((m) => m.id)).toEqual(["chat"]);
   });

@@ -55,7 +55,7 @@ const MODELS = [
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
   { id: "m-sakura", providerId: "p", modelId: "sakura", name: "Sakura", type: "text",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, translateFormat: "sakura" },
-  { id: "m-asr", providerId: "p", modelId: "qwen-audio-3.0-asr-flash-filetrans", name: "ASR", type: "text",
+  { id: "m-asr", providerId: "p", modelId: "qwen-audio-3.0-asr-flash-filetrans", name: "ASR", type: "asr",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, asrFormat: "dashscope-filetrans" },
 ] as never;
 

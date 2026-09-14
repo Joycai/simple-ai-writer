@@ -115,6 +115,23 @@ const DEEPSEEK_MODELS: StarterModel[] = [
   { modelId: "deepseek-v4-pro", name: "DeepSeek V4 Pro", contextSize: 1_048_576, maxOutput: 393_216, thinkingCategory: "deepseek" },
 ];
 
+/**
+ * DashScope's image-reading models, typed so the author does not have to know
+ * which ids look at pictures (measured 2026-09-14, docs/api/landscape.md §6):
+ * qwen3.8-flash is a general model that also reads images (multimodal); the
+ * qwen3-vl pair and the OCR model are the specialists (vision). Window and cap
+ * are filled only where the model page states them (qwen3-vl-plus 262K / 32K).
+ *
+ * Only on the domestic compatible-mode preset: the international host's
+ * catalogue was not checked, and qwen3-vl-plus refuses the Responses wire.
+ */
+const DASHSCOPE_MODELS: StarterModel[] = [
+  { modelId: "qwen3.8-flash", name: "Qwen3.8 Flash", type: "multimodal" },
+  { modelId: "qwen3-vl-plus", name: "Qwen3-VL Plus", contextSize: 262_144, maxOutput: 32_768, type: "vision" },
+  { modelId: "qwen3-vl-flash", name: "Qwen3-VL Flash", type: "vision" },
+  { modelId: "qwen-vl-ocr-latest", name: "Qwen-VL OCR", type: "vision" },
+];
+
 const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
   // Same vendor, second protocol (`/responses`) — the one OpenAI's own docs
@@ -133,7 +150,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // openaiUrl requires (it appends paths verbatim). Two rows because the
   // domestic and international deployments are separate hosts with separate
   // keys, same as MiniMax's two entries below.
-  { name: "通义千问 (DashScope)", apiStandard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { name: "通义千问 (DashScope)", apiStandard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", starterModels: DASHSCOPE_MODELS },
   { name: "通义千问 (国际)", apiStandard: "openai_compat", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
   // Same host, Anthropic Messages shape (docs/api/landscape.md §7 第六个样本).
   // The base is the *root* — the adapter appends /v1/messages, and the

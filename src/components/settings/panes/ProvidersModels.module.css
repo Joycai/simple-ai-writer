@@ -434,6 +434,14 @@
   background: var(--color-type-video-bg);
   color: var(--color-type-video-fg);
 }
+.modelType[data-type="vision"] {
+  background: var(--color-type-vision-bg);
+  color: var(--color-type-vision-fg);
+}
+.modelType[data-type="asr"] {
+  background: var(--color-type-asr-bg);
+  color: var(--color-type-asr-fg);
+}
 
 .groupEmpty {
   padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8);

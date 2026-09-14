@@ -45,7 +45,8 @@ import {
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import {
-  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, TRANSLATE_FORMATS, ASR_FORMATS,
+  canSeeImages, defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, MODEL_TYPES,
+  TRANSLATE_FORMATS, ASR_FORMATS,
   type Model, type ModelType, type TranslateFormat, type AsrFormat,
 } from "../../../lib/ai/configDb";
 import type { ImageDialect } from "../../../lib/ai/imageDialects";
@@ -56,8 +57,6 @@ import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
-
-const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -72,7 +71,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "so", "temp", "verb",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "so", "temp", "verb",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -119,7 +118,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
     price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage || m.pricePerSecond)),
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
-    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
+    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
   };
@@ -239,6 +238,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
+  // DashScope high-resolution image reading (Model.vlHighResolution).
+  const [vlHighResolution, setVlHighResolution] = useState(existing?.vlHighResolution ?? false);
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -323,7 +324,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const isImageModel = form.type === "image";
   // A transcription-only row: 限额 / 思考 / 采样 fold to 「不适用」, 计费 becomes
   // one per-second cell, and 「将发送」 lists the file endpoint (设计稿 02f 屏 1b).
-  const isAsrModel = form.asrFormat !== "";
+  // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
+  const isAsrModel = form.type === "asr";
+  // The hi-res switch exists where it reaches the wire: a model that reads
+  // pictures, on the Chat Completions family (openai.ts sends it; nothing else does).
+  const vlHiResWire = family === "openai" && canSeeImages(form);
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
   const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
@@ -341,11 +346,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // What survives onto this provider's wire: ids it has a spelling for, in the
   // canonical form (extraction only beside search). Absent when nothing does.
   // `serverToolsOn` therefore means "any server tool", image searches included.
-  const grantedServerTools = provider
+  // A transcription row keeps none: its request is the file endpoint's, and a
+  // chat declaration left on it would be a capability that reaches nothing.
+  const grantedServerTools = provider && form.type !== "asr"
     ? normalizeServerTools(serverTools.filter((id) => supportsServerTool(provider.apiStandard, id)))
     : undefined;
   const serverToolsOn = !!grantedServerTools;
-  const structuredOutput = form.structuredOutput === "auto" ? undefined : form.structuredOutput;
+  const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
 
@@ -446,13 +453,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // a spelling for it (the Chat Completions `file` part, or Responses'
         // `input_file`), and only on a model type that converses. False stores
         // as absent.
-        pdfInput: pdfWire && !isImageModel && pdfInput ? true : undefined,
+        pdfInput: pdfWire && !isImageModel && !isAsrModel && pdfInput ? true : undefined,
+        // Same clearing rule: only where the switch is shown.
+        vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
         // protocol would hide it from the app with nothing on screen to say why.
         translateFormat:
-          family === "openai" && !isImageModel && form.translateFormat
+          family === "openai" && !isImageModel && !isAsrModel && form.translateFormat
             ? form.translateFormat
             : undefined,
         // "auto" stores as absent, like the category. An image model has no
@@ -462,10 +471,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         textVerbosity: family === "responses" && !isImageModel && form.textVerbosity !== "auto"
           ? form.textVerbosity
           : undefined,
-        // Cleared on the translate rule: it removes the row from every other
-        // picker, so it must not outlive the protocol it was declared on.
-        asrFormat: family === "openai" && !isImageModel && form.asrFormat ? form.asrFormat : undefined,
-        pricePerSecond: form.asrFormat && parsedPerSecond > 0 ? parsedPerSecond : undefined,
+        // Travels with the type and only with it: the type already says, on the
+        // row's badge, that this model left the chat pickers, so unlike the
+        // translate declaration there is nothing hidden to guard against.
+        asrFormat: isAsrModel ? form.asrFormat || ASR_FORMATS[0] : undefined,
+        pricePerSecond: isAsrModel && parsedPerSecond > 0 ? parsedPerSecond : undefined,
         pricePerImage,
         caps,
       };
@@ -516,8 +526,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     grantedServerTools?.includes("web_search_image") && t("aiConfig.models.serverTool_web_search_image"),
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
     pdfWire && pdfInput && "PDF",
-    family === "openai" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
-    family === "openai" && form.asrFormat && t(`aiConfig.models.asrFormat_${form.asrFormat}`),
+    vlHiResWire && vlHighResolution && t("aiConfig.models.vlHiResShort"),
+    family === "openai" && !isAsrModel && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
+    isAsrModel && t(`aiConfig.models.asrFormat_${form.asrFormat || ASR_FORMATS[0]}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
 
@@ -568,6 +579,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         thinkingBudget,
         serverTools: grantedServerTools,
         structuredOutput,
+        vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         prefix: form.prefix,
         caps: isImageModel
           ? {
@@ -694,7 +706,19 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     // it stays the author's call.
                     const seedDialect =
                       type === "image" && !existing && !form.capsDialect && family === "gemini";
-                    setForm({ ...form, type, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
+                    // Becoming a transcription model picks its (only) endpoint
+                    // and, when the identity fields are still empty, the
+                    // recommended DashScope id and a name; leaving it drops the
+                    // endpoint, since the type is what the format hangs off.
+                    const asrSeed = type === "asr"
+                      ? {
+                          asrFormat: form.asrFormat || ASR_FORMATS[0],
+                          modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
+                          name: form.name || t("aiConfig.models.asrDefaultName"),
+                          translateFormat: "" as const,
+                        }
+                      : { asrFormat: "" as const };
+                    setForm({ ...form, type, ...asrSeed, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
                     if (type === "image" && !existing && provider) {
                       setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
                     }
@@ -974,7 +998,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 something a model quietly gains. Extraction is shown only where
                 the wire can spell it, and is tied to search both ways — the
                 endpoint refuses it alone (normalizeServerTools). */}
-            <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
+            <Fold open={!isAsrModel && !!provider && supportsServerTools(provider.apiStandard)}>
               {SERVER_TOOL_IDS.filter((id) => !!provider && supportsServerTool(provider.apiStandard, id)).map((id) => (
                 <ToggleField
                   key={id}
@@ -1007,13 +1031,25 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 Family-gated like the category chips above: Anthropic and Gemini
                 have no mapping for the part here, so showing the switch there
                 would promise a subagent that refuses at run time. */}
-            <Fold open={pdfWire}>
+            <Fold open={pdfWire && !isAsrModel}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={t("aiConfig.models.briefPdf")}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}
+              />
+            </Fold>
+
+            {/* DashScope `vl_high_resolution_images` — only for a model that
+                reads pictures, on the one family whose adapter sends it. */}
+            <Fold open={vlHiResWire}>
+              <ToggleField
+                title={t("aiConfig.models.vlHiResLabel")}
+                hint={t("aiConfig.models.briefVlHiRes")}
+                on={vlHighResolution}
+                onChange={setVlHighResolution}
+                {...whyProps("vlHiRes", t("aiConfig.models.vlHiResHint"))}
               />
             </Fold>
 
@@ -1027,7 +1063,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 model or as any other subagent's model. The warning has to say
                 so — an author who ticks it and then cannot find their model in
                 the chat picker would otherwise read that as a bug. */}
-            <Fold open={family === "openai" && !form.asrFormat}>
+            <Fold open={family === "openai" && !isAsrModel}>
               <Field label={t("aiConfig.models.translateLabel")} hint={t("aiConfig.models.briefTranslate")}
                 warn={form.translateFormat ? t("aiConfig.models.translateFormatHintOn") : undefined}>
                 <div className={s.chips}>
@@ -1049,28 +1085,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               </Field>
             </Fold>
 
-            {/* Dedicated transcription models (设计稿 02f 屏 1b). Translate's twin,
-                and it takes the same capability away: a row declared here leaves
-                every chat picker and can only be bound to 音频转写. Picking it
-                pre-fills the default DashScope model id and a display name when
-                the identity fields are still empty — the drawer then keeps only
-                the id and a per-second price. */}
-            <Fold open={family === "openai" && !form.translateFormat}>
+            {/* Transcription endpoint (设计稿 02f 屏 1b). The row became a
+                transcription model by its type chip (音频 ASR), which also
+                pre-filled the id and name; this only picks which endpoint it
+                speaks, so there is no "ordinary model" chip here any more. */}
+            <Fold open={isAsrModel}>
               <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
-                warn={form.asrFormat
-                  ? /filetrans/i.test(form.modelId)
-                    ? t("aiConfig.models.asrFormatHintOn")
-                    // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
-                    // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
-                    : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })
-                  : undefined}>
+                warn={/filetrans/i.test(form.modelId)
+                  ? t("aiConfig.models.asrFormatHintOn")
+                  // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
+                  // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
+                  : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })}>
                 <div className={s.chips}>
-                  <DashChip
-                    label={t("aiConfig.models.translateFormatNone")}
-                    active={form.asrFormat === ""}
-                    auto
-                    onClick={() => setForm({ ...form, asrFormat: "" })}
-                  />
                   {ASR_FORMATS.map((f) => (
                     <DashChip
                       key={f}
@@ -1093,6 +1119,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 offered; on Anthropic that is 自动 · 关闭, and the hint says why
                 rather than the row hiding. The note under 自动 shows what it
                 resolves to, same as the thinking category's. */}
+            <Fold open={!isAsrModel}>
             <Field label={t("aiConfig.models.soLabel")} hint={soHint} {...soNote}
               {...whyProps("so", t("aiConfig.models.whySo"))}>
               <div className={s.chips}>
@@ -1112,6 +1139,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ))}
               </div>
             </Field>
+            </Fold>
           </Section>
 
           <Section
