@@ -165,6 +165,28 @@ describe("chat session round-trip", () => {
     expect(Array.isArray(withImage.content)).toBe(true);
   });
 
+  it("saves a question's words but not the video clip attached to it", () => {
+    // Up to 20 MB of data URL per clip, in a row rewritten every turn.
+    const snap = makeSnapshot();
+    const withVideo: StreamMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: "视频里的人说了什么" },
+        { type: "video_url", video_url: { url: `data:video/mp4;base64,${"V".repeat(5000)}` }, fps: 1 },
+      ],
+    };
+    snap.history.push(withVideo);
+    noteTurnStart(snap.meta, withVideo);
+
+    const json = serializeChatSession(snap);
+    expect(json).not.toContain("VVVV");
+    const restored = deserializeChatSession(json)!;
+    const last = restored.history[restored.history.length - 1];
+    expect(last.content).toContain("视频里的人说了什么");
+    expect(restored.meta.turnStarts).toContain(last);
+    expect(Array.isArray(withVideo.content)).toBe(true);
+  });
+
   it("carries the task workspace id, and tolerates blobs from before it existed", () => {
     // With a workspace: the restored session must reconnect to its own notes.
     const snap = makeSnapshot();

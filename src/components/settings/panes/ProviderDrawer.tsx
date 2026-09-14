@@ -76,7 +76,7 @@ interface ProviderPreset {
  * that already knows the answer for its own catalogue should answer it.
  */
 type StarterModel = Pick<Model, "modelId" | "name"> &
-  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type">>;
+  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type" | "videoInput">>;
 
 /**
  * OrcaRouter's free tier (2026-09): rate-limited, billed at $0, and — verified
@@ -126,9 +126,11 @@ const DEEPSEEK_MODELS: StarterModel[] = [
  * catalogue was not checked, and qwen3-vl-plus refuses the Responses wire.
  */
 const DASHSCOPE_MODELS: StarterModel[] = [
-  { modelId: "qwen3.8-flash", name: "Qwen3.8 Flash", type: "multimodal" },
-  { modelId: "qwen3-vl-plus", name: "Qwen3-VL Plus", contextSize: 262_144, maxOutput: 32_768, type: "vision" },
-  { modelId: "qwen3-vl-flash", name: "Qwen3-VL Flash", type: "vision" },
+  // videoInput: all three read an mp4 / mov / webm clip on compatible-mode
+  // (docs/api/landscape.md §7 第六个样本「视觉理解」, 2026-09-14).
+  { modelId: "qwen3.8-flash", name: "Qwen3.8 Flash", type: "multimodal", videoInput: true },
+  { modelId: "qwen3-vl-plus", name: "Qwen3-VL Plus", contextSize: 262_144, maxOutput: 32_768, type: "vision", videoInput: true },
+  { modelId: "qwen3-vl-flash", name: "Qwen3-VL Flash", type: "vision", videoInput: true },
   { modelId: "qwen-vl-ocr-latest", name: "Qwen-VL OCR", type: "vision" },
 ];
 
@@ -337,6 +339,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             contextSize: m.contextSize,
             maxOutput: m.maxOutput,
             thinkingCategory: m.thinkingCategory,
+            videoInput: m.videoInput,
           });
         }
         if (comfyMode && onComfyCreated) {

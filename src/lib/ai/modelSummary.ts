@@ -32,15 +32,16 @@ export interface WireItem {
    * `structured` — sent on structured tasks only, not on every request.
    * `prefix` — the leading system message; the value is empty and the UI
    * names it in the author's language.
+   * `video` — rides on a clip's content part, so only on a message carrying one.
    */
-  scope?: "structured" | "prefix";
+  scope?: "structured" | "prefix" | "video";
 }
 
 export type WireInput = Pick<
   Model,
   | "type" | "modelId" | "maxOutput" | "temperature" | "reasoningEffort"
   | "thinkingCategory" | "thinkingBudget" | "serverTools" | "structuredOutput"
-  | "prefix" | "caps" | "textVerbosity" | "vlHighResolution"
+  | "prefix" | "caps" | "textVerbosity" | "vlHighResolution" | "videoInput" | "videoFps"
 >;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -125,11 +126,16 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   // Sent on every request, beside (not instead of) a structured task's text.format.
   if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
   if (family === "openai" && m.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
+  // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
+  // changes the request, and the bill (4× between fps 0.5 and the default).
+  if (family === "openai" && m.videoInput && m.videoFps !== undefined) {
+    out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
+  }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
 }
 
-type ModelMark = "think" | "web" | "pdf" | "translate";
+type ModelMark = "think" | "web" | "pdf" | "video" | "translate";
 
 /**
  * The explicit declarations on a conversational model, for the list row.
@@ -137,13 +143,14 @@ type ModelMark = "think" | "web" | "pdf" | "translate";
  * `caps` / `asrFormat`, and the row already says what type they are.
  */
 export function declarationMarks(
-  m: Pick<Model, "type" | "thinkingCategory" | "serverTools" | "pdfInput" | "translateFormat">,
+  m: Pick<Model, "type" | "thinkingCategory" | "serverTools" | "pdfInput" | "videoInput" | "translateFormat">,
 ): ModelMark[] {
   if (m.type === "image" || m.type === "video" || m.type === "asr") return [];
   const out: ModelMark[] = [];
   if (m.thinkingCategory) out.push("think");
   if (m.serverTools?.includes("web_search")) out.push("web");
   if (m.pdfInput) out.push("pdf");
+  if (m.videoInput) out.push("video");
   if (m.translateFormat) out.push("translate");
   return out;
 }

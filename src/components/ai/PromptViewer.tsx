@@ -33,7 +33,9 @@ function messageText(m: StreamMessage): string {
         ? p.text
         : p.type === "file"
           ? `<file ${p.file.filename}, ${p.file.file_data.length.toLocaleString()} chars>`
-          : `<image ${p.image_url.url.length.toLocaleString()} chars>`,
+          : p.type === "video_url"
+            ? `<video ${p.video_url.url.length.toLocaleString()} chars${p.fps !== undefined ? `, fps ${p.fps}` : ""}>`
+            : `<image ${p.image_url.url.length.toLocaleString()} chars>`,
     )
     .join("\n");
 }

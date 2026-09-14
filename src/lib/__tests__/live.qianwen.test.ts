@@ -5,6 +5,11 @@
  */
 import { describe, expect, it } from "vitest";
 import zlib from "node:zlib";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { estimateVideoTokens, videoPart } from "../ai/videoInput";
+import { parseMp4Info } from "../fs/video";
 import { streamOpenAI } from "../ai/openai";
 import { streamAnthropic } from "../ai/anthropic";
 import { streamCompletion } from "../ai";
@@ -205,6 +210,45 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
       const first = await an(m, { messages: WEATHER, tools: TOOLS });
       expect(first.toolCalls.length).toBeGreaterThan(0);
     }, 120_000);
+  });
+
+  // Video understanding (docs/feature/video-input.md, 2026-09-14). The clips
+  // are ffmpeg test patterns under __tests__/fixtures (12–24 KB each), sent
+  // through the app's own part builder and the real openai adapter.
+  describe("video: qwen3-vl-plus", () => {
+    const VL = "qwen3-vl-plus";
+    const FIX = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+    const clip = (name: string) => readFileSync(join(FIX, name));
+    const dataUrl = (name: string) => `data:video/mp4;base64,${clip(name).toString("base64")}`;
+    // Straight through the openai adapter (the only family a clip may use),
+    // via `run`, which captures the request body the part rides in.
+    const ask = (name: string, fps?: number) =>
+      oa(VL, {
+        messages: [{ role: "user", content: [{ type: "text", text: "用一句话描述视频内容" }, videoPart(dataUrl(name), fps)] }],
+      });
+    const inTok = (c: Collected) => c.done!.inputTokens as number;
+
+    it("a 2 s clip is read, and its cost is near the estimate", async () => {
+      const c = await ask("v2s_640.mp4");
+      expect(c.text.length).toBeGreaterThan(0);
+      // Measured 602 video tokens + ~20 of text. The estimate is ≈, so a band.
+      const est = estimateVideoTokens({ ...parseMp4Info(new Uint8Array(clip("v2s_640.mp4")))! })!;
+      expect(inTok(c)).toBeGreaterThan(est * 0.9);
+      expect(inTok(c)).toBeLessThan(est * 1.2 + 60);
+    }, 120_000);
+
+    it("a 1 s clip is refused as too short", async () => {
+      await expect(ask("v1s_640.mp4")).rejects.toThrow(/too short/);
+    }, 120_000);
+
+    it("fps 0.5 beside video_url reaches the endpoint: the same clip costs less than the default", async () => {
+      // openai.ts has no `_onRequestBody` hook, so the proof is the bill: the
+      // drop only happens if `fps` arrived where the endpoint reads it. The
+      // part's shape itself is pinned in videoInput.test.ts.
+      const [def, low] = await Promise.all([ask("v6s_320_10fps.mp4"), ask("v6s_320_10fps.mp4", 0.5)]);
+      // Measured 482 → 162 video tokens.
+      expect(inTok(low)).toBeLessThan(inTok(def) - 200);
+    }, 180_000);
   });
 
   // Image understanding (landscape.md §7 第六个样本「视觉理解」, 2026-09-14). Every

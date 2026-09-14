@@ -778,6 +778,75 @@ describe("trimHistory", () => {
     expect(history[0].content).toBe("y".repeat(4000));
   });
 
+  function videoMessage(text: string): StreamMessage {
+    return {
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "video_url", video_url: { url: "data:video/mp4;base64,AAAA" }, fps: 0.5 },
+      ],
+    };
+  }
+
+  it("keeps only the newest video clip, however big the ceiling is, and keeps the words", () => {
+    // Every round resends history and a clip is re-billed each time (60 s 720p
+    // measured 35,642 tokens), so only the clip being asked about stays.
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      videoMessage("第一段"),
+      { role: "assistant", content: "ok" },
+      videoMessage("第二段"),
+    ];
+
+    expect(trimHistory(history, 1_000_000)).toBe(1);
+    expect(typeof history[1].content).toBe("string");
+    expect(String(history[1].content)).toContain("第一段");
+    expect(String(history[1].content)).not.toContain("data:video");
+    expect(Array.isArray(history[3].content)).toBe(true);
+  });
+
+  it("does not count clips against the picture cap, or pictures against the clip cap", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      videoMessage("clip"),
+      ...Array.from({ length: 3 }, imageMessage),
+    ];
+
+    expect(trimHistory(history, 1_000_000)).toBe(0);
+    expect(history.filter((m) => Array.isArray(m.content))).toHaveLength(4);
+  });
+
+  it("taking a clip out of a message that also has a picture leaves the picture", () => {
+    const both: StreamMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: "对比" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+        { type: "video_url", video_url: { url: "data:video/mp4;base64,AAAA" } },
+      ],
+    };
+    const history: StreamMessage[] = [{ role: "system", content: "sys" }, both, videoMessage("newer")];
+
+    trimHistory(history, 1_000_000);
+
+    const parts = history[1].content as { type: string }[];
+    expect(parts.map((p) => p.type)).toEqual(["text", "image_url", "text"]);
+  });
+
+  it("the ceiling pass takes video payloads out too", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      videoMessage("旧的问题"),
+      { role: "assistant", content: "answer" },
+      { role: "user", content: "next" },
+    ];
+
+    // A clip with no estimate is priced at VIDEO_TOKENS_UNKNOWN (10k).
+    expect(trimHistory(history, 500)).toBe(1);
+    expect(String(history[1].content)).toContain("旧的问题");
+    expect(String(history[1].content)).not.toContain("data:video");
+  });
+
   const call = (id: string, name: string, args: string): StreamMessage => ({
     role: "assistant",
     content: null,

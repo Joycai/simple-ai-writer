@@ -23,7 +23,7 @@ import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { createSessionMeta, type ChatSessionMeta } from "./compact";
 import { validateSkillState, type SkillState } from "./skillState";
-import { contentWithoutImages, hasImageParts } from "./imageHistory";
+import { contentWithoutMedia, hasMediaParts } from "./imageHistory";
 import { toPosixPath } from "../paths";
 
 /**
@@ -31,7 +31,7 @@ import { toPosixPath } from "../paths";
  * the conversation, not the pixels — see {@link withoutImageData}.
  */
 const DROPPED_IMAGE =
-  "[image not kept in the saved session — read it again if it still matters]";
+  "[image or video not kept in the saved session — read or attach it again if it still matters]";
 
 /**
  * The history as it goes to disk: same messages, minus the base64.
@@ -44,13 +44,16 @@ const DROPPED_IMAGE =
  * model can call read_image or read_lore_image again for anything it still
  * needs — the paths are right there in the transcript.
  *
+ * A video clip (up to 20 MB of data URL) goes the same way, for the same
+ * reason and more so.
+ *
  * Copies rather than mutates: the live session keeps its images. Order is
  * preserved 1:1 so the meta's index references, computed against the original
  * array, still land on the right messages.
  */
 function withoutImageData(history: StreamMessage[]): StreamMessage[] {
   return history.map((m) =>
-    hasImageParts(m) ? { ...m, content: contentWithoutImages(m, DROPPED_IMAGE) } : m,
+    hasMediaParts(m) ? { ...m, content: contentWithoutMedia(m, DROPPED_IMAGE) } : m,
   );
 }
 

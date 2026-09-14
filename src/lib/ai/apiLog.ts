@@ -71,7 +71,10 @@ function redactMessage(m: StreamMessage): unknown {
             // Same weight problem as an image, at PDF scale — a 100MB document
             // would otherwise land in the log verbatim.
             ? { type: "file", file: { filename: p.file.filename, file_data: `<file data url, ${p.file.file_data.length} chars omitted>` } }
-            : p,
+            : p.type === "video_url"
+              // Up to 20 MB of base64 per clip; keep `fps`, it is what was asked.
+              ? { ...p, video_url: { url: `<video data url, ${p.video_url.url.length} chars omitted>` } }
+              : p,
       ),
     };
   }
