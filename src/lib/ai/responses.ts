@@ -79,9 +79,9 @@ function textOf(content: StreamMessage["content"]): string {
  * One user content part in this wire's spelling.
  *
  * `input_image` takes the data URL directly (verified on GPT-5.4/5.5,
- * docs/api/responses.md §7); `input_file` is the documented shape for a
- * base64 document and is unverified against a live endpoint — the plan's
- * slice H is where both get their tests. Mapping them here rather than
+ * docs/api/responses.md §7); `input_file` with a data URL in `file_data` is
+ * read by xAI's grok-4.5 / 4.6 (docs/api/landscape.md 第十一个样本), which is
+ * what lets the model drawer offer PDF input on this family. Mapping them here rather than
  * dropping them keeps a picture the author attached from vanishing silently
  * on this family.
  *

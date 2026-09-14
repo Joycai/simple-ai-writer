@@ -648,7 +648,8 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
   `{type:"file", file:{file_data:"data:application/pdf;base64,…", filename:"…"}}`
   （base64 形态**必须带 `filename`**）。单文件 ≤150MB / ≤500 页，首响应可达
   300s；计费两段：抽取出的文本图片按输入 token + 处理费 ¥0.02/页。
-  Responses API 暂不支持该能力。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
+  Responses API 暂不支持该能力（出处：[千问 PDF 理解文档](https://platform.qianwenai.com/docs/developer-guides/tool-calling/pdf-understanding)；
+  所以模型抽屉的「PDF 文件输入」开关虽然对 ② 族开放，提示里写明千问要在 ① 族服务商下开）。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
   输入）同形，是镜像而非私有发明。
 - **`preserve_thinking`**（qwen3.8-max 默认开）要求把历史 `reasoning_content`
   **完整**回传；本项目只在工具轮回传上一轮的思维链，纯对话轮不回传——3.8-max
@@ -998,6 +999,13 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
 - **上游不稳**：线路探针 27 条里 12 条在 150 s 处超时（非流式），分布无规律（同一字段换个
   值就过）；sol 比 terra 慢一个量级（同一题 51–76 s 对 5–15 s）。adapter 实测用流式，
   12 条里除 `max_output_tokens` 外全过。
+- **sol 的 `input_file`（2026-09-14 补测，同一台、`[Plus]gpt-5.6-sol`，adapter 用例连跑 6 次）**：
+  **4 过 2 败**，过的 3.4–9.6 s 读出 `PINEAPPLE`。两次失败形状不同：一次 3 s 内
+  `response.failed`「Upstream request failed」（线路问题）；另一次 108 s 后**正常结束、答非所问**——
+  「I'll locate the PDF, extract its text…」，即**文件没到模型手里，也不报错**。对照组同模型的
+  `input_image` 2 次里 1 次 120 s 超时、纯文本 2 次全过。结合上面「同一档位背后不止一个上游」，
+  判断是**部分上游丢 `input_file`**，不是 sol 不会读 PDF。对作者的影响：绑成 PDF 理解子代理时，
+  偶发一次「模型说要去找文件」式的空答，重试即可；官方端点**未验**。
 - 目录里的模型 id 带档位前缀（`[Plus]gpt-5.6-terra`），响应的 `model` 回显去掉前缀
   （`gpt-5.6-terra`）——按 id 前缀查表（`modelLimits` / `jsonMode`）的逻辑认不出带前缀的 id，
   与第八个样本一致。
@@ -1054,7 +1062,7 @@ Responses adapter：
 | `tool_choice` | 规格收扁平 `{type:"function", name}`；函数调用指南的表写的却是嵌套形——**文档自相矛盾** | 扁平 | ✅（按规格） |
 | `text.format` | `json_schema` 的 `name` / `strict` 仅为兼容；含 `maxContains`/`minContains`/数组形 `items` 的 schema 400 | `json_schema` 不发 `strict`；`grok-*` 不在自动抬升表，默认 `json_object` | ✅ |
 | `input_image` | data URL 或公网 URL，**只收 jpg/png**，≤20MiB | data URL | ⚠️ webp / gif 会被拒 |
-| `input_file` | `file_id` / `file_url` / `file_data` 三选一；`file_data` 是**纯 base64**，需 `filename` | `file_data` 里是 **`data:` URL** | ❌ 大概率被拒（未测）。只影响 PDF 理解子代理且需作者声明 `pdfInput` |
+| `input_file` | `file_id` / `file_url` / `file_data` 三选一；`file_data` 是**纯 base64**，需 `filename` | `file_data` 里是 **`data:` URL** | ✅ 实测 `data:` URL 与纯 base64 都读得出（见上）。模型抽屉的「PDF 文件输入」开关因此也对 ② 族开放（原先只在 ① 族显示） |
 | 采样 | `presencePenalty` / `frequencyPenalty` / `stop` 对推理模型**报错**；另收非标准 `top_k` / `min_p` | 仅 Sakura 翻译任务设 `frequency_penalty` | ✅ 实际不会撞上 |
 | `max_output_tokens` | 含推理 token，默认 128,000 | 不发 | ✅ |
 | 流式事件 | 名字与 OpenAI 一致（text / reasoning summary / reasoning text / function args / `output_item`）；**`response.completed` / `incomplete` / `failed` / `error` 文档里都没写**；以 `data: [DONE]` 结束 | 读终止事件拿 usage 与停止原因；流读完没终止事件也会 `finish()` | ⚠️ 不会失败，但若真没有 `response.completed`，**用量记 0**、停止原因缺失。实测前不改 |

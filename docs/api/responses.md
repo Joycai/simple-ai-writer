@@ -215,6 +215,7 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 - `truncation: "auto"`、`context_management`、`conversation` / `previous_response_id`。
 - `phase` 缺失的真实代价（需要多轮、带工具的长任务对照）。
 - 5.6-sol 的多轮回传（第八个样本两次 502；第十个样本只在 terra 上跑了回传）。
+  sol 的 `input_file` 已在中转站补测（6 次 4 过，失败归因于上游，见第十个样本），官方端点仍未验。
 - 5.6-luna（两台中转站的 `[Plus]` 档都没有）。
 
 ## 10. GPT-5.6 与内置工具（2026-09-14 补测，`[Plus]` 档 terra / sol）
