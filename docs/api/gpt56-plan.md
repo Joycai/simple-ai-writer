@@ -119,11 +119,25 @@ sol / terra / luna **不需要按型号分支**：三款共用上面每一条，
 能确认它生效。它是「更贵的另一档」，没有证据前不加入口。有官方 key 后若确认，做成
 `responses-effort` 类目上的一个附加开关，而不是新类目。
 
-### P7 `tool_search`（延迟加载工具）—— **调研项，不排期**
+### P7 `tool_search`（延迟加载工具）—— **后一期**
 
-端点认识 `{type:"tool_search"}`，要求同时有 `defer_loading` 的函数工具。这是 5.x 用来让
-大工具表不进固定头的机制，正对 `agentToolBudget.test.ts` 的棘轮：agent 的完整工具 schema
-每轮都进上下文。值得单独开一篇，读 `agent-tool-context.md` 之后再评估，不在本计划内。
+各族的协议事实已单独成篇：[`tool-search.md`](tool-search.md)（2026-09-14 文档调研，未实测）。
+要点：OpenAI（GPT-5.4+）、Anthropic（4.5+）、xAI 有原生支持，Gemini 与所有 Chat Completions
+端点没有。
+
+评估的起点不是「要不要按需加载」——本项目已经在做（`lore_write` / `lore_organize` 由运行状态
+自动装载，[`agent-tool-context-lld.md`](../feature/agent/agent-tool-context-lld.md) §5）——而是
+**§6 否掉 `load_tools` 的那条理由在原生方案下还成不成立**：让模型自己搜工具，弱模型实测做不成。
+原生搜索解决的是缓存，不是这条。
+
+所以后一期若做，顺序是：
+
+1. 先看**不需要模型配合**的那一个原生机制——OpenAI 的 `additional_tools` 条目——能不能把 5a 的
+   装载改成缓存友好的写法（今天 5a 是往 `tools` 数组尾部追加，② 族上会从工具表那一截起失效缓存）。
+2. 让模型自己搜（`tool_search` / Anthropic 的 regex·bm25）要等 §6 的重开条件：一个强模型在同样的
+   间接下稳定完成 §4.3 第三格。需要官方 key 实测。
+3. 无论哪条，`isEchoItem` 都要先学会回传 `tool_search_call` / `tool_search_output` /
+   `additional_tools`，否则加载过的工具下一轮静默消失。
 
 ### 不做
 

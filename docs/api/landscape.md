@@ -1002,6 +1002,76 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
   （`gpt-5.6-terra`）——按 id 前缀查表（`modelLimits` / `jsonMode`）的逻辑认不出带前缀的 id，
   与第八个样本一致。
 
+### 第十一个样本：xAI Grok 的 ② 族（2026-09-14，官方端点实测 grok-4.5 / 4.6，另用 grok-4.3 做线路探针）
+
+> **实测结论先于下面的文档对照表**（表是实测前按文档写的，⚠️/❌ 以这里为准）：
+>
+> - **adapter 实测**（`live.openai-responses.test.ts`，官方 `https://api.x.ai/v1`，按 `openai_responses_compat`）：
+>   grok-4.5、grok-4.6 各 12 条**全过**——文本流、`response.completed` 带 usage、思考摘要、截断
+>   （`max_output_tokens:16` → `incomplete`）、工具轮回传、强制 `tool_choice`、`json_schema`、`json_object`、
+>   `input_image`、`input_file`。
+> - **effort**：4.5 / 4.6 **拒 `none`**（400 `This model does not support \`reasoning_effort\` value \`none\``），
+>   `low` / `medium` / `xhigh` 收，**默认回显 `high`**；`max` 在 4.3 / 4.5 / 4.6 都是 400 `Invalid reasoning effort.`。
+>   4.5 发 `xhigh` 原样回显 `xhigh`（文档说按 `high` 处理，回显看不出）。4.3 收 `none`。
+>   **本项目的「关闭」芯片在 4.5 / 4.6 上是 400**——越界由端点说话的规则下这是预期的，但作者没有
+>   别的办法关掉思考，因为这两款根本关不掉。
+> - **加密推理 ❌→✅**：不发 `include` 时 reasoning 条目**没有** `encrypted_content`（文档属实），发了 2,904 字节；
+>   但**不带加密内容的原样回传，第二轮照样 200 且答对**（4.3 / 4.5 / 4.6 工具轮都过）。缺的只是往轮推理的延续。
+> - **`input_file` ❌→✅**：`file_data` 里放 `data:` URL 与放纯 base64 **都读得出**（`PINEAPPLE`）。
+> - **终止事件 ⚠️→✅**：流里有 `response.completed`（带完整 usage），另有 `[DONE]` 收尾；adapter 读到的用量正常。
+> - **图片最小尺寸**：16×16 PNG 400 `Image has 256 total pixels (16x16), which is below the minimum of 512 pixels`；
+>   1×1 400 `Both width and height must be at least 8 pixels`。32×32 通过。webp 未测（本机无编码器）。
+> - **采样**：`temperature:0.5` 原样回显（默认回显 `0.7`）；推理模型上发 `frequency_penalty` **200 未报错**（文档说会报错）。
+> - **`json_schema` 带 `strict:true`**：200，回显里 `strict` 被去掉，输出合 schema。
+> - **`web_search`**（4.3）：200，`web_search_call` 的 `action.type` 是 `open_page`（`url`），答案带 `url_citation`；
+>   usage 里 `server_side_tool_usage_details.web_search_calls: 1`，**一次搜索 6,851 输入 token**。本项目 P4 的
+>   `open_page` 解析在这里正好用得上。
+> - **tool search**：带 `defer_loading` 发，**403** `The tool_search tool and defer_loading are only available for alpha users`。
+> - **usage 形状**：OpenAI 形 + `num_sources_used` / `num_server_side_tools_used` / `cost_in_usd_ticks` /
+>   `context_details`；**`phase` 在 message 上缺失**（`null`）。4.6 同题输入 666 token、4.3 是 222——4.6 自带更长的系统前缀。
+>
+> **对本项目**：主路无需改 adapter。可做的两件小事：`ProviderDrawer` 加一条 `xAI (Grok)` 预设
+> （`openai_responses_compat` + `https://api.x.ai/v1`）；思考类目的「关闭」在这两款上会 400，可在抽屉提示里点一句。
+
+xAI 把 Responses 当成主路：迁移页称它是「推荐的交互方式」，对照表把 Chat Completions 标成
+**Deprecated**（但仍作 legacy 端点提供，未给下线日期）；Anthropic SDK 兼容（`/v1/messages`）
+「完全弃用」，未给日期。2026-05-15 下线了 `grok-4-1-fast-*` / `grok-4-fast-*` / `grok-4-0709` /
+`grok-3`，旧 id 重定向到 `grok-4.3`（推理档 effort `low`、非推理 `none`）。现役文本模型：
+`grok-4.6`（500K）、`grok-4.5`、`grok-4.3`、`grok-4.20-0309-reasoning` / `-non-reasoning`、
+`grok-4.20-multi-agent-0309`、`grok-build-0.1`。
+
+**接法**：`openai_responses_compat`，地址 `https://api.x.ai/v1`，Bearer。逐项对照本项目的
+Responses adapter：
+
+| 项 | xAI 文档 | 本项目现在发 / 读 | 结论 |
+| --- | --- | --- | --- |
+| `store` | 默认 `true`（存 30 天）；ZDR 下有状态模式不可用；发图时建议不存 | 恒 `store:false` | ✅ 正合适 |
+| `instructions` | 支持；不能与 `previous_response_id` 同用 | 恒发，不用 `previous_response_id` | ✅ |
+| `reasoning.effort` | 按模型：4.6 `low/medium/high(默认)/xhigh`；4.5 到 `high`（`xhigh` 当 `high`）；4.3 `none/low/medium/high`；不支持的值**报错**；multi-agent 上 effort 是 agent 数（4 / 16） | 菜单 `off/low/medium/high/xhigh/max` 不按型号裁剪 | ⚠️ `max` 与越界值由端点 400——与本项目「越界让端点说话」的规则一致；multi-agent 的语义完全不同，作者需知道 |
+| `reasoning.summary` | 「仅为兼容保留」，恒 `detailed`；4.6 有摘要 | 随 effort 发 `auto` | ✅ |
+| 加密推理 | **只在 `include:["reasoning.encrypted_content"]` 时返回** | 不发 `include` | ❌ 回传的 reasoning 条目没有加密内容；后果未测。与 [`gpt56-plan.md`](gpt56-plan.md) P5 同一件事，现在有两家 |
+| 函数工具 | 扁平；`strict`「不支持，仅为兼容」（实际恒 strict）；≤350 个 | 扁平 + `strict:false` | ✅ 字段被忽略；**恒 strict** 意味着参数一定合 schema |
+| `tool_choice` | 规格收扁平 `{type:"function", name}`；函数调用指南的表写的却是嵌套形——**文档自相矛盾** | 扁平 | ✅（按规格） |
+| `text.format` | `json_schema` 的 `name` / `strict` 仅为兼容；含 `maxContains`/`minContains`/数组形 `items` 的 schema 400 | `json_schema` 不发 `strict`；`grok-*` 不在自动抬升表，默认 `json_object` | ✅ |
+| `input_image` | data URL 或公网 URL，**只收 jpg/png**，≤20MiB | data URL | ⚠️ webp / gif 会被拒 |
+| `input_file` | `file_id` / `file_url` / `file_data` 三选一；`file_data` 是**纯 base64**，需 `filename` | `file_data` 里是 **`data:` URL** | ❌ 大概率被拒（未测）。只影响 PDF 理解子代理且需作者声明 `pdfInput` |
+| 采样 | `presencePenalty` / `frequencyPenalty` / `stop` 对推理模型**报错**；另收非标准 `top_k` / `min_p` | 仅 Sakura 翻译任务设 `frequency_penalty` | ✅ 实际不会撞上 |
+| `max_output_tokens` | 含推理 token，默认 128,000 | 不发 | ✅ |
+| 流式事件 | 名字与 OpenAI 一致（text / reasoning summary / reasoning text / function args / `output_item`）；**`response.completed` / `incomplete` / `failed` / `error` 文档里都没写**；以 `data: [DONE]` 结束 | 读终止事件拿 usage 与停止原因；流读完没终止事件也会 `finish()` | ⚠️ 不会失败，但若真没有 `response.completed`，**用量记 0**、停止原因缺失。实测前不改 |
+| usage | OpenAI 形；另有 `num_server_side_tools_used`、`server_side_tool_usage_details`、`cost_in_usd_ticks`；参考里有一处示例仍是 `prompt_tokens` 键 | 读 `input_tokens` / `output_tokens` / `cached_tokens` | ✅（按规格） |
+| 内置工具 | `web_search`→`web_search_call`（$5/千次）、`x_search`→`x_search_call`、`code_interpreter`（别名 `code_execution`）、`file_search`（别名 `collections_search`）、`attachment_search`、`mcp`；`include` 可取 `web_search_call.action.sources` | compat 线上发 `{type:"web_search"}`、解析 `web_search_call` | ✅ 联网搜索大概率直接可用；`web_extractor` 与两个图片搜索是千问的名字，开了会被拒；`x_search` 没有建模 |
+| tool search | 规格里有 `defer_loading` 与 `{type:"tool_search", execution:"server"}`，无文档页 | 未用 | 见 [`tool-search.md`](tool-search.md) |
+| 明确不支持 | `background`、`metadata`、`truncation`；`context_management`「解析但未执行」；`logprobs` 在 4.20+ 静默忽略 | 都不发 | ✅ |
+
+**小结**：主路（文本、思考、函数工具、强制 `tool_choice`、结构化输出、图片、联网搜索）按
+文档应当直接可用；两处 ❌（加密推理的 `include`、`input_file` 的 base64）和一处 ⚠️（终止事件）
+需要 xAI key 实测后再定。旧的 `openai_compat`（Chat Completions）配置仍可用，但已被标为弃用。
+
+来源（2026-09-14）：`docs.x.ai` 的 `developers/model-capabilities/text/comparison`、
+`legacy/chat-completions`、`rest-api-reference/inference/responses`、`…/inference/legacy`、
+`model-capabilities/text/reasoning`、`images/understanding`、`tools/overview`、`pricing`、
+`migration/may-15-retirement`、`models`，以及 `https://docs.x.ai/openapi.json`。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
