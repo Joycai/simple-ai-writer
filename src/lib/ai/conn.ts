@@ -25,7 +25,7 @@ import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId 
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolId } from "./serverTools";
 import type { StructuredOutputMode } from "./jsonMode";
-import type { ApiStandard, AuthMode } from "./types";
+import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
 
 /**
@@ -90,6 +90,8 @@ export interface ConnOptions {
    * the request is built and travels as `extraBody`.
    */
   structuredOutput?: StructuredOutputMode;
+  /** Responses-family `text.verbosity`; absent sends nothing. */
+  textVerbosity?: TextVerbosity;
 }
 
 /**
@@ -123,6 +125,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     thinkingBudget: model.thinkingBudget,
     serverTools: model.serverTools,
     structuredOutput: model.structuredOutput,
+    textVerbosity: model.textVerbosity,
   };
 }
 
@@ -150,6 +153,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     thinkingBudget: o.thinkingBudget,
     serverTools: o.serverTools,
     structuredOutput: o.structuredOutput,
+    textVerbosity: o.textVerbosity,
   };
 }
 

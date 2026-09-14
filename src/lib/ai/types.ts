@@ -292,6 +292,12 @@ export type StreamChunk =
        * not additional to it, and billed at the model's cheaper cached rate.
        */
       cachedTokens?: number;
+      /**
+       * Fields the endpoint echoed back with another value than the one sent.
+       * Only the Responses family echoes its request, so only it fills this;
+       * the round still succeeded — see `WireRewrite`.
+       */
+      wireRewrites?: WireRewrite[];
     }
   | {
       toolCalls: AccumulatedToolCall[];
@@ -362,6 +368,28 @@ export type StreamMessage =
       _responseItems?: ResponseItemCarry;
     }
   | { role: "tool"; tool_call_id: string; content: string };
+
+/** The Responses family's `text.verbosity` levels (GPT-5.x). */
+export const TEXT_VERBOSITIES = ["low", "medium", "high"] as const;
+export type TextVerbosity = (typeof TEXT_VERBOSITIES)[number];
+
+/** Narrow a stored or imported value; anything else is absent (send nothing). */
+export function parseTextVerbosity(v: unknown): TextVerbosity | undefined {
+  return typeof v === "string" && (TEXT_VERBOSITIES as readonly string[]).includes(v)
+    ? (v as TextVerbosity)
+    : undefined;
+}
+
+/**
+ * A request field the endpoint echoed back with a different value than the
+ * one sent. Only ever built from a real echo — a response that omits the field
+ * says nothing about it (docs/api/gpt56-plan.md P2).
+ */
+export interface WireRewrite {
+  field: "reasoning.effort" | "temperature";
+  sent: string;
+  echoed: string;
+}
 
 export interface StreamOptions {
   baseUrl: string;
@@ -480,6 +508,8 @@ export interface StreamOptions {
    * as `extraBody`.
    */
   structuredOutput?: StructuredOutputMode;
+  /** Responses family: `text.verbosity`, merged beside any `text.format`. */
+  textVerbosity?: TextVerbosity;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

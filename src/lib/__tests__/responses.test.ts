@@ -108,6 +108,59 @@ describe("Responses adapter — request shape", () => {
     expect(calls[0].body).toHaveProperty("instructions", "");
   });
 
+  it("sends text.verbosity only when declared, merged beside a structured task's text.format", async () => {
+    const plain = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+    });
+    expect(plain[0].body).not.toHaveProperty("text");
+
+    const merged = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+      textVerbosity: "low",
+      extraBody: { text: { format: { type: "json_object" } } },
+    });
+    expect(merged[0].body.text).toEqual({ format: { type: "json_object" }, verbosity: "low" });
+  });
+
+  it("reports an echoed effort or temperature that differs from the one sent, and nothing otherwise", async () => {
+    // Measured on a relay 2026-09-14: max sent, none echoed (landscape.md 第十个样本).
+    const rewritten = ev("response.completed", {
+      response: { status: "completed", reasoning: { effort: "none" }, temperature: 1, usage: { input_tokens: 1, output_tokens: 1 } },
+    });
+    mockFetch([rewritten]);
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], onChunk: (c) => received.push(c),
+      reasoningEffort: "max", temperature: 0.5,
+    });
+    expect(doneOf(received).wireRewrites).toEqual([
+      { field: "reasoning.effort", sent: "max", echoed: "none" },
+      { field: "temperature", sent: "0.5", echoed: "1" },
+    ]);
+
+    // Nothing sent, or no echo at all (another upstream answered): nothing reported.
+    mockFetch([rewritten]);
+    const quiet: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], onChunk: (c) => quiet.push(c),
+    });
+    expect(doneOf(quiet)).not.toHaveProperty("wireRewrites");
+    mockFetch([COMPLETED]);
+    const bare: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], onChunk: (c) => bare.push(c),
+      reasoningEffort: "max",
+    });
+    expect(doneOf(bare)).not.toHaveProperty("wireRewrites");
+  });
+
   it("hands the wire body to a caller's own _onRequestBody, beside the api log's", async () => {
     // streamCompletion wires the log through this hook; it used to replace the
     // caller's, which left the live probes asserting on an empty list.
@@ -490,13 +543,43 @@ describe("Responses adapter — server tools (web_search / web_extractor)", () =
     expect(body).not.toHaveProperty("tool_choice");
   });
 
-  it("drops a lone web_extractor, and sends nothing to the official endpoint", async () => {
+  it("drops a lone web_extractor, and sends only web_search to the official endpoint", async () => {
     // The endpoint answers a lone extractor with response.failed
     // (`must be executed with web_search tool`).
     expect((await run("openai_responses_compat", [COMPLETED], { serverTools: ["web_extractor"] })).body)
       .not.toHaveProperty("tools");
-    expect((await run("openai_responses", [COMPLETED], { serverTools: ["web_search", "web_extractor"] })).body)
-      .not.toHaveProperty("tools");
+    // OpenAI's own built-in search; the extractor and image searches are DashScope names.
+    expect((await run("openai_responses", [COMPLETED], {
+      serverTools: ["web_search", "web_extractor", "web_search_image", "image_search"],
+    })).body.tools).toEqual([{ type: "web_search" }]);
+  });
+
+  it("reads OpenAI's web_search_call actions: search (query fallback), open_page and find_in_page", async () => {
+    // Shapes measured on gpt-5.6-terra, 2026-09-14 (responses.md §10).
+    const search = { id: "ws_1", type: "web_search_call", action: { type: "search", query: "bbc headline" } };
+    const open = { id: "ws_2", type: "web_search_call", action: { type: "open_page", url: "https://www.bbc.com" } };
+    const find = { id: "ws_3", type: "web_search_call", action: { type: "find_in_page", url: "https://www.bbc.com", pattern: "Top" } };
+    const { received } = await run("openai_responses", [
+      ev("response.output_item.added", { output_index: 0, item: { ...search, status: "in_progress" } }),
+      ev("response.output_item.done", {
+        output_index: 0,
+        item: { ...search, status: "completed", action: { ...search.action, sources: [{ type: "url", url: "https://www.bbc.com/news" }] } },
+      }),
+      ev("response.output_item.added", { output_index: 1, item: { ...open, status: "in_progress", action: undefined } }),
+      ev("response.output_item.done", { output_index: 1, item: { ...open, status: "completed" } }),
+      ev("response.output_item.done", { output_index: 2, item: { ...find, status: "completed" } }),
+      COMPLETED,
+    ], { serverTools: ["web_search"] });
+
+    const events = received.filter((c): c is { serverTool: ServerToolEvent } => "serverTool" in c).map((c) => c.serverTool);
+    expect(events).toEqual([
+      { phase: "call", id: "ws_1", name: "web_search", input: { queries: ["bbc headline"] } },
+      { phase: "result", id: "ws_1", name: "web_search", results: [{ title: "https://www.bbc.com/news", url: "https://www.bbc.com/news" }] },
+      // The action only arrives with the finished item on OpenAI; the call carries nothing yet.
+      { phase: "call", id: "ws_2", name: "web_search", input: { queries: [] } },
+      { phase: "result", id: "ws_2", name: "web_search", results: [{ title: "https://www.bbc.com", url: "https://www.bbc.com" }] },
+      { phase: "result", id: "ws_3", name: "web_search", results: [{ title: "https://www.bbc.com", url: "https://www.bbc.com" }] },
+    ]);
   });
 
   it("reports web_search_call and web_extractor_call items as server-tool events, never as echo", async () => {

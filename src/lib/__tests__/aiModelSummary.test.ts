@@ -77,6 +77,13 @@ describe("wireSummary", () => {
     ]));
   });
 
+  it("shows text.verbosity on the Responses family only", () => {
+    const m = { ...base, textVerbosity: "low" as const, structuredOutput: "off" as const };
+    expect(wireSummary(m, "openai_responses")).toEqual([{ key: "text.verbosity", value: "low" }]);
+    expect(wireSummary(m, "openai_responses_compat")).toEqual([{ key: "text.verbosity", value: "low" }]);
+    expect(wireSummary(m, "openai")).toEqual([]);
+  });
+
   it("lists the structured-output mode the row resolves to, and drops it when off", () => {
     expect(wireSummary({ ...base, structuredOutput: "json_object" }, "openai")).toEqual([
       { key: "response_format", value: "json_object", scope: "structured" },

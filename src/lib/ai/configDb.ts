@@ -8,7 +8,9 @@ import Database from "@tauri-apps/plugin-sql";
 import type { ComfyWorkflowConfig } from "../comfy/workflow";
 import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
-import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
+import {
+  authModesFor, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
+} from "./types";
 import type { ImageDialect } from "./imageDialects";
 import {
   parseReasoningEffort, parseThinkingCategory, parseThinkingDialect,
@@ -280,6 +282,15 @@ export interface Model {
    */
   pdfInput?: boolean;
   /**
+   * How long and expansive the answer should be — the Responses family's
+   * `text.verbosity` (GPT-5.x; measured on gpt-5.6-terra, `low` visibly
+   * shortens the same answer — docs/api/responses.md §10).
+   *
+   * Only that family has the field, so the drawer offers it there alone and
+   * clears it everywhere else. Absent sends nothing, like every declaration.
+   */
+  textVerbosity?: TextVerbosity;
+  /**
    * Which fixed translation prompt format this model was trained on, if it is a
    * dedicated translation model rather than a general one.
    *
@@ -531,6 +542,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "price_per_second", "REAL");
   await addColumn(db, modelCols, "models", "probed_context_size", "INTEGER");
   await addColumn(db, modelCols, "models", "probed_max_output", "INTEGER");
+  await addColumn(db, modelCols, "models", "text_verbosity", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -773,9 +785,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null],
   };
 }
 
@@ -864,6 +876,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     // Absent for anything but an explicit 1 — the column is free-typed like
     // the rest, and "no declaration" must stay one representation.
     pdfInput: r.pdf_input === 1 ? true : undefined,
+    textVerbosity: parseTextVerbosity(r.text_verbosity),
     translateFormat: parseTranslateFormat(r.translate_format),
     structuredOutput: parseStructuredOutputMode(r.structured_output),
     asrFormat: parseAsrFormat(r.asr_format),

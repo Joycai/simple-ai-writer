@@ -26,7 +26,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
-import { familyOf, type ImageRoute } from "../../../lib/ai/types";
+import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type TextVerbosity } from "../../../lib/ai/types";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
 import {
   analyzeComfyWorkflow, parseComfyWorkflow, type ComfyParseError,
@@ -72,7 +72,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "so", "temp",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "so", "temp", "verb",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -120,7 +120,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
-    samp: !!(m && (m.temperature !== undefined || m.prefix?.trim())),
+    samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
   };
 }
@@ -198,6 +198,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     pricePerSecond: existing?.pricePerSecond !== undefined ? String(existing.pricePerSecond) : "",
     // "auto" ↔ stored undefined, like the category (lib/ai/jsonMode.ts).
     structuredOutput: (existing?.structuredOutput ?? "auto") as StructuredOutputMode | "auto",
+    // "auto" ↔ stored undefined: nothing sent (Responses family only).
+    textVerbosity: (existing?.textVerbosity ?? "auto") as TextVerbosity | "auto",
   });
   // The category the current form selection resolves to (auto → family
   // default). The source of truth for the effort dial, the budget field, and
@@ -451,6 +453,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // "auto" stores as absent, like the category. An image model has no
         // structured tasks, so nothing is kept there either.
         structuredOutput: isImageModel ? undefined : structuredOutput,
+        // Cleared off the Responses family, where no wire has the field.
+        textVerbosity: family === "responses" && !isImageModel && form.textVerbosity !== "auto"
+          ? form.textVerbosity
+          : undefined,
         // Cleared on the translate rule: it removes the row from every other
         // picker, so it must not outlive the protocol it was declared on.
         asrFormat: family === "openai" && !isImageModel && form.asrFormat ? form.asrFormat : undefined,
@@ -510,9 +516,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
 
-  const sampHas = form.temperature.trim() !== "" || form.prefix.trim() !== "";
+  const verbositySet = family === "responses" && form.textVerbosity !== "auto";
+  const sampHas = form.temperature.trim() !== "" || form.prefix.trim() !== "" || verbositySet;
   const sampSum = [
     form.temperature.trim() !== "" && `T ${form.temperature.trim()}`,
+    verbositySet && t(`aiConfig.models.verbosity_${form.textVerbosity}`),
     form.prefix.trim() !== "" && t("aiConfig.models.prefixLabelShort"),
   ].filter(Boolean).join(" · ");
 
@@ -1128,6 +1136,29 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     aria-label={t("aiConfig.models.tempLabel")}
                   />
                   {temperature === 0 && <span className={s.tag}>{t("aiConfig.models.tempDeterministic")}</span>}
+                </div>
+              </Field>
+            </Fold>
+            {/* text.verbosity — the Responses family is the only wire with the
+                field, so the row exists only there. 自动 = dashed, nothing sent. */}
+            <Fold open={family === "responses"}>
+              <Field label={t("aiConfig.models.verbosityLabel")} hint={t("aiConfig.models.briefVerbosity")}
+                {...whyProps("verb", t("aiConfig.models.verbosityHint"))}>
+                <div className={s.chips}>
+                  <DashChip
+                    label={t("aiConfig.models.verbosityAuto")}
+                    active={form.textVerbosity === "auto"}
+                    auto
+                    onClick={() => setForm({ ...form, textVerbosity: "auto" })}
+                  />
+                  {TEXT_VERBOSITIES.map((v) => (
+                    <DashChip
+                      key={v}
+                      label={t(`aiConfig.models.verbosity_${v}`)}
+                      active={form.textVerbosity === v}
+                      onClick={() => setForm({ ...form, textVerbosity: v })}
+                    />
+                  ))}
                 </div>
               </Field>
             </Fold>

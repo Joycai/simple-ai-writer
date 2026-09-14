@@ -263,7 +263,12 @@ function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
       };
       continue;
     }
-    if (event.kind === "round-done") continue;
+    // The one exception: a round whose request the endpoint quietly rewrote
+    // gets a line, because nothing else on screen would ever say so.
+    if (event.kind === "round-done") {
+      if (event.wireRewrites?.length) rows.push({ event });
+      continue;
+    }
     rows.push({ event, round: pending });
     pending = undefined;
   }
@@ -568,6 +573,20 @@ function AgentLogRow({ row, showTime, runStatus }: {
           </span>
           {roundChip}
           {time}
+        </li>
+      );
+    case "round-done":
+      // Only rows for a round whose request the endpoint rewrote (toRows).
+      // Warning-shaped like a truncation: the answer is real, the setting wasn't.
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {(event.wireRewrites ?? []).map((r) => t("ai.agent.log.wireRewrite", {
+              defaultValue: "端点把 {{field}} 从 {{sent}} 改成了 {{echoed}}",
+              field: r.field, sent: r.sent, echoed: r.echoed,
+            })).join(" · ")}
+          </span>
         </li>
       );
     case "round-start":

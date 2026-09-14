@@ -1,6 +1,7 @@
 # GPT-5.6（sol / terra / luna）支持度盘点与方案
 
-> **状态**：`planned`。2026-09-14。
+> **状态**：P2 / P3 / P4.1–4.4 `shipped`（与本文同一个 PR）；P1 / P5 / P6 暂不做（作者 2026-09-14 决定）；
+> P7 移到后一期。2026-09-14。
 > **性质**：本项目的取舍，不是协议事实。事实在 [`responses.md`](responses.md)（§2、§10），
 > 中转站的改写在 [`landscape.md`](landscape.md) §7 第八、第十个样本。
 > **证据的边界**：两次实测都经 New API 中转站（`[Pro]` 档 2026-09-03、`[Plus]` 档 2026-09-14），
@@ -137,11 +138,12 @@ sol / terra / luna **不需要按型号分支**：三款共用上面每一条，
 
 ## 4. 执行顺序
 
-| 片 | 内容 | 前置 |
+| 片 | 内容 | 状态 |
 | --- | --- | --- |
-| A | P4.1 `open_page` 解析 + P2 回显比对 | 无，可直接做 |
-| B | P3 `text.verbosity` 模型声明 | 无 |
-| C | 官方 key 实测：P1 报错原文、P5 `include`、P4.2 `sources`、P6 `mode:"pro"` | 作者提供 `OPENAI_KEY`（官方） |
-| D | P1 报错翻译 + 抽屉提示、P5 按结果发 `include`、P4.2 放开官方 `web_search` | C |
+| A | P2 回显比对（done 块 `wireRewrites` → API 日志 + 执行日志 `round-done` 行）· P3 `text.verbosity` 模型声明 · P4.1 `open_page` / `find_in_page` / `query` 解析 · P4.2 放开官方 `web_search`（其余 id 在官方线上被滤掉）· P4.3 抽屉说明写上成本 | ✅ 与本文同一个 PR |
+| B | P1 报错翻译 + 抽屉提示、P5 `include`、P6 `mode:"pro"` | 暂不做（作者决定）；要做时先用官方 key 实测 |
+| C | P7 `tool_search` 延迟加载工具 | 后一期 |
 
-每片一个 PR，实测结果回填 `responses.md` 与 `landscape.md`。
+P4.2 与计划原文有一处偏离：没有等官方 key 确认 `sources` 是否需要 `include` 就放开了。
+理由是 `sources` 只影响执行日志里能列出几个网址——没有它，搜索照样执行、回答照样带
+`url_citation`，日志里的 `search` 调用只是结果为空，不会让请求失败。实测结果回填 `responses.md` 与 `landscape.md`。
