@@ -47,22 +47,27 @@ function yamlString(v: string): string {
 }
 
 export function transcriptToMarkdown(t: Transcript, opts: RenderOptions): string {
+  // An untimed transcript (the synchronous endpoint) has neither timings nor
+  // speakers to print; the frontmatter says so, so a reader of the file does
+  // not wonder why the timestamp preference was ignored.
+  const timed = t.timed !== false;
   const head = [
     "---",
     `source: ${yamlString(opts.source)}`,
     `transcribed: ${opts.transcribedAt ?? new Date().toISOString()}`,
     `model: ${yamlString(opts.model)}`,
     `duration: ${formatDuration(t.durationMs)}`,
+    ...(timed ? [] : ["timestamps: none"]),
     "---",
     "",
   ];
   const speakerWord = opts.speakerWord ?? "说话人";
-  const showSpeakers = opts.speakers && t.speakers;
+  const showSpeakers = timed && opts.speakers && t.speakers;
   const body: string[] = [];
   for (const s of t.sentences) {
     if (!s.text) continue;
     const parts: string[] = [];
-    if (opts.timestamps) parts.push(`[${formatClock(s.beginMs, t.durationMs)}]`);
+    if (timed && opts.timestamps) parts.push(`[${formatClock(s.beginMs, t.durationMs)}]`);
     if (showSpeakers && s.speaker !== undefined) parts.push(`${speakerWord} ${s.speaker + 1}：`);
     parts.push(s.text);
     body.push(parts.join(" ").replace("： ", "："));

@@ -22,9 +22,17 @@ describe("cacheKeyOf / optionsTag / modelTag", () => {
     const zh = cacheKeyOf(sha, MODEL, { diarization: false, languageHints: ["zh", "en"] });
     expect(new Set([plain, diar, zh]).size).toBe(3);
     for (const k of [plain, diar, zh]) expect(k).toMatch(/^[0-9a-f]{16}-[a-z0-9-]+$/);
-    expect(plain).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-p");
-    expect(diar).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-d2");
-    expect(zh).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-p-zh-en");
+    expect(plain).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-ft-p");
+    expect(diar).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-ft-d2");
+    expect(zh).toBe("0123456789abcdef-qwen-audio-3-0-asr-flash-filetrans-ft-p-zh-en");
+  });
+  it("接口进键：同内容同模型同参数，同步与录音文件识别各一份（两种 result.json 形状不同）", () => {
+    const ft = cacheKeyOf(sha, "qwen3-asr-flash", { diarization: false }, "dashscope-filetrans");
+    const sync = cacheKeyOf(sha, "qwen3-asr-flash", { diarization: false }, "dashscope-sync");
+    expect(ft).not.toBe(sync);
+    expect(sync).toBe("0123456789abcdef-qwen3-asr-flash-sync-p");
+    // 缺省＝录音文件识别：旧调用点的键不因为多了一个参数而变。
+    expect(cacheKeyOf(sha, MODEL, { diarization: false })).toBe(cacheKeyOf(sha, MODEL, { diarization: false }, "dashscope-filetrans"));
   });
   it("换模型 → 换键：同内容同参数的两个模型各留一份缓存，来回切不重复付费", () => {
     const a = cacheKeyOf(sha, "qwen3-asr-flash-filetrans", { diarization: false });
@@ -43,7 +51,7 @@ describe("cacheKeyOf / optionsTag / modelTag", () => {
 
 describe("parseCacheMeta", () => {
   const meta: AsrCacheMeta = {
-    source: "D:/p/a.wav", bytes: 10, model: "m", options: { diarization: true, speakerCount: 2, languageHints: ["zh"] },
+    source: "D:/p/a.wav", bytes: 10, model: "m", format: "dashscope-filetrans", options: { diarization: true, speakerCount: 2, languageHints: ["zh"] },
     billedSeconds: 48, transcribedAt: 1, lastUsedAt: 2, version: ASR_CACHE_VERSION,
   };
   it("往返", () => {
@@ -54,6 +62,10 @@ describe("parseCacheMeta", () => {
   it("isUsableMeta：版本对上还不够，模型也要是这一个", () => {
     expect(isUsableMeta(meta, "m")).toBe(true);
     expect(isUsableMeta(meta, "other")).toBe(false);
+    // 接口也要对上：同步响应不能被 filetrans 的解析器读，反之亦然。
+    expect(isUsableMeta(meta, "m", "dashscope-sync")).toBe(false);
+    expect(isUsableMeta({ ...meta, format: "dashscope-sync" }, "m", "dashscope-sync")).toBe(true);
+    expect(parseCacheMeta(JSON.stringify({ ...meta, format: "dashscope-sync" }))?.format).toBe("dashscope-sync");
     expect(isUsableMeta({ ...meta, version: ASR_CACHE_VERSION + 1 }, "m")).toBe(false);
     expect(isUsableMeta(null, "m")).toBe(false);
   });
@@ -69,7 +81,7 @@ describe("planSweep", () => {
   const now = 10_000_000_000;
   const fresh = (name: string, over: Partial<AsrCacheMeta> = {}) => ({
     name,
-    meta: { source: "s", bytes: 1, model: "m", options: { diarization: false }, billedSeconds: null, transcribedAt: now, lastUsedAt: now, version: ASR_CACHE_VERSION, ...over },
+    meta: { source: "s", bytes: 1, model: "m", format: "dashscope-filetrans" as const, options: { diarization: false }, billedSeconds: null, transcribedAt: now, lastUsedAt: now, version: ASR_CACHE_VERSION, ...over },
   });
   it("丢：没 sidecar、版本不对、过期；留：新鲜的和 keep", () => {
     const gone = planSweep([

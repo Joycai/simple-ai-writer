@@ -4,6 +4,10 @@
  *   读文件 → 算键 → 缓存命中？→ 拿凭证 → 上传 → 提交 → 轮询 → 取结果 JSON
  *   → 落缓存（先写 `.tmp-` 再改名，照 `lib/import/cachedConvert`）→ 解析 → 渲染
  *
+ * 同步接口（`conn.format === "dashscope-sync"`）是另一条腿：先按文件头查上限 →
+ * 读文件 → 算键 → 缓存命中？→ 一次 `/chat/completions` → 落缓存（存的是响应本体）
+ * → 解析。没有上传、没有轮询；缓存、sidecar、落盘规矩和上面完全一样。
+ *
  * 缓存的是**结果 JSON 本体**，不是链接：链接 24 小时失效（不变量 5）。写产物
  * 是另一个函数（`writeTranscript`），因为两个入口对"写到哪、写不写"的答案不同：
  * 右键直接写在源文件旁边，助手那条路要先过审批卡。
@@ -17,12 +21,17 @@ import {
   readBinaryFile,
   readDir,
   readFile,
+  readFileHead,
   removeDir,
   renamePath,
+  toBase64,
   writeFile,
 } from "../fs/fileio";
+import type { AsrFormat } from "../ai/configDb";
 import { baseName, dirName } from "../paths";
 import { uniqueImportPath } from "../import";
+import { wavDurationSeconds } from "./cost";
+import { transcribeSync } from "./sync";
 import {
   ASR_CACHE_VERSION,
   ASR_META_NAME,
@@ -46,8 +55,8 @@ import {
   uploadTemp,
   type AsrConn,
 } from "./client";
-import { transcribeExtOf } from "./formats";
-import { parseTranscript, type Transcript } from "./result";
+import { syncRefusal, syncRefusalText, transcribeExtOf } from "./formats";
+import { parseSyncTranscript, parseTranscript, type Transcript } from "./result";
 import { transcriptToMarkdown } from "./render";
 
 /** 平台凭证说的上限是 1024MB；这里再收紧一点，因为整个文件要进内存做哈希和上传。 */
@@ -150,12 +159,42 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
   };
 }
 
+/** A synchronous request carries the whole file; 43s was the slowest measured. Five minutes is "the endpoint is gone". */
+const SYNC_DEADLINE_MS = 5 * 60_000;
+
+/** The two result files have different shapes; the endpoint that wrote one says which parser reads it. */
+function parseResult(format: AsrFormat, json: string): Transcript {
+  return format === "dashscope-sync" ? parseSyncTranscript(json) : parseTranscript(json);
+}
+
+/**
+ * What the synchronous endpoint can use of the request options: language hints
+ * only. Normalised *before* the cache key, so flipping the diarization switch
+ * on a sync row neither changes the result nor pays for a second copy of it.
+ */
+function effectiveOptions(format: AsrFormat, options: AsrRequestOptions): AsrRequestOptions {
+  if (format !== "dashscope-sync") return options;
+  return { diarization: false, ...(options.languageHints?.length ? { languageHints: options.languageHints } : {}) };
+}
+
 export async function transcribeFile(req: TranscribeRequest): Promise<TranscribeOutcome> {
-  const { projectPath, sourcePath, conn, options, onProgress } = req;
+  const { projectPath, sourcePath, conn, onProgress } = req;
+  const format: AsrFormat = conn.format ?? "dashscope-filetrans";
+  const sync = format === "dashscope-sync";
+  const options = effectiveOptions(format, req.options);
   const ext = transcribeExtOf(sourcePath);
   if (!ext) throw new Error(`"${baseName(sourcePath)}" is not an audio or video file this tool can transcribe`);
 
   onProgress?.({ phase: "reading" });
+  if (sync) {
+    // Both entry points refused an over-limit file before approval (不变量 7);
+    // this is the backstop, and it still runs before the bytes cross IPC and
+    // before a request the endpoint would 400 — the file may have changed
+    // between the card and the click.
+    const head = await readFileHead(sourcePath, 64 * 1024);
+    const refusal = syncRefusal(ext, head.size, ext === "wav" ? wavDurationSeconds(head.head, head.size) : null);
+    if (refusal) throw new Error(`"${baseName(sourcePath)}" ${syncRefusalText(refusal)}`);
+  }
   const bytes = await readBinaryFile(sourcePath);
   if (bytes.byteLength === 0) throw new Error(`"${baseName(sourcePath)}" is empty`);
   if (bytes.byteLength > MAX_TRANSCRIBE_BYTES) {
@@ -163,14 +202,14 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
       `file is ${(bytes.byteLength / 1024 / 1024).toFixed(0)}MB — over the ${MAX_TRANSCRIBE_BYTES / 1024 / 1024}MB transcription limit`,
     );
   }
-  const key = cacheKeyOf(await sha256Hex(bytes), conn.modelId, options);
+  const key = cacheKeyOf(await sha256Hex(bytes), conn.modelId, options, format);
   const dir = cacheDirFor(projectPath, key);
   await sweepOnce(projectPath, key);
 
   const existing = await readMeta(dir);
-  if (isUsableMeta(existing, conn.modelId)) {
+  if (isUsableMeta(existing, conn.modelId, format)) {
     try {
-      const transcript = parseTranscript(await readFile(`${dir}/${ASR_RESULT_NAME}`));
+      const transcript = parseResult(format, await readFile(`${dir}/${ASR_RESULT_NAME}`));
       void writeMeta(dir, { ...existing, lastUsedAt: Date.now() }).catch(() => {});
       return { transcript, cacheDir: dir, cached: true, billedSeconds: existing.billedSeconds, bytes: bytes.byteLength };
     } catch {
@@ -178,35 +217,49 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
     }
   }
 
-  const deadline = withDeadline(req.signal, pollDeadlineMs(bytes.byteLength, null));
   let resultJson: string;
   let billedSeconds: number | null;
-  try {
-    onProgress?.({ phase: "uploading" });
-    const policy = await getUploadPolicy(conn, deadline.signal);
-    const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
-    const taskId = await submitTranscription(conn, ossUrl, options, deadline.signal);
-    onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
-    const polled = await pollTask(
-      conn,
-      taskId,
-      (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
-      deadline.signal,
-    );
-    onProgress?.({ phase: "downloading" });
-    resultJson = await fetchResultJson(polled.transcriptionUrl, deadline.signal);
-    billedSeconds = polled.billedSeconds;
-  } finally {
-    deadline.done();
+  if (sync) {
+    const deadline = withDeadline(req.signal, SYNC_DEADLINE_MS);
+    try {
+      // No upload and no queue: the one request *is* the recognition.
+      onProgress?.({ phase: "running" });
+      const result = await transcribeSync(conn, { audioBase64: toBase64(bytes), ext, options }, deadline.signal);
+      resultJson = result.responseJson;
+      billedSeconds = result.billedSeconds;
+    } finally {
+      deadline.done();
+    }
+  } else {
+    const deadline = withDeadline(req.signal, pollDeadlineMs(bytes.byteLength, null));
+    try {
+      onProgress?.({ phase: "uploading" });
+      const policy = await getUploadPolicy(conn, deadline.signal);
+      const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
+      const taskId = await submitTranscription(conn, ossUrl, options, deadline.signal);
+      onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
+      const polled = await pollTask(
+        conn,
+        taskId,
+        (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
+        deadline.signal,
+      );
+      onProgress?.({ phase: "downloading" });
+      resultJson = await fetchResultJson(polled.transcriptionUrl, deadline.signal);
+      billedSeconds = polled.billedSeconds;
+    } finally {
+      deadline.done();
+    }
   }
 
   // 先解析再落盘：解析不出来的结果不值得缓存——下次命中它只会再失败一次。
-  const transcript = parseTranscript(resultJson);
+  const transcript = parseResult(format, resultJson);
   const now = Date.now();
   const meta: AsrCacheMeta = {
     source: sourcePath,
     bytes: bytes.byteLength,
     model: conn.modelId,
+    format,
     options,
     billedSeconds,
     transcribedAt: now,

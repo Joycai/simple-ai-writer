@@ -6,7 +6,21 @@
  */
 
 export { isAsrEnabled, setAsrEnabled, isAsrTimestampsEnabled, setAsrTimestampsEnabled, isAsrDiarizationDefault, setAsrDiarizationDefault } from "./flag";
-export { ASR_AUDIO_EXTENSIONS, ASR_VIDEO_EXTENSIONS, ASR_EXT_LIST, transcribeExtOf, isVideoExt } from "./formats";
+export {
+  ASR_AUDIO_EXTENSIONS,
+  ASR_VIDEO_EXTENSIONS,
+  ASR_EXT_LIST,
+  ASR_DEFAULT_MODEL_ID,
+  SYNC_ASR_EXTENSIONS,
+  SYNC_MAX_BYTES,
+  SYNC_MAX_SECONDS,
+  asrIdMismatch,
+  looksLikeSyncAsrModel,
+  syncRefusal,
+  transcribeExtOf,
+  isVideoExt,
+  type SyncRefusal,
+} from "./formats";
 export { estimateCost, formatBytes, wavDurationSeconds } from "./cost";
 export { formatClock, formatDuration, transcriptToMarkdown } from "./render";
 export type { Transcript, TranscriptSentence } from "./result";

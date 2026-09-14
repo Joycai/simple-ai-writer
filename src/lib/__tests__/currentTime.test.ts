@@ -86,6 +86,7 @@ const EXEMPT = [
   "src/lib/lore/vision.ts", // image description
   "src/lib/roleplay/context.ts", // a character lives in the story's time — the author's clock would leak into the prose
   "src/lib/translate/run.ts", // Sakura: a training-time template, not a prompt
+  "src/lib/asr/sync.ts", // speech recognition: the system part is hot-word context for a model that only transcribes
   "src/stores/digestStore.ts", // display-only digest
   "src/stores/memoryStore.ts", // story-memory summarizer
 ];
