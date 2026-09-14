@@ -108,6 +108,20 @@ describe("Responses adapter — request shape", () => {
     expect(calls[0].body).toHaveProperty("instructions", "");
   });
 
+  it("hands the wire body to a caller's own _onRequestBody, beside the api log's", async () => {
+    // streamCompletion wires the log through this hook; it used to replace the
+    // caller's, which left the live probes asserting on an empty list.
+    const calls = mockFetch([COMPLETED]);
+    const bodies: unknown[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "openai_responses", modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+      _onRequestBody: (b) => bodies.push(b),
+    });
+    expect(bodies).toEqual([calls[0].body]);
+  });
+
   it("joins several system messages into one instructions string, in order", () => {
     const { instructions, input } = toResponsesInput([
       { role: "system", content: "one" },

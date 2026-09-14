@@ -950,6 +950,58 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
 **可移植的规则**：`chat` 路由的回包**没有**约定形状，只有"目前见过的形状"——每接一台
 新中转都要跑一遍 live 文件，而不是照文档写解析；生图的 mime 永远读字节。
 
+### 第十个样本：另一台 New API 上的 ② 族（`[Plus]` 档 GPT-5.6-terra / -sol，2026-09-14 实测）
+
+协议事实回填在 [`responses.md`](responses.md) §2、§10，这里记**中转站自己干的事**，以及它和
+第八个样本（同为 New API、`[Pro]` 档）的异同。样本是 `42.240.165.241:3000`，目录里同名
+模型挂着 `[Plus]` / `[Pro]` / `[Azure]` / `[AWSb]` / `[官key]` / `[次数]` / `[特价Pro]` 七档
+（5.6 全家三款都在，`[Plus]` 与 `[次数]` 档没有 luna），`supported_endpoint_types` 一律 `openai`。
+取样：terra 跑全套（adapter 实测 12 条 + 线路探针 27 条 + 内置工具 13 条），sol 只补
+与 terra 可能不同的几条（默认力度、`max`、`mode:"pro"`、`high`、`xhigh`）——两款共有的能力
+只在 terra 上验，控制 token 成本。
+
+- **不发 `instructions` 就注入系统提示**，与第八个样本同一条：`input_tokens` 8,778，其中
+  7,680 命中缓存；**Chat 面也注入**（不带 system 消息的请求 `prompt_tokens` 8.8K–13.2K）。
+  带 `instructions` 的 Responses 请求只有 74 token。规则不变：永远显式发 system。
+- **`temperature` 被静默改写**：发 `0.5`，响应回显 `1.0`，不报错（Chat 面同样 200）。
+  是中转站丢了字段还是后端强制 1，分不清——官方端点对 GPT-5 发非 1 的 temperature 的反应
+  **未验**。
+- **`reasoning.effort` 的回显不可信**：
+  - terra：`low` / `xhigh` / `max` 原样回显，`reasoning_tokens` 46–64，summary 条目随 `summary:"auto"` 出现。
+  - terra：**`effort:"none"` 回显 `medium`、`reasoning_tokens` 50**，单发与和 `temperature:0.5` 同发各一次，结果相同——这一档关不掉思考。
+  - sol：不发 effort 回显 `medium`、有推理。**发 `max` 与发 `{effort:"medium", mode:"pro"}` 都回显 `effort:"none"`**、`reasoning_tokens: 0`，输出里多一条 `phase` 缺失、文本为一个空格的 `message`。
+  - sol 发 `xhigh`：200，但响应**根本没有 `reasoning` / `text` / `temperature` 字段**，`input_tokens` 706（同题别的请求 37–111），`message` 无 `phase`，`reasoning_tokens: 0`；`high` 一次 240 s 超时。响应形状不同说明**同一档位背后不止一个上游**，每次请求落到哪个没法从请求侧决定。
+  - 同一请求的输出正确，只是没推理——**这是本目录里第二条"不报错、只降质"的中转站行为**（第一条是注入系统提示）。
+- **`reasoning.mode:"pro"` 回显 `standard`**（terra、sol 都是），与第八个样本 `[Pro]` 档一致。
+  两台中转站、两档都不给 pro，**这个字段在中转站上验不了**。
+- **`max_output_tokens: 16` 被无视**：terra 照常写完三段，`status: completed`，没有
+  `incomplete`（第八个样本上这条是生效的）。本项目 Responses 路径本来就不发它，影响只在
+  「截断」这条状态永远不会出现。
+- **`include` 无关紧要**：`store:false` 时 reasoning 条目**不发 `include` 也自带
+  `encrypted_content`**（1,356–1,484 字节），发了 `["reasoning.encrypted_content"]` 同样 200。
+  所以「官方端点不发 `include` 就没有加密推理」这件事在中转站上**仍验不了**。
+- **Chat 面是翻译出来的**：`reasoning_effort:"medium"` + `tools` 拿到 `tool_calls`（官方文档
+  说 5.4 起不行）；`xhigh` 带回 39 字符的 `reasoning_content`（官方 ① 族没有这个字段）。
+- **内置工具**（terra，Responses 面，只测与写作相关的；`image_generation` 报 403
+  `Image generation is not enabled for this group`，`shell` / `local_shell` / `apply_patch` /
+  `computer_use_preview` 不在本项目范围，结果不收）：
+
+  | 工具 | 结果 |
+  | --- | --- |
+  | `web_search` | ✅ **可用但慢且贵**。一次回答里 5 个 `web_search_call`：`action.type` 为 `search`（带 `query`、`queries`、12–16 条 `sources`）或 `open_page`（只有 `url`）；答案带 `url_citation` 标注；`tool_usage.web_search.num_requests: 3`。**首个事件 54 s、总 112 s、`input_tokens` 45,712**（搜回的网页按输入计）。同样请求另一次在第 43 s 以 `response.failed`（`server_error` "overloaded"）结束——失败发生在已经搜过两次之后。非流式请求 180 s 超时 3/3 |
+  | `web_search_preview` / 强制 `tool_choice:{type:"web_search"}` | 非流式 180 s 超时，未得结论 |
+  | `code_interpreter`（`container:{type:"auto"}`） | **不稳定**：一次 400 `Unsupported tool type`，一次 HTTP 200 但 245 s 内零事件后断流。按不可用算 |
+  | `file_search` / `mcp` | 400 `Unsupported tool type`（这一档没开） |
+  | `tool_search` | 400 `tools.tool_search requires at least one deferred tool`——**端点认识它**，要求同时有延迟加载的函数工具 |
+  | Chat 面 `web_search_options` | 200，**被静默忽略**：模型答"无法访问实时网页"，无 `annotations` |
+
+- **上游不稳**：线路探针 27 条里 12 条在 150 s 处超时（非流式），分布无规律（同一字段换个
+  值就过）；sol 比 terra 慢一个量级（同一题 51–76 s 对 5–15 s）。adapter 实测用流式，
+  12 条里除 `max_output_tokens` 外全过。
+- 目录里的模型 id 带档位前缀（`[Plus]gpt-5.6-terra`），响应的 `model` 回显去掉前缀
+  （`gpt-5.6-terra`）——按 id 前缀查表（`modelLimits` / `jsonMode`）的逻辑认不出带前缀的 id，
+  与第八个样本一致。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
