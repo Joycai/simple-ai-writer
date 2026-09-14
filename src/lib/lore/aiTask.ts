@@ -15,6 +15,7 @@ import type { LoreEntity } from "./model";
 import { MAX_IMAGE_BYTES, readTextFileContent, type ProjectFile } from "../fs/images";
 import type { ContentPart } from "../ai/types";
 import { imagePart } from "../ai/imagePart";
+import { MAX_VIDEO_BYTES, MIN_VIDEO_SECONDS, readVideoForModel, videoMimeOf, type ModelVideo } from "../fs/video";
 
 // ── Attachments ──────────────────────────────────────────────────────────────
 
@@ -37,7 +38,15 @@ export type AttachedText  = { kind: "text";  file: ProjectFile; content: string 
  * `transcribe_audio` (lib/agent/chatRefs); the lore surfaces never offer it.
  */
 export type AttachedMedia = { kind: "media"; file: ProjectFile };
-export type AttachedItem  = AttachedLore | AttachedImage | AttachedText | AttachedMedia;
+/**
+ * A video clip read for a model that declares `videoInput` (lib/fs/video).
+ * Only the chat composer builds one, and only when asked to — the same file
+ * picked for any other model stays an {@link AttachedMedia} pointer. Duration
+ * and frame size are what the chip's ≈ token estimate is computed from;
+ * absent for a WebM.
+ */
+export type AttachedVideo = { kind: "video"; file: ProjectFile } & ModelVideo;
+export type AttachedItem  = AttachedLore | AttachedImage | AttachedText | AttachedMedia | AttachedVideo;
 
 /** Stable identity for an attachment, used for dedupe and chip keys. */
 export function attachedKey(a: AttachedItem): string {
@@ -47,6 +56,7 @@ export function attachedKey(a: AttachedItem): string {
 /** Why a file could not become an attachment — the two ways a pick fails. */
 type AttachFailure =
   | { ok: false; reason: "too-large"; sizeMb: string; maxMb: number }
+  | { ok: false; reason: "too-short"; seconds: string; minSeconds: number }
   | { ok: false; reason: "unreadable" };
 type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
 
@@ -62,7 +72,37 @@ type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
  * oversized one is shrunk to fit, and only one that survives even that is
  * turned away.
  */
-export async function attachProjectFile(file: ProjectFile): Promise<AttachOutcome> {
+export async function attachProjectFile(
+  file: ProjectFile,
+  opts: {
+    /**
+     * The composer's model can take a clip (`canReadVideo`). Without it a
+     * video stays a path, exactly as before — the file tree's 发送到助手 does
+     * not pass it.
+     */
+    video?: boolean;
+  } = {},
+): Promise<AttachOutcome> {
+  if (file.kind === "media" && opts.video && videoMimeOf(file.path)) {
+    try {
+      const read = await readVideoForModel(file.path);
+      if (read.ok) return { ok: true, item: { kind: "video", file, ...read.video } };
+      if (read.reason === "too-large") {
+        return {
+          ok: false,
+          reason: "too-large",
+          sizeMb: (read.sizeBytes / 1_000_000).toFixed(1),
+          maxMb: MAX_VIDEO_BYTES / 1_000_000,
+        };
+      }
+      if (read.reason === "too-short") {
+        return { ok: false, reason: "too-short", seconds: read.durationSec.toFixed(1), minSeconds: MIN_VIDEO_SECONDS };
+      }
+      return { ok: false, reason: "unreadable" };
+    } catch {
+      return { ok: false, reason: "unreadable" };
+    }
+  }
   // A mention, not a payload: the file stays on disk and the message carries
   // its path. Reading a 2GB recording here would only be thrown away.
   if (file.kind === "media") return { ok: true, item: { kind: "media", file } };

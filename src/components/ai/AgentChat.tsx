@@ -14,7 +14,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, FolderOpen, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, Film, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
 import { SnippetPicker } from "./SnippetPicker";
@@ -35,6 +35,8 @@ import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { isAsrEnabled } from "../../lib/asr/flag";
+import { canReadVideo, estimateVideoTokens } from "../../lib/ai/videoInput";
+import { videoMimeOf } from "../../lib/fs/video";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -181,6 +183,11 @@ export function AgentChat() {
   // (Beta on + an `asr` binding, routing.ts's rule): offering it otherwise
   // attaches a file the message can neither carry nor hand to a tool.
   const canTranscribe = isAsrEnabled() && subAgentModel("asr", models, effectiveSubs) !== null;
+  // A clip travels as content only to the active model itself — declared
+  // videoInput, on the Chat Completions family (agentStore's allowVideo is the
+  // same call). There is no video subagent to fall back on.
+  const activeStandard = useAiStore((s) => s.providers.find((p) => p.id === activeModel?.providerId)?.apiStandard);
+  const canVideo = canReadVideo(activeModel, activeStandard);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -258,9 +265,10 @@ export function AgentChat() {
     // carry — the author would see a chip and the assistant would answer as if
     // nothing were there.
     ...projectFiles
-      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages) || (f.kind === "media" && canTranscribe))
+      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages)
+        || (f.kind === "media" && (canTranscribe || (canVideo && videoMimeOf(f.path) !== null))))
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, projectFiles, canSeeImages, canTranscribe]);
+  ], [loreIndex, projectFiles, canSeeImages, canTranscribe, canVideo]);
 
   const mentionItems = filterMentions(
     pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
@@ -313,7 +321,9 @@ export function AgentChat() {
       // picture is refused here rather than at send time: the author is
       // choosing it *now*, and a message that quietly loses an attachment
       // minutes later is unexplainable from the transcript.
-      const outcome = await attachProjectFile(item.file);
+      // A video is read only for a model that can take it; otherwise it stays
+      // a path, as it always was.
+      const outcome = await attachProjectFile(item.file, { video: canVideo });
       if (!outcome.ok) {
         setRefError(outcome.reason === "too-large"
           ? t("ai.chat.imageTooLarge", {
@@ -321,6 +331,13 @@ export function AgentChat() {
               name: item.file.name,
               size: outcome.sizeMb,
               max: outcome.maxMb,
+            })
+          : outcome.reason === "too-short"
+          ? t("ai.chat.videoTooShort", {
+              defaultValue: "{{name}} 太短（{{seconds}} 秒）——读视频的端点要求至少 {{min}} 秒",
+              name: item.file.name,
+              seconds: outcome.seconds,
+              min: outcome.minSeconds,
             })
           : t("ai.chat.refUnreadable", {
               defaultValue: "读不到 {{name}}",
@@ -937,6 +954,27 @@ export function AgentChat() {
                   detail: downscaleNote(r.downscaled),
                 })
               : null;
+            // A clip's cost is the one thing about it the author cannot guess
+            // (600 tokens or 36k), so the chip says it — as an estimate, at
+            // the fps this model will send. Size only when the header gave no
+            // duration (WebM): a guessed number would read as a measurement.
+            const videoTokens = r.kind === "video"
+              ? estimateVideoTokens({ ...r, fps: activeModel?.videoFps })
+              : null;
+            const videoCost = r.kind === "video"
+              ? videoTokens !== null
+                ? t("ai.chat.videoEstimate", { defaultValue: "≈ {{tokens}} token", tokens: videoTokens.toLocaleString() })
+                : t("ai.chat.videoEstimateUnknown", {
+                    defaultValue: "{{size}}MB · 时长未知，估不出 token",
+                    size: (r.sizeBytes / 1_000_000).toFixed(1),
+                  })
+              : null;
+            const videoNote = r.kind === "video" && videoTokens !== null
+              ? t("ai.chat.videoEstimateTitle", {
+                  defaultValue: "估算（按抽帧频率 {{fps}} 帧/秒）；每一轮工具调用都会重新计费，对话里只保留最新的一段",
+                  fps: activeModel?.videoFps ?? 2,
+                })
+              : null;
             return (
               <button
                 key={key}
@@ -944,14 +982,16 @@ export function AgentChat() {
                 onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
                 // The full name always reaches the author somewhere: the chip
                 // may cut its middle (屏 1g-3), the tooltip never does.
-                title={[label, shrunk, t("ai.chat.removeRef")].filter(Boolean).join(" · ")}
+                title={[label, shrunk, videoCost, videoNote, t("ai.chat.removeRef")].filter(Boolean).join(" · ")}
               >
                 {/* A picture is the one attachment whose cost the author can't
                     read off its name — mark it as what it is. */}
                 {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
                 {/* A recording travels as a path, not content — the mark says so. */}
                 {r.kind === "media" && <AudioLines size={10} strokeWidth={2} />}
+                {r.kind === "video" && <Film size={10} strokeWidth={2} />}
                 @{middleEllipsis(label)}
+                {videoCost && <span>{videoCost}</span>}
                 <X size={10} strokeWidth={2} />
               </button>
             );

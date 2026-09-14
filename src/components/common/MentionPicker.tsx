@@ -15,9 +15,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { AudioLines, FileText, Image as ImageIcon } from "lucide-react";
+import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
+import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
 // The pure vocabulary function, not stores/projectStore's useTerms hook: this
 // module's helpers (findMention, filterMentions) are imported by node-side
@@ -170,7 +171,11 @@ function FileThumb({ file }: { file: ProjectFile }) {
   if (file.kind !== "image" || !url) {
     return (
       <div className={styles.pickerThumbPlaceholder}>
-        {file.kind === "image" ? <ImageIcon size={12} /> : file.kind === "media" ? <AudioLines size={12} /> : <FileText size={12} />}
+        {file.kind === "image"
+          ? <ImageIcon size={12} />
+          : file.kind === "media"
+            ? videoMimeOf(file.path) ? <Film size={12} /> : <AudioLines size={12} />
+            : <FileText size={12} />}
       </div>
     );
   }
@@ -289,6 +294,8 @@ export function MentionPicker({
                 ? item.entity.category
                 : item.file.kind === "image"
                   ? t("ai.mention.badgeImage", { defaultValue: "图片" })
+                : item.file.kind === "media" && videoMimeOf(item.file.path)
+                  ? t("ai.mention.badgeVideo", { defaultValue: "视频" })
                 : item.file.kind === "media"
                   ? t("ai.mention.badgeMedia", { defaultValue: "音频" })
                   // HTML files are read as text like any other, but calling one

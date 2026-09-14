@@ -33,7 +33,9 @@ import {
   collectRunNotes, fallbackBrief, handoffToolDefinition, HANDOFF_TOOL_NAME,
   parseHandoffBrief, runWriterHandoff, type HandoffBrief,
 } from "./handoff";
-import { contentWithoutImages, hasImageParts } from "./imageHistory";
+import {
+  contentWithoutImages, contentWithoutMedia, contentWithoutVideo, hasImageParts, hasMediaParts, hasVideoParts,
+} from "./imageHistory";
 import { planLoadsEntityWrites, planLoadsOrganize } from "./plan";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
@@ -262,6 +264,30 @@ function elideOldImageResults(history: StreamMessage[]): number {
 }
 
 /**
+ * How many video clips stay in history verbatim: one.
+ *
+ * Every tool round resends the whole history, and a clip is billed each time —
+ * a 60 s 720p clip measured 35,642 input tokens, so a six-round answer about it
+ * pays for it six times. The newest is the one the author is asking about;
+ * older ones become a note, and attaching again brings one back.
+ */
+const MAX_VIDEO_RESULTS = 1;
+
+const ELIDED_VIDEO =
+  "[earlier video clip dropped from the conversation to save context — ask the author to attach it again if it still matters]";
+
+/** Strip all but the newest {@link MAX_VIDEO_RESULTS} clips, keeping their text. */
+function elideOldVideos(history: StreamMessage[]): number {
+  const live = history.filter(hasVideoParts);
+  let dropped = 0;
+  for (const m of live.slice(0, Math.max(0, live.length - MAX_VIDEO_RESULTS))) {
+    m.content = contentWithoutVideo(m, ELIDED_VIDEO);
+    dropped++;
+  }
+  return dropped;
+}
+
+/**
  * Earlier tool-call argument strings at least this long may be elided when the
  * ceiling needs the room. Paths, slugs and short find strings stay: they cost
  * little, and they are how the model recognises its own earlier call.
@@ -380,7 +406,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   // across turns. Left to the token check alone, a session that reads pictures
   // grows a request body no endpoint will accept while the estimate still
   // reads as comfortably under the ceiling.
-  let dropped = elideOldImageResults(history);
+  let dropped = elideOldImageResults(history) + elideOldVideos(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
   if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
   const protectedFrom = roundInProgressStart(history);
@@ -397,8 +423,10 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     ) {
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
-    } else if (hasImageParts(m)) {
-      m.content = contentWithoutImages(m, ELIDED_IMAGE);
+    } else if (hasMediaParts(m)) {
+      m.content = hasVideoParts(m)
+        ? contentWithoutMedia(m, `${ELIDED_IMAGE}\n\n${ELIDED_VIDEO}`)
+        : contentWithoutImages(m, ELIDED_IMAGE);
       dropped++;
     } else {
       continue;

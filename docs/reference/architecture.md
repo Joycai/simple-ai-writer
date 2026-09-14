@@ -480,6 +480,16 @@ The pixels are half the trade; the other half is how much of them the *endpoint*
 2. The same pass elides more, oldest-first, when the estimate is over the ceiling.
 3. `serializeChatSession` drops every picture before the session blob goes into its SQLite row. A restored session has the conversation, not the pixels — and the paths are still in the transcript, so `read_image` can fetch one again.
 
+#### 视频：同一条路，更窄的门（`docs/feature/video-input.md`）
+
+视频片段以 `video_url` 内容块进入，和图片走同一条组装与清除路径，但每一处都更紧：
+
+- **只有一个入口**：对话里的 `@`（`chatRefs.buildChatMessage` 的 `allowVideo`），没有工具。门是 `lib/ai/videoInput.canReadVideo`——模型声明了 `videoInput`、能看图、且供应商是 **`openai` 族**。Responses / Gemini / Anthropic 适配器对这个块仍然具名报错，但那是兜底，不是门。
+- **一个读取函数**：`lib/fs/video.readVideoForModel`，先 `readFileHead` 查大小（> 15MB 直接拒，因为 DashScope 单个 data URI 上限 20,971,520 字节），再整读、解析 MP4/MOV 头拿时长与尺寸（短于 2 秒拒），最后 base64。视频不压缩、不转码。
+- **每条消息 1 段，历史里 1 段**：`MAX_MESSAGE_VIDEOS` 与 `trimHistory` 的 `MAX_VIDEO_RESULTS`，和图片的 4 / 3 各算各的；天花板那一遍和会话落盘同样把视频数据拿掉、文字留下。
+- **估算不上线**：芯片上的 ≈token（`estimateVideoTokens`）也记进 `tokenEstimate` 的 WeakMap 供预检使用，不写在内容块上——`openai.ts` 原样发送内容块。无估值按 10k 计。
+- `fps` 是模型行上的声明（`Model.videoFps`），放在内容块上而不是请求体上，所以不是 `ConnOptions` 字段；「将发送」里显示为 `video_url.fps`，范围标「消息带视频时」。
+
 ### RAG (Retrieval-Augmented Generation)
 
 - **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)

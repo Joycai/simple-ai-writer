@@ -15,6 +15,30 @@ const CJK_RE = /[⺀-鿿぀-ヿ가-힯豈-﫿＀-￯]/g;
 /** Fixed cost assumed per attached image (vision token usage varies by model). */
 const IMAGE_TOKENS = 800;
 
+/**
+ * Cost assumed for a video clip whose size could not be estimated (a WebM, an
+ * unparseable MP4). Measured clips range from ~600 tokens (2 s, 480p) to
+ * ~36k (60 s, 720p); pricing one as a picture would let the ceiling check
+ * wave through a request forty times its estimate. This sits toward the middle
+ * of what fits under the 15 MB file cap at default fps.
+ */
+export const VIDEO_TOKENS_UNKNOWN = 10_000;
+
+/**
+ * Per-clip estimates, keyed by the part object itself.
+ *
+ * Carried beside the part rather than on it because openai.ts sends parts
+ * verbatim — a bookkeeping field would reach the endpoint. A WeakMap follows
+ * the object through the history (trimming mutates `content` arrays but keeps
+ * the parts it doesn't drop) and lets go of it once the clip is elided.
+ */
+const videoTokenHints = new WeakMap<object, number>();
+
+/** Record the composer's estimate for a clip part it just built. */
+export function noteVideoTokens(part: object, tokens: number): void {
+  if (Number.isFinite(tokens) && tokens > 0) videoTokenHints.set(part, Math.round(tokens));
+}
+
 /** Per-message protocol overhead (role markers, separators). */
 const PER_MESSAGE_OVERHEAD = 4;
 
@@ -52,6 +76,7 @@ export function estimateMessagesTokens(messages: StreamMessage[]): number {
     } else if (Array.isArray(content)) {
       for (const part of content) {
         if (part.type === "text") total += estimateTextTokens(part.text);
+        else if (part.type === "video_url") total += videoTokenHints.get(part) ?? VIDEO_TOKENS_UNKNOWN;
         else total += IMAGE_TOKENS;
       }
     }

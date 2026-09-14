@@ -49,6 +49,7 @@ import {
   TRANSLATE_FORMATS, ASR_FORMATS,
   type Model, type ModelType, type TranslateFormat, type AsrFormat,
 } from "../../../lib/ai/configDb";
+import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
 import type { ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -71,7 +72,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "so", "temp", "verb",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "video", "videoFps", "so", "temp", "verb",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -118,7 +119,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
     price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage || m.pricePerSecond)),
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
-    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
+    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
     asr: m?.type === "asr",
@@ -241,6 +242,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
   const [vlHighResolution, setVlHighResolution] = useState(existing?.vlHighResolution ?? false);
+  // Video clips as chat attachments (Model.videoInput / videoFps). The fps is
+  // a string for the same reason temperature is: empty means "send nothing".
+  const [videoInput, setVideoInput] = useState(existing?.videoInput ?? false);
+  const [videoFpsText, setVideoFpsText] = useState(existing?.videoFps !== undefined ? String(existing.videoFps) : "");
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -330,6 +335,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The hi-res switch exists where it reaches the wire: a model that reads
   // pictures, on the Chat Completions family (openai.ts sends it; nothing else does).
   const vlHiResWire = family === "openai" && canSeeImages(form);
+  // Same gate, same reason: a `video_url` part exists only on Chat Completions,
+  // and only a model that reads pictures reads frames (lib/ai/videoInput).
+  const videoWire = family === "openai" && canSeeImages(form);
+  const videoFps = videoWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
   const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
@@ -457,6 +466,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         pdfInput: pdfWire && !isImageModel && !isAsrModel && pdfInput ? true : undefined,
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
+        // Same clearing rule; the fps goes with the switch (off = nothing kept).
+        videoInput: videoWire && videoInput ? true : undefined,
+        videoFps,
         // Cleared on the same rule, and the stakes are higher here than for the
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
@@ -531,6 +543,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
     pdfWire && pdfInput && "PDF",
     vlHiResWire && vlHighResolution && t("aiConfig.models.vlHiResShort"),
+    videoWire && videoInput && (videoFps !== undefined
+      ? t("aiConfig.models.videoInputShortFps", { fps: videoFps })
+      : t("aiConfig.models.videoInputShort")),
     family === "openai" && form.type === "text" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
@@ -602,6 +617,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         serverTools: grantedServerTools,
         structuredOutput,
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
+        videoInput: videoWire && videoInput ? true : undefined,
+        videoFps,
         prefix: form.prefix,
         caps: isImageModel
           ? {
@@ -1114,6 +1131,34 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               />
             </Fold>
 
+            {/* Video clips as chat @-attachments — same gate as the hi-res
+                switch. The fps field appears under it when on; empty = dashed
+                = no `fps` on the part = the endpoint's own ≈2. */}
+            <Fold open={videoWire}>
+              <ToggleField
+                title={t("aiConfig.models.videoInputLabel")}
+                hint={t("aiConfig.models.briefVideo")}
+                on={videoInput}
+                onChange={setVideoInput}
+                {...whyProps("video", t("aiConfig.models.videoInputHint"))}
+              />
+            </Fold>
+            <Fold open={videoWire && videoInput}>
+              <Field label={t("aiConfig.models.videoFpsLabel")} hint={t("aiConfig.models.briefVideoFps")}
+                {...whyProps("videoFps", t("aiConfig.models.videoFpsHint"))}>
+                <div className={s.numRow}>
+                  <input
+                    className={inputCls(videoFpsText.trim() === "", s.num)}
+                    type="number" min={MIN_VIDEO_FPS} max={MAX_VIDEO_FPS} step="0.5"
+                    placeholder={t("aiConfig.models.phNotSent")}
+                    value={videoFpsText}
+                    onChange={(e) => setVideoFpsText(e.target.value)}
+                    aria-label={t("aiConfig.models.videoFpsLabel")}
+                  />
+                </div>
+              </Field>
+            </Fold>
+
             {/* How this model is asked for JSON on a structured task
                 (lib/ai/jsonMode.ts). Only the modes this family can honour are
                 offered; on Anthropic that is 自动 · 关闭, and the hint says why
@@ -1415,6 +1460,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ? `${w.key} ${t("aiConfig.models.wirePrefix")}`
                 : `${w.key} ${w.value}`}
               {w.scope === "structured" && <span className={s.wireScope}> · {t("aiConfig.models.wireStructuredScope")}</span>}
+              {w.scope === "video" && <span className={s.wireScope}> · {t("aiConfig.models.wireVideoScope")}</span>}
             </span>
           ))
         )}

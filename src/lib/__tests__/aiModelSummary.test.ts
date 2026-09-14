@@ -13,6 +13,21 @@ const base: WireInput = { type: "text", modelId: "some-model" };
 
 const keys = (items: { key: string }[]) => items.map((i) => i.key);
 
+describe("wireSummary: video fps", () => {
+  const vl: WireInput = { type: "vision", modelId: "qwen3-vl-plus", structuredOutput: "off" };
+
+  it("lists video_url.fps, scoped to messages with a clip, only when declared on Chat Completions", () => {
+    expect(wireSummary({ ...vl, videoInput: true, videoFps: 0.5 }, "openai_compat")).toEqual([
+      { key: "video_url.fps", value: "0.5", scope: "video" },
+    ]);
+    // No fps declared = nothing on the part = the endpoint default.
+    expect(wireSummary({ ...vl, videoInput: true }, "openai_compat")).toEqual([]);
+    // A leftover fps without the declaration sends nothing.
+    expect(wireSummary({ ...vl, videoFps: 0.5 }, "openai_compat")).toEqual([]);
+    expect(wireSummary({ ...vl, videoInput: true, videoFps: 0.5 }, "openai_responses_compat")).toEqual([]);
+  });
+});
+
 describe("wireSummary", () => {
   it("shows an undeclared model's one real field — the JSON mode structured tasks get by default", () => {
     // Auto resolves to the family's JSON mode (lib/ai/jsonMode.ts), and that
@@ -167,6 +182,7 @@ describe("declarationMarks", () => {
   it("gives image and video models no marks", () => {
     expect(declarationMarks({ type: "image", thinkingCategory: "qwen-budget" })).toEqual([]);
     expect(declarationMarks({ type: "video", pdfInput: true })).toEqual([]);
+    expect(declarationMarks({ type: "vision", videoInput: true })).toEqual(["video"]);
   });
 });
 
