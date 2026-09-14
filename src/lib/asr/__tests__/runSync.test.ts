@@ -30,6 +30,7 @@ vi.mock("../../fs/fileio", () => {
       if (!(v instanceof Uint8Array)) throw new Error(`no binary file ${p}`);
       return v;
     },
+    readFileRange: async () => new Uint8Array(),
     readFileHead: async (p: string, max: number) => {
       const v = files.get(p) as Uint8Array;
       return { size: sizes.get(p) ?? v.byteLength, head: v.subarray(0, max) };

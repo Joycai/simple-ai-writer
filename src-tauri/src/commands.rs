@@ -258,6 +258,71 @@ pub async fn fs_read_head(
     .await
 }
 
+/// A bounded slice of a file — up to `max_bytes` from `offset` — plus its length.
+///
+/// [`fs_read_head`]'s sibling, for the containers whose duration is *not* in
+/// the first 64 KB: an MP4 / M4A written without "fast start" keeps `moov` at
+/// the end, an Ogg file's total length is the last page's granule position, and
+/// an MP3's first frame can sit behind a large ID3 cover image. A transcription
+/// card has to know the duration before the author approves (the synchronous
+/// endpoint refuses anything over five minutes), and reading the whole
+/// recording to learn one number is exactly what [`fs_read_head`] exists to
+/// avoid — so each call is capped at [`MAX_RANGE_BYTES`], and callers make a
+/// handful at most.
+#[derive(Serialize)]
+pub struct FileRange {
+    pub size: u64,
+    /// Base64 of the bytes read — empty when `offset` is at or past the end.
+    pub bytes: String,
+}
+
+/// The most one `fs_read_range` call returns, whatever the caller asks for.
+const MAX_RANGE_BYTES: u64 = 1024 * 1024;
+
+/// The scope-free half, so a test can reach it.
+fn read_range_bytes(path: &Path, offset: u64, max_bytes: u64) -> std::io::Result<(u64, Vec<u8>)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let size = fs::metadata(path)?.len();
+    if offset >= size {
+        return Ok((size, Vec::new()));
+    }
+    let mut file = fs::File::open(path)?;
+    file.seek(SeekFrom::Start(offset))?;
+    let want =
+        usize::try_from(max_bytes.min(MAX_RANGE_BYTES).min(size - offset)).unwrap_or(usize::MAX);
+    let mut buf = vec![0u8; want];
+    let mut filled = 0;
+    while filled < want {
+        match file.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) => return Err(e),
+        }
+    }
+    buf.truncate(filled);
+    Ok((size, buf))
+}
+
+#[command]
+pub async fn fs_read_range(
+    path: String,
+    offset: u64,
+    max_bytes: u64,
+    scope: State<'_, FsScope>,
+) -> Result<FileRange, String> {
+    let scope = scope.inner().clone();
+    blocking(move || {
+        scope.check(&path)?;
+        let (size, buf) =
+            read_range_bytes(Path::new(&path), offset, max_bytes).map_err(|e| e.to_string())?;
+        Ok(FileRange {
+            size,
+            bytes: BASE64.encode(&buf),
+        })
+    })
+    .await
+}
+
 /// Read text from a file, guessing the encoding when it isn't UTF-8 —
 /// see [`decode_text`].
 #[command]
@@ -580,7 +645,9 @@ pub fn open_with_default_app(
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_text, is_within, read_head_bytes, valid_category};
+    use super::{
+        decode_text, is_within, read_head_bytes, read_range_bytes, valid_category, MAX_RANGE_BYTES,
+    };
     use std::path::Path;
 
     /// The whole point of this reader: `size` is the file's real length even
@@ -621,6 +688,36 @@ mod tests {
     fn read_head_fails_on_a_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         assert!(read_head_bytes(&dir.path().join("nope.wav"), 16).is_err());
+    }
+
+    #[test]
+    fn read_range_returns_the_slice_and_the_real_size() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("r.bin");
+        std::fs::write(&path, b"0123456789").unwrap();
+
+        assert_eq!(
+            read_range_bytes(&path, 3, 4).unwrap(),
+            (10, b"3456".to_vec())
+        );
+        // Clipped at the end of the file, not an error.
+        assert_eq!(
+            read_range_bytes(&path, 8, 16).unwrap(),
+            (10, b"89".to_vec())
+        );
+        // At or past the end: an empty slice, still with the size.
+        assert_eq!(read_range_bytes(&path, 10, 4).unwrap(), (10, vec![]));
+        assert_eq!(read_range_bytes(&path, 99, 4).unwrap(), (10, vec![]));
+    }
+
+    #[test]
+    fn read_range_is_capped_whatever_the_caller_asks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.bin");
+        std::fs::write(&path, vec![7u8; (MAX_RANGE_BYTES + 10) as usize]).unwrap();
+        let (size, bytes) = read_range_bytes(&path, 0, u64::MAX).unwrap();
+        assert_eq!(size, MAX_RANGE_BYTES + 10);
+        assert_eq!(bytes.len() as u64, MAX_RANGE_BYTES);
     }
 
     #[test]

@@ -34,11 +34,11 @@
 4. **付费之前必须有人点头。** 右键路径是确认卡，助手路径是审批卡；`autoApprove` 永不放行 `transcribe_audio`。转写结果先进缓存再写产物，同一文件同一参数**同一模型**不付第二次——键里带模型（`cacheKeyOf`），换绑模型是换一份缓存而不是命中旧的：结果真的不一样，而产物的抬头写的是**这次**绑的那个模型名，拿回上一个模型的稿子等于把一份张冠李戴的文字稿写进项目。
 5. **两代结果形状都认，且结果 JSON 拿到就落盘。** `transcriptionUrlOf` 同时找 `output.result` 和 `output.output`；链接 24 小时失效，缓存里存的是结果本体不是链接。
 6. **Beta 关着＝入口不存在。** 菜单项不渲染、工具不装载（`allowedTools` 里没有），而不是渲染成禁用 / 调用被拒。Beta 开着但没绑模型，菜单项**禁用并指路**（作者能自己修好），工具仍不装载（`isAsrEnabled() && live("asr")`）。
-7. **批准之前不读整个文件，也不越过大小上限。** 提案 / 确认卡要的只有两个数——大小和（WAV 的）时长，`readFileHead` 一次往返给回真实大小和前 64KB。`readBinaryFile` 会把一份 1.5GB 的录音整个搬过 IPC 进 webview 堆，而 `MAX_TRANSCRIBE_BYTES` 那道闸在 `transcribeFile` 里、也就是在**批准之后**才关：两个入口都要在读之前先拦。传给 `wavDurationSeconds` 的必须是**真实大小**而不是手里那段前缀——流式写出的 WAV 把 data 长度写成哨兵值，时长只能由「data 块一直到文件末尾」反推，拿前缀反推会把一小时的录音报成半秒，而那个数字随后就印在付费确认卡上。
+7. **批准之前不读整个文件，也不越过大小上限。** 提案 / 确认卡要的只有两个数——大小和时长，`readFileHead` 一次往返给回真实大小和前 64KB；时长由 `duration.ts` 从容器读（2026-09-14 起覆盖 WAV / MP3 / FLAC / Ogg / MP4 家族），头里不够时经 `readFileRange`（Rust `fs_read_range`，每段 ≤1MiB）读几段有界区间——moov 在末尾的 m4a、末页 granule 的 Ogg、封面图后面的 MP3 帧——仍然不读整个文件。`readBinaryFile` 会把一份 1.5GB 的录音整个搬过 IPC 进 webview 堆，而 `MAX_TRANSCRIBE_BYTES` 那道闸在 `transcribeFile` 里、也就是在**批准之后**才关：两个入口都要在读之前先拦。传给 `wavDurationSeconds` 的必须是**真实大小**而不是手里那段前缀——流式写出的 WAV 把 data 长度写成哨兵值，时长只能由「data 块一直到文件末尾」反推，拿前缀反推会把一小时的录音报成半秒，而那个数字随后就印在付费确认卡上。
 8. **同步接口（2026-09-14）：接口由模型行决定，user 消息只有音频，上限在批准之前。**
    - **接口由模型行决定。** `conn.ts` 返回 `format`，`run.ts` 按它分支，没有第二个模型参与。id 与接口不符，在花钱之前就拒（`asrIdMismatch`）：filetrans 行不是 `*-filetrans` → `not-filetrans`；同步行不是 qwen3-asr-flash 系列 → `not-sync`（实测别的 id 答 `format is empty`）。
    - **user 消息里只有一个 `input_audio` part。** 加一个 text part 就 400。上下文 / 热词只能放进前置的 `system` 消息，这件事只写在 `syncBody` 一处。
-   - **上限在批准之前拦。** ≤ 10MB、≤ 5 分钟（批准前只有 WAV 知道时长）、只收 wav / mp3 / m4a / ogg / flac / mp4。按 `readFileHead` 的真实大小判（`syncRefusal`，工具和文件树确认条共用同一个函数），超限就不出卡。`transcribeFile` 在读整个文件之前再判一次，作兜底。
+   - **上限在批准之前拦。** ≤ 10MB、≤ 5 分钟（批准前从容器读时长，`duration.ts`；读不出的交给平台的 400）、只收 wav / mp3 / m4a / ogg / flac / mp4。按 `readFileHead` 的真实大小判（`syncRefusal`，工具和文件树确认条共用同一个函数），超限就不出卡。`transcribeFile` 在读整个文件之前再判一次，作兜底。
    - **同步稿不带时间。** `Transcript.timed: false`，渲染不写 `[mm:ss]` 和说话人，frontmatter 记 `timestamps: none`。同步行的确认条 / 审批卡上没有分离开关，工具传进来的 `diarization` / `speaker_count` 被忽略，结果里明说。分离选项在算缓存键之前就归一掉（`effectiveOptions`），切换它不会付第二次钱。缓存键带接口（`ASR_CACHE_VERSION` 仍是 2（同步条目目录名带 `-sync-`，filetrans 目录名不变，已付费结果不被清扫））。
 
 ---

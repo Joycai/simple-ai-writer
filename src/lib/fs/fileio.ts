@@ -53,6 +53,21 @@ interface FileHead {
  * length belongs, and the only way to recover the duration is to know how far
  * the file actually runs.
  */
+/**
+ * Up to `maxBytes` bytes from `offset` (capped at 1 MiB on the Rust side),
+ * without reading the rest — `readFileHead`'s sibling for container formats
+ * whose duration lives past the first 64 KB (`lib/asr/duration.ts`). Empty when
+ * `offset` is at or past the end.
+ */
+export async function readFileRange(path: string, offset: number, maxBytes: number): Promise<Uint8Array> {
+  const res = await invoke<{ size: number; bytes: string }>("fs_read_range", {
+    path,
+    offset: Math.max(0, Math.floor(offset)),
+    maxBytes: Math.max(0, Math.floor(maxBytes)),
+  });
+  return fromBase64(res.bytes);
+}
+
 export async function readFileHead(path: string, maxBytes: number): Promise<FileHead> {
   const res = await invoke<{ size: number; head: string }>("fs_read_head", {
     path,

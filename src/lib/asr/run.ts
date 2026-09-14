@@ -22,6 +22,7 @@ import {
   readDir,
   readFile,
   readFileHead,
+  readFileRange,
   removeDir,
   renamePath,
   toBase64,
@@ -30,7 +31,7 @@ import {
 import type { AsrFormat } from "../ai/configDb";
 import { baseName, dirName } from "../paths";
 import { uniqueImportPath } from "../import";
-import { wavDurationSeconds } from "./cost";
+import { probeDurationSeconds } from "./duration";
 import { transcribeSync } from "./sync";
 import {
   ASR_CACHE_VERSION,
@@ -192,7 +193,8 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
     // before a request the endpoint would 400 — the file may have changed
     // between the card and the click.
     const head = await readFileHead(sourcePath, 64 * 1024);
-    const refusal = syncRefusal(ext, head.size, ext === "wav" ? wavDurationSeconds(head.head, head.size) : null);
+    const seconds = await probeDurationSeconds(ext, head, (offset, length) => readFileRange(sourcePath, offset, length));
+    const refusal = syncRefusal(ext, head.size, seconds);
     if (refusal) throw new Error(`"${baseName(sourcePath)}" ${syncRefusalText(refusal)}`);
   }
   const bytes = await readBinaryFile(sourcePath);

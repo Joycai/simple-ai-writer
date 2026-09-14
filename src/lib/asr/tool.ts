@@ -11,11 +11,12 @@
  * 「写这份文字稿」，不只是「花这笔钱」。
  */
 
-import { fileExists, readFileHead } from "../fs/fileio";
+import { fileExists, readFileHead, readFileRange } from "../fs/fileio";
 import { baseName, projectRelative, resolveWorkspacePath } from "../paths";
 import type { ToolContext, TranscribeProposal } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
-import { estimateCost, wavDurationSeconds } from "./cost";
+import { estimateCost } from "./cost";
+import { probeDurationSeconds } from "./duration";
 import { isAsrDiarizationDefault } from "./flag";
 import { transcribeExtOf, ASR_EXT_LIST, syncRefusal, syncRefusalText } from "./formats";
 import { isAsrUnavailable, resolveAsrConn } from "./conn";
@@ -78,7 +79,9 @@ export async function transcribeAudioTool(
   try {
     const head = await readFileHead(source, HEADER_BYTES);
     bytes = head.size;
-    if (ext === "wav") seconds = wavDurationSeconds(head.head, head.size);
+    // Duration from the container (a few bounded reads at most, never the whole
+    // file): the card quotes it, and a synchronous row refuses anything over 5 min.
+    seconds = await probeDurationSeconds(ext, head, (offset, length) => readFileRange(source, offset, length));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { toolCallId, content: `Error reading "${source}": ${msg}.` };

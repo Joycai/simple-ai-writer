@@ -12,7 +12,7 @@ import { AudioLines,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
-import { fileExists, previewHtmlWindow, readFileHead } from "../../lib/fs/fileio";
+import { fileExists, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -29,7 +29,8 @@ import { useImeGuard } from "../../lib/ime";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { isAsrEnabled, isAsrDiarizationDefault, isAsrTimestampsEnabled } from "../../lib/asr/flag";
 import { isVideoExt, syncRefusal, transcribeExtOf, SYNC_ASR_EXTENSIONS, type SyncRefusal } from "../../lib/asr/formats";
-import { estimateCost, formatBytes, wavDurationSeconds } from "../../lib/asr/cost";
+import { estimateCost, formatBytes } from "../../lib/asr/cost";
+import { probeDurationSeconds } from "../../lib/asr/duration";
 import { formatClock } from "../../lib/asr/render";
 import { subAgentModel } from "../../lib/agent/subagent";
 import { useAiStore } from "../../stores/aiStore";
@@ -1177,7 +1178,7 @@ export function FileTree() {
 
   /**
    * 转写前先出确认条（设计稿 02f 屏 1c）：这是右键这一组里唯一一个上传 + 付费的。
-   * 条上要说的数在这里算好——大小、WAV 的时长、有单价时的估价、落点。`FileNode`
+   * 条上要说的数在这里算好——大小、读得出的时长、有单价时的估价、落点。`FileNode`
    * 没有 size，所以问一次磁盘：`readFileHead` 一次往返给回真实大小和前 64KB，
    * 而不是把一份几百 MB 的录音整个读进来只为了看它的头四个字节。
    */
@@ -1188,8 +1189,10 @@ export function FileTree() {
     try {
       const { transcriptTargetFor } = await import("../../lib/asr");
       const head = await readFileHead(node.path, 64 * 1024);
-      // 真实大小传给它：流式写出的 WAV 的时长只能由「data 块到文件末尾」反推。
-      const seconds = ext === "wav" ? wavDurationSeconds(head.head, head.size) : null;
+      // 时长从容器里读（WAV / MP3 / FLAC / Ogg / MP4 家族，lib/asr/duration）：
+      // 必要时再读几段有界的区间，从不整个读进来。真实大小要传进去——流式写出的
+      // WAV 的时长只能由「data 块到文件末尾」反推，CBR 的 mp3 也按剩余字节算。
+      const seconds = await probeDurationSeconds(ext, head, (offset, length) => readFileRange(node.path, offset, length));
       const pricePerSecond = asrModel?.pricePerSecond;
       const sync = asrModel?.asrFormat === "dashscope-sync";
       setTranscribeAsk({
