@@ -153,6 +153,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     && (comfy || models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"));
   const provider = providers.find((p) => p.id === providerId);
   const family = provider ? familyOf(provider.apiStandard) : undefined;
+  // The two wires with a whole-file content part the adapters map
+  // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
+  // docs/api/landscape.md 第十一个样本).
+  const pdfWire = family === "openai" || family === "responses";
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -439,9 +443,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // does nothing behind. Empty stores as absent — one shape for "none".
         serverTools: grantedServerTools,
         // Same clearing rule: the declaration only survives where the wire has
-        // a spelling for it (the OpenAI-family file content part), and only on
-        // a model type that converses. False stores as absent.
-        pdfInput: family === "openai" && !isImageModel && pdfInput ? true : undefined,
+        // a spelling for it (the Chat Completions `file` part, or Responses'
+        // `input_file`), and only on a model type that converses. False stores
+        // as absent.
+        pdfInput: pdfWire && !isImageModel && pdfInput ? true : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
@@ -510,7 +515,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     grantedServerTools?.includes("web_extractor") && t("aiConfig.models.serverTool_web_extractor"),
     grantedServerTools?.includes("web_search_image") && t("aiConfig.models.serverTool_web_search_image"),
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
-    family === "openai" && pdfInput && "PDF",
+    pdfWire && pdfInput && "PDF",
     family === "openai" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     family === "openai" && form.asrFormat && t(`aiConfig.models.asrFormat_${form.asrFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
@@ -998,11 +1003,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ))}
             </Fold>
 
-            {/* Whole-PDF input (the OpenAI file content part). Family-gated
-                like the category chips above: no endpoint on the other wires is
-                declared to take one here, so showing the switch there would
-                promise a subagent that refuses at run time. */}
-            <Fold open={family === "openai"}>
+            {/* Whole-PDF input (Chat Completions `file` / Responses `input_file`).
+                Family-gated like the category chips above: Anthropic and Gemini
+                have no mapping for the part here, so showing the switch there
+                would promise a subagent that refuses at run time. */}
+            <Fold open={pdfWire}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={t("aiConfig.models.briefPdf")}

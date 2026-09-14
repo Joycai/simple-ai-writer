@@ -2364,7 +2364,7 @@
       "serverToolsHintExtractor": "允许服务端打开网址、读取网页正文（千问 web_extractor）。它依附于联网搜索：开启它会一并开启联网搜索，关掉联网搜索它也随之关闭。Responses 协议下在 tools 里多声明 {type: \"web_extractor\"}，读过的网址记录在执行日志里；Chat Completions 协议下改发 search_options.search_strategy: \"agent_max\"，过程同样不可见，而且不是所有模型都接受——实测 qwen3.8-flash 直接报 400，qwen3-max、qwen3.5-plus 可用。只能读公开网页，需要登录的页面、纯脚本渲染的内容读不到；读回来的正文按输入 token 计费。",
       "serverToolsHintOpenai": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。OpenAI 兼容端点上按千问 (DashScope 兼容模式) 的方式发送 enable_search: true；其他兼容端点开了通常不会生效，官方 api.openai.com 不接受该字段（本设置对官方端点不显示）。注意：该协议下搜索过程与命中网页不会返回，执行日志里看不到搜索明细，答案直接吸收检索结果。",
       "pdfInputLabel": "PDF 文件输入",
-      "pdfInputHint": "声明该模型接受整份 PDF 作为消息内容（OpenAI file 内容块；千问 DashScope 兼容模式目前仅 qwen3.8-max 支持，单文件 ≤150MB / ≤500 页，另按页计费）。勾选后它才能被绑定为 PDF 理解子代理。",
+      "pdfInputHint": "声明该模型接受整份 PDF 作为消息内容（Chat Completions 的 file 内容块 / Responses 的 input_file；千问 DashScope 兼容模式目前仅 qwen3.8-max 支持，xAI 的 grok-4.5 / 4.6 实测可读；单文件 ≤150MB / ≤500 页，另按页计费）。千问的 Responses 协议不支持 PDF，请在 Chat Completions 协议的服务商下为 qwen3.8-max 开启。勾选后它才能被绑定为 PDF 理解子代理。",
       "translateFormatNone": "普通模型",
       "asrLabel": "转写模型格式",
       "briefAsr": "这是一个只会转写的模型，走它自己的文件接口。",
