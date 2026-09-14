@@ -125,6 +125,10 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI (Responses)", apiStandard: "openai_responses", baseUrl: STANDARD_ENDPOINTS.openai_responses },
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com", starterModels: DEEPSEEK_MODELS },
+  // xAI marks Chat Completions deprecated and recommends /responses; the base
+  // carries /v1 because the adapter appends /responses verbatim. Grok 4.5 / 4.6
+  // measured on this exact preset (docs/api/landscape.md §7 第十一个样本).
+  { name: "xAI (Grok)", apiStandard: "openai_responses_compat", baseUrl: "https://api.x.ai/v1" },
   // DashScope's OpenAI compatible-mode; the base already carries /v1, which
   // openaiUrl requires (it appends paths verbatim). Two rows because the
   // domestic and international deployments are separate hosts with separate
