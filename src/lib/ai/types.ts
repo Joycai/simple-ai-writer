@@ -189,7 +189,20 @@ export type ContentPart =
    * one fresh 2-message context and never enter a long-lived history — nothing
    * like `imageHistory`'s eviction is needed for them.
    */
-  | { type: "file"; file: { file_data: string; filename: string } };
+  | { type: "file"; file: { file_data: string; filename: string } }
+  /**
+   * A video clip, as a `data:video/…;base64,…` URL — the DashScope
+   * compatible-mode Chat Completions spelling (docs/feature/video-input.md).
+   * `fps` is a sibling of `video_url`, not a field inside it; absent means
+   * the endpoint default (≈2 frames per second, measured).
+   *
+   * Only the `openai` family carries it, and only for a model declaring
+   * `videoInput` — the other adapters throw a named error on it, and the
+   * chat composer never builds one for them (`canReadVideo`). Build with
+   * `videoPart()`; never put bookkeeping fields on it, since openai.ts sends
+   * parts verbatim.
+   */
+  | { type: "video_url"; video_url: { url: string }; fps?: number };
 
 export type MessageContent = string | ContentPart[];
 

@@ -12,20 +12,27 @@
 
 import { useAiStore } from "../../stores/aiStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
+import { isAsrEnabled } from "../../lib/asr/flag";
+import { isTranslateEnabled } from "../../lib/translate/flag";
 
 /**
- * Every kind that is a switch — i.e. all of them except the three nobody flips.
+ * Every kind that is a switch — i.e. all of them except the two nobody flips.
  *
  * The writer is excluded because its switch is a session-level decision made on
  * its own line (see `WriterStrip`, 设计稿 04d 屏 5a). `retrieval` is excluded
  * for a plainer reason: by the time the composer is on screen it has already
  * run, and a control that only takes effect on the *next* turn does not belong
- * among "for this turn" switches. `asr` is off the list too: transcription is
- * an explicit act (a right-click, or a tool whose card the author approves),
- * never something the model picks up mid-turn. All three live in Settings alone.
+ * among "for this turn" switches. Both live in Settings alone.
+ *
+ * `asr` used to be excluded too, on the grounds that transcription is an
+ * explicit act. That held for the right-click, not for the assistant: routing
+ * appends `transcribe_audio` whenever the Beta is on and a model is bound, so
+ * the model *can* propose a transcription mid-turn (behind a card) — the same
+ * shape as 绘图 and 日译中. Switching it off here takes the tool out of this
+ * session, the same subtraction the other rows make.
  */
-export type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval" | "asr">;
-const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval", "asr"];
+export type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval">;
+const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval"];
 const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
 
 /**
@@ -41,7 +48,19 @@ export const FALLBACK_LABELS: Record<ChipKind, string> = {
   pdf: "PDF",
   imagegen: "绘图",
   translate: "日译中",
+  asr: "转写",
 };
+
+/**
+ * The Beta behind a tool-shaped kind. Routing withholds `translate` /
+ * `transcribe_audio` while their flag is off, so a row here would be a switch
+ * that changes nothing — absent, like an unbound kind.
+ */
+function betaOn(kind: ChipKind): boolean {
+  if (kind === "asr") return isAsrEnabled();
+  if (kind === "translate") return isTranslateEnabled();
+  return true;
+}
 
 /**
  * The kinds this project can actually reach, in `SUBAGENT_KINDS` order.
@@ -54,7 +73,7 @@ export const FALLBACK_LABELS: Record<ChipKind, string> = {
 export function useConfiguredKinds(): ChipKind[] {
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  return CHIP_KINDS.filter((k) => subAgentModel(k, models, subAgents) !== null);
+  return CHIP_KINDS.filter((k) => betaOn(k) && subAgentModel(k, models, subAgents) !== null);
 }
 
 /** The model id a kind is bound to, for the menu's right-hand column. */

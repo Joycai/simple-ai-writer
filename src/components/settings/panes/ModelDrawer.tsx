@@ -49,6 +49,8 @@ import {
   TRANSLATE_FORMATS, ASR_FORMATS,
   type Model, type ModelType, type TranslateFormat, type AsrFormat,
 } from "../../../lib/ai/configDb";
+import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
+import { ASR_DEFAULT_MODEL_ID, asrIdMismatch } from "../../../lib/asr/formats";
 import type { ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -71,7 +73,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "so", "temp", "verb",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "video", "videoFps", "so", "temp", "verb",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -118,7 +120,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
     price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage || m.pricePerSecond)),
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
-    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
+    caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
     asr: m?.type === "asr",
@@ -241,6 +243,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
   const [vlHighResolution, setVlHighResolution] = useState(existing?.vlHighResolution ?? false);
+  // Video clips as chat attachments (Model.videoInput / videoFps). The fps is
+  // a string for the same reason temperature is: empty means "send nothing".
+  const [videoInput, setVideoInput] = useState(existing?.videoInput ?? false);
+  const [videoFpsText, setVideoFpsText] = useState(existing?.videoFps !== undefined ? String(existing.videoFps) : "");
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -330,6 +336,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The hi-res switch exists where it reaches the wire: a model that reads
   // pictures, on the Chat Completions family (openai.ts sends it; nothing else does).
   const vlHiResWire = family === "openai" && canSeeImages(form);
+  // Same gate, same reason: a `video_url` part exists only on Chat Completions,
+  // and only a model that reads pictures reads frames (lib/ai/videoInput).
+  const videoWire = family === "openai" && canSeeImages(form);
+  const videoFps = videoWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
   const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
@@ -457,6 +467,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         pdfInput: pdfWire && !isImageModel && !isAsrModel && pdfInput ? true : undefined,
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
+        // Same clearing rule; the fps goes with the switch (off = nothing kept).
+        videoInput: videoWire && videoInput ? true : undefined,
+        videoFps,
         // Cleared on the same rule, and the stakes are higher here than for the
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
@@ -531,6 +544,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
     pdfWire && pdfInput && "PDF",
     vlHiResWire && vlHighResolution && t("aiConfig.models.vlHiResShort"),
+    videoWire && videoInput && (videoFps !== undefined
+      ? t("aiConfig.models.videoInputShortFps", { fps: videoFps })
+      : t("aiConfig.models.videoInputShort")),
     family === "openai" && form.type === "text" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
@@ -580,14 +596,35 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   // ── 「将发送」 ─────────────────────────────────────────────────────────────
   // A transcription row never reaches the chat wire; what it sends is the file
-  // endpoint's four parameters (lib/asr/client.ts submitBody), spelled out here
-  // rather than through wireSummary, whose vocabulary is the chat request's.
-  const asrWire: WireItem[] = [
-    { key: "POST", value: "/services/audio/asr/transcription" },
-    { key: "model", value: form.modelId || "…" },
-    { key: "file_urls[]", value: "(oss, 48h)" },
-    { key: "diarization_enabled", value: "per run" },
-  ];
+  // endpoint's four parameters (lib/asr/client.ts submitBody), or the
+  // synchronous endpoint's (lib/asr/sync.ts syncBody) — spelled out here rather
+  // than through wireSummary, whose vocabulary is the chat request's. The sync
+  // one does post to /chat/completions, but with one audio part and nothing a
+  // chat request would carry.
+  const asrFormatNow: AsrFormat = form.asrFormat || ASR_FORMATS[0];
+  const asrWire: WireItem[] = asrFormatNow === "dashscope-sync"
+    ? [
+        { key: "POST", value: "/chat/completions" },
+        { key: "model", value: form.modelId || "…" },
+        { key: "input_audio", value: "(data URL ≤10MB · ≤5min)" },
+        { key: "asr_options", value: "language · per run" },
+      ]
+    : [
+        { key: "POST", value: "/services/audio/asr/transcription" },
+        { key: "model", value: form.modelId || "…" },
+        { key: "file_urls[]", value: "(oss, 48h)" },
+        { key: "diarization_enabled", value: "per run" },
+      ];
+  // What the transcription field warns about: an id the chosen endpoint refuses
+  // (both measured), else what that endpoint cannot do.
+  const asrMismatch = asrIdMismatch(asrFormatNow, form.modelId);
+  const asrWarn = asrMismatch === "not-filetrans"
+    ? t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })
+    : asrMismatch === "not-sync"
+    ? t("aiConfig.models.asrIdNotSync", { id: form.modelId })
+    : asrFormatNow === "dashscope-sync"
+    ? t("aiConfig.models.asrSyncHintOn")
+    : t("aiConfig.models.asrFormatHintOn");
   const wire = isAsrModel
     ? asrWire
     : provider
@@ -602,6 +639,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         serverTools: grantedServerTools,
         structuredOutput,
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
+        videoInput: videoWire && videoInput ? true : undefined,
+        videoFps,
         prefix: form.prefix,
         caps: isImageModel
           ? {
@@ -700,7 +739,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 const asrSeed = type === "asr"
                   ? {
                       asrFormat: form.asrFormat || ASR_FORMATS[0],
-                      modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
+                      modelId: form.modelId || ASR_DEFAULT_MODEL_ID[form.asrFormat || ASR_FORMATS[0]],
                       name: form.name || t("aiConfig.models.asrDefaultName"),
                       translateFormat: "" as const,
                     }
@@ -1114,6 +1153,34 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               />
             </Fold>
 
+            {/* Video clips as chat @-attachments — same gate as the hi-res
+                switch. The fps field appears under it when on; empty = dashed
+                = no `fps` on the part = the endpoint's own ≈2. */}
+            <Fold open={videoWire}>
+              <ToggleField
+                title={t("aiConfig.models.videoInputLabel")}
+                hint={t("aiConfig.models.briefVideo")}
+                on={videoInput}
+                onChange={setVideoInput}
+                {...whyProps("video", t("aiConfig.models.videoInputHint"))}
+              />
+            </Fold>
+            <Fold open={videoWire && videoInput}>
+              <Field label={t("aiConfig.models.videoFpsLabel")} hint={t("aiConfig.models.briefVideoFps")}
+                {...whyProps("videoFps", t("aiConfig.models.videoFpsHint"))}>
+                <div className={s.numRow}>
+                  <input
+                    className={inputCls(videoFpsText.trim() === "", s.num)}
+                    type="number" min={MIN_VIDEO_FPS} max={MAX_VIDEO_FPS} step="0.5"
+                    placeholder={t("aiConfig.models.phNotSent")}
+                    value={videoFpsText}
+                    onChange={(e) => setVideoFpsText(e.target.value)}
+                    aria-label={t("aiConfig.models.videoFpsLabel")}
+                  />
+                </div>
+              </Field>
+            </Fold>
+
             {/* How this model is asked for JSON on a structured task
                 (lib/ai/jsonMode.ts). Only the modes this family can honour are
                 offered; on Anthropic that is 自动 · 关闭, and the hint says why
@@ -1253,27 +1320,33 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             label={t("aiConfig.models.secAsr")}
             open={open.asr}
             onToggle={() => toggleSection("asr")}
-            summary={t(`aiConfig.models.asrFormat_${form.asrFormat || ASR_FORMATS[0]}`)}
+            summary={t(`aiConfig.models.asrFormat_${asrFormatNow}`)}
             unset={false}
           >
-            <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
-              warn={/filetrans/i.test(form.modelId)
-                ? t("aiConfig.models.asrFormatHintOn")
-                // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
-                // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
-                : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })}>
+            <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")} warn={asrWarn}>
               <div className={s.chips}>
                 {ASR_FORMATS.map((f) => (
                   <DashChip
                     key={f}
                     label={t(`aiConfig.models.asrFormat_${f}`)}
-                    active={(form.asrFormat || ASR_FORMATS[0]) === f}
-                    onClick={() => setForm({
-                      ...form,
-                      asrFormat: f,
-                      modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
-                      name: form.name || t("aiConfig.models.asrDefaultName"),
-                    })}
+                    active={asrFormatNow === f}
+                    onClick={() => {
+                      // The format decides the path, so it also decides the
+                      // sensible id: an id / name still at the other endpoint's
+                      // default (or empty) follows the switch; one the author
+                      // typed stays, and the warning above says if it no
+                      // longer fits.
+                      const nameOf = (x: AsrFormat) =>
+                        t(x === "dashscope-sync" ? "aiConfig.models.asrDefaultNameSync" : "aiConfig.models.asrDefaultName");
+                      const idIsDefault = !form.modelId || form.modelId === ASR_DEFAULT_MODEL_ID[asrFormatNow];
+                      const nameIsDefault = !form.name || form.name === nameOf(asrFormatNow);
+                      setForm({
+                        ...form,
+                        asrFormat: f,
+                        modelId: idIsDefault ? ASR_DEFAULT_MODEL_ID[f] : form.modelId,
+                        name: nameIsDefault ? nameOf(f) : form.name,
+                      });
+                    }}
                   />
                 ))}
               </div>
@@ -1415,6 +1488,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ? `${w.key} ${t("aiConfig.models.wirePrefix")}`
                 : `${w.key} ${w.value}`}
               {w.scope === "structured" && <span className={s.wireScope}> · {t("aiConfig.models.wireStructuredScope")}</span>}
+              {w.scope === "video" && <span className={s.wireScope}> · {t("aiConfig.models.wireVideoScope")}</span>}
             </span>
           ))
         )}

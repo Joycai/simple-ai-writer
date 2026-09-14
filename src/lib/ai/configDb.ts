@@ -19,6 +19,7 @@ import {
 import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
+import { clampVideoFps } from "./videoInput";
 
 /**
  * What a model row *is*, for the app's forms and candidate lists — never sent.
@@ -49,7 +50,14 @@ export type TranslateFormat = "sakura";
  * A second entry (a local Whisper server, say) would arrive as a second
  * client in `lib/asr/`, not as a branch elsewhere.
  */
-export type AsrFormat = "dashscope-filetrans";
+/**
+ * Which transcription endpoint an `asr` row speaks — the model row picks the
+ * path, there is no routing between two rows. `dashscope-filetrans` is the
+ * async upload → submit → poll one (any length, timestamps, speakers);
+ * `dashscope-sync` is compatible-mode `/chat/completions` with the audio inline
+ * (≤5 min / ≤10MB, one plain string back). docs/feature/asr/00-research.md §1.3.
+ */
+export type AsrFormat = "dashscope-filetrans" | "dashscope-sync";
 
 /**
  * What an image model's endpoint can actually do. Declared rather than probed:
@@ -301,6 +309,26 @@ export interface Model {
    */
   vlHighResolution?: boolean;
   /**
+   * Whether a chat `@` attachment may put a video clip on this model's
+   * request, as a `video_url` part (docs/feature/video-input.md).
+   *
+   * Declared rather than derived, same as `pdfInput`: qwen3-vl-plus,
+   * qwen3-vl-flash and qwen3.8-flash read video behind a DashScope endpoint
+   * where other vision models may not, and no probe can ask without spending
+   * a real clip. Honoured only where `canReadVideo` (lib/ai/videoInput) says —
+   * a model that can see, on the `openai` family. Absent means no.
+   */
+  videoInput?: boolean;
+  /**
+   * Frames per second the endpoint should sample from an attached clip — the
+   * part's `fps` field. Absent sends nothing, which the endpoint treats as
+   * about 2. Measured on a 60 s 720p clip: 0.5 → 8,912 tokens in 20 s,
+   * default → 35,642 in 125 s, 4 → 71,282. Stored clamped to 0.1–10
+   * (`clampVideoFps`); only 0.5–4 were measured. Not a `ConnOptions` field:
+   * it rides on the content part, built where the message is composed.
+   */
+  videoFps?: number;
+  /**
    * How long and expansive the answer should be — the Responses family's
    * `text.verbosity` (GPT-5.x; measured on gpt-5.6-terra, `low` visibly
    * shortens the same answer — docs/api/responses.md §10).
@@ -400,7 +428,8 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * 类型是身份、`asrFormat` 是接口，两者必须同时成立：
  * - 带 `asrFormat` 的行一律是 `asr` 类型 —— 这是「转写模型 = 类型」之前的数据
  *   （当时身份在 `asrFormat` 上，类型存的是 `text`），不升级它就会回到对话列表里；
- * - `asr` 类型缺格式时补上唯一的格式 —— 否则转写连接无从选接口。
+ * - `asr` 类型缺格式时补上默认格式（filetrans，`ASR_FORMATS[0]`）—— 否则转写连接无从选接口；
+ *   同步格式是后来加的，缺格式的行只可能来自那之前。
  * 反方向（`asrFormat` 留在非 `asr` 行上）由保存路径清掉，这里不必管。
  */
 export function normalizeAsrIdentity(m: Model): Model {
@@ -597,6 +626,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "probed_max_output", "INTEGER");
   await addColumn(db, modelCols, "models", "text_verbosity", "TEXT");
   await addColumn(db, modelCols, "models", "vl_high_resolution", "INTEGER");
+  await addColumn(db, modelCols, "models", "video_input", "INTEGER");
+  await addColumn(db, modelCols, "models", "video_fps", "REAL");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -839,9 +870,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null],
   };
 }
 
@@ -931,6 +962,8 @@ function rowToModel(r: Record<string, unknown>): Model {
     // the rest, and "no declaration" must stay one representation.
     pdfInput: r.pdf_input === 1 ? true : undefined,
     vlHighResolution: r.vl_high_resolution === 1 ? true : undefined,
+    videoInput: r.video_input === 1 ? true : undefined,
+    videoFps: clampVideoFps(r.video_fps),
     textVerbosity: parseTextVerbosity(r.text_verbosity),
     translateFormat: parseTranslateFormat(r.translate_format),
     structuredOutput: parseStructuredOutputMode(r.structured_output),
@@ -975,8 +1008,13 @@ export function parseTranslateFormat(raw: unknown): TranslateFormat | undefined 
   return TRANSLATE_FORMATS.includes(raw as TranslateFormat) ? (raw as TranslateFormat) : undefined;
 }
 
-/** Every declared transcription format, for the settings drawer to render. */
-export const ASR_FORMATS: readonly AsrFormat[] = ["dashscope-filetrans"];
+/**
+ * Every declared transcription format, for the settings drawer to render.
+ * The first one is the default `normalizeAsrIdentity` fills into a formatless
+ * `asr` row — it stays filetrans, because every such row predates the sync
+ * format and was bound to a *-filetrans id.
+ */
+export const ASR_FORMATS: readonly AsrFormat[] = ["dashscope-filetrans", "dashscope-sync"];
 
 /**
  * Same direction as `parseTranslateFormat`: an unrecognised value must read as

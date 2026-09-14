@@ -35,6 +35,13 @@ export interface Transcript {
   /** 任何一句带 `speaker` 就是 true。 */
   speakers: boolean;
   sentences: TranscriptSentence[];
+  /**
+   * `false` = the endpoint returned no timings at all (the synchronous path:
+   * one plain string). The renderer then prints no `[mm:ss]` and no speaker
+   * labels, whatever the author's preferences say — a `[00:00]` on the whole
+   * text would claim a precision nobody measured. Absent = timed.
+   */
+  timed?: boolean;
 }
 
 export type TaskStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN";
@@ -163,5 +170,81 @@ export function parseTranscript(raw: string | unknown): Transcript {
     durationMs: reported ?? last,
     speakers,
     sentences,
+  };
+}
+
+// ─── 同步接口（compatible-mode /chat/completions） ───────────────────────────
+
+/** Measured 2026-09-14: 169 audio tokens for a 6s clip, 7169 for 286s — 25 per second. */
+const SYNC_AUDIO_TOKENS_PER_SECOND = 25;
+
+interface RawSyncUsage {
+  seconds?: number;
+  prompt_tokens_details?: { audio_tokens?: number };
+}
+interface RawSyncResponse {
+  choices?: {
+    message?: {
+      content?: unknown;
+      annotations?: { type?: string; language?: string; emotion?: string }[];
+    };
+  }[];
+  usage?: RawSyncUsage;
+}
+
+/**
+ * Billed seconds of a synchronous response. The alias reports `usage.seconds`;
+ * the dated snapshot (`qwen3-asr-flash-2026-02-10`) reports only
+ * `prompt_tokens_details.audio_tokens`, so the seconds are derived at the
+ * measured 25 tokens / second, rounded up. Neither → null.
+ */
+export function syncBilledSeconds(usage: RawSyncUsage | undefined): number | null {
+  const seconds = num(usage?.seconds);
+  if (seconds !== undefined) return seconds;
+  const tokens = num(usage?.prompt_tokens_details?.audio_tokens);
+  return tokens !== undefined ? Math.ceil(tokens / SYNC_AUDIO_TOKENS_PER_SECOND) : null;
+}
+
+/**
+ * A synchronous response → `Transcript`: the whole text as one untimed
+ * sentence, `language` / `emotion` from the `audio_info` annotation when the
+ * model sent one (the alias does, the dated snapshot does not).
+ *
+ * An empty string is a legitimate answer — silence — and yields no sentences.
+ * A body without `choices[0].message` is not, and throws, for the same reason
+ * `parseTranscript` does: an empty transcript would be written into the project.
+ */
+export function parseSyncTranscript(raw: string | unknown): Transcript {
+  let json: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      throw new Error("transcription result is not JSON");
+    }
+  }
+  if (!json || typeof json !== "object") throw new Error("transcription result is not an object");
+  const res = json as RawSyncResponse;
+  const message = res.choices?.[0]?.message;
+  if (!message || typeof message.content !== "string") {
+    throw new Error("transcription result carries no choices[0].message.content");
+  }
+  const text = message.content.trim();
+  const info = message.annotations?.find((a) => a?.type === "audio_info");
+  const seconds = syncBilledSeconds(res.usage);
+  const durationMs = seconds !== null ? seconds * 1000 : 0;
+  return {
+    durationMs,
+    speakers: false,
+    timed: false,
+    sentences: text
+      ? [{
+          beginMs: 0,
+          endMs: durationMs,
+          text,
+          ...(info?.language ? { language: info.language } : {}),
+          ...(info?.emotion ? { emotion: info.emotion } : {}),
+        }]
+      : [],
   };
 }

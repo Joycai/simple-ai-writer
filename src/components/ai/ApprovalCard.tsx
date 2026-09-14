@@ -1470,7 +1470,9 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
     { k: t("ai.approval.transcribeEstimate", { defaultValue: "估价" }), ...estimate },
     {
       k: t("ai.approval.transcribeGoesTo", { defaultValue: "去处" }),
-      v: video
+      v: proposal.sync
+        ? t("ai.approval.transcribeGoesToSync", { defaultValue: "随请求直接发给千问同步识别模型，不经临时存储。" })
+        : video
         ? t("ai.approval.transcribeGoesToVideo", { defaultValue: "上传到阿里云临时存储（会抽取音轨），48 小时后自动清理。由千问录音文件识别模型处理。" })
         : t("ai.approval.transcribeGoesToText", { defaultValue: "上传到阿里云临时存储，48 小时后自动清理。由千问录音文件识别模型处理。" }),
     },
@@ -1483,7 +1485,9 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
   return (
     <>
       <div className={styles.emptyNote}>
-        {t("ai.approval.transcribeLead", { defaultValue: "这一步会上传文件并按秒计费；任务提交后不能取消。" })}
+        {proposal.sync
+          ? t("ai.approval.transcribeLeadSync", { defaultValue: "这一步会把文件发给识别模型并按秒计费。" })
+          : t("ai.approval.transcribeLead", { defaultValue: "这一步会上传文件并按秒计费；任务提交后不能取消。" })}
       </div>
       <div className={styles.specRows}>
         {rows.map((r) => (
@@ -1495,6 +1499,19 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
             </span>
           </div>
         ))}
+        {proposal.sync ? (
+          // The synchronous endpoint returns one plain string: a diarization
+          // switch here would be a choice with no effect.
+          <div className={styles.specRow}>
+            <span className={styles.specKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
+            <span className={styles.specBody}>
+              <span className={styles.specVal}>{t("ai.approval.transcribeSyncPlain", { defaultValue: "整段纯文字" })}</span>
+              <span className={styles.specSub}>
+                {t("ai.approval.transcribeSyncPlainSub", { defaultValue: "同步识别不给时间戳和说话人 · 需要它们请在子代理里绑定录音文件识别模型" })}
+              </span>
+            </span>
+          </div>
+        ) : (
         <label className={styles.specRow}>
           <span className={styles.specKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
           <span className={styles.specBody}>
@@ -1514,6 +1531,7 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
             </span>
           </span>
         </label>
+        )}
       </div>
     </>
   );

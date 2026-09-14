@@ -12,7 +12,7 @@
 
 | # | 问题 | 决定 | 落地形态 |
 |---|---|---|---|
-| 1 | 短文件走不走同步 base64 | **只做异步一条** | `lib/asr/client.ts` 只有 上传 → 提交 → 轮询 → 取结果；同步接口的形状只留在 `docs/api/qianwen-compat-plan.md` §1.4 |
+| 1 | 短文件走不走同步 base64 | ~~只做异步一条~~ → **2026-09-14 改为两条，模型行选**（理由与实测：00-research.md §1.3 补记） | 异步：`lib/asr/client.ts` 上传 → 提交 → 轮询 → 取结果。同步：`lib/asr/sync.ts` 一次 compatible-mode `/chat/completions`。`asrFormat`（`dashscope-filetrans` / `dashscope-sync`）决定走哪条，不在两个模型之间自动路由；缺格式的旧行默认 filetrans |
 | 2 | 右键转写前要不要确认 | **要** | 一张确认卡：文件名、大小、能算出就给时长和估价、「会上传到阿里云临时存储，48 小时后自动清理」、说话人分离开关。确认才上传 |
 | 3 | 知识库热词 | **先测再做，默认不做** | PR 4 前先用一段把人名念错的音频对比 `vocabulary` 开关；无效就不做。PR 1 的 `AsrOptions` 里**没有**热词字段 |
 | 4 | 默认模型 | `qwen-audio-3.0-asr-flash-filetrans` | 模型抽屉选「转写模型格式」时预填它；qwen3 一代只在结果解析上兼容 |
@@ -26,7 +26,7 @@
 
 ## 1. 不变量
 
-下面七条任何一条被破坏都算 bug，不算权衡。
+下面八条任何一条被破坏都算 bug，不算权衡。
 
 1. **转写模型绝不进对话候选。** `isAsrOnly(m)` 是这条不变量的名字（2026-09-14 起判据是 `type === "asr"`，`asrFormat` 只表示接口，见 00-research.md §4.1 补记），`conversationalModels` 无条件排除它；`asr` 档位只收 `isAsrOnly` 的模型，`writer` 等其余档位拒收它。绑错的症状和翻译模型一样是**静默的**：它没有对话能力，`/services/audio/asr/transcription` 收到一段文字只会报错，但作为主模型它会让整个对话在第一轮就死掉。
 2. **凭证的 `model` 和提交的 `model` 是同一个变量。** 临时文件与模型名绑定；写成两处字面量，错的症状是轮询阶段的 `FILE_DOWNLOAD_FAILED`，和漏头一模一样，排查不出来。
@@ -35,6 +35,11 @@
 5. **两代结果形状都认，且结果 JSON 拿到就落盘。** `transcriptionUrlOf` 同时找 `output.result` 和 `output.output`；链接 24 小时失效，缓存里存的是结果本体不是链接。
 6. **Beta 关着＝入口不存在。** 菜单项不渲染、工具不装载（`allowedTools` 里没有），而不是渲染成禁用 / 调用被拒。Beta 开着但没绑模型，菜单项**禁用并指路**（作者能自己修好），工具仍不装载（`isAsrEnabled() && live("asr")`）。
 7. **批准之前不读整个文件，也不越过大小上限。** 提案 / 确认卡要的只有两个数——大小和（WAV 的）时长，`readFileHead` 一次往返给回真实大小和前 64KB。`readBinaryFile` 会把一份 1.5GB 的录音整个搬过 IPC 进 webview 堆，而 `MAX_TRANSCRIBE_BYTES` 那道闸在 `transcribeFile` 里、也就是在**批准之后**才关：两个入口都要在读之前先拦。传给 `wavDurationSeconds` 的必须是**真实大小**而不是手里那段前缀——流式写出的 WAV 把 data 长度写成哨兵值，时长只能由「data 块一直到文件末尾」反推，拿前缀反推会把一小时的录音报成半秒，而那个数字随后就印在付费确认卡上。
+8. **同步接口（2026-09-14）：接口由模型行决定，user 消息只有音频，上限在批准之前。**
+   - **接口由模型行决定。** `conn.ts` 返回 `format`，`run.ts` 按它分支，没有第二个模型参与。id 与接口不符，在花钱之前就拒（`asrIdMismatch`）：filetrans 行不是 `*-filetrans` → `not-filetrans`；同步行不是 qwen3-asr-flash 系列 → `not-sync`（实测别的 id 答 `format is empty`）。
+   - **user 消息里只有一个 `input_audio` part。** 加一个 text part 就 400。上下文 / 热词只能放进前置的 `system` 消息，这件事只写在 `syncBody` 一处。
+   - **上限在批准之前拦。** ≤ 10MB、≤ 5 分钟（批准前只有 WAV 知道时长）、只收 wav / mp3 / m4a / ogg / flac / mp4。按 `readFileHead` 的真实大小判（`syncRefusal`，工具和文件树确认条共用同一个函数），超限就不出卡。`transcribeFile` 在读整个文件之前再判一次，作兜底。
+   - **同步稿不带时间。** `Transcript.timed: false`，渲染不写 `[mm:ss]` 和说话人，frontmatter 记 `timestamps: none`。同步行的确认条 / 审批卡上没有分离开关，工具传进来的 `diarization` / `speaker_count` 被忽略，结果里明说。分离选项在算缓存键之前就归一掉（`effectiveOptions`），切换它不会付第二次钱。缓存键带接口（`ASR_CACHE_VERSION` 仍是 2（同步条目目录名带 `-sync-`，filetrans 目录名不变，已付费结果不被清扫））。
 
 ---
 
@@ -95,6 +100,7 @@ interface Transcript {
 - `subagent.ts`：`SubAgentKind` + `SUBAGENT_KINDS` 加 `"asr"`；`DelegateKind` 排除它（理由同 `translate`，注释里补一段）；`subAgentModel`：`kind === "asr" && !isAsrOnly(model)` → null；`writer` 加 `isAsrOnly` 拒收。
 - `prefs.ts`：`ai:subagent:asr:modelId` / `:enabled`、`app:asrBeta`、`ai:asr:timestamps`、`ai:asr:diarization`。
 - `SubAgentChips.tsx`：`asr` 进 `OFF_CHIP`——它不是"本轮要不要用"的开关（转写是显式动作，不是模型自选的工具），和 `writer` 一样只住设置里。PR 2 若设计稿另有主张再挪。
+  > **已改（2026-09-14，作者决定）**：`asr` 移出 `OFF_CHIP`，能力菜单多一行「转写」。原理由只对右键成立——开了 Beta 且绑了模型时，routing 会把 `transcribe_audio` 挂进助手的工具，模型可以在一轮中途提议转写（经审批卡），和「绘图」「日译中」同一形态；在本次对话关掉它，等于把这个工具从本会话拿走。见 `components/ai/subagentChipModel.ts`。
 - `SubAgentsPane.tsx` 的 `candidatesFor` / `warningFor` / `metaFor`：**PR 1 一行没动**——它们对未知档位回落到文本候选，类型检查过了。代价是 PR 1 合并后子代理页会多出一行「asr」、候选列表是错的（列的是对话模型）；这行在 PR 2 里按设计稿重做，**PR 1 单独发布前要么隐藏这一行，要么和 PR 2 一起合**。
 
 ### 3.5 PR 1 实际落地（2026-09-06）

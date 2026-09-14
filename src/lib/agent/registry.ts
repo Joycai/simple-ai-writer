@@ -604,6 +604,12 @@ export interface TranscribeProposal extends ProposalBase {
   diarization: boolean;
   speakerCount?: number;
   languageHints?: string[];
+  /**
+   * The bound row uses the synchronous endpoint: nothing goes to temporary
+   * storage, and the transcript comes back without timestamps or speakers —
+   * the card says so and has no diarization switch.
+   */
+  sync?: boolean;
   /** The bound model's display name. */
   modelName: string;
 }

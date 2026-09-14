@@ -18,7 +18,7 @@ import {
   setAsrDiarizationDefault,
   setAsrTimestampsEnabled,
 } from "../../../lib/asr/flag";
-import { looksLikeFiletransModel } from "../../../lib/asr/formats";
+import { asrIdMismatch } from "../../../lib/asr/formats";
 import { WRITER_PRESET } from "../../../lib/agent/presets";
 import {
   clampChunkLines,
@@ -132,10 +132,13 @@ export function SubAgentsPane() {
     if (kind === "asr" && !isAsrOnly(model)) {
       return t("systemSettings.subagents.warnNotAsr");
     }
-    // 实测：录音文件识别接口只认 *-filetrans 的 id，别的一律 400「url error」——
-    // 在这里就说，别等作者上传完一个文件再被平台拒（lib/asr/conn.ts）。
-    if (kind === "asr" && !looksLikeFiletransModel(model.modelId)) {
-      return t("systemSettings.subagents.warnAsrNotFiletrans", { id: model.modelId });
+    // 实测：录音文件识别接口只认 *-filetrans 的 id（别的一律 400「url error」），
+    // 同步接口只认 qwen3-asr-flash 系列（别的答「format is empty」）——按模型行选的
+    // 接口判，在这里就说，别等作者付费那一步再被平台拒（lib/asr/conn.ts）。
+    if (kind === "asr") {
+      const mismatch = asrIdMismatch(model.asrFormat ?? "dashscope-filetrans", model.modelId);
+      if (mismatch === "not-filetrans") return t("systemSettings.subagents.warnAsrNotFiletrans", { id: model.modelId });
+      if (mismatch === "not-sync") return t("systemSettings.subagents.warnAsrNotSync", { id: model.modelId });
     }
     return undefined;
   };

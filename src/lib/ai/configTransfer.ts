@@ -20,6 +20,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { loadCustomFormats, saveCustomFormat } from "../docx/presets";
 import { parseDocFormat, type DocFormatPreset } from "../docx/format";
 import { parseTextVerbosity } from "./types";
+import { clampVideoFps } from "./videoInput";
 import {
   ensureAiSchema,
   listModels,
@@ -269,6 +270,9 @@ export function parseConfigBundle(
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
       vlHighResolution: r.vlHighResolution === true ? true : undefined,
+      videoInput: r.videoInput === true ? true : undefined,
+      // Clamped like a DB row: a hand-edited backup must not put fps 500 on the wire.
+      videoFps: clampVideoFps(r.videoFps),
       // Unknown level → absent, which sends nothing.
       textVerbosity: parseTextVerbosity(r.textVerbosity),
       // Same reason as the reasoning fields above: an unknown format from a

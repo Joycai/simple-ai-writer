@@ -57,7 +57,33 @@
 的 user 消息，wav 与 mp3 都逐字转写正确；**同一条消息再加一个 text part 就 400**
 （`The dedicated task \`asr\` corresponding to the current service does not support this input.`）。
 `qwen-audio-3.0-asr-flash` 与 `fun-asr-flash-2026-06-15` 在同一形状上 400 `format is empty`——这条线只有 qwen3-asr 一代。
-同步路径**仍未实现**，上面的取舍不变；明细见 [`landscape.md`](../../api/landscape.md) §7 第六个样本「视觉理解」的音频表。
+同步路径当时仍未实现；明细见 [`landscape.md`](../../api/landscape.md) §7 第六个样本「视觉理解」的音频表。
+
+**补记：作者推翻了「只做异步」（2026-09-14），同步一条已实现。**
+
+为什么改：作者手里的音频多是短的——一段口述、采访里的一截、会议里的一段。对这些文件，同步没有上传、没有 48 小时的临时存储、没有任务和轮询，几秒出文字；异步那条是凭证 → OSS 上传 → 提交 → 轮询 → 取结果，快的时候也是分钟级的等待体验。当初担心的「要维护两条路径」用**模型行选接口**化解：`asrFormat` 多一个值 `dashscope-sync`，绑在 `asr` 子代理上的那一行决定走哪条，**不在两个模型之间自动路由**——自动路由意味着作者要同时配好两个模型，还得猜某一次到底走了哪条、为什么没有时间戳。
+
+实测（① 面 `POST {base}/chat/completions`，base `https://dashscope.aliyuncs.com/compatible-mode/v1`；一次性探测脚本不入库。别名与日期快照的两份真机响应作为解析夹具放在 `src/lib/asr/__tests__/fixtures/*-sync.json`，稳定的事实由 `src/lib/__tests__/live.qianwen-asr.test.ts`（有 `QIANWEN_KEY` 才跑，驱动真实的 `sync.ts`）钉住）：
+
+| 项 | 结果 |
+|---|---|
+| 请求 | `{model, messages:[{role:"user", content:[{type:"input_audio", input_audio:{data:"data:<mime>;base64,…", format:"wav\|mp3\|m4a\|ogg\|flac\|mp4"}}]}]}` |
+| user 消息加一个 text part | **400** `The dedicated task asr … does not support this input`——user 消息里**只能有**音频 |
+| 前置 `system` 消息（text part，上下文 / 热词） | 接受，多几个 text token |
+| 顶层 `asr_options: {language:"zh", enable_itn:true}` | 接受 |
+| `qwen3-asr-flash`（别名） | 转写正确；`message.annotations = [{type:"audio_info", language:"zh", emotion:"neutral"}]`；`usage.seconds: 6` + `prompt_tokens_details.audio_tokens: 169` |
+| `qwen3-asr-flash-2026-02-10`（日期快照） | 转写正确，但**没有 `annotations`、没有 `usage.seconds`**，只有 `audio_tokens`（25 token / 秒） |
+| `qwen-audio-3.0-asr-flash`、`fun-asr-flash-2026-06-15` | **400** `format is empty`——不是这条线上的模型；`*-filetrans` / `*-realtime` 也不是 |
+| 响应 | `choices[0].message.content` 是整段纯文字：**没有时间戳，没有说话人** |
+| `stream: true` | 可用，`usage.seconds` 在最后一块；我们用非流式 |
+| 格式 | wav / mp3 / m4a / ogg / flac 都正确；mp4（视频容器）读的是音轨 |
+| 时长 | 286 秒 mp3 成功；330 秒 mp3 **400** `The audio is too long` |
+| 大小 | 13MB wav **400** `Multimodal file size is too large`；平台文档写 ≤ 5 分钟 / ≤ 10MB |
+| 延迟 | 多数 1.3–15 秒 |
+
+同步**做不到**的：时间戳、说话人分离、分句（整段一段）；超过 5 分钟或 10MB 的文件；上传前知道 mp3 / m4a / mp4 的时长（只有 WAV 的文件头算得出——所以一段 330 秒、只有 1.3MB 的 mp3 过得了批准前的检查，由平台以「The audio is too long」拒绝，`sync.ts` 把它改口成「超过 5 分钟，请绑定录音文件识别模型」）。
+
+落地：`lib/asr/sync.ts`（请求体 / 错误改口 / 调用）、`formats.ts`（`looksLikeSyncAsrModel`、`asrIdMismatch`、六个扩展名、`SYNC_MAX_BYTES` / `SYNC_MAX_SECONDS`、`syncRefusal`）、`result.ts`（`parseSyncTranscript`、`Transcript.timed: false`、计费秒数缺席时按 audio_tokens / 25 向上取整）、`run.ts` 按接口分支、缓存键在同步条目上带 `-sync-`（`ASR_CACHE_VERSION` 仍是 2：+1 会让清扫删掉已付费的 filetrans 结果，filetrans 目录名因此不变）。不变量见 `01-execution-plan.md` §1 第 8 条。
 
 ---
 

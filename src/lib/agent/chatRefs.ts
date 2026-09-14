@@ -19,8 +19,12 @@
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent } from "../ai/types";
 import { imagePart } from "../ai/imagePart";
+import { noteVideoTokens } from "../ai/tokenEstimate";
+import { estimateVideoTokens, videoPart } from "../ai/videoInput";
 import { readEntityFile } from "../lore/entity";
-import type { AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText } from "../lore/aiTask";
+import type {
+  AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText, AttachedVideo,
+} from "../lore/aiTask";
 
 /**
  * Longest slice of one referenced file that is inlined. Generous enough for a
@@ -48,6 +52,17 @@ const REF_TOTAL_CHAR_BUDGET = 18_000;
  * request that has to succeed before any trimming ever runs.
  */
 export const MAX_MESSAGE_IMAGES = 4;
+
+/**
+ * Most video clips one message may carry: one.
+ *
+ * Not a guess at a vendor limit (none was measured for several clips) but two
+ * measured facts: one data-URI item may be up to 20 MB, so two clips is a
+ * 40 MB request body before anything else is on it; and a clip costs from
+ * hundreds to tens of thousands of input tokens, re-billed every tool round
+ * (`trimHistory` keeps only the newest clip for the same reason).
+ */
+const MAX_MESSAGE_VIDEOS = 1;
 
 /** One reference, rendered for the prompt. `budget` is what is left for it. */
 async function renderRef(item: AttachedLore | AttachedText, budget: number): Promise<string> {
@@ -152,6 +167,14 @@ export async function buildChatMessage(
     visionDelegate?: boolean;
     /** Whether this run holds `transcribe_audio` — decides what a mentioned recording is told to do. */
     transcribe?: boolean;
+    /**
+     * Whether an attached clip may travel as a `video_url` part — the caller's
+     * `canReadVideo(model, standard)`. When false a clip is treated exactly
+     * like any other recording: a path, and whatever `transcribe` says.
+     */
+    allowVideo?: boolean;
+    /** The model's declared `videoFps`; absent sends no `fps`. */
+    videoFps?: number;
   } = {},
 ): Promise<ChatMessagePayload> {
   const parts: string[] = [];
@@ -212,10 +235,36 @@ export async function buildChatMessage(
     );
   }
 
+  // Video clips: a payload only for a model that declared it, one per message.
+  const videos = refs.filter((r): r is AttachedVideo => r.kind === "video");
+  const sentVideos = opts.allowVideo ? videos.slice(0, MAX_MESSAGE_VIDEOS) : [];
+  if (sentVideos.length) {
+    parts.push(
+      `${i18n.t("ai.chat.videoBlockLabel", { defaultValue: "【附视频】" })}\n${
+        sentVideos.map((v, i) => `${i + 1}. ${v.file.name}${
+          v.durationSec ? `（${Math.round(v.durationSec)}s）` : ""
+        }`).join("\n")
+      }`,
+    );
+  }
+  const overCap = opts.allowVideo ? videos.slice(sentVideos.length) : [];
+  if (overCap.length) {
+    parts.push(i18n.t("ai.chat.videosOverCap", {
+      defaultValue: "（以下视频没有随本条消息发送——每条消息最多带 {{max}} 段视频：\n{{list}}）",
+      max: MAX_MESSAGE_VIDEOS,
+      list: overCap.map((v) => `- ${v.file.name} — ${v.file.path}`).join("\n"),
+    }));
+  }
+
   // Recordings: never a payload, always a pointer. The model is told the path
   // and — only when this run actually holds the tool (tool-presence.md) —
   // which tool turns it into text; otherwise what the author has to switch on.
-  const media = refs.filter((r): r is AttachedMedia => r.kind === "media");
+  // A clip read for a video model that is no longer the one sending lands here
+  // too: to this model it is a recording like any other.
+  const media: { file: AttachedMedia["file"] }[] = [
+    ...refs.filter((r): r is AttachedMedia => r.kind === "media"),
+    ...(opts.allowVideo ? [] : videos),
+  ];
   if (media.length) {
     const listed = media.map((a) => `- ${a.file.name} — ${a.file.path}`).join("\n");
     parts.push(
@@ -236,12 +285,21 @@ export async function buildChatMessage(
   parts.push(message);
   const text = parts.join("\n\n");
 
+  const videoParts = sentVideos.map((v) => {
+    const part = videoPart(v.dataUrl, opts.videoFps);
+    // Beside the part, never on it: openai.ts sends parts verbatim.
+    const estimate = estimateVideoTokens({ ...v, fps: opts.videoFps });
+    if (estimate !== null) noteVideoTokens(part, estimate);
+    return part;
+  });
+
   return {
     text,
-    content: sent.length
+    content: sent.length || videoParts.length
       ? [
           { type: "text", text },
           ...sent.map((a) => imagePart(a.dataUrl)),
+          ...videoParts,
         ]
       : text,
     imagePaths: sent.map((a) => a.file.path),

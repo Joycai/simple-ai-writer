@@ -28,7 +28,7 @@ import { baseName, convertExtOf, convertProjectFile, importDocumentsDialog } fro
 import { useImeGuard } from "../../lib/ime";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { isAsrEnabled, isAsrDiarizationDefault, isAsrTimestampsEnabled } from "../../lib/asr/flag";
-import { isVideoExt, transcribeExtOf } from "../../lib/asr/formats";
+import { isVideoExt, syncRefusal, transcribeExtOf, SYNC_ASR_EXTENSIONS, type SyncRefusal } from "../../lib/asr/formats";
 import { estimateCost, formatBytes, wavDurationSeconds } from "../../lib/asr/cost";
 import { formatClock } from "../../lib/asr/render";
 import { subAgentModel } from "../../lib/agent/subagent";
@@ -63,6 +63,10 @@ interface TranscribeAskState {
   estimate: number | null;
   target: string;
   diarization: boolean;
+  /** The bound row uses the synchronous endpoint: no temporary storage, no timestamps, no speakers. */
+  sync: boolean;
+  /** Why a synchronous row cannot take this file — known before anything is sent, so the bar refuses instead of offering to pay. */
+  refusal: SyncRefusal | null;
 }
 
 /** A dragged or clipboarded entry — the pair every transfer needs. */
@@ -356,15 +360,27 @@ function TranscribeAskBar({
         sub: ask.pricePerSecond === undefined ? t("fileTree.transcribeAskNoPrice") : t("fileTree.transcribeAskRate"),
         dash: true,
       };
+  const goesTo = ask.sync
+    ? "fileTree.transcribeAskGoesToSync"
+    : isVideoExt(ask.ext) ? "fileTree.transcribeAskGoesToVideo" : "fileTree.transcribeAskGoesToText";
   const rows: { k: string; v: string; sub?: string; dash?: boolean }[] = [
     { k: t("fileTree.transcribeAskFile"), v: ask.name, sub: sizeLine },
     { k: t("fileTree.transcribeAskEstimate"), ...estimate },
-    { k: t("fileTree.transcribeAskGoesTo"), v: t(isVideoExt(ask.ext) ? "fileTree.transcribeAskGoesToVideo" : "fileTree.transcribeAskGoesToText") },
+    { k: t("fileTree.transcribeAskGoesTo"), v: t(goesTo) },
     { k: t("fileTree.transcribeAskWrites"), v: baseName(ask.target), sub: t("fileTree.transcribeAskWritesSub") },
   ];
+  // The same pre-check `transcribe_audio` makes (lib/asr/formats syncRefusal),
+  // worded for the author: the bar stays, so the numbers that explain the
+  // refusal are on screen, but there is nothing to confirm.
+  const refusal = ask.refusal === null ? null
+    : ask.refusal.reason === "bytes" ? t("fileTree.transcribeSyncTooBig", { size: formatBytes(ask.refusal.bytes) })
+    : ask.refusal.reason === "seconds" ? t("fileTree.transcribeSyncTooLong", { length: formatClock(ask.refusal.seconds * 1000) })
+    : t("fileTree.transcribeSyncExt", { ext: ask.refusal.ext, list: SYNC_ASR_EXTENSIONS.join(" / ") });
   return (
     <div className={styles.transcribeAsk} onClick={(e) => e.stopPropagation()}>
-      <div className={styles.deleteAskText}>{t("fileTree.transcribeAskLead")}</div>
+      <div className={styles.deleteAskText}>
+        {refusal ?? t(ask.sync ? "fileTree.transcribeAskLeadSync" : "fileTree.transcribeAskLead")}
+      </div>
       <div className={styles.transcribeAskRows}>
         {rows.map((r) => (
           <Fragment key={r.k}>
@@ -376,16 +392,28 @@ function TranscribeAskBar({
           </Fragment>
         ))}
         <span className={styles.transcribeAskKey}>{t("ai.approval.transcribeThisRun", { defaultValue: "本次" })}</span>
-        <span>
-          <label className={styles.transcribeAskToggle}>
-            <input type="checkbox" checked={dia} onChange={(e) => setDia(e.target.checked)} />
-            {t("fileTree.transcribeAskDiarization")}
-          </label>
-          <span className={styles.transcribeAskSub}>{t("fileTree.transcribeAskDiarizationSrc")}</span>
-        </span>
+        {ask.sync ? (
+          // One plain string comes back: a diarization switch would have no effect.
+          <span>
+            <span className={styles.transcribeAskVal}>{t("fileTree.transcribeAskSyncPlain")}</span>
+            <span className={styles.transcribeAskSub}>{t("fileTree.transcribeAskSyncPlainSub")}</span>
+          </span>
+        ) : (
+          <span>
+            <label className={styles.transcribeAskToggle}>
+              <input type="checkbox" checked={dia} onChange={(e) => setDia(e.target.checked)} />
+              {t("fileTree.transcribeAskDiarization")}
+            </label>
+            <span className={styles.transcribeAskSub}>{t("fileTree.transcribeAskDiarizationSrc")}</span>
+          </span>
+        )}
       </div>
       <div className={styles.deleteAskRow}>
-        <button className={styles.transcribeAskGo} onClick={() => onConfirm(dia)}>{t("fileTree.transcribeAskGo")}</button>
+        {!refusal && (
+          <button className={styles.transcribeAskGo} onClick={() => onConfirm(ask.sync ? false : dia)}>
+            {t(ask.sync ? "fileTree.transcribeAskGoSync" : "fileTree.transcribeAskGo")}
+          </button>
+        )}
         <button className={styles.deleteAskCancel} onClick={onCancel}>{t("common.cancel")}</button>
       </div>
     </div>
@@ -1163,6 +1191,7 @@ export function FileTree() {
       // 真实大小传给它：流式写出的 WAV 的时长只能由「data 块到文件末尾」反推。
       const seconds = ext === "wav" ? wavDurationSeconds(head.head, head.size) : null;
       const pricePerSecond = asrModel?.pricePerSecond;
+      const sync = asrModel?.asrFormat === "dashscope-sync";
       setTranscribeAsk({
         path: node.path,
         name: node.name,
@@ -1172,7 +1201,9 @@ export function FileTree() {
         pricePerSecond,
         estimate: seconds === null ? null : estimateCost(seconds, pricePerSecond),
         target: await transcriptTargetFor(node.path),
-        diarization: isAsrDiarizationDefault(),
+        diarization: sync ? false : isAsrDiarizationDefault(),
+        sync,
+        refusal: sync ? syncRefusal(ext, head.size, seconds) : null,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1203,7 +1234,8 @@ export function FileTree() {
         onProgress: (p) => {
           const text = p.phase === "uploading" ? t("fileTree.transcribeUploading", { size: formatBytes(ask.bytes) })
             : p.phase === "queued" ? t("fileTree.transcribeQueued")
-            : p.phase === "running" ? t("fileTree.transcribeRunning", { n: p.polls ?? 1 })
+            // The synchronous endpoint reports "running" once, with no poll count.
+            : p.phase === "running" ? (p.polls ? t("fileTree.transcribeRunning", { n: p.polls }) : t("fileTree.transcribeRecognizing"))
             : p.phase === "downloading" ? t("fileTree.transcribeDownloading")
             : t("fileTree.transcribeReading", { name: ask.name });
           setBusy({ path: ask.path, text });
@@ -1212,7 +1244,7 @@ export function FileTree() {
       const target = await asr.writeTranscript(ask.path, outcome.transcript, {
         modelId: conn.modelId,
         timestamps: isAsrTimestampsEnabled(),
-        speakers: diarization,
+        speakers: diarization && !ask.sync,
       });
       const cost = await asr.recordTranscriptionUsage(projectPath, conn.model, outcome);
       await refreshFileTree();

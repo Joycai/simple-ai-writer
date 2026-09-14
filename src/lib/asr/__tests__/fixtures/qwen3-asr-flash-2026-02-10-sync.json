@@ -1,0 +1,30 @@
+{
+  "choices": [
+    {
+      "message": {
+        "content": "今天杭州天气晴朗，适合去西湖散步。第二句话用来测试时间戳。",
+        "role": "assistant"
+      },
+      "finish_reason": "stop",
+      "index": 0,
+      "logprobs": null
+    }
+  ],
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 169,
+    "completion_tokens": 25,
+    "total_tokens": 194,
+    "prompt_tokens_details": {
+      "audio_tokens": 169,
+      "text_tokens": 0
+    },
+    "completion_tokens_details": {
+      "text_tokens": 25
+    }
+  },
+  "created": 1789378062,
+  "system_fingerprint": null,
+  "model": "qwen3-asr-flash-2026-02-10",
+  "id": "chatcmpl-2a0d374e-532d-98d0-8bef-12b1a67398c6"
+}

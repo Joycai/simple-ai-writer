@@ -59,6 +59,16 @@ describe("parseConfigBundle · models", () => {
   it("keeps the vision type and the hi-res declaration", () => {
     const out = parseConfigBundle(bundle([{ ...base, type: "vision", vlHighResolution: true }]), []);
     expect(out.models[0]).toMatchObject({ type: "vision", vlHighResolution: true });
+    // Video declaration rides along; a hand-edited fps is clamped, junk dropped.
+    const video = parseConfigBundle(bundle([
+      { ...base, id: "v1", type: "vision", videoInput: true, videoFps: 0.5 },
+      { ...base, id: "v2", type: "vision", videoInput: true, videoFps: 500 },
+      { ...base, id: "v3", type: "vision", videoInput: "yes", videoFps: "fast" },
+    ]), []);
+    expect(video.models[0]).toMatchObject({ videoInput: true, videoFps: 0.5 });
+    expect(video.models[1].videoFps).toBe(10);
+    expect(video.models[2].videoInput).toBeUndefined();
+    expect(video.models[2].videoFps).toBeUndefined();
   });
 
   it("upgrades a pre-type transcription row (asrFormat on a text row) to the asr type", () => {

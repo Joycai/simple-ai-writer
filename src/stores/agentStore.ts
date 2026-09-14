@@ -134,6 +134,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { expandAuthorIntent } from "../lib/context/expand";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
+import { canReadVideo } from "../lib/ai/videoInput";
 import { connOptions, resolveConn, type ConnPair } from "../lib/ai/conn";
 import { notify } from "../lib/notify";
 import { baseName, isSamePath, joinPath } from "../lib/paths";
@@ -1708,6 +1709,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // a mentioned recording is pointed at the tool only when it is there.
         transcribe: isAsrEnabled()
           && subAgentModel("asr", useAiStore.getState().models, effectiveSubs) !== null,
+        // Declared on the model AND on the Chat Completions family — a clip on
+        // any other wire is at best an empty answer (docs/feature/video-input.md).
+        allowVideo: canReadVideo(model, provider.apiStandard),
+        videoFps: model.videoFps,
       },
     );
 

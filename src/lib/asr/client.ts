@@ -23,6 +23,7 @@
 import { fetch } from "../http";
 import { dashscopeNativeBase } from "../ai/image";
 import { logAsrEvent } from "../ai/apiLog";
+import type { AsrFormat } from "../ai/configDb";
 import type { AsrRequestOptions } from "./cache";
 import { taskFailureOf, taskStatusOf, transcriptionUrlOf, type TaskOutput } from "./result";
 
@@ -32,6 +33,8 @@ export interface AsrConn {
   apiKey: string;
   /** 模型 id——凭证和提交共用这一个。 */
   modelId: string;
+  /** 走哪个接口；缺席＝录音文件识别（`run.ts` 按它分支）。 */
+  format?: AsrFormat;
 }
 
 /** 端点报的错，结构化的部分留给代码分支，散文留给作者看。 */
