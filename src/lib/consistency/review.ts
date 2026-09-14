@@ -18,7 +18,7 @@
 
 import { connOptions, type AiConn } from "../ai/conn";
 import { extractJsonObject } from "../ai/json";
-import type { Model } from "../ai/configDb";
+import { canSeeImages, type Model } from "../ai/configDb";
 import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import { CONSISTENCY_PRESET } from "../agent/presets";
@@ -330,7 +330,7 @@ async function runWindow(
       projectPath: args.projectPath,
       loreIndex: args.loreIndex,
       loreScope,
-      multimodal: args.conn.model.type === "multimodal",
+      multimodal: canSeeImages(args.conn.model),
       visionDelegate: routed.visionDelegate,
       reviewSink: sink,
       taskWorkspace: workspace,

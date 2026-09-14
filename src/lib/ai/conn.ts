@@ -92,6 +92,8 @@ export interface ConnOptions {
   structuredOutput?: StructuredOutputMode;
   /** Responses-family `text.verbosity`; absent sends nothing. */
   textVerbosity?: TextVerbosity;
+  /** DashScope `vl_high_resolution_images` on the Chat Completions wire; absent sends nothing. */
+  vlHighResolution?: boolean;
 }
 
 /**
@@ -126,6 +128,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     serverTools: model.serverTools,
     structuredOutput: model.structuredOutput,
     textVerbosity: model.textVerbosity,
+    vlHighResolution: model.vlHighResolution,
   };
 }
 
@@ -154,6 +157,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     serverTools: o.serverTools,
     structuredOutput: o.structuredOutput,
     textVerbosity: o.textVerbosity,
+    vlHighResolution: o.vlHighResolution,
   };
 }
 

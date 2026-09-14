@@ -56,6 +56,17 @@ describe("parseConfigBundle · models", () => {
     expect(odd.models[0].textVerbosity).toBeUndefined();
   });
 
+  it("keeps the vision type and the hi-res declaration", () => {
+    const out = parseConfigBundle(bundle([{ ...base, type: "vision", vlHighResolution: true }]), []);
+    expect(out.models[0]).toMatchObject({ type: "vision", vlHighResolution: true });
+  });
+
+  it("upgrades a pre-type transcription row (asrFormat on a text row) to the asr type", () => {
+    // A backup from before `asr` was a type: the identity lived on the format.
+    const out = parseConfigBundle(bundle([{ ...base, type: "text", asrFormat: "dashscope-filetrans" }]), []);
+    expect(out.models[0]).toMatchObject({ type: "asr", asrFormat: "dashscope-filetrans" });
+  });
+
   it("degrades an unknown structured-output value to auto instead of sending it", () => {
     // A backup from a newer build can name a mode this build doesn't know.
     const out = parseConfigBundle(bundle([{ ...base, structuredOutput: "json_schema_v2" }]), []);

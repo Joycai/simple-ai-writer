@@ -39,7 +39,7 @@ import {
   resolveSubAgentConn, withSessionOverrides, type SubAgentKind,
 } from "../lib/agent/subagent";
 import { connOptions, resolveConn } from "../lib/ai/conn";
-import { costFor } from "../lib/ai/configDb";
+import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { persistUsage } from "../lib/ai/usage";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
@@ -719,7 +719,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           projectPath,
           loreIndex,
           loreScope: useLoreStore.getState().scope,
-          multimodal: model.type === "multimodal",
+          multimodal: canSeeImages(model),
           visionDelegate: routed.visionDelegate,
           taskWorkspace: workspace,
           signal: controller.signal,
@@ -1411,7 +1411,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       );
       const inlined = refs.filter((r) => !(r.kind === "lore" && resident.has(r.entity.dirPath)));
       const composed = await buildChatMessage(body, quote, inlined, {
-        allowImages: model?.type === "multimodal",
+        allowImages: !!model && canSeeImages(model),
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
       set((st) => ({

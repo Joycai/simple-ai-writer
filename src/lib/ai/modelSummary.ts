@@ -40,7 +40,7 @@ export type WireInput = Pick<
   Model,
   | "type" | "modelId" | "maxOutput" | "temperature" | "reasoningEffort"
   | "thinkingCategory" | "thinkingBudget" | "serverTools" | "structuredOutput"
-  | "prefix" | "caps" | "textVerbosity"
+  | "prefix" | "caps" | "textVerbosity" | "vlHighResolution"
 >;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -124,6 +124,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   }
   // Sent on every request, beside (not instead of) a structured task's text.format.
   if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
+  if (family === "openai" && m.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
 }
@@ -132,13 +133,13 @@ type ModelMark = "think" | "web" | "pdf" | "translate";
 
 /**
  * The explicit declarations on a conversational model, for the list row.
- * Image and video models carry none: their declarations live in `caps`, and the
- * row already says what type they are.
+ * Image, video and transcription models carry none: their declarations live in
+ * `caps` / `asrFormat`, and the row already says what type they are.
  */
 export function declarationMarks(
   m: Pick<Model, "type" | "thinkingCategory" | "serverTools" | "pdfInput" | "translateFormat">,
 ): ModelMark[] {
-  if (m.type === "image" || m.type === "video") return [];
+  if (m.type === "image" || m.type === "video" || m.type === "asr") return [];
   const out: ModelMark[] = [];
   if (m.thinkingCategory) out.push("think");
   if (m.serverTools?.includes("web_search")) out.push("web");

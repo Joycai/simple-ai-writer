@@ -32,6 +32,11 @@
  *    that, an 8000px screenshot that is *small* in bytes would "improve" its
  *    way back to the original, which was over on pixels.
  *
+ * The same loop also *enlarges* a picture with a side under ten pixels, which
+ * an endpoint refuses outright (`MIN_IMAGE_EDGE` in the planner). A format
+ * the header reader doesn't know is not measured for that, same as it isn't
+ * for the ceiling — see `imageForModel`.
+ *
  * Anything unexpected — an undecodable file, no canvas, a `toBlob` that
  * returns nothing — falls back to the original bytes rather than throwing.
  * Failing to shrink must not become failing to send: the call site's own size
@@ -48,6 +53,7 @@ import {
   MAX_ENCODE_ATTEMPTS,
   type ImageLimits,
   type ImageState,
+  fitsLimits,
   imageLimits,
   planImageStep,
 } from "./downscalePlan";
@@ -142,9 +148,15 @@ interface Candidate {
   ext: string;
 }
 
+/**
+ * The planner's own definition, not a copy of it: a second opinion here
+ * would disagree the moment the planner learned a rule (the size floor did
+ * exactly that — an enlarged candidate is allowed past the long-edge ceiling
+ * that a hand-written check here would still hold it to, and the tiny
+ * original would have "won").
+ */
 function fits(c: Candidate, limits: ImageLimits): boolean {
-  const withinEdge = limits.longEdge <= 0 || Math.max(c.width, c.height) <= limits.longEdge;
-  return withinEdge && c.bytes <= limits.maxBytes;
+  return fitsLimits(c, limits);
 }
 
 async function shrink(
@@ -204,18 +216,22 @@ async function shrink(
       };
     }
     const outBytes = new Uint8Array(await best.blob.arrayBuffer());
+    // An enlargement to the size floor loses nothing the author could miss,
+    // and both places that print `downscaled` say "scaled down" — so a
+    // picture that only grew carries no note rather than a false one.
+    const enlarged = best.width * best.height > decoded.width * decoded.height;
     return {
       dataUrl: `data:${best.blob.type || imageMimeFor(best.ext)};base64,${bytesToBase64(outBytes)}`,
       ext: best.ext,
       bytes: outBytes,
-      downscaled: {
+      ...(enlarged ? {} : { downscaled: {
         fromWidth: decoded.width,
         fromHeight: decoded.height,
         toWidth: best.width,
         toHeight: best.height,
         fromBytes: original.length,
         toBytes: outBytes.length,
-      },
+      } }),
     };
   } finally {
     decoded.release();

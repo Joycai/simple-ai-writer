@@ -48,7 +48,11 @@ wire 层的细节（首块形状、错误信封、文档不符处）见 [`landsc
 | kimi-k3 | 开 | ✅ 关 | **400（budget）** / ✅ | ❌ 照常思考 | ✅（被忽略） | ✅ 接受 | ✅ | ✅ |
 | glm-5.2 | 开 | ✅ 关 | ✅ / ✅ | ❌ 照常思考 | ✅ | ✅ 接受 | ✅ | 无视图片 |
 | MiniMax-M2.5 | 开 | **400** | ✅ / **400** | ❌ 照常思考 | **400** | 400 → 重试 auto ✅ | 不强制（散文或围栏） | 「看不到」 |
-| qwen3-vl-plus | 关 | ✅ | ✅ / ✅ | （本就不思考） | **400** | ✅ 接受 | ✅ | ✅ |
+| qwen3-vl-plus | 关 | ✅ | ✅ / ✅ | （本就不思考） | **400** | ✅ 接受 | ✅ | ✅（png/jpeg/webp/gif；每边 ≥10px；`detail` 无视；2026-09-14） |
+
+qwen3-vl-plus 补测（2026-09-14）：图片按 ≈像素/1024 计 token，默认上限约 2500，
+`vl_high_resolution_images:true` 抬到约 16384；图 + 工具 + `qwen-budget` 思考能读图后调工具；
+② 面 `Unsupported model`；④ 面读图并默认思考。明细见 [`landscape.md`](landscape.md) §7 第六个样本「视觉理解」。
 
 补充：三种关法（`enable_thinking:false`、`reasoning_effort:"none"`、顶层 `thinking:{type:"disabled"}`）
 在 6 个思考模型上等效；`reasoning_effort` 只有 3.8 代真分档；工具轮回传 `reasoning_content`
@@ -75,7 +79,7 @@ wire 层的细节（首块形状、错误信封、文档不符处）见 [`landsc
 见 [`landscape.md`](landscape.md) §7 第六个样本「联网搜索与网页抓取」）、qwen3.8-max 的 `preserve_thinking`
 回传要求与 PDF `file` 块（4.9）、`json_schema` strict 对 `["string","null"]` 的接受度
 （[`structured-output-plan.md`](structured-output-plan.md) §11 第 1 条）、国际站。
-Responses 只探了一次（§4.2）。
+Responses 只探了一次（§4.2）；其 `input_image` 已于 2026-09-14 随视觉理解一起补测。
 
 ### 1.4 原生面 `/api/v1`：录音文件识别 + 临时上传（2026-09-06）
 
@@ -184,7 +188,7 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 | `tool_choice` | `none/auto/required`、`{type:"function",name}`、`{type:"allowed_tools",mode,tools}`、内置工具型。**实测**：`required` 与 `{type:"function"}` 在 effort `medium` 下都合法（5.5 / 5.6-sol），没有 ① 族那种"思考中禁止强制" | `auto/none/required` + `{type:"function",name}`；思考模式下的强制档是否被拒未验（Chat 面上分模型） |
 | 状态 | `store` **默认 true**；`previous_response_id` 或 `conversation`；`store:false` 时 `reasoning` 条目**默认带 `encrypted_content`**（实测 1.3–1.4KB，不用 `include`），回传即可无状态延续；**少回传不报错**（去掉 reasoning / 去掉 encrypted_content / 只回裸 function_call 都 200） | `store` 有；`previous_response_id`（7 天）与 `conversation`；**无 `encrypted_content`**，回传的是明文 `summary` |
 | `input` 条目 | `message`（user/assistant/system/developer，assistant 带 `phase: commentary/final_answer`，**5.3-codex 起要求回传**）、`function_call`、`function_call_output`、`reasoning`、`item_reference`、内置工具条目 | `message`、`function_call`、`function_call_output`、`reasoning`（`id`+`summary[]`）、`web_search_call`；无 `phase`、无 `item_reference` |
-| 图片 | `input_image` 收 URL 或 data URL，`detail: low/high/auto/original` | 文档只给纯文本 `content`；多模态是否走 `input_image` 未验 |
+| 图片 | `input_image` 收 URL 或 data URL，`detail: low/high/auto/original` | 文档只给纯文本 `content`。**实测（2026-09-14）**：qwen3.8-flash 收 `input_image` data URL、读对并思考；qwen3-vl-plus 在这个面上 **`Unsupported model`**——视觉专用模型只能走 ① / ④ 面（[`landscape.md`](landscape.md) §7 第六个样本「视觉理解」） |
 | 其它 | `background`、`truncation:auto`、`context_management`（compaction）、`max_tool_calls`、`prompt_cache_key`、`service_tier`、`stream_options.include_obfuscation` | 明确**不支持 `background`**；其余未提及即忽略（文档原话：未列参数被忽略） |
 
 响应侧：
@@ -263,7 +267,8 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
 
 - 千问：`text.format` 是报错还是忽略；函数参数到底怎么流；流中错误事件形状；
   `reasoning` 条目**不回传**是否报错（Chat 面上带不带都行，这个面未验）；
-  `input_image` 是否可用。**全部未验。**
+  `input_image` 是否可用。**全部未验。**（`input_image` 已于 2026-09-14 定掉：qwen3.8-flash ✅，
+  qwen3-vl-plus 在 ② 面 `Unsupported model`，见 §4.2 表。）
 - OpenAI（2026-09-03 经中转站已定，见 [`responses.md`](responses.md)）：
   - ✅ `strict` 缺省 → 自动 strict，`["string","null"]` 过；工具要非 strict 必须显式 `strict:false`。
   - ✅ `include_obfuscation:false` 无效，adapter 无视 `obfuscation` 字段即可。

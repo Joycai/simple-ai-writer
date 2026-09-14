@@ -1,3 +1,4 @@
+import { canSeeImages } from "../../lib/ai/configDb";
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle, Check } from "lucide-react";
@@ -101,7 +102,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       // Multimodal models additionally receive the entity's avatar + gallery
       // images as binary payloads. Text-only models still get the textual
       // gallery descriptions embedded in the prompt below.
-      const supportsImages = model.type === "multimodal";
+      const supportsImages = canSeeImages(model);
       const galleryLines: string[] = [];
       if (entity.avatarPath) {
         const fname = baseName(entity.avatarPath) || "avatar";
@@ -248,7 +249,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
 
   const activeModel = models.find((m) => m.id === modelId);
   const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
-  const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
+  const willSendImages = !!activeModel && canSeeImages(activeModel) && imageCount > 0;
 
   // 语义步骤 (设计稿 03a 屏 17): 读取 → 生成建议 → 交给作者确认。
   const metaSteps: RunStep[] = [

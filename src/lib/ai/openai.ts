@@ -114,6 +114,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // the vendor spelling (reasoning_effort / enable_thinking / disable
       // switch); the budget is read only by Qwen's budget category.
       ...reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget),
+      // DashScope's high-resolution image reading, declared per model (see
+      // Model.vlHighResolution). Absent unless declared, same rule as above.
+      ...(opts.vlHighResolution ? { vl_high_resolution_images: true } : {}),
       // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),

@@ -11,7 +11,7 @@
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { imagePart } from "../ai/imagePart";
-import { costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { withCurrentTime } from "../context/clock";
@@ -219,7 +219,7 @@ export function subAgentModel(
   if (!cfg?.enabled || !cfg.modelId) return null;
   const model = models.find((m) => m.id === cfg.modelId);
   if (!model) return null;
-  if (kind === "vision" && model.type !== "multimodal") return null;
+  if (kind === "vision" && !canSeeImages(model)) return null;
   if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
   if (kind === "pdf" && !model.pdfInput) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
@@ -242,7 +242,7 @@ export function subAgentModel(
   // just returns the work order back, translated. That is a worse outcome than
   // an unset switch, so it is refused rather than warned about. A
   // transcription-only model has no prose to give either.
-  if (kind === "writer" && (model.type === "image" || model.type === "video")) return null;
+  if (kind === "writer" && (model.type === "image" || model.type === "video" || model.type === "vision")) return null;
   if (kind === "writer" && (isTranslateOnly(model) || isAsrOnly(model))) return null;
   return model;
 }
@@ -289,7 +289,7 @@ export function chainCanSeeImages(
   subs: Record<SubAgentKind, SubAgentConfig>,
   models: Model[],
 ): boolean {
-  return mainModel?.type === "multimodal" || visionSubAgentModel(models, subs) !== null;
+  return (!!mainModel && canSeeImages(mainModel)) || visionSubAgentModel(models, subs) !== null;
 }
 
 /**
@@ -352,7 +352,7 @@ export async function resolveVisionConn(
   }
 
   const activeModel = models.find((m) => m.id === activeModelId);
-  if (!activeModel || activeModel.type !== "multimodal") {
+  if (!activeModel || !canSeeImages(activeModel)) {
     return { error: i18n.t("ai.errors.noVisionModel") };
   }
   const provider = providers.find((p) => p.id === activeModel.providerId);
@@ -410,7 +410,7 @@ export async function executeDelegate(
         `Tell the author to turn it on in Settings → Models, or answer without searching.`,
     );
   }
-  if (kind === "vision" && conn.model.type !== "multimodal") {
+  if (kind === "vision" && !canSeeImages(conn.model)) {
     return fail(
       `the vision subagent's model "${conn.model.name}" is text-only and cannot read images. ` +
         `Tell the author to bind a multimodal model to it in Settings → Subagents.`,
@@ -515,7 +515,7 @@ export async function executeDelegate(
         // 围栏跟着子对话走。不继承的话，把活派给子代理就成了绕过取材范围的方法
         // ——而那正是「委派」最不该有的副作用。
         loreScope: ctx.loreScope,
-        multimodal: conn.model.type === "multimodal",
+        multimodal: canSeeImages(conn.model),
         // Threaded through so this stays correct if a delegate preset ever
         // gains a lore write tool (none has one today). runAgent clones the
         // index per run, so a child's writes reach disk and the app but not the

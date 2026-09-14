@@ -25,7 +25,7 @@ import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
-import { costFor } from "../lib/ai/configDb";
+import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { persistUsage } from "../lib/ai/usage";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { defaultMaxOutput, effectiveMaxOutput } from "../lib/ai/modelLimits";
@@ -635,7 +635,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             loreIndex,
             loreScope,
             organize: loreOrganizer(),
-            multimodal: model.type === "multimodal",
+            multimodal: canSeeImages(model),
             // 同 agentStore：读图的是谁，只在 routeTools 判一次。
             visionDelegate: routed.visionDelegate,
             // Write-auto tools call these after touching disk so the panels

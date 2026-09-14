@@ -11,7 +11,7 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
-import { conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
 import {
   isAsrDiarizationDefault,
   isAsrTimestampsEnabled,
@@ -84,14 +84,23 @@ export function SubAgentsPane() {
   // above: it survives `textCandidates` (which only drops `image`), and a
   // writer bound to one is refused at run time, which would read as the switch
   // doing nothing at all.
+  // `vision` is refused too: a picture specialist is a poor prose writer, and
+  // the run-time check (subAgentModel) says the same.
   const proseCandidates = textCandidates.filter(
     (m) => m.type === "text" || m.type === "multimodal",
   );
+  // Everything conversational can be tried, but the specialists are what this
+  // kind is for — list them first so the obvious binding is the first one.
+  const visionCandidates = [
+    ...textCandidates.filter((m) => m.type === "vision"),
+    ...textCandidates.filter((m) => m.type !== "vision"),
+  ];
   const candidatesFor = (kind: SubAgentKind): Model[] =>
     kind === "imagegen" ? imageCandidates
     : kind === "translate" ? translateCandidates
     : kind === "asr" ? asrCandidates
     : kind === "writer" ? proseCandidates
+    : kind === "vision" ? visionCandidates
     : textCandidates;
 
   /**
@@ -108,7 +117,7 @@ export function SubAgentsPane() {
     if (kind === "search" && !model.serverTools?.includes("web_search")) {
       return t("systemSettings.subagents.warnNoSearch");
     }
-    if (kind === "vision" && model.type !== "multimodal") {
+    if (kind === "vision" && !canSeeImages(model)) {
       return t("systemSettings.subagents.warnNotMultimodal");
     }
     if (kind === "pdf" && !model.pdfInput) {

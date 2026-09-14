@@ -26,12 +26,13 @@ import {
   listPrompts,
   listProviders,
   modelUpsert,
+  normalizeAsrIdentity,
+  parseModelType,
   parseTranslateFormat,
   parseAsrFormat,
   promptUpsert,
   providerUpsert,
   type Model,
-  type ModelType,
   type Prompt,
   type Provider,
 } from "./configDb";
@@ -167,7 +168,6 @@ const API_STANDARDS: ApiStandard[] = [
   "anthropic",
   "anthropic_compat",
 ];
-const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
@@ -240,12 +240,14 @@ export function parseConfigBundle(
     const modelId = str(r.modelId);
     const name = str(r.name);
     if (!id || !providerId || !modelId || !name || !knownProviders.has(providerId)) continue;
-    models.push({
+    // Normalised like a DB row: a backup from before `asr` was a type carries
+    // the identity on `asrFormat` alone and must not land in the chat pickers.
+    models.push(normalizeAsrIdentity({
       id,
       providerId,
       modelId,
       name,
-      type: MODEL_TYPES.includes(r.type as ModelType) ? (r.type as ModelType) : "text",
+      type: parseModelType(r.type),
       priceIn: num(r.priceIn),
       priceCachedIn: num(r.priceCachedIn),
       priceOut: num(r.priceOut),
@@ -266,6 +268,7 @@ export function parseConfigBundle(
       thinkingBudget: typeof r.thinkingBudget === "number" ? r.thinkingBudget : undefined,
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
+      vlHighResolution: r.vlHighResolution === true ? true : undefined,
       // Unknown level → absent, which sends nothing.
       textVerbosity: parseTextVerbosity(r.textVerbosity),
       // Same reason as the reasoning fields above: an unknown format from a
@@ -279,7 +282,7 @@ export function parseConfigBundle(
       structuredOutput: parseStructuredOutputMode(r.structuredOutput),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
-    });
+    }));
   }
 
   const prompts: Prompt[] = [];

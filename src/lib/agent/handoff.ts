@@ -22,7 +22,7 @@
 
 import i18n from "../../i18n";
 import type { StreamMessage, ToolDefinition } from "../ai/types";
-import { costFor } from "../ai/configDb";
+import { canSeeImages, costFor } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { fileExists, readFile } from "../fs/fileio";
@@ -397,7 +397,7 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
       toolContext: {
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
-        multimodal: conn.model.type === "multimodal",
+        multimodal: canSeeImages(conn.model),
         // The parent's handle, passed as-is. Safe because WRITER_PRESET carries
         // no tool that writes into the workspace — the constraint is the
         // toolset, not the handle, the same way the roleplay scene tools are

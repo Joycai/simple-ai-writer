@@ -16,7 +16,7 @@ vi.mock("../fs/fileio", () => ({ readFile: vi.fn(async () => ""), readDir: vi.fn
 
 const {
   DEFAULT_IMAGE_LONG_EDGE, IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN, MAX_ENCODE_ATTEMPTS,
-  fitsLimits, imageMaxLongEdge, planImageStep,
+  MIN_IMAGE_EDGE, fitsLimits, imageMaxLongEdge, planImageStep,
 } = await import("../image/downscalePlan");
 const { MAX_IMAGE_BYTES } = await import("../fs/images");
 
@@ -131,8 +131,63 @@ describe("planImageStep", () => {
     });
   });
 
-  it("never rounds an edge down to nothing", () => {
-    const sliver = withAlpha(3, 1, 30 * MB);
-    expect(planImageStep(sliver, LIMITS, 0)).toMatchObject({ width: 2, height: 1 });
+  it("never scales a side back under the floor to save bytes", () => {
+    // ×0.75 would take 12px to 9 — straight into the 400 the floor exists for.
+    expect(planImageStep(withAlpha(12, 3000, 30 * MB), LIMITS, 0)).toMatchObject({
+      width: 10, height: 2500,
+    });
+    // Already on the floor, over on bytes, no quality knob: nothing is left.
+    expect(planImageStep(withAlpha(10, 3000, 30 * MB), LIMITS, 0)).toEqual({ kind: "give-up" });
+  });
+});
+
+describe("planImageStep — the size floor", () => {
+  // Measured on DashScope qwen3-vl-plus (docs/api/landscape.md, 第六个样本):
+  // 9×9 → 400 "must be larger than 10"; 10×10 and 200×10 pass.
+  it("enlarges the picture the endpoint refused, and leaves the ones it took", () => {
+    expect(MIN_IMAGE_EDGE).toBe(10);
+    expect(planImageStep(withAlpha(9, 9, 100), LIMITS, 0)).toEqual({
+      kind: "encode", width: 10, height: 10, mime: "image/png", quality: undefined,
+    });
+    expect(planImageStep(withAlpha(10, 10, 100), LIMITS, 0)).toEqual({ kind: "as-is" });
+    expect(planImageStep(withAlpha(200, 10, 100), LIMITS, 0)).toEqual({ kind: "as-is" });
+  });
+
+  it("keeps the aspect ratio, rounding the long side up", () => {
+    expect(planImageStep(photo(4, 100, 100), LIMITS, 0)).toMatchObject({
+      width: 10, height: 250, quality: 0.9,
+    });
+    // 1000 × 10/3 = 3333.3 — up, so the short side is never the one that loses.
+    expect(planImageStep(withAlpha(1000, 3, 100), LIMITS, 0)).toMatchObject({
+      width: 3334, height: 10,
+    });
+  });
+
+  it("lets the floor win over the long-edge ceiling, and then counts that as fitting", () => {
+    // 2×1000 against a 256 ceiling can't keep both without distorting it.
+    const tight = { longEdge: 256, maxBytes: 12 * MB };
+    const step = planImageStep(withAlpha(2, 1000, 100), tight, 0);
+    expect(step).toMatchObject({ width: 10, height: 5000 });
+    // Otherwise the ladder would shrink it straight back under the floor.
+    expect(fitsLimits({ width: 10, height: 5000, bytes: 100 }, tight)).toBe(true);
+  });
+
+  it("stops a downscale on the floor instead of passing through it", () => {
+    // Meeting a 256 ceiling exactly would make this 3×256.
+    const tight = { longEdge: 256, maxBytes: 12 * MB };
+    expect(planImageStep(withAlpha(20, 2000, 100), tight, 0)).toMatchObject({
+      width: 10, height: 1000,
+    });
+  });
+
+  it("applies even with the long-edge ceiling switched off", () => {
+    const off = { longEdge: 0, maxBytes: 12 * MB };
+    expect(fitsLimits(photo(9, 9, 100), off)).toBe(false);
+    expect(planImageStep(photo(3, 1, 100), off, 0)).toMatchObject({ width: 30, height: 10 });
+  });
+
+  it("still never touches an animated picture", () => {
+    const tinyGif = { width: 1, height: 1, bytes: 40, mime: "image/png", animated: true } as const;
+    expect(planImageStep(tinyGif, LIMITS, 0)).toEqual({ kind: "as-is" });
   });
 });

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
-import type { Model, ModelType } from "../../../lib/ai/configDb";
+import { MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
 import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
 import type { ProviderMove } from "../../../lib/ai/providerOrder";
 import { MOD_KEY } from "../../../lib/platform";
@@ -18,7 +18,7 @@ import styles from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 
-const TYPE_FILTERS: (ModelType | "all")[] = ["all", "text", "multimodal", "image", "video"];
+const TYPE_FILTERS: (ModelType | "all")[] = ["all", ...MODEL_TYPES];
 
 /** Declaration marks shown on a model row before the rest fold into "+n" (设计稿 05c 屏 1h). */
 const MAX_MARKS = 3;

@@ -531,6 +531,10 @@
     --color-type-image-fg:       #8A5380;
     --color-type-video-bg:       #DCE4E8;
     --color-type-video-fg:       #4A6472;
+    --color-type-vision-bg:      #DCE6DA;
+    --color-type-vision-fg:      #4B6B45;
+    --color-type-asr-bg:         #F0DBDF;
+    --color-type-asr-fg:         #94475A;
 
     /* Elevation — warm, subtle */
     --shadow-sm:    0 1px 3px rgba(60, 40, 20, 0.06);
@@ -584,6 +588,10 @@
     --color-type-image-fg:       #D3A0CB;
     --color-type-video-bg:       rgba(140, 173, 191, 0.18);
     --color-type-video-fg:       #9BBACB;
+    --color-type-vision-bg:      rgba(143, 184, 136, 0.18);
+    --color-type-vision-fg:      #A6C79F;
+    --color-type-asr-bg:         rgba(214, 143, 160, 0.18);
+    --color-type-asr-fg:         #DDA3B1;
 
     --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
     --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
@@ -1031,6 +1039,10 @@
     --color-type-image-fg:       #7C5083;
     --color-type-video-bg:       #DBE3EE;
     --color-type-video-fg:       #4E6390;
+    --color-type-vision-bg:      #DAE6DC;
+    --color-type-vision-fg:      #466A4E;
+    --color-type-asr-bg:         #EEDADF;
+    --color-type-asr-fg:         #8C4458;
 
     /* 影子是冷的：石墨没有暖褐可掺，用正文色的近黑。 */
     --shadow-sm:    0 1px 3px rgba(24, 28, 33, 0.07);
@@ -1083,6 +1095,10 @@
     --color-type-image-fg:       #CBA6D3;
     --color-type-video-bg:       rgba(156, 174, 220, 0.18);
     --color-type-video-fg:       #9CAEDC;
+    --color-type-vision-bg:      rgba(150, 196, 156, 0.18);
+    --color-type-vision-fg:      #9FCBA6;
+    --color-type-asr-bg:         rgba(220, 150, 168, 0.18);
+    --color-type-asr-fg:         #DBA2B2;
 
     --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
     --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
@@ -1134,6 +1150,10 @@
     --color-type-image-fg:       #854E7B;
     --color-type-video-bg:       #D4E3E8;
     --color-type-video-fg:       #2F6A7A;
+    --color-type-vision-bg:      #D6E5D8;
+    --color-type-vision-fg:      #3E6A48;
+    --color-type-asr-bg:         #EED7DC;
+    --color-type-asr-fg:         #93405A;
 
     /* 影子取正文色的近黑，蓝调的，和纸的暖褐相反。 */
     --shadow-sm:    0 1px 3px rgba(28, 30, 47, 0.07);
@@ -1186,6 +1206,10 @@
     --color-type-image-fg:       #C496C8;
     --color-type-video-bg:       rgba(134, 192, 207, 0.18);
     --color-type-video-fg:       #86C0CF;
+    --color-type-vision-bg:      rgba(140, 200, 150, 0.18);
+    --color-type-vision-fg:      #8CC896;
+    --color-type-asr-bg:         rgba(222, 140, 160, 0.18);
+    --color-type-asr-fg:         #DE8CA0;
 
     --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
     --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);

@@ -139,6 +139,14 @@ function blocksOf(content: MessageContent): AnthropicBlock[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
   return content.map((p): AnthropicBlock => {
     if (p.type === "text") return { type: "text", text: p.text };
+    // Same guard as the Gemini adapter: a part from persisted history with any
+    // other type would otherwise be read as an image and die on
+    // `p.image_url.url` with a TypeError that names nothing.
+    if (p.type !== "file" && p.type !== "image_url") {
+      throw new Error(
+        `Anthropic adapter: unsupported content part type "${String((p as { type?: unknown }).type)}"`,
+      );
+    }
     // Same data-URL parse as the Gemini adapter's inlineData conversion. A file
     // part becomes a `document` block — Anthropic's own PDF-input shape — so a
     // file that ever reaches this wire arrives as something it documents rather

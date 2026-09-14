@@ -28,7 +28,7 @@
 
 下面七条任何一条被破坏都算 bug，不算权衡。
 
-1. **转写模型绝不进对话候选。** `isAsrOnly(m)` 是这条不变量的名字，`conversationalModels` 无条件排除它；`asr` 档位只收 `isAsrOnly` 的模型，`writer` 等其余档位拒收它。绑错的症状和翻译模型一样是**静默的**：它没有对话能力，`/services/audio/asr/transcription` 收到一段文字只会报错，但作为主模型它会让整个对话在第一轮就死掉。
+1. **转写模型绝不进对话候选。** `isAsrOnly(m)` 是这条不变量的名字（2026-09-14 起判据是 `type === "asr"`，`asrFormat` 只表示接口，见 00-research.md §4.1 补记），`conversationalModels` 无条件排除它；`asr` 档位只收 `isAsrOnly` 的模型，`writer` 等其余档位拒收它。绑错的症状和翻译模型一样是**静默的**：它没有对话能力，`/services/audio/asr/transcription` 收到一段文字只会报错，但作为主模型它会让整个对话在第一轮就死掉。
 2. **凭证的 `model` 和提交的 `model` 是同一个变量。** 临时文件与模型名绑定；写成两处字面量，错的症状是轮询阶段的 `FILE_DOWNLOAD_FAILED`，和漏头一模一样，排查不出来。
 3. **`X-DashScope-OssResourceResolve: enable` 只跟着 `oss://` 走**，加在提交请求上，不加在 getPolicy 上。
 4. **付费之前必须有人点头。** 右键路径是确认卡，助手路径是审批卡；`autoApprove` 永不放行 `transcribe_audio`。转写结果先进缓存再写产物，同一文件同一参数**同一模型**不付第二次——键里带模型（`cacheKeyOf`），换绑模型是换一份缓存而不是命中旧的：结果真的不一样，而产物的抬头写的是**这次**绑的那个模型名，拿回上一个模型的稿子等于把一份张冠李戴的文字稿写进项目。

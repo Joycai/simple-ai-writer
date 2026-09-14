@@ -1,3 +1,4 @@
+import { canSeeImages } from "../../lib/ai/configDb";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
@@ -156,7 +157,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
-      const supportsImages = model.type === "multimodal";
+      const supportsImages = canSeeImages(model);
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 
       // 新特征 (设计稿 03a 屏 17): one structured pass drafting title + trigger keys +
@@ -348,7 +349,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     }
   };
 
-  const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
+  const multimodalModels = models.filter((m) => m.type === "text" || canSeeImages(m));
 
   // Unsaved once the user has typed an instruction, attached refs, or generated.
   const dirty = phase !== "input" || instruction.trim().length > 0 || attached.length > 0;

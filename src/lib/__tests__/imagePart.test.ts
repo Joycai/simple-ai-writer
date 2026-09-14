@@ -96,3 +96,21 @@ describe("detail on each wire", () => {
     expect(content.parts[0]).toEqual({ inlineData: { mimeType: "image/png", data: "AAAA" } });
   });
 });
+
+describe("a part type no wire can spell", () => {
+  // Typed code can't build one; persisted history or extraBody can. Each
+  // adapter must name it rather than send a hole or crash on `image_url.url`.
+  const history = [
+    { role: "user", content: [{ type: "video_url", video_url: { url: "https://x/v.mp4" } }] },
+  ] as unknown as Parameters<typeof convertToGeminiContents>[0];
+
+  it("Anthropic names the type", () => {
+    expect(() => convertToAnthropicMessages(history, "claude-sonnet-4-5"))
+      .toThrow(/unsupported content part type "video_url"/);
+  });
+
+  it("Gemini names the type", () => {
+    expect(() => convertToGeminiContents(history))
+      .toThrow(/unsupported content part type "video_url"/);
+  });
+});

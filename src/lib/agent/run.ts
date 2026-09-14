@@ -9,6 +9,7 @@
  * single-shot streaming.
  */
 
+import { canSeeImages } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import type { ContentPart, StreamMessage } from "../ai/types";
 import type { LoreIndex, LoreScope } from "../lore";
@@ -48,7 +49,7 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
     projectPath: args.projectPath,
     loreIndex: args.loreIndex,
     loreScope: args.loreScope,
-    multimodal: args.model.type === "multimodal",
+    multimodal: canSeeImages(args.model),
   };
 
   let accumulated = "";

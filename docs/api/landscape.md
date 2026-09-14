@@ -513,7 +513,8 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
   围栏的 JSON 和纯散文，只靠 prompt 里的 JSON 字样约束。
 - **图片**：`image_url` 收 `data:` URL；qwen3.8/3.7-flash、qwen3-vl-plus、kimi-k3 看得见；
   deepseek 与 glm **不报错但无视图片**（答错颜色）；MiniMax 回「看不到图片」。
-  **小于 10px 的图 400**（`height:1 or width:1 must be larger than 10`）。
+  **小于 10px 的图 400**（`height:1 or width:1 must be larger than 10`）。qwen3-vl-plus 的格式、
+  token 计价、高分辨率开关、视频与 ASR 见下「视觉理解」小节（2026-09-14）。
   ⚠️ 这里的 deepseek 是**本平台上架的 `deepseek-v4-pro-0813`**，它本来就没有视觉；
   别把这条读成「DeepSeek 不能看图」。官方直连的 `deepseek-flash`（DeepSeek-V4.1-Flash）
   支持图片理解，收的正是同一个 `image_url` + `data:` URL 形状 —— 见 §2.1。
@@ -557,7 +558,8 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 ——文档的支持面只列 Qwen / DeepSeek / GLM / Kimi。文档没有 `text.format`（无结构化输出），
 不支持 `background`，流式事件表里**没有 `response.function_call_arguments.delta`**
 （参数可能整块到达），有 `response.reasoning_text.delta`。接入评估见
-[`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4。
+[`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4。图片（`input_image`）2026-09-14 已实测：
+qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「视觉理解」。
 
 #### 联网搜索与网页抓取（`web_search` / `web_extractor`，2026-09-14 实测）
 
@@ -623,6 +625,77 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 - 用量：`usage.x_tools.web_search_image.count` / `image_search.count`。
 - **计费**（文档口径）：以文搜图 ¥24/千次，以图搜图 ¥48/千次，都远高于联网搜索的 ¥4——
   这是它们各自单独开关、不挂在搜索下面的原因。单次最多 100 条结果。
+
+#### 视觉理解（qwen3-vl 系列，另附视频与 ASR 在 ① 面上的样子，2026-09-14 实测）
+
+实测用真实 adapter（`streamCompletion`）走一次性探测，稳定的事实固化进
+`src/lib/__tests__/live.qianwen.test.ts` 的「vision: qwen3-vl-plus」组（夹具在测试里现生成：
+纯色 PNG 编码器 + 两个 16px 的 webp / gif 常量）。主测模型 qwen3-vl-plus，① 面，除注明外都是它。
+
+`/compatible-mode/v1/models` 里的视觉 id：`qwen3-vl-plus` / `qwen3-vl-flash`（各带日期快照）、
+`qwen-vl-max`、`qwen-vl-plus`、`qwen-vl-ocr`（`-latest`）、`qwen3.5-ocr`、`qvq-max` / `qvq-plus`，
+以及 omni 家族。
+
+**格式与边界**
+
+| 输入 | 结果 |
+| --- | --- |
+| 16px 纯红 png / jpeg / webp / gif（`data:` URL） | 都读成「红色」，输入 token 相同（81） |
+| 两帧动图 gif（红 → 蓝） | **只看第一帧**，还说「这是静态图片（单帧）」 |
+| 两张图（红、蓝）同一条消息 | 顺序正确「红,蓝」 |
+| 9×9 | **400** `The image length and width do not meet the model restrictions. [height:9 or width:9 must be larger than 10]` |
+| 10×10、200×10 | 通过——下限是**每边 ≥10px**，报文里的 "larger than" 实为「不小于」 |
+| `image_url.detail: low / high` | **无视**：16px 与 2048² 上两档输入 token 完全相同 |
+| 纯文字提示（不带图） | 正常作答，**默认不思考**（qwen3-vl-flash 同） |
+| 图 + `tools` + `qwen-budget` 思考 | 先思考，再按图里读到的城市名调用 `get_weather{city:"Hangzhou"}` |
+
+**图片 token 计价**：约每 32×32 像素块 1 个 token（≈ 像素数 / 1024），另有默认上限。纯文字基线
+（「回答OK」）是 10 个输入 token，下表是带一张纯灰方图后的总输入 token：
+
+| 边长 | 默认 | `vl_high_resolution_images: true` |
+| --- | --- | --- |
+| 64 | 76 | — |
+| 512 | 268 | — |
+| 1024 | 1036 | — |
+| 2048 | **2512**（已触顶） | 4108 |
+| 4096 | **2512**（同上） | **16396**（上限约 16384） |
+
+- 默认上限约 **2500 图片 token**：2048² 与 4096² 被缩到同一个价。`vl_high_resolution_images`
+  是 ① 面的**顶层**布尔（本项目经 `extraBody` 发），把上限抬到约 16384。
+- 缩放不等于看不清：3000² 白底中央一串 11pt 数字，默认档（2526 token）与高分辨率档（8862 token）
+  **都读对**。高分辨率是花 3.5 倍的钱换极小字的余量，不是看图的前提。
+
+**别的线路与模型**
+
+| 线路 / 模型 | 结果 |
+| --- | --- |
+| ② 面 Responses，qwen3-vl-plus | **`Unsupported model: 'qwen3-vl-plus'`**（png / webp / 多图都一样）——这个模型不在 ② 面上 |
+| ② 面 Responses，qwen3.8-flash + `input_image`（data URL） | 读对，且照常思考 |
+| ② 面 Responses，`video_url` part | HTTP 200、**空输出、无报错**（adapter 当时把这个 part 静默丢了；本 PR 改为报错） |
+| ④ 面 `/apps/anthropic`，qwen3-vl-plus，png / webp | 读对，**默认思考**（`claude-adaptive` 档） |
+| qwen-vl-ocr-latest | 读出图中文字；也会调工具；纯文字提示照答 |
+
+**视频**（① 面 qwen3-vl-plus；本项目**不发视频**，只记事实）
+
+| 请求 | 结果 |
+| --- | --- |
+| `{type:"video_url", video_url:{url:"data:video/mp4;base64,…"}}`，1.5s 红 + 1.5s 蓝，320×240 10fps | **400** `Invalid video file.`（加 `fps` 也一样） |
+| 同上，3s + 3s，640×480 25fps | 通过，1822 输入 token，按时间戳描述了红 → 蓝；`fps` 字段被接受 |
+| `{type:"video", video:[data URL…]}` 帧序列，2 帧 | **400** `the range of sequence images should be (4, 2000)` |
+| 同上，4 帧 | 通过 |
+
+**音频走 ① 面**（本项目的转写走原生面 filetrans 异步，见 [`../feature/asr/00-research.md`](../feature/asr/00-research.md)；这里只记事实）
+
+| 模型 | 请求 | 结果 |
+| --- | --- | --- |
+| qwen3-asr-flash-2026-02-10 | 只一个 `{type:"input_audio", input_audio:{data:"data:audio/wav;base64,…", format:"wav"}}`（mp3 同） | 逐字转写正确 |
+| 同上 | 再加一个 text part | **400** `The dedicated task \`asr\` corresponding to the current service does not support this input.` |
+| qwen-audio-3.0-asr-flash、fun-asr-flash-2026-06-15 | 同一形状 | **400** `format is empty`（`UNSUPPORTED_FORMAT`）——不在这条线上 |
+| qwen3.5-omni-flash | text + `input_audio` | 听懂并概括了内容 |
+
+**本项目据此做了什么**：模型类型加「视觉理解」与「音频 ASR」两类（v1.57.0）；图片发出前按每边 10px
+下限处理；模型可声明 `vl_high_resolution_images`（v1.57.0 加入；上表说明默认档多数时候已够读小字，开它是按需加钱）。
+**没做**：视频输入、① 面同步 ASR（转写仍只走 filetrans 一条路径）。
 
 #### 文档与实测不符之处（截至 2026-09-03）
 
