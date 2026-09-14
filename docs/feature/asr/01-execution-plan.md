@@ -95,6 +95,7 @@ interface Transcript {
 - `subagent.ts`：`SubAgentKind` + `SUBAGENT_KINDS` 加 `"asr"`；`DelegateKind` 排除它（理由同 `translate`，注释里补一段）；`subAgentModel`：`kind === "asr" && !isAsrOnly(model)` → null；`writer` 加 `isAsrOnly` 拒收。
 - `prefs.ts`：`ai:subagent:asr:modelId` / `:enabled`、`app:asrBeta`、`ai:asr:timestamps`、`ai:asr:diarization`。
 - `SubAgentChips.tsx`：`asr` 进 `OFF_CHIP`——它不是"本轮要不要用"的开关（转写是显式动作，不是模型自选的工具），和 `writer` 一样只住设置里。PR 2 若设计稿另有主张再挪。
+  > **已改（2026-09-14，作者决定）**：`asr` 移出 `OFF_CHIP`，能力菜单多一行「转写」。原理由只对右键成立——开了 Beta 且绑了模型时，routing 会把 `transcribe_audio` 挂进助手的工具，模型可以在一轮中途提议转写（经审批卡），和「绘图」「日译中」同一形态；在本次对话关掉它，等于把这个工具从本会话拿走。见 `components/ai/subagentChipModel.ts`。
 - `SubAgentsPane.tsx` 的 `candidatesFor` / `warningFor` / `metaFor`：**PR 1 一行没动**——它们对未知档位回落到文本候选，类型检查过了。代价是 PR 1 合并后子代理页会多出一行「asr」、候选列表是错的（列的是对话模型）；这行在 PR 2 里按设计稿重做，**PR 1 单独发布前要么隐藏这一行，要么和 PR 2 一起合**。
 
 ### 3.5 PR 1 实际落地（2026-09-06）

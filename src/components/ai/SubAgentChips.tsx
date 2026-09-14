@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
+import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, AudioLines, type LucideIcon } from "lucide-react";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import type { SubAgentKind } from "../../lib/agent/subagent";
 import { useConfiguredKinds, FALLBACK_LABELS, type ChipKind } from "./subagentChipModel";
@@ -12,6 +12,7 @@ const ICONS: Record<ChipKind, LucideIcon> = {
   pdf: FileText,
   imagegen: ImagePlus,
   translate: Languages,
+  asr: AudioLines,
 };
 
 /**

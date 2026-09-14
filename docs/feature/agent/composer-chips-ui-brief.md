@@ -48,6 +48,8 @@ dev server 上没有项目，所以 @引用芯片的截断、多芯片换行、�
 
 **已修（2026-09-07，本次一并）。** `translate` 在 `SUBAGENT_KINDS` 里且不在 `OFF_CHIP` 里，所以配了翻译模型就会出芯片；但 `ai.chat.subagentChip.translate` 在两份 locale 里都不存在，`defaultValue` 的兜底链最后落到 `"长文"` ——翻译子代理的芯片今天显示成「长文」，提示语也写成「长文子代理已启用」，和真正的长文芯片重名。补两份 locale 的 `translate` / `translateActive` / `translateDisabled` 即可。
 
+**再改（2026-09-14）。** `asr` 移出 `OFF_CHIP`，菜单多一行「转写」（理由见 `docs/feature/asr/01-execution-plan.md` 同名补记）；同时 `translate` / `asr` 两行在各自 Beta 关闭时不出现——routing 此时本就不挂它们的工具，留一行等于一个什么都不改的开关。
+
 ---
 
 # 设计任务：在本项目里新建 `02g 助手输入区 Composer.dc.html`

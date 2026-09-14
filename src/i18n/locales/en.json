@@ -1976,6 +1976,9 @@
         "translate": "JA→ZH",
         "translateActive": "JA→ZH translation subagent active (click to disable for this session)",
         "translateDisabled": "JA→ZH translation subagent disabled for this session (click to enable)",
+        "asr": "Transcribe",
+        "asrActive": "Audio transcription on: the assistant may propose transcribing audio/video files, with your approval (click to disable for this session)",
+        "asrDisabled": "Audio transcription disabled for this session (click to enable)",
         "writer": "Writer",
         "writerActive": "Writer subagent on — it produces this conversation's final text (click to disable)",
         "writerDisabled": "Writer subagent disabled for this session (click to enable)"
