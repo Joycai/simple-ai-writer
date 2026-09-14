@@ -346,11 +346,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // What survives onto this provider's wire: ids it has a spelling for, in the
   // canonical form (extraction only beside search). Absent when nothing does.
   // `serverToolsOn` therefore means "any server tool", image searches included.
-  const grantedServerTools = provider
+  // A transcription row keeps none: its request is the file endpoint's, and a
+  // chat declaration left on it would be a capability that reaches nothing.
+  const grantedServerTools = provider && form.type !== "asr"
     ? normalizeServerTools(serverTools.filter((id) => supportsServerTool(provider.apiStandard, id)))
     : undefined;
   const serverToolsOn = !!grantedServerTools;
-  const structuredOutput = form.structuredOutput === "auto" ? undefined : form.structuredOutput;
+  const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
 
@@ -451,7 +453,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // a spelling for it (the Chat Completions `file` part, or Responses'
         // `input_file`), and only on a model type that converses. False stores
         // as absent.
-        pdfInput: pdfWire && !isImageModel && pdfInput ? true : undefined,
+        pdfInput: pdfWire && !isImageModel && !isAsrModel && pdfInput ? true : undefined,
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
@@ -996,7 +998,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 something a model quietly gains. Extraction is shown only where
                 the wire can spell it, and is tied to search both ways — the
                 endpoint refuses it alone (normalizeServerTools). */}
-            <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
+            <Fold open={!isAsrModel && !!provider && supportsServerTools(provider.apiStandard)}>
               {SERVER_TOOL_IDS.filter((id) => !!provider && supportsServerTool(provider.apiStandard, id)).map((id) => (
                 <ToggleField
                   key={id}
@@ -1029,7 +1031,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 Family-gated like the category chips above: Anthropic and Gemini
                 have no mapping for the part here, so showing the switch there
                 would promise a subagent that refuses at run time. */}
-            <Fold open={pdfWire}>
+            <Fold open={pdfWire && !isAsrModel}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={t("aiConfig.models.briefPdf")}
@@ -1117,6 +1119,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 offered; on Anthropic that is 自动 · 关闭, and the hint says why
                 rather than the row hiding. The note under 自动 shows what it
                 resolves to, same as the thinking category's. */}
+            <Fold open={!isAsrModel}>
             <Field label={t("aiConfig.models.soLabel")} hint={soHint} {...soNote}
               {...whyProps("so", t("aiConfig.models.whySo"))}>
               <div className={s.chips}>
@@ -1136,6 +1139,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ))}
               </div>
             </Field>
+            </Fold>
           </Section>
 
           <Section
