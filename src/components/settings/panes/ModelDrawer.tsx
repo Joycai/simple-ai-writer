@@ -52,7 +52,7 @@ import {
 import type { ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
-import { ChipDivider, DashChip, Field, Fold, Note, Section, ToggleField } from "./ModelDrawerBits";
+import { ChipDivider, DashChip, Field, Fold, Hint, Note, Section, Subhead, ToggleField } from "./ModelDrawerBits";
 import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
@@ -66,8 +66,8 @@ const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
   "not-api-format": "aiConfig.models.comfyErrNotApi",
 };
 
-type SectionKey = "price" | "limits" | "think" | "caps" | "samp" | "image";
-const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", "image"];
+type SectionKey = "price" | "limits" | "think" | "caps" | "samp" | "image" | "asr";
+const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", "image", "asr"];
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
@@ -121,6 +121,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
+    asr: m?.type === "asr",
   };
 }
 
@@ -460,8 +461,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
         // protocol would hide it from the app with nothing on screen to say why.
+        // And only on a Text row (设计稿 05c 屏 2d ④): Sakura is a text model,
+        // and a multimodal / vision row declared translate-only would silently
+        // leave the vision subagent's candidates too.
         translateFormat:
-          family === "openai" && !isImageModel && !isAsrModel && form.translateFormat
+          family === "openai" && form.type === "text" && form.translateFormat
             ? form.translateFormat
             : undefined,
         // "auto" stores as absent, like the category. An image model has no
@@ -527,8 +531,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
     pdfWire && pdfInput && "PDF",
     vlHiResWire && vlHighResolution && t("aiConfig.models.vlHiResShort"),
-    family === "openai" && !isAsrModel && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
-    isAsrModel && t(`aiConfig.models.asrFormat_${form.asrFormat || ASR_FORMATS[0]}`),
+    family === "openai" && form.type === "text" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
 
@@ -547,14 +550,33 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     (isComfy ? !!comfyWorkflow : capsEdit) && t("aiConfig.models.sumEdit"),
   ].filter(Boolean).join(" · ");
 
-  const setCount = [
-    priceHas,
-    !isImageModel && limitsHas,
-    !isImageModel && thinkHas,
-    !isImageModel && capsNames.length > 0,
-    !isImageModel && sampHas,
-    isImageModel && imageHas,
-  ].filter(Boolean).length;
+  // ── The type is the drawer's shape (设计稿 05c 屏 2d ①②⑤) ─────────────────
+  // A section that cannot apply to this type is absent, not folded to
+  // 「不适用」: a transcription row is 身份 · 计费 · 转写, an image row
+  // 身份 · 计费 · 出图, everything else the four text sections. The index and
+  // the band's one-line description are both read off this list, so neither
+  // can name a section the body doesn't show.
+  const isTextLike = !isImageModel && !isAsrModel;
+  const sectionIndex: { key: SectionKey; has: boolean }[] = [
+    { key: "price", has: priceHas },
+    ...(isTextLike
+      ? [
+          { key: "limits" as const, has: limitsHas },
+          { key: "think" as const, has: thinkHas },
+          { key: "caps" as const, has: capsNames.length > 0 },
+          { key: "samp" as const, has: sampHas },
+        ]
+      : []),
+    ...(isAsrModel ? [{ key: "asr" as const, has: true }] : []),
+    ...(isImageModel ? [{ key: "image" as const, has: imageHas }] : []),
+  ];
+  const typeSections = [t("aiConfig.models.idx_identity"), ...sectionIndex.map((x) => t(`aiConfig.models.idx_${x.key}`))]
+    .join(" · ");
+  const typeLine = [
+    isTextLike ? typeSections : t("aiConfig.models.typeLineOnly", { sections: typeSections }),
+    vlHiResWire && t("aiConfig.models.typeLineHiRes"),
+    form.type === "vision" && t("aiConfig.models.typeLineVision"),
+  ].filter(Boolean).join(" · ");
 
   // ── 「将发送」 ─────────────────────────────────────────────────────────────
   // A transcription row never reaches the chat wire; what it sends is the file
@@ -647,8 +669,78 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         </button>
       </div>
 
+      {/* ── 模型类型 — the band that decides which sections exist ─────────── */}
+      <div className={s.typeBand}>
+        <div className={s.typeBandHead}>
+          <span className={s.typeBandLabel}>{t("aiConfig.models.typeLabel")}</span>
+          <div className={s.typeBandHint}>
+            <Hint hint={t("aiConfig.models.briefType")} {...whyProps("type", t("aiConfig.models.whyType"))} />
+          </div>
+        </div>
+        <div className={s.chips}>
+          {MODEL_TYPES.map((type) => (
+            <DashChip
+              key={type}
+              label={t(`aiConfig.modelTypes.${type}`)}
+              active={form.type === type}
+              swatch={`var(--color-type-${type}-fg)`}
+              onClick={() => {
+                // Seed from the provider's protocol the first time this
+                // becomes an image model, so the common case needs no
+                // thought and the odd one is still overridable. The Gemini
+                // wire only serves Gemini image models, so the dialect is
+                // known there; elsewhere (dall-e vs gpt-image vs a relay)
+                // it stays the author's call.
+                const seedDialect =
+                  type === "image" && !existing && !form.capsDialect && family === "gemini";
+                // Becoming a transcription model picks its (only) endpoint
+                // and, when the identity fields are still empty, the
+                // recommended DashScope id and a name; leaving it drops the
+                // endpoint, since the type is what the format hangs off.
+                const asrSeed = type === "asr"
+                  ? {
+                      asrFormat: form.asrFormat || ASR_FORMATS[0],
+                      modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
+                      name: form.name || t("aiConfig.models.asrDefaultName"),
+                      translateFormat: "" as const,
+                    }
+                  : { asrFormat: "" as const };
+                setForm({ ...form, type, ...asrSeed, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
+                if (type === "image" && !existing && provider) {
+                  setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
+                }
+                // A section swap the author asked for: show the new one.
+                setOpen((o) => ({
+                  ...o,
+                  image: type === "image" ? true : o.image,
+                  asr: type === "asr" ? true : o.asr,
+                }));
+              }}
+            />
+          ))}
+        </div>
+        <div className={s.typeLine}>{typeLine}</div>
+      </div>
+
       <div className={s.meta}>
-        <span>{t("aiConfig.models.metaOpenCount", { count: setCount })}</span>
+        {/* 节目录 — replaces 「N 节有值」: which sections this type has, which
+            hold a value, and a click folds or unfolds that one. */}
+        <span className={s.index}>
+          {sectionIndex.map(({ key, has }) => (
+            <span
+              key={key}
+              role="button"
+              tabIndex={0}
+              className={`${s.indexItem} ${open[key] ? s.indexItemOpen : ""}`}
+              onClick={() => toggleSection(key)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSection(key); } }}
+              aria-expanded={open[key]}
+            >
+              <span className={`${s.indexMark} ${has ? s.indexMarkSet : ""}`} />
+              {t(`aiConfig.models.idx_${key}`)}
+            </span>
+          ))}
+        </span>
         <span className={s.metaSpacer} />
         <button type="button" className={s.metaLink} onClick={expandAll}>{t("aiConfig.models.expandAll")}</button>
         <button type="button" className={s.metaLink} onClick={toggleWhyAll}>
@@ -689,45 +781,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           <Field label={t("aiConfig.models.displayNameLabel")} hint={t("aiConfig.models.briefName")}>
             <input className={inputCls(false)} placeholder={t("aiConfig.models.phNameSame")} value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </Field>
-          <Field label={t("aiConfig.models.typeLabel")} hint={t("aiConfig.models.briefType")} {...whyProps("type", t("aiConfig.models.whyType"))}>
-            <div className={s.chips}>
-              {MODEL_TYPES.map((type) => (
-                <DashChip
-                  key={type}
-                  label={t(`aiConfig.modelTypes.${type}`)}
-                  active={form.type === type}
-                  onClick={() => {
-                    // Seed from the provider's protocol the first time this
-                    // becomes an image model, so the common case needs no
-                    // thought and the odd one is still overridable. The Gemini
-                    // wire only serves Gemini image models, so the dialect is
-                    // known there; elsewhere (dall-e vs gpt-image vs a relay)
-                    // it stays the author's call.
-                    const seedDialect =
-                      type === "image" && !existing && !form.capsDialect && family === "gemini";
-                    // Becoming a transcription model picks its (only) endpoint
-                    // and, when the identity fields are still empty, the
-                    // recommended DashScope id and a name; leaving it drops the
-                    // endpoint, since the type is what the format hangs off.
-                    const asrSeed = type === "asr"
-                      ? {
-                          asrFormat: form.asrFormat || ASR_FORMATS[0],
-                          modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
-                          name: form.name || t("aiConfig.models.asrDefaultName"),
-                          translateFormat: "" as const,
-                        }
-                      : { asrFormat: "" as const };
-                    setForm({ ...form, type, ...asrSeed, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
-                    if (type === "image" && !existing && provider) {
-                      setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
-                    }
-                    // A section swap the author asked for: show the new one.
-                    setOpen((o) => ({ ...o, image: type === "image" ? true : o.image }));
-                  }}
-                />
-              ))}
-            </div>
           </Field>
         </Section>
 
@@ -787,13 +840,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         </Section>
 
         {/* ── Text-model sections: 限额 / 思考 / 能力 / 采样 ──────────────────── */}
-        <Fold open={!isImageModel}>
+        <Fold open={isTextLike}>
           <Section
             label={t("aiConfig.models.secLimits")}
-            open={!isAsrModel && open.limits}
-            onToggle={isAsrModel ? undefined : () => toggleSection("limits")}
-            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : limitsHas ? limitsSum : t("aiConfig.models.secLimitsUnset")}
-            unset={isAsrModel || !limitsHas}
+            open={open.limits}
+            onToggle={() => toggleSection("limits")}
+            summary={limitsHas ? limitsSum : t("aiConfig.models.secLimitsUnset")}
+            unset={!limitsHas}
           >
             <Field label={t("aiConfig.models.ctxLabel")} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefCtx")} {...whyProps("ctx", t("aiConfig.models.contextSizeHint"))}
@@ -860,10 +913,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
           <Section
             label={t("aiConfig.models.secThinking")}
-            open={!isAsrModel && open.think}
-            onToggle={isAsrModel ? undefined : () => toggleSection("think")}
-            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
-            unset={isAsrModel || !thinkHas}
+            open={open.think}
+            onToggle={() => toggleSection("think")}
+            summary={thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
+            unset={!thinkHas}
           >
             {/* Which thinking-parameter category this model uses — a per-vendor
                 preset carrying its own legal effort menu. The parameter changed
@@ -998,12 +1051,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 something a model quietly gains. Extraction is shown only where
                 the wire can spell it, and is tied to search both ways — the
                 endpoint refuses it alone (normalizeServerTools). */}
-            <Fold open={!isAsrModel && !!provider && supportsServerTools(provider.apiStandard)}>
+            {/* Four groups (设计稿 05c 屏 2d ③): what the endpoint runs · what
+                goes in · what comes out · what narrows the model to one use.
+                The standing-grant sentence is the tools group's head, said
+                once instead of under every switch. */}
+            <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
+              <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
               {SERVER_TOOL_IDS.filter((id) => !!provider && supportsServerTool(provider.apiStandard, id)).map((id) => (
                 <ToggleField
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
-                  hint={t("aiConfig.models.briefTools")}
+                  hint=""
                   on={serverTools.includes(id)}
                   onChange={(next) =>
                     setServerTools((cur) => {
@@ -1031,7 +1089,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 Family-gated like the category chips above: Anthropic and Gemini
                 have no mapping for the part here, so showing the switch there
                 would promise a subagent that refuses at run time. */}
-            <Fold open={pdfWire && !isAsrModel}>
+            <Fold open={pdfWire || vlHiResWire}>
+              <Subhead label={t("aiConfig.models.capsGroupInput")} />
+            </Fold>
+            <Fold open={pdfWire}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
                 hint={t("aiConfig.models.briefPdf")}
@@ -1053,9 +1114,38 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               />
             </Fold>
 
+            {/* How this model is asked for JSON on a structured task
+                (lib/ai/jsonMode.ts). Only the modes this family can honour are
+                offered; on Anthropic that is 自动 · 关闭, and the hint says why
+                rather than the row hiding. The note under 自动 shows what it
+                resolves to, same as the thinking category's. */}
+            <Subhead label={t("aiConfig.models.capsGroupOutput")} />
+            <Field label={t("aiConfig.models.soLabel")} hint={soHint} {...soNote}
+              {...whyProps("so", t("aiConfig.models.whySo"))}>
+              <div className={s.chips}>
+                <DashChip
+                  label={t("aiConfig.models.soAuto")}
+                  active={form.structuredOutput === "auto"}
+                  auto
+                  onClick={() => setForm({ ...form, structuredOutput: "auto" })}
+                />
+                {soChoices.map((m) => (
+                  <DashChip
+                    key={m}
+                    label={t(SO_LABEL_KEY[m])}
+                    active={form.structuredOutput === m}
+                    onClick={() => setForm({ ...form, structuredOutput: m })}
+                  />
+                ))}
+              </div>
+            </Field>
+
             {/* Dedicated translation models (Sakura). Family-gated for the same
                 reason as the PDF switch — they are served by local
-                OpenAI-compatible endpoints and nothing else.
+                OpenAI-compatible endpoints and nothing else — and Text-only
+                (屏 2d ④): Sakura is a text model, and on a multimodal / vision
+                row the declaration would also take it out of the vision
+                subagent's candidates.
 
                 This is the one control in this drawer that takes a capability
                 *away*: a model declared here is a fixed 日→中 function that does
@@ -1063,7 +1153,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 model or as any other subagent's model. The warning has to say
                 so — an author who ticks it and then cannot find their model in
                 the chat picker would otherwise read that as a bug. */}
-            <Fold open={family === "openai" && !isAsrModel}>
+            <Fold open={family === "openai" && form.type === "text"}>
+              <Subhead label={t("aiConfig.models.capsGroupDedicated")} hint={t("aiConfig.models.capsGroupDedicatedHint")} />
               <Field label={t("aiConfig.models.translateLabel")} hint={t("aiConfig.models.briefTranslate")}
                 warn={form.translateFormat ? t("aiConfig.models.translateFormatHintOn") : undefined}>
                 <div className={s.chips}>
@@ -1085,69 +1176,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               </Field>
             </Fold>
 
-            {/* Transcription endpoint (设计稿 02f 屏 1b). The row became a
-                transcription model by its type chip (音频 ASR), which also
-                pre-filled the id and name; this only picks which endpoint it
-                speaks, so there is no "ordinary model" chip here any more. */}
-            <Fold open={isAsrModel}>
-              <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
-                warn={/filetrans/i.test(form.modelId)
-                  ? t("aiConfig.models.asrFormatHintOn")
-                  // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
-                  // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
-                  : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })}>
-                <div className={s.chips}>
-                  {ASR_FORMATS.map((f) => (
-                    <DashChip
-                      key={f}
-                      label={t(`aiConfig.models.asrFormat_${f}`)}
-                      active={form.asrFormat === f}
-                      onClick={() => setForm({
-                        ...form,
-                        asrFormat: f,
-                        modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
-                        name: form.name || t("aiConfig.models.asrDefaultName"),
-                      })}
-                    />
-                  ))}
-                </div>
-              </Field>
-            </Fold>
-
-            {/* How this model is asked for JSON on a structured task
-                (lib/ai/jsonMode.ts). Only the modes this family can honour are
-                offered; on Anthropic that is 自动 · 关闭, and the hint says why
-                rather than the row hiding. The note under 自动 shows what it
-                resolves to, same as the thinking category's. */}
-            <Fold open={!isAsrModel}>
-            <Field label={t("aiConfig.models.soLabel")} hint={soHint} {...soNote}
-              {...whyProps("so", t("aiConfig.models.whySo"))}>
-              <div className={s.chips}>
-                <DashChip
-                  label={t("aiConfig.models.soAuto")}
-                  active={form.structuredOutput === "auto"}
-                  auto
-                  onClick={() => setForm({ ...form, structuredOutput: "auto" })}
-                />
-                {soChoices.map((m) => (
-                  <DashChip
-                    key={m}
-                    label={t(SO_LABEL_KEY[m])}
-                    active={form.structuredOutput === m}
-                    onClick={() => setForm({ ...form, structuredOutput: m })}
-                  />
-                ))}
-              </div>
-            </Field>
-            </Fold>
           </Section>
 
           <Section
             label={t("aiConfig.models.secSampling")}
-            open={!isAsrModel && open.samp}
-            onToggle={isAsrModel ? undefined : () => toggleSection("samp")}
-            summary={isAsrModel ? t("aiConfig.models.secNaAsr") : sampHas ? sampSum : t("aiConfig.models.secSamplingUnset")}
-            unset={isAsrModel || !sampHas}
+            open={open.samp}
+            onToggle={() => toggleSection("samp")}
+            summary={sampHas ? sampSum : t("aiConfig.models.secSamplingUnset")}
+            unset={!sampHas}
           >
             {/* Sampling temperature — shown only where the adapter can actually
                 send it: the Messages API accepts temperature 1 alone while
@@ -1203,6 +1239,44 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 value={form.prefix}
                 onChange={(e) => setForm({ ...form, prefix: e.target.value })}
               />
+            </Field>
+          </Section>
+        </Fold>
+
+        {/* ── 转写 — replaces the four text sections for an Audio ASR model ── */}
+        {/* Transcription endpoint (设计稿 02f 屏 1b; its own section since 05c
+            屏 2d ②). The row became a transcription model by its type chip,
+            which also pre-filled the id and name; this only picks which
+            endpoint it speaks. */}
+        <Fold open={isAsrModel}>
+          <Section
+            label={t("aiConfig.models.secAsr")}
+            open={open.asr}
+            onToggle={() => toggleSection("asr")}
+            summary={t(`aiConfig.models.asrFormat_${form.asrFormat || ASR_FORMATS[0]}`)}
+            unset={false}
+          >
+            <Field label={t("aiConfig.models.asrLabel")} hint={t("aiConfig.models.briefAsr")}
+              warn={/filetrans/i.test(form.modelId)
+                ? t("aiConfig.models.asrFormatHintOn")
+                // 实测：录音文件识别接口只认 *-filetrans 的 id；qwen3-asr-flash（含日期
+                // 版本）是同步接口的模型，提交到文件接口一律 400「url error」。
+                : t("aiConfig.models.asrIdNotFiletrans", { id: form.modelId })}>
+              <div className={s.chips}>
+                {ASR_FORMATS.map((f) => (
+                  <DashChip
+                    key={f}
+                    label={t(`aiConfig.models.asrFormat_${f}`)}
+                    active={(form.asrFormat || ASR_FORMATS[0]) === f}
+                    onClick={() => setForm({
+                      ...form,
+                      asrFormat: f,
+                      modelId: form.modelId || "qwen-audio-3.0-asr-flash-filetrans",
+                      name: form.name || t("aiConfig.models.asrDefaultName"),
+                    })}
+                  />
+                ))}
+              </div>
             </Field>
           </Section>
         </Fold>

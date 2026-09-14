@@ -381,6 +381,14 @@ Two lines with a fixed shape:
 - **Measured vs typed.** Under 上下文 / 最大输出: green dot + 「实测 {date}」 while the value equals what the probe wrote (`Model.probedContextSize` / `probedMaxOutput`); the moment the author overtypes it, grey dot + 「手填 · 覆盖 08-30 实测 131,072」. The measurement is never discarded, only covered. The same green dot precedes `ctx` on the list row.
 - **「将发送」** sits above the button bar, mono 11px, and is computed by `lib/ai/modelSummary.wireSummary` **from the adapters' own body functions** — a second table of "what the adapter does" is how a summary drifts. Fields sent only on structured tasks carry 「· 结构化任务时」. It is *not* empty for an undeclared OpenAI-family model (the JSON mode structured tasks get by default is real), and honesty there beats the reassuring blank the design showed.
 
+**TURN 2 (设计稿 `05c 模型编辑` 屏 2a–2d, 2026-09-14) — the type is the drawer's shape.** Five decisions, all adopted:
+- **① 类型条.** The six type chips left 身份 for a band under the header, each with an 8px square in its list-tag hue (`--color-type-*-fg`), plus one mono line naming the sections this type has. The type decides which sections exist, so it sits above them.
+- **② Inapplicable sections are absent, not folded to 「不适用」.** Text / multimodal / vision / video get the four text sections; 音频 ASR is 身份 · 计费 · 转写 (the endpoint chips are their own section); image keeps its whole-block swap to 出图. A locked 「不适用」 header was a control that could never open — noise that looked like a setting.
+- **③ 能力声明 in four groups** — 服务端工具 · 常驻授权 / 输入 / 输出格式 / 用途限定 — each under a `Subhead` (hairline + small label). The standing-grant sentence is said once on the tools group, not under every switch.
+- **④ 翻译格式 only on a Text row** (and cleared on save elsewhere): Sakura is a text model, and a multimodal / vision row declared translate-only would silently leave the vision subagent's candidates too. This one changes behaviour, not just layout.
+- **⑤ 节目录 replaces 「N 节有值」.** One short name per section this type has, with the 7px square: solid = holds a value, dashed = sends nothing; a click folds / unfolds that section. The index and the type line are computed from the same list as the body, so neither can name a section the body doesn't show.
+Kept: 计费 second, 「将发送」 at the bottom, fold by has-value, dashed = not sent.
+
 Hints are two-tier: a one-line 「填什么」 (`aiConfig.models.brief*`, new copy) always visible, and 「为什么」 unfolding the existing full hint text. 「全部说明」 opens every block. Chip rows with a fixed pair pin 「自动 · 关闭」 first behind a 1px `ChipDivider`, then let the vendor presets wrap. List rows (19h) carry at most three declaration marks (思考 / 联网 / PDF / 译, then `+n`) — explicit declarations only, never auto, never on image models.
 
 ### 禁止 (Do NOT)

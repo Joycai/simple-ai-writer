@@ -75,7 +75,7 @@ interface WhyProps {
   onWhy?: () => void;
 }
 
-function Hint({ hint, why, whyOpen, onWhy }: { hint: string } & WhyProps) {
+export function Hint({ hint, why, whyOpen, onWhy }: { hint: string } & WhyProps) {
   const { t } = useTranslation();
   return (
     <>
@@ -165,7 +165,7 @@ export function ToggleField({
 }
 
 export function DashChip({
-  label, active, auto, locked, onClick,
+  label, active, auto, locked, swatch, onClick,
 }: {
   label: string;
   active: boolean;
@@ -173,6 +173,8 @@ export function DashChip({
   auto?: boolean;
   /** The category cannot leave this value; no pointer, no-op click. */
   locked?: boolean;
+  /** A colour for the 8px square before the label (the type chips: the list tag's hue). */
+  swatch?: string;
   onClick: () => void;
 }) {
   const cls = [
@@ -183,8 +185,23 @@ export function DashChip({
   ].join(" ");
   return (
     <button type="button" className={cls} onClick={locked ? undefined : onClick} aria-pressed={active}>
+      {swatch && <span className={s.swatch} style={{ background: swatch }} />}
       {label}
     </button>
+  );
+}
+
+/**
+ * A group head inside a section (能力声明's four groups — 设计稿 05c 屏 2d ③):
+ * a hairline, a small label, and the one sentence that holds for every row
+ * below it, said once instead of under each toggle.
+ */
+export function Subhead({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className={s.subhead}>
+      <span className={s.subheadLabel}>{label}</span>
+      {hint && <span className={s.subheadHint}>{hint}</span>}
+    </div>
   );
 }
 
