@@ -57,6 +57,7 @@
 
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
+import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -200,6 +201,7 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
   const { instructions, input } = toResponsesInput(opts.messages, opts.modelId);
+  const serverTools = responsesServerTools(opts.standard, opts.serverTools);
   const body = {
     model: opts.modelId,
     instructions,
@@ -211,9 +213,14 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
-    ...(opts.tools
-      ? { tools: toResponsesTools(opts.tools), tool_choice: toResponsesToolChoice(opts.toolChoice) }
+    // Function tools first, then the endpoint's built-in ones (web_search /
+    // web_extractor — lib/ai/serverTools.ts). `tool_choice` stays tied to the
+    // function tools: a run that declared none has nothing to force, and a
+    // model with only server tools must keep its request free of the field.
+    ...(opts.tools || serverTools.length
+      ? { tools: [...toResponsesTools(opts.tools ?? []), ...serverTools] }
       : {}),
+    ...(opts.tools ? { tool_choice: toResponsesToolChoice(opts.toolChoice) } : {}),
     // `reasoning: {effort, summary}` — absent unless the author set an effort
     // on this model, for the same reason as every other adapter: an unset
     // model must keep sending exactly what it sent before, and each model's
@@ -344,6 +351,10 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
           if (typeof item.name === "string") entry.name = item.name;
           if (typeof item.arguments === "string") entry.args = item.arguments;
         }
+        // A server-run search or page read starting. Report only — the item
+        // is never echoed (isEchoItem) and never becomes a call we owe.
+        const started = responsesServerToolEvent(item, "call", `output_${json.output_index}`);
+        if (started) opts.onChunk({ serverTool: started });
         return false;
       }
       case "response.function_call_arguments.delta": {
@@ -368,6 +379,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
           if (typeof item.arguments === "string") entry.args = item.arguments;
         }
         if (isEchoItem(item)) items.push(item);
+        const finished = responsesServerToolEvent(item, "result", `output_${json.output_index}`);
+        if (finished) opts.onChunk({ serverTool: finished });
         return false;
       }
       case "response.completed":

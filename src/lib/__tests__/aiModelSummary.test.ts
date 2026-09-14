@@ -56,6 +56,27 @@ describe("wireSummary", () => {
     ]));
   });
 
+  it("spells web page reading per wire — agent_max on Chat, tools on Responses compat", () => {
+    const m = { ...base, serverTools: ["web_search", "web_extractor"] as const };
+    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_compat")).toEqual(expect.arrayContaining([
+      { key: "enable_search", value: "true" },
+      { key: "search_options.search_strategy", value: "agent_max" },
+    ]));
+    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_responses_compat")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "web_search,web_extractor" },
+    ]));
+    // Image searches are Responses-only: listed there, absent from Chat's fields.
+    const all = { ...base, serverTools: ["web_search", "web_extractor", "web_search_image", "image_search"] as WireInput["serverTools"] };
+    expect(wireSummary(all, "openai_responses_compat")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "web_search,web_extractor,web_search_image,image_search" },
+    ]));
+    expect(JSON.stringify(wireSummary(all, "openai_compat"))).not.toMatch(/image/);
+    // The Anthropic wire has no spelling for extraction here — only search shows.
+    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "anthropic_compat")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "web_search" },
+    ]));
+  });
+
   it("lists the structured-output mode the row resolves to, and drops it when off", () => {
     expect(wireSummary({ ...base, structuredOutput: "json_object" }, "openai")).toEqual([
       { key: "response_format", value: "json_object", scope: "structured" },

@@ -38,7 +38,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
-  SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
+  normalizeServerTools, SERVER_TOOL_IDS, supportsServerTool, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
@@ -72,7 +72,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "pdf", "so", "temp",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "so", "temp",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -332,7 +332,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     const n = Math.round(Number(form.thinkingBudget));
     return Number.isFinite(n) && n > 0 ? n : undefined;
   })();
-  const serverToolsOn = !!provider && supportsServerTools(provider.apiStandard) && serverTools.length > 0;
+  // What survives onto this provider's wire: ids it has a spelling for, in the
+  // canonical form (extraction only beside search). Absent when nothing does.
+  // `serverToolsOn` therefore means "any server tool", image searches included.
+  const grantedServerTools = provider
+    ? normalizeServerTools(serverTools.filter((id) => supportsServerTool(provider.apiStandard, id)))
+    : undefined;
+  const serverToolsOn = !!grantedServerTools;
   const structuredOutput = form.structuredOutput === "auto" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
@@ -429,7 +435,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // Cleared for a protocol whose adapter would drop them, so switching a
         // model to another provider can't leave a permission that silently
         // does nothing behind. Empty stores as absent — one shape for "none".
-        serverTools: serverToolsOn ? serverTools : undefined,
+        serverTools: grantedServerTools,
         // Same clearing rule: the declaration only survives where the wire has
         // a spelling for it (the OpenAI-family file content part), and only on
         // a model type that converses. False stores as absent.
@@ -495,6 +501,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   const capsNames = [
     serverToolsOn && t("aiConfig.models.mark_web"),
+    grantedServerTools?.includes("web_extractor") && t("aiConfig.models.serverTool_web_extractor"),
+    grantedServerTools?.includes("web_search_image") && t("aiConfig.models.serverTool_web_search_image"),
+    grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
     family === "openai" && pdfInput && "PDF",
     family === "openai" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     family === "openai" && form.asrFormat && t(`aiConfig.models.asrFormat_${form.asrFormat}`),
@@ -544,7 +553,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
         thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
         thinkingBudget,
-        serverTools: serverToolsOn ? serverTools : undefined,
+        serverTools: grantedServerTools,
         structuredOutput,
         prefix: form.prefix,
         caps: isImageModel
@@ -945,23 +954,38 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             unset={capsNames.length === 0}
           >
             {/* Tools the endpoint runs itself. Anthropic-shaped endpoints and
-                OpenAI compat (Qwen's enable_search — see supportsServerTools),
-                and off by default: it is a standing permission for the model to
-                reach the open web on every request, which is the author's call
-                to make rather than something a model quietly gains. */}
+                the two OpenAI-compat wires (Qwen's enable_search / Responses
+                built-ins — see supportsServerTools), and off by default: it is
+                a standing permission for the model to reach the open web on
+                every request, which is the author's call to make rather than
+                something a model quietly gains. Extraction is shown only where
+                the wire can spell it, and is tied to search both ways — the
+                endpoint refuses it alone (normalizeServerTools). */}
             <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
-              {SERVER_TOOL_IDS.map((id) => (
+              {SERVER_TOOL_IDS.filter((id) => !!provider && supportsServerTool(provider.apiStandard, id)).map((id) => (
                 <ToggleField
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
                   hint={t("aiConfig.models.briefTools")}
                   on={serverTools.includes(id)}
                   onChange={(next) =>
-                    setServerTools((cur) => (next ? [...cur.filter((x) => x !== id), id] : cur.filter((x) => x !== id)))
+                    setServerTools((cur) => {
+                      const rest = cur.filter((x) => x !== id);
+                      if (next) return id === "web_extractor" ? [...rest.filter((x) => x !== "web_search"), "web_search", id] : [...rest, id];
+                      return id === "web_search" ? rest.filter((x) => x !== "web_extractor") : rest;
+                    })
                   }
-                  {...whyProps("tools", family === "openai"
-                    ? t("aiConfig.models.serverToolsHintOpenai")
-                    : t("aiConfig.models.serverToolsHint"))}
+                  {...(id === "web_extractor"
+                    ? whyProps("extract", t("aiConfig.models.serverToolsHintExtractor"))
+                    : id === "web_search_image"
+                      ? whyProps("imgText", t("aiConfig.models.serverToolsHintWebSearchImage"))
+                      : id === "image_search"
+                        ? whyProps("imgImage", t("aiConfig.models.serverToolsHintImageSearch"))
+                        : whyProps("tools", family === "openai"
+                          ? t("aiConfig.models.serverToolsHintOpenai")
+                          : family === "responses"
+                            ? t("aiConfig.models.serverToolsHintResponses")
+                            : t("aiConfig.models.serverToolsHint")))}
                 />
               ))}
             </Fold>

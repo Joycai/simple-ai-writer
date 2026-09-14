@@ -242,8 +242,9 @@ export interface Model {
    */
   thinkingDialect?: ThinkingDialect;
   /**
-   * Tools this model may have the **endpoint** run for it — today only
-   * `web_search`, and only on the Anthropic wire (see `lib/ai/serverTools.ts`).
+   * Tools this model may have the **endpoint** run for it — `web_search`, and
+   * `web_extractor` only beside it (see `lib/ai/serverTools.ts` for which wire
+   * spells which).
    *
    * Per-model and declared, for the same reason as everything else here: it is
    * a property of what the author bought (MiniMax-M3 serves it; the M2.x models

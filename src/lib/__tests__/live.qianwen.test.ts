@@ -61,6 +61,67 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
     expect(bad.ok).toBe(false);
   }, 60_000);
 
+  // Server-run search + page reading (landscape.md §7 第六个样本「联网搜索与网页抓取」,
+  // 2026-09-14). A page-summary prompt: answering it well requires opening the URL.
+  describe("server tools: web_search + web_extractor", () => {
+    const PAGE: StreamMessage[] = [{ role: "user", content: "用两句话概括 https://www.rust-lang.org/ 首页讲了什么" }];
+    const serve = async (standard: StreamOptions["standard"], modelId: string, serverTools: StreamOptions["serverTools"], messages: StreamMessage[] = PAGE) => {
+      const c = { text: "", events: [] as Record<string, unknown>[], done: undefined as Record<string, unknown> | undefined, bodies: [] as unknown[] };
+      await streamCompletion({
+        standard, baseUrl: OPENAI_BASE, apiKey: KEY, modelId, messages, serverTools,
+        onChunk: (chunk: StreamChunk) => {
+          const k = chunk as Record<string, unknown>;
+          if (typeof k.text === "string") c.text += k.text;
+          if (k.serverTool) c.events.push(k.serverTool as Record<string, unknown>);
+          if (k.done) c.done = k;
+        },
+        _onRequestBody: (b) => c.bodies.push(b),
+      });
+      return c;
+    };
+
+    it("responses compat qwen3.8-flash: the page read shows up as web_extractor events", async () => {
+      const c = await serve("openai_responses_compat", "qwen3.8-flash", ["web_search", "web_extractor"]);
+      expect(c.text.length).toBeGreaterThan(0);
+      const read = c.events.filter((e) => e.name === "web_extractor");
+      expect(read.map((e) => e.phase)).toEqual(expect.arrayContaining(["call", "result"]));
+      expect(JSON.stringify(read)).toContain("rust-lang.org");
+    }, 240_000);
+
+    it("chat compat qwen3-max: agent_max reads the page (input grows past the bare prompt)", async () => {
+      const c = await serve("openai_compat", "qwen3-max", ["web_search", "web_extractor"]);
+      expect(c.text).toMatch(/Rust/);
+      // No trace on this wire — the input token count is the only evidence.
+      expect(c.done!.inputTokens as number).toBeGreaterThan(500);
+      expect(c.events).toEqual([]);
+    }, 240_000);
+
+    it("responses compat qwen3.8-flash: web_search_image returns titled image hits", async () => {
+      const c = await serve("openai_responses_compat", "qwen3.8-flash", ["web_search_image"], [
+        { role: "user", content: "帮我找两张雪豹的照片，列出链接" },
+      ]);
+      const hits = c.events.filter((e) => e.name === "web_search_image" && e.phase === "result");
+      expect(hits.length).toBeGreaterThan(0);
+      expect((hits[0].results as { url: string }[]).length).toBeGreaterThan(0);
+    }, 240_000);
+
+    it("responses compat qwen3.8-flash: image_search runs on a data-URL image (a flat square matches nothing)", async () => {
+      // Same 16x16 red PNG as the vision probe below — what the app sends is a
+      // data URL, so that is the shape worth verifying. An empty hit list is fine.
+      const png = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGO4IyJCEmIY1TCqQWTYagAAAnEEEPBHj2sAAAAASUVORK5CYII=";
+      const c = await serve("openai_responses_compat", "qwen3.8-flash", ["image_search"], [{
+        role: "user",
+        content: [{ type: "text", text: "用以图搜图找和这张图相似的图片，列出链接" }, { type: "image_url", image_url: { url: `data:image/png;base64,${png}` } }],
+      } as unknown as StreamMessage]);
+      expect(c.events.filter((e) => e.name === "image_search").map((e) => e.phase)).toEqual(expect.arrayContaining(["call", "result"]));
+    }, 240_000);
+
+    it("chat compat qwen3.8-flash refuses the agent_max strategy with a 400", async () => {
+      await expect(serve("openai_compat", "qwen3.8-flash", ["web_search", "web_extractor"]))
+        .rejects.toThrow(/search strategy/);
+    }, 60_000);
+  });
+
   describe.each(MODELS)("openai wire %s", (m) => {
     it("default (auto category, no effort): text + reasoning as the model defaults", async () => {
       const c = await oa(m);

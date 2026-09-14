@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { streamCompletion, type StreamChunk, type StreamMessage } from "../ai";
 import type { ReasoningEffort, ThinkingCategoryId } from "../ai/reasoning";
 import { toResponsesInput } from "../ai/responses";
+import { parseServerTools, type ServerToolEvent, type ServerToolId } from "../ai/serverTools";
 
 function sseResponse(chunks: string[], status = 200): Response {
   const encoder = new TextEncoder();
@@ -443,6 +444,113 @@ describe("Responses adapter — tool calls", () => {
     });
     expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
     expect(text(received)).toBe("just prose");
+  });
+});
+
+describe("Responses adapter — server tools (web_search / web_extractor)", () => {
+  async function run(standard: "openai_responses" | "openai_responses_compat", chunks: string[], extra: {
+    tools?: (typeof TOOL)[]; serverTools?: ServerToolId[];
+  }) {
+    const calls = mockFetch(chunks);
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard, modelId: "qwen3.8-flash",
+      messages: [{ role: "user", content: "hi" }], ...extra,
+      onChunk: (c) => received.push(c),
+    });
+    return { body: calls[0].body, received };
+  }
+
+  it("declares them as bare built-in tools after the function tools, on the compat half", async () => {
+    const { body } = await run("openai_responses_compat", [COMPLETED], {
+      tools: [TOOL], serverTools: ["web_extractor", "web_search"],
+    });
+    const tools = body.tools as Record<string, unknown>[];
+    expect(tools.slice(1)).toEqual([{ type: "web_search" }, { type: "web_extractor" }]);
+    expect(tools[0]).toMatchObject({ type: "function", name: "read_file" });
+  });
+
+  it("sends tools without tool_choice when only server tools are declared", async () => {
+    const { body } = await run("openai_responses_compat", [COMPLETED], { serverTools: ["web_search"] });
+    expect(body.tools).toEqual([{ type: "web_search" }]);
+    expect(body).not.toHaveProperty("tool_choice");
+  });
+
+  it("drops a lone web_extractor, and sends nothing to the official endpoint", async () => {
+    // The endpoint answers a lone extractor with response.failed
+    // (`must be executed with web_search tool`).
+    expect((await run("openai_responses_compat", [COMPLETED], { serverTools: ["web_extractor"] })).body)
+      .not.toHaveProperty("tools");
+    expect((await run("openai_responses", [COMPLETED], { serverTools: ["web_search", "web_extractor"] })).body)
+      .not.toHaveProperty("tools");
+  });
+
+  it("reports web_search_call and web_extractor_call items as server-tool events, never as echo", async () => {
+    const search = { id: "ws_1", type: "web_search_call", action: { type: "search", queries: ["rust stable"] } };
+    const extract = { id: "we_1", type: "web_extractor_call", urls: ["https://www.rust-lang.org/"], goal: "summarize" };
+    const { received } = await run("openai_responses_compat", [
+      ev("response.output_item.added", { output_index: 0, item: { ...search, status: "in_progress" } }),
+      ev("response.output_item.done", {
+        output_index: 0,
+        item: { ...search, status: "completed", action: { ...search.action, sources: [
+          { type: "url", url: "https://blog.rust-lang.org/" }, { type: "url", url: "https://blog.rust-lang.org/" },
+        ] } },
+      }),
+      ev("response.output_item.added", { output_index: 1, item: { ...extract, status: "in_progress" } }),
+      ev("response.output_item.done", { output_index: 1, item: { ...extract, status: "completed", output: "A language empowering everyone" } }),
+      ev("response.output_text.delta", { delta: "ok" }),
+      COMPLETED,
+    ], { serverTools: ["web_search", "web_extractor"] });
+
+    const events = received.filter((c): c is { serverTool: ServerToolEvent } => "serverTool" in c).map((c) => c.serverTool);
+    expect(events).toEqual([
+      { phase: "call", id: "ws_1", name: "web_search", input: { queries: ["rust stable"] } },
+      { phase: "result", id: "ws_1", name: "web_search", results: [{ title: "https://blog.rust-lang.org/", url: "https://blog.rust-lang.org/" }] },
+      { phase: "call", id: "we_1", name: "web_extractor", input: { urls: ["https://www.rust-lang.org/"], goal: "summarize" } },
+      {
+        phase: "result", id: "we_1", name: "web_extractor",
+        results: [{ title: "https://www.rust-lang.org/", url: "https://www.rust-lang.org/", content: "A language empowering everyone" }],
+      },
+    ]);
+    // Nothing to answer and nothing to echo: no tool-call chunk at all.
+    expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
+    expect(text(received)).toBe("ok");
+  });
+
+  it("declares the image searches on their own, without web_search", async () => {
+    const { body } = await run("openai_responses_compat", [COMPLETED], { serverTools: ["image_search", "web_search_image"] });
+    expect(body.tools).toEqual([{ type: "web_search_image" }, { type: "image_search" }]);
+  });
+
+  it("reads image-search items: JSON-string arguments on added, JSON-string hits on done", async () => {
+    // Measured shapes, 2026-09-14 (landscape.md §7 第六个样本「图片搜索」).
+    const textItem = { id: "wsi_1", type: "web_search_image_call", name: "web_search_image", arguments: '{"queries": ["雪豹 照片"]}' };
+    const imageItem = { id: "is_1", type: "image_search_call", name: "image_search", arguments: '{"img_idx": 0, "bbox": [0, 0, 1000, 1000]}' };
+    const { received } = await run("openai_responses_compat", [
+      ev("response.output_item.added", { output_index: 0, item: { ...textItem, status: "in_progress" } }),
+      ev("response.output_item.done", {
+        output_index: 0,
+        item: { ...textItem, status: "completed", output: '[{"title": "雪豹", "url": "https://img.example.com/a.jpg", "index": 1}]' },
+      }),
+      ev("response.output_item.added", { output_index: 1, item: { ...imageItem, status: "in_progress" } }),
+      ev("response.output_item.done", { output_index: 1, item: { ...imageItem, status: "completed", output: "[]" } }),
+      COMPLETED,
+    ], { serverTools: ["web_search_image", "image_search"] });
+
+    const events = received.filter((c): c is { serverTool: ServerToolEvent } => "serverTool" in c).map((c) => c.serverTool);
+    expect(events).toEqual([
+      { phase: "call", id: "wsi_1", name: "web_search_image", input: { queries: ["雪豹 照片"] } },
+      { phase: "result", id: "wsi_1", name: "web_search_image", results: [{ title: "雪豹", url: "https://img.example.com/a.jpg" }] },
+      { phase: "call", id: "is_1", name: "image_search", input: { img_idx: 0, bbox: [0, 0, 1000, 1000] } },
+      // No match is an empty array, not an error.
+      { phase: "result", id: "is_1", name: "image_search", results: [] },
+    ]);
+    expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
+  });
+
+  it("stores web_extractor only beside web_search, in canonical order", () => {
+    expect(parseServerTools('["web_extractor"]')).toBeUndefined();
+    expect(parseServerTools('["web_extractor","web_search","web_search"]')).toEqual(["web_search", "web_extractor"]);
   });
 });
 

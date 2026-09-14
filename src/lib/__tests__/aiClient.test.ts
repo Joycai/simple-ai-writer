@@ -837,6 +837,24 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     const { calls } = await collect({ chunks: done, standard: "openai_compat" });
     expect(calls[0].body).not.toHaveProperty("enable_search");
   });
+
+  it("spells web_extractor as the agent_max search strategy beside enable_search", async () => {
+    // Measured 2026-09-14: plain enable_search never opened the page;
+    // agent_max did (landscape.md §7 第六个样本「联网搜索与网页抓取」).
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", serverTools: ["web_search", "web_extractor"],
+    });
+    expect(calls[0].body.enable_search).toBe(true);
+    expect(calls[0].body.search_options).toEqual({ search_strategy: "agent_max" });
+  });
+
+  it("sends nothing for a lone web_extractor — the endpoint refuses it without search", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", serverTools: ["web_extractor"],
+    });
+    expect(calls[0].body).not.toHaveProperty("enable_search");
+    expect(calls[0].body).not.toHaveProperty("search_options");
+  });
 });
 
 describe("streamCompletion — file content parts", () => {
