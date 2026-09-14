@@ -5,7 +5,7 @@
 > 两条拒绝：New API 中转站上单发 `{type:"tool_search"}` 回 400
 > `tools.tool_search requires at least one deferred tool`（[`landscape.md`](landscape.md) 第十个样本）；
 > xAI 官方端点带着延迟工具发，回 403「仅对 alpha 用户开放」（第十一个样本）。
-> **状态**：`living`。本项目是否采用见 [`gpt56-plan.md`](gpt56-plan.md) P7（后一期）。
+> **状态**：`living`。本项目是否采用见 [`gpt56-plan.md`](gpt56-plan.md) P7（2026-09-14 搁置：不为单一 vendor 调整工具装载架构）。
 
 ## 0. 一句话
 

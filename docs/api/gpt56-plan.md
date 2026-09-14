@@ -1,7 +1,7 @@
 # GPT-5.6（sol / terra / luna）支持度盘点与方案
 
 > **状态**：P2 / P3 / P4.1–4.4 `shipped`（与本文同一个 PR）；P1 / P5 / P6 暂不做（作者 2026-09-14 决定）；
-> P7 移到后一期。2026-09-14。
+> P7 **搁置**（作者 2026-09-14 决定：不为 OpenAI 一家的机制调整工具装载架构）。
 > **性质**：本项目的取舍，不是协议事实。事实在 [`responses.md`](responses.md)（§2、§10），
 > 中转站的改写在 [`landscape.md`](landscape.md) §7 第八、第十个样本。
 > **证据的边界**：两次实测都经 New API 中转站（`[Pro]` 档 2026-09-03、`[Plus]` 档 2026-09-14），
@@ -119,7 +119,9 @@ sol / terra / luna **不需要按型号分支**：三款共用上面每一条，
 能确认它生效。它是「更贵的另一档」，没有证据前不加入口。有官方 key 后若确认，做成
 `responses-effort` 类目上的一个附加开关，而不是新类目。
 
-### P7 `tool_search`（延迟加载工具）—— **后一期**
+### P7 `tool_search`（延迟加载工具）—— **搁置**
+
+> **决定（2026-09-14，作者）**：搁置，不排期。理由：原生延迟加载只有 OpenAI（GPT-5.4+）、Anthropic（4.5+）、xAI（alpha 限定）三家有，Gemini 与所有 Chat Completions 端点没有；本项目已有的运行态延迟工具组（`lore_write` / `lore_organize`）对四个协议族一视同仁，为一家 vendor 的 `additional_tools` 改装载架构，换来的是族间行为分叉。协议事实仍保留在 [`tool-search.md`](tool-search.md) 供日后重新评估。
 
 各族的协议事实已单独成篇：[`tool-search.md`](tool-search.md)（2026-09-14 文档调研，未实测）。
 要点：OpenAI（GPT-5.4+）、Anthropic（4.5+）、xAI 有原生支持，Gemini 与所有 Chat Completions
@@ -156,7 +158,7 @@ sol / terra / luna **不需要按型号分支**：三款共用上面每一条，
 | --- | --- | --- |
 | A | P2 回显比对（done 块 `wireRewrites` → API 日志 + 执行日志 `round-done` 行）· P3 `text.verbosity` 模型声明 · P4.1 `open_page` / `find_in_page` / `query` 解析 · P4.2 放开官方 `web_search`（其余 id 在官方线上被滤掉）· P4.3 抽屉说明写上成本 | ✅ 与本文同一个 PR |
 | B | P1 报错翻译 + 抽屉提示、P5 `include`、P6 `mode:"pro"` | 暂不做（作者决定）；要做时先用官方 key 实测 |
-| C | P7 `tool_search` 延迟加载工具 | 后一期 |
+| C | P7 `tool_search` 延迟加载工具 | 搁置（作者决定：不为单一 vendor 调整架构） |
 
 P4.2 与计划原文有一处偏离：没有等官方 key 确认 `sources` 是否需要 `include` 就放开了。
 理由是 `sources` 只影响执行日志里能列出几个网址——没有它，搜索照样执行、回答照样带
