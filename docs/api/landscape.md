@@ -464,7 +464,7 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 | 面 | 路径 | 本项目 |
 | --- | --- | --- |
 | ① Chat Completions | `/compatible-mode/v1/chat/completions` | `openai_compat`，预设「通义千问 (DashScope)」 |
-| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | 未接（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4） |
+| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | `openai_responses_compat`（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4；服务端工具见下「联网搜索与网页抓取」） |
 | ④ Anthropic Messages | `/apps/anthropic/v1/messages` | `anthropic_compat` 可直接用，尚无预设 |
 | DashScope 原生 | `/api/v1/services/aigc/{text,multimodal}-generation/generation` | 只用于出图（见下一小节） |
 
@@ -559,6 +559,71 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 （参数可能整块到达），有 `response.reasoning_text.delta`。接入评估见
 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4。
 
+#### 联网搜索与网页抓取（`web_search` / `web_extractor`，2026-09-14 实测）
+
+官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/web-scraping`。实测用
+`src/lib/__tests__/live.qianwen.test.ts` 的「server tools」组 + curl，提示词统一为
+「用两句话概括 https://www.rust-lang.org/ 首页讲了什么」。本项目的实现在
+`src/lib/ai/serverTools.ts`（`openaiServerToolsBody` / `responsesServerTools` /
+`responsesServerToolEvent`）。
+
+- **抓取离不开搜索，三条线都一样**：② 面只声明 `{type:"web_extractor"}` 时，HTTP 200 后
+  第一个事件就是 `response.failed`，`error.message` 为
+  `<400> InternalError.Algo.InvalidParameter: The web_extractor tool must be executed with web_search tool.`
+  所以本项目把 `web_extractor` 存成 `web_search` 的**附加档**，单独出现时丢弃（`normalizeServerTools`）。
+- **② 面（Responses）**：`tools:[{type:"web_search"},{type:"web_extractor"}]`，qwen3.8-flash
+  不开思考参数也可用。抓取过程**可见**：
+  - `response.output_item.added` 送出 `{type:"web_extractor_call", id, urls:[…], goal, status:"in_progress"}`，
+    `output_item.done` 再补上 `output`（端点按 `goal` 提炼过的正文，不是原始 HTML，以
+    `The useful information in <url> for user goal … as follows:` 开头）。
+  - 搜索是 `{type:"web_search_call", action:{type:"search", queries:[…]}}`，`done` 时
+    `action.sources:[{type:"url", url}]`（**没有标题**，同一 URL 可能重复出现），另有
+    `response.web_search_call.{in_progress,searching,completed}` 三个进度事件。
+  - 模型觉得不需要搜时，会只抓取、不搜索：计次只有 `web_extractor`。
+  - 用量：`usage.x_tools.{web_search,web_extractor}.count`，另有 `usage.x_details[].plugins`
+    重复同一数字；本项目暂不读。
+  - 这些 item 不需要回传（本项目的 echo 只收 reasoning / function_call / message）。
+- **① 面（Chat Completions）**：抓取没有独立字段，是 `enable_search:true` +
+  `search_options:{search_strategy:"agent_max"}`。过程**完全不可见**（流里只有普通的
+  `reasoning_content` / `content`），只能从输入 token 看出发生了什么：
+
+  | 模型 | 请求 | 结果 | prompt_tokens |
+  | --- | --- | --- | --- |
+  | qwen3.8-flash | `agent_max`（开不开 `enable_thinking` 都一样） | **400** `The current model does not support the "agent" search strategy.` | — |
+  | qwen3-max | `enable_search` 不带策略，开思考 | 凭记忆作答，**根本没搜** | 29 |
+  | qwen3-max | `agent_max`，开思考 | 读到页面 | 1610 |
+  | qwen3-max | `agent_max`，**关思考** | 读到页面 | 1199 |
+  | qwen3.5-plus | `agent_max`，开 / 关思考 | 读到页面 | 1668 / 1530 |
+
+  文档说 ① 面 qwen3-max 「必须开思考」，实测关掉也行（见下表）。400 发生在流开始之前，
+  是普通的 HTTP 错误，作者能直接看到；本项目**不做降级重试**（agent_max → 普通搜索），
+  因为那等于悄悄收回作者开的能力。
+- **计费**（文档口径）：抓取限时免费；搜索 ¥4/千次；抓回的正文算输入 token。
+- **没测的**：④ 面的 `web_fetch_<日期>`（文档没给版本号），所以本项目 ④ 族不提供抓取开关。
+
+#### 图片搜索（`web_search_image` 以文搜图 / `image_search` 以图搜图，2026-09-14 实测）
+
+官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/image-search`。qwen3.8-flash，② 面。
+
+- **只有 ② 面有**。① 面猜的 `search_options:{enable_image_search:true}` 不报错、被静默忽略
+  （模型回「没有可直接打开的图片 URL」）。本项目只在 `openai_responses_compat` 上提供这两个开关。
+- **不需要搜索陪同**：只声明 `{type:"web_search_image"}` 或 `{type:"image_search"}` 都能跑；
+  四个工具（`web_search` / `web_extractor` / `web_search_image` / `image_search`）同时声明也正常，
+  「雪豹分布在哪 + 给两张照片」一问里模型各调了一次搜索和以文搜图。
+- **item 形状像函数调用，不像 `web_search_call`**：`output_item.added` 给
+  `{type:"web_search_image_call"|"image_search_call", name, arguments, status:"in_progress"}`，
+  `arguments` 是 **JSON 字符串**——以文搜图是 `{"queries":[…]}`（模型自己扩成中英文多条），
+  以图搜图是 `{"img_idx":0,"bbox":[0,0,1000,1000]}`（第几张输入图、归一化到 1000 的框）。
+  `done` 时加 `output`，**也是 JSON 字符串**：`[{"title","url","index"}]`；没搜到是 `"[]"`，不是错误。
+- **以图搜图的输入图**：`data:` URL 被接受（本项目发的就是这个形状）；公网 URL 要端点自己抓得到——
+  一个 upload.wikimedia.org 的 jpg 直接 `response.failed`
+  （`The provided URL does not appear to be valid`），换一张国内站点的图就有结果。
+- **只声明不触发是安全的**：带 `image_search` 的纯文字请求（「天空什么颜色」）正常作答，
+  没有 `image_search_call`——所以它能像其他服务端工具一样做成「按模型常开」的声明。
+- 用量：`usage.x_tools.web_search_image.count` / `image_search.count`。
+- **计费**（文档口径）：以文搜图 ¥24/千次，以图搜图 ¥48/千次，都远高于联网搜索的 ¥4——
+  这是它们各自单独开关、不挂在搜索下面的原因。单次最多 100 条结果。
+
 #### 文档与实测不符之处（截至 2026-09-03）
 
 | 文档说 | 实测 |
@@ -569,6 +634,7 @@ kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 | ④ 面 `thinking.type` 只有 enabled/disabled | `adaptive`（含 `display`）被接受 |
 | `json_object` 要求 "json" 字样 | 只有 Qwen / DeepSeek 执行 |
 | 3.7 代接受 `reasoning_effort` | 接受但无视，只认 `thinking_budget` |
+| ① 面网页抓取（`agent_max`）在 qwen3-max 上必须开思考（2026-09-14） | 关思考照样抓取（prompt_tokens 1199）；qwen3.8-flash 无论开关都 400 |
 
 工具调用与随请求跑的能力（2026-08-17 补，**未实测**部分）：
 

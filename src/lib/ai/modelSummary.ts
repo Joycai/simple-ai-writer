@@ -21,7 +21,7 @@ import { effectiveStructuredOutput } from "./jsonMode";
 import {
   reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
 } from "./reasoning";
-import { openaiServerToolsBody, supportsServerTools } from "./serverTools";
+import { openaiServerToolsBody, supportsServerTool, supportsServerTools } from "./serverTools";
 import { familyOf, type ApiStandard } from "./types";
 
 export interface WireItem {
@@ -103,8 +103,11 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
     out.push({ key: "temperature", value: String(m.temperature) });
   }
   if (m.serverTools?.length && supportsServerTools(standard)) {
-    if (family === "anthropic") out.push({ key: "tools", value: m.serverTools.join(",") });
-    else out.push(...flatten(openaiServerToolsBody(standard, m.serverTools)));
+    if (family === "openai") out.push(...flatten(openaiServerToolsBody(standard, m.serverTools)));
+    else {
+      const ids = m.serverTools.filter((id) => supportsServerTool(standard, id));
+      if (ids.length) out.push({ key: "tools", value: ids.join(",") });
+    }
   }
 
   const so = effectiveStructuredOutput({ standard, baseUrl, modelId: m.modelId, structuredOutput: m.structuredOutput });

@@ -71,7 +71,8 @@ wire 层的细节（首块形状、错误信封、文档不符处）见 [`landsc
 
 ### 1.3 没测的
 
-付费额度以外的都测了；**没测**：`enable_search`（4.7）、qwen3.8-max 的 `preserve_thinking`
+付费额度以外的都测了；**没测**：~~`enable_search`（4.7）~~（2026-09-14 已与网页抓取一起实测，
+见 [`landscape.md`](landscape.md) §7 第六个样本「联网搜索与网页抓取」）、qwen3.8-max 的 `preserve_thinking`
 回传要求与 PDF `file` 块（4.9）、`json_schema` strict 对 `["string","null"]` 的接受度
 （[`structured-output-plan.md`](structured-output-plan.md) §11 第 1 条）、国际站。
 Responses 只探了一次（§4.2）。

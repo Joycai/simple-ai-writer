@@ -37,15 +37,46 @@
  * Same id on purpose: the app-level meaning ("this model may reach the web on
  * its own, on every request") is identical, and the id is what the search
  * subagent's eligibility check reads. The *spelling* is the family's business.
+ *
+ * A third wire and a second id arrived together (2026-09-14, measured —
+ * `docs/api/landscape.md` §7 第六个样本「联网搜索与网页抓取」):
+ *
+ *   - **Responses compat**: DashScope's `/responses` takes `web_search` as a
+ *     built-in `tools[]` entry (`{type:"web_search"}`), and — unlike Chat
+ *     Completions — reports it back as `web_search_call` output items with the
+ *     queries and source URLs, so the log can show it again.
+ *   - **`web_extractor`** (网页抓取): the endpoint opens a URL and reads the page.
+ *     It is **not a separate permission** on DashScope: every wire refuses it
+ *     without `web_search` (`The web_extractor tool must be executed with
+ *     web_search tool`), so it is stored as an *upgrade* of search, never alone
+ *     (`normalizeServerTools`). On Responses it is one more `tools[]` entry; on
+ *     Chat Completions it is the `agent_max` search strategy, which some models
+ *     refuse with a 400 (qwen3.8-flash does, qwen3-max / qwen3.5-plus take it).
+ *     Only the two OpenAI-compat wires have a spelling for it here — the
+ *     Anthropic surface's `web_fetch_*` version stamp is unmeasured.
+ *
+ * And two image searches, **Responses compat only** (measured the same day):
+ *
+ *   - **`web_search_image`** (以文搜图): text query → image hits.
+ *   - **`image_search`** (以图搜图): an image already in the input → visually
+ *     similar images. Declaring it on a text-only request is harmless (the
+ *     model simply doesn't call it), which is what lets it be a standing
+ *     per-model permission like the rest.
+ *
+ * Neither needs `web_search` beside it, and Chat Completions has no spelling
+ * for either (a guessed `search_options.enable_image_search` was silently
+ * ignored). Both bill per call at several times search's rate (¥24 / ¥48 per
+ * thousand vs ¥4), which is why they are separate switches rather than riding
+ * on search the way extraction does.
  */
 
 import { familyOf, type ApiStandard } from "./types";
 
 /** This app's own name for a server-side tool. Never a wire type — see below. */
-export type ServerToolId = "web_search";
+export type ServerToolId = "web_search" | "web_extractor" | "web_search_image" | "image_search";
 
 /** Selectable values, in the order the settings drawer shows them. */
-export const SERVER_TOOL_IDS: readonly ServerToolId[] = ["web_search"];
+export const SERVER_TOOL_IDS: readonly ServerToolId[] = ["web_search", "web_extractor", "web_search_image", "image_search"];
 
 /**
  * The wire `type` each id becomes on the Anthropic protocol.
@@ -55,7 +86,7 @@ export const SERVER_TOOL_IDS: readonly ServerToolId[] = ["web_search"];
  * changes, and that must be one edit here rather than a value stored in every
  * model row (where it would silently keep an old version alive forever).
  */
-const ANTHROPIC_WIRE_TYPE: Record<ServerToolId, string> = {
+const ANTHROPIC_WIRE_TYPE: Partial<Record<ServerToolId, string>> = {
   web_search: "web_search_20250305",
 };
 
@@ -63,12 +94,26 @@ const ANTHROPIC_WIRE_TYPE: Record<ServerToolId, string> = {
 export function parseServerTools(v: unknown): ServerToolId[] | undefined {
   const raw = typeof v === "string" ? safeParse(v) : v;
   if (!Array.isArray(raw)) return undefined;
-  const ids = raw.filter((x): x is ServerToolId =>
+  return normalizeServerTools(raw.filter((x): x is ServerToolId =>
     typeof x === "string" && (SERVER_TOOL_IDS as readonly string[]).includes(x),
-  );
-  // Empty is stored as absent — one representation for "none", so a row never
-  // distinguishes never-set from set-to-empty.
-  return ids.length ? [...new Set(ids)] : undefined;
+  ));
+}
+
+/**
+ * The one canonical form of a declaration: deduplicated, in `SERVER_TOOL_IDS`
+ * order, `web_extractor` only beside `web_search`, empty as absent.
+ *
+ * Extraction without search is dropped rather than search added: a row that
+ * says "extract" alone was hand-edited or imported, and silently granting the
+ * *billed* half of the pair is the wrong direction to guess in. Empty stays
+ * absent — one representation for "none", so a row never distinguishes
+ * never-set from set-to-empty.
+ */
+export function normalizeServerTools(ids: readonly ServerToolId[]): ServerToolId[] | undefined {
+  const has = new Set(ids);
+  if (!has.has("web_search")) has.delete("web_extractor");
+  const out = SERVER_TOOL_IDS.filter((id) => has.has(id));
+  return out.length ? out : undefined;
 }
 
 function safeParse(s: string): unknown {
@@ -97,7 +142,32 @@ function safeParse(s: string): unknown {
  * bought a DashScope-shaped endpoint.
  */
 export function supportsServerTools(standard: ApiStandard): boolean {
-  return familyOf(standard) === "anthropic" || standard === "openai_compat";
+  return familyOf(standard) === "anthropic"
+    || standard === "openai_compat"
+    // Same compat-only narrowing for the Responses family: `web_search` as a
+    // bare built-in `tools[]` entry is DashScope's measured spelling; the
+    // official endpoint's own web search tool is a different contract nobody
+    // has measured here.
+    || standard === "openai_responses_compat";
+}
+
+/**
+ * Whether one particular id has a spelling on this wire. `web_search` goes
+ * wherever server tools do; `web_extractor` only on the two OpenAI-compat
+ * wires, the ones measured against DashScope; the two image searches only on
+ * Responses compat, the one wire DashScope serves them on.
+ */
+export function supportsServerTool(standard: ApiStandard, id: ServerToolId): boolean {
+  if (!supportsServerTools(standard)) return false;
+  switch (id) {
+    case "web_search":
+      return true;
+    case "web_extractor":
+      return standard === "openai_compat" || standard === "openai_responses_compat";
+    case "web_search_image":
+    case "image_search":
+      return standard === "openai_responses_compat";
+  }
 }
 
 /**
@@ -128,11 +198,15 @@ const MAX_SEARCHES_PER_REQUEST = 10;
 export function anthropicServerTools(
   ids: readonly ServerToolId[] | undefined,
 ): { type: string; name: string; max_uses?: number }[] {
-  return (ids ?? []).map((id) => ({
-    type: ANTHROPIC_WIRE_TYPE[id],
-    name: id,
-    ...(id === "web_search" ? { max_uses: MAX_SEARCHES_PER_REQUEST } : {}),
-  }));
+  return (ids ?? []).flatMap((id) => {
+    const type = ANTHROPIC_WIRE_TYPE[id];
+    if (!type) return [];
+    return [{
+      type,
+      name: id,
+      ...(id === "web_search" ? { max_uses: MAX_SEARCHES_PER_REQUEST } : {}),
+    }];
+  });
 }
 
 /**
@@ -153,7 +227,33 @@ export function openaiServerToolsBody(
   ids: readonly ServerToolId[] | undefined,
 ): Record<string, unknown> {
   if (standard !== "openai_compat" || !ids?.includes("web_search")) return {};
+  // Extraction has no field of its own on this wire: it is the `agent_max`
+  // search strategy. Measured 2026-09-14 on a page-summary prompt — plain
+  // `enable_search` on qwen3-max answered from memory (29 input tokens, no
+  // search at all), `agent_max` read the page (1.2k–1.6k). A model that
+  // doesn't offer the strategy answers 400 (qwen3.8-flash: `does not support
+  // the "agent" search strategy`) — loud, and the author's declaration to fix.
+  if (ids.includes("web_extractor")) {
+    return { enable_search: true, search_options: { search_strategy: "agent_max" } };
+  }
   return { enable_search: true };
+}
+
+/**
+ * The built-in `tools[]` entries these ids become on the Responses wire —
+ * DashScope's `/responses` spells both as bare `{type}` objects.
+ *
+ * Compat only, same gate as `openaiServerToolsBody` and for the same reason: a
+ * row that travelled onto an official endpoint must not carry DashScope's
+ * `web_extractor` there. Re-normalised here too, because the endpoint answers
+ * a lone extractor with `response.failed` rather than ignoring it.
+ */
+export function responsesServerTools(
+  standard: ApiStandard,
+  ids: readonly ServerToolId[] | undefined,
+): { type: ServerToolId }[] {
+  if (standard !== "openai_responses_compat") return [];
+  return (normalizeServerTools(ids ?? []) ?? []).map((type) => ({ type }));
 }
 
 // ─── What comes back ─────────────────────────────────────────────────────────
@@ -297,6 +397,91 @@ export function renderSearchResults(events: readonly ServerToolEvent[]): string 
 function clipExcerpt(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > RESULT_EXCERPT_CHARS ? `${flat.slice(0, RESULT_EXCERPT_CHARS)}…` : flat;
+}
+
+/**
+ * A Responses output item as a server-tool report, or null for any other item.
+ *
+ * Measured shapes (DashScope, 2026-09-14):
+ *
+ *   - `web_search_call` — `action.queries[]` on `output_item.added`,
+ *     `action.sources[{type:"url", url}]` on `output_item.done`. No titles
+ *     come back, so a hit's title is its URL.
+ *   - `web_extractor_call` — `urls[]` + `goal` on both; `output` (the page
+ *     text the endpoint distilled for that goal) only on `done`. A page that
+ *     could not be read is not an error on this wire: it completes with
+ *     little or no `output`, and the model answers from what it has.
+ *
+ *   - `web_search_image_call` / `image_search_call` — shaped like a function
+ *     call rather than like the two above: `name` + `arguments` (a JSON
+ *     *string*: `{queries}` for text→image, `{img_idx, bbox}` for image→image)
+ *     on `added`, plus `output` — another JSON string, an array of
+ *     `{title, url, index}` — on `done`. No match is `"[]"`, not an error.
+ *
+ * `phase` is the caller's to say, because the two events carry the same item
+ * type and differ only in which event delivered them. `fallbackId` covers an
+ * item without an `id` — the two halves must still meet in the log.
+ */
+export function responsesServerToolEvent(
+  item: unknown,
+  phase: "call" | "result",
+  fallbackId: string,
+): ServerToolEvent | null {
+  if (!item || typeof item !== "object") return null;
+  const it = item as Record<string, unknown>;
+  const name = it.type === "web_search_call" ? "web_search"
+    : it.type === "web_extractor_call" ? "web_extractor"
+    : it.type === "web_search_image_call" ? "web_search_image"
+    : it.type === "image_search_call" ? "image_search"
+    : null;
+  if (!name) return null;
+  const id = typeof it.id === "string" && it.id ? it.id : fallbackId;
+  const action = (it.action && typeof it.action === "object" ? it.action : {}) as Record<string, unknown>;
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+  if (phase === "call") {
+    const input: Record<string, unknown> = name === "web_search"
+      ? { queries: strings(action.queries) }
+      : name === "web_extractor"
+        ? { urls: strings(it.urls), ...(typeof it.goal === "string" ? { goal: it.goal } : {}) }
+        : parseJsonObject(it.arguments);
+    return { phase, id, name, input };
+  }
+
+  const error = it.status === "failed" ? "failed" : undefined;
+  if (name === "web_search_image" || name === "image_search") {
+    return { phase, id, name, results: readImageHits(it.output), ...(error ? { error } : {}) };
+  }
+  if (name === "web_search") {
+    const urls = Array.isArray(action.sources)
+      ? action.sources.map((s) => (s && typeof s === "object" ? (s as Record<string, unknown>).url : undefined))
+      : [];
+    const results = [...new Set(strings(urls))].map((url) => ({ title: url, url }));
+    return { phase, id, name, results, ...(error ? { error } : {}) };
+  }
+  const output = typeof it.output === "string" && it.output.trim() ? it.output : undefined;
+  // One `output` for the whole call — kept on the first URL only, so it is
+  // not duplicated per page.
+  const results = strings(it.urls).map((url, i) => ({
+    title: url, url, ...(i === 0 && output ? { content: output } : {}),
+  }));
+  return { phase, id, name, results, ...(error ? { error } : {}) };
+}
+
+/** A JSON-string `arguments` as an object; anything unreadable is `{}`. */
+function parseJsonObject(v: unknown): Record<string, unknown> {
+  const parsed = typeof v === "string" ? safeParse(v) : v;
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+}
+
+/**
+ * The hits in an image search's `output` — a JSON string holding
+ * `[{title, url, index}]`. Same leniency as `readWebSearchResults`: a
+ * malformed report yields no hits rather than failing a finished answer.
+ */
+function readImageHits(output: unknown): WebSearchResult[] {
+  const parsed = typeof output === "string" ? safeParse(output) : output;
+  return readWebSearchResults(parsed);
 }
 
 /** The error text on a failed `*_tool_result` block, if it carries one. */
