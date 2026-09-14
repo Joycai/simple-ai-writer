@@ -19,6 +19,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { loadCustomFormats, saveCustomFormat } from "../docx/presets";
 import { parseDocFormat, type DocFormatPreset } from "../docx/format";
+import { parseTextVerbosity } from "./types";
 import {
   ensureAiSchema,
   listModels,
@@ -265,6 +266,8 @@ export function parseConfigBundle(
       thinkingBudget: typeof r.thinkingBudget === "number" ? r.thinkingBudget : undefined,
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
+      // Unknown level → absent, which sends nothing.
+      textVerbosity: parseTextVerbosity(r.textVerbosity),
       // Same reason as the reasoning fields above: an unknown format from a
       // newer build must degrade to "an ordinary model" rather than mark a
       // usable model translation-only and hide it from every picker.

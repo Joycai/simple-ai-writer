@@ -130,7 +130,12 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
     signal: watch.signal,
     // Wired here, not by callers: it is the log's own plumbing. An adapter that
     // sends several requests for one call reports each of them through it.
-    _onRequestBody: (body) => log.requestBody(body),
+    // A caller's own hook still runs: the live probes read the bodies they sent
+    // through it, and replacing it left them asserting on nothing.
+    _onRequestBody: (body) => {
+      log.requestBody(body);
+      merged._onRequestBody?.(body);
+    },
     onChunk: (chunk) => {
       streamed = true;
       watch.alive();

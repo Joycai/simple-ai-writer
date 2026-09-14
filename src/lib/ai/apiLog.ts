@@ -8,7 +8,7 @@
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { appendFile, fileExists, makeDir } from "../fs/fileio";
 import { readPref, writePref } from "../prefs";
-import type { StreamChunk, StreamMessage, StreamOptions } from "./types";
+import type { StreamChunk, StreamMessage, StreamOptions, WireRewrite } from "./types";
 
 const ENABLED_KEY = "app:apiLogEnabled";
 
@@ -240,6 +240,8 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
    */
   let stopReason: string | undefined;
   let truncated = false;
+  /** Fields the endpoint echoed with another value than sent — see StreamChunk. */
+  let wireRewrites: WireRewrite[] | undefined;
   /** Searches the endpoint ran for itself — see lib/ai/serverTools. */
   const serverTools: { name: string; input?: unknown; results?: number; error?: string }[] = [];
 
@@ -278,6 +280,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
         usage = { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens };
         stopReason = chunk.stopReason;
         truncated = chunk.truncated ?? false;
+        wireRewrites = chunk.wireRewrites;
       }
     },
     success() {
@@ -290,6 +293,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
         usage,
         stopReason,
         truncated,
+        ...(wireRewrites?.length ? { wireRewrites } : {}),
         toolCalls,
         ...(serverTools.length ? { serverTools } : {}),
         output,

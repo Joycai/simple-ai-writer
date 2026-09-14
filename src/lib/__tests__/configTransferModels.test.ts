@@ -45,12 +45,15 @@ describe("parseConfigBundle · models", () => {
     const out = parseConfigBundle(bundle([{
       ...base,
       thinkingCategory: "qwen-budget", thinkingBudget: 8000, serverTools: ["web_search"],
-      pdfInput: true, structuredOutput: "json_schema", temperature: 0,
+      pdfInput: true, structuredOutput: "json_schema", temperature: 0, textVerbosity: "low",
     }]), []);
     expect(out.models[0]).toMatchObject({
       thinkingCategory: "qwen-budget", thinkingBudget: 8000, serverTools: ["web_search"],
-      pdfInput: true, structuredOutput: "json_schema", temperature: 0,
+      pdfInput: true, structuredOutput: "json_schema", temperature: 0, textVerbosity: "low",
     });
+    // A level this build doesn't know degrades to "send nothing".
+    const odd = parseConfigBundle(bundle([{ ...base, textVerbosity: "extreme" }]), []);
+    expect(odd.models[0].textVerbosity).toBeUndefined();
   });
 
   it("degrades an unknown structured-output value to auto instead of sending it", () => {

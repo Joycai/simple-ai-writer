@@ -1092,6 +1092,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
               kind: "round-done",
               round,
               actualInputTokens: chunk.inputTokens,
+              ...(chunk.wireRewrites?.length ? { wireRewrites: chunk.wireRewrites } : {}),
               incomparable:
                 chunk.inputTokens <= 0
                   ? "no-usage"

@@ -202,7 +202,14 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
   const { instructions, input } = toResponsesInput(opts.messages, opts.modelId);
   const serverTools = responsesServerTools(opts.standard, opts.serverTools);
-  const body = {
+  // `text` has two writers — this model's verbosity and a structured task's
+  // `text.format` (jsonMode, arriving through extraBody) — merged below so
+  // neither erases the other.
+  const extraText = (opts.extraBody as { text?: Record<string, unknown> } | undefined)?.text;
+  const text = opts.textVerbosity || extraText
+    ? { ...extraText, ...(opts.textVerbosity ? { verbosity: opts.textVerbosity } : {}) }
+    : undefined;
+  const body: Record<string, unknown> = {
     model: opts.modelId,
     instructions,
     input,
@@ -234,7 +241,12 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     ),
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
+    ...(text ? { text } : {}),
   };
+  // What went out, for comparing with what the endpoint says it ran — read off
+  // the final body so an extraBody override is what gets compared.
+  const sentEffort = (body.reasoning as { effort?: unknown } | undefined)?.effort;
+  const sentTemperature = body.temperature;
   // The wire body is a different shape from the caller's messages (items, not
   // messages; instructions lifted out), so the log's request entry alone
   // cannot show what was sent — report the body the way the Anthropic adapter
@@ -290,6 +302,12 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     opts.onChunk({ toolCalls, ...(carry ? { _responseItems: carry } : {}) });
   };
 
+  // The terminal response echoes the request. A value that came back different
+  // is an endpoint quietly running something else — measured on a relay:
+  // effort `max` sent, `none` echoed, zero reasoning tokens (gpt56-plan.md P2).
+  // Reported, never retried; a response without the field says nothing.
+  const wireRewrites: { field: "reasoning.effort" | "temperature"; sent: string; echoed: string }[] = [];
+
   const finish = () => {
     emitToolCalls();
     opts.onChunk({
@@ -297,6 +315,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
       ...(truncated ? { truncated } : {}),
       ...(stopReason ? { stopReason } : {}),
       ...(cachedTokens ? { cachedTokens } : {}),
+      ...(wireRewrites.length ? { wireRewrites } : {}),
     });
   };
 
@@ -305,6 +324,18 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     inputTokens = u.inputTokens;
     outputTokens = u.outputTokens;
     cachedTokens = u.cachedTokens;
+    const echo = response as { reasoning?: { effort?: unknown }; temperature?: unknown } | undefined;
+    const echoedEffort = echo?.reasoning?.effort;
+    if (typeof sentEffort === "string" && typeof echoedEffort === "string" && echoedEffort !== sentEffort) {
+      wireRewrites.push({ field: "reasoning.effort", sent: sentEffort, echoed: echoedEffort });
+    }
+    const echoedTemperature = echo?.temperature;
+    if (
+      typeof sentTemperature === "number" && typeof echoedTemperature === "number"
+      && Math.abs(echoedTemperature - sentTemperature) > 1e-6
+    ) {
+      wireRewrites.push({ field: "temperature", sent: String(sentTemperature), echoed: String(echoedTemperature) });
+    }
   };
 
   const callAt = (index: unknown) => {

@@ -40,7 +40,7 @@ export type WireInput = Pick<
   Model,
   | "type" | "modelId" | "maxOutput" | "temperature" | "reasoningEffort"
   | "thinkingCategory" | "thinkingBudget" | "serverTools" | "structuredOutput"
-  | "prefix" | "caps"
+  | "prefix" | "caps" | "textVerbosity"
 >;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -122,6 +122,8 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
         ? { key: "text.format", value: so, scope: "structured" }
         : { key: "response_format", value: so, scope: "structured" });
   }
+  // Sent on every request, beside (not instead of) a structured task's text.format.
+  if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
 }

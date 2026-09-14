@@ -204,9 +204,52 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 
 ## 9. 未验
 
-- 官方端点本身（以上全部经中转站）；`reasoning.mode: "pro"` 与 `background` 在官方上的行为。
+- 官方端点本身（以上全部经中转站）；`reasoning.mode: "pro"` 与 `background` 在官方上的行为
+  （两台中转站、`[Pro]` 与 `[Plus]` 两档都回显 `standard`）。
+- 官方端点 `store:false` 且不发 `include:["reasoning.encrypted_content"]` 时 reasoning 条目
+  是否仍带加密内容；回传一个只有 `id` 的 reasoning 条目是否 400（中转站上加密内容总是自带，
+  且 2026-09-14 那次工具轮没产生 reasoning 条目，没测到）。
+- 官方 ① 族「5.4 起 `reasoning_effort ≠ none` 不能带工具」；GPT-5 上非 1 的 `temperature`。
 - `response.reasoning_text.delta` 何时出现（哪些模型放原始推理）。
 - 并行工具调用的事件交错（多个 `function_call` 同时流）。
 - `truncation: "auto"`、`context_management`、`conversation` / `previous_response_id`。
 - `phase` 缺失的真实代价（需要多轮、带工具的长任务对照）。
-- 5.6-sol 的多轮回传（两次都撞上中转站 502）。
+- 5.6-sol 的多轮回传（第八个样本两次 502；第十个样本只在 terra 上跑了回传）。
+- 5.6-luna（两台中转站的 `[Plus]` 档都没有）。
+
+## 10. GPT-5.6 与内置工具（2026-09-14 补测，`[Plus]` 档 terra / sol）
+
+来源是 [`landscape.md`](landscape.md) §7 第十个样本；只列能当协议事实用的，中转站改写
+（effort / temperature 回显、`max_output_tokens` 失效、系统提示注入）留在那边。
+
+**5.6 的请求字段**（terra）：
+
+| 字段 | 结果 |
+| --- | --- |
+| `reasoning.effort` `xhigh` / `max` | 200，原样回显——5.6 收满 7 档上的这两档 |
+| `reasoning.context: "current_turn"` | 200，回显 `current_turn`；默认回显 `all_turns` |
+| `text.verbosity: "low"` | 200，回显 `low`，**确实变短**（同题 "9.9 is larger." 对默认的 "9.9 is larger than 9.11."） |
+| `reasoning.summary` 不发 | 回显 `null`，reasoning 条目 `summary: []`；发 `auto` 回显 `detailed` |
+| 工具 + effort `medium` / 强制 `{type:"function"}` + effort `high` | 都拿到 `function_call`；回传三种写法（原样 / 删 `encrypted_content` / 删 reasoning）第二轮都 200 且答对 |
+
+**内置 `web_search`**（官方写法 `{type:"web_search", search_context_size?}`）：
+
+```
+response.output_item.added      { item: {type:"web_search_call", status:"in_progress"} }
+→ response.web_search_call.in_progress → .searching → .completed      // 每次 ~10 s
+→ response.output_item.done     { item: {type:"web_search_call", status:"completed",
+                                   action: {type:"search", query, queries:[…], sources:[{type:"url",url}]}
+                                         | {type:"open_page", url} } }
+…（与 reasoning 条目交替，一次回答 2–5 个）
+→ message 条目：output_text.annotations[] 里是 {type:"url_citation", url, title, start_index, end_index}
+→ response.completed            { response: { usage, tool_usage: { web_search: { num_requests } } } }
+```
+
+- 与千问 `web_search_call` 同一个 item 类型，但 **`action.type` 多出 `open_page`**（没有
+  `queries` / `sources`，只有 `url`）；`sources` 只有标题缺失的 URL。
+- `include: ["web_search_call.action.sources"]` 是官方文档要 sources 的写法；实测发了有 sources，
+  没对照不发的情况。
+- **成本形态**：搜回的内容计入 `input_tokens`（一次 45.7K），另按 `num_requests` 计次。
+- **时序**：首个事件可能晚到 54 s（请求期间模型先规划），之后每个 `web_search_call` 之间
+  ~10 s 无文本 delta。
+- Chat Completions 面的 `web_search_options` 在非 search 模型上被忽略，不报错。

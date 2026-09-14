@@ -272,6 +272,10 @@ memo 可以推广到「这个模型拒绝 `thinking_budget`」「这个模型拒
   - ✅ `input_image` data URL 可用；`json_object` 需 "json" 字样。
   - ❌ 仍未定：`phase` 缺失的真实代价（样本太小）；`mode:"pro"` 与官方 ① 族"5.4 起思考不能带工具"
     （中转站翻译过，验不了）；5.6-sol 的多轮回传（中转站 502）。
+  - 2026-09-14 在第二台 New API（`[Plus]` 档 5.6-terra / -sol）上补测：5.6 的 `xhigh` / `max` /
+    `context` / `verbosity` 与内置 `web_search` 的事实进了 [`responses.md`](responses.md) §10，
+    中转站的改写进了 [`landscape.md`](landscape.md) 第十个样本；由此暴露的缺口与方案在
+    [`gpt56-plan.md`](gpt56-plan.md)。上面三条 ❌ 仍然没法在中转站上定。
 
 ## 5. 弃案
 

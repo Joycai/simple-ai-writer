@@ -88,7 +88,7 @@ describe("connOptions", () => {
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
       "modelId", "prefix", "reasoningEffort", "safetySettings", "serverTools",
-      "standard", "structuredOutput", "temperature", "thinkingBudget", "thinkingCategory",
+      "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory",
     ]);
   });
 });

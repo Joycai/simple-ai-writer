@@ -63,6 +63,12 @@
  *     model simply doesn't call it), which is what lets it be a standing
  *     per-model permission like the rest.
  *
+ * The official Responses endpoint joined last (2026-09-14, GPT-5.6 through a
+ * relay — docs/api/responses.md §10): OpenAI's own `{type:"web_search"}`
+ * streams back the same `web_search_call` item, with two more action kinds
+ * (`open_page`, `find_in_page`) that carry a URL instead of queries. Only
+ * `web_search` reaches that wire; the other three ids are DashScope's names.
+ *
  * Neither needs `web_search` beside it, and Chat Completions has no spelling
  * for either (a guessed `search_options.enable_image_search` was silently
  * ignored). Both bill per call at several times search's rate (¥24 / ¥48 per
@@ -144,11 +150,12 @@ function safeParse(s: string): unknown {
 export function supportsServerTools(standard: ApiStandard): boolean {
   return familyOf(standard) === "anthropic"
     || standard === "openai_compat"
-    // Same compat-only narrowing for the Responses family: `web_search` as a
-    // bare built-in `tools[]` entry is DashScope's measured spelling; the
-    // official endpoint's own web search tool is a different contract nobody
-    // has measured here.
-    || standard === "openai_responses_compat";
+    // The Responses family takes both halves. `{type:"web_search"}` is
+    // DashScope's built-in on compat and OpenAI's own on the official
+    // endpoint — the same item type back (`web_search_call`), measured on
+    // GPT-5.6 through a relay 2026-09-14 (docs/api/responses.md §10). Which
+    // *other* ids reach the official wire is `supportsServerTool`'s call.
+    || familyOf(standard) === "responses";
 }
 
 /**
@@ -241,19 +248,23 @@ export function openaiServerToolsBody(
 
 /**
  * The built-in `tools[]` entries these ids become on the Responses wire —
- * DashScope's `/responses` spells both as bare `{type}` objects.
+ * bare `{type}` objects, on DashScope's `/responses` and on OpenAI's own.
  *
- * Compat only, same gate as `openaiServerToolsBody` and for the same reason: a
- * row that travelled onto an official endpoint must not carry DashScope's
- * `web_extractor` there. Re-normalised here too, because the endpoint answers
- * a lone extractor with `response.failed` rather than ignoring it.
+ * Filtered per id through `supportsServerTool` rather than trusting the row:
+ * a row that travelled onto the official endpoint (import, a switched
+ * standard) must carry only `web_search` there — `web_extractor` and the image
+ * searches are DashScope's names, unknown to api.openai.com. Re-normalised
+ * too, because DashScope answers a lone extractor with `response.failed`
+ * rather than ignoring it.
  */
 export function responsesServerTools(
   standard: ApiStandard,
   ids: readonly ServerToolId[] | undefined,
 ): { type: ServerToolId }[] {
-  if (standard !== "openai_responses_compat") return [];
-  return (normalizeServerTools(ids ?? []) ?? []).map((type) => ({ type }));
+  if (familyOf(standard) !== "responses") return [];
+  return (normalizeServerTools(ids ?? []) ?? [])
+    .filter((id) => supportsServerTool(standard, id))
+    .map((type) => ({ type }));
 }
 
 // ─── What comes back ─────────────────────────────────────────────────────────
@@ -439,9 +450,18 @@ export function responsesServerToolEvent(
   const action = (it.action && typeof it.action === "object" ? it.action : {}) as Record<string, unknown>;
   const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
+  // OpenAI's own search also opens pages and searches within them; those
+  // actions carry a `url` and no queries or sources (responses.md §10).
+  const pageUrl = typeof action.url === "string" && action.url ? action.url : undefined;
+
   if (phase === "call") {
+    const queries = strings(action.queries);
     const input: Record<string, unknown> = name === "web_search"
-      ? { queries: strings(action.queries) }
+      ? pageUrl
+        ? { url: pageUrl, ...(typeof action.pattern === "string" ? { pattern: action.pattern } : {}) }
+        // `queries` is DashScope's and OpenAI's plural; OpenAI also sends the
+        // singular `query`, alone on some items.
+        : { queries: queries.length || typeof action.query !== "string" ? queries : [action.query] }
       : name === "web_extractor"
         ? { urls: strings(it.urls), ...(typeof it.goal === "string" ? { goal: it.goal } : {}) }
         : parseJsonObject(it.arguments);
@@ -453,6 +473,7 @@ export function responsesServerToolEvent(
     return { phase, id, name, results: readImageHits(it.output), ...(error ? { error } : {}) };
   }
   if (name === "web_search") {
+    if (pageUrl) return { phase, id, name, results: [{ title: pageUrl, url: pageUrl }], ...(error ? { error } : {}) };
     const urls = Array.isArray(action.sources)
       ? action.sources.map((s) => (s && typeof s === "object" ? (s as Record<string, unknown>).url : undefined))
       : [];

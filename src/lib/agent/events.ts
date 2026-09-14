@@ -13,6 +13,7 @@
  */
 
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
+import type { WireRewrite } from "../ai/types";
 import type { HandoffBrief } from "./handoff";
 import type { LorePlanStep } from "./plan";
 import type { BlockWindow, RewriteSummary } from "../diff/blocks";
@@ -322,6 +323,14 @@ export type AgentEvent = AgentEventScope & (
        *   relays, and "absent" must never be read as "estimated high".
        */
       incomparable?: "server-tools" | "images" | "no-usage";
+      /**
+       * Request fields the endpoint answered with a different value than the
+       * one sent — `reasoning.effort` asked `max`, echoed `none`. The round
+       * succeeded, so this is reported rather than raised; without it an
+       * author who turned deep thinking on has no way to see it never ran
+       * (docs/api/gpt56-plan.md P2). Absent when nothing was rewritten.
+       */
+      wireRewrites?: WireRewrite[];
       at: number;
     }
   | { kind: "tool-step"; step: ToolStep; at: number }

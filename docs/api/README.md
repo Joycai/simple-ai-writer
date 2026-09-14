@@ -64,7 +64,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | [`reasoning.md`](reasoning.md) | 思考强度、思维链取回、以及**回传义务**（唯一会让请求被拒的一件） | ✅ |
 | [`usage.md`](usage.md) | token 计数的两个口径陷阱、输出上限、上下文窗口为何只能靠探测 | ✅ |
 | [`structured.md`](structured.md) | JSON mode / schema / 强制 tool_choice 的四族做法，含 `json_object` 的隐藏前置条件 | ✅ |
-| [`responses.md`](responses.md) | ② 族的骨架、字段、流式事件序列、回传与错误——GPT-5.4 / 5.5 / 5.6 经中转站实测，可搬去别的项目 | ✅ |
+| [`responses.md`](responses.md) | ② 族的骨架、字段、流式事件序列、回传与错误——GPT-5.4 / 5.5 / 5.6 经中转站实测，可搬去别的项目；§10 是 5.6 的新字段与内置 `web_search` | ✅ |
+| [`gpt56-plan.md`](gpt56-plan.md) | GPT-5.6 支持度盘点：已通的、缺口、逐条方案（本项目的取舍，不是协议事实） | 计划 |
 
 ## 接一个新协议族时，先看这三条
 
