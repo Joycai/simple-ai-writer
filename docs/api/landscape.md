@@ -999,6 +999,13 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
 - **上游不稳**：线路探针 27 条里 12 条在 150 s 处超时（非流式），分布无规律（同一字段换个
   值就过）；sol 比 terra 慢一个量级（同一题 51–76 s 对 5–15 s）。adapter 实测用流式，
   12 条里除 `max_output_tokens` 外全过。
+- **sol 的 `input_file`（2026-09-14 补测，同一台、`[Plus]gpt-5.6-sol`，adapter 用例连跑 6 次）**：
+  **4 过 2 败**，过的 3.4–9.6 s 读出 `PINEAPPLE`。两次失败形状不同：一次 3 s 内
+  `response.failed`「Upstream request failed」（线路问题）；另一次 108 s 后**正常结束、答非所问**——
+  「I'll locate the PDF, extract its text…」，即**文件没到模型手里，也不报错**。对照组同模型的
+  `input_image` 2 次里 1 次 120 s 超时、纯文本 2 次全过。结合上面「同一档位背后不止一个上游」，
+  判断是**部分上游丢 `input_file`**，不是 sol 不会读 PDF。对作者的影响：绑成 PDF 理解子代理时，
+  偶发一次「模型说要去找文件」式的空答，重试即可；官方端点**未验**。
 - 目录里的模型 id 带档位前缀（`[Plus]gpt-5.6-terra`），响应的 `model` 回显去掉前缀
   （`gpt-5.6-terra`）——按 id 前缀查表（`modelLimits` / `jsonMode`）的逻辑认不出带前缀的 id，
   与第八个样本一致。

@@ -21,7 +21,7 @@
 | 强制 `tool_choice` | `{type:"function", name}` / `required`，400 学习兜底 | effort `high` 下强制合法 |
 | 无状态回传 | reasoning / function_call / message 条目原样回传 | 三种残缺回传都 200 |
 | 结构化输出 | `gpt-5` 前缀自动 `text.format: json_schema`，不发 `strict` | terra 通过 |
-| 图片 / PDF | `input_image` / `input_file` | terra 通过 |
+| 图片 / PDF | `input_image` / `input_file` | terra 通过；sol 的 `input_file` 6 次 4 过（失败归因于中转站上游，含一次静默丢文件，见 landscape 第十个样本） |
 
 sol / terra / luna **不需要按型号分支**：三款共用上面每一条，差别只在后端给不给某一档
 （sol 的 `mode:"pro"`），而那是端点的事。
