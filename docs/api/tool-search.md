@@ -1,9 +1,10 @@
 # 工具按需加载（tool search / deferred loading）：各族协议事实
 
 > **性质**：与 [`tools.md`](tools.md) 同类的协议事实页，外加一节「与本项目的关系」。
-> **来源**：2026-09-14 读各家**官方文档**（链接见每节末尾）。**全部未实测**——唯一的实测是
-> 一条报错：New API 中转站上单发 `{type:"tool_search"}` 回 400
-> `tools.tool_search requires at least one deferred tool`（[`landscape.md`](landscape.md) 第十个样本）。
+> **来源**：2026-09-14 读各家**官方文档**（链接见每节末尾）。**形状全部未实测**——实测到的只有
+> 两条拒绝：New API 中转站上单发 `{type:"tool_search"}` 回 400
+> `tools.tool_search requires at least one deferred tool`（[`landscape.md`](landscape.md) 第十个样本）；
+> xAI 官方端点带着延迟工具发，回 403「仅对 alpha 用户开放」（第十一个样本）。
 > **状态**：`living`。本项目是否采用见 [`gpt56-plan.md`](gpt56-plan.md) P7（后一期）。
 
 ## 0. 一句话
@@ -17,7 +18,7 @@
 
 | | ② OpenAI Responses | ④ Anthropic Messages | ② xAI Responses | ③ Gemini | ① Chat Completions（全部） |
 | --- | --- | --- | --- | --- | --- |
-| 原生支持 | ✅ GPT-5.4 起 | ✅ Sonnet/Haiku/Opus 4.5 起 | ✅ 仅见于 OpenAPI 规格 | ❌ | ❌ |
+| 原生支持 | ✅ GPT-5.4 起 | ✅ Sonnet/Haiku/Opus 4.5 起 | ⚠️ 规格里有，**实测 403**（2026-09-14，grok-4.3）：`The tool_search tool and defer_loading are only available for alpha users` | ❌ | ❌ |
 | 延迟标记 | 函数 / MCP / custom 工具上 `defer_loading: true` | 工具上 `defer_loading: true` | 函数 / `mcp` 上 `defer_loading: true` | —（带这个字段整个请求被拒，第三方报告） | — |
 | 搜索工具 | `{type:"tool_search", execution?: "server"\|"client", description?, parameters?}` | `tool_search_tool_regex_20251119` / `tool_search_tool_bm25_20251119`（或不带日期的别名） | `{type:"tool_search", execution:"server"}`，只有服务端 | — | — |
 | 客户端自己搜 | ✅ `execution:"client"`：模型发 `tool_search_call` 后停，应用回 `tool_search_output{tools:[…]}` | ✅ 自己的工具在 `tool_result` 里返回 `tool_reference` 块 | ❌ | — | — |

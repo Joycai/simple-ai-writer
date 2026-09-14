@@ -25,8 +25,19 @@ const KEY = process.env.OPENAI_KEY ?? "";
 const BASE = process.env.OPENAI_RESPONSES_BASE ?? DEFAULT_OPENAI_BASE;
 const MODELS = (process.env.OPENAI_RESPONSES_MODELS ?? "gpt-5.4,gpt-5.5,gpt-5.6-sol").split(",").map((s) => s.trim()).filter(Boolean);
 const STANDARD: ApiStandard = BASE.replace(/\/+$/, "") === DEFAULT_OPENAI_BASE ? "openai_responses" : "openai_responses_compat";
-/** GPT-5.4's effort ceiling is `xhigh`; `max` is a 400 there (responses.md §2.1). */
-const capsAtXhigh = (m: string) => /5\.4/.test(m);
+/**
+ * Models whose effort ceiling is `xhigh`, so `max` is a 400: GPT-5.4
+ * (responses.md §2.1) and every Grok (`Invalid reasoning effort.` — landscape.md
+ * 第十一个样本, measured 2026-09-14).
+ */
+const capsAtXhigh = (m: string) => /5\.4|grok/.test(m);
+/**
+ * The cheapest effort a model accepts, for the cases that only want thinking
+ * out of the way. `off` everywhere except Grok 4.5 / 4.6, which refuse
+ * `none` outright — sending it there turned five unrelated cases into the
+ * same 400 and measured nothing they were written for.
+ */
+const quiet = (m: string) => (/grok-4\.[56]/.test(m) ? "low" : "off");
 
 const PROMPT: StreamMessage[] = [{ role: "user", content: "In one word: what colour is the sky on a clear day?" }];
 
@@ -82,8 +93,10 @@ function tinyPdf(word: string): string {
   return `data:application/pdf;base64,${Buffer.from(out, "latin1").toString("base64")}`;
 }
 
-// 16×16 solid red PNG — small enough to cost nothing, large enough for every reader.
-const RED_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAF0lEQVR4nGO4IyJCEmIY1TCqQWTYagAAAnEEEPBHj2sAAAAASUVORK5CYII=";
+// 32×32 solid red PNG — small enough to cost nothing, large enough for every
+// reader. It was 16×16 until xAI refused it: "Image has 256 total pixels
+// (16x16), which is below the minimum of 512 pixels" (landscape.md 第十一个样本).
+const RED_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAJ0lEQVR42u3NsQkAAAjAsP7/tF7hIASyp6lTCQQCgUAgEAgEgi/BAjLD/C5w/SM9AAAAAElFTkSuQmCC";
 
 describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
   it("connection test lists models (or falls back to POST /responses on a relay without /models)", async () => {
@@ -110,7 +123,13 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
       expect(body).not.toHaveProperty("reasoning");
     }, 120_000);
 
-    it("effort off → reasoning:{effort:none}, no summary events", async () => {
+    it("effort off → reasoning:{effort:none}, no summary events (a 400 on Grok 4.5 / 4.6, which cannot stop thinking)", async () => {
+      if (/grok-4\.[56]/.test(m)) {
+        // `This model does not support \`reasoning_effort\` value \`none\`.` — the
+        // endpoint's own words, same rule as the effort ceiling above.
+        await expect(run({ modelId: m, reasoningEffort: "off" })).rejects.toThrow(/does not support/i);
+        return;
+      }
       const c = await run({ modelId: m, reasoningEffort: "off" });
       expect(c.bodies[0].reasoning).toEqual({ effort: "none" });
       expect(c.reasoning).toBe("");
@@ -131,13 +150,13 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
 
     it("effort max: a 400 naming the legal values on 5.4, accepted on 5.5 / 5.6", async () => {
       const p = run({ modelId: m, reasoningEffort: "max" });
-      if (capsAtXhigh(m)) await expect(p).rejects.toThrow(/Unsupported value|not supported/i);
+      if (capsAtXhigh(m)) await expect(p).rejects.toThrow(/Unsupported value|not supported|Invalid reasoning effort/i);
       else expect((await p).text.length).toBeGreaterThan(0);
     }, 180_000);
 
     it("incomplete on max_output_tokens → truncated, stopReason max_output_tokens", async () => {
       const c = await run({
-        modelId: m, reasoningEffort: "off", extraBody: { max_output_tokens: 16 },
+        modelId: m, reasoningEffort: quiet(m), extraBody: { max_output_tokens: 16 },
         messages: [{ role: "user", content: "Write three paragraphs about the sea." }],
       });
       expect(c.done).toMatchObject({ done: true, truncated: true, stopReason: "max_output_tokens" });
@@ -190,7 +209,7 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
       const schema = { name: "answer", parameters: { type: "object", properties: { colour: { type: "string" }, confidence: { type: "number" } }, required: ["colour"] } };
       const shaping = jsonModeShaping({ standard: STANDARD, baseUrl: BASE, modelId: m, structuredOutput: "json_schema" }, "", schema);
       expect(shaping.mode).toBe("json_schema");
-      const c = await run({ modelId: m, reasoningEffort: "off", extraBody: shaping.extraBody });
+      const c = await run({ modelId: m, reasoningEffort: quiet(m), extraBody: shaping.extraBody });
       const format = (c.bodies[0].text as { format: Record<string, unknown> }).format;
       expect(format.type).toBe("json_schema");
       expect(format).not.toHaveProperty("strict");
@@ -202,7 +221,7 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
     it("json_object under text.format → valid JSON", async () => {
       const shaping = jsonModeShaping({ standard: STANDARD, baseUrl: BASE, modelId: m, structuredOutput: "json_object" }, "", undefined);
       const c = await run({
-        modelId: m, reasoningEffort: "off", extraBody: shaping.extraBody,
+        modelId: m, reasoningEffort: quiet(m), extraBody: shaping.extraBody,
         messages: [{ role: "user", content: `Answer as a JSON object with one key "colour": what colour is the sky? ${shaping.cue ?? ""}` }],
       });
       expect(() => JSON.parse(c.text)).not.toThrow();
@@ -210,7 +229,7 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
 
     it("input_image: a data-URL picture is read", async () => {
       const c = await run({
-        modelId: m, reasoningEffort: "off",
+        modelId: m, reasoningEffort: quiet(m),
         messages: [{ role: "user", content: [{ type: "text", text: "What colour is this image? One word." }, { type: "image_url", image_url: { url: RED_PNG } }] }],
       });
       expect(c.text).toMatch(/red/i);
@@ -218,7 +237,7 @@ describe.skipIf(!KEY)("LIVE OpenAI Responses", () => {
 
     it("input_file: a data-URL PDF is read (unverified before this run — responses.md §9)", async () => {
       const c = await run({
-        modelId: m, reasoningEffort: "off",
+        modelId: m, reasoningEffort: quiet(m),
         messages: [{ role: "user", content: [{ type: "text", text: "What is the only word printed in this PDF? Reply with just that word." }, { type: "file", file: { file_data: tinyPdf("PINEAPPLE"), filename: "one-word.pdf" } }] }],
       });
       expect(c.text).toMatch(/pineapple/i);

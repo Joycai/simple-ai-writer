@@ -1002,7 +1002,36 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
   （`gpt-5.6-terra`）——按 id 前缀查表（`modelLimits` / `jsonMode`）的逻辑认不出带前缀的 id，
   与第八个样本一致。
 
-### 第十一个样本：xAI Grok 的 ② 族（2026-09-14 文档口径，**未实测**）
+### 第十一个样本：xAI Grok 的 ② 族（2026-09-14，官方端点实测 grok-4.5 / 4.6，另用 grok-4.3 做线路探针）
+
+> **实测结论先于下面的文档对照表**（表是实测前按文档写的，⚠️/❌ 以这里为准）：
+>
+> - **adapter 实测**（`live.openai-responses.test.ts`，官方 `https://api.x.ai/v1`，按 `openai_responses_compat`）：
+>   grok-4.5、grok-4.6 各 12 条**全过**——文本流、`response.completed` 带 usage、思考摘要、截断
+>   （`max_output_tokens:16` → `incomplete`）、工具轮回传、强制 `tool_choice`、`json_schema`、`json_object`、
+>   `input_image`、`input_file`。
+> - **effort**：4.5 / 4.6 **拒 `none`**（400 `This model does not support \`reasoning_effort\` value \`none\``），
+>   `low` / `medium` / `xhigh` 收，**默认回显 `high`**；`max` 在 4.3 / 4.5 / 4.6 都是 400 `Invalid reasoning effort.`。
+>   4.5 发 `xhigh` 原样回显 `xhigh`（文档说按 `high` 处理，回显看不出）。4.3 收 `none`。
+>   **本项目的「关闭」芯片在 4.5 / 4.6 上是 400**——越界由端点说话的规则下这是预期的，但作者没有
+>   别的办法关掉思考，因为这两款根本关不掉。
+> - **加密推理 ❌→✅**：不发 `include` 时 reasoning 条目**没有** `encrypted_content`（文档属实），发了 2,904 字节；
+>   但**不带加密内容的原样回传，第二轮照样 200 且答对**（4.3 / 4.5 / 4.6 工具轮都过）。缺的只是往轮推理的延续。
+> - **`input_file` ❌→✅**：`file_data` 里放 `data:` URL 与放纯 base64 **都读得出**（`PINEAPPLE`）。
+> - **终止事件 ⚠️→✅**：流里有 `response.completed`（带完整 usage），另有 `[DONE]` 收尾；adapter 读到的用量正常。
+> - **图片最小尺寸**：16×16 PNG 400 `Image has 256 total pixels (16x16), which is below the minimum of 512 pixels`；
+>   1×1 400 `Both width and height must be at least 8 pixels`。32×32 通过。webp 未测（本机无编码器）。
+> - **采样**：`temperature:0.5` 原样回显（默认回显 `0.7`）；推理模型上发 `frequency_penalty` **200 未报错**（文档说会报错）。
+> - **`json_schema` 带 `strict:true`**：200，回显里 `strict` 被去掉，输出合 schema。
+> - **`web_search`**（4.3）：200，`web_search_call` 的 `action.type` 是 `open_page`（`url`），答案带 `url_citation`；
+>   usage 里 `server_side_tool_usage_details.web_search_calls: 1`，**一次搜索 6,851 输入 token**。本项目 P4 的
+>   `open_page` 解析在这里正好用得上。
+> - **tool search**：带 `defer_loading` 发，**403** `The tool_search tool and defer_loading are only available for alpha users`。
+> - **usage 形状**：OpenAI 形 + `num_sources_used` / `num_server_side_tools_used` / `cost_in_usd_ticks` /
+>   `context_details`；**`phase` 在 message 上缺失**（`null`）。4.6 同题输入 666 token、4.3 是 222——4.6 自带更长的系统前缀。
+>
+> **对本项目**：主路无需改 adapter。可做的两件小事：`ProviderDrawer` 加一条 `xAI (Grok)` 预设
+> （`openai_responses_compat` + `https://api.x.ai/v1`）；思考类目的「关闭」在这两款上会 400，可在抽屉提示里点一句。
 
 xAI 把 Responses 当成主路：迁移页称它是「推荐的交互方式」，对照表把 Chat Completions 标成
 **Deprecated**（但仍作 legacy 端点提供，未给下线日期）；Anthropic SDK 兼容（`/v1/messages`）
