@@ -1025,12 +1025,59 @@ export function parseAsrFormat(raw: unknown): AsrFormat | undefined {
   return ASR_FORMATS.includes(raw as AsrFormat) ? (raw as AsrFormat) : undefined;
 }
 
-function parseImageCaps(raw: unknown): ImageCaps | undefined {
-  if (typeof raw !== "string" || !raw) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as ImageCaps) : undefined;
-  } catch {
-    return undefined;
+/**
+ * The values this build can honour. Records rather than arrays so that adding a
+ * member to either union fails `tsc` here until it is listed — an unlisted value
+ * would otherwise be dropped from every stored model the day it ships.
+ */
+const IMAGE_ROUTES: Record<ImageRoute, true> = {
+  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true,
+};
+const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
+  nanobanana: true, "gpt-image-2": true, "wan2.7": true, "qwen-image": true,
+};
+
+const listed = (table: object, v: unknown): boolean =>
+  typeof v === "string" && Object.prototype.hasOwnProperty.call(table, v);
+
+/**
+ * Narrow an image model's `caps` — the stored JSON text, or the object a backup
+ * carries — field by field. Shared by the DB read and `parseConfigBundle`.
+ *
+ * Every consumer reads these fields without a second check (`caps.sizes.join`
+ * in the model drawer, `.map` in the image modal, `comfy.workflow` parsed as
+ * text), so a cast here turned a hand-edited backup into a crash on a page far
+ * from the restore. A field this build cannot read degrades to absent on its
+ * own; nothing readable at all → no caps. See config-backup-plan.md §5.5.
+ */
+export function parseImageCaps(raw: unknown): ImageCaps | undefined {
+  let value = raw;
+  if (typeof raw === "string") {
+    if (!raw) return undefined;
+    try {
+      value = JSON.parse(raw) as unknown;
+    } catch {
+      return undefined;
+    }
   }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const r = value as Record<string, unknown>;
+
+  const caps: ImageCaps = {};
+  if (typeof r.edit === "boolean") caps.edit = r.edit;
+  if (listed(IMAGE_DIALECT_IDS, r.dialect)) caps.dialect = r.dialect as ImageDialect;
+  // An empty list is kept: it means "send no size", which absent does not.
+  if (Array.isArray(r.sizes)) {
+    caps.sizes = r.sizes.filter((s): s is string => typeof s === "string" && s.length > 0);
+  }
+  if (typeof r.maxRefs === "number" && Number.isInteger(r.maxRefs) && r.maxRefs > 0) {
+    caps.maxRefs = r.maxRefs;
+  }
+  if (listed(IMAGE_ROUTES, r.route)) caps.route = r.route as ImageRoute;
+  if (typeof r.asyncTask === "boolean") caps.asyncTask = r.asyncTask;
+  const comfy = r.comfy as Record<string, unknown> | null | undefined;
+  if (comfy && typeof comfy === "object" && typeof comfy.workflow === "string") {
+    caps.comfy = { workflow: comfy.workflow };
+  }
+  return Object.keys(caps).length ? caps : undefined;
 }

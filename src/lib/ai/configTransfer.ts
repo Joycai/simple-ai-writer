@@ -31,6 +31,7 @@ import {
   parseModelType,
   parseTranslateFormat,
   parseAsrFormat,
+  parseImageCaps,
   promptUpsert,
   providerUpsert,
   type Model,
@@ -285,7 +286,9 @@ export function parseConfigBundle(
       // Unknown value → auto, which sends what an undeclared model always sent.
       structuredOutput: parseStructuredOutputMode(r.structuredOutput),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
-      caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
+      // Field by field, not cast: the drawer and the image modal read these
+      // without a second check, so a malformed value crashes a page later.
+      caps: parseImageCaps(r.caps),
     }));
   }
 

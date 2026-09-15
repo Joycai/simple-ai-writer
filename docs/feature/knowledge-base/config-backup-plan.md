@@ -191,6 +191,8 @@ export function parseConfigBundle(
 
 **恢复之后要重读什么，文件导入和服务端恢复共用一个函数**，顺序也是规定好的：先 `aiStore.reloadSelections()`（模型选择和子代理绑定只在启动时从偏好读一次，恢复写进偏好的值不重读就进不了内存），再 `loadConfig()`（清失效 id 这一步要检查的是**恢复来的** id；反过来先跑，清掉并写回偏好的是本窗口旧的那批），然后是外观偏好和 `docFormatStore.reload()`（`hydrate` 只跑一次）。原先两条路各有一份清单：服务端那份只有 `reloadFromPrefs` 一行，恢复报「完成」，供应商列表、模型选择、排版格式却要等重启；文件那份调了 `loadConfig`，但它的清理给每个子代理绑定都换了新对象，按引用比较的持久化订阅把本窗口旧的绑定写回偏好，恢复来的绑定就这样丢了。所以 `loadConfig` 现在只在 id 真的失效时才替换对象，`aiStoreConfigRestore.test.ts` 钉住这一点。字段层面有 `configTransferRoundTrip.test.ts` 兜底：供应商 / 模型 / Prompt 的全部字段按 `Required<…>` 走一遍「写行 → 读行 → 备份 JSON → `parseConfigBundle`」，任何一步漏掉一个字段都会失败，给类型加字段而夹具没跟上时 `tsc` 直接报错。
 
+**图像模型的 `caps` 恢复时逐字段校验**（`configDb.parseImageCaps`，读库和 `parseConfigBundle` 共用这一个）。它原先两头都是 `as ImageCaps` 直接信任，而下游读字段时没有第二道检查：模型抽屉调 `caps.sizes.join`、出图弹窗调 `caps.sizes.map`、ComfyUI 路线把 `caps.comfy.workflow` 当文本解析。于是一份手改过的备份里写 `"sizes": "1024x1024"`，恢复时不报错，而是之后在另一台从没见过这份文件的机器上把设置页弄崩。规则和其余声明字段一致：读不懂的值**逐字段**降级成缺席，不连累同一个模型的其他字段，更不丢掉整个模型；`dialect` / `route` 只认本版本知道的取值（清单用 `Record<联合类型, true>` 写，联合类型加成员而清单没跟上时 `tsc` 报错），`maxRefs` 要正整数，`sizes` 只留非空字符串，全部字段都读不懂时整个 `caps` 缺席。见 `configImageCaps.test.ts`。
+
 **恢复前自动留一份回滚包**（可做可不做，倾向做）：`buildConfigBundle(true)` 写到 `<appdata>/config-rollback-<时间戳>.json`，只保留最近 3 份。恢复是唯一一个会同时覆盖数据库行和 keyring 的操作，而 keyring 的旧值一旦被盖就真没了。
 
 ---
