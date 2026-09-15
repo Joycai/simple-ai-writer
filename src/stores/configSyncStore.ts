@@ -43,7 +43,7 @@ import { getServerUrl } from "../lib/sync/config";
 import { SyncConflictError } from "../lib/sync/client";
 import { listProviders } from "../lib/ai/configDb";
 import { getGlobalDb } from "../lib/project";
-import { useAppStore } from "./appStore";
+import { refreshAfterConfigImport } from "./configImportRefresh";
 
 /** Where the restore flow is. `idle` = no modal on screen. */
 type RestorePhase = "idle" | "downloading" | "password" | "preview" | "applying" | "done";
@@ -270,8 +270,8 @@ export const useConfigSyncStore = create<ConfigSyncState>((set, get) => ({
     set({ phase: "applying", error: null });
     try {
       await applyPull(prepared);
-      // Imported preferences are in the store but not yet on screen.
-      useAppStore.getState().reloadFromPrefs();
+      // The merge wrote tables and prefs; nothing on screen has re-read them.
+      await refreshAfterConfigImport();
       if (target && restorePassword && remember) {
         await rememberSlotPassword(getServerUrl(), target.slot.id, restorePassword);
       }
