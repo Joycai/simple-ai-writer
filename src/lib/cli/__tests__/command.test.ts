@@ -112,8 +112,13 @@ describe("commandAccess — cross-platform approval boundary", () => {
     "wc -w README.md",
     "stat README.md",
     "git status --short",
-    "git -C ../other log --oneline -5",
+    "git -C sub log --oneline -5",
     "git diff -- README.md",
+    "git diff --output-indicator-new=+ -- README.md",
+    "git grep -o TODO",
+    "grep -n 'TODO$' README.md",
+    "tree -L 2 src",
+    "cat ./notes/a.md",
   ])("POSIX read: %j", (command) => {
     expect(commandAccess(command, "posix")).toBe("read");
   });
@@ -128,6 +133,7 @@ describe("commandAccess — cross-platform approval boundary", () => {
     "dir",
     "type README.md",
     "findstr /s TODO *.ts",
+    "findstr /c:TODO README.md",
     "where.exe git",
     "git status --short",
   ])("PowerShell read: %j", (command) => {
@@ -163,6 +169,57 @@ describe("commandAccess — cross-platform approval boundary", () => {
     ["Invoke-Expression 'Get-ChildItem'", "powershell"],
     ["cmd /c dir", "powershell"],
   ] as const)("requires approval: %j", (command, syntax) => {
+    expect(commandAccess(command, syntax)).toBe("write");
+  });
+
+  // Each row is a line the previous allowlist ran without a card.
+  it.each([
+    // Git options that start a program or write a file.
+    ["git ls-remote --upload-pack=\"touch pwned\" .", "posix"],
+    ["git grep \"-Otouch pwned\" TODO", "posix"],
+    ["git grep -iOvim TODO", "posix"],
+    ["git diff --outp=patch.txt", "posix"],
+    ["git log -p --ext-dif", "posix"],
+    ["git show --textc HEAD", "posix"],
+    ["git grep --open-files TODO", "posix"],
+    // A path-qualified program matches the allowlist by basename only.
+    ["./cat README.md", "posix"],
+    ["bin/ls", "posix"],
+    ["ca\\/t README.md", "posix"],
+    ["cat.sh README.md", "posix"],
+    ["./ls.ps1", "powershell"],
+    [".\\cat.exe README.md", "powershell"],
+    ["\\cat.exe README.md", "powershell"],
+    ["ls.cmd", "powershell"],
+    // tree's output-file modes.
+    ["tree -o listing.txt", "posix"],
+    ["tree -aR -H .", "posix"],
+    // Reads that reach outside the project.
+    ["cat ~/.ssh/id_rsa", "posix"],
+    ["cat /etc/passwd", "posix"],
+    ["cat $HOME/.aws/credentials", "posix"],
+    ["cat \"$HOME/.netrc\"", "posix"],
+    ["grep -f/etc/passwd x", "posix"],
+    ["grep --file=/etc/passwd x", "posix"],
+    ["head ../other/secret.txt", "posix"],
+    ["cat .*/.ssh/id_rsa", "posix"],
+    ["cat {,/}etc/passwd", "posix"],
+    ["git -C ../other log --oneline -5", "posix"],
+    ["git --git-dir=/elsewhere/.git log", "posix"],
+    ["git diff --no-index /etc/hosts README.md", "posix"],
+    ["locate id_rsa", "posix"],
+    ["mdfind kMDItemFSName=id_rsa", "posix"],
+    ["ps eww", "posix"],
+    ["Get-Content C:\\Users\\me\\.ssh\\id_rsa", "powershell"],
+    ["Get-Content -Path:C:\\secret.txt", "powershell"],
+    ["Get-Content \\\\server\\share\\x.txt", "powershell"],
+    ["Get-Content /etc/passwd", "powershell"],
+    ["Get-ChildItem Env:", "powershell"],
+    ["Get-Content $env:USERPROFILE\\.ssh\\id_rsa", "powershell"],
+    ["gci ~", "powershell"],
+    ["Get-Content ..\\other\\x.txt", "powershell"],
+    ["findstr /d:C:\\Users TODO *", "powershell"],
+  ] as const)("closes a no-card bypass: %j", (command, syntax) => {
     expect(commandAccess(command, syntax)).toBe("write");
   });
 

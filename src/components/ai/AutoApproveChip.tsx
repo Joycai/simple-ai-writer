@@ -99,7 +99,7 @@ export function AutoApproveChip({ owner, absent = false, variant = "chip" }: {
               })
             : commandLeft > 0
               ? t("ai.autoApprove.offCommands", {
-                  defaultValue: "接下来 {{n}} 条非危险写命令不再询问（点击恢复逐条审批）",
+                  defaultValue: "接下来 {{n}} 条非危险的单条写命令不再询问（点击恢复逐条审批）",
                   n: commandLeft,
                 })
               : t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })

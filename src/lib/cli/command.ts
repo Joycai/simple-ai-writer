@@ -94,9 +94,12 @@ type CommandAccess = "read" | "write";
 /**
  * Programs whose normal operation only observes state. The list is purposely
  * boring: a tool is absent when it has an execution hook (`awk`, `xargs`), an
- * output-file mode (`sort -o`), or too many mutating subcommands (`npm`).
- * Windows installations commonly have Git's POSIX tools too, so PowerShell
- * accepts this shared core in addition to its cmdlets.
+ * output-file mode (`sort -o`), too many mutating subcommands (`npm`), or its
+ * whole point is to look outside the project (`locate`, `mdfind`) or it can
+ * print other processes' environments (`ps e`) — a read that runs without a
+ * card still sends its output to the model. Windows installations commonly
+ * have Git's POSIX tools too, so PowerShell accepts this shared core in
+ * addition to its cmdlets.
  */
 const READ_PROGRAMS = new Set([
   "basename", "cat", "cksum", "df", "dirname", "du", "fc-list", "grep",
@@ -107,7 +110,7 @@ const READ_PROGRAMS = new Set([
 
 const POSIX_READ_PROGRAMS = new Set([
   ...READ_PROGRAMS,
-  "file", "locate", "lsof", "mdfind", "mdls", "ps", "stat", "sw_vers",
+  "file", "lsof", "mdls", "stat", "sw_vers",
 ]);
 
 const POWERSHELL_READ_PROGRAMS = new Set([
@@ -119,31 +122,40 @@ const POWERSHELL_READ_PROGRAMS = new Set([
   // Built-in aliases. The Rust runner starts PowerShell with -NoProfile, so
   // these resolve to the stock read cmdlets rather than profile functions.
   "cat", "dir", "gc", "gci", "gi", "gl", "ls", "pwd", "sls", "type",
-  // Windows read utilities; programNameOf removes the extension.
+  // Windows read utilities, reached as `findstr.exe` or bare. Bare `where` is
+  // PowerShell's alias for Where-Object, not where.exe; without a pipeline
+  // and without a script block (braces are refused) it has nothing to run.
   "findstr", "systeminfo", "tasklist", "where",
 ]);
 
 /** Git subcommands with an observational contract. Mutating multi-mode names
  * (`branch`, `tag`, `remote`, `config`, `stash`) stay out even though some
- * invocations only list: an omitted flag must never turn a read into a write. */
+ * invocations only list: an omitted flag must never turn a read into a write.
+ * `ls-remote` stays out too: it talks to the network, and `--upload-pack=<cmd>`
+ * starts an arbitrary program for a local remote. */
 const READ_GIT_SUBCOMMANDS = new Set([
   "blame", "count-objects", "describe", "diff", "diff-tree", "for-each-ref",
-  "grep", "log", "ls-files", "ls-remote", "ls-tree", "merge-base", "name-rev",
+  "grep", "log", "ls-files", "ls-tree", "merge-base", "name-rev",
   "rev-list", "rev-parse", "shortlog", "show", "show-ref", "status",
   "verify-commit", "verify-pack", "verify-tag", "whatchanged",
 ]);
 
+/** Long options on Git's read subcommands that write a file or run a program. */
+const GIT_UNSAFE_LONG_OPTIONS = ["--output", "--ext-diff", "--textconv", "--open-files-in-pager"];
+
 /**
- * Split enough shell words to locate a Git subcommand and inspect risky flags.
- * It is not used to execute or rebuild the line. A malformed or clever line
- * returns null and therefore gets a card.
+ * Split enough shell words to locate a Git subcommand and inspect arguments.
+ * It is not used to execute or rebuild the line. A malformed line returns null
+ * and therefore gets a card. Backslash escapes only in POSIX: in PowerShell it
+ * is a path separator (its escape, the backtick, is already compound).
  */
-function shellWords(command: string): string[] | null {
+function shellWords(command: string, syntax: CommandSyntax): string[] | null {
   const words: string[] = [];
   let word = "";
   let quote: "'" | '"' | null = null;
   let escaped = false;
   let started = false;
+  const escapes = syntax === "posix";
   for (const ch of command.trim()) {
     if (escaped) {
       word += ch;
@@ -153,7 +165,7 @@ function shellWords(command: string): string[] | null {
     }
     if (quote) {
       if (ch === quote) quote = null;
-      else if (ch === "\\" && quote === '"') escaped = true;
+      else if (escapes && ch === "\\" && quote === '"') escaped = true;
       else word += ch;
       started = true;
       continue;
@@ -161,7 +173,7 @@ function shellWords(command: string): string[] | null {
     if (ch === "'" || ch === '"') {
       quote = ch;
       started = true;
-    } else if (ch === "\\") {
+    } else if (escapes && ch === "\\") {
       escaped = true;
       started = true;
     } else if (/\s/.test(ch)) {
@@ -180,6 +192,88 @@ function shellWords(command: string): string[] | null {
   return words;
 }
 
+/**
+ * Whether the shell would expand a variable anywhere in the line — `$HOME`,
+ * `$env:USERPROFILE`. Single quotes are literal in both shells, so a regex
+ * anchor like `'TODO$'` stays a read. What a variable names cannot be judged
+ * from the text, so it cannot be fenced.
+ */
+function expandsVariable(command: string, syntax: CommandSyntax): boolean {
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+  for (const ch of command) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (syntax === "posix" && ch === "\\" && quote !== "'") {
+      escaped = true;
+    } else if (quote === "'") {
+      if (ch === "'") quote = null;
+    } else if (ch === "$") {
+      return true;
+    } else if (quote === '"') {
+      if (ch === '"') quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+    }
+  }
+  return false;
+}
+
+/**
+ * The first word must name a program looked up on PATH, not a file: `./cat`,
+ * `bin/ls` or `./ls.ps1` would otherwise match the allowlist by basename and
+ * run whatever the project holds under that name. PowerShell may add `.exe`
+ * (`where.exe`), which still resolves through PATH only.
+ */
+function isBareProgram(word: string, syntax: CommandSyntax): boolean {
+  if (!word || /[\\/\s]/.test(word)) return false;
+  if (!word.includes(".")) return true;
+  return syntax === "powershell" && /^[^.]+\.exe$/i.test(word);
+}
+
+/**
+ * The values one argument hands its program: the word itself, what follows
+ * `--opt=` (PowerShell also `-Path:`), and an attached short-option value
+ * (`-f/etc/passwd`). Over-collecting only costs a card.
+ */
+function argumentValues(word: string, syntax: CommandSyntax): string[] {
+  const values = [word];
+  if (word.startsWith("-")) {
+    const sep = (syntax === "powershell" ? /[=:]/ : /=/).exec(word);
+    if (sep) values.push(word.slice(sep.index + 1));
+    if (!word.startsWith("--") && word.length > 2) values.push(word.slice(2));
+  }
+  return values;
+}
+
+/**
+ * Whether an argument may name something outside the project folder the
+ * command runs in: an absolute path, a home-relative one, a `..` climb, a
+ * dot-glob that can match `..`, or (PowerShell) a drive or provider such as
+ * `C:` / `Env:` / `HKLM:`. A read that needs no card must not become a way to
+ * hand `~/.ssh/id_rsa` to the model, so these go back to the card.
+ */
+function leavesProject(value: string, syntax: CommandSyntax): boolean {
+  if (value.startsWith("~")) return true;
+  if (/(?:^|[\\/])\.\.(?:[\\/]|$)/.test(value)) return true;
+  if (/(?:^|[\\/])\.[^\\/]*[*?[]/.test(value)) return true;
+  if (syntax === "posix") return value.startsWith("/");
+  // cmd-style switches (`findstr /s`, `/c:text`) are not root paths; what a
+  // switch carries after its colon is judged on its own.
+  const sw = /^\/[A-Za-z?]{1,2}(?::(.*))?$/.exec(value);
+  if (sw) return sw[1] !== undefined && leavesProject(sw[1], syntax);
+  return /^[\\/]/.test(value) || /^[A-Za-z][\w-]*:/.test(value);
+}
+
+/** Whether a long option is `option` or an abbreviation of it — Git accepts
+ * any unambiguous prefix, so `--outp=x` is `--output=x`. */
+function abbreviates(arg: string, option: string): boolean {
+  const name = arg.split("=")[0];
+  return name.length > 2 && option.startsWith(name);
+}
+
 function gitIsReadOnly(words: string[]): boolean {
   // Skip the handful of global options that may precede the subcommand. An
   // unknown global option is conservative: Git adds new ones over time.
@@ -193,8 +287,9 @@ function gitIsReadOnly(words: string[]): boolean {
       i += 1;
       continue;
     }
-    // Uppercase -C changes directory. Lowercase -c and --config-env inject
-    // configuration; diff.external is enough to turn a read into execution.
+    // Uppercase -C changes directory (its value is fenced like any other
+    // argument). Lowercase -c and --config-env inject configuration;
+    // diff.external is enough to turn a read into execution.
     if (raw === "-C" || word === "--git-dir" || word === "--work-tree"
       || word === "--namespace" || word === "--super-prefix") {
       i += 2;
@@ -214,59 +309,68 @@ function gitIsReadOnly(words: string[]): boolean {
   }
   const subcommand = words[i]?.toLowerCase();
   if (!subcommand || !READ_GIT_SUBCOMMANDS.has(subcommand)) return false;
-  const args = words.slice(i + 1).map((word) => word.toLowerCase());
+  const args = words.slice(i + 1);
   return !args.some((arg) =>
-    arg === "--ext-diff" || arg === "--textconv"
-    || arg === "--output" || arg.startsWith("--output=")
-    || arg === "--open-files-in-pager" || arg.startsWith("--open-files-in-pager="));
+    (arg.startsWith("--") && GIT_UNSAFE_LONG_OPTIONS.some((opt) => abbreviates(arg.toLowerCase(), opt)))
+    // `git grep -O<pager>` is the short --open-files-in-pager, alone or in a
+    // cluster (`-iOvim`). Case matters: `-o` is --only-matching.
+    || (subcommand === "grep" && /^-[^-]*O/.test(arg)));
 }
 
 /** Options on otherwise read-oriented tools that execute code or write files. */
 function hasMutatingReadFlag(program: string, words: string[]): boolean {
-  const args = words.slice(1).map((word) => word.toLowerCase());
+  const args = words.slice(1);
   if (program === "find") {
     return args.some((arg) => [
       "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fls", "-fprint",
       "-fprint0", "-fprintf",
-    ].includes(arg));
+    ].includes(arg.toLowerCase()));
   }
   if (program === "rg" || program === "ripgrep") {
     return args.some((arg) => arg === "--pre" || arg.startsWith("--pre="));
   }
   if (program === "file") {
-    const originalArgs = words.slice(1);
-    return originalArgs.some((arg) => /^-[^-]*C/.test(arg) || arg.toLowerCase() === "--compile");
+    return args.some((arg) => /^-[^-]*C/.test(arg) || arg.toLowerCase() === "--compile");
+  }
+  if (program === "tree") {
+    // `-o file` writes the listing; `-R` writes 00Tree.html into every level.
+    return args.some((arg) => /^-[^-]*[oR]/.test(arg));
   }
   return false;
 }
 
 /**
  * Classify one command for approval. Only a single, non-dangerous invocation
- * of a known read program can be `read`; pipelines, redirections, command
- * substitutions, environment-prefix overrides and unknown flags all become
- * `write`. This is intentionally not a claim that arbitrary shell can be
- * perfectly parsed—it is a narrow fast path with a closed allowlist.
+ * of a known read program, by bare name, with every argument inside the
+ * project, can be `read`; pipelines, redirections, substitutions, variables,
+ * braces, environment-prefix overrides, path-qualified programs and unknown
+ * flags all become `write`. This is intentionally not a claim that arbitrary
+ * shell can be perfectly parsed — it is a narrow fast path with a closed
+ * allowlist.
  */
 export function commandAccess(command: string, syntax: CommandSyntax): CommandAccess {
   if (!command.trim() || isCompound(command) || looksDangerous(command)) return "write";
-  // PowerShell evaluates parenthesised/array/script-block expressions inside
-  // arguments: `Get-Item (Remove-Item x)` starts with a read cmdlet but writes.
-  // Reject the syntax wholesale; a filename containing parentheses merely
-  // gets an extra card.
-  if (syntax === "powershell" && /[(){}]/.test(command)) return "write";
-  const words = shellWords(command);
+  // Braces are brace expansion in POSIX (`{,/}etc/passwd` builds a path the
+  // fence never sees) and script blocks in PowerShell, which also evaluates
+  // parenthesised/array expressions inside arguments: `Get-Item (Remove-Item
+  // x)` starts with a read cmdlet but writes. Reject the syntax wholesale; a
+  // filename containing them merely gets an extra card.
+  if (/[{}]/.test(command) || (syntax === "powershell" && /[()]/.test(command))) return "write";
+  if (expandsVariable(command, syntax)) return "write";
+  const words = shellWords(command, syntax);
   if (!words?.length) return "write";
 
   // Environment prefixes can change a read tool's behaviour through config
   // variables (for example RIPGREP_CONFIG_PATH containing `--pre`).
   if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) return "write";
+  if (!isBareProgram(words[0], syntax)) return "write";
+  if (words.slice(1).some((w) => argumentValues(w, syntax).some((v) => leavesProject(v, syntax)))) {
+    return "write";
+  }
 
   const program = programNameOf(words[0]);
   if (program === "git") return gitIsReadOnly(words) ? "read" : "write";
-  if (program === "rg" || program === "ripgrep") {
-    return hasMutatingReadFlag(program, words) ? "write" : "read";
-  }
-  if (program === "find") {
+  if (program === "rg" || program === "ripgrep" || program === "find" || program === "tree") {
     return hasMutatingReadFlag(program, words) ? "write" : "read";
   }
   if (program === "file") {
@@ -275,3 +379,4 @@ export function commandAccess(command: string, syntax: CommandSyntax): CommandAc
   const allow = syntax === "powershell" ? POWERSHELL_READ_PROGRAMS : POSIX_READ_PROGRAMS;
   return allow.has(program) ? "read" : "write";
 }
+

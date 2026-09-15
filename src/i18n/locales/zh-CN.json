@@ -1668,7 +1668,7 @@
       "commandRunning": "运行中 · {{s}} 秒",
       "commandBatchCount": "连批命令数",
       "commandBatch": "批准并连批 {{n}} 条",
-      "commandBatchHint": "接下来 {{n}} 条非危险写命令不再逐条询问；本轮结束或次数用完即恢复审批",
+      "commandBatchHint": "接下来 {{n}} 条非危险的单条写命令不再逐条询问；含分隔、管道、重定向或看起来危险的仍会出卡。本轮结束或次数用完即恢复审批",
       "commandDanger": {
         "delete": "看起来会成片删除",
         "history-rewrite": "看起来会改写 git 历史或强推",
@@ -1759,7 +1759,7 @@
       "chipIllustrate": "配图连批 · 剩 {{n}} 张",
       "offAppend": "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
       "chipCommands": "命令连批 · 剩 {{n}} 条",
-      "offCommands": "接下来 {{n}} 条非危险写命令不再询问（点击恢复逐条审批）"
+      "offCommands": "接下来 {{n}} 条非危险的单条写命令不再询问（点击恢复逐条审批）"
     },
     "roundLimit": {
       "title": "已达轮数上限",

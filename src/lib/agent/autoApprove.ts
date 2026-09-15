@@ -89,15 +89,20 @@ export interface AutoApproveState {
 
 /** The part of a command proposal a grant is judged on. */
 interface CommandGrantSubject {
+  compound: boolean;
   danger: string | null;
 }
 
 /**
  * Whether a command card may offer a batch at all. Read-only commands never
- * create cards; dangerous-looking writes always require their own review.
+ * create cards; compound and dangerous-looking writes always require their own
+ * review. The danger table is a face-changer, not a complete list — `rm *.md`,
+ * `git checkout -- .` and `python -c …` all miss it — so it cannot be the only
+ * thing between a batch and an arbitrary line. Refusing compound lines keeps a
+ * batch granted on `pandoc a.md -o a.epub` from covering `touch x; <anything>`.
  */
 export function canGrantCommand(subject: CommandGrantSubject): boolean {
-  return subject.danger === null;
+  return !subject.compound && subject.danger === null;
 }
 
 /** Most pictures one press of 批准并连批 may cover. */
@@ -201,8 +206,8 @@ export function grantsAppend(
  *
  * Same key rule as {@link grants}, plus run identity: chat uses a conversation
  * key, which outlives a turn, so the key alone would leak a batch into the next
- * user message. The danger check is repeated here so a later destructive line
- * cannot consume a grant made on an ordinary write.
+ * user message. The compound/danger check is repeated here so a later
+ * composed or destructive line cannot consume a grant made on an ordinary write.
  */
 export function grantsCommand(
   state: AutoApproveState | null,

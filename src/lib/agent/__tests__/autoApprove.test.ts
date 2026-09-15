@@ -92,21 +92,24 @@ describe("isAutoApprovable — the kind-level floor", () => {
 });
 
 describe("counted command grants (shell-command-plan §3.4)", () => {
-  const ordinary = { danger: null };
+  const ordinary = { compound: false, danger: null };
 
-  it("the batch control is offered only for an ordinary write", () => {
+  it("the batch control is offered only for a single ordinary write", () => {
     expect(canGrantCommand(ordinary)).toBe(true);
-    expect(canGrantCommand({ danger: "delete" })).toBe(false);
+    expect(canGrantCommand({ compound: false, danger: "delete" })).toBe(false);
+    // The danger table is not complete; a composed line must not ride a batch.
+    expect(canGrantCommand({ compound: true, danger: null })).toBe(false);
   });
 
-  it("is counted, run-bound, and re-judges danger on every line", () => {
+  it("is counted, run-bound, and re-judges compound/danger on every line", () => {
     const state = {
       key: CHAT_AUTO_APPROVE_KEY, proposals: false, plans: false,
       appendPaths: [], illustrateLeft: 0, commandLeft: 2, commandRun: RUN,
     };
     expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(true);
     expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, {}, ordinary)).toBe(false);
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, { danger: "history-rewrite" })).toBe(false);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, { compound: false, danger: "history-rewrite" })).toBe(false);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, { compound: true, danger: null })).toBe(false);
     expect(grantsCommand({ ...state, commandLeft: 0 }, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(false);
     expect(grantsCommand(state, RUN, RUN, ordinary)).toBe(false);
     expect(grantsCommand(state, undefined, RUN, ordinary)).toBe(false);
