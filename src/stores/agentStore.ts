@@ -76,7 +76,8 @@ import { undoWrites } from "../lib/agent/undo";
 import { turnWrites } from "../lib/agent/planLedger";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
-  chatAutoApproveKey, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsCommand, grantsIllustrate,
+  chatAutoApproveKey, COMMAND_GRANT_MAX, ILLUSTRATE_GRANT_MAX,
+  grants, grantsAppend, grantsCommand, grantsIllustrate,
   isAutoApprovable, isChatAutoApproveKey, type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
 import type { SurfaceTagged } from "../lib/agent/approvalRouting";
@@ -464,13 +465,8 @@ interface AgentState {
    * AutoApproveState.illustrateRun.
    */
   grantIllustrations: (key: unknown, runId: RunId, count: number) => void;
-  /**
-   * Author pressed 「git 都批准」 on a command card: further *single, ordinary*
-   * lines starting with that program apply without a card (lib/agent/
-   * autoApprove `grantsCommand` re-checks the line each time). Per
-   * conversation in chat, per run in the panel — the append grant's scope.
-   */
-  grantCommandProgram: (key: unknown, program: string) => void;
+  /** Author approved a counted batch of ordinary write commands for this run. */
+  grantCommands: (key: unknown, runId: RunId, count: number) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
@@ -1238,7 +1234,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           appendPaths: held?.appendPaths ?? [],
           illustrateLeft: held?.illustrateLeft ?? 0,
           illustrateRun: held?.illustrateRun,
-          commandPrograms: held?.commandPrograms ?? [],
+          commandLeft: held?.commandLeft ?? 0,
+          commandRun: held?.commandRun,
         },
       };
     }),
@@ -1258,15 +1255,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             : [...(held?.appendPaths ?? []), path],
           illustrateLeft: held?.illustrateLeft ?? 0,
           illustrateRun: held?.illustrateRun,
-          commandPrograms: held?.commandPrograms ?? [],
+          commandLeft: held?.commandLeft ?? 0,
+          commandRun: held?.commandRun,
         },
       };
     }),
 
-  grantCommandProgram: (key, program) =>
+  grantCommands: (key, runId, count) =>
     set((s) => {
-      // The append grant's shape exactly: same displacement rule, same merge
-      // within a surface, one more name on the list.
       const held = s.autoApprove?.key === key ? s.autoApprove : null;
       return {
         autoApprove: {
@@ -1276,9 +1272,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           appendPaths: held?.appendPaths ?? [],
           illustrateLeft: held?.illustrateLeft ?? 0,
           illustrateRun: held?.illustrateRun,
-          commandPrograms: held?.commandPrograms.includes(program)
-            ? held.commandPrograms
-            : [...(held?.commandPrograms ?? []), program],
+          // Replaces rather than adds, exactly like the image batch: the
+          // number picked on this card is the whole remaining authorisation.
+          commandLeft: Math.max(1, Math.min(COMMAND_GRANT_MAX, Math.floor(count))),
+          commandRun: runId,
         },
       };
     }),
@@ -1296,7 +1293,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // card just now, and that number is the whole authorisation.
           illustrateLeft: Math.max(1, Math.min(ILLUSTRATE_GRANT_MAX, Math.floor(count))),
           illustrateRun: runId,
-          commandPrograms: held?.commandPrograms ?? [],
+          commandLeft: held?.commandLeft ?? 0,
+          commandRun: held?.commandRun,
         },
       };
     }),
@@ -1314,12 +1312,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // The narrow grant: this one file, appends only.
         || (proposal.kind === "append"
           && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path))
-        // The other narrow grant: this one program, single ordinary lines
-        // only — `grantsCommand` re-judges the line, so a compound or
-        // dangerous-looking `git …` still gets its card.
+        // Counted command batch. Read commands never enter this queue;
+        // dangerous-looking writes are re-judged and always get a card.
         || (proposal.kind === "command"
-          && grantsCommand(get().autoApprove, item.autoApproveKey, proposal));
+          && grantsCommand(get().autoApprove, item.autoApproveKey, runId, proposal));
       if (covered) {
+        if (proposal.kind === "command") {
+          // Spend before starting: two proposals can arrive close together.
+          set((s) => s.autoApprove
+            ? { autoApprove: { ...s.autoApprove, commandLeft: s.autoApprove.commandLeft - 1 } }
+            : {});
+        }
         void settleApproval(item, set, true);
         return;
       }
@@ -1417,13 +1420,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // grant is keyed `chat:<key>`, never a controller, so it is untouched here
     // — closing or resetting that conversation is what ends it (endGrantFor).
     if (get().autoApprove?.key === runId) set({ autoApprove: null });
-    // The illustrate budget dies with the run that granted it, even in chat,
-    // where the boolean grants live on: it is authorisation to spend money,
-    // given for the pictures of THIS run, and any remainder must not sit
-    // armed across turns the author hasn't read yet.
-    else if (get().autoApprove?.illustrateRun === runId) {
+    // Counted image/command budgets die with the run that granted them, even
+    // in chat where boolean grants live on. A remainder must not sit armed
+    // across turns the author has not read yet.
+    else if (get().autoApprove?.illustrateRun === runId
+      || get().autoApprove?.commandRun === runId) {
       set((s) => s.autoApprove
-        ? { autoApprove: { ...s.autoApprove, illustrateLeft: 0, illustrateRun: undefined } }
+        ? {
+            autoApprove: {
+              ...s.autoApprove,
+              illustrateLeft: s.autoApprove.illustrateRun === runId ? 0 : s.autoApprove.illustrateLeft,
+              illustrateRun: s.autoApprove.illustrateRun === runId ? undefined : s.autoApprove.illustrateRun,
+              commandLeft: s.autoApprove.commandRun === runId ? 0 : s.autoApprove.commandLeft,
+              commandRun: s.autoApprove.commandRun === runId ? undefined : s.autoApprove.commandRun,
+            },
+          }
         : {});
     }
 

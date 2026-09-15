@@ -77,41 +77,33 @@ export interface AutoApproveState {
    *
    */
   illustrateRun?: unknown;
+  /** Remaining non-dangerous write commands covered by a counted batch. */
+  commandLeft: number;
   /**
-   * Programs whose **single, ordinary** commands run without a card — `git`,
-   * `pandoc` — by the name `programNameOf` extracts.
-   *
-   * The `appendPaths` shape again, and narrower still: the grant names one
-   * program, and {@link grantsCommand} honours it only for a line that is
-   * neither compound (no `;` `|` `&&` `>` `$(`…) nor dangerous-looking. Both
-   * conditions are checked at *grant* time (the card offers the row only for
-   * such a line) and again at *match* time — `git status` earning a grant
-   * must never let `git status; rm -rf ~` ride it. A shell line can do
-   * anything the author's account can, so the boolean `proposals` grant does
-   * not cover commands at all (`AUTO_APPROVABLE`); this list is the only way.
-   * docs/feature/agent/shell-command-plan.md §3.4.
+   * The run that created the command batch. It always dies at the end of that
+   * run, including in chat: approval must not remain armed for the author's
+   * next message. This mirrors `illustrateRun`.
    */
-  commandPrograms: string[];
+  commandRun?: unknown;
 }
 
 /** The part of a command proposal a grant is judged on. */
 interface CommandGrantSubject {
-  program: string;
-  compound: boolean;
   danger: string | null;
 }
 
 /**
- * Whether a command card may offer the per-program row at all: a simple line
- * with nothing in the danger table. Decided here, once, so the card and the
- * match rule below cannot drift apart.
+ * Whether a command card may offer a batch at all. Read-only commands never
+ * create cards; dangerous-looking writes always require their own review.
  */
 export function canGrantCommand(subject: CommandGrantSubject): boolean {
-  return subject.program.length > 0 && !subject.compound && subject.danger === null;
+  return subject.danger === null;
 }
 
 /** Most pictures one press of 批准并连批 may cover. */
 export const ILLUSTRATE_GRANT_MAX = 5;
+/** Most follow-up write commands one approval may cover. */
+export const COMMAND_GRANT_MAX = 5;
 
 /** What a grant can cover. One flag per card kind that offers the button. */
 export type AutoApproveKind = "proposals" | "plans";
@@ -154,9 +146,8 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "convert",
   // NOT `command`: a shell line can do anything the author's account can, and
   // "keep fixing my prose" must never quietly become "keep running things".
-  // The only grant it gets is the per-program one (`commandPrograms` +
-  // `grantsCommand`), which names one program and excludes compound and
-  // dangerous-looking lines — never this boolean.
+  // The only grant it gets is the counted, run-bound command batch
+  // (`commandLeft` + `grantsCommand`), never this boolean.
 ]);
 
 /** Whether this kind of proposal may skip its card under an active grant. */
@@ -206,20 +197,24 @@ export function grantsAppend(
 }
 
 /**
- * Whether a command is covered by a standing per-program grant.
+ * Whether a write command is covered by the current run's counted batch.
  *
- * Same key rule as {@link grants}. The line must *still* qualify
- * ({@link canGrantCommand}) — the grant was made on a simple line, and only a
- * simple line may use it: a compound or dangerous-looking one that happens to
- * start with the granted program goes back to the card.
+ * Same key rule as {@link grants}, plus run identity: chat uses a conversation
+ * key, which outlives a turn, so the key alone would leak a batch into the next
+ * user message. The danger check is repeated here so a later destructive line
+ * cannot consume a grant made on an ordinary write.
  */
 export function grantsCommand(
   state: AutoApproveState | null,
   key: unknown,
+  runId: unknown,
   subject: CommandGrantSubject,
 ): boolean {
   if (!state || key === undefined) return false;
-  return state.key === key && canGrantCommand(subject) && state.commandPrograms.includes(subject.program);
+  return state.key === key
+    && state.commandRun === runId
+    && state.commandLeft > 0
+    && canGrantCommand(subject);
 }
 
 /** How the button and the indicator chip should word themselves. */

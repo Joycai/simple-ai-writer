@@ -2,9 +2,10 @@
  * `run_command` —— 助手在这台电脑上跑一条命令的**唯一**接口
  * （docs/feature/agent/shell-command-plan.md §3.3）。
  *
- * 形态照 `transcribe_audio`（lib/asr/tool.ts）：卡在**动作之前**——提案时什么都
- * 没跑，作者在卡上看到的是命令原文（不变量 1、2）；批准后由 `agentStore.
- * settleApproval` 的 `case "command"` 调 `lib/cli/run`，结果文本原样回给模型。
+ * 可证明只读的命令直接由这里调用 runner；其余形态照 `transcribe_audio`
+ *（lib/asr/tool.ts）：卡在**动作之前**——提案时什么都没跑，作者在卡上看到的是
+ * 命令原文；批准后由 `agentStore.settleApproval` 的 `case "command"` 调
+ * `lib/cli/run`，结果文本原样回给模型。
  *
  * 这里判的只有三件事，都在建卡之前：`cwd` 在项目内（不变量 9 的 TS 那一半——
  * 围栏挡的是参数，命令本身能 `cd ..`，那是卡的事）、超时夹在范围内、这台机器
@@ -15,9 +16,10 @@
 import { fileExists } from "../fs/fileio";
 import { projectRelative, resolveWorkspacePath } from "../paths";
 import { IS_WINDOWS } from "../platform";
+import i18n from "../../i18n";
 import type { CommandProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
-import { isCompound, looksDangerous, programNameOf } from "../cli/command";
+import { commandAccess, isCompound, looksDangerous } from "../cli/command";
 import { clampTimeout, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS } from "../cli/run";
 import { cachedShellInfo, shellInfo, shellLabel, shellSyntax } from "../cli/shell";
 
@@ -45,10 +47,36 @@ export function describeRunCommand(): string {
   const syntax = (info ? shellSyntax(info) === "powershell" : IS_WINDOWS) ? "PowerShell" : "POSIX";
   return (
     `Run ONE shell command on the author's computer — in ${shell}, so write ${syntax} syntax. ` +
-    "The author reviews the exact line on a card FIRST and nothing runs until they approve; it then runs with their account's full permissions, stdin closed, in the project folder (or `cwd`), and returns the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
+    "Known read-only commands (for example ls/cat/grep/rg or PowerShell Get-ChildItem/Get-Content/Select-String) run without approval. Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
     "Use it for what no other tool does: git, converters and scripts the author has installed, counting and listing beyond list_files / search_text. " +
-    "Never for reading or editing project text — those tools exist and need no approval. One thing per call; do not chain unrelated commands."
+    "Prefer built-in read/edit tools for project text. One thing per call; do not chain unrelated commands."
   );
+}
+
+/** The common runner path for approval-free reads. Approved writes take the
+ * same route from agentStore so there remains one process/log implementation. */
+async function executeCommand(
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+  ctx: ToolContext,
+): Promise<string> {
+  const { runCommand } = await import("../cli/run");
+  const outcome = await runCommand({
+    projectPath: ctx.projectPath,
+    command,
+    cwd,
+    timeoutMs,
+    signal: ctx.signal,
+    onTick: (ms) =>
+      ctx.onProgress?.({
+        label: i18n.t("ai.approval.commandRunning", {
+          s: Math.round(ms / 1000),
+          defaultValue: "运行中 · {{s}} 秒",
+        }),
+      }),
+  });
+  return outcome.report;
 }
 
 export async function runCommandTool(
@@ -91,6 +119,12 @@ export async function runCommandTool(
   const seconds = typeof args.timeout_seconds === "number" ? args.timeout_seconds : DEFAULT_TIMEOUT_MS / 1000;
   const timeoutMs = clampTimeout(Math.min(seconds * 1000, MAX_TIMEOUT_MS));
 
+  // The closed allowlist is the approval boundary. Unknown, composed or
+  // argument-sensitive commands fall through to the proposal below.
+  if (commandAccess(command, shellSyntax(shell)) === "read") {
+    return { toolCallId, content: await executeCommand(command, cwd, timeoutMs, ctx) };
+  }
+
   const proposal: CommandProposal = {
     kind: "command",
     id: `command-${++proposalCounter}`,
@@ -99,7 +133,6 @@ export async function runCommandTool(
     cwdLabel: projectRelative(ctx.projectPath, cwd) || ".",
     timeoutMs,
     shell,
-    program: programNameOf(command),
     compound: isCompound(command),
     danger: looksDangerous(command),
     reason: args.reason?.trim() || undefined,

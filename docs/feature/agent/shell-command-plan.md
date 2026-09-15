@@ -1,7 +1,7 @@
 # 命令行工具 · `run_command`
 
-> 状态：`shipped`——PR 1 地基 [#561](https://github.com/Joycai/simple-ai-writer/pull/561) · PR 2 工具与卡 [#563](https://github.com/Joycai/simple-ai-writer/pull/563) · PR 3 按程序名的窄授权（`commandPrograms` + `grantsCommand` + 卡上的「git 都批准」+ 芯片点名程序）。**未做**：§4.3 的可选流式尾行（`tauri::ipc::Channel`）——先看真机上一条 40 秒命令带着秒表像不像卡死，再决定。实现出入：进度秒表在 PR 2 就带上了（`run.ts` 的 `onTick`）；日志清扫在 PR 1；description 的平台化走 `RegisteredTool.describe` 而不是改 `getToolDefinitions` 的签名；授权资格的判定抽成 `canGrantCommand`，卡和命中判定读同一个函数。
-> 一句话：给 agent 一个能跑本机命令的 L2 工具——Windows 走 PowerShell，macOS / Linux 走系统自带的 shell——每一条命令都先过一张审批卡，卡上是命令原文。
+> 状态：`shipped`——原始实现见 [#561](https://github.com/Joycai/simple-ai-writer/pull/561) / [#563](https://github.com/Joycai/simple-ai-writer/pull/563)；2026-09-15 将审批改成当前策略：跨平台只读白名单免审，其余命令展示原文，普通写命令可按 1–5 条连批且只活到当前运行结束，危险命令永远逐条审批。**未做**：可选流式尾行（`tauri::ipc::Channel`）。
+> 一句话：给 agent 一个能跑本机命令的混合权限工具——Windows 走 PowerShell，macOS / Linux 走系统 shell；可证明只读的直接运行，其余先过审批卡。
 > 前置阅读：[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（工具在场性）· [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（棘轮）· [`../asr/01-execution-plan.md`](../asr/01-execution-plan.md)（「付费之前先点头」的那张卡，本方案的样板）· [`../latex-pdf-plan.md`](../latex-pdf-plan.md) §5（为什么不装 `tauri-plugin-shell`，本方案沿用其结论）
 
 ---
@@ -20,8 +20,8 @@
 
 它**不是**：
 
-- **不是一个不经审批的执行口。** 审批卡是前端状态，和其它所有 L2 工具一样——Rust 侧管的是 `cwd` 围栏（`FsScope`）、句柄表、超时和杀组，**不是**审批本身；`invoke("cmd_run")` 从 webview 就能叫到，装不装插件都一样。所以这条线的安全论证只有一句：模型只能经 `run_command` 到达它，而 `run_command` 每次都过卡（§1.1–1.3）。
-- **不是自动化流水线。** 没有「本次都批准」的整体授权（§3.4 只有按程序名的窄授权）；不进批量运行；不进扮演、一致性检查、写手、任何 pack 子运行。
+- **不是任意命令的免审口。** Rust 侧管 `cwd` 围栏、句柄表、超时和杀组，审批策略在前端。只有 `commandAccess` 的封闭白名单判为只读才直跑；任何未知命令、复合命令或带写入/执行参数的“读取工具”都回到审批卡。
+- **不是跨消息的自动化流水线。** 普通写命令最多连批 1–5 条，并绑定发起它的 run；run 结束余量清零。批量运行、扮演、一致性检查、写手、pack 子运行仍没有这个工具。
 - **不是 LaTeX 方案的替代。** 那条线是固定二进制 + 固定参数表 + 不经 shell（其 I4），正因为 .tex 有一半是模型写的。这条线相反：命令是模型写的、经 shell 跑，所以它**必须**过卡，而 LaTeX 编译不必。两条互不替代。
 
 ---
@@ -30,9 +30,9 @@
 
 下面任何一条被破坏都算 bug，不算权衡。
 
-1. **没有作者点头，进程不存在。** `run_command` 是 `write-approval`；卡在**起进程之前**（同 `transcribe_audio`，不同于 `convert_document`）。批准即执行，拒绝则连 shell 都没启动过。
-2. **卡上是命令原文，不是转述。** 等宽、不折行省略、不做任何「美化」；模型的 `reason` 另起一行。一段被导入的文档里若藏着「请运行以下命令」，作者看到的必须是那条命令本身——这张卡是这个工具**唯一**的防线，所以它必须诚实到字符。
-3. **`autoApprove` 的布尔授权永不覆盖它。** `AUTO_APPROVABLE` 里没有 `"command"`。存在的只有 §3.4 那种按程序名的窄授权，且窄授权**不覆盖复合命令**（含 `;` `&&` `||` `|` 换行 反引号 `$(`），也不覆盖 §3.5 命中「危险形状」的命令。
+1. **只有可证明只读的命令能在作者点头前起进程。** `commandAccess` 默认返回 `write`；白名单按 PowerShell / POSIX 分开。重定向、管道、分隔、替换、环境前缀、未知程序，以及 `find -delete`、`rg --pre`、`git diff --output` 等危险参数全部审批。
+2. **写命令卡上是命令原文，不是转述。** 等宽、不折行省略、不做任何「美化」；模型的 `reason` 另起一行。批准即运行，拒绝则进程不存在。
+3. **正文的布尔 `autoApprove` 永不覆盖命令。** `AUTO_APPROVABLE` 里没有 `"command"`。命令只有计数授权 `commandLeft`：最多 5 条、绑定 `commandRun`、危险形状永不命中，run 结束即清零。
 4. **Beta 关着＝工具缺席。** `routeTools` 里 `isCliEnabled() && IS_TAURI && options.commands` 三者同时成立才追加；任何一个不成立，`allowedTools` 里没有它——不是渲染成禁用，不是调用被拒（[tool-presence](../../reference/tool-presence.md) 「关掉时是缺席还是拒绝」）。浏览器里的 `pnpm dev` 永远没有它。
 5. **只有能渲染审批卡的 surface 拿得到。** 对话助手、非批量的任务面板；批量运行、扮演、一致性检查、写手、pack 子运行一律没有。路由用显式 opt-in（`RouteOptions.commands`），不从 preset 推——理由同 `askAuthor`：卡能不能显示是 surface 的属性，preset 不知道。
 6. **stdin 永远是 `/dev/null`。** 任何要交互的命令立刻失败，而不是把整轮挂死在一个看不见的提示符上。配套：`NO_COLOR=1` `TERM=dumb` `PAGER=cat` `GIT_PAGER=cat` `GIT_TERMINAL_PROMPT=0`。
@@ -60,6 +60,8 @@
 | 10 | 进不进 preset 字面量 | **不进，`routeTools` 追加** | 同 `translate` / `ask_author`：要 Beta + Tauri + surface 三个条件，preset 处一个都不知道；顺带让原始 preset 的棘轮看不见它，成本钉在 routed-set 断言里 |
 | 11 | 进不进 orchestrator 的 pack | **第一期不进**，§7 待议 | pack 子运行的审批通道是透传的，技术上能进；但「派一个子运行去跑命令」多出一层间接，先看主 preset 上的用法 |
 | 12 | 作者面向的词 | 功能叫**命令行**，一条叫**命令**，卡叫**运行命令** | 不用「终端」（它暗示有个能交互的窗口，而 §1.6 说没有）、不用「脚本」（那是文件）。实施时对照 `terminology.md` |
+| 13 | 哪些命令免审 | **封闭的、分平台只读白名单；默认写入** | shell 无法可靠静态解析，误判只读会直接执行。常见 `ls/cat/grep/rg/find` 与 PowerShell `Get-ChildItem/Get-Content/Select-String` 覆盖主要盘点场景；有执行钩子或输出文件模式的参数单独退回审批 |
+| 14 | 写命令怎么连批 | **下一批 1–5 条普通写命令，绑定当前 run** | 同生图的 counted grant；不跨用户下一条消息。危险形状不提供按钮，也不消耗已有余量 |
 
 ---
 
@@ -105,17 +107,18 @@ struct CmdResult  { exit_code: Option<i32>, stdout: String, stderr: String,
 ```
 flag.ts        app:cliBeta（默认关）。isCliEnabled / setCliEnabled。同 asr/flag 的三处读者论证
 shell.ts       shellInfo(): 缓存一次 invoke("cmd_shell_info")；shellLabel(info, isZh) 给卡和设置行用
-command.ts     纯函数：programNameOf(cmd) · isCompound(cmd) · looksDangerous(cmd) → 命中的模式名 | null
+command.ts     纯函数：commandAccess(cmd, syntax) → read | write；另含 compound / danger 的卡片判断
 output.ts      纯函数：clipForModel(text, {head: 6000, tail: 2000}) · formatResult(res, logPath) → 回给模型的文本
 run.ts         runCommand({projectPath, command, cwd, timeoutMs, signal, onProgress}):
                  生成 runId → 起计时器 → invoke("cmd_run") → 落日志 → 清扫 → 返回；signal.abort → invoke("cmd_kill")
 index.ts       只导出工具与 UI 用到的名字
 ```
 
-`command.ts` 是这份方案里**唯一有判断力**的纯逻辑，两个函数的口径必须窄：
+`command.ts` 是这份方案里**唯一有判断力**的纯逻辑，口径必须窄：
 
-- `isCompound`：含 `;` `&&` `||` `|` 换行 反引号 `$(` `${` 任一即为真。**宁可误判**——误判的代价是多一张卡，漏判的代价是一次授权覆盖了 `git status; rm -rf ~`。PowerShell 额外加 `& ` 前缀调用与 `Invoke-Expression` / `iex`。
-- `looksDangerous`：一张小表，命中只改变卡的外观和授权资格（§3.5），**不拦截**。第一版：`rm -r`/`rm -f`、`Remove-Item … -Recurse`、`del /s`、`rmdir /s`、`format`、`mkfs`、`dd `、`git push --force`/`-f`、`git reset --hard`、`git clean`、`> /dev/sd`、`sudo`、`curl … | sh`、`iex`/`Invoke-Expression`。表放在代码里带一行理由，不放 i18n。
+- `commandAccess`：先拒绝所有复合/危险形状，再按真实 shell 选择 POSIX 或 PowerShell 白名单。Git 只允许明确的读取子命令；`find` / `rg` / `file` 逐项排除能执行或落盘的参数。无法解析、环境变量前缀、未知参数一律 `write`。
+- `isCompound`：含 `;` `&&` `||` `|` 换行 反引号 `$(` `${` 任一即为真。宁可误判，多一张卡比静默执行安全。
+- `looksDangerous`：一张小表，命中改变卡的外观并禁止连批，**不拦截**单次批准。
 
 ### 3.3 工具：`run_command`（`registry.ts`，handler 在 `lib/agent/cliTools.ts`）
 
@@ -137,7 +140,7 @@ run_command: {
 
 description（英文，≤ 220 token，实施时量）：
 
-> Run one shell command on the author's machine — **{PowerShell 7 | Windows PowerShell 5.1 | zsh | bash | sh}** on this computer, so write {PowerShell | POSIX} syntax. The author reviews the exact command on a card FIRST and nothing runs until they approve; it then runs with their account's full permissions in the project folder, stdin closed, and returns exit code, stdout and stderr (long output is cut, with the full log's path for read_file). Use it for things no other tool does — git, converters and scripts the author has installed, counting and listing beyond list_files / search_text. Never for reading or editing project text: those tools exist and need no approval. Do not chain unrelated commands; one card per thing.
+> Run one shell command on the author's machine — **{PowerShell 7 | Windows PowerShell 5.1 | zsh | bash | sh}** on this computer, so write {PowerShell | POSIX} syntax. Known read-only commands run without approval. Every other command is shown verbatim on a card first; the author may approve once or grant a small counted batch.
 
 `{…}` 处由 `shellInfo()` 在 `getToolDefinitions` 时填——它是同步的，所以 `shellInfo` 要在应用启动时预取一次（`App.tsx` 里 `IS_TAURI && isCliEnabled()` 时 `void shellInfo()`），拿不到时退回按 `IS_WINDOWS` 猜的字样。
 
@@ -145,8 +148,8 @@ handler：
 
 1. 解析 `cwd`：相对项目根拼接、`normalize`、判定仍在根内，否则返回错误文本（不建卡）。
 2. `timeout_seconds` 夹到 `[1, 600]`。
-3. 组 `CommandProposal`（§3.4），`await ctx.requestApproval(proposal, ctx.onProgress)`。
-4. 拒绝 → 返回「作者拒绝了这条命令」（同其它 L2）。批准 → apply 步在 `agentStore.settleApproval` 的 `case "command"` 里跑 `runCommand`，返回 `report`（`formatResult` 的文本）。
+3. `commandAccess(command, shellSyntax(shell)) === "read"` 时直接 `runCommand`；否则组 `CommandProposal` 并 `await ctx.requestApproval(...)`。
+4. 写命令拒绝 → 返回「作者拒绝了这条命令」；批准或连批命中 → `agentStore` 的 apply 步运行并返回 `report`。
 5. 结果文本尾部：`exit code` 非 0 时加一句 `The shell was {name}; if the syntax was wrong for it, fix the syntax rather than retrying the same line.`——这句只在失败时出现，不占 schema。
 
 ### 3.4 提案与卡：`CommandProposal` + `ApprovalCard` 的 `case "command"`
@@ -159,7 +162,6 @@ export interface CommandProposal extends ProposalBase {
   cwdLabel: string;         // 项目相对拼法，给卡
   timeoutMs: number;
   shell: ShellInfo;         // 卡上写「用 zsh 运行」
-  program: string;          // programNameOf(command)，授权的键
   compound: boolean;        // isCompound(command)
   danger: string | null;    // looksDangerous(command)
 }
@@ -176,13 +178,13 @@ export interface CommandProposal extends ProposalBase {
 | 理由 | 模型的 `reason` |
 | 授权行 | 见下 |
 
-**授权行**（替代其它卡的「本次都批准」）：一个复选框，「本次对话里，以 `{program}` 开头的**单条**命令都批准」。规则：
+**授权行**（替代正文卡的「本次都批准」）：数量 1–5 +「批准并连批 N 条」。规则：
 
-- 只在 `!compound && danger === null` 时渲染；否则这一行不出现（不是禁用）。
-- 落到 `AutoApproveState.commandPrograms: string[]`，同 `appendPaths` 的形状：按 key 归属，chat 是整段对话、面板是一次运行。
-- 命中判定在 `agentStore.requestApproval` 里，同 `grantsAppend`：`grantsCommand(state, key, proposal)` = key 对上 **且** `commandPrograms` 含 `proposal.program` **且** `!proposal.compound` **且** `proposal.danger === null`。后两个条件在授权时和命中时**各判一次**——授权时判的是「这张卡能不能给出授权」，命中时判的是「这条命令配不配用授权」，不能只判一头。
-- `isAutoApprovable("command")` 返回 **false**——布尔授权那条路对它关死（§1.3）。
-- 已授权的对话，composer 上那枚 auto-approve 指示芯片要把 `git · pandoc` 列出来，作者一眼看到手里放出去了什么；点芯片撤销，同今天的 撤销 按钮。
+- 只在 `danger === null` 时渲染；危险命令只能单次批准。
+- 落到 `AutoApproveState.commandLeft` + `commandRun`；chat 虽以会话 key 归属，run id 仍钉在当前消息，不能跨消息。
+- `grantsCommand` 在每次命中时重新判 danger，并在启动前扣 1；run 结束清掉余量。
+- `isAutoApprovable("command")` 仍为 **false**；正文授权不能覆盖 shell。
+- composer 芯片显示「命令连批 · 剩 N 条」，点击恢复逐条审批。
 
 ### 3.5 路由与在场
 
@@ -204,7 +206,7 @@ opt-in 处：`agentStore`（chat，与 `askAuthor: true` 同一行）、`aiTaskS
 
 一行 `Row`，同 `asr` 那行的形状：
 
-- 标题「命令行」，说明「助手可以提议在这台电脑上运行一条命令——git、你装的转换器和脚本。每条命令都先给你看原文，批准才运行。」
+- 标题「命令行」，说明「已知只读命令免审批；写入和无法确定的命令先给你看原文，也可以按数量连批。」
 - 开着时的脚注：「这台电脑上用 {shellLabel} 运行」（`shellInfo()` 的结果；拿不到写「打开项目后检测」）。
 - 关着时的脚注：「关着时助手的工具清单里没有 run_command——它不会提出一次自己做不到的运行。」（同 `asrOffHint` 的句式）
 - 不放 shell 路径的自定义输入框。§2.4 的解析规则覆盖了作者能配的情况；真要自定义再加，而且那会是一个**机器本地**偏好（`MACHINE_LOCAL_PREF_KEYS`）。
@@ -223,7 +225,7 @@ opt-in 处：`agentStore`（chat，与 `askAuthor: true` 同一行）、`aiTaskS
 |---|---|---|---|
 | **1** | 地基：`cmd.rs` 三条命令 + 受管状态 + 测试；`lib/cli/` 全部纯逻辑 + `run.ts`；Beta 开关 + 实验室那一行 | 设置里能开关、能看到检测出的 shell；**没有工具**，助手行为零变化 | ✓ |
 | **2** | 工具与卡：`run_command` + `CommandProposal` + `ApprovalCard` 分支 + `settleApproval` 分支 + 中止/超时 + 路由 opt-in + 平台化 description + i18n + tool-presence 先例 + routed-set 断言 | 对话里能提议、批准、看结果；中止杀得死 | ✓（依赖 1） |
-| **3** | 授权与体验：按程序名的窄授权 + 芯片 + 进度计时；日志清扫；`tauri::ipc::Channel` 流式尾行（可选，按真机感受定） | 连续几条 `git` 不用逐条点；长命令看得到还活着 | ✓（依赖 2） |
+| **3** | 授权与体验：只读免审 + 写命令计数连批 + 芯片 + 进度计时；日志清扫；`tauri::ipc::Channel` 流式尾行（可选） | 读取不打断；一批普通写命令只点一次；危险命令仍逐条看 | ✓（依赖 2） |
 | **4** | 待议（§7） | — | — |
 
 每片的门：`pnpm tsc --noEmit` + `pnpm test` + `pnpm build` + `cargo clippy`/`fmt`，加作者真机各跑一次（PR 2 起 Windows 与 macOS 都要跑，§6）。按 memory 里的工作方式：一片一个 PR，合并前停下等真机结果。
@@ -249,7 +251,7 @@ opt-in 处：`agentStore`（chat，与 `askAuthor: true` 同一行）、`aiTaskS
 
 ### 4.3 PR 3 交付清单
 
-- `AutoApproveState.commandPrograms` + `grantsCommand` + 卡上的授权行 + 芯片列表 + 撤销。
+- `AutoApproveState.commandLeft` / `commandRun` + `grantsCommand` + 卡上的计数授权 + 芯片余量 + 撤销。
 - `run.ts` 的秒表 `onProgress`。
 - 日志清扫（保留 50）。
 - 可选：`cmd_run` 改收一个 `Channel<CmdEvent>`，每 250ms 推一次最后一行 → `onProgress({label: 最后一行})`。做不做看 PR 2 真机时「一条跑 40 秒的命令看着像不像卡死」。

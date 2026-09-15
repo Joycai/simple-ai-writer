@@ -35,6 +35,13 @@ vi.mock("../../fs/fileio", () => ({
   fileExists: vi.fn(async () => true),
 }));
 vi.mock("../backup", () => ({ backupFile: vi.fn(async () => "/p/.ai-writer/backups/x.md") }));
+vi.mock("../../cli/run", async () => {
+  const real = await vi.importActual<typeof import("../../cli/run")>("../../cli/run");
+  return {
+    ...real,
+    runCommand: vi.fn(async () => ({ result: {}, logPath: null, report: "exit 0" })),
+  };
+});
 
 import { activeChat, emptyChat, useAgentStore } from "../../../stores/agentStore";
 
@@ -56,7 +63,7 @@ function commandProposal(id: string, command: string, over: Partial<Extract<Prop
   return {
     kind: "command", id, path: "/p", command, cwdLabel: ".", timeoutMs: 60_000,
     shell: { kind: "zsh", path: "/bin/zsh", version: null },
-    program: "git", compound: false, danger: null,
+    compound: false, danger: null,
     ...over,
   };
 }
@@ -84,38 +91,34 @@ describe("isAutoApprovable — the kind-level floor", () => {
   });
 });
 
-describe("per-program command grants (shell-command-plan §3.4)", () => {
-  const simple = { program: "git", compound: false, danger: null };
+describe("counted command grants (shell-command-plan §3.4)", () => {
+  const ordinary = { danger: null };
 
-  it("the row is offered only for a simple, ordinary line", () => {
-    expect(canGrantCommand(simple)).toBe(true);
-    expect(canGrantCommand({ ...simple, compound: true })).toBe(false);
-    expect(canGrantCommand({ ...simple, danger: "delete" })).toBe(false);
-    expect(canGrantCommand({ ...simple, program: "" })).toBe(false);
+  it("the batch control is offered only for an ordinary write", () => {
+    expect(canGrantCommand(ordinary)).toBe(true);
+    expect(canGrantCommand({ danger: "delete" })).toBe(false);
   });
 
-  it("covers the named program and re-judges every line", () => {
+  it("is counted, run-bound, and re-judges danger on every line", () => {
     const state = {
       key: CHAT_AUTO_APPROVE_KEY, proposals: false, plans: false,
-      appendPaths: [], illustrateLeft: 0, commandPrograms: ["git"],
+      appendPaths: [], illustrateLeft: 0, commandLeft: 2, commandRun: RUN,
     };
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, simple)).toBe(true);
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, { ...simple, program: "pandoc" })).toBe(false);
-    // `git status` earned the grant; `git status; rm -rf ~` must not ride it.
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, { ...simple, compound: true })).toBe(false);
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, { ...simple, danger: "history-rewrite" })).toBe(false);
-    // The key rule of every grant.
-    expect(grantsCommand(state, RUN, simple)).toBe(false);
-    expect(grantsCommand(state, undefined, simple)).toBe(false);
-    expect(grantsCommand(null, CHAT_AUTO_APPROVE_KEY, simple)).toBe(false);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(true);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, {}, ordinary)).toBe(false);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, { danger: "history-rewrite" })).toBe(false);
+    expect(grantsCommand({ ...state, commandLeft: 0 }, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(false);
+    expect(grantsCommand(state, RUN, RUN, ordinary)).toBe(false);
+    expect(grantsCommand(state, undefined, RUN, ordinary)).toBe(false);
+    expect(grantsCommand(null, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(false);
   });
 
   it("a blanket 本次都批准 never covers a command", () => {
     const state = {
       key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true,
-      appendPaths: [], illustrateLeft: 0, commandPrograms: [],
+      appendPaths: [], illustrateLeft: 0, commandLeft: 0,
     };
-    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, simple)).toBe(false);
+    expect(grantsCommand(state, CHAT_AUTO_APPROVE_KEY, RUN, ordinary)).toBe(false);
   });
 });
 
@@ -187,7 +190,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(RUN, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: RUN, proposals: false, plans: true, appendPaths: [], illustrateLeft: 0, commandPrograms: [],
+      key: RUN, proposals: false, plans: true, appendPaths: [], illustrateLeft: 0, commandLeft: 0,
     });
   });
 
@@ -197,7 +200,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(CHAT_AUTO_APPROVE_KEY, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0, commandPrograms: [],
+      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0, commandLeft: 0,
     });
   });
 
@@ -240,23 +243,32 @@ describe("本次都批准 grants", () => {
     expect(grantsAppend(state, undefined, "/proj/page.html")).toBe(false);
   });
 
-  it("a program grant skips the card for a simple line of that program and nothing else", () => {
+  it("a command batch spends one slot per ordinary write and never covers danger or another run", async () => {
     const store = useAgentStore.getState();
-    store.grantCommandProgram(CHAT_AUTO_APPROVE_KEY, "git");
-    store.grantCommandProgram(CHAT_AUTO_APPROVE_KEY, "git"); // idempotent
+    store.grantCommands(CHAT_AUTO_APPROVE_KEY, RUN, 2);
 
-    expect(useAgentStore.getState().autoApprove).toMatchObject({ commandPrograms: ["git"] });
-    // The store's own coverage path, not just the pure predicate. A covered
-    // command never queues; the apply step it reaches is mocked away by the
-    // module mocks above, so only queue membership is asserted.
-    void store.requestApproval(commandProposal("c1", "git status; rm -rf ~", { compound: true }), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
-    void store.requestApproval(commandProposal("c2", "git push --force", { danger: "history-rewrite" }), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
-    void store.requestApproval(commandProposal("c3", "pandoc a.md -o a.epub", { program: "pandoc" }), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
-    expect(useAgentStore.getState().pending.map((p) => p.proposal.id)).toEqual(["c1", "c2", "c3"]);
-    // A blanket grant on top changes nothing for commands.
-    store.enableAutoApprove(CHAT_AUTO_APPROVE_KEY, "proposals");
-    void store.requestApproval(commandProposal("c4", "pandoc x", { program: "pandoc" }), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
-    expect(useAgentStore.getState().pending.map((p) => p.proposal.id)).toEqual(["c1", "c2", "c3", "c4"]);
+    const first = store.requestApproval(commandProposal("c1", "pandoc a.md -o a.epub"), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
+    const second = store.requestApproval(commandProposal("c2", "touch done"), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
+    await Promise.all([first, second]);
+    expect(useAgentStore.getState().autoApprove).toMatchObject({ commandLeft: 0, commandRun: RUN });
+    expect(useAgentStore.getState().pending).toEqual([]);
+
+    void store.requestApproval(commandProposal("c3", "git push --force", { danger: "history-rewrite" }), RUN, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
+    void store.requestApproval(commandProposal("c4", "touch other"), {}, { autoApproveKey: CHAT_AUTO_APPROVE_KEY });
+    expect(useAgentStore.getState().pending.map((p) => p.proposal.id)).toEqual(["c3", "c4"]);
+  });
+
+  it("caps a command batch and clears its remainder when that run ends", () => {
+    const store = useAgentStore.getState();
+    store.grantCommands(CHAT_AUTO_APPROVE_KEY, RUN, 99);
+    expect(useAgentStore.getState().autoApprove).toMatchObject({
+      key: CHAT_AUTO_APPROVE_KEY, commandLeft: 5, commandRun: RUN,
+    });
+
+    store.rejectAll("turn ended", RUN);
+    expect(useAgentStore.getState().autoApprove).toMatchObject({
+      key: CHAT_AUTO_APPROVE_KEY, commandLeft: 0, commandRun: undefined,
+    });
   });
 
   it("keeps 本次都批准 alongside a per-file append grant", () => {
@@ -266,13 +278,13 @@ describe("本次都批准 grants", () => {
 
     expect(useAgentStore.getState().autoApprove).toEqual({
       key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false,
-      appendPaths: ["/proj/page.html"], illustrateLeft: 0, commandPrograms: [],
+      appendPaths: ["/proj/page.html"], illustrateLeft: 0, commandLeft: 0,
     });
   });
 
   it("ends chat's grant on a new conversation", () => {
     useAgentStore.setState({
-      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0, commandPrograms: [] },
+      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0, commandLeft: 0 },
     });
     useAgentStore.getState().newChat();
     expect(useAgentStore.getState().autoApprove).toBeNull();
@@ -280,7 +292,7 @@ describe("本次都批准 grants", () => {
 
   it("does not carry chat's grant into another saved conversation", async () => {
     useAgentStore.setState((st) => ({
-      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [], illustrateLeft: 0, commandPrograms: [] },
+      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [], illustrateLeft: 0, commandLeft: 0 },
       chats: { c0: { ...activeChat(st), sessionId: 1 } },
     }));
 
@@ -296,7 +308,7 @@ describe("本次都批准 grants", () => {
 
   it("keeps one conversation's grant off another open conversation", () => {
     useAgentStore.setState({
-      autoApprove: { key: chatAutoApproveKey("c0"), proposals: true, plans: false, appendPaths: [], illustrateLeft: 0, commandPrograms: [] },
+      autoApprove: { key: chatAutoApproveKey("c0"), proposals: true, plans: false, appendPaths: [], illustrateLeft: 0, commandLeft: 0 },
     });
     // The literal "chat" key would have covered both; the per-conversation
     // key covers exactly the one it was pressed in.
