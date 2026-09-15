@@ -187,9 +187,10 @@ pub(crate) fn decode_text(bytes: Vec<u8>) -> Result<String, String> {
             if bytes.contains(&0) {
                 return Err("not a text file (contains NUL bytes)".into());
             }
-            let mut detector = chardetng::EncodingDetector::new();
+            let mut detector =
+                chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
             detector.feed(&bytes, true);
-            let encoding = detector.guess(None, true);
+            let encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
             let (text, _, _) = encoding.decode(&bytes);
             Ok(text.into_owned())
         }

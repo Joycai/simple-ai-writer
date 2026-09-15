@@ -41,6 +41,17 @@ use tauri::ipc::Channel;
 
 use crate::scope::FsScope;
 
+fn hex_lower(bytes: impl AsRef<[u8]>) -> String {
+    use std::fmt::Write as _;
+
+    let bytes = bytes.as_ref();
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
 /// Paths inside an entry directory that are never part of its content.
 /// Matched on the file name, so the rule applies at every depth.
 fn is_ignored(name: &str) -> bool {
@@ -92,7 +103,7 @@ pub fn hash_entry_dir(dir: &Path) -> Result<String, String> {
         hasher.update((bytes.len() as u64).to_le_bytes());
         hasher.update(&bytes);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex_lower(hasher.finalize()))
 }
 
 #[derive(Serialize)]

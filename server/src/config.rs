@@ -128,7 +128,7 @@ impl TokenEntry {
     pub fn derive_id(value: &str) -> String {
         use sha2::{Digest, Sha256};
         let digest = Sha256::digest(value.as_bytes());
-        format!("{digest:x}")[..12].to_string()
+        crate::hex_lower(digest)[..12].to_string()
     }
 
     /// The first few characters, for a list that should not shout the secret.
@@ -572,7 +572,7 @@ fn system_default_path() -> PathBuf {
 /// `bytes` bytes of system entropy as lowercase hex.
 pub fn random_hex(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
-    getrandom::getrandom(&mut buf).expect("the operating system has no entropy source");
+    getrandom::fill(&mut buf).expect("the operating system has no entropy source");
     let mut out = String::with_capacity(bytes * 2);
     for b in buf {
         use fmt::Write;
@@ -593,7 +593,7 @@ pub fn generate_token() -> String {
 pub fn generate_password() -> String {
     const ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let mut buf = [0u8; 16];
-    getrandom::getrandom(&mut buf).expect("the operating system has no entropy source");
+    getrandom::fill(&mut buf).expect("the operating system has no entropy source");
     buf.iter()
         .map(|b| ALPHABET[*b as usize % ALPHABET.len()] as char)
         .collect()
