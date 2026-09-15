@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../../stores/aiStore";
-import { useAppStore } from "../../../stores/appStore";
+import { refreshAfterConfigImport } from "../../../stores/configImportRefresh";
 import { useConfigSyncStore, slotHeader } from "../../../stores/configSyncStore";
 import {
   applyConfigImport,
@@ -52,7 +52,6 @@ function useErrorText(): (raw: string | null) => string | null {
 export function ConfigBackupSection({ connected }: { connected: boolean }) {
   const { t } = useTranslation();
   const providers = useAiStore((s) => s.providers);
-  const loadConfig = useAiStore((s) => s.loadConfig);
   const cfg = useConfigSyncStore();
   const errorText = useErrorText();
 
@@ -104,9 +103,7 @@ export function ConfigBackupSection({ connected }: { connected: boolean }) {
       }
       if (!window.confirm(confirmMsg)) return;
       await applyConfigImport(staged);
-      await loadConfig();
-      // Imported preferences are in the store but not yet on screen.
-      useAppStore.getState().reloadFromPrefs();
+      await refreshAfterConfigImport();
       setFileStatus({ ok: true, text: t("systemSettings.backup.imported") });
     } catch (e) {
       const invalid = e instanceof Error && e.message === "invalid-backup";

@@ -115,8 +115,9 @@ vi.mock("../ai/configTransfer", async () => {
 
 vi.mock("../ai/configDb", () => ({ listProviders: async () => [] }));
 vi.mock("../project", () => ({ getGlobalDb: async () => ({}) }));
-vi.mock("../../stores/appStore", () => ({
-  useAppStore: { getState: () => ({ reloadFromPrefs: () => {} }) },
+let refreshed = 0;
+vi.mock("../../stores/configImportRefresh", () => ({
+  refreshAfterConfigImport: async () => void refreshed++,
 }));
 
 const { useConfigSyncStore } = await import("../../stores/configSyncStore");
@@ -257,9 +258,13 @@ describe("restore", () => {
     expect(useConfigSyncStore.getState().phase).toBe("preview");
     expect(applied).toHaveLength(0);
 
+    refreshed = 0;
     await useConfigSyncStore.getState().confirmRestore();
     expect(useConfigSyncStore.getState().phase).toBe("done");
     expect(applied).toHaveLength(1);
+    // 「完成」 over a provider list nothing re-read is the bug this pins: the
+    // server route used to refresh only the appearance prefs.
+    expect(refreshed).toBe(1);
   });
 
   it("asks for a password when the envelope is encrypted", async () => {

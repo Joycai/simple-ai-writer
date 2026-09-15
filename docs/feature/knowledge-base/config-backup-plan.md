@@ -187,7 +187,9 @@ export function parseConfigBundle(
 
 **上传**：选档（或新建）→ 勾「包含 API Key」→ 若勾了则密码框变必填 → 显示将要上传的条数 → 推。推完刷新列表，显示「当前版本 · 刚刚 · 本机」。
 
-**恢复**：选档 → 选版本（默认当前）→ 下载 → 若加密则要密码 → 解密 → `parseConfigBundle` → **预览**（复用现有的 `systemSettings.backup.importConfirm` / `importKeysNote` / `importPrefsNote` 三句文案，它们说的正是同一件事）→ 确认 → `applyConfigImport` → `useAppStore.getState().reloadFromPrefs()`。
+**恢复**：选档 → 选版本（默认当前）→ 下载 → 若加密则要密码 → 解密 → `parseConfigBundle` → **预览**（复用现有的 `systemSettings.backup.importConfirm` / `importKeysNote` / `importPrefsNote` 三句文案，它们说的正是同一件事）→ 确认 → `applyConfigImport` → `refreshAfterConfigImport()`（`stores/configImportRefresh.ts`）。
+
+**恢复之后要重读什么，文件导入和服务端恢复共用一个函数**，顺序也是规定好的：先 `aiStore.reloadSelections()`（模型选择和子代理绑定只在启动时从偏好读一次，恢复写进偏好的值不重读就进不了内存），再 `loadConfig()`（清失效 id 这一步要检查的是**恢复来的** id；反过来先跑，清掉并写回偏好的是本窗口旧的那批），然后是外观偏好和 `docFormatStore.reload()`（`hydrate` 只跑一次）。原先两条路各有一份清单：服务端那份只有 `reloadFromPrefs` 一行，恢复报「完成」，供应商列表、模型选择、排版格式却要等重启；文件那份调了 `loadConfig`，但它的清理给每个子代理绑定都换了新对象，按引用比较的持久化订阅把本窗口旧的绑定写回偏好，恢复来的绑定就这样丢了。所以 `loadConfig` 现在只在 id 真的失效时才替换对象，`aiStoreConfigRestore.test.ts` 钉住这一点。字段层面有 `configTransferRoundTrip.test.ts` 兜底：供应商 / 模型 / Prompt 的全部字段按 `Required<…>` 走一遍「写行 → 读行 → 备份 JSON → `parseConfigBundle`」，任何一步漏掉一个字段都会失败，给类型加字段而夹具没跟上时 `tsc` 直接报错。
 
 **恢复前自动留一份回滚包**（可做可不做，倾向做）：`buildConfigBundle(true)` 写到 `<appdata>/config-rollback-<时间戳>.json`，只保留最近 3 份。恢复是唯一一个会同时覆盖数据库行和 keyring 的操作，而 keyring 的旧值一旦被盖就真没了。
 

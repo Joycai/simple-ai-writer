@@ -132,6 +132,15 @@ interface AiState {
   isLoading: boolean;
 
   loadConfig: () => Promise<void>;
+  /**
+   * Re-read every selection (main / prompt / memory / image model, subagent
+   * bindings) from `lib/prefs`. Only a config restore needs this: the store
+   * reads them once at module scope, so selections a restore wrote into prefs
+   * are invisible here — and the subscription below would write the stale
+   * in-memory ones back over them at the next change. Call before `loadConfig`,
+   * so its stale-id sweep checks the restored ids rather than the old ones.
+   */
+  reloadSelections: () => void;
 
   addProvider: (p: Omit<Provider, "id" | "createdAt">, apiKey: string) => Promise<string>;
   updateProvider: (p: Provider, apiKey?: string) => Promise<void>;
@@ -191,10 +200,14 @@ export const useAiStore = create<AiState>((set, get) => ({
       const liveModel = (id: string | null) => (id && modelIds.has(id) ? id : null);
       const liveSubAgents = { ...s.subAgents };
       for (const k of SUBAGENT_KINDS) {
-        liveSubAgents[k] = {
-          ...liveSubAgents[k],
-          modelId: liveModel(liveSubAgents[k].modelId),
-        };
+        const modelId = liveModel(liveSubAgents[k].modelId);
+        // Replace the object only when the id actually went stale. The
+        // persistence subscription compares by reference, so a fresh object
+        // for an unchanged binding rewrites its prefs — which after a config
+        // import wrote this window's old bindings over the restored ones.
+        if (modelId !== liveSubAgents[k].modelId) {
+          liveSubAgents[k] = { ...liveSubAgents[k], modelId };
+        }
       }
       set({
         activeModelId: liveModel(s.activeModelId) ?? models[0]?.id ?? null,
@@ -207,6 +220,15 @@ export const useAiStore = create<AiState>((set, get) => ({
       set({ isLoading: false });
     }
   },
+
+  reloadSelections: () =>
+    set({
+      activeModelId: readSelection("activeModelId"),
+      activePromptId: readSelection("activePromptId"),
+      memoryModelId: readSelection("memoryModelId"),
+      imageModelId: readSelection("imageModelId"),
+      subAgents: readAllSubAgents(),
+    }),
 
   addProvider: async (p, apiKey) => {
     const provider: Provider = { ...p, id: nanoid(), createdAt: Date.now() };

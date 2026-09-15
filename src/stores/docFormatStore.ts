@@ -32,6 +32,11 @@ interface DocFormatState {
   hydrated: boolean;
 
   hydrate: () => Promise<void>;
+  /**
+   * 不管 `hydrated` 重读一遍自建预设和默认。只给配置恢复用：恢复把预设写进了
+   * `config.db`、把默认写进了偏好，而 `hydrate` 只跑一次，不重读就要等重启才看得见。
+   */
+  reload: () => Promise<void>;
   setDefault: (id: string) => void;
   select: (id: string) => void;
   /** 新建或改写一套自建预设，落盘。 */
@@ -109,6 +114,10 @@ export const useDocFormatStore = create<DocFormatState>((set, get) => ({
 
   hydrate: async () => {
     if (get().hydrated) return;
+    await get().reload();
+  },
+
+  reload: async () => {
     let custom: DocFormatPreset[] = [];
     try {
       custom = await loadCustomFormats();
