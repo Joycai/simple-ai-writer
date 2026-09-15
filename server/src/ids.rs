@@ -236,7 +236,7 @@ pub fn slug_for_kb_name(name: &str) -> String {
     if out.is_empty() {
         use sha2::{Digest, Sha256};
         let digest = Sha256::digest(name.trim().as_bytes());
-        format!("kb-{}", &format!("{digest:x}")[..6])
+        format!("kb-{}", &crate::hex_lower(digest)[..6])
     } else {
         out
     }

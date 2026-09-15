@@ -768,7 +768,7 @@ impl Store {
         }
         Ok(Manifest {
             kb: meta,
-            digest: format!("{:x}", hasher.finalize()),
+            digest: crate::hex_lower(hasher.finalize()),
             entries,
         })
     }
@@ -1059,7 +1059,7 @@ impl Store {
         let existing = self.slot_versions(slot);
         check_precondition(&precondition, existing.first().map(|v| v.hash.as_str()))?;
 
-        let hash = format!("{:x}", Sha256::digest(bytes));
+        let hash = crate::hex_lower(Sha256::digest(bytes));
         // Forced strictly upward past the newest stored version. Two uploads in
         // the same millisecond would otherwise produce two versions sharing an
         // `atMs`, and `atMs` is this resource's *address* — the URL that fetches
@@ -2052,7 +2052,7 @@ mod tests {
         assert_eq!(outcome, PutOutcome::Created);
         // Computed here, not supplied — the one place this resource departs
         // from `put_entry`, so the value has to be checkable from the outside.
-        assert_eq!(hash, format!("{:x}", Sha256::digest(payload)));
+        assert_eq!(hash, crate::hex_lower(Sha256::digest(payload)));
 
         let (bytes, version) = s.read_config(&slot.meta.id, None).unwrap();
         assert_eq!(bytes, payload);

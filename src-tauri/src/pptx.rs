@@ -166,16 +166,16 @@ fn rels_path(part: &str) -> String {
 /// and `escape::unescape` resolves the predefined entities — which is the whole
 /// of what the gated method added.
 fn attr_text(attr: &Attribute) -> String {
-    let raw = String::from_utf8_lossy(&attr.value);
-    match unescape(&raw) {
+    let raw = attr.value.as_ref();
+    match unescape(raw) {
         Ok(v) => v.into_owned(),
-        Err(_) => raw.into_owned(),
+        Err(_) => raw.to_string(),
     }
 }
 
 /// The text an `&…;` reference stands for.
 ///
-/// quick-xml 0.41 reports references as their own event rather than folding
+/// quick-xml 0.42 reports references as their own event rather than folding
 /// them into the surrounding text, so a title containing `&` arrives in three
 /// pieces and this is the middle one. Anything unresolvable (a DTD-defined
 /// entity, which OOXML does not use) contributes nothing rather than leaking
@@ -184,8 +184,7 @@ fn reference_text(r: &BytesRef) -> Option<String> {
     if let Ok(Some(ch)) = r.resolve_char_ref() {
         return Some(ch.to_string());
     }
-    let name = r.decode().ok()?;
-    match name.as_ref() {
+    match r.as_ref() {
         "amp" => Some("&".into()),
         "lt" => Some("<".into()),
         "gt" => Some(">".into()),
@@ -203,15 +202,15 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                if e.local_name().as_ref() != b"Relationship" {
+                if e.local_name().as_ref() != "Relationship" {
                     continue;
                 }
                 let mut id = None;
                 let mut target = None;
                 for attr in e.attributes().flatten() {
                     match attr.key.local_name().as_ref() {
-                        b"Id" => id = Some(attr_text(&attr)),
-                        b"Target" => target = Some(attr_text(&attr)),
+                        "Id" => id = Some(attr_text(&attr)),
+                        "Target" => target = Some(attr_text(&attr)),
                         _ => {}
                     }
                 }
@@ -245,15 +244,15 @@ fn slide_parts(zip: &mut Zip) -> Result<Vec<String>, String> {
     let mut reader = Reader::from_str(&pres);
     loop {
         match reader.read_event() {
-            Ok(Event::Start(e)) if e.local_name().as_ref() == b"sldIdLst" => in_list = true,
-            Ok(Event::End(e)) if e.local_name().as_ref() == b"sldIdLst" => break,
+            Ok(Event::Start(e)) if e.local_name().as_ref() == "sldIdLst" => in_list = true,
+            Ok(Event::End(e)) if e.local_name().as_ref() == "sldIdLst" => break,
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                if !in_list || e.local_name().as_ref() != b"sldId" {
+                if !in_list || e.local_name().as_ref() != "sldId" {
                     continue;
                 }
                 for attr in e.attributes().flatten() {
                     let key = attr.key.as_ref();
-                    if attr.key.local_name().as_ref() == b"id" && key.contains(&b':') {
+                    if attr.key.local_name().as_ref() == "id" && key.contains(':') {
                         if let Some(target) = rels.get(attr_text(&attr).as_str()) {
                             out.push(join_target("ppt", target));
                         }
@@ -398,33 +397,33 @@ fn parse_slide(xml: &str, rels: &HashMap<String, String>, base_dir: &str) -> Vec
         match event {
             Event::Start(e) | Event::Empty(e) => {
                 match e.local_name().as_ref() {
-                    b"sp" => {
+                    "sp" => {
                         is_title_shape = false;
                     }
-                    b"pic" => {
+                    "pic" => {
                         in_pic = true;
                         pic_alt.clear();
                     }
                     // The picture's own alt text. `cNvPr` sits on shapes and
                     // group frames too, so only a pic's is read.
-                    b"cNvPr" if in_pic => {
+                    "cNvPr" if in_pic => {
                         for attr in e.attributes().flatten() {
-                            if attr.key.local_name().as_ref() == b"descr" {
+                            if attr.key.local_name().as_ref() == "descr" {
                                 pic_alt = alt_text(&attr_text(&attr));
                             }
                         }
                     }
-                    b"ph" => {
+                    "ph" => {
                         for attr in e.attributes().flatten() {
-                            if attr.key.local_name().as_ref() == b"type" {
+                            if attr.key.local_name().as_ref() == "type" {
                                 let v = attr_text(&attr);
                                 is_title_shape = v == "title" || v == "ctrTitle";
                             }
                         }
                     }
-                    b"blip" if in_pic => {
+                    "blip" if in_pic => {
                         for attr in e.attributes().flatten() {
-                            if attr.key.local_name().as_ref() == b"embed" {
+                            if attr.key.local_name().as_ref() == "embed" {
                                 if let Some(target) = rels.get(attr_text(&attr).as_str()) {
                                     let path = join_target(base_dir, target);
                                     let file = path.rsplit('/').next().unwrap_or(&path).to_string();
@@ -437,28 +436,28 @@ fn parse_slide(xml: &str, rels: &HashMap<String, String>, base_dir: &str) -> Vec
                             }
                         }
                     }
-                    b"tbl" => {
+                    "tbl" => {
                         in_table = true;
                         rows.clear();
                     }
-                    b"tr" if in_table => row.clear(),
-                    b"tc" if in_table => cell = Some(String::new()),
-                    b"p" => {
+                    "tr" if in_table => row.clear(),
+                    "tc" if in_table => cell = Some(String::new()),
+                    "p" => {
                         para = Some(String::new());
                         lvl = 0;
                     }
-                    b"pPr" => {
+                    "pPr" => {
                         for attr in e.attributes().flatten() {
-                            if attr.key.local_name().as_ref() == b"lvl" {
+                            if attr.key.local_name().as_ref() == "lvl" {
                                 lvl = attr_text(&attr).parse::<usize>().unwrap_or(0);
                             }
                         }
                     }
-                    b"t" => in_text = true,
+                    "t" => in_text = true,
                     // A soft line break inside a paragraph: a space, not a
                     // newline — a newline would break the markdown list item
                     // the paragraph becomes.
-                    b"br" => {
+                    "br" => {
                         if let Some(buf) = para.as_mut() {
                             buf.push(' ');
                         }
@@ -469,7 +468,7 @@ fn parse_slide(xml: &str, rels: &HashMap<String, String>, base_dir: &str) -> Vec
             Event::Text(t) => {
                 if in_text {
                     if let Some(buf) = para.as_mut() {
-                        buf.push_str(&t.decode().unwrap_or_default());
+                        buf.push_str(t.as_ref());
                     }
                 }
             }
@@ -481,10 +480,10 @@ fn parse_slide(xml: &str, rels: &HashMap<String, String>, base_dir: &str) -> Vec
                 }
             }
             Event::End(e) => match e.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"sp" => is_title_shape = false,
-                b"pic" => in_pic = false,
-                b"p" => {
+                "t" => in_text = false,
+                "sp" => is_title_shape = false,
+                "pic" => in_pic = false,
+                "p" => {
                     let text = para.take().unwrap_or_default();
                     let trimmed = text.trim().to_string();
                     if let Some(buf) = cell.as_mut() {
@@ -502,13 +501,13 @@ fn parse_slide(xml: &str, rels: &HashMap<String, String>, base_dir: &str) -> Vec
                         }
                     }
                 }
-                b"tc" => {
+                "tc" => {
                     if let Some(text) = cell.take() {
                         row.push(text);
                     }
                 }
-                b"tr" => rows.push(std::mem::take(&mut row)),
-                b"tbl" => {
+                "tr" => rows.push(std::mem::take(&mut row)),
+                "tbl" => {
                     in_table = false;
                     if !rows.is_empty() {
                         blocks.push(Block::Table(std::mem::take(&mut rows)));
@@ -538,17 +537,17 @@ fn parse_notes(xml: &str) -> String {
     loop {
         match reader.read_event() {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => match e.local_name().as_ref() {
-                b"sp" => in_body_shape = false,
-                b"ph" => {
+                "sp" => in_body_shape = false,
+                "ph" => {
                     for attr in e.attributes().flatten() {
-                        if attr.key.local_name().as_ref() == b"type" {
+                        if attr.key.local_name().as_ref() == "type" {
                             in_body_shape = attr_text(&attr) == "body";
                         }
                     }
                 }
-                b"p" => para = Some(String::new()),
-                b"t" => in_text = true,
-                b"br" => {
+                "p" => para = Some(String::new()),
+                "t" => in_text = true,
+                "br" => {
                     if let Some(buf) = para.as_mut() {
                         buf.push(' ');
                     }
@@ -558,7 +557,7 @@ fn parse_notes(xml: &str) -> String {
             Ok(Event::Text(t)) => {
                 if in_text {
                     if let Some(buf) = para.as_mut() {
-                        buf.push_str(&t.decode().unwrap_or_default());
+                        buf.push_str(t.as_ref());
                     }
                 }
             }
@@ -570,9 +569,9 @@ fn parse_notes(xml: &str) -> String {
                 }
             }
             Ok(Event::End(e)) => match e.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"sp" => in_body_shape = false,
-                b"p" => {
+                "t" => in_text = false,
+                "sp" => in_body_shape = false,
+                "p" => {
                     let text = para.take().unwrap_or_default().trim().to_string();
                     if in_body_shape && !text.is_empty() {
                         lines.push(text);

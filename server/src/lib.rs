@@ -54,6 +54,17 @@ use routes::AppState;
 use session::SessionStore;
 use store::Store;
 
+pub(crate) fn hex_lower(bytes: impl AsRef<[u8]>) -> String {
+    use std::fmt::Write as _;
+
+    let bytes = bytes.as_ref();
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
 /// A server that has opened its data directory and bound its port, but is not
 /// yet accepting connections. Everything that can fail at startup has already
 /// failed by the time one of these exists.

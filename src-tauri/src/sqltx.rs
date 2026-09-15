@@ -95,10 +95,16 @@ async fn run(conn: &mut SqliteConnection, statements: &[SqlStatement]) -> Result
         .map_err(|e| e.to_string())?;
 
     for statement in statements {
-        bind(sqlx::query(&statement.sql), &statement.values)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
+        // This command intentionally accepts arbitrary SQL from the same trusted
+        // webview that already has tauri-plugin-sql access. Values remain bound;
+        // asserting the statement text is safe preserves that existing boundary.
+        bind(
+            sqlx::query(sqlx::AssertSqlSafe(statement.sql.as_str())),
+            &statement.values,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
         // On the error path `tx` is dropped here, which rolls back — and the
         // connection it rolls back on is ours alone, so nothing is left holding
         // a lock for the rest of the session.
@@ -107,7 +113,7 @@ async fn run(conn: &mut SqliteConnection, statements: &[SqlStatement]) -> Result
     tx.commit().await.map_err(|e| e.to_string())
 }
 
-type Query<'q> = sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'q>>;
+type Query<'q> = sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>;
 
 /// Bind JSON values positionally, mirroring `tauri-plugin-sql`'s mapping:
 /// numbers go over as f64 (SQLite's column affinity converts them back to

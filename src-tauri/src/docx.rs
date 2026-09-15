@@ -82,8 +82,8 @@ pub struct BlockInfo {
 fn attr(attrs: Attributes, name: &str) -> Option<String> {
     for a in attrs.flatten() {
         let key = a.key.local_name();
-        if key.as_ref() == name.as_bytes() {
-            return Some(String::from_utf8_lossy(&a.value).into_owned());
+        if key.as_ref() == name {
+            return Some(a.value.into_owned());
         }
     }
     None
@@ -98,11 +98,8 @@ fn on_off(attrs: Attributes) -> bool {
     !matches!(attr(attrs, "val").as_deref(), Some("0") | Some("false"))
 }
 
-fn local(name: &[u8]) -> &[u8] {
-    match name.iter().position(|b| *b == b':') {
-        Some(i) => &name[i + 1..],
-        None => name,
-    }
+fn local(name: &str) -> &str {
+    name.rsplit_once(':').map_or(name, |(_, local)| local)
 }
 
 /// `document.xml` 里的 `sectPr`。取**最后一个**：分节符会让文件里出现多个，
@@ -116,26 +113,26 @@ fn parse_page(xml: &str) -> PageInfo {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                let name = local(e.name().as_ref()).to_vec();
-                match name.as_slice() {
-                    b"sectPr" => {
+                let name = local(e.name().as_ref()).to_string();
+                match name.as_str() {
+                    "sectPr" => {
                         depth_in_sect = true;
                         // 后一个 sectPr 覆盖前一个——留下的是 body 末尾那个。
                         page = PageInfo::default();
                     }
-                    b"pgSz" if depth_in_sect => {
+                    "pgSz" if depth_in_sect => {
                         page.width = attr_u32(e.attributes(), "w");
                         page.height = attr_u32(e.attributes(), "h");
                         page.landscape =
                             attr(e.attributes(), "orient").as_deref() == Some("landscape");
                     }
-                    b"pgMar" if depth_in_sect => {
+                    "pgMar" if depth_in_sect => {
                         page.margin_top = attr_u32(e.attributes(), "top");
                         page.margin_right = attr_u32(e.attributes(), "right");
                         page.margin_bottom = attr_u32(e.attributes(), "bottom");
                         page.margin_left = attr_u32(e.attributes(), "left");
                     }
-                    b"docGrid" if depth_in_sect => {
+                    "docGrid" if depth_in_sect => {
                         page.grid_type = attr(e.attributes(), "type");
                         page.grid_line_pitch = attr_u32(e.attributes(), "linePitch");
                         page.grid_char_space =
@@ -145,7 +142,7 @@ fn parse_page(xml: &str) -> PageInfo {
                 }
             }
             Ok(Event::End(e)) => {
-                if local(e.name().as_ref()) == b"sectPr" {
+                if local(e.name().as_ref()) == "sectPr" {
                     depth_in_sect = false;
                 }
             }
@@ -167,36 +164,36 @@ struct BlockCollector {
 }
 
 impl BlockCollector {
-    fn start(&mut self, name: &[u8], attrs: Attributes) {
+    fn start(&mut self, name: &str, attrs: Attributes) {
         match name {
-            b"rPr" => self.in_rpr = true,
-            b"pPr" => self.in_ppr = true,
-            b"rFonts" if self.in_rpr => {
+            "rPr" => self.in_rpr = true,
+            "pPr" => self.in_ppr = true,
+            "rFonts" if self.in_rpr => {
                 self.info.font_east_asia = attr(attrs.clone(), "eastAsia");
                 self.info.font_ascii = attr(attrs, "ascii");
             }
-            b"sz" if self.in_rpr => self.info.size_half_pt = attr_u32(attrs, "val"),
-            b"b" if self.in_rpr => self.info.bold = Some(on_off(attrs)),
-            b"jc" if self.in_ppr => self.info.align = attr(attrs, "val"),
-            b"spacing" if self.in_ppr => {
+            "sz" if self.in_rpr => self.info.size_half_pt = attr_u32(attrs, "val"),
+            "b" if self.in_rpr => self.info.bold = Some(on_off(attrs)),
+            "jc" if self.in_ppr => self.info.align = attr(attrs, "val"),
+            "spacing" if self.in_ppr => {
                 self.info.line = attr_u32(attrs.clone(), "line");
                 self.info.line_rule = attr(attrs.clone(), "lineRule");
                 self.info.space_before = attr_u32(attrs.clone(), "before");
                 self.info.space_after = attr_u32(attrs, "after");
             }
-            b"ind" if self.in_ppr => {
+            "ind" if self.in_ppr => {
                 self.info.first_line_chars = attr_u32(attrs.clone(), "firstLineChars");
                 self.info.first_line = attr_u32(attrs, "firstLine");
             }
-            b"pageBreakBefore" if self.in_ppr => self.info.page_break_before = Some(on_off(attrs)),
+            "pageBreakBefore" if self.in_ppr => self.info.page_break_before = Some(on_off(attrs)),
             _ => {}
         }
     }
 
-    fn end(&mut self, name: &[u8]) {
+    fn end(&mut self, name: &str) {
         match name {
-            b"rPr" => self.in_rpr = false,
-            b"pPr" => self.in_ppr = false,
+            "rPr" => self.in_rpr = false,
+            "pPr" => self.in_ppr = false,
             _ => {}
         }
     }
@@ -216,10 +213,10 @@ fn parse_styles(xml: &str) -> (BlockInfo, Vec<Option<BlockInfo>>) {
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
-                let name = local(e.name().as_ref()).to_vec();
-                if name == b"docDefaults" {
+                let name = local(e.name().as_ref()).to_string();
+                if name == "docDefaults" {
                     in_defaults = true;
-                } else if name == b"style" {
+                } else if name == "style" {
                     // styleId 认 Heading1..Heading4；Word 自己写的就是这几个 id。
                     if let Some(id) = attr(e.attributes(), "styleId") {
                         if let Some(rest) = id.strip_prefix("Heading") {
@@ -240,18 +237,18 @@ fn parse_styles(xml: &str) -> (BlockInfo, Vec<Option<BlockInfo>>) {
                 }
             }
             Ok(Event::End(e)) => {
-                let name = local(e.name().as_ref()).to_vec();
+                let name = local(e.name().as_ref()).to_string();
                 if in_defaults {
                     defaults.end(&name);
                 }
                 if let Some((level, ref mut c)) = current {
                     c.end(&name);
-                    if name == b"style" {
+                    if name == "style" {
                         headings[level] = Some(std::mem::take(&mut c.info));
                         current = None;
                     }
                 }
-                if name == b"docDefaults" {
+                if name == "docDefaults" {
                     in_defaults = false;
                 }
             }

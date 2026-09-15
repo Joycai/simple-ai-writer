@@ -43,7 +43,7 @@ tauri-plugin-notification = "2"
 # pair issued as two `db.execute()` calls is not one transaction — see the module
 # doc comment. `sqltx.rs` opens its own connection to get a real one; the version
 # and feature set match the plugin's so cargo unifies them into one build.
-sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "json"] }
+sqlx = { version = "0.9", default-features = false, features = ["sqlite", "runtime-tokio", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # v4 split the API into keyring-core and each credential store into its own
@@ -55,11 +55,11 @@ serde_json = "1"
 keyring = "4"
 # Lore bundle export/import. Default features pull in bzip2/zstd/aes backends
 # we never produce or accept — deflate is the only method our bundles use.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # Content hashing for knowledge-base sync (`lorehash.rs`). The digest it
 # produces is a wire format shared with the sync server, so this is a real
 # dependency of the protocol, not an implementation detail.
-sha2 = "0.10"
+sha2 = "0.11"
 # `device_label` — the machine name shown as "last written by" in knowledge-base
 # sync. std has no portable hostname call; this is a ~50-line shim over the
 # platform APIs with no dependencies of its own.
@@ -73,14 +73,14 @@ calamine = { version = "0.36", features = ["chrono"] }
 # promotion rather than a new name. Generating in Rust is right here and wrong
 # for .docx: nothing markdown crosses the IPC boundary, only a grid whose cell
 # types the frontend has already settled.
-rust_xlsxwriter = "0.97"
+rust_xlsxwriter = "0.99"
 # .pptx import + the agent's paged slide reader (see pptx.rs). Already in the
 # tree under calamine at this version, so declaring it directly adds a name to
 # this file and nothing to the build.
-quick-xml = "0.41"
+quick-xml = "0.42"
 # Binary file writes cross the IPC boundary as base64 rather than a JSON array
 # of numbers — see `fs_write_binary_file`.
-base64 = "0.22"
+base64 = "0.23"
 # Text-encoding guessing for `fs_read_text_file` (see `decode_text` in
 # commands.rs). A file the author drops into the workspace is as likely GBK
 # (Chinese Windows) or Shift_JIS as UTF-8; before this, anything non-UTF-8 was
@@ -88,7 +88,7 @@ base64 = "0.22"
 # both already proven on exactly this problem, and encoding_rs is in the tree
 # transitively anyway.
 encoding_rs = "0.8"
-chardetng = "0.1"
+chardetng = "1"
 
 # instance.rs asks the OS whether a workspace lock's holder PID is still alive
 # (the advisory multi-open guard). std has no process-liveness call; both
@@ -96,7 +96,7 @@ chardetng = "0.1"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
 # print.rs runs its own NSPrintOperation instead of wry's `print()`, because
 # wry zeroes all four margins on the *shared* NSPrintInfo (wry 0.55 wkwebview
