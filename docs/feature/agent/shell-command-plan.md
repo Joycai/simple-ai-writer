@@ -30,9 +30,9 @@
 
 下面任何一条被破坏都算 bug，不算权衡。
 
-1. **只有可证明只读的命令能在作者点头前起进程。** `commandAccess` 默认返回 `write`；白名单按 PowerShell / POSIX 分开。重定向、管道、分隔、替换、环境前缀、未知程序，以及 `find -delete`、`rg --pre`、`git diff --output` 等危险参数全部审批。
+1. **只有可证明只读、且只读项目内的命令能在作者点头前起进程。** `commandAccess` 默认返回 `write`；白名单按 PowerShell / POSIX 分开。重定向、管道、分隔、替换、变量展开、花括号、环境前缀、未知程序、**带路径或扩展名的程序名**（`./cat`、`./ls.ps1`——按 basename 命中白名单会跑项目里的同名文件），以及 `find -delete`、`rg --pre`、`tree -o`、`git grep -O`、`git diff --output`（**含缩写** `--outp`，git 接受无歧义前缀）等参数全部审批。免审的读取不出卡但输出仍送给模型，所以参数里的绝对路径、`~`、`..`、能匹配 `..` 的点号通配、PowerShell 盘符/provider（`C:` `Env:` `HKLM:`）一律回卡——否则一段注入就能让 `cat ~/.ssh/id_rsa` 静默进上下文。`ls-remote`（联网，`--upload-pack` 能起任意程序）、`locate` / `mdfind`（本意就是搜全盘）、`ps`（`ps e` 打印别的进程的环境变量）不进白名单。
 2. **写命令卡上是命令原文，不是转述。** 等宽、不折行省略、不做任何「美化」；模型的 `reason` 另起一行。批准即运行，拒绝则进程不存在。
-3. **正文的布尔 `autoApprove` 永不覆盖命令。** `AUTO_APPROVABLE` 里没有 `"command"`。命令只有计数授权 `commandLeft`：最多 5 条、绑定 `commandRun`、危险形状永不命中，run 结束即清零。
+3. **正文的布尔 `autoApprove` 永不覆盖命令。** `AUTO_APPROVABLE` 里没有 `"command"`。命令只有计数授权 `commandLeft`：最多 5 条、绑定 `commandRun`、**复合命令和危险形状永不命中**，run 结束即清零。复合那一条不能省：`looksDangerous` 是改卡外观的小表，不是完整清单（`rm *.md`、`git checkout -- .`、`python -c …` 都不中），只靠它挡，批给 `pandoc a.md -o a.epub` 的连批就能盖住 `touch x; <任意命令>`。
 4. **Beta 关着＝工具缺席。** `routeTools` 里 `isCliEnabled() && IS_TAURI && options.commands` 三者同时成立才追加；任何一个不成立，`allowedTools` 里没有它——不是渲染成禁用，不是调用被拒（[tool-presence](../../reference/tool-presence.md) 「关掉时是缺席还是拒绝」）。浏览器里的 `pnpm dev` 永远没有它。
 5. **只有能渲染审批卡的 surface 拿得到。** 对话助手、非批量的任务面板；批量运行、扮演、一致性检查、写手、pack 子运行一律没有。路由用显式 opt-in（`RouteOptions.commands`），不从 preset 推——理由同 `askAuthor`：卡能不能显示是 surface 的属性，preset 不知道。
 6. **stdin 永远是 `/dev/null`。** 任何要交互的命令立刻失败，而不是把整轮挂死在一个看不见的提示符上。配套：`NO_COLOR=1` `TERM=dumb` `PAGER=cat` `GIT_PAGER=cat` `GIT_TERMINAL_PROMPT=0`。
@@ -60,8 +60,8 @@
 | 10 | 进不进 preset 字面量 | **不进，`routeTools` 追加** | 同 `translate` / `ask_author`：要 Beta + Tauri + surface 三个条件，preset 处一个都不知道；顺带让原始 preset 的棘轮看不见它，成本钉在 routed-set 断言里 |
 | 11 | 进不进 orchestrator 的 pack | **第一期不进**，§7 待议 | pack 子运行的审批通道是透传的，技术上能进；但「派一个子运行去跑命令」多出一层间接，先看主 preset 上的用法 |
 | 12 | 作者面向的词 | 功能叫**命令行**，一条叫**命令**，卡叫**运行命令** | 不用「终端」（它暗示有个能交互的窗口，而 §1.6 说没有）、不用「脚本」（那是文件）。实施时对照 `terminology.md` |
-| 13 | 哪些命令免审 | **封闭的、分平台只读白名单；默认写入** | shell 无法可靠静态解析，误判只读会直接执行。常见 `ls/cat/grep/rg/find` 与 PowerShell `Get-ChildItem/Get-Content/Select-String` 覆盖主要盘点场景；有执行钩子或输出文件模式的参数单独退回审批 |
-| 14 | 写命令怎么连批 | **下一批 1–5 条普通写命令，绑定当前 run** | 同生图的 counted grant；不跨用户下一条消息。危险形状不提供按钮，也不消耗已有余量 |
+| 13 | 哪些命令免审 | **封闭的、分平台只读白名单；程序必须是裸名；参数必须留在项目内；默认写入** | shell 无法可靠静态解析，误判只读会直接执行。常见 `ls/cat/grep/rg/find` 与 PowerShell `Get-ChildItem/Get-Content/Select-String` 覆盖主要盘点场景；有执行钩子或输出文件模式的参数单独退回审批（git 长选项按前缀判，因为 git 接受缩写）。参数围栏是 2026-09-15 复查后补的：以前每条命令都过卡，读 `~/.ssh` 作者会看到；免审之后读取的输出不经作者直接进模型上下文，围栏是替那张卡守住「作者没看过的东西不出项目」。误伤（`grep 'a:b'` 在 PowerShell 里被当成 provider 路径）只多一张卡 |
+| 14 | 写命令怎么连批 | **下一批 1–5 条单条普通写命令，绑定当前 run** | 同生图的 counted grant；不跨用户下一条消息。复合命令与危险形状不提供按钮，也不消耗已有余量——危险表不完整，复合是它漏掉的那部分的兜底（§1 不变量 3） |
 
 ---
 
@@ -116,9 +116,9 @@ index.ts       只导出工具与 UI 用到的名字
 
 `command.ts` 是这份方案里**唯一有判断力**的纯逻辑，口径必须窄：
 
-- `commandAccess`：先拒绝所有复合/危险形状，再按真实 shell 选择 POSIX 或 PowerShell 白名单。Git 只允许明确的读取子命令；`find` / `rg` / `file` 逐项排除能执行或落盘的参数。无法解析、环境变量前缀、未知参数一律 `write`。
+- `commandAccess`：先拒绝所有复合/危险形状、花括号、变量展开，再要求程序是裸名（无 `/` `\`，PowerShell 只许 `.exe`）、每个参数（含 `--opt=` 与 `-fVALUE` 里的值）不出项目，最后按真实 shell 选择 POSIX 或 PowerShell 白名单。Git 只允许明确的读取子命令，危险长选项按前缀判、`grep` 的短 `-O` 单独判；`find` / `rg` / `file` / `tree` 逐项排除能执行或落盘的参数。分词器按 shell 区分：反斜杠在 POSIX 是转义，在 PowerShell 是路径分隔。无法解析、环境变量前缀、未知参数一律 `write`。
 - `isCompound`：含 `;` `&&` `||` `|` 换行 反引号 `$(` `${` 任一即为真。宁可误判，多一张卡比静默执行安全。
-- `looksDangerous`：一张小表，命中改变卡的外观并禁止连批，**不拦截**单次批准。
+- `looksDangerous`：一张小表，命中改变卡的外观并禁止连批，**不拦截**单次批准；它不完整，所以连批还要求 `!compound`。
 
 ### 3.3 工具：`run_command`（`registry.ts`，handler 在 `lib/agent/cliTools.ts`）
 
@@ -180,9 +180,9 @@ export interface CommandProposal extends ProposalBase {
 
 **授权行**（替代正文卡的「本次都批准」）：数量 1–5 +「批准并连批 N 条」。规则：
 
-- 只在 `danger === null` 时渲染；危险命令只能单次批准。
+- 只在 `!compound && danger === null` 时渲染（`canGrantCommand`）；复合或危险命令只能单次批准。
 - 落到 `AutoApproveState.commandLeft` + `commandRun`；chat 虽以会话 key 归属，run id 仍钉在当前消息，不能跨消息。
-- `grantsCommand` 在每次命中时重新判 danger，并在启动前扣 1；run 结束清掉余量。
+- `grantsCommand` 在每次命中时用同一个 `canGrantCommand` 重新判复合与危险，并在启动前扣 1；run 结束清掉余量。
 - `isAutoApprovable("command")` 仍为 **false**；正文授权不能覆盖 shell。
 - composer 芯片显示「命令连批 · 剩 N 条」，点击恢复逐条审批。
 

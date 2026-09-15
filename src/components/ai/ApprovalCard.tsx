@@ -1683,7 +1683,7 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
               disabled={deciding}
               title={t("ai.approval.commandBatchHint", {
                 n: batchCount,
-                defaultValue: "接下来 {{n}} 条非危险写命令不再逐条询问；本轮结束或次数用完即恢复审批",
+                defaultValue: "接下来 {{n}} 条非危险的单条写命令不再逐条询问；含分隔、管道、重定向或看起来危险的仍会出卡。本轮结束或次数用完即恢复审批",
               })}
             >
               {t("ai.approval.commandBatch", { n: batchCount, defaultValue: "批准并连批 {{n}} 条" })}

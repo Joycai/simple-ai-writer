@@ -1670,7 +1670,7 @@
       "commandRunning": "Running · {{s}} s",
       "commandBatchCount": "Number of commands to pre-approve",
       "commandBatch": "Approve & batch next {{n}}",
-      "commandBatchHint": "The next {{n}} non-dangerous write commands run without asking one by one; approval returns when this run ends or the count is used up",
+      "commandBatchHint": "The next {{n}} single, non-dangerous write commands run without asking one by one; composed or dangerous-looking lines still ask. Approval returns when this run ends or the count is used up",
       "commandDanger": {
         "delete": "Looks like a bulk delete",
         "history-rewrite": "Looks like it rewrites git history or force-pushes",
@@ -1761,7 +1761,7 @@
       "chipIllustrate": "image batch · {{n}} left",
       "offAppend": "Appends to these files no longer ask: {{files}} (click to go back to asking)",
       "chipCommands": "command batch · {{n}} left",
-      "offCommands": "The next {{n}} non-dangerous write commands no longer ask (click to go back to asking)"
+      "offCommands": "The next {{n}} single, non-dangerous write commands no longer ask (click to go back to asking)"
     },
     "roundLimit": {
       "title": "Round cap reached",
