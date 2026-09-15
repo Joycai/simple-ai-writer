@@ -621,9 +621,9 @@ export interface TranscribeProposal extends ProposalBase {
  * shows `command` verbatim — it is the only thing between the model and the
  * author's account (docs/feature/agent/shell-command-plan.md §1 不变量 1–3).
  *
- * The three judgements `lib/cli/command` makes are computed here, once, and
- * carried on the proposal: the card reads them, and so will the per-program
- * grant (PR 3) — both must see the same answer for the same line.
+ * The command judgements `lib/cli/command` makes are computed before this
+ * proposal: read-only lines never create one; compound/danger are carried so
+ * the card and the counted-batch gate see the same answer for a write.
  */
 export interface CommandProposal extends ProposalBase {
   kind: "command";
@@ -634,8 +634,6 @@ export interface CommandProposal extends ProposalBase {
   timeoutMs: number;
   /** The shell it will run in — the card says so, next to the syntax. */
   shell: ShellInfo;
-  /** `programNameOf(command)`: the key a per-program grant would be made on. */
-  program: string;
   /** `isCompound(command)`: separators, pipes, redirections, substitution. */
   compound: boolean;
   /** `looksDangerous(command)`: changes the card's face, never blocks. */
@@ -3063,6 +3061,9 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   run_command: {
+    // Access metadata is per tool, not per invocation. Keep the strict tier:
+    // commandAccess may fast-path a particular line as read-only, while an
+    // adjacent call can still be a write and must remain serialized/gated.
     access: "write-approval",
     // The description is `describe` (cliTools.describeRunCommand): it names
     // the shell this computer runs, which decides the syntax the model must

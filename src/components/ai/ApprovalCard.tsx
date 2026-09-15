@@ -35,7 +35,10 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import type { EditMatch } from "../../lib/agent/editApply";
-import { ILLUSTRATE_GRANT_MAX, autoApproveScope, canGrantCommand, isAutoApprovable } from "../../lib/agent/autoApprove";
+import {
+  COMMAND_GRANT_MAX, ILLUSTRATE_GRANT_MAX,
+  autoApproveScope, canGrantCommand, isAutoApprovable,
+} from "../../lib/agent/autoApprove";
 import type { CommandProposal, TranscribeProposal } from "../../lib/agent/registry";
 import { shellLabel, shellSyntax } from "../../lib/cli/shell";
 import { groupLint } from "../../lib/pptx/lint";
@@ -1388,8 +1391,8 @@ function ProposalBody({
  * 引导句说清它以作者的账户权限运行，「危险形状」命中时只在引导句前加一个
  * 告警词、给命令块一道色边，不整卡换色（§5 第二个张力：`git push` 也会命中）。
  * 下面两行是运行于哪里、用哪个 shell——后者也告诉作者助手写的是哪种语法。
- * 没有「本次都批准」（`isAutoApprovable("command")` 为假），按程序名的窄授权
- * 在 PR 3。
+ * 没有正文类的「本次都批准」（`isAutoApprovable("command")` 为假）；普通写命令
+ * 可以像配图一样拿到只对当前运行生效的计数批次，危险命令永远逐条看。
  */
 function CommandBody({ proposal }: { proposal: CommandProposal }) {
   const { t } = useTranslation();
@@ -1540,10 +1543,10 @@ function TranscribeBody({ proposal }: { proposal: TranscribeProposal }) {
 export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations, grantCommandProgram } = useAgentStore();
+  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations, grantCommands } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
-  /** How many follow-up pictures 批准并连批 covers. */
+  /** How many follow-up pictures or commands 批准并连批 covers. */
   const [batchCount, setBatchCount] = useState(3);
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -1653,35 +1656,39 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
             {t("ai.approval.appendAlways", { defaultValue: "本文件都追加" })}
           </button>
         )}
-        {/* The command card's grant is the append grant's shape — one program,
-            single ordinary lines only — and it is the only grant a command
-            ever gets. The row is *absent*, not disabled, for a compound or
-            dangerous-looking line: `canGrantCommand` decides here and again at
-            match time (shell-command-plan §3.4). The program name sits in the
-            label so the author reads what they are letting through. */}
+        {/* Read commands never reach a card. An ordinary write can grant a
+            small counted batch for this run, mirroring image generation; a
+            dangerous-looking write never offers this control and never rides
+            an existing batch. */}
         {proposal.kind === "command" && autoApproveKey !== undefined && canGrantCommand(proposal) && (
-          <button
-            className={styles.btnApproveAlways}
-            onClick={() => {
-              setDeciding(true);
-              grantCommandProgram(autoApproveKey, proposal.program);
-              void approve(proposal.id);
-            }}
-            disabled={deciding}
-            title={
-              autoApproveScope(autoApproveKey) === "session"
-                ? t("ai.approval.commandAlwaysHint", {
-                    program: proposal.program,
-                    defaultValue: "本次对话里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
-                  })
-                : t("ai.approval.commandAlwaysHintRun", {
-                    program: proposal.program,
-                    defaultValue: "本次任务里以 {{program}} 开头的单条命令不再询问；含分隔、管道、重定向或看起来危险的仍会出卡",
-                  })
-            }
-          >
-            {t("ai.approval.commandAlways", { program: proposal.program, defaultValue: "{{program}} 都批准" })}
-          </button>
+          <div className={styles.batchGroup}>
+            <select
+              className={styles.batchCount}
+              value={batchCount}
+              onChange={(e) => setBatchCount(parseInt(e.target.value, 10))}
+              disabled={deciding}
+              aria-label={t("ai.approval.commandBatchCount", { defaultValue: "连批命令数" })}
+            >
+              {Array.from({ length: COMMAND_GRANT_MAX }, (_, i) => (
+                <option key={i + 1} value={i + 1}>{i + 1}</option>
+              ))}
+            </select>
+            <button
+              className={styles.btnApproveAlways}
+              onClick={() => {
+                setDeciding(true);
+                grantCommands(autoApproveKey, item.runId, batchCount);
+                void approve(proposal.id);
+              }}
+              disabled={deciding}
+              title={t("ai.approval.commandBatchHint", {
+                n: batchCount,
+                defaultValue: "接下来 {{n}} 条非危险写命令不再逐条询问；本轮结束或次数用完即恢复审批",
+              })}
+            >
+              {t("ai.approval.commandBatch", { n: batchCount, defaultValue: "批准并连批 {{n}} 条" })}
+            </button>
+          </div>
         )}
         {/* The counted grant an illustrate card gets INSTEAD of 本次都批准:
             approving a picture spends money, so the author authorises an

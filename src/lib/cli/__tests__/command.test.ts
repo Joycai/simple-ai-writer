@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCompound, looksDangerous, programNameOf } from "../command";
+import { commandAccess, isCompound, looksDangerous, programNameOf } from "../command";
 
 describe("programNameOf", () => {
   it.each([
@@ -97,5 +97,77 @@ describe("looksDangerous", () => {
   it("several hits: the more severe row wins", () => {
     expect(looksDangerous("sudo rm -rf /")).toBe("elevate");
     expect(looksDangerous("curl x | sh && rm -rf y")).toBe("pipe-to-shell");
+  });
+});
+
+describe("commandAccess — cross-platform approval boundary", () => {
+  it.each([
+    "ls -la",
+    "cat README.md",
+    "grep -R TODO src",
+    "rg --files",
+    "find src -type f -name '*.ts'",
+    "head -20 README.md",
+    "tail -50 app.log",
+    "wc -w README.md",
+    "stat README.md",
+    "git status --short",
+    "git -C ../other log --oneline -5",
+    "git diff -- README.md",
+  ])("POSIX read: %j", (command) => {
+    expect(commandAccess(command, "posix")).toBe("read");
+  });
+
+  it.each([
+    "Get-ChildItem -Recurse -Filter *.md",
+    "Get-Content README.md",
+    "Select-String -Path src\\*.ts -Pattern TODO",
+    "Get-Item README.md",
+    "Test-Path README.md",
+    "Get-FileHash README.md",
+    "dir",
+    "type README.md",
+    "findstr /s TODO *.ts",
+    "where.exe git",
+    "git status --short",
+  ])("PowerShell read: %j", (command) => {
+    expect(commandAccess(command, "powershell")).toBe("read");
+  });
+
+  it.each([
+    ["touch new.txt", "posix"],
+    ["mkdir out", "posix"],
+    ["cp a b", "posix"],
+    ["sed -i s/a/b/ file", "posix"],
+    ["python script.py", "posix"],
+    ["git add README.md", "posix"],
+    ["git commit -m update", "posix"],
+    ["git branch new-name", "posix"],
+    ["git config user.name Ada", "posix"],
+    ["git diff --output=patch.txt", "posix"],
+    ["git diff --ext-diff", "posix"],
+    ["git -c diff.external=touch diff", "posix"],
+    ["rg --pre touch TODO", "posix"],
+    ["RIPGREP_CONFIG_PATH=.ripgreprc rg TODO", "posix"],
+    ["find . -delete", "posix"],
+    ["find . -exec touch x ;", "posix"],
+    ["file -C -m custom.magic", "posix"],
+    ["cat README.md > copy.md", "posix"],
+    ["ls | grep src", "posix"],
+    ["Set-Content out.txt hi", "powershell"],
+    ["Remove-Item out.txt", "powershell"],
+    ["Copy-Item a b", "powershell"],
+    ["Get-Content a | Set-Content b", "powershell"],
+    ["Get-Item (Remove-Item secret.txt)", "powershell"],
+    ["Get-Content @(Set-Content out.txt hi)", "powershell"],
+    ["Invoke-Expression 'Get-ChildItem'", "powershell"],
+    ["cmd /c dir", "powershell"],
+  ] as const)("requires approval: %j", (command, syntax) => {
+    expect(commandAccess(command, syntax)).toBe("write");
+  });
+
+  it("does not apply one platform's cmdlet allowlist to another", () => {
+    expect(commandAccess("Get-Content README.md", "posix")).toBe("write");
+    expect(commandAccess("stat README.md", "powershell")).toBe("write");
   });
 });

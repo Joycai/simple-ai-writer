@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const exists = vi.fn(async (_path: string) => true);
 vi.mock("../../fs/fileio", () => ({ fileExists: (p: string) => exists(p) }));
 
+const run = vi.hoisted(() => vi.fn(async () => ({
+  result: {}, logPath: null, report: "exit 0 · 0.1s · zsh\nreadonly output",
+})));
+vi.mock("../../cli/run", async () => {
+  const real = await vi.importActual<typeof import("../../cli/run")>("../../cli/run");
+  return { ...real, runCommand: run };
+});
+
 const shell = { current: { kind: "zsh", path: "/bin/zsh", version: null } as { kind: string; path: string; version: string | null } | null };
 vi.mock("../../cli/shell", async () => {
   const real = await vi.importActual<typeof import("../../cli/shell")>("../../cli/shell");
@@ -41,6 +49,7 @@ function ctxWith(decide: (p: Proposal) => ApprovalDecision): ToolContext & { see
 
 beforeEach(() => {
   exists.mockClear();
+  run.mockClear();
   shell.current = { kind: "zsh", path: "/bin/zsh", version: null };
   platform.windows = false;
 });
@@ -83,7 +92,6 @@ describe("runCommandTool", () => {
     expect(p.command).toBe("git status; rm -rf x");
     expect(p.path).toBe(PROJECT);
     expect(p.cwdLabel).toBe(".");
-    expect(p.program).toBe("git");
     expect(p.compound).toBe(true);
     expect(p.danger).toBe("delete");
     expect(p.timeoutMs).toBe(60_000);
@@ -93,9 +101,35 @@ describe("runCommandTool", () => {
     expect(r.content).toBe("exit 0 · 0.1s · zsh");
   });
 
+  it("runs a known read command directly without creating an approval", async () => {
+    const ctx = ctxWith(() => ({ approved: false }));
+    const r = await runCommandTool("c1", { command: "ls -la", reason: "inventory" }, ctx);
+
+    expect(ctx.seen).toHaveLength(0);
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      projectPath: PROJECT,
+      cwd: PROJECT,
+      command: "ls -la",
+      timeoutMs: 60_000,
+    }));
+    expect(r.content).toContain("readonly output");
+  });
+
+  it("uses the detected platform syntax for the read allowlist", async () => {
+    const ctx = ctxWith(() => ({ approved: true, backupPath: "approved" }));
+    shell.current = { kind: "pwsh", path: "pwsh.exe", version: "7.4.1" };
+    await runCommandTool("c1", { command: "Get-Content README.md" }, ctx);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(ctx.seen).toHaveLength(0);
+
+    shell.current = { kind: "zsh", path: "/bin/zsh", version: null };
+    await runCommandTool("c2", { command: "Get-Content README.md" }, ctx);
+    expect(ctx.seen).toHaveLength(1);
+  });
+
   it("resolves a project-relative cwd and refuses one outside or under .ai-writer", async () => {
     const ctx = ctxWith(() => ({ approved: true, backupPath: "ok" }));
-    await runCommandTool("c1", { command: "ls", cwd: "卷一" }, ctx);
+    await runCommandTool("c1", { command: "touch note.txt", cwd: "卷一" }, ctx);
     expect((ctx.seen[0] as CommandProposal).path).toBe(`${PROJECT}/卷一`);
     expect((ctx.seen[0] as CommandProposal).cwdLabel).toBe("卷一");
 
