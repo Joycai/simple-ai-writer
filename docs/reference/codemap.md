@@ -4,7 +4,7 @@
 > 这里是 `CLAUDE.md` 目录地图的**展开版**：每个目录一节，写的是那个目录的模块分工、不变量和「为什么不是另一种做法」，以及各自设计文档的落点。`CLAUDE.md` 只保留一句话和硬规则；**改某个目录之前，先读它在这里的那一节。**
 > 2026-09-07 从 `CLAUDE.md` 原样搬出（那份文件曾长到 73KB，每次会话都整份进上下文）。往这里加细节，不往 `CLAUDE.md` 加。
 >
-> **覆盖面**：`src/components/*`、`src/lib/*`、`src-tauri/`、`server/`——每个目录一节，新建一个目录就在这里加一节（2026-09-12 补齐了 `lib/docx` · `lib/editor` · `lib/format` · `lib/search` · `lib/sync` · `components/roleplay` · `components/sync` 与 `src-tauri/`，此前它们只有 `CLAUDE.md` 里的一行）。三个目录**故意不在这里**，因为别处讲得更全：`src/stores/` 看 `CLAUDE.md` → State Management（一段一个 store），`src/styles/` 与 `src/i18n/locales/` 看 [`design-system.md`](design-system.md) 与 [`terminology.md`](terminology.md)。
+> **覆盖面**：`src/components/*`、`src/lib/*`、`src-tauri/`、`server/`——每个目录一节，新建一个目录就在这里加一节（2026-09-12 补齐了 `lib/docx` · `lib/editor` · `lib/format` · `lib/search` · `lib/sync` · `components/roleplay` · `components/sync` 与 `src-tauri/`，此前它们只有 `CLAUDE.md` 里的一行）。两个目录**故意不在这里**，因为别处讲得更全：`src/styles/` 与 `src/i18n/locales/` 看 [`design-system.md`](design-system.md) 与 [`terminology.md`](terminology.md)。（2026-09-16 补上 `src/stores/`，此前它只在 `CLAUDE.md` 的 State Management 一节里。）
 
 ## AI 运行时（`src/lib/agent/` 全景）
 
@@ -177,6 +177,31 @@ document import into the workspace: docx via mammoth+turndown (`docx.ts`/`markdo
 ### `src/lib/` 根模块
 
 `project.ts`, `keyStore.ts`, `instance.ts` (multi-instance / 多开 — the app runs as several processes, one workspace each, VS Code-style: the advisory `.ai-writer/window.lock` plus the loopback focus channel that brings the *existing* window forward when a folder is opened twice (dialog only as fallback), the CLI workspace argument, and spawning a sibling instance for the 新窗口 buttons; paired with `src-tauri/src/instance.rs` and the prefs focus refresh + merged recents write. Separate processes are also why macOS's 「Window」 menu cannot list the siblings on its own — `src-tauri/src/windowmenu.rs` builds that list from a per-pid registry and switches via the same focus channel, and `useWindowTitle` is what gives each window a name to show. Both — see `docs/reference/architecture.md` → Multi-instance), `prefs.ts` (**every** app preference — theme, language, panel widths, model selections; backed by `config.db`, read synchronously from an in-memory cache that `main.tsx` hydrates *before* importing anything that reads one. Never add a `localStorage` call: add a key to `PREF_KEYS` instead — see `docs/reference/architecture.md` → Preferences), `appReset.ts` (重置应用配置 —— 清空 `config.db` 的配置表、全部偏好和钥匙串里的密钥，**钥匙串先于数据库**，因为 `providers` 那几行是「钥匙串里有哪些账户」的唯一记录；文档 / 知识库 / 用量一律不碰。见 `docs/reference/architecture.md` → 重置应用配置), `sqlTx.ts` (**the** way to run several writes as one transaction — the SQL plugin is a connection *pool*, so a hand-written `BEGIN`/`COMMIT` pair is not one transaction and deadlocks the pool; see `docs/reference/architecture.md` → Transactions), `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知), `http.ts`, `paths.ts`, `platform.ts`, `webviewCaps.ts` (渲染引擎的能力底线 — probed by **feature**, never by OS or UA version: the floor the build targets, reported once per missing set under the TitleBar and always in Settings → 关于. Fill where the dependency offers a fill — pdfjs loads its `legacy/build` for exactly this — and probe only what nobody polyfills for us; see `docs/reference/architecture.md` → 渲染引擎的能力底线)
+
+## `src/stores/`
+
+Zustand stores。一个 store 一个关注点，**存的是「现在是什么」，不是「怎么做」**：决策形状的东西住在对应的 `lib/` 子系统里，store 只做时序、订阅和缓存。从 `CLAUDE.md` 搬来（2026-09-16），那边只留一份名字索引。
+
+- **`appStore`** — 主题、语言（i18n）、侧栏 / 面板折叠、活动标签页。持久化的字段经 `lib/prefs` 的 `prefBackedState()` 拿初值；配置导入之后由 `reloadFromPrefs()` 重新派生，因为那些字段只在启动时读过一次偏好。
+- **`projectStore`** — 当前项目路径、文件树、活动文件、字数 / 字符数，以及解析好的 `workspace`（启用了哪些能力包）。**组件订阅的是这里的 `workspace`**，不是 `lib/profile/active` 那个单例——单例不是响应式的。
+- **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度。
+- **`loreStore`** — 已索引的知识库条目、别名映射、条目摘要；项目打开时自动扫 `.ai-writer/lore/`（`scanLore`）。
+- **`aiStore`** — 供应商、模型、提示词。**API 密钥不在这里**：它们经 Rust 的 `secret_*` 命令住在 OS 钥匙串里（`src/lib/keyStore.ts`），这个 store 只存「有哪些 provider」，而那几行也是「钥匙串里有哪些账户」的唯一记录（见 `appReset` 的顺序规矩）。
+- **`aiTaskStore`** — 正在跑的 AI 任务：流式输出、token 用量、中断信号。任务按声明的 `tools` / `target` / `continuation` 分支，**从不按 id 分支**。
+- **`agentStore`** — 对话助手的家：L2 审批队列 **和** 会话状态。同时开几个会话（`chats: Record<key, LiveChat>` + `activeChatKey` 一根轴，`runningChats` / `chatQueue` 另一根，信号量在 `lib/agent/scheduler.ts`，与 roleplay 共用）；每张卡片带 `surface: chat:<key>`，「本次都批准」的 key 是 `chatAutoApproveKey(key)` 而不是一个共享字面量。
+- **`navStore`** — 前进 / 后退历史，靠**观察**其他 store 记录——没有任何调用点登记什么。位置是作者真正在其间移动的那个三元组（哪个主视图 / 哪个文件 / 哪个条目）。
+- **`batchStore`** — 批处理（`batch: true` 的任务）：对拆出来的子句顺序循环调 `runTask`，结果逐条追加进一个输出文件。
+- **`composerStore`** — 作者打了但还没发的内容。**按会话存，永不持久化**：AI 抽屉是 `AnimatePresence` 的子节点，关闭即卸载，原来放在 `useState` 里的半句话跟着一起死；而一句写了一半的指令属于作者，不属于正在显示它的那个界面。
+- **`memoryStore`** — 每份文档的故事记忆片段（`lib/context/memory`）：覆盖范围、新鲜度、以及那次做摘要的运行。
+- **`imageStore`** — 一次对话式的图像会话（初次生成，然后在其上编辑，每轮产出候选供作者挑）。轮次链是**树，不是线**——作者经常退回两轮再岔出去——并且每一轮都记下走的是哪条 provider 路径。
+- **`docFormatStore`** — .docx 排版格式预设。**装机级，不是项目级**（一套公文格式要跨项目复用）：内置的在代码里，作者自建的落在 `config.db`，从一份 .docx 读出来的那一套只活在本次会话里。见 `docs/feature/docx/01-agent-design.md` §7。
+- **`syncStore`** — 知识库同步：连接、绑定、plan→run 的生命周期。决策形状的东西已经在 `lib/sync` 里（三路比对、客户端、执行器），这里只管时序。**任何一个方向都不会在作者没看过计划的情况下执行**——刻意没有「立即同步」这个按钮。
+- **`configSyncStore`** — 应用配置备份：槽位列表、一次推送、一次带预览的恢复。**与 `syncStore` 分开而不是做成它的一节，只因一件事决定了整个形状：这件事不需要打开任何项目。**
+- **`consistencyStore`** — 一致性检查的状态。做成 store 而不是组件状态，是因为抽屉一次只渲染一个标签页：切到对话助手再切回来会把检查卸载掉。
+- **`roleplayStore`** — 互动式角色扮演：花名册 + 每个 agent 的活会话 + 并发闸。为什么是新 store 而不是改造 `agentStore`，见它自己的文件头。
+- **`themeStore`** — 设置页看到的主题注册表；是 `lib/theme/install` 的一层薄 React 面孔（经 `subscribeRegistry` 镜像），状态的主人在那边。
+- **`digestStore`** — 集合摘要（`lib/context` 的 collection digests）的运行状态。
+- **`configImportRefresh.ts`** — 不是 store，是「一份配置落地之后（从文件或从同步服务器）必须重读哪些东西」的**那一个**函数。两条路线共用它；**顺序就是全部的重点**：先从 prefs 取选择（恢复刚把它们写进去，而 store 只在启动时读），再 `loadConfig`（它的失效 id 清扫必须拿*那些* id 去比合并后的表，先跑就会把新的扫掉并持久化），最后才是外观偏好和排版格式预设。
 
 ## `src-tauri/`
 
