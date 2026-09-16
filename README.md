@@ -4,422 +4,311 @@
 [![Release](https://github.com/Joycai/simple-ai-writer/actions/workflows/release.yml/badge.svg)](https://github.com/Joycai/simple-ai-writer/actions/workflows/release.yml)
 [![Latest release](https://img.shields.io/github/v/release/Joycai/simple-ai-writer?sort=semver)](https://github.com/Joycai/simple-ai-writer/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#installation)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#install)
 
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
-[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev)
-[![GitHub stars](https://img.shields.io/github/stars/Joycai/simple-ai-writer?style=social)](https://github.com/Joycai/simple-ai-writer/stargazers)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vite.dev)
 
-A modern, local-first desktop Markdown editor with AI writing assistance powered by your own knowledge base. Write smarter with contextual AI suggestions based on custom lore entities.
+A local-first desktop writing workspace that combines a Markdown editor, a project knowledge base, and an approval-gated AI agent. It is designed for long-form writing and document work where source files, context, and generated results should remain under the author's control.
 
-**Available on:** macOS • Windows • Linux
-
----
-
-## Features
-
-🎯 **Local-First Architecture**
-- All data stored locally—no cloud sync required
-- Multi-platform support via Tauri v2
-- Works offline; AI features require configured providers
-
-📝 **Rich Markdown Editor**
-- CodeMirror 6 with GitHub Flavored Markdown (GFM)
-- Live split/preview modes with KaTeX math rendering
-- Syntax highlighting and line wrapping
-- Word/character count tracking
-
-🧠 **AI Writing Assistance**
-- **Task-based workflows**: Continue • Polish • Rewrite • Summarize • Custom
-- **RAG-powered context**: Automatically surfaces relevant lore entities
-- **Multi-provider support**: OpenAI • Google Gemini • Anthropic Claude (or any OpenAI-compatible API)
-- **Token tracking**: Monitor API usage and costs per session
-
-📚 **Lore Knowledge Base**
-- Create organized entity folders with Markdown summaries
-- Alias-based entity matching for smart context retrieval
-- 4-layer context assembly (system prompt → lore → document → task)
-- Fast keyword scanning without embeddings
-
-⚙️ **Provider & Model Management**
-- Add multiple AI providers with API key security
-- Auto-fetch available models from provider APIs
-- Create custom prompt templates for different writing tasks
-- Secure key storage with argon2 KDF encryption
-
-💾 **Export & Share**
-- **Markdown**: Copy to clipboard
-- **HTML**: Self-contained file with inline CSS
-- **PDF**: System print dialog (macOS/Windows/Linux)
-
-🌐 **Internationalization**
-- English & 中文 (Simplified Chinese) built-in
-- Easy to add more languages via i18next
+**Runs on macOS, Windows, and Linux.** The editor and project data are local. Network access is used only when you call a configured AI provider or opt into the companion sync server.
 
 ---
 
-## Tech Stack
+## What it does
+
+### Write in a real local workspace
+
+- Edit Markdown, text, and HTML files directly inside any folder you choose.
+- Use editor, preview, and split views with GFM, KaTeX, Mermaid, syntax highlighting, zoom, and linked scrolling.
+- Organize files freely, or use the Library view for grouped long-form documents, rolling summaries, and cross-document continuity.
+- Search documents, knowledge-base entries, and the current file from the command palette.
+- Keep project metadata beside the work in `.ai-writer/`; there is no proprietary document container.
+
+### Bring your own AI
+
+- Connect official or compatible endpoints for four protocol families:
+  - OpenAI Chat Completions
+  - OpenAI Responses
+  - Google Gemini
+  - Anthropic Messages
+- Use hosted providers, gateways, or local servers such as Ollama and LM Studio.
+- Configure models by capability, including text, vision, PDF input, video input, image generation, translation, and speech recognition.
+- Keep API keys in the operating system credential manager rather than in project files or SQLite.
+- Track token usage and configured costs per model call.
+
+### Use task workflows or the full agent
+
+Built-in neutral tasks include Continue, Rewrite, Polish, Summarize, HTML Artifact, and Custom. Projects can add domain-specific tasks through capability packs.
+
+The unified agent runtime can:
+
+- search and read project files, HTML pages, slide decks, and knowledge-base entries;
+- propose precise edits or full-document rewrites;
+- create files and hand work to specialized subagents;
+- maintain notes, compact long conversations, rewind chats, and resume persisted long-running tasks;
+- ask the author questions and pause at round limits instead of silently guessing;
+- show approval cards before protected edits, conversions, exports, transcription, or command execution.
+
+The task panel and conversational assistant share the same runtime and execution log. Multiple chat sessions can remain available at once.
+
+### Build a structured knowledge base
+
+Knowledge-base entries live as Markdown under `.ai-writer/lore/<category>/<entry>/` and can include:
+
+- aliases and frontmatter metadata;
+- independently activated facets with keys, groups, priority, and injection modes;
+- collections that narrow discovery without changing the underlying data;
+- image galleries and per-category image slots;
+- citations that navigate back to the source entry.
+
+Context assembly combines the current task, document focus, relevant entries, recent material, rolling memory, and optional book-spine summaries. Retrieval is local and does not require an embedding service.
+
+### Adapt the workspace with capability packs
+
+A project can enable any number of additive packs—or none. Built-in packs currently cover:
+
+- Novel
+- TTRPG module
+- Copywriting
+- WeChat articles
+- Weekly reports
+- Feedback reports
+- Bid responses
+
+Each pack contributes task definitions and knowledge-base categories without changing the app-wide document model or vocabulary. The selection is stored in `.ai-writer/profile.json` and can be changed later.
+
+### Import, export, illustrate, and back up
+
+**Import**
+
+- Convert `.docx`, `.xlsx`, `.pdf`, and `.pptx` into editable Markdown.
+- Copy Markdown, text, HTML, images, audio, and video into the workspace without modifying the source file.
+- Preserve extracted images beside converted documents.
+
+**Export**
+
+- Copy Markdown.
+- Export self-contained HTML.
+- Print or save as PDF through the system print dialog.
+- Generate and edit document illustrations with configured image models; assets use relative links inside the project.
+
+**Back up and sync**
+
+- Export or restore a whole-project archive.
+- Export or import app configuration separately; including API keys is an explicit opt-in and local JSON exports must be protected.
+- Encrypt server-side configuration backups whenever API keys are included.
+- Optionally run the standalone `server/` companion for one-direction-at-a-time knowledge-base sync and versioned app-configuration backups. The desktop app never requires this server.
+
+---
+
+## Experimental features
+
+Settings → AI Configuration → Lab contains features that are **off by default**. When disabled, their entry points and agent tools are absent rather than shown as permanently unavailable.
+
+- PPTX export from HTML slides
+- Word (`.docx`) export with reusable typography presets
+- Excel (`.xlsx`) export from Markdown tables
+- Interactive first-person roleplay with narrator handoff
+- Assistant tool-pack orchestration
+- Structured state memory for very long chats
+- Sakura-style Japanese-to-Chinese translation through a local compatible endpoint
+- Local ComfyUI image generation
+- Qwen audio/video transcription with timestamps and optional diarization
+- Local command execution with approval policy
+
+These features are usable but intentionally remain behind explicit opt-in because they add specialized models, local services, larger tool surfaces, or higher-risk actions.
+
+---
+
+## Tech stack
 
 | Layer | Technology |
-|-------|-----------|
-| **Desktop** | Tauri v2 (Rust backend) |
-| **Frontend** | React 19 + TypeScript + Vite |
-| **Editor** | CodeMirror 6 |
-| **Preview** | markdown-it + KaTeX |
-| **State** | Zustand |
-| **Database** | SQLite (tauri-plugin-sql) |
-| **Secrets** | OS credential manager via `keyring` crate |
-| **i18n** | react-i18next |
-| **Styling** | CSS Modules + CSS Variables (dark/light theme) |
+| --- | --- |
+| Desktop shell | Tauri v2 |
+| Frontend | React 19, TypeScript 7, Vite 8 |
+| Editor | CodeMirror 6 |
+| Preview | markdown-it, KaTeX, Mermaid |
+| State | Zustand |
+| Motion | Motion |
+| Project/config storage | SQLite |
+| Secrets | OS credential manager through Rust `keyring` |
+| Backend | Rust commands for scoped file I/O, Office formats, printing, key storage, and transactions |
+| Optional sync server | Rust + axum |
+| Localization | i18next; English and Simplified Chinese |
+| Styling | CSS Modules plus a token-based theme system |
 
 ---
 
-## Installation
+## Install
 
-### Prerequisites (all platforms)
-- **Node.js** 18+ & **pnpm** 9+
-- **Rust** 1.70+ with the platform's native toolchain (see per-platform guides below)
-- macOS 11+, Windows 10+, or modern Linux
+### Download a release
 
-### Windows Setup
+Download the installer for your platform from [GitHub Releases](https://github.com/Joycai/simple-ai-writer/releases):
 
-1. **Install Microsoft C++ Build Tools** — required by the Rust MSVC toolchain and Tauri.
-   - Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Community is fine) or the standalone [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/), and select the **"Desktop development with C++"** workload.
+| Platform | Artifacts |
+| --- | --- |
+| macOS | Universal `.dmg` |
+| Windows | `.msi` or NSIS `.exe` |
+| Linux | `.AppImage` or `.deb` |
 
-2. **WebView2 Runtime** — Tauri's rendering engine.
-   - Preinstalled on Windows 11 and up-to-date Windows 10. If missing, download the [Evergreen Bootstrapper](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+Release builds are currently not code-signed. Your operating system may require an explicit first-run confirmation.
 
-3. **Install Rust** (MSVC toolchain):
-   ```powershell
-   winget install Rustlang.Rustup
-   ```
-   Rustup installs the `stable-x86_64-pc-windows-msvc` toolchain by default. **Restart your terminal afterwards** so `cargo` is on `PATH` (or run `$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"` in the current session).
+### Build from source
 
-4. **Install Node.js and pnpm**:
-   ```powershell
-   winget install OpenJS.NodeJS.LTS
-   npm install -g pnpm
-   ```
+Prerequisites:
 
-5. **Clone, install, and run**:
-   ```powershell
-   git clone https://github.com/yourusername/simple-ai-writer.git
-   cd simple-ai-writer
-   pnpm install
-   pnpm tauri dev      # dev app with hot reload
-   pnpm tauri build    # release build: .msi + NSIS setup.exe
-   ```
+- a current Node.js LTS release;
+- pnpm 10;
+- the current Rust stable toolchain;
+- the native prerequisites required by Tauri v2 for your platform.
 
-   > **Note:** the first `pnpm tauri build` automatically downloads WiX and NSIS (with hash verification) into `%LOCALAPPDATA%\tauri`; later builds reuse the cache. Installers land in `src-tauri\target\release\bundle\{msi,nsis}\`.
+Platform notes:
 
-**Troubleshooting (Windows)**
-- `cargo: command not found` / "not recognized" → Rust isn't installed or the terminal was opened before installation; see step 3.
-- `link.exe not found` → the C++ workload from step 1 is missing.
-- A blank app window → WebView2 runtime is missing; see step 2.
-
-### macOS Setup
-
-1. **Install Xcode Command Line Tools** — provides `clang` and the system linker:
-   ```bash
-   xcode-select --install
-   ```
-
-2. **Install Rust**:
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source "$HOME/.cargo/env"
-   ```
-
-3. **Install Node.js and pnpm** (via [Homebrew](https://brew.sh), or any Node version manager):
-   ```bash
-   brew install node pnpm
-   ```
-
-4. **Clone, install, and run**:
-   ```bash
-   git clone https://github.com/yourusername/simple-ai-writer.git
-   cd simple-ai-writer
-   pnpm install
-   pnpm tauri dev      # dev app with hot reload
-   pnpm tauri build    # release build: .app + .dmg
-   ```
-
-   Bundles land in `src-tauri/target/release/bundle/{macos,dmg}/`.
-
-5. **(Optional) Universal binary** — one artifact for both Apple Silicon and Intel:
-   ```bash
-   rustup target add aarch64-apple-darwin x86_64-apple-darwin
-   pnpm tauri build -- --target universal-apple-darwin
-   ```
-
-**Troubleshooting (macOS)**
-- `xcrun: error: invalid active developer path` → rerun `xcode-select --install`.
-- Unsigned-app warning when opening the built `.app` → right-click → **Open** the first time, or configure [code signing](https://tauri.app/distribute/sign/macos/) for distribution.
-
-### Linux Build
-
-Install your distro's WebKitGTK dev packages (see the [Tauri Linux prerequisites](https://tauri.app/start/prerequisites/#linux)), then:
+- **Windows:** install the Visual Studio C++ desktop workload and WebView2 Runtime.
+- **macOS:** install Xcode Command Line Tools with `xcode-select --install`.
+- **Linux:** install the WebKitGTK 4.1 and other Tauri build packages for your distribution.
 
 ```bash
-pnpm tauri build -- --target x86_64-unknown-linux-gnu   # appimage/deb
+git clone https://github.com/Joycai/simple-ai-writer.git
+cd simple-ai-writer
+pnpm install
+pnpm tauri dev
 ```
 
-Binaries for all platforms end up under `src-tauri/target/release/bundle/`.
+Build installers for the current platform:
+
+```bash
+pnpm tauri build
+```
+
+`pnpm dev` starts only the Vite frontend on port `1420`. It is useful for UI work, but Tauri IPC features such as filesystem access, SQLite, the keyring, native dialogs, and printing will not work there. Use `pnpm tauri dev` for the normal development loop.
 
 ---
 
-## Quick Start
+## Quick start
 
-1. **Open or create a project**
-   - Click "Open Project" to select or scaffold a new workspace
-   - Auto-creates the `.ai-writer/` data directory (lore categories + `project.db`); your documents live directly in the workspace, organized however you like
-
-2. **Write content**
-   - Create/edit Markdown files in the left sidebar
-   - Toggle Editor ⟷ Preview ⟷ Split view in toolbar
-
-3. **Set up AI (optional)**
-   - Click ⚙ (Settings) → **Providers** tab
-   - Add an OpenAI, Gemini, or Anthropic API key and base URL
-   - Go to **Models** tab → click model provider → fetch available models
-   - (Optional) **Prompts** tab to create custom writing templates
-
-4. **Use AI features**
-   - Highlight text in editor
-   - Open **AI** panel (right sidebar)
-   - Select a task (Continue, Polish, Rewrite, Summarize, or Custom)
-   - Watch streaming output, then "Insert to Document" or start over
-
-5. **Manage lore**
-   - Create folders in `lore/` with entity Markdown files
-   - Each folder = one entity with `index.md` summary + aliases file
-   - AI automatically surfaces matching entities in context
-
-6. **Export**
-   - Click **Export** → Choose format (Markdown, HTML, PDF)
-   - Save or copy output
+1. **Open a folder.** Simple AI Writer initializes `.ai-writer/` without moving or wrapping your existing documents.
+2. **Choose capability packs.** Select any combination during onboarding or later in Settings → Workspace.
+3. **Connect a provider.** Add a provider and model in Settings → Providers & Models, or configure a local endpoint.
+4. **Write or import material.** Create Markdown files, import Office/PDF documents, or add images and recordings.
+5. **Add knowledge.** Create entries in the Knowledge Base and organize details into facets or collections when useful.
+6. **Call AI.** Select text for an edit task, run a continuation, open the assistant, or use the command palette.
+7. **Review before applying.** Generated drafts, proposed edits, and protected actions stay visible until you accept them.
 
 ---
 
-## Project Structure
+## Project data layout
 
+A workspace remains an ordinary folder. App-owned project state is namespaced under `.ai-writer/`:
+
+```text
+my-project/
+├── chapter-01.md
+├── research/
+├── assets/
+└── .ai-writer/
+    ├── project.db             # project-scoped usage and runtime data
+    ├── profile.json           # enabled capability packs and custom categories
+    ├── lore/                  # knowledge-base entries and galleries
+    ├── memory/                # rolling context summaries
+    ├── tasks/                 # resumable agent task state
+    ├── roleplay/              # roleplay transcripts and memory areas
+    ├── themes/                # project typography themes
+    ├── workflows/             # project workflow overrides
+    ├── backups/               # safety copies made before destructive writes
+    └── tmp/                   # conversion and transcription caches
 ```
-simple-ai-writer/
-├── src/
-│   ├── components/        # React components
-│   │   ├── editor/        # CodeMirror wrapper, Preview
-│   │   ├── layout/        # TitleBar, IconRail, Sidebar, EditorArea, AiRail
-│   │   ├── ai/            # AiPanel (task UI, streaming output)
-│   │   ├── lore/          # LorePanel (entity browser)
-│   │   └── settings/      # SettingsPage + panes/ (provider+model, prompt, usage…)
-│   ├── stores/            # Zustand stores
-│   │   ├── projectStore   # Project & file tree state
-│   │   ├── editorStore    # Editor content, selection, save state
-│   │   ├── loreStore      # Lore entity index
-│   │   ├── aiStore        # Provider/model/prompt config
-│   │   ├── aiTaskStore    # Running AI task state
-│   │   └── keyStore       # OS-keyring API key storage (lib/keyStore.ts)
-│   ├── lib/               # Business logic
-│   │   ├── project.ts     # File tree, scaffolding, DB init
-│   │   ├── markdown.ts    # Rendering (preview + export)
-│   │   ├── fileio.ts      # Tauri fs commands
-│   │   ├── db.ts          # SQLite schema & queries
-│   │   ├── rag.ts         # Context assembly, entity matching
-│   │   ├── aiClient.ts    # SSE streaming for OpenAI/Gemini/Anthropic
-│   │   └── export.ts      # Markdown/HTML/PDF export
-│   ├── i18n/              # Translation files (en, zh-CN)
-│   └── App.tsx            # Root component
-├── src-tauri/
-│   ├── src/
-│   │   └── lib.rs         # Tauri setup hooks, command registration
-│   └── capabilities/      # Permission scopes
-├── pnpm-lock.yaml
-└── package.json
-```
+
+Installation-scoped provider, model, prompt, and preference data lives in `config.db` under the app data directory. API keys live separately in the OS credential manager.
 
 ---
 
-## Configuration
+## Repository map
 
-### API Keys & Providers
+```text
+src/
+├── components/        # editor, layout, AI cards/chat, knowledge base, settings, sync
+├── stores/            # Zustand stores, one concern per store
+├── lib/
+│   ├── ai/            # provider protocols, streaming, model capabilities, usage
+│   ├── agent/         # tool loop, approvals, routing, compaction, subagents
+│   ├── context/       # RAG assembly, memory, document focus, clock
+│   ├── lore/          # entry model, facets, collections, citations, galleries
+│   ├── profile/       # capability packs and workspace profile resolution
+│   ├── import/        # docx/xlsx/pdf/pptx → Markdown
+│   ├── fs/            # scoped project I/O, Markdown rendering, export, backup
+│   └── …              # docx, pptx, xlsx, roleplay, translation, ASR, themes, sync
+├── i18n/locales/      # en and zh-CN
+└── styles/            # design tokens and global cascade
 
-Keys are stored in the operating system's credential manager (Windows Credential Manager, macOS Keychain, Linux Secret Service) — never in plaintext files or the database.
-
-**Adding a provider:**
-1. Open Settings ⚙ → Providers
-2. Name (e.g., "OpenAI", "My Gemini", "Anthropic")
-3. Base URL (e.g., `https://api.openai.com/v1`)
-4. Standard (OpenAI, Gemini, or Anthropic format — pick the one the endpoint actually speaks)
-5. Paste API key → Save
-
-**Fetching models:**
-1. Settings → Models → Click provider name → "Fetch from API"
-2. Select models to enable
-
-### Lore Entity Format
-
-Create a folder under `lore/` with this structure:
-
-```
-lore/
-└── EntityName/
-    ├── index.md          # Main summary (rendered in preview)
-    └── aliases.txt       # One alias per line (for context matching)
+src-tauri/             # Tauri/Rust desktop backend
+server/                # optional standalone sync/config-backup server
+docs/                  # living architecture, API, feature, and issue documentation
+themes/                # example downloadable themes
 ```
 
-Example `index.md`:
-```markdown
-# Alice
-
-Alice is the protagonist of the story...
-
-## Background
-Born in...
-
-## Personality
-She is...
-```
-
-Example `aliases.txt`:
-```
-Alice Cooper
-main character
-protagonist
-```
+For the maintained source map and subsystem invariants, read [`docs/reference/codemap.md`](docs/reference/codemap.md). [`docs/README.md`](docs/README.md) indexes all design and implementation documents with their current status.
 
 ---
 
 ## Development
 
-### Project Commands
+### Frontend and desktop commands
 
 ```bash
-pnpm dev           # Start dev server
-pnpm build         # Build frontend
-pnpm tsc --noEmit  # Type-check without emit
-pnpm tauri dev     # Run Tauri dev (hot reload)
-pnpm tauri build   # Build release binaries
+pnpm install
+pnpm tauri dev          # normal desktop development loop
+pnpm dev                # browser UI only; native features are unavailable
+pnpm exec tsc --noEmit  # strict TypeScript check; this is the lint gate
+pnpm test               # Vitest
+pnpm build              # type-check and build the frontend
+pnpm tauri build        # release bundle for the current platform
 ```
 
-### Database Schema
+### Rust checks
 
-Two databases. `.ai-writer/project.db` travels with the project folder
-(`src/lib/project.ts`); `config.db` in the app data dir belongs to the
-installation (`src/lib/ai/configDb.ts`).
+Run these from `src-tauri/`, and again from `server/` when changing the companion server:
 
-Project (`project.db`):
-- `token_usage` — one row per model call (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at). Read back in Settings → 用量.
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo build
+```
 
-Installation (`config.db`):
-- `providers` — API provider configs (name, base_url, api_standard, safety_settings)
-- `models` — Configured models (prices, context size, max output, image caps)
-- `prompts` — Custom prompt templates (id, name, content, scene)
-- `prefs` — Every app preference (theme, language, panel widths, model selections…). Migrated out of the webview's localStorage on first launch; see `src/lib/prefs.ts`.
+The pull-request gate runs the same checks. See [`docs/reference/ci.md`](docs/reference/ci.md) for the exact workflow and platform packages.
 
-API keys are **not** in either database — they live in the OS credential
-manager (see Secure Key Storage). The legacy plaintext `api_keys` table is
-migrated into the keyring and dropped on first launch.
+### Documentation for contributors
 
-### Adding a New Language
+- [`AGENTS.md`](AGENTS.md) — repository rules, architecture overview, and required reading before changing a subsystem
+- [`docs/reference/architecture.md`](docs/reference/architecture.md) — storage, RAG, providers, streaming, exports, IPC, and security details
+- [`docs/reference/design-system.md`](docs/reference/design-system.md) — UI and theme contract
+- [`docs/reference/terminology.md`](docs/reference/terminology.md) — author-facing vocabulary
+- [`docs/reference/workflows.md`](docs/reference/workflows.md) — recipes for providers, packs, tasks, languages, and knowledge-base changes
+- [`docs/reference/tool-presence.md`](docs/reference/tool-presence.md) — rules for exposing agent tools
 
-1. Copy `src/i18n/locales/en.json` to `src/i18n/locales/[lang].json`
-2. Translate values
-3. Update `src/i18n/config.ts` to include the new language
-4. Restart dev server
-
-### Debugging
-
-- **Frontend**: Chrome DevTools (Ctrl/Cmd+Shift+I in dev mode)
-- **Rust backend**: Use `println!()` macros; output in terminal
-- **Database**: Check SQLite at `~/.config/simple-ai-writer/project.db` with `sqlite3`
+When contributing, branch from `main` with a `feat/`, `fix/`, `chore/`, `docs/`, or `refactor/` prefix. Pull requests target `main`; the author merges after CI is green.
 
 ---
 
-## Usage Examples
+## Security and privacy model
 
-### Writing a story chapter
+- Project documents and knowledge-base files remain in the selected local folder.
+- Filesystem commands are fenced to explicitly scoped paths by the Tauri backend.
+- API credentials are stored in the OS credential manager.
+- Provider requests go directly to the endpoint configured by the author.
+- Protected writes and paid or high-risk actions use proposal/approval cards.
+- Imported and converted source files are never modified in place.
+- Optional sync is self-hosted and uses explicit push/pull plans; it is not live collaborative editing.
 
-1. Open `lore/` and add character entities with backstories
-2. Create a new file, e.g. `chapter1.md` (any folder layout works)
-3. Start typing the opening scene
-4. Select key plot points → AI panel → "Continue" → watch AI extend your narrative
-5. Click "Insert to Document" to add the output
-6. Refine with "Polish" or "Rewrite" tasks
-
-### Creating marketing copy
-
-1. Set up a "Marketing" prompt in Settings with brand guidelines
-2. Draft headline in editor
-3. Select it → AI panel → choose "Marketing" prompt
-4. Customize instruction: "Make it punchier"
-5. Insert result, iterate
-
-### Summarizing research notes
-
-1. Paste research into a new file
-2. Select paragraphs → AI panel → "Summarize"
-3. Adjust output length via custom instruction
-4. Export as HTML for sharing
-
----
-
-## Contributing
-
-We welcome contributions! Here's how:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m "Add amazing feature"`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request with a clear description
-
-### Reporting Issues
-
-Please file bugs or feature requests at [GitHub Issues](https://github.com/yourusername/simple-ai-writer/issues) with:
-- OS and app version
-- Steps to reproduce
-- Expected vs. actual behavior
-- Screenshots (if applicable)
-
----
-
-## Roadmap (V1.1+)
-
-- [ ] WYSIWYG editor mode toggle
-- [ ] Image generation from text prompts
-- [ ] Prompt auto-optimization
-- [ ] Multi-provider request routing
-- [x] Custom CSS themes — appearance and typography theme files; downloadable examples and the format guide in [`themes/`](themes/README.md)
-- [ ] Collaborative editing (optional sync backend)
-- [ ] More language support
+As with any bring-your-own-provider application, content sent to an AI endpoint is subject to that provider's privacy and retention policies.
 
 ---
 
 ## License
 
-This project is licensed under the **MIT License** — see [LICENSE](./LICENSE) for details.
-
-You are free to use, modify, and distribute this software for personal and commercial purposes.
-
----
-
-## Acknowledgments
-
-Built with ❤️ using:
-- [Tauri](https://tauri.app) — Lightweight desktop framework
-- [React](https://react.dev) — UI library
-- [CodeMirror](https://codemirror.net) — Advanced code editor
-- [Zustand](https://zustand.docs.pmnd.io) — State management
-- [markdown-it](https://markdown-it.github.io) — Markdown parser
-- [KaTeX](https://katex.org) — Math typesetting
-
----
-
-## Support
-
-Have questions? Check the [GitHub Discussions](https://github.com/yourusername/simple-ai-writer/discussions) or open an [issue](https://github.com/yourusername/simple-ai-writer/issues).
-
-Follow for updates: [GitHub](https://github.com/yourusername/simple-ai-writer)
+Simple AI Writer is available under the [MIT License](./LICENSE).
