@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FIRST_CHUNK_BASE_MS, STREAM_IDLE_MS, firstChunkDeadlineMs, streamCompletion,
   type StreamChunk,
-} from "..";
+} from "../index";
 
 const encoder = new TextEncoder();
 

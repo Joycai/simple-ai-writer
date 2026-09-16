@@ -5,7 +5,7 @@
  * sequences in docs/api/responses.md §4.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { streamCompletion, type StreamChunk, type StreamMessage } from "..";
+import { streamCompletion, type StreamChunk, type StreamMessage } from "../index";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
 import { toResponsesInput } from "../responses";
 import { parseServerTools, type ServerToolEvent, type ServerToolId } from "../serverTools";

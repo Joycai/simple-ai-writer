@@ -33,7 +33,7 @@ vi.mock("../../fs/fileio", () => ({
   removeFile: vi.fn(),
 }));
 
-import { scanLore } from "..";
+import { scanLore } from "../index";
 import { resetActiveWorkspace } from "../../profile";
 
 const ROOT = "/proj";

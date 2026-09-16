@@ -15,7 +15,7 @@
  * docs/api/responses.md, and the three left open in the plan's §4.5.
  */
 import { describe, expect, it } from "vitest";
-import { streamCompletion } from "..";
+import { streamCompletion } from "../index";
 import { jsonModeShaping } from "../jsonMode";
 import { fetchRemoteModels, testProviderConnection } from "../providerProbe";
 import { DEFAULT_OPENAI_BASE } from "../urls";

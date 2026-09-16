@@ -15,7 +15,7 @@ import {
   segText,
   splitLines,
   tokenize,
-} from "..";
+} from "../index";
 import { diffIndices } from "../myers";
 
 describe("tokenize", () => {

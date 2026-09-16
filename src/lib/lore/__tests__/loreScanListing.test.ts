@@ -37,7 +37,7 @@ vi.mock("../../fs/fileio", () => ({
   removeFile: vi.fn(),
 }));
 
-import { scanEntity } from "..";
+import { scanEntity } from "../index";
 
 const DIR = "/proj/.ai-writer/lore/characters/ava";
 
