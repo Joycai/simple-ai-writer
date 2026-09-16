@@ -424,7 +424,7 @@ A preset carrying lore *write* tools must supply `onLoreChanged`; it stays optio
 - **单次运行**（AiPanel 任务、批量、子代理、`run_pack` 子运行、写手交接）的 system 层每次运行只建一次，时间就挂在它**末尾**（`withCurrentTime`）：前面的静态文本照样命中，一个工具循环里的各轮共享同一个时间戳，后面没有任何东西依赖它。
 - **多轮对话**正相反。它的历史跨发送持续存在，第 N 轮的整份历史就是第 N+1 轮的缓存前缀；时间戳若放在 system 消息里，每次发送都变，等于为了 25 个 token 把它后面的全部——每一轮、每条工具结果、每张图——全部作废。所以聊天把时间戳打在**当前这一轮的用户消息**上（`currentTimeLine` 经 `withDirective`，和计划模式指令走同一条缝）：它接在最新一条消息后面、落在缓存前缀之外，而历史里每一轮都留着自己的发送时间——作者第二天早上接着聊时，模型本来就该看到这些。
 
-**刻意不打时间戳的**：角色扮演（人物活在故事的时间里，作者的挂钟正是那种会漏进正文的事实；旁白要真实时间戳时读的是 transcript 自带的那份）、一致性检查（对照的是知识库，日期不是它核的事实）、各种归纳器（压缩、文库摘要、故事记忆——把「今天」编进摘要是错的）、结构化一次性提取，以及 Sakura（它的 system 是训练时固定的模板）。`src/lib/__tests__/currentTime.test.ts` 的源码扫描把这两张名单钉死：任何新建 `role: "system"` 消息的文件都必须进 REQUIRED 或带着理由进 EXEMPT。
+**刻意不打时间戳的**：角色扮演（人物活在故事的时间里，作者的挂钟正是那种会漏进正文的事实；旁白要真实时间戳时读的是 transcript 自带的那份）、一致性检查（对照的是知识库，日期不是它核的事实）、各种归纳器（压缩、文库摘要、故事记忆——把「今天」编进摘要是错的）、结构化一次性提取，以及 Sakura（它的 system 是训练时固定的模板）。`src/lib/context/__tests__/currentTime.test.ts` 的源码扫描把这两张名单钉死：任何新建 `role: "system"` 消息的文件都必须进 REQUIRED 或带着理由进 EXEMPT。
 
 ### Images in context (谁能看图，看多久)
 
@@ -729,7 +729,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **⌘L 保留 mode，是有意的不对称。** 一个「无论现在在哪个 tab 都直达对话」的键有独立价值；⌘J 则是「把面板收起来 / 拿回来」。同理，⌘⇧E/L/M 和内联气泡仍然强制 `"generate"`——它们要跑的就是生成任务，落错 tab 等于什么都没发生。
 - **没有因此丢掉可达性** — 命令面板仍能按名字打开「生成」（并把查询串当作选区）和「一致性检查」，扮演有自己的 tab。
 - **降级只在读取侧** — `storedAiDrawerMode()` 在读到 `"roleplay"` 而 Beta 开关已关时退回 `"generate"`；偏好里那一行不改写，开关重新打开时记忆还在。
-- **回归测试** — `src/lib/__tests__/aiDrawerMode.test.ts`：连续多次「不指定 tab 地打开」必须不漂移回第一个标签页。
+- **回归测试** — `src/stores/__tests__/aiDrawerMode.test.ts`：连续多次「不指定 tab 地打开」必须不漂移回第一个标签页。
 
 ### 系统通知 (OS notifications)
 

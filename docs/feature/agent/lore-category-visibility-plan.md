@@ -110,7 +110,7 @@
    create_lore_category 新建（同样要过方案）。分类的改名/删除请作者在 app 里操作
    （{{kb}}墙上分类右键，或 设置 → 工作台）。」——末句与 main 已落地的分类管理面
    （`lore-category-manage-plan.md` 分片 2 的两扇门）对齐，不再只指设置页。
-4. 测试（`src/lib/__tests__/agentOrganizeTools.test.ts` 扩展）：id 命中 / labelZh 命中 /
+4. 测试（`src/lib/agent/__tests__/agentOrganizeTools.test.ts` 扩展）：id 命中 / labelZh 命中 /
    大小写与空白容错 / 未命中时照常建；两处描述与指令的陈旧句子加反向断言（不再含
    "No tool creates categories" / 「分类本身没有增删工具」）。复测 `agentToolBudget` 并记数。
 

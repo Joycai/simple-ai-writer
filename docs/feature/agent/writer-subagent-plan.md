@@ -279,7 +279,7 @@ MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 
 三片一起落地，因为 §3.1 那次返工把 PR-1 的边界重画了：`handoff` 每轮挂载之后，
 "这一轮的回复由写手出"和"落到哪个文件里"共用同一条返回路径，拆开反而要写两遍。
 
-**覆盖测试**：`lib/__tests__/agentRuntimeHandoff.test.ts`（整条循环，含降级路径与
+**覆盖测试**：`lib/agent/__tests__/agentRuntimeHandoff.test.ts`（整条循环，含降级路径与
 `deliverTo` 的四种模式）、`lib/agent/__tests__/handoff.test.ts`（解析与绑定）、
 `lib/agent/__tests__/routing.test.ts` 的 `routeTools — writer handoff` 一节。
 

@@ -272,7 +272,7 @@ web font 进不了 pptx——删掉省 200 token，换回来一次截断重跑�
 
 ### 3.3 护栏（本 PR 的**全部**内容）
 
-`src/lib/__tests__/agentToolBudget.test.ts`（新）：四个预设各一个上限
+`src/lib/agent/__tests__/agentToolBudget.test.ts`（新）：四个预设各一个上限
 （agent-assist / continue / roleplay-narrator / roleplay-character），外加
 "每个工具的描述不得短于 40 字符、不得漏掉分类占位符替换"两条低成本不变量。
 四个而不是一个：旁白那份也在长，而它一直没人量过。
@@ -578,4 +578,4 @@ briefing (zh)        3,400               1,389
 
 > 上面每一格都是 `round-start.toolTokens`（PR1）上线后逐个 PR 量出来的，不是算出来的。
 > 再动这块之前先跑一遍现值：`estimateToolsTokens` 的口径由
-> `src/lib/__tests__/agentToolBudget.test.ts` 的棘轮盯着。
+> `src/lib/agent/__tests__/agentToolBudget.test.ts` 的棘轮盯着。

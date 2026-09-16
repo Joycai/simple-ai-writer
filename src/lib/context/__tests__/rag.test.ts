@@ -1,0 +1,609 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { resetActiveWorkspace, setActiveWorkspace } from "../../profile/active";
+import { resolveWorkspace } from "../../profile/resolve";
+import { BID_PROFILE, NOVEL_PROFILE, TTRPG_PROFILE } from "../../profile/model";
+import {
+  assembleContext,
+  bundleToChatMessages,
+  bundleToMessages,
+  locateAppendAnchor,
+  resolveAppendAnchor,
+  resolveEditRange,
+  spliceContinuation,
+} from "../rag";
+import type { LoreIndex } from "../../lore";
+
+// The real i18n module touches localStorage at import time (browser-only).
+vi.mock("../../../i18n", () => ({ default: { t: (key: string) => key } }));
+
+// Mock file I/O so entity summaries load without a Tauri backend.
+const files = new Map<string, string>();
+vi.mock("../../fs/fileio", () => ({
+  readFile: async (path: string) => {
+    const content = files.get(path);
+    if (content == null) throw new Error(`no such file: ${path}`);
+    return content;
+  },
+}));
+
+function makeLoreIndex(): LoreIndex {
+  return {
+    characters: [
+      {
+        name: "Aria",
+        aliases: ["the Songbird"],
+        dirPath: "/proj/.ai-writer/lore/characters/aria",
+      },
+      {
+        name: "Bran",
+        aliases: [],
+        dirPath: "/proj/.ai-writer/lore/characters/bran",
+      },
+    ],
+    world: [
+      {
+        name: "Ironhold",
+        aliases: ["the Iron City"],
+        dirPath: "/proj/.ai-writer/lore/world/ironhold",
+      },
+    ],
+  } as unknown as LoreIndex;
+}
+
+beforeEach(() => {
+  files.clear();
+  files.set("/proj/.ai-writer/lore/characters/aria/index.md", "Aria is a bard.");
+  files.set("/proj/.ai-writer/lore/characters/bran/index.md", "Bran is a smith.");
+  files.set("/proj/.ai-writer/lore/world/ironhold/index.md", "Ironhold is a fortress city.");
+});
+
+// Ironhold is mentioned right before a mid-document anchor; Bran is mentioned
+// only in the document's actual tail, far past it. Lore matching should key
+// off the anchor's neighborhood — where the edit/continuation actually is —
+// not blindly the document's end.
+function makeAnchoredDoc() {
+  const before = "y".repeat(3000);
+  const nearAnchor = "Ironhold loomed on the horizon. ";
+  const selection = "selected-text";
+  const after = "z".repeat(3000) + " Bran waved from the docks.";
+  return { doc: before + nearAnchor + selection + after, selection };
+}
+
+describe("assembleContext", () => {
+  it("includes lore snippets for entities matched by name or alias", async () => {
+    const bundle = await assembleContext(
+      "SYS",
+      makeLoreIndex(),
+      "The Songbird walked into the Iron City.",
+      "",
+      "Continue the story."
+    );
+    expect(bundle.loreSnippets).toContain("Aria is a bard.");
+    expect(bundle.loreSnippets).toContain("Ironhold is a fortress city.");
+    expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
+  it("matches lore on the author's own instruction, not just the manuscript", async () => {
+    // 作者意图进匹配靶（docs/feature/lore/lore-retrieval-plan.md §3）。在此之前
+    // 面板任务的靶子只有「选中文本 + 锚点前 500 字」，于是一句「写 Bran 打铁那场戏」
+    // 既召不来 Bran，也激活不了他任何一条特征——而作者看到的只是一个空的知识库块。
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "A quiet morning in the valley.", "", "Continue.",
+      { extraMatchText: "写 Bran 打铁那场戏" },
+    );
+    expect(bundle.loreSnippets).toContain("Bran is a smith.");
+  });
+
+  it("不传 extraMatchText 时靶子和从前一样", async () => {
+    const base = "A quiet morning in the valley.";
+    const before = await assembleContext("SYS", makeLoreIndex(), base, "", "Continue.");
+    const after = await assembleContext("SYS", makeLoreIndex(), base, "", "Continue.", {});
+    expect(after.loreSnippets).toBe(before.loreSnippets);
+    expect(before.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
+  it("matches lore near the selection anchor, not the unrelated document tail", async () => {
+    const { doc, selection } = makeAnchoredDoc();
+    const bundle = await assembleContext("SYS", makeLoreIndex(), doc, selection, "Rewrite.");
+
+    expect(bundle.loreSnippets).toContain("Ironhold is a fortress city.");
+    expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
+  it("matches lore near a mid-document append anchor, not the document tail", async () => {
+    // Same anchor-relative requirement, but for "continue" (append mode)
+    // anchored mid-document via a selection, rather than an in-place edit.
+    const { doc, selection } = makeAnchoredDoc();
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, selection, "Continue.",
+      { appendMode: true },
+    );
+
+    expect(bundle.loreSnippets).toContain("Ironhold is a fortress city.");
+    expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
+  it("merges manually pinned entities ahead of auto-matched ones, deduped", async () => {
+    const bundle = await assembleContext(
+      "SYS",
+      makeLoreIndex(),
+      "Aria sang.",
+      "",
+      "Continue.",
+      {
+        manualLorePaths: [
+          "/proj/.ai-writer/lore/characters/bran",
+          "/proj/.ai-writer/lore/characters/aria", // also auto-matched — must not duplicate
+        ],
+      }
+    );
+    const snippets = bundle.loreSnippets.split("\n\n---\n\n");
+    expect(snippets).toHaveLength(2);
+    expect(snippets[0]).toContain("Bran is a smith.");
+    expect(snippets[1]).toContain("Aria is a bard.");
+  });
+
+  it("tolerates missing entity files (snippet omitted, no throw)", async () => {
+    files.delete("/proj/.ai-writer/lore/characters/aria/index.md");
+    const bundle = await assembleContext("SYS", makeLoreIndex(), "Aria sang.", "", "Continue.");
+    expect(bundle.loreSnippets).toBe("");
+  });
+
+  it("caps recent context and cuts it before the selection", async () => {
+    const filler = "x".repeat(5000);
+    const doc = `${filler}NEEDLE selected-text tail`;
+    const bundle = await assembleContext(
+      "SYS",
+      makeLoreIndex(),
+      doc,
+      "selected-text",
+      "Rewrite."
+    );
+    // recent context ends right before the selection…
+    expect(bundle.recentContext.endsWith("NEEDLE")).toBe(true);
+    expect(bundle.recentContext).not.toContain("selected-text");
+    // …and is capped at 800 tokens * 3 chars
+    expect(bundle.recentContext.length).toBeLessThanOrEqual(800 * 3);
+  });
+
+  it("slices recent context exactly before the selection when given source offsets", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    const from = doc.indexOf("target");
+    const to = from + "target".length;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from, to },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+    expect(bundle.recentContext).not.toContain("target");
+    expect(bundle.recentContext).not.toContain("after"); // never the doc tail
+  });
+
+  it("locates a preview-style selection (missing markdown markup) via normalized match", async () => {
+    // Source has bold markers + a list bullet the rendered selection lacks.
+    const doc = "开头的一段前文。\n\n- **目标段落的标题** 后面还有正文 BBB";
+    const rendered = "目标段落的标题"; // as copied from the preview pane
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, rendered, "Rewrite.",
+    );
+    expect(bundle.recentContext).toContain("开头的一段前文");
+    expect(bundle.recentContext).not.toContain("目标段落的标题");
+    expect(bundle.recentContext).not.toContain("BBB"); // still never the tail
+  });
+
+  it("does NOT fall back to the document tail when the selection can't be located", async () => {
+    // Rendered/preview selection that doesn't appear verbatim in the source.
+    const doc = `${"x".repeat(3000)}THE ACTUAL ENDING`;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "rendered text not in source", "Rewrite.",
+    );
+    expect(bundle.recentContext).toBe("");
+    expect(bundle.recentContext).not.toContain("ENDING");
+    // The selection itself is still sent as the edit target.
+    expect(bundle.taskText).toContain("rendered text not in source");
+  });
+
+  it("append mode: selection is context, not a 【选中内容】 target", async () => {
+    const doc = "PREAMBLE ".repeat(50) + "THE SELECTED TAIL";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "THE SELECTED TAIL", "Continue.",
+      { appendMode: true },
+      { from: doc.indexOf("THE SELECTED TAIL"), to: doc.length },
+    );
+    // No edit-target block; the instruction stands alone.
+    expect(bundle.taskText).not.toContain("【选中内容】");
+    // The selected text falls into the reference window (anchor = selection end).
+    expect(bundle.recentContext).toContain("THE SELECTED TAIL");
+  });
+
+  it("append mode with no selection continues from the document end", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(bundle.recentContext.endsWith("PREAMBLE")).toBe(true);
+    expect(bundle.taskText).not.toContain("【选中内容】");
+  });
+
+  it("binds the model to the outline only when one is filled in", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const withOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.",
+      { appendMode: true, outline: "第一步：主角进城" },
+    );
+    expect(withOutline.outline).toBe("第一步：主角进城");
+    // The follow-outline directive is appended after the base instruction
+    // (i18n returns the raw key under the test config).
+    expect(withOutline.taskText).toContain("followOutline");
+    expect(withOutline.taskText.startsWith("Continue.")).toBe(true);
+    const withoutOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(withoutOutline.taskText).toBe("Continue.");
+  });
+
+  it("honours contextChars to bound the reference range (0 = none)", async () => {
+    const doc = "PREAMBLE ".repeat(100) + "SELECTED";
+    const none = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 0 },
+    );
+    expect(none.recentContext).toBe("");
+    const some = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 20 },
+    );
+    expect(some.recentContext.length).toBeLessThanOrEqual(20);
+    expect(some.recentContext.length).toBeGreaterThan(0);
+  });
+
+  it("ignores stale source offsets that no longer match the selection", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    // Offsets point somewhere whose text != selection → must fall back to search.
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from: 0, to: 3 },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+  });
+
+  it("builds task text from selection plus extra requirement", async () => {
+    const bundle = await assembleContext(
+      "SYS",
+      makeLoreIndex(),
+      "doc",
+      "some selection",
+      "Polish this.",
+      { requirement: "Keep it short." }
+    );
+    expect(bundle.taskText).toContain("some selection");
+    expect(bundle.taskText).toContain("Polish this.");
+    expect(bundle.taskText).toContain("Keep it short.");
+  });
+
+  it("estimates tokens from total assembled characters", async () => {
+    const short = await assembleContext("SYS", makeLoreIndex(), "short doc", "", "Go.");
+    const long = await assembleContext("SYS", makeLoreIndex(), "x".repeat(4000), "", "Go.");
+    // A ballpark char-per-token ratio, not an exact figure — pin that the
+    // estimate actually scales with input size, not just "is positive".
+    expect(short.estimatedTokens).toBeGreaterThan(0);
+    expect(long.estimatedTokens).toBeGreaterThan(short.estimatedTokens + 500);
+  });
+
+  it("threads book context (prior recap + prev-chapter tail) only in append mode", async () => {
+    const book = {
+      priorSummary: "第一章：主角进城。",
+      prevChapterTail: "他推开了门。",
+      prevChapterTitle: "第2章",
+    };
+    const cont = await assembleContext(
+      "SYS", makeLoreIndex(), "新章开头", "", "Continue.",
+      { appendMode: true, bookContext: book },
+    );
+    expect(cont.priorChaptersSummary).toBe("第一章：主角进城。");
+    expect(cont.prevChapterTail).toBe("他推开了门。");
+    expect(cont.prevChapterTitle).toBe("第2章");
+
+    // A non-append task (edit) must not pull in cross-chapter context.
+    const edit = await assembleContext(
+      "SYS", makeLoreIndex(), "doc", "sel", "Polish.",
+      { bookContext: book },
+    );
+    expect(edit.priorChaptersSummary).toBe("");
+    expect(edit.prevChapterTail).toBe("");
+  });
+});
+
+describe("bundleToMessages", () => {
+  it("produces a system message and a layered user message", async () => {
+    const bundle = await assembleContext(
+      "You are a writing assistant.",
+      makeLoreIndex(),
+      "Aria sang in Ironhold.",
+      "",
+      "Continue the story.",
+      { outline: "Chapter 2 outline", additionalKnowledge: "Magic is rare." }
+    );
+    const messages = bundleToMessages(bundle);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toEqual({ role: "system", content: "You are a writing assistant." });
+
+    const user = messages[1].content;
+    // Layer order: lore → knowledge → outline → recent → task
+    const idxLore = user.indexOf("【知识库】");
+    const idxKnowledge = user.indexOf("【附加知识】");
+    const idxOutline = user.indexOf("【大纲/写作方向】");
+    const idxRecent = user.indexOf("【近期内容】");
+    const idxTask = user.indexOf("Continue the story.");
+    expect(idxLore).toBeGreaterThanOrEqual(0);
+    expect(idxKnowledge).toBeGreaterThan(idxLore);
+    expect(idxOutline).toBeGreaterThan(idxKnowledge);
+    expect(idxRecent).toBeGreaterThan(idxOutline);
+    expect(idxTask).toBeGreaterThan(idxRecent);
+  });
+
+  it("emits 【前文回顾】 before 【近期内容】 and labels the previous document's ending", async () => {
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "本章开头正文", "", "Continue.",
+      {
+        appendMode: true,
+        bookContext: {
+          priorSummary: "第一章梗概。",
+          prevChapterTail: "上一章的最后一句。",
+          prevChapterTitle: "第2章",
+        },
+      },
+    );
+    const user = bundleToMessages(bundle)[1].content;
+    const idxPrior = user.indexOf("【前文回顾】");
+    const idxPrevTail = user.indexOf("【上一篇结尾·第2章】");
+    const idxRecent = user.indexOf("【近期内容】");
+    expect(idxPrior).toBeGreaterThanOrEqual(0);
+    expect(idxPrevTail).toBeGreaterThan(idxPrior);
+    expect(idxRecent).toBeGreaterThan(idxPrevTail);
+    expect(user).toContain("上一章的最后一句。");
+  });
+
+  // The block headings are the only thing telling the model what each block
+  // is, so a task assembled with its pack's id must speak that pack's wording
+  // — while the same blocks stay neutral without one.
+  describe("with a pack task's packId", () => {
+    afterEach(() => resetActiveWorkspace());
+
+    it("labels blocks with the declaring pack's wording", async () => {
+      setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
+      const bundle = await assembleContext(
+        "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
+        {
+          packId: "ttrpg",
+          appendMode: true,
+          additionalKnowledge: "Magic is rare.",
+          bookContext: {
+            priorSummary: "前面发生的事。",
+            prevChapterTail: "上一场景的收尾。",
+            prevChapterTitle: "序场",
+          },
+        },
+      );
+      const user = bundleToMessages(bundle)[1].content;
+      expect(user).toContain("【全模组前情】");
+      expect(user).toContain("【上一场景结尾·序场】");
+      expect(user).not.toContain("【上一篇结尾");
+      // The knowledge base is never renamed, and a section the pack does not
+      // override keeps the shared default.
+      expect(user).toContain("【知识库】");
+      expect(user).toContain("【附加知识】");
+    });
+
+    it("falls back to the one neutral system prompt when none is active", async () => {
+      setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
+      const bundle = await assembleContext("", makeLoreIndex(), "x", "", "Continue.");
+      // i18n is mocked to echo the key, so this asserts *which* key is used.
+      expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.system");
+    });
+
+    it("labels a bid task's blocks with bid wording, others stay neutral", async () => {
+      setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
+      const bundle = await assembleContext(
+        "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Respond.",
+        { packId: "bid", additionalKnowledge: "投标须知。", outline: "第三章应答。" },
+      );
+      const [system, user] = bundleToMessages(bundle).map((m) => m.content);
+      expect(system).toBe("ai.instructions.system");
+      expect(user).toContain("【应答大纲】");
+      expect(user).toContain("【知识库】");
+      expect(user).toContain("【附加知识】");
+    });
+
+    it("keeps the neutral wording when no packId is given", async () => {
+      setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
+      const bundle = await assembleContext(
+        "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
+      );
+      const [system, user] = bundleToMessages(bundle).map((m) => m.content);
+      expect(system).toBe("ai.instructions.system");
+      expect(user).toContain("【知识库】");
+      expect(user).not.toContain("【应答大纲】");
+    });
+  });
+});
+
+describe("bundleToChatMessages", () => {
+  it("splits the same layers into system / seeded context / question", async () => {
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "第一个问题",
+      { outline: "Chapter 2 outline" },
+    );
+    const seed = bundleToChatMessages(bundle);
+    expect(seed.messages).toHaveLength(3);
+    expect(seed.messages[0]).toEqual({ role: "system", content: "SYS" });
+    // Identity, not equality: the session records *these objects* as the
+    // droppable seed block and the first turn's start.
+    expect(seed.messages[1]).toBe(seed.seedContext);
+    expect(seed.messages[2]).toBe(seed.question);
+    expect(seed.seedContext!.content).toContain("【知识库】");
+    expect(seed.seedContext!.content).toContain("【近期内容】");
+    expect(seed.question.content).toContain("第一个问题");
+    // The question is conversation, the seed is retrieval — no bleed-through.
+    expect(seed.seedContext!.content).not.toContain("第一个问题");
+
+    // Same content as the merged shape, only the packaging differs.
+    const merged = bundleToMessages(bundle)[1].content;
+    expect(`${seed.seedContext!.content}\n\n${seed.question.content}`).toBe(merged);
+  });
+
+  it("omits the seed message entirely when nothing was seeded", async () => {
+    const bundle = await assembleContext("SYS", {}, "", "", "只有问题");
+    const seed = bundleToChatMessages(bundle);
+    expect(seed.seedContext).toBeNull();
+    expect(seed.messages).toHaveLength(2);
+    expect(seed.messages[1]).toBe(seed.question);
+  });
+});
+
+// The continue task reads from one offset and writes to it. The AiPanel labels
+// that same offset for the author ("第 N 段之后" / "文末"), so a drift between
+// these two functions is a drift between what the panel promises and what the
+// document gets.
+describe("resolveAppendAnchor", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+
+  it("anchors just after a selection whose offsets still match the text", () => {
+    const from = doc.indexOf("第二段。");
+    const range = { from, to: from + "第二段。".length };
+    expect(resolveAppendAnchor(doc, "第二段。", range)).toBe(range.to);
+  });
+
+  it("falls back to the document end with no selection", () => {
+    expect(resolveAppendAnchor(doc, "", null)).toBe(doc.length);
+  });
+
+  it("relocates a selection whose offsets went stale after an edit above it", () => {
+    const edited = "新开头。\n\n" + doc;
+    const stale = { from: 0, to: 4 };
+    expect(resolveAppendAnchor(edited, "第二段。", stale)).toBe(
+      edited.indexOf("第二段。") + "第二段。".length,
+    );
+  });
+
+  it("falls back to the document end when the selection is nowhere in the text", () => {
+    // The command palette commits the user's query as a "selection" that was
+    // never part of the document — it must not drag the anchor somewhere odd.
+    expect(resolveAppendAnchor(doc, "写一段打斗戏", null)).toBe(doc.length);
+  });
+});
+
+describe("spliceContinuation", () => {
+  it("appends with a blank line at the document end", () => {
+    expect(spliceContinuation("第一段。", 4, "续写。")).toBe("第一段。\n\n续写。");
+  });
+
+  it("adds no leading gap in an empty chapter", () => {
+    expect(spliceContinuation("", 0, "开篇。")).toBe("开篇。");
+  });
+
+  it("separates on both sides when inserting mid-document", () => {
+    const doc = "第一段。\n\n第二段。";
+    const at = "第一段。".length;
+    expect(spliceContinuation(doc, at, "插入。")).toBe("第一段。\n\n插入。\n\n第二段。");
+  });
+
+  it("does not stack blank lines that are already there", () => {
+    expect(spliceContinuation("第一段。\n\n", 6, "续写。")).toBe("第一段。\n\n续写。");
+  });
+
+  it("splits a paragraph cleanly when the anchor lands mid-sentence", () => {
+    const doc = "前半后半";
+    expect(spliceContinuation(doc, 2, "插入。")).toBe("前半\n\n插入。\n\n后半");
+  });
+});
+
+// Polish/rewrite overwrite prose, so "where" has to be right or not answered
+// at all — null means the caller appends, which is lossless.
+describe("resolveEditRange", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+  const from = doc.indexOf("第二段。");
+  const range = { from, to: from + "第二段。".length };
+
+  it("trusts offsets that still describe the document", () => {
+    expect(resolveEditRange(doc, "第二段。", range, "commit")).toEqual(range);
+    expect(resolveEditRange(doc, "第二段。", range, "marker")).toEqual(range);
+  });
+
+  it("relocates a dragged selection whose offsets went stale", () => {
+    const edited = "新开头。\n\n" + doc;
+    expect(resolveEditRange(edited, "第二段。", range, "commit")).toEqual({
+      from: edited.indexOf("第二段。"),
+      to: edited.indexOf("第二段。") + 4,
+    });
+  });
+
+  it("refuses to relocate a MARKED range whose offsets went stale", () => {
+    // A marked range is maintained by the editor. If its offsets have stopped
+    // describing the document, searching for the text and overwriting whatever
+    // turns up is not a recovery — it is a different bug with worse blast radius.
+    const edited = "新开头。\n\n" + doc;
+    expect(resolveEditRange(edited, "第二段。", range, "marker")).toBeNull();
+  });
+
+  it("refuses an ambiguous match rather than overwriting the wrong copy", () => {
+    const repeated = "他说。\n\n中间。\n\n他说。";
+    expect(resolveEditRange(repeated, "他说。", null, "commit")).toBeNull();
+  });
+
+  it("locates a preview-origin selection that carries no offsets", () => {
+    expect(resolveEditRange(doc, "第三段。", null, "commit")).toEqual({
+      from: doc.indexOf("第三段。"),
+      to: doc.length,
+    });
+  });
+
+  it("has nowhere to act with no selection at all", () => {
+    expect(resolveEditRange(doc, "", null, null)).toBeNull();
+  });
+});
+
+// The panel names a continuation's position on the card and then writes there.
+// Both facts come from one offset, so a mode that resolves to the wrong number
+// is a promise the panel breaks silently.
+describe("locateAppendAnchor", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+  const from = doc.indexOf("第二段。");
+
+  it("anchors after a selection that still matches", () => {
+    expect(locateAppendAnchor(doc, "第二段。", { from, to: from + 4 })).toBe(from + 4);
+  });
+
+  it("gives the document end when nothing is selected", () => {
+    expect(locateAppendAnchor(doc, "", null)).toBe(doc.length);
+  });
+
+  it("refuses (null) when a selection exists but cannot be located", () => {
+    // resolveAppendAnchor answers "the document end" here, which is right for a
+    // caller with no author choice to honour and wrong for expand mode, whose
+    // entire premise is that the author pointed somewhere.
+    expect(locateAppendAnchor(doc, "根本不在文中的一段话", null)).toBeNull();
+    expect(resolveAppendAnchor(doc, "根本不在文中的一段话", null)).toBe(doc.length);
+  });
+});
+
+describe("assembleContext — explicit append anchor", () => {
+  it("slices the reference window from the given anchor, not from the selection", async () => {
+    // Opening mode: offset 0 even though a passage further down is selected.
+    const doc = "开头段。\n\n" + "中间内容。".repeat(80) + "结尾段。";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "结尾段。", "Continue.",
+      { appendMode: true, appendAnchor: 0 },
+      { from: doc.indexOf("结尾段。"), to: doc.length },
+    );
+    expect(bundle.recentContext).toBe("");
+  });
+
+  it("still derives the anchor when none is given", async () => {
+    const doc = "PREAMBLE ".repeat(60) + "TAIL";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(bundle.recentContext.endsWith("TAIL")).toBe(true);
+  });
+});

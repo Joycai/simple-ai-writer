@@ -72,7 +72,7 @@
 
 ### 测试
 
-- `src/lib/__tests__/aiClient.test.ts` 补两条：给 `topP` / `frequencyPenalty` 时请求体带上；不给时字段不存在。
+- `src/lib/ai/__tests__/aiClient.test.ts` 补两条：给 `topP` / `frequencyPenalty` 时请求体带上；不给时字段不存在。
 - `localeParity.test.ts` 会自动守 i18n 两语齐全。
 
 ### 验收
@@ -199,7 +199,7 @@ export function judgeChunk(r: {
 
 ### 关于 tool budget
 
-`src/lib/__tests__/agentToolBudget.test.ts` 的棘轮测的是**整个 preset**（`AGENT_ASSIST_PRESET.tools`），当前 9,609 / 上限 10,000，只剩 391 token 余量。
+`src/lib/agent/__tests__/agentToolBudget.test.ts` 的棘轮测的是**整个 preset**（`AGENT_ASSIST_PRESET.tools`），当前 9,609 / 上限 10,000，只剩 391 token 余量。
 
 按 `delegate` 的既有做法，`translate` **在 `routeTools` 里条件追加**，不进 preset —— 所以棘轮看不见它。这不是绕过：`delegate` 就是这么处理的，因为它的存在取决于作者的开关。但为了不把成本藏起来，**本片要新增一条断言**：把 Beta 开 + 绑定可用时的 routed 集合算一次 token，钉一个自己的小上限（预期 ≈ 200 token）。
 

@@ -389,7 +389,7 @@ export async function ingestImageFile(src: string): Promise<{ bytes: Uint8Array;
 测试全在两个纯层上 —— `imageSize.test.ts`（四种文件头的偏移量，手搓头部当
 fixture）和 `imageDownscale.test.ts`（阶梯、质量先于像素、PNG 无质量档、动图
 放行、`longEdge = 0`、give-up 边界、不把边长舍成 0）。canvas 那层照
-[`imageToDataUrl.test.ts`](../../src/lib/__tests__/imageToDataUrl.test.ts) 的做法
+[`imageToDataUrl.test.ts`](../../src/lib/fs/__tests__/imageToDataUrl.test.ts) 的做法
 在调用方 mock 掉：`agentReadTools.test.ts` 和 `imageSession.test.ts` 现在打桩的
 是 `imageForModel` 而不是 `imageToDataUrl`。
 

@@ -185,7 +185,7 @@ read_document(path: string, start_line?: number)
 | `src/lib/agent/registry.ts` | `read_document` 条目（`access: "read"`）；`ToolId` 联合加一项 |
 | `src/lib/agent/presets.ts`、`packs.ts`、`subagent.ts` | 按 D9 加进五处清单 |
 | `src/i18n/locales/zh-CN.json`、`en.json` | `ai.agent.tool.read_document`（执行日志标签；缺了会回退成裸工具名，不是崩）；`ai.instructions.toolsRead` 那句「read_slides 按页读演示稿」后面加「read_document 读 Word / Excel / PDF」 |
-| `src/lib/__tests__/agentToolBudget.test.ts` | 量出新数，按 D9 处理 `write` 档 |
+| `src/lib/agent/__tests__/agentToolBudget.test.ts` | 量出新数，按 D9 处理 `write` 档 |
 | `docs/README.md`、`CLAUDE.md` | README 加行；CLAUDE.md 的 `src/lib/import/` 一段补「第三个读者」一句 |
 
 ### 5.2 PR 切片

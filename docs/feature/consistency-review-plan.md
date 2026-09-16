@@ -365,7 +365,7 @@ summary: string;               // 总评（§7.3）
   `routeTools` + `createTaskWorkspace` + `runAgent`，`toolContext` 照 `aiTaskStore` 那份减去
   审批通道）③合并；替换 `scan.ts`（删除，不保留单发路径）
 - `lib/consistency/scope.ts` — `ReviewScope` 类型、序列化、失效剔除
-- `lib/consistency/__tests__/{budget,merge,reviewTools,scope}.test.ts`
+- `lib/consistency/__tests__/{consistencyBudget,consistencyMerge,consistencyModel,consistencyReviewTools,consistencyScope}.test.ts`
 
 **修改**
 - `lib/agent/presets.ts` — `CONSISTENCY_PRESET`

@@ -13,7 +13,7 @@
 > Responses 面约 90 次，§4.5 的 OpenAI 侧悬案大半定掉了；协议事实单独成页
 > [`responses.md`](responses.md)，中转站怪癖是 [`landscape.md`](landscape.md) §7 第八个样本。
 >
-> 实测工具：`src/lib/__tests__/live.qianwen.test.ts`——用仓库里**真实的 adapter**
+> 实测工具：`src/lib/ai/__tests__/live.qianwen.test.ts`——用仓库里**真实的 adapter**
 > （`streamOpenAI` / `streamAnthropic` / `streamCompletion` / `testProviderConnection`）
 > 直连端点，设 `QIANWEN_KEY` 环境变量才运行，没有 key 整组跳过。验证的是"我们实际发出的
 > 字节对面认不认"，不是手写的模仿请求。

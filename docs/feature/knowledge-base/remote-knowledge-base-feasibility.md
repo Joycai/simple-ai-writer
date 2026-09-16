@@ -601,7 +601,7 @@ snapshot 里没有它 → 之后任何一侧改一次,`localChanged` 和 `remote
 
 修法:`none` 步骤同样参与 snapshot 推进(两侧都没有则从 snapshot 移除)。
 逐条跳过让这个 bug 更容易撞上(跳过会留下长期不一致的条目),所以一并修了。
-回归测试在 `src/lib/__tests__/syncRun.test.ts`。
+回归测试在 `src/lib/sync/__tests__/syncRun.test.ts`。
 
 ### 19.4 UI:预览表多一列,以及一条批量
 

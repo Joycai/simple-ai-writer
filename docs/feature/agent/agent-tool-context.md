@@ -6,7 +6,7 @@
 > 落地后已挂进 `CLAUDE.md` 的 Detailed References。
 >
 > **§1 的数字是提案当时（2026-08）的快照**，不是今天的读数——今天的常驻 schema 体积由
-> `src/lib/__tests__/agentToolBudget.test.ts` 的棘轮盯着，要现值就跑它。
+> `src/lib/agent/__tests__/agentToolBudget.test.ts` 的棘轮盯着，要现值就跑它。
 
 ## 1. 先量，再说
 

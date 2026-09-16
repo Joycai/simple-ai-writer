@@ -1,0 +1,477 @@
+/**
+ * A ratchet on what the toolset costs every request.
+ *
+ * This number is not an incidental one. The assistant preset's schemas ride on
+ * **every round** of a run — forty of them at the cap — and nothing about
+ * adding a tool makes that cost visible in a diff. So it is pinned here: going
+ * over means someone decides to, and the decision shows up as an edit to the
+ * constant rather than as a slow drift nobody signed off on.
+ *
+ * Measured against the **whole preset**, before `routeTools` narrows it. The
+ * routed set changes with the author's subagent switches and the pptx Beta
+ * flag, so ratcheting on it would make flipping a switch look like a
+ * regression.
+ *
+ * If a new tool genuinely belongs in the assistant, raise the cap in the same
+ * commit and say why. If several are landing at once, that is the signal to
+ * read docs/feature/agent/agent-tool-context-lld.md §5 instead — deferred loading is the
+ * answer to "the toolset keeps growing", not a bigger number here.
+ */
+import { describe, expect, it, vi } from "vitest";
+
+// The registry reaches the Tauri fs at import time through the write tools;
+// nothing here executes one. Same mock set as agentToolSchema.test.ts.
+vi.mock("../../fs/fileio", () => ({
+  readFile: vi.fn(async () => ""),
+  writeFile: vi.fn(async () => {}),
+  appendFile: vi.fn(async () => {}),
+  writeBinaryFile: vi.fn(async () => {}),
+  makeDir: vi.fn(async () => {}),
+  fileExists: vi.fn(async () => false),
+  removeDir: vi.fn(async () => {}),
+  removeFile: vi.fn(async () => {}),
+  renamePath: vi.fn(async () => {}),
+  readDir: vi.fn(async () => []),
+}));
+vi.mock("../../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
+// `language` is set so the budget is measured at its worst case: the category
+// id↔label pairs substituted into list_lore_entities' description only differ
+// from the bare ids when the labels do (they always do in Chinese, mostly not
+// in English), so an unset language would measure the cheap variant.
+vi.mock("../../../i18n", () => ({ default: { t: (key: string) => key, language: "zh-CN" } }));
+
+import { getToolDefinitions, partitionByGroup } from "../registry";
+import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, WRITE_PRESET } from "../presets";
+import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../../roleplay/presets";
+import { estimateToolsTokens } from "../../ai/tokenEstimate";
+import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../packs";
+
+/**
+ * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
+ * the price of the workflow-cards feature's second disclosure level, decided
+ * in docs/feature/agent/workflow-cards-plan.md §3). Then one review of the
+ * agent's tool surface landed in two halves, and both are priced here —
+ * **11,388 measured with both in**:
+ *   - the knowledge base's gallery tier (update_lore_image /
+ *     delete_lore_image / set_lore_avatar / copy_lore_file, the lore review's
+ *     F3/F4): ~1.4k tokens, ALL in the deferred `lore_write` group, so a run
+ *     pays them only once the author has approved a lore plan — the exact
+ *     moment they become callable.
+ *   - the file tools (copy_file's `new_name`, and move/copy/delete now stating
+ *     their real scope plus the extension and illustration-folder rules):
+ *     ~430 tokens of pure wording, bought to stop wrong-tool calls and
+ *     broken-image surprises.
+ * Measured together rather than added: each half was 11,237 / 10,173 alone,
+ * which sums 279 over the truth — the estimator is not linear in description
+ * text, so a cap derived by arithmetic would be quietly wrong. Re-measure.
+ *
+ * 11,790 with `add_lore_image` (+402: ~330 for the tool, ~70 for the sentence
+ * on generate_image that points at it). Bought to close a real hole rather
+ * than to add a capability: filing a picture the project ALREADY has into an
+ * entity's gallery had no tool at all, so the model reached for the one tool
+ * whose effect was "a picture ends up in that gallery" — generate_image, which
+ * draws a new one and charges for it. A wrong call every time, and the pointer
+ * sentence is what stops it recurring.
+ *
+ * 12,452 after `edit_image` was split in two (+662). One tool named
+ * `edit_image` accepted only an entity plus a gallery filename, so every
+ * request to change an ordinary project image reached it and was refused with
+ * an error about lore galleries — a wrong call every time, like add_lore_image
+ * above. The fix is a PAIR (`edit_image` takes a file path,
+ * `redraw_lore_image` takes an entry plus a filename) rather than one widened
+ * tool, because one tool would have to infer from the source what the author
+ * meant, and an inference is a second way to be wrong. Two names cost a second
+ * schema (~510) and buy a choice the model can actually check, plus the errors
+ * that name the sibling when it picks wrong.
+ *
+ * The cap is **11,790 measured, 15,000 pinned** — deliberately loose, on the
+ * author's call. The tight cap was costing a commit of its own every time a
+ * description gained a clarifying sentence, which is the change this file most
+ * wants to be cheap: a sentence that stops a wrong call is worth more than the
+ * tokens it costs, and making it expensive to write was the wrong incentive.
+ *
+ * 14,799 with `create_lore_facet` (+691 over the 14,108 measured just before
+ * it: ~613 for the tool, ~78 for the sentences on update_lore_file and
+ * update_facet_meta that now point at it). All of it deferred — the resident
+ * half is unmoved at 9,457 — and bought to close a hole of the same shape as
+ * add_lore_image's, only quieter: no tool created a facet, so "split this entry
+ * into facets" reached update_lore_file, whose new .md arrives without `facet:`
+ * frontmatter, scans as an inert attachment, and is reported back as a
+ * successful write. A wrong call every time, with no error to learn from.
+ * Note the headroom this leaves: ~200. The next tool to land here should be
+ * read against docs/feature/agent/agent-tool-context-lld.md §5 rather than
+ * against a bigger number.
+ *
+ * 14,870 with the lore-plan category-target rewording (+51 on move_lore_entity,
+ * −4 resident) and the category id(label) pairs in list_lore_entities'
+ * description (+19 resident, zh worst case — the i18n mock pins zh-CN so this
+ * file measures the expensive variant). Then 14,861 (−9, resident unmoved)
+ * when the stale "No tool creates categories" sentences on create_lore_entity
+ * and move_lore_entity — written before create_lore_category existed — were
+ * replaced by shorter pointers to it. Headroom 139: the next description that
+ * grows here should check this number first.
+ *
+ * What the ratchet is still for is the thing it was always for — a NEW TOOL, or
+ * a run of them, slipping in unpriced. At 15,000 that signal is weaker, so the
+ * measured numbers above matter more, not less: record what you measured when
+ * you change this surface, even when the assertion did not fail. If a change
+ * pushes past 15,000, do not raise it again by reflex — read
+ * docs/feature/agent/agent-tool-context-lld.md §5 first, because at that size
+ * deferred loading is the answer and a bigger number is not.
+ *
+ * 15,135 with export_xlsx: **+274**, and the cap moved to 15,200 rather than the
+ * tool being deferred — §5 was read first, and its mechanism does not fit. What
+ * makes `lore_write` safe to withhold is a gate that makes those tools
+ * *unusable* until it opens (no approved plan → every call comes back as an
+ * error), so the model's path is unchanged by the deferral. An export has no
+ * such gate: it is callable from the first round, and holding it back would
+ * only mean the model cannot see a feature the author turned on. Its real gate
+ * is the Beta switch, and that one already costs nothing — routing strips the
+ * tool before the request is built, so an author who has not enabled Excel
+ * export pays 0 of these 274. What this cap measures is the all-three-Betas-on
+ * worst case. Headroom 65: the next tool that lands here needs a wider read
+ * than a wider number.
+ *
+ * **Still 15,135** after the edit-loop work (docs/feature/agent/edit-loop-plan.md),
+ * and that is the design rather than a coincidence: read_file's line numbers,
+ * read_slides' deck index and the receipt an approved write hands back are all
+ * *runtime output*, not schema. With 65 tokens of headroom, "say it in the
+ * result the model is already reading" was the only affordable place to put any
+ * of it — and it is the better place anyway, since the rule then arrives at the
+ * moment it applies instead of thousands of tokens earlier.
+ *
+ * 15,337 with `inspect_html`: **+202**, cap 15,200 → 15,400. §5 was read first
+ * and again does not fit: what makes `lore_write` deferrable is a gate that
+ * makes those tools *fail* until it opens, so withholding them changes nothing
+ * about the model's path. `inspect_html` is the opposite — it is callable from
+ * round one and its entire value is being callable *early*, because it is the
+ * only thing in this loop that tells the model what its page actually became.
+ * Nor can it ride the pptx Beta: measuring a page is not exporting one, and the
+ * author who never turns PowerPoint export on is exactly the author whose
+ * diagrams nobody is checking.
+ *
+ * But note what this raise ran into, and do not raise past it again:
+ * `contextForecast.test.ts` pins the fact that on a **32k local model** the
+ * assistant's schemas alone exceed the whole input ceiling (15.3k of 14k), so
+ * the knowledge base gets nothing.
+ *
+ * That argument has since been acted on rather than merely written down: the
+ * `write` tier (below) carries **4,017** for a task whose product is a
+ * document, and `htmlArtifact` — the longest-file, most-rounds task in the app
+ * — now runs on it. The assistant's number stays what it is because nothing
+ * can come out of it without taking capability away; the answer to "the
+ * toolset keeps growing" is a narrower *tier*, not a bigger number here.
+ * See docs/feature/agent/edit-loop-plan.md §7.
+ *
+ * **15,385** after `search_text` grew to cover the knowledge base (+48; the cap
+ * is unchanged, and this now sits 15 tokens under it). That +48 is the cheapest
+ * thing measured on this line: before it, "which entry mentions the bronze key"
+ * had no search at all — `read_dir_recursive` skips dotfiles, so `.ai-writer/`
+ * was invisible — and was answered by `read_lore_entity` on candidate after
+ * candidate, up to one round of the *whole* schema per entry. A second tool
+ * would have cost ~250 every round to say what this one now says for 48.
+ * See docs/feature/agent/edit-loop-plan.md §10.
+ *
+ * At 15 tokens of headroom the next addition to this preset does not fit at
+ * all. That is the intended state, not a problem to solve by raising the number
+ * again: read §5 of agent-tool-context-lld.md, then put it in a tier.
+ *
+ * **15,506** after `edit_lore_file` gained `occurrence` / `replace_all`
+ * (+121), cap 15,400 → 15,600. This is the one shape of growth §5 says yes to,
+ * and the evidence is in the numbers rather than in the argument: the
+ * **resident half did not move** (9,996 before and after), because every token
+ * of the +121 is inside the `lore_write` group, which does not reach the wire
+ * until the author approves a lore plan — the exact moment the tool becomes
+ * callable at all. The `write` tier is unmoved too, at 4,065.
+ *
+ * So read the two numbers together, and treat the resident one as the bill: it
+ * has stayed within ~500 tokens across the last five slices while this one grew
+ * by 1,700. A change that moves *resident* is the one that deserves the
+ * argument, not this.
+ *
+ * **15,937** with the knowledge base's read paging + `rewrite_lore_lines`
+ * (edit-loop-plan.md §14), cap 15,600 → 16,000. The split is the sanctioned
+ * shape again: the new tool's 321 is all deferred; what moved resident is
+ * `read_lore_entity` growing `file`/`start_line` (170 → 280, **+110**) — the
+ * one read-side change §14 budgeted (~+90 estimated), bought to end "reading
+ * an entry = paying for all of it" on large entries. Resident 9,996 → 10,106.
+ *
+ * **16,252** with `insert_lines` (docs/feature/agent/large-doc-formatting-plan.md
+ * §1), cap 16,000 → 16,400. This one is **+316 resident**, which by the rule
+ * two paragraphs up is the shape that owes an argument rather than a number.
+ * The argument:
+ *
+ * §5 was read first and does not fit, for the third time and the same reason as
+ * `export_xlsx` and `inspect_html`: what makes `lore_write` deferrable is a gate
+ * that makes those tools *fail* until it opens, so withholding them changes
+ * nothing about the model's path. `insert_lines` is callable from round one and
+ * its whole value is being reachable at the moment the model is looking at a
+ * document it has just read.
+ *
+ * What the 316 buys is measured on the other side of the ledger, where this
+ * file's own metric lives. Giving a long headingless document structure — the
+ * scenario that motivated it — was previously ~one `rewrite_lines` per section,
+ * each one re-emitting the prose it was keeping, on top of paging the whole file
+ * in at 4,000 characters a call. At ~16k of schema per round, one round is worth
+ * fifty of these tools. It also closes a correctness hole no round count shows:
+ * a `rewrite_lines` pass late in a long run re-types prose whose original read
+ * has already been folded away by compaction, and re-typing from memory is how a
+ * document quietly gets paraphrased under an author who is approving cards about
+ * headings.
+ *
+ * The 32k-local-model line from `contextForecast.test.ts` still holds and is
+ * still the reason the assistant preset is not where a small model should be
+ * doing this: the `write` tier is (4,175 → 4,491 with the same tool), and that
+ * is where `htmlArtifact` and any future formatting task run.
+ */
+/**
+ * **16,479** with `read_document` (+226 resident; cap 16,400 → 16,600). §5
+ * again does not fit: nothing gates the tool, and its whole value is being
+ * reachable when `list_files` has just shown the model a folder of .docx and
+ * .pdf it was asked to sort. What the 226 buys is counted in author actions,
+ * not rounds: before it, every Word / Excel / PDF file in that folder was a
+ * manual 右键 → 转换文档 by the author *before* the assistant could start —
+ * and the converted copy then sat in the project as a file nobody asked for.
+ * After it, the read is one call, cached, and leaves nothing behind
+ * (docs/feature/agent/document-read-plan.md D2, D9).
+ */
+/**
+ * **16,669** with `convert_document` (+190; cap 16,600 → 16,800). The write half
+ * of the same feature, and gated the same way the export tools are — nothing
+ * defers it, so §5 does not apply. Its worth is the *other* half of the
+ * read_document argument: once the assistant can read a folder of Office
+ * files, "make me an editable copy of this one" is the next sentence, and
+ * without the tool the answer is again a manual 右键 → 转换文档 by the author,
+ * or — worse — the model re-typing 30 pages it just read through
+ * `create_file`, which is how a document gets paraphrased under a card that
+ * says "create".
+ */
+/**
+ * **16,873** (cap 16,800 → 16,900) when `create_lore_category` became
+ * `manage_category` and grew rename and delete. Measured against main's
+ * **16,743**, so the capability costs **+130** — and every one of them is
+ * deferred: the tool is in `lore_organize`, so a run pays it only after the
+ * author has approved a plan that reorganises the knowledge base. The
+ * resident half is unmoved, which the assertion below still pins at 12,000.
+ *
+ * This is the case §5 asks for before a bigger number, and it is already
+ * satisfied — the answer there is deferred loading, and this tool is deferred.
+ * What was bought: the two axes' management surfaces now match
+ * (`manage_collection` had create/rename/delete from the start), and the
+ * asymmetry that justified the gap turned out to rest on a wrong premise —
+ * a category's id *is* its folder, and a rename only rewrites the label, so
+ * nothing moves on disk. See `agent/organizeTools`' header.
+ */
+const AGENT_ASSIST_CAP = 16_900;
+/**
+ * The `write` tier — a task whose product is a document (docs/feature/agent/
+ * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
+ * against the assistant's 15,385 whole / 9,996 resident: the same run, minus
+ * every tool it was never going to call.
+ *
+ * This is the cap that matters now. The assistant's is a worst case nobody can
+ * shrink without taking capability away; this one is the shape a *task* should
+ * be, and the number to defend. A tool added here should have been asked for by
+ * `ai.instructions.htmlArtifact` — if the instruction never names it, the run
+ * pays for it every round and calls it never.
+ *
+ * **4,491** with `insert_lines` (+316; the tier had also drifted to 4,175 from
+ * the 4,065 recorded above, unmeasured at the time — record what you measure).
+ * It earns its place on this tier by that same rule: a page built section by
+ * section is exactly the file you later need to put something *between* two
+ * sections of, and the alternative on a long .html is re-emitting a region
+ * through `rewrite_lines` to change nothing in it.
+ */
+/**
+ * **4,718** with `read_document` (+226; cap 4,600 → 4,800). It is asked for by
+ * the tasks on this tier, not by `htmlArtifact`: a 投标应答 (`bidRespond`)
+ * reads a tender that is almost always a .docx or a .pdf, and a deck or a
+ * report is assembled from whatever the author dropped into the project —
+ * which is Office files more often than markdown. Without it the tier's only
+ * route to those files is the author converting each by hand first.
+ */
+const WRITE_CAP = 4_800;
+/** The read tier a 续写 carries. Measured 1,738; 1,964 with `read_document`. */
+const CONTINUE_CAP = 2_000;
+/** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
+const NARRATOR_CAP = 7_000;
+const ROLEPLAY_CAP = 2_500;
+
+const tokensOf = (preset: { tools: readonly string[] }) =>
+  estimateToolsTokens(getToolDefinitions(preset.tools as never));
+
+describe("tool schema budget", () => {
+  it.each([
+    ["agent-assist", AGENT_ASSIST_PRESET, AGENT_ASSIST_CAP],
+    ["continue", CONTINUE_PRESET, CONTINUE_CAP],
+    ["write", WRITE_PRESET, WRITE_CAP],
+    ["roleplay-narrator", NARRATOR_PRESET, NARRATOR_CAP],
+    ["roleplay-character", ROLEPLAY_PRESET, ROLEPLAY_CAP],
+  ])("%s stays within its per-request budget", (_name, preset, cap) => {
+    expect(tokensOf(preset)).toBeLessThanOrEqual(cap);
+  });
+
+  it("keeps the assistant's resident half well under the full toolset", () => {
+    // What a conversation actually pays before it touches the knowledge base —
+    // which is most conversations. Measured 7,067 of 9,609 at 1.22.0;
+    // 7,201 of 9,743 with read_workflow (resident on purpose: the roster it
+    // serves sits in the briefing from round one); 7,705 with both halves of
+    // the tool-surface review in. The gallery tier's resident share is only
+    // generate_image's `slot` parameter and the read-side wording — its four
+    // new write tools are all deferred — whereas the file-tools wording is
+    // resident in full, because the manuscript tools are. 7,774 with
+    // add_lore_image: the tool itself is deferred, so all this half pays is
+    // the sentence on generate_image telling it not to draw what already
+    // exists — 69 tokens against a wrong, billable call. 8,435 with the
+    // edit_image / redraw_lore_image pair: both are resident, because neither
+    // is gated on an approved lore plan — what they spend is money, so their
+    // gate is the illustrate card, the same one generate_image goes through.
+    // 8,896 with export_docx: +296, and it is resident because routing — not
+    // the preset — is what withholds it while the Beta switch is off, exactly
+    // like export_pptx. The overrides object is where that money went, so it
+    // is capped at five fields with one shared sentence instead of six
+    // per-property descriptions (that phrasing alone was another 138). The
+    // full DocFormat never enters a schema at all: the model names a preset id
+    // and the app resolves it — see docs/feature/docx/01-agent-design.md I2.
+    // 9,078 with read_doc_format: +182 for the other half of that trade. It is
+    // what keeps the full format OUT of every schema — one string parameter
+    // buys "tell me this preset's margins" and "copy that .docx's layout",
+    // both answered as prose rather than as a JSON object the model would then
+    // be tempted to write back.
+    // 9,268 with the plan's second axis (`target` + `members` on a step, see
+    // lib/agent/plan): +190, and it is the whole resident cost of collection
+    // organising — the two tools that act on the plan sit in the deferred
+    // `lore_organize` group and cost nothing until the author approves. What
+    // the 190 buys is the difference between a reorganisation the author can
+    // read and one they can only rubber-stamp: without a collection target,
+    // 「把 200 条按作品归类」 is 200 entity steps. Most of it is the sentence on
+    // `target` telling the model to write ONE step per collection rather than
+    // one per entry — delete that and the schema gets cheaper while the card
+    // gets useless.
+    // 9,457 with `negative` on the three drawing tools: +189, paid by every
+    // conversation including the ones with no ComfyUI model bound — which is
+    // the honest price of the alternative being worse. Only the comfyui route
+    // has negative conditioning on the wire, and folding "no watermark" into
+    // the positive prompt instead is not a degraded version of the feature but
+    // the opposite of it: SD draws what it reads. Three tools rather than one
+    // because img2img runs the same sampler — a negative that works on
+    // generate_image and silently does nothing on redraw_lore_image is a bug
+    // report waiting to happen. The wording is the compact one on purpose;
+    // the first draft explained the drop-for-other-models rule twice over and
+    // cost 50 more for nothing.
+    // 9,453 after the category target learned it is also a move *destination*:
+    // **−4**. That is not a rounding accident — it is a rewording rather than
+    // an addition, and both sentences came out shorter than the ones they
+    // replaced (`target` gained "or move entries into it", `members` stopped
+    // saying "collection steps only" for a rule that now covers both axes).
+    // The 51 that change does cost sits on `move_lore_entity`, which is
+    // deferred: a run pays it only once the author has approved a plan, which
+    // is the only moment "one category step, not twelve entity steps" could
+    // change what the model does.
+    // 9,472 (of 14,870 full) after list_lore_entities' description started
+    // substituting id(label) pairs instead of bare ids — +19, measured at the
+    // zh worst case, which is why the i18n mock above pins zh-CN. The pairing
+    // is the fix for a real failure: asked in Chinese to organise by the novel
+    // pack's categories, the model — which had only ever seen the English
+    // folder ids — proposed creating 「人物」/「势力」 as new categories beside
+    // characters/factions. The resident cap moved 9,500 → 12,000 in the same
+    // commit (author's call, 2026-08-29,
+    // docs/feature/agent/lore-category-visibility-plan.md): the tight cap was
+    // making a ~20-token honesty fix look like a regression. The 15,000
+    // full-preset cap did NOT move and is now the binding one — headroom 130.
+    // 9,996 after search_text grew to cover the knowledge base (+48) — and
+    // still 9,996 after edit_lore_file gained occurrence/replace_all (+121),
+    // because that tool is deferred. Those two slices are the clearest example
+    // of what this assertion is for: the full preset moved 169 tokens and the
+    // number a conversation actually pays moved 48.
+    const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
+    const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
+    expect(residentTokens).toBeLessThanOrEqual(12_000);
+    // A guard against the deferral quietly becoming a no-op: someone drops the
+    // `group` tag off a tool and the only symptom is a bigger bill.
+    expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);
+  });
+
+  it("prices the tools that routing appends, which this file's preset caps cannot see", () => {
+    // `delegate`, `translate` and `ask_author` are added by `routeTools`, not
+    // listed in any preset — the first two depend on the author's switches and
+    // the third on whether the surface can render the question card, none of
+    // which the preset layer can know. That keeps them outside the caps above,
+    // so their cost is pinned here instead. Without this, "append in routing"
+    // would be a way to add tools that no ratchet ever measures.
+    //
+    // Measured 634 — delegate 287, translate 347 — before ask_author; 895 with
+    // it (260 alone). Note these are not additive with the caps above in
+    // practice: a conversation carries at most the ones its surface and
+    // switches allow.
+    //
+    // translate was 217 when it only took `text`; the whole-file form added
+    // `path` + `reason` and the sentences that keep the model from reaching for
+    // the wrong one. Paid deliberately: the alternative — two tools — costs a
+    // second schema and a second name for one capability.
+    //
+    // ask_author's 260 is mostly the discipline sentences (when to ask, never
+    // for write permission, fold decisions together) — the schema itself is two
+    // parameters. Cutting them makes the tool cheaper and the interruptions
+    // more frequent, which is the wrong trade for a card the author must stop
+    // and answer.
+    const appended = estimateToolsTokens(getToolDefinitions(["delegate", "translate", "ask_author"]));
+    expect(appended).toBeLessThanOrEqual(1_000);
+    // run_command rides the same route (Beta + surface + Tauri), and its
+    // description is built at hand-out time to name the machine's shell —
+    // measured here in the no-probe fallback, which is the longer wording.
+    // Pinned on its own because it is the one tool whose schema the author
+    // can switch off entirely: what it costs is what the Beta costs.
+    // Measured 308 at PR 2 (docs/feature/agent/shell-command-plan.md): four
+    // parameters and a description whose sentences each stop a wrong call —
+    // the syntax it must write, that reading/editing text has its own tools,
+    // one thing per call. All four appends together measured 1,268.
+    const command = estimateToolsTokens(getToolDefinitions(["run_command"]));
+    expect(command).toBeLessThanOrEqual(340);
+  });
+
+  it("keeps each tool pack's resident half inside the plan's budget", () => {
+    // tool-pack-plan.md §3.1/§4: a pack sub-run pays its resident schemas on
+    // every round, and the plan's whole economic argument prices file_write at
+    // ≈5.5k. Measured at slice 2: run_pack 313, file_write 4,982,
+    // lore_edit 2,258 (its write tools stay in the deferred groups — 5,020
+    // more that load only when the shared plan gate's steps demand),
+    // export 2,889. The caps have the usual ratchet slack; a trip means a
+    // pack quietly grew past what the dispatch was supposed to buy.
+    expect(estimateToolsTokens(getToolDefinitions(["run_pack"]))).toBeLessThanOrEqual(400);
+    const residentOf = (pack: keyof typeof PACK_PRESETS) =>
+      estimateToolsTokens(getToolDefinitions(partitionByGroup(PACK_PRESETS[pack].tools).resident));
+    expect(residentOf("file_write")).toBeLessThanOrEqual(5_400);
+    expect(residentOf("lore_edit")).toBeLessThanOrEqual(2_600);
+    expect(residentOf("export")).toBeLessThanOrEqual(3_200);
+  });
+
+  it("keeps the orchestrator tier where the plan priced it", () => {
+    // tool-pack-plan §3.1 estimated the orchestrator's resident half at
+    // ≈3.5–4.5k. Measured at slice 3: 4,789 with the imagegen trio listed
+    // (present only while an image binding is live — routing strips it
+    // otherwise), 2,849 without it, and the routed appends (run_pack +
+    // delegate + ask_author) at 860 — so a typical no-imagegen session pays
+    // ≈3.7k against the assist tier's ≈10k. The relational assertion is the
+    // feature itself: if the orchestrator ever costs more than half of
+    // assist's resident half, the dispatch overhead stops buying anything.
+    const { resident } = partitionByGroup(ORCHESTRATOR_PRESET.tools);
+    const orches = estimateToolsTokens(getToolDefinitions(resident));
+    expect(orches).toBeLessThanOrEqual(5_200);
+    const assist = estimateToolsTokens(
+      getToolDefinitions(partitionByGroup(AGENT_ASSIST_PRESET.tools).resident),
+    );
+    expect(orches).toBeLessThan(assist * 0.55);
+  });
+
+  it("gives every tool a description worth its place", () => {
+    // A tool the model can see but can't tell apart from its neighbours is
+    // worse than no tool: it costs schema tokens *and* buys a wrong call.
+    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate", "ask_author", "run_pack", "run_command"])) {
+      expect(def.function.description.trim().length).toBeGreaterThan(40);
+      // The category placeholder is substituted per call — one that survives
+      // into the wire means the model is being shown literal `{{…}}`.
+      expect(def.function.description).not.toContain("{{");
+    }
+  });
+});

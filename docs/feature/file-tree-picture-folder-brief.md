@@ -118,7 +118,7 @@ photo  photos  screenshot  screenshots  gallery  media
 | `src/i18n/locales/{zh-CN,en}.json` | 新增 `fileTree.picturesLabel` = 「图片」/ `Pictures` |
 | `docs/reference/design-system.md` | §01b 右列那段补一句 `pictures` |
 | `docs/reference/codemap.md` | `lib/fs` 一节补一句判据 |
-| `src/lib/__tests__/rowMeta.test.ts` | §8 |
+| `src/lib/fs/__tests__/rowMeta.test.ts` | §8 |
 
 ### 7.1 种类从哪里来
 

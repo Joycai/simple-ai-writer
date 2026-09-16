@@ -30,7 +30,7 @@ A pack is data — reach for this instead of adding branches for a new kind of w
    - `tasks` — the pack's own tasks, plus a base-id entry only to *override* a base task's instruction (the way novel re-points 续写 at `continueNovel`)
 2. Add the task instructions to **both** locales (`en.json`, `zh-CN.json`) under `ai.instructions`, folding the domain's non-negotiables into them — there is no per-pack system prompt to carry them.
 3. Nothing else is required — the toggles (Settings → 工作台), the scaffold, the lore scan, the category pickers and the agent tool schemas all read the merged workspace at runtime.
-4. Tests: extend `src/lib/__tests__/profile.test.ts` (the built-in loop already validates ids/uniqueness for every pack). `resolveWorkspace.test.ts` covers the merge, `profileStore.test.ts` the `profile.json` read/write path and `projectStoreProfile.test.ts` the open/close/switch ordering.
+4. Tests: extend `src/lib/profile/__tests__/profile.test.ts` (the built-in loop already validates ids/uniqueness for every pack). `resolveWorkspace.test.ts` covers the merge, `profileStore.test.ts` the `profile.json` read/write path and `projectStoreProfile.test.ts` the open/close/switch ordering.
 
 For **project-specific categories** no code (and no pack) is needed: the lore wall's 「+ 新建分类」 chip and Settings → 工作台 manage user-defined categories persisted in profile.json's top-level `categories`. For a project-specific *pack*, hand-write `.ai-writer/profile.json`; a `packs[]` entry naming a built-in patches it (`{"id":"ttrpg","sections":{"prevTail":"上一幕结尾"}}`) — `categories` and `sections` both layer over that built-in's, so overriding one label keeps the rest of its wording.
 
@@ -42,7 +42,7 @@ Draft count is a user setting (`appStore.draftCount`, chip row in the AI panel),
 
 Before lifting the clamp on `agent` or `continue`, read the table in `docs/reference/architecture.md` → Multi-draft output: `agent` is a correctness limit (concurrent disk writes + racing approval cards), and `continue` needs per-draft `agentLog`s first or the execution log becomes unreadable.
 
-Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out count, per-draft failure isolation, shared-abort, and one usage row per draft.
+Tests: `src/stores/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out count, per-draft failure isolation, shared-abort, and one usage row per draft.
 
 ## Add a new provider/API
 
@@ -60,7 +60,7 @@ Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out co
 8. **Default base URL** — `defaultBaseFor()` in `src/lib/ai/urls.ts`, used when an official provider's stored base is empty (a family that shares another's host, like Responses on OpenAI's, needs no branch there).
 9. **Probes** — `src/lib/ai/providerProbe.ts` (`testProviderConnection`'s "count the list" branch and `completionProbeRequest`, whose fallback must speak the family's own shape — a relay serving only the new endpoint need not serve the old one) and `src/lib/ai/endpointProbe.ts` (`authHeaders`, the Step-0 models endpoint, a `chatRequest` branch or an early return from the chat-based steps, and `outputParamFor` if the family names its output cap differently).
 10. **JSON mode** — `resolveStructuredOutput` / `jsonModeShaping` in `src/lib/ai/jsonMode.ts`, if the protocol enforces JSON differently (or not at all — sending a foreign field is a 400 on Anthropic and silently nothing on Responses), plus the matching `soChoices` list in `ModelDrawer.tsx`.
-11. **Tests** — a test file per adapter under `src/lib/__tests__/` (`aiClient.test.ts` for the original three, `responses.test.ts` for the Responses family) covering deltas, usage, truncation, a streamed tool call, and an in-band error; plus `providerProbe.test.ts`, and the `familyOf` / `defaultCategoryId` / `defaultImageCaps` cases in `providerUrls.test.ts`, `thinkingCategory.test.ts`, `imageDomain.test.ts`.
+11. **Tests** — a test file per adapter under `src/lib/ai/__tests__/` (`aiClient.test.ts` for the original three, `responses.test.ts` for the Responses family) covering deltas, usage, truncation, a streamed tool call, and an in-band error; plus `providerProbe.test.ts`, and the `familyOf` / `defaultCategoryId` / `defaultImageCaps` cases in `providerUrls.test.ts`, `thinkingCategory.test.ts`, `imageDomain.test.ts`.
 
 ## Add a new language
 1. Copy `src/i18n/locales/en.json` → `src/i18n/locales/[lang].json`
@@ -79,4 +79,4 @@ Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out co
 1. Manual: LoreDetail → 特征 section → 新建特征 / 转为特征 (form writes the `facet` frontmatter)
 2. AI split: LoreDetail top bar → 拆分特征 → review drafts → Apply (original index.md backed up to `.ai-writer/backups/`)
 3. Activation semantics live in `src/lib/context/loreSelect.ts`; facet parsing in `src/lib/lore/entity.ts` (`parseFacetMeta`)
-4. Tests: `src/lib/__tests__/loreSelect.test.ts`, `splitter.test.ts`
+4. Tests: `src/lib/context/__tests__/loreSelect.test.ts`, `splitter.test.ts`

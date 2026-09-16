@@ -474,7 +474,7 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 `dashscope-intl.aliyuncs.com` 是独立 host 与 key。
 
 实测方法：用仓库里的真实 adapter（`streamOpenAI` / `streamAnthropic` / `streamCompletion` /
-`testProviderConnection`）跑 `src/lib/__tests__/live.qianwen.test.ts`（设 `QIANWEN_KEY`
+`testProviderConnection`）跑 `src/lib/ai/__tests__/live.qianwen.test.ts`（设 `QIANWEN_KEY`
 才运行），外加 curl 矩阵。模型：qwen3.8-flash、qwen3.7-flash、deepseek-v4-pro-0813、
 kimi-k3、glm-5.2、MiniMax-M2.5、qwen3-vl-plus。
 
@@ -564,7 +564,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 #### 联网搜索与网页抓取（`web_search` / `web_extractor`，2026-09-14 实测）
 
 官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/web-scraping`。实测用
-`src/lib/__tests__/live.qianwen.test.ts` 的「server tools」组 + curl，提示词统一为
+`src/lib/ai/__tests__/live.qianwen.test.ts` 的「server tools」组 + curl，提示词统一为
 「用两句话概括 https://www.rust-lang.org/ 首页讲了什么」。本项目的实现在
 `src/lib/ai/serverTools.ts`（`openaiServerToolsBody` / `responsesServerTools` /
 `responsesServerToolEvent`）。
@@ -629,7 +629,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 #### 视觉理解（qwen3-vl 系列，另附视频与 ASR 在 ① 面上的样子，2026-09-14 实测）
 
 实测用真实 adapter（`streamCompletion`）走一次性探测，稳定的事实固化进
-`src/lib/__tests__/live.qianwen.test.ts` 的「vision: qwen3-vl-plus」组（夹具在测试里现生成：
+`src/lib/ai/__tests__/live.qianwen.test.ts` 的「vision: qwen3-vl-plus」组（夹具在测试里现生成：
 纯色 PNG 编码器 + 两个 16px 的 webp / gif 常量）。主测模型 qwen3-vl-plus，① 面，除注明外都是它。
 
 `/compatible-mode/v1/models` 里的视觉 id：`qwen3-vl-plus` / `qwen3-vl-flash`（各带日期快照）、
@@ -788,7 +788,7 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
 
-**2026-09-04 实测**（`src/lib/__tests__/live.dashscope-image.test.ts`，驱动真实的
+**2026-09-04 实测**（`src/lib/ai/__tests__/live.dashscope-image.test.ts`，驱动真实的
 `generateImage`，`DASHSCOPE_IMAGE_KEY` 才跑；key 是千问AI平台的 `sk-ws-…` 工作空间 key，
 打的仍是 `dashscope.aliyuncs.com`）——本项目的 body **一个字节没改就通了**，上面的
 协议事实全部成立，另外几条文档没写的：
@@ -1012,7 +1012,7 @@ host 上还挂着 `[Plus]` / `[官key]` / `[次数]` / `[kiro]` 等档位，同�
 ### 第九个样本：同一中转站上的两条生图路由（`[R]gpt-image-2` 经 ①、`[R]gemini-3.1-flash-image-preview` 经 ③，2026-09-04 实测）
 
 生图没有协议——① 族的 Chat Completions 根本没有图片字段，③ 族有（`inlineData`）但
-中转站照样各自发挥。实测工具是 `src/lib/__tests__/live.relay-image.test.ts`（驱动真实的
+中转站照样各自发挥。实测工具是 `src/lib/ai/__tests__/live.relay-image.test.ts`（驱动真实的
 `generateImage`，`RELAY_IMAGE_KEY` 才跑），每条用例一张图；结论已回填 `lib/ai/image.ts`
 与 `imageClient.test.ts`。样本仍是 `hk.chenmoai.com`（第八个样本那台）。
 

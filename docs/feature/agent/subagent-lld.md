@@ -1314,17 +1314,17 @@ CI 是 PR 门禁（`docs/reference/ci.md`：tsc + vitest + build，Rust fmt/clip
 
 | 测试 | 位置 | 断言 |
 | :--- | :--- | :--- |
-| `task.md` 序列化往返 | `lib/__tests__/taskWorkspace.test.ts` | parse∘serialize 恒等；作者手改复选框后 `parseSteps` 读出新状态；元数据损坏时 `parseTaskDoc` 返回 null 而不抛 |
+| `task.md` 序列化往返 | `lib/agent/__tests__/taskWorkspace.test.ts` | parse∘serialize 恒等；作者手改复选框后 `parseSteps` 读出新状态；元数据损坏时 `parseTaskDoc` 返回 null 而不抛 |
 | 步骤寻址 | 同上 | `task_progress({step:2,action:"check"})` 只改第 2 行；越界序号返回 tool error |
-| 路径沙箱 | `lib/__tests__/scratchpadTools.test.ts` | `slug: "../../x"`、绝对路径、空 slug 三种输入都被挡 |
-| **serverTools 策略** | `lib/__tests__/agentRuntime.test.ts` | `tools:[] + serverTools:"always"` 的预设，**每一轮**的请求都带 serverTools（这是 §5.2.1 那个 bug 的回归测试）；默认策略的收尾轮不带 |
+| 路径沙箱 | `lib/agent/__tests__/scratchpadTools.test.ts` | `slug: "../../x"`、绝对路径、空 slug 三种输入都被挡 |
+| **serverTools 策略** | `lib/agent/__tests__/agentRuntime.test.ts` | `tools:[] + serverTools:"always"` 的预设，**每一轮**的请求都带 serverTools（这是 §5.2.1 那个 bug 的回归测试）；默认策略的收尾轮不带 |
 | checkpoint 撤回 | 同上 | 注入 checkpoint 的那一轮请求里有提示消息，**该轮结束后 history 里没有** |
 | 暂停退出 | 同上 | `onRoundLimit` 返回 `{action:"pause"}` 时 `outcome === "paused"`，且 history 的 tool_call 配对完整 |
-| 委托沙箱 | `lib/__tests__/subagent.test.ts` | 子 `ToolContext` 不含 approval/plan/workspace；`SUB_PRESETS` 均不含 `delegate`；`AbortError` 被重抛而非转成 tool error |
+| 委托沙箱 | `lib/agent/__tests__/subagent.test.ts` | 子 `ToolContext` 不含 approval/plan/workspace；`SUB_PRESETS` 均不含 `delegate`；`AbortError` 被重抛而非转成 tool error |
 | 产出捕获 | 同上 | mock `runAgent` 只经 `onOutputText` 吐字，note 内容与之一致（这是 §0 第三条的回归测试） |
-| 能力路由 | `lib/__tests__/routing.test.ts` | vision 启用 ⇒ 工具集无 `read_image`；search 启用 ⇒ `serverTools: "off"`；无工作区 ⇒ 无 `delegate` |
-| 日志作用域 | `lib/__tests__/agentEvents.test.ts` | 主 run 与子跑各自的 round-1 reasoning 并存，互不覆盖 |
-| 子代理配置清理 | `lib/__tests__/aiStoreRemoval.test.ts` | 删除模型后 `subAgents.*.modelId` 被清空（沿用 `memoryModelId` 的既有用例） |
+| 能力路由 | `lib/agent/__tests__/routing.test.ts` | vision 启用 ⇒ 工具集无 `read_image`；search 启用 ⇒ `serverTools: "off"`；无工作区 ⇒ 无 `delegate` |
+| 日志作用域 | `lib/agent/__tests__/agentEventsScope.test.ts` | 主 run 与子跑各自的 round-1 reasoning 并存，互不覆盖 |
+| 子代理配置清理 | `stores/__tests__/aiStoreRemoval.test.ts` | 删除模型后 `subAgents.*.modelId` 被清空（沿用 `memoryModelId` 的既有用例） |
 
 ---
 

@@ -181,7 +181,7 @@ const collapseAll = () => {
 
 `src/i18n/locales/{zh-CN,en}.json` 的 `fileTree.collapseAll`。
 
-### 5.5 测试（`src/lib/__tests__/selection.test.ts`，已存在）—— 已实现
+### 5.5 测试（`src/lib/fs/__tests__/selection.test.ts`，已存在）—— 已实现
 
 要钉住的四条，全是纯函数层：
 

@@ -195,7 +195,7 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
   元数据），只改正文不改摘要的编辑不触发重注——模型仍可用工具读到最新内容。
 - 顺序即依赖序；PR2/PR3 互不依赖，可并行。
 
-**测试**（`src/lib/__tests__/chatCompact.test.ts`）：折叠绝不切开
+**测试**（`src/lib/agent/__tests__/chatCompact.test.ts`）：折叠绝不切开
 assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确；归纳失败
 回退不改历史；注入账本的去重、折叠回收、内容变更重注入。
 

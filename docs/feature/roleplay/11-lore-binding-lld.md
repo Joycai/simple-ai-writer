@@ -285,7 +285,7 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 改：`lib/context/loreSelect.ts`、`components/ai/AiPanel.tsx`（一条 `dropReason`
 分支）、两份 i18n。
 
-测试（`src/lib/__tests__/loreSelect.test.ts` 新增）：
+测试（`src/lib/context/__tests__/loreSelect.test.ts` 新增）：
 
 - a. `coreDone` 的条目只产出特征块——没有 `> 摘要`、没有正文、没有配图行
 - b. `coreDone` 且没有新特征 → 该条目不出现在 `text` 里，且 `usedChars` 不因它增长

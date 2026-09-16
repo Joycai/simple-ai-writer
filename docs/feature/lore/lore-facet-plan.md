@@ -153,7 +153,7 @@ export async function selectLore(
 - `ContextBundle` 增加 `loreReport: LoreActivationReport`，随 bundle 返回给 `aiTaskStore`，供 UI 展示（§4.4）；
 - 常量 `MAX_LORE_CHARS` 改为从 appStore 设置读取（默认仍 600 token 等效值）。
 
-### 2.4 单元测试（vitest，放 `src/lib/__tests__/loreSelect.test.ts`）
+### 2.4 单元测试（vitest，放 `src/lib/context/__tests__/loreSelect.test.ts`）
 
 覆盖：二级 AND 匹配命中/未命中；`always/manual` 模式；同组互斥按 priority、同分稳定性、pin 压倒 priority；预算耗尽时 facet 整体丢弃且报告正确；无 facet 实体行为与现状等价（回归保护）；CJK 关键词子串匹配。
 
