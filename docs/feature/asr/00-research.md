@@ -63,7 +63,7 @@
 
 为什么改：作者手里的音频多是短的——一段口述、采访里的一截、会议里的一段。对这些文件，同步没有上传、没有 48 小时的临时存储、没有任务和轮询，几秒出文字；异步那条是凭证 → OSS 上传 → 提交 → 轮询 → 取结果，快的时候也是分钟级的等待体验。当初担心的「要维护两条路径」用**模型行选接口**化解：`asrFormat` 多一个值 `dashscope-sync`，绑在 `asr` 子代理上的那一行决定走哪条，**不在两个模型之间自动路由**——自动路由意味着作者要同时配好两个模型，还得猜某一次到底走了哪条、为什么没有时间戳。
 
-实测（① 面 `POST {base}/chat/completions`，base `https://dashscope.aliyuncs.com/compatible-mode/v1`；一次性探测脚本不入库。别名与日期快照的两份真机响应作为解析夹具放在 `src/lib/asr/__tests__/fixtures/*-sync.json`，稳定的事实由 `src/lib/__tests__/live.qianwen-asr.test.ts`（有 `QIANWEN_KEY` 才跑，驱动真实的 `sync.ts`）钉住）：
+实测（① 面 `POST {base}/chat/completions`，base `https://dashscope.aliyuncs.com/compatible-mode/v1`；一次性探测脚本不入库。别名与日期快照的两份真机响应作为解析夹具放在 `src/lib/asr/__tests__/fixtures/*-sync.json`，稳定的事实由 `src/lib/asr/__tests__/live.qianwen-asr.test.ts`（有 `QIANWEN_KEY` 才跑，驱动真实的 `sync.ts`）钉住）：
 
 | 项 | 结果 |
 |---|---|

@@ -321,8 +321,8 @@ authMode?: "default" | "bearer" | "both";
 | `components/settings/panes/ProviderDrawer.tsx` | 下拉 6 项；official 的 URL 输入框**只读展示**（不隐藏，用户要看得见地址才知道该不该换 compat）；compat 显示鉴权下拉；预设整理 |
 | `components/onboarding/Onboarding.tsx` | 预设沿用 official |
 | `i18n/locales/{en,zh-CN}.json` | `aiConfig.apiStandards` 六项 + 鉴权方式文案 + compat 的 baseUrl 占位提示 |
-| `lib/__tests__/aiClient.test.ts` | 新增 URL 归一化用例（§3.2 三种写法）、鉴权头用例 |
-| `lib/__tests__/providerProbe.test.ts` | 新增 `/models` 404 降级用例 |
+| `lib/ai/__tests__/aiClient.test.ts` | 新增 URL 归一化用例（§3.2 三种写法）、鉴权头用例 |
+| `lib/ai/__tests__/providerProbe.test.ts` | 新增 `/models` 404 降级用例 |
 
 ## 8. PR 切片
 

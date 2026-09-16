@@ -178,7 +178,7 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 | 4.8 | DashScope：思考开 + forced `tool_choice` 的报错与降级条件是否精确 | 声明「开关式」、力度设「关闭」，跑一次结构化任务（forced pseudo-tool），确认思考关时 forced 真的合法 | 若「关闭」时也拒 forced，`toolChoiceFor` 的降级条件要放宽成"方言声明即降级"（与 anthropic 侧对齐） |
 | 4.9 | DashScope：`file` 内容块（base64 `file_data` + `filename`）是否被 qwen3.8-max 接受；一次多个 PDF 是否可行 | PDF 子代理绑 qwen3.8-max，delegate 一份小 PDF；再试 refs 传两份 | 文档只给了单文件示例；多文件被拒则 `MAX_PDF_FILES` 应降为 1 |
 
-**2026-09-03 千问AI平台实测**（`src/lib/__tests__/live.qianwen.test.ts`，结论在
+**2026-09-03 千问AI平台实测**（`src/lib/ai/__tests__/live.qianwen.test.ts`，结论在
 [`../api/qianwen-compat-plan.md`](../api/qianwen-compat-plan.md) §1，wire 细节在
 [`../api/landscape.md`](../api/landscape.md) §7 第六个样本）：
 

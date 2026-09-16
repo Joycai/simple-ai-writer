@@ -61,4 +61,4 @@ token（`usage.prompt_tokens_details.video_tokens`）：
 
 ## 5. 复测
 
-`src/lib/__tests__/live.qianwen.test.ts` 的 `video: qwen3-vl-plus`（需要 `QIANWEN_KEY`）：2 秒片段通过且输入 token 落在估值附近；1 秒片段报 too short；同一段 6 秒片段 `fps: 0.5` 比默认少。三个片段在 `src/lib/__tests__/fixtures/`（ffmpeg 测试图样，共约 54KB）。
+`src/lib/ai/__tests__/live.qianwen.test.ts` 的 `video: qwen3-vl-plus`（需要 `QIANWEN_KEY`）：2 秒片段通过且输入 token 落在估值附近；1 秒片段报 too short；同一段 6 秒片段 `fps: 0.5` 比默认少。三个片段在 `src/lib/fs/__tests__/fixtures/`（ffmpeg 测试图样，共约 54KB）。

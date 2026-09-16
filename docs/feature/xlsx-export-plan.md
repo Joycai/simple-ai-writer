@@ -14,7 +14,7 @@
 | 二进制写盘 | `writeBinaryFile(path, bytes)`，base64 over IPC | `src/lib/fs/fileio.ts` |
 | Beta 三件套 | `flag.ts` + `routeTools` 剥离 + 设置页开关 | pptx / docx 各一套 |
 | `rust_xlsxwriter` | **已在树里**，dev-dependency：xlsx.rs 的往返测试用它造 fixture | `src-tauri/Cargo.toml` |
-| 工具预算 | 全预设 14,861 token，棘轮 15,000（headroom 139） | `src/lib/__tests__/agentToolBudget.test.ts` |
+| 工具预算 | 全预设 14,861 token，棘轮 15,000（headroom 139） | `src/lib/agent/__tests__/agentToolBudget.test.ts` |
 
 ## 2. 四条不变量
 

@@ -112,5 +112,5 @@ A typography theme is a stylesheet that **only touches the rendered document**. 
 一份 `.css`（有资产就加同名文件夹），文件头写清楚用途、怎么装、改哪里，在上面的表里加一行。不用改代码：主题是数据，不是分支。
 One `.css` (plus a folder of the same name if it has assets), a header saying what it is for, how to install it and where to change it, and a row in the table above. No code changes: a theme is data, not a branch.
 
-`src/lib/__tests__/themeExamples.test.ts` 会检查这个目录里的每一份：元数据齐全、`--theme-extends` 指向内置、每条选择器都在围栏里、`url()` 合规。
-`src/lib/__tests__/themeExamples.test.ts` checks every file here: complete metadata, `--theme-extends` naming a built-in, every selector inside the fence, every `url()` allowed.
+`src/lib/theme/__tests__/themeExamples.test.ts` 会检查这个目录里的每一份：元数据齐全、`--theme-extends` 指向内置、每条选择器都在围栏里、`url()` 合规。
+`src/lib/theme/__tests__/themeExamples.test.ts` checks every file here: complete metadata, `--theme-extends` naming a built-in, every selector inside the fence, every `url()` allowed.

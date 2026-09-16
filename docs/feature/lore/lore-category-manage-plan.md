@@ -123,7 +123,7 @@ i18n 的 `categoriesHint` 是诚实的（「移除分类不会删除其文件夹
   把这句话**留着并禁用**，而不是把菜单项藏掉：藏掉会让作者以为自己点错了地方。
 
 「保留文件夹」那条出口所承诺的降级形态（标签退化成文件夹 id、不能在里面新建），以及
-「搬空之后分类自己消失」，都由 [`orphanCategories.test.ts`](../../../src/lib/__tests__/orphanCategories.test.ts)
+「搬空之后分类自己消失」，都由 [`orphanCategories.test.ts`](../../../src/lib/lore/__tests__/orphanCategories.test.ts)
 既有的用例锁着；这一片新加的用例只覆盖 `relocationTargets`。
 
 ## 6. 分片 3（已实施）：给 `move_lore_entity` 接上 target 轴
@@ -155,7 +155,7 @@ i18n 的 `categoriesHint` 是诚实的（「移除分类不会删除其文件夹
 **当时仍然不加**分类的改名/删除工具，理由写的是「§2 那一栏没变」。§8 把这句话推翻了——
 那一栏说的从来不是改名的代价。
 
-代价记在 [`agentToolBudget.test.ts`](../../../src/lib/__tests__/agentToolBudget.test.ts)：常驻
+代价记在 [`agentToolBudget.test.ts`](../../../src/lib/agent/__tests__/agentToolBudget.test.ts)：常驻
 那一半 **9,457 → 9,453（−4）**，因为两句 schema 说明是**改写**而不是新增，都比它们替掉的
 那两句更短；真正的 +51 落在 `move_lore_entity` 上，而它是延迟装载的——一次运行只在作者
 批准了方案之后才付这笔钱，也正是那句话唯一可能改变模型行为的时刻。
@@ -198,7 +198,7 @@ i18n 的 `categoriesHint` 是诚实的（「移除分类不会删除其文件夹
 
 ### 8.3 代价
 
-[`agentToolBudget.test.ts`](../../../src/lib/__tests__/agentToolBudget.test.ts)：
+[`agentToolBudget.test.ts`](../../../src/lib/agent/__tests__/agentToolBudget.test.ts)：
 **16,743 → 16,873（+130）**，全部落在延迟那一半——常驻那一半一个 token 都没动。一次运行
 只在作者批准了一份重整方案之后才付这 130，也正是这句说明唯一可能改变模型行为的时刻。
 

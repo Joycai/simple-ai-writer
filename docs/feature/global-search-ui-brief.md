@@ -75,7 +75,7 @@
 
 | 事 | 落点 | 说明 |
 |---|---|---|
-| 匹配与排序 | 新建 [`lib/search/globalSearch.ts`](../../src/lib/search/globalSearch.ts) + [`lib/__tests__/globalSearch.test.ts`](../../src/lib/__tests__/globalSearch.test.ts) | 纯函数：`parseQuery`（前缀 → 作用域）、`matchText`（子串 > 词首 > 子序列，多 token 空格分词，回传高亮区间）、`searchFiles`（名字 ×1 / 分组路径 ×0.6 / 全路径 ×0.5）、`searchLore`（名字 > 别名）、`searchLines`（只认子串——正文行上子序列是噪音）、`recentLocations`（去重、剔掉已不存在的） |
+| 匹配与排序 | 新建 [`lib/search/globalSearch.ts`](../../src/lib/search/globalSearch.ts) + [`lib/search/__tests__/globalSearch.test.ts`](../../src/lib/search/__tests__/globalSearch.test.ts) | 纯函数：`parseQuery`（前缀 → 作用域）、`matchText`（子串 > 词首 > 子序列，多 token 空格分词，回传高亮区间）、`searchFiles`（名字 ×1 / 分组路径 ×0.6 / 全路径 ×0.5）、`searchLore`（名字 > 别名）、`searchLines`（只认子串——正文行上子序列是噪音）、`recentLocations`（去重、剔掉已不存在的） |
 | 文档候选 | `projectStore.fileTree` 全部非目录节点 | 同 `projectFilesFromTree` 的理由：一棵树、一条刷新路径；但**不过滤种类**——搜索是「找存在的东西」 |
 | 打开条目 | `setMainView("lore-wall")` + `openDetail(dirPath)` | 与 `navStore.applyLocation` 的 lore 分支同一条路 |
 | 定位文档 | `projectStore.revealPath(path)`：一次 `set` 展开祖先链 + 记一条 `revealRequest {path, seq}` | 树的 effect 消费 `seq`（模块级记忆，**只消费一次**——树卸载再挂回不会把当前文档再居中一遍），rAF 后 `scrollIntoView` 居中 + 选中。`revealCurrent`、脚线、⋯ 菜单、⌥⌘L 全走它 |
