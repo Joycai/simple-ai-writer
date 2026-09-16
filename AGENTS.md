@@ -1,8 +1,8 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Codex, Claude Code, Cursor, …) when working with code in this repository.
 
-> [`AGENTS.md`](AGENTS.md) is this file's generated mirror — the entry point for agents that follow the `AGENTS.md` convention (Codex, Cursor, …), so they read the same map instead of a second copy that drifts. Edit here, then run `node scripts/gen-agents-md.ts`; `agentsMdSync.test.ts` fails while the mirror lags.
+> **GENERATED from [`CLAUDE.md`](CLAUDE.md) by `scripts/gen-agents-md.ts` — do not edit by hand.** `CLAUDE.md` is the source; this file is its body under an agent-neutral head, so agents that follow the `AGENTS.md` convention read the same map. Edit `CLAUDE.md`, then run `node scripts/gen-agents-md.ts`; `agentsMdSync.test.ts` fails when the two drift.
 
 > **Progressive disclosure** — This file is the always-loaded high-level map: commands, the shape of the app, the hard rules, and where to read next. Per-directory notes (module split, invariants, why-not-the-other-way) live in [`docs/reference/codemap.md`](docs/reference/codemap.md); subsystem deep-dives, the UI/design spec and recipes are under `docs/` (see [Detailed References](#detailed-references)). **Keep this file lean: add new detail to `codemap.md` or the relevant `docs/` file, not here.**
 
