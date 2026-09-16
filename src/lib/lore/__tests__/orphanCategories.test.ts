@@ -39,7 +39,7 @@ import {
   relocationTargets,
   scanLore,
   type LoreIndex,
-} from "..";
+} from "../index";
 import { NOVEL_PROFILE, isKnownCategory, resetActiveWorkspace } from "../../profile";
 
 const ROOT = "/proj";

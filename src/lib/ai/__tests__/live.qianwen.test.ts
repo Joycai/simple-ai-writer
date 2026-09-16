@@ -12,7 +12,7 @@ import { estimateVideoTokens, videoPart } from "../videoInput";
 import { parseMp4Info } from "../../fs/video";
 import { streamOpenAI } from "../openai";
 import { streamAnthropic } from "../anthropic";
-import { streamCompletion } from "..";
+import { streamCompletion } from "../index";
 import { fetchRemoteModels, testProviderConnection } from "../providerProbe";
 import type { StreamChunk, StreamMessage, StreamOptions } from "../types";
 

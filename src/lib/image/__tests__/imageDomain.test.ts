@@ -13,7 +13,7 @@ vi.mock("../../project", () => ({ getDb: vi.fn() }));
 vi.mock("@tauri-apps/plugin-fs", () => ({ readFile: vi.fn() }));
 vi.mock("../../fs/fileio", () => ({ readDir: vi.fn(), readFile: vi.fn() }));
 
-const { sizeForAspect } = await import("..");
+const { sizeForAspect } = await import("../index");
 const { dataUrlToBytes } = await import("../../fs/images");
 
 function model(over: Partial<Model> = {}): Model {

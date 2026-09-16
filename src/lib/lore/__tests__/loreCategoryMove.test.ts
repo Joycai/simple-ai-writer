@@ -41,7 +41,7 @@ vi.mock("../../fs/fileio", () => ({
   removeFile: vi.fn(),
 }));
 
-import { moveEntitiesToCategory, repointPins, type LoreEntity } from "..";
+import { moveEntitiesToCategory, repointPins, type LoreEntity } from "../index";
 
 const ROOT = "/proj";
 

@@ -5,7 +5,7 @@
  * 面内」那条的前提）；盒内按 priority 降序、同优先级保持原序。
  */
 import { describe, expect, it } from "vitest";
-import { buildFacetBlocks, type LoreFacet } from "..";
+import { buildFacetBlocks, type LoreFacet } from "../index";
 
 const facet = (title: string, group: string | null = null, priority = 0): LoreFacet => ({
   file: `${title}.md`,

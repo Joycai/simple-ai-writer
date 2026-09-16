@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCiteBody, resolveCitation } from "../citations";
 import { renderMarkdown } from "../../fs/markdown";
-import type { LoreEntity, LoreIndex } from "..";
+import type { LoreEntity, LoreIndex } from "../index";
 
 const entity = (over: Partial<LoreEntity>): LoreEntity =>
   ({

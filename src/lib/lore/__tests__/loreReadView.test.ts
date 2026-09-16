@@ -35,7 +35,7 @@ import {
   splitDictBody,
   type LoreEntity,
   type LoreFacet,
-} from "..";
+} from "../index";
 import { parseDictBody } from "../../translate/glossary";
 import { PREF_KEYS } from "../../prefs";
 

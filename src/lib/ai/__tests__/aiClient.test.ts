@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   streamCompletion, ContextSizeError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
-} from "..";
+} from "../index";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
 import { __resetForcedToolChoiceMemo } from "../toolChoice";
 import type { ServerToolId } from "../serverTools";

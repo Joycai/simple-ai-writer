@@ -27,8 +27,8 @@ vi.mock("../session", () => ({
 }));
 // Partial mock: the store now also pulls imageRequestParams (pure) from this
 // module — only the I/O (usage rows) is stubbed out.
-vi.mock("..", async () => {
-  const actual = await vi.importActual<typeof import("..")>("..");
+vi.mock("../index", async () => {
+  const actual = await vi.importActual<typeof import("../index")>("../index");
   return { ...actual, recordImageUsage: vi.fn(async () => {}) };
 });
 // The source image is read through the model-bound reader, which decodes and
@@ -170,7 +170,7 @@ describe("edit chain", () => {
     expect(useImageStore.getState().sessionId).toBeNull();
     expect(writeCandidates).not.toHaveBeenCalled();
     // The money was still spent, so it is still on the books.
-    const { recordImageUsage } = await import("..");
+    const { recordImageUsage } = await import("../index");
     expect(recordImageUsage).toHaveBeenCalled();
   });
 

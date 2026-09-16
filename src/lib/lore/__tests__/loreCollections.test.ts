@@ -34,7 +34,7 @@ import {
   ungroupedCount,
   type LoreEntity,
   type LoreIndex,
-} from "..";
+} from "../index";
 
 // selectLore 会去磁盘读条目正文，这里只关心谁被选中，所以给每个 index.md 一份空正文。
 const files = new Map<string, string>();

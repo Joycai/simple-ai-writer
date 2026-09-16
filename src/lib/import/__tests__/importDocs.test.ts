@@ -22,7 +22,7 @@ import {
   importedName,
   markdownName,
   uniqueImportPath,
-} from "..";
+} from "../index";
 
 describe("htmlToMarkdown", () => {
   it("converts headings, lists and emphasis to atx/dash markdown", () => {
