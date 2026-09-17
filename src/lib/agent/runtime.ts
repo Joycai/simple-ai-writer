@@ -296,6 +296,10 @@ function elideImagesOverBudget(history: StreamMessage[]): number {
   return dropped;
 }
 
+/** What a picture refused with its request becomes; the model reads this. */
+const UNSENT_IMAGE =
+  "[image not sent: together with the others it was too large for one request — read it again on its own if it still matters]";
+
 /**
  * After a request was refused for its pictures, take out the ones
  * `elideImagesOverBudget` had to leave in, so the refusal isn't permanent.
@@ -309,9 +313,6 @@ function elideImagesOverBudget(history: StreamMessage[]): number {
  * are already in history. They could not be sent anyway; their text stays, so
  * the model knows what it read and can read one again.
  */
-const UNSENT_IMAGE =
-  "[image not sent: together with the others it was too large for one request — read it again on its own if it still matters]";
-
 function elideUnsendableImages(history: StreamMessage[]): void {
   const newest = history.filter(hasImageParts).pop();
   const from = roundInProgressStart(history);
