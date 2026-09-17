@@ -613,7 +613,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           preset === AGENT_ASSIST_PRESET && !useBatchStore.getState().running;
         // commands: the same variable on purpose — a run that can show the
         // question card is exactly a run that can show a command's card.
-        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk });
+        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk, providers });
         const effectivePreset = {
           ...preset!,
           tools: routed.tools,
@@ -638,6 +638,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             multimodal: canSeeImages(model),
             // 同 agentStore：读图的是谁，只在 routeTools 判一次。
             visionDelegate: routed.visionDelegate,
+            searchReadsPages: routed.searchReadsPages,
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).
             // Awaited, and returns the fresh index, so the run's own snapshot

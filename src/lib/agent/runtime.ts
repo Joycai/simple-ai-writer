@@ -783,7 +783,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // Rebuilt per round because `activeTools` grows. `getToolDefinitions` also
     // re-patches the active profile's lore categories, which is free to redo
     // and wrong to cache across a project switch.
-    const toolDefinitions = getToolDefinitions(activeTools, searchable);
+    const toolDefinitions = getToolDefinitions(activeTools, searchable, opts.toolContext.searchReadsPages);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -1013,7 +1013,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       ? handoffToolTokens()
       : withholdTools
         ? 0
-        : toolTokensOf(activeTools, searchable) + (handoffPreset ? handoffToolTokens() : 0);
+        : toolTokensOf(activeTools, searchable, opts.toolContext.searchReadsPages) + (handoffPreset ? handoffToolTokens() : 0);
     opts.onEvent({
       kind: "round-start",
       round,

@@ -850,6 +850,14 @@ export interface ToolContext {
    */
   visionDelegate?: boolean;
   /**
+   * Whether the search subagent this run delegates to can open a web page
+   * itself (its model declares `web_extractor`) — from `routeTools`, like
+   * `visionDelegate`. Read when the definitions are handed out: `delegate`'s
+   * description offers "read this URL" only when it is true, so the main model
+   * (whose own server tools routing withheld) knows where a link goes.
+   */
+  searchReadsPages?: boolean;
+  /**
    * The tools this run may actually call — filled in by `executeRegisteredTool`
    * from its own `allowed` list, never by callers. Read-side handlers use it to
    * keep their result trailers honest: `read_lore_entity`'s gutter note names
@@ -1043,15 +1051,18 @@ export type ToolGroup = "lore_write" | "lore_organize" | "file_ops" | "image";
 interface DescribeContext {
   /** The searchable groups this run carries — see ./toolSearch. */
   searchable: SearchableTools;
+  /** `ToolContext.searchReadsPages` for this run — `delegate`'s description reads it. */
+  searchReadsPages: boolean;
 }
 
 export interface RegisteredTool {
   definition: ToolDefinition;
   /**
    * A description computed when the definitions are handed out, replacing
-   * `definition.function.description`. For the one tool whose right wording
-   * depends on the machine: `run_command` names the shell it will actually
-   * run in, which nothing knows at import. Same reason `profileCategoryParams`
+   * `definition.function.description`. For tools whose right wording depends
+   * on the machine or the run: `run_command` names the shell it will actually
+   * run in, `delegate` offers page reading only when the search subagent can
+   * do it — neither is knowable at import. Same reason `profileCategoryParams`
    * exists — this registry is a module constant, the world is not.
    */
   describe?: (ctx: DescribeContext) => string;
@@ -1194,6 +1205,31 @@ function cursorArg(raw: unknown): number | undefined {
  * whichever profile happened to load first.
  */
 const CATEGORY_PLACEHOLDER = "{{categories}}";
+
+
+/**
+ * `delegate`'s description. The page-reading sentence appears only when the
+ * search subagent's model declares `web_extractor` (`ToolContext.searchReadsPages`):
+ * routing withholds the main model's own server tools while that subagent is
+ * live, so a link the author pastes can only be read through it — and a
+ * description that never says so leaves the main model answering "I can't
+ * open links" (docs/reference/tool-presence.md, 能力静默消失). Offered only
+ * when true, because a search-only model handed a URL can at best find it in
+ * an index, not read it.
+ */
+function describeDelegate(searchReadsPages: boolean): string {
+  return (
+    "Hand a context-heavy or capability-specific job to a specialist subagent " +
+    "running on its own model. The subagent works in a separate context, writes " +
+    "its full findings to a note file, and returns only a short summary plus the " +
+    "note path — so its raw material never enters this conversation. Use it for " +
+    "web research, reading images, reading PDF files, and digesting long documents." +
+    (searchReadsPages
+      ? " The search subagent can also open a web page and read its text: to read a URL, " +
+        "delegate kind \"search\" and put the full URL and what to extract from it in 'task'."
+      : "")
+  );
+}
 
 /**
  * Who, on this run, can actually open one of the pictures `read_lore_entity`
@@ -3826,12 +3862,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       type: "function",
       function: {
         name: "delegate",
-        description:
-          "Hand a context-heavy or capability-specific job to a specialist subagent " +
-          "running on its own model. The subagent works in a separate context, writes " +
-          "its full findings to a note file, and returns only a short summary plus the " +
-          "note path — so its raw material never enters this conversation. Use it for " +
-          "web research, reading images, reading PDF files, and digesting long documents.",
+        description: describeDelegate(false),
         parameters: {
           type: "object",
           properties: {
@@ -3862,6 +3893,10 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         },
       },
     },
+    // Whether "read this web page" is on offer depends on the search
+    // subagent's bound model, which nothing knows at import — see
+    // describeDelegate.
+    describe: ({ searchReadsPages }) => describeDelegate(searchReadsPages),
     execute: executeDelegate,
   },
 
@@ -4107,11 +4142,13 @@ export function getToolDefinitions(
    * upper bound, the safe side for a budget.
    */
   searchable?: SearchableTools,
+  /** `ToolContext.searchReadsPages` — see `describeDelegate`. */
+  searchReadsPages = false,
 ): ToolDefinition[] {
   let describeCtx: DescribeContext | undefined;
   return ids.map((id) => {
     const tool = REGISTRY[id];
-    if (tool.describe) describeCtx ??= { searchable: searchable ?? allSearchable() };
+    if (tool.describe) describeCtx ??= { searchable: searchable ?? allSearchable(), searchReadsPages };
     const definition = tool.describe && describeCtx
       ? { ...tool.definition, function: { ...tool.definition.function, description: tool.describe(describeCtx) } }
       : tool.definition;

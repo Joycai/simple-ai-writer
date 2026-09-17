@@ -23,6 +23,13 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
+**2026-09-17 · search 子代理说出它能不能读网页（§5.2.3 新增）。** 网页抓取
+（`web_extractor`）在模型行上声明后，wire 早就带着它进了搜索子跑，但没有一句话告诉
+任何一方：`delegate` 只说「look things up on the web」，子代理提示词只说「使用网络
+搜索」，而搜索子代理一开主模型的服务端工具就被摘掉——作者贴一个链接，主模型只能答
+「打不开链接」。**能力静默消失**。现在 `routeTools` 交出 `searchReadsPages`，
+`delegate` 的描述、子代理提示词和设置页都从同一个判断取词。
+
 **2026-09-06 · 图集清单说出真正走得通的那条路（§6.1.4 新增）。** `read_lore_entity`
 的图集抬头原来只看 `ToolContext.multimodal`，识图子代理一开就两头说错：多模态主模型
 上点名一个刚被摘掉的 `read_lore_image`（一轮 Unknown tool），纯文本主模型上说「本模型
@@ -708,6 +715,37 @@ Tell the author to turn it on in Settings → Models, or answer without searchin
 该协议**不返回任何搜索痕迹**（厂商文档明载无来源、无角标），所以千问当搜索
 子代理时执行日志里没有「搜了什么、命中了什么」的行——产出笔记里的结论就是
 全部可见物，`renderSearchResults` 那套回手转写在这条线上天然无事可做。
+
+#### 5.2.3 能不能读网页，三处同一个答案（2026-09-17）
+
+`web_extractor` 只能挂在 `web_search` 旁边（`normalizeServerTools`），所以它不是
+子代理**可不可用**的条件，而是**能做到哪一步**的说明。判断只有一个：
+`searchReadsPages(model, standard)`（`lib/agent/subagent.ts`）= 模型行声明了
+`web_extractor` **且**供应商当前协议有它的写法（`supportsServerTool`）。
+
+只看模型行是不够的：抽屉只在**保存那一刻**按协议过滤，而现有供应商可以事后改协议、
+模型行不跟着重算——改成 `anthropic_compat` 或官方 Responses 之后，行上仍写着网页抓取，
+适配器每次请求却都把它丢掉。只看行就会对一个只会搜的子跑承诺「能读网页」，它就可能
+把搜索摘要乃至编出来的东西当成页面原文报回来。供应商查不到时答否：核实不了就不承诺。
+
+协议从哪来：`executeDelegate` 用 `conn.provider`；`routeTools` 经 `RouteOptions.providers`
+（四个运行入口都传）；设置页读 `aiStore.providers`。只做估算的路径（`plannedToolTokens`
+等）不传 `providers`，此时只看模型行——只会**多算**那一句的开销，不会让真实运行少一句。
+
+三处读者：
+
+| 读者 | 取词 | 为什么必须按模型分 |
+|---|---|---|
+| `delegate` 的描述（`describeDelegate`，经 `routeTools` → `ToolContext.searchReadsPages` → `getToolDefinitions`） | 为真时加一句「search 子代理能打开网页，读 URL 就派 kind search 并把完整网址写进 task」 | 子代理在时主模型没有服务端工具，这句是链接唯一的去处；只会搜的模型不能被说成能读页面 |
+| 子代理系统提示（`subagentSystemPrompt`） | 真：给了网址先读页面本身；假：可以搜，但报告开头必须说明没读到原文 | 同一个「总结这个链接」要相反的指令；只会搜的模型否则会把搜索摘要当成页面内容报回来 |
+| 设置 → 子代理的元信息行 | 「可读网页」/「只搜不读网页（模型未开网页抓取）」 | 开关在另一个面板（模型抽屉），作者在这里问的正是「贴链接行不行」 |
+
+默认值（不传）是**不加那句**：只算预算的调用方（`toolTokensOf` 不带参数）得到的是
+更短的描述，与改动前逐字相同，`agentToolBudget` 的棘轮不动。`plannedToolTokens`
+和 runtime 每轮的计价都传了真实值，所以开了网页抓取的那几十个 token 算得到。
+
+Chat Completions 线上读网页是 `agent_max` 策略，由模型自己决定要不要读，过程不回显；
+提示词里「先读页面本身」是在这条线上唯一能施加的力。
 
 ### 5.3 `delegate` 工具与嵌套调用
 

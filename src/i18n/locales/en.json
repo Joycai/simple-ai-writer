@@ -766,6 +766,8 @@
       "rounds": "Round budget {{n}}",
       "singleShot": "Single request",
       "searchAlways": "Server-side search always on",
+      "searchPages": "Reads web pages",
+      "searchNoPages": "Searches only — web page reading is off on this model",
       "pdfLimits": "≤{{files}} files per call · ≤{{mb}}MB each",
       "imagegenMeta": "Approval card (prompt and price) before each generation",
       "warnNoModel": "No model bound — a delegation would be refused at run time.",
@@ -1051,6 +1053,8 @@
         "inheritedHeading": "Project and role (from the main conversation)"
       },
       "subagentTask": "Task objective:\n{{task}}",
+      "subagentSearchPages": "You can also open a URL and read the page text. When the task gives a URL, read that page itself first, then search further if needed; say in the report which findings came from the page.",
+      "subagentSearchNoPages": "You can search but cannot open web pages directly. If the task asks you to read a URL, you may search for information about that page, but state at the top of your report that the page itself could not be read — do not present search snippets as the page's content.",
       "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}",
       "subagentTaskWithImages": "Task objective:\n{{task}}\n\nPictures attached to this message, in order:\n{{images}}",
       "subagentRefsList": "\n\nReferences:\n{{refs}}",

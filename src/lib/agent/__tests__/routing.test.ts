@@ -106,6 +106,35 @@ describe("routeTools", () => {
     const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
     expect(res.serverTools).toBe("off");
     expect(res.tools).toContain("delegate");
+    // Search only — the delegate description must not offer page reading.
+    expect(res.searchReadsPages).toBe(false);
+  });
+
+  it("reports page reading only when the live search model declares web_extractor", () => {
+    const reader = [
+      ...(MODELS as unknown as object[]),
+      { id: "m-reader", providerId: "p", modelId: "r", name: "R", type: "text",
+        priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, serverTools: ["web_search", "web_extractor"] },
+    ] as never;
+    const on = { ...allDisabled, search: { kind: "search" as const, modelId: "m-reader", enabled: true } };
+    const provider = (apiStandard: string) => [{ id: "p", name: "P", baseUrl: "", apiStandard }] as never;
+    expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("openai_compat") }).searchReadsPages)
+      .toBe(true);
+    // The row still says web_extractor, but the provider was switched to a
+    // wire the adapter drops it on — the run must not be promised pages.
+    expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("anthropic_compat") }).searchReadsPages)
+      .toBe(false);
+    expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("openai_responses") }).searchReadsPages)
+      .toBe(false);
+    // Provider row gone: unknown wire, no promise.
+    expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: [] }).searchReadsPages).toBe(false);
+    // No provider list at all is the pricing path: the row decides, which can
+    // only over-count the description.
+    expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader).searchReadsPages).toBe(true);
+    // Bound but switched off: not live, so nothing to read pages through.
+    const off = { ...on, search: { ...on.search, enabled: false } };
+    expect(routeTools(AGENT_ASSIST_PRESET, off, WS, reader, { providers: provider("openai_compat") }).searchReadsPages)
+      .toBe(false);
   });
 
   it("strips read_image and read_lore_image from main agent when vision subagent is active", () => {

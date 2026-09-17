@@ -9,7 +9,8 @@
  */
 
 import i18n from "../../i18n";
-import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import type { ApiStandard, ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import { supportsServerTool } from "../ai/serverTools";
 import { imagePart } from "../ai/imagePart";
 import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
@@ -245,6 +246,30 @@ export function subAgentModel(
   if (kind === "writer" && (model.type === "image" || model.type === "video" || model.type === "vision")) return null;
   if (kind === "writer" && (isTranslateOnly(model) || isAsrOnly(model))) return null;
   return model;
+}
+
+/**
+ * Whether a search subagent on this model can open a web page itself: the row
+ * declares 网页抓取 (`web_extractor`) **and** the provider's wire has a
+ * spelling for it.
+ *
+ * The row alone is not the answer. The model drawer filters the declaration by
+ * standard only when it saves, and a provider's standard can be switched
+ * afterwards without touching its models — the adapters then drop the id on
+ * every request (`anthropicServerTools` has no spelling; `responsesServerTools`
+ * filters it off the official endpoint). Promising page reading there makes
+ * the subagent report search snippets, or worse, as the page. An unknown
+ * standard (provider missing) answers false: don't promise what can't be
+ * checked.
+ *
+ * Asked in three places that must agree: the `delegate` description (via
+ * `routeTools`), the search subagent's own system prompt, and the settings
+ * pane's note under the binding.
+ */
+export function searchReadsPages(model: Model, standard: ApiStandard | undefined): boolean {
+  return standard !== undefined
+    && supportsServerTool(standard, "web_extractor")
+    && (model.serverTools?.includes("web_extractor") ?? false);
 }
 
 /** {@link subAgentModel} for the vision kind — the one with callers outside the agent. */
@@ -497,7 +522,7 @@ export async function executeDelegate(
   }
 
   const messages: StreamMessage[] = [
-    { role: "system", content: withCurrentTime(i18n.t(`ai.instructions.subagent.${kind}`)) },
+    { role: "system", content: withCurrentTime(subagentSystemPrompt(kind, conn.model, conn.provider.apiStandard)) },
     { role: "user", content: userContent },
   ];
 
@@ -592,4 +617,19 @@ export async function executeDelegate(
       clip(output, DELEGATE_SUMMARY_CHARS),
     ].join("\n"),
   };
+}
+
+/**
+ * A delegate sub-run's system prompt. The search kind says whether pages can
+ * be opened, because the same task ("summarise this link") needs opposite
+ * instructions: read it, or say plainly that it could not be read — a
+ * search-only model otherwise reports a search hit's snippet as if it were
+ * the page.
+ */
+function subagentSystemPrompt(kind: DelegateKind, model: Model, standard: ApiStandard): string {
+  const base = i18n.t(`ai.instructions.subagent.${kind}`);
+  if (kind !== "search") return base;
+  return base + "\n" + i18n.t(searchReadsPages(model, standard)
+    ? "ai.instructions.subagentSearchPages"
+    : "ai.instructions.subagentSearchNoPages");
 }

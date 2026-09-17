@@ -337,6 +337,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         windows,
         subAgents: subs,
         models: allModels,
+        providers: allProviders,
         contextUtilization: useAppStore.getState().contextUtilization,
         resolveSubAgent: (k) => resolveSubAgentConn(k, allModels, allProviders, subs, loadApiKey),
         expandFocus: async (intent, signal) => {
