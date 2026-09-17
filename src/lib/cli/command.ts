@@ -423,12 +423,74 @@ const NEVER_ALLOW = new Set([
   "icm", "invoke-item", "ii", "call", "open", "xdg-open", "rundll32",
   "regsvr32", "schtasks", "at", "crontab", "launchctl", "systemd-run",
   "ssh", "make", "just",
+  // build tools and containers: running project code is what they are for
+  "gradle", "mvn", "ant", "sbt", "rake", "tox", "nox", "bazel", "cmake",
+  "ninja", "meson", "scons", "docker", "podman", "nix", "nix-shell",
+  "pixi", "rye", "pdm", "hatch", "conda", "mamba",
   // elevation
   "sudo", "doas", "su", "runas", "pkexec",
 ]);
 
+/**
+ * Builtins that change what the *next* link of a chain runs against. None
+ * runs a program itself, but `cd && cat .ssh/id_rsa` leaves the argument
+ * fence behind (a bare `cd` goes home), and `export GIT_EXTERNAL_DIFF=./x
+ * && git diff` turns a free read into execution.
+ */
+const CHANGES_SHELL = new Set([
+  "cd", "chdir", "pushd", "popd", "set-location", "sl", "push-location",
+  "pop-location", "export", "set", "unset", "declare", "typeset", "local",
+  "readonly", "alias", "unalias", "set-alias", "new-alias", "sal", "nal",
+  "set-variable", "sv", "new-variable", "nv", "clear-variable", "source",
+  "trap", "hash", "shopt", "setopt", "unsetopt", "ulimit", "umask",
+  "function", "enable", "disable", "autoload", "emulate", "zmodload",
+]);
+
+/**
+ * Package managers are allowed only for their *looking* subcommands: most of
+ * the rest run code the project (or a registry) supplies — `npm run` / `exec`
+ * / `test`, the install lifecycle scripts, `pnpm build` and `yarn build`
+ * running a script by bare name, `cargo build` running build.rs. A closed list
+ * per manager, so a subcommand nobody thought of gets a card. The empty
+ * subcommand (flags only: `npm -v`) is a look too.
+ */
+const PACKAGE_MANAGER_LOOKS: Readonly<Record<string, ReadonlySet<string>>> = {
+  npm: new Set(["", "ls", "list", "ll", "la", "view", "info", "show", "v", "outdated", "search", "s", "find", "help", "doctor", "whoami", "ping", "root", "prefix", "fund", "explain", "why", "docs", "repo", "bugs"]),
+  pnpm: new Set(["", "ls", "list", "ll", "la", "why", "outdated", "view", "info", "root", "bin", "licenses", "help"]),
+  yarn: new Set(["", "list", "info", "why", "outdated", "licenses", "help", "versions"]),
+  cargo: new Set(["", "tree", "metadata", "search", "help", "locate-project", "pkgid", "verify-project", "version"]),
+  pip: new Set(["", "list", "show", "freeze", "check", "help", "search", "index", "inspect", "debug"]),
+  uv: new Set(["", "tree", "help", "version"]),
+  poetry: new Set(["", "show", "check", "search", "about", "help"]),
+  gem: new Set(["", "list", "search", "info", "contents", "environment", "help", "which", "specification"]),
+  bundle: new Set(["", "list", "info", "outdated", "show", "platform", "help", "check"]),
+  composer: new Set(["", "show", "info", "outdated", "why", "depends", "licenses", "search", "help", "validate"]),
+};
+
+/**
+ * Programs a card never offers to always-allow, though the settings page still
+ * takes them: deleting and moving files. The danger table only catches the
+ * recursive / forced shapes, so one click on 「始终允许 rm」 would quietly make
+ * `rm *.md` card-free — a decision worth making on purpose, in Settings, not
+ * in the middle of approving one line.
+ */
+const NEVER_OFFER = new Set([
+  "rm", "rmdir", "unlink", "shred", "trash", "truncate", "del", "erase",
+  "rd", "move", "mv", "remove-item", "ri", "rni", "move-item", "mi",
+  "clear-content", "clc",
+]);
+
+/**
+ * The name a refusal or a hook table is keyed on: a trailing version dropped
+ * (`node22` → `node`, `pip3` → `pip`), so a numbered spelling of a refused
+ * program is the same program.
+ */
+function baseProgram(name: string): string {
+  return name.replace(/(?<=[a-z])[\d._-]+$/, "") || name;
+}
+
 /** Why a name cannot join the list — an id the settings pane turns into words. */
-export type AllowRefusal = "invalid" | "runs-code";
+export type AllowRefusal = "invalid" | "runs-code" | "changes-shell";
 
 /**
  * The key a typed name is stored under: what `programNameOf` would read off a
@@ -442,7 +504,8 @@ export function normalizeProgramName(raw: string): string {
 /** Null when `name` (already normalized) may be always-allowed. */
 export function allowRefusal(name: string): AllowRefusal | null {
   if (!/^[a-z0-9][a-z0-9._+-]*$/.test(name)) return "invalid";
-  if (NEVER_ALLOW.has(name)) return "runs-code";
+  if (NEVER_ALLOW.has(name) || NEVER_ALLOW.has(baseProgram(name))) return "runs-code";
+  if (CHANGES_SHELL.has(name)) return "changes-shell";
   return null;
 }
 
@@ -467,8 +530,16 @@ const GIT_EXEC_OPTIONS = [
  * the shape checks in `plainInvocation` run first and the list is closed to
  * shells and interpreters.
  */
-function runsAnotherProgram(program: string, words: string[]): boolean {
+function runsAnotherProgram(name: string, words: string[]): boolean {
   const args = words.slice(1);
+  const program = baseProgram(name);
+  const looks = PACKAGE_MANAGER_LOOKS[program];
+  if (looks) {
+    // `uv pip list` is pip's look under uv's name.
+    const [sub = "", next = ""] = args.filter((a) => !a.startsWith("-")).map((a) => a.toLowerCase());
+    if (program === "uv" && sub === "pip") return !PACKAGE_MANAGER_LOOKS.pip.has(next);
+    return !looks.has(sub);
+  }
   switch (program) {
     case "git": {
       // The subcommand is the first word that is not a global option (or the
@@ -491,8 +562,10 @@ function runsAnotherProgram(program: string, words: string[]): boolean {
       // `gh alias set --shell` stores a shell line; extensions are programs.
       return args.some((a) => ["alias", "extension", "ext", "codespace", "cs"].includes(a.toLowerCase()));
     case "pandoc":
-      return args.some((a) => /^(?:-F|-L)/.test(a)
-        || /^--(?:filter|lua-filter|pdf-engine|pdf-engine-opt)(?:=|$)/i.test(a));
+      // A defaults file (`-d`) can name filters and a PDF engine itself, and
+      // `--data-dir` is where a bare `-d name` is looked up.
+      return args.some((a) => /^(?:-F|-L|-d)/.test(a)
+        || /^--(?:filter|lua-filter|pdf-engine|pdf-engine-opt|defaults|data-dir)(?:=|$)/i.test(a));
     case "find":
     case "rg":
     case "ripgrep":
@@ -625,7 +698,7 @@ export function allowlistCandidates(
     if (commandAccess(piece, syntax) === "read" || allowlistCovers(piece, syntax, allowed)) continue;
     const words = plainInvocation(piece, syntax);
     const program = words ? programNameOf(words[0]) : "";
-    if (!program || !allowlistCovers(piece, syntax, [program])) return null;
+    if (!program || NEVER_OFFER.has(program) || !allowlistCovers(piece, syntax, [program])) return null;
     missing.add(program);
   }
   return missing.size ? [...missing] : null;

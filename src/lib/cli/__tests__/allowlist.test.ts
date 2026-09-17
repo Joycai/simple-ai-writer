@@ -36,6 +36,7 @@ describe("免审批命令清单", () => {
     expect(addCliAllowed("   ")).toMatchObject({ ok: false, reason: "empty" });
     expect(addCliAllowed("git status")).toMatchObject({ ok: false, reason: "invalid" });
     expect(addCliAllowed("bash")).toMatchObject({ ok: false, name: "bash", reason: "runs-code" });
+    expect(addCliAllowed("cd")).toMatchObject({ ok: false, name: "cd", reason: "changes-shell" });
     expect(readCliAllowlist()).toEqual(["git"]);
   });
 

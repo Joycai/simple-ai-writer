@@ -74,6 +74,12 @@ describe("describeRunCommand", () => {
     expect(describeRunCommand()).toContain("always-allowed these programs");
     expect(describeRunCommand()).toContain(": git, pandoc.");
   });
+  it("caps how many always-allowed programs it names", () => {
+    allowlist.current = Array.from({ length: 23 }, (_, i) => `tool${String.fromCharCode(97 + i)}`);
+    const text = describeRunCommand();
+    expect(text).toContain("toolt and 3 more.");
+    expect(text).not.toContain("toolu");
+  });
   it("guesses by platform before the probe has answered", () => {
     shell.current = null;
     expect(describeRunCommand()).toContain("computer (Linux) — in the login shell (zsh / bash), so write POSIX syntax");

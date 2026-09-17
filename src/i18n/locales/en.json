@@ -569,7 +569,8 @@
       "cliAllowDuplicate": "{{name}} is already on the list.",
       "cliAllowInvalid": "“{{name}}” is not a program name — just the name, no arguments or spaces.",
       "cliAllowRunsCode": "{{name}} can't be added: it runs its arguments as commands, so allowing it would let any command skip approval.",
-      "cliAllowBuiltin": "Built-in read-only commands always run without approval: ls, cat, grep, rg, find, tree, git status / log / diff and the like. Shells, interpreters and sudo — programs that run their arguments as commands — can't be added. This list applies to this computer only and is not included in config backups."
+      "cliAllowChangesShell": "{{name}} can't be added: it changes the directory or environment for the commands after it on the same line, which could send the other card-free commands outside the project or swap in another program.",
+      "cliAllowBuiltin": "Built-in read-only commands always run without approval: ls, cat, grep, rg, find, tree, git status / log / diff and the like. Shells, interpreters, build tools and sudo — anything that runs another program — can't be added, nor can cd, export and similar commands that change the directory or environment for what follows; package managers are allowed only for looking subcommands (such as npm ls). Programs that delete or move files can be added here only — approval cards don't offer them. This list applies to this computer only and is not included in config backups."
     },
     "backup": {
       "export": "Export config…",

@@ -37,6 +37,8 @@ export function CliAllowlist() {
         return t("systemSettings.lab.cliAllowInvalid", { name: draft.trim() || res.name });
       case "runs-code":
         return t("systemSettings.lab.cliAllowRunsCode", { name: res.name });
+      case "changes-shell":
+        return t("systemSettings.lab.cliAllowChangesShell", { name: res.name });
     }
   };
 

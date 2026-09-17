@@ -30,6 +30,9 @@ import { cachedShellInfo, shellInfo, shellLabel, shellSyntax, systemLabel } from
 
 let proposalCounter = 0;
 
+/** Most always-allowed programs the description names one by one. */
+const DESCRIBED_ALLOWED_MAX = 20;
+
 interface RunCommandArgs {
   command?: string;
   /** Project-relative working directory; absent = the project root. */
@@ -53,9 +56,13 @@ export function describeRunCommand(): string {
   const shell = info ? shellLabel(info) : IS_WINDOWS ? "PowerShell" : "the login shell (zsh / bash)";
   const syntax = (info ? shellSyntax(info) === "powershell" : IS_WINDOWS) ? "PowerShell" : "POSIX";
   // Named only when there are any: an empty list costs the schema nothing.
+  // Capped, because this text is paid for on every round.
   const allowed = readCliAllowlist();
+  const named = allowed.length > DESCRIBED_ALLOWED_MAX
+    ? `${allowed.slice(0, DESCRIBED_ALLOWED_MAX).join(", ")} and ${allowed.length - DESCRIBED_ALLOWED_MAX} more`
+    : allowed.join(", ");
   const allowedLine = allowed.length
-    ? `The author has also always-allowed these programs, so single commands (or chains joined by && || ; |) made only of them and read-only commands run without approval: ${allowed.join(", ")}. `
+    ? `The author has also always-allowed these programs, so single commands (or chains joined by && || ; |) made only of them and read-only commands run without approval: ${named}. `
     : "";
   return (
     `Run ONE shell command on the author's computer (${system}) — in ${shell}, so write ${syntax} syntax. ` +

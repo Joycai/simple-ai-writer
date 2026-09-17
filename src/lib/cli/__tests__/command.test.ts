@@ -251,13 +251,26 @@ describe("免审批命令 — normalizeProgramName / allowRefusal", () => {
     expect(allowRefusal(name)).toBeNull();
   });
 
+  it.each(["cd", "pushd", "set-location", "sl", "export", "set", "unset", "alias", "source", "declare"])(
+    "never allows %s: it changes what the next link runs against",
+    (name) => {
+      expect(allowRefusal(name)).toBe("changes-shell");
+    },
+  );
+
   it("refuses a line with arguments, or a name that is not one", () => {
     expect(allowRefusal(normalizeProgramName("git status"))).toBe("invalid");
     expect(allowRefusal(normalizeProgramName("git;rm"))).toBe("invalid");
     expect(allowRefusal("")).toBe("invalid");
   });
 
-  it.each(["bash", "sh", "pwsh", "powershell", "python3", "node", "npx", "env", "xargs", "sudo", "iex", "start-process"])(
+  it.each([
+    "bash", "sh", "pwsh", "powershell", "python3", "node", "npx", "env", "xargs", "sudo", "iex", "start-process",
+    // A numbered spelling is the same program.
+    "node22", "ruby3", "python311", "perl5",
+    // Build tools and containers.
+    "gradle", "mvn", "docker",
+  ])(
     "never allows %s: it runs its arguments",
     (name) => {
       expect(allowRefusal(name)).toBe("runs-code");
@@ -350,8 +363,35 @@ describe("免审批命令 — allowlistCovers", () => {
     ["pandoc a.md --pdf-engine=./x -o a.pdf", allowed],
     ["find . -delete", allowed],
     ["find . -exec touch y +", allowed],
+    ["pandoc -d mydefaults.yaml a.md", allowed],
+    ["pandoc --defaults=d.yaml a.md", allowed],
+    ["pandoc --data-dir=tpl -d x a.md", allowed],
+    // Package managers: only their looking subcommands.
+    ["npm run build", ["npm"]],
+    ["npm install", ["npm"]],
+    ["npm test", ["npm"]],
+    ["pnpm build", ["pnpm"]],
+    ["yarn build", ["yarn"]],
+    ["cargo build", ["cargo"]],
+    ["pip install requests", ["pip"]],
+    ["pip3 install requests", ["pip3"]],
+    ["uv run x.py", ["uv"]],
+    ["uv pip install x", ["uv"]],
+    ["npm --prefix sub ls", ["npm"]],
   ])("still cards %s", (line, list) => {
     expect(allowlistCovers(line, "posix", list)).toBeNull();
+  });
+
+  it.each([
+    ["npm ls --depth 0", "npm"],
+    ["npm -v", "npm"],
+    ["pnpm why react", "pnpm"],
+    ["cargo tree", "cargo"],
+    ["pip3 list", "pip3"],
+    ["uv pip list", "uv"],
+    ["uv tree", "uv"],
+  ])("covers the package manager look %s", (line, program) => {
+    expect(allowlistCovers(line, "posix", [program])).toBe(program);
   });
 
   it("never trusts a refused name even when it is on a hand-edited list", () => {
@@ -380,6 +420,11 @@ describe("免审批命令 — commandCover", () => {
     expect(commandCover("git log --oneline | head -20", "posix", allowed)).toEqual([]);
     expect(commandCover("ls | wc -l", "posix", [])).toEqual([]);
     expect(commandCover("git fetch; git status", "posix", allowed)).toEqual(["git"]);
+  });
+
+  it("never covers a chain whose builtin was hand-edited onto the list", () => {
+    expect(commandCover("cd && cat .ssh/id_rsa", "posix", ["cd"])).toBeNull();
+    expect(commandCover("export GIT_EXTERNAL_DIFF=./x.sh && git diff", "posix", ["export"])).toBeNull();
   });
 
   it("cards the whole chain when one link is not covered", () => {
@@ -412,6 +457,19 @@ describe("免审批命令 — allowlistCandidates", () => {
     expect(allowlistCandidates("git -c core.pager=x log", "posix", [])).toBeNull();
     expect(allowlistCandidates("pandoc a.md -o /tmp/a.epub", "posix", [])).toBeNull();
     expect(allowlistCandidates("touch a && bash x.sh", "posix", [])).toBeNull();
+    expect(allowlistCandidates("npm run build", "posix", [])).toBeNull();
+    // A state-changing builtin is never offered, so neither is its chain.
+    expect(allowlistCandidates("cd 稿件 && pandoc a.md -o a.epub", "posix", [])).toBeNull();
+    expect(allowlistCandidates("cd && cat .ssh/id_rsa", "posix", [])).toBeNull();
+    expect(allowlistCandidates("export GIT_EXTERNAL_DIFF=./x.sh && git diff", "posix", [])).toBeNull();
+  });
+
+  it("never offers deleting or moving files, though Settings may still list them", () => {
+    expect(allowlistCandidates("rm old.md", "posix", [])).toBeNull();
+    expect(allowlistCandidates("mv a.md b.md", "posix", [])).toBeNull();
+    expect(allowlistCandidates("git add a && rm old.md", "posix", ["git"])).toBeNull();
+    expect(allowRefusal("rm")).toBeNull();
+    expect(commandCover("rm old.md", "posix", ["rm"])).toEqual(["rm"]);
   });
 
   it("offers nothing when the line already runs free", () => {
