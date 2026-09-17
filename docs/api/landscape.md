@@ -77,25 +77,38 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 `function_call` → `tool_calls`、`role:"system"` → `role:"developer"`、
 推理模型加 `reasoning_effort`。旧字段大多仍被接受。
 
-### 2.1 DeepSeek 的图片理解（官方直连，2026-09 文档口径，未实测）
+### 2.1 DeepSeek 的图片理解（官方直连，2026-09-17 三族已实测）
 
 记在这里而不是马甲层：DeepSeek 是官方端点，且它的图片面**没有任何私有扩展**
-——本项目发出去的 part 一个字都不用改。
+——本项目发出去的 part 一个字都不用改。实测由
+`src/lib/ai/__tests__/live.deepseek-vision.test.ts` 钉住（`DEEPSEEK_KEY`，走本项目
+自己的适配器，① / ② / ④ 三族各一遍）。
 
-- **模型**：`deepseek-flash`（DeepSeek-V4.1-Flash）看得见图；`deepseek-v4-pro`
-  看不见。旧的 `deepseek-v4-flash-vision-exp` 已下线，请求由 Flash 承接。
+- **模型**：`/models` 只列 `deepseek-flash`（DeepSeek-V4.1-Flash）和
+  `deepseek-v4-pro`，只有前者看得见图。旧的 `deepseek-v4-flash-vision-exp` 已下线。
+  **`deepseek-v4-pro` 带图不报错**：200 返回，图被静默丢掉（`prompt_tokens` 29，
+  同一请求 flash 是 208），回答是瞎猜——实测给青色图答过 "Skyblue"、"Unable to
+  determine."、"NOIMAGE"。所以作者把它的类型设成「多模态」时，app 这边什么都拦不住，
+  也看不到错误；类型是作者声明的，这一条只能靠文档。
 - **三种传法**，都是标准 ① 族 block 数组：base64 `data:` URL、公网 http(s)
   URL、Files API 的 `file_id`。本项目只用第一种。
 - **`detail` 可选**：`low`（推理前缩到 512×512）/ `high` / `original` / `auto`
   （当前等价 `original`）。本项目经 `lib/ai/imagePart.ts` 只发 `low` / `high`
   （`high` 在 DeepSeek 表里与 `original` 等价），作者不设置就一个字段都不发。
+  实测四个值都收；2000×2000 的图 `low` 计 197 token，不发 / `high` 计 1007。
 - **硬约束：图片只能出现在 `user` 消息里**，`system` / `assistant` 带图 400。
-  本项目天然满足——`lib/agent/imageHistory.ts` 的 `ImageMessage` 把
-  `role: "user"` 写进了类型，工具返回的图也是另起一条 user 消息
+  实测报错原文 `Image in system message is unsupported`。本项目天然满足——
+  `lib/agent/imageHistory.ts` 的 `ImageMessage` 把 `role: "user"` 写进了类型，工具返回的图也是另起一条 user 消息
   （`lib/agent/runtime.ts`）。
 - **限额**：格式 JPEG/PNG/GIF/WebP（按字节判定，不看文件名）；单图 32 MiB
   （Files API 64 MiB）、请求体 48 MiB、单请求最多 600 张、单边最长 8192px
-  （≥15 张时降到 4096px）。本项目对应的三道闸：单图 12 MiB（`MAX_IMAGE_BYTES`）；
+  （≥15 张时降到 4096px）。**实测 8192 收、8193 拒**（宽、高两个方向都是），
+  但拒绝的报错说的是格式：`You have uploaded an unsupported image. Please make
+  sure your image is valid and has one of the following formats: webp, png,
+  jpeg, and gif.`——撞上它的作者会以为是格式问题，这是 `MAX_IMAGE_EDGE` 在作者关掉
+  缩放时也要守住的又一个理由。**没有下限**：9×9 照收（千问要 >10，第六个样本），
+  `MIN_IMAGE_EDGE` 的放大对这里无害。`data:` 头里写错 MIME（PNG 标成 jpeg）也照收，
+  与"按字节判定"一致。本项目对应的三道闸：单图 12 MiB（`MAX_IMAGE_BYTES`）；
   长边默认 4096、设置项上限 8192，作者关掉缩放时也仍按 8192 缩
   （`MAX_IMAGE_EDGE`，image-normalize-plan.md §2.2）；**一次请求的图片合计
   ≤ 24 MiB**（按 data URL 字符数计，`MAX_REQUEST_IMAGE_CHARS`，§2.9）——这一道是
@@ -106,11 +119,25 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 - **另外两族同款**：`https://api.deepseek.com/anthropic` 收 ④ 族的
   `{type:"image",source:{type:"base64"|"url"|"file"}}`；Responses 面收
   `input_image` + `detail`。两条本项目的适配器都已经按这个形状发
-  （`lib/ai/anthropic.ts` 的 `blocksOf`、`lib/ai/responses.ts`）。
-- **一处形状差异**：file part 官方文档写的是平铺的
-  `{type:"file", file_data, filename}`，本项目按 OpenAI 的嵌套形状发
-  `{type:"file", file:{file_data, filename}}`（`lib/ai/types.ts`）。目前只有
-  PDF 子代理造 file part，绑到 deepseek-flash 时大概率不被认。
+  （`lib/ai/anthropic.ts` 的 `blocksOf`、`lib/ai/responses.ts`），实测三族读图
+  计费一致（同一张图都是 +~180 token）。④ 族的 base 填
+  `https://api.deepseek.com/anthropic`（适配器补 `/v1/messages`）；② 族的 base 填
+  `https://api.deepseek.com`，`/responses` 与 `/v1/responses` 实测都通。文档还说
+  ② 族的 `input_image` 可以放进 `function_call_output` 的 `output`——本项目工具返回
+  的图走另起一条 user 消息，用不到。
+- **不收 PDF，三族都不收**（文档里平铺的 `{type:"file", file_data, filename}`
+  是**传图片**的另一种写法，不是文档输入）。实测：
+  - ① 族：本项目的嵌套形状 `{type:"file", file:{…}}` 根本不被解析
+    （400 `file must have a file_id or file_data`）；改成文档的平铺形状能解析，
+    但 PDF 被拒（400，同上那句"只收 webp/png/jpeg/gif"）。平铺形状传 PNG 能读。
+  - ④ 族 `document` 块、② 族 `input_file`：**200 返回，文件被换成
+    `[Unsupported Document]` 占位**（模型的思考里原样看得到这串字，`input_tokens`
+    57），不报错。
+  - 结论：**不改 file part 的形状**——改成平铺只是把一个 400 换成另一个 400，而
+    本项目只有 PDF 子代理造 file part。PDF 子代理本来就只绑模型抽屉里打开了
+    「PDF 文件输入」的模型（`subagent.ts`，没打开直接失败），所以 DeepSeek 的
+    模型**不要打开这个开关**；打开了，① 族会报上面那句难懂的 400，② ④ 族会让
+    子代理在看不到文件的情况下作答。
 
 ## 3. ② OpenAI Responses
 
