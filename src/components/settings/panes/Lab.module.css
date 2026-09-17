@@ -33,6 +33,42 @@
   color: var(--color-text-faint);
 }
 
+/* A sub-option under a switch (状态记忆's 「新会话默认打开」): a checkbox in
+   the label column, shown only while its parent is on. A checkbox, not a
+   second toggle — the right edge stays one switch per row. */
+.sub {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: goIn 200ms var(--ease-settle);
+}
+
+.subCheck {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 28px;
+  font-size: var(--font-size-sm);
+  color: var(--stg-text);
+  cursor: pointer;
+}
+.subCheck input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--stg-accent);
+  cursor: pointer;
+}
+
+.subHint {
+  padding-left: 23px;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--stg-text-faint);
+}
+
 @keyframes goIn {
   from { opacity: 0; transform: translateY(calc(-2px * var(--motion-shift))); }
   to { opacity: 1; transform: none; }

@@ -535,6 +535,9 @@
       "toolPackLabel": "Assistant tool-pack mode",
       "skillStateLabel": "State memory (SKILL.state)",
       "skillStateHint": "Adds a “State memory” switch to the chat composer, per conversation. A conversation with it on no longer waits for a threshold to compact: before every send, everything before the last turn is folded into a schema-validated execution state (goal / decisions / facts / progress / files / open / last result) and only the last turn stays verbatim, so each turn's context stops growing with the conversation. The model rewrites the state each turn and the app validates it against the schema; a state that fails keeps the previous one and falls back to ordinary compaction. Suited to long tasks of dozens of turns; casual back-and-forth just pays one extra small request. From arXiv:2608.26263.",
+      "skillStateDefaultLabel": "On by default in new conversations",
+      "skillStateDefaultOnHint": "Every new conversation starts with state memory on; you can still turn it off in any one of them. Existing conversations are unchanged.",
+      "skillStateDefaultOffHint": "New conversations start with state memory off; turn it on per conversation from the composer's Abilities menu.",
       "toolPackHint": "The chat assistant becomes an orchestrator: it keeps a light resident toolset (search, read, notes, memory) and dispatches every document, knowledge-base and export change to a specialist agent carrying just the tools for that job — approval cards appear exactly as before. Cuts the per-round tool overhead from ~10k to ~4k tokens, which matters most on small-context local models. Experimental: the model must dispatch reliably (Gemma-class models measured fine; some models loop on reads instead). Takes effect on the next message; the briefing refreshes with a new session.",
       "paneSub": "Everything here is off by default; switch one on and the assistant can do one more thing.",
       "groupExport": "Export formats",
@@ -2028,6 +2031,7 @@
       "capabilityResets": "resets per conversation",
       "capabilityRestore": "off this conversation · restore",
       "stateMemoryMeta": "beta · folded into state before each send",
+      "stateMemoryMetaDefault": "beta · on for new conversations",
       "thinkingScope": "writes the model row",
       "thinkingBudgetUnit": "tk · saved on blur"
     },

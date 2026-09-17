@@ -9,6 +9,11 @@
  * 独立小模块的理由同 `lib/pptx/flag` / `packFlag`：芯片、sendChat 和设置页三处
  * 都读它，其中两处在 React 之外。关掉开关不删任何东西：已开状态记忆的会话
  * 退回普通归纳，`meta.state` 留在会话里，重新打开开关就接着用。
+ *
+ * 子选项「新会话默认打开」只改**起点**：开着时新会话的芯片一开始就是亮的，
+ * 作者仍可在那次对话里关掉；已存的会话照旧从 `meta.stateMode` 恢复，不受它
+ * 影响。它挂在 Beta 开关下面——Beta 关着时它不起作用，也不显示。理由见
+ * `docs/feature/agent/skill-state-memory-plan.md` §3「新会话默认打开」。
  */
 
 import { readPref, writePref } from "../prefs";
@@ -21,4 +26,19 @@ export function isSkillStateEnabled(): boolean {
 
 export function setSkillStateEnabled(enabled: boolean): void {
   writePref(KEY, enabled ? "1" : "0");
+}
+
+const DEFAULT_KEY = "app:skillStateDefaultOn";
+
+export function isSkillStateDefaultOn(): boolean {
+  return readPref(DEFAULT_KEY) === "1";
+}
+
+export function setSkillStateDefaultOn(on: boolean): void {
+  writePref(DEFAULT_KEY, on ? "1" : "0");
+}
+
+/** 一次新会话的状态记忆起点：Beta 开着且勾了「新会话默认打开」。 */
+export function newChatStateMemory(): boolean {
+  return isSkillStateEnabled() && isSkillStateDefaultOn();
 }

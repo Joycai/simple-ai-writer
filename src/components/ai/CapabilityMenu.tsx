@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
-import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
+import { isSkillStateDefaultOn, isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import type { SubAgentKind } from "../../lib/agent/subagent";
 import {
   useBoundModelName, useConfiguredKinds, FALLBACK_LABELS, type ChipKind,
@@ -46,6 +46,7 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
   const chatDisabled = useActiveChat((c) => c.disabledSubAgents);
   const chatToggle = useAgentStore((s) => s.toggleSubAgent);
   const memoryOn = useActiveChat((c) => c.stateMemory);
+  const chatStarted = useActiveChat((c) => c.turns.length > 0 || c.sessionId !== null);
   const setStateMemory = useAgentStore((s) => s.setStateMemory);
   const configuredKinds = useConfiguredKinds();
   const boundName = useBoundModelName();
@@ -185,8 +186,13 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
                   {t("ai.chat.stateMemory", { defaultValue: "状态记忆" })}
                 </span>
                 <span className={styles.itemFill} />
+                {/* A new conversation lit by 「新会话默认打开」 says why — the
+                    head's 「换会话即重置」 is true of the others, not of this one.
+                    Everywhere else the row keeps saying what the mode does. */}
                 <span className={styles.itemModel}>
-                  {t("ai.chat.stateMemoryMeta", { defaultValue: "beta · 发送前折成执行状态" })}
+                  {memoryOn && !chatStarted && isSkillStateDefaultOn()
+                    ? t("ai.chat.stateMemoryMetaDefault", { defaultValue: "beta · 新会话默认开" })
+                    : t("ai.chat.stateMemoryMeta", { defaultValue: "beta · 发送前折成执行状态" })}
                 </span>
               </button>
             </>
