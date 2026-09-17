@@ -122,6 +122,16 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
       expect(c.events.filter((e) => e.name === "image_search").map((e) => e.phase)).toEqual(expect.arrayContaining(["call", "result"]));
     }, 240_000);
 
+    it("chat compat qwen3.5-plus: beside function tools the page reading is dropped, not a 400", async () => {
+      const c = { done: undefined as Record<string, unknown> | undefined, bodies: [] as Record<string, unknown>[] };
+      await streamCompletion({
+        standard: "openai_compat", baseUrl: OPENAI_BASE, apiKey: KEY, modelId: "qwen3.5-plus",
+        messages: WEATHER, tools: TOOLS, serverTools: ["web_search", "web_extractor"],
+        onChunk: (chunk: StreamChunk) => { if ((chunk as Record<string, unknown>).done) c.done = chunk as Record<string, unknown>; },
+      });
+      expect(c.done).toMatchObject({ done: true });
+    }, 120_000);
+
     it("chat compat qwen3.8-flash refuses the agent_max strategy with a 400", async () => {
       await expect(serve("openai_compat", "qwen3.8-flash", ["web_search", "web_extractor"]))
         .rejects.toThrow(/search strategy/);

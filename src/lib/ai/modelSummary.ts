@@ -104,8 +104,9 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
     out.push({ key: "temperature", value: String(m.temperature) });
   }
   if (m.serverTools?.length && supportsServerTools(standard)) {
-    // Summarised as a request without function tools: the one condition that
-    // drops `enable_code_interpreter` is the request's, not the model's.
+    // Summarised as a request without function tools: the condition that
+    // drops `enable_code_interpreter` and the `agent_max` strategy is the
+    // request's, not the model's.
     if (family === "openai") out.push(...flatten(openaiServerToolsBody(standard, m.serverTools, m.modelId, { functionTools: false })));
     else {
       const ids = m.serverTools.filter((id) => supportsServerToolFor(standard, id, m.modelId));

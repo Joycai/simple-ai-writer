@@ -337,8 +337,17 @@ export function openaiServerToolsBody(
     // search at all), `agent_max` read the page (1.2k–1.6k). A model that
     // doesn't offer the strategy answers 400 (qwen3.8-flash: `does not support
     // the "agent" search strategy`) — loud, and the author's declaration to fix.
+    //
+    // And never beside function tools: the strategy is DashScope's "agent
+    // mode", which refuses them with the same 400 as the interpreter below
+    // (`Agent mode does not support tools`, measured 2026-09-17). Such a
+    // request keeps plain search — measured fine beside tools — and gives up
+    // page reading for that request only. The search subagent, the one caller
+    // whose job is reading pages, sends no function tools, so it keeps it.
     out.enable_search = true;
-    if (ids.includes("web_extractor")) out.search_options = { search_strategy: "agent_max" };
+    if (ids.includes("web_extractor") && !request.functionTools) {
+      out.search_options = { search_strategy: "agent_max" };
+    }
   }
   // Only on a request without function tools: this wire refuses the pair
   // outright (400 `Agent mode does not support tools`, measured 2026-09-17),

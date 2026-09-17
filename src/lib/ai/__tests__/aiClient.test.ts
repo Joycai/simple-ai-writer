@@ -849,6 +849,17 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     expect(calls[0].body.search_options).toEqual({ search_strategy: "agent_max" });
   });
 
+  it("keeps plain search but drops agent_max beside function tools — agent mode refuses them", async () => {
+    // 400 `Agent mode does not support tools … avoid using the agent mode with
+    // enable_search` (measured 2026-09-17); plain enable_search takes tools.
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", serverTools: ["web_search", "web_extractor"],
+      tools: [{ type: "function", function: { name: "read_file", description: "read", parameters: { type: "object", properties: {} } } }],
+    });
+    expect(calls[0].body.enable_search).toBe(true);
+    expect(calls[0].body).not.toHaveProperty("search_options");
+  });
+
   it("sends nothing for a lone web_extractor — the endpoint refuses it without search", async () => {
     const { calls } = await collect({
       chunks: done, standard: "openai_compat", serverTools: ["web_extractor"],

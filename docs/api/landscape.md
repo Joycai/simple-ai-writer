@@ -600,6 +600,12 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   文档说 ① 面 qwen3-max 「必须开思考」，实测关掉也行（见下表）。400 发生在流开始之前，
   是普通的 HTTP 错误，作者能直接看到；本项目**不做降级重试**（agent_max → 普通搜索），
   因为那等于悄悄收回作者开的能力。
+  **例外：带函数工具的请求**。`agent_max` 是 DashScope 的「agent 模式」，与函数工具同发一律 400
+  （`Agent mode does not support tools. You need to either avoid using enable_code_interpreter or avoid using the agent mode with enable_search.`，
+  2026-09-17 在 qwen3.5-plus 上复现；同样的请求只发 `enable_search` 则正常搜索，prompt_tokens 5111）。
+  这是请求形状决定的、必然失败的组合，不是模型能力问题，所以 `openaiServerToolsBody` 在本轮带函数工具时
+  只发 `enable_search`、不发 `agent_max`——agent / 对话助手的轮次在 ① 面上只搜不抓；搜索子代理不带函数工具，照常抓取。
+  （这个问题从 2026-09-14 接入抓取起就在，当时只测了不带工具的请求。）
 - **计费**（文档口径）：抓取限时免费；搜索 ¥4/千次；抓回的正文算输入 token。
 - **没测的**：④ 面的 `web_fetch_<日期>`（文档没给版本号），所以本项目 ④ 族不提供抓取开关。
 
@@ -642,7 +648,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   | 非流式 | **400** `Non-streaming mode does not support Code interpreter.` | 可以（返回完整 `output`） |
   | 同时带函数工具 | **400** `Agent mode does not support tools. You need to either avoid using enable_code_interpreter or avoid using the agent mode with enable_search.` | **可以**，qwen3.5-plus 一问里先调了 `get_weather`、下一轮再跑代码 |
   | 关思考 | qwen3.5-plus、qwen3-max 都照常跑（与文档「qwen3-max 需开思考」不符） | `reasoning.effort:"none"` 或 `enable_thinking:false` → `response.failed`：`Normal mode does not support Code interpreter. Please set enable_thinking to true.` |
-  | 与 `enable_search` / `web_search` 同开 | 可以（含 `agent_max`） | 可以 |
+  | 与 `enable_search` / `web_search` 同开 | 可以（含 `agent_max`，但只在不带函数工具时——带工具时 `agent_max` 本身就 400，见上「联网搜索与网页抓取」） | 可以 |
   | 过程可见 | **不可见**，只有 prompt_tokens 从 ~30 涨到 700–1600 | 可见，见下 |
 
   文档说「与 function calling 互斥」，实测只在 ① 面成立。本项目的处理：① 面上**本轮带函数工具就不发**
