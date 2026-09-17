@@ -46,6 +46,7 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
   const chatDisabled = useActiveChat((c) => c.disabledSubAgents);
   const chatToggle = useAgentStore((s) => s.toggleSubAgent);
   const memoryOn = useActiveChat((c) => c.stateMemory);
+  const chatStarted = useActiveChat((c) => c.turns.length > 0 || c.sessionId !== null);
   const setStateMemory = useAgentStore((s) => s.setStateMemory);
   const configuredKinds = useConfiguredKinds();
   const boundName = useBoundModelName();
@@ -185,11 +186,11 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
                   {t("ai.chat.stateMemory", { defaultValue: "状态记忆" })}
                 </span>
                 <span className={styles.itemFill} />
-                {/* With 「新会话默认打开」 on, the row says why a fresh
-                    conversation already has it lit — the head's 「换会话即重置」
-                    is true of the others, not of this one. */}
+                {/* A new conversation lit by 「新会话默认打开」 says why — the
+                    head's 「换会话即重置」 is true of the others, not of this one.
+                    Everywhere else the row keeps saying what the mode does. */}
                 <span className={styles.itemModel}>
-                  {isSkillStateDefaultOn()
+                  {memoryOn && !chatStarted && isSkillStateDefaultOn()
                     ? t("ai.chat.stateMemoryMetaDefault", { defaultValue: "beta · 新会话默认开" })
                     : t("ai.chat.stateMemoryMeta", { defaultValue: "beta · 发送前折成执行状态" })}
                 </span>

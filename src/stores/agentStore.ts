@@ -448,9 +448,11 @@ interface AgentState {
   setPlanMode: (on: boolean, key?: string) => void;
   setStateMemory: (on: boolean, key?: string) => void;
   /**
-   * The Lab pane moved 状态记忆's starting point: every conversation that has
-   * not started yet (no turn, no saved row) takes the new default, so the
+   * The author ticked or unticked 「新会话默认打开」: every conversation that
+   * has not started yet (no turn, no saved row) takes the new default, so the
    * blank tab on screen is a 新会话 too. Started ones keep what they have.
+   * Called only from that checkbox — flipping the Beta itself must not
+   * overwrite a value the author set by hand on a blank tab.
    */
   applyStateMemoryDefault: () => void;
 

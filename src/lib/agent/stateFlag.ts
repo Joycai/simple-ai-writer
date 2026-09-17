@@ -13,7 +13,7 @@
  * 子选项「新会话默认打开」只改**起点**：开着时新会话的芯片一开始就是亮的，
  * 作者仍可在那次对话里关掉；已存的会话照旧从 `meta.stateMode` 恢复，不受它
  * 影响。它挂在 Beta 开关下面——Beta 关着时它不起作用，也不显示。理由见
- * `docs/feature/agent/skill-state-memory-plan.md` §新会话默认打开。
+ * `docs/feature/agent/skill-state-memory-plan.md` §3「新会话默认打开」。
  */
 
 import { readPref, writePref } from "../prefs";

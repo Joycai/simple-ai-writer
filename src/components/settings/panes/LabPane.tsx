@@ -142,7 +142,8 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
         </Row>
         {/* 「新会话默认打开」（设计稿「状态记忆 · 默认打开」）：只在 Beta 开着时出现，
             是这一行的脚注而不是第二个开关——右边那条竖线只属于 Beta 本身。勾选
-            改的是新会话的起点，还没开始的空白对话也跟着变。 */}
+            改的是新会话的起点，还没开始的空白对话也跟着变；切 Beta 本身不同步，
+            免得冲掉作者在空白对话里亲手点的值（Beta 关着时这个值本来就不起作用）。 */}
         <Row
           top
           title={t("systemSettings.lab.skillStateLabel")}
@@ -171,11 +172,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
         >
           <Toggle
             on={skillStateOn}
-            onChange={(next) => {
-              setSkillStateEnabled(next);
-              setSkillStateOn(next);
-              applyStateMemoryDefault();
-            }}
+            onChange={(next) => { setSkillStateEnabled(next); setSkillStateOn(next); }}
             label={t("systemSettings.lab.skillStateLabel")}
           />
         </Row>
