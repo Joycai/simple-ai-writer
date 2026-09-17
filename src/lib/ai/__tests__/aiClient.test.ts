@@ -44,6 +44,7 @@ async function collect(opts: {
   thinkingCategory?: ThinkingCategoryId;
   thinkingBudget?: number;
   serverTools?: ServerToolId[];
+  modelId?: string;
   temperature?: number;
   topP?: number;
   frequencyPenalty?: number;
@@ -54,7 +55,7 @@ async function collect(opts: {
     baseUrl: opts.baseUrl ?? "https://api.example.com/v1",
     apiKey: "test-key",
     standard: opts.standard ?? "openai",
-    modelId: "test-model",
+    modelId: opts.modelId ?? "test-model",
     messages: opts.messages ?? [{ role: "user", content: "hi" }],
     prefix: opts.prefix,
     maxOutput: opts.maxOutput,
@@ -854,6 +855,50 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     });
     expect(calls[0].body).not.toHaveProperty("enable_search");
     expect(calls[0].body).not.toHaveProperty("search_options");
+  });
+
+  // Measured 2026-09-17 (landscape.md §7 第六个样本「代码解释器」).
+  const TOOL_DEF: ToolDefinition = {
+    type: "function",
+    function: { name: "read_file", description: "read", parameters: { type: "object", properties: {} } },
+  };
+
+  it("spells code_interpreter as enable_code_interpreter on a supported model", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", modelId: "qwen3.5-plus", serverTools: ["code_interpreter"],
+    });
+    expect(calls[0].body.enable_code_interpreter).toBe(true);
+    expect(calls[0].body).not.toHaveProperty("enable_search");
+    // The wire refuses the interpreter without streaming; this adapter always streams.
+    expect(calls[0].body.stream).toBe(true);
+  });
+
+  it("leaves code_interpreter out beside function tools — the wire refuses the pair", async () => {
+    // 400 `Agent mode does not support tools` — the round's own tools win.
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", modelId: "qwen3.5-plus",
+      serverTools: ["web_search", "code_interpreter"], tools: [TOOL_DEF],
+    });
+    expect(calls[0].body).not.toHaveProperty("enable_code_interpreter");
+    expect(calls[0].body.enable_search).toBe(true);
+    expect(calls[0].body.tools).toHaveLength(1);
+  });
+
+  it("leaves code_interpreter out for a model id this wire does not run it on", async () => {
+    // qwen3.8-flash: 400 `does not support the code_interpreter tool` here.
+    for (const modelId of ["qwen3.8-flash", "qwen-max", "test-model"]) {
+      const { calls } = await collect({
+        chunks: done, standard: "openai_compat", modelId, serverTools: ["code_interpreter"],
+      });
+      expect(calls[0].body, modelId).not.toHaveProperty("enable_code_interpreter");
+    }
+  });
+
+  it("never sends enable_code_interpreter to the official endpoint", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai", modelId: "qwen3.5-plus", serverTools: ["code_interpreter"],
+    });
+    expect(calls[0].body).not.toHaveProperty("enable_code_interpreter");
   });
 });
 

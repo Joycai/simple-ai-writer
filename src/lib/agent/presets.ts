@@ -13,6 +13,9 @@ import type { TaskTools } from "../profile/model";
 import type { ToolId } from "./registry";
 import type { SearchableGroup } from "./toolSearch";
 
+/** How a task permits server-side tools — see `TaskPreset.serverTools`. */
+export type ServerToolPolicy = "final-round-off" | "off" | "always" | "no-web";
+
 /**
  * How a run is allowed to finish:
  *   - "force-text"     — on the final round, tools are withheld and the model is
@@ -49,8 +52,11 @@ export interface TaskPreset {
    *  - "final-round-off" (default) — allowed, but withheld on the force-text final round
    *  - "off"                       — never allowed (e.g. structured JSON tasks)
    *  - "always"                    — allowed every round, including the final round (search subagent)
+   *  - "no-web"                      — "final-round-off" for the non-web ids only (the code
+   *                                    interpreter): set by `routeTools` when a live search
+   *                                    subagent owns the web, never declared on a preset
    */
-  serverTools?: "final-round-off" | "off" | "always";
+  serverTools?: ServerToolPolicy;
   /**
    * Searchable groups (`file_ops` / `image`) this task sends from round one
    * instead of leaving to `search_tools`. For the tasks whose whole job IS that

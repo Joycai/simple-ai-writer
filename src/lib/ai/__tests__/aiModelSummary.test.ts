@@ -92,6 +92,22 @@ describe("wireSummary", () => {
     ]));
   });
 
+  it("spells the code interpreter per wire, only for a model id that runs it", () => {
+    const ci: WireInput = { ...base, modelId: "qwen3.5-plus", serverTools: ["code_interpreter"] };
+    expect(wireSummary(ci, "openai_compat")).toEqual(expect.arrayContaining([
+      { key: "enable_code_interpreter", value: "true" },
+    ]));
+    expect(wireSummary(ci, "openai_responses_compat")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "code_interpreter" },
+    ]));
+    // qwen3.8 runs it on Responses only.
+    const q38: WireInput = { ...ci, modelId: "qwen3.8-flash" };
+    expect(JSON.stringify(wireSummary(q38, "openai_compat"))).not.toMatch(/code_interpreter/);
+    expect(wireSummary(q38, "openai_responses_compat")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "code_interpreter" },
+    ]));
+  });
+
   it("shows text.verbosity on the Responses family only", () => {
     const m = { ...base, textVerbosity: "low" as const, structuredOutput: "off" as const };
     expect(wireSummary(m, "openai_responses")).toEqual([{ key: "text.verbosity", value: "low" }]);
@@ -177,6 +193,8 @@ describe("declarationMarks", () => {
     })).toEqual(["think", "web", "pdf", "translate"]);
     // Auto thinking is not a declaration.
     expect(declarationMarks({ type: "text", reasoningEffort: "high" } as never)).toEqual([]);
+    // The code interpreter alone is not "web".
+    expect(declarationMarks({ type: "text", serverTools: ["code_interpreter"] })).toEqual(["code"]);
   });
 
   it("gives image and video models no marks", () => {

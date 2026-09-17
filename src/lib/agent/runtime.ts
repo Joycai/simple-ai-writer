@@ -17,6 +17,7 @@ import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
 import { imagePart } from "../ai/imagePart";
+import { nonWebServerTools } from "../ai/serverTools";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
@@ -854,7 +855,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     const withholdServerTools =
       forceHandoff ||
       serverToolPolicy === "off" ||
-      (serverToolPolicy === "final-round-off" && isLastRound && preset.finishPolicy === "force-text");
+      ((serverToolPolicy === "final-round-off" || serverToolPolicy === "no-web") &&
+        isLastRound && preset.finishPolicy === "force-text");
+    const roundServerTools = withholdServerTools
+      ? undefined
+      : serverToolPolicy === "no-web"
+        ? nonWebServerTools(opts.serverTools)
+        : opts.serverTools;
     /**
      * The "stop calling tools" nudge, retracted after this round's request.
      *
@@ -1058,10 +1065,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ...(forceHandoff
           ? { toolChoice: { type: "function" as const, function: { name: HANDOFF_TOOL_NAME } } }
           : {}),
-        // Governed by preset.serverTools (final-round-off | off | always).
+        // Governed by preset.serverTools (final-round-off | off | always | no-web).
         // Separate from local tools because search subagent has no local tools
         // (preset.tools: []) but requires serverTools enabled on every round.
-        serverTools: withholdServerTools ? undefined : opts.serverTools,
+        serverTools: roundServerTools,
         signal: roundAbort.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {

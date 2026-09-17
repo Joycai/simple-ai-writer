@@ -525,7 +525,7 @@ describe("Responses adapter — tool calls", () => {
 
 describe("Responses adapter — server tools (web_search / web_extractor)", () => {
   async function run(standard: "openai_responses" | "openai_responses_compat", chunks: string[], extra: {
-    tools?: (typeof TOOL)[]; serverTools?: ServerToolId[];
+    tools?: (typeof TOOL)[]; serverTools?: ServerToolId[]; modelId?: string; reasoningEffort?: ReasoningEffort;
   }) {
     const calls = mockFetch(chunks);
     const received: StreamChunk[] = [];
@@ -652,6 +652,68 @@ describe("Responses adapter — server tools (web_search / web_extractor)", () =
       { phase: "result", id: "is_1", name: "image_search", results: [] },
     ]);
     expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
+  });
+
+  it("declares code_interpreter beside function tools on a supported model", async () => {
+    // Unlike Chat Completions, this wire takes the pair (measured 2026-09-17).
+    const { body } = await run("openai_responses_compat", [COMPLETED], {
+      tools: [TOOL], serverTools: ["web_search", "code_interpreter"],
+    });
+    const tools = body.tools as Record<string, unknown>[];
+    expect(tools.slice(1)).toEqual([{ type: "web_search" }, { type: "code_interpreter" }]);
+  });
+
+  it("leaves code_interpreter out with thinking off, on an unsupported model, and on the official endpoint", async () => {
+    // Thinking off: `Normal mode does not support Code interpreter` fails the response.
+    const off = await run("openai_responses_compat", [COMPLETED], {
+      serverTools: ["code_interpreter"], reasoningEffort: "off",
+    });
+    expect((off.body.reasoning as Record<string, unknown>).effort).toBe("none");
+    expect(off.body).not.toHaveProperty("tools");
+    // A thinking level that is on keeps it.
+    expect((await run("openai_responses_compat", [COMPLETED], {
+      serverTools: ["code_interpreter"], reasoningEffort: "low",
+    })).body.tools).toEqual([{ type: "code_interpreter" }]);
+    // qwen3.6-27b: `Unsupported model`.
+    expect((await run("openai_responses_compat", [COMPLETED], {
+      serverTools: ["code_interpreter"], modelId: "qwen3.6-27b",
+    })).body).not.toHaveProperty("tools");
+    // OpenAI's own code_interpreter wants a container — a different tool.
+    expect((await run("openai_responses", [COMPLETED], {
+      serverTools: ["code_interpreter"], modelId: "gpt-5.6",
+    })).body).not.toHaveProperty("tools");
+  });
+
+  it("reads code_interpreter_call items: code on added, fenced logs on done", async () => {
+    // Measured shapes, 2026-09-17 (landscape.md §7 第六个样本「代码解释器」).
+    const item = { id: "msg_ci", type: "code_interpreter_call", code: "result = 123 ** 21\nprint(result)", container_id: "" };
+    const { received } = await run("openai_responses_compat", [
+      ev("response.output_item.added", { output_index: 1, item: { ...item, status: "in_progress" } }),
+      ev("response.code_interpreter_call.in_progress", { output_index: 1, item_id: "msg_ci" }),
+      ev("response.code_interpreter_call.interpreting", { output_index: 1, item_id: "msg_ci" }),
+      ev("response.code_interpreter_call.completed", { output_index: 1, item_id: "msg_ci" }),
+      ev("response.output_item.done", {
+        output_index: 1,
+        item: {
+          ...item, container_id: "msg_ci", status: "completed",
+          outputs: [{ type: "logs", logs: "```\n77269364466549865653073473388030061522211723\n\n```" }],
+        },
+      }),
+      ev("response.output_text.delta", { delta: "1728" }),
+      COMPLETED,
+    ], { serverTools: ["code_interpreter"] });
+
+    const events = received.filter((c): c is { serverTool: ServerToolEvent } => "serverTool" in c).map((c) => c.serverTool);
+    expect(events).toEqual([
+      { phase: "call", id: "msg_ci", name: "code_interpreter", input: { code: "result = 123 ** 21\nprint(result)" } },
+      {
+        phase: "result", id: "msg_ci", name: "code_interpreter", results: [],
+        output: "77269364466549865653073473388030061522211723",
+      },
+    ]);
+    // Nothing to answer and nothing to echo.
+    expect(received.find((c) => "toolCalls" in c)).toBeUndefined();
+    expect(text(received)).toBe("1728");
   });
 
   it("stores web_extractor only beside web_search, in canonical order", () => {

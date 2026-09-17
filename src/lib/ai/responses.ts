@@ -210,7 +210,13 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
   const { instructions, input } = toResponsesInput(opts.messages, opts.modelId);
-  const serverTools = responsesServerTools(opts.standard, opts.serverTools);
+  const reasoning = reasoningBody(
+    resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
+    opts.reasoningEffort,
+  );
+  const serverTools = responsesServerTools(opts.standard, opts.serverTools, opts.modelId, {
+    thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
+  });
   // `text` has two writers — this model's verbosity and a structured task's
   // `text.format` (jsonMode, arriving through extraBody) — merged below so
   // neither erases the other.
@@ -230,7 +236,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
     // Function tools first, then the endpoint's built-in ones (web_search /
-    // web_extractor — lib/ai/serverTools.ts). `tool_choice` stays tied to the
+    // web_extractor / code_interpreter — lib/ai/serverTools.ts). `tool_choice` stays tied to the
     // function tools: a run that declared none has nothing to force, and a
     // model with only server tools must keep its request free of the field.
     ...(opts.tools || serverTools.length
@@ -244,10 +250,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     // spelled as any one of them. The category resolves to `responses-effort`
     // for this family (lib/ai/reasoning.ts); a legacy or cross-family
     // category reaches here as the family default too.
-    ...reasoningBody(
-      resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
-      opts.reasoningEffort,
-    ),
+    ...reasoning,
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
     ...(text ? { text } : {}),

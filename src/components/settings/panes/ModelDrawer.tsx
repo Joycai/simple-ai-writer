@@ -38,7 +38,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
-  normalizeServerTools, SERVER_TOOL_IDS, supportsServerTool, supportsServerTools, type ServerToolId,
+  normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
@@ -73,7 +73,7 @@ const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", 
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
-  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "pdf", "vlHiRes", "video", "videoFps", "so", "temp", "verb",
+  "mid", "type", "price", "ctx", "maxOut", "cat", "effort", "budget", "tools", "extract", "imgText", "imgImage", "code", "pdf", "vlHiRes", "video", "videoFps", "so", "temp", "verb",
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
@@ -354,15 +354,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     const n = Math.round(Number(form.thinkingBudget));
     return Number.isFinite(n) && n > 0 ? n : undefined;
   })();
-  // What survives onto this provider's wire: ids it has a spelling for, in the
-  // canonical form (extraction only beside search). Absent when nothing does.
-  // `serverToolsOn` therefore means "any server tool", image searches included.
+  // What survives onto this provider's wire: ids it has a spelling for — and,
+  // for the code interpreter, that this model id runs — in the canonical form
+  // (extraction only beside search). Absent when nothing does.
   // A transcription row keeps none: its request is the file endpoint's, and a
   // chat declaration left on it would be a capability that reaches nothing.
+  const offersServerTool = (id: ServerToolId) =>
+    !!provider && supportsServerToolFor(provider.apiStandard, id, form.modelId.trim());
   const grantedServerTools = provider && form.type !== "asr"
-    ? normalizeServerTools(serverTools.filter((id) => supportsServerTool(provider.apiStandard, id)))
+    ? normalizeServerTools(serverTools.filter(offersServerTool))
     : undefined;
-  const serverToolsOn = !!grantedServerTools;
   const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
@@ -538,10 +539,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   ].filter(Boolean).join(" · ");
 
   const capsNames = [
-    serverToolsOn && t("aiConfig.models.mark_web"),
+    grantedServerTools?.includes("web_search") && t("aiConfig.models.mark_web"),
     grantedServerTools?.includes("web_extractor") && t("aiConfig.models.serverTool_web_extractor"),
     grantedServerTools?.includes("web_search_image") && t("aiConfig.models.serverTool_web_search_image"),
     grantedServerTools?.includes("image_search") && t("aiConfig.models.serverTool_image_search"),
+    grantedServerTools?.includes("code_interpreter") && t("aiConfig.models.serverTool_code_interpreter"),
     pdfWire && pdfInput && "PDF",
     vlHiResWire && vlHighResolution && t("aiConfig.models.vlHiResShort"),
     videoWire && videoInput && (videoFps !== undefined
@@ -1096,7 +1098,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 once instead of under every switch. */}
             <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
-              {SERVER_TOOL_IDS.filter((id) => !!provider && supportsServerTool(provider.apiStandard, id)).map((id) => (
+              {/* The code interpreter appears only for a model id that runs it
+                  on this wire (supportsCodeInterpreter) — type the id first. */}
+              {SERVER_TOOL_IDS.filter(offersServerTool).map((id) => (
                 <ToggleField
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
@@ -1115,7 +1119,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                       ? whyProps("imgText", t("aiConfig.models.serverToolsHintWebSearchImage"))
                       : id === "image_search"
                         ? whyProps("imgImage", t("aiConfig.models.serverToolsHintImageSearch"))
-                        : whyProps("tools", family === "openai"
+                        : id === "code_interpreter"
+                          ? whyProps("code", t(family === "responses"
+                            ? "aiConfig.models.serverToolsHintCodeInterpreterResponses"
+                            : "aiConfig.models.serverToolsHintCodeInterpreter"))
+                          : whyProps("tools", family === "openai"
                           ? t("aiConfig.models.serverToolsHintOpenai")
                           : family === "responses"
                             ? t("aiConfig.models.serverToolsHintResponses")

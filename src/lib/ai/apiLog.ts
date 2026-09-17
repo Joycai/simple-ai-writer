@@ -246,7 +246,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
   /** Fields the endpoint echoed with another value than sent — see StreamChunk. */
   let wireRewrites: WireRewrite[] | undefined;
   /** Searches the endpoint ran for itself — see lib/ai/serverTools. */
-  const serverTools: { name: string; input?: unknown; results?: number; error?: string }[] = [];
+  const serverTools: { name: string; input?: unknown; results?: number; output?: string; error?: string }[] = [];
 
   /** Which request of this call — a turn that resumes itself sends several. */
   let leg = 0;
@@ -277,7 +277,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
         serverTools.push(
           e.phase === "call"
             ? { name: e.name, input: e.input }
-            : { name: e.name, results: e.results.length, error: e.error },
+            : { name: e.name, results: e.results.length, output: e.output, error: e.error },
         );
       } else if ("done" in chunk) {
         usage = { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens };
