@@ -16,7 +16,8 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
-import { imagePart } from "../ai/imagePart";
+import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
+import { ImagePayloadError } from "../ai/types";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
@@ -265,6 +266,64 @@ function elideOldImageResults(history: StreamMessage[]): number {
 }
 
 /**
+ * Strip the oldest pictures until the history's pictures fit one request body
+ * together (`MAX_REQUEST_IMAGE_CHARS`).
+ *
+ * The count cap above counts *messages*, and one message can carry four
+ * attachments — so three kept messages can still be a body no endpoint takes.
+ *
+ * Two things are never touched, and for the same reason: they are what the
+ * model is about to look at. The round in progress (M1, see `trimHistory`) —
+ * two large `read_image` results from one round would otherwise lose the first
+ * before the model saw it, the model would read it again, and the second
+ * would go the same way, until the round cap. And the newest message carrying
+ * a picture, which is the author's attachment when no tool is in flight. When
+ * the ceiling cannot be met without them, the request goes out over it and
+ * `streamCompletion`'s pre-flight check says so, as `trimHistory` does for
+ * tokens.
+ */
+function elideImagesOverBudget(history: StreamMessage[]): number {
+  const protectedFrom = roundInProgressStart(history);
+  const newest = history.filter(hasImageParts).pop();
+  let dropped = 0;
+  for (let i = 0; i < protectedFrom; i++) {
+    if (imagePayload(history).chars <= MAX_REQUEST_IMAGE_CHARS) break;
+    const m = history[i];
+    if (m === newest || !hasImageParts(m)) continue;
+    m.content = contentWithoutImages(m, ELIDED_IMAGE);
+    dropped++;
+  }
+  return dropped;
+}
+
+/** What a picture refused with its request becomes; the model reads this. */
+const UNSENT_IMAGE =
+  "[image not sent: together with the others it was too large for one request — read it again on its own if it still matters]";
+
+/**
+ * After a request was refused for its pictures, take out the ones
+ * `elideImagesOverBudget` had to leave in, so the refusal isn't permanent.
+ *
+ * The history outlives the run: the chat appends the author's next question to
+ * this same array. And a fresh question after a tool round doesn't end that
+ * round as far as `roundInProgressStart` can tell — the last assistant message
+ * is still the tool call — so the pictures that were over stay protected, and
+ * every later request in the conversation is refused the same way. Nothing the
+ * error suggests (fewer attachments, a lower long edge) reaches pictures that
+ * are already in history. They could not be sent anyway; their text stays, so
+ * the model knows what it read and can read one again.
+ */
+function elideUnsendableImages(history: StreamMessage[]): void {
+  const newest = history.filter(hasImageParts).pop();
+  const from = roundInProgressStart(history);
+  history.forEach((m, i) => {
+    if ((i >= from || m === newest) && hasImageParts(m)) {
+      m.content = contentWithoutImages(m, UNSENT_IMAGE);
+    }
+  });
+}
+
+/**
  * How many video clips stay in history verbatim: one.
  *
  * Every tool round resends the whole history, and a clip is billed each time —
@@ -407,7 +466,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   // across turns. Left to the token check alone, a session that reads pictures
   // grows a request body no endpoint will accept while the estimate still
   // reads as comfortably under the ceiling.
-  let dropped = elideOldImageResults(history) + elideOldVideos(history);
+  let dropped = elideOldImageResults(history) + elideImagesOverBudget(history) + elideOldVideos(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
   if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
   const protectedFrom = roundInProgressStart(history);
@@ -1186,6 +1245,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ) {
           history.push({ role: "assistant", content: roundText });
         }
+        if (err instanceof ImagePayloadError) elideUnsendableImages(history);
         throw err;
       }
     } finally {

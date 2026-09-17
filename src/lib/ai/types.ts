@@ -542,6 +542,31 @@ export class ContextSizeError extends Error {
 }
 
 /**
+ * Thrown before sending when the request's pictures together exceed
+ * `MAX_REQUEST_IMAGE_CHARS` (lib/ai/imagePart.ts).
+ *
+ * The paths that send several pictures fit themselves under the ceiling first;
+ * this is the net under the ones that don't. Refused here rather than sent
+ * because the failure it replaces is slow and nameless: tens of megabytes
+ * uploading for minutes before an endpoint answers 413, or nothing at all.
+ */
+export class ImagePayloadError extends Error {
+  constructor(
+    public readonly images: number,
+    public readonly chars: number,
+    public readonly limit: number,
+  ) {
+    const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+    super(i18n.t("ai.errors.imagePayloadTooLarge", {
+      count: images,
+      size: mb(chars),
+      limit: mb(limit),
+    }));
+    this.name = "ImagePayloadError";
+  }
+}
+
+/**
  * Thrown when a stream stays silent past its deadline — `streamCompletion`'s
  * watchdog (docs/feature/agent/window-edge-plan.md D7).
  *

@@ -6,7 +6,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
-import { imagePart } from "../../lib/ai/imagePart";
+import { imagePart, imagesWithinBudget } from "../../lib/ai/imagePart";
 import {
   assignableCategories, readEntityFile, saveEntityMetaAndBody,
   type CategoryId, type LoreEntity,
@@ -103,27 +103,40 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       // images as binary payloads. Text-only models still get the textual
       // gallery descriptions embedded in the prompt below.
       const supportsImages = canSeeImages(model);
-      const galleryLines: string[] = [];
-      if (entity.avatarPath) {
-        const fname = baseName(entity.avatarPath) || "avatar";
-        galleryLines.push(`- ${fname}: (avatar)`);
-      }
-      for (const img of entity.images) {
-        galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}`);
-      }
+      const gallery = [
+        ...(entity.avatarPath
+          ? [{ path: entity.avatarPath, line: `- ${baseName(entity.avatarPath) || "avatar"}: (avatar)` }]
+          : []),
+        ...entity.images.map((img) => ({
+          path: img.absPath,
+          line: `- ${img.file}: ${img.desc || "(no description)"}`,
+        })),
+      ];
 
+      // The whole gallery rides along, so it is fitted to the request's
+      // picture budget here (lib/ai/imagePart): an entity with a large gallery
+      // would otherwise be refused outright on every attempt, and nothing in
+      // this modal lets the author pick fewer. A picture that doesn't fit is
+      // still described in the list, and marked so the model doesn't claim to
+      // have looked at it.
       const imageDataUrls: string[] = [];
-      if (supportsImages) {
-        const paths = [
-          ...(entity.avatarPath ? [entity.avatarPath] : []),
-          ...entity.images.map((i) => i.absPath),
-        ];
-        for (const p of paths) {
-          try {
-            const { dataUrl } = await imageForModel(p);
-            imageDataUrls.push(dataUrl);
-          } catch { /* skip unreadable image */ }
+      const galleryLines: string[] = [];
+      let payload = 0;
+      for (const g of gallery) {
+        if (!supportsImages) {
+          galleryLines.push(g.line);
+          continue;
         }
+        try {
+          const { dataUrl } = await imageForModel(g.path);
+          if (imagesWithinBudget([dataUrl.length], payload) === 0) {
+            galleryLines.push(`${g.line} (not attached: over the request's image size limit)`);
+            continue;
+          }
+          payload += dataUrl.length;
+          imageDataUrls.push(dataUrl);
+        } catch { /* skip unreadable image */ }
+        galleryLines.push(g.line);
       }
 
       const systemBase = [

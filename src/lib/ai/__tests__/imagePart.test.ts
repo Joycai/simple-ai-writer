@@ -18,7 +18,7 @@ vi.mock("../../prefs", () => ({
   writePref: vi.fn(),
 }));
 
-const { imagePart } = await import("../imagePart");
+const { imagePart, imagePayload, imagesWithinBudget, MAX_REQUEST_IMAGE_CHARS } = await import("../imagePart");
 const { toResponsesInput } = await import("../responses");
 const { convertToAnthropicMessages } = await import("../anthropic");
 const { convertToGeminiContents } = await import("../gemini");
@@ -112,5 +112,39 @@ describe("a part type no wire can spell", () => {
   it("Gemini names the type", () => {
     expect(() => convertToGeminiContents(history))
       .toThrow(/unsupported content part type "video_url"/);
+  });
+});
+
+describe("the request's picture budget", () => {
+  const MiB = 1024 * 1024;
+  const big = (mib: number) => `data:image/png;base64,${"A".repeat(mib * MiB)}`;
+
+  it("sits under Anthropic's 32 MB request limit, and a single capped picture fits it", () => {
+    expect(MAX_REQUEST_IMAGE_CHARS).toBeLessThan(32 * 1000 * 1000);
+    // MAX_IMAGE_BYTES (12 MiB) encoded is 16 MiB.
+    expect(Math.ceil((12 * MiB) / 3) * 4).toBeLessThanOrEqual(MAX_REQUEST_IMAGE_CHARS);
+  });
+
+  it("counts every picture part and its data-URL length, and nothing else", () => {
+    const url = big(1);
+    const payload = imagePayload([
+      { role: "system", content: "sys" },
+      { role: "user", content: [{ type: "text", text: "x".repeat(5000) }, imagePart(url, "auto"), imagePart(url, "auto")] },
+      { role: "tool", tool_call_id: "c", content: "y" },
+      { role: "user", content: [imagePart(url, "auto")] },
+    ]);
+    expect(payload).toEqual({ count: 3, chars: 3 * url.length });
+  });
+
+  it("takes pictures in order until the next would cross the ceiling", () => {
+    expect(imagesWithinBudget([10 * MiB, 10 * MiB, 10 * MiB])).toBe(2);
+    expect(imagesWithinBudget([1, 2, 3])).toBe(3);
+    expect(imagesWithinBudget([])).toBe(0);
+  });
+
+  it("always lets a first picture through on an empty request, never onto a full one", () => {
+    expect(imagesWithinBudget([MAX_REQUEST_IMAGE_CHARS + 1])).toBe(1);
+    expect(imagesWithinBudget([MAX_REQUEST_IMAGE_CHARS + 1], 1)).toBe(0);
+    expect(imagesWithinBudget([10 * MiB], 20 * MiB)).toBe(0);
   });
 });

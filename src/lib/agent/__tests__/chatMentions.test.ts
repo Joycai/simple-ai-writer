@@ -216,7 +216,9 @@ describe("buildChatMessage", () => {
     expect(parts.filter((p) => p.type === "image_url")).toHaveLength(MAX_MESSAGE_IMAGES);
     expect(out.imagePaths).toHaveLength(MAX_MESSAGE_IMAGES);
     // The ones that didn't fit are named rather than vanishing.
-    expect(out.text).toMatch(/未能随本条消息发送/);
+    // …and the reason given is the cap, not a blindness the model doesn't have.
+    expect(out.text).toMatch(/没有随本条消息发送——单条消息最多带 4 张/);
+    expect(out.text).not.toMatch(/读不了图/);
     expect(out.text).toContain(`${MAX_MESSAGE_IMAGES + 1}.png`);
   });
 });
