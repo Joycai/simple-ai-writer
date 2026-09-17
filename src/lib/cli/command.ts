@@ -340,6 +340,37 @@ function hasMutatingReadFlag(program: string, words: string[]): boolean {
 }
 
 /**
+ * The words of a line that is one plain invocation — or null when anything
+ * about its shape needs the author's eyes: composition, a dangerous shape,
+ * braces / PowerShell expressions, a variable, a malformed quote, an
+ * environment prefix, a path-qualified program, or an argument that reaches
+ * outside the project. Shared by the two ways a line may skip the card (the
+ * built-in read list and the author's always-allowed programs), so neither can
+ * be looser about shape than the other.
+ */
+function plainInvocation(command: string, syntax: CommandSyntax): string[] | null {
+  if (!command.trim() || isCompound(command) || looksDangerous(command)) return null;
+  // Braces are brace expansion in POSIX (`{,/}etc/passwd` builds a path the
+  // fence never sees) and script blocks in PowerShell, which also evaluates
+  // parenthesised/array expressions inside arguments: `Get-Item (Remove-Item
+  // x)` starts with a read cmdlet but writes. Reject the syntax wholesale; a
+  // filename containing them merely gets an extra card.
+  if (/[{}]/.test(command) || (syntax === "powershell" && /[()]/.test(command))) return null;
+  if (expandsVariable(command, syntax)) return null;
+  const words = shellWords(command, syntax);
+  if (!words?.length) return null;
+
+  // Environment prefixes can change a tool's behaviour through config
+  // variables (for example RIPGREP_CONFIG_PATH containing `--pre`).
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) return null;
+  if (!isBareProgram(words[0], syntax)) return null;
+  if (words.slice(1).some((w) => argumentValues(w, syntax).some((v) => leavesProject(v, syntax)))) {
+    return null;
+  }
+  return words;
+}
+
+/**
  * Classify one command for approval. Only a single, non-dangerous invocation
  * of a known read program, by bare name, with every argument inside the
  * project, can be `read`; pipelines, redirections, substitutions, variables,
@@ -349,24 +380,8 @@ function hasMutatingReadFlag(program: string, words: string[]): boolean {
  * allowlist.
  */
 export function commandAccess(command: string, syntax: CommandSyntax): CommandAccess {
-  if (!command.trim() || isCompound(command) || looksDangerous(command)) return "write";
-  // Braces are brace expansion in POSIX (`{,/}etc/passwd` builds a path the
-  // fence never sees) and script blocks in PowerShell, which also evaluates
-  // parenthesised/array expressions inside arguments: `Get-Item (Remove-Item
-  // x)` starts with a read cmdlet but writes. Reject the syntax wholesale; a
-  // filename containing them merely gets an extra card.
-  if (/[{}]/.test(command) || (syntax === "powershell" && /[()]/.test(command))) return "write";
-  if (expandsVariable(command, syntax)) return "write";
-  const words = shellWords(command, syntax);
-  if (!words?.length) return "write";
-
-  // Environment prefixes can change a read tool's behaviour through config
-  // variables (for example RIPGREP_CONFIG_PATH containing `--pre`).
-  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) return "write";
-  if (!isBareProgram(words[0], syntax)) return "write";
-  if (words.slice(1).some((w) => argumentValues(w, syntax).some((v) => leavesProject(v, syntax)))) {
-    return "write";
-  }
+  const words = plainInvocation(command, syntax);
+  if (!words) return "write";
 
   const program = programNameOf(words[0]);
   if (program === "git") return gitIsReadOnly(words) ? "read" : "write";
@@ -380,3 +395,238 @@ export function commandAccess(command: string, syntax: CommandSyntax): CommandAc
   return allow.has(program) ? "read" : "write";
 }
 
+// ---------------------------------------------------------------------------
+// 免审批命令 — the programs the author has always-allowed
+// (docs/feature/agent/shell-command-plan.md §3.8).
+
+/**
+ * Programs that may never be always-allowed, because what they run is their
+ * argument: shells, interpreters, wrappers that start another program, and
+ * elevation. Allowing `bash` would make `bash -c '<anything>'` card-free,
+ * and `python x.py` runs whatever a lore write left in `x.py` — either one
+ * turns "this program" into "any program". Not complete (nothing here can be);
+ * it catches the names an author is likely to type.
+ */
+const NEVER_ALLOW = new Set([
+  // shells
+  "sh", "bash", "zsh", "fish", "dash", "ksh", "csh", "tcsh", "nu", "pwsh",
+  "powershell", "powershell_ise", "cmd", "wsl", "busybox",
+  // interpreters and package runners
+  "python", "python2", "python3", "py", "pythonw", "node", "deno", "bun",
+  "ruby", "perl", "php", "lua", "luajit", "tclsh", "wish", "osascript",
+  "cscript", "wscript", "mshta", "rscript", "julia", "java", "dotnet",
+  "npx", "bunx", "pnpx", "uvx", "pipx", "go",
+  // program launchers and wrappers
+  "env", "exec", "eval", "xargs", "nohup", "time", "timeout", "nice",
+  "ionice", "stdbuf", "command", "builtin", "watch", "script", "parallel",
+  "start", "start-process", "invoke-expression", "iex", "invoke-command",
+  "icm", "invoke-item", "ii", "call", "open", "xdg-open", "rundll32",
+  "regsvr32", "schtasks", "at", "crontab", "launchctl", "systemd-run",
+  "ssh", "make", "just",
+  // elevation
+  "sudo", "doas", "su", "runas", "pkexec",
+]);
+
+/** Why a name cannot join the list — an id the settings pane turns into words. */
+export type AllowRefusal = "invalid" | "runs-code";
+
+/**
+ * The key a typed name is stored under: what `programNameOf` would read off a
+ * command line, so `Git.exe`, `/usr/bin/git` and `git` are one entry.
+ */
+export function normalizeProgramName(raw: string): string {
+  const name = raw.trim();
+  return /\s/.test(name) ? name.toLowerCase() : programNameOf(name);
+}
+
+/** Null when `name` (already normalized) may be always-allowed. */
+export function allowRefusal(name: string): AllowRefusal | null {
+  if (!/^[a-z0-9][a-z0-9._+-]*$/.test(name)) return "invalid";
+  if (NEVER_ALLOW.has(name)) return "runs-code";
+  return null;
+}
+
+const GIT_EXEC_SUBCOMMANDS = new Set([
+  // `config` writes an alias (`!cmd`) or hooksPath that a later, also-allowed
+  // `git` line would run; the rest start a program by design.
+  "config", "bisect", "submodule", "difftool", "mergetool", "filter-branch",
+  "filter-repo", "rebase", "hook", "daemon", "instaweb", "web--browse",
+  "send-email", "credential", "var",
+]);
+const GIT_EXEC_OPTIONS = [
+  "--config", "--config-env", "--exec-path", "--exec", "--upload-pack",
+  "--receive-pack", "--extcmd", "--ext-diff", "--textconv", "--template",
+  "--open-files-in-pager", "--output",
+];
+
+/**
+ * Options and subcommands that make an always-allowed program start *another*
+ * program, or rewrite the configuration a later allowed line would obey. The
+ * author allowed `git`, not "whatever `git -c alias.x='!…'` runs". Like the
+ * danger table this is a short list of known shapes, not a proof — which is why
+ * the shape checks in `plainInvocation` run first and the list is closed to
+ * shells and interpreters.
+ */
+function runsAnotherProgram(program: string, words: string[]): boolean {
+  const args = words.slice(1);
+  switch (program) {
+    case "git": {
+      // The subcommand is the first word that is not a global option (or the
+      // value of one that takes a value).
+      let i = 0;
+      while (i < args.length && args[i].startsWith("-")) {
+        i += ["-C", "--git-dir", "--work-tree", "--namespace"].includes(args[i]) ? 2 : 1;
+      }
+      const sub = args[i]?.toLowerCase() ?? "";
+      if (GIT_EXEC_SUBCOMMANDS.has(sub)) return true;
+      return args.some((a) => a === "-c" || /^-c./.test(a)
+        || (a.startsWith("--") && GIT_EXEC_OPTIONS.some((opt) => abbreviates(a.toLowerCase(), opt)))
+        // `-u <program>` is --upload-pack on the fetching commands only;
+        // elsewhere (`add -u`, `push -u`) it is harmless.
+        || (/^-[^-]*u/.test(a) && ["clone", "fetch", "ls-remote", "archive", "pull"].includes(sub))
+        // `git grep -O<pager>`, alone or in a cluster.
+        || (sub === "grep" && /^-[^-]*O/.test(a)));
+    }
+    case "gh":
+      // `gh alias set --shell` stores a shell line; extensions are programs.
+      return args.some((a) => ["alias", "extension", "ext", "codespace", "cs"].includes(a.toLowerCase()));
+    case "pandoc":
+      return args.some((a) => /^(?:-F|-L)/.test(a)
+        || /^--(?:filter|lua-filter|pdf-engine|pdf-engine-opt)(?:=|$)/i.test(a));
+    case "find":
+    case "rg":
+    case "ripgrep":
+    case "file":
+    case "tree":
+      return hasMutatingReadFlag(program, words);
+    default:
+      return false;
+  }
+}
+
+/**
+ * The always-allowed program this line runs under, or null when the line
+ * still needs a card. A covered line is one plain invocation (see
+ * `plainInvocation`), of a program on `allowed`, that is not refused by
+ * `allowRefusal` (a list edited by hand, or by an older build, is not trusted
+ * past that), and that uses none of the program's known execution hooks.
+ */
+export function allowlistCovers(
+  command: string,
+  syntax: CommandSyntax,
+  allowed: readonly string[],
+): string | null {
+  const words = plainInvocation(command, syntax);
+  if (!words) return null;
+  const program = programNameOf(words[0]);
+  if (!allowed.includes(program) || allowRefusal(program)) return null;
+  return runsAnotherProgram(program, words) ? null : program;
+}
+
+/**
+ * Split a chain of plain commands at `&&` `||` `;` `|` and line breaks,
+ * outside quotes. Null for anything a chain of plain commands does not need:
+ * a lone `&` (background), redirection, backticks, `$(…)` / `${…}` (also
+ * inside double quotes, where POSIX still expands them), an unterminated
+ * quote, or an empty link (`a && && b`). A trailing separator is tolerated.
+ * Each piece is then judged on its own; the split only decides where the
+ * pieces are, never whether they are safe.
+ */
+export function splitChain(command: string, syntax: CommandSyntax): string[] | null {
+  const pieces: string[] = [];
+  let cur = "";
+  let quote: "'" | '"' | null = null;
+  const escapes = syntax === "posix";
+  const push = (): boolean => {
+    if (!cur.trim()) return false;
+    pieces.push(cur.trim());
+    cur = "";
+    return true;
+  };
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const next = command[i + 1];
+    if (ch === "`" || (ch === "$" && (next === "(" || next === "{") && quote !== "'")) return null;
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      else if (escapes && ch === "\\" && quote === '"' && next !== undefined) cur += command[++i];
+      continue;
+    }
+    if (escapes && ch === "\\") {
+      if (next === undefined || next === "\n" || next === "\r") return null;
+      cur += ch + command[++i];
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+    } else if ((ch === "&" && next === "&") || (ch === "|" && next === "|")) {
+      if (!push()) return null;
+      i++;
+    } else if (ch === ";" || ch === "|" || ch === "\n" || ch === "\r") {
+      // `\r\n` is one break; a blank line between commands is not a link.
+      if (!push() && ch !== "\n" && ch !== "\r") return null;
+    } else if (ch === "&" || ch === "<" || ch === ">") {
+      return null;
+    } else {
+      cur += ch;
+    }
+  }
+  if (quote) return null;
+  if (cur.trim()) pieces.push(cur.trim());
+  return pieces.length ? pieces : null;
+}
+
+/**
+ * Whether a line may run without a card, and under which always-allowed
+ * programs. A single line or a chain qualifies when **every** piece is either
+ * a built-in read (`commandAccess`) or covered by the author's list
+ * (`allowlistCovers`), and the whole line has no dangerous shape — the danger
+ * table looks across pieces (`curl … | sh`). Returns the allowed programs the
+ * line leans on (empty: reads only), or null for a card.
+ */
+export function commandCover(
+  command: string,
+  syntax: CommandSyntax,
+  allowed: readonly string[],
+): string[] | null {
+  if (!command.trim() || looksDangerous(command)) return null;
+  const pieces = splitChain(command, syntax);
+  if (!pieces) return null;
+  const used = new Set<string>();
+  for (const piece of pieces) {
+    if (commandAccess(piece, syntax) === "read") continue;
+    const program = allowlistCovers(piece, syntax, allowed);
+    if (!program) return null;
+    used.add(program);
+  }
+  return [...used];
+}
+
+/**
+ * The programs a card may offer to always-allow: exactly the ones this very
+ * line still lacks, and only when allowing them would let it through. A line
+ * that would still get a card after the click (a dangerous shape, a
+ * redirection, an argument outside the project, a hook option, a shell) is
+ * offered nothing — a button whose promise the next identical line breaks is
+ * worse than no button.
+ */
+export function allowlistCandidates(
+  command: string,
+  syntax: CommandSyntax,
+  allowed: readonly string[],
+): string[] | null {
+  if (!command.trim() || looksDangerous(command)) return null;
+  const pieces = splitChain(command, syntax);
+  if (!pieces) return null;
+  const missing = new Set<string>();
+  for (const piece of pieces) {
+    if (commandAccess(piece, syntax) === "read" || allowlistCovers(piece, syntax, allowed)) continue;
+    const words = plainInvocation(piece, syntax);
+    const program = words ? programNameOf(words[0]) : "";
+    if (!program || !allowlistCovers(piece, syntax, [program])) return null;
+    missing.add(program);
+  }
+  return missing.size ? [...missing] : null;
+}

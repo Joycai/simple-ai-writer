@@ -647,6 +647,12 @@ export interface CommandProposal extends ProposalBase {
   compound: boolean;
   /** `looksDangerous(command)`: changes the card's face, never blocks. */
   danger: DangerKind | null;
+  /**
+   * The programs 「始终允许」 would add — exactly those this line lacks, and
+   * only when adding them would let this very line through
+   * (`allowlistCandidates`). Absent: the card offers no such button.
+   */
+  allowPrograms?: string[];
 }
 
 /**

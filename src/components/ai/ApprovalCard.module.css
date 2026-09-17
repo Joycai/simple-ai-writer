@@ -393,6 +393,16 @@
 .btnApproveAlways:hover:not(:disabled) { color: var(--color-sienna); border-color: var(--color-sienna); }
 .btnApproveAlways:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* 始终允许 <程序>：写进设置的长期授权，比连批更重一档，所以边框和字用赭石的
+   描边色而不是面板灰——但仍是描边按钮，实底只属于「批准并运行」。 */
+.btnAllowProgram {
+  border-color: var(--color-border-accent);
+  color: var(--color-sienna);
+}
+.allowProgramName {
+  font-family: var(--font-mono);
+}
+
 /* 连批控件：张数选择挨着按钮，视觉上是一个分体控件。 */
 .batchGroup { display: flex; align-items: stretch; }
 
@@ -880,6 +890,11 @@
     background: none;
     font-size: 10px;
     color: var(--color-text-muted);
+  }
+
+  /* The standing grant keeps its accent in the small-text line too. */
+  .footer > .btnAllowProgram {
+    color: var(--color-sienna);
   }
 
   .footer > .btnApproveAlways:hover:not(:disabled) {

@@ -126,6 +126,8 @@ export const PREF_KEYS = [
   "ai:asr:diarization",
   // 命令行（Beta）— lib/cli/flag：助手能不能提议在这台电脑上跑一条命令。
   "app:cliBeta",
+  // 免审批命令：作者列出的程序名（JSON 数组）— lib/cli/allowlist。机器本地。
+  "app:cliAllowlist",
   // 写手的一次性说明看过没有。设置卡上的「再看一次说明」清掉它。
   "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
@@ -163,6 +165,9 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "app:pinHintDone",
   "app:webviewCapsNoticed",
   "manuscript:onboarding-done",
+  // Trust in a program on *this* computer — the same name may be a different
+  // program on another one, and the author never nodded there.
+  "app:cliAllowlist",
 ];
 
 /**

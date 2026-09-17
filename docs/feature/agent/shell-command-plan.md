@@ -1,6 +1,6 @@
 # 命令行工具 · `run_command`
 
-> 状态：`shipped`——原始实现见 [#561](https://github.com/Joycai/simple-ai-writer/pull/561) / [#563](https://github.com/Joycai/simple-ai-writer/pull/563)；2026-09-15 将审批改成当前策略：跨平台只读白名单免审，其余命令展示原文，普通写命令可按 1–5 条连批且只活到当前运行结束，危险命令永远逐条审批。**未做**：可选流式尾行（`tauri::ipc::Channel`）。
+> 状态：`shipped`——原始实现见 [#561](https://github.com/Joycai/simple-ai-writer/pull/561) / [#563](https://github.com/Joycai/simple-ai-writer/pull/563)；2026-09-15 将审批改成当前策略：跨平台只读白名单免审，其余命令展示原文，普通写命令可按 1–5 条连批且只活到当前运行结束，危险命令永远逐条审批；2026-09-17 加**免审批命令**（作者列出的程序，卡上可「始终允许」，由它们和只读命令组成的单条或 `&&` `||` `;` `|` 串联命令免审，§3.8）。**未做**：可选流式尾行（`tauri::ipc::Channel`）。
 > 一句话：给 agent 一个能跑本机命令的混合权限工具——Windows 走 PowerShell，macOS / Linux 走系统 shell；可证明只读的直接运行，其余先过审批卡。
 > 前置阅读：[`../../reference/tool-presence.md`](../../reference/tool-presence.md)（工具在场性）· [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（棘轮）· [`../asr/01-execution-plan.md`](../asr/01-execution-plan.md)（「付费之前先点头」的那张卡，本方案的样板）· [`../latex-pdf-plan.md`](../latex-pdf-plan.md) §5（为什么不装 `tauri-plugin-shell`，本方案沿用其结论）
 
@@ -20,7 +20,7 @@
 
 它**不是**：
 
-- **不是任意命令的免审口。** Rust 侧管 `cwd` 围栏、句柄表、超时和杀组，审批策略在前端。只有 `commandAccess` 的封闭白名单判为只读才直跑；任何未知命令、复合命令或带写入/执行参数的“读取工具”都回到审批卡。
+- **不是任意命令的免审口。** Rust 侧管 `cwd` 围栏、句柄表、超时和杀组，审批策略在前端。只有 `commandAccess` 的封闭白名单判为只读、或作者亲手列进「免审批命令」的程序（§3.8），才直跑；任何未知命令、带危险形状或重定向的命令、带写入/执行参数的“读取工具”都回到审批卡。
 - **不是跨消息的自动化流水线。** 普通写命令最多连批 1–5 条，并绑定发起它的 run；run 结束余量清零。批量运行、扮演、一致性检查、写手、pack 子运行仍没有这个工具。
 - **不是 LaTeX 方案的替代。** 那条线是固定二进制 + 固定参数表 + 不经 shell（其 I4），正因为 .tex 有一半是模型写的。这条线相反：命令是模型写的、经 shell 跑，所以它**必须**过卡，而 LaTeX 编译不必。两条互不替代。
 
@@ -30,7 +30,7 @@
 
 下面任何一条被破坏都算 bug，不算权衡。
 
-1. **只有可证明只读、且只读项目内的命令能在作者点头前起进程。** `commandAccess` 默认返回 `write`；白名单按 PowerShell / POSIX 分开。重定向、管道、分隔、替换、变量展开、花括号、环境前缀、未知程序、**带路径或扩展名的程序名**（`./cat`、`./ls.ps1`——按 basename 命中白名单会跑项目里的同名文件），以及 `find -delete`、`rg --pre`、`tree -o`、`git grep -O`、`git diff --output`（**含缩写** `--outp`，git 接受无歧义前缀）等参数全部审批。免审的读取不出卡但输出仍送给模型，所以参数里的绝对路径、`~`、`..`、能匹配 `..` 的点号通配、PowerShell 盘符/provider（`C:` `Env:` `HKLM:`）一律回卡——否则一段注入就能让 `cat ~/.ssh/id_rsa` 静默进上下文。`ls-remote`（联网，`--upload-pack` 能起任意程序）、`locate` / `mdfind`（本意就是搜全盘）、`ps`（`ps e` 打印别的进程的环境变量）不进白名单。
+1. **只有可证明只读、且只读项目内的命令——或作者亲手列进「免审批命令」的程序（§3.8）——能在作者点头前起进程。** `commandAccess` 默认返回 `write`；白名单按 PowerShell / POSIX 分开。重定向、管道、分隔、替换、变量展开、花括号、环境前缀、未知程序、**带路径或扩展名的程序名**（`./cat`、`./ls.ps1`——按 basename 命中白名单会跑项目里的同名文件），以及 `find -delete`、`rg --pre`、`tree -o`、`git grep -O`、`git diff --output`（**含缩写** `--outp`，git 接受无歧义前缀）等参数全部审批。免审的读取不出卡但输出仍送给模型，所以参数里的绝对路径、`~`、`..`、能匹配 `..` 的点号通配、PowerShell 盘符/provider（`C:` `Env:` `HKLM:`）一律回卡——否则一段注入就能让 `cat ~/.ssh/id_rsa` 静默进上下文。`ls-remote`（联网，`--upload-pack` 能起任意程序）、`locate` / `mdfind`（本意就是搜全盘）、`ps`（`ps e` 打印别的进程的环境变量）不进白名单。
 2. **写命令卡上是命令原文，不是转述。** 等宽、不折行省略、不做任何「美化」；模型的 `reason` 另起一行。批准即运行，拒绝则进程不存在。
 3. **正文的布尔 `autoApprove` 永不覆盖命令。** `AUTO_APPROVABLE` 里没有 `"command"`。命令只有计数授权 `commandLeft`：最多 5 条、绑定 `commandRun`、**复合命令和危险形状永不命中**，run 结束即清零。复合那一条不能省：`looksDangerous` 是改卡外观的小表，不是完整清单（`rm *.md`、`git checkout -- .`、`python -c …` 都不中），只靠它挡，批给 `pandoc a.md -o a.epub` 的连批就能盖住 `touch x; <任意命令>`。
 4. **Beta 关着＝工具缺席。** `routeTools` 里 `isCliEnabled() && IS_TAURI && options.commands` 三者同时成立才追加；任何一个不成立，`allowedTools` 里没有它——不是渲染成禁用，不是调用被拒（[tool-presence](../../reference/tool-presence.md) 「关掉时是缺席还是拒绝」）。浏览器里的 `pnpm dev` 永远没有它。
@@ -41,6 +41,7 @@
 9. **`cwd` 在项目围栏内，命令本身不在。** `cwd` 参数是项目相对路径，TS 侧 + Rust `FsScope::check` 双重判定在项目内。但 shell 能 `cd ..`、能碰 `.ai-writer/`、能碰整块磁盘——**围栏挡的是参数，闸是那张卡**。文档和卡片文案都不许暗示「命令只能动项目里的东西」。
 10. **Windows 不闪黑窗。** `CREATE_NO_WINDOW`（`0x08000000`）经 `CommandExt::creation_flags` 传入；缺了它每条命令弹一个控制台窗口，作者读到的是「应用坏了」。
 11. **描述里点名的 shell 就是实际跑的 shell。** 工具 description 在 `getToolDefinitions` 时按平台生成（先例：`list_lore_entities` 把分类 id 拼进 description），写明「PowerShell」或「zsh」或「sh」——一个不知道自己在 Windows 上的模型会写 `ls -la | grep`，然后把一轮花在读错误上。**系统也一起点名**（2026-09-17 补）：「macOS 15.2 · arm64」「Windows 10.0.26100 · x86_64」「Ubuntu 24.04.1 LTS (Linux) · x86_64」。只说 zsh 不够——zsh 在 macOS 上配的是 BSD userland（`sed -i ''`），在 Linux 上是 GNU；`open` / `xdg-open`、`brew` / `apt` 也只能由系统决定。系统信息和 shell 同一次探测（`ShellInfo.os / osVersion / arch`，macOS 读 `SystemVersion.plist`、Linux 读 `os-release`、Windows 在 PowerShell 探测里多打一行 `[Environment]::OSVersion`），不起新进程；只放在 `run_command` 的描述里、不进系统提示词——没有这个工具的运行用不上它，按[在场性](../../reference/tool-presence.md)也不该提。设置页的脚注用同一个 `systemLabel`，作者看到的就是模型读到的那句。代价：描述多约 10 token，棘轮从 340 上调到 360。
+12. **免审批命令只信作者亲手列的程序名，且只信「这个程序本身」。** 清单（`app:cliAllowlist`）只在设置页或卡上的「始终允许」按钮里增加，模型没有任何途径改它。命中还要同时满足：整行无危险形状；按 `&&` `||` `;` `|` 换行切开后**每一段**都是只读或被清单覆盖；每一段过与只读白名单**同一个** `plainInvocation`（裸名程序、无环境前缀、无变量/花括号/PowerShell 括号、参数不出项目）；不带该程序已知的「起另一个程序」的钩子（`git -c` / `config` / `--upload-pack`、`gh alias`、`pandoc --filter` / `--pdf-engine`、`find -exec` 等）。shell、解释器、启动器、提权（`bash` `python` `node` `npx` `env` `xargs` `sudo` `iex` …）**永远不能加入**——加入它们等于任何命令都免审；手改进偏好里的也在读取时丢掉。重定向、后台 `&`、命令替换在串联里一律回卡。
 
 ---
 
@@ -62,6 +63,9 @@
 | 12 | 作者面向的词 | 功能叫**命令行**，一条叫**命令**，卡叫**运行命令** | 不用「终端」（它暗示有个能交互的窗口，而 §1.6 说没有）、不用「脚本」（那是文件）。实施时对照 `terminology.md` |
 | 13 | 哪些命令免审 | **封闭的、分平台只读白名单；程序必须是裸名；参数必须留在项目内；默认写入** | shell 无法可靠静态解析，误判只读会直接执行。常见 `ls/cat/grep/rg/find` 与 PowerShell `Get-ChildItem/Get-Content/Select-String` 覆盖主要盘点场景；有执行钩子或输出文件模式的参数单独退回审批（git 长选项按前缀判，因为 git 接受缩写）。参数围栏是 2026-09-15 复查后补的：以前每条命令都过卡，读 `~/.ssh` 作者会看到；免审之后读取的输出不经作者直接进模型上下文，围栏是替那张卡守住「作者没看过的东西不出项目」。误伤（`grep 'a:b'` 在 PowerShell 里被当成 provider 路径）只多一张卡 |
 | 14 | 写命令怎么连批 | **下一批 1–5 条单条普通写命令，绑定当前 run** | 同生图的 counted grant；不跨用户下一条消息。复合命令与危险形状不提供按钮，也不消耗已有余量——危险表不完整，复合是它漏掉的那部分的兜底（§1 不变量 3） |
+| 15 | 要不要作者可维护的免审程序清单（2026-09-17，作者提出） | **要，按程序名，装机级、机器本地** | §7 原把它列为待议，理由是「授权从当场点头变成一行配置，是一次信任模型的迁移」。作者明确要这次迁移，它换来的是 `git` / `gh` / `pandoc` 这类每天几十次的命令不再逐条点。迁移的边界靠不变量 12 守：清单只有作者能写（设置页 + 卡上按钮），命中条件与只读白名单共用形状检查，列不进会跑代码的程序。**按程序名而不是按子命令**（`git` 而不是 `git status`）：作者给的例子就是程序名；子命令粒度要给每个程序写一份解析器，而危险子命令已有危险表 + 钩子表兜。**装机级**而不是 §7 设想的项目级 `.ai-writer/commands.json`：作者在实验室页维护它；而项目文件会随同步、备份、他人的仓库进来，一份别人写的「免审」文件正是这里最不该信的东西。**机器本地**（`MACHINE_LOCAL_PREF_KEYS`）：信的是这台电脑上的那个程序，另一台上同名的可能是别的东西，作者也没在那台上点过头 |
+| 16 | 串联命令算不算（2026-09-17，作者追加） | **算：切段后每一段都只读或被覆盖，整行才免审** | 作者的原话是「同时执行三个白名单命令，也得放行」——`git add … && git commit … && git push` 是清单最常见的用法，只认单条会让清单在最需要它的地方失效。切分只认 `&&` `||` `;` `|` 和换行，**不认**重定向（写文件）、后台 `&`（进程脱离中止）、命令替换（`$(…)` 里的东西不是任何一段）；危险表对**整行**再跑一次（`curl … \| sh` 跨段）。纯只读的串联（`git log \| head`、`ls \| wc -l`）顺带也免审——每一段单独就免审，串起来并没有多做什么。计数连批（#14）**仍**不接复合命令：它不知道每段是什么，只有清单知道 |
+| 17 | 卡上的「始终允许」什么时候出现 | **只在加进去之后这一行本身就能免审时；列出这一行还缺的全部程序（`始终允许 git · gh`）；不要求 `autoApproveKey`** | 一个点完之后同样一行照旧出卡的按钮，是在对作者撒谎——所以候选（`allowlistCandidates`）在建卡时算好挂在提案上，任何一段过不了形状检查或是会跑代码的程序就整行不给。它写的是设置里的长期清单，不是这次运行的授权，所以不像连批那样绑 surface 与 run；点击＝写清单 + 批准这一张。已经排在后面的卡不回头自动批：作者正在看的卡由作者决定。按钮用赭石描边（比连批的面板灰重一档，但不是实底——实底只属于「批准并运行」），窄栏里和其它授权一起降成小字行但保留赭石色 |
 
 ---
 
@@ -217,6 +221,33 @@ opt-in 处：`agentStore`（chat，与 `askAuthor: true` 同一行）、`aiTaskS
 - `resultSummary` 的头部就是 `formatResult` 的前几行：`exit 0 · 1.2s` 这种，作者扫日志时能看出成败。
 - 中止：`AbortSignal` 已经贯穿 `settleApproval`（`transcribe` 那个 `signal`），apply 步收到 abort 就 `cmd_kill`。
 
+### 3.8 免审批命令（2026-09-17）
+
+设计稿：Claude Design 画布「命令行 · 免审批命令」（实验室行 · 宽卡 · 窄栏三块画板）。
+
+**数据**：`app:cliAllowlist`，JSON 字符串数组，存规整后的程序名（`normalizeProgramName`：去目录、去 `.exe` 等扩展名、小写——`/usr/bin/Git.exe` 与 `git` 是同一条）。`lib/cli/allowlist.ts` 读写；读的时候丢掉不合法或被拒的项，匹配时 `allowRefusal` 再查一次（旧版本写进去的、手改的都不信）。
+
+**判定**（`lib/cli/command.ts`）：
+
+```
+commandCover(line, syntax, allowed) → string[] | null      // null＝出卡；[]＝全是只读
+  looksDangerous(line)            → null                   // 整行，跨段
+  splitChain(line)                → null | pieces          // && || ; | 换行；> < & ` $( ${ → null
+  每段：commandAccess(piece) === "read"                     → 过
+        allowlistCovers(piece, allowed) → program          → 过，记下
+        否则                                                → null
+allowlistCovers = plainInvocation(piece) ∧ program ∈ allowed ∧ !allowRefusal(program) ∧ !runsAnotherProgram(program, words)
+allowlistCandidates(line, allowed) → 这行还缺的程序 | null   // 加进去之后本行必须能过
+```
+
+`plainInvocation` 是从 `commandAccess` 里抽出来的形状检查，两条免审路径共用同一份，谁也不能比谁宽松。`runsAnotherProgram` 是按程序的钩子表，和危险表一样**不完整**——所以形状检查先跑，会跑代码的程序整类拒收。
+
+**工具**：`cliTools` 用 `commandCover` 代替原来的 `commandAccess === "read"`；清单非空时 description 多一句点名这些程序（空清单零成本，棘轮不动）。建卡时 `allowPrograms` 算好挂在 `CommandProposal` 上。
+
+**设置**：实验室 → 命令行，开关开着时脚注下面一块：程序名等宽方块（× 移除）、添加框（回车或「添加」，被拒时就地说原因）、常用建议（git · gh · find · pandoc，已在清单里的不显示）、一句内置只读与不可加入的说明。关着时不画——工具缺席，清单无从生效，但保留。
+
+**卡**：见决定 #17。
+
 ---
 
 ## 4. 分片
@@ -286,7 +317,7 @@ opt-in 处：`agentStore`（chat，与 `askAuthor: true` 同一行）、`aiTaskS
 
 ## 7. 待议（不阻塞 PR 1–3）
 
-- **项目级允许清单** `.ai-writer/commands.json`：作者预先写「这个项目里 `pandoc`、`git` 免审批」。等 PR 3 的对话级授权用过再看是否值得——它把授权从「作者当场点头」变成「一份文件里的一行」，是一次信任模型的迁移，不该顺手做。
+- ~~**项目级允许清单** `.ai-writer/commands.json`~~：2026-09-17 以**装机级、机器本地**的「免审批命令」落地（决定 #15–#17、§3.8）。项目级那一版不做：项目文件会随同步和别人的仓库进来，一份别人写的免审清单正是最不该信的东西。
 - **进 orchestrator 的 pack**（`pack-shell`）：§2.11。
 - **工作流卡**：「用 git 看这章的修改史」之类的套路可以做成 `workflows/` 里的卡，让小模型也知道该调它——这是 workflow-cards-plan 那条线的事，等工具本身稳定。
 - **`open` / `Start-Process` 的专用工具**：把成品交给别的应用今天 `open_with_default_app` 已经能做，只是 agent 没有它。若发现作者总是让 agent 跑 `open x.pdf`，那是一个 20 token 的 read 级工具，比让它过卡便宜得多。

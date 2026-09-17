@@ -86,7 +86,7 @@
 | `toolSearch.ts` `search_tools` | 目录只列本次运行**非空**的可搜组——没绑图像模型时 routing 摘空了 `image`，目录里就没有画图；预设里一个可搜工具都没有时 `search_tools` 本身缺席。可搜组的工具在装载前被点名，当场装上并报「这次没执行，下一步再调」，不是「不存在」 |
 | `tools.ts` `formatLoreIndex` 集合抬头 | 有集合的项目才多一句「归集要在方案里写一条 collection 步骤」——它只对有集合的项目成立，也只在模型真的去看清单时计费 |
 | `routing.ts` `transcribe_audio` · `tools.ts` 音频改口 | 追加规则同 `translate`（Beta 开 **且** `asr` 档位绑了 `isAsrOnly` 的模型）；`read_file` 遇到音视频文件时按 `allowedTools` 判：有就点名 `transcribe_audio`，没有就说要作者去实验室开开关并绑模型——不点一个本次运行没有的工具 |
-| `routing.ts` `run_command` · `registry.ts` `describe` | 三个条件缺一即缺席：surface 能渲染审批卡（`RouteOptions.commands`，chat 与非批量任务面板）、命令行 Beta 开、在 Tauri 里（浏览器没有 shell）。description 在交出定义时才生成（`RegisteredTool.describe`）——它点名这台机器**真正**会用的 shell，模型据此写 PowerShell 还是 POSIX 语法；失败的结果文本再点一次名，教模型改写而不是重试。见 [shell-command-plan §1 不变量 4、5、11](../feature/agent/shell-command-plan.md) |
+| `routing.ts` `run_command` · `registry.ts` `describe` | 三个条件缺一即缺席：surface 能渲染审批卡（`RouteOptions.commands`，chat 与非批量任务面板）、命令行 Beta 开、在 Tauri 里（浏览器没有 shell）。description 在交出定义时才生成（`RegisteredTool.describe`）——它点名这台机器**真正**会用的 shell，模型据此写 PowerShell 还是 POSIX 语法；失败的结果文本再点一次名，教模型改写而不是重试。作者列了免审批命令时，description 多一句点名这些程序（清单空时不出现），让模型知道哪些串联不会打断作者。见 [shell-command-plan §1 不变量 4、5、11、12](../feature/agent/shell-command-plan.md) |
 
 ## 一个例外：跨工具改口
 

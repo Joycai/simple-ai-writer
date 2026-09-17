@@ -18,6 +18,7 @@ import {
 import { useAgentStore } from "../../../stores/agentStore";
 import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
 import { cachedShellInfo, shellInfo, shellLabel, systemLabel, type ShellInfo } from "../../../lib/cli/shell";
+import { CliAllowlist } from "./CliAllowlist";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import styles from "./Lab.module.css";
@@ -185,13 +186,18 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
           title={t("systemSettings.lab.cliLabel")}
           desc={t("systemSettings.lab.cliHint")}
           foot={
-            <div className={ui.rowDesc}>
-              {cliOn
-                ? shell
-                  ? t("systemSettings.lab.cliShell", { shell: shellLabel(shell), system: systemLabel(shell) })
-                  : t("systemSettings.lab.cliShellUnknown")
-                : t("systemSettings.lab.cliOffHint")}
-            </div>
+            <>
+              <div className={ui.rowDesc}>
+                {cliOn
+                  ? shell
+                    ? t("systemSettings.lab.cliShell", { shell: shellLabel(shell), system: systemLabel(shell) })
+                    : t("systemSettings.lab.cliShellUnknown")
+                  : t("systemSettings.lab.cliOffHint")}
+              </div>
+              {/* 免审批命令（shell-command-plan §3.8）只在开着时画：关着时整个工具
+                  缺席，清单无从生效；清单本身保留，重新打开时还在。 */}
+              {cliOn && <CliAllowlist />}
+            </>
           }
           last
         >
