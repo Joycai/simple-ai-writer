@@ -426,8 +426,11 @@ describe("tool schema budget", () => {
     // parameters and a description whose sentences each stop a wrong call —
     // the syntax it must write, that reading/editing text has its own tools,
     // one thing per call. All four appends together measured 1,268.
+    // 2026-09-17: 342 once the description also names the OS (macOS /
+    // Windows / distro + arch) — the shell alone didn't say BSD or GNU, brew
+    // or apt, and a wrong guess costs a whole round of reading an error.
     const command = estimateToolsTokens(getToolDefinitions(["run_command"]));
-    expect(command).toBeLessThanOrEqual(340);
+    expect(command).toBeLessThanOrEqual(360);
   });
 
   it("keeps each tool pack's resident half inside the plan's budget", () => {

@@ -62,7 +62,7 @@ function deleteProposal(id: string): Proposal {
 function commandProposal(id: string, command: string, over: Partial<Extract<Proposal, { kind: "command" }>> = {}): Proposal {
   return {
     kind: "command", id, path: "/p", command, cwdLabel: ".", timeoutMs: 60_000,
-    shell: { kind: "zsh", path: "/bin/zsh", version: null },
+    shell: { kind: "zsh", path: "/bin/zsh", version: null, os: "macos", osVersion: "15.2", arch: "aarch64" },
     compound: false, danger: null,
     ...over,
   };

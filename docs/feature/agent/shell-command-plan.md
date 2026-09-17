@@ -40,7 +40,7 @@
 8. **输出有上限，且上限之外的部分不丢。** 进程输出在 Rust 侧最多留 1MB（超出后停止收集并标记）；回给模型的结果最多 ~8000 字（头 6000 + 尾 2000，中间写「……省略 N 字，完整输出见 <路径>」）；完整输出落 `.ai-writer/tmp/cmd/<runId>-<n>.log`，模型用 `read_file` 分页读。理由同 `read_file` 的 4000 字分页：一条 `git log` 就能把一轮上下文吃光。
 9. **`cwd` 在项目围栏内，命令本身不在。** `cwd` 参数是项目相对路径，TS 侧 + Rust `FsScope::check` 双重判定在项目内。但 shell 能 `cd ..`、能碰 `.ai-writer/`、能碰整块磁盘——**围栏挡的是参数，闸是那张卡**。文档和卡片文案都不许暗示「命令只能动项目里的东西」。
 10. **Windows 不闪黑窗。** `CREATE_NO_WINDOW`（`0x08000000`）经 `CommandExt::creation_flags` 传入；缺了它每条命令弹一个控制台窗口，作者读到的是「应用坏了」。
-11. **描述里点名的 shell 就是实际跑的 shell。** 工具 description 在 `getToolDefinitions` 时按平台生成（先例：`list_lore_entities` 把分类 id 拼进 description），写明「PowerShell」或「zsh」或「sh」——一个不知道自己在 Windows 上的模型会写 `ls -la | grep`，然后把一轮花在读错误上。
+11. **描述里点名的 shell 就是实际跑的 shell。** 工具 description 在 `getToolDefinitions` 时按平台生成（先例：`list_lore_entities` 把分类 id 拼进 description），写明「PowerShell」或「zsh」或「sh」——一个不知道自己在 Windows 上的模型会写 `ls -la | grep`，然后把一轮花在读错误上。**系统也一起点名**（2026-09-17 补）：「macOS 15.2 · arm64」「Windows 10.0.26100 · x86_64」「Ubuntu 24.04.1 LTS (Linux) · x86_64」。只说 zsh 不够——zsh 在 macOS 上配的是 BSD userland（`sed -i ''`），在 Linux 上是 GNU；`open` / `xdg-open`、`brew` / `apt` 也只能由系统决定。系统信息和 shell 同一次探测（`ShellInfo.os / osVersion / arch`，macOS 读 `SystemVersion.plist`、Linux 读 `os-release`、Windows 在 PowerShell 探测里多打一行 `[Environment]::OSVersion`），不起新进程；只放在 `run_command` 的描述里、不进系统提示词——没有这个工具的运行用不上它，按[在场性](../../reference/tool-presence.md)也不该提。设置页的脚注用同一个 `systemLabel`，作者看到的就是模型读到的那句。代价：描述多约 10 token，棘轮从 340 上调到 360。
 
 ---
 
@@ -72,7 +72,7 @@
 三条命令 + 一个受管状态。
 
 ```
-cmd_shell_info() -> ShellInfo            { kind: "pwsh"|"powershell"|"zsh"|"bash"|"sh"|…, path, version? }
+cmd_shell_info() -> ShellInfo            { kind: "pwsh"|"powershell"|"zsh"|"bash"|"sh"|…, path, version?, os, osVersion?, arch }
 cmd_run(req: CmdRequest) -> CmdResult    起进程 → 等待（带超时）→ 收集 → 杀组 → 返回
 cmd_kill(run_id: String) -> ()           作者中止 / 前端超时兜底
 ```

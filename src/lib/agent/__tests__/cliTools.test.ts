@@ -11,7 +11,10 @@ vi.mock("../../cli/run", async () => {
   return { ...real, runCommand: run };
 });
 
-const shell = { current: { kind: "zsh", path: "/bin/zsh", version: null } as { kind: string; path: string; version: string | null } | null };
+type Shell = { kind: string; path: string; version: string | null; os: string; osVersion: string | null; arch: string };
+const ZSH: Shell = { kind: "zsh", path: "/bin/zsh", version: null, os: "macos", osVersion: "15.2", arch: "aarch64" };
+const PWSH: Shell = { kind: "pwsh", path: "pwsh.exe", version: "7.4.1", os: "windows", osVersion: "10.0.26100.0", arch: "x86_64" };
+const shell = { current: ZSH as Shell | null };
 vi.mock("../../cli/shell", async () => {
   const real = await vi.importActual<typeof import("../../cli/shell")>("../../cli/shell");
   return {
@@ -21,11 +24,11 @@ vi.mock("../../cli/shell", async () => {
   };
 });
 
-const platform = { windows: false };
+const platform = { windows: false, mac: false };
 vi.mock("../../platform", () => ({
   get IS_WINDOWS() { return platform.windows; },
   IS_TAURI: true,
-  IS_MAC: false,
+  get IS_MAC() { return platform.mac; },
 }));
 
 import { describeRunCommand, runCommandTool } from "../cliTools";
@@ -50,21 +53,25 @@ function ctxWith(decide: (p: Proposal) => ApprovalDecision): ToolContext & { see
 beforeEach(() => {
   exists.mockClear();
   run.mockClear();
-  shell.current = { kind: "zsh", path: "/bin/zsh", version: null };
+  shell.current = ZSH;
   platform.windows = false;
+  platform.mac = false;
 });
 
 describe("describeRunCommand", () => {
-  it("names the machine's shell and its syntax", () => {
-    expect(describeRunCommand()).toContain("in zsh, so write POSIX syntax");
-    shell.current = { kind: "pwsh", path: "pwsh.exe", version: "7.4.1" };
-    expect(describeRunCommand()).toContain("in PowerShell 7.4 (pwsh), so write PowerShell syntax");
+  it("names the machine's system, shell and syntax", () => {
+    expect(describeRunCommand()).toContain("computer (macOS 15.2 · arm64) — in zsh, so write POSIX syntax");
+    shell.current = PWSH;
+    expect(describeRunCommand()).toContain("computer (Windows 10.0.26100 · x86_64) — in PowerShell 7.4 (pwsh), so write PowerShell syntax");
   });
   it("guesses by platform before the probe has answered", () => {
     shell.current = null;
-    expect(describeRunCommand()).toContain("in the login shell (zsh / bash), so write POSIX syntax");
+    expect(describeRunCommand()).toContain("computer (Linux) — in the login shell (zsh / bash), so write POSIX syntax");
+    platform.mac = true;
+    expect(describeRunCommand()).toContain("computer (macOS) — in the login shell");
+    platform.mac = false;
     platform.windows = true;
-    expect(describeRunCommand()).toContain("in PowerShell, so write PowerShell syntax");
+    expect(describeRunCommand()).toContain("computer (Windows) — in PowerShell, so write PowerShell syntax");
   });
 });
 
@@ -117,12 +124,12 @@ describe("runCommandTool", () => {
 
   it("uses the detected platform syntax for the read allowlist", async () => {
     const ctx = ctxWith(() => ({ approved: true, backupPath: "approved" }));
-    shell.current = { kind: "pwsh", path: "pwsh.exe", version: "7.4.1" };
+    shell.current = PWSH;
     await runCommandTool("c1", { command: "Get-Content README.md" }, ctx);
     expect(run).toHaveBeenCalledTimes(1);
     expect(ctx.seen).toHaveLength(0);
 
-    shell.current = { kind: "zsh", path: "/bin/zsh", version: null };
+    shell.current = ZSH;
     await runCommandTool("c2", { command: "Get-Content README.md" }, ctx);
     expect(ctx.seen).toHaveLength(1);
   });

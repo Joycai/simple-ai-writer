@@ -79,7 +79,12 @@ const ENV: [(&str, &str); 7] = [
     ("PYTHONUTF8", "1"),
 ];
 
-/// Which shell this machine runs commands with. Resolved once per process.
+/// Which shell this machine runs commands with, and on what system. Resolved
+/// once per process. The system half is here rather than in a command of its
+/// own because it has exactly one reader, the tool description, and that
+/// reader needs both at once: `zsh` alone does not say whether `sed -i` wants
+/// an argument (BSD) or not (GNU), or whether `open` / `xdg-open` / `brew` /
+/// `apt` exist.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ShellInfo {
@@ -91,6 +96,29 @@ pub struct ShellInfo {
     /// PowerShell's `$PSVersionTable.PSVersion`; `None` on unix, where the
     /// kind says enough.
     pub version: Option<String>,
+    /// `std::env::consts::OS`: `macos` / `windows` / `linux` / …
+    pub os: String,
+    /// The system's own version string — macOS `15.2`, Windows `10.0.26100.0`,
+    /// Linux `/etc/os-release`'s `PRETTY_NAME` (`Ubuntu 24.04.1 LTS`). `None`
+    /// when it could not be read; the OS name still goes out.
+    pub os_version: Option<String>,
+    /// `std::env::consts::ARCH` — the architecture this binary was built for,
+    /// which is the machine's except under emulation (an x64 build on ARM
+    /// Windows, Rosetta).
+    pub arch: String,
+}
+
+impl ShellInfo {
+    fn new(kind: &str, path: &str, version: Option<String>, os_version: Option<String>) -> Self {
+        ShellInfo {
+            kind: kind.into(),
+            path: path.into(),
+            version,
+            os: std::env::consts::OS.into(),
+            os_version,
+            arch: std::env::consts::ARCH.into(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -151,6 +179,23 @@ fn no_window(cmd: &mut Command) {
     cmd.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
 }
 
+/// One probe, two lines: the PowerShell version, then the Windows version.
+/// No quotes on purpose — Rust's Windows argument quoting and 5.1's command
+/// line parser disagree about `\"`.
+#[cfg(windows)]
+const PS_PROBE: &str =
+    "$PSVersionTable.PSVersion.ToString(); [Environment]::OSVersion.Version.ToString()";
+
+/// The probe's stdout → (PowerShell version, Windows version).
+#[cfg(any(windows, test))]
+fn parse_ps_probe(stdout: &str) -> (Option<String>, Option<String>) {
+    let mut lines = stdout.lines().map(str::trim).filter(|l| !l.is_empty());
+    (
+        lines.next().map(String::from),
+        lines.next().map(String::from),
+    )
+}
+
 #[cfg(windows)]
 fn resolve_shell() -> ShellInfo {
     for (kind, exe) in [("pwsh", "pwsh.exe"), ("powershell", "powershell.exe")] {
@@ -160,28 +205,20 @@ fn resolve_shell() -> ShellInfo {
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "$PSVersionTable.PSVersion.ToString()",
+            PS_PROBE,
         ]);
         cmd.stdin(Stdio::null());
         no_window(&mut cmd);
         if let Ok(out) = cmd.output() {
             if out.status.success() {
-                let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                return ShellInfo {
-                    kind: kind.into(),
-                    path: exe.into(),
-                    version: (!version.is_empty()).then_some(version),
-                };
+                let (version, os_version) = parse_ps_probe(&String::from_utf8_lossy(&out.stdout));
+                return ShellInfo::new(kind, exe, version, os_version);
             }
         }
     }
     // Every supported Windows ships 5.1; reaching here means the probe itself
     // failed, and the run will report the real error when it tries.
-    ShellInfo {
-        kind: "powershell".into(),
-        path: "powershell.exe".into(),
-        version: None,
-    }
+    ShellInfo::new("powershell", "powershell.exe", None, None)
 }
 
 /// The command as PowerShell receives it. Three things around the author's
@@ -248,16 +285,19 @@ fn is_executable(path: &Path) -> bool {
 
 #[cfg(unix)]
 fn resolve_shell() -> ShellInfo {
+    let (kind, path) = find_unix_shell();
+    ShellInfo::new(&kind, &path, None, os_version())
+}
+
+/// (kind, absolute path) of the shell commands run in.
+#[cfg(unix)]
+fn find_unix_shell() -> (String, String) {
     const KNOWN: [&str; 6] = ["zsh", "bash", "sh", "fish", "dash", "ksh"];
     if let Ok(login) = std::env::var("SHELL") {
         let path = Path::new(&login);
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             if KNOWN.contains(&name) && is_executable(path) {
-                return ShellInfo {
-                    kind: name.into(),
-                    path: login.clone(),
-                    version: None,
-                };
+                return (name.into(), login.clone());
             }
         }
     }
@@ -269,18 +309,56 @@ fn resolve_shell() -> ShellInfo {
         let path = Path::new(candidate);
         if is_executable(path) {
             let kind = path.file_name().and_then(|n| n.to_str()).unwrap_or("sh");
-            return ShellInfo {
-                kind: kind.into(),
-                path: candidate.into(),
-                version: None,
-            };
+            return (kind.into(), candidate.into());
         }
     }
-    ShellInfo {
-        kind: "sh".into(),
-        path: "/bin/sh".into(),
-        version: None,
-    }
+    ("sh".into(), "/bin/sh".into())
+}
+
+/// macOS: read the version file rather than run `sw_vers` — a file read, no
+/// process, same answer.
+#[cfg(target_os = "macos")]
+fn os_version() -> Option<String> {
+    let plist = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist").ok()?;
+    plist_product_version(&plist)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn os_version() -> Option<String> {
+    ["/etc/os-release", "/usr/lib/os-release"]
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())
+        .and_then(|text| os_release_name(&text))
+}
+
+/// `<key>ProductVersion</key><string>15.2</string>` → `15.2`. The file is an
+/// XML plist Apple has kept that shape for twenty years; a plist crate for one
+/// string is not worth the dependency.
+#[cfg(any(target_os = "macos", test))]
+fn plist_product_version(plist: &str) -> Option<String> {
+    let after_key = &plist[plist.find("<key>ProductVersion</key>")? + 25..];
+    let start = after_key.find("<string>")? + 8;
+    let end = after_key[start..].find("</string>")? + start;
+    let v = after_key[start..end].trim();
+    (!v.is_empty()).then(|| v.to_string())
+}
+
+/// os-release's `PRETTY_NAME`, else `NAME VERSION_ID`.
+#[cfg(any(all(unix, not(target_os = "macos")), test))]
+fn os_release_name(text: &str) -> Option<String> {
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+            .map(|v| v.trim().trim_matches(|c| c == '"' || c == '\'').to_string())
+            .filter(|v| !v.is_empty())
+    };
+    field("PRETTY_NAME").or_else(|| {
+        let name = field("NAME")?;
+        Some(match field("VERSION_ID") {
+            Some(v) => format!("{name} {v}"),
+            None => name,
+        })
+    })
 }
 
 #[cfg(unix)]
@@ -515,6 +593,49 @@ pub fn cmd_kill(run_id: String, running: State<'_, Running>) -> Result<(), Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shell_info_names_this_system() {
+        let info = shell();
+        assert_eq!(info.os, std::env::consts::OS);
+        assert_eq!(info.arch, std::env::consts::ARCH);
+        #[cfg(target_os = "macos")]
+        assert!(info.os_version.as_deref().is_some_and(|v| v
+            .chars()
+            .next()
+            .unwrap()
+            .is_ascii_digit()));
+    }
+
+    #[test]
+    fn plist_version_is_read_from_its_key() {
+        let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>15.2</string>\n</dict>";
+        assert_eq!(plist_product_version(plist).as_deref(), Some("15.2"));
+        assert_eq!(plist_product_version("<dict></dict>"), None);
+    }
+
+    #[test]
+    fn os_release_prefers_pretty_name() {
+        let text = "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\n";
+        assert_eq!(os_release_name(text).as_deref(), Some("Ubuntu 24.04.1 LTS"));
+        assert_eq!(
+            os_release_name("NAME=Arch Linux\n").as_deref(),
+            Some("Arch Linux")
+        );
+        assert_eq!(
+            os_release_name("NAME=Debian\nVERSION_ID=12\n").as_deref(),
+            Some("Debian 12")
+        );
+        assert_eq!(os_release_name("ID=x\n"), None);
+    }
+
+    #[test]
+    fn ps_probe_splits_into_two_versions() {
+        let (ps, os) = parse_ps_probe("7.4.1\r\n10.0.26100.0\r\n");
+        assert_eq!(ps.as_deref(), Some("7.4.1"));
+        assert_eq!(os.as_deref(), Some("10.0.26100.0"));
+        assert_eq!(parse_ps_probe(""), (None, None));
+    }
 
     fn run_in(running: &Running, id: &str, cmd: &str, timeout_ms: u64) -> CmdResult {
         let dir = tempfile::tempdir().unwrap();

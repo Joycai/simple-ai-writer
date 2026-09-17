@@ -20,7 +20,7 @@ function result(over: Partial<CmdResult> = {}): CmdResult {
   return {
     pid: 1, exitCode: 0, stdout: "ok\n", stderr: "", durationMs: 10,
     timedOut: false, killed: false, stdoutTruncated: false, stderrTruncated: false,
-    shell: { kind: "zsh", path: "/bin/zsh", version: null },
+    shell: { kind: "zsh", path: "/bin/zsh", version: null, os: "macos", osVersion: "15.2", arch: "aarch64" },
     ...over,
   };
 }

@@ -551,7 +551,7 @@
       "cliLabel": "Command line (Beta)",
       "cliHint": "The assistant can run commands on this computer — git, converters and scripts you have installed, file inventories. Known read-only commands such as ls, grep and cat run without approval; writes and anything uncertain are shown verbatim first, with an optional counted batch. Commands use your account's permissions and can do anything you could do in a terminal. PowerShell on Windows, the system shell on macOS / Linux.",
       "cliOffHint": "While off, run_command is absent from the assistant's tools — it won't propose a run it cannot perform.",
-      "cliShell": "Runs with {{shell}} on this computer.",
+      "cliShell": "Runs with {{shell}} on this computer ({{system}}).",
       "cliShellUnknown": "The shell is detected only in the desktop app; the browser has no such tool."
     },
     "backup": {

@@ -549,7 +549,7 @@
       "cliLabel": "命令行（Beta）",
       "cliHint": "助手可以在这台电脑上运行命令——git、你装的转换器和脚本、文件盘点。ls、grep、cat 等已知只读命令免审批；写入和无法确定的命令先展示原文，也可以按数量连批。命令以你的账户权限运行，能做你在终端里能做的一切。Windows 用 PowerShell，macOS / Linux 用系统 shell。",
       "cliOffHint": "关着时助手的工具清单里没有 run_command——它不会提出一次自己做不到的运行。",
-      "cliShell": "这台电脑上用 {{shell}} 运行。",
+      "cliShell": "这台电脑是 {{system}}，用 {{shell}} 运行。",
       "cliShellUnknown": "只在桌面应用里检测 shell；浏览器里没有这个工具。"
     },
     "backup": {
