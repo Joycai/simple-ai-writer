@@ -102,6 +102,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [composer-chips-ui-brief.md](feature/agent/composer-chips-ui-brief.md) | `shipped` | 输入区那行芯片挤成四条横带 + 十六个控件的收拾：设计稿 `02g` 的方向 1c——消息材料 / 会话开关 / 模型设置 / 状态指示器各给一件衣服，框内框外是最硬的一道边 |
 | [token-estimate-calibration-plan.md](feature/agent/token-estimate-calibration-plan.md) | `partial` | 用 API 回报的 token 数校准 `estimateTextTokens`：**只改显示**、按 (协议族, 模型 id) 粒度、prefs 里存滚动中位数。S1 落地，S2 等真机跑够轮数攒出偏差再动 |
 | [shell-command-plan.md](feature/agent/shell-command-plan.md) | `shipped` (#561 · #563；2026-09-15 审批策略升级；2026-09-17 免审批命令；可选流式未做) | `run_command`：Windows 走 PowerShell，macOS / Linux 走系统 shell。POSIX / PowerShell 封闭只读白名单免审批（程序须裸名、参数须留在项目内），未知、复合和带写入/执行参数的命令默认审批；单条普通写命令可按 1–5 条连批并绑定当前 run，复合或危险命令永远逐条看；作者可在实验室或卡上「始终允许」某个程序（机器本地，shell / 解释器不可加入），由这些程序和只读命令组成的单条或串联命令免审。stdin 关死、杀整个进程组、输出头尾截断 + 日志落 `tmp/cmd/`、`cwd` 双重围栏；Beta + Tauri + 能渲染卡的 surface 三者缺一即缺席。 |
+| [mcp-tool-plan.md](feature/agent/mcp-tool-plan.md) | `proposal` | MCP 工具：应用作为 MCP 客户端（Rust `rmcp`，stdio + Streamable HTTP），每个服务是一个 `search_tools` 可搜组，工具按需展开成真实 wire 工具（`mcp__<服务>__<工具>`，schema 规整后上线）；调用默认过卡，免审只有作者按工具、按定义指纹给的信任清单与本次运行内连批；服务给的说明、注解、结果都按不可信文本处理，定义漂移即缺席。配置装机级、机密进 keyring；Beta + Tauri + 能渲染卡的 surface 缺一即缺席。实施前先过装载台架与四族 schema 探测 |
 
 ### feature/lore/ — the knowledge base
 
