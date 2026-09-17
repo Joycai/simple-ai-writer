@@ -73,3 +73,150 @@
   from { opacity: 0; transform: translateY(calc(-2px * var(--motion-shift))); }
   to { opacity: 1; transform: none; }
 }
+
+/* 命令行 → 免审批命令（设计稿「命令行 · 免审批命令」）: a block in the label
+   column under the switch, set off by one hairline. Program names are mono
+   everywhere they appear — they are what the author would type. Square chips,
+   one border each; the remove × is the chip's own right half. */
+.allow {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--stg-line-row);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: goIn 200ms var(--ease-settle);
+}
+
+.allowHead { display: flex; align-items: baseline; gap: 10px; }
+.allowTitle { font-size: var(--font-size-sm); font-weight: 500; color: var(--stg-text); }
+.allowCount { font-size: var(--font-size-xs); color: var(--stg-text-faint); }
+
+.allowDesc,
+.allowFoot {
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--stg-text-desc);
+}
+.allowFoot { color: var(--stg-text-faint); }
+
+.allowChips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.allowChip {
+  display: inline-flex;
+  align-items: stretch;
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+}
+
+.allowChipName {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px 0 10px;
+  font: 400 12px/1 var(--font-mono);
+  color: var(--stg-text);
+}
+
+.allowChipRemove {
+  width: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--stg-text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.allowChipRemove:hover { color: var(--color-error); }
+.allowChipRemove:focus-visible { outline: 2px solid var(--stg-focus-ring); outline-offset: -2px; }
+
+.allowEmpty {
+  padding: 8px 10px;
+  border: 1px dashed var(--stg-border-mid);
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--stg-text-faint);
+}
+
+.allowAdd { display: flex; align-items: stretch; gap: 8px; }
+
+.allowInput {
+  width: 240px;
+  max-width: 100%;
+  min-width: 0;
+  height: 30px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+  color: var(--stg-text);
+  font: 400 12px/1 var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.allowInput::placeholder { color: var(--stg-text-placeholder); font-family: var(--font-sans); }
+.allowInput:focus { border-color: var(--stg-accent); }
+.allowInputBad,
+.allowInputBad:focus { border-color: var(--color-error); }
+
+.allowAddBtn {
+  flex: none;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--stg-accent);
+  background: transparent;
+  color: var(--stg-accent);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+}
+.allowAddBtn:hover:not(:disabled) { color: var(--stg-accent-hover); border-color: var(--stg-accent-hover); }
+.allowAddBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.allowError {
+  margin-top: -4px;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-error);
+}
+
+.allowSuggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+.allowSuggestBtn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--stg-border-mid);
+  background: transparent;
+  color: var(--stg-text-desc);
+  font: 400 11.5px/1 var(--font-mono);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.allowSuggestBtn:hover { color: var(--stg-accent); border-color: var(--stg-accent); }
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

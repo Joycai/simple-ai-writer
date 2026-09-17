@@ -7,6 +7,10 @@
  * 命令原文；批准后由 `agentStore.settleApproval` 的 `case "command"` 调
  * `lib/cli/run`，结果文本原样回给模型。
  *
+ * 作者在设置或卡上列进「免审批命令」的程序，和内置只读命令走同一条直跑路径
+ *（§3.8）：一行命令——或用 `&&` `||` `;` `|` 串起来的一串——每一段都是只读
+ * 或被清单覆盖，整行才不出卡。
+ *
  * 这里判的只有三件事，都在建卡之前：`cwd` 在项目内（不变量 9 的 TS 那一半——
  * 围栏挡的是参数，命令本身能 `cd ..`，那是卡的事）、超时夹在范围内、这台机器
  * 有 shell 可用。`commandAccess` 决定要不要建卡；建卡时 `command.ts` 的两个判断
@@ -19,11 +23,15 @@ import { IS_MAC, IS_WINDOWS } from "../platform";
 import i18n from "../../i18n";
 import type { CommandProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
-import { commandAccess, isCompound, looksDangerous } from "../cli/command";
+import { allowlistCandidates, commandCover, isCompound, looksDangerous } from "../cli/command";
+import { readCliAllowlist } from "../cli/allowlist";
 import { clampTimeout, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS } from "../cli/run";
 import { cachedShellInfo, shellInfo, shellLabel, shellSyntax, systemLabel } from "../cli/shell";
 
 let proposalCounter = 0;
+
+/** Most always-allowed programs the description names one by one. */
+const DESCRIBED_ALLOWED_MAX = 20;
 
 interface RunCommandArgs {
   command?: string;
@@ -47,9 +55,20 @@ export function describeRunCommand(): string {
   const system = info ? systemLabel(info) : IS_WINDOWS ? "Windows" : IS_MAC ? "macOS" : "Linux";
   const shell = info ? shellLabel(info) : IS_WINDOWS ? "PowerShell" : "the login shell (zsh / bash)";
   const syntax = (info ? shellSyntax(info) === "powershell" : IS_WINDOWS) ? "PowerShell" : "POSIX";
+  // Named only when there are any: an empty list costs the schema nothing.
+  // Capped, because this text is paid for on every round.
+  const allowed = readCliAllowlist();
+  const named = allowed.length > DESCRIBED_ALLOWED_MAX
+    ? `${allowed.slice(0, DESCRIBED_ALLOWED_MAX).join(", ")} and ${allowed.length - DESCRIBED_ALLOWED_MAX} more`
+    : allowed.join(", ");
+  const allowedLine = allowed.length
+    ? `The author has also always-allowed these programs, so single commands (or chains joined by && || ; |) made only of them and read-only commands run without approval: ${named}. `
+    : "";
   return (
     `Run ONE shell command on the author's computer (${system}) — in ${shell}, so write ${syntax} syntax. ` +
-    "Known read-only commands (for example ls/cat/grep/rg or PowerShell Get-ChildItem/Get-Content/Select-String) run without approval. Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
+    "Known read-only commands (for example ls/cat/grep/rg or PowerShell Get-ChildItem/Get-Content/Select-String) run without approval. " +
+    allowedLine +
+    "Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
     "Use it for what no other tool does: git, converters and scripts the author has installed, counting and listing beyond list_files / search_text. " +
     "Prefer built-in read/edit tools for project text. One thing per call; do not chain unrelated commands."
   );
@@ -121,9 +140,12 @@ export async function runCommandTool(
   const seconds = typeof args.timeout_seconds === "number" ? args.timeout_seconds : DEFAULT_TIMEOUT_MS / 1000;
   const timeoutMs = clampTimeout(Math.min(seconds * 1000, MAX_TIMEOUT_MS));
 
-  // The closed allowlist is the approval boundary. Unknown, composed or
-  // argument-sensitive commands fall through to the proposal below.
-  if (commandAccess(command, shellSyntax(shell)) === "read") {
+  // The closed read list plus the author's always-allowed programs are the
+  // approval boundary. Unknown, dangerous or argument-sensitive commands — or a
+  // chain with one such link — fall through to the proposal below.
+  const syntax = shellSyntax(shell);
+  const allowed = readCliAllowlist();
+  if (commandCover(command, syntax, allowed)) {
     return { toolCallId, content: await executeCommand(command, cwd, timeoutMs, ctx) };
   }
 
@@ -137,6 +159,7 @@ export async function runCommandTool(
     shell,
     compound: isCompound(command),
     danger: looksDangerous(command),
+    allowPrograms: allowlistCandidates(command, syntax, allowed) ?? undefined,
     reason: args.reason?.trim() || undefined,
   };
 

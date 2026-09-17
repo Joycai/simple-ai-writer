@@ -41,6 +41,7 @@ import {
 } from "../../lib/agent/autoApprove";
 import type { CommandProposal, TranscribeProposal } from "../../lib/agent/registry";
 import { shellLabel, shellSyntax } from "../../lib/cli/shell";
+import { addCliAllowedAll } from "../../lib/cli/allowlist";
 import { groupLint } from "../../lib/pptx/lint";
 import { formatBytes, formatClock, isVideoExt } from "../../lib/asr";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
@@ -1689,6 +1690,28 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
               {t("ai.approval.commandBatch", { n: batchCount, defaultValue: "批准并连批 {{n}} 条" })}
             </button>
           </div>
+        )}
+        {/* 始终允许（shell-command-plan §3.8）：写进设置里的免审批命令，不是这次
+            运行的授权——所以不要求 autoApproveKey，也不随运行结束失效。只在
+            加进去之后这一行本身就能免审时出现（allowPrograms 建卡时算好）；
+            程序名等宽嵌在句子里，和「本文件都追加」是同一族的带参数授权。 */}
+        {proposal.kind === "command" && proposal.allowPrograms && proposal.allowPrograms.length > 0 && (
+          <button
+            className={`${styles.btnApproveAlways} ${styles.btnAllowProgram}`}
+            onClick={() => {
+              setDeciding(true);
+              addCliAllowedAll(proposal.allowPrograms ?? []);
+              void approve(proposal.id);
+            }}
+            disabled={deciding}
+            title={t("ai.approval.commandAllowHint", {
+              programs: proposal.allowPrograms.join(" · "),
+              defaultValue: "之后只由 {{programs}} 和只读命令组成的命令（含 && || ; | 串起来的）不再询问；看起来危险、带重定向或指向项目外的仍会出卡。可在 设置 → 实验室 → 命令行 移除",
+            })}
+          >
+            {t("ai.approval.commandAllow", { defaultValue: "始终允许" })}{" "}
+            <span className={styles.allowProgramName}>{proposal.allowPrograms.join(" · ")}</span>
+          </button>
         )}
         {/* The counted grant an illustrate card gets INSTEAD of 本次都批准:
             approving a picture spends money, so the author authorises an

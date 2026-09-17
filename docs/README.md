@@ -101,7 +101,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [window-edge-plan.md](feature/agent/window-edge-plan.md) | `shipped` `unverified`（六片全部合并，待真机） | 本地小模型「卡死 / 死循环 / 突然中断」的实测与方案（2026-09-11，qwen3.8-27b @ LM Studio 32k，DeepSeek 压到 32k 做对照）：六个机制里五个**跟窗口走不跟模型走**——`trimHistory` 会裁掉本轮刚到的结果（重读循环）、检查点提示每次裁剪后重新布防（轮次花在记账上）、只思考没正文的截断被报成 `completed`、流没有看门狗、小窗口上每次发送都先归纳；第六个是思考打转。同一 qwen 同一任务占用 50%→90%：223 秒零产出 → 49 秒改成。六片 PR，PR-4 上限保底要作者定。台架 `scripts/local-model-probe.ts`，永不进 CI |
 | [composer-chips-ui-brief.md](feature/agent/composer-chips-ui-brief.md) | `shipped` | 输入区那行芯片挤成四条横带 + 十六个控件的收拾：设计稿 `02g` 的方向 1c——消息材料 / 会话开关 / 模型设置 / 状态指示器各给一件衣服，框内框外是最硬的一道边 |
 | [token-estimate-calibration-plan.md](feature/agent/token-estimate-calibration-plan.md) | `partial` | 用 API 回报的 token 数校准 `estimateTextTokens`：**只改显示**、按 (协议族, 模型 id) 粒度、prefs 里存滚动中位数。S1 落地，S2 等真机跑够轮数攒出偏差再动 |
-| [shell-command-plan.md](feature/agent/shell-command-plan.md) | `shipped` (#561 · #563；2026-09-15 审批策略升级；可选流式未做) | `run_command`：Windows 走 PowerShell，macOS / Linux 走系统 shell。POSIX / PowerShell 封闭只读白名单免审批（程序须裸名、参数须留在项目内），未知、复合和带写入/执行参数的命令默认审批；单条普通写命令可按 1–5 条连批并绑定当前 run，复合或危险命令永远逐条看。stdin 关死、杀整个进程组、输出头尾截断 + 日志落 `tmp/cmd/`、`cwd` 双重围栏；Beta + Tauri + 能渲染卡的 surface 三者缺一即缺席。 |
+| [shell-command-plan.md](feature/agent/shell-command-plan.md) | `shipped` (#561 · #563；2026-09-15 审批策略升级；2026-09-17 免审批命令；可选流式未做) | `run_command`：Windows 走 PowerShell，macOS / Linux 走系统 shell。POSIX / PowerShell 封闭只读白名单免审批（程序须裸名、参数须留在项目内），未知、复合和带写入/执行参数的命令默认审批；单条普通写命令可按 1–5 条连批并绑定当前 run，复合或危险命令永远逐条看；作者可在实验室或卡上「始终允许」某个程序（机器本地，shell / 解释器不可加入），由这些程序和只读命令组成的单条或串联命令免审。stdin 关死、杀整个进程组、输出头尾截断 + 日志落 `tmp/cmd/`、`cwd` 双重围栏；Beta + Tauri + 能渲染卡的 surface 三者缺一即缺席。 |
 
 ### feature/lore/ — the knowledge base
 

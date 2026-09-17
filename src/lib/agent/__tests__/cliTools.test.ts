@@ -24,6 +24,9 @@ vi.mock("../../cli/shell", async () => {
   };
 });
 
+const allowlist = vi.hoisted(() => ({ current: [] as string[] }));
+vi.mock("../../cli/allowlist", () => ({ readCliAllowlist: () => allowlist.current }));
+
 const platform = { windows: false, mac: false };
 vi.mock("../../platform", () => ({
   get IS_WINDOWS() { return platform.windows; },
@@ -56,6 +59,7 @@ beforeEach(() => {
   shell.current = ZSH;
   platform.windows = false;
   platform.mac = false;
+  allowlist.current = [];
 });
 
 describe("describeRunCommand", () => {
@@ -63,6 +67,18 @@ describe("describeRunCommand", () => {
     expect(describeRunCommand()).toContain("computer (macOS 15.2 · arm64) — in zsh, so write POSIX syntax");
     shell.current = PWSH;
     expect(describeRunCommand()).toContain("computer (Windows 10.0.26100 · x86_64) — in PowerShell 7.4 (pwsh), so write PowerShell syntax");
+  });
+  it("names the always-allowed programs only when there are any", () => {
+    expect(describeRunCommand()).not.toContain("always-allowed");
+    allowlist.current = ["git", "pandoc"];
+    expect(describeRunCommand()).toContain("always-allowed these programs");
+    expect(describeRunCommand()).toContain(": git, pandoc.");
+  });
+  it("caps how many always-allowed programs it names", () => {
+    allowlist.current = Array.from({ length: 23 }, (_, i) => `tool${String.fromCharCode(97 + i)}`);
+    const text = describeRunCommand();
+    expect(text).toContain("toolt and 3 more.");
+    expect(text).not.toContain("toolu");
   });
   it("guesses by platform before the probe has answered", () => {
     shell.current = null;
@@ -120,6 +136,26 @@ describe("runCommandTool", () => {
       timeoutMs: 60_000,
     }));
     expect(r.content).toContain("readonly output");
+  });
+
+  it("runs an always-allowed line, or a chain of them, without a card", async () => {
+    allowlist.current = ["git", "gh"];
+    const ctx = ctxWith(() => ({ approved: false }));
+    await runCommandTool("c1", { command: "git commit -m 初稿" }, ctx);
+    await runCommandTool("c2", { command: "git add a.md && git commit -m x && gh pr create --fill" }, ctx);
+    await runCommandTool("c3", { command: "git log --oneline | head -5" }, ctx);
+    expect(ctx.seen).toHaveLength(0);
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("still cards a chain with one uncovered link, and offers what it lacks", async () => {
+    allowlist.current = ["git"];
+    const ctx = ctxWith(() => ({ approved: true, backupPath: "ok" }));
+    await runCommandTool("c1", { command: "git add a.md && gh pr create --fill" }, ctx);
+    await runCommandTool("c2", { command: "git add . && git push --force" }, ctx);
+    await runCommandTool("c3", { command: "git log > log.txt" }, ctx);
+    expect(run).not.toHaveBeenCalled();
+    expect(ctx.seen.map((p) => (p as CommandProposal).allowPrograms)).toEqual([["gh"], undefined, undefined]);
   });
 
   it("uses the detected platform syntax for the read allowlist", async () => {
