@@ -778,6 +778,48 @@ describe("trimHistory", () => {
     expect(history[0].content).toBe("y".repeat(4000));
   });
 
+  it("drops older pictures until the kept ones fit one request body, sparing the newest", () => {
+    // Three kept messages is the count cap, but one message can carry four
+    // attachments: three of them at 10 MiB each is past what an endpoint takes.
+    const heavy = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(10 * 1024 * 1024)}` } },
+      ],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      heavy("第一张"),
+      { role: "assistant", content: "ok" },
+      heavy("第二张"),
+      { role: "assistant", content: "ok" },
+      heavy("第三张"),
+    ];
+
+    // 30 MiB → dropping the oldest leaves 20, which fits; the rest stay.
+    expect(trimHistory(history, undefined)).toBe(1);
+    expect(String(history[1].content)).toContain("第一张");
+    expect(String(history[1].content)).not.toContain("data:image");
+    expect(Array.isArray(history[3].content)).toBe(true);
+    expect(Array.isArray(history[5].content)).toBe(true);
+  });
+
+  it("spares the newest picture message even when it alone is over the ceiling", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "一大张" },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(25 * 1024 * 1024)}` } },
+        ],
+      },
+    ];
+    expect(trimHistory(history, undefined)).toBe(0);
+    expect(Array.isArray(history[1].content)).toBe(true);
+  });
+
   function videoMessage(text: string): StreamMessage {
     return {
       role: "user",

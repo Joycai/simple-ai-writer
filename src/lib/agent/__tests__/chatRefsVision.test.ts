@@ -59,3 +59,29 @@ describe("buildChatMessage with an unsendable image", () => {
     expect(res.text).not.toContain("delegate");
   });
 });
+
+describe("buildChatMessage with more picture than one request carries", () => {
+  const sized = (name: string, mib: number) => ({
+    kind: "image",
+    file: { name, path: `/proj/${name}` },
+    dataUrl: `data:image/png;base64,${"A".repeat(mib * 1024 * 1024)}`,
+  }) as unknown as AttachedItem;
+
+  it("sends what fits and names the rest by path, without claiming the model is blind", async () => {
+    const res = await buildChatMessage("比较这几张", undefined, [sized("a.png", 10), sized("b.png", 10), sized("c.png", 10)], {
+      allowImages: true,
+    });
+    expect(res.imagePaths).toEqual(["/proj/a.png", "/proj/b.png"]);
+    expect(res.text).toContain("/proj/c.png");
+    expect(res.text).not.toContain("读不了图");
+    expect(res.text).toContain("24 MB");
+  });
+
+  it("names count overflow the same way", async () => {
+    const five = ["1", "2", "3", "4", "5"].map((n) => ({ ...(image as object), file: { name: `${n}.png`, path: `/proj/${n}.png` } }) as AttachedItem);
+    const res = await buildChatMessage("看图", undefined, five, { allowImages: true });
+    expect(res.imagePaths).toHaveLength(4);
+    expect(res.text).toContain("/proj/5.png");
+    expect(res.text).not.toContain("读不了图");
+  });
+});

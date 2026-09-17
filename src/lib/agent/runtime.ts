@@ -16,7 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
-import { imagePart } from "../ai/imagePart";
+import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
@@ -265,6 +265,28 @@ function elideOldImageResults(history: StreamMessage[]): number {
 }
 
 /**
+ * Strip the oldest pictures until the history's pictures fit one request body
+ * together (`MAX_REQUEST_IMAGE_CHARS`), never touching the newest message that
+ * carries one.
+ *
+ * The count cap above counts *messages*, and one message can carry four
+ * attachments — so three kept messages can still be a body no endpoint takes.
+ * The newest is spared because it is what the model is about to look at; a
+ * message over the ceiling on its own was built over it, and the pre-flight
+ * check in `streamCompletion` names that rather than this pass hiding it.
+ */
+function elideImagesOverBudget(history: StreamMessage[]): number {
+  const live = history.filter(hasImageParts);
+  let dropped = 0;
+  for (const m of live.slice(0, -1)) {
+    if (imagePayload(history).chars <= MAX_REQUEST_IMAGE_CHARS) break;
+    m.content = contentWithoutImages(m, ELIDED_IMAGE);
+    dropped++;
+  }
+  return dropped;
+}
+
+/**
  * How many video clips stay in history verbatim: one.
  *
  * Every tool round resends the whole history, and a clip is billed each time —
@@ -407,7 +429,7 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
   // across turns. Left to the token check alone, a session that reads pictures
   // grows a request body no endpoint will accept while the estimate still
   // reads as comfortably under the ceiling.
-  let dropped = elideOldImageResults(history) + elideOldVideos(history);
+  let dropped = elideOldImageResults(history) + elideImagesOverBudget(history) + elideOldVideos(history);
   if (!ceilingTokens || ceilingTokens <= 0) return dropped;
   if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
   const protectedFrom = roundInProgressStart(history);
