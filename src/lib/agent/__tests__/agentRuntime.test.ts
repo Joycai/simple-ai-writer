@@ -805,6 +805,44 @@ describe("trimHistory", () => {
     expect(Array.isArray(history[5].content)).toBe(true);
   });
 
+  it("never strips pictures from the round in progress, even over the ceiling", () => {
+    // Two large read_image results from one round: dropping the first before
+    // the model saw it made it read that picture again, which dropped the
+    // second — round after round until the cap.
+    const MiB = 1024 * 1024;
+    const seen = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(11 * MiB)}` } },
+      ],
+    });
+    const call = (id: string): StreamMessage => ({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id, type: "function", function: { name: "read_image", arguments: "{}" } }],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "比较这两张" },
+      call("c1"),
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+      seen("旧的"),
+      call("c2"),
+      { role: "tool", tool_call_id: "c2", content: "ok" },
+      seen("甲"),
+      seen("乙"),
+    ];
+
+    // 33 MiB: the older round's picture goes, the current round's two stay
+    // even though they are still over — the pre-flight check reports that.
+    expect(trimHistory(history, undefined)).toBe(1);
+    expect(String(history[4].content)).toContain("旧的");
+    expect(String(history[4].content)).not.toContain("data:image");
+    expect(Array.isArray(history[7].content)).toBe(true);
+    expect(Array.isArray(history[8].content)).toBe(true);
+  });
+
   it("spares the newest picture message even when it alone is over the ceiling", () => {
     const history: StreamMessage[] = [
       { role: "system", content: "sys" },

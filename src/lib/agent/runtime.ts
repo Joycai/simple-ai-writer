@@ -266,20 +266,29 @@ function elideOldImageResults(history: StreamMessage[]): number {
 
 /**
  * Strip the oldest pictures until the history's pictures fit one request body
- * together (`MAX_REQUEST_IMAGE_CHARS`), never touching the newest message that
- * carries one.
+ * together (`MAX_REQUEST_IMAGE_CHARS`).
  *
  * The count cap above counts *messages*, and one message can carry four
  * attachments — so three kept messages can still be a body no endpoint takes.
- * The newest is spared because it is what the model is about to look at; a
- * message over the ceiling on its own was built over it, and the pre-flight
- * check in `streamCompletion` names that rather than this pass hiding it.
+ *
+ * Two things are never touched, and for the same reason: they are what the
+ * model is about to look at. The round in progress (M1, see `trimHistory`) —
+ * two large `read_image` results from one round would otherwise lose the first
+ * before the model saw it, the model would read it again, and the second
+ * would go the same way, until the round cap. And the newest message carrying
+ * a picture, which is the author's attachment when no tool is in flight. When
+ * the ceiling cannot be met without them, the request goes out over it and
+ * `streamCompletion`'s pre-flight check says so, as `trimHistory` does for
+ * tokens.
  */
 function elideImagesOverBudget(history: StreamMessage[]): number {
-  const live = history.filter(hasImageParts);
+  const protectedFrom = roundInProgressStart(history);
+  const newest = history.filter(hasImageParts).pop();
   let dropped = 0;
-  for (const m of live.slice(0, -1)) {
+  for (let i = 0; i < protectedFrom; i++) {
     if (imagePayload(history).chars <= MAX_REQUEST_IMAGE_CHARS) break;
+    const m = history[i];
+    if (m === newest || !hasImageParts(m)) continue;
     m.content = contentWithoutImages(m, ELIDED_IMAGE);
     dropped++;
   }
