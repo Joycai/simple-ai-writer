@@ -12,7 +12,7 @@
  * Timestamps are epoch millis; the UI formats them per locale.
  */
 
-import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
+import { summarizeServerToolResult, type ServerToolEvent } from "../ai/serverTools";
 import type { WireRewrite } from "../ai/types";
 import type { HandoffBrief } from "./handoff";
 import type { LorePlanStep } from "./plan";
@@ -647,7 +647,7 @@ export function createServerToolLog(round: number): (event: ServerToolEvent) => 
         name: event.name,
         argumentSummary: queries.get(event.id) ?? "{}",
         status: event.error ? "error" : "done",
-        resultSummary: event.error ?? summarizeSearchResults(event.results),
+        resultSummary: event.error ?? summarizeServerToolResult(event),
         argsTruncated: false,
         resultTruncated: false,
       },

@@ -122,10 +122,99 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
       expect(c.events.filter((e) => e.name === "image_search").map((e) => e.phase)).toEqual(expect.arrayContaining(["call", "result"]));
     }, 240_000);
 
+    it("chat compat qwen3.5-plus: beside function tools the page reading is dropped, not a 400", async () => {
+      const c = { done: undefined as Record<string, unknown> | undefined, bodies: [] as Record<string, unknown>[] };
+      await streamCompletion({
+        standard: "openai_compat", baseUrl: OPENAI_BASE, apiKey: KEY, modelId: "qwen3.5-plus",
+        messages: WEATHER, tools: TOOLS, serverTools: ["web_search", "web_extractor"],
+        onChunk: (chunk: StreamChunk) => { if ((chunk as Record<string, unknown>).done) c.done = chunk as Record<string, unknown>; },
+      });
+      expect(c.done).toMatchObject({ done: true });
+    }, 120_000);
+
     it("chat compat qwen3.8-flash refuses the agent_max strategy with a 400", async () => {
       await expect(serve("openai_compat", "qwen3.8-flash", ["web_search", "web_extractor"]))
         .rejects.toThrow(/search strategy/);
     }, 60_000);
+  });
+
+  // Server-run Python (landscape.md §7 第六个样本「代码解释器」, 2026-09-17). The
+  // prompt's answer is a 44-digit number no model gets right from memory.
+  describe("server tools: code_interpreter", () => {
+    const POWER = "77269364466549865653073473388030061522211723";
+    const CALC: StreamMessage[] = [{ role: "user", content: "请用代码计算 123 的 21 次方，只给出结果" }];
+    const serve = async (standard: StreamOptions["standard"], modelId: string, extra: Partial<StreamOptions> = {}) => {
+      const c = { text: "", events: [] as Record<string, unknown>[], toolCalls: [] as Record<string, unknown>[], carry: undefined as unknown, done: undefined as Record<string, unknown> | undefined, bodies: [] as Record<string, unknown>[] };
+      await streamCompletion({
+        standard, baseUrl: OPENAI_BASE, apiKey: KEY, modelId, messages: CALC, serverTools: ["code_interpreter"],
+        onChunk: (chunk: StreamChunk) => {
+          const k = chunk as Record<string, unknown>;
+          if (typeof k.text === "string") c.text += k.text;
+          if (k.serverTool) c.events.push(k.serverTool as Record<string, unknown>);
+          if (Array.isArray(k.toolCalls)) { c.toolCalls.push(...(k.toolCalls as Record<string, unknown>[])); c.carry = k._responseItems; }
+          if (k.done) c.done = k;
+        },
+        _onRequestBody: (b) => c.bodies.push(b as Record<string, unknown>),
+        ...extra,
+      });
+      return c;
+    };
+    const digits = (s: string) => s.replace(/[\s,，]/g, "");
+
+    it("responses compat qwen3.8-flash: the run shows up as code + output, beside a function tool", async () => {
+      const c = await serve("openai_responses_compat", "qwen3.8-flash", { tools: TOOLS });
+      expect((c.bodies[0].tools as { type: string }[]).map((t) => t.type)).toEqual(["function", "code_interpreter"]);
+      const call = c.events.find((e) => e.name === "code_interpreter" && e.phase === "call");
+      const result = c.events.find((e) => e.name === "code_interpreter" && e.phase === "result");
+      expect(String((call?.input as { code?: string })?.code)).toMatch(/123/);
+      expect(digits(String(result?.output))).toContain(POWER);
+      expect(digits(c.text)).toContain(POWER);
+    }, 240_000);
+
+    it("responses compat qwen3.5-plus: a function-call round, then the interpreter, in one conversation", async () => {
+      const ask: StreamMessage[] = [{ role: "user", content: "先调用 get_weather 查北京天气，拿到结果后再用代码计算 123 的 21 次方" }];
+      const r1 = await serve("openai_responses_compat", "qwen3.5-plus", { tools: TOOLS, messages: ask });
+      expect(r1.toolCalls.length).toBeGreaterThan(0);
+      const tc = r1.toolCalls[0] as { id: string; name: string; arguments: string };
+      const history: StreamMessage[] = [
+        ...ask,
+        {
+          role: "assistant", content: null,
+          tool_calls: [{ id: tc.id, type: "function", function: { name: tc.name, arguments: tc.arguments } }],
+          ...(r1.carry ? { _responseItems: r1.carry } : {}),
+        } as StreamMessage,
+        { role: "tool", tool_call_id: tc.id, content: "北京：晴，25°C" },
+      ];
+      const r2 = await serve("openai_responses_compat", "qwen3.5-plus", { tools: TOOLS, messages: history });
+      expect(r2.events.some((e) => e.name === "code_interpreter" && e.phase === "result")).toBe(true);
+      expect(digits(r2.text)).toContain(POWER);
+    }, 360_000);
+
+    it("responses compat: thinking off leaves the tool out, and the request still succeeds", async () => {
+      const c = await serve("openai_responses_compat", "qwen3.5-plus", { reasoningEffort: "off" });
+      expect(c.bodies[0]).not.toHaveProperty("tools");
+      expect(c.done).toMatchObject({ done: true });
+    }, 120_000);
+
+    it("chat compat qwen3.5-plus: enable_code_interpreter runs it, with no trace but the input size", async () => {
+      const c = await serve("openai_compat", "qwen3.5-plus");
+      expect(digits(c.text)).toContain(POWER);
+      // The interpreter's own instructions grow the prompt from ~30 tokens.
+      expect(c.done!.inputTokens as number).toBeGreaterThan(300);
+      expect(c.events).toEqual([]);
+    }, 240_000);
+
+    it("chat compat qwen3.5-plus: beside function tools the interpreter is left out, not a 400", async () => {
+      const c = await serve("openai_compat", "qwen3.5-plus", { tools: TOOLS, messages: WEATHER });
+      expect(c.done).toMatchObject({ done: true });
+      expect(c.done!.inputTokens as number).toBeLessThan(300);
+    }, 120_000);
+
+    it("chat compat qwen3.8-flash: an unsupported id sends nothing and succeeds", async () => {
+      // A trivial prompt: without the interpreter this model works the power out by hand, for minutes.
+      const c = await serve("openai_compat", "qwen3.8-flash", { messages: PROMPT });
+      expect(c.done).toMatchObject({ done: true });
+    }, 120_000);
   });
 
   describe.each(MODELS)("openai wire %s", (m) => {

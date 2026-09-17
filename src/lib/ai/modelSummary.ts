@@ -21,7 +21,7 @@ import { effectiveStructuredOutput } from "./jsonMode";
 import {
   reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
 } from "./reasoning";
-import { openaiServerToolsBody, supportsServerTool, supportsServerTools } from "./serverTools";
+import { openaiServerToolsBody, supportsServerToolFor, supportsServerTools } from "./serverTools";
 import { familyOf, type ApiStandard } from "./types";
 
 export interface WireItem {
@@ -104,9 +104,12 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
     out.push({ key: "temperature", value: String(m.temperature) });
   }
   if (m.serverTools?.length && supportsServerTools(standard)) {
-    if (family === "openai") out.push(...flatten(openaiServerToolsBody(standard, m.serverTools)));
+    // Summarised as a request without function tools: the condition that
+    // drops `enable_code_interpreter` and the `agent_max` strategy is the
+    // request's, not the model's.
+    if (family === "openai") out.push(...flatten(openaiServerToolsBody(standard, m.serverTools, m.modelId, { functionTools: false })));
     else {
-      const ids = m.serverTools.filter((id) => supportsServerTool(standard, id));
+      const ids = m.serverTools.filter((id) => supportsServerToolFor(standard, id, m.modelId));
       if (ids.length) out.push({ key: "tools", value: ids.join(",") });
     }
   }
@@ -135,7 +138,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   return out;
 }
 
-type ModelMark = "think" | "web" | "pdf" | "video" | "translate";
+type ModelMark = "think" | "web" | "code" | "pdf" | "video" | "translate";
 
 /**
  * The explicit declarations on a conversational model, for the list row.
@@ -149,6 +152,7 @@ export function declarationMarks(
   const out: ModelMark[] = [];
   if (m.thinkingCategory) out.push("think");
   if (m.serverTools?.includes("web_search")) out.push("web");
+  if (m.serverTools?.includes("code_interpreter")) out.push("code");
   if (m.pdfInput) out.push("pdf");
   if (m.videoInput) out.push("video");
   if (m.translateFormat) out.push("translate");

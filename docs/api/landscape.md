@@ -470,7 +470,7 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 | 面 | 路径 | 本项目 |
 | --- | --- | --- |
 | ① Chat Completions | `/compatible-mode/v1/chat/completions` | `openai_compat`，预设「通义千问 (DashScope)」 |
-| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | `openai_responses_compat`（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4；服务端工具见下「联网搜索与网页抓取」） |
+| ② Responses | `/compatible-mode/v1/responses`（另有 `GET/DELETE …/{id}`、`GET …/{id}/input_items`） | `openai_responses_compat`（见 [`qianwen-compat-plan.md`](qianwen-compat-plan.md) §4；服务端工具见下「联网搜索与网页抓取」「代码解释器」） |
 | ④ Anthropic Messages | `/apps/anthropic/v1/messages` | `anthropic_compat` 可直接用，尚无预设 |
 | DashScope 原生 | `/api/v1/services/aigc/{text,multimodal}-generation/generation` | 只用于出图（见下一小节） |
 
@@ -606,6 +606,12 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   文档说 ① 面 qwen3-max 「必须开思考」，实测关掉也行（见下表）。400 发生在流开始之前，
   是普通的 HTTP 错误，作者能直接看到；本项目**不做降级重试**（agent_max → 普通搜索），
   因为那等于悄悄收回作者开的能力。
+  **例外：带函数工具的请求**。`agent_max` 是 DashScope 的「agent 模式」，与函数工具同发一律 400
+  （`Agent mode does not support tools. You need to either avoid using enable_code_interpreter or avoid using the agent mode with enable_search.`，
+  2026-09-17 在 qwen3.5-plus 上复现；同样的请求只发 `enable_search` 则正常搜索，prompt_tokens 5111）。
+  这是请求形状决定的、必然失败的组合，不是模型能力问题，所以 `openaiServerToolsBody` 在本轮带函数工具时
+  只发 `enable_search`、不发 `agent_max`——agent / 对话助手的轮次在 ① 面上只搜不抓；搜索子代理不带函数工具，照常抓取。
+  （这个问题从 2026-09-14 接入抓取起就在，当时只测了不带工具的请求。）
 - **计费**（文档口径）：抓取限时免费；搜索 ¥4/千次；抓回的正文算输入 token。
 - **没测的**：④ 面的 `web_fetch_<日期>`（文档没给版本号），所以本项目 ④ 族不提供抓取开关。
 
@@ -631,6 +637,63 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 - 用量：`usage.x_tools.web_search_image.count` / `image_search.count`。
 - **计费**（文档口径）：以文搜图 ¥24/千次，以图搜图 ¥48/千次，都远高于联网搜索的 ¥4——
   这是它们各自单独开关、不挂在搜索下面的原因。单次最多 100 条结果。
+
+#### 代码解释器（`code_interpreter`，2026-09-17 实测）
+
+官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/code-interpreter`。实测用 curl
+扫了一遍 `/models` 里的候选 id，再用 `live.qianwen.test.ts` 的「server tools: code_interpreter」组
+走真实 adapter 复核；提示词「请用代码计算 123 的 21 次方」（44 位数，模型背不出来，答对即说明真跑了）。
+本项目的实现在 `src/lib/ai/serverTools.ts`（`supportsCodeInterpreter` / `openaiServerToolsBody` /
+`responsesServerTools` / `codeInterpreterEvent`）。
+
+- **两个面的拼写和条件都不一样**：
+
+  | | ① Chat Completions | ② Responses |
+  | --- | --- | --- |
+  | 声明 | 顶层 `enable_code_interpreter: true` | `tools:[{type:"code_interpreter"}]` |
+  | 非流式 | **400** `Non-streaming mode does not support Code interpreter.` | 可以（返回完整 `output`） |
+  | 同时带函数工具 | **400** `Agent mode does not support tools. You need to either avoid using enable_code_interpreter or avoid using the agent mode with enable_search.` | **可以**，qwen3.5-plus 一问里先调了 `get_weather`、下一轮再跑代码 |
+  | 关思考 | qwen3.5-plus、qwen3-max 都照常跑（与文档「qwen3-max 需开思考」不符） | `reasoning.effort:"none"` 或 `enable_thinking:false` → `response.failed`：`Normal mode does not support Code interpreter. Please set enable_thinking to true.` |
+  | 与 `enable_search` / `web_search` 同开 | 可以（含 `agent_max`，但只在不带函数工具时——带工具时 `agent_max` 本身就 400，见上「联网搜索与网页抓取」） | 可以 |
+  | 过程可见 | **不可见**，只有 prompt_tokens 从 ~30 涨到 700–1600 | 可见，见下 |
+
+  文档说「与 function calling 互斥」，实测只在 ① 面成立。本项目的处理：① 面上**本轮带函数工具就不发**
+  `enable_code_interpreter`（agent 的工具不能让），所以 ① 面上它只惠及不带工具的请求；② 面上
+  **思考档位为「关闭」就不发**这个工具。两处都是按请求丢掉，而不是发一个必然失败的请求。
+- **支持哪些模型，按 id 判断**（`supportsCodeInterpreter`，设置抽屉只对匹配的 id 显示开关）：
+
+  | 模型 | ① 面 | ② 面 |
+  | --- | --- | --- |
+  | qwen3-max、qwen3-max-2026-01-23 | ✅ | ✅ |
+  | qwen3-max-preview | 不报错、**静默忽略**（prompt 24） | ❌ `does not support the code_interpreter tool` |
+  | qwen3.5-plus（含日期版）、qwen3.6-plus、qwen3.7-plus、qwen3.7-max、qwen3.6-max-preview | ✅ | ✅ |
+  | qwen3.5-flash、qwen3.6-flash | ✅ | ✅（qwen3.6-flash 有一次思考完就挂住、150 秒超时，未复现） |
+  | qwen3.8-flash、qwen3.8-max、qwen3.8-27b | ❌ `does not support the code_interpreter tool` | ✅（含 qwen3.8-max-0902、qwen3.8-2.4t-a95b） |
+  | qwen3.5-397b-a17b | ✅ | ✅ |
+  | qwen3.5-27b、qwen3.6-35b-a3b | 未测 / 未测 | ✅ |
+  | qwen3.6-27b | 未测 | ❌ `Unsupported model` |
+  | deepseek-v4-pro、deepseek-v4.1-flash | 未测 | ✅ |
+  | qwen-max、qwen3.5-omni-plus | 静默忽略 | 未测 / `Unsupported model` |
+  | qwen-plus | 未测 | ❌（开思考后又报 `result_format` 必须是 `message`） |
+  | qwen3-vl-plus、qwen3-235b-a22b-thinking-2507 | 未测 | ❌ |
+
+  ① 面「静默忽略」是按 id 判断而不是「开了试试」的原因：作者看不到任何报错，只会得到一个没算过的答案。
+  3.8 之后的新一代不预先放行，实测过再加。qwen3-coder-plus 在 ① 面也跑了，但文档没列，未收。
+  另：qwen3-max 在 ① 面**开思考**时有一次思考文本来回重复、180 秒没出结果（1453 个数据块），只出现过一次。
+- **② 面的 item**：`output_item.added` 就带完整代码
+  `{type:"code_interpreter_call", id, code, container_id:"", status:"in_progress"}`，之后是
+  `response.code_interpreter_call.{in_progress,interpreting,completed}` 三个进度事件（只有 `item_id`），
+  `output_item.done` 补上 `outputs:[{type:"logs", logs}]`——`logs` 外面包着一层 markdown 代码围栏。
+  - **Python 异常不算失败**：`1/0` 的 item 仍是 `status:"completed"`，traceback 在 `logs` 里，模型据此作答。
+    执行日志的结果列取输出的最后一行，正好是 `ZeroDivisionError: division by zero`。
+  - **画图**：matplotlib 的图以 markdown 图片的形式**写在 `logs` 里**，指向带签名的 OSS 地址
+    （`dashscope-cn-beijing.oss-cn-beijing.aliyuncs.com/code-interpreter/temp_files/…`），
+    `Expires` 约 12 小时后。最终回答正文里**不带**这个链接。本项目只当文本记进日志，不下载、不保存。
+  - 用量：`usage.x_tools.code_interpreter.count`（`x_details[].plugins` 重复同一数字）。
+  - 这些 item 不需要回传；多轮里 echo 照旧只收 reasoning / function_call / message，实测第二轮正常。
+- **计费**（文档口径）：限时免费；但一次回答会触发多轮推理，token 用量明显增加
+  （qwen3.8-flash 一问约 1.1k tokens，不开时约 30）。
+- **官方 api.openai.com 的 `code_interpreter` 不是这个工具**：它要求 `container` 参数，本项目不对 `openai_responses` 提供此开关。
 
 #### 视觉理解（qwen3-vl 系列，另附视频与 ASR 在 ① 面上的样子，2026-09-14 实测）
 

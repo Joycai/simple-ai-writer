@@ -74,15 +74,52 @@
  * ignored). Both bill per call at several times search's rate (¥24 / ¥48 per
  * thousand vs ¥4), which is why they are separate switches rather than riding
  * on search the way extraction does.
+ *
+ * The fifth id is not a web tool at all (2026-09-17, measured —
+ * `docs/api/landscape.md` §7 第六个样本「代码解释器」):
+ *
+ *   - **`code_interpreter`** (代码解释器): the endpoint writes Python, runs it in
+ *     its own sandbox, and answers from the output. Two wires spell it —
+ *     Chat Completions compat as the top-level `enable_code_interpreter: true`,
+ *     Responses compat as `{type:"code_interpreter"}` — and each attaches a
+ *     condition the other doesn't: Chat Completions refuses it beside function
+ *     tools (400 `Agent mode does not support tools`) and without streaming,
+ *     Responses refuses it with thinking off (`Normal mode does not support
+ *     Code interpreter`) but takes function tools beside it. Both conditions
+ *     are the adapter's to honour per request (`openaiServerToolsBody`,
+ *     `responsesServerTools`) — dropping the interpreter for that request
+ *     rather than sending a guaranteed failure.
+ *   - **Gated by model id**, unlike every id above. Support is per model and
+ *     differs per wire (qwen3.8-* runs it on Responses only), an unsupported
+ *     model answers 400 on some and *silently ignores* it on others
+ *     (qwen-max, qwen3-max-preview on Chat Completions), and the vendor's list
+ *     follows model families that an id pattern can name — see
+ *     `supportsCodeInterpreter`. The official OpenAI endpoint's
+ *     `code_interpreter` wants a `container` and is not this tool.
  */
 
 import { familyOf, type ApiStandard } from "./types";
 
 /** This app's own name for a server-side tool. Never a wire type — see below. */
-export type ServerToolId = "web_search" | "web_extractor" | "web_search_image" | "image_search";
+export type ServerToolId = "web_search" | "web_extractor" | "web_search_image" | "image_search" | "code_interpreter";
 
 /** Selectable values, in the order the settings drawer shows them. */
-export const SERVER_TOOL_IDS: readonly ServerToolId[] = ["web_search", "web_extractor", "web_search_image", "image_search"];
+export const SERVER_TOOL_IDS: readonly ServerToolId[] = ["web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter"];
+
+/**
+ * Whether an id reaches the web. The search subagent takes these — and only
+ * these — away from the main model (`lib/agent/routing.ts`); a sandbox that
+ * computes is not something the search subagent can do for it.
+ */
+function isWebServerTool(id: ServerToolId): boolean {
+  return id !== "code_interpreter";
+}
+
+/** A declaration without its web ids — absent when nothing is left. */
+export function nonWebServerTools(ids: readonly ServerToolId[] | undefined): ServerToolId[] | undefined {
+  const rest = (ids ?? []).filter((id) => !isWebServerTool(id));
+  return rest.length ? rest : undefined;
+}
 
 /**
  * The wire `type` each id becomes on the Anthropic protocol.
@@ -174,7 +211,63 @@ export function supportsServerTool(standard: ApiStandard, id: ServerToolId): boo
     case "web_search_image":
     case "image_search":
       return standard === "openai_responses_compat";
+    case "code_interpreter":
+      return standard === "openai_compat" || standard === "openai_responses_compat";
   }
+}
+
+/**
+ * {@link supportsServerTool} narrowed to one model: the question the settings
+ * drawer and the adapters actually ask. Only `code_interpreter` depends on the
+ * model; every other id answers as the wire does.
+ */
+export function supportsServerToolFor(standard: ApiStandard, id: ServerToolId, modelId: string): boolean {
+  if (!supportsServerTool(standard, id)) return false;
+  return id !== "code_interpreter" || supportsCodeInterpreter(standard, modelId);
+}
+
+/** A released id's tail: nothing, a date stamp, a four-digit snapshot, or `-preview`. */
+const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
+
+/**
+ * Which model ids run the code interpreter, per wire — the vendor's list
+ * (developer-guides/tool-calling/code-interpreter) as id patterns, corrected
+ * by a sweep over the live model list on 2026-09-17 (landscape.md §7).
+ *
+ *   - **Both wires**: `qwen3-max` and its dated snapshots (not
+ *     `qwen3-max-preview` — refused on Responses, silently ignored on Chat
+ *     Completions); the 3.5 / 3.6 / 3.7 generation's plus / max / flash; the
+ *     3.5 open-weight models (`qwen3.5-397b-a17b`, `qwen3.5-27b`).
+ *   - **Responses only**: the 3.8 generation (Chat Completions answers
+ *     `does not support the code_interpreter tool` for qwen3.8-flash / -max /
+ *     -27b), the 3.6 open-weight models except `qwen3.6-27b` (`Unsupported
+ *     model`), and DeepSeek V4 as DashScope serves it.
+ *
+ * Deliberately anchored: `qwen3.5-omni-plus`, `qwen3-vl-plus`,
+ * `qwen3.8-livetranslate-flash-realtime` share a prefix and none of them
+ * takes the tool. A generation after 3.8 is not guessed at — a new family
+ * earns its line here the way these did, by a measurement.
+ */
+const CODE_INTERPRETER_MODELS: Record<"openai_compat" | "openai_responses_compat", readonly RegExp[]> = {
+  openai_compat: [
+    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
+    new RegExp(`^qwen3\\.[5-7]-(?:plus|max|flash)${SNAPSHOT}$`),
+    /^qwen3\.5-\d+b(?:-a\d+b)?$/,
+  ],
+  openai_responses_compat: [
+    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
+    new RegExp(`^qwen3\\.[5-8]-(?:plus|max|flash)${SNAPSHOT}$`),
+    /^qwen3\.(?:5|8)-[\d.]+[bt](?:-a\d+b)?$/,
+    /^qwen3\.6-(?!27b$)\d+b(?:-a\d+b)?$/,
+    /^deepseek-v4(?:\.\d+)?-(?:pro|flash)(?:-\d{4})?$/,
+  ],
+};
+
+/** Whether `modelId` runs the code interpreter on this wire (see the table above). */
+export function supportsCodeInterpreter(standard: ApiStandard, modelId: string): boolean {
+  if (standard !== "openai_compat" && standard !== "openai_responses_compat") return false;
+  const id = modelId.trim().toLowerCase();
+  return CODE_INTERPRETER_MODELS[standard].some((re) => re.test(id));
 }
 
 /**
@@ -232,18 +325,40 @@ export function anthropicServerTools(
 export function openaiServerToolsBody(
   standard: ApiStandard,
   ids: readonly ServerToolId[] | undefined,
+  modelId: string,
+  request: { functionTools: boolean },
 ): Record<string, unknown> {
-  if (standard !== "openai_compat" || !ids?.includes("web_search")) return {};
-  // Extraction has no field of its own on this wire: it is the `agent_max`
-  // search strategy. Measured 2026-09-14 on a page-summary prompt — plain
-  // `enable_search` on qwen3-max answered from memory (29 input tokens, no
-  // search at all), `agent_max` read the page (1.2k–1.6k). A model that
-  // doesn't offer the strategy answers 400 (qwen3.8-flash: `does not support
-  // the "agent" search strategy`) — loud, and the author's declaration to fix.
-  if (ids.includes("web_extractor")) {
-    return { enable_search: true, search_options: { search_strategy: "agent_max" } };
+  if (standard !== "openai_compat" || !ids?.length) return {};
+  const out: Record<string, unknown> = {};
+  if (ids.includes("web_search")) {
+    // Extraction has no field of its own on this wire: it is the `agent_max`
+    // search strategy. Measured 2026-09-14 on a page-summary prompt — plain
+    // `enable_search` on qwen3-max answered from memory (29 input tokens, no
+    // search at all), `agent_max` read the page (1.2k–1.6k). A model that
+    // doesn't offer the strategy answers 400 (qwen3.8-flash: `does not support
+    // the "agent" search strategy`) — loud, and the author's declaration to fix.
+    //
+    // And never beside function tools: the strategy is DashScope's "agent
+    // mode", which refuses them with the same 400 as the interpreter below
+    // (`Agent mode does not support tools`, measured 2026-09-17). Such a
+    // request keeps plain search — measured fine beside tools — and gives up
+    // page reading for that request only. The search subagent, the one caller
+    // whose job is reading pages, sends no function tools, so it keeps it.
+    out.enable_search = true;
+    if (ids.includes("web_extractor") && !request.functionTools) {
+      out.search_options = { search_strategy: "agent_max" };
+    }
   }
-  return { enable_search: true };
+  // Only on a request without function tools: this wire refuses the pair
+  // outright (400 `Agent mode does not support tools`, measured 2026-09-17),
+  // and an agent round's own tools are not the thing to give up. So on Chat
+  // Completions the interpreter reaches tool-less requests only — the drawer's
+  // hint says so, and points agent runs at the Responses wire, which takes
+  // both. Streaming is the wire's other condition; this adapter always streams.
+  if (ids.includes("code_interpreter") && !request.functionTools && supportsCodeInterpreter(standard, modelId)) {
+    out.enable_code_interpreter = true;
+  }
+  return out;
 }
 
 /**
@@ -260,10 +375,17 @@ export function openaiServerToolsBody(
 export function responsesServerTools(
   standard: ApiStandard,
   ids: readonly ServerToolId[] | undefined,
+  modelId: string,
+  request: { thinkingOff: boolean },
 ): { type: ServerToolId }[] {
   if (familyOf(standard) !== "responses") return [];
   return (normalizeServerTools(ids ?? []) ?? [])
-    .filter((id) => supportsServerTool(standard, id))
+    .filter((id) => supportsServerToolFor(standard, id, modelId))
+    // The interpreter needs the model thinking on this wire: with
+    // `reasoning.effort: "none"` DashScope fails the whole response
+    // (`Normal mode does not support Code interpreter`, measured 2026-09-17).
+    // The author turned thinking off on purpose; the interpreter yields.
+    .filter((id) => id !== "code_interpreter" || !request.thinkingOff)
     .map((type) => ({ type }));
 }
 
@@ -297,7 +419,11 @@ interface WebSearchResult {
  */
 export type ServerToolEvent =
   | { phase: "call"; id: string; name: string; input: Record<string, unknown> }
-  | { phase: "result"; id: string; name: string; results: WebSearchResult[]; error?: string };
+  | {
+    phase: "result"; id: string; name: string; results: WebSearchResult[]; error?: string;
+    /** What a code interpreter run printed — its only result; searches leave it unset. */
+    output?: string;
+  };
 
 /**
  * Pull the hits out of a `web_search_tool_result` block.
@@ -444,6 +570,7 @@ export function responsesServerToolEvent(
     : it.type === "web_extractor_call" ? "web_extractor"
     : it.type === "web_search_image_call" ? "web_search_image"
     : it.type === "image_search_call" ? "image_search"
+    : it.type === "code_interpreter_call" ? "code_interpreter"
     : null;
   if (!name) return null;
   const id = typeof it.id === "string" && it.id ? it.id : fallbackId;
@@ -453,6 +580,8 @@ export function responsesServerToolEvent(
   // OpenAI's own search also opens pages and searches within them; those
   // actions carry a `url` and no queries or sources (responses.md §10).
   const pageUrl = typeof action.url === "string" && action.url ? action.url : undefined;
+
+  if (name === "code_interpreter") return codeInterpreterEvent(it, phase, id);
 
   if (phase === "call") {
     const queries = strings(action.queries);
@@ -489,6 +618,42 @@ export function responsesServerToolEvent(
   return { phase, id, name, results, ...(error ? { error } : {}) };
 }
 
+/**
+ * A `code_interpreter_call` item as a report. Measured shape (DashScope,
+ * 2026-09-17): `code` is already whole on `output_item.added`; `outputs` —
+ * `[{type:"logs", logs}]`, the text fenced in a markdown code block — arrives
+ * on `done`. A Python exception is not a failed call: it completes with the
+ * traceback in `logs`, and the model answers from it. A plot comes back as a
+ * markdown image *inside* `logs`, pointing at a signed OSS URL that expires
+ * about twelve hours later — kept as text, never fetched or stored. OpenAI's
+ * own `{type:"image", url}` output is read too, as a hit.
+ */
+function codeInterpreterEvent(it: Record<string, unknown>, phase: "call" | "result", id: string): ServerToolEvent {
+  const name = "code_interpreter";
+  if (phase === "call") {
+    return { phase, id, name, input: typeof it.code === "string" ? { code: it.code } : {} };
+  }
+  const logs: string[] = [];
+  const images: WebSearchResult[] = [];
+  for (const raw of Array.isArray(it.outputs) ? it.outputs : []) {
+    if (!raw || typeof raw !== "object") continue;
+    const o = raw as Record<string, unknown>;
+    if (o.type === "logs" && typeof o.logs === "string") logs.push(o.logs);
+    else if (o.type === "image" && typeof o.url === "string" && o.url) images.push({ title: o.url, url: o.url });
+  }
+  const output = stripFence(logs.join("\n"));
+  return {
+    phase, id, name, results: images,
+    ...(output ? { output } : {}),
+    ...(it.status === "failed" ? { error: "failed" } : {}),
+  };
+}
+
+/** Logs without the markdown fence DashScope wraps them in. */
+function stripFence(text: string): string {
+  return text.replace(/^\s*```[\w-]*\n?/, "").replace(/\n?```\s*$/, "").trim();
+}
+
 /** A JSON-string `arguments` as an object; anything unreadable is `{}`. */
 function parseJsonObject(v: unknown): Record<string, unknown> {
   const parsed = typeof v === "string" ? safeParse(v) : v;
@@ -513,8 +678,21 @@ export function readServerToolError(content: unknown): string | undefined {
   return typeof c.error_code === "string" ? c.error_code : "error";
 }
 
+/**
+ * One-line summary of a finished server tool, for the execution log's result
+ * column: a search's hits, or the last line a code run printed — the value,
+ * or the exception's own line after a traceback.
+ */
+export function summarizeServerToolResult(event: Extract<ServerToolEvent, { phase: "result" }>): string {
+  if (event.output === undefined) return summarizeSearchResults(event.results);
+  const last = event.output.split("\n").map((l) => l.trim()).filter(Boolean).pop() ?? "";
+  return last.length > CODE_SUMMARY_CHARS ? `${last.slice(0, CODE_SUMMARY_CHARS)}…` : last;
+}
+
+const CODE_SUMMARY_CHARS = 160;
+
 /** One-line summary of a search's hits, for the execution log's result column. */
-export function summarizeSearchResults(results: WebSearchResult[]): string {
+function summarizeSearchResults(results: WebSearchResult[]): string {
   if (!results.length) return "";
   const head = results.slice(0, 3).map((r) => r.title).join(" / ");
   return results.length > 3 ? `${head} …(${results.length})` : head;

@@ -104,10 +104,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
       ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
       // A standing permission the author granted this model, spelled the way
-      // this wire wants it (enable_search — see lib/ai/serverTools.ts). Empty
-      // object for every model without the declaration, so their requests are
-      // byte-identical to before this existed.
-      ...openaiServerToolsBody(opts.standard, opts.serverTools),
+      // this wire wants it (enable_search / enable_code_interpreter — see
+      // lib/ai/serverTools.ts). Empty object for every model without the
+      // declaration, so their requests are byte-identical to before this existed.
+      ...openaiServerToolsBody(opts.standard, opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
       // Absent unless the author set an effort on this model — an unset model
       // must keep sending exactly what it sent before this existed, because a
       // volunteered field is a field some relay can reject. The category carries

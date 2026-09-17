@@ -2,7 +2,7 @@
  * Dynamic tool routing based on active subagents.
  *
  * Rewrites the tool list and serverTools policy for the main agent:
- * - If search subagent is active: withhold serverTools from main agent
+ * - If search subagent is active: withhold the web server tools from main agent
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
  * - If the imagegen subagent is NOT active: strip the three image tools
  * - If an export Beta is off: strip its tools (pptx / docx / xlsx)
@@ -14,7 +14,7 @@
  */
 
 import type { ToolId } from "./registry";
-import type { FinishPolicy, TaskPreset } from "./presets";
+import type { FinishPolicy, ServerToolPolicy, TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, searchReadsPages, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
@@ -29,8 +29,11 @@ import type { Model, Provider } from "../ai/configDb";
 
 interface RoutedTools {
   tools: ToolId[];
-  /** Whether the main model is still allowed server-side search. */
-  serverTools: "final-round-off" | "off" | "always";
+  /**
+   * Which server tools the main model keeps: `"no-web"` when a live search
+   * subagent took the web over (the code interpreter stays).
+   */
+  serverTools: ServerToolPolicy;
   /**
    * The preset's finish policy as routing leaves it — `"handoff"` when this
    * surface opted in and a usable writer is bound, the preset's own value
@@ -256,10 +259,13 @@ function route(
     tools.push("run_command");
   }
 
-  // Search subagent takes over web search: withhold serverTools from main agent.
-  const serverToolsPolicy = live("search")
-    ? "off"
-    : (preset.serverTools ?? "final-round-off");
+  // Search subagent takes over web search: withhold the web server tools from
+  // the main agent — only those. The code interpreter is not something the
+  // search subagent can do for it, so it stays on the main model's requests.
+  const presetPolicy = preset.serverTools ?? "final-round-off";
+  const serverToolsPolicy: ServerToolPolicy = live("search") && presetPolicy !== "off"
+    ? "no-web"
+    : presetPolicy;
 
   // The writer takes over the final round rather than a tool: it is the one
   // subagent no model chooses to use, so there is nothing to strip and nothing

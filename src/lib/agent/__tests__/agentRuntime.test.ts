@@ -303,6 +303,34 @@ describe("runAgent", () => {
     expect(mockStream.mock.calls[1][0].serverTools).toBeUndefined();
   });
 
+  it("keeps only the code interpreter when a search subagent owns the web", async () => {
+    queueRound([{ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 }]);
+    queueRound([{ text: "写完了" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions({
+      preset: { ...PRESET, maxRounds: 2, serverTools: "no-web" },
+      serverTools: ["web_search", "web_extractor", "code_interpreter"],
+    });
+
+    await runAgent(opts);
+
+    expect(mockStream.mock.calls[0][0].serverTools).toEqual(["code_interpreter"]);
+    // Still "final-round-off" underneath: the wrap-up round gets none.
+    expect(mockStream.mock.calls[1][0].serverTools).toBeUndefined();
+  });
+
+  it("sends no server tools under no-web when the model declared only web ones", async () => {
+    queueRound([{ text: "写完了" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions({
+      preset: { ...PRESET, serverTools: "no-web" },
+      serverTools: ["web_search"],
+    });
+
+    await runAgent(opts);
+
+    expect(mockStream.mock.calls[0][0].serverTools).toBeUndefined();
+  });
+
   it("reports a tool-step error for unknown tools and lets the model retry", async () => {
     queueRound([
       { toolCalls: [{ index: 0, id: "c1", name: "no_such_tool", arguments: "{}" }] },

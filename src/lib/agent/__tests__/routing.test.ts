@@ -98,13 +98,15 @@ describe("routeTools", () => {
     expect(res.serverTools).toBe("final-round-off");
   });
 
-  it("disables serverTools on main agent when search subagent is active", () => {
+  it("withholds the web server tools from the main agent when search subagent is active", () => {
     const subs: Record<SubAgentKind, SubAgentConfig> = {
       ...allDisabled,
       search: { kind: "search", modelId: "m-search", enabled: true },
     };
     const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
-    expect(res.serverTools).toBe("off");
+    // The web only: the code interpreter is nothing the search subagent can
+    // do for the main model, so it stays.
+    expect(res.serverTools).toBe("no-web");
     expect(res.tools).toContain("delegate");
     // Search only — the delegate description must not offer page reading.
     expect(res.searchReadsPages).toBe(false);
@@ -243,7 +245,7 @@ describe("routeTools", () => {
       vision: { kind: "vision", modelId: "m-vision", enabled: true },
     };
     const on = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
-    expect(on.serverTools).toBe("off");
+    expect(on.serverTools).toBe("no-web");
     expect(on.tools).not.toContain("read_image");
 
     // Disabling search must hand browsing back to the main model; disabling
