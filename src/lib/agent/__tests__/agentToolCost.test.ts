@@ -107,11 +107,12 @@ describe("plannedToolTokens", () => {
    */
   it("counts only the resident half — deferred groups are the runtime's business", () => {
     const routed = routePlannedTools(AGENT_ASSIST_PRESET, NO_SUBS, []);
-    const { resident, deferred } = partitionByGroup(routed.tools);
+    const { resident, deferred, searchable } = partitionByGroup(routed.tools);
     // The premise, so this test fails loudly if the groups ever empty out.
     expect(Object.values(deferred).flat().length).toBeGreaterThan(10);
+    // Priced with this run's own search_tools catalogue, not the widest one.
     expect(plannedToolTokens(AGENT_ASSIST_PRESET, NO_SUBS, []))
-      .toBe(toolTokensOf(resident));
+      .toBe(toolTokensOf(resident, searchable));
   });
 });
 

@@ -20,7 +20,8 @@
  * project's vitest `include` is `src/**` so this never joins the CI suite, and
  * adding a runner to devDependencies for one manual script is not worth it.
  * Knobs are environment variables for the same reason (vitest owns argv):
- * `AB_MODEL`, `AB_RUNS`, `AB_VARIANT`, `AB_TASKS`, `OLLAMA_URL`, `AB_OUT`.
+ * `AB_MODEL`, `AB_RUNS`, `AB_VARIANT`, `AB_TASKS`, `AB_TURNS`, `AB_BASELINE`,
+ * `OLLAMA_URL` (any OpenAI-compatible `/v1`, not only ollama), `AB_OUT`.
  *
  * Prints one row per (task × variant) with the tool the model reached for
  * first, plus a verdict per acceptance criterion.
@@ -29,7 +30,13 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { AGENT_ASSIST_PRESET } from "../src/lib/agent/presets";
-import { getToolDefinitions, partitionByGroup } from "../src/lib/agent/registry";
+import { getToolDefinitions, partitionByGroup, type ToolId } from "../src/lib/agent/registry";
+import {
+  autoLoadMessage,
+  runSearchTools,
+  SEARCHABLE_GROUPS,
+  type SearchableGroup,
+} from "../src/lib/agent/toolSearch";
 import { promptParams } from "../src/lib/profile/active";
 import type { ToolDefinition } from "../src/lib/ai/types";
 
@@ -63,13 +70,26 @@ const SYSTEM = () =>
   `${interpolate(locale.ai.instructions.system, promptParams(true))}\n\n${briefing()}`;
 
 /**
- * The toolset the chat actually sends after PR5a: resident only. The lore
- * write tools are deliberately absent — reaching for one of them is not a
- * possible answer here, and "did it propose a plan first" is the question.
+ * `AB_BASELINE=1` keeps `file_ops` / `image` resident — the toolset as it was
+ * before search_tools — so the same tasks can be run with and without the
+ * extra step on the same model (agent-tool-context-lld.md §6).
  */
-const TOOLS: ToolDefinition[] = getToolDefinitions(
-  partitionByGroup(AGENT_ASSIST_PRESET.tools).resident,
-);
+const BASELINE = process.env.AB_BASELINE === "1";
+
+/**
+ * The toolset the chat actually sends: resident only. The lore write tools are
+ * deliberately absent — reaching for one of them is not a possible answer
+ * here, and "did it propose a plan first" is the question. The searchable
+ * groups start absent too (unless BASELINE) and are loaded the way the runtime
+ * loads them: by `search_tools`, or by a direct call to one of their tools.
+ */
+const PARTITION = partitionByGroup(AGENT_ASSIST_PRESET.tools, BASELINE ? SEARCHABLE_GROUPS : []);
+
+function toolsFor(loaded: ReadonlySet<SearchableGroup>): ToolDefinition[] {
+  const ids: ToolId[] = [...PARTITION.resident];
+  for (const g of SEARCHABLE_GROUPS) if (loaded.has(g)) ids.push(...PARTITION.deferred[g]);
+  return getToolDefinitions(ids, PARTITION.searchable);
+}
 
 interface Task {
   id: string;
@@ -104,6 +124,15 @@ const RESULTS: Record<string, string> = {
   read_slides: "（不是演示稿）",
   read_memory: "（暂无记忆）",
   propose_lore_plan: "方案已获作者批准。可以按步骤执行了。",
+  move_chapter: "作者已批准，已移动。",
+  copy_file: "作者已批准，已复制。",
+  delete_directory: "作者已批准，文件夹已移入备份。",
+  delete_chapter: "作者已批准，文件已移入备份。",
+  create_directory: "作者已批准，文件夹已创建。",
+  create_chapter: "作者已批准，已创建。",
+  generate_image: "作者已批准，图片已生成：/p/.ai-writer/lore/characters/阿瓦/images/avatar.png",
+  edit_image: "作者已批准，图片已生成。",
+  redraw_lore_image: "作者已批准，图片已生成。",
   create_file: "已创建 /p/intro.html。",
   append_file: "已追加到 /p/intro.html。",
   propose_edit: "作者已批准，改动已写入。",
@@ -133,6 +162,27 @@ const TASKS: Task[] = [
     },
     why: "用 search_text 定位，而不是逐个 read_file 翻",
   },
+  // The three below are search_tools' acceptance criteria: each needs a tool
+  // that starts outside the list. Passing means the model got to that tool —
+  // through search_tools, or by naming it and taking the auto-load.
+  {
+    id: "rename-file",
+    prompt: "把第三章改名为「第三章 坠落」。",
+    expect: (calls) => calls.includes("move_chapter"),
+    why: "改名要用到 file_ops 组里的 move_chapter",
+  },
+  {
+    id: "delete-folder",
+    prompt: "项目里那个「旧稿」文件夹不要了，帮我删掉。",
+    expect: (calls) => calls.includes("delete_directory"),
+    why: "删文件夹要用到 file_ops 组里的 delete_directory",
+  },
+  {
+    id: "draw",
+    prompt: "给知识库里的人物「阿瓦」画一张头像。",
+    expect: (calls) => calls.includes("generate_image"),
+    why: "画图要用到 image 组里的 generate_image",
+  },
   {
     id: "segmented-write",
     prompt: "帮我写一个项目介绍页 intro.html，要有封面、三个特性区块和一个联系方式区块，内容尽量充实。",
@@ -155,7 +205,7 @@ const TASKS: Task[] = [
  * turns × 3 runs × 3 tasks is already ~40 minutes per variant, and a run that
  * has not shown its hand by turn four is not going to.
  */
-const MAX_TURNS = 4;
+const MAX_TURNS = Number(process.env.AB_TURNS ?? "4");
 
 /**
  * Per-reply output cap, mirroring the app's own (`lib/ai/modelLimits` →
@@ -194,12 +244,12 @@ interface Reply {
  * There is an irony worth keeping: what makes this harness slow is the size of
  * the tool payload, which is the thing the whole change set is about.
  */
-async function complete(messages: Record<string, unknown>[]): Promise<Reply> {
+async function complete(messages: Record<string, unknown>[], tools: ToolDefinition[]): Promise<Reply> {
   const url = new URL(`${BASE}/chat/completions`);
   const payload = JSON.stringify({
     model: MODEL,
     messages,
-    tools: TOOLS,
+    tools,
     stream: true,
     temperature: 0.7,
     max_tokens: MAX_OUTPUT_TOKENS,
@@ -261,8 +311,12 @@ async function complete(messages: Record<string, unknown>[]): Promise<Reply> {
       },
       (res) => {
         if ((res.statusCode ?? 0) >= 400) {
-          reject(new Error(`HTTP ${res.statusCode}`));
-          res.resume();
+          // The body is the only place a server says *why* (context too long,
+          // a schema it rejects) — keep it.
+          let body = "";
+          res.setEncoding("utf-8");
+          res.on("data", (d: string) => (body += d));
+          res.on("end", () => reject(new Error(`HTTP ${res.statusCode} ${body.slice(0, 300)}`)));
           return;
         }
         res.setEncoding("utf-8");
@@ -288,20 +342,56 @@ async function run(task: Task): Promise<string[]> {
     { role: "user", content: task.prompt },
   ];
   const calls: string[] = [];
+  const loaded = new Set<SearchableGroup>();
+  const pending = new Set<SearchableGroup>();
+  const handle = {
+    groups: PARTITION.searchable,
+    load: (gs: readonly SearchableGroup[]) => gs.forEach((g) => pending.add(g)),
+    isLoaded: (g: SearchableGroup) => loaded.has(g),
+    planGated: true,
+  };
+  const offered = (name: string) => toolsFor(loaded).some((t) => t.function.name === name);
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const msg = await complete(messages);
+    // Same moment as the runtime: requests made last round load now.
+    for (const g of pending) loaded.add(g);
+    pending.clear();
+    const msg = await complete(messages, toolsFor(loaded));
     const toolCalls = msg.tool_calls ?? [];
     if (toolCalls.length === 0) return calls;
 
-    messages.push({ role: "assistant", content: msg.content, tool_calls: toolCalls });
+    // Ids assigned once and `type` spelled out: ollama tolerates a bare
+    // `{ id, function }`, LM Studio rejects the whole request as invalid
+    // messages — and the echo must carry the same id the tool result names.
+    const echoed = toolCalls.map((c, i) => ({
+      id: c.id ?? `call_${turn}_${i}`,
+      type: "function" as const,
+      function: c.function,
+    }));
+    messages.push({ role: "assistant", content: msg.content, tool_calls: echoed });
     for (const [i, c] of toolCalls.entries()) {
-      calls.push(c.function.name);
-      messages.push({
-        role: "tool",
-        tool_call_id: c.id ?? `call_${turn}_${i}`,
-        content: RESULTS[c.function.name] ?? "（已完成）",
-      });
+      const name = c.function.name;
+      let content: string;
+      if (name === "search_tools") {
+        let query = "";
+        try {
+          query = String((JSON.parse(c.function.arguments || "{}") as { query?: unknown }).query ?? "");
+        } catch { /* an unparsable query is just an empty one */ }
+        content = runSearchTools(query, handle);
+        calls.push(`search_tools(${query})`);
+      } else if (!offered(name)) {
+        // Not in this round's list. A searchable tool takes the runtime's
+        // auto-load and is recorded as such — it did not run, so it does not
+        // count towards the criterion.
+        const group = SEARCHABLE_GROUPS.find((g) => PARTITION.deferred[g].includes(name as ToolId));
+        if (group) handle.load([group]);
+        content = group ? autoLoadMessage(name, group) : `Unknown tool: ${name}`;
+        calls.push(`${name}!unloaded`);
+      } else {
+        content = RESULTS[name] ?? "（已完成）";
+        calls.push(name);
+      }
+      messages.push({ role: "tool", tool_call_id: echoed[i].id, content });
     }
     // Stop the moment the question is answered. At ~65s a turn, letting a run
     // that already did the right thing keep going is a minute of nothing —
@@ -315,9 +405,10 @@ async function run(task: Task): Promise<string[]> {
 async function main() {
   writeFileSync(OUT, "");
   const promptChars = SYSTEM().length;
-  const toolTokens = Math.ceil(JSON.stringify(TOOLS).length / 4);
-  say(`model=${MODEL} runs=${RUNS} variant=${VARIANT || "(locale ai.instructions.agent)"}`);
-  say(`system prompt: ${promptChars} chars · tools: ${TOOLS.length} defs ≈ ${toolTokens} tok\n`);
+  const tools = toolsFor(new Set());
+  const toolTokens = Math.ceil(JSON.stringify(tools).length / 4);
+  say(`model=${MODEL} runs=${RUNS} variant=${VARIANT || "(locale ai.instructions.agent)"} baseline=${BASELINE}`);
+  say(`system prompt: ${promptChars} chars · tools: ${tools.length} defs ≈ ${toolTokens} tok\n`);
 
   let pass = 0;
   let total = 0;
@@ -335,7 +426,7 @@ async function main() {
         if (hit) ok++;
         say(`  ${hit ? "✓" : "✗"} ${((Date.now() - t0) / 1000).toFixed(0)}s  ${calls.length ? calls.join(" → ") : "(无工具调用)"}`);
       } catch (e) {
-        say(`  ! ${((Date.now() - t0) / 1000).toFixed(0)}s  ERROR ${String(e).slice(0, 80)}`);
+        say(`  ! ${((Date.now() - t0) / 1000).toFixed(0)}s  ERROR ${String(e).slice(0, 400)}`);
       }
     }
     total += RUNS;

@@ -11,6 +11,7 @@
 import i18n from "../../i18n";
 import type { TaskTools } from "../profile/model";
 import type { ToolId } from "./registry";
+import type { SearchableGroup } from "./toolSearch";
 
 /**
  * How a run is allowed to finish:
@@ -50,6 +51,14 @@ export interface TaskPreset {
    *  - "always"                    — allowed every round, including the final round (search subagent)
    */
   serverTools?: "final-round-off" | "off" | "always";
+  /**
+   * Searchable groups (`file_ops` / `image`) this task sends from round one
+   * instead of leaving to `search_tools`. For the tasks whose whole job IS that
+   * group — a file pack, a narrator whose way of saving a scene is
+   * `create_chapter` — where asking for the tools first is a round spent on
+   * every single run. Absent = every searchable group is deferred.
+   */
+  residentGroups?: readonly SearchableGroup[];
 }
 
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */

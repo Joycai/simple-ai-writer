@@ -384,9 +384,19 @@ describe("tool schema budget", () => {
     // because that tool is deferred. Those two slices are the clearest example
     // of what this assertion is for: the full preset moved 169 tokens and the
     // number a conversation actually pays moved 48.
-    const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
-    const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(12_000);
+    // 10,828 by 2026-09-17, then **7,726** once the file-organising tools
+    // (`file_ops`, 1,404) and the drawing trio (`image`, 1,940) moved behind
+    // `search_tools` (+241 resident for the tool and its catalogue): −3,102.
+    // Neither group has a gate — they are deferred because most conversations
+    // never touch them, and the model asks for them when one does
+    // (agent-tool-context-lld.md §6 has why that indirection was reopened and
+    // what it was measured on). The cap came down 12,000 → 9,000 with it, so
+    // the saving cannot drain back unnoticed.
+    const { resident, searchable } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
+    const residentTokens = estimateToolsTokens(getToolDefinitions(resident, searchable));
+    expect(residentTokens).toBeLessThanOrEqual(9_000);
+    // The catalogue is the price of the whole mechanism, paid on every round.
+    expect(estimateToolsTokens(getToolDefinitions(["search_tools"], searchable))).toBeLessThanOrEqual(300);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);
@@ -443,7 +453,9 @@ describe("tool schema budget", () => {
     // pack quietly grew past what the dispatch was supposed to buy.
     expect(estimateToolsTokens(getToolDefinitions(["run_pack"]))).toBeLessThanOrEqual(400);
     const residentOf = (pack: keyof typeof PACK_PRESETS) =>
-      estimateToolsTokens(getToolDefinitions(partitionByGroup(PACK_PRESETS[pack].tools).resident));
+      estimateToolsTokens(getToolDefinitions(
+        partitionByGroup(PACK_PRESETS[pack].tools, PACK_PRESETS[pack].residentGroups).resident,
+      ));
     expect(residentOf("file_write")).toBeLessThanOrEqual(5_400);
     expect(residentOf("lore_edit")).toBeLessThanOrEqual(2_600);
     expect(residentOf("export")).toBeLessThanOrEqual(3_200);
@@ -458,6 +470,9 @@ describe("tool schema budget", () => {
     // ≈3.7k against the assist tier's ≈10k. The relational assertion is the
     // feature itself: if the orchestrator ever costs more than half of
     // assist's resident half, the dispatch overhead stops buying anything.
+    // Both sides moved on 2026-09-17 when the imagegen trio went behind
+    // search_tools on every preset: orchestrator 4,789 → 3,264, assist
+    // 10,828 → 7,726 — the ratio held (0.44 → 0.42).
     const { resident } = partitionByGroup(ORCHESTRATOR_PRESET.tools);
     const orches = estimateToolsTokens(getToolDefinitions(resident));
     expect(orches).toBeLessThanOrEqual(5_200);

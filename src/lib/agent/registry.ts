@@ -126,6 +126,15 @@ import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent, ToolProgress } from "./events";
+import {
+  autoLoadMessage,
+  describeSearchTools,
+  isSearchableGroup,
+  runSearchTools,
+  SEARCHABLE_GROUPS,
+  type SearchableTools,
+  type ToolSearchHandle,
+} from "./toolSearch";
 import type { AiConn } from "../ai/conn";
 
 type ToolAccess = "read" | "write-auto" | "write-approval";
@@ -939,6 +948,11 @@ export interface ToolContext {
    */
   onProgress?: (progress: ToolProgress) => void;
   /**
+   * The run's handle for loading the `file_ops` / `image` groups on request —
+   * injected by `runAgent` when the run has any of them, absent otherwise.
+   */
+  toolSearch?: ToolSearchHandle;
+  /**
    * Resolver for child agent connections. Injected by the caller from aiStore,
    * avoiding reverse dependencies from lib/agent into stores.
    *
@@ -1010,10 +1024,20 @@ export interface ToolContext {
  * first. Withholding the definitions changes nothing about what the model can
  * do; it only stops the run paying for nine schemas it cannot use.
  *
+ * `file_ops` and `image` are the other kind: no gate, just rarely needed. The
+ * model loads those itself through `search_tools` (see ./toolSearch, and
+ * agent-tool-context-lld.md §6 for why that indirection was reopened).
+ *
  * A tool with no group is resident — the default, and what every tool was
  * before this existed.
  */
-export type ToolGroup = "lore_write" | "lore_organize";
+export type ToolGroup = "lore_write" | "lore_organize" | "file_ops" | "image";
+
+/** What a `describe` may depend on besides the machine: the run's own shape. */
+interface DescribeContext {
+  /** The searchable groups this run carries — see ./toolSearch. */
+  searchable: SearchableTools;
+}
 
 export interface RegisteredTool {
   definition: ToolDefinition;
@@ -1024,7 +1048,7 @@ export interface RegisteredTool {
    * run in, which nothing knows at import. Same reason `profileCategoryParams`
    * exists — this registry is a module constant, the world is not.
    */
-  describe?: () => string;
+  describe?: (ctx: DescribeContext) => string;
   access: ToolAccess;
   execute: (call: ToolCall, ctx: ToolContext) => Promise<ToolResult>;
   /** Deferred group this tool belongs to; absent = resident. See {@link ToolGroup}. */
@@ -1136,7 +1160,8 @@ export type ToolId =
   | "run_pack"
   | "translate"
   | "transcribe_audio"
-  | "run_command";
+  | "run_command"
+  | "search_tools";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -1509,6 +1534,39 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => readMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // Never listed in a preset: `partitionByGroup` appends it to the resident half
+  // of any toolset that has a searchable group, so its presence follows the
+  // groups' and cannot drift from them. The description is rendered per run
+  // from those groups (`describe`), the placeholder below is never sent.
+  search_tools: {
+    access: "read",
+    // Free of the folder fence: it reads nothing and writes nothing, it only
+    // changes which schemas the next round of this run carries.
+    projectFree: true,
+    definition: {
+      type: "function",
+      function: {
+        name: "search_tools",
+        description: "",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "A group name from the list, or a few words such as 'rename a file' or '画一张头像'",
+            },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    describe: ({ searchable }) => describeSearchTools(searchable),
+    execute: async (call, ctx) => {
+      const args = parseArgs<{ query?: unknown }>(call.arguments);
+      return { toolCallId: call.id, content: runSearchTools(String(args.query ?? ""), ctx.toolSearch) };
+    },
   },
 
   read_workflow: {
@@ -2732,6 +2790,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   create_chapter: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -2795,6 +2854,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   create_directory: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -2822,6 +2882,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   move_chapter: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -2854,6 +2915,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   copy_file: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -3114,6 +3176,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   generate_image: {
     access: "write-approval",
+    group: "image",
     definition: {
       type: "function",
       function: {
@@ -3185,6 +3248,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   edit_image: {
     access: "write-approval",
+    group: "image",
     definition: {
       type: "function",
       function: {
@@ -3253,9 +3317,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   // writes to an entity: that group is deferred until a lore *plan* is
   // approved, and a plan is the gate on changing what an entry SAYS. What this
   // one spends is the author's money, so its gate is the illustrate card —
-  // exactly like generate_image filing a picture into the same gallery.
+  // exactly like generate_image filing a picture into the same gallery. It is
+  // deferred all the same, with the other two drawing tools, in the `image`
+  // group the model loads through search_tools (./toolSearch).
   redraw_lore_image: {
     access: "write-approval",
+    group: "image",
     definition: {
       type: "function",
       function: {
@@ -3322,6 +3389,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   delete_chapter: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -3347,6 +3415,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 
   delete_directory: {
     access: "write-approval",
+    group: "file_ops",
     definition: {
       type: "function",
       function: {
@@ -3945,18 +4014,43 @@ function withProfileCategories(
  * appends to the array rather than reshuffling it, so the cached prefix
  * covering the resident half survives the load.
  */
-export function partitionByGroup(ids: readonly ToolId[]): {
+export function partitionByGroup(
+  ids: readonly ToolId[],
+  /** Searchable groups the preset keeps resident (`TaskPreset.residentGroups`). */
+  residentGroups: readonly ToolGroup[] = [],
+): {
   resident: ToolId[];
   deferred: Record<ToolGroup, ToolId[]>;
+  /** The deferred groups the model loads itself, non-empty ones only. */
+  searchable: SearchableTools;
 } {
   const resident: ToolId[] = [];
-  const deferred: Record<ToolGroup, ToolId[]> = { lore_write: [], lore_organize: [] };
+  const deferred: Record<ToolGroup, ToolId[]> = {
+    lore_write: [],
+    lore_organize: [],
+    file_ops: [],
+    image: [],
+  };
   for (const id of ids) {
     const group = REGISTRY[id].group;
-    if (group) deferred[group].push(id);
-    else resident.push(id);
+    if (group && !residentGroups.includes(group)) deferred[group].push(id);
+    else if (id !== "search_tools") resident.push(id);
   }
-  return { resident, deferred };
+  const searchable: SearchableTools = {};
+  for (const g of SEARCHABLE_GROUPS) if (deferred[g].length) searchable[g] = deferred[g];
+  // Last, so the resident order before it is the preset's own and the only
+  // thing a toolset without searchable groups sees is exactly what it had.
+  if (Object.keys(searchable).length) resident.push("search_tools");
+  return { resident, deferred, searchable };
+}
+
+/** Every searchable group at its widest — the fallback when no run shape is given. */
+function allSearchable(): SearchableTools {
+  const groups: SearchableTools = {};
+  for (const g of SEARCHABLE_GROUPS) {
+    groups[g] = (Object.keys(REGISTRY) as ToolId[]).filter((id) => REGISTRY[id].group === g);
+  }
+  return groups;
 }
 
 /**
@@ -3999,11 +4093,21 @@ export function toolNeedsProject(id: ToolId): boolean {
 }
 
 /** Resolve wire definitions for a preset's toolset, preserving order. */
-export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
+export function getToolDefinitions(
+  ids: readonly ToolId[],
+  /**
+   * The run's searchable groups, for `search_tools`' catalogue. Omitted by
+   * callers that only price a toolset, which then get the widest catalogue — an
+   * upper bound, the safe side for a budget.
+   */
+  searchable?: SearchableTools,
+): ToolDefinition[] {
+  let describeCtx: DescribeContext | undefined;
   return ids.map((id) => {
     const tool = REGISTRY[id];
-    const definition = tool.describe
-      ? { ...tool.definition, function: { ...tool.definition.function, description: tool.describe() } }
+    if (tool.describe) describeCtx ??= { searchable: searchable ?? allSearchable() };
+    const definition = tool.describe && describeCtx
+      ? { ...tool.definition, function: { ...tool.definition.function, description: tool.describe(describeCtx) } }
       : tool.definition;
     return withProfileCategories(definition, tool.profileCategoryParams);
   });
@@ -4028,6 +4132,9 @@ export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
  * surface 根本给不了的能力——`tool-presence.md` 的契约。
  */
 function unloadedToolMessage(name: string, group: ToolGroup): string {
+  if (isSearchableGroup(group)) {
+    return `Error: ${name} is not loaded yet. Call search_tools with "${group}" first, then use ${name} on the next round.`;
+  }
   const organize = group === "lore_organize";
   const how = organize
     ? "a plan step whose `target` is 'collection' (or 'category' for a new one)"
@@ -4062,6 +4169,12 @@ export async function executeRegisteredTool(
     const waiting = (pending as readonly string[]).includes(call.name)
       ? REGISTRY[call.name as ToolId]?.group
       : undefined;
+    // A searchable group has no gate to wait for: the model asking for one of
+    // its tools by name IS the request, so load the group and say so.
+    if (waiting && isSearchableGroup(waiting) && ctx.toolSearch) {
+      ctx.toolSearch.load([waiting]);
+      return { toolCallId: call.id, content: autoLoadMessage(call.name, waiting) };
+    }
     return {
       toolCallId: call.id,
       content: waiting

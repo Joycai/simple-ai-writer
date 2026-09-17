@@ -99,6 +99,9 @@ export const PACK_PRESETS: Record<PackId, TaskPreset> = {
       "delete_chapter",
       "delete_directory",
     ],
+    // This pack's whole job is file work: deferring its file tools would only
+    // spend a search_tools round on every dispatch.
+    residentGroups: ["file_ops"],
     maxRounds: 16,
     finishPolicy: "force-text",
     serverTools: "off",
@@ -329,6 +332,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     conn.model.contextSize,
     ctx.contextUtilization ?? CONTEXT_UTILIZATION_DEFAULT,
     preset.tools,
+    preset.residentGroups,
   );
 
   let output = "";
