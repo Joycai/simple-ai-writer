@@ -9,6 +9,8 @@ import type { StreamOptions } from "../../ai/types";
 import type { AgentEvent } from "../events";
 import type { TaskPreset } from "../presets";
 import { repairToolCallPairing, runAgent, trimHistory, type AgentRuntimeOptions } from "../runtime";
+import { ImagePayloadError } from "../../ai/types";
+import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../../ai/imagePart";
 import { appendAgentEventTo } from "../events";
 import type { LoreIndex } from "../../lore";
 import type { StreamMessage } from "../../ai/types";
@@ -841,6 +843,52 @@ describe("trimHistory", () => {
     expect(String(history[4].content)).not.toContain("data:image");
     expect(Array.isArray(history[7].content)).toBe(true);
     expect(Array.isArray(history[8].content)).toBe(true);
+  });
+
+  it("a run refused for its pictures leaves a history the next turn can send", async () => {
+    // The round in progress is protected, so it goes out over the ceiling and
+    // is refused. The author's next question is appended to this same array
+    // and still looks like it sits inside that round — so unless the refused
+    // pictures come out here, every later request is refused too.
+    const MiB = 1024 * 1024;
+    const seen = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(13 * MiB)}` } },
+      ],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "比较这两张" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          { id: "c1", type: "function", function: { name: "read_image", arguments: "{}" } },
+          { id: "c2", type: "function", function: { name: "read_image", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+      { role: "tool", tool_call_id: "c2", content: "ok" },
+      seen("甲"),
+      seen("乙"),
+    ];
+    mockStream.mockImplementationOnce(async (o: StreamOptions) => {
+      throw new ImagePayloadError(2, imagePayload(o.messages).chars, MAX_REQUEST_IMAGE_CHARS);
+    });
+
+    await expect(runAgent(makeOptions({ messages: history }))).rejects.toBeInstanceOf(ImagePayloadError);
+
+    expect(imagePayload(history).count).toBe(0);
+    // The words stay, so the model knows what it read and can read it again.
+    expect(String(history[5].content)).toContain("甲");
+    expect(String(history[5].content)).toContain("image not sent");
+    expect(String(history[6].content)).toContain("乙");
+
+    history.push({ role: "user", content: "那再说说第一张" });
+    trimHistory(history, undefined);
+    expect(imagePayload(history).chars).toBeLessThanOrEqual(MAX_REQUEST_IMAGE_CHARS);
   });
 
   it("spares the newest picture message even when it alone is over the ceiling", () => {

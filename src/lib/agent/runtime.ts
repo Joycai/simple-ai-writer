@@ -17,6 +17,7 @@ import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
 import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
+import { ImagePayloadError } from "../ai/types";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, ResponseItemCarry, StreamMessage, ThinkingBlockCarry,
@@ -293,6 +294,32 @@ function elideImagesOverBudget(history: StreamMessage[]): number {
     dropped++;
   }
   return dropped;
+}
+
+/**
+ * After a request was refused for its pictures, take out the ones
+ * `elideImagesOverBudget` had to leave in, so the refusal isn't permanent.
+ *
+ * The history outlives the run: the chat appends the author's next question to
+ * this same array. And a fresh question after a tool round doesn't end that
+ * round as far as `roundInProgressStart` can tell — the last assistant message
+ * is still the tool call — so the pictures that were over stay protected, and
+ * every later request in the conversation is refused the same way. Nothing the
+ * error suggests (fewer attachments, a lower long edge) reaches pictures that
+ * are already in history. They could not be sent anyway; their text stays, so
+ * the model knows what it read and can read one again.
+ */
+const UNSENT_IMAGE =
+  "[image not sent: together with the others it was too large for one request — read it again on its own if it still matters]";
+
+function elideUnsendableImages(history: StreamMessage[]): void {
+  const newest = history.filter(hasImageParts).pop();
+  const from = roundInProgressStart(history);
+  history.forEach((m, i) => {
+    if ((i >= from || m === newest) && hasImageParts(m)) {
+      m.content = contentWithoutImages(m, UNSENT_IMAGE);
+    }
+  });
 }
 
 /**
@@ -1217,6 +1244,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ) {
           history.push({ role: "assistant", content: roundText });
         }
+        if (err instanceof ImagePayloadError) elideUnsendableImages(history);
         throw err;
       }
     } finally {
