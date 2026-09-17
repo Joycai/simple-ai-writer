@@ -98,6 +98,11 @@ async function runMemoryGeneration(opts: {
     let summary = "";
     await streamCompletion({
       ...connOptions({ provider, model, apiKey }),
+      // A background summary of text already in hand: nothing to look up or
+      // compute. The model's standing server tools would only add cost — the
+      // code interpreter's instructions alone are ~800 input tokens a request,
+      // and each one it runs is another inference pass (lib/ai/serverTools).
+      serverTools: undefined,
       messages: [
         { role: "system", content: i18n.t("ai.memory.systemPrompt") },
         { role: "user", content: parts.join("\n\n") },

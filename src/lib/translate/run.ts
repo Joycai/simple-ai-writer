@@ -91,8 +91,10 @@ async function requestOnce(
     ...SAKURA_SAMPLING,
     frequencyPenalty: freq,
     maxOutput: maxTokensFor(chunk.lines.length),
-    // 工具永远不传：见文件头第 1 条。
+    // 工具永远不传：见文件头第 1 条。服务端工具（联网搜索、代码解释器）同理——
+    // 翻译只处理手头这块原文，没什么可查、可算的，带上只会多花钱。
     tools: undefined,
+    serverTools: undefined,
     messages: [
       { role: "system", content: SAKURA_SYSTEM },
       ...buildCarry(o.carry),

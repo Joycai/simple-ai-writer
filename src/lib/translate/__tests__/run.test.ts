@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * the document loop — which requests get made, with what frequency penalty, and
  * what lands in the file when one of them never comes good.
  */
-const calls: { freq?: number; maxOutput?: number; lineCount: number; messages: unknown[] }[] = [];
+const calls: { freq?: number; maxOutput?: number; lineCount: number; messages: unknown[]; tools?: unknown; serverTools?: unknown }[] = [];
 type Reply = { text: string; truncated?: boolean; outputTokens?: number } | "abort";
 let script: Reply[] = [];
 
@@ -13,6 +13,8 @@ vi.mock("../../ai", () => ({
   streamCompletion: async (o: {
     frequencyPenalty?: number;
     maxOutput?: number;
+    tools?: unknown;
+    serverTools?: unknown;
     messages: { role: string; content: string }[];
     onChunk: (c: unknown) => void;
   }) => {
@@ -23,6 +25,8 @@ vi.mock("../../ai", () => ({
       maxOutput: o.maxOutput,
       lineCount: src.split("\n").length,
       messages: o.messages,
+      tools: o.tools,
+      serverTools: o.serverTools,
     });
     const reply = script.shift();
     if (reply === "abort") {
@@ -69,6 +73,15 @@ beforeEach(() => {
 
 describe("runChunk — 重试阶梯", () => {
   const oneChunk = (n: number) => splitDocument(jp(n)).chunks[0];
+
+  it("不带函数工具，也不带模型行上的服务端工具", async () => {
+    script = [{ text: zh(3) }];
+    await runChunk(oneChunk(3), {
+      conn: { ...(CONN as object), serverTools: ["web_search", "code_interpreter"] } as never,
+    });
+    expect(calls[0].tools).toBeUndefined();
+    expect(calls[0].serverTools).toBeUndefined();
+  });
 
   it("一次就成时只发一次请求，用阶梯的首项", () => {
     // 首发 0.1 而不是 0：实测 100 行在 0 上退化，0.2 上完整且快一倍。

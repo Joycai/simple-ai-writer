@@ -97,6 +97,9 @@ export const useDigestStore = create<DigestState>((set, get) => ({
       let usage = { in: 0, out: 0, cached: 0 };
       await streamCompletion({
         ...connOptions({ provider, model, apiKey }),
+        // Background summary, same as memoryStore: no server tools (search,
+        // code interpreter) — they can only add cost to a digest of text in hand.
+        serverTools: undefined,
         messages: [
           { role: "system", content: i18n.t("ai.digest.systemPrompt") },
           { role: "user", content: `${body}\n\n${i18n.t("ai.digest.instruction")}` },
