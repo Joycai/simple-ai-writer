@@ -9,7 +9,13 @@ import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
 import { isAsrEnabled, setAsrEnabled } from "../../../lib/asr/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
-import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
+import {
+  isSkillStateDefaultOn,
+  isSkillStateEnabled,
+  setSkillStateDefaultOn,
+  setSkillStateEnabled,
+} from "../../../lib/agent/stateFlag";
+import { useAgentStore } from "../../../stores/agentStore";
 import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
 import { cachedShellInfo, shellInfo, shellLabel, systemLabel, type ShellInfo } from "../../../lib/cli/shell";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
@@ -51,6 +57,8 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [orchestratorOn, setOrchestratorOn] = useState(isOrchestratorEnabled());
   const [skillStateOn, setSkillStateOn] = useState(isSkillStateEnabled());
+  const [stateDefaultOn, setStateDefaultOn] = useState(isSkillStateDefaultOn());
+  const applyStateMemoryDefault = useAgentStore((s) => s.applyStateMemoryDefault);
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
   const [asrOn, setAsrOn] = useState(isAsrEnabled());
@@ -132,10 +140,42 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             label={t("systemSettings.lab.toolPackLabel")}
           />
         </Row>
-        <Row top title={t("systemSettings.lab.skillStateLabel")} desc={t("systemSettings.lab.skillStateHint")}>
+        {/* 「新会话默认打开」（设计稿「状态记忆 · 默认打开」）：只在 Beta 开着时出现，
+            是这一行的脚注而不是第二个开关——右边那条竖线只属于 Beta 本身。勾选
+            改的是新会话的起点，还没开始的空白对话也跟着变。 */}
+        <Row
+          top
+          title={t("systemSettings.lab.skillStateLabel")}
+          desc={t("systemSettings.lab.skillStateHint")}
+          foot={skillStateOn ? (
+            <div className={styles.sub}>
+              <label className={styles.subCheck}>
+                <input
+                  type="checkbox"
+                  checked={stateDefaultOn}
+                  onChange={(e) => {
+                    setSkillStateDefaultOn(e.target.checked);
+                    setStateDefaultOn(e.target.checked);
+                    applyStateMemoryDefault();
+                  }}
+                />
+                <span>{t("systemSettings.lab.skillStateDefaultLabel")}</span>
+              </label>
+              <div className={styles.subHint}>
+                {t(stateDefaultOn
+                  ? "systemSettings.lab.skillStateDefaultOnHint"
+                  : "systemSettings.lab.skillStateDefaultOffHint")}
+              </div>
+            </div>
+          ) : undefined}
+        >
           <Toggle
             on={skillStateOn}
-            onChange={(next) => { setSkillStateEnabled(next); setSkillStateOn(next); }}
+            onChange={(next) => {
+              setSkillStateEnabled(next);
+              setSkillStateOn(next);
+              applyStateMemoryDefault();
+            }}
             label={t("systemSettings.lab.skillStateLabel")}
           />
         </Row>

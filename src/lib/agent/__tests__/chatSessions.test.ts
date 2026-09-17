@@ -31,6 +31,12 @@ vi.mock("../sessionDb", () => ({
     row?.title || row?.preview || untitled,
   MAX_CHAT_SESSIONS: 5,
 }));
+// 状态记忆「新会话默认打开」: the store reads the starting point per new chat.
+const stateDefault = vi.hoisted(() => ({ on: false }));
+vi.mock("../stateFlag", async (orig) => ({
+  ...(await orig<typeof import("../stateFlag")>()),
+  newChatStateMemory: () => stateDefault.on,
+}));
 vi.mock("../chatSession", () => ({
   deserializeChatSession: () => ({
     turns: [{ id: "t9", role: "user", text: "old", log: [], at: 0 }],
@@ -72,7 +78,40 @@ const edit = (id: string): Proposal =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  stateDefault.on = false;
   seed([emptyChat("c0")]);
+});
+
+describe("状态记忆: the new-conversation default", () => {
+  it("starts a new tab with state memory on when the default says so", () => {
+    stateDefault.on = true;
+    seed([withTurns("c0")]);
+    const key = state().newChat();
+    expect(chat(key).stateMemory).toBe(true);
+  });
+
+  it("resets a reused empty tab to the default, whatever it was left at", () => {
+    seed([{ ...emptyChat("c0"), stateMemory: true }]);
+    state().newChat();
+    expect(chat("c0").stateMemory).toBe(false);
+  });
+
+  it("moves only conversations that have not started when the default flips", () => {
+    seed([
+      emptyChat("c0"),
+      withTurns("c1"),
+      { ...emptyChat("c2"), sessionId: 7 },
+    ]);
+    stateDefault.on = true;
+    state().applyStateMemoryDefault();
+    expect(chat("c0").stateMemory).toBe(true);
+    expect(chat("c1").stateMemory).toBe(false);
+    expect(chat("c2").stateMemory).toBe(false);
+
+    stateDefault.on = false;
+    state().applyStateMemoryDefault();
+    expect(chat("c0").stateMemory).toBe(false);
+  });
 });
 
 describe("tabs: which conversation is on screen", () => {

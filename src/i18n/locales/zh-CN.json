@@ -533,6 +533,9 @@
       "toolPackLabel": "助手工具包模式",
       "skillStateLabel": "状态记忆（SKILL.state）",
       "skillStateHint": "对话助手的输入框多出一个「状态记忆」开关，按对话单独开启。开着的对话不再等到阈值才归纳：每次发送前，上一轮之前的对话都折进一份有 schema 的执行状态（目标 / 决定 / 事实 / 进展 / 文件 / 待决 / 上一轮结果），只保留上一轮原文，所以每轮的上下文大小不随对话长度增长。状态由模型每轮重写、由应用按 schema 校验，不合格就保留上一份并退回普通归纳。适合几十轮的长任务；闲聊式的来回反而多付一次小请求。出自 arXiv:2608.26263。",
+      "skillStateDefaultLabel": "新会话默认打开",
+      "skillStateDefaultOnHint": "每个新对话的「状态记忆」一开始就是开的，单个对话里仍可关掉。已有的对话不变。",
+      "skillStateDefaultOffHint": "新对话的「状态记忆」一开始是关的，需要时在输入框的「能力」菜单里逐个打开。",
       "toolPackHint": "对话助手改为「主控编排」：常驻一套轻工具（查、读、笔记、记忆），文档 / 知识库 / 导出的改动一律派给带专职工具的执行代理完成——审批卡照常出现。每轮工具开销从约 10k 降到约 4k token，对小上下文的本地模型最有感。实验中：模型需要能可靠派单（实测 Gemma 级可以；有的模型会陷在反复读文件里）。下一条消息起生效；系统提示在新会话时刷新。",
       "paneSub": "这里的开关默认关着；打开一项，助手就多一项能干的事。",
       "groupExport": "导出格式",
@@ -2025,6 +2028,7 @@
       "capabilityResets": "换会话即重置",
       "capabilityRestore": "本次已停 · 恢复",
       "stateMemoryMeta": "beta · 发送前折成执行状态",
+      "stateMemoryMetaDefault": "beta · 新会话默认开",
       "thinkingScope": "写进模型行",
       "thinkingBudgetUnit": "tk · 失焦提交"
     },

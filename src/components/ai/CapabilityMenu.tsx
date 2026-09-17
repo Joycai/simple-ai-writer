@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
-import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
+import { isSkillStateDefaultOn, isSkillStateEnabled } from "../../lib/agent/stateFlag";
 import type { SubAgentKind } from "../../lib/agent/subagent";
 import {
   useBoundModelName, useConfiguredKinds, FALLBACK_LABELS, type ChipKind,
@@ -185,8 +185,13 @@ export function CapabilityMenu({ disabled, onToggle, stateMemory = false }: {
                   {t("ai.chat.stateMemory", { defaultValue: "状态记忆" })}
                 </span>
                 <span className={styles.itemFill} />
+                {/* With 「新会话默认打开」 on, the row says why a fresh
+                    conversation already has it lit — the head's 「换会话即重置」
+                    is true of the others, not of this one. */}
                 <span className={styles.itemModel}>
-                  {t("ai.chat.stateMemoryMeta", { defaultValue: "beta · 发送前折成执行状态" })}
+                  {isSkillStateDefaultOn()
+                    ? t("ai.chat.stateMemoryMetaDefault", { defaultValue: "beta · 新会话默认开" })
+                    : t("ai.chat.stateMemoryMeta", { defaultValue: "beta · 发送前折成执行状态" })}
                 </span>
               </button>
             </>

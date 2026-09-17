@@ -78,6 +78,8 @@ export const PREF_KEYS = [
   "app:toolPackOrchestratorBeta",
   // 状态记忆（SKILL.state 模式）的 Beta 开关 — lib/agent/stateFlag.
   "app:skillStateBeta",
+  // 状态记忆开着时的子选项：新会话一开始就点亮状态记忆 — lib/agent/stateFlag.
+  "app:skillStateDefaultOn",
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",

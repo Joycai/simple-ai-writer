@@ -101,6 +101,7 @@ import {
 } from "../lib/agent/subagent";
 import { subAgentModel } from "../lib/agent/subagent";
 import { isAsrEnabled } from "../lib/asr/flag";
+import { newChatStateMemory } from "../lib/agent/stateFlag";
 import {
   repairToolCallPairing, runAgent,
   type RoundLimitDecision, type TruncationDecision,
@@ -446,6 +447,12 @@ interface AgentState {
   toggleSubAgent: (kind: SubAgentKind, key?: string) => void;
   setPlanMode: (on: boolean, key?: string) => void;
   setStateMemory: (on: boolean, key?: string) => void;
+  /**
+   * The Lab pane moved 状态记忆's starting point: every conversation that has
+   * not started yet (no turn, no saved row) takes the new default, so the
+   * blank tab on screen is a 新会话 too. Started ones keep what they have.
+   */
+  applyStateMemoryDefault: () => void;
 
   /**
    * Author pressed 本次都批准 on a card: everything of that kind from the same
@@ -1212,7 +1219,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   pendingQuestions: [],
   autoApprove: null,
 
-  chats: { c0: emptyChat("c0") },
+  chats: { c0: freshChat("c0") },
   chatOrder: ["c0"],
   activeChatKey: "c0",
   runningChats: [],
@@ -1520,6 +1527,18 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // turn after it would otherwise be lost with the window.
     void get().persistChat(k);
   },
+  applyStateMemoryDefault: () => {
+    const on = newChatStateMemory();
+    set((st) => {
+      let chats = st.chats;
+      for (const [k, c] of Object.entries(st.chats)) {
+        if (c.turns.length > 0 || c.sessionId !== null || c.stateMemory === on) continue;
+        if (chats === st.chats) chats = { ...st.chats };
+        chats[k] = { ...c, stateMemory: on };
+      }
+      return chats === st.chats ? {} : { chats };
+    });
+  },
 
   activateChat: (key) => {
     if (!get().chats[key]) return;
@@ -1542,7 +1561,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const key = empty ?? newChatKey();
     endGrantFor(set, get, key);
     set((st) => ({
-      chats: { ...st.chats, [key]: emptyChat(key) },
+      chats: { ...st.chats, [key]: freshChat(key) },
       chatOrder: empty ? st.chatOrder : [...st.chatOrder, key],
       activeChatKey: key,
       lastClosedLabel: null,
@@ -2193,7 +2212,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     for (const k of [...get().runningChats, ...Object.keys(compactAborts)]) get().stopChat(k);
     const key = newChatKey();
     set({
-      chats: { [key]: emptyChat(key) },
+      chats: { [key]: freshChat(key) },
       chatOrder: [key],
       activeChatKey: key,
       runningChats: [],
@@ -2242,6 +2261,16 @@ export function emptyChat(key: string): LiveChat {
     contextVersion: 0, taskWorkspace: null, error: null,
     disabledSubAgents: [], planMode: false, stateMemory: false, unread: false,
   };
+}
+
+/**
+ * A conversation the author is about to start. Same as `emptyChat` except for
+ * the one switch whose starting point is a preference: 状态记忆 under its
+ * 「新会话默认打开」 sub-option. Read at creation, not at module scope's leisure —
+ * the Lab pane can flip it while the app runs (`applyStateMemoryDefault`).
+ */
+function freshChat(key: string): LiveChat {
+  return { ...emptyChat(key), stateMemory: newChatStateMemory() };
 }
 
 /**
