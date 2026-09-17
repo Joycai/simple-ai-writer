@@ -16,7 +16,7 @@
 import type { ToolId } from "./registry";
 import type { FinishPolicy, TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
-import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import { subAgentModel, searchReadsPages, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";
@@ -25,7 +25,7 @@ import { isAsrEnabled } from "../asr/flag";
 import { isCliEnabled } from "../cli/flag";
 import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
-import type { Model } from "../ai/configDb";
+import type { Model, Provider } from "../ai/configDb";
 
 interface RoutedTools {
   tools: ToolId[];
@@ -50,6 +50,13 @@ interface RoutedTools {
    * viewer has no other way to know which one is real.
    */
   visionDelegate: boolean;
+  /**
+   * Whether the live search subagent can open web pages (`searchReadsPages`).
+   * Pass it into `ToolContext.searchReadsPages`; `delegate`'s description is
+   * the one reader, and it must not offer page reading to a run whose search
+   * subagent can only search.
+   */
+  searchReadsPages: boolean;
 }
 
 /**
@@ -88,6 +95,15 @@ export interface RouteOptions {
    * exists at all; any one no means absent, never a tool that refuses.
    */
   commands?: boolean;
+  /**
+   * The provider list, so `searchReadsPages` can check the search model's wire
+   * — not a per-surface choice like the rest, but carried here so the pricing
+   * helpers that already forward `options` get it too. **Every run surface
+   * passes it.** Absent means "price it": the row alone decides, which can
+   * only over-count `delegate`'s description (the safe side for a budget, same
+   * as `getToolDefinitions`' widest catalogue) — never shorten a real run's.
+   */
+  providers?: readonly Provider[];
 }
 
 /**
@@ -253,10 +269,16 @@ function route(
   const finishPolicy: FinishPolicy =
     options?.handoff && live("writer") ? "handoff" : preset.finishPolicy;
 
+  const searchModel = subAgentModel("search", models, subs);
+  const readsPages = searchModel === null ? false
+    : options?.providers
+      ? searchReadsPages(searchModel, options.providers.find((p) => p.id === searchModel.providerId)?.apiStandard)
+      : searchModel.serverTools?.includes("web_extractor") ?? false;
   return {
     tools,
     serverTools: serverToolsPolicy,
     finishPolicy,
     visionDelegate: live("vision"),
+    searchReadsPages: readsPages,
   };
 }

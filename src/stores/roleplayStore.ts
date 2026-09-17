@@ -708,7 +708,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const effectiveSubs = subAgentsFor(agent.kind, withSessionOverrides(
         subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
       ));
-      const routed = routeTools(preset, effectiveSubs, workspace, models);
+      const routed = routeTools(preset, effectiveSubs, workspace, models, { providers });
 
       const result = await runAgent({
         ...connOptions({ provider, model, apiKey }),
@@ -721,6 +721,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreScope: useLoreStore.getState().scope,
           multimodal: canSeeImages(model),
           visionDelegate: routed.visionDelegate,
+          searchReadsPages: routed.searchReadsPages,
           taskWorkspace: workspace,
           signal: controller.signal,
           // 只有旁白拿得到这个通道，所以扮演 agent 的 scene 工具即使被硬塞

@@ -127,3 +127,19 @@ describe("lore categories named in a tool description", () => {
     }
   });
 });
+
+describe("delegate's description follows the search subagent's page reading", () => {
+  const delegateText = (searchReadsPages?: boolean) =>
+    getToolDefinitions(["delegate"], undefined, searchReadsPages)[0].function.description;
+
+  it("offers reading a URL only when the search subagent can open pages", () => {
+    // Routing withholds the main model's own server tools while search is
+    // delegated, so this sentence is the only place a pasted link gets a route.
+    expect(delegateText(true)).toMatch(/open a web page/);
+    expect(delegateText(true)).toMatch(/URL/);
+    // A search-only binding must not be promised as a page reader.
+    expect(delegateText(false)).not.toMatch(/URL|open a web page/);
+    // Pricing callers that pass nothing get the default (no page sentence).
+    expect(delegateText()).toBe(delegateText(false));
+  });
+});

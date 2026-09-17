@@ -27,6 +27,7 @@ vi.mock("../../ai", () => ({
 import { executeDelegate } from "../subagent";
 import { createTaskWorkspace, loadTaskDoc } from "../taskWorkspace";
 import type { ToolContext } from "../registry";
+import i18n from "../../../i18n";
 
 const MODEL = {
   id: "m2", providerId: "pv", modelId: "x", name: "N", type: "text",
@@ -34,7 +35,7 @@ const MODEL = {
   serverTools: ["web_search"],
 } as const;
 
-function makeCtx(overrides: Partial<ToolContext> = {}, model: object = MODEL): ToolContext {
+function makeCtx(overrides: Partial<ToolContext> = {}, model: object = MODEL, apiStandard = "openai"): ToolContext {
   const handle = createTaskWorkspace("/p", "mdl-main");
   return {
     projectPath: "/p", loreIndex: {}, multimodal: false,
@@ -42,7 +43,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}, model: object = MODEL): T
     signal: new AbortController().signal,
     onNestedEvent: () => {},
     resolveSubAgent: async () => ({
-      provider: { id: "pv", name: "Prov", baseUrl: "", apiStandard: "openai" },
+      provider: { id: "pv", name: "Prov", baseUrl: "", apiStandard },
       model, apiKey: "k",
     }),
     ...overrides,
@@ -106,6 +107,34 @@ describe("delegate naming and preconditions", () => {
     expect(res.content).toContain("text-only");
     expect(sent).toHaveLength(0);        // no request was made
     expect([...fs.keys()]).toHaveLength(0); // and no workspace was created
+  });
+
+  it("tells a page-reading search subagent to read a given URL, and a search-only one to say it could not", async () => {
+    const pages = i18n.t("ai.instructions.subagentSearchPages");
+    const noPages = i18n.t("ai.instructions.subagentSearchNoPages");
+    const systemOf = (i: number) => String(sent[i].messages.find((m) => m.role === "system")!.content);
+
+    const reader = { ...MODEL, serverTools: ["web_search", "web_extractor"] };
+    const task = call({ kind: "search", task: "总结 https://example.com/a" });
+    await executeDelegate(task, makeCtx({}, reader, "openai_compat"));
+    await executeDelegate(task, makeCtx({}, MODEL, "openai_compat"));
+    // Declared on the row, but the provider was switched to a wire with no
+    // spelling for it — the request carries search only, so no promise.
+    await executeDelegate(task, makeCtx({}, reader, "anthropic_compat"));
+    // Other kinds carry neither sentence.
+    await executeDelegate(
+      call({ kind: "longread", task: "读一读", refs: ["writing/ch1.md"] }),
+      makeCtx({}, reader, "openai_compat"),
+    );
+
+    expect(systemOf(0)).toContain(pages);
+    expect(systemOf(0)).not.toContain(noPages);
+    expect(systemOf(1)).toContain(noPages);
+    expect(systemOf(1)).not.toContain(pages);
+    expect(systemOf(2)).toContain(noPages);
+    expect(systemOf(2)).not.toContain(pages);
+    expect(systemOf(3)).not.toContain(pages);
+    expect(systemOf(3)).not.toContain(noPages);
   });
 
   it("still refuses a search subagent whose model cannot browse", async () => {

@@ -8,6 +8,7 @@ import {
   MAX_PDF_FILES,
   SUBAGENT_KINDS,
   SUB_PRESETS,
+  searchReadsPages,
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
@@ -58,6 +59,7 @@ export function SubAgentsPane() {
   const [asrTimestamps, setAsrTimestamps] = useState(isAsrTimestampsEnabled());
   const [asrDiarization, setAsrDiarization] = useState(isAsrDiarizationDefault());
   const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
   const activeModelId = useAiStore((s) => s.activeModelId);
@@ -144,7 +146,7 @@ export function SubAgentsPane() {
   };
 
   /** The preset's own numbers, so this line can't drift from what runs. */
-  const metaFor = (kind: SubAgentKind): string => {
+  const metaFor = (kind: SubAgentKind, model: Model | undefined): string => {
     if (kind === "imagegen") return t("systemSettings.subagents.imagegenMeta");
     if (kind === "translate") return t("systemSettings.subagents.translateMeta");
     if (kind === "asr") return t("systemSettings.subagents.asrMeta");
@@ -171,6 +173,16 @@ export function SubAgentsPane() {
       );
     }
     if (preset.serverTools === "always") parts.push(t("systemSettings.subagents.searchAlways"));
+    // Whether a pasted link can be read is the question authors actually ask
+    // of this binding; the answer is the model row's 网页抓取 switch
+    // (searchReadsPages), which lives in a different pane. Only said once the
+    // model can search at all — otherwise the warning above is the news.
+    if (kind === "search" && model?.serverTools?.includes("web_search")) {
+      const standard = providers.find((p) => p.id === model.providerId)?.apiStandard;
+      parts.push(t(searchReadsPages(model, standard)
+        ? "systemSettings.subagents.searchPages"
+        : "systemSettings.subagents.searchNoPages"));
+    }
     return parts.join(" · ");
   };
 
@@ -182,7 +194,7 @@ export function SubAgentsPane() {
     const candidates = candidatesFor(kind);
     const model = candidates.find((m) => m.id === cfg.modelId);
     const warn = warningFor(kind, model);
-    return { kind, cfg, candidates, warn, broken: cfg.enabled && !!warn };
+    return { kind, cfg, candidates, model, warn, broken: cfg.enabled && !!warn };
   });
 
   const enabled = state.filter((s) => s.cfg.enabled).length;
@@ -249,7 +261,7 @@ export function SubAgentsPane() {
 
           <div className={css.cards}>
             {group.kinds.map((kind) => {
-              const { cfg, candidates, warn, broken: bad } = state.find((s) => s.kind === kind)!;
+              const { cfg, candidates, model, warn, broken: bad } = state.find((s) => s.kind === kind)!;
               const name = t(`systemSettings.subagents.${kind}`);
               const status = !cfg.enabled
                 ? t("systemSettings.subagents.statusOff")
@@ -296,7 +308,7 @@ export function SubAgentsPane() {
                         ]}
                         ariaLabel={`${t("systemSettings.subagents.runModel")} — ${name}`}
                       />
-                      <span className={css.meta}>{metaFor(kind)}</span>
+                      <span className={css.meta}>{metaFor(kind, model)}</span>
                     </div>
 
                     {/* 写手多出来的两样：一条元信息行（含把一次性说明叫回来的

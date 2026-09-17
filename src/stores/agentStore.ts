@@ -2832,7 +2832,8 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // packs: chat is the surface that threads the approval channels and
       // selfConn through ToolContext — see run_pack's guards (agent/packs).
       // commands: same area renders the command card (lib/cli).
-      { handoff: true, askAuthor: true, packs: true, commands: true },
+      // providers: the search model's wire decides whether it can read pages.
+      { handoff: true, askAuthor: true, packs: true, commands: true, providers: useAiStore.getState().providers },
     );
     const effectivePreset = {
       ...chatPreset,
@@ -2881,6 +2882,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         // 谁来读图，由 routeTools 一处判定（它同时也是摘掉 read_lore_image
         // 的那一处）。图集清单据此说出真正走得通的那条路。
         visionDelegate: routed.visionDelegate,
+        searchReadsPages: routed.searchReadsPages,
         onLoreChanged: async (changed) => {
           // Those folders re-read when the write stayed inside them; the
           // whole walk only when what exists changed (see ToolContext).

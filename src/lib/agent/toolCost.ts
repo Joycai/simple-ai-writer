@@ -40,13 +40,18 @@ import type { SearchableTools } from "./toolSearch";
  */
 const cache = new Map<string, number>();
 
-export function toolTokensOf(ids: readonly ToolId[], searchable?: SearchableTools): number {
+export function toolTokensOf(
+  ids: readonly ToolId[],
+  searchable?: SearchableTools,
+  /** Changes `delegate`'s description — see `RoutedTools.searchReadsPages`. */
+  searchReadsPages = false,
+): number {
   if (ids.length === 0) return 0;
   const catalogue = searchable ? JSON.stringify(searchable) : "*";
-  const key = `${ids.join(",")}|${loreCategoryIds().join(",")}|${catalogue}`;
+  const key = `${ids.join(",")}|${loreCategoryIds().join(",")}|${catalogue}|${searchReadsPages ? "pages" : ""}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const tokens = estimateToolsTokens(getToolDefinitions(ids, searchable));
+  const tokens = estimateToolsTokens(getToolDefinitions(ids, searchable, searchReadsPages));
   cache.set(key, tokens);
   return tokens;
 }
@@ -102,7 +107,7 @@ export function plannedToolTokens(
   const routed = routePlannedTools(preset, subs, models, options);
   const { resident, searchable } = partitionByGroup(routed.tools, preset.residentGroups);
   return (
-    toolTokensOf(resident, searchable) +
+    toolTokensOf(resident, searchable, routed.searchReadsPages) +
     (routed.finishPolicy === "handoff" ? handoffToolTokens() : 0)
   );
 }

@@ -18,7 +18,7 @@
 
 import { connOptions, type AiConn } from "../ai/conn";
 import { extractJsonObject } from "../ai/json";
-import { canSeeImages, type Model } from "../ai/configDb";
+import { canSeeImages, type Model, type Provider } from "../ai/configDb";
 import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import { CONSISTENCY_PRESET } from "../agent/presets";
@@ -79,6 +79,7 @@ interface ReviewRunArgs {
   windows: DocWindow[];
   subAgents: Record<SubAgentKind, SubAgentConfig>;
   models: Model[];
+  providers: Provider[];
   contextUtilization: number;
   resolveSubAgent: ToolContext["resolveSubAgent"];
   /** The retrieval subagent's expansion of `focus` into knowledge-base terms; absent = none. */
@@ -323,7 +324,7 @@ async function runWindow(
     ];
 
     const workspace = createTaskWorkspace(args.projectPath, args.conn.model.id);
-    const routed = routeTools(CONSISTENCY_PRESET, args.subAgents, workspace, args.models);
+    const routed = routeTools(CONSISTENCY_PRESET, args.subAgents, workspace, args.models, { providers: args.providers });
     const preset = { ...CONSISTENCY_PRESET, tools: routed.tools, serverTools: routed.serverTools };
 
     const toolContext: ToolContext = {
@@ -332,6 +333,7 @@ async function runWindow(
       loreScope,
       multimodal: canSeeImages(args.conn.model),
       visionDelegate: routed.visionDelegate,
+      searchReadsPages: routed.searchReadsPages,
       reviewSink: sink,
       taskWorkspace: workspace,
       resolveSubAgent: args.resolveSubAgent,

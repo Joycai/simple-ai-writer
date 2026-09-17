@@ -763,6 +763,8 @@
       "rounds": "轮次预算 {{n}}",
       "singleShot": "单发请求",
       "searchAlways": "服务端检索常驻",
+      "searchPages": "可读网页",
+      "searchNoPages": "只搜不读网页（模型未开网页抓取）",
       "pdfLimits": "每次 ≤{{files}} 份 · 单文件 ≤{{mb}}MB",
       "imagegenMeta": "生成前出审批卡（提示词与价格）",
       "warnNoModel": "尚未绑定模型——运行时委托会被拒绝。",
@@ -1048,6 +1050,8 @@
         "inheritedHeading": "项目与身份（来自主对话）"
       },
       "subagentTask": "任务目标：\n{{task}}",
+      "subagentSearchPages": "你还能打开网址、读取网页正文。任务给出网址时，先读那个页面本身，再按需要搜索补充；报告里注明哪些内容来自该页面。",
+      "subagentSearchNoPages": "你只能搜索，不能直接打开网页。任务要求读某个网址时，可以搜索该页面的相关信息，但必须在报告开头说明没能读取页面原文，不要把搜索摘要当成页面内容。",
       "subagentTaskWithRefs": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}",
       "subagentTaskWithImages": "任务目标：\n{{task}}\n\n随本消息附上的图片（按顺序）：\n{{images}}",
       "subagentRefsList": "\n\n参考资源：\n{{refs}}",
