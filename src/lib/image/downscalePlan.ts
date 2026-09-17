@@ -67,9 +67,20 @@ export const IMAGE_LONG_EDGE_KEY = "app:imageMaxLongEdge";
  */
 export const DEFAULT_IMAGE_LONG_EDGE = 4096;
 
+/**
+ * The longest edge any endpoint has been documented to accept, in pixels.
+ *
+ * DeepSeek refuses a picture wider or taller than 8192 (docs/api/landscape.md
+ * §2.1). Like `MIN_IMAGE_EDGE` this is a hard refusal, not a preference, so it
+ * holds even when the author turned the ceiling off: "don't resize" means
+ * "don't resize anything an endpoint would take", and a 10000px screenshot sent
+ * as-is is a 400 the author can do nothing with.
+ */
+export const MAX_IMAGE_EDGE = 8192;
+
 /** Bounds for the setting — a free number field, but not a nonsense one. */
 export const IMAGE_LONG_EDGE_MIN = 256;
-export const IMAGE_LONG_EDGE_MAX = 16384;
+export const IMAGE_LONG_EDGE_MAX = MAX_IMAGE_EDGE;
 
 /** The ceilings one normalization run works against. */
 export interface ImageLimits {
@@ -120,7 +131,7 @@ export function imageMaxLongEdge(): number {
 
 /** Both ceilings, resolved. */
 export function imageLimits(): ImageLimits {
-  return { longEdge: imageMaxLongEdge(), maxBytes: MAX_IMAGE_BYTES };
+  return { longEdge: imageMaxLongEdge() || MAX_IMAGE_EDGE, maxBytes: MAX_IMAGE_BYTES };
 }
 
 /**

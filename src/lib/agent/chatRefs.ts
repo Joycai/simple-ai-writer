@@ -18,7 +18,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent } from "../ai/types";
-import { imagePart } from "../ai/imagePart";
+import { imagePart, imagesWithinBudget, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { noteVideoTokens } from "../ai/tokenEstimate";
 import { estimateVideoTokens, videoPart } from "../ai/videoInput";
 import { readEntityFile } from "../lore/entity";
@@ -204,7 +204,11 @@ export async function buildChatMessage(
   }
 
   const images = refs.filter((r): r is AttachedImage => r.kind === "image");
-  const sent = opts.allowImages ? images.slice(0, MAX_MESSAGE_IMAGES) : [];
+  // Two ceilings, whichever bites first: the count, and the request's picture
+  // budget (lib/ai/imagePart) — four large screenshots are under the first and
+  // well over the second, and the request that carries them is this one.
+  const capped = opts.allowImages ? images.slice(0, MAX_MESSAGE_IMAGES) : [];
+  const sent = capped.slice(0, imagesWithinBudget(capped.map((a) => a.dataUrl.length)));
   const unsent = images.slice(sent.length);
   // Named, not just shown: "第二张图里的那件外套" only resolves if the model
   // knows which picture is which, and the parts array carries no filenames.
@@ -226,6 +230,14 @@ export async function buildChatMessage(
         ? i18n.t("ai.chat.imagesNotSentDelegate", {
             defaultValue:
               "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
+            list: listed,
+          })
+        : opts.allowImages
+        ? i18n.t("ai.chat.imagesOverCap", {
+            defaultValue:
+              "（以下图片没有随本条消息发送——单条消息最多带 {{max}} 张图片，合计也不能超过 {{mb}} MB：\n{{list}}）",
+            max: MAX_MESSAGE_IMAGES,
+            mb: MAX_REQUEST_IMAGE_CHARS / 1024 / 1024,
             list: listed,
           })
         : i18n.t("ai.chat.imagesNotSent", {

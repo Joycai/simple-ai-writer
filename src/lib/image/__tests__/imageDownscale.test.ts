@@ -16,7 +16,7 @@ vi.mock("../../fs/fileio", () => ({ readFile: vi.fn(async () => ""), readDir: vi
 
 const {
   DEFAULT_IMAGE_LONG_EDGE, IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN, MAX_ENCODE_ATTEMPTS,
-  MIN_IMAGE_EDGE, fitsLimits, imageMaxLongEdge, planImageStep,
+  MAX_IMAGE_EDGE, MIN_IMAGE_EDGE, fitsLimits, imageLimits, imageMaxLongEdge, planImageStep,
 } = await import("../downscalePlan");
 const { MAX_IMAGE_BYTES } = await import("../../fs/images");
 
@@ -51,6 +51,20 @@ describe("imageMaxLongEdge", () => {
     expect(imageMaxLongEdge()).toBe(IMAGE_LONG_EDGE_MAX);
     prefValue = "10";
     expect(imageMaxLongEdge()).toBe(IMAGE_LONG_EDGE_MIN);
+  });
+
+  it("never lets the setting go past the largest edge an endpoint accepts", () => {
+    expect(IMAGE_LONG_EDGE_MAX).toBe(MAX_IMAGE_EDGE);
+    expect(MAX_IMAGE_EDGE).toBe(8192);
+    prefValue = "16384"; // a value stored before the ceiling came down
+    expect(imageLimits().longEdge).toBe(MAX_IMAGE_EDGE);
+  });
+
+  it("still holds the endpoint ceiling when the author turned resizing off", () => {
+    prefValue = "0";
+    expect(imageLimits().longEdge).toBe(MAX_IMAGE_EDGE);
+    expect(fitsLimits(photo(10000, 3000, 1 * MB), imageLimits())).toBe(false);
+    expect(fitsLimits(photo(8000, 3000, 1 * MB), imageLimits())).toBe(true);
   });
 
   it("uses the app-wide byte cap, not a second opinion about it", () => {

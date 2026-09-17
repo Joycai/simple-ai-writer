@@ -9,6 +9,8 @@ import type { StreamOptions } from "../../ai/types";
 import type { AgentEvent } from "../events";
 import type { TaskPreset } from "../presets";
 import { repairToolCallPairing, runAgent, trimHistory, type AgentRuntimeOptions } from "../runtime";
+import { ImagePayloadError } from "../../ai/types";
+import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../../ai/imagePart";
 import { appendAgentEventTo } from "../events";
 import type { LoreIndex } from "../../lore";
 import type { StreamMessage } from "../../ai/types";
@@ -804,6 +806,132 @@ describe("trimHistory", () => {
 
     expect(trimHistory(history, undefined)).toBe(2);
     expect(history[0].content).toBe("y".repeat(4000));
+  });
+
+  it("drops older pictures until the kept ones fit one request body, sparing the newest", () => {
+    // Three kept messages is the count cap, but one message can carry four
+    // attachments: three of them at 10 MiB each is past what an endpoint takes.
+    const heavy = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(10 * 1024 * 1024)}` } },
+      ],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      heavy("第一张"),
+      { role: "assistant", content: "ok" },
+      heavy("第二张"),
+      { role: "assistant", content: "ok" },
+      heavy("第三张"),
+    ];
+
+    // 30 MiB → dropping the oldest leaves 20, which fits; the rest stay.
+    expect(trimHistory(history, undefined)).toBe(1);
+    expect(String(history[1].content)).toContain("第一张");
+    expect(String(history[1].content)).not.toContain("data:image");
+    expect(Array.isArray(history[3].content)).toBe(true);
+    expect(Array.isArray(history[5].content)).toBe(true);
+  });
+
+  it("never strips pictures from the round in progress, even over the ceiling", () => {
+    // Two large read_image results from one round: dropping the first before
+    // the model saw it made it read that picture again, which dropped the
+    // second — round after round until the cap.
+    const MiB = 1024 * 1024;
+    const seen = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(11 * MiB)}` } },
+      ],
+    });
+    const call = (id: string): StreamMessage => ({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id, type: "function", function: { name: "read_image", arguments: "{}" } }],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "比较这两张" },
+      call("c1"),
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+      seen("旧的"),
+      call("c2"),
+      { role: "tool", tool_call_id: "c2", content: "ok" },
+      seen("甲"),
+      seen("乙"),
+    ];
+
+    // 33 MiB: the older round's picture goes, the current round's two stay
+    // even though they are still over — the pre-flight check reports that.
+    expect(trimHistory(history, undefined)).toBe(1);
+    expect(String(history[4].content)).toContain("旧的");
+    expect(String(history[4].content)).not.toContain("data:image");
+    expect(Array.isArray(history[7].content)).toBe(true);
+    expect(Array.isArray(history[8].content)).toBe(true);
+  });
+
+  it("a run refused for its pictures leaves a history the next turn can send", async () => {
+    // The round in progress is protected, so it goes out over the ceiling and
+    // is refused. The author's next question is appended to this same array
+    // and still looks like it sits inside that round — so unless the refused
+    // pictures come out here, every later request is refused too.
+    const MiB = 1024 * 1024;
+    const seen = (text: string): StreamMessage => ({
+      role: "user",
+      content: [
+        { type: "text", text },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(13 * MiB)}` } },
+      ],
+    });
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "比较这两张" },
+      {
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          { id: "c1", type: "function", function: { name: "read_image", arguments: "{}" } },
+          { id: "c2", type: "function", function: { name: "read_image", arguments: "{}" } },
+        ],
+      },
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+      { role: "tool", tool_call_id: "c2", content: "ok" },
+      seen("甲"),
+      seen("乙"),
+    ];
+    mockStream.mockImplementationOnce(async (o: StreamOptions) => {
+      throw new ImagePayloadError(2, imagePayload(o.messages).chars, MAX_REQUEST_IMAGE_CHARS);
+    });
+
+    await expect(runAgent(makeOptions({ messages: history }))).rejects.toBeInstanceOf(ImagePayloadError);
+
+    expect(imagePayload(history).count).toBe(0);
+    // The words stay, so the model knows what it read and can read it again.
+    expect(String(history[5].content)).toContain("甲");
+    expect(String(history[5].content)).toContain("image not sent");
+    expect(String(history[6].content)).toContain("乙");
+
+    history.push({ role: "user", content: "那再说说第一张" });
+    trimHistory(history, undefined);
+    expect(imagePayload(history).chars).toBeLessThanOrEqual(MAX_REQUEST_IMAGE_CHARS);
+  });
+
+  it("spares the newest picture message even when it alone is over the ceiling", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "一大张" },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(25 * 1024 * 1024)}` } },
+        ],
+      },
+    ];
+    expect(trimHistory(history, undefined)).toBe(0);
+    expect(Array.isArray(history[1].content)).toBe(true);
   });
 
   function videoMessage(text: string): StreamMessage {

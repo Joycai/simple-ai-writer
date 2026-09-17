@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  streamCompletion, ContextSizeError,
+  streamCompletion, ContextSizeError, ImagePayloadError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../index";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
@@ -147,6 +147,40 @@ describe("streamCompletion — context size guard", () => {
       }),
     ).rejects.toBeInstanceOf(ContextSizeError);
     expect(calls.length).toBe(0);
+  });
+});
+
+describe("streamCompletion — picture payload guard", () => {
+  const picture = (chars: number) =>
+    ({ type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(chars)}` } }) as const;
+
+  it("refuses a request whose pictures together exceed the ceiling, before sending", async () => {
+    const calls = mockFetch([]);
+    const MiB = 1024 * 1024;
+    const err = await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "test-key",
+      standard: "openai",
+      modelId: "test-model",
+      messages: [{ role: "user", content: [{ type: "text", text: "看图" }, picture(13 * MiB), picture(13 * MiB)] }],
+      onChunk: () => {},
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ImagePayloadError);
+    expect((err as ImagePayloadError).images).toBe(2);
+    expect(calls.length).toBe(0);
+  });
+
+  it("sends pictures that fit", async () => {
+    const calls = mockFetch([`data: [DONE]\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "test-key",
+      standard: "openai",
+      modelId: "test-model",
+      messages: [{ role: "user", content: [{ type: "text", text: "看图" }, picture(1024), picture(1024)] }],
+      onChunk: () => {},
+    });
+    expect(calls.length).toBe(1);
   });
 });
 

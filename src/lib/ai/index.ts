@@ -15,7 +15,8 @@ import {
   forcedToolChoiceRefused, isForcedToolChoice, isForcedToolChoiceRejection,
   noteForcedToolChoiceRefused,
 } from "./toolChoice";
-import { applyPrefix, ContextSizeError, familyOf, StreamStallError, type StreamOptions } from "./types";
+import { applyPrefix, ContextSizeError, familyOf, ImagePayloadError, StreamStallError, type StreamOptions } from "./types";
+import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "./imagePart";
 
 export * from "./types";
 
@@ -116,6 +117,12 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   const estimated = estimateMessagesTokens(merged.messages) + estimateToolsTokens(merged.tools);
   if (merged.contextSize && merged.contextSize > 0 && estimated > merged.contextSize) {
     const err = new ContextSizeError(estimated, merged.contextSize);
+    log.error(err);
+    throw err;
+  }
+  const images = imagePayload(merged.messages);
+  if (images.chars > MAX_REQUEST_IMAGE_CHARS) {
+    const err = new ImagePayloadError(images.count, images.chars, MAX_REQUEST_IMAGE_CHARS);
     log.error(err);
     throw err;
   }

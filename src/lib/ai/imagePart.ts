@@ -41,7 +41,7 @@
  */
 
 import { readPref } from "../prefs";
-import type { ContentPart, ImageDetail } from "./types";
+import type { ContentPart, ImageDetail, StreamMessage } from "./types";
 
 /** Where the author's detail preference is stored. */
 export const IMAGE_DETAIL_KEY = "app:imageDetail";
@@ -72,4 +72,56 @@ export function imageDetail(): ImageDetail | undefined {
 export function imagePart(url: string, detail?: ImageDetail | "auto"): ContentPart {
   const d = detail === undefined ? imageDetail() : detail === "auto" ? undefined : detail;
   return { type: "image_url", image_url: d ? { url, detail: d } : { url } };
+}
+
+/**
+ * Ceiling on the pictures one request carries, in data-URL characters — the
+ * bytes they actually occupy in the body, base64 and all.
+ *
+ * `MAX_IMAGE_BYTES` bounds one picture; nothing bounded their sum, and the
+ * paths that send several (four chat attachments, eight on a vision
+ * delegation, three image messages kept in history) could each build a body
+ * well past what an endpoint takes. The documented ceilings this sits under:
+ * Anthropic's Messages API refuses a request over 32 MB, DeepSeek one over
+ * 48 MiB (docs/api/landscape.md §2.1). 24 MiB leaves the tighter of the two
+ * room for the text, tool schemas and JSON around the pictures.
+ *
+ * One ceiling for every provider, for the reason the long edge has one
+ * (docs/feature/image-normalize-plan.md §2.2): a relay hides who is behind it.
+ * A single picture at `MAX_IMAGE_BYTES` (16 MiB once encoded) always fits, so
+ * the ceiling only ever decides how many travel together.
+ */
+export const MAX_REQUEST_IMAGE_CHARS = 24 * 1024 * 1024;
+
+/** How many pictures a request carries, and how much of its body they occupy in characters. */
+export function imagePayload(messages: readonly StreamMessage[]): { count: number; chars: number } {
+  let count = 0;
+  let chars = 0;
+  for (const m of messages) {
+    if (!Array.isArray(m.content)) continue;
+    for (const p of m.content) {
+      if (p.type !== "image_url") continue;
+      count++;
+      chars += p.image_url.url.length;
+    }
+  }
+  return { count, chars };
+}
+
+/**
+ * How many of `sizes`, taken in order, fit under the request ceiling together.
+ *
+ * `spent` is what the request already carries. Never less than one when there
+ * is a first picture and nothing spent: a lone picture is already bounded by
+ * `MAX_IMAGE_BYTES`, and refusing it here would only move the refusal.
+ */
+export function imagesWithinBudget(sizes: readonly number[], spent = 0): number {
+  let total = spent;
+  let n = 0;
+  for (const size of sizes) {
+    if (total + size > MAX_REQUEST_IMAGE_CHARS && !(n === 0 && spent === 0)) break;
+    total += size;
+    n++;
+  }
+  return n;
 }

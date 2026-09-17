@@ -560,6 +560,22 @@ describe("subagent", () => {
       expect(text).not.toContain("References:");
     });
 
+    it("asks for a split when the pictures together are more than one request carries", async () => {
+      // Under the eight-picture count, over the request's picture budget: the
+      // sub-run is never started with some of them silently missing.
+      mockFileExists.mockResolvedValue(true);
+      mockImageForModel.mockResolvedValue({
+        dataUrl: `data:image/png;base64,${"A".repeat(10 * 1024 * 1024)}`, ext: "png", bytes: new Uint8Array([65]),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "vision", task: "比较", refs: ["a.png", "b.png", "c.png"] }),
+      };
+      const res = await executeDelegate(call, makeCtx());
+      expect(res.content).toMatch(/^Error: images too large to send together \(2 fit, stopped at c\.png\)/);
+      expect(mockRunAgent).not.toHaveBeenCalled();
+    });
+
     it("fails a vision delegation up front when a named image does not exist", async () => {
       mockFileExists.mockResolvedValue(false);
       const call: ToolCall = {

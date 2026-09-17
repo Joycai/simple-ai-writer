@@ -87,14 +87,20 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
 - **三种传法**，都是标准 ① 族 block 数组：base64 `data:` URL、公网 http(s)
   URL、Files API 的 `file_id`。本项目只用第一种。
 - **`detail` 可选**：`low`（推理前缩到 512×512）/ `high` / `original` / `auto`
-  （当前等价 `original`）。本项目的 `ContentPart` 还没有这个字段。
+  （当前等价 `original`）。本项目经 `lib/ai/imagePart.ts` 只发 `low` / `high`
+  （`high` 在 DeepSeek 表里与 `original` 等价），作者不设置就一个字段都不发。
 - **硬约束：图片只能出现在 `user` 消息里**，`system` / `assistant` 带图 400。
   本项目天然满足——`lib/agent/imageHistory.ts` 的 `ImageMessage` 把
   `role: "user"` 写进了类型，工具返回的图也是另起一条 user 消息
   （`lib/agent/runtime.ts`）。
 - **限额**：格式 JPEG/PNG/GIF/WebP（按字节判定，不看文件名）；单图 32 MiB
   （Files API 64 MiB）、请求体 48 MiB、单请求最多 600 张、单边最长 8192px
-  （≥15 张时降到 4096px）。本项目的 12 MiB / 长边 4096 都在限内。
+  （≥15 张时降到 4096px）。本项目对应的三道闸：单图 12 MiB（`MAX_IMAGE_BYTES`）；
+  长边默认 4096、设置项上限 8192，作者关掉缩放时也仍按 8192 缩
+  （`MAX_IMAGE_EDGE`，image-normalize-plan.md §2.2）；**一次请求的图片合计
+  ≤ 24 MiB**（按 data URL 字符数计，`MAX_REQUEST_IMAGE_CHARS`，§2.9）——这一道是
+  为 Anthropic 的 32 MB 请求上限定的，DeepSeek 的 48 MiB 顺带满足。单请求张数
+  到不了 15（对话每条 4 张、历史留 3 条、看图子代理 8 张，且都先撞上合计上限）。
 - **计费**：进模型前统一缩放（小于约 544² 放大，更大的缩到约 1300² 的总像素），
   因此**每张图最多 1024 token**——`lib/ai/tokenEstimate.ts` 的 800/张是同量级。
 - **另外两族同款**：`https://api.deepseek.com/anthropic` 收 ④ 族的

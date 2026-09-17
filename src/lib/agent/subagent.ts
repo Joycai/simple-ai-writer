@@ -11,7 +11,7 @@
 import i18n from "../../i18n";
 import type { ApiStandard, ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { supportsServerTool } from "../ai/serverTools";
-import { imagePart } from "../ai/imagePart";
+import { imagePart, imagesWithinBudget } from "../ai/imagePart";
 import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
@@ -502,9 +502,18 @@ export async function executeDelegate(
     if (imageRefs.length) {
       const parts: ContentPart[] = [];
       const captions: string[] = [];
+      let payload = 0;
       for (const ref of imageRefs) {
         const loaded = await loadProjectImage(ctx.projectPath, ref);
         if ("error" in loaded) return fail(loaded.error.replace(/^Error:\s*/, ""));
+        // The count cap above is not a size cap: eight large screenshots pass
+        // it and still build a body no endpoint takes (lib/ai/imagePart).
+        // Refused as a split, like the count, rather than trimmed — the job
+        // named these pictures, and a sub-run missing some would answer anyway.
+        if (imagesWithinBudget([loaded.dataUrl.length], payload) === 0) {
+          return fail(`images too large to send together (${parts.length} fit, stopped at ${loaded.name}) — delegate fewer per call, splitting the job if needed.`);
+        }
+        payload += loaded.dataUrl.length;
         captions.push(`- ${loaded.name} — ${loaded.path}${shrunkNote(loaded.downscaled)}`);
         parts.push(imagePart(loaded.dataUrl));
       }
