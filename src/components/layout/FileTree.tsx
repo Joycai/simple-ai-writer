@@ -257,9 +257,11 @@ function NameInputRow({
   // A Chinese name is committed with Enter too — that Enter belongs to the IME.
   const ime = useImeGuard();
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (ime.isComposing(e)) return;
     // The tree's own keymap must not see these: ⌫ deletes the selection there.
+    // Stop first, *then* ask the IME — a ⌫ that erases pinyin is still ours, and
+    // bailing before this line let it bubble up and ask to delete the folder.
     e.stopPropagation();
+    if (ime.isComposing(e)) return;
     if (e.key === "Enter") { e.preventDefault(); void submit(); }
     if (e.key === "Escape") onCancel();
   };
@@ -1745,6 +1747,10 @@ export function FileTree() {
   // ── Keyboard (scoped to the tree, which takes focus on click) ────────────────
 
   const onTreeKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // 树的键位只属于树本身：从任何输入框冒上来的键（改名、新建、弹层里的字段）
+    // 一律不接——⌫ 在这里是「删除选中项」，输入法删拼音时也会按它。
+    const origin = e.target as HTMLElement;
+    if (origin.tagName === "INPUT" || origin.tagName === "TEXTAREA" || origin.isContentEditable) return;
     const native = e.nativeEvent;
     const targets = selectedSources();
     if (matchesCombo(native, COMBO_NEW_GROUP)) {
