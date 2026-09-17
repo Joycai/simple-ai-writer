@@ -5,6 +5,8 @@ import { useSyncStore } from "../../../stores/syncStore";
 import type { RemoteSyncRecord } from "../../../lib/sync/client";
 import type { FreshnessVerdict } from "../../../lib/sync/status";
 import { ConfigBackupSection } from "./ConfigBackupSection";
+import { KbPicker } from "./KbPicker";
+import { useConfigSyncStore, slotHeader } from "../../../stores/configSyncStore";
 import { Pane, PaneHeader } from "./bits";
 import ui from "../settingsUi.module.css";
 import sp from "./syncPane.module.css";
@@ -21,6 +23,11 @@ import { baseName } from "../../../lib/paths";
  * 底纸上,只带一条「这台机器」标题线;项目级的东西(绑定、同步选项、记录)
  * 落在一张 `--stg-hint` 色的暖纸上,纸头写着项目名。
  *
+ * **项目在前,机器在后。** 绑定与推拉是这一页被打开的理由,所以暖纸紧跟
+ * 锚点卡;「这台机器」挪到页底并默认收成一行摘要(没开项目时展开——那时
+ * 它就是全部)。未绑定时选库走 `KbPicker`:推荐卡 + 搜索 + 定高列表,库再多
+ * 绑定按钮也不会被挤到页底。见 `sync-lore-ui-brief.md` §绑定选择器。
+ *
  * **推拉只有一个家。** 两个按钮长在锚点卡里,都带省略号,都先出预览
  * (`startPreview` → `SyncPreviewModal`,与墙上的状态件共用同一条路)。
  */
@@ -28,9 +35,9 @@ export function SyncPane() {
   const { t } = useTranslation();
   const projectPath = useProjectStore((p) => p.projectPath);
   const sync = useSyncStore();
-  const [selected, setSelected] = useState<string | null>(null);
-  const [newName, setNewName] = useState("");
-  const [creating, setCreating] = useState(false);
+  // 这台机器 folds by default once a project is open — the project's binding is
+  // what this page is visited for. Without a project it is all there is.
+  const [machineOpen, setMachineOpen] = useState(() => !projectPath);
   const [editConn, setEditConn] = useState(false);
   const [showAllRecords, setShowAllRecords] = useState(false);
 
@@ -270,16 +277,6 @@ export function SyncPane() {
         )}
       </div>
 
-      {/* ── 底纸:这台机器(装机级) ───────────────────────────────────── */}
-      <div className={sp.machineHead}>
-        <span className={sp.machineEyebrow}>{t("sync.aMachine")}</span>
-        {sync.device && <span className={sp.machineName}>{sync.device}</span>}
-        <span className={sp.stripSpacer} />
-        <span className={sp.machineNote}>{t("sync.aMachineNote")}</span>
-      </div>
-      <div className={sp.machineRule} />
-      <ConfigBackupSection connected={connected} />
-
       {/* ── 暖纸:当前项目(项目级) ───────────────────────────────────── */}
       <div className={sp.paper}>
         <div className={sp.paperHead}>
@@ -319,79 +316,11 @@ export function SyncPane() {
             </div>
           )
         ) : !bound ? (
-          <>
-            <div className={sp.kbListLabel}>
-              {t("sync.aKbPick", { name: baseName(projectPath) })}
-            </div>
-            {sync.kbs.map((kb) => (
-              <div
-                key={kb.id}
-                className={`${sp.kbRow} ${selected === kb.id ? sp.kbRowOn : ""}`}
-                onClick={() => setSelected(kb.id)}
-              >
-                <span className={`${sp.radio} ${selected === kb.id ? sp.radioOn : ""}`}>
-                  {selected === kb.id && <span className={sp.radioDot} />}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className={sp.kbName}>{kb.name}</div>
-                  <div className={sp.kbMeta}>{kbSubtitle(kb, t)}</div>
-                </div>
-              </div>
-            ))}
-            {creating && (
-              <div className={`${sp.kbRow} ${sp.kbRowOn}`}>
-                <span className={`${sp.radio} ${sp.radioOn}`}>
-                  <span className={sp.radioDot} />
-                </span>
-                <input
-                  className={sp.kbCreateInput}
-                  autoFocus
-                  value={newName}
-                  placeholder={t("sync.newKbName")}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <button
-                  className={ui.primaryBtn}
-                  disabled={!newName.trim() || sync.busy}
-                  onClick={async () => {
-                    const kb = await sync.createKb(newName.trim());
-                    if (kb) {
-                      setSelected(kb.id);
-                      setNewName("");
-                      setCreating(false);
-                    }
-                  }}
-                >
-                  {t("sync.aKbCreateGo")}
-                </button>
-              </div>
-            )}
-            {sync.kbs.length === 0 && !creating && (
-              <div className={sp.recEmpty}>
-                {t("sync.aKbEmpty")} <span>{t("sync.aKbEmptyHint")}</span>
-              </div>
-            )}
-            <div className={sp.kbFoot}>
-              <div className={sp.kbFootHint}>{t("sync.aBindHint")}</div>
-              {!creating && (
-                <button className={ui.rowBtn} onClick={() => setCreating(true)}>
-                  {t("sync.aKbNew")}
-                </button>
-              )}
-              <button
-                className={ui.primaryBtn}
-                disabled={!selected}
-                onClick={() => {
-                  const kb = sync.kbs.find((k) => k.id === selected);
-                  if (kb) void sync.bind(projectPath, kb);
-                }}
-              >
-                {selected
-                  ? t("sync.bindTo", { name: sync.kbs.find((k) => k.id === selected)?.name ?? "" })
-                  : t("sync.bind")}
-              </button>
-            </div>
-          </>
+          <KbPicker
+            key={projectPath}
+            projectPath={projectPath}
+            projectName={baseName(projectPath)}
+          />
         ) : (
           <>
             <div className={sp.paperRow}>
@@ -438,8 +367,78 @@ export function SyncPane() {
           </>
         )}
       </div>
+
+      {/* ── 底纸:这台机器(装机级) ───────────────────────────────────── */}
+      <div className={sp.machineHead}>
+        <span className={sp.machineEyebrow}>{t("sync.aMachine")}</span>
+        {sync.device && <span className={sp.machineName}>{sync.device}</span>}
+        <span className={sp.stripSpacer} />
+        <span className={sp.machineNote}>{t("sync.aMachineNote")}</span>
+      </div>
+      <div className={sp.machineRule} />
+      <button
+        className={sp.machineSummary}
+        aria-expanded={machineOpen}
+        aria-controls="sync-machine-body"
+        onClick={() => setMachineOpen((v) => !v)}
+      >
+        <span className={sp.machineSummaryMain}>
+          <span className={sp.machineSummaryTitle}>{t("sync.cfgSumTitle")}</span>
+          <span className={sp.machineSummaryDesc}>
+            <ConfigSummary connected={connected} />
+          </span>
+        </span>
+        <span className={sp.machineSummaryToggle}>
+          {t(machineOpen ? "sync.cfgSumCollapse" : "sync.cfgSumExpand")}
+          <span className={`${sp.chevron} ${machineOpen ? sp.chevronOpen : ""}`} aria-hidden />
+        </span>
+      </button>
+      {/* Hidden, not unmounted: the section refreshes the slot list the summary
+          line reads, and keeps a half-typed slot name across a fold. */}
+      <div id="sync-machine-body" hidden={!machineOpen}>
+        <ConfigBackupSection connected={connected} />
+      </div>
     </Pane>
   );
+}
+
+/**
+ * 「本地文件导入 / 导出 · 服务器上 2 个备份档 · 最近 studio · 2026/9/12 · 已加密」——
+ * what the folded 这台机器 section holds, so nobody has to unfold it to learn
+ * there is nothing new there.
+ */
+function ConfigSummary({ connected }: { connected: boolean }) {
+  const { t } = useTranslation();
+  const slots = useConfigSyncStore((s) => s.slots);
+  const loading = useConfigSyncStore((s) => s.loading);
+  const failed = useConfigSyncStore((s) => s.error !== null && s.slots.length === 0);
+  const parts = [t("sync.cfgSumLocal")];
+  if (!connected) {
+    parts.push(t("sync.cfgSumOffline"));
+  } else if (failed) {
+    // A failed read also empties the list; "no backups yet" would be a lie.
+    parts.push(t("sync.cfgSumFailed"));
+  } else if (loading && slots.length === 0) {
+    parts.push(t("sync.cfgLoading"));
+  } else if (slots.length === 0) {
+    parts.push(t("sync.cfgSumNoSlots"));
+  } else {
+    parts.push(t("sync.cfgSumSlots", { n: slots.length }));
+    const latest = slots
+      .filter((s) => s.current)
+      .sort((a, b) => b.current!.atMs - a.current!.atMs)[0];
+    if (latest?.current) {
+      parts.push(
+        t("sync.cfgSumLatest", {
+          name: latest.name,
+          when: new Date(latest.current.atMs).toLocaleDateString(),
+        }),
+      );
+      const header = slotHeader(latest);
+      if (header) parts.push(t(header.encrypted ? "sync.cfgEncrypted" : "sync.cfgPlain"));
+    }
+  }
+  return <>{parts.join(" · ")}</>;
 }
 
 type AnchorVerdict = FreshnessVerdict | "offline" | "loading";
@@ -652,23 +651,6 @@ function RecordsBlock({
       )}
     </>
   );
-}
-
-/**
- * "128 条 · 最后更新 08-19 22:41 · 来自 MacBook-Pro" — the line that tells the
- * author which of several knowledge bases is the one they have been writing
- * into. Each clause is dropped when the server has nothing to say.
- */
-function kbSubtitle(
-  kb: { entryCount: number; updatedAtMs: number; lastDevice: string | null },
-  t: (k: string, o?: Record<string, unknown>) => string,
-): string {
-  const parts = [t("sync.entryCount", { n: kb.entryCount })];
-  if (kb.updatedAtMs > 0) {
-    parts.push(t("sync.kbUpdated", { when: new Date(kb.updatedAtMs).toLocaleString() }));
-  }
-  if (kb.lastDevice) parts.push(t("sync.kbFrom", { device: kb.lastDevice }));
-  return parts.join(" · ");
 }
 
 function hostOf(url: string): string {

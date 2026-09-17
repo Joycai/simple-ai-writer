@@ -196,6 +196,43 @@
 .machineName { font: 400 12px/1 var(--font-mono); color: var(--stg-text-warm); }
 .machineNote { font-size: 11.5px; color: var(--stg-text-faint); }
 .machineRule { height: 1px; background: var(--stg-line-section); margin-top: 8px; }
+/* 折叠摘要行:整行是按钮,收起时它就是这一区的全部。 */
+.machineSummary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 4px;
+  border: none;
+  border-bottom: 1px solid var(--stg-line-row);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.machineSummary:hover { background: var(--stg-card); }
+.machineSummary:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--stg-focus-ring); }
+.machineSummaryMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.machineSummaryTitle { font-size: 14px; font-weight: 500; color: var(--stg-text); }
+.machineSummaryDesc { font-size: 12px; line-height: 1.6; color: var(--stg-text-desc); }
+.machineSummaryToggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--stg-text-warm);
+}
+.chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform var(--transition-fast);
+}
+.chevronOpen { transform: translateY(1px) rotate(-135deg); }
 
 /* ── 暖纸:当前项目 ──────────────────────────────────────────────────────── */
 .paper {
@@ -250,18 +287,101 @@
 }
 .paperRowDesc { margin-top: 4px; font-size: 12px; color: var(--stg-text-desc); line-height: 1.7; }
 
-/* 服务器库单选列表(未绑定时)。 */
-.kbListLabel { padding: 16px 0 6px; font-size: 13px; color: var(--stg-text-warm); }
-.kbRow {
+/* 服务器库选择器(未绑定时)——推荐卡 + 工具条 + 定高列表 + 底栏。 */
+.kbListLabel { padding: 16px 0 10px; font-size: 13px; color: var(--stg-text-warm); }
+
+.recCard {
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 13px 12px;
+  gap: 16px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--stg-card);
+  border: 1px solid var(--stg-border-soft);
+  box-shadow: inset 3px 0 0 var(--stg-accent-soft);
+}
+.recCardMain { flex: 1; min-width: 0; }
+.recCardTop { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.recCardTag {
+  flex: none;
+  font: 500 10.5px/1 var(--font-sans);
+  letter-spacing: 0.06em;
+  color: var(--stg-accent);
+  border: 1px solid var(--stg-accent-soft);
+  padding: 3px 6px;
+}
+.recCardName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 600 14px var(--font-serif-settings, var(--font-serif));
+  color: var(--stg-text);
+}
+
+.kbTools { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.kbSearch {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+  font: 13px var(--font-sans);
+  color: var(--stg-text);
+}
+.kbSearch::placeholder { color: var(--stg-text-placeholder); }
+.kbSearch:focus-visible { outline: none; border-color: var(--stg-accent); box-shadow: 0 0 0 3px var(--stg-focus-ring); }
+.kbSort { flex: none; display: flex; border: 1px solid var(--stg-border-mid); }
+.kbSortBtn {
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  font: 12px var(--font-sans);
+  color: var(--stg-text-desc);
+  cursor: pointer;
+}
+.kbSortBtn + .kbSortBtn { border-left: 1px solid var(--stg-border-mid); }
+.kbSortBtn:hover { color: var(--stg-text); }
+.kbSortBtnOn { background: var(--stg-card); color: var(--stg-text); font-weight: 500; }
+.kbSortBtn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--stg-focus-ring); }
+
+.kbTable { border: 1px solid var(--stg-border-soft); background: var(--stg-bg-input); }
+.kbGrid {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 3fr) 56px 84px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  padding: 0 12px;
+}
+.kbThead {
+  height: 30px;
+  font: 500 11px/1 var(--font-sans);
+  letter-spacing: 0.06em;
+  color: var(--stg-text-faint);
+  border-bottom: 1px solid var(--stg-line-row);
+}
+/* 约 7 行高,超出在框内滚动——底栏因此永远就在列表下面。 */
+.kbScroll { max-height: 308px; overflow-y: auto; overscroll-behavior: contain; }
+.kbRow {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-bottom: 1px solid var(--stg-line-row);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
+.kbRow:last-child { border-bottom: none; }
 .kbRow:hover { background: var(--stg-card); }
+.kbRow:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--stg-focus-ring); }
 .kbRowOn { background: var(--stg-card); box-shadow: inset 3px 0 0 var(--stg-accent); }
+.kbRowOn:focus-visible { box-shadow: inset 3px 0 0 var(--stg-accent), inset 0 0 0 2px var(--stg-focus-ring); }
 .radio {
   flex: none;
   width: 14px;
@@ -274,15 +394,70 @@
 }
 .radioOn { border-color: var(--stg-accent); }
 .radioDot { width: 7px; height: 7px; border-radius: 50%; background: var(--stg-accent); }
-.kbName { font-size: 14px; font-weight: 500; color: var(--stg-text); }
+.kbName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--stg-text);
+}
+.kbCell {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 400 11.5px var(--font-mono);
+  color: var(--stg-text-faint);
+}
+.kbCellSelf { color: var(--stg-text-warm); font-weight: 500; }
+.kbNum { text-align: right; }
 .kbMeta { margin-top: 4px; font: 400 11.5px var(--font-mono); color: var(--stg-text-desc); }
+.kbNoMatch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 14px;
+  font-size: 13px;
+  color: var(--stg-text-warm);
+}
+.kbStatus {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-top: 1px solid var(--stg-line-row);
+  font-size: 11.5px;
+  color: var(--stg-text-faint);
+}
+.kbStatusLegend { text-align: right; }
+
+.kbCreate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--stg-card);
+  box-shadow: inset 3px 0 0 var(--stg-accent);
+}
+.kbCreateLabel { flex: none; font-size: 12.5px; color: var(--stg-text-warm); }
 .kbFoot {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 16px 0 0;
+  margin-top: 14px;
   border-top: 1px solid var(--stg-line-row);
-  margin-top: 4px;
+}
+/* 按钮上写着库名;名字再长也不能把提示挤没。 */
+.kbBindBtn {
+  max-width: 280px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .kbFootHint { flex: 1; font-size: 12px; color: var(--stg-text-desc); line-height: 1.7; }
 .kbCreateInput {
