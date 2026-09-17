@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CLIP_HEAD, CLIP_TAIL, clipForModel, formatResult, type CmdResult } from "../output";
-import { shellLabel } from "../shell";
+import { shellLabel, systemLabel } from "../shell";
 
-const zsh = { kind: "zsh" as const, path: "/bin/zsh", version: null };
-const pwsh = { kind: "pwsh" as const, path: "pwsh.exe", version: "7.4.1" };
+const zsh = { kind: "zsh" as const, path: "/bin/zsh", version: null, os: "macos", osVersion: "15.2", arch: "aarch64" };
+const pwsh = { kind: "pwsh" as const, path: "pwsh.exe", version: "7.4.1", os: "windows", osVersion: "10.0.26100.0", arch: "x86_64" };
 
 function result(over: Partial<CmdResult> = {}): CmdResult {
   return {
@@ -42,9 +42,24 @@ describe("clipForModel", () => {
 describe("shellLabel", () => {
   it("两位版本号；unix 只有名字", () => {
     expect(shellLabel(pwsh)).toBe("PowerShell 7.4 (pwsh)");
-    expect(shellLabel({ kind: "powershell", path: "powershell.exe", version: "5.1.26100.1" })).toBe("Windows PowerShell 5.1");
-    expect(shellLabel({ kind: "pwsh", path: "pwsh.exe", version: null })).toBe("PowerShell (pwsh)");
+    expect(shellLabel({ ...pwsh, kind: "powershell", path: "powershell.exe", version: "5.1.26100.1" })).toBe("Windows PowerShell 5.1");
+    expect(shellLabel({ ...pwsh, version: null })).toBe("PowerShell (pwsh)");
     expect(shellLabel(zsh)).toBe("zsh");
+  });
+});
+
+describe("systemLabel", () => {
+  it("系统名 + 版本 + 架构，给模型看它在哪种 userland 上", () => {
+    expect(systemLabel(zsh)).toBe("macOS 15.2 · arm64");
+    expect(systemLabel(pwsh)).toBe("Windows 10.0.26100 · x86_64");
+    expect(systemLabel({ ...zsh, os: "linux", osVersion: "Ubuntu 24.04.1 LTS", arch: "x86_64" })).toBe("Ubuntu 24.04.1 LTS (Linux) · x86_64");
+    expect(systemLabel({ ...zsh, os: "linux", osVersion: "Arch Linux", arch: "x86_64" })).toBe("Arch Linux · x86_64");
+  });
+  it("版本读不到时仍报系统名", () => {
+    expect(systemLabel({ ...zsh, osVersion: null })).toBe("macOS · arm64");
+    expect(systemLabel({ ...pwsh, osVersion: null })).toBe("Windows · x86_64");
+    expect(systemLabel({ ...zsh, os: "linux", osVersion: null, arch: "x86_64" })).toBe("Linux · x86_64");
+    expect(systemLabel({ ...zsh, os: "freebsd", osVersion: null, arch: "x86_64" })).toBe("freebsd · x86_64");
   });
 });
 

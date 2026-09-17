@@ -11,7 +11,7 @@ import { isAsrEnabled, setAsrEnabled } from "../../../lib/asr/flag";
 import { isOrchestratorEnabled, setOrchestratorEnabled } from "../../../lib/agent/packFlag";
 import { isSkillStateEnabled, setSkillStateEnabled } from "../../../lib/agent/stateFlag";
 import { isCliEnabled, setCliEnabled } from "../../../lib/cli/flag";
-import { cachedShellInfo, shellInfo, shellLabel, type ShellInfo } from "../../../lib/cli/shell";
+import { cachedShellInfo, shellInfo, shellLabel, systemLabel, type ShellInfo } from "../../../lib/cli/shell";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import styles from "./Lab.module.css";
@@ -141,7 +141,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
         </Row>
         {/* 命令行（docs/feature/agent/shell-command-plan.md §3.6）：住在工作方式里，
             因为它改变的是助手能提议什么，不是多一种文件。开着时的脚注报这台电脑
-            检测到的 shell——作者据此知道助手会用哪种语法；关着时的补充句说的是
+            检测到的系统和 shell——和 run_command 描述里告诉模型的是同一句，作者据此知道助手会用哪种语法；关着时的补充句说的是
             入口**不存在**（不是禁用），句式同音频转写。 */}
         <Row
           top
@@ -151,7 +151,7 @@ export function LabPane({ onDocxToggled, onNavigate }: Props) {
             <div className={ui.rowDesc}>
               {cliOn
                 ? shell
-                  ? t("systemSettings.lab.cliShell", { shell: shellLabel(shell) })
+                  ? t("systemSettings.lab.cliShell", { shell: shellLabel(shell), system: systemLabel(shell) })
                   : t("systemSettings.lab.cliShellUnknown")
                 : t("systemSettings.lab.cliOffHint")}
             </div>

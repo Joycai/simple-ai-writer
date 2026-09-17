@@ -15,13 +15,13 @@
 
 import { fileExists } from "../fs/fileio";
 import { projectRelative, resolveWorkspacePath } from "../paths";
-import { IS_WINDOWS } from "../platform";
+import { IS_MAC, IS_WINDOWS } from "../platform";
 import i18n from "../../i18n";
 import type { CommandProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 import { commandAccess, isCompound, looksDangerous } from "../cli/command";
 import { clampTimeout, DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS } from "../cli/run";
-import { cachedShellInfo, shellInfo, shellLabel, shellSyntax } from "../cli/shell";
+import { cachedShellInfo, shellInfo, shellLabel, shellSyntax, systemLabel } from "../cli/shell";
 
 let proposalCounter = 0;
 
@@ -35,18 +35,20 @@ interface RunCommandArgs {
 
 /**
  * The tool's description, built when the definitions are handed to the model
- * rather than at import: it names the shell this computer actually runs, so a
- * model on Windows writes `Get-ChildItem` and not `ls -la | grep` (不变量 11).
- * Before the probe has answered (or outside Tauri) it falls back to the
- * platform's likely shell — a guess, but the right guess far more often than
- * a description that names none.
+ * rather than at import: it names the system and the shell this computer
+ * actually runs, so a model on Windows writes `Get-ChildItem` and not
+ * `ls -la | grep`, and one on macOS writes `sed -i ''` (不变量 11). Before the
+ * probe has answered (or outside Tauri) it falls back to the platform's likely
+ * OS and shell — a guess, but the right guess far more often than a
+ * description that names none.
  */
 export function describeRunCommand(): string {
   const info = cachedShellInfo();
+  const system = info ? systemLabel(info) : IS_WINDOWS ? "Windows" : IS_MAC ? "macOS" : "Linux";
   const shell = info ? shellLabel(info) : IS_WINDOWS ? "PowerShell" : "the login shell (zsh / bash)";
   const syntax = (info ? shellSyntax(info) === "powershell" : IS_WINDOWS) ? "PowerShell" : "POSIX";
   return (
-    `Run ONE shell command on the author's computer — in ${shell}, so write ${syntax} syntax. ` +
+    `Run ONE shell command on the author's computer (${system}) — in ${shell}, so write ${syntax} syntax. ` +
     "Known read-only commands (for example ls/cat/grep/rg or PowerShell Get-ChildItem/Get-Content/Select-String) run without approval. Every other command is shown verbatim on a card FIRST; the author can approve it once or grant a small counted batch. Commands run with their account's full permissions, stdin closed, in the project folder (or `cwd`), and return the exit code, stdout and stderr (long output is cut, with the full log's path for read_file). " +
     "Use it for what no other tool does: git, converters and scripts the author has installed, counting and listing beyond list_files / search_text. " +
     "Prefer built-in read/edit tools for project text. One thing per call; do not chain unrelated commands."

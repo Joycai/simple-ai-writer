@@ -20,6 +20,12 @@ export interface ShellInfo {
   path: string;
   /** PowerShell's `$PSVersionTable.PSVersion`; null on unix. */
   version: string | null;
+  /** Rust's `std::env::consts::OS`: `macos` / `windows` / `linux` / … */
+  os: string;
+  /** macOS `15.2`, Windows `10.0.26100.0`, Linux os-release `PRETTY_NAME`; null if unread. */
+  osVersion: string | null;
+  /** Rust's `std::env::consts::ARCH`: `aarch64` / `x86_64` / … */
+  arch: string;
 }
 
 let cached: ShellInfo | null = null;
@@ -71,4 +77,32 @@ export function shellLabel(info: ShellInfo): string {
     default:
       return info.kind;
   }
+}
+
+/**
+ * The system the shell runs on, as the model and the author both read it:
+ * "macOS 15.2 · arm64", "Windows 10.0.26100 · x86_64", "Ubuntu 24.04.1 LTS ·
+ * x86_64". The shell alone doesn't say whether the userland is BSD or GNU, or
+ * which of `open` / `xdg-open` / `brew` / `apt` exists — the OS does.
+ */
+export function systemLabel(info: ShellInfo): string {
+  const v = info.osVersion?.trim() || null;
+  let name: string;
+  switch (info.os) {
+    case "macos":
+      name = v ? `macOS ${v}` : "macOS";
+      break;
+    case "windows":
+      // `10.0.26100.0` — the revision is always 0 and only costs a token.
+      name = v ? `Windows ${v.replace(/\.0$/, "")}` : "Windows";
+      break;
+    case "linux":
+      // PRETTY_NAME usually names the distribution without saying "Linux".
+      name = v ? (/linux/i.test(v) ? v : `${v} (Linux)`) : "Linux";
+      break;
+    default:
+      name = v ? `${info.os} ${v}` : info.os;
+  }
+  const arch = info.arch === "aarch64" ? "arm64" : info.arch;
+  return arch ? `${name} · ${arch}` : name;
 }
