@@ -49,6 +49,7 @@ The unified agent runtime can:
 - search and read project files, HTML pages, slide decks, and knowledge-base entries;
 - propose precise edits or full-document rewrites;
 - create files and hand work to specialized subagents;
+- load less-common tool groups — file organizing (rename, move, copy, delete) and image generation/editing — on demand through `search_tools`, keeping the default tool list small enough for local models;
 - maintain notes, compact long conversations, rewind chats, and resume persisted long-running tasks;
 - ask the author questions and pause at round limits instead of silently guessing;
 - show approval cards before protected edits, conversions, exports, transcription, or command execution.
@@ -118,7 +119,7 @@ Settings → AI Configuration → Lab contains features that are **off by defaul
 - Sakura-style Japanese-to-Chinese translation through a local compatible endpoint
 - Local ComfyUI image generation
 - Qwen audio/video transcription with timestamps and optional diarization
-- Local command execution with approval policy
+- Local command execution with approval policy, aware of the host shell, OS version, and architecture
 
 These features are usable but intentionally remain behind explicit opt-in because they add specialized models, local services, larger tool surfaces, or higher-risk actions.
 
