@@ -720,8 +720,9 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   - 这些 item 不需要回传；多轮里 echo 照旧只收 reasoning / function_call / message，实测第二轮正常。
 - **计费**（文档口径）：限时免费；但一次回答会触发多轮推理，token 用量明显增加
   （qwen3.8-flash 一问约 1.1k tokens，不开时约 30）。所以本项目自己发起的后台请求——前情摘要
-  （`memoryStore`）、合集摘要（`digestStore`），以及早已如此的结构化任务与历史压缩——一律不带服务端工具：
-  摘要的是手头已有的文本，没什么可查、可算的，带上只会多花钱。
+  （`memoryStore`）、合集摘要（`digestStore`）、Sakura 翻译（`translate/run.ts`）、设定图片描述
+  （`lore/vision.ts`），以及早已如此的结构化任务与历史压缩——一律不带服务端工具：
+  处理的都是手头已有的文本或图片，没什么可查、可算的，带上只会多花钱。
 - **官方 api.openai.com 的 `code_interpreter` 不是这个工具**：它要求 `container` 参数，本项目不对 `openai_responses` 提供此开关。
 
 #### 视觉理解（qwen3-vl 系列，另附视频与 ASR 在 ① 面上的样子，2026-09-14 实测）

@@ -75,6 +75,9 @@ export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise
   let acc = "";
   await streamCompletion({
     ...pickConnOptions(opts),
+    // Describing the picture in hand: nothing to look up or compute, so the
+    // model's standing server tools (search, code interpreter) stay off.
+    serverTools: undefined,
     signal: opts.signal,
     messages,
     onChunk: (chunk) => {
