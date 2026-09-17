@@ -37,6 +37,7 @@ import {
   contentWithoutImages, contentWithoutMedia, contentWithoutVideo, hasImageParts, hasMediaParts, hasVideoParts,
 } from "./imageHistory";
 import { planLoadsEntityWrites, planLoadsOrganize } from "./plan";
+import { groupsUsedIn, SEARCHABLE_GROUPS, type SearchableGroup } from "./toolSearch";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -615,9 +616,19 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
    *
    * An array rather than a Set precisely because that order is load-bearing.
    */
-  const { resident, deferred } = partitionByGroup(preset.tools);
+  const { resident, deferred, searchable } = partitionByGroup(preset.tools, preset.residentGroups);
   const activeTools: ToolId[] = [...resident];
   const loadedGroups = new Set<ToolGroup>();
+  /**
+   * Searchable groups asked for (`search_tools`, or a direct call to one of
+   * their tools) and not yet loaded — loaded at the top of the next round, the
+   * same place and for the same reason as the plan-driven groups.
+   *
+   * Seeded from the conversation so far: every chat turn is a new run, and a
+   * group the model already used two turns ago should not cost it a round to
+   * ask for again.
+   */
+  const requestedGroups = new Set<SearchableGroup>(groupsUsedIn(history, searchable));
   /**
    * The message ceiling as it stands *now*. The caller computed
    * `inputCeilingTokens` against the resident toolset (`plannedToolTokens`
@@ -641,6 +652,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   const runToolContext: ToolContext = {
     ...opts.toolContext,
     loreIndex: cloneLoreIndex(opts.toolContext.loreIndex),
+    toolSearch: Object.keys(searchable).length
+      ? {
+          groups: searchable,
+          load: (groups) => {
+            for (const g of groups) if (searchable[g]?.length) requestedGroups.add(g);
+          },
+          isLoaded: (g) => loadedGroups.has(g),
+          planGated:
+            resident.includes("propose_lore_plan") &&
+            deferred.lore_write.length + deferred.lore_organize.length > 0,
+        }
+      : undefined,
   };
 
   let totalInputTokens = 0;
@@ -732,11 +755,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     const steps = runToolContext.lorePlan?.steps ?? [];
     const wantsWrite = planLoadsEntityWrites(steps);
     const wantsOrganize = planLoadsOrganize(steps);
-    for (const [group, wanted] of [
+    // 可搜的组没有方案这道门：要过（search_tools 或直接点名）就装。
+    const wanted: [ToolGroup, boolean][] = [
       ["lore_write", wantsWrite],
       ["lore_organize", wantsOrganize],
-    ] as const) {
-      if (!wanted || loadedGroups.has(group) || deferred[group].length === 0) continue;
+      ...SEARCHABLE_GROUPS.map((g): [ToolGroup, boolean] => [g, requestedGroups.has(g)]),
+    ];
+    for (const [group, wantsGroup] of wanted) {
+      if (!wantsGroup || loadedGroups.has(group) || deferred[group].length === 0) continue;
       loadedGroups.add(group);
       activeTools.push(...deferred[group]);
       if (messageCeiling !== undefined) {
@@ -757,7 +783,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // Rebuilt per round because `activeTools` grows. `getToolDefinitions` also
     // re-patches the active profile's lore categories, which is free to redo
     // and wrong to cache across a project switch.
-    const toolDefinitions = getToolDefinitions(activeTools);
+    const toolDefinitions = getToolDefinitions(activeTools, searchable);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -987,7 +1013,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       ? handoffToolTokens()
       : withholdTools
         ? 0
-        : toolTokensOf(activeTools) + (handoffPreset ? handoffToolTokens() : 0);
+        : toolTokensOf(activeTools, searchable) + (handoffPreset ? handoffToolTokens() : 0);
     opts.onEvent({
       kind: "round-start",
       round,

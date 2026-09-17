@@ -26,6 +26,7 @@ import type { TaskPreset } from "./presets";
 import { getToolDefinitions, partitionByGroup, type ToolId } from "./registry";
 import { routePlannedTools, type RouteOptions } from "./routing";
 import type { SubAgentConfig, SubAgentKind } from "./subagent";
+import type { SearchableTools } from "./toolSearch";
 
 /**
  * Memoised per (toolset × active lore categories).
@@ -39,12 +40,13 @@ import type { SubAgentConfig, SubAgentKind } from "./subagent";
  */
 const cache = new Map<string, number>();
 
-export function toolTokensOf(ids: readonly ToolId[]): number {
+export function toolTokensOf(ids: readonly ToolId[], searchable?: SearchableTools): number {
   if (ids.length === 0) return 0;
-  const key = `${ids.join(",")}|${loreCategoryIds().join(",")}`;
+  const catalogue = searchable ? JSON.stringify(searchable) : "*";
+  const key = `${ids.join(",")}|${loreCategoryIds().join(",")}|${catalogue}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
-  const tokens = estimateToolsTokens(getToolDefinitions(ids));
+  const tokens = estimateToolsTokens(getToolDefinitions(ids, searchable));
   cache.set(key, tokens);
   return tokens;
 }
@@ -76,7 +78,10 @@ export function handoffToolTokens(): number {
  * groups (`lore_write` / `lore_organize`) load when the author approves a lore
  * plan, and the plan gate is created fresh for every run (`createPlanGate()` in
  * the stores) — so a request planned *before* a run starts cannot be carrying
- * them, ever. Counting them anyway is what this used to do, and it made every
+ * them, ever. (`file_ops` / `image` are the exception: a conversation that has
+ * used one starts its next run with it loaded — see `toolSearch.groupsUsedIn`
+ * — and this does not count that. The runtime shrinks its ceiling for them the
+ * same way, so the miss is a meter reading low, not a window overflowing.) Counting them anyway is what this used to do, and it made every
  * assistant meter over-report by ~5.4k: on a 32k local model that was the
  * difference between "the knowledge base gets a layer" and "the knowledge base
  * gets zero", charged against schemas that were not on the wire.
@@ -95,9 +100,9 @@ export function plannedToolTokens(
 ): number {
   if (!preset) return 0;
   const routed = routePlannedTools(preset, subs, models, options);
-  const { resident } = partitionByGroup(routed.tools);
+  const { resident, searchable } = partitionByGroup(routed.tools, preset.residentGroups);
   return (
-    toolTokensOf(resident) +
+    toolTokensOf(resident, searchable) +
     (routed.finishPolicy === "handoff" ? handoffToolTokens() : 0)
   );
 }
@@ -151,9 +156,10 @@ export function messageCeilingForTools(
   contextSize: number | undefined,
   utilization: number,
   tools: readonly ToolId[],
+  residentGroups?: TaskPreset["residentGroups"],
 ): number {
-  const { resident } = partitionByGroup(tools);
-  const toolTokens = toolTokensOf(resident);
+  const { resident, searchable } = partitionByGroup(tools, residentGroups);
+  const toolTokens = toolTokensOf(resident, searchable);
   return flooredCeiling(effectiveInputCeiling(contextSize, utilization, toolTokens), toolTokens);
 }
 

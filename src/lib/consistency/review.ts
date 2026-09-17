@@ -341,7 +341,7 @@ async function runWindow(
     let finalText = "";
     const run = await runAgent({
       ...connOptions(args.conn),
-      inputCeilingTokens: messageCeilingForTools(args.conn.model.contextSize, args.contextUtilization, routed.tools),
+      inputCeilingTokens: messageCeilingForTools(args.conn.model.contextSize, args.contextUtilization, routed.tools, preset.residentGroups),
       preset,
       messages,
       toolContext,

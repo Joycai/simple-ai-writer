@@ -81,6 +81,8 @@ export const NARRATOR_PRESET: TaskPreset = {
     "read_note",
     "list_notes",
   ],
+  // create_chapter 是上面四个写工具之一，不能留给旁白先去 search_tools 要。
+  residentGroups: ["file_ops"],
   maxRounds: 20,
   finishPolicy: "force-text",
   scratchpad: "offered",

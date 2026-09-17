@@ -163,7 +163,9 @@ describe("description conventions", () => {
   /** A search tool must say how matching works, or the model writes regexes. */
   it("makes every search tool state its matching semantics", () => {
     for (const { id, description } of allTools()) {
-      if (!id.startsWith("search_")) continue;
+      // search_tools searches a catalogue of tool groups, not text: its query
+      // is a group name or a few words, and no regex could be written for it.
+      if (!id.startsWith("search_") || id === "search_tools") continue;
       expect(description, `${id} does not say matching is literal`).toMatch(/literal/i);
       expect(description, `${id} does not say matching is case-insensitive`)
         .toMatch(/case-insensitive/i);
@@ -185,8 +187,9 @@ describe("the open-folder fence", () => {
     // run (lib/lore/splitter) is the one caller that passes no project at all.
     // The 一致性检查 collectors (lib/consistency/reviewTools) are the same shape:
     // an in-memory sink, and handlers the tests run with no project.
+    // search_tools touches no file at all — it only loads schemas into the run.
     // Anything else added here needs a reason of that kind in its registry entry.
-    expect(free.sort()).toEqual(["report_issue", "report_pass", "split_core", "split_facet"]);
+    expect(free.sort()).toEqual(["report_issue", "report_pass", "search_tools", "split_core", "split_facet"]);
   });
 
   it("refuses a fenced tool with no folder open, before the handler runs", async () => {

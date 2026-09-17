@@ -15,7 +15,7 @@ import type { AgentEvent } from "../events";
 import type { TaskPreset } from "../presets";
 import { runAgent, type AgentRuntimeOptions } from "../runtime";
 import { createPlanGate, type PlanGate } from "../plan";
-import { partitionByGroup } from "../registry";
+import { getToolDefinitions, partitionByGroup, type ToolId } from "../registry";
 import { toolTokensOf } from "../toolCost";
 import { estimateMessagesTokens } from "../../ai/tokenEstimate";
 import type { LoreIndex } from "../../lore";
@@ -358,5 +358,122 @@ describe("lore_write is withheld until a plan is approved", () => {
       (e): e is Extract<AgentEvent, { kind: "round-start" }> => e.kind === "round-start",
     );
     expect(starts[1].toolTokens!).toBeGreaterThan(starts[0].toolTokens!);
+  });
+});
+
+/**
+ * The other kind of deferred group: no gate, just rarely needed. The model
+ * loads `file_ops` / `image` itself through `search_tools`
+ * (agent-tool-context-lld.md §6). What has to hold is the same boundary as
+ * above — no schema, no execution — plus the two fallbacks that keep a missed
+ * search from becoming a dead end.
+ */
+describe("searchable groups load on request", () => {
+  const SEARCH_PRESET: TaskPreset = {
+    id: "test-search",
+    tools: ["list_files", "move_chapter", "copy_file", "generate_image"],
+    maxRounds: 6,
+    finishPolicy: "force-text",
+  };
+  const FILE_OPS: ToolId[] = ["move_chapter", "copy_file"];
+
+  function searchOptions(messages?: AgentRuntimeOptions["messages"]) {
+    return { ...makeOptions(undefined), preset: SEARCH_PRESET, ...(messages ? { messages } : {}) };
+  }
+
+  function lastSummary(events: AgentEvent[]): string {
+    const steps = events.filter((e) => e.kind === "tool-step");
+    return (steps[steps.length - 1] as { step: { resultSummary: string } }).step.resultSummary;
+  }
+
+  it("keeps the groups out and appends search_tools last", () => {
+    const { resident, searchable } = partitionByGroup(SEARCH_PRESET.tools);
+    expect(resident).toEqual(["list_files", "search_tools"]);
+    expect(searchable).toEqual({ file_ops: FILE_OPS, image: ["generate_image"] });
+  });
+
+  it("keeps a group resident when the preset says its job is that group", () => {
+    const { resident, searchable } = partitionByGroup(SEARCH_PRESET.tools, ["file_ops"]);
+    expect(resident).toEqual(["list_files", ...FILE_OPS, "search_tools"]);
+    expect(searchable).toEqual({ image: ["generate_image"] });
+    // Nothing left to search for → no search_tools at all.
+    expect(partitionByGroup(["list_files", "move_chapter"], ["file_ops"]).resident)
+      .toEqual(["list_files", "move_chapter"]);
+  });
+
+  it("lists only the groups this run has in the search_tools description", () => {
+    const withImage = getToolDefinitions(["search_tools"], { file_ops: FILE_OPS, image: ["generate_image"] });
+    const without = getToolDefinitions(["search_tools"], { file_ops: FILE_OPS });
+    expect(withImage[0].function.description).toContain("- image:");
+    expect(withImage[0].function.description).toContain("move_chapter, copy_file");
+    // Routing strips the drawing tools when no image model is bound; the
+    // catalogue must not promise them then (tool-presence.md).
+    expect(without[0].function.description).not.toContain("image");
+  });
+
+  it("loads the matching group on the round after search_tools", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "search_tools", arguments: '{"query":"重命名一个章节"}' }] },
+      done,
+    ]);
+    queueRound([{ text: "done" }, done]);
+    const opts = searchOptions();
+
+    await runAgent(opts);
+
+    expect(offered[0]).toEqual(["list_files", "search_tools"]);
+    // Appended, so the resident prefix — and its cache — survives.
+    expect(offered[1]).toEqual(["list_files", "search_tools", ...FILE_OPS]);
+    expect(lastSummary(opts.events)).toContain("Loaded file_ops");
+    const loaded = opts.events.filter((e) => e.kind === "tools-loaded");
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]).toMatchObject({ group: "file_ops", round: 2, names: FILE_OPS });
+  });
+
+  it("loads nothing for a query that matches no group, and names the groups", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "search_tools", arguments: '{"query":"translate"}' }] },
+      done,
+    ]);
+    queueRound([{ text: "done" }, done]);
+    const opts = searchOptions();
+
+    await runAgent(opts);
+
+    expect(offered[1]).toEqual(["list_files", "search_tools"]);
+    expect(lastSummary(opts.events)).toContain("file_ops, image");
+  });
+
+  it("a direct call to an unloaded tool does not run, but loads its group", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "generate_image", arguments: '{"prompt":"x"}' }] },
+      done,
+    ]);
+    queueRound([{ text: "done" }, done]);
+    const opts = searchOptions();
+
+    await runAgent(opts);
+
+    const summary = lastSummary(opts.events);
+    expect(summary).toContain("did not run");
+    expect(summary).toContain("call generate_image again");
+    expect(offered[1]).toEqual(["list_files", "search_tools", "generate_image"]);
+  });
+
+  it("starts loaded with a group the conversation already used", async () => {
+    queueRound([{ text: "done" }, done]);
+    const opts = searchOptions([
+      { role: "system", content: "sys" },
+      { role: "user", content: "把第三章改名" },
+      { role: "assistant", content: null, tool_calls: [
+        { id: "old1", type: "function", function: { name: "move_chapter", arguments: "{}" } },
+      ] },
+      { role: "tool", tool_call_id: "old1", content: "已移动" },
+      { role: "user", content: "再把第四章也改了" },
+    ]);
+
+    await runAgent(opts);
+
+    expect(offered[0]).toEqual(["list_files", "search_tools", ...FILE_OPS]);
   });
 });
