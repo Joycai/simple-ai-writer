@@ -237,3 +237,80 @@ system prompt: 4707 chars · tools: 31 defs ≈ 7686 tok
 
 总计 33/50
 ```
+
+## 大模型对照：qwen3.8-27b-uncensored（每格 5 次、至多 8 轮）
+
+作者要的是方向，所以每组只跑 20 次；画图一格被作者叫停（用得少），延迟组那一格没有数据，
+两组合计都不含它。轮数放到 8：这个模型读得更多，6 轮会先把延迟组（多一步搜索）卡死。
+
+delete-folder 两组都几乎全败，原因在夹具：`list_files` 的假结果里根本没有「旧稿」，
+27B 会一直去找它，4B 不会。画图常驻组 0/5 同理——假条目里没有配图信息，它一直在翻参考资料。
+所以这一节只看两组之间的差，不看绝对分数。
+
+### 常驻
+
+```
+[plan-first] 动知识库之前必须提 propose_lore_plan
+  ✓ 51s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 69s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 69s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 66s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✗ 47s  (无工具调用)
+  = 4/5
+
+[rename-file] 改名要用到 file_ops 组里的 move_chapter
+  ✓ 45s  search_text → list_files → read_file → read_file → read_file → move_chapter
+  ✗ 17s  list_files → read_file → propose_edit
+  ✗ 64s  search_text → list_files → read_file
+  ✓ 57s  list_files → read_file → move_chapter
+  ✗ 49s  list_files → read_file → propose_edit
+  = 2/5
+
+[delete-folder] 删文件夹要用到 file_ops 组里的 delete_directory
+  ✗ 53s  list_files → search_text → search_text → list_files → read_file → read_file → search_text → list_files → read_file → read_file → read_file
+  ✗ 60s  list_files → search_text → read_file → list_files → read_file → read_file
+  ✗ 89s  list_files → list_files → search_text → read_file → list_files → list_files
+  ✓ 45s  list_files → search_text → list_files → list_files → delete_directory
+  ✗ 56s  list_files → list_files → search_text → read_file → read_file
+  = 1/5
+
+[draw] 画图要用到 image 组里的 generate_image
+  ✗ 33s  list_lore_entities → read_lore_entity → read_lore_entity → search_text → read_file → read_lore_entity → list_files → read_file → read_file → read_lore_entity → read_lore_entity
+  ✗ 24s  list_lore_entities → read_lore_entity → read_lore_entity → search_text → read_file → list_files → read_file → read_file → search_text
+  ✗ 20s  list_lore_entities → read_lore_entity → read_lore_entity → search_text → search_text → list_files → read_file → read_file → read_file
+  ✗ 28s  list_lore_entities → read_lore_entity → read_lore_entity → read_lore_entity → search_text → read_file → read_lore_entity → read_lore_entity → list_files
+  ✗ 68s  list_lore_entities → read_workflow → read_lore_entity → read_lore_entity → read_lore_entity → search_text → list_files → read_file → read_file → read_file → read_lore_entity
+  = 0/5
+
+总计 7/20
+```
+
+### 延迟（第二版）
+
+```
+[plan-first] 动知识库之前必须提 propose_lore_plan
+  ✓ 58s  list_lore_entities → search_text → read_lore_entity → search_tools(知识库 修改别名 人物条目 update_lore_meta propose_lore_plan) → propose_lore_plan
+  ✓ 22s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 16s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 25s  list_lore_entities → read_lore_entity → propose_lore_plan
+  ✓ 13s  list_lore_entities → propose_lore_plan
+  = 5/5
+
+[rename-file] 改名要用到 file_ops 组里的 move_chapter
+  ✗ 14s  search_text → list_files → read_file → propose_edit
+  ✓ 27s  list_files → search_tools(rename a chapter file) → read_file → move_chapter
+  ✓ 41s  list_files → search_tools(rename a chapter file) → read_file → read_file → read_file → read_file → move_chapter
+  ✓ 128s  search_text → read_file → search_tools(rename a file / 章节改名) → list_files → read_file → read_file → search_text → search_text → move_chapter
+  ✓ 35s  search_text → list_files → search_tools(rename chapter file) → read_file → read_file → read_file → move_chapter
+  = 4/5
+
+[delete-folder] 删文件夹要用到 file_ops 组里的 delete_directory
+  ✗ 46s  list_files → search_text → read_file
+  ✗ 38s  list_files → search_tools(delete folder) → search_text → list_files → list_lore_entities
+  ✗ 61s  list_files → search_text → list_files → read_file → read_file → list_files → read_file → search_text → read_file
+  ✗ 78s  list_files → search_text → read_file → read_file → list_files → search_text → search_text → list_files
+  ✗ 35s  list_files → search_tools(删除文件夹 delete directory) → search_text → read_file
+  = 0/5
+
+（draw 被叫停）
+```
