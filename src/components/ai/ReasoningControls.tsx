@@ -16,7 +16,7 @@
  * level governs — the whole response on Anthropic, thinking alone elsewhere.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
@@ -81,8 +81,13 @@ function footerValueWord(
 export function ReasoningControls({ variant }: Props) {
   const { t } = useTranslation();
   const model = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
-  const provider = useAiStore((s) =>
-    model ? providerFor(model, s.providers) : undefined,
+  // Select the raw array and route outside the selector: `providerFor` builds a
+  // fresh object on every call, and a selector that never returns the same
+  // reference re-renders forever (React #185).
+  const providers = useAiStore((s) => s.providers);
+  const provider = useMemo(
+    () => (model ? providerFor(model, providers) : undefined),
+    [model, providers],
   );
   const updateModel = useAiStore((s) => s.updateModel);
 
