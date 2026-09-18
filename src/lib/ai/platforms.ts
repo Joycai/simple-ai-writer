@@ -323,7 +323,11 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     ],
     hosts: ["ark.cn-beijing.volces.com"],
     // No private search field on Chat Completions; Responses' own web_search
-    // stays at "unknown" via the protocol-native list.
+    // stays at "unknown" via the protocol-native list — on this key a bare
+    // `{type:"web_search"}` may land on the separately-activated 联网内容插件
+    // rather than 豆包搜索, which nobody has measured. The vendor also serves
+    // Messages to these keys, but at a path a plan key cannot find (auth runs
+    // before routing: every path is a 401), so no Anthropic route is listed.
     serverTools: { openai: [] },
     source: "Ark docs (文本生成 · 图片理解 · 文档理解, 2026-09-08); pay-as-you-go wire unmeasured",
   },
@@ -331,14 +335,16 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     origin: "https://ark.cn-beijing.volces.com",
     endpoints: [
       { family: "openai", path: "/api/plan/v3" },
-      // The adapter appends /v1/messages. No /responses and no /models on
-      // this prefix (404).
+      { family: "responses", path: "/api/plan/v3" },
+      // The adapter appends /v1/messages. No /models on this prefix (404).
       { family: "anthropic", path: "/api/plan" },
     ],
     hosts: ["ark.cn-beijing.volces.com/api/plan"],
-    // Anthropic's versioned web_search ran (server_tool_use + results) on
-    // doubao-seed-2.0-mini; Chat Completions has no field for it.
-    serverTools: { openai: [], anthropic: [{ id: "web_search" }] },
+    // The vendor's 联网搜索 page names only Responses and Messages. Both ran
+    // on all three sampled models; on a plan key the bare Responses
+    // `{type:"web_search"}` bills to the `doubao` source (豆包搜索 Custom,
+    // plan-covered) with no `sources` field. Chat Completions has no field.
+    serverTools: { openai: [], responses: [{ id: "web_search" }], anthropic: [{ id: "web_search" }] },
     // A base64 `document` block was read (the secret word came back) — the
     // one Anthropic-shaped wire measured to do so.
     pdfFamilies: ["openai", "responses", "anthropic"],

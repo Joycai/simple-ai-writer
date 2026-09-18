@@ -180,6 +180,7 @@ describe("volcengine: two platforms on one host", () => {
   const HOST = "https://ark.cn-beijing.volces.com";
   it("names the plan by its path prefix and pay-as-you-go by the bare host", () => {
     expect(inferPlatform(`${HOST}/api/plan/v3`, "openai_compat")).toBe("volcengine-plan");
+    expect(inferPlatform(`${HOST}/api/plan/v3`, "openai_responses_compat")).toBe("volcengine-plan");
     expect(inferPlatform(`${HOST}/api/plan`, "anthropic_compat")).toBe("volcengine-plan");
     expect(inferPlatform(`${HOST}/api/plan/`, "anthropic_compat")).toBe("volcengine-plan");
     expect(inferPlatform(`${HOST}/api/v3`, "openai_compat")).toBe("volcengine");
@@ -201,6 +202,7 @@ describe("volcengine: two platforms on one host", () => {
   it("spells the plan's measured tools: Anthropic web_search yes, Chat none", () => {
     expect(serverToolStatus({ platform: "volcengine-plan", standard: "anthropic_compat" }, "web_search")).toBe("yes");
     expect(serverToolStatus({ platform: "volcengine-plan", standard: "openai_compat" }, "web_search")).toBe("no");
+    expect(serverToolStatus({ platform: "volcengine-plan", standard: "openai_responses_compat" }, "web_search")).toBe("yes");
     expect(serverToolStatus({ platform: "volcengine", standard: "openai_responses_compat" }, "web_search")).toBe("unknown");
   });
 });
@@ -213,5 +215,6 @@ describe("wireReadsPdf", () => {
     expect(wireReadsPdf({ platform: "google", standard: "gemini" })).toBe(false);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
+    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
   });
 });

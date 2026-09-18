@@ -1,10 +1,11 @@
 /**
  * LIVE probe of 火山方舟 Agent / Coding Plan — NOT part of the suite.
  * Runs only when SEEDDACE_KEY (a plan key) is set. Drives the real adapters
- * through `streamCompletion` on both routes the `volcengine-plan` platform
- * lists, so what is verified is the app's own request bodies: `imagePart`,
- * the Chat `file` part and the Anthropic `document` block, the `doubao`
- * thinking category, Anthropic's `thinking` echo across a tool round.
+ * through `streamCompletion` on all three routes the `volcengine-plan`
+ * platform lists, so what is verified is the app's own request bodies:
+ * `imagePart`, the Chat `file` part, Responses' `input_file` and the Anthropic
+ * `document` block, the `doubao` / `responses-effort` thinking categories, the
+ * reasoning echo across a tool round, and each route's web_search spelling.
  *
  * The facts it pins are docs/api/landscape.md §7 第十二个样本 (2026-09-18).
  */
@@ -12,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import zlib from "node:zlib";
 import { streamCompletion } from "../index";
 import { imagePart } from "../imagePart";
-import { resolvePlatform } from "../platforms";
+import { resolvePlatform, serverToolStatus } from "../platforms";
 import { testProviderConnection } from "../providerProbe";
 import type {
   ApiStandard, ContentPart, StreamChunk, StreamMessage, StreamOptions, ToolDefinition,
@@ -24,6 +25,7 @@ const HOST = "https://ark.cn-beijing.volces.com";
 type Wire = [ApiStandard, string, ThinkingCategoryId];
 const WIRES: Wire[] = [
   ["openai_compat", `${HOST}/api/plan/v3`, "doubao"],
+  ["openai_responses_compat", `${HOST}/api/plan/v3`, "responses-effort"],
   ["anthropic_compat", `${HOST}/api/plan`, "doubao-switch"],
 ];
 const MODELS = ["doubao-seed-2.0-mini", "doubao-seed-2.0-lite", "doubao-seed-2.1-turbo"];
@@ -160,7 +162,7 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
 
     it("thinking on streams reasoning", async () => {
       const c = await ask(wire, user("17 × 23 = ? 只答数字。"), {
-        reasoningEffort: cat === "doubao" ? "low" : "high",
+        reasoningEffort: cat === "doubao-switch" ? "high" : "low",
         maxOutput: 4096,
       });
       expect(c.text).toMatch(/391/);
@@ -170,7 +172,7 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
     it("finishes a tool round with thinking on (the reasoning echo is accepted)", async () => {
       const opts = {
         tools: [WEATHER],
-        reasoningEffort: (cat === "doubao" ? "low" : "high") as StreamOptions["reasoningEffort"],
+        reasoningEffort: (cat === "doubao-switch" ? "high" : "low") as StreamOptions["reasoningEffort"],
         maxOutput: 4096,
       };
       const first = user("北京现在天气怎样？必须先调用 get_weather 工具。");
@@ -184,11 +186,31 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
           tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }],
           _reasoning: r1.toolCalls!._reasoning,
           _thinkingBlocks: r1.toolCalls!._thinkingBlocks,
+          _responseItems: r1.toolCalls!._responseItems,
         },
         { role: "tool", tool_call_id: call.id, content: "{\"city\":\"北京\",\"weather\":\"小雨\",\"temp_c\":17}" },
       ];
       const r2 = await ask(wire, history, opts);
       expect(r2.text).toMatch(/雨|17/);
     }, 240_000);
+
+    // Chat Completions has no spelling (the vendor's page names only
+    // Responses and Messages); the other two run the endpoint's own search.
+    it.skipIf(standard === "openai_compat")("runs web_search on the route's own spelling", async () => {
+      const wire0 = { platform: "volcengine-plan" as const, baseUrl: base, standard };
+      expect(serverToolStatus(wire0, "web_search")).toBe("yes");
+      let searches = 0;
+      let answer = "";
+      await ask(wire, user("今天杭州天气如何？请联网搜索后回答。"), {
+        serverTools: ["web_search"],
+        maxOutput: 4096,
+        onChunk: (chunk: StreamChunk) => {
+          if ("serverTool" in chunk) searches++;
+          if ("text" in chunk) answer += chunk.text;
+        },
+      });
+      expect(searches).toBeGreaterThan(0);
+      expect(answer.length).toBeGreaterThan(0);
+    }, 180_000);
   });
 });

@@ -1286,17 +1286,18 @@ Responses adapter：
 `model-capabilities/text/reasoning`、`images/understanding`、`tools/overview`、`pricing`、
 `migration/may-15-retirement`、`models`，以及 `https://docs.x.ai/openapi.json`。
 
-### 第十二个样本：火山方舟 Agent / Coding Plan（① ④ 两族，2026-09-18 实测 doubao-seed-2.0-lite / -mini / 2.1-turbo）
+### 第十二个样本：火山方舟 Agent / Coding Plan（① ② ④ 三族，2026-09-18 实测 doubao-seed-2.0-lite / -mini / 2.1-turbo）
 
-> **实测结论**（`live.volcengine.test.ts`，`SEEDDACE_KEY` 设为套餐 key，25 条**全过**；平台画像 `volcengine-plan`）：
+> **实测结论**（`live.volcengine.test.ts`，`SEEDDACE_KEY` 设为套餐 key，三条线路 39 条**全过**；平台画像 `volcengine-plan`）：
 >
 > - **两种 key，两条前缀，同一主机** `ark.cn-beijing.volces.com`：套餐 key 只在 `/api/plan` 下有效，
 >   在按量的 `/api/v3` 上 401 `AuthenticationError`；反之亦然（按量 key 未实测，按文档）。因此画像分成
 >   **两个平台**：`volcengine`（按量，`/api/v3`，Chat · Resp，按文档未实测）与 `volcengine-plan`
->   （套餐，`/api/plan/v3` Chat · `/api/plan` Anth，已实测）。`inferPlatform` 为此支持了带路径的
+>   （套餐，`/api/plan/v3` Chat · Resp、`/api/plan` Anth，已实测）。`inferPlatform` 为此支持了带路径的
 >   `hosts` 条目（最长前缀、段边界匹配）；抽屉里只填主机时保留作者选的那个（`platformForAddress`）。
-> - **套餐前缀下没有的**：`/responses`（404 `InvalidAction`）、`/models`（① 族 404；④ 族 `/v1/models`
->   对有效 key 回 **401**——误导性的）。连通测试因此改为：兼容端的模型列表回 404 / 401 / 403 都再发
+> - **套餐前缀下没有的**：`/models`（① 族 `/api/plan/v3/models` 404；④ 族 `/v1/models`
+>   对有效 key 回 **401**——误导性的）。**`/responses` 是有的**，在 `/api/plan/v3/responses`（200）——首轮探测
+>   打在了没有 `/v3` 的路径上得了 404，据此把 ② 线路漏掉了，复核联网搜索文档时补回。连通测试因此改为：兼容端的模型列表回 404 / 401 / 403 都再发
 >   一次空补全，由补全端点定论（错 key 在那里也是 401；造的模型 id 回 404 `UnsupportedModel`）。
 > - **图片**：① `image_url`（data URL）与 ④ `image` 块三款都读得出（64² 纯色 → Teal，计 ~1,360 输入 token）。
 > - **PDF**：① 的 `{type:"file", file:{file_data, filename}}`（本项目 `file` 片段原样）与 ④ 的 base64
@@ -1314,21 +1315,29 @@ Responses adapter：
 >   Claude 的两个类目关不掉它（`claude-budget` 不论档位都发 `enabled`，`off` 什么都不发 = 在想），所以加了
 >   `doubao-switch`（adaptive / disabled，同 MiniMax 的拼法）；**强制 `tool_choice` 在思考开时照常可用**
 >   （① `required` / 具名、④ `{type:"tool"}` 三种都 200），所以它不像 `minimax` 那样把强制降成 auto。
-> - **工具**：① 函数调用、④ `tool_use` 都正常；带思考的工具轮两族都能走完（推理回传被接受）。
+> - **思考，② 面**：同样默认开；`reasoning:{effort}` 收 `none` … `max` 全部七档，`none` 三款都是 0 推理——
+>   `responses-effort` 类目原样可用（「关闭」发 `effort:"none"`）。也认顶层 `thinking:{type:"disabled"}`，本项目不用。
+> - **工具**：① 函数调用、② 扁平 `function`（`strict:false`）、④ `tool_use` 都正常；带思考的工具轮三族都能走完
+>   （① `reasoning_content`、② 整条 output item、④ thinking 块的回传都被接受）。① 的 `tool_choice`
+>   `required` / 具名 / `none` 在思考开关两种状态下都 200（强制时推理 token 为 0，静默跳过思考）。
 >   ① `response_format: json_schema`（strict）输出合 schema。
-> - **服务端工具**：④ 的 Anthropic 版本化 `web_search_20250305` **真跑了**（`server_tool_use` + `web_search_tool_result`，
->   结果带 `encrypted_content`、`url` 为空串）→ 画像记 `yes`；① 面无对应字段。
-> - **上限**：`max_tokens` 两族都 ≤ 131,072（超了 400 并报上限）；2.1-turbo 文档写最大输出 256k，但同一
->   上限校验未单测。上下文 256k（套餐概览页）。
+> - **服务端工具**：厂商「联网搜索工具」页只列 Responses 与 Messages 两种接口（Chat 没有）。④ 的 Anthropic 版本化
+>   `web_search_20250305` + `max_uses` 三款都**真跑了**（`server_tool_use` + `web_search_tool_result`，结果带
+>   `encrypted_content`、`url` 为空串；`usage.server_tool_use.web_search_requests` 计数）。② 的 `{type:"web_search"}`
+>   三款都跑出 `web_search_call`；文档要求豆包搜索 Custom 版显式写 `sources:["doubao"]`，但套餐 key 上**不写也
+>   记在 `doubao` 源下**（`usage.tool_usage_details.web_search.doubao`），所以本项目的拼法不用改 → ②④ 画像都记 `yes`，
+>   ① 记无。按量 key 上不写 `sources` 可能落到需另开通、按次计费的「联网内容插件」，未实测，按量画像仍是 `unknown`。
+> - **上限**：`max_tokens` 上限按模型：2.0-mini 两族都 ≤ 131,072（超了 400 并报上限），2.1-turbo 两族都收
+>   262,144。起步模型的 `maxOutput` 照此填。上下文 256k（套餐概览页）。
 > - **鉴权**：④ 面 `x-api-key` 与 `Authorization: Bearer` 都收。
 > - **条款**：套餐概览页写明文本模型「不可用于 API 调用，在非 AI 工具中使用……可能被识别为滥用」。本应用是
 >   AI 写作工具，属于其列；抽屉的平台提示条照实写了这一句。
 >
-> **对本项目**：adapter 一处没改。新增：两个平台画像、`doubao` / `doubao-switch` 两个思考类目、
+> **对本项目**：adapter 一处没改（② 线路也是原样的 `openai_responses_compat`）。新增：两个平台画像、`doubao` / `doubao-switch` 两个思考类目、
 > `pdfFamilies` 与 `wireReadsPdf`、三个起步模型（多模态 + PDF，Anth 线路停放 `doubao-switch`）、
 > 连通测试在 401 时的二次确认、抽屉里的平台提示条（设计稿 05k TURN 2）。
 
-来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「Agent Plan 套餐概览」
+来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
