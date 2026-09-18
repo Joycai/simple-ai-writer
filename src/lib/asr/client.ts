@@ -218,7 +218,7 @@ export async function submitTranscription(
           message:
             `the model id "${conn.modelId}" is not a file-transcription model — the endpoint answers "url error" ` +
             `to a model/endpoint mismatch. The id must be a *-filetrans model (e.g. qwen-audio-3.0-asr-flash-filetrans); ` +
-            `fix the model row under 供应商与模型. The upload itself succeeded.`,
+            `fix the model row under 渠道与模型. The upload itself succeeded.`,
         }),
       );
     }

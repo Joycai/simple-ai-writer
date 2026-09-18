@@ -24,6 +24,7 @@ import type { Model, Provider } from "./configDb";
 import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import { resolvePlatform, type PlatformId } from "./platforms";
+import { activeFamily, channelEndpoints, ROUTE_LONG, routeProvider } from "./routes";
 import type { ServerToolId } from "./serverTools";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
@@ -184,10 +185,15 @@ export type ConnResolution =
 /**
  * Resolve a model id against the configured tables, or explain why it failed.
  *
- * The three failure modes stay distinct on purpose. "No model selected",
- * "the selected model is gone" (deleted, or its config was re-imported) and
- * "its provider is gone" call for different fixes, and one call site used to
- * report all three as the first one.
+ * The failure modes stay distinct on purpose. "No model selected", "the
+ * selected model is gone" (deleted, or its config was re-imported), "its
+ * channel is gone" and "its channel no longer has the route it takes" call for
+ * different fixes, and one call site used to report all of them as the first.
+ *
+ * The provider handed back is the channel **as the model's route sees it**
+ * (`routeProvider`): base URL, standard, auth and platform are that route's,
+ * so every consumer downstream — `connOptions`, the wire summaries, the tool
+ * routing — reads the right family without knowing routes exist.
  */
 export function resolveConn(
   models: Model[],
@@ -197,7 +203,17 @@ export function resolveConn(
   if (!modelId) return { ok: false, error: i18n.t("ai.errors.noModel") };
   const model = models.find((m) => m.id === modelId);
   if (!model) return { ok: false, error: i18n.t("ai.errors.modelNotFound") };
-  const provider = providers.find((p) => p.id === model.providerId);
-  if (!provider) return { ok: false, error: i18n.t("ai.errors.providerNotFound") };
+  const channel = providers.find((p) => p.id === model.providerId);
+  if (!channel) return { ok: false, error: i18n.t("ai.errors.providerNotFound") };
+  // A picked route the channel dropped since is refused rather than quietly
+  // replaced by the primary one: the model's route fields were set for that
+  // family, and sending them down another is a cross-family request.
+  if (model.activeRoute && !channelEndpoints(channel).some((e) => e.family === model.activeRoute)) {
+    return {
+      ok: false,
+      error: i18n.t("ai.errors.routeNotFound", { route: ROUTE_LONG[model.activeRoute], provider: channel.name }),
+    };
+  }
+  const provider = routeProvider(channel, activeFamily(model, channel)) ?? channel;
   return { ok: true, model, provider };
 }

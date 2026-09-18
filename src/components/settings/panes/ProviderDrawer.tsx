@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import type { Model } from "../../../lib/ai/configDb";
-import { authModesFor, familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "../../../lib/ai/types";
-import { DEFAULT_ANTHROPIC_BASE, DEFAULT_GEMINI_BASE, DEFAULT_OPENAI_BASE } from "../../../lib/ai/urls";
+import type { Model, Provider } from "../../../lib/ai/configDb";
+import { authModesFor, type AuthMode, type ProtocolFamily } from "../../../lib/ai/types";
+import { anthropicUrl, defaultBaseFor, geminiUrl, openaiUrl } from "../../../lib/ai/urls";
 import {
   GEMINI_HARM_CATEGORIES,
   GEMINI_THRESHOLD_LEVELS,
@@ -14,67 +14,34 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  inferPlatform, PLATFORM_IDS, platformForAddress, resolvePlatform, type PlatformId,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformOrigin, serverToolStatus,
+  type PlatformId,
 } from "../../../lib/ai/platforms";
+import {
+  activeFamily, channelEndpoints, channelHost, endpointBaseUrl, newChannelEndpoints, normalizeChannel,
+  ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
+} from "../../../lib/ai/routes";
+import { SERVER_TOOL_IDS } from "../../../lib/ai/serverTools";
 import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
+import r from "./Routes.module.css";
 
 /**
- * What the Base URL field shows for each standard. The official ones are shown
- * read-only rather than hidden — an author staring at a 404 needs to see which
- * address the app is using before they can tell it is the wrong *standard* they
- * picked, not the wrong key. Compat starts empty because there is nothing to
- * guess. Only the compat value is ever stored (see handleSave).
+ * The channel drawer — 设计稿 05k 屏 02 (添加渠道 · 选平台) and 屏 03 (线路表).
+ *
+ * A channel is one key on one platform (docs/feature/channel-model-route-plan.md
+ * §2.1). Adding one starts from the **platform**, not the protocol: the
+ * platform says which routes exist, where each one lives and which server tools
+ * each one spells, so the author picks it, sees that preview, and types a key.
+ * The routes are then a table — one row per protocol family the platform
+ * serves, each with its own path (the platform's convention unless changed),
+ * auth header and connection test. The host is typed once.
+ *
+ * What replaced the old preset buttons: a preset was a form fill that vanished
+ * once applied. The platform stays on the row, so its routes, paths and tools
+ * keep following `lib/ai/platforms.ts` as it learns more (§4 rule 3).
  */
-const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
-  openai: DEFAULT_OPENAI_BASE,
-  openai_compat: "",
-  // Same host as Chat Completions; the adapter appends /responses below it.
-  openai_responses: DEFAULT_OPENAI_BASE,
-  openai_responses_compat: "",
-  gemini: DEFAULT_GEMINI_BASE,
-  gemini_compat: "",
-  anthropic: DEFAULT_ANTHROPIC_BASE,
-  anthropic_compat: "",
-};
-
-interface ProviderPreset {
-  name: string;
-  apiStandard: ApiStandard;
-  baseUrl: string;
-  /**
-   * The server this preset is, beyond its protocol (lib/ai/platforms.ts) —
-   * stored on the row, so the preset no longer vanishes once applied: it is
-   * what decides which server tools the row's models may send. Only New API
-   * needs saying; every other preset's address names its platform.
-   */
-  platform?: PlatformId;
-  /**
-   * ComfyUI: not a protocol but a local render server, reached through
-   * `caps.route = "comfyui"` on the model. The preset exists because every
-   * field on this form is a formality for it — see the drawer's comfyMode.
-   */
-  comfy?: true;
-  /**
-   * The header the relay documents for the key, when it is not the protocol's
-   * own. Absent means `default`, and clicking a preset always writes the mode
-   * — otherwise a Bearer mode picked up from one preset would silently ride
-   * along into the next.
-   */
-  authMode?: AuthMode;
-  /**
-   * Model rows created alongside a *new* provider saved from this preset.
-   *
-   * For a relay with a 190-entry catalogue, "which of these can I even
-   * call?" is the first thing an author hits after saving, and the answer is
-   * not in the list. A preset that knows the catalogue can hand the author a
-   * working model before they have read anything — the relay's free tier, or
-   * a vendor's own two models with their windows and capabilities already
-   * filled in. Only on creation — editing an existing provider never adds rows.
-   */
-  starterModels?: StarterModel[];
-}
 
 /**
  * The fields a starter row declares; everything else takes the row default.
@@ -144,89 +111,56 @@ const DASHSCOPE_MODELS: StarterModel[] = [
   { modelId: "qwen-vl-ocr-latest", name: "Qwen-VL OCR", type: "vision" },
 ];
 
-const PROVIDER_PRESETS: ProviderPreset[] = [
-  { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
-  // Same vendor, second protocol (`/responses`) — the one OpenAI's own docs
-  // now lead with, and the only one whose reasoning summaries and encrypted
-  // reasoning items come back. Slice D of docs/api/qianwen-compat-plan.md:
-  // text streaming today; tools, thinking and structured output follow in
-  // E/F/G, so a row on this preset gets prose answers until they land.
-  { name: "OpenAI (Responses)", apiStandard: "openai_responses", baseUrl: STANDARD_ENDPOINTS.openai_responses },
-  { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
-  { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com", starterModels: DEEPSEEK_MODELS },
-  // xAI marks Chat Completions deprecated and recommends /responses; the base
-  // carries /v1 because the adapter appends /responses verbatim. Grok 4.5 / 4.6
-  // measured on this exact preset (docs/api/landscape.md §7 第十一个样本).
-  { name: "xAI (Grok)", apiStandard: "openai_responses_compat", baseUrl: "https://api.x.ai/v1" },
-  // DashScope's OpenAI compatible-mode; the base already carries /v1, which
-  // openaiUrl requires (it appends paths verbatim). Two rows because the
-  // domestic and international deployments are separate hosts with separate
-  // keys, same as MiniMax's two entries below.
-  { name: "通义千问 (DashScope)", apiStandard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", starterModels: DASHSCOPE_MODELS },
-  { name: "通义千问 (国际)", apiStandard: "openai_compat", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
-  // Same host, Anthropic Messages shape (docs/api/landscape.md §7 第六个样本).
-  // The base is the *root* — the adapter appends /v1/messages, and the
-  // platform's own FAQ warns against a trailing /v1. It has no /v1/models, so
-  // the connection test takes the completion-probe fallback; both x-api-key
-  // and Bearer are accepted, so authMode stays at the protocol default. Only
-  // the domestic host is listed: whether the international one serves
-  // /apps/anthropic is unverified.
-  { name: "通义千问 (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic" },
-  { name: "Anthropic", apiStandard: "anthropic", baseUrl: STANDARD_ENDPOINTS.anthropic },
-  { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
-  // Self-hosted, so there is no address to prefill — the preset exists to
-  // answer "which standard do I pick for my relay", which is the part an
-  // author has no way to guess.
-  { name: "New API", apiStandard: "openai_compat", baseUrl: "", platform: "newapi" },
-  { name: "MiniMax", apiStandard: "openai_compat", baseUrl: "https://api.minimaxi.com" },
-  // Same vendor, second protocol — the endpoint carries an /anthropic
-  // prefix, which anthropicRoot leaves alone (it only trims a trailing
-  // /v1 and /messages).
-  { name: "MiniMax (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.minimaxi.com/anthropic" },
-  // OrcaRouter is a relay that serves all three protocols off one host and one
-  // catalogue, with every model id carrying its vendor as a prefix
-  // (`anthropic/claude-sonnet-4.6`, `google/gemini-2.5-flash`). One row per
-  // protocol, like MiniMax above. The OpenAI row reaches every model; the
-  // other two exist for what the OpenAI shape cannot carry — Anthropic
-  // content blocks and base64 images to Claude (its docs steer those to the
-  // native path), Gemini's own thinkingConfig and built-in tools.
-  //
-  // Its docs write `Authorization: Bearer` in every example and say it holds
-  // for all endpoints; `x-api-key` / `x-goog-api-key` are only promised on the
-  // Anthropic- and Gemini-shaped paths, and `/v1/models` — which the Claude
-  // row's model list hits — is not one of those. So the one header documented
-  // for both calls a provider makes is the one the presets pick. Bases follow
-  // each family's own convention: anthropicRoot appends /v1 itself, geminiUrl
-  // does not. See docs/api/landscape.md §7 第七个样本.
-  { name: "OrcaRouter", apiStandard: "openai_compat", baseUrl: "https://api.orcarouter.ai/v1", starterModels: ORCAROUTER_FREE_MODELS },
-  { name: "OrcaRouter (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.orcarouter.ai", authMode: "bearer" },
-  { name: "OrcaRouter (Gemini 格式)", apiStandard: "gemini_compat", baseUrl: "https://api.orcarouter.ai/v1beta", authMode: "bearer" },
-  // Local render server, not an LLM endpoint. The standard is stored only
-  // because the column is NOT NULL — dispatch reads the model's caps.route
-  // (lib/ai/image.ts), never this. See docs/feature/comfyui-plan.md §7.
-  { name: "ComfyUI", apiStandard: "openai_compat", baseUrl: "http://127.0.0.1:8188", comfy: true },
-];
+/** Starter rows a new channel on a platform brings along (only on creation). */
+const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
+  deepseek: DEEPSEEK_MODELS,
+  dashscope: DASHSCOPE_MODELS,
+  orcarouter: ORCAROUTER_FREE_MODELS,
+};
+
+/** Platforms whose routes are the vendor's own constants — no host, no path to type. */
+const isOfficialPlatform = (p: PlatformId): boolean =>
+  platformEndpoints(p).every((e) => e.official);
 
 /** A server on the local machine (Ollama, LM Studio) — these need no API key. */
 function isLocalEndpoint(url: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url.trim());
 }
 
+/** The request one route's chat call actually goes to — the adapters' own URL functions (§5.1.1). */
+function requestUrl(ep: Endpoint, base: string): string {
+  const b = base || defaultBaseFor(standardOf(ep));
+  switch (ep.family) {
+    case "anthropic": return anthropicUrl(b, "/messages");
+    case "gemini": return geminiUrl(b, "/models/{model}:streamGenerateContent");
+    case "responses": return openaiUrl(b, "/responses");
+    default: return openaiUrl(b, "/chat/completions");
+  }
+}
+
 interface Props {
-  /** null = add a new provider. */
+  /** null = add a new channel. */
   providerId: string | null;
   /** The key is fetched by the pane before opening, so the drawer never has to
    *  render a half-populated form while the keyring call is in flight. */
   initialApiKey: string;
   onClose: () => void;
   /**
-   * Called instead of onClose when a brand-new ComfyUI provider is saved, so
-   * the pane can open the model drawer on it right away. A provider row alone
-   * generates nothing — the workflow import is the step that matters, and
-   * leaving the author to find it is what made this route feel unconfigurable
+   * Called instead of onClose when a brand-new ComfyUI channel is saved, so
+   * the pane can open the model drawer on it right away. A channel alone
+   * generates nothing — the workflow import is the step that matters
    * (docs/feature/comfyui-plan.md §7.2).
    */
   onComfyCreated?: (providerId: string) => void;
+}
+
+interface Form {
+  name: string;
+  apiKey: string;
+  platform: PlatformId;
+  host: string;
+  /** Enabled routes, primary first. */
+  endpoints: Endpoint[];
 }
 
 export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
@@ -234,122 +168,157 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
   const { providers, models, addProvider, updateProvider, addModel } = useAiStore();
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
-  const [form, setForm] = useState({
-    // An official provider stores no base URL, so fill the field from the
-    // constant instead of leaving it blank.
-    baseUrl:
-      existing && !isCompatStandard(existing.apiStandard)
-        ? STANDARD_ENDPOINTS[existing.apiStandard]
-        : existing?.baseUrl ?? STANDARD_ENDPOINTS.openai,
-    name: existing?.name ?? "",
-    apiStandard: existing?.apiStandard ?? ("openai" as ApiStandard),
-    apiKey: initialApiKey,
-    authMode: existing?.authMode ?? ("default" as AuthMode),
-    safetySettings: existing?.safetySettings ?? defaultSafetySettings(),
-    platform: existing
-      ? resolvePlatform(existing.platform, existing.baseUrl, existing.apiStandard)
-      : inferPlatform(STANDARD_ENDPOINTS.openai, "openai"),
-  });
-  /**
-   * "This row is a ComfyUI instance" — a form mode, never a stored field.
-   *
-   * For a new provider it comes from the preset the author clicked. For an
-   * existing one it is derived from its models: a comfyui route on any of them
-   * is the fact, and deriving it costs nothing where a `providers.kind` column
-   * would have to ride configTransfer and the backup envelope too (§7.3).
-   */
-  const [comfyMode, setComfyMode] = useState(
-    () => !!providerId && models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"),
+  const [form, setForm] = useState<Form | null>(() =>
+    existing
+      ? {
+          name: existing.name,
+          apiKey: initialApiKey,
+          platform: existing.platform ?? "custom",
+          host: channelHost(existing),
+          endpoints: channelEndpoints(existing),
+        }
+      : null,
   );
   /**
-   * The rows the clicked preset promised — held apart from the form because
-   * they belong to the *preset*, not to any field the author can see: a name
-   * they retype is still the same relay, but a standard they switch is not,
-   * so the standard picker below drops them and the preset buttons reset them.
-   */
-  const [starterModels, setStarterModels] = useState<StarterModel[]>([]);
-  /**
-   * The author chose the platform themselves — from the select, or on a row
-   * whose stored platform is not what its address infers (a DashScope-shaped
-   * proxy saved earlier). Then editing the address leaves it alone; otherwise
-   * the platform follows the address (platformForAddress). Without this, fixing
-   * a typo in a proxy's path silently turned 百炼 back into 自定义.
+   * The author chose the platform themselves (the select, or a stored platform
+   * the host doesn't name). Then editing the host leaves it alone; otherwise
+   * the platform follows the host — pasting DashScope's address means DashScope.
    */
   const [platformPinned, setPlatformPinned] = useState(
-    () => !!existing?.platform && isCompatStandard(existing.apiStandard)
-      && existing.platform !== inferPlatform(existing.baseUrl, existing.apiStandard),
+    () => !!existing?.platform && !isOfficialPlatform(existing.platform)
+      && platformForAddress(existing.platform, channelHost(existing), "openai_compat") !== existing.platform,
   );
+  const [starterModels, setStarterModels] = useState<StarterModel[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState<ProtocolFamily | "comfy" | null>(null);
+  const [testResult, setTestResult] = useState<{ route: ProtocolFamily | "comfy"; ok: boolean; message: string } | null>(null);
 
-  const apiStandardOptions = (
-    [
-      "openai", "openai_compat", "openai_responses", "openai_responses_compat",
-      "gemini", "gemini_compat", "anthropic", "anthropic_compat",
-    ] as const
-  ).map((value) => ({ value: value as ApiStandard, label: t(`aiConfig.apiStandards.${value}`) }));
+  const pickPlatform = (platform: PlatformId) => {
+    setPlatformPinned(platform === "newapi" || platform === "custom");
+    setStarterModels(STARTER_MODELS[platform] ?? []);
+    setTestResult(null);
+    setForm((f) => ({
+      name: f && f.name && !PLATFORM_IDS.some((id) => t(`aiConfig.platforms.${id}`) === f.name)
+        ? f.name
+        : t(`aiConfig.platforms.${platform}`),
+      apiKey: f?.apiKey ?? "",
+      platform,
+      host: platformOrigin(platform),
+      endpoints: newChannelEndpoints(platform),
+    }));
+  };
 
-  // Local servers (Ollama, LM Studio) authenticate no requests, so the API key
-  // is optional for them but required for everything else.
-  // ComfyUI authenticates nothing at all, wherever it is reached from.
-  const keyRequired = !comfyMode && !isLocalEndpoint(form.baseUrl);
-  const endpointLocked = !isCompatStandard(form.apiStandard);
-  // One entry means the protocol has no choice to offer — don't render a
-  // dropdown whose only option is "the way it already works".
-  const authModes = authModesFor(form.apiStandard);
+  // ── Add, step 1: the platform grid with its preview ───────────────────────
+  if (!form) {
+    return (
+      <div className={hub.drawer} role="dialog" aria-label={t("aiConfig.providers.addTitle")}>
+        <DrawerHead title={t("aiConfig.providers.addTitle")} onClose={onClose} />
+        <div className={hub.drawerBody}>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.providers.platformPickLabel")}</label>
+            <div className={styles.hint}>{t("aiConfig.providers.platformPickHint")}</div>
+          </div>
+          <PlatformGrid current={null} onPick={pickPlatform} />
+        </div>
+      </div>
+    );
+  }
 
-  const handleTest = async () => {
-    if (!form.baseUrl || (keyRequired && !form.apiKey)) {
-      setTestResult({ ok: false, message: t("aiConfig.providers.testMissingFields") });
-      return;
-    }
-    setTesting(true);
+  const comfyMode = form.platform === "comfyui"
+    || (!!existing && models.some((m) => m.providerId === existing.id && m.caps?.route === "comfyui"));
+  const official = isOfficialPlatform(form.platform);
+  // The draft as a channel: every address below is read off it, through the
+  // same functions a request uses, so the table can't show one URL and the
+  // request go to another.
+  const draft: Provider = normalizeChannel({
+    id: existing?.id ?? "draft",
+    name: form.name,
+    baseUrl: "",
+    apiStandard: standardOf(form.endpoints[0]),
+    platform: comfyMode ? "comfyui" : form.platform,
+    host: official ? "" : form.host.trim(),
+    endpoints: form.endpoints,
+    createdAt: existing?.createdAt ?? 0,
+  });
+  const keyRequired = !comfyMode && !isLocalEndpoint(draft.host ?? "");
+  const offered: ProtocolFamily[] = ROUTE_FAMILIES.filter((f) =>
+    platformEndpoints(form.platform).some((e) => e.family === f) || form.endpoints.some((e) => e.family === f));
+  /** Models on this channel that take `family` as their route — a route in use can't be switched off. */
+  const usersOf = (family: ProtocolFamily): number => existing
+    ? models.filter((m) => m.providerId === existing.id && activeFamily(m, existing) === family).length
+    : 0;
+
+  const setEndpoint = (family: ProtocolFamily, patch: Partial<Endpoint> | null) => {
+    setForm((f) => {
+      if (!f) return f;
+      const idx = f.endpoints.findIndex((e) => e.family === family);
+      if (patch === null) return { ...f, endpoints: f.endpoints.filter((e) => e.family !== family) };
+      if (idx < 0) {
+        const spec = platformEndpoints(f.platform).find((e) => e.family === family);
+        const ep: Endpoint = {
+          family,
+          official: spec?.official === true,
+          ...(spec?.authMode ? { authMode: spec.authMode } : {}),
+          ...(family === "gemini" ? { safetySettings: defaultSafetySettings() } : {}),
+          ...patch,
+        };
+        // Appended in family order after the primary, so the table and the
+        // badges read the same way everywhere.
+        const rest = [...f.endpoints.slice(1), ep].sort(
+          (a, b) => ROUTE_FAMILIES.indexOf(a.family) - ROUTE_FAMILIES.indexOf(b.family));
+        return { ...f, endpoints: [f.endpoints[0], ...rest] };
+      }
+      const next = [...f.endpoints];
+      const merged = { ...next[idx], ...patch } as Endpoint;
+      for (const k of Object.keys(merged) as (keyof Endpoint)[]) if (merged[k] === undefined) delete merged[k];
+      next[idx] = merged;
+      return { ...f, endpoints: next };
+    });
+  };
+  const makePrimary = (family: ProtocolFamily) => setForm((f) => f && {
+    ...f,
+    endpoints: [
+      ...f.endpoints.filter((e) => e.family === family),
+      ...f.endpoints.filter((e) => e.family !== family),
+    ],
+  });
+
+  const test = async (family: ProtocolFamily | "comfy") => {
+    setTesting(family);
     setTestResult(null);
     try {
-      const result = comfyMode
-        ? await testComfyUiConnection(form.baseUrl)
-        : await testProviderConnection(
-            form.baseUrl,
-            form.apiKey,
-            form.apiStandard,
-            form.authMode,
-          );
-      setTestResult({ ok: result.ok, message: result.ok ? result.message : result.error });
+      if (family === "comfy") {
+        const res = await testComfyUiConnection(draft.baseUrl);
+        setTestResult({ route: family, ok: res.ok, message: res.ok ? res.message : res.error });
+        return;
+      }
+      const ep = form.endpoints.find((e) => e.family === family)!;
+      const base = endpointBaseUrl(draft, ep) || defaultBaseFor(standardOf(ep));
+      if (!base || (keyRequired && !form.apiKey)) {
+        setTestResult({ route: family, ok: false, message: t("aiConfig.providers.testMissingFields") });
+        return;
+      }
+      const res = await testProviderConnection(base, form.apiKey, standardOf(ep), ep.authMode ?? "default");
+      setTestResult({ route: family, ok: res.ok, message: res.ok ? res.message : res.error });
     } catch (e) {
-      setTestResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
+      setTestResult({ route: family, ok: false, message: e instanceof Error ? e.message : String(e) });
     } finally {
-      setTesting(false);
+      setTesting(null);
     }
   };
 
   const handleSave = async () => {
-    if (!form.name || (keyRequired && !form.apiKey)) return;
+    if (!form.name || (keyRequired && !form.apiKey) || form.endpoints.length === 0) return;
     setSaving(true);
     setError(null);
     try {
-      const safetySettings = familyOf(form.apiStandard) === "gemini" ? form.safetySettings : undefined;
-      // Official providers store nothing: the address is a constant of the
-      // vendor's, and keeping it out of the database makes a vendor domain
-      // change a code edit rather than a data migration.
-      const baseUrl = endpointLocked ? "" : form.baseUrl.trim();
-      // Store nothing for the protocol's own scheme, so a provider that never
-      // touched this setting reads back exactly as it did before it existed.
-      const authMode = form.authMode === "default" ? undefined : form.authMode;
-      // Always stored once saved, so the row stops depending on re-inference
-      // (an official standard still resolves to its vendor on read).
-      const platform = comfyMode ? "comfyui" : resolvePlatform(form.platform, baseUrl, form.apiStandard);
+      const channel: Provider = { ...draft, name: form.name.trim() };
       if (existing) {
-        await updateProvider(
-          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode, platform },
-          form.apiKey,
-        );
+        await updateProvider({ ...existing, ...channel, id: existing.id, createdAt: existing.createdAt }, form.apiKey);
       } else {
-        const newId = await addProvider(
-          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode, platform },
-          form.apiKey,
-        );
+        const { id: _draftId, createdAt: _draftAt, ...rest } = channel;
+        const newId = await addProvider(rest, form.apiKey);
         // Sequential on purpose: addModel is also where the first model ever
         // added becomes the active one, and two rows racing for that would
         // leave the author with whichever resolved second.
@@ -382,126 +351,50 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     }
   };
 
+  const resultFor = (route: ProtocolFamily | "comfy") => testResult?.route === route && (
+    <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
+      {testResult.ok
+        ? <Check size={14} className={styles.testResultIcon} />
+        : <AlertCircle size={14} className={styles.testResultIcon} />}
+      <span className={styles.testResultMessage}>{testResult.message}</span>
+    </div>
+  );
+  const gemini = form.endpoints.find((e) => e.family === "gemini");
+
   return (
-    <div className={hub.drawer} role="dialog" aria-label={t("aiConfig.providers.addTitle")}>
-      <div className={hub.drawerHead}>
-        <div style={{ minWidth: 0 }}>
-          <div className={hub.drawerTitle}>
-            {existing ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}
-          </div>
-          {existing && (
-            <div className={hub.drawerSub}>
-              {existing.baseUrl || t("aiConfig.providers.defaultEndpoint")}
-            </div>
-          )}
-        </div>
-        <span className={hub.footSpacer} />
-        <button className={hub.iconBtn} onClick={onClose} title={t("aiConfig.providers.cancel")}>
-          <X size={16} />
-        </button>
-      </div>
+    <div className={hub.drawer} role="dialog" aria-label={existing ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}>
+      <DrawerHead
+        title={existing ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}
+        sub={t(`aiConfig.platforms.${comfyMode ? "comfyui" : form.platform}`)}
+        onClose={onClose}
+      />
 
       <div className={hub.drawerBody}>
         {error && <div className={styles.errorNote}>{error}</div>}
 
         {!existing && (
-          <div className={styles.presetSection}>
-            <div className={styles.label}>{t("aiConfig.providers.presetsLabel")}</div>
-            <div className={styles.presetGrid}>
-              {PROVIDER_PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  className={styles.btnSecondary}
-                  onClick={() => {
-                    setComfyMode(!!preset.comfy);
-                    setPlatformPinned(false);
-                    setStarterModels(preset.starterModels ?? []);
-                    setTestResult(null);
-                    setForm({
-                      ...form,
-                      name: preset.name,
-                      apiStandard: preset.apiStandard,
-                      baseUrl: preset.baseUrl,
-                      authMode: preset.authMode ?? "default",
-                      platform: preset.platform ?? inferPlatform(preset.baseUrl, preset.apiStandard),
-                    });
-                  }}
-                >
-                  {preset.name}
-                </button>
-              ))}
-            </div>
-            {starterModels.length > 0 && (
-              <div className={styles.hint}>
-                {t("aiConfig.providers.presetStarterModels", {
-                  count: starterModels.length,
-                  models: starterModels.map((m) => m.name).join(" · "),
-                })}
-              </div>
-            )}
-          </div>
+          <>
+            <PlatformGrid current={form.platform} onPick={pickPlatform} />
+            <PlatformPreview platform={form.platform} starters={starterModels} />
+          </>
         )}
 
-        <div className={styles.formRow}>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>{t("aiConfig.providers.nameLabel")}</label>
-            <input className={styles.input} placeholder="OpenAI" value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          {!comfyMode && (
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>{t("aiConfig.providers.apiStandardLabel")}</label>
-            <Select value={form.apiStandard} options={apiStandardOptions}
-              ariaLabel={t("aiConfig.providers.apiStandardLabel")}
-              onChange={(v) => {
-                const standard = v as ApiStandard;
-                // Starter rows are declared for the preset's own surface; a
-                // different protocol would take the same ids to a different
-                // endpoint, so the promise no longer holds.
-                if (standard !== form.apiStandard) setStarterModels([]);
-                setForm({
-                  ...form,
-                  apiStandard: standard,
-                  baseUrl: STANDARD_ENDPOINTS[standard],
-                  platform: platformForAddress(form.platform, STANDARD_ENDPOINTS[standard], standard),
-                  // Switching away from anthropic_compat would otherwise keep a
-                  // mode the new standard can't use — including onto the
-                  // official endpoint, which rejects two credentials.
-                  authMode: authModesFor(standard).includes(form.authMode) ? form.authMode : "default",
-                });
-              }} />
-          </div>
-          )}
-        </div>
-
         <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("aiConfig.providers.baseUrlLabel")}</label>
-          <input className={`${styles.input} ${hub.mono}`} placeholder="https://api.openai.com/v1" value={form.baseUrl}
-            readOnly={endpointLocked}
-            aria-readonly={endpointLocked}
-            onChange={(e) => setForm({
-              ...form,
-              baseUrl: e.target.value,
-              platform: platformPinned ? form.platform : platformForAddress(form.platform, e.target.value, form.apiStandard),
-            })} />
-          {endpointLocked && (
-            <div className={styles.hint}>{t("aiConfig.providers.baseUrlOfficialHint")}</div>
-          )}
-          {comfyMode && (
-            <div className={styles.hint}>{t("aiConfig.providers.comfyBaseUrlHint")}</div>
-          )}
+          <label className={styles.label}>{t("aiConfig.providers.nameLabel")}</label>
+          <input className={styles.input} value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
 
         {/* The platform: which private fields this server takes beyond its
-            protocol (lib/ai/platforms.ts). Only a compat row has a choice —
-            an official standard's platform is its vendor. Follows the address
-            as it is typed (platformForAddress); the select is for the cases
-            no host names: a self-hosted New API, a DashScope-shaped proxy. */}
-        {!comfyMode && !endpointLocked && (
+            protocol, and which routes it serves. Fixed on an official one
+            (the vendor *is* the platform); otherwise it follows the host as
+            it is typed, and the select covers what no host names — a
+            self-hosted New API, a DashScope-shaped proxy. */}
+        {existing && !comfyMode && !official && (
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.providers.platformLabel")}</label>
             <Select value={form.platform}
-              options={PLATFORM_IDS.filter((id) => id !== "comfyui")
+              options={PLATFORM_IDS.filter((id) => id !== "comfyui" && !isOfficialPlatform(id))
                 .map((id) => ({ value: id, label: t(`aiConfig.platforms.${id}`) }))}
               ariaLabel={t("aiConfig.providers.platformLabel")}
               onChange={(v) => {
@@ -512,53 +405,160 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           </div>
         )}
 
+        {!official && (
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              {comfyMode ? t("aiConfig.providers.comfyHostLabel") : t("aiConfig.providers.hostLabel")}
+            </label>
+            <input className={`${styles.input} ${hub.mono}`} placeholder="https://relay.example.com" value={form.host}
+              onChange={(e) => {
+                const host = e.target.value;
+                setForm({
+                  ...form,
+                  host,
+                  platform: platformPinned || comfyMode
+                    ? form.platform
+                    : platformForAddress(form.platform, host, "openai_compat"),
+                });
+              }} />
+            <div className={styles.hint}>
+              {comfyMode ? t("aiConfig.providers.comfyBaseUrlHint") : t("aiConfig.providers.hostHint")}
+            </div>
+          </div>
+        )}
+
         <div className={styles.fieldGroup}>
-          {/* ComfyUI has no key and no standard to pick, so the row collapses to
-              the one control that still means something here — and it means more
-              than usual: its 403 branch is the only place that can tell a running
-              ComfyUI refusing us apart from a stopped one (§7.1). */}
           <label className={styles.label}>
             {comfyMode ? t("aiConfig.providers.comfyCheckLabel") : t("aiConfig.providers.apiKeyLabel")}
             {!comfyMode && !keyRequired && <span className={styles.hint}> · {t("aiConfig.providers.apiKeyOptional")}</span>}
           </label>
-          <div className={styles.keyRow}>
-            {!comfyMode && (
-              <input className={styles.input} type="password"
-                placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
-            )}
-            <button className={`${styles.btnSecondary} ${styles.testBtn}`} onClick={handleTest}
-              disabled={!form.baseUrl || (keyRequired && !form.apiKey) || testing}>
-              {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
-            </button>
-          </div>
-          {comfyMode && <div className={styles.hint}>{t("aiConfig.providers.comfyCheckHint")}</div>}
-          {testResult && (
-            <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
-              {testResult.ok
-                ? <Check size={14} className={styles.testResultIcon} />
-                : <AlertCircle size={14} className={styles.testResultIcon} />}
-              <span className={styles.testResultMessage}>{testResult.message}</span>
-            </div>
+          {comfyMode ? (
+            <>
+              <div className={styles.keyRow}>
+                <button className={`${styles.btnSecondary} ${styles.testBtn}`} onClick={() => void test("comfy")}
+                  disabled={!draft.baseUrl || testing !== null}>
+                  {testing === "comfy" ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
+                </button>
+              </div>
+              <div className={styles.hint}>{t("aiConfig.providers.comfyCheckHint")}</div>
+              {resultFor("comfy")}
+            </>
+          ) : (
+            <input className={styles.input} type="password"
+              placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
+              value={form.apiKey}
+              onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           )}
         </div>
 
-        {!comfyMode && authModes.length > 1 && (
+        {!comfyMode && (
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>{t("aiConfig.providers.authModeLabel")}</label>
-            <Select value={form.authMode}
-              options={authModes.map((mode) => ({ value: mode, label: t(`aiConfig.providers.authModes.${mode}`) }))}
-              ariaLabel={t("aiConfig.providers.authModeLabel")}
-              onChange={(v) => setForm({ ...form, authMode: v as AuthMode })} />
-            <div className={styles.hint}>{t("aiConfig.providers.authModeHint")}</div>
+            <label className={styles.label}>{t("aiConfig.providers.routesLabel")}</label>
+            <div className={styles.hint}>{t(official ? "aiConfig.providers.routesHintOfficial" : "aiConfig.providers.routesHint")}</div>
+            <div className={r.table}>
+              {offered.map((family) => {
+                const ep = form.endpoints.find((e) => e.family === family);
+                const on = !!ep;
+                const primary = form.endpoints[0]?.family === family;
+                const users = usersOf(family);
+                const def = platformDefaultPath(form.platform, family);
+                const std = standardOf(ep ?? { family, official });
+                const authModes = authModesFor(std);
+                const base = ep ? endpointBaseUrl(draft, ep) : "";
+                const absolute = !!ep?.path && /^[a-z][a-z0-9+.-]*:\/\//i.test(ep.path);
+                const blockOff = primary && form.endpoints.length === 1
+                  ? t("aiConfig.providers.routeLastOne")
+                  : users > 0 ? t("aiConfig.providers.routeInUse", { count: users }) : null;
+                return (
+                  <div key={family} className={`${r.row} ${on ? "" : r.rowOff}`}>
+                    <div className={r.rowHead}>
+                      <input type="checkbox" checked={on}
+                        aria-label={t("aiConfig.providers.routeEnable", { route: ROUTE_LONG[family] })}
+                        disabled={on && !!blockOff}
+                        title={on && blockOff ? blockOff : undefined}
+                        onChange={(e) => setEndpoint(family, e.target.checked ? {} : null)} />
+                      <span className={`${r.badge} ${users > 0 ? r.badgeOn : on ? "" : r.badgeOffered}`}>{ROUTE_SHORT[family]}</span>
+                      <span className={r.rowName}>{ROUTE_LONG[family]}</span>
+                      {primary && <span className={r.tag}>{t("aiConfig.providers.routePrimary")}</span>}
+                      {users > 0 && <span className={r.tag}>{t("aiConfig.providers.routeUsers", { count: users })}</span>}
+                      <span className={r.rowSpacer} />
+                      {on && !primary && (
+                        <button className={r.tinyBtn} onClick={() => makePrimary(family)}>
+                          {t("aiConfig.providers.routeMakePrimary")}
+                        </button>
+                      )}
+                      {on && (
+                        <button className={r.tinyBtn} onClick={() => void test(family)} disabled={testing !== null}>
+                          {testing === family ? t("aiConfig.providers.testing") : t("aiConfig.providers.routeTest")}
+                        </button>
+                      )}
+                    </div>
+                    {on && ep && (
+                      <>
+                        {ep.official ? (
+                          <div className={r.pathRow}>
+                            <span className={r.tag}>{t("aiConfig.providers.routeOfficialPath")}</span>
+                          </div>
+                        ) : (
+                          <div className={r.pathRow}>
+                            <span className={r.hostCell}>
+                              {absolute ? t("aiConfig.providers.routeOwnHostCell") : (draft.host || "—")}
+                            </span>
+                            <input
+                              className={`${styles.input} ${r.pathInput} ${ep.path === undefined ? r.pathInputDefault : ""}`}
+                              value={ep.path ?? ""}
+                              placeholder={def || "/"}
+                              aria-label={t("aiConfig.providers.routePathLabel", { route: ROUTE_LONG[family] })}
+                              onChange={(e) => setEndpoint(family, { path: e.target.value })}
+                              // An override equal to the convention is the
+                              // convention: stored as nothing, so it keeps
+                              // following the platform (§5.1.1).
+                              onBlur={(e) => { if (e.target.value === def || e.target.value === "") setEndpoint(family, { path: undefined }); }}
+                            />
+                          </div>
+                        )}
+                        {!ep.official && (
+                          <div className={r.pathRow}>
+                            <span className={`${r.tag} ${ep.path !== undefined ? r.tagSet : ""}`}>
+                              {ep.path === undefined
+                                ? t("aiConfig.providers.routeDefaultTag", { path: def || t("aiConfig.providers.routeRoot") })
+                                : absolute
+                                  ? t("aiConfig.providers.routeOwnHost")
+                                  : t("aiConfig.providers.routeChangedTag", { path: def || t("aiConfig.providers.routeRoot") })}
+                            </span>
+                            <button className={r.tinyBtn} disabled={ep.path === undefined}
+                              onClick={() => setEndpoint(family, { path: undefined })}>
+                              {t("aiConfig.providers.routeRestore")}
+                            </button>
+                          </div>
+                        )}
+                        {authModes.length > 1 && (
+                          <div className={r.pathRow}>
+                            <span className={r.hostCell}>{t("aiConfig.providers.authModeLabel")}</span>
+                            <Select value={ep.authMode ?? "default"}
+                              options={authModes.map((mode) => ({ value: mode, label: t(`aiConfig.providers.authModes.${mode}`) }))}
+                              ariaLabel={t("aiConfig.providers.authModeLabel")}
+                              onChange={(v) => setEndpoint(family, { authMode: v === "default" ? undefined : v as AuthMode })} />
+                          </div>
+                        )}
+                        <div className={r.url}>POST {requestUrl(ep, base)}</div>
+                        {resultFor(family)}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {offered.some((f) => form.endpoints.some((e) => e.family === f && authModesFor(standardOf(e)).length > 1)) && (
+              <div className={styles.hint}>{t("aiConfig.providers.authModeHint")}</div>
+            )}
           </div>
         )}
 
-        {!comfyMode && familyOf(form.apiStandard) === "gemini" && (
+        {!comfyMode && gemini && (
           <GeminiSafetyEditor
-            value={form.safetySettings}
-            onChange={(safetySettings) => setForm({ ...form, safetySettings })}
+            value={gemini.safetySettings ?? defaultSafetySettings()}
+            onChange={(safetySettings) => setEndpoint("gemini", { safetySettings })}
           />
         )}
       </div>
@@ -568,7 +568,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
         <span className={hub.footSpacer} />
         <button className={styles.btnSecondary} onClick={onClose}>{t("aiConfig.providers.cancel")}</button>
         <button className={styles.btnPrimary} onClick={handleSave}
-          disabled={!form.name || (keyRequired && !form.apiKey) || saving}>
+          disabled={!form.name || (keyRequired && !form.apiKey) || form.endpoints.length === 0 || saving}>
           {saving
             ? (existing ? t("aiConfig.providers.editing") : t("aiConfig.providers.saving"))
             : existing
@@ -578,6 +578,84 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
                 : t("aiConfig.providers.save")}
         </button>
       </div>
+    </div>
+  );
+}
+
+function DrawerHead({ title, sub, onClose }: { title: string; sub?: string; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className={hub.drawerHead}>
+      <div style={{ minWidth: 0 }}>
+        <div className={hub.drawerTitle}>{title}</div>
+        {sub && <div className={hub.drawerSub}>{sub}</div>}
+      </div>
+      <span className={hub.footSpacer} />
+      <button className={hub.iconBtn} onClick={onClose} title={t("aiConfig.providers.cancel")}>
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
+
+/** The platform cards (屏 02): name + the routes it would create. */
+function PlatformGrid({ current, onPick }: { current: PlatformId | null; onPick: (p: PlatformId) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className={r.platformGrid}>
+      {PLATFORM_IDS.map((id) => (
+        <button key={id} type="button"
+          className={`${r.platformCard} ${current === id ? r.platformCardOn : ""}`}
+          aria-pressed={current === id}
+          onClick={() => onPick(id)}>
+          <span className={r.platformName}>{t(`aiConfig.platforms.${id}`)}</span>
+          {id !== "comfyui" && (
+            <span className={r.badges}>
+              {newChannelEndpoints(id).map((e) => (
+                <span key={e.family} className={r.badge}>{ROUTE_SHORT[e.family]}</span>
+              ))}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** What picking this platform will create (屏 02 right side): routes, their tools, starter rows. */
+function PlatformPreview({ platform, starters }: { platform: PlatformId; starters: StarterModel[] }) {
+  const { t } = useTranslation();
+  if (platform === "comfyui") return null;
+  const routes = newChannelEndpoints(platform);
+  return (
+    <div className={r.preview}>
+      <div className={r.previewRow}>
+        <span className={r.previewLabel}>{t("aiConfig.providers.previewRoutes")}</span>
+        <span className={r.badges}>
+          {routes.map((e) => <span key={e.family} className={r.badge}>{ROUTE_LONG[e.family]}</span>)}
+        </span>
+      </div>
+      {routes.map((e) => {
+        const wire = { platform, standard: standardOf(e) };
+        const tools = SERVER_TOOL_IDS.filter((id) => serverToolStatus(wire, id) !== "no");
+        return (
+          <div key={e.family} className={r.previewRow}>
+            <span className={r.previewLabel}>{ROUTE_SHORT[e.family]}</span>
+            <span>
+              {tools.length
+                ? tools.map((id) => t(`aiConfig.models.serverTool_${id}`)
+                  + (serverToolStatus(wire, id) === "unknown" ? ` (${t("aiConfig.providers.previewUnmeasured")})` : "")).join(" · ")
+                : t("aiConfig.providers.previewNoTools")}
+            </span>
+          </div>
+        );
+      })}
+      {starters.length > 0 && (
+        <div className={r.previewRow}>
+          <span className={r.previewLabel}>{t("aiConfig.providers.previewStarters")}</span>
+          <span>{starters.map((m) => m.name).join(" · ")}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -39,6 +39,8 @@
   font-size: var(--font-size-md);
   line-height: 1.7;
   color: var(--color-text-secondary);
+  /* A multi-part message (the channel merge preview) is one line per part. */
+  white-space: pre-line;
   /* The message names what is about to be lost — let the author select it. */
   user-select: text;
 }

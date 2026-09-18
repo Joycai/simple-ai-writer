@@ -101,6 +101,7 @@
 import { familyOf } from "./types";
 import { providerWire, serverToolStatus, wireHasServerTools, type ServerToolWire } from "./platforms";
 import type { Model, Provider } from "./configDb";
+import { providerFor } from "./routes";
 
 export type { ServerToolWire } from "./platforms";
 
@@ -234,11 +235,11 @@ export function effectiveServerTools(
  * missing provider answers `undefined` — don't promise what can't be checked.
  */
 export function serverToolsSent(
-  model: Pick<Model, "providerId" | "modelId" | "serverTools">,
+  model: Pick<Model, "providerId" | "modelId" | "serverTools" | "activeRoute">,
   providers?: readonly Provider[],
 ): ServerToolId[] | undefined {
   if (!providers) return model.serverTools;
-  const provider = providers.find((p) => p.id === model.providerId);
+  const provider = providerFor(model, providers);
   return provider ? effectiveServerTools(providerWire(provider), model.serverTools, model.modelId) : undefined;
 }
 

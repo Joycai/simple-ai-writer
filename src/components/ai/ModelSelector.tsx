@@ -22,6 +22,7 @@ import { blockedModelIds, noteModelUsed, recentModelIds } from "../../lib/ai/mod
 import { contextLabel, parseModelLabel, parseProviderLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import styles from "./ModelSelector.module.css";
+import { activeFamily, channelEndpoints, providerFor, ROUTE_SHORT } from "../../lib/ai/routes";
 
 /** Context size at which a model is worth surfacing under 「长上下文」. */
 const LONG_CONTEXT_MIN = 128_000;
@@ -101,7 +102,7 @@ export function ModelSelector({
   const modelPickerNonce = useAppStore((s) => s.modelPickerNonce);
 
   // Controlled = the caller owns the selection (and the global side effects —
-  // ⌘M, the "open the picker" nonce, 管理供应商 — stay with the header instance).
+  // ⌘M, the "open the picker" nonce, 管理渠道 — stay with the header instance).
   const controlled = onChange !== undefined;
   /**
    * 翻译模型在**每一个** picker 里都被排除，包括调用方自己传进来的列表。
@@ -157,12 +158,12 @@ export function ModelSelector({
 
   const activeModel = models.find((m) => m.id === selectedId);
   const activeProvider = activeModel
-    ? providers.find((p) => p.id === activeModel.providerId)
+    ? providerFor(activeModel, providers)
     : undefined;
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const allRows: Row[] = useMemo(
-    () => models.map((model) => ({ model, provider: providers.find((p) => p.id === model.providerId) })),
+    () => models.map((model) => ({ model, provider: providerFor(model, providers) })),
     [models, providers],
   );
 
@@ -394,6 +395,18 @@ export function ModelSelector({
                               {label.badges.map((b) => (
                                 <span key={b} className={styles.itemBadge}>{b}</span>
                               ))}
+                              {/* 线路签 (plan §8 P4): which protocol this model's
+                                  requests take, only where its channel has more
+                                  than one to choose between. */}
+                              {(() => {
+                                const channel = providers.find((p) => p.id === row.model.providerId);
+                                if (!channel || channelEndpoints(channel).length < 2) return null;
+                                return (
+                                  <span className={styles.itemRoute} title={t("ai.modelPicker.routeTag", { defaultValue: "这个模型走的线路" })}>
+                                    {ROUTE_SHORT[activeFamily(row.model, channel)]}
+                                  </span>
+                                );
+                              })()}
                             </span>
                             {label.subtitle && (
                               <span className={styles.itemSubtitle}>{label.subtitle}</span>
@@ -452,7 +465,7 @@ export function ModelSelector({
                 className={styles.manageBtn}
                 onClick={() => { setOpen(false); openSettings("providers-models"); }}
               >
-                {t("ai.modelPicker.manageProviders", { defaultValue: "管理供应商" })}
+                {t("ai.modelPicker.manageProviders", { defaultValue: "管理渠道" })}
               </button>
             )}
           </div>

@@ -34,13 +34,15 @@ import {
   parseImageCaps,
   promptUpsert,
   providerUpsert,
+  readChannel,
   type Model,
   type Prompt,
   type Provider,
 } from "./configDb";
+import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
-import { parsePlatform, resolvePlatform } from "./platforms";
+import { parsePlatform } from "./platforms";
 import { parseStructuredOutputMode } from "./jsonMode";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
@@ -51,7 +53,14 @@ import { sqlTransaction } from "../sqlTx";
 import { openTextFileDialog, saveTextFileDialog } from "../fs/transfer";
 
 export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
-const CONFIG_BACKUP_VERSION = 1;
+/**
+ * 2: channels carry `host` + `endpoints`, models `activeRoute` + `routes`
+ * (channel-model-route-plan.md §5.4). A v1 bundle reads through the same
+ * normalization a pre-routes DB row does (`readChannel`), so there is one
+ * migration, not two. A build that knows only v1 refuses a v2 bundle — the
+ * version check below was always there for exactly this.
+ */
+const CONFIG_BACKUP_VERSION = 2;
 
 interface ProviderBackup extends Provider {
   /** Present only when the backup was exported with "include API keys". */
@@ -214,7 +223,7 @@ export function parseConfigBundle(
     // A backup written before the official/compat split names the family only
     // — same re-labelling as reading a pre-split DB row.
     const migrated = migrateLegacyStandard(apiStandard, r.baseUrl);
-    providers.push({
+    const channel = readChannel({
       id,
       name,
       baseUrl: r.baseUrl,
@@ -232,10 +241,14 @@ export function parseConfigBundle(
       // A backup from before platforms existed has none: inferred from the
       // address, the same answer reading an old DB row gives. An id this
       // build doesn't know reads as `custom` (parsePlatform).
-      platform: resolvePlatform(parsePlatform(r.platform), r.baseUrl, migrated),
+      platform: parsePlatform(r.platform),
+      // v1 has neither: readChannel builds the one route the flat fields
+      // describe, exactly as for a pre-routes DB row.
+      host: typeof r.host === "string" ? r.host : undefined,
+      endpoints: parseEndpoints(r.endpoints),
       createdAt: num(r.createdAt, Date.now()),
-      ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}),
     });
+    providers.push({ ...channel, ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}) });
   }
 
   const knownProviders = new Set([...existingProviderIds, ...providers.map((p) => p.id)]);
@@ -294,6 +307,8 @@ export function parseConfigBundle(
       // Field by field, not cast: the drawer and the image modal read these
       // without a second check, so a malformed value crashes a page later.
       caps: parseImageCaps(r.caps),
+      activeRoute: parseRouteFamily(r.activeRoute),
+      routes: parseRouteProfiles(r.routes),
     }));
   }
 

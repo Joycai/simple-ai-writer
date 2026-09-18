@@ -29,6 +29,7 @@ import { splitDocument } from "./chunk";
 import { isTranslateLoreEnabled, translateLinesPerChunk } from "./flag";
 import { isDictEntity, parseDictBody, type GlossaryEntry } from "./glossary";
 import { runChunk, runDocument, type DocProgress } from "./run";
+import { providerFor } from "../ai/routes";
 
 let proposalCounter = 0;
 
@@ -47,10 +48,10 @@ async function resolveTranslateConn(): Promise<AiConn | { error: string }> {
     return {
       error:
         "the translation subagent is not usable. Tell the author to enable it in Settings → 子代理 " +
-        "and bind a model whose 翻译模型格式 is set (Settings → 供应商与模型).",
+        "and bind a model whose 翻译模型格式 is set (Settings → 渠道与模型).",
     };
   }
-  const provider = providers.find((p) => p.id === model.providerId);
+  const provider = providerFor(model, providers);
   if (!provider) return { error: `the provider serving "${model.name}" is gone. Tell the author to re-add it.` };
 
   // 本地端点通常没有 key，空串是**合法**的——这里不像别的子代理那样把"没有 key"

@@ -41,6 +41,7 @@ import { ModelPicker } from "./ai/ModelPicker";
 import { categoryColor } from "./catColor";
 import shell from "./LoreImproveModal.module.css";
 import styles from "./LoreDictNormalizeModal.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 interface Props {
   entity: LoreEntity;
@@ -176,7 +177,7 @@ export function LoreDictNormalizeModal({ entity, onClose }: Props) {
 
   const handleGenerate = async () => {
     const model = models.find((m) => m.id === modelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    const provider = model ? providerFor(model, providers) : null;
     if (!model || !provider) {
       setError(t("ai.errors.noModel", { defaultValue: "请先在设置中选择模型" }));
       return;

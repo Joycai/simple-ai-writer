@@ -88,6 +88,7 @@ import { AutoApproveChip } from "./AutoApproveChip";
 import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
 import type { AttachedItem } from "../../lib/lore/aiTask";
 import styles from "./AgentChat.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 function formatTime(at: number): string {
   const d = new Date(at);
@@ -187,7 +188,7 @@ export function AgentChat() {
   // A clip travels as content only to the active model itself — declared
   // videoInput, on the Chat Completions family (agentStore's allowVideo is the
   // same call). There is no video subagent to fall back on.
-  const activeStandard = useAiStore((s) => s.providers.find((p) => p.id === activeModel?.providerId)?.apiStandard);
+  const activeStandard = useAiStore((s) => (activeModel ? providerFor(activeModel, s.providers) : undefined)?.apiStandard);
   const canVideo = canReadVideo(activeModel, activeStandard);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();

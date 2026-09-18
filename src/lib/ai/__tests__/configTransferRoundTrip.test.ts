@@ -59,16 +59,27 @@ async function throughDb<T>(stmt: SqlStatement, read: (db: never) => Promise<T[]
   return out[0];
 }
 
+// Normalized already (flat fields = the primary route's), so `toEqual` means
+// nothing was lost rather than something was re-derived. Two routes, one with
+// an overridden path and one on the platform's convention (no `path`).
 const provider: Required<Provider> = {
   id: "p1",
   name: "Relay",
-  baseUrl: "https://relay.example/v1",
-  apiStandard: "anthropic_compat",
+  baseUrl: "https://relay.example/gemini-v1beta",
+  apiStandard: "gemini_compat",
   safetySettings: { HARM_CATEGORY_HARASSMENT: "BLOCK_NONE" },
   authMode: "bearer",
   sortOrder: 3,
   // Not what the address would infer (custom): the stored value must survive.
   platform: "newapi",
+  host: "https://relay.example",
+  endpoints: [
+    {
+      family: "gemini", official: false, path: "/gemini-v1beta", authMode: "bearer",
+      safetySettings: { HARM_CATEGORY_HARASSMENT: "BLOCK_NONE" },
+    },
+    { family: "anthropic", official: false, authMode: "both" },
+  ],
   createdAt: 1_700_000_000_000,
 };
 
@@ -117,6 +128,14 @@ const model: Required<Model> = {
   pricePerSecond: 0.00022,
   pricePerImage: 0.04,
   caps,
+  activeRoute: "gemini",
+  routes: {
+    anthropic: {
+      maxOutput: 4096, temperature: 1, reasoningEffort: "low", thinkingCategory: "claude-adaptive",
+      thinkingBudget: 2048, thinkingDialect: "extended", structuredOutput: "off", textVerbosity: "high",
+      vlHighResolution: true, probedAt: 1_700_000_000_900, probedContextSize: 200_000, probedMaxOutput: 64_000,
+    },
+  },
 };
 
 const prompt: Required<Prompt> = {
@@ -146,7 +165,7 @@ describe("config backup · every field round-trips", () => {
     // a field that only exists as `undefined` never reaches the other machine.
     const wire = JSON.parse(JSON.stringify({
       kind: CONFIG_BACKUP_KIND,
-      version: 1,
+      version: 2,
       providers: [fromDb.provider],
       models: [fromDb.model],
       prompts: [fromDb.prompt],
@@ -164,7 +183,7 @@ describe("config backup · every field round-trips", () => {
     // the transaction is the same statement the original row came from.
     const parsed = parseConfigBundle(JSON.parse(JSON.stringify({
       kind: CONFIG_BACKUP_KIND,
-      version: 1,
+      version: 2,
       providers: [provider],
       models: [model],
       prompts: [prompt],

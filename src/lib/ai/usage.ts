@@ -283,3 +283,22 @@ export async function persistUsage(
   }
 }
 
+
+/**
+ * Point the open project's usage rows at the ids that replaced merged-away
+ * models (lib/ai/channelMerge.ts). Best-effort like `persistUsage`: other
+ * projects' rows are not reachable from here and read as a deleted model's
+ * usage does — the same as deleting the model outright would leave them.
+ */
+export async function remapUsageModelIds(projectPath: string, remap: Record<string, string>): Promise<void> {
+  const entries = Object.entries(remap);
+  if (entries.length === 0) return;
+  try {
+    const db = await getDb(projectPath);
+    for (const [from, to] of entries) {
+      await db.execute("UPDATE token_usage SET model_id = ? WHERE model_id = ?", [to, from]);
+    }
+  } catch {
+    // non-critical: the configuration merge already landed
+  }
+}

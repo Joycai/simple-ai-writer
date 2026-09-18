@@ -19,6 +19,7 @@ import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
 import { imageRequestParams, inputImageSize, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
+import { providerFor } from "../ai/routes";
 
 /** `m:ss`, the same clock the execution log's round timer shows. */
 function clock(ms: number): string {
@@ -84,7 +85,7 @@ export async function runIllustration(
   const { useAiStore } = await import("../../stores/aiStore");
   const { models, providers } = useAiStore.getState();
   const model = models.find((m) => m.id === proposal.modelId);
-  const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+  const provider = model ? providerFor(model, providers) : null;
   if (!model || !provider) {
     throw new Error("The image model this proposal was made with is no longer configured.");
   }

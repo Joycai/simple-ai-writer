@@ -1317,7 +1317,7 @@ async function uploadComfyImage(base: string, dataUrl: string, signal: AbortSign
 async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
   const raw = conn.comfy?.workflow;
   if (!raw) {
-    throw new Error("This model has no ComfyUI workflow imported — import an API-format export in Settings → 供应商与模型.");
+    throw new Error("This model has no ComfyUI workflow imported — import an API-format export in Settings → 渠道与模型.");
   }
   const parsed = parseComfyWorkflow(raw);
   if ("error" in parsed) {

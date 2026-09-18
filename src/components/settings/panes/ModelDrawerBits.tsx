@@ -30,9 +30,14 @@ export function Fold({ open, children }: { open: boolean; children: ReactNode })
 }
 
 export function Section({
-  label, open, onToggle, summary, unset, children,
+  label, scope, open, onToggle, summary, unset, children,
 }: {
   label: string;
+  /**
+   * Which config the section's fields belong to when a model has several
+   * routes — 「本线路 · Resp」 (设计稿 05k 屏 04). Absent = say nothing.
+   */
+  scope?: string;
   open: boolean;
   /** Absent = the section never folds (身份). */
   onToggle?: () => void;
@@ -45,6 +50,7 @@ export function Section({
   const head = (
     <>
       <span className={s.secLabel}>{label}</span>
+      {scope && <span className={s.scope}>{scope}</span>}
       <span className={`${s.secSum} ${unset ? s.secSumUnset : ""}`}>
         {!open && unset && <span className={s.dashMark} />}
         {!open && <span className={s.secSumText}>{summary}</span>}
@@ -114,9 +120,11 @@ export function Note({ text, tone = "muted" }: { text: string; tone?: NoteTone }
 }
 
 export function Field({
-  label, sub, hint, note, noteTone, warn, children, ...whyProps
+  label, scope, sub, hint, note, noteTone, warn, children, ...whyProps
 }: {
   label: string;
+  /** Same as `Section.scope`, for a per-route field inside a mixed section. */
+  scope?: string;
   /** A unit or qualifier beside the label — `tokens`, `USD / 1M tokens`. */
   sub?: string;
   hint: string;
@@ -131,6 +139,7 @@ export function Field({
     <div className={s.field}>
       <div className={s.fieldHead}>
         <span className={s.fieldLabel}>{label}</span>
+        {scope && <span className={s.scope}>{scope}</span>}
         {sub && <span className={s.fieldSub}>{sub}</span>}
       </div>
       {children}

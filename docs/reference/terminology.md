@@ -96,6 +96,9 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | Titles（公众号包任务） | 拟标题 | 同上 |
 | Body text（编辑器段落样式） | 正文段落 | 弃裸「正文」——它同时是 body / content / prose / Manuscript |
 | prose（写手的产出） | 成稿 | 同上 |
+| Channel（设置里的 provider 行） | 渠道 | 弃「供应商」（2026-09-18）。一行 = 一把 key + 一个平台，下面挂几条线路；「供应商」读起来是一家公司，而同一家公司两把 key 是两个渠道、一把 key 打三个协议是一个渠道。代码里的 `Provider` / `providers` 表不改名。见 `docs/feature/channel-model-route-plan.md` §12 第 10 条 |
+| Route（渠道下的一个协议） | 线路 | 界面上用协议名徽标（`Chat` · `Resp` · `Gemini` · `Anth`），不用编号——编号要背（同文 §6.1） |
+| Platform | 平台 | 这台服务器在协议之外认哪些私有字段（阿里云百炼、DeepSeek 官方、New API……）；不是「厂商」，一个中转站也是一个平台 |
 
 ## 4. 校准批次
 

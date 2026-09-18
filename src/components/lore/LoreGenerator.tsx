@@ -25,6 +25,7 @@ import { loadApiKey } from "../../lib/keyStore";
 import { useImeGuard } from "../../lib/ime";
 import { Select } from "../common/Select";
 import styles from "./LoreGenerator.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 interface Props {
   onClose: () => void;
@@ -113,7 +114,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // ── Generate ─────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     const model = models.find((m) => m.id === modelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    const provider = model ? providerFor(model, providers) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
 
     const ctrl = new AbortController();

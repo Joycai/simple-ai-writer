@@ -28,7 +28,7 @@
  * which one.
  */
 
-import { familyOf, isCompatStandard, type ApiStandard, type ProtocolFamily } from "./types";
+import { familyOf, isCompatStandard, type ApiStandard, type AuthMode, type ProtocolFamily } from "./types";
 import type { ServerToolId } from "./serverTools";
 
 export type PlatformId =
@@ -72,7 +72,46 @@ interface ServerToolSpelling {
   gate?: (modelId: string) => boolean;
 }
 
+/**
+ * One route a platform serves: a protocol family at a path below the platform's
+ * host (docs/feature/channel-model-route-plan.md §5.1.1). `path` is what goes
+ * between the host and the adapter's own tail (`/chat/completions`,
+ * `/v1/messages`, …) — the same thing a provider's base URL always held past
+ * its host, so `lib/ai/urls.ts` trims it exactly as before.
+ */
+interface PlatformEndpoint {
+  family: ProtocolFamily;
+  path: string;
+  /**
+   * The vendor's own endpoint: its address is a constant (`defaultBaseFor`),
+   * so the route table shows it read-only and a row stores no path for it.
+   */
+  official?: true;
+  /** The header the platform documents for the key, when not the protocol's own. */
+  authMode?: AuthMode;
+}
+
+/**
+ * The conventions every self-hosted relay and generic gateway follows — New
+ * API's docs and OrcaRouter's both: the OpenAI halves under `/v1`, Gemini under
+ * `/v1beta`, Anthropic at the root (the adapter appends `/v1/messages`).
+ */
+const GENERIC_ENDPOINTS: readonly PlatformEndpoint[] = [
+  { family: "openai", path: "/v1" },
+  { family: "responses", path: "/v1" },
+  { family: "gemini", path: "/v1beta" },
+  { family: "anthropic", path: "" },
+];
+
 interface PlatformProfile {
+  /** `scheme://host` of the platform's own server; absent = the author types it (New API, custom). */
+  origin?: string;
+  /**
+   * The routes this platform serves, in the order a new channel lists them —
+   * the first is the channel's primary route. Every path is one a sample in
+   * landscape.md reached, or the preset it replaces had.
+   */
+  endpoints: readonly PlatformEndpoint[];
   /**
    * Hosts that identify the platform when a row carries no `platform` yet
    * (every row saved before the column existed). Lower-case, `host[:port]`.
@@ -172,21 +211,34 @@ const DASHSCOPE_SERVER_TOOLS: Partial<Record<ProtocolFamily, readonly ServerTool
 
 const PROFILES: Record<PlatformId, PlatformProfile> = {
   openai: {
+    origin: "https://api.openai.com",
+    endpoints: [{ family: "openai", path: "", official: true }, { family: "responses", path: "", official: true }],
     hosts: ["api.openai.com"],
     // Chat Completions: none (official rejects unknown top-level fields).
     serverTools: { openai: [], responses: [{ id: "web_search" }] },
     source: "docs/api/responses.md §10 (GPT-5.6, 2026-09-14)",
   },
   anthropic: {
+    origin: "https://api.anthropic.com",
+    endpoints: [{ family: "anthropic", path: "", official: true }],
     hosts: ["api.anthropic.com"],
     serverTools: { anthropic: [{ id: "web_search" }] },
     source: "Anthropic's own versioned web_search tool",
   },
   google: {
+    origin: "https://generativelanguage.googleapis.com",
+    endpoints: [{ family: "gemini", path: "", official: true }],
     hosts: ["generativelanguage.googleapis.com"],
     source: "no server tool spelled on the Gemini wire (the only family this platform serves)",
   },
   deepseek: {
+    origin: "https://api.deepseek.com",
+    endpoints: [
+      { family: "openai", path: "" },
+      // `/responses` and `/v1/responses` both answer (landscape.md §2.1).
+      { family: "responses", path: "" },
+      { family: "anthropic", path: "/anthropic" },
+    ],
     hosts: ["api.deepseek.com"],
     // Chat Completions: none (no native tool, no private field). Its
     // Anthropic-shaped path falls back to the protocol's own web_search at
@@ -195,16 +247,36 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {
+    origin: "https://dashscope.aliyuncs.com",
+    endpoints: [
+      { family: "openai", path: "/compatible-mode/v1" },
+      // Same path; the adapter appends /responses below it.
+      { family: "responses", path: "/compatible-mode/v1" },
+      // The root — the platform's FAQ warns against a trailing /v1.
+      { family: "anthropic", path: "/apps/anthropic" },
+    ],
     hosts: ["dashscope.aliyuncs.com"],
     serverTools: DASHSCOPE_SERVER_TOOLS,
     source: "landscape.md §7 第六个样本 (联网搜索与网页抓取 2026-09-14 · 代码解释器 2026-09-17)",
   },
   "dashscope-intl": {
+    origin: "https://dashscope-intl.aliyuncs.com",
+    endpoints: [
+      { family: "openai", path: "/compatible-mode/v1" },
+      { family: "responses", path: "/compatible-mode/v1" },
+      // Whether this host serves /apps/anthropic is unverified — not offered.
+    ],
     hosts: ["dashscope-intl.aliyuncs.com"],
     serverTools: DASHSCOPE_SERVER_TOOLS,
     source: "landscape.md §7 第六个样本, same surfaces as the domestic host",
   },
   xai: {
+    origin: "https://api.x.ai",
+    endpoints: [
+      // Chat Completions is marked deprecated; Responses is the recommended wire.
+      { family: "responses", path: "/v1" },
+      { family: "openai", path: "/v1" },
+    ],
     hosts: ["api.x.ai"],
     // web_search measured on grok-4.3; web_extractor and the image searches
     // are DashScope's names and are refused.
@@ -212,19 +284,36 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     source: "landscape.md §7 第十一个样本 (2026-09-14)",
   },
   minimax: {
+    origin: "https://api.minimaxi.com",
+    endpoints: [
+      { family: "openai", path: "" },
+      { family: "anthropic", path: "/anthropic" },
+    ],
     hosts: ["api.minimaxi.com", "api.minimax.io"],
     serverTools: { anthropic: [{ id: "web_search" }] },
     source: "landscape.md §7 第四个样本",
   },
   orcarouter: {
+    origin: "https://api.orcarouter.ai",
+    endpoints: [
+      { family: "openai", path: "/v1" },
+      { family: "responses", path: "/v1" },
+      // Bearer on every path is the one header its docs promise for both a
+      // completion and /v1/models (landscape.md §7 第七个样本).
+      { family: "anthropic", path: "", authMode: "bearer" },
+      { family: "gemini", path: "/v1beta", authMode: "bearer" },
+    ],
     hosts: ["api.orcarouter.ai"],
     source: "landscape.md §7 第七个样本 — relay; protocol-native tools unmeasured",
   },
   newapi: {
+    endpoints: GENERIC_ENDPOINTS,
     hosts: [],
     source: "landscape.md §7 New API 样本 — relay; protocol-native tools depend on the upstream",
   },
   ollama: {
+    origin: "http://localhost:11434",
+    endpoints: [{ family: "openai", path: "/v1" }],
     hosts: ["localhost:11434", "127.0.0.1:11434"],
     // A local server runs no tools of its own on any wire — say so rather
     // than inherit the protocol-native search at "unknown".
@@ -232,11 +321,14 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     source: "local server; no server tools",
   },
   comfyui: {
+    origin: "http://127.0.0.1:8188",
+    endpoints: [{ family: "openai", path: "" }],
     hosts: ["localhost:8188", "127.0.0.1:8188"],
     serverTools: { openai: [], responses: [], anthropic: [] },
     source: "local render server; reached through caps.route, not a chat wire",
   },
   custom: {
+    endpoints: GENERIC_ENDPOINTS,
     hosts: [],
     source: "protocol vocabulary only",
   },
@@ -386,4 +478,25 @@ export function wireHasServerTools(wire: ServerToolWire): boolean {
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */
 export function platformSource(id: PlatformId): string {
   return PROFILES[id].source;
+}
+
+/** The routes a platform serves, primary first. */
+export function platformEndpoints(id: PlatformId): readonly PlatformEndpoint[] {
+  return PROFILES[id]?.endpoints ?? GENERIC_ENDPOINTS;
+}
+
+/** `scheme://host` of a platform's own server, or "" when the author types it. */
+export function platformOrigin(id: PlatformId): string {
+  return PROFILES[id]?.origin ?? "";
+}
+
+/**
+ * The path a route takes when its row stores none (§5.1.1: `NULL` follows the
+ * platform's convention). A family the platform does not list falls back to the
+ * generic relay convention — a route an author added by hand on a platform that
+ * never measured it.
+ */
+export function platformDefaultPath(id: PlatformId, family: ProtocolFamily): string {
+  const own = platformEndpoints(id).find((e) => e.family === family);
+  return (own ?? GENERIC_ENDPOINTS.find((e) => e.family === family))?.path ?? "";
 }

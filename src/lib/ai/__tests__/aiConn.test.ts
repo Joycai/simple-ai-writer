@@ -105,7 +105,20 @@ describe("connOptions", () => {
 describe("resolveConn", () => {
   it("pairs a model with the endpoint that serves it", () => {
     const r = resolveConn([model], [provider], "m1");
-    expect(r).toEqual({ ok: true, model, provider });
+    // The provider comes back as the model's route sees it (lib/ai/routes.ts):
+    // same channel, same address, fields the standard can't use dropped.
+    expect(r).toMatchObject({
+      ok: true, model, provider: { id: "p1", baseUrl: "https://relay.example/v1", apiStandard: "openai_compat" },
+    });
+  });
+
+  it("refuses a route the channel no longer has, and says which", () => {
+    // Not quietly re-pointed at the primary route: the model's route fields
+    // were set for that family, and sending them down another is a
+    // cross-family request (plan §7 invariant 3).
+    const r = resolveConn([{ ...model, activeRoute: "anthropic" }], [provider], "m1");
+    expect(r.ok).toBe(false);
+    expect(r.ok ? "" : r.error).toContain("Anthropic");
   });
 
   it("tells the three failures apart", () => {
