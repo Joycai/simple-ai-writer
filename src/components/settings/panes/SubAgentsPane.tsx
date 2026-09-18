@@ -127,7 +127,7 @@ export function SubAgentsPane() {
     if (kind === "vision" && !canSeeImages(model)) {
       return t("systemSettings.subagents.warnNotMultimodal");
     }
-    if (kind === "pdf" && !readsPdf(model, providerFor(model, providers)?.apiStandard)) {
+    if (kind === "pdf" && !readsPdf(model, providerFor(model, providers))) {
       return t("systemSettings.subagents.warnNoPdf");
     }
     if (kind === "imagegen" && model.type !== "image") {

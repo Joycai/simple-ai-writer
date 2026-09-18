@@ -10,6 +10,7 @@ import {
   platformToStore,
   resolvePlatform,
   serverToolStatus,
+  wireReadsPdf,
 } from "../platforms";
 
 describe("inferPlatform", () => {
@@ -171,5 +172,46 @@ describe("dashscopeRunsCodeInterpreter", () => {
   it("has no table outside the two OpenAI-shaped wires", () => {
     expect(dashscopeRunsCodeInterpreter("anthropic", "qwen3.5-plus")).toBe(false);
     expect(dashscopeRunsCodeInterpreter("gemini", "qwen3.5-plus")).toBe(false);
+  });
+});
+
+// 火山方舟: one host, two products told apart by path (landscape.md §7 第十二个样本).
+describe("volcengine: two platforms on one host", () => {
+  const HOST = "https://ark.cn-beijing.volces.com";
+  it("names the plan by its path prefix and pay-as-you-go by the bare host", () => {
+    expect(inferPlatform(`${HOST}/api/plan/v3`, "openai_compat")).toBe("volcengine-plan");
+    expect(inferPlatform(`${HOST}/api/plan`, "anthropic_compat")).toBe("volcengine-plan");
+    expect(inferPlatform(`${HOST}/api/plan/`, "anthropic_compat")).toBe("volcengine-plan");
+    expect(inferPlatform(`${HOST}/api/v3`, "openai_compat")).toBe("volcengine");
+    // A prefix matches on a segment boundary only.
+    expect(inferPlatform(`${HOST}/api/planner`, "openai_compat")).toBe("volcengine");
+  });
+
+  it("keeps the picked product while the drawer's host field holds the bare host", () => {
+    expect(platformForAddress("volcengine-plan", HOST, "openai_compat")).toBe("volcengine-plan");
+    expect(platformForAddress("volcengine", HOST, "openai_compat")).toBe("volcengine");
+    expect(platformForAddress("custom", HOST, "openai_compat")).toBe("volcengine");
+    // A path still decides: pasting the pay-as-you-go address leaves the plan.
+    expect(platformForAddress("volcengine-plan", `${HOST}/api/v3`, "openai_compat")).toBe("volcengine");
+    // An inferable row stores nothing.
+    expect(platformToStore({ platform: "volcengine-plan", baseUrl: `${HOST}/api/plan/v3`, apiStandard: "openai_compat" }))
+      .toBeUndefined();
+  });
+
+  it("spells the plan's measured tools: Anthropic web_search yes, Chat none", () => {
+    expect(serverToolStatus({ platform: "volcengine-plan", standard: "anthropic_compat" }, "web_search")).toBe("yes");
+    expect(serverToolStatus({ platform: "volcengine-plan", standard: "openai_compat" }, "web_search")).toBe("no");
+    expect(serverToolStatus({ platform: "volcengine", standard: "openai_responses_compat" }, "web_search")).toBe("unknown");
+  });
+});
+
+describe("wireReadsPdf", () => {
+  it("is Chat + Responses by default, and Anthropic only where a platform measured it", () => {
+    expect(wireReadsPdf({ platform: "custom", standard: "openai_compat" })).toBe(true);
+    expect(wireReadsPdf({ platform: "custom", standard: "openai_responses_compat" })).toBe(true);
+    expect(wireReadsPdf({ platform: "deepseek", standard: "anthropic_compat" })).toBe(false);
+    expect(wireReadsPdf({ platform: "google", standard: "gemini" })).toBe(false);
+    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
+    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
   });
 });

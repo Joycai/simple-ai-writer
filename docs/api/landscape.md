@@ -1286,6 +1286,51 @@ Responses adapter：
 `model-capabilities/text/reasoning`、`images/understanding`、`tools/overview`、`pricing`、
 `migration/may-15-retirement`、`models`，以及 `https://docs.x.ai/openapi.json`。
 
+### 第十二个样本：火山方舟 Agent / Coding Plan（① ④ 两族，2026-09-18 实测 doubao-seed-2.0-lite / -mini / 2.1-turbo）
+
+> **实测结论**（`live.volcengine.test.ts`，`SEEDDACE_KEY` 设为套餐 key，25 条**全过**；平台画像 `volcengine-plan`）：
+>
+> - **两种 key，两条前缀，同一主机** `ark.cn-beijing.volces.com`：套餐 key 只在 `/api/plan` 下有效，
+>   在按量的 `/api/v3` 上 401 `AuthenticationError`；反之亦然（按量 key 未实测，按文档）。因此画像分成
+>   **两个平台**：`volcengine`（按量，`/api/v3`，Chat · Resp，按文档未实测）与 `volcengine-plan`
+>   （套餐，`/api/plan/v3` Chat · `/api/plan` Anth，已实测）。`inferPlatform` 为此支持了带路径的
+>   `hosts` 条目（最长前缀、段边界匹配）；抽屉里只填主机时保留作者选的那个（`platformForAddress`）。
+> - **套餐前缀下没有的**：`/responses`（404 `InvalidAction`）、`/models`（① 族 404；④ 族 `/v1/models`
+>   对有效 key 回 **401**——误导性的）。连通测试因此改为：兼容端的模型列表回 404 / 401 / 403 都再发
+>   一次空补全，由补全端点定论（错 key 在那里也是 401；造的模型 id 回 404 `UnsupportedModel`）。
+> - **图片**：① `image_url`（data URL）与 ④ `image` 块三款都读得出（64² 纯色 → Teal，计 ~1,360 输入 token）。
+> - **PDF**：① 的 `{type:"file", file:{file_data, filename}}`（本项目 `file` 片段原样）与 ④ 的 base64
+>   `document` 块**都真读到了内容**（PELICAN 7342）——④ 族上读 PDF 的第一个实测样本（DeepSeek 的 ④ 面是
+>   静默换成占位符，§2.1）。扁平的 `{type:"file", file_data}` 400 `missing messages.content.file`。
+>   平台画像为此加了 `pdfFamilies`，`readsPdf` 改为按渠道的「平台 × 线路」回答。
+> - **思考，① 面**：默认**开**（「用一句话说你好」想了 590 token）。`thinking:{type:"disabled"}` 关；
+>   `reasoning_effort` 收 `none / minimal / low / medium / high / xhigh / max`，乱写 400 并列出参数名；
+>   `minimal` 与 `none` 都是 0 推理。**`high` + `disabled` 同发 400**「Invalid combination of reasoning_effort
+>   and thinking type」——所以新类目 `doubao` 的「关闭」只发开关，不带强度（与 `deepseek` 同一拼法），
+>   菜单 `off / low / medium / high`（`medium` 是真的一档：同题 1,541 token，`max` 反而 136）。
+>   推理从 `reasoning_content` 流出，`usage.completion_tokens_details.reasoning_tokens` 有数。
+> - **思考，④ 面**：同样默认开；`thinking:{type:"disabled"}` 关，`adaptive` 与 `enabled+budget_tokens` 都收，
+>   `output_config.effort` 不报错（效果未比）。thinking 块**没有 `signature`**，原样回传后工具轮第二轮照样 200。
+>   Claude 的两个类目关不掉它（`claude-budget` 不论档位都发 `enabled`，`off` 什么都不发 = 在想），所以加了
+>   `doubao-switch`（adaptive / disabled，同 MiniMax 的拼法）；**强制 `tool_choice` 在思考开时照常可用**
+>   （① `required` / 具名、④ `{type:"tool"}` 三种都 200），所以它不像 `minimax` 那样把强制降成 auto。
+> - **工具**：① 函数调用、④ `tool_use` 都正常；带思考的工具轮两族都能走完（推理回传被接受）。
+>   ① `response_format: json_schema`（strict）输出合 schema。
+> - **服务端工具**：④ 的 Anthropic 版本化 `web_search_20250305` **真跑了**（`server_tool_use` + `web_search_tool_result`，
+>   结果带 `encrypted_content`、`url` 为空串）→ 画像记 `yes`；① 面无对应字段。
+> - **上限**：`max_tokens` 两族都 ≤ 131,072（超了 400 并报上限）；2.1-turbo 文档写最大输出 256k，但同一
+>   上限校验未单测。上下文 256k（套餐概览页）。
+> - **鉴权**：④ 面 `x-api-key` 与 `Authorization: Bearer` 都收。
+> - **条款**：套餐概览页写明文本模型「不可用于 API 调用，在非 AI 工具中使用……可能被识别为滥用」。本应用是
+>   AI 写作工具，属于其列；抽屉的平台提示条照实写了这一句。
+>
+> **对本项目**：adapter 一处没改。新增：两个平台画像、`doubao` / `doubao-switch` 两个思考类目、
+> `pdfFamilies` 与 `wireReadsPdf`、三个起步模型（多模态 + PDF，Anth 线路停放 `doubao-switch`）、
+> 连通测试在 401 时的二次确认、抽屉里的平台提示条（设计稿 05k TURN 2）。
+
+来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「Agent Plan 套餐概览」
+（`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

@@ -40,6 +40,8 @@ export type PlatformId =
   | "dashscope-intl"
   | "xai"
   | "minimax"
+  | "volcengine"
+  | "volcengine-plan"
   | "orcarouter"
   | "newapi"
   | "ollama"
@@ -49,7 +51,7 @@ export type PlatformId =
 /** Selectable values, in the order the provider drawer lists them. */
 export const PLATFORM_IDS: readonly PlatformId[] = [
   "openai", "anthropic", "google", "deepseek", "dashscope", "dashscope-intl", "xai",
-  "minimax", "orcarouter", "newapi", "ollama", "comfyui", "custom",
+  "minimax", "volcengine", "volcengine-plan", "orcarouter", "newapi", "ollama", "comfyui", "custom",
 ];
 
 /**
@@ -114,7 +116,10 @@ interface PlatformProfile {
   endpoints: readonly PlatformEndpoint[];
   /**
    * Hosts that identify the platform when a row carries no `platform` yet
-   * (every row saved before the column existed). Lower-case, `host[:port]`.
+   * (every row saved before the column existed). Lower-case, `host[:port]`,
+   * optionally followed by a path prefix (`host/api/plan`) for two platforms
+   * that share one host and differ by path — the longest match wins, so the
+   * prefixed entry beats the bare host it sits under.
    */
   hosts: readonly string[];
   /**
@@ -124,6 +129,15 @@ interface PlatformProfile {
    * `unknown`.
    */
   serverTools?: Partial<Record<ProtocolFamily, readonly ServerToolSpelling[]>>;
+  /**
+   * Families whose wire reads a whole PDF (`readsPdf`), when not the default
+   * Chat Completions + Responses. A platform lists the Anthropic family here
+   * only after a sample showed its `document` block actually reaching the
+   * model — most Anthropic-shaped relays swap it for a placeholder and answer
+   * 200 (DeepSeek, landscape.md §2.1), which is the silent failure this gate
+   * exists to keep the PDF subagent out of.
+   */
+  pdfFamilies?: readonly ProtocolFamily[];
   /** Where the entries above were measured. */
   source: string;
 }
@@ -293,6 +307,43 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     serverTools: { anthropic: [{ id: "web_search" }] },
     source: "landscape.md §7 第四个样本",
   },
+  // 火山方舟. Two platforms on one host, told apart by path, because the key
+  // decides the path: a pay-as-you-go key answers only under `/api/v3`, a
+  // subscription (Agent / Coding Plan) key only under `/api/plan` — each is a
+  // 401 on the other's path (landscape.md §7 第十二个样本). Same key, same
+  // host, different product; one platform with both would offer routes the
+  // key can never reach.
+  volcengine: {
+    origin: "https://ark.cn-beijing.volces.com",
+    endpoints: [
+      // Both from the vendor's own curl examples (文本生成 / 文档理解); the
+      // plan key of the sample cannot reach this path, so unmeasured here.
+      { family: "openai", path: "/api/v3" },
+      { family: "responses", path: "/api/v3" },
+    ],
+    hosts: ["ark.cn-beijing.volces.com"],
+    // No private search field on Chat Completions; Responses' own web_search
+    // stays at "unknown" via the protocol-native list.
+    serverTools: { openai: [] },
+    source: "Ark docs (文本生成 · 图片理解 · 文档理解, 2026-09-08); pay-as-you-go wire unmeasured",
+  },
+  "volcengine-plan": {
+    origin: "https://ark.cn-beijing.volces.com",
+    endpoints: [
+      { family: "openai", path: "/api/plan/v3" },
+      // The adapter appends /v1/messages. No /responses and no /models on
+      // this prefix (404).
+      { family: "anthropic", path: "/api/plan" },
+    ],
+    hosts: ["ark.cn-beijing.volces.com/api/plan"],
+    // Anthropic's versioned web_search ran (server_tool_use + results) on
+    // doubao-seed-2.0-mini; Chat Completions has no field for it.
+    serverTools: { openai: [], anthropic: [{ id: "web_search" }] },
+    // A base64 `document` block was read (the secret word came back) — the
+    // one Anthropic-shaped wire measured to do so.
+    pdfFamilies: ["openai", "responses", "anthropic"],
+    source: "landscape.md §7 第十二个样本 (2026-09-18)",
+  },
   orcarouter: {
     origin: "https://api.orcarouter.ai",
     endpoints: [
@@ -359,14 +410,20 @@ export function inferPlatform(baseUrl: string, standard: ApiStandard): PlatformI
       default: return "openai";
     }
   }
-  const host = hostOf(baseUrl);
-  if (!host) return "custom";
+  const addr = addressOf(baseUrl);
+  if (!addr) return "custom";
+  let best: PlatformId = "custom";
+  let bestLen = 0;
   for (const id of PLATFORM_IDS) {
-    // `URL.host` already drops a scheme's default port, so an explicit `:443`
-    // compares equal to the bare host.
-    if (PROFILES[id].hosts.includes(host)) return id;
+    for (const h of PROFILES[id].hosts) {
+      // `URL.host` already drops a scheme's default port, so an explicit `:443`
+      // compares equal to the bare host. A path prefix matches on a segment
+      // boundary only (`/api/plan` is not `/api/planner`).
+      const hit = addr === h || addr.startsWith(`${h}/`);
+      if (hit && h.length > bestLen) { best = id; bestLen = h.length; }
+    }
   }
-  return "custom";
+  return best;
 }
 
 /**
@@ -405,14 +462,30 @@ export function platformHasHosts(id: PlatformId): boolean {
  */
 export function platformForAddress(current: PlatformId, baseUrl: string, standard: ApiStandard): PlatformId {
   const inferred = inferPlatform(baseUrl, standard);
-  if (!isCompatStandard(standard) || inferred !== "custom") return inferred;
+  if (!isCompatStandard(standard)) return inferred;
+  // The drawer's host field holds a bare host. Two platforms on one host
+  // (火山方舟 按量 / Plan) differ only by path, so a bare host that is also the
+  // current platform's host says nothing against the current pick.
+  if (inferred !== "custom") return sharesBareHost(current, baseUrl) ? current : inferred;
   return platformHasHosts(current) ? "custom" : current;
 }
 
-/** Lower-case `host[:port]` of a URL, or "" when it doesn't parse. */
-function hostOf(url: string): string {
+/** Whether `url` is a bare host (no path) that one of `id`'s `hosts` entries sits on. */
+function sharesBareHost(id: PlatformId, url: string): boolean {
+  const addr = addressOf(url);
+  if (!addr || addr.includes("/")) return false;
+  return PROFILES[id].hosts.some((h) => h.split("/")[0] === addr);
+}
+
+/**
+ * Lower-case `host[:port]` of a URL followed by its path without a trailing
+ * slash (`api.x.ai/v1`), or "" when it doesn't parse — what `hosts` entries
+ * are matched against.
+ */
+function addressOf(url: string): string {
   try {
-    return new URL(url.trim()).host.toLowerCase();
+    const u = new URL(url.trim());
+    return (u.host + u.pathname.replace(/\/+$/, "")).toLowerCase();
   } catch {
     return "";
   }
@@ -473,6 +546,17 @@ export function serverToolStatus(wire: ServerToolWire, id: ServerToolId, modelId
 /** Whether this wire has any server tool at all — the drawer's section gate. */
 export function wireHasServerTools(wire: ServerToolWire): boolean {
   return spellings(wire).length > 0;
+}
+
+const PDF_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses"];
+
+/**
+ * Whether this wire hands a whole PDF to the model: Chat Completions' `file`
+ * part and Responses' `input_file` everywhere, plus the families a platform
+ * measured beyond that (`pdfFamilies`).
+ */
+export function wireReadsPdf(wire: ServerToolWire): boolean {
+  return (PROFILES[wire.platform]?.pdfFamilies ?? PDF_FAMILIES).includes(familyOf(wire.standard));
 }
 
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */

@@ -101,6 +101,16 @@ button.badge:focus-visible {
   color: var(--color-text-muted);
 }
 
+/* The platform's own caveat (05k 屏 2a): which key belongs here. Settings'
+   warn pair, the same one SubAgents uses — no new colour. */
+.previewNote {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--stg-border-warn);
+  background: var(--stg-warn-bg);
+  color: var(--color-warning-text);
+  line-height: 1.65;
+}
+
 /* ── Route table (渠道抽屉 · 线路表) ────────────────────────────────────── */
 .table {
   display: flex;

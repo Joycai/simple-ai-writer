@@ -15,7 +15,11 @@ import {
   categoriesForFamily,
   defaultCategoryId,
   parseThinkingCategory,
+  forcesToolChoiceAuto,
+  reasoningBody,
   resolveThinkingCategory,
+  THINKING_CATEGORIES,
+  thinkingBody,
 } from "../reasoning";
 import type { ApiStandard } from "../types";
 
@@ -130,7 +134,7 @@ describe("defaultCategoryId / categoriesForFamily", () => {
     expect(openai[openai.length - 1]).toBe("off");
 
     const anthropic = categoriesForFamily("anthropic");
-    expect(anthropic).toEqual(["claude-adaptive", "claude-budget", "minimax", "off"]);
+    expect(anthropic).toEqual(["claude-adaptive", "claude-budget", "minimax", "doubao-switch", "off"]);
   });
 
   it("parseThinkingCategory narrows a free-text column, else undefined", () => {
@@ -139,5 +143,40 @@ describe("defaultCategoryId / categoriesForFamily", () => {
     expect(parseThinkingCategory("bogus")).toBeUndefined();
     expect(parseThinkingCategory(42)).toBeUndefined();
     expect(parseThinkingCategory(undefined)).toBeUndefined();
+  });
+});
+
+// 火山方舟's Doubao Seed (landscape.md §7 第十二个样本): off must be the disable
+// switch *alone* — the endpoint 400s on `reasoning_effort:"high"` next to
+// `thinking:{type:"disabled"}` — and `medium` is a real level there.
+describe("doubao category", () => {
+  const cat = THINKING_CATEGORIES.doubao;
+  it("offers medium and sends the switch alone for off", () => {
+    expect(cat.menu).toEqual(["off", "low", "medium", "high"]);
+    expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(cat, "medium")).toEqual({ reasoning_effort: "medium" });
+    expect(reasoningBody(cat, "default")).toBeUndefined();
+  });
+  it("is an openai-family category", () => {
+    expect(categoriesForFamily("openai")).toContain("doubao");
+    expect(categoriesForFamily("anthropic")).not.toContain("doubao");
+  });
+});
+
+// The Anthropic-route twin: the MiniMax switch's two spellings, without
+// MiniMax's ban on a forced tool (a named tool_choice ran with thinking on).
+describe("doubao-switch category", () => {
+  const cat = THINKING_CATEGORIES["doubao-switch"];
+  it("sends disabled for off and adaptive for on", () => {
+    expect(thinkingBody(cat.dialect, 1024, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(thinkingBody(cat.dialect, 1024, "high")).toEqual({ thinking: { type: "adaptive" } });
+  });
+  it("keeps a forced tool_choice, unlike MiniMax", () => {
+    expect(forcesToolChoiceAuto(cat, "high")).toBe(false);
+    expect(forcesToolChoiceAuto(THINKING_CATEGORIES.minimax, "high")).toBe(true);
+  });
+  it("is offered only on the Anthropic family", () => {
+    expect(categoriesForFamily("anthropic")).toContain("doubao-switch");
+    expect(categoriesForFamily("openai")).not.toContain("doubao-switch");
   });
 });

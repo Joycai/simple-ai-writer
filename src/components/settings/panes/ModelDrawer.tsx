@@ -40,7 +40,7 @@ import {
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { providerWire, serverToolStatus } from "../../../lib/ai/platforms";
+import { providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -176,10 +176,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The route the author clicked, shown as a diff before the switch (屏 06).
   const [pendingRoute, setPendingRoute] = useState<ProtocolFamily | null>(null);
   const multiRoute = channelRoutes.length > 1;
-  // The two wires with a whole-file content part the adapters map
+  // The wires with a whole-file content part the adapters map
   // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
-  // docs/api/landscape.md 第十一个样本).
-  const pdfWire = family === "openai" || family === "responses";
+  // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
+  // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
+  const pdfWire = provider ? wireReadsPdf(providerWire(provider)) : false;
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.

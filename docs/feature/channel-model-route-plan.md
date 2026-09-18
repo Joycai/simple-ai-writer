@@ -1,6 +1,6 @@
 # 「渠道与模型」重构：渠道 × 模型 × 线路（原「供应商与模型」）
 
-> 状态：`shipped`（2026-09-18 提出；P0 已实施，见 §11；P1–P4 已实施，见 §12——与本文的出入都记在那里，包括唯一没做的一项：§5.1.2 专用接口仍走 `caps.route` / `asrFormat`，没有进 `provider_endpoints`）。设计稿在 claude.ai/design 项目（本 app 的设计项目）的
+> 状态：`shipped`（2026-09-18 提出；P0 已实施，见 §11；P1–P4 已实施，见 §12；火山方舟两个平台见 §13——与本文的出入都记在那里，包括唯一没做的一项：§5.1.2 专用接口仍走 `caps.route` / `asrFormat`，没有进 `provider_endpoints`）。设计稿在 claude.ai/design 项目（本 app 的设计项目）的
 > [`05k 渠道与线路 Channel × Route.dc.html`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0?file=05k+%E6%B8%A0%E9%81%93%E4%B8%8E%E7%BA%BF%E8%B7%AF+Channel+%C3%97+Route.dc.html) TURN 1，屏 1a–1h + 1n 设计说明（沿用 05c 抽屉与 05d 列表的组件语汇，Tweaks 可切深浅）。
 > 下文 §6 的「屏 01–08」依次对应 1a–1h。
 > 本文是**方案**：数据模型、字段归属、迁移、分期、不变量。UI 口径以设计稿为准，本文 §6 只记每屏回答了哪个问题。
@@ -105,7 +105,7 @@ DashScope 私有的 `enable_search` / `search_options` / `enable_code_interprete
 ```ts
 interface PlatformProfile {
   id: PlatformId;                 // "dashscope" | "dashscope-intl" | "deepseek" | "openai" | "anthropic" | "google"
-                                  // | "xai" | "minimax" | "orcarouter" | "newapi" | "ollama" | "comfyui" | "custom"
+                                  // | "xai" | "minimax" | "volcengine" | "volcengine-plan" | "orcarouter" | "newapi" | "ollama" | "comfyui" | "custom"
   name: string;
   /** 官方主机；newapi / custom / ollama 缺省，由作者在渠道上填。 */
   host?: string;
@@ -392,3 +392,32 @@ P1–P4 在一个 PR 里落地（作者要求一次做完；§8「每期一个 P
 **没做的**：§5.1.2 的专用接口线路（`dashscope-native` / `comfyui` 进 `provider_endpoints`、出图 / 转写线路带按平台过滤）。
 出图与转写仍由 `caps.route` 与 `asrFormat` 选接口、由渠道地址推出原生前缀，行为与之前相同；专用接口进线路表要等一个
 「同一出图模型换接口」的样本（§9 同一理由）。
+
+## 13. 第一个「一台主机、两种 key」的平台：火山方舟（2026-09-18）
+
+实测在 [`landscape.md`](../api/landscape.md) §7 第十二个样本；设计稿是 05k 的 **TURN 2**（屏 2a–2c + 2n 设计说明，叠在 TURN 1 上面）。
+这一期没有新组件，只有画像数据、两个思考类目、一条提示条。每条取舍的理由：
+
+1. **拆成两个平台，而不是一个平台两条路径。** 按量 key 只认 `/api/v3`，套餐（Agent / Coding Plan）key 只认 `/api/plan`，在对方
+   路径上都是 401。§2.1 说渠道以 key 为身份——同一把 key 永远到不了的线路不该出现在它的线路表里。于是 `volcengine`（Chat · Resp，
+   按文档，未实测）与 `volcengine-plan`（Chat `/api/plan/v3` · Anth `/api/plan`，已实测）各是一个平台，平台卡上一眼看出线路不同。
+2. **`hosts` 允许带路径前缀，最长者胜、只在段边界上匹配。** 旧行（没存 `platform` 的）要能从地址认回自己；两个平台共用主机，
+   只有路径能分。`/api/planner` 不算 `/api/plan`。§4 规则 3 不变：地址能认出的平台照旧不存（`platformToStore`）。
+3. **抽屉的主机框只填主机时，保留作者选的平台。** 主机框里从来只有主机，按规则 2 它会被认成按量平台，把作者刚点的套餐冲掉。
+   `platformForAddress` 因此多一条：地址是**光主机**、且正是当前平台的主机时，不改；带了路径才由路径决定。
+4. **能不能读 PDF 按「平台 × 线路」回答（`pdfFamilies` · `wireReadsPdf`）。** 以前按族：①② 能、④ 不能——因为多数 ④ 兼容端把
+   `document` 块静默换成占位符（DeepSeek，§2.1），那是这道闸要挡的。方舟 Plan 的 ④ 面真读到了 PDF 内容，所以画像里列出 ④；
+   没实测过的平台仍是默认的 ①②。`readsPdf` 的第二个参数因此从 `standard` 变成渠道（要平台）。
+5. **两个思考类目，而不是借现成的。** ① 面：`doubao`（关闭 · low · medium · high）——拼法同 `deepseek`（关 = 只发
+   `thinking:disabled`，否则 `reasoning_effort`），但 `medium` 是真的一档，而且「强度 + disabled」同发会 400，所以不能沿用
+   `openai-generic`。④ 面：`doubao-switch`（adaptive / disabled）——豆包默认在想，Claude 两个类目都关不掉；拼法与 `minimax` 相同，
+   但方舟在思考开时照样接受强制 `tool_choice`，借 `minimax` 会把结构化任务的强制调用无谓地降成 auto（`forcesToolChoiceAuto`
+   因此改按 id 判 MiniMax，而不是按 `switch` 方言）。
+6. **起步模型带好能力与另一条线路的参数。** 三个豆包 Seed 两条线路都读了图和 PDF，所以直接是「多模态 + PDF 输入」；④ 线路的思考
+   类目以 `routes.anthropic` 停放好——作者切过去就是能关的那个，而不是关不掉的 Claude 默认。
+7. **连通测试：兼容端 `/models` 回 401 / 403 也不算定论。** 方舟 Plan 的 ④ 面 `/v1/models` 对有效 key 回 401，而 `/v1/messages`
+   收同一把 key。改为像 404 一样再发一次空补全；错的 key 在补全端点上仍是 401，所以不会把坏 key 报成通。
+8. **提示条只说作者能行动的事。** 选中方舟平台时预览顶部一条：这种 key 属于哪条前缀、另一种 key 该选哪个平台，套餐加一句条款
+   （只许在 AI 工具里用）。用设置页现成的 warn 两色，不新造颜色；其他平台没有这条——没有「选错就是 401、测试也解释不了」的问题。
+9. **主机框末尾的 `/` 在保存前去掉。** 顺手修的旧问题：粘贴 `https://host/` 会得到 `host//api/…`，每个平台都会撞上，这次在方舟
+   的预览地址里第一次看见。

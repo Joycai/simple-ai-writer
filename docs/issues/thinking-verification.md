@@ -76,6 +76,9 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
   验：DashScope 上 Qwen-Max 是否接受二者同发、`xhigh` 是否被识别。
 - **`qwen-budget` 类目**：`enable_thinking` + `thinking_budget:N`。验：预算是否被遵守。
 - **GLM `glm` 类目**：`reasoning_effort` + `thinking:{clear_thinking:false}`。验：GLM-5.3 是否接受该组合。
+- **豆包 `doubao` 类目**：`off` 只发 `thinking:{type:"disabled"}`，开时只发 `reasoning_effort`。✅ 2026-09-18 在火山方舟
+  Plan 上实测（关 = 0 推理 token；强度与 disabled 同发会 400，所以分开发）；④ 面的 `doubao-switch` 同日验过
+  （[`landscape.md`](../api/landscape.md) §7 第十二个样本）。
 - **Claude `claude-budget` 类目**：作者显式填的 `budget_tokens`（旧代 4.5-）。验：4.5- 上是否遵守；
   4.7+ 应报错（届时应改用 `claude-adaptive`）。
 
