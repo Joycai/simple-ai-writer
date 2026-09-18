@@ -53,7 +53,7 @@ import r from "./Routes.module.css";
  * that already knows the answer for its own catalogue should answer it.
  */
 type StarterModel = Pick<Model, "modelId" | "name"> &
-  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type" | "videoInput" | "pdfInput" | "routes">>;
+  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type" | "videoInput" | "pdfInput" | "routes" | "caps" | "activeRoute">>;
 
 /**
  * OrcaRouter's free tier (2026-09): rate-limited, billed at $0, and — verified
@@ -128,16 +128,42 @@ const doubao = (modelId: string, name: string, maxOutput: number): StarterModel 
   modelId, name, contextSize: 262_144, maxOutput, thinkingCategory: "doubao", type: "multimodal", pdfInput: true,
   routes: { anthropic: { maxOutput, thinkingCategory: "doubao-switch" } },
 });
+/**
+ * Seedream 5.0 lite and 5.0 pro — the two image models the plan serves, and the
+ * current generation on pay-as-you-go. Typed image and declared onto the `ark`
+ * route with their own size dialect, because nothing about the id tells the
+ * app that Seedream's body differs from OpenAI's (no `n`, a JSON `image`
+ * field, a watermark that defaults on). The two platforms spell the ids
+ * differently: the plan documents `doubao-seedream-5.0-*`, pay-as-you-go the
+ * dated ids — and the plan answers the undated-lite dated id
+ * (`doubao-seedream-5-0-260128`) with 404 UnsupportedModel, so each platform
+ * gets the spelling its own docs use (docs/api/landscape.md §7 第十三个样本).
+ */
+// Pinned to the Chat route: /images/generations sits under `…/v3`, and the
+// plan's Anthropic route (`/api/plan`) would build a path that does not exist
+// if the author moved it first.
+const seedream = (modelId: string, name: string, dialect: "seedream-5-lite" | "seedream-5-pro"): StarterModel => ({
+  modelId, name, type: "image", activeRoute: "openai",
+  caps: { route: "ark", dialect, edit: true, maxRefs: dialect === "seedream-5-pro" ? 10 : 14 },
+});
 const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
   doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite", 131_072),
   doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini", 131_072),
   doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo", 262_144),
+  seedream("doubao-seedream-5.0-lite", "Seedream 5.0 Lite", "seedream-5-lite"),
+  seedream("doubao-seedream-5.0-pro", "Seedream 5.0 Pro", "seedream-5-pro"),
+];
+/** Pay-as-you-go: the text models were not measured on this key, the image ids are the documented ones. */
+const VOLCENGINE_MODELS: StarterModel[] = [
+  seedream("doubao-seedream-5-0-lite-260128", "Seedream 5.0 Lite", "seedream-5-lite"),
+  seedream("doubao-seedream-5-0-pro-260628", "Seedream 5.0 Pro", "seedream-5-pro"),
 ];
 
 /** Starter rows a new channel on a platform brings along (only on creation). */
 const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
   deepseek: DEEPSEEK_MODELS,
   dashscope: DASHSCOPE_MODELS,
+  volcengine: VOLCENGINE_MODELS,
   "volcengine-plan": VOLCENGINE_PLAN_MODELS,
   orcarouter: ORCAROUTER_FREE_MODELS,
 };
@@ -377,6 +403,8 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             videoInput: m.videoInput,
             pdfInput: m.pdfInput,
             routes: m.routes,
+            caps: m.caps,
+            activeRoute: m.activeRoute,
           });
         }
         if (comfyMode && onComfyCreated) {

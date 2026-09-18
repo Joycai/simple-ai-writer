@@ -1340,6 +1340,33 @@ Responses adapter：
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
+### 第十三个样本：火山方舟 Seedream 出图（`ark` 出图接口，2026-09-18 实测 5.0 lite / 5.0 pro）
+
+> **实测结论**（`live.volcengine-image.test.ts`，`SEEDREAM_IMAGE_KEY` 设为套餐 key，4 条全过，计费 2 张）：
+>
+> - **路径与 OpenAI 生成端点同形、body 不同**：`POST {base}/images/generations`，base 就是渠道 Chat 线路的
+>   `…/api/v3`（按量）/ `…/api/plan/v3`（套餐）。`model` / `prompt` / `size` / `response_format` 同名同义；
+>   **没有 `n`、`quality`**；参考图是 JSON 的 `image` 字段（一张字符串、多张数组，`data:image/<fmt>` 的 fmt
+>   须小写），不是 `/images/edits` 的 multipart——所以配了一个新的出图接口值 `ark`，而不是 `images-api` 的开关。
+> - **`watermark` 上游默认 `true`**（右下角「AI 生成」，照常计费）。adapter 恒发 `false`，排在 `extraBody` 之前，
+>   作者要水印可以自己加回来。
+> - **尺寸**：档位（`1K`…`4K`，**按版本不同**：5.0 pro 1K/1.5K/2K，5.0 lite 2K/3K/4K，4.5 2K/4K，4.0 1K/2K/4K）
+>   或 `WxH`，不能混发。只发档位时比例由模型从提示词里猜，所以选了比例就发文档「档位 × 比例」表里的像素——
+>   **查表不计算**：同是 2K 16:9，pro 是 2816x1584、lite 是 2848x1600；`WxH` 约束的是总像素（lite 下限
+>   2560x1440）。实测 lite 按 `2848x1600` 回的字节正是 2848×1600，pro 改图按 `1248x832` 回的正是 1248×832。
+> - **套餐 key 的模型**：`doubao-seedream-5.0-lite` / `-5.0-pro` 可用；按量文档里 lite 的正式 id
+>   `doubao-seedream-5-0-260128` 回 404 `UnsupportedModel`。发一个非法 `size`（`1x1`）零成本区分：支持的模型
+>   400（生成前就拒）、不支持的 404。
+> - **响应**：`data[]` 每项 `b64_json`（或 24 小时的 `url`）+ `size`；组图里单项可以只有 `error{code,message}`
+>   （审核不过），其余照常——整次失败只在一张都没有时（顶层 `error`）。`usage.output_tokens` = 像素/256 只是参考，
+>   **按张计费**（`generated_images`），所以不当 token 用量上报。回显的 `model` 不带日期。
+> - **耗时**：一张 26–43 s（Image AI Toolkits 同日实测），本次两张共 ~85 s。
+>
+> **对本项目**：`ImageRoute` 加 `ark`（永不作推导默认）、三个参数方言 `seedream-5-pro` / `-5-lite` / `-4`，
+> 两个火山方舟平台各带两个 Seedream 起步模型（套餐用 `5.0` 拼写，按量用带日期的 id）。取舍见
+> `docs/feature/image-generation-plan.md` PR7。协议事实的另一份（含 5.0 pro 图层拆分 / 透明背景）在
+> Joycai Image AI Toolkits 的 `docs/api/volcengine-ark.md`。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

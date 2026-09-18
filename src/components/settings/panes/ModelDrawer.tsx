@@ -56,7 +56,7 @@ import {
 } from "../../../lib/ai/configDb";
 import { clampVideoFps, MAX_VIDEO_FPS, MIN_VIDEO_FPS } from "../../../lib/ai/videoInput";
 import { ASR_DEFAULT_MODEL_ID, asrIdMismatch } from "../../../lib/asr/formats";
-import type { ImageDialect } from "../../../lib/ai/imageDialects";
+import { SEEDREAM_DIALECTS, type ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { ChipDivider, DashChip, Field, Fold, Hint, Note, Section, Subhead, ToggleField } from "./ModelDrawerBits";
@@ -96,6 +96,9 @@ const DIALECT_LABEL_KEY: Record<string, string> = {
   "gpt-image-2": "aiConfig.models.capsDialectGptImage2",
   "wan2.7": "aiConfig.models.capsDialectWan27",
   "qwen-image": "aiConfig.models.capsDialectQwenImage",
+  "seedream-5-pro": "aiConfig.models.capsDialectSeedream5Pro",
+  "seedream-5-lite": "aiConfig.models.capsDialectSeedream5Lite",
+  "seedream-4": "aiConfig.models.capsDialectSeedream4",
 };
 const ROUTE_LABEL_KEY: Record<string, string> = {
   "": "aiConfig.models.capsRouteAuto",
@@ -104,6 +107,7 @@ const ROUTE_LABEL_KEY: Record<string, string> = {
   "gemini": "aiConfig.models.capsRouteGemini",
   "dashscope": "aiConfig.models.capsRouteDashscope",
   "comfyui": "aiConfig.models.capsRouteComfyui",
+  "ark": "aiConfig.models.capsRouteArk",
 };
 
 /** "Has a value" — the fold rule's one predicate. 0 and "" are both unset here. */
@@ -1642,6 +1646,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
                     { value: "wan2.7", label: t("aiConfig.models.capsDialectWan27") },
                     { value: "qwen-image", label: t("aiConfig.models.capsDialectQwenImage") },
+                    { value: "seedream-5-pro", label: t("aiConfig.models.capsDialectSeedream5Pro") },
+                    { value: "seedream-5-lite", label: t("aiConfig.models.capsDialectSeedream5Lite") },
+                    { value: "seedream-4", label: t("aiConfig.models.capsDialectSeedream4") },
                   ]}
                   ariaLabel={t("aiConfig.models.capsDialectLabel")}
                   onChange={(v) => {
@@ -1652,6 +1659,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                       // picking the dialect answers the route question too.
                       // Only fills a blank — an explicit route choice stands.
                       ...(v === "wan2.7" && !f.capsRoute ? { capsRoute: "dashscope" } : {}),
+                      // Same for Seedream: its body only exists on the ark route.
+                      ...(SEEDREAM_DIALECTS.includes(v as ImageDialect) && !f.capsRoute ? { capsRoute: "ark" } : {}),
                     }));
                     // Every declared dialect belongs to models that take input
                     // images (Nano Banana natively, GPT-Image via /images/edits,
@@ -1670,6 +1679,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   { value: "chat", label: t("aiConfig.models.capsRouteChat") },
                   { value: "gemini", label: t("aiConfig.models.capsRouteGemini") },
                   { value: "dashscope", label: t("aiConfig.models.capsRouteDashscope") },
+                  { value: "ark", label: t("aiConfig.models.capsRouteArk") },
                   // Behind the Beta flag — but a model already declared onto
                   // this route keeps its option, so flipping the flag off never
                   // turns an imported workflow into unviewable dead data.
@@ -1689,7 +1699,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                       ? { capsSizes: "1024*1024, 1328*1328" }
                       : {}),
                   }));
-                  if (capsRoute === "dashscope") setCapsEdit(true);
+                  // Every Seedream version takes reference images (10–14).
+                  if (capsRoute === "dashscope" || capsRoute === "ark") setCapsEdit(true);
                 }} />
             </Field>
             {/* PR1 of the comfyui route cannot take input images — the
