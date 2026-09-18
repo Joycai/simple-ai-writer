@@ -73,7 +73,8 @@ function betaOn(kind: ChipKind): boolean {
 export function useConfiguredKinds(): ChipKind[] {
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  return CHIP_KINDS.filter((k) => betaOn(k) && subAgentModel(k, models, subAgents) !== null);
+  const providers = useAiStore((s) => s.providers);
+  return CHIP_KINDS.filter((k) => betaOn(k) && subAgentModel(k, models, subAgents, providers) !== null);
 }
 
 /** The model id a kind is bound to, for the menu's right-hand column. */

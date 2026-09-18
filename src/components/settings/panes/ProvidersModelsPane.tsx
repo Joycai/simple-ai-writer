@@ -7,6 +7,7 @@ import {
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
 import { MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
+import { resolvePlatform, type PlatformId } from "../../../lib/ai/platforms";
 import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
 import type { ProviderMove } from "../../../lib/ai/providerOrder";
 import { MOD_KEY } from "../../../lib/platform";
@@ -173,13 +174,17 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
       id: string;
       name: string;
       std: string | null;
+      /** Which server beyond the protocol — the label the row used to lose once its preset was applied. */
+      platform: PlatformId | null;
       url: string | null;
       all: Model[];
       shown: Model[];
       visible: boolean;
     }[] = [];
 
-    const build = (id: string, name: string, std: string | null, url: string | null, all: Model[]) => {
+    const build = (
+      id: string, name: string, std: string | null, platform: PlatformId | null, url: string | null, all: Model[],
+    ) => {
       const nameMatch = !q || name.toLowerCase().includes(q) || (url ?? "").toLowerCase().includes(q);
       const shown = all.filter(
         (m) =>
@@ -187,16 +192,19 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
           (nameMatch || `${m.name} ${m.modelId}`.toLowerCase().includes(q)),
       );
       rows.push({
-        id, name, std, url, all, shown,
+        id, name, std, platform, url, all, shown,
         visible: shown.length > 0 || (nameMatch && typeFilter === "all"),
       });
     };
 
     for (const p of providers) {
-      build(p.id, p.name, p.apiStandard, p.baseUrl || null, models.filter((m) => m.providerId === p.id));
+      build(
+        p.id, p.name, p.apiStandard, resolvePlatform(p.platform, p.baseUrl, p.apiStandard), p.baseUrl || null,
+        models.filter((m) => m.providerId === p.id),
+      );
     }
     if (orphans.length > 0) {
-      build(ORPHAN_ID, t("aiConfig.hub.unknownProvider"), null, null, orphans);
+      build(ORPHAN_ID, t("aiConfig.hub.unknownProvider"), null, null, null, orphans);
     }
     return rows.filter((r) => r.visible);
   }, [providers, models, q, typeFilter, t]);
@@ -326,6 +334,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                   <ChevronRight size={14} />
                 </span>
                 <span className={hub.groupName}>{g.name}</span>
+                {g.platform && <span className={hub.groupStd}>{t(`aiConfig.platforms.${g.platform}`)}</span>}
                 {g.std && <span className={hub.groupStd}>{g.std}</span>}
                 {!isOrphan && (
                   <span className={hub.groupUrl}>{g.url ?? t("aiConfig.providers.defaultEndpoint")}</span>

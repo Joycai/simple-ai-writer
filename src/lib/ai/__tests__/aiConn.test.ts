@@ -55,6 +55,8 @@ describe("connOptions", () => {
       standard: "openai_compat",
       safetySettings: { harassment: "BLOCK_NONE" },
       authMode: "bearer",
+      // No stored platform: inferred from the address — a host nothing names.
+      platform: "custom",
       modelId: "some-model",
       prefix: "always answer in Chinese",
       contextSize: 128_000,
@@ -65,6 +67,13 @@ describe("connOptions", () => {
       serverTools: ["web_search"],
       structuredOutput: "json_schema",
     });
+  });
+
+  it("carries the stored platform, except where an official standard names the vendor", () => {
+    expect(connOptions({ ...conn, provider: { ...provider, platform: "newapi" } }).platform).toBe("newapi");
+    // A stale compat-era platform must not put DashScope's fields on api.openai.com.
+    expect(connOptions({ ...conn, provider: { ...provider, apiStandard: "openai", platform: "dashscope" } }).platform)
+      .toBe("openai");
   });
 
   it("passes an empty baseUrl through instead of substituting a default", () => {
@@ -87,7 +96,7 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
-      "modelId", "prefix", "reasoningEffort", "safetySettings", "serverTools",
+      "modelId", "platform", "prefix", "reasoningEffort", "safetySettings", "serverTools",
       "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "vlHighResolution",
     ]);
   });

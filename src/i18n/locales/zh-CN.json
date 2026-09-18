@@ -699,6 +699,7 @@
       "pickModel": "选择模型",
       "noModel": "未绑定模型",
       "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
+      "warnSearchNotSent": "该模型开了联网搜索，但它所在平台没有服务端搜索，请求里不会发送——子代理无法联网。换一个支持搜索的平台上的模型。",
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
       "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
       "enable": "启用",
@@ -2305,7 +2306,9 @@
       "comfyCheckHint": "检查 ComfyUI 是否在跑、以及它是否接受本应用的请求。",
       "comfyTestOk": "连接成功，ComfyUI {{version}}。",
       "comfyTestForbidden": "ComfyUI 在跑，但拒绝了本应用的请求（403）。它默认会拦下 Origin 与自身地址不一致的请求，本应用发的正是这样的请求。请给 ComfyUI 的启动命令加上 --enable-cors-header 后重启，再试一次。",
-      "comfyTestUnreachable": "连不上 ComfyUI——确认它已启动、地址和端口正确（默认 http://127.0.0.1:8188）。{{detail}}"
+      "comfyTestUnreachable": "连不上 ComfyUI——确认它已启动、地址和端口正确（默认 http://127.0.0.1:8188）。{{detail}}",
+      "platformLabel": "平台",
+      "platformHint": "这台服务器在协议之外还认哪些私有字段——服务端工具（联网搜索、代码解释器……）按平台发送。改了地址会跟着地址重新判断；自建中转选「New API」或「自定义」，只发协议本身的字段。"
     },
     "models": {
       "add": "添加",
@@ -2410,7 +2413,7 @@
       "serverToolsHintImageSearch": "允许服务端拿对话里已有的图片去搜相似的网络图片（千问 image_search），返回标题与链接；命中的链接记录在执行日志里。只在消息里带了图片时才会触发，纯文字的请求开着也不影响。仅 Responses 兼容端点（千问 DashScope）可用。按次计费，约 ¥48/千次；图片本身也按输入 token 计费。",
       "serverToolsHintResponses": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。在 tools 里声明内置工具 {type: \"web_search\"}：官方 api.openai.com 上是 OpenAI 自家的联网搜索（实测一次搜索回答约 4.5 万输入 token、耗时近 2 分钟，另按次计费）；兼容端点上是千问 (DashScope) 的同名工具，其他兼容端点开了可能被拒绝。网页抓取和图片搜索只有千问有。搜索词、打开的网页和命中的网址会记录在执行日志里。",
       "serverToolsHintExtractor": "允许服务端打开网址、读取网页正文（千问 web_extractor）。它依附于联网搜索：开启它会一并开启联网搜索，关掉联网搜索它也随之关闭。Responses 协议下在 tools 里多声明 {type: \"web_extractor\"}，读过的网址记录在执行日志里；Chat Completions 协议下改发 search_options.search_strategy: \"agent_max\"，过程同样不可见，而且不是所有模型都接受——实测 qwen3.8-flash 直接报 400，qwen3-max、qwen3.5-plus 可用；它还不能和函数工具同发，所以 Agent 运行和对话助手在这个协议下只搜索、不抓取（搜索子代理不受影响）。只能读公开网页，需要登录的页面、纯脚本渲染的内容读不到；读回来的正文按输入 token 计费。",
-      "serverToolsHintOpenai": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。OpenAI 兼容端点上按千问 (DashScope 兼容模式) 的方式发送 enable_search: true；其他兼容端点开了通常不会生效，官方 api.openai.com 不接受该字段（本设置对官方端点不显示）。注意：该协议下搜索过程与命中网页不会返回，执行日志里看不到搜索明细，答案直接吸收检索结果。",
+      "serverToolsHintOpenai": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。只在阿里云百炼平台出现：按兼容模式的方式发送 enable_search: true（DeepSeek、中转站、Ollama 等其他平台没有这个字段，不会发送）。注意：该协议下搜索过程与命中网页不会返回，执行日志里看不到搜索明细，答案直接吸收检索结果。",
       "pdfInputLabel": "PDF 文件输入",
       "pdfInputHint": "声明该模型接受整份 PDF 作为消息内容（Chat Completions 的 file 内容块 / Responses 的 input_file；千问 DashScope 兼容模式目前仅 qwen3.8-max 支持，xAI 的 grok-4.5 / 4.6 实测可读；单文件 ≤150MB / ≤500 页，另按页计费）。千问的 Responses 协议不支持 PDF，请在 Chat Completions 协议的服务商下为 qwen3.8-max 开启。勾选后它才能被绑定为 PDF 理解子代理。",
       "translateFormatNone": "普通模型",
@@ -2558,7 +2561,9 @@
       "markMore": "+{{n}}",
       "sumEdit": "可修图",
       "translateLabel": "翻译模型格式",
-      "noteSoCeiling": "本会话实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}"
+      "noteSoCeiling": "本会话实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}",
+      "serverToolNotSent": "{{platform}} 没有这个工具的拼写：开关保留，但请求里不发送。",
+      "serverToolUnmeasured": "{{platform}} 上未实测：这是协议自带的工具，取决于上游是否转发，开了可能被拒绝。"
     },
     "probe": {
       "title": "探测真实上限",
@@ -2691,6 +2696,21 @@
       "gemini_compat": "Gemini 兼容",
       "anthropic": "Anthropic Claude 官方",
       "anthropic_compat": "Anthropic 兼容"
+    },
+    "platforms": {
+      "openai": "OpenAI 官方",
+      "anthropic": "Anthropic 官方",
+      "google": "Google 官方",
+      "deepseek": "DeepSeek 官方",
+      "dashscope": "阿里云百炼（国内）",
+      "dashscope-intl": "阿里云百炼（国际）",
+      "xai": "xAI",
+      "minimax": "MiniMax",
+      "orcarouter": "OrcaRouter",
+      "newapi": "New API / One API",
+      "ollama": "Ollama",
+      "comfyui": "ComfyUI",
+      "custom": "自定义"
     }
   },
   "lore": {

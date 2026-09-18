@@ -67,6 +67,8 @@ const provider: Required<Provider> = {
   safetySettings: { HARM_CATEGORY_HARASSMENT: "BLOCK_NONE" },
   authMode: "bearer",
   sortOrder: 3,
+  // Not what the address would infer (custom): the stored value must survive.
+  platform: "newapi",
   createdAt: 1_700_000_000_000,
 };
 

@@ -33,6 +33,7 @@ export interface ResponseItemCarry {
 }
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolEvent, ServerToolId } from "./serverTools";
+import type { PlatformId } from "./platforms";
 import i18n from "../../i18n";
 
 /**
@@ -414,6 +415,11 @@ export interface StreamOptions {
    * every provider configured before this setting existed use.
    */
   authMode?: AuthMode;
+  /**
+   * The server beyond its protocol (`lib/ai/platforms.ts`) — which private
+   * fields the adapter may spell. Absent = inferred from `baseUrl` (`wireOf`).
+   */
+  platform?: PlatformId;
   modelId: string;
   messages: StreamMessage[];
   onChunk: (chunk: StreamChunk) => void;

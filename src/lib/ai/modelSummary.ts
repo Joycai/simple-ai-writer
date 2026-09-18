@@ -21,7 +21,8 @@ import { effectiveStructuredOutput } from "./jsonMode";
 import {
   reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
 } from "./reasoning";
-import { openaiServerToolsBody, supportsServerToolFor, supportsServerTools } from "./serverTools";
+import { effectiveServerTools, openaiServerToolsBody, supportsServerTools } from "./serverTools";
+import { wireOf, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
 export interface WireItem {
@@ -66,11 +67,13 @@ const NOISE = new Set(["thinking.display", "generationConfig.thinkingConfig.incl
  *
  * `baseUrl` names the endpoint for the session memo of refused JSON modes: with
  * it, the structured-output item is what will *actually* be sent, not what the
- * config alone would say.
+ * config alone would say. `platform` decides which server tools can be spelled
+ * (`lib/ai/platforms.ts`); absent = inferred from `baseUrl`, as the adapters do.
  */
-export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: string): WireItem[] {
+export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: string, platform?: PlatformId): WireItem[] {
   const out: WireItem[] = [];
   const family = familyOf(standard);
+  const wire = wireOf({ platform, baseUrl: baseUrl ?? "", standard });
 
   if (m.type === "image") {
     // An image model's declarations steer the client, not a chat body.
@@ -103,14 +106,14 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   if (m.temperature !== undefined && supportsTemperature(standard, category.id)) {
     out.push({ key: "temperature", value: String(m.temperature) });
   }
-  if (m.serverTools?.length && supportsServerTools(standard)) {
+  if (m.serverTools?.length && supportsServerTools(wire)) {
     // Summarised as a request without function tools: the condition that
     // drops `enable_code_interpreter` and the `agent_max` strategy is the
     // request's, not the model's.
-    if (family === "openai") out.push(...flatten(openaiServerToolsBody(standard, m.serverTools, m.modelId, { functionTools: false })));
+    if (family === "openai") out.push(...flatten(openaiServerToolsBody(wire, m.serverTools, m.modelId, { functionTools: false })));
     else {
-      const ids = m.serverTools.filter((id) => supportsServerToolFor(standard, id, m.modelId));
-      if (ids.length) out.push({ key: "tools", value: ids.join(",") });
+      const ids = effectiveServerTools(wire, m.serverTools, m.modelId);
+      if (ids) out.push({ key: "tools", value: ids.join(",") });
     }
   }
 

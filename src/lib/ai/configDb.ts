@@ -17,6 +17,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
+import { parsePlatform, resolvePlatform, type PlatformId } from "./platforms";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
@@ -156,6 +157,15 @@ export interface Provider {
    * scheme, so an upgrade never changes how an existing provider authenticates.
    */
   authMode?: AuthMode;
+  /**
+   * Which server this is, beyond its protocol — the key into the platform
+   * profiles (`lib/ai/platforms.ts`) that decide which private fields, server
+   * tools above all, this row's requests may carry. Absent = inferred from the
+   * address on every read (`resolvePlatform`); `listProviders` fills it in, so
+   * rows read from the database always carry one. Written by the provider
+   * drawer. docs/feature/channel-model-route-plan.md §4.
+   */
+  platform?: PlatformId;
   /**
    * Position in the provider list, written by the reorder buttons (see
    * `lib/ai/providerOrder`). Undefined — every provider never explicitly
@@ -587,6 +597,9 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, providerCols, "providers", "safety_settings", "TEXT");
   await addColumn(db, providerCols, "providers", "auth_mode", "TEXT");
   await addColumn(db, providerCols, "providers", "sort_order", "INTEGER");
+  // NULL = never saved since platforms existed; read as inferred from the
+  // address (resolvePlatform), written the next time the drawer saves the row.
+  await addColumn(db, providerCols, "providers", "platform", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -716,7 +729,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   // Explicitly ordered rows first, in their order; never-moved rows (NULL)
   // after them, oldest first — see Provider.sortOrder.
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
   );
   return rows.map((r) => {
     const baseUrl = r.base_url as string;
@@ -730,6 +743,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
       apiStandard,
       safetySettings: parseSafetySettings(r.safety_settings),
       authMode: parseAuthMode(r.auth_mode, apiStandard),
+      platform: resolvePlatform(parsePlatform(r.platform), baseUrl, apiStandard),
       sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
       createdAt: r.created_at as number,
     };
@@ -799,15 +813,16 @@ export function providerUpsert(p: Provider): SqlStatement {
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   return {
-    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
        api_standard = excluded.api_standard,
        safety_settings = excluded.safety_settings,
        auth_mode = excluded.auth_mode,
-       sort_order = excluded.sort_order`,
+       sort_order = excluded.sort_order,
+       platform = excluded.platform`,
     values: [
       p.id,
       p.name,
@@ -816,6 +831,7 @@ export function providerUpsert(p: Provider): SqlStatement {
       p.safetySettings ? JSON.stringify(p.safetySettings) : null,
       p.authMode ?? null,
       p.sortOrder ?? null,
+      p.platform ?? null,
       p.createdAt,
     ],
   };

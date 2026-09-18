@@ -119,7 +119,9 @@ describe("routeTools", () => {
         priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, serverTools: ["web_search", "web_extractor"] },
     ] as never;
     const on = { ...allDisabled, search: { kind: "search" as const, modelId: "m-reader", enabled: true } };
-    const provider = (apiStandard: string) => [{ id: "p", name: "P", baseUrl: "", apiStandard }] as never;
+    // DashScope's host: page reading is DashScope's tool (lib/ai/platforms.ts).
+    const provider = (apiStandard: string, baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1") =>
+      [{ id: "p", name: "P", baseUrl, apiStandard }] as never;
     expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("openai_compat") }).searchReadsPages)
       .toBe(true);
     // The row still says web_extractor, but the provider was switched to a
@@ -128,6 +130,11 @@ describe("routeTools", () => {
       .toBe(false);
     expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("openai_responses") }).searchReadsPages)
       .toBe(false);
+    // Same standard on a relay: nothing spells extraction there — nor search,
+    // so the search subagent isn't live and the main model keeps its tools.
+    const relay = routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: provider("openai_compat", "https://relay.example/v1") });
+    expect(relay.searchReadsPages).toBe(false);
+    expect(relay.tools).not.toContain("delegate");
     // Provider row gone: unknown wire, no promise.
     expect(routeTools(AGENT_ASSIST_PRESET, on, WS, reader, { providers: [] }).searchReadsPages).toBe(false);
     // No provider list at all is the pricing path: the row decides, which can

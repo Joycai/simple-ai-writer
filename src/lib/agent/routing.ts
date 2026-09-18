@@ -178,7 +178,7 @@ function route(
   // web_search would otherwise take the main model's own browsing away
   // (serverTools: "off") and give nothing back — strictly worse than leaving
   // the switch alone.
-  const live = (k: SubAgentKind) => subAgentModel(k, models, subs) !== null;
+  const live = (k: SubAgentKind) => subAgentModel(k, models, subs, options?.providers) !== null;
 
   // Vision takes over reading images: strip local image reading tools from main agent.
   if (live("vision")) {
@@ -275,10 +275,10 @@ function route(
   const finishPolicy: FinishPolicy =
     options?.handoff && live("writer") ? "handoff" : preset.finishPolicy;
 
-  const searchModel = subAgentModel("search", models, subs);
+  const searchModel = subAgentModel("search", models, subs, options?.providers);
   const readsPages = searchModel === null ? false
     : options?.providers
-      ? searchReadsPages(searchModel, options.providers.find((p) => p.id === searchModel.providerId)?.apiStandard)
+      ? searchReadsPages(searchModel, options.providers.find((p) => p.id === searchModel.providerId))
       : searchModel.serverTools?.includes("web_extractor") ?? false;
   return {
     tools,

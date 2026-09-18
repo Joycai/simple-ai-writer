@@ -58,6 +58,7 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
+import { wireOf } from "./platforms";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -214,7 +215,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
     opts.reasoningEffort,
   );
-  const serverTools = responsesServerTools(opts.standard, opts.serverTools, opts.modelId, {
+  const serverTools = responsesServerTools(wireOf(opts), opts.serverTools, opts.modelId, {
     thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
   });
   // `text` has two writers — this model's verbosity and a structured task's

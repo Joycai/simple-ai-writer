@@ -13,6 +13,9 @@ import {
   type GeminiHarmCategory,
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
+import {
+  inferPlatform, PLATFORM_IDS, platformForAddress, resolvePlatform, type PlatformId,
+} from "../../../lib/ai/platforms";
 import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
@@ -40,6 +43,13 @@ interface ProviderPreset {
   name: string;
   apiStandard: ApiStandard;
   baseUrl: string;
+  /**
+   * The server this preset is, beyond its protocol (lib/ai/platforms.ts) —
+   * stored on the row, so the preset no longer vanishes once applied: it is
+   * what decides which server tools the row's models may send. Only New API
+   * needs saying; every other preset's address names its platform.
+   */
+  platform?: PlatformId;
   /**
    * ComfyUI: not a protocol but a local render server, reached through
    * `caps.route = "comfyui"` on the model. The preset exists because every
@@ -167,7 +177,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // Self-hosted, so there is no address to prefill — the preset exists to
   // answer "which standard do I pick for my relay", which is the part an
   // author has no way to guess.
-  { name: "New API", apiStandard: "openai_compat", baseUrl: "" },
+  { name: "New API", apiStandard: "openai_compat", baseUrl: "", platform: "newapi" },
   { name: "MiniMax", apiStandard: "openai_compat", baseUrl: "https://api.minimaxi.com" },
   // Same vendor, second protocol — the endpoint carries an /anthropic
   // prefix, which anthropicRoot leaves alone (it only trims a trailing
@@ -236,6 +246,9 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     apiKey: initialApiKey,
     authMode: existing?.authMode ?? ("default" as AuthMode),
     safetySettings: existing?.safetySettings ?? defaultSafetySettings(),
+    platform: existing
+      ? resolvePlatform(existing.platform, existing.baseUrl, existing.apiStandard)
+      : inferPlatform(STANDARD_ENDPOINTS.openai, "openai"),
   });
   /**
    * "This row is a ComfyUI instance" — a form mode, never a stored field.
@@ -313,14 +326,17 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
       // Store nothing for the protocol's own scheme, so a provider that never
       // touched this setting reads back exactly as it did before it existed.
       const authMode = form.authMode === "default" ? undefined : form.authMode;
+      // Always stored once saved, so the row stops depending on re-inference
+      // (an official standard still resolves to its vendor on read).
+      const platform = comfyMode ? "comfyui" : resolvePlatform(form.platform, baseUrl, form.apiStandard);
       if (existing) {
         await updateProvider(
-          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
+          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode, platform },
           form.apiKey,
         );
       } else {
         const newId = await addProvider(
-          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
+          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode, platform },
           form.apiKey,
         );
         // Sequential on purpose: addModel is also where the first model ever
@@ -395,6 +411,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
                       apiStandard: preset.apiStandard,
                       baseUrl: preset.baseUrl,
                       authMode: preset.authMode ?? "default",
+                      platform: preset.platform ?? inferPlatform(preset.baseUrl, preset.apiStandard),
                     });
                   }}
                 >
@@ -434,6 +451,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
                   ...form,
                   apiStandard: standard,
                   baseUrl: STANDARD_ENDPOINTS[standard],
+                  platform: platformForAddress(form.platform, STANDARD_ENDPOINTS[standard], standard),
                   // Switching away from anthropic_compat would otherwise keep a
                   // mode the new standard can't use — including onto the
                   // official endpoint, which rejects two credentials.
@@ -449,7 +467,11 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           <input className={`${styles.input} ${hub.mono}`} placeholder="https://api.openai.com/v1" value={form.baseUrl}
             readOnly={endpointLocked}
             aria-readonly={endpointLocked}
-            onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+            onChange={(e) => setForm({
+              ...form,
+              baseUrl: e.target.value,
+              platform: platformForAddress(form.platform, e.target.value, form.apiStandard),
+            })} />
           {endpointLocked && (
             <div className={styles.hint}>{t("aiConfig.providers.baseUrlOfficialHint")}</div>
           )}
@@ -457,6 +479,23 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             <div className={styles.hint}>{t("aiConfig.providers.comfyBaseUrlHint")}</div>
           )}
         </div>
+
+        {/* The platform: which private fields this server takes beyond its
+            protocol (lib/ai/platforms.ts). Only a compat row has a choice —
+            an official standard's platform is its vendor. Follows the address
+            as it is typed (platformForAddress); the select is for the cases
+            no host names: a self-hosted New API, a DashScope-shaped proxy. */}
+        {!comfyMode && !endpointLocked && (
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.providers.platformLabel")}</label>
+            <Select value={form.platform}
+              options={PLATFORM_IDS.filter((id) => id !== "comfyui")
+                .map((id) => ({ value: id, label: t(`aiConfig.platforms.${id}`) }))}
+              ariaLabel={t("aiConfig.providers.platformLabel")}
+              onChange={(v) => setForm({ ...form, platform: v as PlatformId })} />
+            <div className={styles.hint}>{t("aiConfig.providers.platformHint")}</div>
+          </div>
+        )}
 
         <div className={styles.fieldGroup}>
           {/* ComfyUI has no key and no standard to pick, so the row collapses to

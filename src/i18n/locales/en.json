@@ -702,6 +702,7 @@
       "pickModel": "Select a model",
       "noModel": "No model bound",
       "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
+      "warnSearchNotSent": "This model has web search switched on, but its platform has no server-side search, so nothing is sent — the subagent cannot browse. Bind a model on a platform that searches.",
       "warnNotMultimodal": "This model is text-only and cannot read images.",
       "warnNoPdf": "This model is not declared to accept PDF file input (check it in the model's settings), so the subagent cannot read PDFs.",
       "enable": "Enable",
@@ -2313,7 +2314,9 @@
       "comfyCheckHint": "Checks whether ComfyUI is running, and whether it accepts requests from this app.",
       "comfyTestOk": "Connected — ComfyUI {{version}}.",
       "comfyTestForbidden": "ComfyUI is running but refused this app's request (403). By default it blocks requests whose Origin differs from its own address, which is exactly what this app sends. Restart ComfyUI with --enable-cors-header and try again.",
-      "comfyTestUnreachable": "Cannot reach ComfyUI — check that it is running and that the address and port are right (http://127.0.0.1:8188 by default). {{detail}}"
+      "comfyTestUnreachable": "Cannot reach ComfyUI — check that it is running and that the address and port are right (http://127.0.0.1:8188 by default). {{detail}}",
+      "platformLabel": "Platform",
+      "platformHint": "Which private fields this server accepts beyond its protocol — server-side tools (web search, code interpreter…) are sent per platform. Editing the address re-detects it; for a self-hosted relay pick New API or Custom, which send the protocol's own fields only."
     },
     "models": {
       "add": "Add",
@@ -2418,7 +2421,7 @@
       "serverToolsHintImageSearch": "Lets the endpoint take an image already in the conversation and find visually similar images on the web (Qwen's image_search), returning titles and links that are recorded in the execution log. It only fires when a message carries an image; text-only requests are unaffected. Responses-compatible endpoints (Qwen DashScope) only. Billed per call at about ¥48 per thousand, plus the image itself as input tokens.",
       "serverToolsHintResponses": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. It is declared as the built-in tool {type: \"web_search\"} in tools: on the official api.openai.com that is OpenAI's own web search (measured: one searched answer took ~45K input tokens and nearly two minutes, plus a per-search fee); on compat endpoints it is Qwen (DashScope)'s tool of the same name, and other compat endpoints may reject it. Page reading and the image searches are Qwen-only. Search queries, opened pages and the URLs they hit are recorded in the execution log.",
       "serverToolsHintExtractor": "Lets the endpoint open URLs and read the page text (Qwen's web_extractor). It rides on web search: turning it on turns search on too, and turning search off turns it off. On the Responses protocol it is one more built-in tool, {type: \"web_extractor\"}, and the pages read are recorded in the execution log; on Chat Completions it is sent as search_options.search_strategy: \"agent_max\" instead — invisible there too, and not every model accepts it (measured: qwen3.8-flash answers 400, qwen3-max and qwen3.5-plus work), and it cannot be sent beside function tools, so agent runs and the chat assistant only search on this protocol, without reading pages (the search subagent is unaffected). Public pages only — pages behind a login or rendered purely by script come back empty; the text read is billed as input tokens.",
-      "serverToolsHintOpenai": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. On OpenAI-compatible endpoints this is sent the Qwen (DashScope compatible-mode) way, as enable_search: true; other compat endpoints will usually ignore it, and the official api.openai.com rejects the field (this setting is hidden there). Note: on this protocol the search leaves no trace — no sources or citations come back, so the execution log shows nothing; the answer simply absorbs what was found.",
+      "serverToolsHintOpenai": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. Offered on the Alibaba Model Studio platform only, where it is sent the compatible-mode way as enable_search: true (DeepSeek, relays, Ollama and other platforms have no such field, and nothing is sent there). Note: on this protocol the search leaves no trace — no sources or citations come back, so the execution log shows nothing; the answer simply absorbs what was found.",
       "pdfInputLabel": "PDF file input",
       "pdfInputHint": "Declares that this model accepts whole PDF files as message content (the Chat Completions file part / Responses input_file; on Qwen's DashScope compatible-mode currently qwen3.8-max only; read by xAI's grok-4.5 / 4.6 in live tests; ≤150MB / ≤500 pages per file, billed per page on top of tokens). Qwen's Responses protocol does not support PDF input — enable it on qwen3.8-max under a Chat Completions provider instead. Required before it can be bound as the PDF digest subagent.",
       "translateFormatNone": "Ordinary model",
@@ -2566,7 +2569,9 @@
       "markMore": "+{{n}}",
       "sumEdit": "edit",
       "translateLabel": "Translation model format",
-      "noteSoCeiling": "this session · endpoint refused {{refused}}, now {{mode}}"
+      "noteSoCeiling": "this session · endpoint refused {{refused}}, now {{mode}}",
+      "serverToolNotSent": "{{platform}} has no spelling for this tool: the switch is kept, but nothing is sent.",
+      "serverToolUnmeasured": "Unmeasured on {{platform}}: this is the protocol's own tool, so it depends on whether the upstream passes it on — it may be rejected."
     },
     "probe": {
       "title": "Probe real limits",
@@ -2699,6 +2704,21 @@
       "gemini_compat": "Gemini compatible",
       "anthropic": "Anthropic Claude (official)",
       "anthropic_compat": "Anthropic compatible"
+    },
+    "platforms": {
+      "openai": "OpenAI (official)",
+      "anthropic": "Anthropic (official)",
+      "google": "Google (official)",
+      "deepseek": "DeepSeek (official)",
+      "dashscope": "Alibaba Model Studio (China)",
+      "dashscope-intl": "Alibaba Model Studio (Intl)",
+      "xai": "xAI",
+      "minimax": "MiniMax",
+      "orcarouter": "OrcaRouter",
+      "newapi": "New API / One API",
+      "ollama": "Ollama",
+      "comfyui": "ComfyUI",
+      "custom": "Custom"
     }
   },
   "lore": {

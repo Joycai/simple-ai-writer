@@ -8,6 +8,7 @@ import {
   resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
+import { wireOf } from "./platforms";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
@@ -107,7 +108,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // this wire wants it (enable_search / enable_code_interpreter — see
       // lib/ai/serverTools.ts). Empty object for every model without the
       // declaration, so their requests are byte-identical to before this existed.
-      ...openaiServerToolsBody(opts.standard, opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
+      ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
       // Absent unless the author set an effort on this model — an unset model
       // must keep sending exactly what it sent before this existed, because a
       // volunteered field is a field some relay can reject. The category carries
