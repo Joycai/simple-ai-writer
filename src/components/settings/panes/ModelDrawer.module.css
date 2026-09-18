@@ -474,3 +474,21 @@
 .error {
   margin: var(--space-3) 0;
 }
+
+/* Which config a section / field belongs to on a multi-route model:
+   「本线路 · Resp」 (设计稿 05k 屏 04). Mono, hairline, never louder than the label. */
+.scope {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1;
+  padding: 2px 5px;
+  margin-left: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}

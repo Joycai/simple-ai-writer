@@ -33,6 +33,7 @@ import {
 } from "./ai/LoreRunProgress";
 import { ModelPicker } from "./ai/ModelPicker";
 import styles from "./LoreSplitModal.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 interface Props {
   entity: LoreEntity;
@@ -139,7 +140,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
 
   const handleGenerate = async () => {
     const model = models.find((m) => m.id === modelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    const provider = model ? providerFor(model, providers) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
     if (!indexBody && entity.facets.length === 0) { setError(t("lore.split.emptyEntry", { defaultValue: "当前条目没有正文，无需拆分" })); return; }
 

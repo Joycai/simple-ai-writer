@@ -50,6 +50,7 @@ import { ModelPicker } from "../lore/ai/ModelPicker";
 import { Select } from "../common/Select";
 import styles from "./ImageGenModal.module.css";
 import gen from "./ImageGenModal.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 interface Props {
   target: ImageGenTarget;
@@ -73,7 +74,7 @@ export function ImageGenModal({ target, onClose }: Props) {
   // should never have to choose it.
   const effectiveImageModelId = imageModelId ?? imageModels[0]?.id ?? "";
   const imageModel = imageModels.find((m) => m.id === effectiveImageModelId) ?? null;
-  const imageProvider = imageModel ? providers.find((p) => p.id === imageModel.providerId) ?? null : null;
+  const imageProvider = imageModel ? providerFor(imageModel, providers) ?? null : null;
   /**
    * The chat-completions route carries no n/size/aspect fields (see
    * lib/ai/image.ts). Saying so beats offering controls that quietly do

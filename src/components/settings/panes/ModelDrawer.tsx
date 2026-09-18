@@ -26,7 +26,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
-import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type TextVerbosity } from "../../../lib/ai/types";
+import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type ProtocolFamily, type TextVerbosity } from "../../../lib/ai/types";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
 import {
   analyzeComfyWorkflow, parseComfyWorkflow, type ComfyParseError,
@@ -41,6 +41,10 @@ import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import { providerWire, serverToolStatus } from "../../../lib/ai/platforms";
+import {
+  activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
+  type RouteProfile,
+} from "../../../lib/ai/routes";
 import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
@@ -60,6 +64,7 @@ import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
+import r from "./Routes.module.css";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -154,8 +159,23 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
    */
   const comfySeed = !existing
     && (comfy || models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"));
-  const provider = providers.find((p) => p.id === providerId);
+  // The channel, and the route this drawer is editing on (设计稿 05k 屏 04).
+  // Everything below that asks a protocol question reads `provider` — the
+  // channel as that route sees it (lib/ai/routes) — so the thinking chips,
+  // the server tools, the structured-output modes and 「将发送」 all follow a
+  // route switch without knowing routes exist.
+  const channel = providers.find((p) => p.id === providerId);
+  const channelRoutes: ProtocolFamily[] = channel ? channelEndpoints(channel).map((e) => e.family) : [];
+  const [route, setRoute] = useState<ProtocolFamily | undefined>(() =>
+    channel ? (existing ? activeFamily(existing, channel) : channelRoutes[0]) : undefined);
+  const provider = channel ? routeProvider(channel, route) : undefined;
   const family = provider ? familyOf(provider.apiStandard) : undefined;
+  // The other routes' fields, parked while this one is being edited
+  // (Model.routes). Only the routes the channel still has are offered.
+  const [parked, setParked] = useState<Partial<Record<ProtocolFamily, RouteProfile>>>(() => existing?.routes ?? {});
+  // The route the author clicked, shown as a diff before the switch (屏 06).
+  const [pendingRoute, setPendingRoute] = useState<ProtocolFamily | null>(null);
+  const multiRoute = channelRoutes.length > 1;
   // The two wires with a whole-file content part the adapters map
   // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
   // docs/api/landscape.md 第十一个样本).
@@ -276,7 +296,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     setFetching(true);
     setError(null);
     try {
-      setFetchedList(await fetchAndImportModels(providerId));
+      setFetchedList(await fetchAndImportModels(providerId, route));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -388,6 +408,71 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
 
+  /**
+   * The current route's fields as they would be saved — what `handleSave`
+   * writes into the flat columns, and what a route switch parks. One function
+   * so the two can't clear by different rules.
+   */
+  const routeFieldsNow = (): RouteProfile => routeProfileOf({
+    maxOutput: parsedOut > 0 ? parsedOut : undefined,
+    temperature,
+    reasoningEffort:
+      form.reasoningEffort === "default"
+      || (formCategory?.shape === "budget" && !isOnOffCategory(formCategory))
+        ? undefined
+        : form.reasoningEffort,
+    thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
+    thinkingBudget,
+    structuredOutput: isImageModel ? undefined : structuredOutput,
+    textVerbosity: family === "responses" && !isImageModel && form.textVerbosity !== "auto"
+      ? form.textVerbosity
+      : undefined,
+    vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
+    probedAt: probed.at,
+    probedContextSize: probed.ctx,
+    probedMaxOutput: probed.out,
+  });
+
+  /**
+   * Move the drawer to another route of the channel: this route's fields are
+   * parked, the other one's loaded — or nothing, for a route never configured
+   * (plan §7 invariant 3: nothing is copied across; a category is per family).
+   */
+  const switchRoute = (next: ProtocolFamily) => {
+    if (!channel || !route || next === route) return;
+    const nextProvider = routeProvider(channel, next);
+    if (!nextProvider) return;
+    const now = routeFieldsNow();
+    const prof = parked[next] ?? {};
+    setParked((p) => {
+      const n = { ...p, [route]: now };
+      delete n[next];
+      return n;
+    });
+    setForm((f) => ({
+      ...f,
+      maxOutput: prof.maxOutput ? String(prof.maxOutput) : "",
+      temperature: prof.temperature !== undefined ? String(prof.temperature) : "",
+      reasoningEffort: prof.reasoningEffort ?? "default",
+      thinkingCategory: (prof.thinkingCategory
+        ?? (prof.thinkingDialect ? resolveThinkingCategory(prof, nextProvider.apiStandard).id : "auto")) as ThinkingCategoryId | "auto",
+      thinkingBudget: prof.thinkingBudget != null ? String(prof.thinkingBudget) : "",
+      structuredOutput: prof.structuredOutput ?? "auto",
+      textVerbosity: prof.textVerbosity ?? "auto",
+    }));
+    setProbed({ at: prof.probedAt, ctx: prof.probedContextSize, out: prof.probedMaxOutput });
+    setVlHighResolution(prof.vlHighResolution ?? false);
+    setRoute(next);
+    setPendingRoute(null);
+  };
+
+  /** The parked routes that survive a save: ones the channel still has, minus the current one. */
+  const routesToSave = (): Model["routes"] => {
+    const out: Partial<Record<ProtocolFamily, RouteProfile>> = {};
+    for (const f of channelRoutes) if (f !== route && parked[f]) out[f] = parked[f];
+    return Object.keys(out).length ? out : undefined;
+  };
+
   const handleSave = async () => {
     if (!form.modelId) return;
     setSaving(true);
@@ -470,16 +555,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // what this wire can't say is shown as 不发送 rather than dropped, and
         // the adapters cut it per request. Empty stores as absent.
         serverTools: declaredServerTools,
-        // Same clearing rule: the declaration only survives where the wire has
-        // a spelling for it (the Chat Completions `file` part, or Responses'
-        // `input_file`), and only on a model type that converses. False stores
-        // as absent.
-        pdfInput: pdfWire && !isImageModel && !isAsrModel && pdfInput ? true : undefined,
+        // A declaration of the model's, kept whatever route it is on now —
+        // a switch to ④ and back must not make the author declare it again
+        // (plan §3). Whether it is usable is asked per route (`readsPdf`).
+        // Only on a model type that converses; false stores as absent.
+        pdfInput: !isImageModel && !isAsrModel && pdfInput ? true : undefined,
         // Same clearing rule: only where the switch is shown.
         vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
-        // Same clearing rule; the fps goes with the switch (off = nothing kept).
-        videoInput: videoWire && videoInput ? true : undefined,
-        videoFps,
+        // A model declaration like the PDF one: kept across routes, and
+        // honoured only where `canReadVideo` says (a seeing model on Chat
+        // Completions). The fps goes with the switch (off = nothing kept).
+        videoInput: canSeeImages(form) && videoInput ? true : undefined,
+        videoFps: canSeeImages(form) && videoInput ? clampVideoFps(videoFpsText) : undefined,
         // Cleared on the same rule, and the stakes are higher here than for the
         // two above: this one *removes* the model from every other picker, so a
         // declaration left behind on a model the author moved to another
@@ -505,6 +592,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         pricePerSecond: isAsrModel && parsedPerSecond > 0 ? parsedPerSecond : undefined,
         pricePerImage,
         caps,
+        // The route (plan §2.2). A model that never picked one keeps following
+        // the channel's primary route while it still takes it.
+        activeRoute: !existing?.activeRoute && route === channelRoutes[0] ? undefined : route,
+        routes: routesToSave(),
       };
       if (existing) {
         await updateModel({ ...existing, ...shared });
@@ -702,6 +793,41 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
   const inputCls = (unset: boolean, extra = "") => `${s.input} ${unset ? s.unset : ""} ${extra}`;
 
+  // ── Routes (设计稿 05k 屏 04–06) ───────────────────────────────────────────
+  // The scope tag on every per-route field, only when there is more than one
+  // route to be confused between.
+  const routeScope = multiRoute && route ? t("aiConfig.models.scopeRoute", { route: ROUTE_SHORT[route] }) : undefined;
+  const routeWire = (f: ProtocolFamily) => {
+    const p = channel ? routeProvider(channel, f) : undefined;
+    return p ? providerWire(p) : undefined;
+  };
+  // Every tool some route of this channel spells, or the model declares — the
+  // matrix rows (屏 05). Columns are the channel's routes.
+  const matrixTools = multiRoute
+    ? SERVER_TOOL_IDS.filter((id) => serverTools.includes(id)
+      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && serverToolStatus(w, id) !== "no"; }))
+    : [];
+  /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
+  const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {
+    const cat = p?.thinkingCategory;
+    const effort = p?.reasoningEffort && p.reasoningEffort !== "default" ? effortLabel(p.reasoningEffort) : null;
+    const w = routeWire(f);
+    const tools = w ? effectiveServerTools(w, declaredServerTools, form.modelId.trim()) : undefined;
+    return [
+      {
+        key: t("aiConfig.models.secThinking"),
+        value: cat ? [t(THINKING_CATEGORIES[cat].labelKey), effort].filter(Boolean).join(" · ") : effort,
+      },
+      { key: t("aiConfig.models.maxOutLabel"), value: p?.maxOutput ? p.maxOutput.toLocaleString() : null },
+      { key: t("aiConfig.models.soLabel"), value: p?.structuredOutput ? t(SO_LABEL_KEY[p.structuredOutput]) : null },
+      { key: t("aiConfig.models.tempLabel"), value: p?.temperature !== undefined ? `T ${p.temperature}` : null },
+      {
+        key: t("aiConfig.models.capsGroupTools"),
+        value: tools?.length ? tools.map((id) => t(`aiConfig.models.serverTool_${id}`)).join(" · ") : null,
+      },
+    ];
+  };
+
   return (
     <div className={hub.drawer} role="dialog" aria-label={t("aiConfig.models.addTitle")}>
       <div className={hub.drawerHead}>
@@ -718,6 +844,73 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           <X size={16} />
         </button>
       </div>
+
+      {/* ── 线路条 (屏 04): the channel's routes; ink = this model's current
+          one, a hairline = configured before, dashed + = offered and never
+          configured. A click shows what changes (屏 06) before switching. Image
+          and transcription rows pick a dedicated endpoint instead (plan §5.1.2),
+          so the strip is for the conversational types only. ────────────── */}
+      {channel && route && multiRoute && !isImageModel && !isAsrModel && (
+        <div className={r.strip}>
+          <div className={r.stripHead}>
+            <span className={r.stripLabel}>{t("aiConfig.models.routeLabel")}</span>
+            <span className={r.badges}>
+              {channelRoutes.map((f) => {
+                const on = f === route;
+                const configured = !!parked[f];
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    className={`${r.badge} ${on ? r.badgeOn : configured ? "" : r.badgeOffered}`}
+                    aria-pressed={on}
+                    title={on
+                      ? t("aiConfig.models.routeCurrent")
+                      : configured ? t("aiConfig.models.routeConfigured") : t("aiConfig.models.routeNew")}
+                    onClick={() => setPendingRoute(on ? null : f)}
+                  >
+                    {on || configured ? ROUTE_LONG[f] : `+ ${ROUTE_LONG[f]}`}
+                  </button>
+                );
+              })}
+            </span>
+          </div>
+          {pendingRoute && (() => {
+            const before = describeRoute(routeFieldsNow(), route);
+            const after = describeRoute(parked[pendingRoute], pendingRoute);
+            return (
+              <div className={r.diff} role="group" aria-label={t("aiConfig.models.routeDiffTitle", { from: ROUTE_SHORT[route], to: ROUTE_SHORT[pendingRoute] })}>
+                <div className={r.diffTitle}>
+                  {t("aiConfig.models.routeDiffTitle", { from: ROUTE_SHORT[route], to: ROUTE_SHORT[pendingRoute] })}
+                </div>
+                {before.map((row, i) => (
+                  <div key={row.key} className={r.diffRow}>
+                    <span className={r.diffKey}>{row.key}</span>
+                    <span className={row.value === null ? r.diffUnset : ""}>{row.value ?? t("aiConfig.models.routeUnset")}</span>
+                    <span>→</span>
+                    <span className={after[i].value === null ? r.diffUnset : ""}>{after[i].value ?? t("aiConfig.models.routeUnset")}</span>
+                  </div>
+                ))}
+                {!parked[pendingRoute] && <div className={r.url}>{t("aiConfig.models.routeNoCopy")}</div>}
+                <div className={r.diffActions}>
+                  {parked[pendingRoute] && (
+                    <button className={r.tinyBtn} onClick={() => {
+                      setParked((p) => { const n = { ...p }; delete n[pendingRoute]; return n; });
+                      setPendingRoute(null);
+                    }}>
+                      {t("aiConfig.models.routeForget")}
+                    </button>
+                  )}
+                  <button className={r.tinyBtn} onClick={() => setPendingRoute(null)}>{t("aiConfig.models.cancel")}</button>
+                  <button className={r.tinyBtn} onClick={() => switchRoute(pendingRoute)}>
+                    {t("aiConfig.models.routeSwitch", { route: ROUTE_LONG[pendingRoute] })}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* ── 模型类型 — the band that decides which sections exist ─────────── */}
       <div className={s.typeBand}>
@@ -922,7 +1115,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 />
               </div>
             </Field>
-            <Field label={t("aiConfig.models.maxOutLabel")} sub={t("aiConfig.models.unitTokens")}
+            <Field label={t("aiConfig.models.maxOutLabel")} scope={routeScope} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefMaxOut")} {...whyProps("maxOut", t("aiConfig.models.maxOutputHint"))}
               {...measuredNote(parsedOut, probed.out)}>
               <div className={s.numRow}>
@@ -934,9 +1127,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   onChange={(e) => setForm({ ...form, maxOutput: e.target.value })} />
               </div>
             </Field>
-            <Field label={t("aiConfig.models.probeLabel")} hint={t("aiConfig.models.briefProbe")}>
+            <Field label={t("aiConfig.models.probeLabel")} scope={routeScope} hint={t("aiConfig.models.briefProbe")}>
               <ModelProbePanel
                 providerId={providerId}
+                route={route}
                 modelId={form.modelId}
                 contextSize={form.contextSize}
                 maxOutput={form.maxOutput}
@@ -963,6 +1157,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
 
           <Section
             label={t("aiConfig.models.secThinking")}
+            scope={routeScope}
             open={open.think}
             onToggle={() => toggleSection("think")}
             summary={thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
@@ -1106,7 +1301,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 goes in · what comes out · what narrows the model to one use.
                 The standing-grant sentence is the tools group's head, said
                 once instead of under every switch. */}
-            <Fold open={(!!toolWire && supportsServerTools(toolWire)) || shownServerTools.length > 0}>
+            <Fold open={(!!toolWire && supportsServerTools(toolWire)) || shownServerTools.length > 0 || matrixTools.length > 0}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
               {/* Offered ids, plus any switched on that this wire can't send
                   (shownServerTools). The code interpreter is offered only for
@@ -1152,19 +1347,60 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                             : t("aiConfig.models.serverToolsHint")))}
                 />
               ))}
+              {/* 可用性矩阵 (屏 05): the switches above are the author's grant,
+                  the same on every route; whether a route can *say* each one is
+                  the platform's, per route. The current route's column is the
+                  one the switches' hints speak for. */}
+              {matrixTools.length > 0 && route && (
+                <>
+                  <table className={r.matrix} aria-label={t("aiConfig.models.matrixLabel")}>
+                    <thead>
+                      <tr>
+                        <th />
+                        {channelRoutes.map((f) => (
+                          <th key={f} className={`${r.matrixHead} ${f === route ? r.matrixCur : ""}`}>{ROUTE_SHORT[f]}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matrixTools.map((id) => (
+                        <tr key={id}>
+                          <td>{t(`aiConfig.models.serverTool_${id}`)}</td>
+                          {channelRoutes.map((f) => {
+                            const w = routeWire(f);
+                            const st = w ? serverToolStatus(w, id, form.modelId.trim() || undefined) : "no";
+                            return (
+                              <td key={f}
+                                className={`${st === "yes" ? r.cellYes : st === "unknown" ? r.cellUnknown : r.cellNo} ${f === route ? r.matrixCur : ""}`}
+                                title={t(`aiConfig.models.matrix_${st}`)}>
+                                {st === "yes" ? "✓" : st === "unknown" ? "?" : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className={r.url}>{t("aiConfig.models.matrixLegend")}</div>
+                </>
+              )}
             </Fold>
 
             {/* Whole-PDF input (Chat Completions `file` / Responses `input_file`).
                 Family-gated like the category chips above: Anthropic and Gemini
                 have no mapping for the part here, so showing the switch there
                 would promise a subagent that refuses at run time. */}
-            <Fold open={pdfWire || vlHiResWire}>
+            <Fold open={pdfWire || vlHiResWire || pdfInput || (videoInput && canSeeImages(form))}>
               <Subhead label={t("aiConfig.models.capsGroupInput")} />
             </Fold>
-            <Fold open={pdfWire}>
+            {/* Shown where the wire has a spelling, and also where it doesn't
+                but the model declares it — the declaration is the model's and
+                outlives a route switch, so it must stay visible (and able to be
+                turned off), with the reason it isn't sent here. */}
+            <Fold open={pdfWire || pdfInput}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
-                hint={t("aiConfig.models.briefPdf")}
+                hint={pdfWire ? t("aiConfig.models.briefPdf") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}
@@ -1186,10 +1422,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             {/* Video clips as chat @-attachments — same gate as the hi-res
                 switch. The fps field appears under it when on; empty = dashed
                 = no `fps` on the part = the endpoint's own ≈2. */}
-            <Fold open={videoWire}>
+            <Fold open={videoWire || (videoInput && canSeeImages(form))}>
               <ToggleField
                 title={t("aiConfig.models.videoInputLabel")}
-                hint={t("aiConfig.models.briefVideo")}
+                hint={videoWire ? t("aiConfig.models.briefVideo") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
                 on={videoInput}
                 onChange={setVideoInput}
                 {...whyProps("video", t("aiConfig.models.videoInputHint"))}
@@ -1217,7 +1453,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 rather than the row hiding. The note under 自动 shows what it
                 resolves to, same as the thinking category's. */}
             <Subhead label={t("aiConfig.models.capsGroupOutput")} />
-            <Field label={t("aiConfig.models.soLabel")} hint={soHint} {...soNote}
+            <Field label={t("aiConfig.models.soLabel")} scope={routeScope} hint={soHint} {...soNote}
               {...whyProps("so", t("aiConfig.models.whySo"))}>
               <div className={s.chips}>
                 <DashChip
@@ -1290,7 +1526,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 unchanged. Empty = dashed + 不发; 0 = solid + 确定性, because the
                 two used to look the same and mean opposite things. */}
             <Fold open={temperatureReaches}>
-              <Field label={t("aiConfig.models.tempLabel")} hint={t("aiConfig.models.briefTemp")}
+              <Field label={t("aiConfig.models.tempLabel")} scope={routeScope} hint={t("aiConfig.models.briefTemp")}
                 {...whyProps("temp", t("aiConfig.models.temperatureHint"))}>
                 <div className={s.numRow}>
                   <input
@@ -1308,7 +1544,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             {/* text.verbosity — the Responses family is the only wire with the
                 field, so the row exists only there. 自动 = dashed, nothing sent. */}
             <Fold open={family === "responses"}>
-              <Field label={t("aiConfig.models.verbosityLabel")} hint={t("aiConfig.models.briefVerbosity")}
+              <Field label={t("aiConfig.models.verbosityLabel")} scope={routeScope} hint={t("aiConfig.models.briefVerbosity")}
                 {...whyProps("verb", t("aiConfig.models.verbosityHint"))}>
                 <div className={s.chips}>
                   <DashChip

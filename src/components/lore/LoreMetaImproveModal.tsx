@@ -30,6 +30,7 @@ import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
 import { baseName } from "../../lib/paths";
+import { providerFor } from "../../lib/ai/routes";
 
 interface Props {
   entity: LoreEntity;
@@ -82,7 +83,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
 
   const handleGenerate = async () => {
     const model = models.find((m) => m.id === modelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    const provider = model ? providerFor(model, providers) : null;
     if (!model || !provider) {
       setError(t("ai.errors.noModel", { defaultValue: "请先在设置中选择模型" }));
       return;

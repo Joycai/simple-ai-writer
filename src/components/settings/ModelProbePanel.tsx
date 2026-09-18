@@ -16,10 +16,18 @@ import { Activity, AlertTriangle, Check, Loader2, X } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { planProbeCost, probeEndpoint, type ProbeReport, type ProbeStage } from "../../lib/ai/endpointProbe";
 import type { ProbeFinding } from "../../lib/ai/probeAnalysis";
+import { routeProvider } from "../../lib/ai/routes";
+import type { ProtocolFamily } from "../../lib/ai/types";
 import styles from "./ModelProbePanel.module.css";
 
 interface Props {
   providerId: string;
+  /**
+   * The route to measure on — the drawer's current one. A measurement is of
+   * one wire (plan §3: `probedAt` and the probed values are per route), so the
+   * probe must go down the same route the values will be filed under.
+   */
+  route?: ProtocolFamily;
   modelId: string;
   /** Raw form values, so the estimate tracks what the author is typing. */
   contextSize: string;
@@ -82,7 +90,8 @@ export function ModelProbePanel(props: Props) {
     : t("aiConfig.probe.cost", { tokens: compact(estimate.inputTokens + estimate.outputTokens) });
 
   const run = async () => {
-    const provider = providers.find((p) => p.id === props.providerId);
+    const channel = providers.find((p) => p.id === props.providerId);
+    const provider = channel ? routeProvider(channel, props.route) : undefined;
     if (!provider) return;
     setPhase("running");
     setReport(null);

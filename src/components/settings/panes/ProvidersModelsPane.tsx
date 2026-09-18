@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
-import { MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
+import { useProjectStore } from "../../../stores/projectStore";
+import { isAsrOnly, MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
 import { resolvePlatform, type PlatformId } from "../../../lib/ai/platforms";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
@@ -19,6 +20,10 @@ import { Chip } from "./bits";
 import styles from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
+import r from "./Routes.module.css";
+import { activeFamily, channelEndpoints, channelHost, providerFor, ROUTE_LONG, ROUTE_SHORT } from "../../../lib/ai/routes";
+import { mergeCandidates, planMerge, type MergeCandidate } from "../../../lib/ai/channelMerge";
+import type { ProtocolFamily } from "../../../lib/ai/types";
 
 const TYPE_FILTERS: (ModelType | "all")[] = ["all", ...MODEL_TYPES];
 
@@ -36,11 +41,20 @@ type Drawer =
   | { kind: "model"; providerId: string; modelId: string | null; comfy?: boolean }
   | null;
 
-/** A pending deletion, held until the author confirms it. */
+/** A pending deletion or merge, held until the author confirms it. */
 type Pending =
   | { kind: "provider"; id: string; name: string; count: number }
   | { kind: "model"; id: string; name: string }
+  | { kind: "merge"; candidate: MergeCandidate }
   | null;
+
+/**
+ * The part of a model id two channels can share: lower-cased, without a
+ * relay's `vendor/` prefix (OrcaRouter's `deepseek/deepseek-v4-pro` is
+ * DeepSeek's `deepseek-v4-pro`). Exact otherwise — a dated snapshot is a
+ * different model, and a guess here is a hint that lies.
+ */
+const sameNameKey = (modelId: string): string => modelId.trim().toLowerCase().replace(/^[^/]+\//, "");
 
 interface Props {
   /** Lets the page route Escape to the drawer while one is open, and to the
@@ -50,7 +64,9 @@ interface Props {
 
 export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const { t } = useTranslation();
-  const { providers, models, removeProvider, removeModel, moveProvider, getApiKey } = useAiStore();
+  const { providers, models, removeProvider, removeModel, moveProvider, getApiKey, mergeProviders } = useAiStore();
+  const { activeModelId, memoryModelId, imageModelId, subAgents } = useAiStore();
+  const projectPath = useProjectStore((s) => s.projectPath);
   const defaultMaxOutput = useAppStore((s) => s.defaultMaxOutput);
   const setDefaultMaxOutput = useAppStore((s) => s.setDefaultMaxOutput);
 
@@ -167,6 +183,54 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
 
   const q = query.trim().toLowerCase();
 
+  /**
+   * The keys, read once per provider list, only to find channels that are one
+   * (same platform, host and key — lib/ai/channelMerge). Compared in memory and
+   * never rendered; a keyring that can't be read just finds nothing to merge.
+   */
+  const [keys, setKeys] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    let alive = true;
+    // Only the channels that could pair on everything but the key — every
+    // keychain read may prompt on a build whose signature changed
+    // (docs/reference/macos-signing.md), so reading all of them each time
+    // this page opens would be a wall of password dialogs.
+    const site = (p: (typeof providers)[number]) =>
+      `${resolvePlatform(p.platform, p.baseUrl, p.apiStandard)} ${channelHost(p).trim().toLowerCase()}`;
+    const count = new Map<string, number>();
+    for (const p of providers) count.set(site(p), (count.get(site(p)) ?? 0) + 1);
+    const suspects = new Set(providers.filter((p) => (count.get(site(p)) ?? 0) > 1).map((p) => p.id));
+    void Promise.all(providers.filter((p) => suspects.has(p.id)).map(async (p) => {
+      try {
+        return [p.id, (await getApiKey(p.id)) ?? ""] as const;
+      } catch {
+        return [p.id, `\u0000unreadable:${p.id}`] as const;
+      }
+    })).then((pairs) => { if (alive) setKeys(new Map(pairs)); });
+    return () => { alive = false; };
+  }, [providers, getApiKey]);
+  const merges = useMemo(() => mergeCandidates(providers, keys), [providers, keys]);
+
+  /** Same-name models on other channels (屏 08): model row id → where else it lives. */
+  const sameName = useMemo(() => {
+    const byKey = new Map<string, Model[]>();
+    for (const m of models) {
+      if (isAsrOnly(m)) continue;
+      const k = sameNameKey(m.modelId);
+      byKey.set(k, [...(byKey.get(k) ?? []), m]);
+    }
+    const out = new Map<string, string[]>();
+    for (const m of models) {
+      const others = (byKey.get(sameNameKey(m.modelId)) ?? []).filter((x) => x.providerId !== m.providerId);
+      if (others.length === 0) continue;
+      out.set(m.id, others.map((x) => {
+        const p = providerFor(x, providers);
+        return p ? `${p.name} · ${ROUTE_SHORT[activeFamily(x, providers.find((c) => c.id === x.providerId)!)]}` : x.name;
+      }));
+    }
+    return out;
+  }, [models, providers]);
+
   const groups = useMemo(() => {
     const known = new Set(providers.map((p) => p.id));
     const orphans = models.filter((m) => !known.has(m.providerId));
@@ -174,7 +238,8 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     const rows: {
       id: string;
       name: string;
-      std: string | null;
+      /** The channel's routes, primary first, and whether some model takes each one (ink badge). */
+      routes: { family: ProtocolFamily; inUse: boolean }[];
       /** Which server beyond the protocol — the label the row used to lose once its preset was applied. */
       platform: PlatformId | null;
       url: string | null;
@@ -184,7 +249,8 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     }[] = [];
 
     const build = (
-      id: string, name: string, std: string | null, platform: PlatformId | null, url: string | null, all: Model[],
+      id: string, name: string, routes: { family: ProtocolFamily; inUse: boolean }[],
+      platform: PlatformId | null, url: string | null, all: Model[],
     ) => {
       const nameMatch = !q || name.toLowerCase().includes(q) || (url ?? "").toLowerCase().includes(q);
       const shown = all.filter(
@@ -193,19 +259,25 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
           (nameMatch || `${m.name} ${m.modelId}`.toLowerCase().includes(q)),
       );
       rows.push({
-        id, name, std, platform, url, all, shown,
+        id, name, routes, platform, url, all, shown,
         visible: shown.length > 0 || (nameMatch && typeFilter === "all"),
       });
     };
 
     for (const p of providers) {
+      const mine = models.filter((m) => m.providerId === p.id);
       build(
-        p.id, p.name, p.apiStandard, resolvePlatform(p.platform, p.baseUrl, p.apiStandard), p.baseUrl || null,
-        models.filter((m) => m.providerId === p.id),
+        p.id, p.name,
+        channelEndpoints(p).map((e) => ({
+          family: e.family,
+          inUse: mine.some((m) => !isAsrOnly(m) && m.type !== "image" && activeFamily(m, p) === e.family),
+        })),
+        resolvePlatform(p.platform, p.baseUrl, p.apiStandard), p.host || p.baseUrl || null,
+        mine,
       );
     }
     if (orphans.length > 0) {
-      build(ORPHAN_ID, t("aiConfig.hub.unknownProvider"), null, null, null, orphans);
+      build(ORPHAN_ID, t("aiConfig.hub.unknownProvider"), [], null, null, orphans);
     }
     return rows.filter((r) => r.visible);
   }, [providers, models, q, typeFilter, t]);
@@ -219,9 +291,9 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
    * Gone as soon as every such switch is off or its platform picked.
    */
   const unsentGrants = useMemo(() => models.flatMap((m) => {
-    const provider = providers.find((p) => p.id === m.providerId);
+    const provider = providerFor(m, providers);
     if (!provider || !m.serverTools?.length || m.type === "asr") return [];
-    const sent = serverToolsSent(m, [provider]) ?? [];
+    const sent = serverToolsSent(m, providers) ?? [];
     return m.serverTools.some((id) => !sent.includes(id)) ? [`${m.name}（${provider.name}）`] : [];
   }), [models, providers]);
 
@@ -242,7 +314,30 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const confirmPending = () => {
     if (!pending) return;
     if (pending.kind === "provider") removeProvider(pending.id);
-    else removeModel(pending.id);
+    else if (pending.kind === "model") removeModel(pending.id);
+    else {
+      const { keep, absorb } = pending.candidate;
+      void mergeProviders(keep.id, absorb.id, projectPath).catch((e) =>
+        setError(e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  /** The merge preview (屏 07): what moves where, and how many references get re-pointed. */
+  const mergeMessage = (c: MergeCandidate): string => {
+    const plan = planMerge(c.keep, c.absorb, models);
+    const gone = new Set(plan.deletes);
+    const refs = [activeModelId, memoryModelId, imageModelId, ...Object.values(subAgents).map((x) => x.modelId)]
+      .filter((id): id is string => !!id && gone.has(id)).length;
+    return [
+      t("aiConfig.hub.mergeRoutes", {
+        routes: channelEndpoints(c.absorb).map((e) => ROUTE_LONG[e.family]).join("、"),
+        keep: c.keep.name,
+      }),
+      plan.merged > 0 && t("aiConfig.hub.mergeFolded", { count: plan.merged, keep: c.keep.name }),
+      plan.moved > 0 && t("aiConfig.hub.mergeMoved", { count: plan.moved }),
+      refs > 0 && t("aiConfig.hub.mergeRefs", { count: refs }),
+      t("aiConfig.hub.mergeKey", { absorb: c.absorb.name }),
+    ].filter(Boolean).join("\n");
   };
 
   return (
@@ -312,6 +407,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
       <div className={hub.list}>
         <div className={hub.listInner}>
         {error && <div className={styles.errorNote}>{error}</div>}
+        {/* 合并同一渠道 (屏 07): detected, never done unasked (§5.2 step 4). */}
+        {merges.map((c) => (
+          <div key={`${c.keep.id}:${c.absorb.id}`} className={r.mergeNote} role="note">
+            <span>{t("aiConfig.hub.mergeNote", { keep: c.keep.name, absorb: c.absorb.name })}</span>
+            <span className={r.rowSpacer} />
+            <button className={r.tinyBtn} onClick={() => setPending({ kind: "merge", candidate: c })}>
+              {t("aiConfig.hub.mergePreview")}
+            </button>
+          </div>
+        ))}
         {unsentGrants.length > 0 && (
           <div className={styles.hint} role="note">
             {t("aiConfig.hub.serverToolsNotSent", { count: unsentGrants.length, models: unsentGrants.join(" · ") })}
@@ -356,7 +461,13 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                 </span>
                 <span className={hub.groupName}>{g.name}</span>
                 {g.platform && <span className={hub.groupStd}>{t(`aiConfig.platforms.${g.platform}`)}</span>}
-                {g.std && <span className={hub.groupStd}>{g.std}</span>}
+                {g.routes.length > 0 && (
+                  <span className={r.badges} title={t("aiConfig.hub.routesTitle")}>
+                    {g.routes.map((x) => (
+                      <span key={x.family} className={`${r.badge} ${x.inUse ? r.badgeOn : ""}`}>{ROUTE_SHORT[x.family]}</span>
+                    ))}
+                  </span>
+                )}
                 {!isOrphan && (
                   <span className={hub.groupUrl}>{g.url ?? t("aiConfig.providers.defaultEndpoint")}</span>
                 )}
@@ -492,6 +603,17 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                           </span>
                         );
                       })()}
+                      {sameName.has(m.id) && (
+                        <span className={hub.mark} title={t("aiConfig.hub.sameNameTitle", { where: sameName.get(m.id)!.join("、") })}>
+                          {t("aiConfig.hub.sameName", { count: sameName.get(m.id)!.length })}
+                        </span>
+                      )}
+                      {/* The route this row's requests take, in full (§6.1). Image and
+                          transcription rows pick a dedicated endpoint, not a route. */}
+                      {!isOrphan && m.type !== "image" && !isAsrOnly(m) && (() => {
+                        const channel = providers.find((p) => p.id === m.providerId);
+                        return channel ? <span className={`${r.badge} ${r.badgeOn}`}>{ROUTE_LONG[activeFamily(m, channel)]}</span> : null;
+                      })()}
                       <span className={hub.modelType} data-type={m.type}>
                         {t(`aiConfig.modelTypes.${m.type}`)}
                       </span>
@@ -603,12 +725,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
         <ConfirmDialog
           title={pending.kind === "provider"
             ? t("aiConfig.hub.deleteProvider")
-            : t("aiConfig.hub.deleteModel")}
+            : pending.kind === "model"
+              ? t("aiConfig.hub.deleteModel")
+              : t("aiConfig.hub.mergeTitle", { keep: pending.candidate.keep.name })}
           message={pending.kind === "provider"
             ? t("aiConfig.hub.deleteProviderConfirm", { name: pending.name, count: pending.count })
-            : t("aiConfig.hub.deleteModelConfirm", { name: pending.name })}
-          confirmLabel={t("common.delete")}
-          danger
+            : pending.kind === "model"
+              ? t("aiConfig.hub.deleteModelConfirm", { name: pending.name })
+              : mergeMessage(pending.candidate)}
+          confirmLabel={pending.kind === "merge" ? t("aiConfig.hub.mergeConfirm") : t("common.delete")}
+          danger={pending.kind !== "merge"}
           onConfirm={confirmPending}
           onClose={() => setPending(null)}
         />

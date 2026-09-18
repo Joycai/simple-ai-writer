@@ -33,7 +33,7 @@ import { familyOf, isCompatStandard, type ApiStandard } from "./types";
 export const DEFAULT_OPENAI_BASE = "https://api.openai.com/v1";
 export const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 /** Displayed as-is in Settings; `anthropicRoot` strips the `/v1` back off. */
-export const DEFAULT_ANTHROPIC_BASE = "https://api.anthropic.com/v1";
+const DEFAULT_ANTHROPIC_BASE = "https://api.anthropic.com/v1";
 
 /**
  * The endpoint an official provider talks to when its stored `baseUrl` is empty.

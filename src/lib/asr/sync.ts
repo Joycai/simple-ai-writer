@@ -108,7 +108,7 @@ export function syncErrorOf(status: number, body: string, modelId: string): AsrH
     return rewrite(
       "ModelNotSync",
       `the model id "${modelId}" is not a synchronous ASR model — only the qwen3-asr-flash family answers on this ` +
-        `endpoint. Fix the model row under 供应商与模型: set the id to qwen3-asr-flash, or switch its 转写接口 to file transcription.`,
+        `endpoint. Fix the model row under 渠道与模型: set the id to qwen3-asr-flash, or switch its 转写接口 to file transcription.`,
     );
   }
   return new AsrHttpError("Transcription error", status, body);

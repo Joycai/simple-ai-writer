@@ -12,7 +12,7 @@ import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { serverToolsSent } from "../ai/serverTools";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
-import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { withCurrentTime } from "../context/clock";
@@ -25,6 +25,7 @@ import type { ToolContext } from "./registry";
 import { loadProjectImage, shrunkNote, type ToolCall, type ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
+import { providerFor } from "../ai/routes";
 
 export type SubAgentKind =
   | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer"
@@ -229,7 +230,7 @@ export function subAgentModel(
   if (!model) return null;
   if (kind === "vision" && !canSeeImages(model)) return null;
   if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) return null;
-  if (kind === "pdf" && !model.pdfInput) return null;
+  if (kind === "pdf" && !readsPdf(model, providers ? providerFor(model, providers)?.apiStandard : undefined)) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
   // The mirror of the image check: that one refuses a model that cannot draw,
   // this one refuses a model that has not been *declared* a translation model —
@@ -333,7 +334,7 @@ export async function resolveSubAgentConn(
   if (!model) {
     return { error: `Model for ${kind} subagent not found.` };
   }
-  const provider = providers.find((p) => p.id === model.providerId);
+  const provider = providerFor(model, providers);
   if (!provider) {
     return { error: `Provider for ${kind} subagent not found.` };
   }
@@ -378,7 +379,7 @@ export async function resolveVisionConn(
   if (!activeModel || !canSeeImages(activeModel)) {
     return { error: i18n.t("ai.errors.noVisionModel") };
   }
-  const provider = providers.find((p) => p.id === activeModel.providerId);
+  const provider = providerFor(activeModel, providers);
   if (!provider) return { error: i18n.t("ai.errors.providerNotFound") };
   const apiKey = await loadKey(provider.id);
   // Never "": a keyless request comes back 401 and reads as a broken feature
@@ -443,7 +444,7 @@ export async function executeDelegate(
         `Tell the author to bind a multimodal model to it in Settings → Subagents.`,
     );
   }
-  if (kind === "pdf" && !conn.model.pdfInput) {
+  if (kind === "pdf" && !readsPdf(conn.model, conn.provider.apiStandard)) {
     return fail(
       `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
         `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,

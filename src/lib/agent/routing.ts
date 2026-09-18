@@ -26,6 +26,7 @@ import { isCliEnabled } from "../cli/flag";
 import { IS_TAURI } from "../platform";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { Model, Provider } from "../ai/configDb";
+import { providerFor } from "../ai/routes";
 
 interface RoutedTools {
   tools: ToolId[];
@@ -278,7 +279,7 @@ function route(
   const searchModel = subAgentModel("search", models, subs, options?.providers);
   const readsPages = searchModel === null ? false
     : options?.providers
-      ? searchReadsPages(searchModel, options.providers.find((p) => p.id === searchModel.providerId))
+      ? searchReadsPages(searchModel, providerFor(searchModel, options.providers))
       : searchModel.serverTools?.includes("web_extractor") ?? false;
   return {
     tools,

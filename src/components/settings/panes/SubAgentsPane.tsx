@@ -12,7 +12,7 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
-import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import {
   isAsrDiarizationDefault,
@@ -35,6 +35,7 @@ import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import css from "./SubAgents.module.css";
+import { providerFor } from "../../../lib/ai/routes";
 
 /**
  * Binds each specialist subagent to a model and turns it on.
@@ -126,7 +127,7 @@ export function SubAgentsPane() {
     if (kind === "vision" && !canSeeImages(model)) {
       return t("systemSettings.subagents.warnNotMultimodal");
     }
-    if (kind === "pdf" && !model.pdfInput) {
+    if (kind === "pdf" && !readsPdf(model, providerFor(model, providers)?.apiStandard)) {
       return t("systemSettings.subagents.warnNoPdf");
     }
     if (kind === "imagegen" && model.type !== "image") {
@@ -182,7 +183,7 @@ export function SubAgentsPane() {
     // (searchReadsPages), which lives in a different pane. Only said once the
     // model can search at all — otherwise the warning above is the news.
     if (kind === "search" && model && serverToolsSent(model, providers)?.includes("web_search")) {
-      parts.push(t(searchReadsPages(model, providers.find((p) => p.id === model.providerId))
+      parts.push(t(searchReadsPages(model, providerFor(model, providers))
         ? "systemSettings.subagents.searchPages"
         : "systemSettings.subagents.searchNoPages"));
     }

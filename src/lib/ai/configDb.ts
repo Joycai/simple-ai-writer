@@ -9,7 +9,7 @@ import type { ComfyWorkflowConfig } from "../comfy/workflow";
 import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
 import {
-  authModesFor, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
+  authModesFor, familyOf, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
 } from "./types";
 import type { ImageDialect } from "./imageDialects";
 import {
@@ -17,7 +17,13 @@ import {
   type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
-import { parsePlatform, platformToStore, resolvePlatform, type PlatformId } from "./platforms";
+import { parsePlatform, platformToStore, type PlatformId } from "./platforms";
+import {
+  legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
+  standardOf, writtenBaseOf,
+  type Endpoint, type RouteProfile,
+} from "./routes";
+import type { ProtocolFamily } from "./types";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
@@ -166,6 +172,21 @@ export interface Provider {
    * drawer. docs/feature/channel-model-route-plan.md §4.
    */
   platform?: PlatformId;
+  /**
+   * `scheme://host[:port]` every route of this channel hangs off, typed once
+   * (plan §5.1.1). Empty on an official platform, whose routes are vendor
+   * constants. Absent only on a hand-built row; `listProviders` fills it.
+   */
+  host?: string;
+  /**
+   * The channel's routes, primary first — one per protocol family, each an
+   * address below `host` (`lib/ai/routes.ts`). The flat `baseUrl` /
+   * `apiStandard` / `authMode` / `safetySettings` above are always the
+   * primary route's (`normalizeChannel`); a model on another route reads its
+   * channel through `providerFor`. Absent only on a hand-built row, where the
+   * flat fields are the one route.
+   */
+  endpoints?: Endpoint[];
   /**
    * Position in the provider list, written by the reorder buttons (see
    * `lib/ai/providerOrder`). Undefined — every provider never explicitly
@@ -392,6 +413,20 @@ export interface Model {
   pricePerImage?: number;
   /** Image-model capabilities. Meaningless (and unset) for text models. */
   caps?: ImageCaps;
+  /**
+   * Which of its channel's routes this model's requests take (plan §2.2).
+   * Absent = the channel's primary route. The route fields above
+   * (`ROUTE_PROFILE_KEYS`: thinking, output cap, temperature, structured
+   * output, verbosity, hi-res, the probe's readings) are always *this* route's.
+   */
+  activeRoute?: ProtocolFamily;
+  /**
+   * The route fields of every other route this model has been configured on,
+   * parked by family. Switching route swaps them with the flat fields
+   * (`switchModelRoute`); a family with no entry was never configured and
+   * sends nothing (invariant 3).
+   */
+  routes?: Partial<Record<ProtocolFamily, RouteProfile>>;
 }
 
 /**
@@ -430,6 +465,23 @@ export function isAsrOnly(m: Pick<Model, "type">): boolean {
  */
 export function canSeeImages(m: Pick<Model, "type">): boolean {
   return m.type === "multimodal" || m.type === "vision";
+}
+
+/**
+ * 这个模型在这条线路上能不能收整份 PDF。
+ *
+ * `pdfInput` 是模型上的声明（作者买的是这个模型读 PDF 的能力），但只有两族有拼法：
+ * Chat Completions 的 `file` 片段与 Responses 的 `input_file`（openai.ts / responses.ts）。
+ * 模型能在渠道的几条线路之间切换以后，声明就不能再在保存时按「当前线路」清掉——
+ * 切到 ④ 族再切回来，作者不该重填一遍（channel-model-route-plan.md §3）。所以声明
+ * 留着，能不能用在这里按线路回答；PDF 子代理的资格、委派时的拦截都问这一句。
+ * 不给线路（手里没有渠道列表的界面）时只看声明。
+ */
+export function readsPdf(m: Pick<Model, "pdfInput">, standard?: ApiStandard): boolean {
+  if (!m.pdfInput) return false;
+  if (!standard) return true;
+  const family = familyOf(standard);
+  return family === "openai" || family === "responses";
 }
 
 /**
@@ -600,6 +652,10 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   // NULL = never saved since platforms existed; read as inferred from the
   // address (resolvePlatform), written the next time the drawer saves the row.
   await addColumn(db, providerCols, "providers", "platform", "TEXT");
+  // Routes (channel-model-route-plan.md P1). NULL on a row saved before them:
+  // read as the one route its base_url / api_standard describe (legacyEndpoint).
+  await addColumn(db, providerCols, "providers", "host", "TEXT");
+  await addColumn(db, providerCols, "providers", "endpoints", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -641,6 +697,9 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "vl_high_resolution", "INTEGER");
   await addColumn(db, modelCols, "models", "video_input", "INTEGER");
   await addColumn(db, modelCols, "models", "video_fps", "REAL");
+  // P2: the route this model takes, and the other routes' parked fields.
+  await addColumn(db, modelCols, "models", "active_route", "TEXT");
+  await addColumn(db, modelCols, "models", "routes", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -729,25 +788,65 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   // Explicitly ordered rows first, in their order; never-moved rows (NULL)
   // after them, oldest first — see Provider.sortOrder.
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
   );
-  return rows.map((r) => {
-    const baseUrl = r.base_url as string;
-    const apiStandard = migrateLegacyStandard(parseApiStandard(r.api_standard), baseUrl);
-    return {
-      id: r.id as string,
-      name: r.name as string,
-      baseUrl,
-      // Re-labels pre-split rows (see migrateLegacyStandard); the row itself is
-      // rewritten only when the author next saves the provider.
-      apiStandard,
-      safetySettings: parseSafetySettings(r.safety_settings),
-      authMode: parseAuthMode(r.auth_mode, apiStandard),
-      platform: resolvePlatform(parsePlatform(r.platform), baseUrl, apiStandard),
-      sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
-      createdAt: r.created_at as number,
-    };
-  });
+  return rows.map(rowToProvider);
+}
+
+/**
+ * One stored provider row → a normalized channel. Shared with the config
+ * restore's reader in spirit (it builds the same shape from a backup and runs
+ * the same `readChannel`), so a pre-routes row and a pre-routes backup become
+ * the same channel.
+ */
+function rowToProvider(r: Record<string, unknown>): Provider {
+  const baseUrl = typeof r.base_url === "string" ? r.base_url : "";
+  const apiStandard = migrateLegacyStandard(parseApiStandard(r.api_standard), baseUrl);
+  return readChannel({
+    id: r.id as string,
+    name: r.name as string,
+    baseUrl,
+    // Re-labels pre-split rows (see migrateLegacyStandard); the row itself is
+    // rewritten only when the author next saves the provider.
+    apiStandard,
+    safetySettings: parseSafetySettings(r.safety_settings),
+    authMode: parseAuthMode(r.auth_mode, apiStandard),
+    platform: parsePlatform(r.platform),
+    host: typeof r.host === "string" ? r.host : undefined,
+    endpoints: parseEndpoints(r.endpoints),
+    sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
+    createdAt: r.created_at as number,
+  }, writtenBaseOf(r.endpoints));
+}
+
+/**
+ * The read-side normalization of a channel, from whatever it was stored as.
+ *
+ * Three shapes arrive here: a row with routes; a row from before routes (no
+ * `endpoints`) — its one route is the legacy columns (`legacyEndpoint`), with
+ * the path stored only where it differs from the platform's convention, so no
+ * request changes (plan §5.2); and a row with routes that an **older build**
+ * edited since — it rewrote base_url / api_standard and knows nothing of
+ * routes, so its edit is the newer truth for the primary route, which is
+ * rebuilt from the columns while the other routes stay.
+ */
+export function readChannel(p: Provider, writtenBase?: string): Provider {
+  let endpoints = p.endpoints;
+  let host = p.host;
+  // With the marker, "diverged" means the columns changed since this build
+  // wrote them — not that today's platform table computes another address,
+  // which is exactly what a route with no stored path is supposed to follow.
+  const diverged = endpoints?.length
+    ? writtenBase !== undefined
+      ? writtenBase !== p.baseUrl || standardOf(endpoints[0]) !== p.apiStandard
+      : legacyColumnsDiverged({ ...p, host }, endpoints)
+    : false;
+  if (endpoints?.length && diverged) {
+    const legacy = legacyEndpoint(p);
+    endpoints = [legacy.endpoint, ...endpoints.slice(1).filter((e) => e.family !== legacy.endpoint.family)];
+    host = legacy.host || host;
+  }
+  return normalizeChannel({ ...p, host, endpoints });
 }
 
 const API_STANDARDS: ApiStandard[] = [
@@ -806,6 +905,7 @@ function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
  * prompt builders below.
  */
 export function providerUpsert(p: Provider): SqlStatement {
+  const c = normalizeChannel(p);
   // A real upsert, NOT `INSERT OR REPLACE`: that is a DELETE followed by an
   // INSERT, and `models.provider_id` declares `ON DELETE CASCADE`. sqlx (which
   // backs tauri-plugin-sql) connects with `foreign_keys = ON` by default, so
@@ -813,8 +913,8 @@ export function providerUpsert(p: Provider): SqlStatement {
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   return {
-    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
@@ -822,19 +922,29 @@ export function providerUpsert(p: Provider): SqlStatement {
        safety_settings = excluded.safety_settings,
        auth_mode = excluded.auth_mode,
        sort_order = excluded.sort_order,
-       platform = excluded.platform`,
+       platform = excluded.platform,
+       host = excluded.host,
+       endpoints = excluded.endpoints`,
     values: [
-      p.id,
-      p.name,
-      p.baseUrl,
-      p.apiStandard,
-      p.safetySettings ? JSON.stringify(p.safetySettings) : null,
-      p.authMode ?? null,
-      p.sortOrder ?? null,
+      c.id,
+      c.name,
+      // The legacy columns hold the primary route, always — an older build
+      // reading this row talks to exactly what this one's primary route does.
+      c.baseUrl,
+      c.apiStandard,
+      c.safetySettings ? JSON.stringify(c.safetySettings) : null,
+      c.authMode ?? null,
+      c.sortOrder ?? null,
       // Only a platform the address doesn't already name (platformToStore):
       // an inferred one is left NULL so it keeps following the table.
-      platformToStore(p) ?? null,
-      p.createdAt,
+      platformToStore(c) ?? null,
+      c.host ?? null,
+      // The primary route carries the base_url written beside it, so a read can
+      // tell an older build's edit to the columns (they no longer match) from a
+      // platform convention that moved since (they still do) — routes.ts
+      // `writtenBaseOf`.
+      JSON.stringify(c.endpoints!.map((e, i) => (i === 0 ? { ...e, writtenBase: c.baseUrl } : e))),
+      c.createdAt,
     ],
   };
 }
@@ -888,9 +998,11 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    // The flat columns are the current route's (lib/ai/routes.ts), which is
+    // also all an older build reads; the other routes ride in `routes`.
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null],
   };
 }
 
@@ -987,6 +1099,8 @@ function rowToModel(r: Record<string, unknown>): Model {
     structuredOutput: parseStructuredOutputMode(r.structured_output),
     asrFormat: parseAsrFormat(r.asr_format),
     pricePerSecond: typeof r.price_per_second === "number" ? r.price_per_second : undefined,
+    activeRoute: parseRouteFamily(r.active_route),
+    routes: parseRouteProfiles(r.routes),
   });
 }
 

@@ -9,9 +9,10 @@
 > - [`provider-standards.md`](provider-standards.md) — 2025 年那次把 `ApiStandard`
 >   重构成 6 个值的**具体方案**（已实现）。本文是它隐含的分层的显式说法。
 > - [`reasoning-plan.md`](reasoning-plan.md) — 第一个按本文裁决字段归属的功能。
-> - [`feature/channel-model-route-plan.md`](../feature/channel-model-route-plan.md)（`proposal`）—
->   提议把 L2 拆成「渠道（key + 平台）＋ 线路（每族一条地址）」、L3 拆成「模型 ＋ 模型×线路」，
->   并把 §4 的预设表升级为渠道行引用的平台画像。落地前本文仍以现状为准。
+> - [`feature/channel-model-route-plan.md`](../feature/channel-model-route-plan.md)（`shipped`，§11–§12）—
+>   把 L2 拆成「渠道（key + 平台）＋ 线路（每族一条地址）」、L3 拆成「模型 ＋ 模型×线路」，
+>   并把 §4 的预设表升级为渠道行引用的平台画像（`lib/ai/platforms.ts`、`lib/ai/routes.ts`）。
+>   本文的裁决法不变：判定一个字段属于哪层时多问一句「同一渠道同一模型，换一个协议会变吗」——会变就是模型×线路。
 
 ## 1. 三层加一维
 

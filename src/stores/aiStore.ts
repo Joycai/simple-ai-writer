@@ -7,7 +7,10 @@ import {
   ensureAiSchema,
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
-import { resolvePlatform } from "../lib/ai/platforms";
+import { normalizeChannel, routeProvider } from "../lib/ai/routes";
+import { mergeStatements, planMerge, type MergePlan } from "../lib/ai/channelMerge";
+import { remapUsageModelIds } from "../lib/ai/usage";
+import type { ProtocolFamily } from "../lib/ai/types";
 import { moveId, type ProviderMove } from "../lib/ai/providerOrder";
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
@@ -146,6 +149,15 @@ interface AiState {
   addProvider: (p: Omit<Provider, "id" | "createdAt">, apiKey: string) => Promise<string>;
   updateProvider: (p: Provider, apiKey?: string) => Promise<void>;
   removeProvider: (id: string) => Promise<void>;
+  /**
+   * Fold channel `absorbId` into `keepId` (lib/ai/channelMerge, 设计稿 05k 屏 07):
+   * the rows in one transaction, every selection and subagent binding that
+   * named a merged-away model re-pointed, the open project's usage rows
+   * re-pointed, and only then the absorbed channel's key deleted — the reverse
+   * of appReset's order, because here the database must stop referring to the
+   * key before the key goes.
+   */
+  mergeProviders: (keepId: string, absorbId: string, projectPath?: string | null) => Promise<MergePlan>;
   /** 置顶/上移/下移/置底 — reorders the provider list and persists it. */
   moveProvider: (id: string, move: ProviderMove) => Promise<void>;
   getApiKey: (providerId: string) => Promise<string | null>;
@@ -153,7 +165,8 @@ interface AiState {
   addModel: (m: Omit<Model, "id">) => Promise<void>;
   updateModel: (m: Model) => Promise<void>;
   removeModel: (id: string) => Promise<void>;
-  fetchAndImportModels: (providerId: string) => Promise<{ id: string; name: string }[]>;
+  /** The channel's model list, asked of `route` (its primary route when absent). */
+  fetchAndImportModels: (providerId: string, route?: ProtocolFamily) => Promise<{ id: string; name: string }[]>;
 
   addPrompt: (p: Omit<Prompt, "id">) => Promise<string>;
   /** Records one insertion (drives the picker's 「常用」 section). Fire and
@@ -232,12 +245,11 @@ export const useAiStore = create<AiState>((set, get) => ({
     }),
 
   addProvider: async (p, apiKey) => {
-    // Resolved in memory the way listProviders resolves a row read back, so a
-    // provider added from a surface that never names a platform (onboarding)
-    // doesn't read differently until the next launch.
-    const provider: Provider = {
-      ...p, id: nanoid(), createdAt: Date.now(), platform: resolvePlatform(p.platform, p.baseUrl, p.apiStandard),
-    };
+    // Normalized in memory the way listProviders normalizes a row read back
+    // (routes filled, flat fields = primary route, platform resolved), so a
+    // provider added from a surface that names neither a platform nor routes
+    // (onboarding) doesn't read differently until the next launch.
+    const provider = normalizeChannel({ ...p, id: nanoid(), createdAt: Date.now() });
     if (isTauri) {
       const d = await db();
       await saveProvider(d, provider);
@@ -248,12 +260,12 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   updateProvider: async (p, apiKey) => {
+    const resolved = normalizeChannel(p);
     if (isTauri) {
       const d = await db();
-      await saveProvider(d, p);
+      await saveProvider(d, resolved);
       if (apiKey !== undefined) await saveApiKey(p.id, apiKey);
     }
-    const resolved = { ...p, platform: resolvePlatform(p.platform, p.baseUrl, p.apiStandard) };
     set((s) => ({ providers: s.providers.map((x) => (x.id === p.id ? resolved : x)) }));
   },
 
@@ -282,6 +294,46 @@ export const useAiStore = create<AiState>((set, get) => ({
         subAgents: cleanSubs,
       };
     });
+  },
+
+  mergeProviders: async (keepId, absorbId, projectPath) => {
+    const cur = get();
+    const keep = cur.providers.find((p) => p.id === keepId);
+    const absorb = cur.providers.find((p) => p.id === absorbId);
+    if (!keep || !absorb || keep.id === absorb.id) throw new Error("Provider not found");
+    const plan = planMerge(keep, absorb, cur.models);
+    if (isTauri) {
+      await db();
+      await sqlTransaction(await getGlobalDbPath(), mergeStatements(plan, absorbId));
+    }
+    const re = (id: string | null) => (id && plan.remap[id]) || id;
+    set((s) => {
+      const upserted = new Map(plan.upserts.map((m) => [m.id, m]));
+      const gone = new Set(plan.deletes);
+      const subAgents = { ...s.subAgents };
+      for (const k of SUBAGENT_KINDS) {
+        const to = re(subAgents[k].modelId);
+        // Replace only what changed — the persistence subscription compares by reference.
+        if (to !== subAgents[k].modelId) subAgents[k] = { ...subAgents[k], modelId: to };
+      }
+      return {
+        providers: s.providers.filter((p) => p.id !== absorbId).map((p) => (p.id === keepId ? plan.channel : p)),
+        models: s.models.filter((m) => !gone.has(m.id)).map((m) => upserted.get(m.id) ?? m),
+        activeModelId: re(s.activeModelId),
+        memoryModelId: re(s.memoryModelId),
+        imageModelId: re(s.imageModelId),
+        subAgents,
+      };
+    });
+    if (projectPath) await remapUsageModelIds(projectPath, plan.remap);
+    if (isTauri) {
+      try {
+        await deleteApiKey(absorbId);
+      } catch (e) {
+        console.warn("[aiStore] merged channel's key could not be removed from the keyring:", e);
+      }
+    }
+    return plan;
   },
 
   moveProvider: async (id, move) => {
@@ -348,8 +400,9 @@ export const useAiStore = create<AiState>((set, get) => ({
     });
   },
 
-  fetchAndImportModels: async (providerId) => {
-    const provider = get().providers.find((p) => p.id === providerId);
+  fetchAndImportModels: async (providerId, route) => {
+    const channel = get().providers.find((p) => p.id === providerId);
+    const provider = channel ? routeProvider(channel, route) : undefined;
     if (!provider) throw new Error("Provider not found");
     const apiKey = await loadApiKey(providerId) ?? "";
     return fetchRemoteModels(provider.baseUrl, apiKey, provider.apiStandard, provider.authMode);

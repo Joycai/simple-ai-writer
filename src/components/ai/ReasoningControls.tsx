@@ -26,6 +26,7 @@ import {
   type ReasoningEffort, type ThinkingBudgetSpec,
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
+import { providerFor } from "../../lib/ai/routes";
 
 function labelKeyFor(e: ReasoningEffort): string {
   return `aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`;
@@ -81,7 +82,7 @@ export function ReasoningControls({ variant }: Props) {
   const { t } = useTranslation();
   const model = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const provider = useAiStore((s) =>
-    model ? s.providers.find((p) => p.id === model.providerId) : undefined,
+    model ? providerFor(model, s.providers) : undefined,
   );
   const updateModel = useAiStore((s) => s.updateModel);
 

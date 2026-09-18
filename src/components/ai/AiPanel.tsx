@@ -95,6 +95,7 @@ import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
 import { Select } from "../common/Select";
 import styles from "./AiPanel.module.css";
 import { baseName, isSamePath } from "../../lib/paths";
+import { providerFor } from "../../lib/ai/routes";
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
 const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
@@ -998,7 +999,7 @@ export function AiPanel() {
   const docxDefaultId = useDocFormatStore((s) => s.defaultId);
 
   const activeModel = models.find((m) => m.id === activeModelId);
-  const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
+  const activeProvider = activeModel ? providerFor(activeModel, providers) : null;
   const hasConfig = !!activeModel;
 
   const isContinue = !!task.continuation;

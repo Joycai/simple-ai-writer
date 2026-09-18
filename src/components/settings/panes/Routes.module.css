@@ -1,0 +1,319 @@
+/*
+ * Routes — the channel × route surfaces (设计稿 05k 屏 1a–1h): the protocol
+ * badges, the channel drawer's route table, the add-channel platform grid, the
+ * model drawer's route strip / diff card / server-tool matrix, the merge card.
+ *
+ * Badge states are fill and edge only (§6.1): ink = current / in use, a thin
+ * edge = configured, dashed = offered but not enabled here. A route the
+ * platform doesn't serve is never drawn.
+ */
+
+/* ── Badges ─────────────────────────────────────────────────────────────── */
+.badges {
+  display: inline-flex;
+  gap: 3px;
+  flex: none;
+  align-items: center;
+}
+.badge {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  background: transparent;
+  white-space: nowrap;
+}
+.badgeOn {
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+  color: var(--color-paper);
+}
+.badgeOffered {
+  border-style: dashed;
+  color: var(--color-text-faint);
+}
+button.badge {
+  cursor: pointer;
+}
+button.badge:hover:not(.badgeOn) {
+  border-color: var(--color-border-emphasis);
+  color: var(--color-text-primary);
+}
+button.badge:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 1px;
+}
+
+/* ── Platform grid (添加渠道 · 选平台) ──────────────────────────────────── */
+.platformGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-2);
+}
+.platformCard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  min-width: 0;
+}
+.platformCard:hover {
+  border-color: var(--color-border-emphasis);
+}
+.platformCardOn {
+  border-color: var(--color-ink);
+  box-shadow: inset 0 0 0 1px var(--color-ink);
+}
+.platformName {
+  font-weight: 600;
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.previewRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.previewLabel {
+  flex: none;
+  min-width: 64px;
+  color: var(--color-text-muted);
+}
+
+/* ── Route table (渠道抽屉 · 线路表) ────────────────────────────────────── */
+.table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+}
+.row:first-child {
+  border-top: none;
+}
+.rowOff {
+  background: var(--color-bg-inset);
+}
+.rowHead {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rowName {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.rowSpacer {
+  flex: 1;
+}
+.pathRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+.hostCell {
+  flex: none;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.pathInput {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+.pathInputDefault {
+  border-style: dashed !important;
+}
+.tag {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.tagSet {
+  border-style: solid;
+  color: var(--color-text-secondary);
+}
+.url {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-faint);
+  overflow-wrap: anywhere;
+}
+.tinyBtn {
+  flex: none;
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.tinyBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.tinyBtn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-emphasis);
+}
+
+/* ── Model drawer: route strip + scope tags + diff card ─────────────────── */
+.strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.stripHead {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.stripLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  font-size: var(--font-size-xs);
+}
+.diffTitle {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.diffRow {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr auto 1fr;
+  gap: var(--space-2);
+  align-items: baseline;
+  color: var(--color-text-secondary);
+}
+.diffKey {
+  color: var(--color-text-muted);
+}
+.diffUnset {
+  color: var(--color-text-faint);
+  border-bottom: 1px dashed var(--color-border);
+}
+.diffActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+/* ── Server-tool matrix (屏 05) ─────────────────────────────────────────── */
+.matrix {
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+  margin: 2px 0 var(--space-2);
+}
+.matrix th,
+.matrix td {
+  padding: 3px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-weight: 400;
+}
+.matrix th:first-child,
+.matrix td:first-child {
+  text-align: left;
+  color: var(--color-text-secondary);
+}
+.matrixHead {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+.matrixCur {
+  background: var(--color-bg-selected);
+}
+.cellYes {
+  color: var(--color-success-text);
+}
+.cellUnknown {
+  color: var(--color-warning-text);
+}
+.cellNo {
+  color: var(--color-text-ghost);
+}
+
+/* ── Merge (屏 07) ──────────────────────────────────────────────────────── */
+.mergeNote {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.mergeList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+/* Four routes don't fit a card's width — wrap rather than overflow. */
+.platformCard .badges {
+  flex-wrap: wrap;
+  flex: initial;
+}
