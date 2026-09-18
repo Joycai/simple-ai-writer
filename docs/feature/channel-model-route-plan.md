@@ -153,7 +153,7 @@ ALTER TABLE providers ADD COLUMN host TEXT;                -- scheme+主机(+端
 CREATE TABLE provider_endpoints (                          -- 线路
   id TEXT PRIMARY KEY,
   provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
-  family TEXT NOT NULL,                                    -- openai | responses | gemini | anthropic | dashscope（原生，仅出图 / 转写）
+  family TEXT NOT NULL,                                    -- openai | responses | gemini | anthropic；专用接口见 §5.1.2
   official INTEGER NOT NULL DEFAULT 0,
   path TEXT,                                               -- NULL = 平台约定；'/…' 接在渠道主机后；'https://…' 整条替换（§5.1.1）
   auth_mode TEXT,
@@ -189,6 +189,22 @@ CREATE TABLE model_routes (                                -- 模型×线路
 - **路径里只放路径。** 各族 adapter 自己补尾巴（`/chat/completions`、`/responses`、`/v1/messages`、`/models/{id}:…`），路径字段填到 adapter 补尾巴之前为止，与今天 `baseUrl` 的约定一致（`urls.ts` 的 `openaiUrl` / `anthropicRoot` / `geminiUrl` 各自的修剪规则照旧生效，作者多填一个 `/v1` 不会拼出 `/v1/v1`）。
 
 官方平台（OpenAI、Anthropic、Google 官方）今天锁定地址；这里同样锁定：画像标 `official: true` 的线路路径不可改——那正是「官方」与「兼容」在 provider-standards §2.2 里的区别。要改地址的作者选「自定义」平台。
+
+#### 5.1.2 专用接口：出图与转写也是「线路」，但不是协议线路
+
+出图、转写走的是特殊 endpoint（`/images/generations`、`:generateContent` 出图、DashScope 原生 `/services/aigc/…` 与
+`/services/audio/asr/transcription`、ComfyUI）。它们对这两类模型来说就是线路——**选哪一条决定请求发到哪里、长什么样**——
+但和对话协议不是一回事，所以：
+
+- **不上徽标。** 渠道头与模型行的徽标只回答「这个渠道说哪几种对话协议」。出图 / 转写模型的列表行不画徽标，写一行 mono「出图 · DashScope 异步」。
+- **按类型换线路带。** 模型抽屉里，类型选了**图片生成**，线路带换成**出图线路**（Images API · 对话内出图 · Gemini 出图 · DashScope 原生 · ComfyUI）；
+  选了**音频 ASR**，换成**转写线路**（同步识别 · 录音文件转写）。单选，每行带实际请求地址；平台不提供的一行置灰写「本平台不提供」。设计稿 05k 屏 1i。
+- **地址从哪来。** 挂在协议线路上的专用接口不另存地址：Images API / 对话内出图跟 Chat 线路走，Gemini 出图跟 Gemini 线路走。
+  有独立前缀的（DashScope 原生 `/api/v1`、ComfyUI 的本机地址）是渠道的一条**专用接口**，在渠道抽屉「专用接口」块里有自己一行路径，
+  规则同 §5.1.1（空值 = 平台约定，可覆盖）。
+- **存储不新增字段。** 「选了哪条出图 / 转写线路」今天已经存在：`caps.route`（`ImageRoute`）与 `asrFormat`。这一轮只是把它们从
+  抽屉深处的「出图」「转写」节提到线路带的位置，并让选项由平台画像过滤。独立前缀的专用接口进 `provider_endpoints`，`family` 取
+  `dashscope-native` / `comfyui`，另加一列 `special INTEGER NOT NULL DEFAULT 0`——对话模型的线路带与徽标只读 `special = 0` 的行。
 
 `UNIQUE (provider_id, family)`：一个渠道同一族两条线路（比如同族两个区域）在样本里没有出现，那种情况是两个渠道。
 
@@ -230,6 +246,7 @@ B 的 keyring 项在事务提交**之后**删（与 appReset 的顺序反过来�
 | 05 服务端工具 · 可用性矩阵 | 「这个工具这里能不能用」怎么说清？ | 能力声明里服务端工具变成矩阵：行 = 工具（作者的授权开关），列 = 线路，格 = 能拼 / 拼不出 / 未实测；当前线路那一列高亮。声明了但当前线路拼不出 = 开关仍亮 + 一行「本线路不发」 |
 | 06 切换线路 · 差异 | 切线路时哪些参数变了？ | 点另一条线路时，线路条下方就地展开一张差异卡：思考 / 最大输出 / 结构化 / 服务端工具 各一行 `旧 → 新`，没配过的线路显示虚线「未设置 · 不发」——**不从旧线路抄参数**（不变量 3） |
 | 07 合并同一渠道 | 迁移后的重复渠道怎么收拢？ | 列表顶部提示条 → 合并预览（线路并入、同名模型合一、被替换的引用计数）→ 确认 |
+| 1i 出图 / 转写 · 专用接口 | 出图和转写模型的「线路」在哪选？ | 类型选了图片生成 / 音频 ASR，线路带换成出图线路 / 转写线路，单选，每行带实际请求地址；不上徽标（§5.1.2） |
 | 08 同一模型 · 两个渠道 | 「同一模型在不同平台能力不同」给作者看得见吗？ | DeepSeek-V4-Pro 在「DeepSeek 官方」与「百炼」两个渠道下的对照：线路、服务端工具、看图各不相同。这是说明屏，产品里的落点是模型行悬停时的「同名模型」提示 |
 
 ### 6.1 线路的显示：协议名徽标，不是编号
@@ -238,7 +255,7 @@ B 的 keyring 项在事务提交**之后**删（与 appReset 的顺序反过来�
 `Chat` · `Resp` · `Gemini` · `Anth` · `DashScope`；挤的地方（渠道头、服务端工具矩阵表头、合并表）用简写，宽的地方（模型行、抽屉线路带、线路表）写全名
 （`Chat Completions` · `Responses` · `Anthropic`）。状态只用填充与边框表达：墨底 = 当前 / 在用，细边 = 已配，虚线 = 渠道提供但本模型未启用；
 **平台不提供的线路不出现**，不画空位——空位只在编号体系里有意义（「第 3 格是空的」），换成名字后它就是噪音。
-正文里沿用 landscape.md 的 ①–④ 指协议族，那是文档的记法，不进界面。
+正文里沿用 landscape.md 的 ①–④ 指协议族，那是文档的记法，不进界面。上一版把 DashScope 原生也做成了徽标，作者再次否决：出图、转写是专用接口，不是对话协议，见 §5.1.2。
 
 ## 7. 不变量
 
@@ -266,7 +283,7 @@ P0 独立有价值（它修一个 bug），即使后面几期不做也该合。
 
 - **线路级的 key**、**同族多线路**：样本里没有，见 §2.1 与 §5.1。
 - **按请求临时切线路**（例如 agent 某一轮临时走 ②）：线路是模型的配置，不是请求参数。需要时建第二个模型行。
-- **生图 / ASR 模型的参数线路化**：它们今天已经有自己的路由（`ImageRoute`、`asrFormat`），与对话协议不是一回事。它们**只借用线路的地址**：百炼渠道多一条 `dashscope` 线路（原生 `/api/v1`，与兼容模式不是同一个前缀），出图 / 转写模型挂在它上面，列表行显示 `DashScope` 徽标；但它们没有「模型×线路」参数，抽屉里也没有线路带。`dashscope` 线路**永远不出现在对话模型的线路带里**，与 `conversationalModels` 不变量同一个理由。
+- **出图 / 转写模型的「模型×线路」参数**：它们选的是专用接口（§5.1.2），出图参数（方言、尺寸、可改图）与转写参数仍各存一份在模型上，不按线路分份——一个出图模型换接口的场景在样本里没有出现过。专用接口**永远不出现在对话模型的线路带里**，与 `conversationalModels` 不变量同一个理由。
 - **画像进配置备份或可由作者编辑**：画像是实测结论，作者要表达「我知道这个中转站也认 X」时，用的是 `custom` 平台 + 协议原生工具的「未实测」开关，而不是改画像。
 
 ## 10. 待决问题
