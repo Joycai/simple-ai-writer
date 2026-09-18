@@ -172,6 +172,7 @@ export function AgentChat() {
   const subAgents = useAiStore((s) => s.subAgents);
   const disabledSubAgents = useActiveChat((c) => c.disabledSubAgents);
   const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
   const effectiveSubs = useMemo(
     () => withSessionOverrides(subAgents, disabledSubAgents),
     [subAgents, disabledSubAgents],
@@ -643,8 +644,8 @@ export function AgentChat() {
     // carries the thin tier, and this bar is where the作者 sees that saving.
     // (Flag flips don't re-render this memo — the number catches up on the
     // next deps change or remount, same read-once tolerance as the briefing.)
-    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true }),
-    [effectiveSubs, models],
+    () => plannedToolTokens(chatAgentPreset(), effectiveSubs, models, { handoff: true, packs: true, providers }),
+    [effectiveSubs, models, providers],
   );
   const context = useMemo(
     () =>

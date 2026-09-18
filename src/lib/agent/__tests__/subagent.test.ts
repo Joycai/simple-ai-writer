@@ -86,11 +86,14 @@ describe("subagent", () => {
     serverTools: ["web_search"],
   };
 
+  // DashScope: the search model's web_search must be *sent*, and only a
+  // platform that spells it sends it (lib/ai/platforms.ts) — official OpenAI's
+  // Chat Completions has no server tools at all.
   const dummyProvider: Provider = {
     id: "p1",
     name: "Provider 1",
-    baseUrl: "https://api.openai.com",
-    apiStandard: "openai",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    apiStandard: "openai_compat",
     createdAt: 0,
   };
 

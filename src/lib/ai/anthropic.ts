@@ -28,6 +28,7 @@ import {
   type ServerToolEvent,
 } from "./serverTools";
 import { createToolArgsProgress } from "./toolArgsProgress";
+import { wireOf } from "./platforms";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -567,7 +568,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
   // a standing permission on the model, not something a task opts into.
-  const serverTools = anthropicServerTools(opts.serverTools);
+  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools);
   if (opts.tools?.length || serverTools.length) {
     const tools: Record<string, unknown>[] = [
       ...serverTools,

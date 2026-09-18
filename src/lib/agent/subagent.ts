@@ -9,8 +9,8 @@
  */
 
 import i18n from "../../i18n";
-import type { ApiStandard, ContentPart, MessageContent, StreamMessage } from "../ai/types";
-import { supportsServerTool } from "../ai/serverTools";
+import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import { serverToolsSent } from "../ai/serverTools";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
 import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
@@ -215,13 +215,20 @@ export function subAgentModel(
   kind: SubAgentKind,
   models: Model[],
   subs: Record<SubAgentKind, SubAgentConfig>,
+  /**
+   * With the provider list, "can search" means the platform actually sends
+   * web_search for this model (`serverToolsSent`); without it, the row's
+   * declaration alone answers — the surfaces that have no providers in hand
+   * (a chip, a strip) accept that, `routeTools` and the delegate do not.
+   */
+  providers?: readonly Provider[],
 ): Model | null {
   const cfg = subs[kind];
   if (!cfg?.enabled || !cfg.modelId) return null;
   const model = models.find((m) => m.id === cfg.modelId);
   if (!model) return null;
   if (kind === "vision" && !canSeeImages(model)) return null;
-  if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
+  if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) return null;
   if (kind === "pdf" && !model.pdfInput) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
   // The mirror of the image check: that one refuses a model that cannot draw,
@@ -249,27 +256,18 @@ export function subAgentModel(
 }
 
 /**
- * Whether a search subagent on this model can open a web page itself: the row
- * declares 网页抓取 (`web_extractor`) **and** the provider's wire has a
- * spelling for it.
- *
- * The row alone is not the answer. The model drawer filters the declaration by
- * standard only when it saves, and a provider's standard can be switched
- * afterwards without touching its models — the adapters then drop the id on
- * every request (`anthropicServerTools` has no spelling; `responsesServerTools`
- * filters it off the official endpoint). Promising page reading there makes
- * the subagent report search snippets, or worse, as the page. An unknown
- * standard (provider missing) answers false: don't promise what can't be
- * checked.
+ * Whether a search subagent on this model can open a web page itself: the
+ * row declares 网页抓取 (`web_extractor`) **and** its provider's platform
+ * spells it — see `serverToolsSent` (lib/ai/serverTools). Promising page reading where it
+ * isn't sent makes the subagent report search snippets, or worse, as the page.
  *
  * Asked in three places that must agree: the `delegate` description (via
  * `routeTools`), the search subagent's own system prompt, and the settings
  * pane's note under the binding.
  */
-export function searchReadsPages(model: Model, standard: ApiStandard | undefined): boolean {
-  return standard !== undefined
-    && supportsServerTool(standard, "web_extractor")
-    && (model.serverTools?.includes("web_extractor") ?? false);
+export function searchReadsPages(model: Model, provider: Provider | undefined): boolean {
+  return provider !== undefined
+    && (serverToolsSent(model, [provider])?.includes("web_extractor") ?? false);
 }
 
 /** {@link subAgentModel} for the vision kind — the one with callers outside the agent. */
@@ -429,10 +427,14 @@ export async function executeDelegate(
   // subagent bound to a model that cannot do its one job would otherwise burn a
   // whole round trip before reporting it, and report it as a failure rather
   // than as a configuration problem the author can fix.
-  if (kind === "search" && !conn.model.serverTools?.includes("web_search")) {
+  if (kind === "search" && !serverToolsSent(conn.model, [conn.provider])?.includes("web_search")) {
     return fail(
-      `the search subagent's model "${conn.model.name}" has no server-side web_search enabled. ` +
-        `Tell the author to turn it on in Settings → Models, or answer without searching.`,
+      conn.model.serverTools?.includes("web_search")
+        ? `the search subagent's model "${conn.model.name}" has web_search switched on, but its provider "${conn.provider.name}" ` +
+            `is on a platform with no server-side search, so nothing is sent. Tell the author to bind a model on a platform that searches ` +
+            `(Settings → Subagents), or answer without searching.`
+        : `the search subagent's model "${conn.model.name}" has no server-side web_search enabled. ` +
+            `Tell the author to turn it on in Settings → Models, or answer without searching.`,
     );
   }
   if (kind === "vision" && !canSeeImages(conn.model)) {
@@ -531,7 +533,7 @@ export async function executeDelegate(
   }
 
   const messages: StreamMessage[] = [
-    { role: "system", content: withCurrentTime(subagentSystemPrompt(kind, conn.model, conn.provider.apiStandard)) },
+    { role: "system", content: withCurrentTime(subagentSystemPrompt(kind, conn.model, conn.provider)) },
     { role: "user", content: userContent },
   ];
 
@@ -635,10 +637,10 @@ export async function executeDelegate(
  * search-only model otherwise reports a search hit's snippet as if it were
  * the page.
  */
-function subagentSystemPrompt(kind: DelegateKind, model: Model, standard: ApiStandard): string {
+function subagentSystemPrompt(kind: DelegateKind, model: Model, provider: Provider): string {
   const base = i18n.t(`ai.instructions.subagent.${kind}`);
   if (kind !== "search") return base;
-  return base + "\n" + i18n.t(searchReadsPages(model, standard)
+  return base + "\n" + i18n.t(searchReadsPages(model, provider)
     ? "ai.instructions.subagentSearchPages"
     : "ai.instructions.subagentSearchNoPages");
 }

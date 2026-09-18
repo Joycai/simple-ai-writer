@@ -529,8 +529,11 @@ describe("Responses adapter — server tools (web_search / web_extractor)", () =
   }) {
     const calls = mockFetch(chunks);
     const received: StreamChunk[] = [];
+    // Compat means DashScope's `/responses` here: the four DashScope-only ids
+    // are the platform's, not the standard's (lib/ai/platforms.ts).
     await streamCompletion({
-      baseUrl: "", apiKey: "k", standard, modelId: "qwen3.8-flash",
+      baseUrl: standard === "openai_responses_compat" ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "",
+      apiKey: "k", standard, modelId: "qwen3.8-flash",
       messages: [{ role: "user", content: "hi" }], ...extra,
       onChunk: (c) => received.push(c),
     });
@@ -561,6 +564,20 @@ describe("Responses adapter — server tools (web_search / web_extractor)", () =
     expect((await run("openai_responses", [COMPLETED], {
       serverTools: ["web_search", "web_extractor", "web_search_image", "image_search"],
     })).body.tools).toEqual([{ type: "web_search" }]);
+  });
+
+  it("sends only web_search to xAI and to a relay — the other ids are DashScope's names", async () => {
+    // xAI refuses web_extractor and the image searches (landscape.md §7
+    // 第十一个样本); before platforms, openai_responses_compat sent all five.
+    for (const baseUrl of ["https://api.x.ai/v1", "https://relay.example/v1"]) {
+      const calls = mockFetch([COMPLETED]);
+      await streamCompletion({
+        baseUrl, apiKey: "k", standard: "openai_responses_compat", modelId: "qwen3.5-plus",
+        messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+        serverTools: ["web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter"],
+      });
+      expect(calls[0].body.tools, baseUrl).toEqual([{ type: "web_search" }]);
+    }
   });
 
   it("reads OpenAI's web_search_call actions: search (query fallback), open_page and find_in_page", async () => {

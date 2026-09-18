@@ -6,6 +6,7 @@ import {
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
 import { __resetForcedToolChoiceMemo } from "../toolChoice";
 import type { ServerToolId } from "../serverTools";
+import type { PlatformId } from "../platforms";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -44,6 +45,7 @@ async function collect(opts: {
   thinkingCategory?: ThinkingCategoryId;
   thinkingBudget?: number;
   serverTools?: ServerToolId[];
+  platform?: PlatformId;
   modelId?: string;
   temperature?: number;
   topP?: number;
@@ -63,6 +65,7 @@ async function collect(opts: {
     thinkingCategory: opts.thinkingCategory,
     thinkingBudget: opts.thinkingBudget,
     serverTools: opts.serverTools,
+    platform: opts.platform,
     temperature: opts.temperature,
     topP: opts.topP,
     frequencyPenalty: opts.frequencyPenalty,
@@ -850,10 +853,14 @@ describe("streamCompletion — endpoints that reject a forced tool_choice", () =
 
 describe("streamCompletion — server tools on the OpenAI-compatible wire", () => {
   const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  // Every spelling below is DashScope's private body field, so the requests go
+  // to DashScope's host — the platform, not the standard, decides whether they
+  // are sent (lib/ai/platforms.ts).
+  const DS = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 
   it("spells web_search as a top-level enable_search on openai_compat", async () => {
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", serverTools: ["web_search"],
+      chunks: done, standard: "openai_compat", baseUrl: DS, serverTools: ["web_search"],
     });
     expect(calls[0].body.enable_search).toBe(true);
   });
@@ -877,7 +884,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     // Measured 2026-09-14: plain enable_search never opened the page;
     // agent_max did (landscape.md §7 第六个样本「联网搜索与网页抓取」).
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", serverTools: ["web_search", "web_extractor"],
+      chunks: done, standard: "openai_compat", baseUrl: DS, serverTools: ["web_search", "web_extractor"],
     });
     expect(calls[0].body.enable_search).toBe(true);
     expect(calls[0].body.search_options).toEqual({ search_strategy: "agent_max" });
@@ -887,7 +894,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     // 400 `Agent mode does not support tools … avoid using the agent mode with
     // enable_search` (measured 2026-09-17); plain enable_search takes tools.
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", serverTools: ["web_search", "web_extractor"],
+      chunks: done, standard: "openai_compat", baseUrl: DS, serverTools: ["web_search", "web_extractor"],
       tools: [{ type: "function", function: { name: "read_file", description: "read", parameters: { type: "object", properties: {} } } }],
     });
     expect(calls[0].body.enable_search).toBe(true);
@@ -896,7 +903,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
 
   it("sends nothing for a lone web_extractor — the endpoint refuses it without search", async () => {
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", serverTools: ["web_extractor"],
+      chunks: done, standard: "openai_compat", baseUrl: DS, serverTools: ["web_extractor"],
     });
     expect(calls[0].body).not.toHaveProperty("enable_search");
     expect(calls[0].body).not.toHaveProperty("search_options");
@@ -910,7 +917,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
 
   it("spells code_interpreter as enable_code_interpreter on a supported model", async () => {
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", modelId: "qwen3.5-plus", serverTools: ["code_interpreter"],
+      chunks: done, standard: "openai_compat", baseUrl: DS, modelId: "qwen3.5-plus", serverTools: ["code_interpreter"],
     });
     expect(calls[0].body.enable_code_interpreter).toBe(true);
     expect(calls[0].body).not.toHaveProperty("enable_search");
@@ -921,7 +928,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
   it("leaves code_interpreter out beside function tools — the wire refuses the pair", async () => {
     // 400 `Agent mode does not support tools` — the round's own tools win.
     const { calls } = await collect({
-      chunks: done, standard: "openai_compat", modelId: "qwen3.5-plus",
+      chunks: done, standard: "openai_compat", baseUrl: DS, modelId: "qwen3.5-plus",
       serverTools: ["web_search", "code_interpreter"], tools: [TOOL_DEF],
     });
     expect(calls[0].body).not.toHaveProperty("enable_code_interpreter");
@@ -933,7 +940,7 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     // qwen3.8-flash: 400 `does not support the code_interpreter tool` here.
     for (const modelId of ["qwen3.8-flash", "qwen-max", "test-model"]) {
       const { calls } = await collect({
-        chunks: done, standard: "openai_compat", modelId, serverTools: ["code_interpreter"],
+        chunks: done, standard: "openai_compat", baseUrl: DS, modelId, serverTools: ["code_interpreter"],
       });
       expect(calls[0].body, modelId).not.toHaveProperty("enable_code_interpreter");
     }
@@ -944,6 +951,33 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
       chunks: done, standard: "openai", modelId: "qwen3.5-plus", serverTools: ["code_interpreter"],
     });
     expect(calls[0].body).not.toHaveProperty("enable_code_interpreter");
+  });
+
+  it("sends none of DashScope's fields on another platform that reads openai_compat", async () => {
+    // The bug platforms fixed: DeepSeek, relays, Ollama all read `openai_compat`
+    // and used to receive enable_search, which they ignore — the author's
+    // "search" then answered from memory (channel-model-route-plan.md §1).
+    for (const baseUrl of ["https://api.deepseek.com", "https://relay.example/v1", "http://localhost:11434/v1"]) {
+      const { calls } = await collect({
+        chunks: done, standard: "openai_compat", baseUrl, modelId: "qwen3.5-plus",
+        serverTools: ["web_search", "web_extractor", "code_interpreter"],
+      });
+      expect(calls[0].body, baseUrl).not.toHaveProperty("enable_search");
+      expect(calls[0].body, baseUrl).not.toHaveProperty("search_options");
+      expect(calls[0].body, baseUrl).not.toHaveProperty("enable_code_interpreter");
+    }
+  });
+
+  it("follows an explicit platform over the address — a DashScope-shaped proxy, or New API on DashScope's host", async () => {
+    const proxied = await collect({
+      chunks: done, standard: "openai_compat", baseUrl: "https://proxy.example/v1", platform: "dashscope",
+      serverTools: ["web_search"],
+    });
+    expect(proxied.calls[0].body.enable_search).toBe(true);
+    const relabelled = await collect({
+      chunks: done, standard: "openai_compat", baseUrl: DS, platform: "newapi", serverTools: ["web_search"],
+    });
+    expect(relabelled.calls[0].body).not.toHaveProperty("enable_search");
   });
 });
 

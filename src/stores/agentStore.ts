@@ -1884,7 +1884,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       models,
       // Same as the turn's: this is the chat, so a writer run carries the
       // handoff schema on every round and the ceiling must know it.
-      { handoff: true, packs: true },
+      // providers: whether the search subagent is live depends on what its
+      // model's platform sends (serverToolsSent) — the turn asks the same.
+      { handoff: true, packs: true, providers: useAiStore.getState().providers },
     );
 
     // Same repair a turn does before touching an inherited history: a turn
@@ -2530,7 +2532,9 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // point of this module is that a ceiling must not assume a schema the
       // request carries. See lib/agent/toolCost. `packs` for the same
       // reason: with the dev flag on, run_pack is resident on every round.
-      { handoff: true, packs: true },
+      // providers: whether the search subagent is live depends on what its
+      // model's platform sends (serverToolsSent) — the turn asks the same.
+      { handoff: true, packs: true, providers: useAiStore.getState().providers },
     );
     let history = get().chats[key]?.history ?? null;
     if (!history) {

@@ -13,6 +13,7 @@ import {
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
 import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { serverToolsSent } from "../../../lib/ai/serverTools";
 import {
   isAsrDiarizationDefault,
   isAsrTimestampsEnabled,
@@ -116,8 +117,11 @@ export function SubAgentsPane() {
    */
   const warningFor = (kind: SubAgentKind, model: Model | undefined): string | undefined => {
     if (!model) return subAgents[kind].enabled ? t("systemSettings.subagents.warnNoModel") : undefined;
-    if (kind === "search" && !model.serverTools?.includes("web_search")) {
-      return t("systemSettings.subagents.warnNoSearch");
+    if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) {
+      // Declared but not sent: the platform has no server-side search.
+      return t(model.serverTools?.includes("web_search")
+        ? "systemSettings.subagents.warnSearchNotSent"
+        : "systemSettings.subagents.warnNoSearch");
     }
     if (kind === "vision" && !canSeeImages(model)) {
       return t("systemSettings.subagents.warnNotMultimodal");
@@ -177,9 +181,8 @@ export function SubAgentsPane() {
     // of this binding; the answer is the model row's 网页抓取 switch
     // (searchReadsPages), which lives in a different pane. Only said once the
     // model can search at all — otherwise the warning above is the news.
-    if (kind === "search" && model?.serverTools?.includes("web_search")) {
-      const standard = providers.find((p) => p.id === model.providerId)?.apiStandard;
-      parts.push(t(searchReadsPages(model, standard)
+    if (kind === "search" && model && serverToolsSent(model, providers)?.includes("web_search")) {
+      parts.push(t(searchReadsPages(model, providers.find((p) => p.id === model.providerId))
         ? "systemSettings.subagents.searchPages"
         : "systemSettings.subagents.searchNoPages"));
     }

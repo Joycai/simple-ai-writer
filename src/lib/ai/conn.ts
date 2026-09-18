@@ -23,6 +23,7 @@ import i18n from "../../i18n";
 import type { Model, Provider } from "./configDb";
 import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
+import { resolvePlatform, type PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
@@ -58,6 +59,13 @@ export interface ConnOptions {
   safetySettings?: GeminiSafetySettings;
   /** Anthropic-compat auth scheme; ignored by every other protocol. */
   authMode?: AuthMode;
+  /**
+   * Which server this is beyond its protocol (`lib/ai/platforms.ts`): decides
+   * which private fields — server tools above all — the adapters may spell.
+   * `connOptions()` always fills it; absent in a hand-built bag means "infer
+   * from the address", the same answer `listProviders` gives (`wireOf`).
+   */
+  platform?: PlatformId;
   /** L3 — the model. */
   modelId: string;
   /** Optional model-scoped prefix prompt, prepended as a leading system message. */
@@ -112,6 +120,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     standard: provider.apiStandard,
     safetySettings: provider.safetySettings,
     authMode: provider.authMode,
+    platform: resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard),
     modelId: model.modelId,
     prefix: model.prefix,
     contextSize: model.contextSize,
@@ -146,6 +155,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     standard: o.standard,
     safetySettings: o.safetySettings,
     authMode: o.authMode,
+    platform: o.platform,
     modelId: o.modelId,
     prefix: o.prefix,
     contextSize: o.contextSize,

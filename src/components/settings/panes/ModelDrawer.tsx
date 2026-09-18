@@ -38,8 +38,9 @@ import {
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
-  normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
+  effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
+import { providerWire, serverToolStatus } from "../../../lib/ai/platforms";
 import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
@@ -354,16 +355,24 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     const n = Math.round(Number(form.thinkingBudget));
     return Number.isFinite(n) && n > 0 ? n : undefined;
   })();
-  // What survives onto this provider's wire: ids it has a spelling for — and,
-  // for the code interpreter, that this model id runs — in the canonical form
-  // (extraction only beside search). Absent when nothing does.
-  // A transcription row keeps none: its request is the file endpoint's, and a
-  // chat declaration left on it would be a capability that reaches nothing.
+  // Server tools are asked of the provider's *platform* and family, not its
+  // standard (lib/ai/platforms.ts): DeepSeek, a relay and DashScope all read
+  // `openai_compat`, and only one of them has `enable_search`.
+  const toolWire = provider ? providerWire(provider) : undefined;
   const offersServerTool = (id: ServerToolId) =>
-    !!provider && supportsServerToolFor(provider.apiStandard, id, form.modelId.trim());
-  const grantedServerTools = provider && form.type !== "asr"
-    ? normalizeServerTools(serverTools.filter(offersServerTool))
-    : undefined;
+    !!toolWire && supportsServerToolFor(toolWire, id, form.modelId.trim());
+  // What is *stored*: the author's grant, whole — kept even where this wire
+  // can't say an id (the switch stays on and says 不发送), because the grant is
+  // the author's and a provider can move platform under it (plan §7 invariant
+  // 4). A transcription row keeps none: its request is the file endpoint's.
+  const declaredServerTools = form.type !== "asr" ? normalizeServerTools(serverTools) : undefined;
+  // What is *sent*: the grant cut to this wire, in canonical form (extraction
+  // only beside search). The summary line and 将发送 read this one.
+  const grantedServerTools = toolWire ? effectiveServerTools(toolWire, declaredServerTools, form.modelId.trim()) : undefined;
+  // Shown: every id the wire offers, plus any the author switched on that it
+  // doesn't — so a grant that isn't sent is visible and can be turned off.
+  const shownServerTools = SERVER_TOOL_IDS.filter((id) => offersServerTool(id) || serverTools.includes(id));
+  const platformName = toolWire ? t(`aiConfig.platforms.${toolWire.platform}`) : "";
   const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
@@ -457,10 +466,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         thinkingDialect: undefined,
         // Only meaningful for a budget-shape category; parsed, positive, else absent.
         thinkingBudget,
-        // Cleared for a protocol whose adapter would drop them, so switching a
-        // model to another provider can't leave a permission that silently
-        // does nothing behind. Empty stores as absent — one shape for "none".
-        serverTools: grantedServerTools,
+        // The grant, whole — not cut to the wire (see declaredServerTools):
+        // what this wire can't say is shown as 不发送 rather than dropped, and
+        // the adapters cut it per request. Empty stores as absent.
+        serverTools: declaredServerTools,
         // Same clearing rule: the declaration only survives where the wire has
         // a spelling for it (the Chat Completions `file` part, or Responses'
         // `input_file`), and only on a model type that converses. False stores
@@ -652,7 +661,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard, provider.baseUrl)
+      }, provider.apiStandard, provider.baseUrl, provider.platform)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────
@@ -1084,9 +1093,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             summary={capsNames.length ? capsNames.join(" · ") : t("aiConfig.models.secCapsUnset")}
             unset={capsNames.length === 0}
           >
-            {/* Tools the endpoint runs itself. Anthropic-shaped endpoints and
-                the two OpenAI-compat wires (Qwen's enable_search / Responses
-                built-ins — see supportsServerTools), and off by default: it is
+            {/* Tools the endpoint runs itself — which ones is the provider's
+                platform's call, per family (lib/ai/platforms.ts; DashScope's
+                enable_search / Responses built-ins, the protocol-native
+                web_search elsewhere), and off by default: it is
                 a standing permission for the model to reach the open web on
                 every request, which is the author's call to make rather than
                 something a model quietly gains. Extraction is shown only where
@@ -1096,15 +1106,27 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 goes in · what comes out · what narrows the model to one use.
                 The standing-grant sentence is the tools group's head, said
                 once instead of under every switch. */}
-            <Fold open={!!provider && supportsServerTools(provider.apiStandard)}>
+            <Fold open={(!!toolWire && supportsServerTools(toolWire)) || shownServerTools.length > 0}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
-              {/* The code interpreter appears only for a model id that runs it
-                  on this wire (supportsCodeInterpreter) — type the id first. */}
-              {SERVER_TOOL_IDS.filter(offersServerTool).map((id) => (
+              {/* Offered ids, plus any switched on that this wire can't send
+                  (shownServerTools). The code interpreter is offered only for
+                  a model id that runs it on this wire
+                  (dashscopeRunsCodeInterpreter in lib/ai/platforms) — type the
+                  id first. */}
+              {shownServerTools.map((id) => (
                 <ToggleField
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
-                  hint=""
+                  hint={!offersServerTool(id)
+                    // Two reasons, said apart: the platform has no spelling,
+                    // or it has one this model id doesn't run (the code
+                    // interpreter's per-model gate).
+                    ? t(toolWire && serverToolStatus(toolWire, id) !== "no"
+                      ? "aiConfig.models.serverToolNotForModel"
+                      : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
+                    : toolWire && serverToolStatus(toolWire, id) === "unknown"
+                      ? t("aiConfig.models.serverToolUnmeasured", { platform: platformName })
+                      : ""}
                   on={serverTools.includes(id)}
                   onChange={(next) =>
                     setServerTools((cur) => {

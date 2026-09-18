@@ -94,11 +94,15 @@
  *     model answers 400 on some and *silently ignores* it on others
  *     (qwen-max, qwen3-max-preview on Chat Completions), and the vendor's list
  *     follows model families that an id pattern can name — see
- *     `supportsCodeInterpreter`. The official OpenAI endpoint's
+ *     `dashscopeRunsCodeInterpreter` in `platforms.ts`. The official OpenAI endpoint's
  *     `code_interpreter` wants a `container` and is not this tool.
  */
 
-import { familyOf, type ApiStandard } from "./types";
+import { familyOf } from "./types";
+import { providerWire, serverToolStatus, wireHasServerTools, type ServerToolWire } from "./platforms";
+import type { Model, Provider } from "./configDb";
+
+export type { ServerToolWire } from "./platforms";
 
 /** This app's own name for a server-side tool. Never a wire type — see below. */
 export type ServerToolId = "web_search" | "web_extractor" | "web_search_image" | "image_search" | "code_interpreter";
@@ -168,106 +172,74 @@ function safeParse(s: string): unknown {
 }
 
 /**
- * Whether this endpoint can be told about server tools at all.
+ * Whether this wire can be told about any server tool at all — the settings
+ * drawer's section gate.
  *
- * Anthropic-shaped endpoints, deliberately not narrowed to the compat half:
- * the declaration is the author's, and an official endpoint that grows its own
- * server tools would take the same field. Offering the setting where the
- * adapter would drop it is the failure this guards against — the same rule
- * `supportsThinkingLevel` follows.
- *
- * The OpenAI family gets the **opposite** narrowing, and the same reasoning
- * produces it: there the spelling is `enable_search: true`, a DashScope
- * extension that api.openai.com does not know — and OpenAI's official endpoint
- * rejects unknown top-level arguments outright, so on `openai` (official) the
- * adapter must never send it and this setting must never appear. Compat is
- * exactly the half where the author typed the address and knows whether they
- * bought a DashScope-shaped endpoint.
+ * Asked of the **platform and family**, never of the standard alone
+ * (`lib/ai/platforms.ts`). The standard used to be the whole answer, and
+ * `openai_compat` quietly meant "DashScope": every DeepSeek, New API,
+ * OrcaRouter or Ollama row could declare 联网搜索 and sent DashScope's private
+ * `enable_search` to a server that had never heard of it
+ * (docs/feature/channel-model-route-plan.md §1). Offering the setting where
+ * the adapter would drop it is the failure this guards against — the same
+ * rule `supportsThinkingLevel` follows.
  */
-export function supportsServerTools(standard: ApiStandard): boolean {
-  return familyOf(standard) === "anthropic"
-    || standard === "openai_compat"
-    // The Responses family takes both halves. `{type:"web_search"}` is
-    // DashScope's built-in on compat and OpenAI's own on the official
-    // endpoint — the same item type back (`web_search_call`), measured on
-    // GPT-5.6 through a relay 2026-09-14 (docs/api/responses.md §10). Which
-    // *other* ids reach the official wire is `supportsServerTool`'s call.
-    || familyOf(standard) === "responses";
+export function supportsServerTools(wire: ServerToolWire): boolean {
+  return wireHasServerTools(wire);
 }
 
-/**
- * Whether one particular id has a spelling on this wire. `web_search` goes
- * wherever server tools do; `web_extractor` only on the two OpenAI-compat
- * wires, the ones measured against DashScope; the two image searches only on
- * Responses compat, the one wire DashScope serves them on.
- */
-export function supportsServerTool(standard: ApiStandard, id: ServerToolId): boolean {
-  if (!supportsServerTools(standard)) return false;
-  switch (id) {
-    case "web_search":
-      return true;
-    case "web_extractor":
-      return standard === "openai_compat" || standard === "openai_responses_compat";
-    case "web_search_image":
-    case "image_search":
-      return standard === "openai_responses_compat";
-    case "code_interpreter":
-      return standard === "openai_compat" || standard === "openai_responses_compat";
-  }
+/** Whether one id has a spelling on this wire, whatever the model. */
+function supportsServerTool(wire: ServerToolWire, id: ServerToolId): boolean {
+  return serverToolStatus(wire, id) !== "no";
 }
 
 /**
  * {@link supportsServerTool} narrowed to one model: the question the settings
- * drawer and the adapters actually ask. Only `code_interpreter` depends on the
- * model; every other id answers as the wire does.
+ * drawer and the adapters actually ask. Only a gated id (the code interpreter)
+ * depends on the model; every other id answers as the wire does.
  */
-export function supportsServerToolFor(standard: ApiStandard, id: ServerToolId, modelId: string): boolean {
-  if (!supportsServerTool(standard, id)) return false;
-  return id !== "code_interpreter" || supportsCodeInterpreter(standard, modelId);
+export function supportsServerToolFor(wire: ServerToolWire, id: ServerToolId, modelId: string): boolean {
+  return serverToolStatus(wire, id, modelId) !== "no";
 }
 
-/** A released id's tail: nothing, a date stamp, a four-digit snapshot, or `-preview`. */
-const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
+/**
+ * The part of a declaration this wire can actually say, in canonical form —
+ * absent when nothing is left.
+ *
+ * The declaration is the author's grant and stays on the model row untouched;
+ * this is what reaches the request. A declaration can outlive its wire (the
+ * row's provider moved platform, or was re-imported), and the difference is
+ * *not sent*, never *sent anyway* (plan §7 invariant 4).
+ */
+export function effectiveServerTools(
+  wire: ServerToolWire,
+  ids: readonly ServerToolId[] | undefined,
+  modelId: string,
+): ServerToolId[] | undefined {
+  return normalizeServerTools((ids ?? []).filter((id) => supportsServerToolFor(wire, id, modelId)));
+}
 
 /**
- * Which model ids run the code interpreter, per wire — the vendor's list
- * (developer-guides/tool-calling/code-interpreter) as id patterns, corrected
- * by a sweep over the live model list on 2026-09-17 (landscape.md §7).
+ * The server tools this model's requests actually carry: its declaration, cut
+ * to what its provider's platform can spell ({@link effectiveServerTools}).
  *
- *   - **Both wires**: `qwen3-max` and its dated snapshots (not
- *     `qwen3-max-preview` — refused on Responses, silently ignored on Chat
- *     Completions); the 3.5 / 3.6 / 3.7 generation's plus / max / flash; the
- *     3.5 open-weight models (`qwen3.5-397b-a17b`, `qwen3.5-27b`).
- *   - **Responses only**: the 3.8 generation (Chat Completions answers
- *     `does not support the code_interpreter tool` for qwen3.8-flash / -max /
- *     -27b), the 3.6 open-weight models except `qwen3.6-27b` (`Unsupported
- *     model`), and DeepSeek V4 as DashScope serves it.
+ * The row alone is not the answer. A declaration is the author's grant and is
+ * kept when the wire can't say it (plan §7 invariant 4) — a provider moved to
+ * another platform or standard, a row imported — and the adapters then drop
+ * the id on every request. Anything that *promises* a capability (a search
+ * subagent, page reading, a mark on the model list) must ask this instead of
+ * the row.
  *
- * Deliberately anchored: `qwen3.5-omni-plus`, `qwen3-vl-plus`,
- * `qwen3.8-livetranslate-flash-realtime` share a prefix and none of them
- * takes the tool. A generation after 3.8 is not guessed at — a new family
- * earns its line here the way these did, by a measurement.
+ * Without a provider list the declaration is returned as-is; with one, a
+ * missing provider answers `undefined` — don't promise what can't be checked.
  */
-const CODE_INTERPRETER_MODELS: Record<"openai_compat" | "openai_responses_compat", readonly RegExp[]> = {
-  openai_compat: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-7]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.5-\d+b(?:-a\d+b)?$/,
-  ],
-  openai_responses_compat: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-8]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.(?:5|8)-[\d.]+[bt](?:-a\d+b)?$/,
-    /^qwen3\.6-(?!27b$)\d+b(?:-a\d+b)?$/,
-    /^deepseek-v4(?:\.\d+)?-(?:pro|flash)(?:-\d{4})?$/,
-  ],
-};
-
-/** Whether `modelId` runs the code interpreter on this wire (see the table above). */
-export function supportsCodeInterpreter(standard: ApiStandard, modelId: string): boolean {
-  if (standard !== "openai_compat" && standard !== "openai_responses_compat") return false;
-  const id = modelId.trim().toLowerCase();
-  return CODE_INTERPRETER_MODELS[standard].some((re) => re.test(id));
+export function serverToolsSent(
+  model: Pick<Model, "providerId" | "modelId" | "serverTools">,
+  providers?: readonly Provider[],
+): ServerToolId[] | undefined {
+  if (!providers) return model.serverTools;
+  const provider = providers.find((p) => p.id === model.providerId);
+  return provider ? effectiveServerTools(providerWire(provider), model.serverTools, model.modelId) : undefined;
 }
 
 /**
@@ -296,9 +268,11 @@ const MAX_SEARCHES_PER_REQUEST = 10;
 
 /** The `tools[]` entries these ids become on the Anthropic wire. */
 export function anthropicServerTools(
+  wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
 ): { type: string; name: string; max_uses?: number }[] {
-  return (ids ?? []).flatMap((id) => {
+  if (familyOf(wire.standard) !== "anthropic") return [];
+  return (ids ?? []).filter((id) => supportsServerTool(wire, id)).flatMap((id) => {
     const type = ANTHROPIC_WIRE_TYPE[id];
     if (!type) return [];
     return [{
@@ -310,27 +284,31 @@ export function anthropicServerTools(
 }
 
 /**
- * The body fields these ids become on the OpenAI-compatible wire — Qwen on
- * DashScope compatible-mode spells the permission `enable_search: true` at the
- * top level of the request.
+ * The body fields these ids become on the Chat Completions wire — DashScope's
+ * compatible-mode spells the permission `enable_search: true` at the top level
+ * of the request. No other platform has a Chat Completions spelling, so on
+ * every other platform this is `{}`.
  *
- * Gated on the standard here rather than trusting the caller, mirroring the
- * asymmetry in `supportsServerTools`: the config layer refuses to *store* the
- * permission on an official-OpenAI model, but a config row travels (import,
- * hand edits), and this field on api.openai.com is a guaranteed 400. Nothing
- * like Anthropic's `max_uses` exists to send: DashScope documents no per-request
- * search cap on this wire, and search bills per call at a rate three orders of
- * magnitude below Anthropic's, so the missing brake is not the same hazard.
+ * Gated on the wire here rather than trusting the caller: the drawer stops
+ * offering a switch the wire can't say, but a config row travels (import, hand
+ * edits, a provider moved to another platform), and these fields on
+ * api.openai.com are a guaranteed 400 — on a relay, a silent no-op the author
+ * reads as "the model searched". Nothing like Anthropic's `max_uses` exists to
+ * send: DashScope documents no per-request search cap on this wire, and search
+ * bills per call at a rate three orders of magnitude below Anthropic's, so the
+ * missing brake is not the same hazard.
  */
 export function openaiServerToolsBody(
-  standard: ApiStandard,
+  wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { functionTools: boolean },
 ): Record<string, unknown> {
-  if (standard !== "openai_compat" || !ids?.length) return {};
+  if (familyOf(wire.standard) !== "openai") return {};
+  const granted = effectiveServerTools(wire, ids, modelId);
+  if (!granted) return {};
   const out: Record<string, unknown> = {};
-  if (ids.includes("web_search")) {
+  if (granted.includes("web_search")) {
     // Extraction has no field of its own on this wire: it is the `agent_max`
     // search strategy. Measured 2026-09-14 on a page-summary prompt — plain
     // `enable_search` on qwen3-max answered from memory (29 input tokens, no
@@ -345,7 +323,7 @@ export function openaiServerToolsBody(
     // page reading for that request only. The search subagent, the one caller
     // whose job is reading pages, sends no function tools, so it keeps it.
     out.enable_search = true;
-    if (ids.includes("web_extractor") && !request.functionTools) {
+    if (granted.includes("web_extractor") && !request.functionTools) {
       out.search_options = { search_strategy: "agent_max" };
     }
   }
@@ -355,7 +333,7 @@ export function openaiServerToolsBody(
   // Completions the interpreter reaches tool-less requests only — the drawer's
   // hint says so, and points agent runs at the Responses wire, which takes
   // both. Streaming is the wire's other condition; this adapter always streams.
-  if (ids.includes("code_interpreter") && !request.functionTools && supportsCodeInterpreter(standard, modelId)) {
+  if (granted.includes("code_interpreter") && !request.functionTools) {
     out.enable_code_interpreter = true;
   }
   return out;
@@ -365,22 +343,21 @@ export function openaiServerToolsBody(
  * The built-in `tools[]` entries these ids become on the Responses wire —
  * bare `{type}` objects, on DashScope's `/responses` and on OpenAI's own.
  *
- * Filtered per id through `supportsServerTool` rather than trusting the row:
- * a row that travelled onto the official endpoint (import, a switched
- * standard) must carry only `web_search` there — `web_extractor` and the image
- * searches are DashScope's names, unknown to api.openai.com. Re-normalised
- * too, because DashScope answers a lone extractor with `response.failed`
- * rather than ignoring it.
+ * Filtered per id through the platform rather than trusting the row: a row on
+ * the official endpoint or on xAI must carry only `web_search` there —
+ * `web_extractor` and the image searches are DashScope's names, and xAI
+ * refuses them (landscape.md §7 第十一个样本). Re-normalised too, because
+ * DashScope answers a lone extractor with `response.failed` rather than
+ * ignoring it.
  */
 export function responsesServerTools(
-  standard: ApiStandard,
+  wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { thinkingOff: boolean },
 ): { type: ServerToolId }[] {
-  if (familyOf(standard) !== "responses") return [];
-  return (normalizeServerTools(ids ?? []) ?? [])
-    .filter((id) => supportsServerToolFor(standard, id, modelId))
+  if (familyOf(wire.standard) !== "responses") return [];
+  return (effectiveServerTools(wire, ids, modelId) ?? [])
     // The interpreter needs the model thinking on this wire: with
     // `reasoning.effort: "none"` DashScope fails the whole response
     // (`Normal mode does not support Code interpreter`, measured 2026-09-17).

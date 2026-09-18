@@ -1303,6 +1303,7 @@ export function AiPanel() {
         loreBudgetTokens,
         subAgents,
         models,
+        providers,
         systemPromptChars: systemPrompt.length,
         instructionChars: instructionText.length,
         docxRosterChars,
@@ -1318,7 +1319,7 @@ export function AiPanel() {
       }),
     [
       runTaskDef, activeModel?.contextSize, activeModel?.maxOutput, contextUtilization,
-      loreBudgetTokens, subAgents, models, systemPrompt.length, instructionText.length,
+      loreBudgetTokens, subAgents, models, providers, systemPrompt.length, instructionText.length,
       docxRosterChars, isZh,
       selection.length, outline.length, additionalKnowledge.length, content, anchorOffset,
       contextChars, continueLength, memoryChars,

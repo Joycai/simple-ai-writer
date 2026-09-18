@@ -35,7 +35,13 @@ const MODEL = {
   serverTools: ["web_search"],
 } as const;
 
-function makeCtx(overrides: Partial<ToolContext> = {}, model: object = MODEL, apiStandard = "openai"): ToolContext {
+// DashScope's host: the platform decides which server tools are sent
+// (lib/ai/platforms.ts), and DashScope is the one that spells page reading.
+const DASHSCOPE = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
+function makeCtx(
+  overrides: Partial<ToolContext> = {}, model: object = MODEL, apiStandard = "openai_compat", baseUrl = DASHSCOPE,
+): ToolContext {
   const handle = createTaskWorkspace("/p", "mdl-main");
   return {
     projectPath: "/p", loreIndex: {}, multimodal: false,
@@ -43,7 +49,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}, model: object = MODEL, ap
     signal: new AbortController().signal,
     onNestedEvent: () => {},
     resolveSubAgent: async () => ({
-      provider: { id: "pv", name: "Prov", baseUrl: "", apiStandard },
+      provider: { id: "pv", name: "Prov", baseUrl, apiStandard },
       model, apiKey: "k",
     }),
     ...overrides,
@@ -141,6 +147,17 @@ describe("delegate naming and preconditions", () => {
     const ctx = makeCtx({}, { ...MODEL, serverTools: undefined });
     const res = await executeDelegate(call({ kind: "search", task: "查" }), ctx);
     expect(res.content).toMatch(/^Error/);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("refuses a search subagent whose platform has no server-side search, even with the switch on", async () => {
+    // DeepSeek's endpoint reads `openai_compat` like DashScope's, but has no
+    // enable_search: before platforms existed this sent DashScope's field and
+    // the "search" answered from memory (docs/feature/channel-model-route-plan.md §1).
+    const ctx = makeCtx({}, MODEL, "openai_compat", "https://api.deepseek.com");
+    const res = await executeDelegate(call({ kind: "search", task: "查" }), ctx);
+    expect(res.content).toMatch(/^Error/);
+    expect(res.content).toContain("no server-side search");
     expect(sent).toHaveLength(0);
   });
 });

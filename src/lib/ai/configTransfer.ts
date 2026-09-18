@@ -40,6 +40,7 @@ import {
 } from "./configDb";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
+import { parsePlatform, resolvePlatform } from "./platforms";
 import { parseStructuredOutputMode } from "./jsonMode";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
@@ -228,6 +229,10 @@ export function parseConfigBundle(
       // Absent stays absent — "never moved" must survive a backup round-trip
       // rather than becoming position 0.
       sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : undefined,
+      // A backup from before platforms existed has none: inferred from the
+      // address, the same answer reading an old DB row gives. An id this
+      // build doesn't know reads as `custom` (parsePlatform).
+      platform: resolvePlatform(parsePlatform(r.platform), r.baseUrl, migrated),
       createdAt: num(r.createdAt, Date.now()),
       ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}),
     });

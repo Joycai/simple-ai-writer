@@ -250,7 +250,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // and the schemas are English JSON on a different ratio entirely — see
     // ContextBudgetInput.toolSchemaTokens.
     const toolSchemaTokens = plannedToolTokens(
-      preset, useAiStore.getState().subAgents, models,
+      preset, useAiStore.getState().subAgents, models, { providers },
     );
 
     // System prompt: user-selected prompt (scene === "system"), else default

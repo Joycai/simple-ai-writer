@@ -136,7 +136,7 @@ export function reportMatchesOpenDocument(report: ConsistencyReport | null): boo
 
 /** The forecast the settings block draws — a pure derivation of store + app state. */
 export function forecastReview(docText: string, scope: ReviewScope): ReviewPlan {
-  const { models, activeModelId, subAgents } = useAiStore.getState();
+  const { models, providers, activeModelId, subAgents } = useAiStore.getState();
   const model = models.find((m) => m.id === activeModelId);
   const subs = withSessionOverrides(subAgents, activeChat(useAgentStore.getState()).disabledSubAgents);
   const index = useLoreStore.getState().index;
@@ -154,7 +154,7 @@ export function forecastReview(docText: string, scope: ReviewScope): ReviewPlan 
   return planReview({
     contextSize: model?.contextSize,
     utilization: useAppStore.getState().contextUtilization,
-    toolTokens: plannedToolTokens(CONSISTENCY_PRESET, subs, models),
+    toolTokens: plannedToolTokens(CONSISTENCY_PRESET, subs, models, { providers }),
     fixedChars: 1_600,
     charsPerToken: measureCharsPerToken(docText),
     docChars: docText.length,

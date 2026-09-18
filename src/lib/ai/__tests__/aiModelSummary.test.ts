@@ -60,7 +60,7 @@ describe("wireSummary", () => {
       thinkingBudget: 8000,
       temperature: 0,
       serverTools: ["web_search"],
-    }, "openai_compat");
+    }, "openai_compat", undefined, "dashscope");
     expect(items).toEqual(expect.arrayContaining([
       { key: "enable_thinking", value: "true" },
       { key: "thinking_budget", value: "8000" },
@@ -73,19 +73,19 @@ describe("wireSummary", () => {
 
   it("spells web page reading per wire — agent_max on Chat, tools on Responses compat", () => {
     const m = { ...base, serverTools: ["web_search", "web_extractor"] as const };
-    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_compat")).toEqual(expect.arrayContaining([
+    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "enable_search", value: "true" },
       { key: "search_options.search_strategy", value: "agent_max" },
     ]));
-    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_responses_compat")).toEqual(expect.arrayContaining([
+    expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "openai_responses_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "tools", value: "web_search,web_extractor" },
     ]));
     // Image searches are Responses-only: listed there, absent from Chat's fields.
     const all = { ...base, serverTools: ["web_search", "web_extractor", "web_search_image", "image_search"] as WireInput["serverTools"] };
-    expect(wireSummary(all, "openai_responses_compat")).toEqual(expect.arrayContaining([
+    expect(wireSummary(all, "openai_responses_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "tools", value: "web_search,web_extractor,web_search_image,image_search" },
     ]));
-    expect(JSON.stringify(wireSummary(all, "openai_compat"))).not.toMatch(/image/);
+    expect(JSON.stringify(wireSummary(all, "openai_compat", undefined, "dashscope"))).not.toMatch(/image/);
     // The Anthropic wire has no spelling for extraction here — only search shows.
     expect(wireSummary({ ...m, serverTools: [...m.serverTools] }, "anthropic_compat")).toEqual(expect.arrayContaining([
       { key: "tools", value: "web_search" },
@@ -94,18 +94,21 @@ describe("wireSummary", () => {
 
   it("spells the code interpreter per wire, only for a model id that runs it", () => {
     const ci: WireInput = { ...base, modelId: "qwen3.5-plus", serverTools: ["code_interpreter"] };
-    expect(wireSummary(ci, "openai_compat")).toEqual(expect.arrayContaining([
+    expect(wireSummary(ci, "openai_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "enable_code_interpreter", value: "true" },
     ]));
-    expect(wireSummary(ci, "openai_responses_compat")).toEqual(expect.arrayContaining([
+    expect(wireSummary(ci, "openai_responses_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "tools", value: "code_interpreter" },
     ]));
     // qwen3.8 runs it on Responses only.
     const q38: WireInput = { ...ci, modelId: "qwen3.8-flash" };
-    expect(JSON.stringify(wireSummary(q38, "openai_compat"))).not.toMatch(/code_interpreter/);
-    expect(wireSummary(q38, "openai_responses_compat")).toEqual(expect.arrayContaining([
+    expect(JSON.stringify(wireSummary(q38, "openai_compat", undefined, "dashscope"))).not.toMatch(/code_interpreter/);
+    expect(wireSummary(q38, "openai_responses_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([
       { key: "tools", value: "code_interpreter" },
     ]));
+    // The same declaration on DeepSeek's endpoint: nothing to send, and the
+    // summary must not claim otherwise.
+    expect(JSON.stringify(wireSummary(ci, "openai_compat", "https://api.deepseek.com"))).not.toMatch(/code_interpreter|enable_/);
   });
 
   it("shows text.verbosity on the Responses family only", () => {

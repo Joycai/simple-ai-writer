@@ -27,7 +27,7 @@
  * 就是这个模块存在的理由——见 `docs/feature/agent/context-meters.md`。
  */
 
-import type { Model } from "../ai/configDb";
+import type { Model, Provider } from "../ai/configDb";
 import { presetForTools, toolBriefingFor } from "../agent/presets";
 import { plannedToolTokens } from "../agent/toolCost";
 import type { SubAgentConfig, SubAgentKind } from "../agent/subagent";
@@ -97,6 +97,8 @@ export interface ForecastInput {
   /** 算工具 schema 用——路由要知道哪些子代理在场。 */
   subAgents: Record<SubAgentKind, SubAgentConfig>;
   models: Model[];
+  /** Whether the search subagent is live depends on its model's platform — the run passes these too. */
+  providers?: readonly Provider[];
   systemPromptChars: number;
   instructionChars: number;
   /**
@@ -134,7 +136,7 @@ export interface ForecastInput {
 export function planForecast(input: ForecastInput): ContextForecast | null {
   const {
     runTask, contextSize, maxOutputTokens, utilization, loreBudgetTokens, subAgents,
-    models, systemPromptChars, instructionChars, documentText, anchorOffset, memoryChars,
+    models, providers, systemPromptChars, instructionChars, documentText, anchorOffset, memoryChars,
   } = input;
   if (contextSize <= 0) return null;
 
@@ -143,7 +145,7 @@ export function planForecast(input: ForecastInput): ContextForecast | null {
   const isContinue = !!runTask.continuation;
   const supportsExtras = !!runTask.referenceWindow;
   const preset = presetForTools(runTask.tools);
-  const toolSchemaTokens = plannedToolTokens(preset, subAgents, models);
+  const toolSchemaTokens = plannedToolTokens(preset, subAgents, models, { providers });
 
   // 工具说明也在系统层里（`aiTaskStore` 把它接在 basePrompt 后面），read 层的那
   // 份将近 400 tokens——续写是用得最多的任务，漏掉它就等于每次都少算一点。
