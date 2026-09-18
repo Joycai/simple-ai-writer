@@ -73,6 +73,7 @@ const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
   "localeParity.test.ts": "扫 i18n 两个语言包——键集必须一致",
   "localeTerms.test.ts": "扫 src/ 全部作者可见文案——退役词不许复活",
   "sourceNulBytes.test.ts": "扫全部源码——不许有裸 NUL 字节",
+  "storeSelectorFreshObjects.test.ts": "扫 src/ 全部 store selector——不许返回 providerFor 之类现造的对象（React #185）",
   "testPlacement.test.ts": "扫 src/lib/ 的测试位置——就是本文件",
 };
 
