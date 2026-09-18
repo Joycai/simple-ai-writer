@@ -71,3 +71,20 @@ describe("selection persistence", () => {
     expect(store.has("ai:imageModelId")).toBe(false);
   });
 });
+
+describe("automatic chat-model pick", () => {
+  const row = (id: string, type: string) => ({
+    providerId: "p", modelId: id, name: id, type, priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true,
+  }) as never;
+
+  it("never makes an image or video model the chat model on first add", async () => {
+    // 火山方舟 pay-as-you-go's starter list is Seedream only.
+    await useAiStore.getState().addModel(row("doubao-seedream-5-0-lite-260128", "image"));
+    await useAiStore.getState().addModel(row("some-video", "video"));
+    expect(useAiStore.getState().activeModelId).toBeNull();
+    await useAiStore.getState().addModel(row("doubao-seed-2.0-lite", "multimodal"));
+    const active = useAiStore.getState().models.find((m) => m.id === useAiStore.getState().activeModelId);
+    expect(active?.modelId).toBe("doubao-seed-2.0-lite");
+  });
+});
+

@@ -4,7 +4,7 @@ import {
   listProviders, saveProvider, deleteProvider, providerOrderUpdate,
   listModels, saveModel, deleteModel,
   listPrompts, savePrompt, deletePrompt,
-  ensureAiSchema,
+  ensureAiSchema, canAutoSelectAsChat,
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
 import { normalizeChannel, routeProvider } from "../lib/ai/routes";
@@ -224,7 +224,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         }
       }
       set({
-        activeModelId: liveModel(s.activeModelId) ?? models[0]?.id ?? null,
+        activeModelId: liveModel(s.activeModelId) ?? models.find(canAutoSelectAsChat)?.id ?? null,
         memoryModelId: liveModel(s.memoryModelId),
         imageModelId: liveModel(s.imageModelId),
         subAgents: liveSubAgents,
@@ -367,7 +367,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       await saveModel(d, model);
     }
     set((s) => ({ models: [...s.models, model] }));
-    if (!get().activeModelId) set({ activeModelId: model.id });
+    if (!get().activeModelId && canAutoSelectAsChat(model)) set({ activeModelId: model.id });
   },
 
   updateModel: async (m) => {
