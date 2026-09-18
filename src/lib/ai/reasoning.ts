@@ -122,10 +122,10 @@ type ThinkingShape = "levels" | "onoff" | "budget" | "none";
  */
 export type ThinkingCategoryId =
   | "off"
-  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm"
+  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "doubao"
   | "responses-effort"
   | "gemini3"
-  | "claude-adaptive" | "claude-budget" | "minimax";
+  | "claude-adaptive" | "claude-budget" | "minimax" | "doubao-switch";
 
 export interface ThinkingBudgetSpec {
   min: number;
@@ -219,6 +219,18 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     menu: ["low", "high", "max"], defaultEffort: "max",
     extra: { thinking: { clear_thinking: false } },
   },
+  doubao: {
+    id: "doubao",
+    labelKey: "aiConfig.models.thinkingCatDoubao",
+    hintKey: "aiConfig.models.thinkingCatDoubaoHint",
+    family: "openai", dialect: "none", shape: "levels",
+    // 火山方舟's Doubao Seed: the same two fields as DeepSeek — the disable
+    // switch for off, `reasoning_effort` for depth — but `medium` is a real
+    // level here (it thought 1541 tokens where `max` thought 136 on the same
+    // prompt), and the endpoint refuses `high` + `disabled` together, so off
+    // must carry the switch alone (landscape.md §7 第十二个样本).
+    menu: ["off", "low", "medium", "high"],
+  },
   "responses-effort": {
     id: "responses-effort",
     labelKey: "aiConfig.models.thinkingCatResponsesEffort",
@@ -258,6 +270,18 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     id: "minimax",
     labelKey: "aiConfig.models.thinkingCatMinimax",
     hintKey: "aiConfig.models.thinkingCatMinimaxHint",
+    family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
+  },
+  // Doubao Seed on 火山方舟's Anthropic-shaped route. It thinks unless told
+  // not to, and the Claude categories cannot say "not": `claude-budget` sends
+  // `enabled` whatever the level, `off` sends nothing (= thinking). The same
+  // adaptive/disabled switch as MiniMax — but a forced `tool_choice` works
+  // here with thinking on, so it is its own category rather than MiniMax's,
+  // which downgrades forcing (landscape.md §7 第十二个样本).
+  "doubao-switch": {
+    id: "doubao-switch",
+    labelKey: "aiConfig.models.thinkingCatDoubaoSwitch",
+    hintKey: "aiConfig.models.thinkingCatDoubaoSwitchHint",
     family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
   },
 };
@@ -395,7 +419,7 @@ export function forcesToolChoiceAuto(
   const thinkingOn = effort !== undefined && effort !== "default" && effort !== "off";
   switch (category.family) {
     case "anthropic":
-      return category.dialect === "switch"; // MiniMax: forcing is always illegal
+      return category.id === "minimax"; // MiniMax: forcing is always illegal
     case "openai":
       return (category.id === "qwen-budget" || category.id === "qwen-effort") && thinkingOn;
     default:
@@ -486,7 +510,8 @@ export function reasoningBody(
             ? { enable_thinking: true, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
             : { enable_thinking: false };
         case "deepseek":
-          // DeepSeek turns thinking off with the disable switch, not
+        case "doubao":
+          // DeepSeek (and Doubao on 火山方舟) turns thinking off with the disable switch, not
           // `reasoning_effort:"none"` — that field only tunes depth while on.
           // The switch is a **top-level** `thinking` object on the wire. The
           // vendor docs show it inside `extra_body`, but that is the Python

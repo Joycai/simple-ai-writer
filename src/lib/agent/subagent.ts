@@ -230,7 +230,7 @@ export function subAgentModel(
   if (!model) return null;
   if (kind === "vision" && !canSeeImages(model)) return null;
   if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) return null;
-  if (kind === "pdf" && !readsPdf(model, providers ? providerFor(model, providers)?.apiStandard : undefined)) return null;
+  if (kind === "pdf" && !readsPdf(model, providers ? providerFor(model, providers) : undefined)) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
   // The mirror of the image check: that one refuses a model that cannot draw,
   // this one refuses a model that has not been *declared* a translation model —
@@ -444,7 +444,7 @@ export async function executeDelegate(
         `Tell the author to bind a multimodal model to it in Settings → Subagents.`,
     );
   }
-  if (kind === "pdf" && !readsPdf(conn.model, conn.provider.apiStandard)) {
+  if (kind === "pdf" && !readsPdf(conn.model, conn.provider)) {
     return fail(
       `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
         `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,

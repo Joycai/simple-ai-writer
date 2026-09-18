@@ -208,6 +208,24 @@ describe("compat endpoints without /models", () => {
     ).resolves.toMatchObject({ ok: false });
   });
 
+  // 火山方舟 Plan's Anthropic route: /v1/models says 401 to a key that
+  // /v1/messages accepts. The completion probe gets the last word.
+  it("asks the completion endpoint when /models refuses the key", async () => {
+    const calls = mockMissingModels(401, {
+      status: 404,
+      body: JSON.stringify({ error: { code: "UnsupportedModel", message: "The requested model does not support the agent plan feature." } }),
+    });
+    const result = await testProviderConnection("https://ark.cn-beijing.volces.com/api/plan", "k", "anthropic_compat");
+    expect(result.ok).toBe(true);
+    expect(calls[1].url).toBe("https://ark.cn-beijing.volces.com/api/plan/v1/messages");
+    // …and a key the completion endpoint refuses too is still a failure.
+    vi.unstubAllGlobals();
+    mockMissingModels(401, { status: 401, body: JSON.stringify({ error: { message: "invalid api key" } }) });
+    await expect(
+      testProviderConnection("https://ark.cn-beijing.volces.com/api/plan", "bad", "anthropic_compat"),
+    ).resolves.toMatchObject({ ok: false });
+  });
+
   // The case the whole heuristic exists to catch: a base URL pointing at
   // something that isn't the API. It 404s like a missing model list does, but
   // answers in HTML rather than the protocol's error shape.

@@ -169,6 +169,13 @@ export async function testProviderConnection(
       if (isCompatStandard(standard) && ENDPOINT_ABSENT.has(res.status)) {
         return probeCompletionEndpoint(baseUrl, apiKey, standard, authMode);
       }
+      // A compat `/models` refusing the key is not the last word either:
+      // 火山方舟 Plan's Anthropic route answers 401 there to a key its
+      // `/v1/messages` accepts (landscape.md §7 第十二个样本). The completion
+      // probe still fails a key that really is wrong — with a 401 of its own.
+      if (isCompatStandard(standard) && (res.status === 401 || res.status === 403)) {
+        return probeCompletionEndpoint(baseUrl, apiKey, standard, authMode);
+      }
       const error = await res.text();
       return { ok: false, error: `API error ${res.status} (${url}): ${error}` };
     }

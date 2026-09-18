@@ -53,7 +53,7 @@ import r from "./Routes.module.css";
  * that already knows the answer for its own catalogue should answer it.
  */
 type StarterModel = Pick<Model, "modelId" | "name"> &
-  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type" | "videoInput">>;
+  Partial<Pick<Model, "contextSize" | "maxOutput" | "thinkingCategory" | "type" | "videoInput" | "pdfInput" | "routes">>;
 
 /**
  * OrcaRouter's free tier (2026-09): rate-limited, billed at $0, and — verified
@@ -111,10 +111,34 @@ const DASHSCOPE_MODELS: StarterModel[] = [
   { modelId: "qwen-vl-ocr-latest", name: "Qwen-VL OCR", type: "vision" },
 ];
 
+/**
+ * 火山方舟 Agent / Coding Plan's Doubao Seed trio (套餐概览, 2026-09-17: 256k
+ * window; 128k cap, 256k for 2.1-turbo). All three are typed multimodal and
+ * declared PDF readers because the sample read a picture and a PDF on both of
+ * the plan's routes (docs/api/landscape.md §7 第十二个样本) — a capability the
+ * author would otherwise have to guess from a model id that says nothing of
+ * it. Their thinking is the `doubao` category on Chat and `doubao-switch`
+ * parked for the Anthropic route: the endpoint defaults to thinking, so
+ * without a declared off the author could not turn it down on either.
+ *
+ * The plan's other models (DeepSeek, GLM, Kimi, MiniMax) are not listed: the
+ * sample measured Doubao only, and a starter list is a recommendation.
+ */
+const doubao = (modelId: string, name: string, maxOutput: number): StarterModel => ({
+  modelId, name, contextSize: 262_144, maxOutput, thinkingCategory: "doubao", type: "multimodal", pdfInput: true,
+  routes: { anthropic: { maxOutput, thinkingCategory: "doubao-switch" } },
+});
+const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
+  doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite", 131_072),
+  doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini", 131_072),
+  doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo", 262_144),
+];
+
 /** Starter rows a new channel on a platform brings along (only on creation). */
 const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
   deepseek: DEEPSEEK_MODELS,
   dashscope: DASHSCOPE_MODELS,
+  "volcengine-plan": VOLCENGINE_PLAN_MODELS,
   orcarouter: ORCAROUTER_FREE_MODELS,
 };
 
@@ -240,7 +264,9 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     baseUrl: "",
     apiStandard: standardOf(form.endpoints[0]),
     platform: comfyMode ? "comfyui" : form.platform,
-    host: official ? "" : form.host.trim(),
+    // A pasted host often ends in "/"; every path starts with one, so keeping
+    // it would send `host//api/…`.
+    host: official ? "" : form.host.trim().replace(/\/+$/, ""),
     endpoints: form.endpoints,
     createdAt: existing?.createdAt ?? 0,
   });
@@ -349,6 +375,8 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             maxOutput: m.maxOutput,
             thinkingCategory: m.thinkingCategory,
             videoInput: m.videoInput,
+            pdfInput: m.pdfInput,
+            routes: m.routes,
           });
         }
         if (comfyMode && onComfyCreated) {
@@ -635,13 +663,25 @@ function PlatformGrid({ current, onPick }: { current: PlatformId | null; onPick:
   );
 }
 
+/**
+ * A caveat the author needs *before* typing a key (05k 屏 2a). Only where a
+ * wrong pick fails in a way the connection test can't explain: 火山方舟's two
+ * key kinds each 401 on the other's path, and both sit on one host.
+ */
+const PLATFORM_NOTES: Partial<Record<PlatformId, string>> = {
+  volcengine: "aiConfig.providers.platformNoteVolcengine",
+  "volcengine-plan": "aiConfig.providers.platformNoteVolcenginePlan",
+};
+
 /** What picking this platform will create (屏 02 right side): routes, their tools, starter rows. */
 function PlatformPreview({ platform, starters }: { platform: PlatformId; starters: StarterModel[] }) {
   const { t } = useTranslation();
   if (platform === "comfyui") return null;
   const routes = newChannelEndpoints(platform);
+  const note = PLATFORM_NOTES[platform];
   return (
     <div className={r.preview}>
+      {note && <div className={r.previewNote}>{t(note)}</div>}
       <div className={r.previewRow}>
         <span className={r.previewLabel}>{t("aiConfig.providers.previewRoutes")}</span>
         <span className={r.badges}>
