@@ -74,7 +74,7 @@ DashScope 私有的 `enable_search` / `search_options` / `enable_code_interprete
 
 | 字段 | 今天在 | 之后在 | 判据 / 证据 |
 | --- | --- | --- | --- |
-| `name` `baseUrl`→ | Provider | 渠道 `name` ＋ 线路 `baseUrl` | — |
+| `name` `baseUrl`→ | Provider | 渠道 `name` ＋ 渠道 `host` ＋ 线路 `path`（缺省 = 平台约定，§5.1.1） | 地址 = 主机 + 路径：主机随渠道填一次，路径每条线路各自可改 |
 | `apiStandard` | Provider | 线路 `family` ＋ `official`（由平台画像给出） | `ApiStandard` 继续作为**派生值**存在，adapter 一行不改（§4） |
 | `authMode` | Provider | 线路 | OrcaRouter ① 面 Bearer、④ 面也 Bearer，但千问 ④ 面两种都收——鉴权随线路 |
 | `safetySettings` | Provider | 线路（仅 ③ 族） | 本来就只有 Gemini 族有 |
@@ -145,13 +145,14 @@ interface ServerToolSpelling {
 ```sql
 -- providers 表保留名字与 id（= 渠道）。appReset 的「keyring 先于数据库」依赖它记录有哪些 keyring 账号。
 ALTER TABLE providers ADD COLUMN platform TEXT;            -- NULL = 未迁移，读时按 baseUrl 推断
+ALTER TABLE providers ADD COLUMN host TEXT;                -- scheme+主机(+端口)；官方平台可空，取画像的主机
 
 CREATE TABLE provider_endpoints (                          -- 线路
   id TEXT PRIMARY KEY,
   provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
   family TEXT NOT NULL,                                    -- openai | responses | gemini | anthropic
   official INTEGER NOT NULL DEFAULT 0,
-  base_url TEXT NOT NULL,
+  path TEXT,                                               -- NULL = 平台约定；'/…' 接在渠道主机后；'https://…' 整条替换（§5.1.1）
   auth_mode TEXT,
   safety_settings TEXT,
   sort_order INTEGER,
@@ -168,6 +169,24 @@ CREATE TABLE model_routes (                                -- 模型×线路
 );
 ```
 
+#### 5.1.1 线路路径：默认 + 可改
+
+每条线路的地址 = 渠道主机 + 线路路径。路径**有平台默认值，但每条都能单独改**（设计稿屏 03）：
+
+| `path` 存的值 | 含义 | 抽屉里的样子 |
+| --- | --- | --- |
+| `NULL` | 用平台画像的约定（New API：`/v1` · `/v1` · `/v1beta` · 根） | 空输入框 + 占位符显示默认值 + 「默认 /v1」虚线标签；「恢复默认」置灰 |
+| `/openai/v1` | 接在渠道主机后面 | 实线框 + 「已改 · 默认 /v1」 |
+| `https://claude.relay.example.com` | 整条替换，连主机一起换（有的中转把 ④ 放在单独子域名） | 主机位显示「独立主机」+「已改 · 独立主机」 |
+
+每行下面一行 mono 显示请求实际打到的地址（`POST https://…/chat/completions`），由各族 adapter 自己的 URL 函数（`lib/ai/urls.ts`）算出——和「将发送」同一个理由：第二份「adapter 会怎么拼」的表迟早会漂。
+
+两条规则：
+- **存覆盖值，不存结果。** `NULL` 与「填了一个恰好等于默认的值」是两回事：前者以后跟着画像的约定走（平台改了路径约定，所有没改过的渠道一起变），后者钉死。「恢复默认」写回 `NULL`，而不是把默认值抄进去。输入框失焦时若值与默认相同，也写 `NULL`。
+- **路径里只放路径。** 各族 adapter 自己补尾巴（`/chat/completions`、`/responses`、`/v1/messages`、`/models/{id}:…`），路径字段填到 adapter 补尾巴之前为止，与今天 `baseUrl` 的约定一致（`urls.ts` 的 `openaiUrl` / `anthropicRoot` / `geminiUrl` 各自的修剪规则照旧生效，作者多填一个 `/v1` 不会拼出 `/v1/v1`）。
+
+官方平台（OpenAI、Anthropic、Google 官方）今天锁定地址；这里同样锁定：画像标 `official: true` 的线路路径不可改——那正是「官方」与「兼容」在 provider-standards §2.2 里的区别。要改地址的作者选「自定义」平台。
+
 `UNIQUE (provider_id, family)`：一个渠道同一族两条线路（比如同族两个区域）在样本里没有出现，那种情况是两个渠道。
 
 线路参数用一列 JSON 而不是十列：这些字段按族出现（`textVerbosity` 只有 ②、`vlHighResolution` 只有 ①），拉成列会是一张大部分为 NULL 的宽表；
@@ -175,7 +194,7 @@ CREATE TABLE model_routes (                                -- 模型×线路
 
 ### 5.2 迁移（一次，幂等，一个 `sqlTx`）
 
-1. 每个 `providers` 行 → 自己的一条线路（`family = familyOf(api_standard)`，`official = !isCompatStandard`，`base_url` / `auth_mode` / `safety_settings` 原样）。`platform` 由主机推断。
+1. 每个 `providers` 行 → 自己的一条线路（`family = familyOf(api_standard)`，`official = !isCompatStandard`，`auth_mode` / `safety_settings` 原样）。`platform` 由主机推断；`base_url` 拆成渠道 `host`（origin）与线路 `path`（其余部分）——**路径等于画像约定时写 `NULL`**，否则原样存为覆盖值，所以迁移后请求地址逐字节不变。
 2. 每个 `models` 行 → 一条 `model_routes`（family 同上），把 §3 表里下沉的列原样搬进 JSON；`active_route` = 该 family。
 3. 旧列**不删**，只停止读写（SQLite 删列要重建表；`configTransfer` 的旧版备份仍要能导入）。
 4. **不自动合并**。「MiniMax」与「MiniMax (Claude 格式)」迁移后仍是两个渠道，各一条线路；合并由作者触发（§5.3）。
@@ -203,7 +222,7 @@ B 的 keyring 项在事务提交**之后**删（与 appReset 的顺序反过来�
 | --- | --- | --- |
 | 01 渠道与模型 · 总览 | 列表该按什么分组？ | 左栏是**渠道**（平台徽标 + 线路格 ①②③④ + key 状态），右栏是该渠道的模型；每行尾部一个 mono 线路签 `② Responses`——一眼看出哪个模型走哪条路 |
 | 02 添加渠道 · 选平台 | 「添加」时作者先选什么？ | 先选**平台**，不再选协议。选中后右侧预览这个平台会建哪几条线路、每条线路认哪些服务端工具、起步模型；只要填**一把 key** |
-| 03 渠道抽屉 · 线路 | 一个渠道的多个协议在哪里配？ | 渠道抽屉里一张线路表：每族一行（地址 / 鉴权 / 连通测试 / 启用），New API 这种自建主机只填一次主机，路径按约定补齐 |
+| 03 渠道抽屉 · 线路表与路径 | 一个渠道的多个协议在哪里配？路径怎么改？ | 渠道抽屉里一张线路表：每族一行（路径 / 鉴权 / 连通测试 / 启用）。主机填一次；每条线路的路径默认取平台约定，可单独改成另一段路径或一整条 URL，「恢复默认」回到约定；每行下方显示实际请求地址（§5.1.1） |
 | 04 模型抽屉 · 线路切换 | 同一渠道下怎么切一个模型的协议？ | 抽屉头部一条**线路条**（渠道提供的线路，已启用的实底、未启用的虚线 `+`）；下面的节标出作用域：「模型」节与「本线路」节，本线路节的标题带线路签 |
 | 05 服务端工具 · 可用性矩阵 | 「这个工具这里能不能用」怎么说清？ | 能力声明里服务端工具变成矩阵：行 = 工具（作者的授权开关），列 = 线路，格 = 能拼 / 拼不出 / 未实测；当前线路那一列高亮。声明了但当前线路拼不出 = 开关仍亮 + 一行「本线路不发」 |
 | 06 切换线路 · 差异 | 切线路时哪些参数变了？ | 点另一条线路时，线路条下方就地展开一张差异卡：思考 / 最大输出 / 结构化 / 服务端工具 各一行 `旧 → 新`，没配过的线路显示虚线「未设置 · 不发」——**不从旧线路抄参数**（不变量 3） |
