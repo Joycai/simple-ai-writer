@@ -106,8 +106,10 @@ interface PlatformProfile {
   id: PlatformId;                 // "dashscope" | "dashscope-intl" | "deepseek" | "openai" | "anthropic" | "google"
                                   // | "xai" | "minimax" | "orcarouter" | "newapi" | "ollama" | "comfyui" | "custom"
   name: string;
-  /** 这个平台提供哪些线路，各自的默认地址与鉴权。newapi / custom 只给路径约定，主机作者填。 */
-  endpoints: Partial<Record<ProtocolFamily, { baseUrl: string; official: boolean; authMode?: AuthMode }>>;
+  /** 官方主机；newapi / custom / ollama 缺省，由作者在渠道上填。 */
+  host?: string;
+  /** 这个平台提供哪些线路，各自的默认路径与鉴权。路径是默认值，线路可覆盖（§5.1.1）；official 线路不可覆盖。 */
+  endpoints: Partial<Record<ProtocolFamily, { defaultPath: string; official: boolean; authMode?: AuthMode }>>;
   /** 服务端工具：每条线路上哪些 id 有拼写，以及按模型 id 的闸门（supportsCodeInterpreter 搬到这里）。 */
   serverTools: Partial<Record<ProtocolFamily, ServerToolSpelling[]>>;
   /** 每条线路建议的思考类目（抽屉把它排在前面；不限制作者选别的同族类目）。 */
