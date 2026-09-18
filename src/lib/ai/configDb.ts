@@ -521,6 +521,19 @@ export function conversationalModels(models: readonly Model[]): Model[] {
 }
 
 /**
+ * Whether a model may be picked *automatically* as the chat model — the first
+ * model ever added, or the fallback when the stored selection went stale.
+ * Stricter than `conversationalModels`: an image or video generation row
+ * answers `/chat/completions` with an error, and a new channel's starter list
+ * can open with one (火山方舟 pay-as-you-go brings only Seedream), which used
+ * to leave a fresh install chatting with an image model. The author can still
+ * pick anything by hand; this only governs what the app picks for them.
+ */
+export function canAutoSelectAsChat(m: Model): boolean {
+  return m.type !== "image" && m.type !== "video" && conversationalModels([m]).length > 0;
+}
+
+/**
  * USD cost of one completion, accounting for the model's cheaper cached-input
  * rate. `cachedTokens` is a subset of `inputTokens` — both OpenAI's and
  * Gemini's usage reporting count it that way — so only the uncached
@@ -1167,10 +1180,11 @@ export function parseAsrFormat(raw: unknown): AsrFormat | undefined {
  * would otherwise be dropped from every stored model the day it ships.
  */
 const IMAGE_ROUTES: Record<ImageRoute, true> = {
-  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true,
+  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true,
 };
 const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
   nanobanana: true, "gpt-image-2": true, "wan2.7": true, "qwen-image": true,
+  "seedream-5-pro": true, "seedream-5-lite": true, "seedream-4": true,
 };
 
 const listed = (table: object, v: unknown): boolean =>

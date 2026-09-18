@@ -44,10 +44,23 @@
  *   this dialect always sends a size, defaulting to the 1K area; an edit
  *   without a requested aspect takes its ratio from the input image, because
  *   the endpoint's own "follow the input" (no size) is also its 2K default.
+ * - Seedream (火山方舟, docs checked 2026-09-18): `size` is a tier ("2K") *or*
+ *   `WxH`, never both. With a tier alone the model picks the ratio from the
+ *   prompt (5.0 pro at 1K answered 1248x832 unasked), so a requested aspect is
+ *   sent as the documented pixels for that tier × ratio — looked up, not
+ *   computed, because the tiers are not one formula (5.0 pro's 2K 16:9 is
+ *   2816x1584, lite's is 2848x1600) and `WxH` is bounded by *total pixels*
+ *   per version (lite's floor is 2560x1440, so a computed 1K size would 400).
+ *   Tiers differ by version: 5.0 pro 1K/1.5K/2K, 5.0 lite 2K/3K/4K, 4.5 2K/4K,
+ *   4.0 1K/2K/4K (its 1K row disagrees between two doc pages, so the 4.x
+ *   dialect offers only the tiers both versions share). Billing is per
+ *   picture, not per tier.
  */
 
 /** The declared dialect ids. Absent = generic (free-form size list). */
-export type ImageDialect = "nanobanana" | "gpt-image-2" | "wan2.7" | "qwen-image";
+export type ImageDialect =
+  | "nanobanana" | "gpt-image-2" | "wan2.7" | "qwen-image"
+  | "seedream-5-pro" | "seedream-5-lite" | "seedream-4";
 
 /** The generic wire fields a dialect resolves the author's choices into. */
 export interface ImageWireParams {
@@ -284,7 +297,77 @@ const QWEN_IMAGE: ImageDialectSpec = {
   },
 };
 
-export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2, WAN_2_7, QWEN_IMAGE];
+/** The ratios every Seedream version documents pixels for, in display order. */
+const SEEDREAM_ASPECTS = ["1:1", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"] as const;
+
+type SeedreamTable = Record<string, Record<(typeof SEEDREAM_ASPECTS)[number], string>>;
+
+/** One tier's documented pixels, listed in SEEDREAM_ASPECTS order. */
+const row = (...sizes: string[]): Record<(typeof SEEDREAM_ASPECTS)[number], string> =>
+  Object.fromEntries(SEEDREAM_ASPECTS.map((a, i) => [a, sizes[i]])) as Record<(typeof SEEDREAM_ASPECTS)[number], string>;
+
+// 「图片生成 API」参考页 + 5.0 pro 教程的「档位 × 比例」常见值 (2026-09-18).
+const SEEDREAM_2K = row("2048x2048", "1728x2304", "2304x1728", "1664x2496", "2496x1664", "1600x2848", "2848x1600", "3136x1344");
+const SEEDREAM_4K = row("4096x4096", "3520x4704", "4704x3520", "3328x4992", "4992x3328", "3040x5504", "5504x3040", "6240x2656");
+const SEEDREAM_PRO: SeedreamTable = {
+  "1K": row("1024x1024", "864x1152", "1152x864", "832x1248", "1248x832", "800x1424", "1424x800", "1568x672"),
+  "1.5K": row("1536x1536", "1344x1792", "1792x1344", "1248x1872", "1872x1248", "1152x2048", "2048x1152", "2352x1008"),
+  "2K": row("2048x2048", "1776x2368", "2368x1776", "1664x2496", "2496x1664", "1584x2816", "2816x1584", "3136x1344"),
+};
+const SEEDREAM_LITE: SeedreamTable = {
+  "2K": SEEDREAM_2K,
+  "3K": row("3072x3072", "2592x3456", "3456x2592", "2496x3744", "3744x2496", "2304x4096", "4096x2304", "4704x2016"),
+  "4K": SEEDREAM_4K,
+};
+const SEEDREAM_4X: SeedreamTable = { "2K": SEEDREAM_2K, "4K": SEEDREAM_4K };
+
+/** "1.5K" → 1.5. The half tier is why this is not a `\d+K` match. */
+const tierValue = (tier: string): number => Number.parseFloat(tier);
+
+/**
+ * The tier to send for a requested one: itself when this version has it, else
+ * the nearest (the lower on a tie). The agent's tools only know 1K/2K/4K, and a
+ * tier a version lacks is a 400 — nearer beats refusing. "" = 2K, the one tier
+ * every version has and the endpoint's own default.
+ */
+function seedreamTier(requested: string | undefined, tiers: readonly string[]): string {
+  const want = requested || "2K";
+  if (tiers.includes(want)) return want;
+  const v = tierValue(want);
+  if (!Number.isFinite(v)) return tiers.includes("2K") ? "2K" : tiers[0];
+  let best = tiers[0];
+  for (const t of tiers) if (Math.abs(tierValue(t) - v) < Math.abs(tierValue(best) - v)) best = t;
+  return best;
+}
+
+function seedreamDialect(id: ImageDialect, table: SeedreamTable): ImageDialectSpec {
+  const tiers = Object.keys(table);
+  return {
+    id,
+    aspects: SEEDREAM_ASPECTS,
+    resolutions: tiers,
+    params: (sel) => {
+      const tier = seedreamTier(sel.resolution, tiers);
+      const pixels = sel.aspect ? table[tier][sel.aspect as (typeof SEEDREAM_ASPECTS)[number]] : undefined;
+      // A requested ratio is the documented pixels for it; no ratio (an edit
+      // following its input, or an agent call that named none) is the bare
+      // tier. A ratio outside the table (the agent's 4:5) is the tier too —
+      // never a computed size that could fall outside the version's pixel range.
+      return { ...(sel.aspect ? { aspect: sel.aspect } : {}), size: pixels ?? tier };
+    },
+  };
+}
+
+const SEEDREAM_5_PRO = seedreamDialect("seedream-5-pro", SEEDREAM_PRO);
+const SEEDREAM_5_LITE = seedreamDialect("seedream-5-lite", SEEDREAM_LITE);
+const SEEDREAM_4 = seedreamDialect("seedream-4", SEEDREAM_4X);
+
+/** Declared dialects that only exist behind the ark route (火山方舟). */
+export const SEEDREAM_DIALECTS: readonly ImageDialect[] = ["seedream-5-pro", "seedream-5-lite", "seedream-4"];
+
+export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [
+  NANOBANANA, GPT_IMAGE_2, WAN_2_7, QWEN_IMAGE, SEEDREAM_5_PRO, SEEDREAM_5_LITE, SEEDREAM_4,
+];
 
 /** The spec for a declared dialect, or null for generic / unknown values. */
 export function imageDialect(id: string | undefined): ImageDialectSpec | null {

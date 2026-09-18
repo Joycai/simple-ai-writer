@@ -303,6 +303,10 @@ function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest, lo
       // A local instance running the model's imported workflow — submit the
       // injected graph, poll history, fetch the files. Never a derived route.
       return comfyImage(conn, req, log);
+    case "ark":
+      // Seedream: the images-api path with its own body. One request per
+      // picture — see arkImage for why `n` becomes parallel calls.
+      return arkImage(conn, req);
     default:
       // The OpenAI protocol is the odd one out: editing is a different URL
       // with a different encoding (multipart), not the same call with extra
@@ -1208,6 +1212,129 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
   } finally {
     deadline.done();
   }
+}
+
+// ─── 火山方舟 Seedream (ark) ──────────────────────────────────────────────────
+//
+// `POST {base}/images/generations` — the OpenAI generations path, so the base is
+// the channel's Chat route (`…/api/v3` pay-as-you-go, `…/api/plan/v3` plan).
+// The body is not OpenAI's: no `n`, no `quality`, reference images ride a JSON
+// `image` field instead of /images/edits multipart, and `watermark` defaults to
+// *true* upstream. Synchronous only. Protocol facts: docs/api/landscape.md §7
+// 第十三个样本; choices: docs/feature/image-generation-plan.md PR7.
+
+/**
+ * One Seedream picture takes 26–43 s (5.0 lite 2K / 5.0 pro 1K, measured); a
+ * 4K one longer. Wider than GENERATE_TIMEOUT_MS because a request cut off here
+ * has usually already been billed.
+ */
+const ARK_TIMEOUT_MS = 300_000;
+
+/** The endpoint rejects `data:image/PNG;…` — the format token must be lowercase. */
+function lowercaseDataUrlMime(url: string): string {
+  const comma = url.indexOf(",");
+  if (!url.startsWith("data:") || comma === -1) return url;
+  return url.slice(0, comma).toLowerCase() + url.slice(comma);
+}
+
+/**
+ * The Seedream request body for exactly one picture.
+ *
+ * `watermark: false` is always written: upstream stamps 「AI 生成」 on every
+ * image unless told otherwise, and bills it the same. It sits before
+ * `extraBody` so an author who wants the mark can still ask for it.
+ * `sequential_image_generation` is never sent — its default is off, and 5.0
+ * pro rejects the field outright.
+ */
+function arkImageBody(conn: ImageConn, req: ImageRequest): Record<string, unknown> {
+  const refs = (req.images ?? []).map(lowercaseDataUrlMime);
+  return {
+    model: conn.modelId,
+    prompt: req.prompt,
+    // One reference goes as a string, several as an array — both documented.
+    ...(refs.length === 1 ? { image: refs[0] } : refs.length > 1 ? { image: refs } : {}),
+    ...(req.size ? { size: req.size } : {}),
+    response_format: "b64_json",
+    watermark: false,
+    ...req.extraBody,
+  };
+}
+
+/**
+ * Generate with Seedream.
+ *
+ * The endpoint has no `n`. Its group mode (`sequential_image_generation`) is
+ * not the same thing: the model decides how many to draw and draws a related
+ * *set*, not alternatives — and 5.0 pro has no group mode at all. So `n`
+ * candidates are `n` single-picture requests in parallel, which bill exactly
+ * what `n` pictures cost anyway. A request that fails while others succeed is
+ * reported in `text`, not thrown: the successful ones are already paid for.
+ */
+async function arkImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const n = Math.max(1, req.n ?? 1);
+  const settled = await Promise.allSettled(Array.from({ length: n }, () => arkImageOnce(conn, req)));
+  const images: GeneratedImage[] = [];
+  const failures: unknown[] = [];
+  for (const s of settled) {
+    if (s.status === "fulfilled") images.push(...s.value);
+    else failures.push(s.reason);
+  }
+  if (!images.length) throw failures[0];
+  if (!failures.length) return { images };
+  const reason = failures[0] instanceof Error ? failures[0].message : String(failures[0]);
+  return { images, text: `${failures.length} of ${n} requests returned no image: ${reason}` };
+}
+
+async function arkImageOnce(conn: ImageConn, req: ImageRequest): Promise<GeneratedImage[]> {
+  const url = openaiUrl(conn.baseUrl, "/images/generations");
+  const deadline = withDeadline(req.signal, ARK_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
+      },
+      body: JSON.stringify(arkImageBody(conn, req)),
+      signal: deadline.signal,
+    });
+    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+    return await parseArkImagePayload(await readJson(res, "Image API error"), deadline.signal);
+  } finally {
+    deadline.done();
+  }
+}
+
+/**
+ * The `{ data: [...] }` answer. An entry can be `{ error: { code, message } }`
+ * on its own — a moderation refusal (`OutputImageSensitiveContentDetected`)
+ * drops that one picture and keeps the rest. Only when nothing came back is it
+ * an error, thrown with the entry's structured code so a refusal is never read
+ * as "this endpoint cannot edit" (isEditUnsupportedError).
+ *
+ * `usage.output_tokens` is deliberately not returned: it is pixels / 256, a
+ * reference figure, while the bill is per picture (`generated_images`). As
+ * token usage it would make a token-priced fee group charge money that was
+ * never spent; the per-image price covers these models.
+ */
+async function parseArkImagePayload(raw: unknown, signal?: AbortSignal): Promise<GeneratedImage[]> {
+  const json = raw as {
+    data?: { b64_json?: string; url?: string; error?: { code?: string; message?: string } }[];
+    error?: { code?: string; message?: string } | string;
+  };
+  if (json.error) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: json.error }));
+  const images: GeneratedImage[] = [];
+  let refused: { code?: string; message?: string } | undefined;
+  for (const entry of json.data ?? []) {
+    if (entry.b64_json) images.push(imageFromBase64(entry.b64_json));
+    else if (entry.url?.startsWith("data:")) images.push(imageFromDataUrl(entry.url));
+    // A 24-hour link when the author's extraBody asked for `url`.
+    else if (entry.url) images.push(await urlToDataUrl(entry.url, signal));
+    else if (entry.error) refused ??= entry.error;
+  }
+  if (images.length) return images;
+  if (refused) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: refused }));
+  throw new NoImageError();
 }
 
 // ─── ComfyUI (local instance, imported workflow) ─────────────────────────────
