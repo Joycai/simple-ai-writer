@@ -372,7 +372,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // Shown: every id the wire offers, plus any the author switched on that it
   // doesn't — so a grant that isn't sent is visible and can be turned off.
   const shownServerTools = SERVER_TOOL_IDS.filter((id) => offersServerTool(id) || serverTools.includes(id));
-  const platformName = provider?.platform ? t(`aiConfig.platforms.${provider.platform}`) : "";
+  const platformName = toolWire ? t(`aiConfig.platforms.${toolWire.platform}`) : "";
   const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
@@ -1093,9 +1093,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             summary={capsNames.length ? capsNames.join(" · ") : t("aiConfig.models.secCapsUnset")}
             unset={capsNames.length === 0}
           >
-            {/* Tools the endpoint runs itself. Anthropic-shaped endpoints and
-                the two OpenAI-compat wires (Qwen's enable_search / Responses
-                built-ins — see supportsServerTools), and off by default: it is
+            {/* Tools the endpoint runs itself — which ones is the provider's
+                platform's call, per family (lib/ai/platforms.ts; DashScope's
+                enable_search / Responses built-ins, the protocol-native
+                web_search elsewhere), and off by default: it is
                 a standing permission for the model to reach the open web on
                 every request, which is the author's call to make rather than
                 something a model quietly gains. Extraction is shown only where
@@ -1107,14 +1108,22 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 once instead of under every switch. */}
             <Fold open={(!!toolWire && supportsServerTools(toolWire)) || shownServerTools.length > 0}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
-              {/* The code interpreter appears only for a model id that runs it
-                  on this wire (supportsCodeInterpreter) — type the id first. */}
+              {/* Offered ids, plus any switched on that this wire can't send
+                  (shownServerTools). The code interpreter is offered only for
+                  a model id that runs it on this wire
+                  (dashscopeRunsCodeInterpreter in lib/ai/platforms) — type the
+                  id first. */}
               {shownServerTools.map((id) => (
                 <ToggleField
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
                   hint={!offersServerTool(id)
-                    ? t("aiConfig.models.serverToolNotSent", { platform: platformName })
+                    // Two reasons, said apart: the platform has no spelling,
+                    // or it has one this model id doesn't run (the code
+                    // interpreter's per-model gate).
+                    ? t(toolWire && serverToolStatus(toolWire, id) !== "no"
+                      ? "aiConfig.models.serverToolNotForModel"
+                      : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
                     : toolWire && serverToolStatus(toolWire, id) === "unknown"
                       ? t("aiConfig.models.serverToolUnmeasured", { platform: platformName })
                       : ""}

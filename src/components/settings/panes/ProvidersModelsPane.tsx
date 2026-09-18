@@ -8,6 +8,7 @@ import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
 import { MODEL_TYPES, type Model, type ModelType } from "../../../lib/ai/configDb";
 import { resolvePlatform, type PlatformId } from "../../../lib/ai/platforms";
+import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { declarationMarks, isMeasured } from "../../../lib/ai/modelSummary";
 import type { ProviderMove } from "../../../lib/ai/providerOrder";
 import { MOD_KEY } from "../../../lib/platform";
@@ -209,6 +210,21 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     return rows.filter((r) => r.visible);
   }, [providers, models, q, typeFilter, t]);
 
+  /**
+   * Models with a server-tool switch on that their provider's platform can't
+   * send — the migration note §5.2 of channel-model-route-plan.md promises.
+   * Platforms made `openai_compat` stop meaning DashScope, so a proxy of
+   * DashScope's, or a DeepSeek row with 联网搜索 on, quietly stopped sending
+   * it; each drawer says so, and this line says it once, where the list is.
+   * Gone as soon as every such switch is off or its platform picked.
+   */
+  const unsentGrants = useMemo(() => models.flatMap((m) => {
+    const provider = providers.find((p) => p.id === m.providerId);
+    if (!provider || !m.serverTools?.length || m.type === "asr") return [];
+    const sent = serverToolsSent(m, [provider]) ?? [];
+    return m.serverTools.some((id) => !sent.includes(id)) ? [`${m.name}（${provider.name}）`] : [];
+  }), [models, providers]);
+
   const openProviderDrawer = async (providerId: string | null) => {
     setError(null);
     let apiKey = "";
@@ -296,6 +312,11 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
       <div className={hub.list}>
         <div className={hub.listInner}>
         {error && <div className={styles.errorNote}>{error}</div>}
+        {unsentGrants.length > 0 && (
+          <div className={styles.hint} role="note">
+            {t("aiConfig.hub.serverToolsNotSent", { count: unsentGrants.length, models: unsentGrants.join(" · ") })}
+          </div>
+        )}
 
         {providers.length === 0 && groups.length === 0 && !q && (
           <div className={styles.emptyNote}>{t("aiConfig.providers.empty")}</div>
@@ -454,7 +475,10 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       <span className={hub.groupSpacer} />
                       {(() => {
                         // Explicit declarations only — auto is never marked.
-                        const marks = declarationMarks(m);
+                        // Server tools as *sent*: a grant this provider's
+                        // platform can't spell is kept on the row but must not
+                        // be advertised here (lib/ai/serverTools serverToolsSent).
+                        const marks = declarationMarks({ ...m, serverTools: serverToolsSent(m, providers) });
                         if (marks.length === 0) return null;
                         const shown = marks.slice(0, MAX_MARKS);
                         return (

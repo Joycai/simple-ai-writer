@@ -99,7 +99,8 @@
  */
 
 import { familyOf } from "./types";
-import { serverToolStatus, wireHasServerTools, type ServerToolWire } from "./platforms";
+import { providerWire, serverToolStatus, wireHasServerTools, type ServerToolWire } from "./platforms";
+import type { Model, Provider } from "./configDb";
 
 export type { ServerToolWire } from "./platforms";
 
@@ -216,6 +217,29 @@ export function effectiveServerTools(
   modelId: string,
 ): ServerToolId[] | undefined {
   return normalizeServerTools((ids ?? []).filter((id) => supportsServerToolFor(wire, id, modelId)));
+}
+
+/**
+ * The server tools this model's requests actually carry: its declaration, cut
+ * to what its provider's platform can spell ({@link effectiveServerTools}).
+ *
+ * The row alone is not the answer. A declaration is the author's grant and is
+ * kept when the wire can't say it (plan §7 invariant 4) — a provider moved to
+ * another platform or standard, a row imported — and the adapters then drop
+ * the id on every request. Anything that *promises* a capability (a search
+ * subagent, page reading, a mark on the model list) must ask this instead of
+ * the row.
+ *
+ * Without a provider list the declaration is returned as-is; with one, a
+ * missing provider answers `undefined` — don't promise what can't be checked.
+ */
+export function serverToolsSent(
+  model: Pick<Model, "providerId" | "modelId" | "serverTools">,
+  providers?: readonly Provider[],
+): ServerToolId[] | undefined {
+  if (!providers) return model.serverTools;
+  const provider = providers.find((p) => p.id === model.providerId);
+  return provider ? effectiveServerTools(providerWire(provider), model.serverTools, model.modelId) : undefined;
 }
 
 /**

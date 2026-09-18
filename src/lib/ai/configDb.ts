@@ -17,7 +17,7 @@ import {
   type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
-import { parsePlatform, resolvePlatform, type PlatformId } from "./platforms";
+import { parsePlatform, platformToStore, resolvePlatform, type PlatformId } from "./platforms";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
@@ -831,7 +831,9 @@ export function providerUpsert(p: Provider): SqlStatement {
       p.safetySettings ? JSON.stringify(p.safetySettings) : null,
       p.authMode ?? null,
       p.sortOrder ?? null,
-      p.platform ?? null,
+      // Only a platform the address doesn't already name (platformToStore):
+      // an inferred one is left NULL so it keeps following the table.
+      platformToStore(p) ?? null,
       p.createdAt,
     ],
   };

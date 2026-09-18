@@ -72,6 +72,7 @@ export function ContextMemoryPane() {
   const setContextUtilization = useAppStore((s) => s.setContextUtilization);
   const utilSectionRef = useRef<HTMLDivElement>(null);
   const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
   const subAgents = useAiStore((s) => s.subAgents);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId) ?? null);
 
@@ -82,12 +83,12 @@ export function ContextMemoryPane() {
     if (!activeModel) return null;
     const messageCeiling = messageCeilingFor(
       activeModel.contextSize, contextUtilization, chatAgentPreset(), subAgents, models,
-      { handoff: true, packs: true },
+      { handoff: true, packs: true, providers },
     );
     return compactTriggerFor({
       contextSize: activeModel.contextSize, messageCeiling, triggerTokens, triggerRatio,
     });
-  }, [activeModel, contextUtilization, subAgents, models, triggerTokens, triggerRatio]);
+  }, [activeModel, contextUtilization, subAgents, models, providers, triggerTokens, triggerRatio]);
 
   const ratioPct = Math.round(triggerRatio * 100);
   const utilPct = Math.round(contextUtilization * 100);

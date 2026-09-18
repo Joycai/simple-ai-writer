@@ -7,6 +7,7 @@ import {
   platformForAddress,
   platformHasHosts,
   platformSource,
+  platformToStore,
   resolvePlatform,
   serverToolStatus,
 } from "../platforms";
@@ -82,6 +83,19 @@ describe("platformForAddress", () => {
   });
 });
 
+describe("platformToStore", () => {
+  it("stores only what the address doesn't already say, so inferred rows keep following the table", () => {
+    const ds = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    expect(platformToStore({ platform: "dashscope", baseUrl: ds, apiStandard: "openai_compat" })).toBeUndefined();
+    expect(platformToStore({ platform: "newapi", baseUrl: ds, apiStandard: "openai_compat" })).toBe("newapi");
+    expect(platformToStore({ platform: "dashscope", baseUrl: "https://proxy.example/v1", apiStandard: "openai_compat" }))
+      .toBe("dashscope");
+    // Official: the vendor, always — nothing to store.
+    expect(platformToStore({ platform: "openai", baseUrl: "", apiStandard: "openai" })).toBeUndefined();
+    expect(platformToStore({ baseUrl: ds, apiStandard: "openai_compat" })).toBeUndefined();
+  });
+});
+
 describe("serverToolStatus", () => {
   it("answers yes where the platform lists a tool, unknown for a protocol-native one it doesn't, no otherwise", () => {
     expect(serverToolStatus({ platform: "minimax", standard: "anthropic_compat" }, "web_search")).toBe("yes");
@@ -91,6 +105,9 @@ describe("serverToolStatus", () => {
     expect(serverToolStatus({ platform: "newapi", standard: "openai_compat" }, "web_search")).toBe("no");
     expect(serverToolStatus({ platform: "openai", standard: "openai" }, "web_search")).toBe("no");
     expect(serverToolStatus({ platform: "google", standard: "gemini" }, "web_search")).toBe("no");
+    // A local server runs no tools: explicit, not "unknown".
+    expect(serverToolStatus({ platform: "ollama", standard: "anthropic_compat" }, "web_search")).toBe("no");
+    expect(serverToolStatus({ platform: "deepseek", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
   });
 
   it("consults the model gate only when given a model id", () => {

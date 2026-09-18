@@ -720,17 +720,22 @@ Tell the author to turn it on in Settings → Models, or answer without searchin
 
 `web_extractor` 只能挂在 `web_search` 旁边（`normalizeServerTools`），所以它不是
 子代理**可不可用**的条件，而是**能做到哪一步**的说明。判断只有一个：
-`searchReadsPages(model, standard)`（`lib/agent/subagent.ts`）= 模型行声明了
-`web_extractor` **且**供应商当前协议有它的写法（`supportsServerTool`）。
+`searchReadsPages(model, provider)`（`lib/agent/subagent.ts`）= 模型**实际发送**的服务端工具里有
+`web_extractor`——即 `serverToolsSent(model, providers)`（`lib/ai/serverTools.ts`）：模型行的声明，
+按供应商的**平台 × 协议族**裁掉拼不出的（`lib/ai/platforms.ts`，渠道方案 §4 / §11）。
 
-只看模型行是不够的：抽屉只在**保存那一刻**按协议过滤，而现有供应商可以事后改协议、
-模型行不跟着重算——改成 `anthropic_compat` 或官方 Responses 之后，行上仍写着网页抓取，
-适配器每次请求却都把它丢掉。只看行就会对一个只会搜的子跑承诺「能读网页」，它就可能
-把搜索摘要乃至编出来的东西当成页面原文报回来。供应商查不到时答否：核实不了就不承诺。
+只看模型行是不够的，而且自平台画像起更不够：模型抽屉**不再**在保存时裁剪声明——声明是作者的授权，
+拼不出时保留、开关下写「不发送」（渠道方案不变量 4）。于是一个行上写着网页抓取的模型，可能挂在
+`anthropic_compat`、官方 Responses、xAI 或任何非千问平台上，适配器每次请求都把它丢掉。
+只看行就会对一个只会搜的子跑承诺「能读网页」，它就可能把搜索摘要乃至编出来的东西当成页面原文报回来。
+供应商查不到时答否：核实不了就不承诺。同一个理由也管「搜索子代理在不在线」：`subAgentModel` 在给了
+供应商列表时按实际发送的 `web_search` 判断，DeepSeek 直连上开着联网搜索的模型不算可用的搜索子代理。
 
-协议从哪来：`executeDelegate` 用 `conn.provider`；`routeTools` 经 `RouteOptions.providers`
-（四个运行入口都传）；设置页读 `aiStore.providers`。只做估算的路径（`plannedToolTokens`
-等）不传 `providers`，此时只看模型行——只会**多算**那一句的开销，不会让真实运行少一句。
+供应商从哪来：`executeDelegate` 用 `conn.provider`；`routeTools` 经 `RouteOptions.providers`
+（四个运行入口都传）；设置页读 `aiStore.providers`。估算路径（`plannedToolTokens` /
+`messageCeilingFor` 的全部调用点、`planForecast`）**也传** `providers`——否则「搜索子代理在线」
+在估算里按声明、在运行里按实际发送，`delegate` 的 schema 一边算一边不算，天花板对不上。
+只有手里没有供应商列表的界面（输入框的子代理小签）退回读声明。
 
 三处读者：
 

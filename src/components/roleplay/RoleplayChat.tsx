@@ -412,6 +412,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const mention = useMentionState();
 
   const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
   const subAgents = useAiStore((s) => s.subAgents);
   const activeModelId = useAiStore((s) => s.activeModelId);
   const boundModel = useMemo(
@@ -462,8 +463,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 没有 handoff 那一项），明天就未必。`toolCost` 的注释写着「一个函数，一个定义」。
    */
   const toolTokens = useMemo(
-    () => plannedToolTokens(presetFor(agent.kind), effectiveSubs, models),
-    [agent.kind, effectiveSubs, models],
+    () => plannedToolTokens(presetFor(agent.kind), effectiveSubs, models, { providers }),
+    [agent.kind, effectiveSubs, models, providers],
   );
   const contextVersion = session?.contextVersion ?? 0;
   const context = useMemo(

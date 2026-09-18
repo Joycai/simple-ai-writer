@@ -9,11 +9,11 @@ import {
   SUBAGENT_KINDS,
   SUB_PRESETS,
   searchReadsPages,
-  serverToolsSent,
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
 import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { serverToolsSent } from "../../../lib/ai/serverTools";
 import {
   isAsrDiarizationDefault,
   isAsrTimestampsEnabled,

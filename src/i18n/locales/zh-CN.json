@@ -2247,7 +2247,8 @@
       "unknownProvider": "未知供应商（配置已丢失）",
       "defaultMaxOutput": "默认最大输出",
       "defaultMaxOutputEmpty": "跟随协议默认",
-      "defaultMaxOutputHint": "模型没填「最大输出」且不在内置表里时用这个值。留空/0 = 各协议自己的默认（Anthropic 32k，其余交给服务端）。"
+      "defaultMaxOutputHint": "模型没填「最大输出」且不在内置表里时用这个值。留空/0 = 各协议自己的默认（Anthropic 32k，其余交给服务端）。",
+      "serverToolsNotSent": "{{count}} 个模型开着的服务端工具在请求里不会发送——它所在平台没有这个工具，或这个模型不跑它：{{models}}。服务端工具现在按平台发送：如果这是一个千问（百炼）的代理地址，在供应商里把平台选成「阿里云百炼」；否则可以在模型里关掉它。"
     },
     "providers": {
       "empty": "暂无供应商，点击下方添加",
@@ -2563,6 +2564,7 @@
       "translateLabel": "翻译模型格式",
       "noteSoCeiling": "本会话实测 · 端点拒绝了 {{refused}}，已降为 {{mode}}",
       "serverToolNotSent": "{{platform}} 没有这个工具的拼写：开关保留，但请求里不发送。",
+      "serverToolNotForModel": "{{platform}} 有这个工具，但 {{model}} 不跑它：开关保留，请求里不发送。",
       "serverToolUnmeasured": "{{platform}} 上未实测：这是协议自带的工具，取决于上游是否转发，开了可能被拒绝。"
     },
     "probe": {

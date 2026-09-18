@@ -10,8 +10,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
-import { effectiveServerTools, type ServerToolId } from "../ai/serverTools";
-import { providerWire } from "../ai/platforms";
+import { serverToolsSent } from "../ai/serverTools";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
 import { canSeeImages, costFor, isAsrOnly, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
@@ -257,28 +256,9 @@ export function subAgentModel(
 }
 
 /**
- * The server tools this model's requests actually carry: its declaration, cut
- * to what its provider's platform can spell (`effectiveServerTools`).
- *
- * The row alone is not the answer. A declaration is the author's grant and is
- * kept when the wire can't say it (plan §7 invariant 4) — a provider moved to
- * another platform or standard, a row imported — and the adapters then drop
- * the id on every request. Anything that *promises* a capability (a search
- * subagent, page reading) must ask this instead of the row.
- *
- * Without a provider list the declaration is returned as-is; with one, a
- * missing provider answers `undefined` — don't promise what can't be checked.
- */
-export function serverToolsSent(model: Model, providers?: readonly Provider[]): ServerToolId[] | undefined {
-  if (!providers) return model.serverTools;
-  const provider = providers.find((p) => p.id === model.providerId);
-  return provider ? effectiveServerTools(providerWire(provider), model.serverTools, model.modelId) : undefined;
-}
-
-/**
  * Whether a search subagent on this model can open a web page itself: the
  * row declares 网页抓取 (`web_extractor`) **and** its provider's platform
- * spells it — see {@link serverToolsSent}. Promising page reading where it
+ * spells it — see `serverToolsSent` (lib/ai/serverTools). Promising page reading where it
  * isn't sent makes the subagent report search snippets, or worse, as the page.
  *
  * Asked in three places that must agree: the `delegate` description (via

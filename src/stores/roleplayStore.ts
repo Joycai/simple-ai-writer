@@ -546,6 +546,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
       ),
       models,
+      { providers },
     );
 
     // 同 agentStore.sendChat：流式的输出文本和 reasoning 片段都是
@@ -1465,6 +1466,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           presetFor(agent.kind),
           subAgentsFor(agent.kind, withSessionOverrides(subAgents, session.disabledSubAgents)),
           models,
+          { providers },
         );
 
         const apiKey = (await loadApiKey(provider.id)) ?? "";

@@ -7,6 +7,7 @@ import {
   ensureAiSchema,
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
+import { resolvePlatform } from "../lib/ai/platforms";
 import { moveId, type ProviderMove } from "../lib/ai/providerOrder";
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
@@ -231,7 +232,12 @@ export const useAiStore = create<AiState>((set, get) => ({
     }),
 
   addProvider: async (p, apiKey) => {
-    const provider: Provider = { ...p, id: nanoid(), createdAt: Date.now() };
+    // Resolved in memory the way listProviders resolves a row read back, so a
+    // provider added from a surface that never names a platform (onboarding)
+    // doesn't read differently until the next launch.
+    const provider: Provider = {
+      ...p, id: nanoid(), createdAt: Date.now(), platform: resolvePlatform(p.platform, p.baseUrl, p.apiStandard),
+    };
     if (isTauri) {
       const d = await db();
       await saveProvider(d, provider);
@@ -247,7 +253,8 @@ export const useAiStore = create<AiState>((set, get) => ({
       await saveProvider(d, p);
       if (apiKey !== undefined) await saveApiKey(p.id, apiKey);
     }
-    set((s) => ({ providers: s.providers.map((x) => (x.id === p.id ? p : x)) }));
+    const resolved = { ...p, platform: resolvePlatform(p.platform, p.baseUrl, p.apiStandard) };
+    set((s) => ({ providers: s.providers.map((x) => (x.id === p.id ? resolved : x)) }));
   },
 
   removeProvider: async (id) => {

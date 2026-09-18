@@ -184,11 +184,15 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   },
   google: {
     hosts: ["generativelanguage.googleapis.com"],
-    source: "no server tool spelled on the Gemini wire",
+    source: "no server tool spelled on the Gemini wire (the only family this platform serves)",
   },
   deepseek: {
     hosts: ["api.deepseek.com"],
-    source: "landscape.md §2.1 — no server tools on the official endpoint",
+    // Chat Completions: none (no native tool, no private field). Its
+    // Anthropic-shaped path falls back to the protocol's own web_search at
+    // "unknown" — unmeasured, not known absent.
+    serverTools: { openai: [] },
+    source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {
     hosts: ["dashscope.aliyuncs.com"],
@@ -222,10 +226,14 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   },
   ollama: {
     hosts: ["localhost:11434", "127.0.0.1:11434"],
+    // A local server runs no tools of its own on any wire — say so rather
+    // than inherit the protocol-native search at "unknown".
+    serverTools: { openai: [], responses: [], anthropic: [] },
     source: "local server; no server tools",
   },
   comfyui: {
     hosts: ["localhost:8188", "127.0.0.1:8188"],
+    serverTools: { openai: [], responses: [], anthropic: [] },
     source: "local render server; reached through caps.route, not a chat wire",
   },
   custom: {
@@ -337,6 +345,17 @@ export function wireOf(o: { platform?: PlatformId; baseUrl: string; standard: Ap
 /** {@link wireOf} for a provider row (`apiStandard` rather than `standard`). */
 export function providerWire(p: { platform?: PlatformId; baseUrl: string; apiStandard: ApiStandard }): ServerToolWire {
   return wireOf({ platform: p.platform, baseUrl: p.baseUrl, standard: p.apiStandard });
+}
+
+/**
+ * What a row stores for its platform: nothing when the address already says
+ * it, so the row keeps following this table (a host added in a later build
+ * reaches it with no migration, §4 rule 3); the value only when the author
+ * chose something the address doesn't name (New API, a DashScope-shaped proxy).
+ */
+export function platformToStore(p: { platform?: PlatformId; baseUrl: string; apiStandard: ApiStandard }): PlatformId | undefined {
+  if (!p.platform || !isCompatStandard(p.apiStandard)) return undefined;
+  return p.platform === inferPlatform(p.baseUrl, p.apiStandard) ? undefined : p.platform;
 }
 
 /** The spellings one wire has, before any model gate. */

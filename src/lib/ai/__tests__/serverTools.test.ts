@@ -3,6 +3,7 @@ import {
   nonWebServerTools,
   parseServerTools,
   effectiveServerTools,
+  serverToolsSent,
   supportsServerToolFor,
   summarizeServerToolResult,
 } from "../serverTools";
@@ -44,6 +45,18 @@ describe("effectiveServerTools", () => {
       .toBeUndefined();
     // Extraction survives only beside search.
     expect(effectiveServerTools(DS, ["web_extractor"], "qwen3.5-plus")).toBeUndefined();
+  });
+});
+
+describe("serverToolsSent", () => {
+  const model = { providerId: "p", modelId: "deepseek-flash", serverTools: ["web_search"] as ["web_search"] };
+  const provider = (baseUrl: string) => ({ id: "p", name: "P", baseUrl, apiStandard: "openai_compat" as const, createdAt: 0 });
+
+  it("answers what the provider's platform sends, the declaration only without a provider list", () => {
+    expect(serverToolsSent(model, [provider("https://dashscope.aliyuncs.com/compatible-mode/v1")])).toEqual(["web_search"]);
+    expect(serverToolsSent(model, [provider("https://api.deepseek.com")])).toBeUndefined();
+    expect(serverToolsSent(model, [])).toBeUndefined();
+    expect(serverToolsSent(model)).toEqual(["web_search"]);
   });
 });
 

@@ -268,6 +268,17 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
    * so the standard picker below drops them and the preset buttons reset them.
    */
   const [starterModels, setStarterModels] = useState<StarterModel[]>([]);
+  /**
+   * The author chose the platform themselves — from the select, or on a row
+   * whose stored platform is not what its address infers (a DashScope-shaped
+   * proxy saved earlier). Then editing the address leaves it alone; otherwise
+   * the platform follows the address (platformForAddress). Without this, fixing
+   * a typo in a proxy's path silently turned 百炼 back into 自定义.
+   */
+  const [platformPinned, setPlatformPinned] = useState(
+    () => !!existing?.platform && isCompatStandard(existing.apiStandard)
+      && existing.platform !== inferPlatform(existing.baseUrl, existing.apiStandard),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -403,6 +414,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
                   className={styles.btnSecondary}
                   onClick={() => {
                     setComfyMode(!!preset.comfy);
+                    setPlatformPinned(false);
                     setStarterModels(preset.starterModels ?? []);
                     setTestResult(null);
                     setForm({
@@ -470,7 +482,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             onChange={(e) => setForm({
               ...form,
               baseUrl: e.target.value,
-              platform: platformForAddress(form.platform, e.target.value, form.apiStandard),
+              platform: platformPinned ? form.platform : platformForAddress(form.platform, e.target.value, form.apiStandard),
             })} />
           {endpointLocked && (
             <div className={styles.hint}>{t("aiConfig.providers.baseUrlOfficialHint")}</div>
@@ -492,7 +504,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
               options={PLATFORM_IDS.filter((id) => id !== "comfyui")
                 .map((id) => ({ value: id, label: t(`aiConfig.platforms.${id}`) }))}
               ariaLabel={t("aiConfig.providers.platformLabel")}
-              onChange={(v) => setForm({ ...form, platform: v as PlatformId })} />
+              onChange={(v) => {
+                setPlatformPinned(true);
+                setForm({ ...form, platform: v as PlatformId });
+              }} />
             <div className={styles.hint}>{t("aiConfig.providers.platformHint")}</div>
           </div>
         )}

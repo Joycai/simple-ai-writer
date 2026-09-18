@@ -2255,7 +2255,8 @@
       "unknownProvider": "Unknown provider (config missing)",
       "defaultMaxOutput": "Default max output",
       "defaultMaxOutputEmpty": "protocol default",
-      "defaultMaxOutputHint": "Used when a model has no 'max output' of its own and isn't in the built-in table. Empty/0 = each protocol's own default (32k on Anthropic, server's choice elsewhere)."
+      "defaultMaxOutputHint": "Used when a model has no 'max output' of its own and isn't in the built-in table. Empty/0 = each protocol's own default (32k on Anthropic, server's choice elsewhere).",
+      "serverToolsNotSent": "{{count}} model(s) have a server-side tool switched on that is not sent — their platform doesn't have it, or that model doesn't run it: {{models}}. Server tools are now sent per platform: if this is a proxy of Alibaba Model Studio (DashScope), set the provider's platform to it; otherwise switch the tool off on the model."
     },
     "providers": {
       "empty": "No providers yet, click below to add",
@@ -2571,6 +2572,7 @@
       "translateLabel": "Translation model format",
       "noteSoCeiling": "this session · endpoint refused {{refused}}, now {{mode}}",
       "serverToolNotSent": "{{platform}} has no spelling for this tool: the switch is kept, but nothing is sent.",
+      "serverToolNotForModel": "{{platform}} has this tool, but {{model}} doesn't run it: the switch is kept, but nothing is sent.",
       "serverToolUnmeasured": "Unmeasured on {{platform}}: this is the protocol's own tool, so it depends on whether the upstream passes it on — it may be rejected."
     },
     "probe": {
