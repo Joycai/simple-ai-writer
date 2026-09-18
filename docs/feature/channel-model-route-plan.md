@@ -1,7 +1,7 @@
 # 「供应商与模型」重构：渠道 × 模型 × 线路
 
 > 状态：`proposal`（2026-09-18）。设计稿在 claude.ai/design 项目（本 app 的设计项目）的
-> [`05k 渠道与线路 Channel × Route.dc.html`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0?file=05k+%E6%B8%A0%E9%81%93%E4%B8%8E%E7%BA%BF%E8%B7%AF+Channel+%C3%97+Route.dc.html) TURN 1，屏 1a–1h + 1z 口径。
+> [`05k 渠道与线路 Channel × Route.dc.html`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0?file=05k+%E6%B8%A0%E9%81%93%E4%B8%8E%E7%BA%BF%E8%B7%AF+Channel+%C3%97+Route.dc.html) TURN 1，屏 1a–1h + 1n 设计说明（沿用 05c 抽屉与 05d 列表的组件语汇，Tweaks 可切深浅）。
 > 下文 §6 的「屏 01–08」依次对应 1a–1h。
 > 本文是**方案**：数据模型、字段归属、迁移、分期、不变量。UI 口径以设计稿为准，本文 §6 只记每屏回答了哪个问题。
 >
