@@ -20,6 +20,7 @@ import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parsePlatform, platformToStore, type PlatformId } from "./platforms";
 import {
   legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
+  standardOf, writtenBaseOf,
   type Endpoint, type RouteProfile,
 } from "./routes";
 import type { ProtocolFamily } from "./types";
@@ -815,7 +816,7 @@ function rowToProvider(r: Record<string, unknown>): Provider {
     endpoints: parseEndpoints(r.endpoints),
     sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
     createdAt: r.created_at as number,
-  });
+  }, writtenBaseOf(r.endpoints));
 }
 
 /**
@@ -829,10 +830,18 @@ function rowToProvider(r: Record<string, unknown>): Provider {
  * routes, so its edit is the newer truth for the primary route, which is
  * rebuilt from the columns while the other routes stay.
  */
-export function readChannel(p: Provider): Provider {
+export function readChannel(p: Provider, writtenBase?: string): Provider {
   let endpoints = p.endpoints;
   let host = p.host;
-  if (endpoints?.length && legacyColumnsDiverged({ ...p, host }, endpoints)) {
+  // With the marker, "diverged" means the columns changed since this build
+  // wrote them — not that today's platform table computes another address,
+  // which is exactly what a route with no stored path is supposed to follow.
+  const diverged = endpoints?.length
+    ? writtenBase !== undefined
+      ? writtenBase !== p.baseUrl || standardOf(endpoints[0]) !== p.apiStandard
+      : legacyColumnsDiverged({ ...p, host }, endpoints)
+    : false;
+  if (endpoints?.length && diverged) {
     const legacy = legacyEndpoint(p);
     endpoints = [legacy.endpoint, ...endpoints.slice(1).filter((e) => e.family !== legacy.endpoint.family)];
     host = legacy.host || host;
@@ -930,7 +939,11 @@ export function providerUpsert(p: Provider): SqlStatement {
       // an inferred one is left NULL so it keeps following the table.
       platformToStore(c) ?? null,
       c.host ?? null,
-      JSON.stringify(c.endpoints),
+      // The primary route carries the base_url written beside it, so a read can
+      // tell an older build's edit to the columns (they no longer match) from a
+      // platform convention that moved since (they still do) — routes.ts
+      // `writtenBaseOf`.
+      JSON.stringify(c.endpoints!.map((e, i) => (i === 0 ? { ...e, writtenBase: c.baseUrl } : e))),
       c.createdAt,
     ],
   };

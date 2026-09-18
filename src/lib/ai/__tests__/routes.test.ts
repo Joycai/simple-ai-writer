@@ -182,6 +182,21 @@ describe("parsing", () => {
       .toEqual({ responses: { maxOutput: 100 } });
   });
 
+  it("a moved platform convention is not mistaken for an older build's edit", () => {
+    // The columns still hold what this build wrote (the marker says so), so an
+    // empty path keeps following the platform even though today's convention
+    // computes another address than the one written back then.
+    const stored: Provider = {
+      id: "p", name: "P", createdAt: 0, platform: "dashscope",
+      baseUrl: "https://dashscope.aliyuncs.com/old-mode/v1", apiStandard: "openai_compat",
+      host: "https://dashscope.aliyuncs.com",
+      endpoints: [{ family: "openai", official: false }],
+    };
+    const c = readChannel(stored, "https://dashscope.aliyuncs.com/old-mode/v1");
+    expect(c.endpoints![0].path).toBeUndefined();
+    expect(c.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
+  });
+
   it("an older build's edit to the columns wins for the primary route", () => {
     // It rewrote base_url / api_standard and knows nothing of `endpoints`.
     const stored: Provider = {

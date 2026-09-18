@@ -21,7 +21,7 @@ import styles from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 import r from "./Routes.module.css";
-import { activeFamily, channelEndpoints, providerFor, ROUTE_LONG, ROUTE_SHORT } from "../../../lib/ai/routes";
+import { activeFamily, channelEndpoints, channelHost, providerFor, ROUTE_LONG, ROUTE_SHORT } from "../../../lib/ai/routes";
 import { mergeCandidates, planMerge, type MergeCandidate } from "../../../lib/ai/channelMerge";
 import type { ProtocolFamily } from "../../../lib/ai/types";
 
@@ -191,7 +191,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [keys, setKeys] = useState<ReadonlyMap<string, string>>(new Map());
   useEffect(() => {
     let alive = true;
-    void Promise.all(providers.map(async (p) => {
+    // Only the channels that could pair on everything but the key — every
+    // keychain read may prompt on a build whose signature changed
+    // (docs/reference/macos-signing.md), so reading all of them each time
+    // this page opens would be a wall of password dialogs.
+    const site = (p: (typeof providers)[number]) =>
+      `${resolvePlatform(p.platform, p.baseUrl, p.apiStandard)} ${channelHost(p).trim().toLowerCase()}`;
+    const count = new Map<string, number>();
+    for (const p of providers) count.set(site(p), (count.get(site(p)) ?? 0) + 1);
+    const suspects = new Set(providers.filter((p) => (count.get(site(p)) ?? 0) > 1).map((p) => p.id));
+    void Promise.all(providers.filter((p) => suspects.has(p.id)).map(async (p) => {
       try {
         return [p.id, (await getApiKey(p.id)) ?? ""] as const;
       } catch {

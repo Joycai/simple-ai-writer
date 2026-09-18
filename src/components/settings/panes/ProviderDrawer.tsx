@@ -165,7 +165,7 @@ interface Form {
 
 export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
   const { t } = useTranslation();
-  const { providers, models, addProvider, updateProvider, addModel } = useAiStore();
+  const { providers, models, addProvider, updateProvider, addModel, updateModel } = useAiStore();
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
   const [form, setForm] = useState<Form | null>(() =>
@@ -227,7 +227,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
 
   const comfyMode = form.platform === "comfyui"
     || (!!existing && models.some((m) => m.providerId === existing.id && m.caps?.route === "comfyui"));
-  const official = isOfficialPlatform(form.platform);
+  // Asked of the routes, not the platform: a compat row whose host happens to
+  // be a vendor's (an openai_compat row on api.openai.com) is on the `openai`
+  // platform but has a typed address — treating it as official would drop its host.
+  const official = form.endpoints.length > 0 && form.endpoints.every((e) => e.official);
   // The draft as a channel: every address below is read off it, through the
   // same functions a request uses, so the table can't show one URL and the
   // request go to another.
@@ -258,7 +261,8 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
         const spec = platformEndpoints(f.platform).find((e) => e.family === family);
         const ep: Endpoint = {
           family,
-          official: spec?.official === true,
+          // Official only beside official routes — never a vendor constant on a relay.
+          official: spec?.official === true && f.endpoints.every((e) => e.official),
           ...(spec?.authMode ? { authMode: spec.authMode } : {}),
           ...(family === "gemini" ? { safetySettings: defaultSafetySettings() } : {}),
           ...patch,
@@ -315,6 +319,15 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     try {
       const channel: Provider = { ...draft, name: form.name.trim() };
       if (existing) {
+        // A model that never picked a route follows the primary one; moving the
+        // primary would carry it to another protocol with fields set for the
+        // old one (invariant 3). Pin those to the route they were on first.
+        const oldPrimary = channelEndpoints(existing)[0].family;
+        if (channel.endpoints![0].family !== oldPrimary) {
+          for (const m of models) {
+            if (m.providerId === existing.id && !m.activeRoute) await updateModel({ ...m, activeRoute: oldPrimary });
+          }
+        }
         await updateProvider({ ...existing, ...channel, id: existing.id, createdAt: existing.createdAt }, form.apiKey);
       } else {
         const { id: _draftId, createdAt: _draftAt, ...rest } = channel;

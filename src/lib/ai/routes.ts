@@ -429,3 +429,15 @@ export function legacyColumnsDiverged(p: Provider, endpoints: Endpoint[]): boole
   const base = endpointBaseUrl({ ...p, apiStandard: std }, primary);
   return base !== p.baseUrl;
 }
+
+/**
+ * The base URL the writing build stored in the legacy column beside the route
+ * list (`providerUpsert` puts it on the primary route). Absent on a list
+ * written without it — `legacyColumnsDiverged` then answers alone.
+ */
+export function writtenBaseOf(raw: unknown): string | undefined {
+  const value = fromJson(raw);
+  if (!Array.isArray(value)) return undefined;
+  const first = value[0] as Record<string, unknown> | undefined;
+  return first && typeof first.writtenBase === "string" ? first.writtenBase : undefined;
+}
