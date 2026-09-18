@@ -70,6 +70,13 @@ describe("parseImageCaps", () => {
     expect(parseImageCaps({ edit: "yes", asyncTask: 1, route: "dashscope" })).toEqual({ route: "dashscope" });
   });
 
+  it("keeps the ark route and the Seedream dialects (火山方舟 starter rows declare them)", () => {
+    for (const dialect of ["seedream-5-pro", "seedream-5-lite", "seedream-4"]) {
+      const caps = { route: "ark", dialect, edit: true, maxRefs: 14 };
+      expect(parseImageCaps(JSON.stringify(caps))).toEqual(caps);
+    }
+  });
+
   it("wants the ComfyUI workflow as text", () => {
     for (const comfy of [{ workflow: 5 }, { workflow: { "3": {} } }, "graph", null]) {
       expect(parseImageCaps({ route: "comfyui", comfy })).toEqual({ route: "comfyui" });

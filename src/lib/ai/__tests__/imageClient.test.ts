@@ -1034,6 +1034,99 @@ describe("generateImage · ComfyUI route", () => {
   });
 });
 
+describe("generateImage · ark route (火山方舟 Seedream)", () => {
+  // The plan base; pay-as-you-go is the same with /api/v3.
+  const ARK = {
+    baseUrl: "https://ark.cn-beijing.volces.com/api/plan/v3",
+    apiKey: "k",
+    standard: "openai_compat" as const,
+    modelId: "doubao-seedream-5.0-lite",
+    route: "ark" as const,
+  };
+
+  it("posts Seedream's body to {base}/images/generations with the watermark off", async () => {
+    const calls = mockJson({ data: [{ b64_json: PNG_B64, size: "2048x2048" }] });
+    const res = await generateImage(ARK, { prompt: "a cat", size: "2K" });
+    expect(calls[0].url).toBe("https://ark.cn-beijing.volces.com/api/plan/v3/images/generations");
+    // Upstream stamps 「AI 生成」 unless told not to, and bills the same.
+    expect(calls[0].body.watermark).toBe(false);
+    expect(calls[0].body.response_format).toBe("b64_json");
+    expect(calls[0].body.size).toBe("2K");
+    // No `n` (not a Seedream field) and no group mode (5.0 pro 400s on it).
+    expect(calls[0].body).not.toHaveProperty("n");
+    expect(calls[0].body).not.toHaveProperty("sequential_image_generation");
+    expect(res.images).toHaveLength(1);
+    expect(res.images[0].mime).toBe("image/png");
+  });
+
+  it("lets extraBody turn the watermark back on", async () => {
+    const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage(ARK, { prompt: "a cat", extraBody: { watermark: true } });
+    expect(calls[0].body.watermark).toBe(true);
+  });
+
+  it("sends references as a JSON `image` field — one as a string, several as an array, mime lowercased", async () => {
+    const one = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/PNG;base64,aGk="] });
+    expect(one[0].body.image).toBe("data:image/png;base64,aGk=");
+
+    vi.unstubAllGlobals();
+    const two = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk=", "data:image/jpeg;base64,aGk="] });
+    expect(two[0].body.image).toEqual(["data:image/png;base64,aGk=", "data:image/jpeg;base64,aGk="]);
+    // Still the generations path — Seedream has no /images/edits.
+    expect(two[0].url).toMatch(/\/images\/generations$/);
+  });
+
+  it("turns n candidates into n single-picture requests", async () => {
+    const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    const res = await generateImage(ARK, { prompt: "a cat", n: 3 });
+    expect(calls).toHaveLength(3);
+    expect(res.images).toHaveLength(3);
+    for (const c of calls) expect(c.body).not.toHaveProperty("n");
+  });
+
+  it("keeps the pictures that came back when one of the requests failed", async () => {
+    let i = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => (i++ === 0
+      ? new Response(JSON.stringify({ error: { code: "InternalServiceError", message: "boom" } }), { status: 500 })
+      : new Response(JSON.stringify({ data: [{ b64_json: PNG_B64 }] }), { status: 200 }))));
+    const res = await generateImage(ARK, { prompt: "a cat", n: 2 });
+    expect(res.images).toHaveLength(1);
+    expect(res.text).toMatch(/1 of 2/);
+  });
+
+  it("keeps the rest of a response when one entry is a moderation refusal", async () => {
+    mockJson({ data: [
+      { error: { code: "OutputImageSensitiveContentDetected", message: "no" } },
+      { b64_json: JPEG_B64 },
+    ] });
+    const res = await generateImage(ARK, { prompt: "a cat" });
+    expect(res.images).toHaveLength(1);
+    expect(res.images[0].mime).toBe("image/jpeg");
+  });
+
+  it("throws a refusal with its code — never read as 'cannot edit'", async () => {
+    mockJson({ data: [{ error: { code: "OutputImageSensitiveContentDetected", message: "no" } }] });
+    const err = await generateImage(ARK, { prompt: "a cat", images: ["data:image/png;base64,aGk="] }).catch((e) => e);
+    expect(err).toBeInstanceOf(ImageHttpError);
+    expect(err.code).toBe("OutputImageSensitiveContentDetected");
+    expect(isEditUnsupportedError(err)).toBe(false);
+  });
+
+  it("does not report pixel-derived output_tokens as usage (billing is per picture)", async () => {
+    mockJson({ data: [{ b64_json: PNG_B64 }], usage: { generated_images: 1, output_tokens: 16384, total_tokens: 16384 } });
+    const res = await generateImage(ARK, { prompt: "a cat" });
+    expect(res.usage).toBeUndefined();
+  });
+
+  it("is never derived — an unset route on the same channel stays images-api", async () => {
+    const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage({ ...ARK, route: undefined }, { prompt: "a cat" });
+    expect(calls[0].body).not.toHaveProperty("watermark");
+  });
+});
+
 describe("isEditUnsupportedError", () => {
   // Drives the visible fallback to regeneration — a second, separately billed
   // call — so it must fire on a missing route and stay quiet on anything the

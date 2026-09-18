@@ -1167,10 +1167,11 @@ export function parseAsrFormat(raw: unknown): AsrFormat | undefined {
  * would otherwise be dropped from every stored model the day it ships.
  */
 const IMAGE_ROUTES: Record<ImageRoute, true> = {
-  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true,
+  "images-api": true, chat: true, gemini: true, dashscope: true, comfyui: true, ark: true,
 };
 const IMAGE_DIALECT_IDS: Record<ImageDialect, true> = {
   nanobanana: true, "gpt-image-2": true, "wan2.7": true, "qwen-image": true,
+  "seedream-5-pro": true, "seedream-5-lite": true, "seedream-4": true,
 };
 
 const listed = (table: object, v: unknown): boolean =>

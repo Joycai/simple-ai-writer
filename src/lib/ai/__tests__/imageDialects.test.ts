@@ -172,6 +172,55 @@ describe("dialect params", () => {
   });
 });
 
+describe("Seedream dialects", () => {
+  const pro = imageDialect("seedream-5-pro")!;
+  const lite = imageDialect("seedream-5-lite")!;
+  const v4 = imageDialect("seedream-4")!;
+
+  it("offers each version's own tiers, the half tier included", () => {
+    expect(pro.resolutions).toEqual(["1K", "1.5K", "2K"]);
+    expect(lite.resolutions).toEqual(["2K", "3K", "4K"]);
+    expect(v4.resolutions).toEqual(["2K", "4K"]);
+  });
+
+  it("sends the documented pixels for a requested ratio — looked up, per version", () => {
+    // Same 2K 16:9, different documented pixels: why this is a table, not a formula.
+    expect(pro.params({ aspect: "16:9", resolution: "2K" }).size).toBe("2816x1584");
+    expect(lite.params({ aspect: "16:9", resolution: "2K" }).size).toBe("2848x1600");
+    expect(pro.params({ aspect: "3:2", resolution: "1K" }).size).toBe("1248x832");
+    expect(pro.params({ aspect: "3:4", resolution: "1.5K" }).size).toBe("1344x1792");
+    expect(lite.params({ aspect: "21:9", resolution: "4K" }).size).toBe("6240x2656");
+  });
+
+  it("keeps every table size inside its version's total-pixel range", () => {
+    const ranges: [typeof pro, number, number][] = [
+      [pro, 921_600, 4_624_220], [lite, 3_686_400, 16_777_216], [v4, 3_686_400, 16_777_216],
+    ];
+    for (const [spec, lo, hi] of ranges) {
+      for (const tier of spec.resolutions) {
+        for (const aspect of spec.aspects) {
+          const [w, h] = spec.params({ aspect, resolution: tier }).size!.split("x").map(Number);
+          expect(w * h, `${spec.id} ${tier} ${aspect}`).toBeGreaterThanOrEqual(lo);
+          expect(w * h, `${spec.id} ${tier} ${aspect}`).toBeLessThanOrEqual(hi);
+        }
+      }
+    }
+  });
+
+  it("sends the bare tier when no ratio was asked for, or one outside the table", () => {
+    expect(lite.params({ resolution: "3K" }, { edit: true }).size).toBe("3K");
+    expect(pro.params({ aspect: "4:5", resolution: "1K" }).size).toBe("1K");
+    // "" is 2K — every version has it, and it is the endpoint's own default.
+    expect(pro.params({}).size).toBe("2K");
+  });
+
+  it("moves a tier the version lacks to the nearest one it has (the agent only knows 1K/2K/4K)", () => {
+    expect(pro.params({ resolution: "4K" }).size).toBe("2K");
+    expect(lite.params({ resolution: "1K" }).size).toBe("2K");
+    expect(v4.params({ aspect: "1:1", resolution: "1K" }).size).toBe("2048x2048");
+  });
+});
+
 describe("imageRequestParams", () => {
   it("routes through the declared dialect when there is one", () => {
     expect(imageRequestParams({ dialect: "nanobanana" }, { aspect: "4:5", resolution: "4K" })).toEqual({

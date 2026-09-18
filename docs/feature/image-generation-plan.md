@@ -606,6 +606,33 @@ image-conditioned 通道，`dest.kind === "document"` 早就会存盘并回传 m
 7,774 → 8,435，`agentToolBudget.test.ts` 的常驻上限随之抬到 8,600 并记录了
 测量值。
 
+### PR7 · 火山方舟 Seedream（`ark` 出图接口）— ✅ 已实现
+
+协议事实与实测在 `docs/api/landscape.md` §7 第十三个样本。四个决策及理由：
+
+- **新增 `ImageRoute` 值 `ark`，不做 `images-api` 的变体。** 路径同形（`{base}/images/generations`），但 body 不同：
+  没有 `n`、参考图走 JSON `image` 字段而不是 `/images/edits` 的 multipart、`watermark` 上游默认开。按
+  `provider-layering.md` 的标准，body 形状不同就配一个枚举值。它和 `dashscope` / `comfyui` 一样**永不作推导默认**
+  ——同一渠道上没声明 route 的图片模型仍是 `images-api`，已有配置的请求一个字节不变；火山方舟的起步模型显式声明它。
+- **`n` 张候选 = `n` 个单张请求并发，不用组图。** 组图（`sequential_image_generation:"auto"`）是模型自己决定画几张的
+  **一组相关图**，不是同一提示词的几个候选，且 5.0 pro 根本不支持。按张计费，并发 `n` 个请求的钱与 `n` 张一样。
+  部分请求失败时收下成功的、在 `text` 里报失败数——成功的那几张已经计费了。
+- **尺寸是三个方言，查表不计算。** `seedream-5-pro`（1K/1.5K/2K）、`seedream-5-lite`（2K/3K/4K）、`seedream-4`
+  （4.5 与 4.0 共有的 2K/4K；4.0 的 1K 两份文档不一致，不列）。选了比例发文档表里的像素，没选比例（改图跟随原图、
+  agent 没给比例）发档位。agent 工具只认 1K/2K/4K，版本没有的档位就近换（pro 的 4K → 2K），而不是 400。
+  每张表的每个格子都有单测钉住在该版本的总像素区间内。
+- **`output_tokens` 不当 token 用量。** 它是像素/256 的参考值，账单按张（`generated_images`）；报成 token，按 token
+  计价的费用组就会算出一笔没花的钱。计费走模型的 `pricePerImage`。
+
+配套：起步模型带上 `caps` 与 `activeRoute`（`StarterModel` 新增这两个字段）。Seedream 起步行钉在 Chat 线路——出图路径
+在 `…/v3` 下，套餐的 Anthropic 线路是 `/api/plan`，作者若把它排到首位，没钉住的出图行就会拼出不存在的路径。两个平台的
+id 拼法不同：套餐用它文档里的 `doubao-seedream-5.0-*`，按量用带日期的 id（lite 用带 `lite` 的那个，两边都收）。
+
+**明确不做（这一期）**：5.0 pro 的图层拆分（`layer_decomposition`）与透明背景（`background:"transparent"`）——都是
+「恰好一张参考图」的互斥模式，结果是底图 + 多个带透明通道的图层，需要新的落盘形态，不是一个开关；组图；5.0 lite 的
+出图联网搜索（`tools:[{type:"web_search"}]`）；`stream:true` 逐张推送；`optimize_prompt_options` 与 `output_format`
+（后者只有 5.0 收，不发则全系默认 jpeg，mime 按字节嗅探）。都可以经 `extraBody` 自行加。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |

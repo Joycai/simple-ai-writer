@@ -153,8 +153,13 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  *                    poll {base}/history/{id} and fetch via {base}/view. Never
  *                    a default either — only an explicit declaration selects it.
  *                    See docs/feature/comfyui-plan.md.
+ *   - "ark"        — 火山方舟 Seedream: POST {base}/images/generations, the
+ *                    same path as "images-api" but a different body (no `n`,
+ *                    references as a JSON `image` field, `watermark` on by
+ *                    default upstream). Never a default either — the 火山方舟
+ *                    starter rows declare it. See docs/api/landscape.md §7.
  */
-export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui";
+export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui" | "ark";
 
 /**
  * The optional processing hint that rides beside an image URL.
