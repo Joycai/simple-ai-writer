@@ -39,8 +39,7 @@ import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
 import { applyExportFlags } from "./routing";
 import { isOrchestratorEnabled } from "./packFlag";
 import type { ToolContext, ToolId } from "./registry";
-import { runAgent, type AgentRunResult } from "./runtime";
-import { messageCeilingForTools } from "./toolCost";
+import type { AgentRunResult } from "./runtime";
 import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { syncLore } from "./writeTools";
@@ -323,12 +322,15 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   ];
 
   const conn: AiConn = ctx.selfConn;
+  // Injected by the runtime; see `SubRunner` for why this is not an import.
+  const subRun = ctx.subRun;
+  if (!subRun) return fail("run_pack needs the agent runtime to start a sub-run, and this call is not inside one.");
   // The sub-run sizes its own message ceiling the way every surface does —
   // through the toolCost seam, on the already-resolved toolset (no routing, no
   // handoff on a pack preset): the window is the model's, the schema share is
   // the pack's resident half — the runtime shrinks it further if the shared
   // plan gate loads a deferred group mid-run.
-  const inputCeilingTokens = messageCeilingForTools(
+  const inputCeilingTokens = subRun.messageCeilingForTools(
     conn.model.contextSize,
     ctx.contextUtilization ?? CONTEXT_UTILIZATION_DEFAULT,
     preset.tools,
@@ -338,7 +340,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   let output = "";
   let result: AgentRunResult;
   try {
-    result = await runAgent({
+    result = await subRun.run({
       ...connOptions(conn),
       inputCeilingTokens,
       preset,

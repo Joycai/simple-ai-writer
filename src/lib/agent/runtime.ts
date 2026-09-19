@@ -52,7 +52,7 @@ import {
   type ToolGroup,
   type ToolId,
 } from "./registry";
-import { handoffToolTokens, toolTokensOf } from "./toolCost";
+import { handoffToolTokens, messageCeilingForTools, toolTokensOf } from "./toolCost";
 import { loadTaskDoc, parseSteps, type TaskStep } from "./taskWorkspace";
 import type { ToolCall, ToolResult } from "./tools";
 
@@ -712,6 +712,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   const runToolContext: ToolContext = {
     ...opts.toolContext,
     loreIndex: cloneLoreIndex(opts.toolContext.loreIndex),
+    // How `delegate` / `run_pack` start their sub-runs — injected rather than
+    // imported, since both live behind the registry this module imports.
+    subRun: { run: runAgent, messageCeilingForTools },
     toolSearch: Object.keys(searchable).length
       ? {
           groups: searchable,
@@ -1375,6 +1378,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           brief,
           degraded,
           ctx: runToolContext,
+          runAgent,
           inheritedSystem: opts.writerSystem,
           signal: opts.signal,
           onEvent: opts.onEvent,

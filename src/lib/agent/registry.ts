@@ -127,6 +127,8 @@ import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent, ToolProgress } from "./events";
+import type { AgentRunResult, AgentRuntimeOptions } from "./runtime";
+import type { TaskPreset } from "./presets";
 import {
   autoLoadMessage,
   describeSearchTools,
@@ -808,9 +810,34 @@ export interface LoreOrganizer {
 }
 
 /** Everything an executor may need about the running project. */
+/**
+ * How a tool starts a nested agent run. The runtime fills it for every run it
+ * starts (`runAgent` itself, and the toolCost seam a sub-run sizes its message
+ * ceiling with). `delegate` and `run_pack` take it from here rather than
+ * importing `runtime` / `toolCost`, because both of those import this
+ * registry — a direct import closes an import cycle through the one table
+ * every tool lives in (docs/feature/code-structure-plan.md P2).
+ */
+export interface SubRunner {
+  run: (opts: AgentRuntimeOptions) => Promise<AgentRunResult>;
+  messageCeilingForTools: (
+    contextSize: number | undefined,
+    utilization: number,
+    tools: readonly ToolId[],
+    residentGroups?: TaskPreset["residentGroups"],
+  ) => number;
+}
+
 export interface ToolContext {
   projectPath: string;
   loreIndex: LoreIndex;
+  /**
+   * Nested runs ({@link SubRunner}). Set by `runAgent` on the context it hands
+   * its tools, so every caller gets it without passing it; absent only when a
+   * tool is executed outside a run (tests), where the tools that need it fail
+   * with a message instead of reaching for the runtime.
+   */
+  subRun?: SubRunner;
   /**
    * 作者当前设定的**取材范围**：一个集合名，或 null / 缺席＝不设围栏
    * （见 lib/lore/collections）。
