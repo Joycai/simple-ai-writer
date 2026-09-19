@@ -218,11 +218,10 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
     baseUrl: opts.baseUrl,
     model: opts.modelId,
     tools: opts.tools?.map((t) => t.function.name),
-    // Logged explicitly because the OpenAI adapter has no requestBody hook —
-    // this entry is the only record of whether these sampling fields reached
-    // the wire. That matters most for the translation engine, whose whole
-    // degeneration remedy is a frequency_penalty that changes between retries:
-    // without this line, "did the retry actually send 0.2?" is unanswerable.
+    // The caller's side of the sampling fields. Whether they reached the wire
+    // is the request-body entry's job — every adapter reports its body now,
+    // the OpenAI one included — and comparing the two is how "did the
+    // translation retry actually send frequency_penalty 0.2?" gets answered.
     temperature: opts.temperature,
     topP: opts.topP,
     frequencyPenalty: opts.frequencyPenalty,
