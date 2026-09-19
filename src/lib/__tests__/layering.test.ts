@@ -47,8 +47,10 @@ const LIB_TO_STORES: Readonly<Record<string, number>> = {};
 const STORE_DYNAMIC: Readonly<Record<string, number>> = {
   // projectStore / appStore / openDocument / memoryStore 都会把 appStore 带进来，而 appStore 在
   // 模块加载时就把主题写上 document（main.tsx 的 boot 依赖这一点，首帧就是作者的主题）。
-  // agentStore 被十来个 node 环境的测试直接 import，静态导入会让它们在加载时就碰 DOM。
-  "stores/agentStore.ts": 21,
+  // agentStore（连同它静态 import 的 stores/agent/*）被十来个 node 环境的测试直接 import，
+  // 静态导入会让它们在加载时就碰 DOM。
+  "stores/agentStore.ts": 13,
+  "stores/agent/chatJob.ts": 4, // agentStore 的私有拆分（P5），同一条理由
 };
 
 function sources(dir: string, out: string[] = []): string[] {

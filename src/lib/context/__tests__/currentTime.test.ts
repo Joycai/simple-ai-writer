@@ -63,7 +63,7 @@ describe("currentTimeLine / withCurrentTime", () => {
  * `currentTimeLine` on the chat's per-turn directive.
  */
 const REQUIRED = [
-  "src/stores/agentStore.ts", // chat — stamps the turn, not history[0]
+  "src/stores/agent/chatJob.ts", // chat (runChatJob) — stamps the turn, not history[0]
   "src/stores/aiTaskStore.ts", // AiPanel tasks and, through runTask, batch runs
   "src/lib/agent/subagent.ts", // delegates: web search is the one that needs the date most
   "src/lib/agent/packs.ts", // pack sub-runs write the same documents chat does

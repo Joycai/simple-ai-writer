@@ -95,8 +95,8 @@
 | P1 | 拆 `subagent.ts`：纯查询 / 执行 | 已合并 | #645 |
 | P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 已合并 | #646 |
 | P3 | `lib → stores` 归零 | 已合并 | #647 |
-| P4 | store 环：项目生命周期协调 + 批处理标志 | 进行中 | |
-| P5 | `agentStore` 拆分 | 未开始 | |
+| P4 | store 环：项目生命周期协调 + 批处理标志 | 已合并 | #648 |
+| P5 | `agentStore` 拆分 | 进行中 | |
 | P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 未开始 | |
 | P7 | 零碎：`readImageBytes` 复用、`codemap.md` 分段 | 未开始 | |
 
@@ -231,6 +231,7 @@ pnpm build
 | 2026-09-19 | P2 | 只注入 `runAgent` 解不开整个组：`registry → packs → toolCost → registry` 这条环不经过 runtime——`run_pack` 要用 `messageCeilingForTools` 给子运行定上限，而 `toolCost` 要读 registry 的工具定义。所以注入的是 `ToolContext.subRun: SubRunner`（`run` + `messageCeilingForTools`）而不是单个 `runSubAgent`。字段设为可选而不是方案写的必填：`runAgent` 在它交给工具的上下文上统一填入，调用方一个都不用改；不在运行里调用（只有测试）时，`delegate` / `run_pack` 返回一条说明而不是去找 runtime。写手交接照方案，`runAgent` 作参数传入。结果 agent 组整组消失，不只是静态部分。 |
 | 2026-09-19 | P3 | 四个读 AI 配置的文件没有复用 `resolveSubAgent`：它解析的是**连接**（带 key、套上本次对话的芯片开关），而 `imageTools` / `translate` / `asr` 读的是设置里原样的绑定，换成它会改变行为。于是加了 `ToolContext.appState: ToolAppState`（`aiSettings` / `docFormats` / `addImitatedFormat` 三个 getter，store 一侧是 `stores/toolAppState.ts`），`resolveAsrConn` 与 `runIllustration` 改为收参数（`FileTree` 的右键转写直接传 `useAiStore.getState()`）。`imitatedIdFor` / `isSessionImitated` 是纯函数，从 `docFormatStore` 搬进 `lib/docx/presets.ts`。批准插图的路径要 `aiStore`，`agentStore` 于是改为静态 import 它——`aiStore` 本来就不在 agentStore 的环里——原有的 4 处 `await import("./aiStore")` 一并去掉，这本是 P4 的活，提前了。 |
 | 2026-09-19 | P4 | 方案漏了一条环：`projectStore ↔ editorStore` 是**双向静态**导入（`editorStore` 写字数、读 `activeFilePath`；`projectStore` 冲刷与重置缓冲区），madge 列的 15 条环里没有单独出现它。拆法：字数 / 字符数从 `projectStore` 搬进 `editorStore`（它本来就是从内容算的，四个组件改订阅）；`closeDocument` 与写作焦点（`WritingFocus` 一族）搬进新文件 `stores/openDocument.ts`，它在两个 store 之上。项目切换照方案走 `stores/projectLifecycle.ts`，但做法是把聊天那两步作为**必填钩子**传进 `projectStore.openProject/closeProject`，而不是在协调函数里重排步骤——这样切换中途的顺序和出错时的回滚（包括 catch 里移出最近项目）一字不变。批处理照方案用 `{ fromBatch: true }`；唯一的差别是一个本来就到不了的窗口：批处理两条子句之间若有人从快捷键另起一个面板任务，原先它会因 `running` 而不出卡片，现在会出。环拆完后把不再为躲环的动态导入改成静态（`roleplayStore`、`aiTaskStore`、`projectStore` 归零），其中三处 fire-and-forget 的 `void import(…).then(…)` 变成同步调用（composer 清空、记忆重载、`rejectAll`），各自改的是另一个 store，先后不可观察。`agentStore` 保留 21 处：目标都会把 `appStore` 带进来，而 `appStore` 加载即写主题到 `document`——静态导入会让十来个 node 测试在加载时就碰 DOM；理由写进了守卫。**手动走查（开项目 A → 聊天中切 B → 取消 → 再切 → 关闭）在这个环境里做不了**（Tauri 窗口无法自动驱动），留给合并前手动确认。 |
+| 2026-09-19 | P5 | 照方案拆，另加一个文件：只搬 `proposalApply` / `chatJob` / 选择器，`agentStore` 仍有约 1850 行，于是把约 480 行的类型也搬进 `stores/agent/types.ts`，落到 1272 行。两个订阅 store 的钩子（`useActiveChat`、`useChatStateInputs`）留在 `agentStore`，因为 `selectors` 若 import store 就会与它成环；`chatSurface` 放在 `chatJob` 而不是 `selectors`，理由相同（两者互相要对方的一个函数）。`chatSystemPrompt` 只有聊天运行用，随 `chatJob` 走；`currentTime.test.ts` 登记的「聊天面」因此从 `agentStore.ts` 改为 `stores/agent/chatJob.ts`——打时间戳的代码搬了家，守卫跟着搬。`proposalApply` 的依赖由 `agentStore` 的 `proposalApplyDeps()` 一次 `await import("./projectStore")` 组装，原来五个 apply 函数各自一次，store 间动态导入因此从 21 降到 17（`agentStore` 13 + `chatJob` 4）。 |
 
 ## 8. 复现 §1 的数字
 
