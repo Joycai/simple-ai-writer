@@ -118,7 +118,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
     }
   }
 
-  const so = effectiveStructuredOutput({ standard, baseUrl, modelId: m.modelId, structuredOutput: m.structuredOutput });
+  const so = effectiveStructuredOutput({ standard, baseUrl, platform: wire.platform, modelId: m.modelId, structuredOutput: m.structuredOutput });
   if (so !== "off") {
     // 三条线三个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
     // 否则只是 responseMimeType）、Responses 的 text.format、其余的 response_format。

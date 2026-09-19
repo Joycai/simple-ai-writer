@@ -360,6 +360,44 @@ export function makePadding(chars: number, seed = 20240801): string {
   return parts.join(" ").slice(0, chars);
 }
 
+// ─── Output length ───────────────────────────────────────────────────────────
+
+/** Finish reasons that mean the model chose to stop — not that anything stopped it. */
+const NATURAL_STOPS = new Set(["stop", "end_turn", "stop_sequence", "completed"]);
+
+/**
+ * Whether a generation run is evidence of an output ceiling.
+ *
+ * Only a run that stopped well short of what was asked **and** was stopped —
+ * a length-type finish reason, or none at all (a relay that clamps silently) —
+ * measures a ceiling. One that ended of its own accord (`stop`, `end_turn`,
+ * Gemini's `STOP`) says the model was done, however short: the counting task
+ * makes that unlikely, not impossible, and reading it as a cap writes a number
+ * below the model's real limit into its settings. A run that reached the
+ * request proves only a floor (see {@link suggestSettings}).
+ */
+export function outputRunCapped(requested: number, produced: number, finishReason?: string): boolean {
+  if (produced >= requested * 0.9) return false;
+  return !(finishReason && NATURAL_STOPS.has(finishReason.toLowerCase()));
+}
+
+/**
+ * What a generation run tells the settings: a capped run measures the ceiling
+ * (what it produced, high confidence); anything else is only a floor (low) —
+ * the request when the run reached it, and what it actually produced when the
+ * model stopped itself short. Recording the request in that last case claimed
+ * output the model never wrote, and raised a false conflict against a real
+ * cap below the request.
+ */
+export function generationFinding(
+  requested: number,
+  produced: number,
+  capped: boolean,
+): { maxOutput: number; confidence: FindingConfidence } {
+  if (capped) return { maxOutput: produced, confidence: "high" };
+  return { maxOutput: produced >= requested * 0.9 ? requested : produced, confidence: "low" };
+}
+
 // ─── Aggregation ─────────────────────────────────────────────────────────────
 
 type FindingSource =
@@ -425,8 +463,17 @@ export function suggestSettings(
     }
   }
 
-  const maxOutput = out.length ? Math.min(...out.map((f) => f.maxOutput!)) : undefined;
-  for (const f of out) {
+  // A low-confidence generation finding is a floor ("it produced this much"),
+  // not a ceiling: taking the smallest value would put the floor into the
+  // settings in place of a larger declared cap it never contradicted — ask for
+  // 16k, get 16k cleanly, and a model the author set to 64k is "fixed" to 16k.
+  const caps = out.filter((f) => !(f.detail === "generation" && f.confidence === "low"));
+  const floor = Math.max(0, ...out.filter((f) => !caps.includes(f)).map((f) => f.maxOutput!));
+  const maxOutput = caps.length ? Math.min(...caps.map((f) => f.maxOutput!)) : undefined;
+  if (maxOutput !== undefined && floor > maxOutput) {
+    conflicts.push(`generation: ${floor.toLocaleString()}`);
+  }
+  for (const f of caps) {
     if (f.maxOutput !== maxOutput) {
       conflicts.push(`${f.detail}: ${f.maxOutput!.toLocaleString()}`);
     }

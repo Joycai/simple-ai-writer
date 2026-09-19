@@ -286,11 +286,13 @@ const QWEN_IMAGE: ImageDialectSpec = {
     if (sel.aspect) return { ...aspect, size: qwenImageSize(sel.aspect, tier) };
     if (opts?.edit) {
       // No aspect asked for on an edit means "keep the input's framing". The
-      // endpoint spells that as "omit size" — which also means 2K — so the
-      // input's own ratio is re-spelled at the requested tier instead. With no
-      // dimensions to hand, omitting is the only honest option left.
+      // endpoint spells that as "omit size" — which also means 2K, at twice
+      // the price — so the input's own ratio is re-spelled at the requested
+      // tier instead. With no dimensions to hand, a square at the requested
+      // tier: a framing the author may not have wanted costs less than a
+      // silent doubling of the bill (size is never omitted on this dialect).
       const input = opts.inputSize;
-      if (!input?.width || !input?.height) return {};
+      if (!input?.width || !input?.height) return { size: qwenImageSize("1:1", tier) };
       return { size: qwenImageSize(`${input.width}:${input.height}`, tier) };
     }
     return { size: qwenImageSize("1:1", tier) };

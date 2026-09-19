@@ -24,6 +24,7 @@ import {
   THINKING_CATEGORIES,
   thinkingBody,
   thinkingIsOn,
+  type ThinkingCategory,
 } from "../reasoning";
 import type { ApiStandard } from "../types";
 
@@ -243,5 +244,27 @@ describe("effortForCategory", () => {
     expect(effortForCategory(C["glm-switch"], "off")).toBe("off");
     expect(effortForCategory(C["glm-switch"], "high")).toBe("high");
     expect(effortForCategory(C.minimax, "off")).toBe("off");
+  });
+});
+
+// Adding a vendor is a registry entry, never a branch on its id: a category the
+// code has never heard of gets its wire shape and its forcing rule from its data.
+describe("dispatch reads the category's data, not its id", () => {
+  const novel = (extra: Partial<ThinkingCategory>): ThinkingCategory => ({
+    ...THINKING_CATEGORIES["openai-generic"], ...extra,
+  });
+
+  it("spells a Chat Completions category by its openaiWire", () => {
+    expect(reasoningBody(novel({ openaiWire: "effort-or-disable" }), "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(novel({ openaiWire: "switch-budget" }), "high", 500)).toEqual({ enable_thinking: true, thinking_budget: 500 });
+    expect(reasoningBody(novel({ openaiWire: "thinking-type" }), "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(novel({}), "off")).toEqual({ reasoning_effort: "none" });
+  });
+
+  it("downgrades forcing by the category's forcing field", () => {
+    expect(forcesToolChoiceAuto(novel({ forcing: "always" }), undefined)).toBe(true);
+    expect(forcesToolChoiceAuto(novel({ forcing: "while-thinking" }), "high")).toBe(true);
+    expect(forcesToolChoiceAuto(novel({ forcing: "while-thinking" }), "off")).toBe(false);
+    expect(forcesToolChoiceAuto(novel({}), "high")).toBe(false);
   });
 });

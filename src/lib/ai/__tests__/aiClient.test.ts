@@ -203,6 +203,38 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
   });
 
+  it("hands the wire body to _onRequestBody and reports the finish_reason as stopReason", async () => {
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"x"},"finish_reason":null}]}\n`,
+      `data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    const bodies: unknown[] = [];
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], reasoningEffort: "high",
+      _onRequestBody: (b) => bodies.push(b),
+      onChunk: (c) => received.push(c),
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ model: "m", reasoning_effort: "high", stream: true });
+    expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "stop" });
+  });
+
+  it("reads a part-array delta.content as its text, never as [object Object]", async () => {
+    // Relays fronting a Responses / Anthropic backend mirror its part arrays.
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":[{"type":"text","text":"Hel"}]}}]}\n`,
+        `data: {"choices":[{"delta":{"content":[{"type":"text","text":"lo"},{"type":"image"}]}}]}\n`,
+        `data: {"choices":[{"delta":{"content":"!"}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(text(received)).toBe("Hello!");
+  });
+
   it("reassembles an SSE line split across network chunks", async () => {
     // One JSON line split mid-token — naive per-chunk parsing would drop it.
     const line = `data: {"choices":[{"delta":{"content":"whole"}}]}\n`;
@@ -225,6 +257,31 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(toolChunk.toolCalls).toEqual([
       { index: 0, id: "call_1", name: "read_file", arguments: '{"path":"a.md"}' },
     ]);
+  });
+
+  it("makes up an id for a call a relay sent with an empty one, distinct per call", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"","function":{"name":"a","arguments":"{}"}}]}}]}\n`,
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"","function":{"name":"b","arguments":"{}"}}]}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    const { toolCalls } = received.find((c) => "toolCalls" in c) as { toolCalls: { id: string }[] };
+    expect(toolCalls.map((c) => c.id).every((id) => id.startsWith("call_"))).toBe(true);
+    expect(new Set(toolCalls.map((c) => c.id)).size).toBe(2);
+  });
+
+  it("merges arguments a relay sent as two objects back to back", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"read_file","arguments":"{}"}}]}}]}\n`,
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\"a.md\\"}"}}]}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    const { toolCalls } = received.find((c) => "toolCalls" in c) as { toolCalls: { arguments: string }[] };
+    expect(JSON.parse(toolCalls[0].arguments)).toEqual({ path: "a.md" });
   });
 
   it("emits done even when the stream ends without [DONE]", async () => {
@@ -326,7 +383,7 @@ describe("streamCompletion — OpenAI SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true, stopReason: "model_context_window_exceeded",
     });
   });
 
@@ -339,7 +396,7 @@ describe("streamCompletion — OpenAI SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true, stopReason: "length",
     });
   });
 
@@ -459,6 +516,53 @@ describe("streamCompletion — Gemini SSE", () => {
     })).rejects.toThrow(/didn't declare/);
   });
 
+  it("fails on a finishReason it does not know instead of completing silently", async () => {
+    // MALFORMED_FUNCTION_CALL comes back HTTP 200 with empty parts; read as
+    // success, an agent loop ends the run as completed with nothing done.
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[]},"finishReason":"MALFORMED_FUNCTION_CALL"}]}\n`],
+    })).rejects.toThrow(/tool call that could not be parsed/);
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hm"}]},"finishReason":"SOME_FUTURE_REASON"}]}\n`],
+    })).rejects.toThrow(/abnormally \(finishReason: SOME_FUTURE_REASON\)/);
+    // The unspecified default is not a failure.
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"FINISH_REASON_UNSPECIFIED"}]}\n`],
+    });
+    expect(text(received)).toBe("ok");
+  });
+
+  it("hands the wire body to _onRequestBody", async () => {
+    mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}\n`]);
+    const bodies: unknown[] = [];
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "gemini", modelId: "gemini-3-pro",
+      messages: [{ role: "user", content: "hi" }], _onRequestBody: (b) => bodies.push(b),
+      onChunk: (c) => received.push(c),
+    });
+    expect(bodies[0]).toMatchObject({ contents: [{ role: "user", parts: [{ text: "hi" }] }] });
+    expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "STOP" });
+  });
+
+  it("joins every system message into one systemInstruction, flattening part arrays", async () => {
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "gemini", modelId: "gemini-3-pro",
+      messages: [
+        { role: "system", content: "first" },
+        { role: "system", content: [{ type: "text", text: "second" }] },
+        { role: "user", content: "hi" },
+      ],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.systemInstruction).toEqual({ parts: [{ text: "first\n\nsecond" }] });
+    expect(calls[0].body.contents).toEqual([{ role: "user", parts: [{ text: "hi" }] }]);
+  });
+
   it("spells every Gemini field in camelCase", async () => {
     // Google accepts both spellings; relays fronting it document only camel,
     // and an unrecognised key is ignored rather than rejected — a snake_case
@@ -549,7 +653,7 @@ describe("streamCompletion — Gemini SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 4, outputTokens: 8, truncated: true,
+      done: true, inputTokens: 4, outputTokens: 8, truncated: true, stopReason: "MAX_TOKENS",
     });
   });
 
@@ -2091,6 +2195,42 @@ describe("streamCompletion — Anthropic SSE", () => {
     expect(done[0]).toMatchObject({ outputTokens: 42, stopReason: "end_turn" });
   });
 
+  it("keeps both legs' thinking, in order, when a resumed leg numbers its blocks from 0 again", async () => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => sseResponse(
+        call++ === 0
+          ? [
+              `data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"leg one"}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"S1"}}\n\n`,
+              `data: {"type":"content_block_stop","index":0}\n\n`,
+              `data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":1}}\n\n`,
+              `data: {"type":"message_stop"}\n\n`,
+            ]
+          : [
+              `data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"leg two"}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"S2"}}\n\n`,
+              `data: {"type":"content_block_stop","index":0}\n\n`,
+              `data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"read_file"}}\n\n`,
+              `data: {"type":"content_block_stop","index":1}\n\n`,
+              `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":1}}\n\n`,
+              `data: {"type":"message_stop"}\n\n`,
+            ],
+      )),
+    );
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "anthropic", modelId: "m",
+      serverTools: ["web_search"], messages: [{ role: "user", content: "hi" }],
+      onChunk: (c) => received.push(c),
+    });
+    const tc = received.find((c) => "toolCalls" in c) as { _thinkingBlocks?: { blocks: Record<string, unknown>[] } };
+    expect(tc._thinkingBlocks?.blocks.map((b) => b.signature)).toEqual(["S1", "S2"]);
+  });
+
   it("resumes a turn that stopped on its search results reporting end_turn", async () => {
     // Reproduces a real MiniMax-M3 response: an opening line, eight searches,
     // then `stop_reason: "end_turn"` with nothing after the results. The
@@ -2824,6 +2964,17 @@ describe("streamCompletion — top_p / frequency_penalty", () => {
     const cfg = calls[0].body.generationConfig as Record<string, unknown> | undefined;
     expect(cfg?.topP).toBeUndefined();
     expect(calls[0].body.top_p).toBeUndefined();
+  });
+
+  it("sends a task's maxTokens as max_tokens, and never the model's maxOutput", async () => {
+    const capped = await collect({ chunks: [`data: [DONE]\n`], maxOutput: 8192 });
+    expect(capped.calls[0].body).not.toHaveProperty("max_tokens");
+    const calls = mockFetch([`data: [DONE]\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], maxOutput: 8192, maxTokens: 1600, onChunk: () => {},
+    });
+    expect(calls[0].body.max_tokens).toBe(1600);
   });
 });
 

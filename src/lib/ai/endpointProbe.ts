@@ -26,7 +26,7 @@
 import { fetch, isLocalUrl } from "../http";
 import {
   calibrate, classifyProbeError, estimateProbeCost, expectedPromptTokens,
-  isTransient, judgeTruncation, makePadding, parseOllamaParameters, readEntryLimits,
+  generationFinding, isTransient, judgeTruncation, makePadding, outputRunCapped, parseOllamaParameters, readEntryLimits,
   suggestSettings,
   type Calibration, type FindingConfidence, type ProbeCost, type ProbeFinding,
   type ProbeSuggestion, type TruncationResult,
@@ -820,9 +820,9 @@ async function measureOutputLength(
     requested,
     produced,
     finishReason: res.finishReason,
-    // Stopping well short of the request without hitting a length limit means
-    // the server enforces a lower ceiling than the parameter suggested.
-    capped: produced < requested * 0.9,
+    // Stopped well short of the request by something other than the model
+    // itself: the server enforces a lower ceiling than the parameter said.
+    capped: outputRunCapped(requested, produced, res.finishReason),
   };
 }
 
@@ -899,10 +899,8 @@ export async function probeEndpoint(opts: ProbeOptions): Promise<ProbeReport> {
       if (outputTest) {
         s.findings.push({
           source: "measured", detail: "generation",
-          // A capped run measures the ceiling; a clean run only proves the
-          // model reached what we asked for, which is a floor, not a limit.
-          maxOutput: outputTest.capped ? outputTest.produced : outputTest.requested,
-          confidence: outputTest.capped ? "high" : "low",
+          // A ceiling when capped, otherwise a floor — see generationFinding.
+          ...generationFinding(outputTest.requested, outputTest.produced, outputTest.capped),
         });
       }
     }

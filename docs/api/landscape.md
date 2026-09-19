@@ -397,6 +397,10 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 `/anthropic/v1/messages`），是"协议族与厂商正交"最直白的证据：选哪个族是调用方
 的事，不是厂商的属性。
 
+① 族的 `/v1` 不能省：无 key 探测（2026-09-19）根路径 `/chat/completions` 回 nginx
+的 404 HTML，`/v1/chat/completions` 回 401 JSON。平台行因此把 ① 的路径记为
+`/v1` —— 此前记的是空串，新建的 ① 渠道一律 404。
+
 与官方 ④ 的差异：
 
 - **端点带前缀**：`/anthropic/v1/messages`，不是 `/v1/messages`。
@@ -1263,7 +1267,7 @@ Responses adapter：
 | `instructions` | 支持；不能与 `previous_response_id` 同用 | 恒发，不用 `previous_response_id` | ✅ |
 | `reasoning.effort` | 按模型：4.6 `low/medium/high(默认)/xhigh`；4.5 到 `high`（`xhigh` 当 `high`）；4.3 `none/low/medium/high`；不支持的值**报错**；multi-agent 上 effort 是 agent 数（4 / 16） | 菜单 `off/low/medium/high/xhigh/max` 不按型号裁剪 | ⚠️ `max` 与越界值由端点 400——与本项目「越界让端点说话」的规则一致；multi-agent 的语义完全不同，作者需知道 |
 | `reasoning.summary` | 「仅为兼容保留」，恒 `detailed`；4.6 有摘要 | 随 effort 发 `auto` | ✅ |
-| 加密推理 | **只在 `include:["reasoning.encrypted_content"]` 时返回** | 不发 `include` | ❌ 回传的 reasoning 条目没有加密内容；后果未测。与 [`gpt56-plan.md`](gpt56-plan.md) P5 同一件事，现在有两家 |
+| 加密推理 | **只在 `include:["reasoning.encrypted_content"]` 时返回** | 平台行 `responsesInclude` 声明，只对 xAI 发 | ✅（2026-09-19 起）。此前不发：回传的 reasoning 条目没有加密内容，第二轮照样 200，往轮推理静默断开。官方 OpenAI 是否同样要 `include` 仍未验（[`gpt56-plan.md`](gpt56-plan.md) P5），故不对它发 |
 | 函数工具 | 扁平；`strict`「不支持，仅为兼容」（实际恒 strict）；≤350 个 | 扁平 + `strict:false` | ✅ 字段被忽略；**恒 strict** 意味着参数一定合 schema |
 | `tool_choice` | 规格收扁平 `{type:"function", name}`；函数调用指南的表写的却是嵌套形——**文档自相矛盾** | 扁平 | ✅（按规格） |
 | `text.format` | `json_schema` 的 `name` / `strict` 仅为兼容；含 `maxContains`/`minContains`/数组形 `items` 的 schema 400 | `json_schema` 不发 `strict`；`grok-*` 不在自动抬升表，默认 `json_object` | ✅ |

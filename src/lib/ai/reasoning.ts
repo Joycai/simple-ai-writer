@@ -11,8 +11,9 @@
  * See `docs/api/landscape.md` for the protocol facts and `docs/api/reasoning-plan.md`
  * for why the mapping is shaped this way.
  *
- * Only the OpenAI Chat Completions family is wired up so far; the others return
- * undefined, which is exactly the behaviour they had before this file existed.
+ * All four families are wired up (`reasoningBody`, plus `thinkingBody` for the
+ * Anthropic `thinking` field). How one vendor spells it on its family is data
+ * on its category (`openaiWire`, `forcing`), never a branch on the category id.
  */
 
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
@@ -161,6 +162,28 @@ export interface ThinkingCategory {
   /** A static fragment always merged into the request while this category is on. */
   extra?: Record<string, unknown>;
   /**
+   * How a Chat Completions endpoint spells this category (family `openai`
+   * only; absent = `effort`):
+   *
+   *   - `effort` — the standard `reasoning_effort`, `off` spelled `"none"`,
+   *     plus the category's static `extra`.
+   *   - `effort-or-disable` — `reasoning_effort` while on; off is the
+   *     top-level `thinking:{type:"disabled"}` switch *alone*, because
+   *     `"none"` does not stop these endpoints (DeepSeek, Doubao, GLM-5.2).
+   *   - `switch-budget` — DashScope's `enable_thinking` boolean, plus
+   *     `thinking_budget` while on and set.
+   *   - `switch-effort` — `enable_thinking` with `reasoning_effort` beside it.
+   *   - `thinking-type` — the `thinking.type` switch only; the endpoint drops
+   *     `reasoning_effort` without a word (GLM before 5.3).
+   */
+  openaiWire?: "effort" | "effort-or-disable" | "switch-budget" | "switch-effort" | "thinking-type";
+  /**
+   * When a forced `tool_choice` is illegal on this category's endpoint:
+   * `always` (MiniMax's enum is `auto|none`), or `while-thinking` (DashScope
+   * refuses it once `enable_thinking` is true). Absent = never.
+   */
+  forcing?: "always" | "while-thinking";
+  /**
    * Whether the endpoint thinks when the request says nothing — what an on/off
    * toggle shows for an unset effort. Absent = the family's habit (Anthropic
    * categories on, the rest off); see `thinkingIsOn`.
@@ -199,6 +222,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // that silently means another. `off` sends the disable switch (not
     // reasoning_effort:"none") — see reasoningBody.
     menu: ["off", "low", "high", "max"],
+    openaiWire: "effort-or-disable",
   },
   "qwen-budget": {
     id: "qwen-budget",
@@ -207,6 +231,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "openai", dialect: "switch", shape: "budget",
     menu: [],
     budget: { min: 1, max: 32768, default: 4000 },
+    openaiWire: "switch-budget", forcing: "while-thinking",
   },
   "qwen-effort": {
     id: "qwen-effort",
@@ -215,6 +240,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "openai", dialect: "none", shape: "levels",
     // Qwen-Max tops out at `xhigh`, not `max`; `medium` between low and xhigh.
     menu: ["off", "low", "medium", "xhigh"],
+    openaiWire: "switch-effort", forcing: "while-thinking",
   },
   glm: {
     id: "glm",
@@ -237,6 +263,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     hintKey: "aiConfig.models.thinkingCatGlmEffortHint",
     family: "openai", dialect: "none", shape: "levels",
     menu: ["off", "high", "max"],
+    openaiWire: "effort-or-disable",
   },
   // GLM before 5.3 (4.5 / 4.6 / 4.7 / 5 / 5.1) on 智谱's own endpoint: thinking
   // is on unless `thinking.type` says `disabled`, and `reasoning_effort` is
@@ -248,6 +275,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatGlmSwitch",
     hintKey: "aiConfig.models.thinkingCatGlmSwitchHint",
     family: "openai", dialect: "switch", shape: "onoff", menu: [], defaultOn: true,
+    openaiWire: "thinking-type",
   },
   doubao: {
     id: "doubao",
@@ -260,6 +288,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // prompt), and the endpoint refuses `high` + `disabled` together, so off
     // must carry the switch alone (landscape.md §7 第十二个样本).
     menu: ["off", "low", "medium", "high"],
+    openaiWire: "effort-or-disable",
   },
   "responses-effort": {
     id: "responses-effort",
@@ -301,6 +330,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatMinimax",
     hintKey: "aiConfig.models.thinkingCatMinimaxHint",
     family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
+    forcing: "always",
   },
   // Doubao Seed on 火山方舟's Anthropic-shaped route. It thinks unless told
   // not to, and the Claude categories cannot say "not": `claude-budget` sends
@@ -463,14 +493,7 @@ export function forcesToolChoiceAuto(
   effort: ReasoningEffort | undefined,
 ): boolean {
   const thinkingOn = effort !== undefined && effort !== "default" && effort !== "off";
-  switch (category.family) {
-    case "anthropic":
-      return category.id === "minimax"; // MiniMax: forcing is always illegal
-    case "openai":
-      return (category.id === "qwen-budget" || category.id === "qwen-effort") && thinkingOn;
-    default:
-      return false;
-  }
+  return category.forcing === "always" || (category.forcing === "while-thinking" && thinkingOn);
 }
 
 /**
@@ -540,8 +563,8 @@ export function reasoningBody(
           : { effort: OPENAI_EFFORT.off },
       };
     case "openai":
-      switch (category.id) {
-        case "qwen-budget":
+      switch (category.openaiWire ?? "effort") {
+        case "switch-budget":
           // A bare `enable_thinking` boolean (DashScope compatible-mode), plus
           // the token budget when the author set one. Budget omitted while off
           // or unset, so a migrated switch model stays byte-identical.
@@ -549,19 +572,17 @@ export function reasoningBody(
             enable_thinking: on,
             ...(on && typeof budget === "number" ? { thinking_budget: budget } : {}),
           };
-        case "qwen-effort":
+        case "switch-effort":
           // Qwen-Max: the switch and the level travel together (they are
           // documented as mutually exclusive with the *budget*, not each other).
           return on
             ? { enable_thinking: true, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
             : { enable_thinking: false };
-        case "glm-switch":
+        case "thinking-type":
           // The switch alone: GLM before 5.3 ignores reasoning_effort, so
           // sending it would only dress a no-op up as a setting.
           return { thinking: { type: on ? "enabled" : "disabled" } };
-        case "deepseek":
-        case "doubao":
-        case "glm-effort":
+        case "effort-or-disable":
           // DeepSeek (and Doubao on 火山方舟, GLM-5.2) turns thinking off with the disable switch, not
           // `reasoning_effort:"none"` — that field only tunes depth while on.
           // The switch is a **top-level** `thinking` object on the wire. The
@@ -572,7 +593,7 @@ export function reasoningBody(
           return on
             ? { reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
             : { thinking: { type: "disabled" } };
-        default:
+        case "effort":
           // openai-generic, glm — the standard top-level field, plus any static
           // fragment the category always carries (GLM's clear_thinking:false).
           return {
@@ -651,8 +672,9 @@ const GEMINI_LEVEL: Record<Exclude<ReasoningEffort, "default">, string> = {
  * than to disable. So "off" here is honestly "as little as this model allows" —
  * the UI says so rather than promising a switch the protocol won't honour.
  *
- * `xhigh` is deliberately absent from this app's vocabulary (see
- * REASONING_EFFORTS), which sidesteps the one level Claude 4.6 lacks.
+ * `xhigh` is in this app's vocabulary but off the Claude categories' menu
+ * (`claude-adaptive`), which sidesteps the one level Claude 4.6 lacks; its row
+ * here only keeps the map total.
  */
 const ANTHROPIC_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
   off: "low",

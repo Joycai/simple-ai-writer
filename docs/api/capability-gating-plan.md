@@ -372,3 +372,19 @@ C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单�
 C1 之后它已经没有调用方了：四族都有思考参数的拼法，它对当时的三族恒为 true，对 Responses 反而答 false，留着只会被误用。
 思考档位该不该显示，看的是解析出的思考类目（`resolveThinkingCategory`）有没有档位，不看协议族。
 `anthropic-plan.md` §4.4、`gemini-plan.md` 里提到它的是当时的实施记录，不改。
+
+### 8.9 严格 JSON 档成为线路能力 `jsonSchema`（模型端点审查，2026-09-19）
+
+`jsonMode.ts` 的自动抬升原来按**协议族**判：① / ② / ③ 族上，模型 id 在 `KNOWN_JSON_SCHEMA` 名单里就发 `json_schema`。
+注释写的是「中转站要靠声明才给严格档」，代码却对任何 `openai_compat` 地址都抬升，因为 compat 和官方同属一族。
+智谱是反例：它收下 `json_schema` 回 200 然后静默无视，吐出代码块包着的中文字段名（landscape.md §7 第十四个样本）。
+可同样是 GLM，在百炼上 `json_schema` 是生效的（qianwen-compat-plan.md P7）。所以「收不收严格档」是**线路**的事，
+不是模型 id 的事，理应进能力表。
+
+- 新增能力 `jsonSchema`：`native`，`assumed: "unknown"`，依赖 `structuredOutput`。平台格：OpenAI 两族、Google ③、
+  百炼 ①、xAI ② 记 `true`（都有实测或官方明列）；智谱记 `false`；其余平台和中转停在「未实测」。
+- **自动档只在格子为 `yes` 时抬升**。「未实测」照发作者的声明，但不替作者抬升，这正是原注释的本意。
+- **作者声明了 `json_schema`、格子是 `no`**：降一档发 `json_object`。那个 200 回来的是散文，不是作者要的 schema。
+  模型抽屉在这种线路上不再给严格档选项，已经存了的声明仍显示，免得选中项凭空消失。
+- 代价：百炼 ② 上的 Qwen 原来被自动抬升，现在停在 `json_object`，因为 ② 面没人测过。这是少一次升级，
+  不是一次失败。实测之后补格子即可。

@@ -26,6 +26,8 @@ const conn = {
   baseUrl: "https://relay/v1",
   apiKey: "k",
   standard: "openai_compat" as const,
+  // The platform decides whether json_schema is lifted to (capabilities.ts `jsonSchema`).
+  platform: "dashscope" as const,
   modelId: "qwen3.8-max",
 };
 

@@ -80,10 +80,27 @@ describe("resolveStructuredOutput", () => {
   });
 
   it("lifts a model id documented to take strict mode to json_schema", () => {
-    expect(resolveStructuredOutput({ standard: "openai_compat", modelId: "qwen3.8-max" })).toBe("json_schema");
+    expect(resolveStructuredOutput({ standard: "openai_compat", platform: "dashscope", modelId: "qwen3.8-max" })).toBe("json_schema");
     expect(resolveStructuredOutput({ standard: "openai", modelId: "gpt-5" })).toBe("json_schema");
     expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-3-pro" })).toBe("json_schema");
     expect(resolveStructuredOutput({ standard: "gemini", modelId: "gemini-2.0-flash" })).toBe("json_object");
+  });
+
+  it("lifts only where the wire is measured to honour json_schema, not wherever the family spells it", () => {
+    // The same id behind a relay, or on an unmeasured platform: json_object.
+    expect(resolveStructuredOutput({ standard: "openai_compat", modelId: "qwen3.8-max" })).toBe("json_object");
+    expect(resolveStructuredOutput({ standard: "openai_compat", baseUrl: "https://relay.example/v1", modelId: "gpt-5" })).toBe("json_object");
+    // The host names the platform: DashScope's compatible-mode is measured.
+    expect(resolveStructuredOutput({
+      standard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", modelId: "qwen3.8-max",
+    })).toBe("json_schema");
+  });
+
+  it("sends a json_schema declaration one tier down where the platform ignores it (智谱)", () => {
+    const zhipu = { standard: "openai_compat" as const, baseUrl: "https://open.bigmodel.cn/api/paas/v4", modelId: "glm-5.3" };
+    expect(resolveStructuredOutput({ ...zhipu, structuredOutput: "json_schema" })).toBe("json_object");
+    // Unmeasured is not ignored: a relay still gets what the author declared.
+    expect(resolveStructuredOutput({ standard: "openai_compat", modelId: "x", structuredOutput: "json_schema" })).toBe("json_schema");
   });
 
   it("lets the author's declaration win over the table", () => {
@@ -131,7 +148,7 @@ describe("parseStructuredOutputMode", () => {
 
 describe("jsonModeShaping · per-model modes", () => {
   it("sends strict json_schema, without a cue, when the model takes it and a schema is given", () => {
-    const s = jsonModeShaping({ standard: "openai_compat", modelId: "qwen3.8-max" }, WITHOUT, SCHEMA);
+    const s = jsonModeShaping({ standard: "openai_compat", platform: "dashscope", modelId: "qwen3.8-max" }, WITHOUT, SCHEMA);
     expect(s.mode).toBe("json_schema");
     expect(s.cue).toBeUndefined();
     expect(s.extraBody).toEqual({
@@ -260,7 +277,7 @@ describe("jsonModeShaping · the Responses family", () => {
 describe("json-mode refusal memo", () => {
   beforeEach(() => __resetJsonModeMemo());
 
-  const qwen = { standard: "openai_compat" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
+  const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
 
   it("steps a refused mode down one level and caps later shaping", () => {
     expect(jsonModeShaping(qwen, WITH, SCHEMA).mode).toBe("json_schema");
@@ -318,7 +335,7 @@ describe("json-mode refusal memo", () => {
 describe("withJsonModeFallback", () => {
   beforeEach(() => __resetJsonModeMemo());
 
-  const qwen = { standard: "openai_compat" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
+  const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
   const refusal = (mode: string) =>
     new Error(`400 Invalid parameter: 'response_format' of type '${mode}' is not supported with this model.`);
 

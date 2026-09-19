@@ -125,6 +125,11 @@ const PROBES: Record<CapabilityId, Probe> = {
   structuredOutput: async (ctx) => ({
     summary: summarySends(ctx, { structuredOutput: "off" }, { structuredOutput: "json_object" }),
   }),
+  // A declared strict tier reaches the request exactly where the table allows
+  // it — a platform measured to ignore it is sent json_object instead.
+  jsonSchema: async (ctx) => ({
+    summary: summarySends(ctx, { structuredOutput: "json_object" }, { structuredOutput: "json_schema" }),
+  }),
   web_search: serverTool("web_search"),
   web_extractor: serverTool("web_extractor"),
   web_search_image: serverTool("web_search_image"),

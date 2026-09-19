@@ -213,6 +213,29 @@
 | comfyui | ✓ protocol |  |  |  |
 | custom | ✓ protocol | ✓ protocol | ✓ protocol | · |
 
+## jsonSchema
+
+`native` · 规则缺省适用的协议族：Chat / Resp / Gemini
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | ✓ measured | ✓ measured |  |  |
+| anthropic |  |  |  | · |
+| google |  |  | ✓ measured |  |
+| deepseek | ? unmeasured | ? unmeasured |  | · |
+| dashscope | ✓ measured | ? unmeasured |  | · |
+| dashscope-intl | ✓ measured | ? unmeasured |  |  |
+| xai | ? unmeasured | ✓ measured |  |  |
+| minimax | ? unmeasured |  |  | · |
+| volcengine | ? unmeasured | ? unmeasured |  |  |
+| volcengine-plan | ? unmeasured | ? unmeasured |  | · |
+| zhipu | · |  |  |  |
+| orcarouter | ? unmeasured | ? unmeasured | ? unmeasured | · |
+| newapi | ? unmeasured | ? unmeasured | ? unmeasured | · |
+| ollama | ? unmeasured |  |  |  |
+| comfyui | ? unmeasured |  |  |  |
+| custom | ? unmeasured | ? unmeasured | ? unmeasured | · |
+
 ## web_search
 
 `native` · 规则缺省适用的协议族：Resp / Anth

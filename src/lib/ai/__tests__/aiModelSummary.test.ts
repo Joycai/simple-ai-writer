@@ -142,13 +142,13 @@ describe("wireSummary", () => {
 
   it("reports the mode the endpoint will actually get once it has refused a stronger one", () => {
     const t = { standard: "openai_compat" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
-    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl))
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl, "dashscope"))
       .toContainEqual({ key: "response_format", value: "json_schema", scope: "structured" });
     noteJsonModeRefused(t, "json_schema");
-    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl))
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, t.baseUrl, "dashscope"))
       .toContainEqual({ key: "response_format", value: "json_object", scope: "structured" });
     // Another endpoint serving the same model id is unaffected.
-    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, "https://other/v1"))
+    expect(wireSummary({ ...base, modelId: t.modelId }, t.standard, "https://other/v1", "dashscope"))
       .toContainEqual({ key: "response_format", value: "json_schema", scope: "structured" });
   });
 

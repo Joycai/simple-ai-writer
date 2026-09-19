@@ -171,8 +171,15 @@ export class ImageHttpError extends Error {
   readonly code?: string;
   /** OpenAI-shaped `error.param` — the field the endpoint objected to. */
   readonly param?: string;
+  /**
+   * `task` when the endpoint had already *accepted* the job — raised while
+   * polling it or by the job's own failure. The route evidently exists then,
+   * so nothing about this error can mean "this endpoint cannot edit"; a 404
+   * here is a task that vanished. Absent = the request itself.
+   */
+  readonly stage?: "task";
 
-  constructor(label: string, status: number, body: string) {
+  constructor(label: string, status: number, body: string, stage?: "task") {
     const structured = parseErrorBody(body);
     super(`${label} ${status}: ${structured.message ?? body}`);
     this.name = "ImageHttpError";
@@ -180,6 +187,7 @@ export class ImageHttpError extends Error {
     this.body = body;
     this.code = structured.code;
     this.param = structured.param;
+    if (stage) this.stage = stage;
   }
 }
 
@@ -331,6 +339,9 @@ export function isEditUnsupportedError(err: unknown): boolean {
   // billable generation.
   if (err instanceof NoImageError) return false;
   if (!(err instanceof ImageHttpError)) return false;
+  // The job was accepted, so the route is there: a 404 while polling is the
+  // task gone missing, and falling back would bill a second generation for it.
+  if (err.stage === "task") return false;
 
   // "There is no such endpoint / method here" — unambiguous, and the case the
   // fallback exists for.
@@ -474,6 +485,32 @@ async function urlToDataUrl(url: string, signal?: AbortSignal): Promise<Generate
   }
 }
 
+/**
+ * One link of a multi-image response, downloaded on its own: a failure is
+ * recorded in `failures` and answered with undefined rather than thrown.
+ *
+ * Every picture in the response is already paid for, so one link that will
+ * not download must not take the others down with it — thrown from inside the
+ * loop, it used to discard the pictures that had arrived *and* the usage the
+ * response reported. The caller rethrows the first failure only when nothing
+ * arrived at all ({@link throwIfNoneArrived}). An abort is never swallowed.
+ */
+async function tryLinkedImage(url: string, signal: AbortSignal | undefined, failures: unknown[]): Promise<GeneratedImage | undefined> {
+  try {
+    return await urlToDataUrl(url, signal);
+  } catch (e) {
+    if (signal?.aborted || (e as Error)?.name === "AbortError") throw e;
+    failures.push(e);
+    console.warn("[image] a generated picture could not be downloaded; keeping the rest", e);
+    return undefined;
+  }
+}
+
+/** The first download failure, when it is the reason there is no picture to return. */
+function throwIfNoneArrived(images: GeneratedImage[], failures: unknown[]): void {
+  if (!images.length && failures.length) throw failures[0];
+}
+
 async function downloadImage(url: string, signal?: AbortSignal): Promise<GeneratedImage> {
   const deadline = withDeadline(signal, DOWNLOAD_TIMEOUT_MS);
   try {
@@ -577,6 +614,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
 
   const entries = json.data ?? [];
   const images: GeneratedImage[] = [];
+  const failures: unknown[] = [];
   for (const entry of entries) {
     if (entry.b64_json) {
       // The wire format carries no mime, so read it off the bytes: the
@@ -589,9 +627,11 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
       // to work in a browser and does not in Tauri's reqwest transport.
       images.push(imageFromDataUrl(entry.url));
     } else if (entry.url) {
-      images.push(await urlToDataUrl(entry.url, signal));
+      const img = await tryLinkedImage(entry.url, signal, failures);
+      if (img) images.push(img);
     }
   }
+  throwIfNoneArrived(images, failures);
   if (!images.length) throw new NoImageError(entries.length ? "no image data in response" : undefined);
 
   // Present on the token-billed image models, absent on the per-image ones.
@@ -851,7 +891,12 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
   }
 
   const images: GeneratedImage[] = [];
-  for (const f of found) images.push("link" in f ? await urlToDataUrl(f.link, req.signal) : f);
+  const failures: unknown[] = [];
+  for (const f of found) {
+    const img = "link" in f ? await tryLinkedImage(f.link, req.signal, failures) : f;
+    if (img) images.push(img);
+  }
+  throwIfNoneArrived(images, failures);
   if (!images.length) {
     // The model replying in words is the usual symptom of a text model being
     // configured as an image one — say so with its own words attached.
@@ -1077,10 +1122,15 @@ async function collectDashscopeImages(
   signal: AbortSignal | undefined,
 ): Promise<ImageResult> {
   const images: GeneratedImage[] = [];
+  const failures: unknown[] = [];
   for (const u of urls) {
     if (u.startsWith("data:")) images.push({ dataUrl: u, mime: mimeOfDataUrl(u) });
-    else images.push(await urlToDataUrl(u, signal));
+    else {
+      const img = await tryLinkedImage(u, signal, failures);
+      if (img) images.push(img);
+    }
   }
+  throwIfNoneArrived(images, failures);
   if (!images.length) throw new NoImageError(texts.join(" ").slice(0, 200) || undefined);
   // No usage: DashScope reports image counts and dimensions, not tokens —
   // billing goes through pricePerImage like the other per-image endpoints.
@@ -1180,7 +1230,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
           headers: dashscopeHeaders(conn),
           signal: deadline.signal,
         });
-        if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text());
+        if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text(), "task");
         json = (await readJson(poll, "Image task error")) as { output?: DashscopeOutput };
       } catch (e) {
         // The generation is already paid for and a poll is a cheap GET, so a
@@ -1207,7 +1257,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
       }
       // FAILED / CANCELED / anything unrecognized. The failure's code and
       // message live inside `output`, which parseErrorBody reads top-level.
-      throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json));
+      throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json), "task");
     }
   } finally {
     deadline.done();
@@ -1324,15 +1374,19 @@ async function parseArkImagePayload(raw: unknown, signal?: AbortSignal): Promise
   };
   if (json.error) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: json.error }));
   const images: GeneratedImage[] = [];
+  const failures: unknown[] = [];
   let refused: { code?: string; message?: string } | undefined;
   for (const entry of json.data ?? []) {
     if (entry.b64_json) images.push(imageFromBase64(entry.b64_json));
     else if (entry.url?.startsWith("data:")) images.push(imageFromDataUrl(entry.url));
     // A 24-hour link when the author's extraBody asked for `url`.
-    else if (entry.url) images.push(await urlToDataUrl(entry.url, signal));
-    else if (entry.error) refused ??= entry.error;
+    else if (entry.url) {
+      const img = await tryLinkedImage(entry.url, signal, failures);
+      if (img) images.push(img);
+    } else if (entry.error) refused ??= entry.error;
   }
   if (images.length) return images;
+  if (!refused) throwIfNoneArrived(images, failures);
   if (refused) throw new ImageHttpError("Image API error", 200, JSON.stringify({ error: refused }));
   throw new NoImageError();
 }
@@ -1519,7 +1573,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
       let entry: ComfyHistoryEntry | undefined;
       try {
         const poll = await fetch(`${base}/history/${promptId}`, { signal: deadline.signal });
-        if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text());
+        if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text(), "task");
         const json = (await readJson(poll, "ComfyUI task error")) as Record<string, ComfyHistoryEntry>;
         entry = json[promptId];
       } catch (e) {
@@ -1541,7 +1595,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
         continue;
       }
       if (entry.status?.status_str === "error") {
-        throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status));
+        throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status), "task");
       }
 
       const files = collectComfyFiles(entry);
@@ -1551,13 +1605,16 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
         );
       }
       const images: GeneratedImage[] = [];
+      const failures: unknown[] = [];
       for (const f of files) {
         const query =
           `filename=${encodeURIComponent(f.filename)}` +
           `&subfolder=${encodeURIComponent(f.subfolder)}` +
           `&type=${encodeURIComponent(f.type)}`;
-        images.push(await urlToDataUrl(`${base}/view?${query}`, deadline.signal));
+        const img = await tryLinkedImage(`${base}/view?${query}`, deadline.signal, failures);
+        if (img) images.push(img);
       }
+      throwIfNoneArrived(images, failures);
       // No usage and no text: ComfyUI meters nothing, and billing stays on
       // pricePerImage (normally 0 — it is the author's own GPU).
       return { images };

@@ -162,6 +162,30 @@ describe("generateImage · OpenAI shape", () => {
     await expect(generateImage(OPENAI, { prompt: "x" })).rejects.toThrow(/rather than an image/);
   });
 
+  it("keeps the pictures that downloaded, and the usage, when one link of several fails", async () => {
+    // Every picture is already paid for; one dead link used to throw away the
+    // rest and the usage along with them.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          return new Response(JSON.stringify({
+            data: [{ url: "https://cdn.example.com/ok" }, { url: "https://cdn.example.com/dead" }],
+            usage: { input_tokens: 5, output_tokens: 9 },
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return String(url).endsWith("/dead")
+          ? new Response("gone", { status: 404 })
+          : new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { status: 200, headers: { "content-type": "image/png" } });
+      }),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await generateImage(OPENAI, { prompt: "two cats", n: 2 });
+    expect(res.images).toHaveLength(1);
+    expect(res.usage).toEqual({ inputTokens: 5, outputTokens: 9 });
+    warn.mockRestore();
+  });
+
   it("downloads a URL response into bytes rather than storing the link", async () => {
     // Signed URLs expire; a gallery entry pointing at one would rot within the
     // hour, so the adapter must inline the bytes at generation time.
@@ -1148,6 +1172,13 @@ describe("isEditUnsupportedError", () => {
     expect(isEditUnsupportedError(http(400, "this model does not support image editing"))).toBe(true);
     expect(isEditUnsupportedError(http(400, "editing is not supported for this model"))).toBe(true);
     expect(isEditUnsupportedError(http(400, "only imagen models are supported"))).toBe(true);
+  });
+
+  it("never reads an error from an accepted task as a missing route", () => {
+    // A 404 while polling is the task gone, not the endpoint — regenerating
+    // would bill a second picture for it.
+    expect(isEditUnsupportedError(new ImageHttpError("Image task error", 404, "Not Found", "task"))).toBe(false);
+    expect(isEditUnsupportedError(new ImageHttpError("Image task error", 200, "edit not supported", "task"))).toBe(false);
   });
 
   it("leaves a genuine refusal alone", () => {

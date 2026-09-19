@@ -24,6 +24,7 @@ import {
   readFileHead,
   readFileRange,
   removeDir,
+  removeFile,
   renamePath,
   toBase64,
   writeFile,
@@ -49,6 +50,7 @@ import {
   type SweepEntry,
 } from "./cache";
 import {
+  AsrHttpError,
   fetchResultJson,
   getUploadPolicy,
   pollTask,
@@ -111,7 +113,14 @@ async function sweepOnce(projectPath: string, keep: string): Promise<void> {
     if (!(await fileExists(root))) return;
     const entries: SweepEntry[] = [];
     for (const entry of await readDir(root)) {
-      if (!entry.isDirectory) continue;
+      if (!entry.isDirectory) {
+        // A checkpoint whose task the platform has let go (or that no longer
+        // reads): nothing can resume it, and nothing else would remove it.
+        if (entry.name.endsWith(PENDING_SUFFIX) && entry.name !== `${keep}${PENDING_SUFFIX}` && !(await pendingIsLive(entry.path))) {
+          await removeFile(entry.path).catch(() => {});
+        }
+        continue;
+      }
       entries.push({ name: entry.name, meta: await readMeta(entry.path) });
     }
     for (const name of planSweep(entries, Date.now(), keep)) {
@@ -158,6 +167,66 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
       signal?.removeEventListener("abort", onAbort);
     },
   };
+}
+
+/**
+ * The filetrans checkpoint: a submitted task's id, written the moment the
+ * submit returns and removed once its result is in the cache.
+ *
+ * Submitting is the billed step. Without this, anything that stopped the run
+ * after it — 停止, the poll deadline, a crash, a 401 after the key rotated —
+ * left a paid task running on the platform with nobody to collect it, and the
+ * rerun uploaded and paid again (坑 121). A rerun of the same file, model and
+ * options now polls the task it already paid for.
+ *
+ * A sibling file of the cache directory, not a file in it: the directory only
+ * exists once a result has landed (it is renamed into place whole), and the
+ * sweep's cache pass only looks at directories. Older than the platform keeps
+ * a task, it is ignored by a rerun and removed by the sweep.
+ */
+interface PendingTask {
+  taskId: string;
+  model: string;
+  submittedAt: number;
+}
+
+/** DashScope keeps a task (and its result link) for 24 hours. */
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+
+const PENDING_SUFFIX = ".pending.json";
+const pendingPathFor = (dir: string) => `${dir}${PENDING_SUFFIX}`;
+
+async function readPendingFile(path: string): Promise<PendingTask | null> {
+  try {
+    const raw = JSON.parse(await readFile(path)) as Partial<PendingTask>;
+    if (typeof raw.taskId !== "string" || typeof raw.model !== "string" || typeof raw.submittedAt !== "number") return null;
+    return Date.now() - raw.submittedAt < PENDING_TTL_MS ? (raw as PendingTask) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readPending(dir: string, modelId: string): Promise<PendingTask | null> {
+  const pending = await readPendingFile(pendingPathFor(dir));
+  return pending?.model === modelId ? pending : null;
+}
+
+/** Still inside the platform's keep window — the sweep leaves it for a rerun to resume. */
+async function pendingIsLive(path: string): Promise<boolean> {
+  return (await readPendingFile(path)) !== null;
+}
+
+async function dropPending(dir: string): Promise<void> {
+  try {
+    await removeFile(pendingPathFor(dir));
+  } catch {
+    // Absent, or already gone — either way nothing to resume.
+  }
+}
+
+/** A task the platform has no more: gone (404) or settled as failed. Its checkpoint is worthless. */
+function taskIsGone(e: unknown): boolean {
+  return e instanceof AsrHttpError && (e.status === 404 || (e.status === 200 && e.message.startsWith("Transcription failed")));
 }
 
 /** A synchronous request carries the whole file; 43s was the slowest measured. Five minutes is "the endpoint is gone". */
@@ -235,17 +304,37 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
   } else {
     const deadline = withDeadline(req.signal, pollDeadlineMs(bytes.byteLength, null));
     try {
-      onProgress?.({ phase: "uploading" });
-      const policy = await getUploadPolicy(conn, deadline.signal);
-      const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
-      const taskId = await submitTranscription(conn, ossUrl, options, deadline.signal);
-      onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
-      const polled = await pollTask(
-        conn,
-        taskId,
-        (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
-        deadline.signal,
-      );
+      const submit = async (): Promise<string> => {
+        onProgress?.({ phase: "uploading" });
+        const policy = await getUploadPolicy(conn, deadline.signal);
+        const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
+        const id = await submitTranscription(conn, ossUrl, options, deadline.signal);
+        // Written before the first poll: from here on the task is paid for.
+        const pending: PendingTask = { taskId: id, model: conn.modelId, submittedAt: Date.now() };
+        await writeFile(pendingPathFor(dir), JSON.stringify(pending)).catch(() => {});
+        return id;
+      };
+      const poll = (id: string) => {
+        onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
+        return pollTask(
+          conn,
+          id,
+          (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
+          deadline.signal,
+        );
+      };
+      const resumed = await readPending(dir, conn.modelId);
+      let polled;
+      try {
+        polled = await poll(resumed?.taskId ?? (await submit()));
+      } catch (e) {
+        if (!taskIsGone(e)) throw e; // keep the checkpoint: a rerun resumes this task
+        await dropPending(dir);
+        // The checkpoint pointed at a task the platform no longer has — the
+        // author approved one transcription, and this is the first real one.
+        if (!resumed) throw e;
+        polled = await poll(await submit());
+      }
       onProgress?.({ phase: "downloading" });
       resultJson = await fetchResultJson(polled.transcriptionUrl, deadline.signal);
       billedSeconds = polled.billedSeconds;
@@ -282,7 +371,19 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
       if (!(await fileExists(dir))) throw e;
     }
   }
+  if (!sync) await dropPending(dir);
   return { transcript, cacheDir: dir, cached: false, billedSeconds, bytes: bytes.byteLength };
+}
+
+/**
+ * 要了说话人分离，结果里却一个编号都没有（坑 115）。
+ *
+ * 分离真的生效时，哪怕只有一个人说话也带 `speaker_id`（0 号），所以「一句都没有」
+ * 只能是端点把开关静默丢了——百炼的同步接口就这样，文档还写着支持。请求照常 200，
+ * 不报错；但作者要的那一列没有，得告诉他，而不是交出一份看起来正常的稿子。
+ */
+export function speakersMissing(requested: boolean, transcript: Transcript): boolean {
+  return requested && !transcript.speakers && transcript.sentences.length > 0;
 }
 
 /** 产物落点：源文件旁边的 `<stem>.md`；已存在就编号，绝不覆盖。 */

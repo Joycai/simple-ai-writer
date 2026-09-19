@@ -147,7 +147,7 @@ describe("dialect params", () => {
     }
   });
 
-  it("qwen-image edits: a requested aspect wins, else the input's framing at the tier, else nothing", () => {
+  it("qwen-image edits: a requested aspect wins, else the input's framing at the tier, else a square at the tier", () => {
     const spec = imageDialect("qwen-image")!;
     expect(spec.params({ aspect: "1:1" }, { edit: true })).toEqual({ aspect: "1:1", size: "1024*1024" });
     // A 768×1376 portrait input keeps its ratio at the 1K area rather than
@@ -157,7 +157,9 @@ describe("dialect params", () => {
     expect(h).toBeGreaterThan(w);
     expect(Math.abs(w / h - 768 / 1376)).toBeLessThan(0.03);
     expect(w * h).toBeLessThanOrEqual(1024 * 1024);
-    expect(spec.params({}, { edit: true })).toEqual({});
+    // Never omitted: an absent size is the 2K tier at twice the price.
+    expect(spec.params({}, { edit: true })).toEqual({ size: "1024*1024" });
+    expect(spec.params({ resolution: "2K" }, { edit: true })).toEqual({ size: "2048*2048" });
   });
 
   it("every dialect's aspect list stays within the shared vocabulary", () => {

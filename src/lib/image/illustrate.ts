@@ -139,12 +139,12 @@ export async function runIllustration(
   if (inputPaths.length && model.caps?.edit !== false) {
     const images: string[] = [];
     for (const p of inputPaths) images.push((await imageForModel(p)).dataUrl);
-    // Resolved only now: the source image (first in `inputPaths`) is what a
-    // dialect keeps the framing of when the proposal named no aspect.
-    const editParams = imageRequestParams(model.caps, sel, {
-      edit: true,
-      ...(proposal.sourcePath ? { inputSize: inputImageSize(images[0]) } : {}),
-    });
+    // Resolved only now: the first input (the source, or the first reference
+    // when there is none) is what a dialect keeps the framing of when the
+    // proposal named no aspect — the same rule the interactive session uses.
+    // Always passed: a dialect handed no size may have to omit it, and on
+    // qwen-image an omitted size bills the 2K tier.
+    const editParams = imageRequestParams(model.caps, sel, { edit: true, inputSize: inputImageSize(images[0]) });
     const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress };
     try {
       result = await generateImage(conn, { ...editReq, images });

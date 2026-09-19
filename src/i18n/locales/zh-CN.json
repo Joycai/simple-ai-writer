@@ -3509,6 +3509,7 @@
     "transcribedCost": "已转写 · {{seconds}} 秒 · ¥{{cost}} · {{name}}",
     "transcribedCached": "已转写（命中缓存，未计费）· {{seconds}} 秒 · {{name}}",
     "transcribeFailed": "转写「{{name}}」失败：",
+    "transcribeNoSpeakers": "要了区分说话人，但结果里没有说话人编号（端点忽略了这个开关）",
     "cut": "剪切",
     "copy": "复制",
     "pasteEntry": "粘贴「{{name}}」",

@@ -115,7 +115,21 @@ const GEMINI_BLOCKED_FINISH_REASONS = new Set([
   "RECITATION",
   "SPII",
   "IMAGE_SAFETY",
+  "IMAGE_PROHIBITED_CONTENT",
+  "IMAGE_RECITATION",
 ]);
+
+/**
+ * The `finishReason` values that mean the turn ended the way it meant to:
+ * `STOP`, `MAX_TOKENS` (truncated but real, flagged below), and the
+ * unspecified default some relays fill in. **Every other value fails the
+ * request** — the known ones with their own wording below, the rest naming the
+ * value. The alternative, reading an unrecognised reason as success, is the
+ * silent kind of failure: `MALFORMED_FUNCTION_CALL` arrives with empty parts on
+ * HTTP 200, and an agent loop reading that as "no tool call, no text" ends the
+ * run as completed.
+ */
+const GEMINI_NORMAL_FINISH_REASONS = new Set(["STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"]);
 
 /**
  * `finishReason` values that report a malformed *request* rather than a refused
@@ -138,6 +152,13 @@ const GEMINI_REQUEST_FAULTS: Record<string, string> = {
   // The server cut a runaway tool loop short.
   TOO_MANY_TOOL_CALLS: "the model called tools too many times in a row",
   MALFORMED_RESPONSE: "the model returned a malformed response",
+  // The model tried to call a tool and produced something that doesn't parse
+  // as a call — the parts come back empty.
+  MALFORMED_FUNCTION_CALL: "the model produced a tool call that could not be parsed",
+  // The model declined to answer in the language of the request.
+  LANGUAGE: "the request's language is not supported by this model",
+  // An image-output model that produced no image.
+  NO_IMAGE: "the model was expected to return an image but returned none",
 };
 
 /**
@@ -161,20 +182,46 @@ export function geminiAuthHeaders(apiKey: string, authMode?: AuthMode): Record<s
   };
 }
 
+/**
+ * Every system message, joined — Gemini's one `systemInstruction`.
+ *
+ * Same hoist as the Anthropic adapter's `extractSystem`, for the same two
+ * reasons: this wire has no system role inside `contents`, so a second system
+ * message (a prefix, a pack instruction) must be joined in rather than left
+ * behind — it used to be, silently, when only the first was read — and
+ * part-array content is flattened to its text, where assigning it straight
+ * across put an array where a string belongs.
+ */
+function geminiSystemText(messages: StreamMessage[]): string | undefined {
+  const texts = messages
+    .filter((m) => m.role === "system")
+    .map((m) => {
+      const c = (m as { content: unknown }).content;
+      if (typeof c === "string") return c;
+      if (!Array.isArray(c)) return "";
+      return c
+        .filter((p): p is { type: "text"; text: string } => (p as { type?: unknown }).type === "text")
+        .map((p) => p.text)
+        .join("");
+    })
+    .filter((t) => t.trim());
+  return texts.length ? texts.join("\n\n") : undefined;
+}
+
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
   // into proxy/server logs and error messages.
   const url = geminiUrl(opts.baseUrl, `/models/${opts.modelId}:streamGenerateContent?alt=sse`);
 
-  const systemMsg = opts.messages.find((m) => m.role === "system");
+  const systemText = geminiSystemText(opts.messages);
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
 
   const body: Record<string, unknown> = {
     contents: convertToGeminiContents(nonSystemMsgs),
     ...opts.extraBody,
   };
-  if (systemMsg) {
-    body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+  if (systemText) {
+    body.systemInstruction = { parts: [{ text: systemText }] };
   }
   if (opts.tools?.length) {
     body.tools = [{
@@ -226,10 +273,10 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     };
   }
 
-  console.debug("[Gemini request]", {
-    model: opts.modelId,
-    safetySettings: body.safetySettings ?? "(none)",
-  });
+  // The wire body is a different shape from the caller's messages (contents,
+  // not messages; thinking inside generationConfig), so the log's request entry
+  // alone cannot show what was sent.
+  opts._onRequestBody?.(body);
 
   const res = await fetch(url, {
     method: "POST",
@@ -249,6 +296,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   let outputTokens = 0;
   let cachedTokens = 0;
   let truncated = false;
+  // The candidate's finishReason, for the log — see the Chat Completions adapter.
+  let stopReason: string | undefined;
   const geminiToolCalls: AccumulatedToolCall[] = [];
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
@@ -331,7 +380,11 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     if (fault) {
       throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
     }
+    if (candidate?.finishReason) stopReason = candidate.finishReason;
     if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
+    if (candidate?.finishReason && !GEMINI_NORMAL_FINISH_REASONS.has(candidate.finishReason)) {
+      throw new Error(`Gemini ended this response abnormally (finishReason: ${candidate.finishReason}).`);
+    }
   };
 
   while (true) {
@@ -351,6 +404,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   opts.onChunk({
     done: true, inputTokens, outputTokens,
     ...(truncated ? { truncated } : {}),
+    ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
   });
 }

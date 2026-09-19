@@ -132,6 +132,15 @@ interface PlatformProfile {
    * serves ({@link ModelCalibration}). Only ids a sample measured.
    */
   models?: Readonly<Record<string, ModelCalibration>>;
+  /**
+   * `include` entries the Responses route must ask for. Only for what a
+   * platform withholds unless asked: xAI returns a reasoning item's
+   * `encrypted_content` only on request, and the echo without it still 200s —
+   * the next turn just silently starts its reasoning over (landscape.md §7
+   * 第十一个样本). Absent = send no `include`, which is what the relays that
+   * attach it unasked were measured with (responses.md §2.4).
+   */
+  responsesInclude?: readonly string[];
   /** Where the entries above were measured. */
   source: string;
 }
@@ -159,6 +168,18 @@ const ZHIPU_MODELS: Record<string, ModelCalibration> = {
   "glm-4.6": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
   "glm-4.5": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
   "glm-4.5-air": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
+};
+
+/**
+ * DeepSeek's two listed models (landscape.md §2.1, `/models` 2026-09-17). The
+ * `deepseek` category is the point: the family default spells off as
+ * `reasoning_effort:"none"`, which DeepSeek does not read as off — its off is
+ * the `thinking:{type:"disabled"}` switch (qianwen-compat-plan.md P1). Without
+ * this a hand-added row thought on after the author pressed 关.
+ */
+const DEEPSEEK_MODELS: Record<string, ModelCalibration> = {
+  "deepseek-flash": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216, type: "multimodal" },
+  "deepseek-v4-pro": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 },
 };
 
 const PROFILES: Record<PlatformId, PlatformProfile> = {
@@ -189,6 +210,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.deepseek.com"],
+    models: DEEPSEEK_MODELS,
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {
@@ -221,6 +243,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "openai", path: "/v1" },
     ],
     hosts: ["api.x.ai"],
+    responsesInclude: ["reasoning.encrypted_content"],
     // web_search measured on grok-4.3; web_extractor and the image searches
     // are DashScope's names and are refused.
     source: "landscape.md §7 第十一个样本 (2026-09-14)",
@@ -228,7 +251,10 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   minimax: {
     origin: "https://api.minimaxi.com",
     endpoints: [
-      { family: "openai", path: "" },
+      // Chat Completions lives under `/v1`: the bare root is nginx's 404 page
+      // (no-key probe 2026-09-19 — root 404 text/html, `/v1/chat/completions`
+      // 401 JSON). The adapter appends `/chat/completions` and nothing else.
+      { family: "openai", path: "/v1" },
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.minimaxi.com", "api.minimax.io"],
@@ -485,6 +511,11 @@ export function platformModelCalibration(id: PlatformId, modelId: string): Model
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */
 export function platformSource(id: PlatformId): string {
   return PROFILES[id].source;
+}
+
+/** `include` entries a platform's Responses route must send — see {@link PlatformProfile.responsesInclude}. */
+export function platformResponsesInclude(id: PlatformId): readonly string[] {
+  return PROFILES[id]?.responsesInclude ?? [];
 }
 
 /** The routes a platform serves, primary first. */

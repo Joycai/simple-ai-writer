@@ -3517,6 +3517,7 @@
     "transcribedCost": "Transcribed · {{seconds}} s · ¥{{cost}} · {{name}}",
     "transcribedCached": "Transcribed (cache hit, not billed) · {{seconds}} s · {{name}}",
     "transcribeFailed": "Could not transcribe \"{{name}}\":",
+    "transcribeNoSpeakers": "speaker separation was requested, but the result has no speaker labels (the endpoint ignored it)",
     "cut": "Cut",
     "copy": "Copy",
     "pasteEntry": "Paste \"{{name}}\"",
