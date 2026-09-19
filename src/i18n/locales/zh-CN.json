@@ -2634,6 +2634,8 @@
       "routeForget": "忘记这条线路的设置",
       "routeSwitch": "切到 {{route}}",
       "matrixLabel": "服务端工具 · 各线路可用性",
+      "matrixLabelInput": "输入 · 各线路可用性",
+      "matrixLabelOutput": "输出 · 各线路可用性",
       "matrix_yes": "能发",
       "matrix_unknown": "协议有、这个平台未实测",
       "matrix_no": "这条线路不发",
@@ -2788,6 +2790,19 @@
       "ollama": "Ollama",
       "comfyui": "ComfyUI",
       "custom": "自定义"
+    },
+    "capReason": {
+      "measured": "{{platform}} 上实测可用",
+      "protocol": "协议自带，{{platform}} 没有反例记录",
+      "unmeasured": "协议自带，但 {{platform}} 上未实测：取决于上游是否转发，可能被拒绝",
+      "relay": "{{platform}} 是中继，背后可能正是支持它的平台；未实测，照发",
+      "platform-absent": "{{platform}} 实测不收，或收了不起作用",
+      "platform-unlisted": "这是别家平台的私有字段，{{platform}} 上没有实测过",
+      "family": "这条线路的协议没有这一项的拼法",
+      "model": "{{platform}} 有这一项，但 {{model}} 不支持",
+      "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
+      "requires": "它依赖的另一项在这条线路上不可用",
+      "thinking": "思考开着时这条线路不收它"
     }
   },
   "lore": {

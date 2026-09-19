@@ -389,6 +389,8 @@ Two lines with a fixed shape:
 - **⑤ 节目录 replaces 「N 节有值」.** One short name per section this type has, with the 7px square: solid = holds a value, dashed = sends nothing; a click folds / unfolds that section. The index and the type line are computed from the same list as the body, so neither can name a section the body doesn't show.
 Kept: 计费 second, 「将发送」 at the bottom, fold by has-value, dashed = not sent.
 
+**可用性矩阵 is the standard way to say where a declaration reaches** (`panes/CapabilityMatrix.tsx`, 2026-09-19). Rows = capabilities, columns = the channel's routes (mono `Chat · Resp · Anth` badges, the current route's column on `--color-bg-selected`), cells ✓ / ? / — in success / warning / ghost ink, and the **reason on hover** — the capability table's reason code, sentence from `aiConfig.capReason.*`. Every cell is `capabilityVerdict`, so the matrix can't claim what the adapters don't do. It sits at the end of a 能力声明 group — 服务端工具, 输入, 输出格式 — only on a channel with more than one route (one route has nothing to compare; the switch hints speak for it), and a row appears when some route has it **or** the model declares it, so a grant the current route can't say is still visible and can be switched off. A new capability group reuses it rather than growing a table of its own.
+
 Hints are two-tier: a one-line 「填什么」 (`aiConfig.models.brief*`, new copy) always visible, and 「为什么」 unfolding the existing full hint text. 「全部说明」 opens every block. Chip rows with a fixed pair pin 「自动 · 关闭」 first behind a 1px `ChipDivider`, then let the vendor presets wrap. List rows (19h) carry at most three declaration marks (思考 / 联网 / PDF / 译, then `+n`) — explicit declarations only, never auto, never on image models.
 
 ### 禁止 (Do NOT)

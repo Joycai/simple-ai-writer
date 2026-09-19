@@ -4,33 +4,36 @@ import {
   parseServerTools,
   effectiveServerTools,
   serverToolsSent,
-  supportsServerToolFor,
   summarizeServerToolResult,
 } from "../serverTools";
 import { wireOf } from "../platforms";
+import { hasCapability, type CapabilityWire } from "../capabilities";
 
 const DS = { platform: "dashscope", standard: "openai_compat" } as const;
 
-describe("supportsServerToolFor", () => {
+/** The question the drawer and the adapters ask of the capability table, per model. */
+const offered = (wire: CapabilityWire, id: Parameters<typeof hasCapability>[0], modelId: string) => hasCapability(id, wire, { modelId });
+
+describe("which server tool a wire offers a model", () => {
   it("is a DashScope tool only, whatever the standard", () => {
     // A row still labelled dashscope, switched to an official standard or to
     // a family DashScope has no interpreter on (wireOf resolves the official
     // ones to their vendor).
     for (const standard of ["openai", "openai_responses", "anthropic_compat", "gemini_compat"] as const) {
       const wire = wireOf({ platform: "dashscope", baseUrl: "", standard });
-      expect(supportsServerToolFor(wire, "code_interpreter", "qwen3.5-plus"), standard).toBe(false);
+      expect(offered(wire, "code_interpreter", "qwen3.5-plus"), standard).toBe(false);
     }
     // Same standard, another platform: the bug this table exists to fix.
     for (const platform of ["deepseek", "newapi", "orcarouter", "ollama", "custom"] as const) {
-      expect(supportsServerToolFor({ platform, standard: "openai_compat" }, "web_search", "qwen3.5-plus"), platform).toBe(false);
-      expect(supportsServerToolFor({ platform, standard: "openai_compat" }, "code_interpreter", "qwen3.5-plus"), platform).toBe(false);
+      expect(offered({ platform, standard: "openai_compat" }, "web_search", "qwen3.5-plus"), platform).toBe(false);
+      expect(offered({ platform, standard: "openai_compat" }, "code_interpreter", "qwen3.5-plus"), platform).toBe(false);
     }
   });
 
   it("gates only the code interpreter by model id", () => {
-    expect(supportsServerToolFor(DS, "web_search", "anything")).toBe(true);
-    expect(supportsServerToolFor(DS, "code_interpreter", "anything")).toBe(false);
-    expect(supportsServerToolFor(DS, "code_interpreter", "qwen3.5-plus")).toBe(true);
+    expect(offered(DS, "web_search", "anything")).toBe(true);
+    expect(offered(DS, "code_interpreter", "anything")).toBe(false);
+    expect(offered(DS, "code_interpreter", "qwen3.5-plus")).toBe(true);
   });
 });
 

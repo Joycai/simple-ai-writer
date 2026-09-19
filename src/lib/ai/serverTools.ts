@@ -94,12 +94,13 @@
  *     model answers 400 on some and *silently ignores* it on others
  *     (qwen-max, qwen3-max-preview on Chat Completions), and the vendor's list
  *     follows model families that an id pattern can name — see
- *     `dashscopeRunsCodeInterpreter` in `platforms.ts`. The official OpenAI endpoint's
+ *     the `code_interpreter` cells in `capabilities.ts`. The official OpenAI endpoint's
  *     `code_interpreter` wants a `container` and is not this tool.
  */
 
 import { familyOf } from "./types";
-import { providerWire, serverToolStatus, wireHasServerTools, type ServerToolWire } from "./platforms";
+import { providerWire, type ServerToolWire } from "./platforms";
+import { hasCapability } from "./capabilities";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
 
@@ -173,37 +174,6 @@ function safeParse(s: string): unknown {
 }
 
 /**
- * Whether this wire can be told about any server tool at all — the settings
- * drawer's section gate.
- *
- * Asked of the **platform and family**, never of the standard alone
- * (`lib/ai/platforms.ts`). The standard used to be the whole answer, and
- * `openai_compat` quietly meant "DashScope": every DeepSeek, New API,
- * OrcaRouter or Ollama row could declare 联网搜索 and sent DashScope's private
- * `enable_search` to a server that had never heard of it
- * (docs/feature/channel-model-route-plan.md §1). Offering the setting where
- * the adapter would drop it is the failure this guards against — the same
- * rule `supportsThinkingLevel` follows.
- */
-export function supportsServerTools(wire: ServerToolWire): boolean {
-  return wireHasServerTools(wire);
-}
-
-/** Whether one id has a spelling on this wire, whatever the model. */
-function supportsServerTool(wire: ServerToolWire, id: ServerToolId): boolean {
-  return serverToolStatus(wire, id) !== "no";
-}
-
-/**
- * {@link supportsServerTool} narrowed to one model: the question the settings
- * drawer and the adapters actually ask. Only a gated id (the code interpreter)
- * depends on the model; every other id answers as the wire does.
- */
-export function supportsServerToolFor(wire: ServerToolWire, id: ServerToolId, modelId: string): boolean {
-  return serverToolStatus(wire, id, modelId) !== "no";
-}
-
-/**
  * The part of a declaration this wire can actually say, in canonical form —
  * absent when nothing is left.
  *
@@ -217,7 +187,7 @@ export function effectiveServerTools(
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
 ): ServerToolId[] | undefined {
-  return normalizeServerTools((ids ?? []).filter((id) => supportsServerToolFor(wire, id, modelId)));
+  return normalizeServerTools((ids ?? []).filter((id) => hasCapability(id, wire, { modelId })));
 }
 
 /**
@@ -273,7 +243,7 @@ export function anthropicServerTools(
   ids: readonly ServerToolId[] | undefined,
 ): { type: string; name: string; max_uses?: number }[] {
   if (familyOf(wire.standard) !== "anthropic") return [];
-  return (ids ?? []).filter((id) => supportsServerTool(wire, id)).flatMap((id) => {
+  return (ids ?? []).filter((id) => hasCapability(id, wire)).flatMap((id) => {
     const type = ANTHROPIC_WIRE_TYPE[id];
     if (!type) return [];
     return [{

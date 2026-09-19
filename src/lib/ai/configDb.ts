@@ -17,7 +17,8 @@ import {
   type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
-import { parsePlatform, platformToStore, providerWire, wireReadsPdf, type PlatformId } from "./platforms";
+import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
+import { hasCapability } from "./capabilities";
 import {
   legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
   standardOf, writtenBaseOf,
@@ -473,7 +474,7 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * `pdfInput` 是模型上的声明（作者买的是这个模型读 PDF 的能力），但只有两族一定有拼法：
  * Chat Completions 的 `file` 片段与 Responses 的 `input_file`（openai.ts / responses.ts）。
  * Anthropic 族的 `document` 块多数兼容端会换成占位符静默吞掉，只有平台画像实测过的
- * （能力表 `capabilities.ts` 的 `pdfInput` 格，如火山方舟 Plan）才算数——所以这里按渠道的平台 × 线路问 `wireReadsPdf`。
+ * （能力表 `capabilities.ts` 的 `pdfInput` 格，如火山方舟 Plan）才算数——所以这里按渠道的平台 × 线路问能力表。
  * 模型能在渠道的几条线路之间切换以后，声明就不能再在保存时按「当前线路」清掉——
  * 切到 ④ 族再切回来，作者不该重填一遍（channel-model-route-plan.md §3）。所以声明
  * 留着，能不能用在这里按线路回答；PDF 子代理的资格、委派时的拦截都问这一句。
@@ -485,7 +486,7 @@ export function readsPdf(
 ): boolean {
   if (!m.pdfInput) return false;
   if (!provider) return true;
-  return wireReadsPdf(providerWire(provider));
+  return hasCapability("pdfInput", providerWire(provider));
 }
 
 /**

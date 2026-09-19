@@ -18,15 +18,18 @@
  *     as the third axis. Endpoint-run tools live here too: which tool a wire
  *     runs is a fact about the platform and the model id, like any other.
  *
- * {@link familyVerdict} is the only reader in the app (the tables are exported
- * for the tests that walk them). This file never imports `platforms.ts` at
- * runtime — that file delegates here — so the two cannot form a cycle.
+ * Every asker — the adapters, the 将发送 summary, the drawers, the chat
+ * surface — calls {@link capabilityVerdict} or {@link hasCapability} here
+ * directly; there are no per-capability wrappers to drift apart (the tables
+ * are exported for the tests that walk them). This file never imports
+ * `platforms.ts` at runtime, so the two cannot form a cycle.
  */
 
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 import type { ModelType } from "./configDb";
 import type { PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
+import type { ThinkingCategoryId } from "./reasoning";
 
 /** What can be asked about. A server tool's id is a capability id. */
 export type CapabilityId =
@@ -35,6 +38,10 @@ export type CapabilityId =
   | "videoInput"
   | "videoFps"
   | "forcedToolChoice"
+  | "temperature"
+  | "textVerbosity"
+  | "translateFormat"
+  | "structuredOutput"
   | ServerToolId;
 
 /**
@@ -47,30 +54,32 @@ export type CapabilityId =
  *   - `no`: nothing to send. A declaration on the model row is kept and simply
  *     not sent (channel-model-route-plan §7 invariant 4).
  */
-export type CapabilityStatus = "yes" | "unknown" | "no";
+type CapabilityStatus = "yes" | "unknown" | "no";
 
-/** Why — a closed set so tests can assert it; the sentences live in the locale files. */
-type CapabilityReason =
-  /** The platform's table lists it for this family. */
-  | "measured"
-  /** Part of the protocol; no platform entry contradicts it. */
-  | "protocol"
-  /** The protocol defines it, but nobody measured whether this platform passes it on. */
-  | "unmeasured"
-  /** A private field on a relay that may front the platform that owns it. */
-  | "relay"
-  /** The platform's table says this wire does not take it (or takes and ignores it). */
-  | "platform-absent"
-  /** A private field, and this platform is not one that was measured taking it. */
-  | "platform-unlisted"
-  /** No spelling on this protocol family. */
-  | "family"
-  /** The platform runs it, but not for this model id. */
-  | "model"
-  /** The model's type rules it out (a text model reads no frames). */
-  | "model-type"
-  /** A capability it depends on is unavailable. */
-  | "requires";
+/**
+ * Why — a closed set so tests can assert it. The sentences live in the locale
+ * files only, as `aiConfig.capReason.<reason>` in both languages (the same
+ * split as `ThemeReasonCode`): a test can hold the reason, and the wording can
+ * change without touching the logic. `capabilities.test.ts` holds every reason
+ * to a sentence in each language.
+ *
+ *   - `measured`: the platform's table lists it for this family.
+ *   - `protocol`: part of the protocol; no platform entry contradicts it.
+ *   - `unmeasured`: the protocol defines it, but nobody measured whether this platform passes it on.
+ *   - `relay`: a private field on a relay that may front the platform that owns it.
+ *   - `platform-absent`: the platform's table says this wire does not take it (or takes and ignores it).
+ *   - `platform-unlisted`: a private field, and this platform is not one that was measured taking it.
+ *   - `family`: no spelling on this protocol family.
+ *   - `model`: the platform runs it, but not for this model id.
+ *   - `model-type`: the model's type rules it out (a text model reads no frames).
+ *   - `requires`: a capability it depends on is unavailable.
+ *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
+ */
+export const CAPABILITY_REASONS = [
+  "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
+  "family", "model", "model-type", "requires", "thinking",
+] as const;
+type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 
 interface CapabilityVerdict {
   status: CapabilityStatus;
@@ -104,6 +113,14 @@ interface CapabilityRule {
   modelTypes?: readonly ModelType[];
   /** Capabilities that must not be `no` on the same wire. */
   requires?: readonly CapabilityId[];
+  /**
+   * Families where it exists only while thinking is off — `no / thinking`
+   * for any category but `off`. An absent category counts as thinking: every
+   * family's default category thinks (`defaultCategoryId`), so a caller that
+   * forgot to resolve it gets the safe answer, not a field the endpoint
+   * refuses. Only an explicit `off` opens it.
+   */
+  thinkingOff?: readonly ProtocolFamily[];
 }
 
 const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
@@ -128,6 +145,24 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   videoFps: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES, requires: ["videoInput"] },
   // `tool_choice: required | {function}` being honoured.
   forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
+  // Sampling temperature: every family spells it, but the Messages API accepts
+  // `temperature: 1` and nothing else while extended thinking is on, and an
+  // Anthropic model thinks unless the author declares otherwise. Clamping the
+  // author's 0.2 up to the one legal value would send the opposite of what
+  // they asked for under the name of honouring it, so the adapter omits it —
+  // and the drawer, asking the same cell, never renders a control that does
+  // nothing.
+  temperature: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", thinkingOff: ["anthropic"] },
+  // `text.verbosity` exists on the Responses family only.
+  textVerbosity: { families: ["responses"], origin: "native" },
+  // The Sakura translation engine (lib/translate) runs a Chat Completions
+  // request with a fixed prompt; a text model only — a seeing model declared
+  // translate-only would silently leave the vision subagent's candidates.
+  translateFormat: { families: ["openai"], origin: "native", modelTypes: ["text"] },
+  // A JSON mode at all (`response_format` / `text.format` /
+  // `generationConfig.response*`). How strong is jsonMode.ts's business; the
+  // Messages API has no JSON mode, so an Anthropic model's only option is off.
+  structuredOutput: { families: ["openai", "responses", "gemini"], origin: "native" },
   // Anthropic's versioned `web_search_*` tool and the Responses built-in
   // `{type:"web_search"}` are the protocol's own; whether a relay passes them
   // on is unmeasured until a platform cell says so. Chat Completions has no
@@ -149,12 +184,13 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
   "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
+  "temperature", "textVerbosity", "translateFormat", "structuredOutput",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
 
 /**
  * The ids that are endpoint-run tools. A `Record` so that a new
- * `ServerToolId` does not compile until it is listed — `wireHasServerTools`
+ * `ServerToolId` does not compile until it is listed — {@link hasAnyServerTool}
  * walks this, and an id it skipped would fold the drawer's section shut.
  */
 const SERVER_TOOL_FLAGS: Record<ServerToolId, true> = {
@@ -295,7 +331,7 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
 };
 
 /** The wire a question is about — the same pair `platforms.ts` calls `ServerToolWire`. */
-interface CapabilityWire {
+export interface CapabilityWire {
   platform: PlatformId;
   standard: ApiStandard;
 }
@@ -304,6 +340,11 @@ interface CapabilityWire {
 interface CapabilityModel {
   modelId?: string;
   type?: ModelType;
+  /**
+   * The *resolved* category (`resolveThinkingCategory`). Consulted only by a
+   * `thinkingOff` rule, where absent reads as the family default — thinking.
+   */
+  thinkingCategory?: ThinkingCategoryId;
 }
 
 const verdict = (status: CapabilityStatus, reason: CapabilityReason): CapabilityVerdict => ({ status, reason });
@@ -314,8 +355,8 @@ function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId)
 }
 
 /**
- * The one answer. Order is fixed: model type → what it requires → the
- * platform's cell (a measurement wins) → the rule's families → its default.
+ * The one answer. Order is fixed: model type → what it requires → thinking →
+ * the platform's cell (a measurement wins) → the rule's families → its default.
  */
 export function capabilityVerdict(id: CapabilityId, wire: CapabilityWire, model: CapabilityModel = {}): CapabilityVerdict {
   return familyVerdict(id, wire.platform, familyOf(wire.standard), model);
@@ -327,6 +368,9 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (model.type && rule.modelTypes && !rule.modelTypes.includes(model.type)) return verdict("no", "model-type");
   for (const dep of rule.requires ?? []) {
     if (familyVerdict(dep, platform, family, model).status === "no") return verdict("no", "requires");
+  }
+  if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== "off") {
+    return verdict("no", "thinking");
   }
 
   const cell = cellFor(platform, family, id);
@@ -350,4 +394,19 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
 /** Whether the wire has it — `unknown` counts: it is offered and sent. */
 export function hasCapability(id: CapabilityId, wire: CapabilityWire, model?: CapabilityModel): boolean {
   return capabilityVerdict(id, wire, model).status !== "no";
+}
+
+/**
+ * Whether this wire has any endpoint-run tool at all — the drawer's section gate.
+ *
+ * Asked of the **platform and family**, never of the standard alone. The
+ * standard used to be the whole answer, and `openai_compat` quietly meant
+ * "DashScope": every DeepSeek, New API, OrcaRouter or Ollama row could declare
+ * 联网搜索 and sent DashScope's private `enable_search` to a server that had
+ * never heard of it (docs/feature/channel-model-route-plan.md §1). Offering
+ * the setting where the adapter would drop it is the failure this guards
+ * against — the same rule `supportsThinkingLevel` follows.
+ */
+export function hasAnyServerTool(wire: CapabilityWire): boolean {
+  return SERVER_TOOL_CAPABILITIES.some((id) => hasCapability(id, wire));
 }

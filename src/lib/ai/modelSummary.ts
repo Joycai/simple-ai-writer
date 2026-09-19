@@ -19,10 +19,11 @@
 import type { Model } from "./configDb";
 import { effectiveStructuredOutput } from "./jsonMode";
 import {
-  reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
+  reasoningBody, resolveThinkingCategory, thinkingBody,
 } from "./reasoning";
-import { effectiveServerTools, openaiServerToolsBody, supportsServerTools } from "./serverTools";
-import { wireOf, wireTakesVideoFps, wireTakesVlHighResolution, type PlatformId } from "./platforms";
+import { effectiveServerTools, openaiServerToolsBody } from "./serverTools";
+import { wireOf, type PlatformId } from "./platforms";
+import { hasAnyServerTool, hasCapability } from "./capabilities";
 import { familyOf, type ApiStandard } from "./types";
 
 export interface WireItem {
@@ -103,10 +104,10 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
 
   if (family === "anthropic" && m.maxOutput) out.push({ key: "max_tokens", value: String(m.maxOutput) });
-  if (m.temperature !== undefined && supportsTemperature(standard, category.id)) {
+  if (m.temperature !== undefined && hasCapability("temperature", wire, { thinkingCategory: category.id })) {
     out.push({ key: "temperature", value: String(m.temperature) });
   }
-  if (m.serverTools?.length && supportsServerTools(wire)) {
+  if (m.serverTools?.length && hasAnyServerTool(wire)) {
     // Summarised as a request without function tools: the condition that
     // drops `enable_code_interpreter` and the `agent_max` strategy is the
     // request's, not the model's.
@@ -130,11 +131,11 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
         : { key: "response_format", value: so, scope: "structured" });
   }
   // Sent on every request, beside (not instead of) a structured task's text.format.
-  if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
-  if (wireTakesVlHighResolution(wire) && m.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
+  if (m.textVerbosity && hasCapability("textVerbosity", wire)) out.push({ key: "text.verbosity", value: m.textVerbosity });
+  if (m.vlHighResolution && hasCapability("vlHighResolution", wire)) out.push({ key: "vl_high_resolution_images", value: "true" });
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).
-  if (wireTakesVideoFps(wire) && m.videoInput && m.videoFps !== undefined) {
+  if (m.videoInput && m.videoFps !== undefined && hasCapability("videoFps", wire)) {
     out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });

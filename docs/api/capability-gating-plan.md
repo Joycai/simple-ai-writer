@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0 已实现（能力表 + 裁决函数 + 矩阵文档，行为逐格不变）；C1–C3 待做；C4（视频按平台）搁置。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -157,7 +157,7 @@ export function capabilitySent(id: CapabilityId, wire: ServerToolWire, model: Ca
 | **C1** | 调用点改问 `capabilitySent` / `useCapability`：抽屉、`openai.ts`、`modelSummary.ts`、`videoInput.ts`、`readsPdf`、会话面。删旧函数。一致性测试上线。 | 无 |
 | **C2** | 收采样与输出：温度、输出详细度、翻译格式、结构化输出的选项集、强制 tool_choice。原因码与 i18n 归并。 | 仅措辞 |
 | **C3** | 源码扫描棘轮上线，起点 = C2 合并后的实际计数。 | 无 |
-| **C4**（**搁置**，§7） | **第一次行为变化**：`videoInput` 标为 `private`-like 的实测能力——点名千问 ×2 与智谱（均已实测）；中继 `unknown`；其余平台在实测前 `no`。需要先跑的样本：OpenAI 官方、DeepSeek、xAI、火山方舟的 ① 线路各一条 `video_url`，结果记入 `landscape.md` 新样本。已声明视频的旧行不受伤：落在 `no` 上的按 §2.4 显示「已声明，不发送」。 | 有，需实测 |
+| **C4**（**搁置**，§7；待办见 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)） | **第一次行为变化**：`videoInput` 标为 `private`-like 的实测能力——点名千问 ×2 与智谱（均已实测）；中继 `unknown`；其余平台在实测前 `no`。需要先跑的样本：OpenAI 官方、DeepSeek、xAI、火山方舟的 ① 线路各一条 `video_url`，结果记入 `landscape.md` 新样本。已声明视频的旧行不受伤：落在 `no` 上的按 §2.4 显示「已声明，不发送」。 | 有，需实测 |
 | ~~**C5**（可选）~~（**取消**：已并入 C0，§7） | 服务端工具的裁决出口并到 `capabilityVerdict` 之下（拼法表留在原处）。只有当 C0–C4 证明这个形状顺手时才做。 | 无 |
 
 C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单独决定。
@@ -246,3 +246,89 @@ C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单�
 5. **`requires` 是无保护的递归。** 规则表里写出一个环，就是抽屉和适配器里的栈溢出。加一条遍历规则表的无环测试。
 6. **矩阵文档的章节顺序靠对象键顺序。** 整理规则表的行序会把整份文档重排，淹没真正变了的那一格。`CAPABILITY_IDS` 改为显式列出，测试保证齐全。
 7. **§2–§4 的旧设计原地没有标注。** 已在各处加上指向本节的标记。
+
+## 8. C1–C3 实施记录（2026-09-19）
+
+**三期合成一个 PR、分三笔提交。** §4 原定每期一个 PR；但本仓库不叠 PR（CI 只对指向 `main` 的 PR 跑），而 PR 由作者合并，
+三期串行开要等三轮合并。三期都不改行为，每笔提交各自能过全部门禁，评审时按提交看即可。
+
+### 8.1 C1：调用点直接问表
+
+- **删掉了全部转调函数**：`platforms.ts` 的 `serverToolStatus` / `wireHasServerTools` / `dashscopeRunsCodeInterpreter` /
+  `wireReadsPdf` / `wireIgnoresForcedToolChoice` / `wireTakesVlHighResolution` / `wireTakesVideoFps`，`serverTools.ts` 的
+  `supportsServerTools` / `supportsServerToolFor`。调用点（`openai.ts`、`modelSummary.ts`、`videoInput.ts`、`configDb.readsPdf`、
+  `serverTools.ts` 自身、模型抽屉、渠道抽屉）一律问 `hasCapability(id, wire, { modelId?, type? })` 或 `capabilityVerdict`。
+  「这条线有没有任何服务端工具」是唯一的聚合问题，收成 `capabilities.ts` 里的 `hasAnyServerTool`。
+- **`canReadVideo` 的第二个参数从 `ApiStandard` 改成渠道**，读 `videoInput` 格。今天 `videoInput` 只有族缺省、没有平台格，
+  所以行为不变；但 C4 一旦给平台写格子，聊天面与 `agentStore` 不必再改——它们本来就只看得到 standard，看不到平台。
+- **抽屉的三个视觉开关带上模型类型问表**（`{ type: form.type }`），不再在表外再乘一个 `canSeeImages`：类型门槛本来就是规则行的
+  `modelTypes`，fps 对视频的依赖本来就是 `requires`。
+- **没有做 `capabilitySent` / `useCapability`**（§2.3、§2.4 的设想）。每个能力的「作者声明」形状不同（布尔、数组、fps 数值），
+  而每个提问者手里本来就拿着自己那一个；做一个统一的 `capabilitySent` 需要再登记一张「声明怎么读」的表，那是又一份要保持同步的副本——
+  正是 §7.5 那七条的成因。「声明 && `hasCapability`」是一个 `&&`，留在调用点。
+- 被删函数的测试没有删：挪进 `capabilities.test.ts`，改成对表提问，每一格原样保留（它们都是有人花钱测出来的）。
+
+### 8.2 第二道闸：一致性测试（`capabilityConsistency.test.ts`）
+
+对 16 个平台 × 各自的线路 × 全部能力 × 三个模型 id，把**真正动手的地方**拿来问：适配器的请求体、「将发送」摘要、
+聊天面的视频闸（`canReadVideo` / `sentVideoFps`）、PDF 的 `readsPdf`。判据是**观察**而不是复述：带声明构造一次、不带声明构造一次，
+两者不同 = 发出去了；必须与 `hasCapability` 相同。
+
+- 适配器的请求体在 `fetch` 处截获，不发网络请求。
+- `PROBES` 是 `Record<CapabilityId, …>`：新增一个能力，不写它由谁执行就编译不过。
+- 它也会抓到**反方向**的错：给某个族写了平台格，而那个族的适配器根本不读这个能力（例如给 Anthropic 线写 `forcedToolChoice: false`，
+  而 `anthropic.ts` 没有这道闸），测试会报「表说不发，请求体照发」。
+- 验过它会报：临时去掉 `openai.ts` 里高分辨率的闸，官方 OpenAI 的 Chat 线立刻三格报错。
+
+### 8.3 C2：采样与输出收进表，原因码进语言文件
+
+- **四个新能力**，都是 `native`：`temperature`（四族；Anthropic 上思考开着时 `no / thinking`——规则行的 `thinkingOff`）、
+  `textVerbosity`（只有 Responses 族）、`translateFormat`（Chat 族，只对文本模型）、`structuredOutput`（Anthropic 以外三族有 JSON 模式）。
+  `forcedToolChoice` 在 C0 已经进表。
+- **`supportsTemperature` 删掉**，Anthropic 适配器、摘要、抽屉都问 `temperature` 格。裁决带上**解析后的**思考类目；
+  类目不传就不查（与其它模型字段同一个约定），所以提问者必须先 `resolveThinkingCategory`——三个提问者本来就是这么拿到类目的。
+- **抽屉里「有没有这个控件」一律问表**：一个 `can(id, model?)` 包住当前线路；`family` 只剩下选拼法和措辞
+  （结构化输出三族的说明文字不同、服务端工具按族的「为什么」），这些是「怎么说」，不是「有没有」（§3 的白名单原则）。
+- **结构化输出的强度不进表。** 表只回答「有没有 JSON 模式」；自动档抬升到 `json_schema`、被 400 过的降档，仍是 `jsonMode.ts` 的事——
+  那是按族与按端点学来的拼法，不是能力有无。
+- **`translateFormat` 在一致性测试里没有提问者**（探针返回空，写明是故意的）：这个声明不改任何请求体，它把模型从选择器里拿出来交给
+  `lib/translate`，守门的是抽屉保存时的清除，纯函数测试看不到。
+- **原因码的句子只在语言文件里**：`aiConfig.capReason.<code>`，两种语言各一份，`capabilities.test.ts` 保证每个码都有句子
+  （与 `ThemeReasonCode` 同一个做法）。`CAPABILITY_REASONS` 是有序常量，原因码的类型从它推出来。
+- **没有把抽屉里既有的「不发送」提示改成原因码句子。** 那几句（PDF 的 `declNotOnRoute`、服务端工具的三句）带着线路名、平台名、模型 id，
+  读起来比通用的原因句更具体；原因句先用在矩阵的悬停说明上。要统一时，把它们换成 `capReason` 加参数即可，无需改逻辑。
+
+### 8.4 可用性矩阵成为标准组件（作者提议，2026-09-19）
+
+作者看了服务端工具那张「各线路可用性」矩阵（channel-model-route-plan 屏 05），提议做成标准的提示组件：只要这个模型的能力在表里，就用同一个样子说明。
+落成 `panes/CapabilityMatrix.tsx`：
+
+- 行 = 能力，列 = 渠道的线路，格 = `capabilityVerdict`，**悬停显示原因句**。矩阵的每一格都是表的裁决，所以它说不出适配器不做的事。
+- 用在能力声明的三组末尾：服务端工具（原来那张，改用组件）、**输入**（PDF / 高分辨率 / 视频 / 抽帧频率）、**输出格式**（结构化输出 / 回答详略）。
+- 何时出现：渠道有**不止一条线路**时（一条线路没有可比的，开关自己的提示就够了）；某一行出现的条件是**某条线路有它，或模型声明了它**——
+  声明了而当前线路说不出来的，照样在矩阵里看得见、能去关掉。
+- 采样温度没进矩阵：它随每条线路各自的思考类目变，矩阵需要逐线路的类目，而抽屉里只有当前线路的表单值；等有需要再接。
+
+### 8.5 C3：源码扫描棘轮（`src/lib/__tests__/capabilityFamilyRatchet.test.ts`）
+
+§3 设想的是在五个点名的文件里数 `family === "`。落成时反过来：**扫整个 `src/`**，点名的是**允许**按族分支的文件——
+这样一个新文件长出按族判断的能力有无，不需要有人记得把它加进名单才会被抓到。
+
+- 数的是去掉注释后「拿族和字面量比」的写法（`family === "…"`、`familyOf(…) !== "…"`、`x.family === "…"`）；`switch (family)` 不数，那几乎总是在选拼法。
+- **`WIRE_SHAPE` 白名单**：`capabilities.ts`、`platforms.ts`、`routes.ts`、`urls.ts`、`reasoning.ts`、`jsonMode.ts`、`serverTools.ts`、
+  两个探测模块、`image.ts`——都是在决定请求**长什么样**，每一条在测试里写了理由。适配器本身不按字面量比族（它们按 `familyOf` 分派），不必进名单。
+- **`CEILING`**：其余文件的上限 = C2 之后的实际计数：`ModelDrawer.tsx` 6（结构化输出说明文字、图像模型 Gemini 方言预填、服务端工具「为什么」的措辞）、
+  `modelSummary.ts` 5（按族拼字段名）、`ProviderDrawer.tsx` 3（Gemini 安全设置、ComfyUI 保存分支）。没列的文件上限是 0。
+- **只许降**：数少了也失败，提示把上限改成新数，免得腾出来的名额被悄悄用掉。
+- 拦下时的出路写在测试文件头注里：「有没有」去能力表加一行，调用点问 `hasCapability`；确实是在选拼法或措辞，才把上限加一并写明哪一处。
+
+### 8.6 审查修正（2026-09-19，同一个 PR）
+
+1. **温度：没给思考类目时判「思考开着」。** C2 的写法是「类目不传就不查」，于是没有模型信息时 Anthropic 各线路的温度都是 `yes`——
+   矩阵文档照此把它们标成了 ✓，而一个没声明类目的 Anthropic 模型默认是在思考的，适配器会丢掉这个字段。
+   旧的 `supportsTemperature(standard)` 在同样情况下答 false。改为：`thinkingOff` 规则把缺席的类目当作族的默认类目，
+   而四族的默认类目都在思考（`defaultCategoryId`），所以只有显式的 `off` 才放行。忘了解析类目的调用方拿到的是安全的答案。
+   矩阵文档里 Anthropic 线路的温度格随之从 ✓ 变成 ·。
+2. **棘轮去注释改为按词法。** 原来用正则删 `/* … */`，字符串里的 `/*`（`FacetEditModal.tsx` 就有 `${id}/*.md`）会让它一直吞到下一个
+   `*/`，把中间的真代码一起删掉——少数、放过违规；而行尾的 `//` 注释没删，又会多数。现在按词法走一遍：去注释、清空字符串与模板文字的内容、
+   `${…}` 里照常扫，并有一条测试钉住这几种写法。
