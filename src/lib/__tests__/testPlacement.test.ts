@@ -71,6 +71,7 @@ const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
   "docSourceRefs.test.ts": "扫 docs/ 与源码注释——不许写 `文件:行号`",
   "exportReach.test.ts": "扫 src/ 全部导出——每个 export 得有第二个文件用它",
   "focusRing.test.ts": "扫 src/styles/——焦点环只能由 token 画",
+  "layering.test.ts": "扫 src/ 全部源码的 import 图——循环依赖、lib → stores、store 间动态导入（棘轮）",
   "localeParity.test.ts": "扫 i18n 两个语言包——键集必须一致",
   "localeTerms.test.ts": "扫 src/ 全部作者可见文案——退役词不许复活",
   "sourceNulBytes.test.ts": "扫全部源码——不许有裸 NUL 字节",

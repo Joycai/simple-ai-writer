@@ -12,18 +12,18 @@
 
 ## 1. 现状盘点（2026-09-19，`main` @ `03882022`，逐项核实）
 
-### 1.1 运行时循环依赖：4 组强连通分量，25 个文件
+### 1.1 运行时循环依赖：4 组强连通分量，24 个文件
 
 只数**值导入**（`import type` 与 `import { type X }` 不算，它们在编译后消失）；`await import("…")` **算**一条边——它只是把环藏到了运行时。复现命令见 §8。
 
 | 组 | 文件数 | 成员 |
 |---|---|---|
-| agent | 13 | `lib/agent/` 的 `events` `handoff` `imageTools` `packs` `registry` `routing` `runtime` `subagent` `toolCost`，`lib/asr/conn` `lib/asr/tool`，`lib/translate/tool`，`stores/aiStore` |
+| agent | 12 | `lib/agent/` 的 `handoff` `imageTools` `packs` `registry` `routing` `runtime` `subagent` `toolCost`，`lib/asr/conn` `lib/asr/tool`，`lib/translate/tool`，`stores/aiStore` |
 | lore | 6 | `lib/fs/markdown`，`lib/lore/` 的 `citations` `entity` `index` `transfer`，`stores/loreStore` |
 | project | 4 | `stores/` 的 `agentStore` `editorStore` `memoryStore` `projectStore` |
 | batch | 2 | `stores/aiTaskStore` `stores/batchStore` |
 
-只看静态导入是 2 组 13 个文件——另外 12 个是 `await import` 藏起来的。**组是 P0 棘轮的单位**：环路条数取决于遍历顺序，组的成员不会。
+只看静态导入是 2 组 13 个文件——另外 11 个是 `await import` 藏起来的。（盘点时数成 25 个：`events.ts` 注释里的一段 `import("…")` 示例被当成了边，P0 的解析器先去注释再解析，见 §7。）**组是 P0 棘轮的单位**：环路条数取决于遍历顺序，组的成员不会。
 
 下表是 madge 列出的 15 条具体环路，用来看「为什么成环」，不作指标：
 
@@ -65,9 +65,9 @@
 
 `lib/shortcuts.ts` 只 `import type { AppScreen }`，不算。前四个要的是同一样东西——一份 AI 配置快照；`ToolContext` 已经有 `resolveSubAgent` 回调，是注入这类依赖的现成先例。`citations` 的 `installCitationNavigation()` 由 `App` 安装一次，可以直接收回调作参数。
 
-### 1.3 store 之间的动态导入：50 处
+### 1.3 store 之间的动态导入：61 处
 
-`agentStore` 32、`roleplayStore` 10、`aiTaskStore` 4、`projectStore` 4。多数是为了绕开环 12–15。环本身的来由：
+`agentStore` 34、`roleplayStore` 18、`aiTaskStore` 5、`projectStore` 4。数的是 `import("./…")` 的**次数**——`Promise.all([import(…), import(…)])` 一行算几次（盘点时按行数成 50，见 §7）。多数是为了绕开环 12–15。环本身的来由：
 
 - `projectStore → agentStore`：切换/关闭项目时调 `confirmProjectSwitch`、`resetChatForProject`（`openProject`、`closeProject` 两个 action 里）。
 - `aiTaskStore → batchStore`：只读 `useBatchStore.getState().running`（`runTask` 里三处：选预设时一次，`onTruncationLimit`、`onRoundLimit` 回调各一次）。
@@ -91,7 +91,7 @@
 
 | 阶段 | 内容 | 状态 | PR |
 |---|---|---|---|
-| P0 | 守卫：分层与循环的棘轮测试 | 未开始 | |
+| P0 | 守卫：分层与循环的棘轮测试 | 进行中 | |
 | P1 | 拆 `subagent.ts`：纯查询 / 执行 | 未开始 | |
 | P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 未开始 | |
 | P3 | `lib → stores` 归零 | 未开始 | |
@@ -106,9 +106,9 @@
 
 | 指标 | 起点 | P1 后 | P2 后 | P3 后 | P4 后 | 终点目标 |
 |---|---|---|---|---|---|---|
-| 循环依赖：组 / 文件（§1.1） | 4 / 25 | | | | | 0 / 0 |
+| 循环依赖：组 / 文件（§1.1） | 4 / 24 | | | | | 0 / 0 |
 | `lib → stores` 值依赖文件数（§1.2） | 7 | | | | | 0 |
-| store 间 `await import`（§1.3） | 50 | | | | | 只剩写明理由的几处 |
+| store 间 `await import`（§1.3） | 61 | | | | | 只剩写明理由的几处 |
 | 最大源文件行数 | 4246 | | | | | < 1500 |
 
 每一列在对应 PR 合并时填实际值。「P1 后」「P2 后」的循环数是预期会降的地方；没降，就是方案错了，先回来改文档。
@@ -226,7 +226,7 @@ pnpm build
 
 | 日期 | 阶段 | 记录 |
 |---|---|---|
-| | | |
+| 2026-09-19 | P0 | 守卫实测修正两个盘点数字：agent 组 12 个文件而不是 13（`events.ts` 只经注释里的 `import("…")` 示例入组，那不是边）；store 间动态导入 61 处而不是 50（盘点的 grep 按行计数）。§1、§3 已改成实测值。 |
 
 ## 8. 复现 §1 的数字
 
@@ -238,8 +238,10 @@ npx --yes madge@8 --circular --extensions ts,tsx --ts-config tsconfig.json src
 rm .madgerc
 ```
 
-store 间动态导入：
+store 间动态导入（按次数，不按行）：
 
 ```bash
-grep -rcE 'await import\("\./[a-zA-Z]+Store"\)' src/stores/*.ts | grep -v ':0'
+grep -oE 'import\("\./[a-zA-Z]+Store"\)' src/stores/*.ts | cut -d: -f1 | sort | uniq -c
 ```
+
+权威数字以 `src/lib/__tests__/layering.test.ts` 为准——它去掉注释再解析。
