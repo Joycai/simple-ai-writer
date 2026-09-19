@@ -435,7 +435,7 @@ export function hasCapability(id: CapabilityId, wire: CapabilityWire, model?: Ca
  * 联网搜索 and sent DashScope's private `enable_search` to a server that had
  * never heard of it (docs/feature/channel-model-route-plan.md §1). Offering
  * the setting where the adapter would drop it is the failure this guards
- * against — the same rule `supportsThinkingLevel` follows.
+ * against — a control that does nothing is worse than no control.
  */
 export function hasAnyServerTool(wire: CapabilityWire): boolean {
   return SERVER_TOOL_CAPABILITIES.some((id) => hasCapability(id, wire));

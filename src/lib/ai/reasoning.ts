@@ -698,26 +698,6 @@ export function thinkingBody(
   }
 }
 
-// ─── What a given endpoint can actually be told ───────────────────────────────
-
-/**
- * Whether a thinking level can reach this endpoint at all.
- *
- * Answers "can the adapter *send* it today", not "does the model think" — an
- * endpoint whose family has no mapping yet would swallow the setting silently,
- * and a control that does nothing is worse than no control.
- *
- * Every family this app speaks now has a mapping, so this is true across the
- * board. It stays as a function rather than collapsing into `true` because the
- * fourth family (OpenAI Responses) is not implemented yet, and because
- * `reasoningBody` returning undefined for an unmapped family is exactly the
- * silent-swallow case this guards against.
- */
-export function supportsThinkingLevel(standard: ApiStandard): boolean {
-  const family = familyOf(standard);
-  return family === "openai" || family === "anthropic" || family === "gemini";
-}
-
 // ─── Reasoning content on the OpenAI-compatible wire ──────────────────────────
 
 /**
