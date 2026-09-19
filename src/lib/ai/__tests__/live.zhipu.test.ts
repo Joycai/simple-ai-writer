@@ -182,6 +182,16 @@ describe.skipIf(!KEY)("LIVE 智谱 BigModel", () => {
     expect(r2.text).toMatch(/雨|17/);
   }, 240_000);
 
+  // GLM-5.2's `none` keeps thinking; the category's off is the switch.
+  it("glm-5.2 under glm-effort: off stops thinking, max thinks", async () => {
+    const off = await ask("glm-5.2", "glm-effort", user("17 × 23 = ? 只答数字。"), { reasoningEffort: "off" });
+    expect(off.text).toMatch(/391/);
+    expect(off.reasoning).toBe("");
+    const max = await ask("glm-5.2", "glm-effort", user("17 × 23 = ? 只答数字。"), { reasoningEffort: "max" });
+    expect(max.text).toMatch(/391/);
+    expect(max.reasoning.length).toBeGreaterThan(0);
+  }, 180_000);
+
   // Unforced, this is `400 1210 API 调用参数有误` on glm-4.7 with thinking on.
   it("a named tool_choice goes out as auto, so glm-4.7 with thinking on still answers", async () => {
     const c = await ask("glm-4.7", "glm-switch", user("北京现在天气怎样？"), {

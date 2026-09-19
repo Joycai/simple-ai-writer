@@ -122,7 +122,7 @@ type ThinkingShape = "levels" | "onoff" | "budget" | "none";
  */
 export type ThinkingCategoryId =
   | "off"
-  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "glm-switch" | "doubao"
+  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "glm-effort" | "glm-switch" | "doubao"
   | "responses-effort"
   | "gemini3"
   | "claude-adaptive" | "claude-budget" | "minimax" | "doubao-switch";
@@ -224,6 +224,19 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // GLM-5.3 cannot disable thinking, so there is no `off`; it defaults to max.
     menu: ["low", "high", "max"], defaultEffort: "max",
     extra: { thinking: { clear_thinking: false } },
+  },
+  // GLM-5.2 on 智谱's own endpoint: the one generation that both stops
+  // thinking and takes a depth. `none` does *not* stop it (it thought as much
+  // as `low`), so off is the disable switch, as on DeepSeek; and the endpoint
+  // folds low/medium into high and xhigh into max, so two levels are real —
+  // `max` thought ~35% more than `low` on the same problem (landscape.md §7
+  // 第十四个样本).
+  "glm-effort": {
+    id: "glm-effort",
+    labelKey: "aiConfig.models.thinkingCatGlmEffort",
+    hintKey: "aiConfig.models.thinkingCatGlmEffortHint",
+    family: "openai", dialect: "none", shape: "levels",
+    menu: ["off", "high", "max"],
   },
   // GLM before 5.3 (4.5 / 4.6 / 4.7 / 5 / 5.1) on 智谱's own endpoint: thinking
   // is on unless `thinking.type` says `disabled`, and `reasoning_effort` is
@@ -533,7 +546,8 @@ export function reasoningBody(
           return { thinking: { type: on ? "enabled" : "disabled" } };
         case "deepseek":
         case "doubao":
-          // DeepSeek (and Doubao on 火山方舟) turns thinking off with the disable switch, not
+        case "glm-effort":
+          // DeepSeek (and Doubao on 火山方舟, GLM-5.2) turns thinking off with the disable switch, not
           // `reasoning_effort:"none"` — that field only tunes depth while on.
           // The switch is a **top-level** `thinking` object on the wire. The
           // vendor docs show it inside `extra_body`, but that is the Python

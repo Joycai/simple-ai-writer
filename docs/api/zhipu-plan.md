@@ -42,6 +42,7 @@
 | G7 | **temperature 上限是 1**：抽屉允许到 `MAX_TEMPERATURE` | 400，报错明确 | 低（会响） |
 | G8 | **联网**：对话内的 `web_search` 是 `tools[]` 项，本项目 ① 族服务端工具只会拼顶层字段（千问），且默认意图识别会让模型**没搜也说搜了**；另有独立的 `/web_search` 与 `/reader` 端点，本项目没有「应用执行的联网工具」这一类 | 暂时不提供，无害 | 功能缺失（P2） |
 | G9 | **GLM Coding Plan 的三条编程端点**（① `/api/coding/paas/v4`、④ `/api/anthropic`、② `/api/v1`）同一把 key 都通，但走哪条决定扣套餐还是余额，且套餐条款只许「指定工具」 | 不提供 | 需作者决策 |
+| G11 | **手动添加的模型不会自动拿到对的类目**：类目的「自动」按协议族取默认（① 族 = `openai-generic`），不看模型 id。作者在智谱渠道里手动加一个起步清单之外的 GLM，思考开关就是「发 `reasoning_effort:none`」——在全部 11 款上都关不掉思考 | 起步三款之外都要作者自己选对类目 | 中（静默 + 计费） |
 | G10 | **保留式思考**：`glm` 类目恒发 `thinking.clear_thinking:false`（厂商对 5.3-flash 的推荐值）。它要求**跨轮**原样回传历史 `reasoning_content`，本项目只在工具轮内回传 | 效果未量 | 未知 |
 
 ## 4. 方案
@@ -55,6 +56,9 @@
   `thinking:{type:"disabled"}`，**不发 `reasoning_effort`**——4.x 与 5.0/5.1 收了也无视，发它只是给无效的档位
   一个假象（G2）。这是 ① 族第一个 `onoff` 类目；`isOnOffCategory` / `onEffort` 本就按 shape 判断，抽屉的开关
   UI 直接复用。5.3 代仍用既有的 `glm`（low/high/max，不能关）。
+- **新类目 `glm-effort`**（「GLM-5.2」，① 族，`levels`）：菜单 关 · high · max。5.2 是唯一「能关又能调」的一代，
+  但 `reasoning_effort:"none"` 关不掉它（校准实测），所以「关」发 `thinking.disabled`（与 `deepseek` / `doubao` 同一拼法）；
+  low / medium 被端点折成 high，不单列。
 - **平台声明「只认 auto」**：画像加 `forcedToolChoice: "ignored"`；`openai.ts` 的 `toolChoiceFor` 在这个平台上
   把 `required` / 具名降成 `auto`（G3）。理由与 MiniMax 同：两个会强制的调用方（`agent/structured.ts` 的 JSON 回退、
   handoff 的散文回退）本来就不依赖强制；不降级是 4.7 上的必然 400，降级的代价是 4.5-air 失去它唯一生效的强制
@@ -130,7 +134,26 @@ A 作为补充仍可做（给直接在 GLM 上聊天、不走子代理的场景�
 画像加「本平台无 `json_schema`」，抽屉里不给这一档或给出提示（G6）。温度上限（G7）同理可以按平台给，
 但它会响（400 文案明确），不急。
 
-## 5. 为什么不把旧代 GLM 放进 `deepseek` 类目
+## 5. 模型校准表（2026-09-19，全部 11 个 id 实测，逐项数据见 landscape.md 第十四个样本）
+
+| 模型 | 类目 | 上下文 | 输出上限 | 类型 |
+| --- | --- | --- | --- | --- |
+| glm-5.3 | `glm` | 1M | 128K | 文本 |
+| glm-5.3-flash · glm-5.3-flashx | `glm` | 1M | 128K | 多模态 + PDF |
+| glm-5.2 | `glm-effort` | 1M | 128K | 文本 |
+| glm-5.1 · glm-5 · glm-5-turbo | `glm-switch` | 200K | 128K | 文本 |
+| glm-4.7 · glm-4.6 | `glm-switch` | 200K | 128K | 文本 |
+| glm-4.5 | `glm-switch` | 128K | 96K（上限表取保守值；端点实际收到 128K） | 文本 |
+| glm-4.5-air | `glm-switch` | 128K | 96K | 文本 |
+
+上限表（`modelLimits.ts`）的 `glm-4.5` 行保持 98,304：它同时覆盖 4.5-flash / 4.5-x（文档都写 96K），取低值不会 400。
+PDF 只在 5.3-flash 上实测过，flashx 按同一个模型的提速版推定。
+
+**G11 的两个解法（待作者定）**：① 把起步清单扩到全部 11 款——纯数据，但新建渠道时一次灌进 11 行；② 给平台画像加一张
+「模型 id → 类目 / 上限 / 类型」的校准表，作者手动添加或从 `/models` 拉取时按 id 预填——一次到位，但这是新机制，别的平台
+（方舟、千问）也会想要它。
+
+## 6. 为什么不把旧代 GLM 放进 `deepseek` 类目
 
 报文上 `deepseek` 类目碰巧可用（关发 `thinking.disabled`、开发 `reasoning_effort`）。但类目存在的理由是
 「抽屉里的档位 = 端点真认的档位」（[`reasoning-plan.md`](reasoning-plan.md) §0）：在 4.7 上给出 low / high / max

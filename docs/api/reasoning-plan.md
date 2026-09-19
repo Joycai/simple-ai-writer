@@ -28,10 +28,10 @@ GLM-5.3 根本无法关闭思考。旧设计用「作者声明 + 端点 400 纠�
 「刻意删掉这两档」的结论**——它们不再对每个模型都出现，而是**只在真支持的类目里
 出现**）。每个类目声明：所属协议族、底层 wire dialect（复用 `thinkingBody`）、
 形态（`levels`/`onoff`/`budget`/`none`）、精确的可选档位 `menu`、以及档位→wire 串。
-类目清单：`openai-generic` / `deepseek` / `qwen-budget` / `qwen-effort` / `glm` / `glm-switch` / `doubao` /
+类目清单：`openai-generic` / `deepseek` / `qwen-budget` / `qwen-effort` / `glm` / `glm-effort` / `glm-switch` / `doubao` /
 `gemini3` / `claude-adaptive` / `claude-budget` / `minimax` / `doubao-switch`（后两个豆包类目 2026-09-18 加，
-理由见 [`landscape.md`](landscape.md) §7 第十二个样本；`glm-switch` 2026-09-19 加，① 族第一个 `onoff` 类目，
-理由见 [`zhipu-plan.md`](zhipu-plan.md) §5），外加 `auto`（＝按族默认）
+理由见 [`landscape.md`](landscape.md) §7 第十二个样本；`glm-switch`（① 族第一个 `onoff` 类目）与 `glm-effort` 2026-09-19 加，
+理由见 [`zhipu-plan.md`](zhipu-plan.md) §6），外加 `auto`（＝按族默认）
 与 `off`（＝什么都不发）。UI：模型抽屉里选类目（按族过滤）+ 预算类目多一个 token
 输入框；对话面的「思考强度」盘载入该类目的 `menu`（`ReasoningControls`）。
 

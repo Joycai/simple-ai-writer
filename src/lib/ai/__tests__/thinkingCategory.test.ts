@@ -209,3 +209,15 @@ describe("glm-switch category", () => {
     expect(categoriesForFamily("anthropic")).not.toContain("glm-switch");
   });
 });
+
+// GLM-5.2 (landscape.md §7 第十四个样本): `none` keeps thinking, so off is the
+// switch; low/medium fold into high, so the menu is off · high · max.
+describe("glm-effort category", () => {
+  const cat = THINKING_CATEGORIES["glm-effort"];
+  it("sends the switch alone for off and reasoning_effort otherwise", () => {
+    expect(cat.menu).toEqual(["off", "high", "max"]);
+    expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(cat, "max")).toEqual({ reasoning_effort: "max" });
+    expect(reasoningBody(cat, "default")).toBeUndefined();
+  });
+});
