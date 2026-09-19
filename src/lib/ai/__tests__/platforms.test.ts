@@ -14,7 +14,8 @@ import {
   resolvePlatform,
   serverToolStatus,
   wireIgnoresForcedToolChoice,
-  wireTakesQwenVisionParams,
+  wireTakesVideoFps,
+  wireTakesVlHighResolution,
   wireReadsPdf,
 } from "../platforms";
 import { THINKING_CATEGORIES } from "../reasoning";
@@ -291,9 +292,12 @@ describe("zhipu model calibration", () => {
 // DashScope's vision knobs belong to the platforms that read them: its own two,
 // plus the host-less relays that may front it — never a hosted vendor that
 // merely speaks the same family (智谱 ignores both, landscape.md §7 第十四个样本).
-describe("wireTakesQwenVisionParams", () => {
-  const on = (platform: Parameters<typeof wireTakesQwenVisionParams>[0]["platform"], standard: Parameters<typeof wireTakesQwenVisionParams>[0]["standard"] = "openai_compat") =>
-    wireTakesQwenVisionParams({ platform, standard });
+describe.each([
+  ["wireTakesVlHighResolution", wireTakesVlHighResolution],
+  ["wireTakesVideoFps", wireTakesVideoFps],
+] as const)("%s", (_name, takes) => {
+  const on = (platform: Parameters<typeof takes>[0]["platform"], standard: Parameters<typeof takes>[0]["standard"] = "openai_compat") =>
+    takes({ platform, standard });
   it("is DashScope's, and a relay's that may front it", () => {
     for (const p of ["dashscope", "dashscope-intl", "newapi", "custom"] as const) expect(on(p), p).toBe(true);
   });

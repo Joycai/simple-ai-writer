@@ -34,7 +34,7 @@
 
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode, type ProtocolFamily } from "./types";
 import type { ServerToolId } from "./serverTools";
-import { capabilityVerdict, familyVerdict, hasCapability, type CapabilityStatus } from "./capabilities";
+import { SERVER_TOOL_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability, type CapabilityStatus } from "./capabilities";
 import type { ThinkingCategoryId } from "./reasoning";
 
 export type PlatformId =
@@ -486,8 +486,6 @@ export function platformToStore(p: { platform?: PlatformId; baseUrl: string; api
  * answer is no longer computed here. docs/api/capability-gating-plan.md.
  */
 
-const SERVER_TOOLS: readonly ServerToolId[] = ["web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter"];
-
 /**
  * Whether one id can be said on this wire — and, given a model id, whether
  * that model takes it. Omitting `modelId` answers for the wire alone (the
@@ -499,7 +497,7 @@ export function serverToolStatus(wire: ServerToolWire, id: ServerToolId, modelId
 
 /** Whether this wire has any server tool at all — the drawer's section gate. */
 export function wireHasServerTools(wire: ServerToolWire): boolean {
-  return SERVER_TOOLS.some((id) => hasCapability(id, wire));
+  return SERVER_TOOL_CAPABILITIES.some((id) => hasCapability(id, wire));
 }
 
 /** Whether `modelId` runs DashScope's code interpreter on this family's wire. */
@@ -521,9 +519,14 @@ export function wireIgnoresForcedToolChoice(wire: ServerToolWire): boolean {
   return !hasCapability("forcedToolChoice", wire);
 }
 
-/** Whether this wire takes DashScope's `vl_high_resolution_images` and clip `fps`. */
-export function wireTakesQwenVisionParams(wire: ServerToolWire): boolean {
+/** Whether this wire takes DashScope's `vl_high_resolution_images`. */
+export function wireTakesVlHighResolution(wire: ServerToolWire): boolean {
   return hasCapability("vlHighResolution", wire);
+}
+
+/** Whether this wire reads a clip part's `fps` — its own cell, not hi-res's: the two were measured separately. */
+export function wireTakesVideoFps(wire: ServerToolWire): boolean {
+  return hasCapability("videoFps", wire);
 }
 
 /** What this platform knows about one of its model ids, or undefined — see {@link ModelCalibration}. */

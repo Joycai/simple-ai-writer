@@ -22,7 +22,7 @@ import {
   reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
 } from "./reasoning";
 import { effectiveServerTools, openaiServerToolsBody, supportsServerTools } from "./serverTools";
-import { wireOf, wireTakesQwenVisionParams, type PlatformId } from "./platforms";
+import { wireOf, wireTakesVideoFps, wireTakesVlHighResolution, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
 export interface WireItem {
@@ -131,11 +131,10 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   }
   // Sent on every request, beside (not instead of) a structured task's text.format.
   if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
-  const qwenVision = wireTakesQwenVisionParams(wire);
-  if (qwenVision && m.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
+  if (wireTakesVlHighResolution(wire) && m.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).
-  if (qwenVision && m.videoInput && m.videoFps !== undefined) {
+  if (wireTakesVideoFps(wire) && m.videoInput && m.videoFps !== undefined) {
     out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });

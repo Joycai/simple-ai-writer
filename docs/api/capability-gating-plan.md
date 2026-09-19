@@ -47,6 +47,9 @@
 
 ## 2. 目标形状
 
+> **落成的形状与本节有三处出入，以 §7 为准**：平台一侧不是 `PlatformProfile` 上的一个槽，而是 `capabilities.ts` 里独立的一张
+> 平台 × 协议族 × 能力表（第三轴模型 id）；服务端工具**并入**了这张表；裁决时平台格先于族检查。本节保留原样，是为了留下当时的推理。
+
 ### 2.1 一张能力登记表（`lib/ai/capabilities.ts`，新文件）
 
 每个能力是一行**数据**，回答四件事：它在哪一层、缺省哪些族有拼法、依赖什么、谁能覆盖。
@@ -95,7 +98,7 @@ type PlatformCapability =
 | `qwenVisionParams: true`（dashscope ×2） | `capabilities.vlHighResolution` / `videoFps`: `{ families: ["openai"] }` |
 | `forcedToolChoice: "ignored"`（zhipu） | `capabilities.forcedToolChoice: false` |
 
-`serverTools` **不并入**：它带拼法（同一个 id 在不同平台是不同的 body），不只是有无。但它的裁决走同一个出口（§2.3），
+~~`serverTools` **不并入**~~（**已作废，见 §7 第 3 条：服务端工具并入能力表**）：它带拼法（同一个 id 在不同平台是不同的 body），不只是有无。但它的裁决走同一个出口（§2.3），
 三值语义本来就是从它那里借的。`models`（按 id 的校准表）也不并入：它是**预填**，不是门槛（zhipu-plan §5）。
 
 ### 2.3 一个裁决函数，三值加原因码
@@ -154,8 +157,8 @@ export function capabilitySent(id: CapabilityId, wire: ServerToolWire, model: Ca
 | **C1** | 调用点改问 `capabilitySent` / `useCapability`：抽屉、`openai.ts`、`modelSummary.ts`、`videoInput.ts`、`readsPdf`、会话面。删旧函数。一致性测试上线。 | 无 |
 | **C2** | 收采样与输出：温度、输出详细度、翻译格式、结构化输出的选项集、强制 tool_choice。原因码与 i18n 归并。 | 仅措辞 |
 | **C3** | 源码扫描棘轮上线，起点 = C2 合并后的实际计数。 | 无 |
-| **C4** | **第一次行为变化**：`videoInput` 标为 `private`-like 的实测能力——点名千问 ×2 与智谱（均已实测）；中继 `unknown`；其余平台在实测前 `no`。需要先跑的样本：OpenAI 官方、DeepSeek、xAI、火山方舟的 ① 线路各一条 `video_url`，结果记入 `landscape.md` 新样本。已声明视频的旧行不受伤：落在 `no` 上的按 §2.4 显示「已声明，不发送」。 | 有，需实测 |
-| **C5**（可选） | 服务端工具的裁决出口并到 `capabilityVerdict` 之下（拼法表留在原处）。只有当 C0–C4 证明这个形状顺手时才做。 | 无 |
+| **C4**（**搁置**，§7） | **第一次行为变化**：`videoInput` 标为 `private`-like 的实测能力——点名千问 ×2 与智谱（均已实测）；中继 `unknown`；其余平台在实测前 `no`。需要先跑的样本：OpenAI 官方、DeepSeek、xAI、火山方舟的 ① 线路各一条 `video_url`，结果记入 `landscape.md` 新样本。已声明视频的旧行不受伤：落在 `no` 上的按 §2.4 显示「已声明，不发送」。 | 有，需实测 |
+| ~~**C5**（可选）~~（**取消**：已并入 C0，§7） | 服务端工具的裁决出口并到 `capabilityVerdict` 之下（拼法表留在原处）。只有当 C0–C4 证明这个形状顺手时才做。 | 无 |
 
 C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单独决定。
 
@@ -222,7 +225,24 @@ C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单�
 
 ### 7.4 C0 没做的
 
-- 调用点没动（C1）：`wireReadsPdf` 等旧名字还在，只是不再自己算；`canReadVideo` 仍是自己的族判断（它的签名里没有平台，改它就是改调用点）。
+- 调用点没动（C1）：`wireReadsPdf` 等旧名字还在，只是不再自己算（唯一的例外见 §7.5 第 3 条）；`canReadVideo` 仍是自己的族判断（它的签名里没有平台，改它就是改调用点）。
 - `CapabilityReason` 的句子还没进语言文件（C2）；四个类型暂未导出，因为 `exportReach.test.ts` 不许没有第二个使用者的导出，C1 的调用点会用到它们。
 - 表目前只到「平台 × 族 × 模型 id → 有无」。按模型 id 给**能力**（而不只是预填）下结论——比如智谱只有 glm-5.3-flash / flashx 读 PDF——
   形状上已经能写（一个正则组），但那是行为变化，且对没见过的新 id 该判 `no` 还是 `unknown` 需要先定，留到 C1 之后单独提。
+
+### 7.5 审查修正（2026-09-19，同一个 PR）
+
+对 C0 的一轮代码审查提了七条，全部在合并前修掉。值得记下的是它们的**同一个成因**：把散落的判据收成一张表的时候，
+又顺手抄出了新的副本。
+
+1. **模型类型抄了一份、抄的时候就漏了 `video`。** `capabilities.ts` 自己声明了一个类型列表，而 `configDb.ts` 早有 `ModelType`。改为类型导入。
+2. **服务端工具的 id 抄了第三份**（`platforms.ts` 里给 `wireHasServerTools` 用）。新增一个工具 id 而漏了它，抽屉的区段就折着不开。
+   改为 `capabilities.ts` 里一个 `Record<ServerToolId, true>`——漏写编译不过——并加一条测试钉住它与 `SERVER_TOOL_IDS` 相同。
+3. **表里分开的两格，转调时又并成了一格。** `vlHighResolution` 与 `videoFps` 是两个能力、各有格子，但旧名字 `wireTakesQwenVisionParams`
+   只读前者，fps 的三个提问者（`sentVideoFps`、摘要、抽屉）都跟着它走——哪天两格不同，矩阵文档与线上就静默不一致。
+   拆成 `wireTakesVlHighResolution` / `wireTakesVideoFps`，各读各的格。这是 C0 里唯一动了调用点的地方；今天两格相同，行为不变。
+4. **防泄漏测试对中继整个跳过。** 没标 `relay` 的私有能力（`web_extractor`、代码解释器）在 New API / 自定义上从未被断言为 `no`。
+   改为逐格算出期望值：没有格子 ⇒ `no`，除非平台是中继、规则标了 `relay`、族在规则内、先决能力成立 ⇒ `unknown`。
+5. **`requires` 是无保护的递归。** 规则表里写出一个环，就是抽屉和适配器里的栈溢出。加一条遍历规则表的无环测试。
+6. **矩阵文档的章节顺序靠对象键顺序。** 整理规则表的行序会把整份文档重排，淹没真正变了的那一格。`CAPABILITY_IDS` 改为显式列出，测试保证齐全。
+7. **§2–§4 的旧设计原地没有标注。** 已在各处加上指向本节的标记。

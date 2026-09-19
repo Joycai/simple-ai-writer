@@ -18,12 +18,13 @@
  *     as the third axis. Endpoint-run tools live here too: which tool a wire
  *     runs is a fact about the platform and the model id, like any other.
  *
- * {@link capabilityVerdict} is the only reader. It never imports
- * `platforms.ts` at runtime (that file delegates here), so the two cannot
- * form a cycle.
+ * {@link familyVerdict} is the only reader in the app (the tables are exported
+ * for the tests that walk them). This file never imports `platforms.ts` at
+ * runtime — that file delegates here — so the two cannot form a cycle.
  */
 
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
+import type { ModelType } from "./configDb";
 import type { PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
 
@@ -76,8 +77,6 @@ interface CapabilityVerdict {
   reason: CapabilityReason;
 }
 
-type ModelKind = "text" | "multimodal" | "vision" | "image" | "asr";
-
 interface CapabilityRule {
   /**
    * Families where the rule's own default applies: for a `native` capability,
@@ -102,12 +101,12 @@ interface CapabilityRule {
    */
   relay?: "unknown";
   /** Model types that can have it at all; absent = any. */
-  modelTypes?: readonly ModelKind[];
+  modelTypes?: readonly ModelType[];
   /** Capabilities that must not be `no` on the same wire. */
   requires?: readonly CapabilityId[];
 }
 
-const SEES_IMAGES: readonly ModelKind[] = ["multimodal", "vision"];
+const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
 
 /**
  * The protocol's side. `Record<CapabilityId, …>` on purpose: a new capability
@@ -142,7 +141,26 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   code_interpreter: { families: ["openai", "responses"], origin: "private" },
 };
 
-export const CAPABILITY_IDS = Object.keys(CAPABILITY_RULES) as CapabilityId[];
+/**
+ * Every id, in the order the generated matrix lists them. Spelled out rather
+ * than read off the object's keys so that tidying the table above cannot
+ * reshuffle docs/api/capability-matrix.md and bury the one cell that moved;
+ * `capabilities.test.ts` holds it complete.
+ */
+export const CAPABILITY_IDS: readonly CapabilityId[] = [
+  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
+  "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
+];
+
+/**
+ * The ids that are endpoint-run tools. A `Record` so that a new
+ * `ServerToolId` does not compile until it is listed — `wireHasServerTools`
+ * walks this, and an id it skipped would fold the drawer's section shut.
+ */
+const SERVER_TOOL_FLAGS: Record<ServerToolId, true> = {
+  web_search: true, web_extractor: true, web_search_image: true, image_search: true, code_interpreter: true,
+};
+export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as ServerToolId[];
 
 /** A model-id axis entry: the platform runs it for ids matching any pattern. */
 type ModelMatcher = readonly RegExp[];
@@ -285,7 +303,7 @@ interface CapabilityWire {
 /** What is known of the model. Every field optional: an absent one is not consulted. */
 interface CapabilityModel {
   modelId?: string;
-  type?: ModelKind;
+  type?: ModelType;
 }
 
 const verdict = (status: CapabilityStatus, reason: CapabilityReason): CapabilityVerdict => ({ status, reason });

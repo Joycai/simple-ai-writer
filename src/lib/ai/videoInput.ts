@@ -12,7 +12,7 @@
 
 import type { Model } from "./configDb";
 import { familyOf, type ApiStandard, type ContentPart } from "./types";
-import { providerWire, wireTakesQwenVisionParams } from "./platforms";
+import { providerWire, wireTakesVideoFps } from "./platforms";
 
 /** Lowest `fps` the settings field accepts. Only 0.5–4 were measured. */
 export const MIN_VIDEO_FPS = 0.1;
@@ -65,7 +65,7 @@ export function sentVideoFps(
   provider: Parameters<typeof providerWire>[0] | null | undefined,
 ): number | undefined {
   if (!model || !provider) return undefined;
-  return wireTakesQwenVisionParams(providerWire(provider)) ? model.videoFps : undefined;
+  return wireTakesVideoFps(providerWire(provider)) ? model.videoFps : undefined;
 }
 
 /** The one builder for a clip's content part. `fps` absent = endpoint default. */

@@ -8,7 +8,7 @@ import {
   resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
-import { wireIgnoresForcedToolChoice, wireOf, wireTakesQwenVisionParams } from "./platforms";
+import { wireIgnoresForcedToolChoice, wireOf, wireTakesVlHighResolution } from "./platforms";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
@@ -123,7 +123,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // DashScope's high-resolution image reading, declared per model (see
       // Model.vlHighResolution). Absent unless declared, same rule as above —
       // and unless the platform reads it (智谱 takes it and ignores it).
-      ...(opts.vlHighResolution && wireTakesQwenVisionParams(wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
+      ...(opts.vlHighResolution && wireTakesVlHighResolution(wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
       // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),

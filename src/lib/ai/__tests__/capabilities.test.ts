@@ -13,10 +13,11 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  CAPABILITY_IDS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability,
+  CAPABILITY_IDS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability,
   type CapabilityId,
 } from "../capabilities";
 import { PLATFORM_IDS, platformEndpoints } from "../platforms";
+import { SERVER_TOOL_IDS } from "../serverTools";
 import type { ProtocolFamily } from "../types";
 
 declare const require: (m: string) => {
@@ -75,23 +76,45 @@ describe("capability matrix", () => {
 describe("a private capability does not leak", () => {
   const PRIVATE = CAPABILITY_IDS.filter((id) => CAPABILITY_RULES[id].origin === "private");
 
-  it("is `no` on every platform that has a host and no cell for it", () => {
+  it("is `no` wherever no cell lists it — a relay excepted only for a rule that says so", () => {
     expect(PRIVATE.length).toBeGreaterThan(0);
     for (const id of PRIVATE) for (const platform of PLATFORM_IDS) for (const family of FAMILIES) {
       const caps = PLATFORM_CAPABILITIES[platform];
       const listed = caps.families?.[family]?.[id] !== undefined || caps.families?.all?.[id] !== undefined;
-      if (listed || caps.relay) continue;
-      expect(familyVerdict(id, platform, family).status, `${id} on ${platform}/${family}`).toBe("no");
+      if (listed) continue;
+      const relayed = !!caps.relay && !!CAPABILITY_RULES[id].relay && CAPABILITY_RULES[id].families.includes(family)
+        && (CAPABILITY_RULES[id].requires ?? []).every((dep) => familyVerdict(dep, platform, family).status !== "no");
+      expect(familyVerdict(id, platform, family).status, `${id} on ${platform}/${family}`).toBe(relayed ? "unknown" : "no");
     }
   });
 
-  it("is never better than `unknown` on a relay", () => {
+  it("is never `yes` on a relay", () => {
     for (const id of PRIVATE) for (const platform of PLATFORM_IDS) {
       if (!PLATFORM_CAPABILITIES[platform].relay) continue;
       for (const family of FAMILIES) {
         expect(familyVerdict(id, platform, family).status, `${id} on ${platform}/${family}`).not.toBe("yes");
       }
     }
+  });
+});
+
+describe("the rule table is well-formed", () => {
+  it("CAPABILITY_IDS lists every rule exactly once", () => {
+    expect([...CAPABILITY_IDS].sort()).toEqual(Object.keys(CAPABILITY_RULES).sort());
+  });
+
+  it("the server tool ids are the ones serverTools.ts selects from", () => {
+    expect([...SERVER_TOOL_CAPABILITIES].sort()).toEqual([...SERVER_TOOL_IDS].sort());
+  });
+
+  // familyVerdict resolves `requires` by recursion; a loop would be a stack
+  // overflow in the drawer and the adapter, not a failed build.
+  it("`requires` has no cycle", () => {
+    const walk = (id: CapabilityId, seen: readonly CapabilityId[]): void => {
+      expect(seen, `${[...seen, id].join(" → ")}`).not.toContain(id);
+      for (const dep of CAPABILITY_RULES[id].requires ?? []) walk(dep, [...seen, id]);
+    };
+    for (const id of CAPABILITY_IDS) walk(id, []);
   });
 });
 
