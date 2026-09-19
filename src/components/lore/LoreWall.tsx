@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -43,7 +42,7 @@ import { CategoryDeleteModal, type CategoryDeleteChoice } from "./CategoryDelete
 import { CollectionsManageModal } from "./collections/CollectionsManageModal";
 import { ScopeBand, ScopeButton, ScopeMenu, type ScopeMenuAnchor } from "./collections/ScopePicker";
 import cs from "./collections/collections.module.css";
-import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
+import { IMAGE_EXTENSIONS, readImageBytes } from "../../lib/fs/images";
 import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { useImageThumbnails } from "./useImageDataUrl";
@@ -184,8 +183,7 @@ export function LoreWall() {
     if (typeof picked !== "string") return;
     setAvatarBusy(entity.id);
     try {
-      const bytes = await readBinaryFile(picked);
-      const ext = (picked.split(".").pop() ?? "png").toLowerCase();
+      const { bytes, ext } = await readImageBytes(picked);
       await setEntityAvatar(entity.dirPath, bytes, ext);
       // One folder, not the wall: the avatar is the only thing that changed.
       await refreshEntity(projectPath, entity);
