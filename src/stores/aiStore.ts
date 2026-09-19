@@ -21,7 +21,7 @@ import {
   SUBAGENT_KINDS,
   type SubAgentConfig,
   type SubAgentKind,
-} from "../lib/agent/subagent";
+} from "../lib/agent/subagentModel";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 

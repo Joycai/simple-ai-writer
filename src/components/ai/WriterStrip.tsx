@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../stores/aiStore";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { useAppStore } from "../../stores/appStore";
-import { subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
+import { subAgentModel, withSessionOverrides } from "../../lib/agent/subagentModel";
 import { readPref, writePref } from "../../lib/prefs";
 import styles from "./WriterTurn.module.css";
 

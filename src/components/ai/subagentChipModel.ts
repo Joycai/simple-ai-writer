@@ -11,7 +11,7 @@
  */
 
 import { useAiStore } from "../../stores/aiStore";
-import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
+import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagentModel";
 import { isAsrEnabled } from "../../lib/asr/flag";
 import { isTranslateEnabled } from "../../lib/translate/flag";
 

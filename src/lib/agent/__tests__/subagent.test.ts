@@ -36,14 +36,14 @@ vi.mock("../../image/normalize", () => ({
 import {
   chainCanSeeImages,
   DELEGATE_KINDS,
-  executeDelegate,
   resolveSubAgentConn,
   resolveVisionConn,
   subAgentModel,
   SUBAGENT_KINDS,
   type SubAgentConfig,
   type SubAgentKind,
-} from "../subagent";
+} from "../subagentModel";
+import { executeDelegate } from "../subagent";
 
 describe("subagent", () => {
   const dummyTextModel: Model = {

@@ -11,7 +11,7 @@ import {
   searchReadsPages,
   type DelegateKind,
   type SubAgentKind,
-} from "../../../lib/agent/subagent";
+} from "../../../lib/agent/subagentModel";
 import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import {

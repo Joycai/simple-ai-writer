@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown } from "lucide-react";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
 import { isSkillStateDefaultOn, isSkillStateEnabled } from "../../lib/agent/stateFlag";
-import type { SubAgentKind } from "../../lib/agent/subagent";
+import type { SubAgentKind } from "../../lib/agent/subagentModel";
 import {
   useBoundModelName, useConfiguredKinds, FALLBACK_LABELS, type ChipKind,
 } from "./subagentChipModel";

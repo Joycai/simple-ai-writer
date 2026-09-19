@@ -10,7 +10,7 @@
 
 import type { AsrFormat, Model, Provider } from "../ai/configDb";
 import { loadApiKey } from "../keyStore";
-import { subAgentModel } from "../agent/subagent";
+import { subAgentModel } from "../agent/subagentModel";
 import type { AsrConn } from "./client";
 import { asrIdMismatch, looksLikeFiletransModel } from "./formats";
 import { providerFor } from "../ai/routes";

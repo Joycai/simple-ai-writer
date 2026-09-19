@@ -63,7 +63,7 @@ const MODELS = [
 const WS: TaskWorkspaceHandle = { taskId: null, ensure: async () => ({ taskId: "t", dir: "/d" }) };
 import { AGENT_ASSIST_PRESET } from "../presets";
 import { ROLEPLAY_PRESET, subAgentsFor } from "../../roleplay/presets";
-import { withSessionOverrides, type SubAgentConfig, type SubAgentKind } from "../subagent";
+import { withSessionOverrides, type SubAgentConfig, type SubAgentKind } from "../subagentModel";
 
 describe("routeTools", () => {
   const allDisabled: Record<SubAgentKind, SubAgentConfig> = {

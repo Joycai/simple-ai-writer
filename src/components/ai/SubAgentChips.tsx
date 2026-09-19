@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, AudioLines, type LucideIcon } from "lucide-react";
 import { useActiveChat, useAgentStore } from "../../stores/agentStore";
-import type { SubAgentKind } from "../../lib/agent/subagent";
+import type { SubAgentKind } from "../../lib/agent/subagentModel";
 import { useConfiguredKinds, FALLBACK_LABELS, type ChipKind } from "./subagentChipModel";
 import styles from "./toggleChip.module.css";
 

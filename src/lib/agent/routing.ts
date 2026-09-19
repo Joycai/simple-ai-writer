@@ -16,7 +16,7 @@
 import type { ToolId } from "./registry";
 import type { FinishPolicy, ServerToolPolicy, TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
-import { subAgentModel, searchReadsPages, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import { subAgentModel, searchReadsPages, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagentModel";
 import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
 import { isXlsxExportEnabled } from "../xlsx/flag";

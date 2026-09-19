@@ -7,7 +7,7 @@ import {
   canSeeImages, conversationalModels, isAsrOnly, MODEL_TYPES, normalizeAsrIdentity, parseModelType,
   type Model,
 } from "../configDb";
-import { chainCanSeeImages, subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagent";
+import { chainCanSeeImages, subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
 import { declarationMarks, wireSummary } from "../modelSummary";
 
 function model(over: Partial<Model>): Model {

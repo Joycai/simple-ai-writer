@@ -42,7 +42,7 @@ import { routePlannedTools } from "../routing";
 import { resetActiveWorkspace, setActiveWorkspace } from "../../profile/active";
 import { resolveWorkspace } from "../../profile/resolve";
 import { NOVEL_PROFILE, TTRPG_PROFILE } from "../../profile/model";
-import type { SubAgentConfig, SubAgentKind } from "../subagent";
+import type { SubAgentConfig, SubAgentKind } from "../subagentModel";
 
 afterEach(() => {
   resetActiveWorkspace();

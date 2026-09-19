@@ -33,7 +33,7 @@ import { imageToThumbnailDataUrl } from "../../lib/fs/images";
 import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
-import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
+import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagentModel";
 import { isAsrEnabled } from "../../lib/asr/flag";
 import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/videoInput";
 import { videoMimeOf } from "../../lib/fs/video";

@@ -15,7 +15,7 @@ import { parseFrontmatter } from "../../../lib/fs/markdown";
 import type { ImageGenTarget, SaveInput } from "../../../lib/image/target";
 import { addLoreImage, readEntityFile, setEntityAvatar, updateLoreImageDesc, type LoreEntity } from "../../../lib/lore";
 import { connOptions } from "../../../lib/ai/conn";
-import { resolveVisionConn } from "../../../lib/agent/subagent";
+import { resolveVisionConn } from "../../../lib/agent/subagentModel";
 import { describeLoreImage } from "../../../lib/lore/vision";
 import { categoryLabel, findCategory } from "../../../lib/profile";
 import { loadApiKey } from "../../../lib/keyStore";

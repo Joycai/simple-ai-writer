@@ -121,7 +121,8 @@ import {
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { reportIssueCall, reportPassCall, type ReviewSink } from "../consistency/reviewTools";
-import { executeDelegate, type SubAgentKind } from "./subagent";
+import { executeDelegate } from "./subagent";
+import type { SubAgentKind } from "./subagentModel";
 import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
