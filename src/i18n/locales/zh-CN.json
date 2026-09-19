@@ -2622,6 +2622,7 @@
       "serverToolNotSent": "{{platform}} 没有这个工具的拼写：开关保留，但请求里不发送。",
       "serverToolNotForModel": "{{platform}} 有这个工具，但 {{model}} 不跑它：开关保留，请求里不发送。",
       "serverToolUnmeasured": "{{platform}} 上未实测：这是协议自带的工具，取决于上游是否转发，开了可能被拒绝。",
+      "serverToolModelUnmeasured": "{{platform}} 有这个工具，但 {{model}} 没实测过：开了照发，可能被拒绝，也可能被静默忽略。",
       "declNotOnRoute": "声明保留在模型上；{{route}} 线路没有这项的拼法，走这条线路时不发",
       "scopeRoute": "本线路 · {{route}}",
       "routeLabel": "线路",
@@ -2637,7 +2638,7 @@
       "matrixLabelInput": "输入 · 各线路可用性",
       "matrixLabelOutput": "输出 · 各线路可用性",
       "matrix_yes": "能发",
-      "matrix_unknown": "协议有、这个平台未实测",
+      "matrix_unknown": "未实测，照发",
       "matrix_no": "这条线路不发",
       "matrixLegend": "✓ 能发 · ? 未实测 · — 不发。上面的开关是你给这个模型的授权，各线路共用；每条线路能不能说出来，看平台。"
     },
@@ -2800,6 +2801,7 @@
       "platform-unlisted": "这是别家平台的私有字段，{{platform}} 上没有实测过",
       "family": "这条线路的协议没有这一项的拼法",
       "model": "{{platform}} 有这一项，但 {{model}} 不支持",
+      "model-unlisted": "{{platform}} 有这一项，但 {{model}} 没实测过：照发，可能不起作用",
       "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
       "requires": "它依赖的另一项在这条线路上不可用",
       "thinking": "思考开着时这条线路不收它"

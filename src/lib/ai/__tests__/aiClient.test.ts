@@ -1039,14 +1039,21 @@ describe("streamCompletion — server tools on the OpenAI-compatible wire", () =
     expect(calls[0].body.tools).toHaveLength(1);
   });
 
-  it("leaves code_interpreter out for a model id this wire does not run it on", async () => {
-    // qwen3.8-flash: 400 `does not support the code_interpreter tool` here.
-    for (const modelId of ["qwen3.8-flash", "qwen-max", "test-model"]) {
+  it("leaves code_interpreter out for a model id measured refusing or ignoring it", async () => {
+    // qwen3.8-flash: 400 `does not support the code_interpreter tool` here; qwen-max ignores it.
+    for (const modelId of ["qwen3.8-flash", "qwen-max"]) {
       const { calls } = await collect({
         chunks: done, standard: "openai_compat", baseUrl: DS, modelId, serverTools: ["code_interpreter"],
       });
       expect(calls[0].body, modelId).not.toHaveProperty("enable_code_interpreter");
     }
+  });
+
+  it("sends code_interpreter for a model id nobody measured — the drawer said 未实测", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", baseUrl: DS, modelId: "test-model", serverTools: ["code_interpreter"],
+    });
+    expect(calls[0].body.enable_code_interpreter).toBe(true);
   });
 
   it("never sends enable_code_interpreter to the official endpoint", async () => {

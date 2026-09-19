@@ -468,6 +468,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // doesn't — so a grant that isn't sent is visible and can be turned off.
   const shownServerTools = SERVER_TOOL_IDS.filter((id) => offersServerTool(id) || serverTools.includes(id));
   const platformName = toolWire ? t(`aiConfig.platforms.${toolWire.platform}`) : "";
+  // An offered switch the table is unsure of: the platform hasn't been
+  // measured passing a protocol tool on, or it has the tool and this model id
+  // was never tried with it (capability-gating-plan §8.7). Either way it is sent.
+  const unmeasuredToolHint = (id: ServerToolId) => {
+    const modelId = form.modelId.trim();
+    const v = toolWire ? capabilityVerdict(id, toolWire, { modelId }) : undefined;
+    if (v?.status !== "unknown") return "";
+    return v.reason === "model-unlisted"
+      ? t("aiConfig.models.serverToolModelUnmeasured", { platform: platformName, model: modelId })
+      : t("aiConfig.models.serverToolUnmeasured", { platform: platformName });
+  };
   const structuredOutput = form.structuredOutput === "auto" || form.type === "asr" ? undefined : form.structuredOutput;
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
@@ -1384,10 +1395,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={(!!toolWire && hasAnyServerTool(toolWire)) || shownServerTools.length > 0 || matrixTools.length > 0}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
               {/* Offered ids, plus any switched on that this wire can't send
-                  (shownServerTools). The code interpreter is offered only for
-                  a model id that runs it on this wire
-                  (the code_interpreter cells in lib/ai/capabilities) — type the
-                  id first. */}
+                  (shownServerTools). The code interpreter is per model id
+                  (the code_interpreter cells in lib/ai/capabilities): an id
+                  measured refusing it gets no switch, one never measured gets
+                  the switch and says so. */}
               {shownServerTools.map((id) => (
                 <ToggleField
                   key={id}
@@ -1399,9 +1410,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     ? t(toolWire && hasCapability(id, toolWire)
                       ? "aiConfig.models.serverToolNotForModel"
                       : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
-                    : toolWire && capabilityVerdict(id, toolWire).status === "unknown"
-                      ? t("aiConfig.models.serverToolUnmeasured", { platform: platformName })
-                      : ""}
+                    : unmeasuredToolHint(id)}
                   on={serverTools.includes(id)}
                   onChange={(next) =>
                     setServerTools((cur) => {

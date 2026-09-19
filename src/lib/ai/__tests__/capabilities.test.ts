@@ -37,7 +37,7 @@ function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family:
   if (!platformEndpoints(platform).some((e) => e.family === family)) return "";
   const v = familyVerdict(id, platform, family);
   if (v.status === "no") return "·";
-  const perModel = familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).status === "no";
+  const perModel = familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).reason === "model-unlisted";
   return (v.status === "yes" ? "✓" : "?") + (perModel ? " 按模型" : "") + ` ${v.reason}`;
 }
 
@@ -157,6 +157,10 @@ describe("capabilityVerdict", () => {
     expect(capabilityVerdict("code_interpreter", chat("dashscope"), { modelId: " QWEN3.5-Plus " }).status).toBe("yes");
     expect(capabilityVerdict("code_interpreter", chat("dashscope"), { modelId: "qwen3.8-flash" }))
       .toEqual({ status: "no", reason: "model" });
+    expect(capabilityVerdict("code_interpreter", chat("dashscope"), { modelId: "qwen3.9-plus" }))
+      .toEqual({ status: "unknown", reason: "model-unlisted" });
+    // Blank = nothing typed yet, the same as not asking.
+    expect(capabilityVerdict("code_interpreter", chat("dashscope"), { modelId: "  " }).status).toBe("yes");
   });
 
   it("rules out by model type before anything else, and by what it requires", () => {
@@ -187,8 +191,9 @@ describe("capabilityVerdict", () => {
 
 // The old per-question readers, gone in C1; the cells they pinned stay pinned.
 const status = (wire: CapabilityWire, id: CapabilityId, modelId?: string) => capabilityVerdict(id, wire, { modelId }).status;
-const runsCodeInterpreter = (family: ProtocolFamily, modelId: string) =>
-  familyVerdict("code_interpreter", "dashscope", family, { modelId }).status === "yes";
+const codeInterpreter = (family: ProtocolFamily, modelId: string) =>
+  familyVerdict("code_interpreter", "dashscope", family, { modelId }).status;
+const runsCodeInterpreter = (family: ProtocolFamily, modelId: string) => codeInterpreter(family, modelId) === "yes";
 
 describe("server tools, per wire", () => {
   it("answers yes where the platform lists a tool, unknown for a protocol-native one it doesn't, no otherwise", () => {
@@ -231,9 +236,8 @@ describe("DashScope's code interpreter, per model id", () => {
       "qwen3.8-flash", "qwen3.8-max", "qwen3.8-27b",
       // accepted, but the prompt never grew: ignored
       "qwen-max", "qwen3-max-preview", "qwen3.5-omni-plus",
-      "gpt-5.6", "",
     ]) {
-      expect(runsCodeInterpreter("openai", id), id).toBe(false);
+      expect(codeInterpreter("openai", id), id).toBe("no");
     }
   });
 
@@ -250,9 +254,21 @@ describe("DashScope's code interpreter, per model id", () => {
   it("refuses what Responses compat failed", () => {
     for (const id of [
       "qwen3.6-27b", "qwen3-max-preview", "qwen3-235b-a22b-thinking-2507", "qwen3-vl-plus", "qwen3.5-omni-plus",
-      "qwen-plus", "qwen3.8-livetranslate-flash-realtime", "qwen3.7-text-embedding",
+      "qwen-plus",
     ]) {
-      expect(runsCodeInterpreter("responses", id), id).toBe(false);
+      expect(codeInterpreter("responses", id), id).toBe("no");
+    }
+  });
+
+  // The platform has the tool, so an id nobody measured keeps the switch and
+  // says it is unmeasured (capability-gating-plan §8.7) — including the
+  // prefix-sharing ids the `runs` patterns are anchored against.
+  it("offers an unmeasured id at unknown on both wires", () => {
+    for (const id of ["qwen3.9-plus", "qwen3.8-livetranslate-flash-realtime", "qwen3.7-text-embedding", "gpt-5.6"]) {
+      expect(codeInterpreter("responses", id), id).toBe("unknown");
+    }
+    for (const id of ["qwen3.9-plus", "qwen3-vl-plus", "gpt-5.6", "qwen3.6-35b-a3b", "deepseek-v4-pro"]) {
+      expect(codeInterpreter("openai", id), id).toBe("unknown");
     }
   });
 
