@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal, ImageOff } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import {
   type CategoryId,
   type FacetBlock,
@@ -48,7 +47,7 @@ import { loadApiKey } from "../../lib/keyStore";
 import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagentModel";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
-import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
+import { IMAGE_EXTENSIONS, readImageBytes } from "../../lib/fs/images";
 import { imageForModel } from "../../lib/image/normalize";
 import { useImageDataUrl, useImageThumbnails } from "./useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
@@ -390,8 +389,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (typeof picked !== "string") return;
     setBusy(true);
     try {
-      const bytes = await readBinaryFile(picked);
-      const ext = (picked.split(".").pop() ?? "png").toLowerCase();
+      const { bytes, ext } = await readImageBytes(picked);
       await setEntityAvatar(entity.dirPath, bytes, ext);
       await refreshEntity(projectPath, entity);
       setAvatarVersion((v) => v + 1);
@@ -516,7 +514,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setBusy(true);
     try {
       for (const srcPath of paths) {
-        const bytes = await readBinaryFile(srcPath);
+        const { bytes } = await readImageBytes(srcPath);
         const basename = baseName(srcPath) || "image";
         await addLoreImage(entity.dirPath, basename, bytes, "", slot);
       }
