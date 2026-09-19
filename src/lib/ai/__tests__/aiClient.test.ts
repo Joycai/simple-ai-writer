@@ -272,6 +272,18 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(new Set(toolCalls.map((c) => c.id)).size).toBe(2);
   });
 
+  it("merges arguments a relay sent as two objects back to back", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"read_file","arguments":"{}"}}]}}]}\n`,
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\"a.md\\"}"}}]}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    const { toolCalls } = received.find((c) => "toolCalls" in c) as { toolCalls: { arguments: string }[] };
+    expect(JSON.parse(toolCalls[0].arguments)).toEqual({ path: "a.md" });
+  });
+
   it("emits done even when the stream ends without [DONE]", async () => {
     const { received } = await collect({
       chunks: [`data: {"choices":[{"delta":{"content":"tail"}}],"usage":{"prompt_tokens":1,"completion_tokens":2}}`],

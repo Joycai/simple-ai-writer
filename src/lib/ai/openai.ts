@@ -12,6 +12,7 @@ import { wireOf } from "./platforms";
 import { hasCapability } from "./capabilities";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
+import { mergeConcatenatedArgs } from "./toolArgs";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
 
 /**
@@ -216,7 +217,13 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     const stamp = Date.now().toString(36);
     const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
       .sort(([a], [b]) => a - b)
-      .map(([index, tc]) => ({ index, id: tc.id || `call_${stamp}_${index}`, name: tc.name, arguments: tc.args }));
+      .map(([index, tc]) => ({
+        index,
+        id: tc.id || `call_${stamp}_${index}`,
+        name: tc.name,
+        // `{}{"id":1}` from some relays — see toolArgs.ts.
+        arguments: mergeConcatenatedArgs(tc.args),
+      }));
     opts.onChunk({ toolCalls, ...(reasoning ? { _reasoning: reasoning } : {}) });
   };
 
