@@ -107,6 +107,13 @@ describe("Responses adapter — request shape", () => {
       messages: [{ role: "user", content: "hi" }], onChunk: () => {},
     });
     expect(xai[0].body.include).toEqual(["reasoning.encrypted_content"]);
+    // A non-reasoning id has nothing to encrypt; the field is left out.
+    const plain = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "https://api.x.ai/v1", apiKey: "k", standard: "openai_responses_compat",
+      modelId: "grok-4.20-0309-non-reasoning", messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+    });
+    expect(plain[0].body).not.toHaveProperty("include");
     const { calls } = await collect({ chunks: [COMPLETED] });
     expect(calls[0].body).not.toHaveProperty("include");
   });

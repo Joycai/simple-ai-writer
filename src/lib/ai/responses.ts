@@ -216,7 +216,10 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     opts.reasoningEffort,
   );
   const wire = wireOf(opts);
-  const include = platformResponsesInclude(wire.platform);
+  // Not for a model that has no reasoning to encrypt: OpenAI answers that
+  // combination with a 400, and xAI's non-reasoning ids were never measured
+  // with it — the include buys nothing there and risks the whole route.
+  const include = /non-reasoning/i.test(opts.modelId) ? [] : platformResponsesInclude(wire.platform);
   const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
     thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
   });
