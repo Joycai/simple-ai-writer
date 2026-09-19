@@ -702,7 +702,6 @@ export interface LoreOrganizer {
   deleteCategory: (id: string) => Promise<void>;
 }
 
-/** Everything an executor may need about the running project. */
 /**
  * How a tool starts a nested agent run. The runtime fills it for every run it
  * starts (`runAgent` itself, and the toolCost seam a sub-run sizes its message
@@ -738,6 +737,7 @@ export interface ToolAppState {
   addImitatedFormat: (preset: DocFormatPreset) => void;
 }
 
+/** Everything an executor may need about the running project. */
 export interface ToolContext {
   projectPath: string;
   loreIndex: LoreIndex;

@@ -11,7 +11,7 @@
 All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry
 
 #### 三层工具（读 / L1 / L2）
-- (`registry.ts` — read tools, including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`
+- (`registry.ts`, entries in `toolTable/read.ts` — read tools, including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`
 - L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all
   - `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it
   - `rewrite_document` for a whole short file.
@@ -35,7 +35,7 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 #### 历史压缩、回溯与状态记忆
 - AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
-- Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into `agentStore.sendChat`; design: `docs/feature/agent/chat-memory-plan.md`.
+- Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into the chat run (`stores/agent/chatJob.ts`); design: `docs/feature/agent/chat-memory-plan.md`.
 - A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
 - Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
   - the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
@@ -96,7 +96,7 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 **顶栏右半段分两截，各有各的规矩（设计稿 `01e`，`TitleBar.tsx` + `DocActions.tsx`）。** 文档段跟着当前文档来去，全局段（主题 / 语言 / AI）右锚不动。三条：
 
 - **谁在场由扩展名决定，不在场就不渲染**——一张名单一类文件，`lib/fs/docKind.ts` 的 `DocKind` 五个值就是设计稿表 B 的五行（`markdown` / `html` / `image` / `convertible` / `opaque`）。`.html` 的导出只剩「打印 · PDF」（三条导出都先 `renderMarkdown`，把页面源码再渲染一遍不是导出，见 `printHtmlDocument`）；图片与读不出来的没有视图切换、没有字数，空位换成「用默认应用打开」/「转换文档」。
-- **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/editorStore`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。
+- **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/openDocument`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。
 - **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
 
 **关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
@@ -245,14 +245,14 @@ unified agent runtime (
 #### 运行时核心
 
 - `runtime.ts` loop
-- `registry.ts` tool registry
+- `registry.ts` tool registry（条目在 `toolTable/`，类型在 `toolTypes.ts`——见上面「文件怎么分」）
 - `presets.ts` per-task config
 - `events.ts` execution-log events——其中 `ChangeRecord` 是 L1 写入交回来的**「改成了什么」**：这些写入调用即落盘、作者那一票发生在更早的方案卡上（卡上只有模型自己写的一句打算），所以在此之前没有任何地方给作者看过真正写进去的字，日志那一行只有工具名与截断到 400 字的原始 JSON；记录落在本来就免费的地方——handler 为了备份已经读了旧文（`backup.ts` 的 `snapshotFile` 把它读到的那份顺手交出来）、也握着新文，由 lore 层拼装的那几个则读回盘上的结果（`changeAfterWrite`，理由和写入回执一样：记录该说落了什么而不是打算写什么）
   - 两侧各 4000 字封顶且**超了就一起丢**（只留能装下的那一侧会被读成「整份都是新加的」——那是断言不是省略），字数与 `backupPath` / `path` 照留，完整的旧版新版本来就在盘上
   - 只有产生前后两份**文本**的写入才有它：归集改的是成员、头像改的是字节，那些改动由方案步骤自己说清
   - 它也是「本次对话都批准」之后唯一还读得到改动的地方
   - 正文写入（`propose_edit` / `rewrite_*` / `insert_lines` / `append_file` / 新建与删除文档）批准之后也交一份（`writeReceipt`，读回落盘结果，`autoApproved` 标出没人读过的那几次）；两侧超出上限时改存有界的窗口（`ChangeRecord.diff`：最多 6 扇、每侧前两行、每行 300 字）——章节几乎总是超限，只剩字数的记录等于回到卡片改版之前
-  - 批准一个正打开的文档时改动走编辑器缓冲，所以 `agentStore` 批准后立即 `saveNow`：不然读回的是 2 秒自动保存之前的旧文，记录说什么都没改、指纹让之后的撤回误判「改过了」
+  - 批准一个正打开的文档时改动走编辑器缓冲，所以批准后的写盘（`lib/agent/proposalApply.ts` 的 `flushEditor`）立即 `saveNow`：不然读回的是 2 秒自动保存之前的旧文，记录说什么都没改、指纹让之后的撤回误判「改过了」
 
 #### 压缩与方案账本
 
@@ -271,7 +271,7 @@ unified agent runtime (
 
 #### 写入与编辑工具
 
-- `writeTools.ts` L1/L2 write handlers
+- `writeTools.ts` L1/L2 write handlers（只做转出，实现在 `write/`——见上面「文件怎么分」）
 - `editApply.ts` where an approved find/replace lands, plus the line-range slicing behind `rewrite_lines` — the occurrence count recorded on the proposal is what lets a targeted edit refuse a file that moved on——而 `locateMatches` 把每一处命中的行号与上下文行也在建提案那一刻记下来（那时文件正文就在手上），卡片才说得出「改在哪」而不只是「改成什么」
 - `lineEcho.ts` 行号契约的两半——`read_file` 每行带行号（模型才能**指名**一个区域而不是把它抄进 `find`），以及写入批准后的回执带回新行区间、位移和应用后的片段，**那正是它取代的那次重读**（位移从落盘后的文件量出来，不从发出去的文本推算：换行符的归属有三处可以差一行，而差一行是静默的、错的是**下一次**编辑）。这些全部是**运行时输出而不是 schema**——棘轮只剩 65 token，而规则在它生效的那一刻到达本来就比写在几千 token 之前更管用；见 `docs/feature/agent/edit-loop-plan.md`
 - `htmlTools.ts` the `inspect_html` verifier —— 这条链上唯一一个**验**而不是**写**的工具：模型看不见自己画出来的页面，所以把它渲进 `lib/pptx/harvest` 那个离屏沙箱，回报盒子有没有掉出幻灯片、有没有一页什么都没画、有没有图没加载上（判定在纯的 `lib/pptx/inspect.ts`）。**一行 `harvester.js` 都不用改**——每个盒子本来就带着相对本页的 box，`canvas` 就是第一张幻灯片自己的矩形，所以「超边界」只是两次比较；而没有分节的长页面是一张和自己一样高的幻灯片，因此**不会**把整页误报成溢出。见 `docs/feature/agent/edit-loop-plan.md` §6
@@ -425,7 +425,7 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 ### `src/lib/asr/`
 
 #### 入口与设计
-- 音频转写（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`；两个入口：文件树右键「转写为文字稿…」→ 行下确认条 → `FileTree.handleTranscribe`，以及 L2 工具 `transcribe_audio`（`tool.ts` → `TranscribeProposal` 卡 → `agentStore` 的 apply）——**卡在付费之前**而不是之后，和 `convert_document` 相反，因为转写本身就是计费的那一步；设计稿 02f，实现出入记在 `docs/feature/asr/02-ui-brief.md`）
+- 音频转写（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`；两个入口：文件树右键「转写为文字稿…」→ 行下确认条 → `FileTree.handleTranscribe`，以及 L2 工具 `transcribe_audio`（`tool.ts` → `TranscribeProposal` 卡 → `lib/agent/proposalApply.ts`）——**卡在付费之前**而不是之后，和 `convert_document` 相反，因为转写本身就是计费的那一步；设计稿 02f，实现出入记在 `docs/feature/asr/02-ui-brief.md`）
 
 #### 双路径总览
 - 千问 / DashScope 语音识别，**两条路，由绑定的模型行选**（`asrFormat`，不在两个模型之间自动路由）
