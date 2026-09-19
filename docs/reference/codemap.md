@@ -8,13 +8,80 @@
 
 ## AI 运行时（`src/lib/agent/` 全景）
 
-All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts` — read tools, including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`; L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all; `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it; `rewrite_document` for a whole short file. All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved). Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover. Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`). Hitting the preset's round cap mid-work doesn't force-end the run: the runtime's `onRoundLimit` callback blocks on a 继续/收尾 card (`RoundLimitCard.tsx`, queued in agentStore like approvals) — wired only where that card can render (chat, AiPanel; not lore modals or batch runs, which keep the hard stop). The agent can also put a decision to the author mid-run: `ask_author` (2–4 options plus the card's own always-present free-text row, `QuestionCard.tsx`) blocks its tool call on the answer, and routing appends the tool only for surfaces that render the card — chat and the non-batch AiPanel; design: `docs/feature/agent/ask-author-plan.md`. The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`, session state in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other; components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` — except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`); structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback — and the forced attempt is **skipped outright** when the endpoint is known to downgrade a forced `tool_choice` *and* strict `json_schema` is available, because then the fallback enforces the same schema and the attempt only buys an `EMPTY_TOOL_CALL` and a second request; only `json_object` to fall back on and it still tries the tool, since one tool call beats valid JSON whose shape rests on prose). Design & history: `docs/feature/agent/unified-agent-plan.md`. AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`. Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into `agentStore.sendChat`; design: `docs/feature/agent/chat-memory-plan.md`. A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc). Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction; the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
+All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry
 
-Long tasks persist to a durable workspace instead of just wire history: `.ai-writer/tasks/<taskId>/task.md` (goal + step checklist) and `notes/*.md` (intermediate results), written via scratchpad tools (`lib/agent/scratchpadTools.ts`) and resumed into a fresh context rather than replayed (`components/ai/TaskWorkspaceView.tsx`). Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents (`lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask; `lib/agent/subagent.ts` holds only `executeDelegate`, the half that runs a nested agent and so the only half allowed to import `runtime` — the split is what keeps the image / translate / ASR tools out of the agent import cycle, docs/feature/code-structure-plan.md P1. The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2; configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c) so it doesn't bloat the main run's context. Design: `docs/feature/agent/subagent-lld.md`. The **writer** subagent (`lib/agent/handoff.ts`) inverts that contract and is therefore not a `delegate` kind: its output *is* the turn's answer rather than a summary, and no model chooses it — with the switch on, the chat assistant's run ends by handing a **work order** to the writer (`finishPolicy: "handoff"`, applied by `routeTools` only for surfaces that opt in), whose text streams straight into the turn. Prose is not an accepted ending on that preset, and the writer never writes to disk: `deliverTo` on the brief makes the *runtime* build the proposal, so the bytes never pass through a second model. Design: `docs/feature/agent/writer-subagent-plan.md`.
+#### 三层工具（读 / L1 / L2）
+- (`registry.ts` — read tools, including `read_slides`, which pages a deck by slide — a .pptx because `read_file` can only return zip noise for one, an .html because finding slide 7 by paging 4000 characters of source is not a way to edit it; see `docs/feature/pptx-plan.md`
+- L1 auto+backup write tools for lore/memory, and the L2 manuscript tools that block on user approval — `propose_edit` for a find/replace — the Nth occurrence or all of them, so repeated text in a deck or a table is addressable at all
+  - `rewrite_lines` for a region named by line numbers, which is how a LONG file gets restructured without re-emitting it
+  - `rewrite_document` for a whole short file.
+- All three are one `EditProposal` machinery apart from the last: the proposal records how many times `find` occurred when the author saw the card, and `editApply.ts` refuses to write if that moved).
+
+#### Lore 写入门控与执行日志
+- Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover.
+- Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`).
+
+#### 轮次上限卡与作者决策卡
+- Hitting the preset's round cap mid-work doesn't force-end the run: the runtime's `onRoundLimit` callback blocks on a 继续/收尾 card (`RoundLimitCard.tsx`, queued in agentStore like approvals) — wired only where that card can render (chat, AiPanel; not lore modals or batch runs, which keep the hard stop).
+- The agent can also put a decision to the author mid-run: `ask_author` (2–4 options plus the card's own always-present free-text row, `QuestionCard.tsx`) blocks its tool call on the answer, and routing appends the tool only for surfaces that render the card — chat and the non-batch AiPanel; design: `docs/feature/agent/ask-author-plan.md`.
+
+#### 对话式助手与多会话
+- The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`, session state in `stores/agentStore.ts` — **several conversations at once**: `chats: Record<key, LiveChat>` + `activeChatKey` on one axis, `runningChats` / `chatQueue` (semaphore in `lib/agent/scheduler.ts`, shared with roleplay) on the other
+  - components read the on-screen one through `useActiveChat`, every card a conversation raises is tagged `surface: chat:<key>`, and its 本次都批准 key is `chatAutoApproveKey(key)`, never a shared literal — see `docs/feature/agent/chat-sessions-plan.md`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET` —
+- except that chat behind the 助手工具包模式 Beta swaps to the thin `ORCHESTRATOR_PRESET` (`lib/agent/packs.ts`: reads + memory + notes only, every write dispatched via `run_pack` to a pack sub-run on the parent's own model, with the parent's approval channels and plan gate passed through so cards render where they always do; `chatAgentPreset()` is the one seam every chat-side reader goes through, and the default stays off because dispatch reliability is model-tiered — see `docs/feature/agent/tool-pack-plan.md`)
+
+#### 结构化输出
+- structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback — and the forced attempt is **skipped outright** when the endpoint is known to downgrade a forced `tool_choice` *and* strict `json_schema` is available, because then the fallback enforces the same schema and the attempt only buys an `EMPTY_TOOL_CALL` and a second request; only `json_object` to fall back on and it still tries the tool, since one tool call beats valid JSON whose shape rests on prose). Design & history: `docs/feature/agent/unified-agent-plan.md`.
+
+#### 历史压缩、回溯与状态记忆
+- AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
+- Chat history is compacted, not just trimmed: folded/summarized old turns plus a per-turn injection ledger live in `lib/agent/compact.ts` + `compactRun.ts`, wired into `agentStore.sendChat`; design: `docs/feature/agent/chat-memory-plan.md`.
+- A question can be rewound to (`lib/agent/rewind.ts` — a *cut* of the wire history at that turn's start, never a re-seed, and never offered for a turn already folded into the summary: what the author still sees above the cut must be what the model still holds; §12 of the same doc).
+- Behind the 状态记忆 Beta (`lib/agent/stateFlag.ts`) a conversation can instead run on a SKILL.state-style **structured execution state** (`skillState.ts` schema/validation/rendering + `skillStateRun.ts`, arXiv:2608.26263): every send folds everything before the last turn into one schema-validated JSON block in the summary's slot — the same `planFold` with `keepTurns: 1`, so the fold invariants are unchanged — and a state the model twice fails to make valid leaves the history alone and falls back to ordinary compaction
+  - the mode is per session (`ChatSessionMeta.stateMode`, the composer chip mirrors it; the Lab sub-option 「新会话默认打开」 only sets where a *new* conversation starts — `freshChat` / `newChatStateMemory`), see `docs/feature/agent/skill-state-memory-plan.md`.
+
+#### 任务工作区
+
+Long tasks persist to a durable workspace instead of just wire history: `.ai-writer/tasks/<taskId>/task.md` (goal + step checklist) and `notes/*.md` (intermediate results), written via scratchpad tools (`lib/agent/scratchpadTools.ts`) and resumed into a fresh context rather than replayed (`components/ai/TaskWorkspaceView.tsx`).
+
+#### 子代理委派
+
+- Auxiliary work (web search, vision, long-document reads, image generation) can be delegated to per-kind subagents
+  - (`lib/agent/subagentModel.ts` holds the kinds, bindings and connection resolution that the tools, `routeTools` and settings panes ask
+  - `lib/agent/subagent.ts` holds only `executeDelegate`, the half that runs a nested agent and so the only half allowed to import `runtime` — the split is what keeps the image / translate / ASR tools out of the agent import cycle, docs/feature/code-structure-plan.md P1.
+  - The three places a tool starts a nested run — `delegate`, `run_pack`, the writer handoff — never import `runtime`: `runAgent` fills `ToolContext.subRun` (`SubRunner`: itself plus the toolCost ceiling seam) on every context it hands its tools, and passes itself to `runWriterHandoff`; importing it back would close a cycle through the registry, P2
+  - configured in Settings → `components/settings/panes/SubAgentsPane.tsx`, session-level toggles in `components/ai/CapabilityMenu.tsx` on the composers and `components/ai/SubAgentChips.tsx` in 一致性检查's pre-run block — two renderings of one control, sharing `components/ai/subagentChipModel.ts`; 设计稿 02g 屏 1c) so it doesn't bloat the main run's context.
+- Design: `docs/feature/agent/subagent-lld.md`.
+
+#### Writer 子代理
+
+- The **writer** subagent (`lib/agent/handoff.ts`) inverts that contract and is therefore not a `delegate` kind: its output *is* the turn's answer rather than a summary, and no model chooses it — with the switch on, the chat assistant's run ends by handing a **work order** to the writer (`finishPolicy: "handoff"`, applied by `routeTools` only for surfaces that opt in), whose text streams straight into the turn.
+- Prose is not an accepted ending on that preset, and the writer never writes to disk: `deliverTo` on the brief makes the *runtime* build the proposal, so the bytes never pass through a second model.
+- Design: `docs/feature/agent/writer-subagent-plan.md`.
 
 ## 能力包（Workspace packs）
 
-The project is not hardcoded to novels — and not to one domain at a time. A project **enables zero or more capability packs** (`.ai-writer/profile.json` v3: `{enabled[], packs[], categories[]}`; v1/v2 files still read; absent = the built-in `novel` pack alone). Packs are **equal, purely additive toggles** — there is no primary pack: each pack (a `WorkspaceProfile` in `model.ts`) contributes knowledge-base categories and a **task list** (each task = a prompt + a tool set), and may reword the 【…】 prompt block labels *for its own tasks*. `resolveWorkspace(enabled, userCategories)` (`lib/profile/resolve.ts`) merges: categories = pack union + the project's **user-defined categories** (author-created, persisted in profile.json) + the always-present app-level `custom` bucket; tasks = the app-level base menu (`DEFAULT_TASKS`: 续写/润色/改写/总结/自定义/agent) + each pack's own — 每条任务声明一个**工具档** `none`/`read`/`write`/`full`（`presetForTools`），而 `write`（产物是一份文档：查 + 写文件 + 验 + 交付，**不碰知识库**）实测 4,017 对 `full` 的 15,337，所以**先考虑 `write` 再考虑 `full`**——schema 每轮重发，32k 的本地模型上 `full` 一档就能把整个输入上限吃光、知识库分到零（`contextForecast.test.ts` 钉着）。随工具走而不是随档位走的还有两份清单（工作流卡 / docx 格式），见 `docs/feature/agent/edit-loop-plan.md` §7, where a pack declaring a base id *overrides* that base task (first enabled pack wins — how novel keeps its fiction wording). Supporting another kind of writing (跑团模组, 文案, 周报…) is still a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`, `wechat`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`; toggling is Settings → 工作台 (`projectStore.setPacks`), custom categories via the lore wall's 「+ 新建分类」 or the same pane (`projectStore.setCustomCategories`).
+The project is not hardcoded to novels — and not to one domain at a time.
+
+#### 能力包（Capability Packs）
+
+- A project **enables zero or more capability packs** (`.ai-writer/profile.json` v3: `{enabled[], packs[], categories[]}`; v1/v2 files still read; absent = the built-in `novel` pack alone).
+- Packs are **equal, purely additive toggles** — there is no primary pack: each pack (a `WorkspaceProfile` in `model.ts`) contributes knowledge-base categories and a **task list** (each task = a prompt + a tool set), and may reword the 【…】 prompt block labels *for its own tasks*.
+
+#### 合并规则（resolveWorkspace）
+
+- `resolveWorkspace(enabled, userCategories)` (`lib/profile/resolve.ts`) merges
+  - categories = pack union + the project's **user-defined categories** (author-created, persisted in profile.json) + the always-present app-level `custom` bucket
+  - tasks = the app-level base menu (`DEFAULT_TASKS`: 续写/润色/改写/总结/自定义/agent) + each pack's own —
+- 每条任务声明一个**工具档** `none`/`read`/`write`/`full`（`presetForTools`），而 `write`（产物是一份文档：查 + 写文件 + 验 + 交付，**不碰知识库**）实测 4,017 对 `full` 的 15,337，所以**先考虑 `write` 再考虑 `full`**——schema 每轮重发，32k 的本地模型上 `full` 一档就能把整个输入上限吃光、知识库分到零（`contextForecast.test.ts` 钉着）。
+- 随工具走而不是随档位走的还有两份清单（工作流卡 / docx 格式），见 `docs/feature/agent/edit-loop-plan.md` §7, where a pack declaring a base id *overrides* that base task (first enabled pack wins — how novel keeps its fiction wording).
+- Supporting another kind of writing (跑团模组, 文案, 周报…) is still a data addition, not new branches.
+
+#### 内置包与配置入口
+
+- Built-ins (`novel`, `ttrpg`, `copy`, `wechat`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`
+- toggling is Settings → 工作台 (`projectStore.setPacks`)
+- custom categories via the lore wall's 「+ 新建分类」 or the same pane (`projectStore.setCustomCategories`).
 
 The UI vocabulary is **app-level and uniform** (`appTerms`/`useTerms`: 文档/分组/知识库/条目 — every project's knowledge store is a 知识库; the retired synonyms are ratcheted shut by `localeTerms.test.ts`, and `docs/reference/terminology.md` is the word list), and so are the document model (always all-on; `useDocModel()` is the seam kept for a future per-project setting) and the system prompt (one neutral writing collaborator — packs do not preset the AI's persona; domain rules live in each pack task's *instruction*, e.g. `bidRespond` carries the deviation discipline). Never hardcode 章/卷/设定 in a component or an i18n value — pass `useTerms()` words into parametrized i18n strings. Prompt templates (`ai.instructions.*`) get the same words plus the 【…】 section labels via `promptParams(isZh, packId?)` — pass the running task's `packId` so a pack task speaks its own wording (【应答大纲】, not 【大纲/写作方向】); the resolution chain is task's pack → neutral defaults, and `knowledge` is never renamed. Keep shared instruction text neutral and give novel its own variant (base-task override with a `*Novel` key) when fiction wording matters.
 
@@ -48,7 +115,35 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 ### `src/components/settings/`
 
-SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`. Panes are built from the shared row/section/card/chip vocabulary in `settingsUi.module.css` + `panes/bits.tsx`; `settingsCommon.module.css` holds the form controls used inside the edit drawers. 渠道与模型 is a single merged pane (grouped list + right-hand drawer), and Prompt has a drawer of its own. The model drawer (`ModelDrawer.tsx` + `ModelDrawerBits.tsx`, 设计稿 05c) folds its six sections by **"has a value"** (decided once from the stored row, never from the live form), spells **unset as a dashed edge** everywhere — an empty input, a selected 自动 chip, an off toggle, a folded empty section — because unset means *nothing is sent* and must not look like "set to 0", and ends in a 「将发送」 line computed by `lib/ai/modelSummary` from the adapters' own body functions; see `docs/reference/design-system.md` → 模型编辑抽屉. Under the AI group, 实验室 (`LabPane`) holds **every** Beta switch — each gates an assistant capability, so its neighbours are the panes an author configures next — and 上下文与记忆 (`ContextMemoryPane`) holds what a conversation puts in front of the model, in the order one bounds the next: **窗口占用** (the 50–90% share of the model's window a single request may occupy — `CONTEXT_UTILIZATION_*`; it moved here from the AI panel's chip row on 2026-09-05, which is why the compaction example's third attribution now scrolls up this same page rather than leaving settings — see `docs/feature/agent/compact-threshold-plan.md` §D), 对话归纳 (the auto-fold switch + the two threshold sliders), and the image long-edge ceiling — see `docs/feature/settings-ai-tabs-ui-brief.md`). 同步与备份 (`SyncPane`) runs top to bottom: the anchor card (server connection + the bound pair, installation-level connection), the **current project** paper (bind / push / pull / records — project-scoped, and the only part with an "open a project first" state), then **这台机器** (应用配置 — local file export/import *and* the server backups, one section because they are two exits from the same thing), folded to a one-line summary while a project is open because the binding is what the page is visited for. Picking a base to bind is `KbPicker` (recommendation card + search/sort + a fixed-height list, so the bind button never scrolls away; pure half in `lib/sync/kbPicker`) — reasons in `docs/feature/knowledge-base/sync-lore-ui-brief.md` §绑定选择器
+#### 设置页结构
+
+- SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`.
+- Panes are built from the shared row/section/card/chip vocabulary in `settingsUi.module.css` + `panes/bits.tsx`; `settingsCommon.module.css` holds the form controls used inside the edit drawers.
+- 渠道与模型 is a single merged pane (grouped list + right-hand drawer), and Prompt has a drawer of its own.
+
+#### 模型抽屉
+
+- The model drawer (`ModelDrawer.tsx` + `ModelDrawerBits.tsx`, 设计稿 05c) folds its six sections by **"has a value"** (decided once from the stored row, never from the live form), spells **unset as a dashed edge** everywhere — an empty input, a selected 自动 chip, an off toggle, a folded empty section — because unset means *nothing is sent* and must not look like "set to 0", and ends in a 「将发送」 line computed by `lib/ai/modelSummary` from the adapters' own body functions; see `docs/reference/design-system.md` → 模型编辑抽屉.
+
+#### 实验室与上下文记忆
+
+- Under the AI group, 实验室 (`LabPane`) holds **every** Beta switch — each gates an assistant capability, so its neighbours are the panes an author configures next —
+- and 上下文与记忆 (`ContextMemoryPane`) holds what a conversation puts in front of the model, in the order one bounds the next:
+  - **窗口占用** (the 50–90% share of the model's window a single request may occupy — `CONTEXT_UTILIZATION_*`; it moved here from the AI panel's chip row on 2026-09-05, which is why the compaction example's third attribution now scrolls up this same page rather than leaving settings — see `docs/feature/agent/compact-threshold-plan.md` §D)
+  - 对话归纳 (the auto-fold switch + the two threshold sliders)
+  - and the image long-edge ceiling — see `docs/feature/settings-ai-tabs-ui-brief.md`).
+
+#### 同步与备份
+
+- 同步与备份 (`SyncPane`) runs top to bottom:
+  - the anchor card (server connection + the bound pair, installation-level connection)
+  - the **current project** paper (bind / push / pull / records — project-scoped, and the only part with an "open a project first" state)
+  - then **这台机器** (应用配置 — local file export/import *and* the server backups, one section because they are two exits from the same thing)
+- folded to a one-line summary while a project is open because the binding is what the page is visited for.
+
+#### KbPicker
+
+- Picking a base to bind is `KbPicker` (recommendation card + search/sort + a fixed-height list, so the bind button never scrolls away; pure half in `lib/sync/kbPicker`) — reasons in `docs/feature/knowledge-base/sync-lore-ui-brief.md` §绑定选择器
 
 ### `src/components/common/`
 
@@ -60,7 +155,26 @@ CommandPalette, onboarding flow, library view (文库: book-spine ordering + per
 
 ### `src/components/roleplay/`
 
-扮演 Beta 的整套界面（设计稿 04a / 04b / 04c，功能设计在 `docs/feature/roleplay/`）。`RoleplayPanel.tsx` 是外壳（花名册 + 对话区），空态是作者第一次看见这个功能的地方，所以它不是一句「暂无内容」——标题说清这是什么，中间给一段真的对话长什么样，底下直接列出知识库里现成的人物。`RoleplayRoster.tsx` 的两类角色**靠形状和分组区分，不靠颜色**：角色是圆头像（取人物条目的配图，无图时用名字最后一个字），旁白是直角方框套小方块并单独成组置顶；花名册里永远只有一个赭石，它属于「选中」而不属于分类（悬停是中性灰、无左规——把悬停也染成赭石会读成一个并不存在的选中，`docs/reference/design-system.md` 的硬规矩）。`RoleplayChat.tsx` 是**稿面而不是聊天**：一栏 640px 居中、与编辑器正文同宽，作者的回合只用一条 2px 赭石左规加一个小号名标区分，角色的回合直接落在纸上——没有气泡、没有左右分栏，因为气泡把每条消息切成独立单元而剧本要的是连续的稿面。它的输入框实时着色**只改颜色，不改字号字重字形**：那是一个 textarea 上盖一层镜像 div，任何度量差异都会让光标和字错位，而「边打边变」要传达的只是「标记生效了」。**它是 `AgentChat` 的第二份撰写区**——改一边就得把另一边的 band 顺序和嵌套一起改。`ScriptText.tsx` 是稿面这套混合文本的排版（`*动作*` / `「台词」` / 裸文本＝场景 / `[元指令]`）。`AgentComposer.tsx` 是新建 / 编辑 agent 的二层抽屉，唯一复杂的东西是绑定选择器（左边条目、右边该条目的特征、勾到底部芯片行），计数 `3/6` 落在**条目行**上——作者可能有几十个条目、上百段特征，不点进去也要知道哪条已经绑了东西。`AreaPicker.tsx` 与 `AreaBrowser.tsx` 是记忆区：前者在编辑抽屉里只讲清**继承**（绑一个已存在的区，新角色一上场就记得旧事，包括上一个角色答应过、误会过、记错过的；删角色不删区；一个区同时只能挂一个角色，所以已占用的条目**显示但不可选**——藏起来作者会以为它不见了），后者是浏览与编辑，**必须一眼看出不是知识库**：知识库是世界的事实（格纸墙、硬阴影、按分类着色），这里是**某个角色以为的事**（横格纸内页、单色、细线分行、卡片不浮起），它可以和正典矛盾而那是特性，所以这里从不「纠正」、也没有任何同步回知识库的入口。`MemoryPanel.tsx` 是记事本（约定 / 待办 / 事件 / 关系）——设计稿没画这一屏：它做成**默认收起的第三栏**，因为稿面 640px 是整个面板不肯让步的一条，常驻会把它压到 640 以下；但入口带计数，因为它不是配置而是作品的一部分。`SceneTransition.tsx` 是转场，**就地向上展开而不是弹层**（作者一天可能用好几次），两支的差别用**一道线**表达而不是图标或第二个颜色：另起一场是断掉的线，接续是中间嵌一个赭石实心方块的线；三态（选择 → 生成中 → 预览确认）在同一块里原地替换。`TurnTrace.tsx` 是本轮取材条，回答「这一轮模型眼前有哪些条目和特征、为什么」，四种来源**不靠四种颜色而靠同一根线的不同终止方式**（常驻上下出血、知识库两端止笔、记忆区断成点线加斜体下沉、引用是作者轮那道 2px 赭石线——四段里唯一带强调色的装订，因为它唯一由作者负责）。`ArchiveViewer.tsx` 是封存场次的**只读**查看器：「新开会话」把上一场移进 `archive/` 一个字没删，但只留在文件里不算数——作者读不到它，「封存」在他的体感里就和「删除」没区别；只读是刻意的，能继续的会话只有一个，这就是「存档」这个词的全部含义。
+扮演 Beta 的整套界面（设计稿 04a / 04b / 04c，功能设计在 `docs/feature/roleplay/`）。
+
+#### 花名册与对话主界面
+
+- `RoleplayPanel.tsx` 是外壳（花名册 + 对话区），空态是作者第一次看见这个功能的地方，所以它不是一句「暂无内容」——标题说清这是什么，中间给一段真的对话长什么样，底下直接列出知识库里现成的人物。
+- `RoleplayRoster.tsx` 的两类角色**靠形状和分组区分，不靠颜色**：角色是圆头像（取人物条目的配图，无图时用名字最后一个字），旁白是直角方框套小方块并单独成组置顶；花名册里永远只有一个赭石，它属于「选中」而不属于分类（悬停是中性灰、无左规——把悬停也染成赭石会读成一个并不存在的选中，`docs/reference/design-system.md` 的硬规矩）。
+- `RoleplayChat.tsx` 是**稿面而不是聊天**：一栏 640px 居中、与编辑器正文同宽，作者的回合只用一条 2px 赭石左规加一个小号名标区分，角色的回合直接落在纸上——没有气泡、没有左右分栏，因为气泡把每条消息切成独立单元而剧本要的是连续的稿面。它的输入框实时着色**只改颜色，不改字号字重字形**：那是一个 textarea 上盖一层镜像 div，任何度量差异都会让光标和字错位，而「边打边变」要传达的只是「标记生效了」。**它是 `AgentChat` 的第二份撰写区**——改一边就得把另一边的 band 顺序和嵌套一起改。
+- `ScriptText.tsx` 是稿面这套混合文本的排版（`*动作*` / `「台词」` / 裸文本＝场景 / `[元指令]`）。
+
+#### Agent 编辑与记忆区
+
+- `AgentComposer.tsx` 是新建 / 编辑 agent 的二层抽屉，唯一复杂的东西是绑定选择器（左边条目、右边该条目的特征、勾到底部芯片行），计数 `3/6` 落在**条目行**上——作者可能有几十个条目、上百段特征，不点进去也要知道哪条已经绑了东西。
+- `AreaPicker.tsx` 与 `AreaBrowser.tsx` 是记忆区：前者在编辑抽屉里只讲清**继承**（绑一个已存在的区，新角色一上场就记得旧事，包括上一个角色答应过、误会过、记错过的；删角色不删区；一个区同时只能挂一个角色，所以已占用的条目**显示但不可选**——藏起来作者会以为它不见了），后者是浏览与编辑，**必须一眼看出不是知识库**：知识库是世界的事实（格纸墙、硬阴影、按分类着色），这里是**某个角色以为的事**（横格纸内页、单色、细线分行、卡片不浮起），它可以和正典矛盾而那是特性，所以这里从不「纠正」、也没有任何同步回知识库的入口。
+- `MemoryPanel.tsx` 是记事本（约定 / 待办 / 事件 / 关系）——设计稿没画这一屏：它做成**默认收起的第三栏**，因为稿面 640px 是整个面板不肯让步的一条，常驻会把它压到 640 以下；但入口带计数，因为它不是配置而是作品的一部分。
+
+#### 转场与取材追溯
+
+- `SceneTransition.tsx` 是转场，**就地向上展开而不是弹层**（作者一天可能用好几次），两支的差别用**一道线**表达而不是图标或第二个颜色：另起一场是断掉的线，接续是中间嵌一个赭石实心方块的线；三态（选择 → 生成中 → 预览确认）在同一块里原地替换。
+- `TurnTrace.tsx` 是本轮取材条，回答「这一轮模型眼前有哪些条目和特征、为什么」，四种来源**不靠四种颜色而靠同一根线的不同终止方式**（常驻上下出血、知识库两端止笔、记忆区断成点线加斜体下沉、引用是作者轮那道 2px 赭石线——四段里唯一带强调色的装订，因为它唯一由作者负责）。
+- `ArchiveViewer.tsx` 是封存场次的**只读**查看器：「新开会话」把上一场移进 `archive/` 一个字没删，但只留在文件里不算数——作者读不到它，「封存」在他的体感里就和「删除」没区别；只读是刻意的，能继续的会话只有一个，这就是「存档」这个词的全部含义。
 
 ### `src/components/sync/`
 
@@ -74,13 +188,99 @@ CommandPalette, onboarding flow, library view (文库: book-spine ordering + per
 
 ### `src/lib/ai/`
 
-streaming client (`index.ts` dispatch on `familyOf(standard)`, `openai.ts`/`responses.ts`/`gemini.ts`/`anthropic.ts` adapters — four protocol families, Responses being OpenAI's second one on the same base and Bearer, with `instructions` + `input` items instead of `messages`, typed stream events, and `store:false` on every request; `Model.textVerbosity` goes out as `text.verbosity`, merged beside a structured task's `text.format` rather than replacing it, and the terminal event's echoed `reasoning.effort` / `temperature` is compared with what was sent — a mismatch becomes `wireRewrites` on the done chunk, in the API log and as a `round-done` row in the execution log, reported and never retried (`docs/api/gpt56-plan.md` P2 / P3); slice-by-slice status in `docs/api/qianwen-compat-plan.md` §6 — `types.ts`), the config→request seam (`conn.ts` — `ConnOptions` is **the one place** a provider/model transport field is declared; every arg type that carries provider wiring `extends` it, so a new field is one edit, not eighteen. See `docs/api/provider-layering.md`), per-protocol **and per-model** JSON-mode shaping (`jsonMode.ts` — the protocol decides the spelling, `Model.structuredOutput` decides the strength: `off` / `json_object` / `json_schema`, absent = auto → family default lifted to strict `json_schema` for model ids known to take it (OpenAI `response_format.json_schema`, the Responses family's `text.format`, Gemini 2.5+'s `generationConfig.responseJsonSchema` — a **standard** JSON Schema, so the same `strictify` output goes on the wire unchanged, unlike the older OpenAPI-dialect `responseSchema`), and capped by what the endpoint has already refused with a 400 naming that field — `effectiveStructuredOutput` is the one answer the shaping, the 「将发送」 summary and the skip decision all read — learned once, remembered per endpoint+model for the session, applied through `withJsonModeFallback`, the one runner both JSON call sites use; `jsonSchemaStrict.ts` adapts an output schema to strict mode's all-required rule on the way out and strips the resulting nulls on the way back, so the eight call-site schemas stay untouched; see `docs/api/structured-output-plan.md`), forced-`tool_choice` support (`toolChoice.ts` — the endpoints that answer a forced choice with a 400 instead of honouring or ignoring it: learned from that 400, retried once with `auto`, remembered for the session), server-side tools (`serverTools.ts` — tools the *endpoint* runs inside one request, **spelled per `(platform, family)`, never per standard**: `platforms.ts` holds the platform profiles, keyed by the provider row's `platform` (inferred from the host when a row never stored one; an official standard is always its vendor), so DashScope's private body fields reach DashScope only — before it, every `openai_compat` row (DeepSeek, relays, Ollama) got them; a protocol-native tool on a platform that lists none is offered as 未实测. **Whether** a wire has a capability at all — a server tool, whole-PDF input, DashScope's hi-res / clip-fps knobs, forced `tool_choice` — is one table, `capabilities.ts` (platform × family × capability, model id as the third axis; `capabilityVerdict` → `yes / unknown / no` + a reason code), rendered as `docs/api/capability-matrix.md`; a `private` capability is `no` on any platform that has no cell for it, so a new vendor field cannot leak by omission (`docs/api/capability-gating-plan.md`). `platforms.ts` keeps addresses, routes and per-model prefills; every asker (adapters, 「将发送」, drawers, the chat surface) calls `hasCapability` / `capabilityVerdict` directly — there are no per-capability wrappers — and `capabilityConsistency.test.ts` holds each asker's actual request against the table. The model's declaration is the author's grant and **stays when the wire can't say it** — `effectiveServerTools` is what a request carries, `serverToolsSent` is what any capability promise (search subagent, page reading, list marks, context estimates) reads, never the raw row (`docs/feature/channel-model-route-plan.md` §4, §11): `web_search`, spelled as Anthropic `tools[]` entries on MiniMax-M3, as top-level `enable_search` on DashScope's Chat Completions, and as built-in `tools[]` entries on both Responses standards — DashScope's tool on compat, OpenAI's own search on the official endpoint, whose `web_search_call` items also carry `open_page` / `find_in_page` actions (a `url`, no queries) — with every other id filtered off the official wire; plus `web_extractor` (网页抓取), **only ever beside `web_search`** because DashScope refuses it alone — `search_strategy: agent_max` on Chat (dropped from any request carrying function tools — DashScope's "agent mode" 400s on the pair, so agent rounds there search without reading pages), `{type:"web_extractor"}` on Responses, where the calls stream back as `web_*_call` items and reach the execution log; plus the two image searches `web_search_image` (以文搜图) / `image_search` (以图搜图), Responses-compat only, independent switches because they bill far above search, their items carrying JSON-string `arguments` / `output`; plus `code_interpreter` (代码解释器) — the one id that is not a web tool and the one **gated by model id** (the `code_interpreter` cells in `capabilities.ts`, a measured id table per wire; the drawer shows the switch only for a matching id), `enable_code_interpreter` on Chat compat but **dropped from any request that carries function tools** (the wire 400s on the pair), `{type:"code_interpreter"}` on Responses compat, where it sits beside function tools but is **dropped when thinking is off**, its `code_interpreter_call` items reaching the log as code + printed output; a live search subagent takes only the web ids from the main model (`"no-web"` policy — `routeTools` / `nonWebServerTools`); requests the app makes on its own send **no** server tools — structured tasks, compaction, the background summaries in `memoryStore` / `digestStore`, Sakura translation (`translate/run.ts`) and the lore gallery's image description (`lore/vision.ts`) override the field the model row carries (work on text or a picture already in hand has nothing to look up or compute, and a declared interpreter alone costs ~800 input tokens a request; `backgroundSummaryServerTools.test.ts`, `translate/run.test.ts`, `lore/vision.test.ts`); nothing to execute locally, so they never enter the agent registry — measurements in `docs/api/landscape.md` §7 第六个样本「代码解释器」), provider config storage (`configDb.ts`), channels × routes (`routes.ts` — a provider row is a **channel**, one key on one platform, with one **route** per protocol family at host + path (a path left empty follows the platform's convention in `platforms.ts`); a model takes one route (`activeRoute`) and keeps the fields that change with the protocol per route (`RouteProfile`, parked in `Model.routes`). **The flat fields are always the current route's** — the channel's primary route on the row, the model's current route on the model — so anything asking a protocol question about a model goes through **`providerFor(model, providers)`**, never `providers.find(p => p.id === m.providerId)`, and `resolveConn` hands back the routed view the same way; stored as two JSON columns, migrated at read time byte-for-byte (`docs/feature/channel-model-route-plan.md` §12), merging two channels that are one key (`channelMerge.ts` — detect only, the author confirms; the one operation that deletes model ids, references re-pointed in the same step), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), endpoint limit probing (`endpointProbe.ts` HTTP + `probeAnalysis.ts` pure judgement — measures a model's real context window / output cap; see `docs/reference/architecture.md` → Endpoint probing), per-reply output caps (`modelLimits.ts` — the built-in table + the app-wide default behind `effectiveMaxOutput`, the one resolver both the wire and the budget planner read; see `docs/reference/architecture.md` → Large outputs), multi-draft output vocabulary (`drafts.ts`), the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`), token/cost accounting read side (`usage.ts` — the `token_usage` rollups behind Settings → 用量), the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1), `apiLog.ts`, `tokenEstimate.ts`
+#### 流式协议层
+- streaming client (`index.ts` dispatch on `familyOf(standard)`, `openai.ts`/`responses.ts`/`gemini.ts`/`anthropic.ts` adapters — four protocol families, Responses being OpenAI's second one on the same base and Bearer, with `instructions` + `input` items instead of `messages`, typed stream events, and `store:false` on every request
+  - `Model.textVerbosity` goes out as `text.verbosity`, merged beside a structured task's `text.format` rather than replacing it, and the terminal event's echoed `reasoning.effort` / `temperature` is compared with what was sent — a mismatch becomes `wireRewrites` on the done chunk, in the API log and as a `round-done` row in the execution log, reported and never retried (`docs/api/gpt56-plan.md` P2 / P3)
+  - slice-by-slice status in `docs/api/qianwen-compat-plan.md` §6 — `types.ts`)
+
+#### 请求整形与工具选择
+- the config→request seam (`conn.ts` — `ConnOptions` is **the one place** a provider/model transport field is declared; every arg type that carries provider wiring `extends` it, so a new field is one edit, not eighteen. See `docs/api/provider-layering.md`)
+- per-protocol **and per-model** JSON-mode shaping (`jsonMode.ts` — the protocol decides the spelling, `Model.structuredOutput` decides the strength: `off` / `json_object` / `json_schema`, absent = auto → family default lifted to strict `json_schema` for model ids known to take it (OpenAI `response_format.json_schema`, the Responses family's `text.format`, Gemini 2.5+'s `generationConfig.responseJsonSchema` — a **standard** JSON Schema, so the same `strictify` output goes on the wire unchanged, unlike the older OpenAPI-dialect `responseSchema`)
+  - and capped by what the endpoint has already refused with a 400 naming that field — `effectiveStructuredOutput` is the one answer the shaping, the 「将发送」 summary and the skip decision all read — learned once, remembered per endpoint+model for the session, applied through `withJsonModeFallback`, the one runner both JSON call sites use
+  - `jsonSchemaStrict.ts` adapts an output schema to strict mode's all-required rule on the way out and strips the resulting nulls on the way back, so the eight call-site schemas stay untouched
+  - see `docs/api/structured-output-plan.md`)
+- forced-`tool_choice` support (`toolChoice.ts` — the endpoints that answer a forced choice with a 400 instead of honouring or ignoring it: learned from that 400, retried once with `auto`, remembered for the session)
+
+#### 服务端工具
+- server-side tools (`serverTools.ts` — tools the *endpoint* runs inside one request, **spelled per `(platform, family)`, never per standard**: `platforms.ts` holds the platform profiles, keyed by the provider row's `platform` (inferred from the host when a row never stored one; an official standard is always its vendor), so DashScope's private body fields reach DashScope only — before it, every `openai_compat` row (DeepSeek, relays, Ollama) got them; a protocol-native tool on a platform that lists none is offered as 未实测.
+  - **Whether** a wire has a capability at all — a server tool, whole-PDF input, DashScope's hi-res / clip-fps knobs, forced `tool_choice` — is one table, `capabilities.ts` (platform × family × capability, model id as the third axis; `capabilityVerdict` → `yes / unknown / no` + a reason code), rendered as `docs/api/capability-matrix.md`; a `private` capability is `no` on any platform that has no cell for it, so a new vendor field cannot leak by omission (`docs/api/capability-gating-plan.md`).
+  - `platforms.ts` keeps addresses, routes and per-model prefills; every asker (adapters, 「将发送」, drawers, the chat surface) calls `hasCapability` / `capabilityVerdict` directly — there are no per-capability wrappers — and `capabilityConsistency.test.ts` holds each asker's actual request against the table.
+  - The model's declaration is the author's grant and **stays when the wire can't say it** — `effectiveServerTools` is what a request carries, `serverToolsSent` is what any capability promise (search subagent, page reading, list marks, context estimates) reads, never the raw row (`docs/feature/channel-model-route-plan.md` §4, §11):
+  - `web_search`, spelled as Anthropic `tools[]` entries on MiniMax-M3, as top-level `enable_search` on DashScope's Chat Completions, and as built-in `tools[]` entries on both Responses standards — DashScope's tool on compat, OpenAI's own search on the official endpoint, whose `web_search_call` items also carry `open_page` / `find_in_page` actions (a `url`, no queries) — with every other id filtered off the official wire;
+  - plus `web_extractor` (网页抓取), **only ever beside `web_search`** because DashScope refuses it alone — `search_strategy: agent_max` on Chat (dropped from any request carrying function tools — DashScope's "agent mode" 400s on the pair, so agent rounds there search without reading pages), `{type:"web_extractor"}` on Responses, where the calls stream back as `web_*_call` items and reach the execution log;
+  - plus the two image searches `web_search_image` (以文搜图) / `image_search` (以图搜图), Responses-compat only, independent switches because they bill far above search, their items carrying JSON-string `arguments` / `output`;
+  - plus `code_interpreter` (代码解释器) — the one id that is not a web tool and the one **gated by model id** (the `code_interpreter` cells in `capabilities.ts`, a measured id table per wire; the drawer shows the switch only for a matching id), `enable_code_interpreter` on Chat compat but **dropped from any request that carries function tools** (the wire 400s on the pair), `{type:"code_interpreter"}` on Responses compat, where it sits beside function tools but is **dropped when thinking is off**, its `code_interpreter_call` items reaching the log as code + printed output;
+  - a live search subagent takes only the web ids from the main model (`"no-web"` policy — `routeTools` / `nonWebServerTools`);
+  - requests the app makes on its own send **no** server tools — structured tasks, compaction, the background summaries in `memoryStore` / `digestStore`, Sakura translation (`translate/run.ts`) and the lore gallery's image description (`lore/vision.ts`) override the field the model row carries (work on text or a picture already in hand has nothing to look up or compute, and a declared interpreter alone costs ~800 input tokens a request; `backgroundSummaryServerTools.test.ts`, `translate/run.test.ts`, `lore/vision.test.ts`);
+  - nothing to execute locally, so they never enter the agent registry — measurements in `docs/api/landscape.md` §7 第六个样本「代码解释器」)
+
+#### 供应商、路由与探测
+- provider config storage (`configDb.ts`)
+- channels × routes (`routes.ts` — a provider row is a **channel**, one key on one platform, with one **route** per protocol family at host + path (a path left empty follows the platform's convention in `platforms.ts`);
+  - a model takes one route (`activeRoute`) and keeps the fields that change with the protocol per route (`RouteProfile`, parked in `Model.routes`).
+  - **The flat fields are always the current route's** — the channel's primary route on the row, the model's current route on the model — so anything asking a protocol question about a model goes through **`providerFor(model, providers)`**, never `providers.find(p => p.id === m.providerId)`, and `resolveConn` hands back the routed view the same way;
+  - stored as two JSON columns, migrated at read time byte-for-byte (`docs/feature/channel-model-route-plan.md` §12)
+- merging two channels that are one key (`channelMerge.ts` — detect only, the author confirms; the one operation that deletes model ids, references re-pointed in the same step)
+- Gemini safety settings (`safety.ts`)
+- remote probing (`providerProbe.ts`)
+- endpoint limit probing (`endpointProbe.ts` HTTP + `probeAnalysis.ts` pure judgement — measures a model's real context window / output cap; see `docs/reference/architecture.md` → Endpoint probing)
+
+#### 输出、草稿与片段库
+- per-reply output caps (`modelLimits.ts` — the built-in table + the app-wide default behind `effectiveMaxOutput`, the one resolver both the wire and the budget planner read; see `docs/reference/architecture.md` → Large outputs)
+- multi-draft output vocabulary (`drafts.ts`)
+- the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`)
+- token/cost accounting read side (`usage.ts` — the `token_usage` rollups behind Settings → 用量)
+
+#### 图片与日志
+- the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1)
+- `apiLog.ts`
+- `tokenEstimate.ts`
 
 ### `src/lib/agent/`
 
 **文件怎么分（P6，docs/feature/code-structure-plan.md）。** `registry.ts` 只是入口：工具表的类型在 `toolTypes.ts`（`registry.ts` 用 `export type *` 原样转出，外部照旧 `from "./registry"`），工具条目按领域分在 `toolTable/` 下十个片段里（`read` · `lore` · `collectors` · `manuscript` · `exports` · `image` · `manuscriptDelete` · `scratchpad` · `roleplay` · `subRuns`，共用的参数解析与描述构造在 `toolTable/shared.ts`），`registry.ts` 按固定顺序把它们展开回 `REGISTRY`——**这个顺序就是发给模型的声明顺序**，`search_tools` 的目录和 Anthropic 的缓存前缀都跟着它，`toolDefinitionsSnapshot.test.ts` 逐字节钉住拆分前的输出。加工具放进它领域的片段；`manuscriptDelete` 单列一个片段正是因为那两个删除工具在线上排在图像工具之后。写工具同理：`writeTools.ts` 只做转出，实现按原来的分节在 `write/` 下——`planGate`（方案门与破坏性步骤的暂停）· `loreFiles` · `loreAssets`（图集、头像、跨条目复制、搬移与删除条目）· `memory` · `manuscript`（L2 提案与落点回执），`write/shared.ts` 放它们共用而谁也不拥有的东西（提案 id 计数器，快照上的两个辅助），这样模块之间不绕圈。
 
-unified agent runtime (`runtime.ts` loop, `registry.ts` tool registry, `presets.ts` per-task config, `events.ts` execution-log events——其中 `ChangeRecord` 是 L1 写入交回来的**「改成了什么」**：这些写入调用即落盘、作者那一票发生在更早的方案卡上（卡上只有模型自己写的一句打算），所以在此之前没有任何地方给作者看过真正写进去的字，日志那一行只有工具名与截断到 400 字的原始 JSON；记录落在本来就免费的地方——handler 为了备份已经读了旧文（`backup.ts` 的 `snapshotFile` 把它读到的那份顺手交出来）、也握着新文，由 lore 层拼装的那几个则读回盘上的结果（`changeAfterWrite`，理由和写入回执一样：记录该说落了什么而不是打算写什么）。两侧各 4000 字封顶且**超了就一起丢**（只留能装下的那一侧会被读成「整份都是新加的」——那是断言不是省略），字数与 `backupPath` / `path` 照留，完整的旧版新版本来就在盘上。只有产生前后两份**文本**的写入才有它：归集改的是成员、头像改的是字节，那些改动由方案步骤自己说清。它也是「本次对话都批准」之后唯一还读得到改动的地方。正文写入（`propose_edit` / `rewrite_*` / `insert_lines` / `append_file` / 新建与删除文档）批准之后也交一份（`writeReceipt`，读回落盘结果，`autoApproved` 标出没人读过的那几次）；两侧超出上限时改存有界的窗口（`ChangeRecord.diff`：最多 6 扇、每侧前两行、每行 300 字）——章节几乎总是超限，只剩字数的记录等于回到卡片改版之前。批准一个正打开的文档时改动走编辑器缓冲，所以 `agentStore` 批准后立即 `saveNow`：不然读回的是 2 秒自动保存之前的旧文，记录说什么都没改、指纹让之后的撤回误判「改过了」, `tools.ts` handlers + path containment, `compact.ts` chat-history compaction planning — its trigger is `compactTriggerFor`, the lowest of three lines (the author's token slider, the author's window-ratio slider × the model's window, and the classic `COMPACT_TRIGGER × message ceiling`, which the sliders can only ever pull *earlier*), read by the store, the context bar and the settings readout so all three name the same number; 自动归纳 off skips the automatic fold entirely and leaves 立即归纳 (chat **and** roleplay — `lib/roleplay/run.ts`'s `compactSceneNow`, whose summary-to-disk + memory-block refresh are the same `afterCompaction` step the automatic path runs) — see `docs/feature/agent/compact-threshold-plan.md`, `plan.ts` lore-plan gate — whose steps carry a **target** axis (entity / collection / category) so a reorganisation is one step per collection *or category* rather than one per entry, which is the difference between a card the author reads and one they rubber-stamp; that axis also decides which deferred tool group a run loads (`planLoadsEntityWrites` / `planLoadsOrganize` — a `category`+`move` step loads `lore_write`, because `move_lore_entity` is what carries it out), `planLedger.ts` 把批准过的方案做成这一轮的账本（设计稿 02h 1i）——方案卡以前一批准就消失，之后的写入各落各的，只剩工具行和 400 字 JSON；现在每一步长出回执（已写入 · +a −b · 展开）。**哪次写入属于哪一步由门自己记**（`plan.recordMatch` 按工具调用 id 存进 `PlanGate.matched`，运行时抄到 `ToolStep.planStep`），UI 不重新匹配——第二个匹配器迟早会和门说法不一；按调用 id 而不是「上一次命中」存，是因为同轮工具调用可以并发。账本从落盘的回合日志里建，所以重启之后还在；`summarizeTurnWrites` 给「本轮写入」带子算数（文档按路径去重、条目按实体去重、删掉的段数取自改动窗的摘要）, `destructive.ts` 决定哪些**已批准**的知识库步骤仍要停下来问（设计稿 02h 1g）：删条目，或替换超过六成正文（按去掉 frontmatter 的正文算，字级；正文不到 200 字的不停——把「待补充」补成正文不该触发）。写入工具在门放行之后、落盘之前调 `pauseForStep` 出一张 `loreStep` 卡：批准时这边什么都不 apply，由写入工具自己写；跳过只跳这一步（`PlanGate.skipped`，账本显示「已跳过」），模型被明确告知方案其余照旧。这张卡不在 `AUTO_APPROVABLE` 里——方案本身就是那一层的授权，这张卡正是为它不该覆盖的两类步骤而设。删条目的卡还会扫一遍文档找 `[[lore:…]]` 引用（`citingDocuments`，按渲染器同一套名字 → 别名 → category/id 解析），那是条目一删就再也查不出来的事, `undo.ts` 是账本里的撤回（设计稿 02h 1h / 1i）：**只撤回还是那次写入原样的文件**——按 `ChangeRecord.afterHash` 比对（正文超出记录上限被丢掉之后指纹还在），本轮稍后的写入碰过同一文件就点名拒绝，作者手改过就说「最后改于今天 14:03（可能是你手动改的）」——时间按路径问 `fs_stat`（`lib/fs/modified.ts`；删文档卡的「最后改于」也是它），不挂在 `FileNode` 上，那棵树每次打开项目整棵读，是谁改的仍说不出，删掉的文件或条目原位已被占用就拒绝；撤回全部从新到旧做，撤回本身也先备份被覆盖的那份；撤回之前先保存编辑器里没存的字（让「改过了」看得见它），之后重新载入或关掉打开的文档。每次尝试作为 `undo` 事件追加进那一轮的日志并落盘（`agentStore.undoTurnWrites`），账本据此显示「已撤回」或拒绝原因，`logModel` 跳过这种事件不当作行, `organizeTools.ts` the collection/category tools that ride on it (deferred `lore_organize`, loaded **by plan shape**), `toolSearch.ts` `search_tools`——另一种延迟组：`file_ops`（改名/复制/删除/新建章节与目录）和 `image`（三个画图工具）没有门，只是多数对话用不到，所以由模型自己要。目录只列这次运行真有的组；模型不搜直接点名时当场装上并让它再调一次；同一段对话用过的组下一次运行开跑就装上；`TaskPreset.residentGroups` 让以此为本职的预设（文件 pack、旁白）照旧常驻——见 `docs/feature/agent/agent-tool-context-lld.md` §6, `writeTools.ts` L1/L2 write handlers, `editApply.ts` where an approved find/replace lands, plus the line-range slicing behind `rewrite_lines` — the occurrence count recorded on the proposal is what lets a targeted edit refuse a file that moved on——而 `locateMatches` 把每一处命中的行号与上下文行也在建提案那一刻记下来（那时文件正文就在手上），卡片才说得出「改在哪」而不只是「改成什么」, `lineEcho.ts` 行号契约的两半——`read_file` 每行带行号（模型才能**指名**一个区域而不是把它抄进 `find`），以及写入批准后的回执带回新行区间、位移和应用后的片段，**那正是它取代的那次重读**（位移从落盘后的文件量出来，不从发出去的文本推算：换行符的归属有三处可以差一行，而差一行是静默的、错的是**下一次**编辑）。这些全部是**运行时输出而不是 schema**——棘轮只剩 65 token，而规则在它生效的那一刻到达本来就比写在几千 token 之前更管用；见 `docs/feature/agent/edit-loop-plan.md`, `htmlTools.ts` the `inspect_html` verifier —— 这条链上唯一一个**验**而不是**写**的工具：模型看不见自己画出来的页面，所以把它渲进 `lib/pptx/harvest` 那个离屏沙箱，回报盒子有没有掉出幻灯片、有没有一页什么都没画、有没有图没加载上（判定在纯的 `lib/pptx/inspect.ts`）。**一行 `harvester.js` 都不用改**——每个盒子本来就带着相对本页的 box，`canvas` 就是第一张幻灯片自己的矩形，所以「超边界」只是两次比较；而没有分节的长页面是一张和自己一样高的幻灯片，因此**不会**把整页误报成溢出。见 `docs/feature/agent/edit-loop-plan.md` §6，`splitTools.ts` the facet-split collector — the only tools that write nothing anywhere, existing purely so the split arrives as one tool call per facet instead of one hand-escaped JSON blob, `imageHistory.ts` the one definition of how a picture lives in — and leaves — the wire history, `chatImages.ts` the mirror of that on the way back — where a picture link **the model wrote** resolves (the project root, since a chat turn is not a file) and which ones are refused unread; see `docs/reference/architecture.md` → Images in context)
+unified agent runtime (
+
+#### 运行时核心
+
+- `runtime.ts` loop
+- `registry.ts` tool registry
+- `presets.ts` per-task config
+- `events.ts` execution-log events——其中 `ChangeRecord` 是 L1 写入交回来的**「改成了什么」**：这些写入调用即落盘、作者那一票发生在更早的方案卡上（卡上只有模型自己写的一句打算），所以在此之前没有任何地方给作者看过真正写进去的字，日志那一行只有工具名与截断到 400 字的原始 JSON；记录落在本来就免费的地方——handler 为了备份已经读了旧文（`backup.ts` 的 `snapshotFile` 把它读到的那份顺手交出来）、也握着新文，由 lore 层拼装的那几个则读回盘上的结果（`changeAfterWrite`，理由和写入回执一样：记录该说落了什么而不是打算写什么）
+  - 两侧各 4000 字封顶且**超了就一起丢**（只留能装下的那一侧会被读成「整份都是新加的」——那是断言不是省略），字数与 `backupPath` / `path` 照留，完整的旧版新版本来就在盘上
+  - 只有产生前后两份**文本**的写入才有它：归集改的是成员、头像改的是字节，那些改动由方案步骤自己说清
+  - 它也是「本次对话都批准」之后唯一还读得到改动的地方
+  - 正文写入（`propose_edit` / `rewrite_*` / `insert_lines` / `append_file` / 新建与删除文档）批准之后也交一份（`writeReceipt`，读回落盘结果，`autoApproved` 标出没人读过的那几次）；两侧超出上限时改存有界的窗口（`ChangeRecord.diff`：最多 6 扇、每侧前两行、每行 300 字）——章节几乎总是超限，只剩字数的记录等于回到卡片改版之前
+  - 批准一个正打开的文档时改动走编辑器缓冲，所以 `agentStore` 批准后立即 `saveNow`：不然读回的是 2 秒自动保存之前的旧文，记录说什么都没改、指纹让之后的撤回误判「改过了」
+
+#### 压缩与方案账本
+
+- `tools.ts` handlers + path containment
+- `compact.ts` chat-history compaction planning — its trigger is `compactTriggerFor`, the lowest of three lines (the author's token slider, the author's window-ratio slider × the model's window, and the classic `COMPACT_TRIGGER × message ceiling`, which the sliders can only ever pull *earlier*), read by the store, the context bar and the settings readout so all three name the same number
+  - 自动归纳 off skips the automatic fold entirely and leaves 立即归纳 (chat **and** roleplay — `lib/roleplay/run.ts`'s `compactSceneNow`, whose summary-to-disk + memory-block refresh are the same `afterCompaction` step the automatic path runs) — see `docs/feature/agent/compact-threshold-plan.md`
+- `plan.ts` lore-plan gate — whose steps carry a **target** axis (entity / collection / category) so a reorganisation is one step per collection *or category* rather than one per entry, which is the difference between a card the author reads and one they rubber-stamp; that axis also decides which deferred tool group a run loads (`planLoadsEntityWrites` / `planLoadsOrganize` — a `category`+`move` step loads `lore_write`, because `move_lore_entity` is what carries it out)
+- `planLedger.ts` 把批准过的方案做成这一轮的账本（设计稿 02h 1i）——方案卡以前一批准就消失，之后的写入各落各的，只剩工具行和 400 字 JSON；现在每一步长出回执（已写入 · +a −b · 展开）。**哪次写入属于哪一步由门自己记**（`plan.recordMatch` 按工具调用 id 存进 `PlanGate.matched`，运行时抄到 `ToolStep.planStep`），UI 不重新匹配——第二个匹配器迟早会和门说法不一；按调用 id 而不是「上一次命中」存，是因为同轮工具调用可以并发。账本从落盘的回合日志里建，所以重启之后还在；`summarizeTurnWrites` 给「本轮写入」带子算数（文档按路径去重、条目按实体去重、删掉的段数取自改动窗的摘要）
+- `destructive.ts` 决定哪些**已批准**的知识库步骤仍要停下来问（设计稿 02h 1g）：删条目，或替换超过六成正文（按去掉 frontmatter 的正文算，字级；正文不到 200 字的不停——把「待补充」补成正文不该触发）。写入工具在门放行之后、落盘之前调 `pauseForStep` 出一张 `loreStep` 卡：批准时这边什么都不 apply，由写入工具自己写；跳过只跳这一步（`PlanGate.skipped`，账本显示「已跳过」），模型被明确告知方案其余照旧。这张卡不在 `AUTO_APPROVABLE` 里——方案本身就是那一层的授权，这张卡正是为它不该覆盖的两类步骤而设。删条目的卡还会扫一遍文档找 `[[lore:…]]` 引用（`citingDocuments`，按渲染器同一套名字 → 别名 → category/id 解析），那是条目一删就再也查不出来的事
+- `undo.ts` 是账本里的撤回（设计稿 02h 1h / 1i）：**只撤回还是那次写入原样的文件**——按 `ChangeRecord.afterHash` 比对（正文超出记录上限被丢掉之后指纹还在），本轮稍后的写入碰过同一文件就点名拒绝，作者手改过就说「最后改于今天 14:03（可能是你手动改的）」——时间按路径问 `fs_stat`（`lib/fs/modified.ts`；删文档卡的「最后改于」也是它），不挂在 `FileNode` 上，那棵树每次打开项目整棵读，是谁改的仍说不出，删掉的文件或条目原位已被占用就拒绝；撤回全部从新到旧做，撤回本身也先备份被覆盖的那份；撤回之前先保存编辑器里没存的字（让「改过了」看得见它），之后重新载入或关掉打开的文档。每次尝试作为 `undo` 事件追加进那一轮的日志并落盘（`agentStore.undoTurnWrites`），账本据此显示「已撤回」或拒绝原因，`logModel` 跳过这种事件不当作行
+
+#### 工具组加载与检索
+
+- `organizeTools.ts` the collection/category tools that ride on it (deferred `lore_organize`, loaded **by plan shape**)
+- `toolSearch.ts` `search_tools`——另一种延迟组：`file_ops`（改名/复制/删除/新建章节与目录）和 `image`（三个画图工具）没有门，只是多数对话用不到，所以由模型自己要。目录只列这次运行真有的组；模型不搜直接点名时当场装上并让它再调一次；同一段对话用过的组下一次运行开跑就装上；`TaskPreset.residentGroups` 让以此为本职的预设（文件 pack、旁白）照旧常驻——见 `docs/feature/agent/agent-tool-context-lld.md` §6
+
+#### 写入与编辑工具
+
+- `writeTools.ts` L1/L2 write handlers
+- `editApply.ts` where an approved find/replace lands, plus the line-range slicing behind `rewrite_lines` — the occurrence count recorded on the proposal is what lets a targeted edit refuse a file that moved on——而 `locateMatches` 把每一处命中的行号与上下文行也在建提案那一刻记下来（那时文件正文就在手上），卡片才说得出「改在哪」而不只是「改成什么」
+- `lineEcho.ts` 行号契约的两半——`read_file` 每行带行号（模型才能**指名**一个区域而不是把它抄进 `find`），以及写入批准后的回执带回新行区间、位移和应用后的片段，**那正是它取代的那次重读**（位移从落盘后的文件量出来，不从发出去的文本推算：换行符的归属有三处可以差一行，而差一行是静默的、错的是**下一次**编辑）。这些全部是**运行时输出而不是 schema**——棘轮只剩 65 token，而规则在它生效的那一刻到达本来就比写在几千 token 之前更管用；见 `docs/feature/agent/edit-loop-plan.md`
+- `htmlTools.ts` the `inspect_html` verifier —— 这条链上唯一一个**验**而不是**写**的工具：模型看不见自己画出来的页面，所以把它渲进 `lib/pptx/harvest` 那个离屏沙箱，回报盒子有没有掉出幻灯片、有没有一页什么都没画、有没有图没加载上（判定在纯的 `lib/pptx/inspect.ts`）。**一行 `harvester.js` 都不用改**——每个盒子本来就带着相对本页的 box，`canvas` 就是第一张幻灯片自己的矩形，所以「超边界」只是两次比较；而没有分节的长页面是一张和自己一样高的幻灯片，因此**不会**把整页误报成溢出。见 `docs/feature/agent/edit-loop-plan.md` §6
+- `splitTools.ts` the facet-split collector — the only tools that write nothing anywhere, existing purely so the split arrives as one tool call per facet instead of one hand-escaped JSON blob
+
+#### 图片历史
+
+- `imageHistory.ts` the one definition of how a picture lives in — and leaves — the wire history
+- `chatImages.ts` the mirror of that on the way back — where a picture link **the model wrote** resolves (the project root, since a chat turn is not a file) and which ones are refused unread; see `docs/reference/architecture.md` → Images in context)
 
 ### `src/lib/lore/`
 
@@ -108,11 +308,42 @@ clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
 
 ### `src/lib/consistency/`
 
-一致性检查: the document read back against the knowledge base **on the assistant's own loop** (`review.ts` — ① 取材 in code, ② one full `runAgent` per window on `CONSISTENCY_PRESET` = the read tier + `report_issue` / `report_pass` and no write tool, subagents routed like chat, ③ merge). **Windowing is code's, not the model's** (`budget.ts` — the plan whose segments sum to the ceiling, and `splitDocument`; measured reasons in the plan §3): N = 1 is the common case and then the run is fully autonomous; N > 1 nests each window under a `check_window` step so the log needs no new band. `reviewTools.ts` is the collector — a finding's quote is verified against the segment **at record time** (verbatim, exactly once) and sent back for a rewrite otherwise, an entity must resolve, and in entries mode the sink refuses anyone not pinned; `scope.ts` the three-way range (all follows the fence / collections override it / entries pin and refuse — the fence narrows discovery only, never recording); `merge.ts` cross-window dedupe + the coverage band; `model.ts` the anchoring (`locateIssue` — scan-time anchor as tie-breaker in widening rings, then whole document; `applySuggestions` / `revertSuggestion`). Never a green tick for an empty run: `emptyRun`, failed and aborted windows and the cap's tail are all on the report head. State in `stores/consistencyStore.ts` (range persisted per project, findings stream in live), UI in `components/ai/ConsistencyCheck.tsx` (设计稿 02d). Design: `docs/feature/consistency-review-plan.md`
+#### 流程总览
+- 一致性检查: the document read back against the knowledge base **on the assistant's own loop** (`review.ts` — ① 取材 in code, ② one full `runAgent` per window on `CONSISTENCY_PRESET` = the read tier + `report_issue` / `report_pass` and no write tool, subagents routed like chat, ③ merge).
+- **Windowing is code's, not the model's** (`budget.ts` — the plan whose segments sum to the ceiling, and `splitDocument`; measured reasons in the plan §3): N = 1 is the common case and then the run is fully autonomous; N > 1 nests each window under a `check_window` step so the log needs no new band.
+
+#### 收集与范围
+- `reviewTools.ts` is the collector — a finding's quote is verified against the segment **at record time** (verbatim, exactly once) and sent back for a rewrite otherwise, an entity must resolve, and in entries mode the sink refuses anyone not pinned
+- `scope.ts` the three-way range (all follows the fence / collections override it / entries pin and refuse — the fence narrows discovery only, never recording)
+
+#### 合并与定位
+- `merge.ts` cross-window dedupe + the coverage band
+- `model.ts` the anchoring (`locateIssue` — scan-time anchor as tie-breaker in widening rings, then whole document; `applySuggestions` / `revertSuggestion`).
+
+#### 状态与展示
+- Never a green tick for an empty run: `emptyRun`, failed and aborted windows and the cap's tail are all on the report head.
+- State in `stores/consistencyStore.ts` (range persisted per project, findings stream in live), UI in `components/ai/ConsistencyCheck.tsx` (设计稿 02d).
+- Design: `docs/feature/consistency-review-plan.md`
 
 ### `src/lib/pptx/`
 
-HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** — `harvest.ts` renders the page in an offscreen sandboxed iframe and `harvester.js` (injected `?raw`, answers by `postMessage`) reports what the browser measured, `deck.ts` is the pure layer (units, slide size, colours, pruning, text slack — where the tests are), `write.ts` calls pptxgenjs (lazy, own chunk), and `htmlSlides.ts` reads a page **by structure** — by slide for `read_slides` (its selector list **must** stay in step with `harvester.js`'s or "slide 7" means two different things), and by landmark (`landmarkIndex`: headings, `id`s, and the tags that are a place on their own) for the pages those selectors cannot divide, which is the map `read_file` puts in front of a long landing page or report. Pure text, one tag scanner, one offset-to-line map — see `docs/feature/agent/html-read-edit-plan.md`. `lint.ts` is the generation-side half of fidelity: a text-level scan of the page for what the harvester **can never see** (a `::before` has no box to measure; an entrance animation starting at `opacity: 0` is measured as hidden) or is known to approximate, appended to `inspect_html`'s report with a line per finding, carried on the `export_pptx` card (folded by rule, the sentences in both locale files) and repeated in the apply report beside what the conversion measured, saying nothing on a clean page — never a reason to refuse an export, and never a `harvester.js` edit; the rule table is `pptx-plan.md` §7.3. Entry points are the `export_pptx` L2 tool (converted in `applyProposal`, the only place with a DOM), the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk. **Never add `allow-same-origin` to that frame, and never edit `harvester.js` without updating BOTH the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list** (a `blob:` document inherits the app's CSP, so that hash is the only reason the script runs at all; `pptxHarvesterCsp.test.ts` guards the drift) — see `docs/reference/architecture.md` → HTML → PPTX 导出; design + rejected alternatives: `docs/feature/pptx-plan.md` §4
+HTML → PPTX（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）: the model keeps writing `.html` and the conversion runs **no model at all** —
+
+#### 转换管线（无模型参与）
+- `harvest.ts` renders the page in an offscreen sandboxed iframe and `harvester.js` (injected `?raw`, answers by `postMessage`) reports what the browser measured
+- `deck.ts` is the pure layer (units, slide size, colours, pruning, text slack — where the tests are)
+- `write.ts` calls pptxgenjs (lazy, own chunk)
+- and `htmlSlides.ts` reads a page **by structure** — by slide for `read_slides` (its selector list **must** stay in step with `harvester.js`'s or "slide 7" means two different things), and by landmark (`landmarkIndex`: headings, `id`s, and the tags that are a place on their own) for the pages those selectors cannot divide, which is the map `read_file` puts in front of a long landing page or report. Pure text, one tag scanner, one offset-to-line map — see `docs/feature/agent/html-read-edit-plan.md`.
+
+#### 生成侧保真度检查
+- `lint.ts` is the generation-side half of fidelity: a text-level scan of the page for what the harvester **can never see** (a `::before` has no box to measure; an entrance animation starting at `opacity: 0` is measured as hidden) or is known to approximate, appended to `inspect_html`'s report with a line per finding, carried on the `export_pptx` card (folded by rule, the sentences in both locale files) and repeated in the apply report beside what the conversion measured, saying nothing on a clean page — never a reason to refuse an export, and never a `harvester.js` edit
+  - the rule table is `pptx-plan.md` §7.3.
+
+#### 入口点
+- Entry points are the `export_pptx` L2 tool (converted in `applyProposal`, the only place with a DOM), the `.html` preview toolbar, and the file tree's right-click menu — the last two call the same `exportHtmlToPptx(path)` and both flush the editor first, since it reads the file off disk.
+
+#### CSP 安全约束
+- **Never add `allow-same-origin` to that frame, and never edit `harvester.js` without updating BOTH the `sha256-` in `tauri.conf.json`'s `script-src` and `htmlSlides.ts`'s selector list** (a `blob:` document inherits the app's CSP, so that hash is the only reason the script runs at all; `pptxHarvesterCsp.test.ts` guards the drift) — see `docs/reference/architecture.md` → HTML → PPTX 导出; design + rejected alternatives: `docs/feature/pptx-plan.md` §4
 
 ### `src/lib/xlsx/`
 
@@ -120,11 +351,72 @@ markdown 表格 → .xlsx（Settings → AI 配置 → 实验室 的 Beta 开关
 
 ### `src/lib/docx/`
 
-markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）。**转换一个字都不过模型**：模型写 markdown，版面全部来自 `DocFormat`（`docs/feature/docx/01-agent-design.md` I1），`index.ts` 只负责把源文、格式、插图三样凑齐再汇报降级了什么。分层照 `pptx/` 的分法——能不碰库就决定的全住在纯模块里，`write.ts` 是**唯一**知道 `docx` 库存在的文件（1.1MB，懒加载，不进启动包），换库或改走 Rust 时要重写的只有它。`format.ts` 是主体：一份 Word 文稿的全部版面参数，单位是磅 / 毫米 / twip。**刻意不复用 `lib/theme/markdownThemes.ts`** —— 那五套是 CSS，`2em` 和 `var(--font-serif)` 无法无损翻成磅，而 CSS **根本不表达页面**（纸张、页边距、文档网格在那边不存在）；内置预设的名字和 markdown 主题对齐（作者看到的和导出的对得上），值是一张手写映射表而不是从 CSS 推导的。`blocks.ts` 走 markdown-it 的 **token 流**而不是 `renderMarkdown` 的 HTML：vitest 跑在 node 下没有 DOM，走 DOM 就等于这一层不可测，而逻辑全在这一层；用的是 `lib/fs/markdown` 里**同一个** `md` 实例，所以方言不分叉、自定义的 `lore_cite` 也看得见。`read.ts` 是「参考模仿」——把一份 .docx 里写死的参数读成一套 `DocFormat`（纯函数 `layoutToFormat` + 一趟 IPC 到 `src-tauri/src/docx.rs`），三条判断留在 TS 侧而不是 Rust 侧（那边只报「XML 里写着什么」）：缺席 ≠ 零、纸张**按尺寸认不按名字认**（OOXML 里没有「A4」这个词）、并报出「哪些是它写死的」。`resolve.ts` 合并三级来源（本次明确指定 > 参考模仿的文件 > 默认预设），永远有结果，所以「作者没特别指定」不需要模型做任何事。**贯穿整个子系统的一条纪律：解析失败抛错或返回 null，绝不静默取默认。** 静默回落正是「看起来对、其实不合规」的来源——作者说了仿宋三号、产出是默认格式，而没有任何地方会亮红。`presets.ts` 把作者自建的格式存进 `config.db`（**装机级**：一套公文格式要跨项目复用，连带好处是自然落进「应用配置备份」的范围；整套格式存成一列 JSON，因为这张表永远整套读写、从不按字段查询）。`fontCheck.ts` 回答「这台机器装了这个字体吗」，手段是**量宽度**而不是 `document.fonts.check`（后者在家族缺失时靠后备字体照样排得出来，于是对没装的字体也答 true），三个后备各问一次防止字形宽度巧合；缺字体只是一句中性提示不是错误——导出的文件仍然是对的，拿到装了它的机器上打印一样合规。`briefing.ts` 把可点名的格式清单挂在固定头部（和工作流清单同一层、同一个理由），格式的**细节**不进上下文，那是 `read_doc_format` 的活。设计：`docs/feature/docx/`（00 可行性 —— 为什么难的是读 docx 不是写 docx · 01 agent 设计 · 02 / 03 UI 稿）
+#### 概述
+
+markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）。**转换一个字都不过模型**：模型写 markdown，版面全部来自 `DocFormat`（`docs/feature/docx/01-agent-design.md` I1），`index.ts` 只负责把源文、格式、插图三样凑齐再汇报降级了什么。
+
+
+#### 分层模块（write.ts / format.ts / blocks.ts）
+
+- 分层照 `pptx/` 的分法——能不碰库就决定的全住在纯模块里，`write.ts` 是**唯一**知道 `docx` 库存在的文件（1.1MB，懒加载，不进启动包），换库或改走 Rust 时要重写的只有它。
+- `format.ts` 是主体：一份 Word 文稿的全部版面参数，单位是磅 / 毫米 / twip。**刻意不复用 `lib/theme/markdownThemes.ts`** —— 那五套是 CSS，`2em` 和 `var(--font-serif)` 无法无损翻成磅，而 CSS **根本不表达页面**（纸张、页边距、文档网格在那边不存在）；内置预设的名字和 markdown 主题对齐（作者看到的和导出的对得上），值是一张手写映射表而不是从 CSS 推导的。
+- `blocks.ts` 走 markdown-it 的 **token 流**而不是 `renderMarkdown` 的 HTML：vitest 跑在 node 下没有 DOM，走 DOM 就等于这一层不可测，而逻辑全在这一层；用的是 `lib/fs/markdown` 里**同一个** `md` 实例，所以方言不分叉、自定义的 `lore_cite` 也看得见。
+
+#### 读取与合并（read.ts / resolve.ts）
+
+- `read.ts` 是「参考模仿」——把一份 .docx 里写死的参数读成一套 `DocFormat`（纯函数 `layoutToFormat` + 一趟 IPC 到 `src-tauri/src/docx.rs`），三条判断留在 TS 侧而不是 Rust 侧（那边只报「XML 里写着什么」）：缺席 ≠ 零、纸张**按尺寸认不按名字认**（OOXML 里没有「A4」这个词）、并报出「哪些是它写死的」。
+- `resolve.ts` 合并三级来源（本次明确指定 > 参考模仿的文件 > 默认预设），永远有结果，所以「作者没特别指定」不需要模型做任何事。
+- **贯穿整个子系统的一条纪律：解析失败抛错或返回 null，绝不静默取默认。** 静默回落正是「看起来对、其实不合规」的来源——作者说了仿宋三号、产出是默认格式，而没有任何地方会亮红。
+
+#### 预设与字体检查（presets.ts / fontCheck.ts）
+
+- `presets.ts` 把作者自建的格式存进 `config.db`（**装机级**：一套公文格式要跨项目复用，连带好处是自然落进「应用配置备份」的范围；整套格式存成一列 JSON，因为这张表永远整套读写、从不按字段查询）。
+- `fontCheck.ts` 回答「这台机器装了这个字体吗」，手段是**量宽度**而不是 `document.fonts.check`（后者在家族缺失时靠后备字体照样排得出来，于是对没装的字体也答 true），三个后备各问一次防止字形宽度巧合；缺字体只是一句中性提示不是错误——导出的文件仍然是对的，拿到装了它的机器上打印一样合规。
+
+#### 上下文简报与设计文档
+
+- `briefing.ts` 把可点名的格式清单挂在固定头部（和工作流清单同一层、同一个理由），格式的**细节**不进上下文，那是 `read_doc_format` 的活。
+- 设计：`docs/feature/docx/`（00 可行性 —— 为什么难的是读 docx 不是写 docx · 01 agent 设计 · 02 / 03 UI 稿）
 
 ### `src/lib/roleplay/`
 
-互动式角色扮演（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：作者以第一人称和知识库里的人物对话，另有一个能读到全部对话的「旁白」。以下模块承担全部设计：`transcript.ts` 是**只追加、永不改写**的对话记录（资产；`session.json` 里的 wire history 只是缓存，读不出来就从 transcript 重新播种），`context.ts` 把历史播种成 `[system, 绑定块, seed 块, 提问]` —— **绑定块必须是 prelude 里一条独立消息、绝不能并进 seed 块**，因为 `buildCompactedHistory` 只丢 `meta.seedContext`，放对位置就等于永不失忆（`__tests__/context.test.ts` 跑真实压缩守着这条），`markup.ts` 解析 `*动作*` / `「台词」` / 裸文本 / `[元指令]`（**解析只影响作者看到的稿面，发给模型的仍是原文**），`sceneTools.ts` 是旁白读别人 transcript / summary / memory / 记忆区的**唯一**通道——扮演 agent 的 preset 里根本没有这几个工具名，隔离是结构性的；它覆盖当前场**和归档**（场次地址 `<agentId>#<N>`，当前场＝最大归档号 + 1，见 `scene.ts`），而**作者作废的场次（「另起一场」）默认一层都不进**，点名读得到但内容前面挂着作废提示——旁白是会往正文里写字的，把试验场当情节写进第三章是这个口子唯一真实的风险。`conversationTools.ts` 是角色回看**自己**的通道，同样覆盖自己的每一场（废弃的连点名都够不到），作用域仍然是结构性的（`ToolContext.conversation` **没有 agent id 参数**——场号选的是「自己的哪一场」，不是「谁的场」）。**system 层不是只播种一次的**：角色名 / 主角条目正文 / 扮演指令 / 作者身份都住在 `history[0]`，作者随时会改，所以 `refreshSystemPrompt` 就地重写它、`contextSignature` 是「设定已更新」的基线（覆盖这全部输入，不只是绑定块）——往 system 层加一样作者能改的东西，就要同时加进那个签名，否则提示永远不亮（05 §2.16）——`AuthorPersona` 的四档（`lore` / `prompt` / `stranger` / **默认 `none` ＝导演视角**，作者写场面和剧情指令而不是以某个人的身份说话）踩的就是这条：`personaKey` 不区分 `none` 和 `stranger`，切换身份时提示永远不亮。`memory.ts` + `memoryTools.ts` 是角色的长期记忆（约定 / 待办 / 事件 / 关系）：它**不是摘要**——摘要会被再次摘要，一条没兑现的约定三轮之后就变成「他们聊了一些计划」，所以记忆只增改不删、恒在 prelude，且注入块**只在四个时刻刷新**（播种 / 压缩之后 / 恢复 / 作者手动），绝不在 `remember` 写入的当下；注入块**只放标题**，正文由 `recall(id)` 按需展开——连正文一起塞时超预算的记录是**整条不列**的，而那意味着角色连那件事发生过都不知道。每条记忆带 `scene`（记下时是第几场）：转场把轮号归零，所以单给「turn 14」指不到任何东西。`run.ts` 是一次运行的**历史准备**，它的排序本身就是设计：修对配对 → 压缩 →（**压缩了才**）刷新记忆块 → 条目注入 → 记忆区检索 → 提问（永远最后一条，且是本轮 turnStart）——「压缩之后刷新记忆块」不是省钱的优化，压缩刚把 `remember` 的工具结果折叠掉，**那一刻精确地就是正确性边界**。`area.ts` + `recap.ts` 是**转场**，而它有**两支**：「接续」＝这一场算数——欠着的约定/待办和关系留在常驻层，其余**移出**常驻层、逐条沉进记忆区（改成标 `void` 留档就会让分拣每次都重新命中它们，条目随转场次数平方级膨胀），前情由角色**第一人称自己写**（第三人称全知会写进它当时不该知道的事）；「另起一场」＝这一场**作废**——**分拣一步都不跑**，本场记下的记录移出常驻层，归档存成 `transcript-NN.discarded.md`（**编号推进和归档列表必须认同一套正则**，否则下一场会拿到一个已占用的号、覆盖掉那一场的 summary）。分拣曾经无条件执行，于是试验场里记的事照样沉进记忆区、三场之后被关键字命中说出来；记忆区的格式和知识库完全相同，却**绝不并进 `loreIndex`**——并进去，隔离就从「它不在那里」降级成一个要在六处同时正确的过滤器（含一致性检查，它会把角色的错误认知报成正文矛盾），而记忆区装的正是角色**以为**的事，本就可以和正文冲突；区落在 `areas/<areaId>/` 而不挂在 agent 上，所以删掉角色它还在、能被下一个角色继承。`trace.ts` 是**取材事实**的数据一侧——这一轮命中了哪些条目/特征、被什么关键字激活、什么没进去，以及首次发送**之前**的预估（`history` 还是 null 时上下文构成条只画得出工具 schema）。两条必须记住：**常驻层和本轮检索是两个字段**（`coreDone` 会让常驻条目在报告里显示成「匹配了、贡献 0 字」，合成一栏作者就会以为人设没进上下文），**记忆区永不并进知识库那一栏**（同 `loreIndex` 那条，记忆区装的是角色**以为**的事）；`BoundContent` 因此有两个清单——`resident` 给注入账本（只收真装了正文的），`pieces` 给作者看（**必须**含只写了标题的那些），合并只能二选一：要么账本出错，要么界面漏报。预估的三块字符数走 `context.ts` 的 `blockSizes`，它调的就是真正的块构造函数——理由同 `contextSignature`。`traceView.ts` 是它的取数层（纯函数），界面是 `components/roleplay/TurnTrace.tsx`——**四种来源靠同一根线的四种终止方式分开**（常驻上下出血 / 知识库两端止笔 / 记忆区断成点线 / 引用 2px 赭石）——**3px 双线一次都不用**，那已经归集合所有。取材条一律读**字**（数据层给的就是 chars），只有上下文构成条读 tk：换算只在构成条发生一次，两处各说各的真实数据比对齐成一个假数好。`hitRows` 刻意**不用** `contributingEntities`——`coreResident` 的条目要以「0 字」出现，滤掉它作者会以为没唤起，然后去改一个工作正常的条目。状态在 `stores/roleplayStore.ts`（每 agent 一个会话 + 3 个并发的信号量；`contextTrace` 按轮号、只在内存，`preflight` 按 agent、装机后就有），UI 在 `components/roleplay/`。设计与取舍：`docs/feature/roleplay/`
+#### 总览
+
+互动式角色扮演（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`）：作者以第一人称和知识库里的人物对话，另有一个能读到全部对话的「旁白」。以下模块承担全部设计：
+
+
+#### 记录与播种（transcript.ts / context.ts / markup.ts）
+
+- `transcript.ts` 是**只追加、永不改写**的对话记录（资产；`session.json` 里的 wire history 只是缓存，读不出来就从 transcript 重新播种），
+- `context.ts` 把历史播种成 `[system, 绑定块, seed 块, 提问]` —— **绑定块必须是 prelude 里一条独立消息、绝不能并进 seed 块**，因为 `buildCompactedHistory` 只丢 `meta.seedContext`，放对位置就等于永不失忆（`__tests__/context.test.ts` 跑真实压缩守着这条），
+- `markup.ts` 解析 `*动作*` / `「台词」` / 裸文本 / `[元指令]`（**解析只影响作者看到的稿面，发给模型的仍是原文**），
+
+#### 读取通道与 system 层（sceneTools.ts / conversationTools.ts）
+
+- `sceneTools.ts` 是旁白读别人 transcript / summary / memory / 记忆区的**唯一**通道——扮演 agent 的 preset 里根本没有这几个工具名，隔离是结构性的；它覆盖当前场**和归档**（场次地址 `<agentId>#<N>`，当前场＝最大归档号 + 1，见 `scene.ts`），而**作者作废的场次（「另起一场」）默认一层都不进**，点名读得到但内容前面挂着作废提示——旁白是会往正文里写字的，把试验场当情节写进第三章是这个口子唯一真实的风险。
+- `conversationTools.ts` 是角色回看**自己**的通道，同样覆盖自己的每一场（废弃的连点名都够不到），作用域仍然是结构性的（`ToolContext.conversation` **没有 agent id 参数**——场号选的是「自己的哪一场」，不是「谁的场」）。
+- **system 层不是只播种一次的**：角色名 / 主角条目正文 / 扮演指令 / 作者身份都住在 `history[0]`，作者随时会改，所以 `refreshSystemPrompt` 就地重写它、`contextSignature` 是「设定已更新」的基线（覆盖这全部输入，不只是绑定块）——往 system 层加一样作者能改的东西，就要同时加进那个签名，否则提示永远不亮（05 §2.16）——
+- `AuthorPersona` 的四档（`lore` / `prompt` / `stranger` / **默认 `none` ＝导演视角**，作者写场面和剧情指令而不是以某个人的身份说话）踩的就是这条：`personaKey` 不区分 `none` 和 `stranger`，切换身份时提示永远不亮。
+
+#### 长期记忆（memory.ts / run.ts）
+
+- `memory.ts` + `memoryTools.ts` 是角色的长期记忆（约定 / 待办 / 事件 / 关系）：它**不是摘要**——摘要会被再次摘要，一条没兑现的约定三轮之后就变成「他们聊了一些计划」，所以记忆只增改不删、恒在 prelude，且注入块**只在四个时刻刷新**（播种 / 压缩之后 / 恢复 / 作者手动），绝不在 `remember` 写入的当下；注入块**只放标题**，正文由 `recall(id)` 按需展开——连正文一起塞时超预算的记录是**整条不列**的，而那意味着角色连那件事发生过都不知道。
+- 每条记忆带 `scene`（记下时是第几场）：转场把轮号归零，所以单给「turn 14」指不到任何东西。
+- `run.ts` 是一次运行的**历史准备**，它的排序本身就是设计：修对配对 → 压缩 →（**压缩了才**）刷新记忆块 → 条目注入 → 记忆区检索 → 提问（永远最后一条，且是本轮 turnStart）——「压缩之后刷新记忆块」不是省钱的优化，压缩刚把 `remember` 的工具结果折叠掉，**那一刻精确地就是正确性边界**。
+
+#### 转场（area.ts / recap.ts）
+
+- `area.ts` + `recap.ts` 是**转场**，而它有**两支**：「接续」＝这一场算数——欠着的约定/待办和关系留在常驻层，其余**移出**常驻层、逐条沉进记忆区（改成标 `void` 留档就会让分拣每次都重新命中它们，条目随转场次数平方级膨胀），前情由角色**第一人称自己写**（第三人称全知会写进它当时不该知道的事）；
+- 「另起一场」＝这一场**作废**——**分拣一步都不跑**，本场记下的记录移出常驻层，归档存成 `transcript-NN.discarded.md`（**编号推进和归档列表必须认同一套正则**，否则下一场会拿到一个已占用的号、覆盖掉那一场的 summary）。
+- 分拣曾经无条件执行，于是试验场里记的事照样沉进记忆区、三场之后被关键字命中说出来；记忆区的格式和知识库完全相同，却**绝不并进 `loreIndex`**——并进去，隔离就从「它不在那里」降级成一个要在六处同时正确的过滤器（含一致性检查，它会把角色的错误认知报成正文矛盾），而记忆区装的正是角色**以为**的事，本就可以和正文冲突；区落在 `areas/<areaId>/` 而不挂在 agent 上，所以删掉角色它还在、能被下一个角色继承。
+
+#### 取材追踪与状态（trace.ts / traceView.ts / roleplayStore.ts）
+
+- `trace.ts` 是**取材事实**的数据一侧——这一轮命中了哪些条目/特征、被什么关键字激活、什么没进去，以及首次发送**之前**的预估（`history` 还是 null 时上下文构成条只画得出工具 schema）。
+- 两条必须记住：**常驻层和本轮检索是两个字段**（`coreDone` 会让常驻条目在报告里显示成「匹配了、贡献 0 字」，合成一栏作者就会以为人设没进上下文），**记忆区永不并进知识库那一栏**（同 `loreIndex` 那条，记忆区装的是角色**以为**的事）；`BoundContent` 因此有两个清单——`resident` 给注入账本（只收真装了正文的），`pieces` 给作者看（**必须**含只写了标题的那些），合并只能二选一：要么账本出错，要么界面漏报。预估的三块字符数走 `context.ts` 的 `blockSizes`，它调的就是真正的块构造函数——理由同 `contextSignature`。
+- `traceView.ts` 是它的取数层（纯函数），界面是 `components/roleplay/TurnTrace.tsx`——**四种来源靠同一根线的四种终止方式分开**（常驻上下出血 / 知识库两端止笔 / 记忆区断成点线 / 引用 2px 赭石）——**3px 双线一次都不用**，那已经归集合所有。
+- 取材条一律读**字**（数据层给的就是 chars），只有上下文构成条读 tk：换算只在构成条发生一次，两处各说各的真实数据比对齐成一个假数好。`hitRows` 刻意**不用** `contributingEntities`——`coreResident` 的条目要以「0 字」出现，滤掉它作者会以为没唤起，然后去改一个工作正常的条目。
+- 状态在 `stores/roleplayStore.ts`（每 agent 一个会话 + 3 个并发的信号量；`contextTrace` 按轮号、只在内存，`preflight` 按 agent、装机后就有），UI 在 `components/roleplay/`。设计与取舍：`docs/feature/roleplay/`
 
 ### `src/lib/translate/`
 
@@ -132,7 +424,27 @@ markdown → .docx（Settings → AI 配置 → 实验室 的 Beta 开关，`fla
 
 ### `src/lib/asr/`
 
-音频转写（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`；两个入口：文件树右键「转写为文字稿…」→ 行下确认条 → `FileTree.handleTranscribe`，以及 L2 工具 `transcribe_audio`（`tool.ts` → `TranscribeProposal` 卡 → `agentStore` 的 apply）——**卡在付费之前**而不是之后，和 `convert_document` 相反，因为转写本身就是计费的那一步；设计稿 02f，实现出入记在 `docs/feature/asr/02-ui-brief.md`）：千问 / DashScope 语音识别，**两条路，由绑定的模型行选**（`asrFormat`，不在两个模型之间自动路由）。异步那条——`client.ts` 拿临时上传凭证 → OSS 表单上传（`file` 字段必须最后）→ `oss://` 提交 → 轮询 `/tasks/{id}` → 取结果 JSON；filetrans 接口**只收公网 URL**，所以上传不是优化是唯一入口。同步那条（`dashscope-sync`，`sync.ts`，2026-09-14）是 compatible-mode `/chat/completions` 一次往返：user 消息只能有一个 `input_audio` part；≤10MB / ≤5 分钟在批准之前按 `formats.ts` 的 `syncRefusal` 拦；结果是一段不带时间的纯文字（`Transcript.timed: false`，渲染不写时间戳和说话人）。理由与实测见 `00-research.md` §1.3 补记。三条不变量写在 `01-execution-plan.md` §1：凭证和提交的 `model` 是**同一个变量**（临时文件与模型名绑定）、`X-DashScope-OssResourceResolve` 头只跟着 `oss://` 走（漏了提交照样 200，错误只在轮询里出现）、付费之前必须有人点头（右键确认卡 / 审批卡，`autoApprove` 永不放行）。`result.ts` 同时认两代模型的响应形状（结果链接在 `output.result` 还是 `output.output`、`sentence_id` 从 0 还是 1）——按形状不按模型 id 分支，因为 id 是作者手打的自由文本；`cache.ts` + `run.ts` 把结果 JSON 本体按「内容哈希 + 模型 + 参数」缓存到 `.ai-writer/tmp/asr/`（链接 24 小时失效，一小时音频 ¥0.8）——模型进键而不是命中后比对，两个模型才各留一份、来回切不重复付费；命中时仍核对 `meta.model`，因为目录名里的模型 id 是清洗过的。批准之前一律走 `readFileHead`（`fs_read_head`，一次往返给回真实大小 + 前 64KB）而不是 `readBinaryFile`，时长由 `duration.ts` 从容器读（MP3 / FLAC / Ogg / MP4 家族，头里不够时经 `fs_read_range` 读有界区间），大小上限也在那时拦——`transcribeFile` 里的那道闸在付费之后。模型行的身份是类型 `asr`（界面「音频 ASR」；2026-09-14 之前是 `asrFormat` 标记，读旧行与旧备份时 `normalizeAsrIdentity` 升级，`asrFormat` 现在只表示走哪种接口，理由见 `00-research.md` §4.1 补记。照 `translateFormat`：`isAsrOnly` 是不变量的名字，`conversationalModels` 无条件排除），绑在 `asr` 子代理档位上（进 `SUBAGENT_KINDS` 不进 `DELEGATE_KINDS`——端点收的是音频 URL，没有对话可委托）。轮询循环和 `image.ts` 的 `dashscopeAsyncImage` 是同一节奏但**没有抽共用**（§0 修正）。设计与实测：`docs/feature/asr/`，wire 事实在 `docs/api/qianwen-compat-plan.md` §1.4
+#### 入口与设计
+- 音频转写（Settings → AI 配置 → 实验室 的 Beta 开关，`flag.ts`；两个入口：文件树右键「转写为文字稿…」→ 行下确认条 → `FileTree.handleTranscribe`，以及 L2 工具 `transcribe_audio`（`tool.ts` → `TranscribeProposal` 卡 → `agentStore` 的 apply）——**卡在付费之前**而不是之后，和 `convert_document` 相反，因为转写本身就是计费的那一步；设计稿 02f，实现出入记在 `docs/feature/asr/02-ui-brief.md`）
+
+#### 双路径总览
+- 千问 / DashScope 语音识别，**两条路，由绑定的模型行选**（`asrFormat`，不在两个模型之间自动路由）
+
+#### 异步与同步转写
+- 异步那条——`client.ts` 拿临时上传凭证 → OSS 表单上传（`file` 字段必须最后）→ `oss://` 提交 → 轮询 `/tasks/{id}` → 取结果 JSON；filetrans 接口**只收公网 URL**，所以上传不是优化是唯一入口
+- 同步那条（`dashscope-sync`，`sync.ts`，2026-09-14）是 compatible-mode `/chat/completions` 一次往返：user 消息只能有一个 `input_audio` part；≤10MB / ≤5 分钟在批准之前按 `formats.ts` 的 `syncRefusal` 拦；结果是一段不带时间的纯文字（`Transcript.timed: false`，渲染不写时间戳和说话人）。理由与实测见 `00-research.md` §1.3 补记
+
+#### 三条不变量
+- 三条不变量写在 `01-execution-plan.md` §1：凭证和提交的 `model` 是**同一个变量**（临时文件与模型名绑定）、`X-DashScope-OssResourceResolve` 头只跟着 `oss://` 走（漏了提交照样 200，错误只在轮询里出现）、付费之前必须有人点头（右键确认卡 / 审批卡，`autoApprove` 永不放行）
+
+#### 结果、缓存与读取
+- `result.ts` 同时认两代模型的响应形状（结果链接在 `output.result` 还是 `output.output`、`sentence_id` 从 0 还是 1）——按形状不按模型 id 分支，因为 id 是作者手打的自由文本
+- `cache.ts` + `run.ts` 把结果 JSON 本体按「内容哈希 + 模型 + 参数」缓存到 `.ai-writer/tmp/asr/`（链接 24 小时失效，一小时音频 ¥0.8）——模型进键而不是命中后比对，两个模型才各留一份、来回切不重复付费；命中时仍核对 `meta.model`，因为目录名里的模型 id 是清洗过的
+- 批准之前一律走 `readFileHead`（`fs_read_head`，一次往返给回真实大小 + 前 64KB）而不是 `readBinaryFile`，时长由 `duration.ts` 从容器读（MP3 / FLAC / Ogg / MP4 家族，头里不够时经 `fs_read_range` 读有界区间），大小上限也在那时拦——`transcribeFile` 里的那道闸在付费之后
+
+#### 身份、关联与文档
+- 模型行的身份是类型 `asr`（界面「音频 ASR」；2026-09-14 之前是 `asrFormat` 标记，读旧行与旧备份时 `normalizeAsrIdentity` 升级，`asrFormat` 现在只表示走哪种接口，理由见 `00-research.md` §4.1 补记。照 `translateFormat`：`isAsrOnly` 是不变量的名字，`conversationalModels` 无条件排除），绑在 `asr` 子代理档位上（进 `SUBAGENT_KINDS` 不进 `DELEGATE_KINDS`——端点收的是音频 URL，没有对话可委托）
+- 轮询循环和 `image.ts` 的 `dashscopeAsyncImage` 是同一节奏但**没有抽共用**（§0 修正）。设计与实测：`docs/feature/asr/`，wire 事实在 `docs/api/qianwen-compat-plan.md` §1.4
 
 ### `src/lib/cli/`
 
@@ -160,27 +472,160 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 
 ### `src/lib/sync/`
 
-知识库同步的客户端一侧（服务端是 `server/`，两者的可行性与线格式在 `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18，UI 稿在 `sync-lore-ui-brief.md`）。`model.ts` 是共同词汇：一个项目可以**绑定**到服务器上一个具名知识库，同步是**单向、整棵树**的——把本地 `.ai-writer/lore/` 推上去，或把远端拉下来，**没有 merge**，作者选方向、另一侧变成它的镜像。也正因如此每次操作都先出一份**方案**：镜像反了就是毁掉工作，而作者和这件事之间唯一的东西，就是被逐条告知将要发生什么、其中哪几步会丢东西（`SyncDecision` 让他关掉任意单步，镜像是默认形状不是紧身衣）。`plan.ts` 是整个功能的安全栏：只比本地和远端，只能说出**它们不同**，说不出**谁动了**——而没有后者，每次覆盖都是抛硬币（用你没动过的旧副本盖掉同事的新条目，和推上你自己的修改，看起来一模一样）。所以方案是三路比对：本地哈希 × 远端哈希 × **上次同步成功时的快照**（`SyncBinding.snapshot`），两侧都动过是 DANGER，只有远端动过而你要推是「拿旧的盖新的」。`run.ts` 执行方案，三条规则：**一、本地任何东西都不会被 unlink**，拉取要替换或删掉的条目是被**移进** `.ai-writer/backups/`（和 `applyLoreImport` 的 `displaceEntity`、agent 的 `delete_lore_entity` 同一个扁平目录——知识库是作者几十小时的工作而应用没有撤销，一个地方可找就是全部的恢复叙事）；**二、拉取先把整棵树快照到项目之外**（单条备份挡的是单条误操作，挡不住「我拉反了方向」；放应用数据目录而不是 `.ai-writer/backups/`，因为被覆盖的正是项目文件夹，存在里面的安全网会跟着这个文件夹一起被别的工具还原 / 移动 / 同步掉）；**三、每一次写都带前置条件，即使作者已经点过警告**——那是两种不同的保证，作者接受的是方案**给他看的**东西，`If-Match` 挡的是方案画出来之后、这次写落地之前服务器上变掉的东西。一步失败不中止整轮：剩下的条目仍然值得同步，快照只为落地了的那些前进，所以重试会正确地重新规划其余部分。`client.ts` 走 `lib/http` 的 fetch（Tauri 的那个，请求从 Rust 发出），于是局域网上自建的服务器不用为 CORS 头操心；每个写操作都发 `If-Match` / `If-None-Match`，违反前置条件变成 `SyncConflictError`，并带上服务器上真正存着的哈希好让调用方重新规划。`config.ts` 与 `store.ts` 是**装机级和项目级的分界**：服务器地址是普通偏好、令牌进 OS 钥匙串（和 AI 供应商密钥同一套 `secret_*`），因为地址和令牌描述的是**这台机器**而不是这个项目（几个项目共用一台服务器，存成项目级意味着逐个重输，还会把 bearer 令牌放进一个作者可能转手给别人的文件夹）；而「绑定了哪个知识库」和上次同步的快照在项目的 `.ai-writer/sync.json` 里，照 `lib/profile/store.ts` 的样子写——**永不抛**，它在项目打开路径上，一个缺失 / 截断 / 被手改成乱码的文件必须降级成「未绑定」而不是拦住作者打开项目（快照坏了再降一级也仍然安全：没有快照，规划器把每处差异都报成两侧冲突，吵但绝不静默破坏）。`local.ts` 是本地那半的三件事，都过 Rust：哈希在 `src-tauri/src/lorehash.rs`（摘要是和服务器共享的线格式，而且条目的图集不该为了算哈希从 webview 读一遍），打包解包在 `src-tauri/src/transfer.rs`（压缩包代码和 zip-slip 防护本来就在那边，后者在**下载**路径上最要紧）。`status.ts` 回答「本地和服务器谁比较新」，读的是和方案同样的三张哈希图、**从不看时间戳**：时间戳只能说某一侧**什么时候**被写过，快照说的是**自作者上次认可以来哪一侧动了**，后者才是「该推还是该拉」真正在问的问题；而且它能活过一切会重置 mtime 的事（还原备份、复制项目文件夹），那恰好是作者最想要一个可信答案的时刻。纯的、只供显示，不喂方案也不喂执行器。
+知识库同步的客户端一侧（服务端是 `server/`，两者的可行性与线格式在 `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18，UI 稿在 `sync-lore-ui-brief.md`）。
+
+#### 共同词汇与同步方向（model.ts）
+- `model.ts` 是共同词汇：一个项目可以**绑定**到服务器上一个具名知识库，同步是**单向、整棵树**的——把本地 `.ai-writer/lore/` 推上去，或把远端拉下来，**没有 merge**，作者选方向、另一侧变成它的镜像
+- 也正因如此每次操作都先出一份**方案**：镜像反了就是毁掉工作，而作者和这件事之间唯一的东西，就是被逐条告知将要发生什么、其中哪几步会丢东西（`SyncDecision` 让他关掉任意单步，镜像是默认形状不是紧身衣）
+
+#### 方案安全栏（plan.ts）
+- `plan.ts` 是整个功能的安全栏：只比本地和远端，只能说出**它们不同**，说不出**谁动了**——而没有后者，每次覆盖都是抛硬币（用你没动过的旧副本盖掉同事的新条目，和推上你自己的修改，看起来一模一样）
+- 所以方案是三路比对：本地哈希 × 远端哈希 × **上次同步成功时的快照**（`SyncBinding.snapshot`），两侧都动过是 DANGER，只有远端动过而你要推是「拿旧的盖新的」
+
+#### 执行三原则（run.ts）
+- `run.ts` 执行方案，三条规则：
+  - **一、本地任何东西都不会被 unlink**，拉取要替换或删掉的条目是被**移进** `.ai-writer/backups/`（和 `applyLoreImport` 的 `displaceEntity`、agent 的 `delete_lore_entity` 同一个扁平目录——知识库是作者几十小时的工作而应用没有撤销，一个地方可找就是全部的恢复叙事）
+  - **二、拉取先把整棵树快照到项目之外**（单条备份挡的是单条误操作，挡不住「我拉反了方向」；放应用数据目录而不是 `.ai-writer/backups/`，因为被覆盖的正是项目文件夹，存在里面的安全网会跟着这个文件夹一起被别的工具还原 / 移动 / 同步掉）
+  - **三、每一次写都带前置条件，即使作者已经点过警告**——那是两种不同的保证，作者接受的是方案**给他看的**东西，`If-Match` 挡的是方案画出来之后、这次写落地之前服务器上变掉的东西
+- 一步失败不中止整轮：剩下的条目仍然值得同步，快照只为落地了的那些前进，所以重试会正确地重新规划其余部分
+
+#### 请求层与前置条件（client.ts）
+- `client.ts` 走 `lib/http` 的 fetch（Tauri 的那个，请求从 Rust 发出），于是局域网上自建的服务器不用为 CORS 头操心
+- 每个写操作都发 `If-Match` / `If-None-Match`，违反前置条件变成 `SyncConflictError`，并带上服务器上真正存着的哈希好让调用方重新规划
+
+#### 装机级与项目级配置（config.ts / store.ts）
+- `config.ts` 与 `store.ts` 是**装机级和项目级的分界**：服务器地址是普通偏好、令牌进 OS 钥匙串（和 AI 供应商密钥同一套 `secret_*`），因为地址和令牌描述的是**这台机器**而不是这个项目（几个项目共用一台服务器，存成项目级意味着逐个重输，还会把 bearer 令牌放进一个作者可能转手给别人的文件夹）
+- 而「绑定了哪个知识库」和上次同步的快照在项目的 `.ai-writer/sync.json` 里，照 `lib/profile/store.ts` 的样子写——**永不抛**，它在项目打开路径上，一个缺失 / 截断 / 被手改成乱码的文件必须降级成「未绑定」而不是拦住作者打开项目（快照坏了再降一级也仍然安全：没有快照，规划器把每处差异都报成两侧冲突，吵但绝不静默破坏）
+
+#### 本地哈希、打包与新旧判断（local.ts / status.ts）
+- `local.ts` 是本地那半的三件事，都过 Rust：哈希在 `src-tauri/src/lorehash.rs`（摘要是和服务器共享的线格式，而且条目的图集不该为了算哈希从 webview 读一遍），打包解包在 `src-tauri/src/transfer.rs`（压缩包代码和 zip-slip 防护本来就在那边，后者在**下载**路径上最要紧）
+- `status.ts` 回答「本地和服务器谁比较新」，读的是和方案同样的三张哈希图、**从不看时间戳**：时间戳只能说某一侧**什么时候**被写过，快照说的是**自作者上次认可以来哪一侧动了**，后者才是「该推还是该拉」真正在问的问题；而且它能活过一切会重置 mtime 的事（还原备份、复制项目文件夹），那恰好是作者最想要一个可信答案的时刻。纯的、只供显示，不喂方案也不喂执行器。
 
 ### `src/lib/fs/`
 
-Tauri file I/O wrappers (`fileio.ts`), backlinks (`links.ts` 是「哪些文档链接到这个文件」——删除卡上**唯一一件删完就问不出来的事**：正文在备份里、大小在日志里，而文件一没，指向它的链接就只是断了，没人记得它们曾经是通的。只认真链接（markdown 的 `](path)` 与 `[[wiki]]`），不认光提到名字：一份叫 `序.md` 的稿子会让「被 12 个文档引用」变成没人再读第二遍的一行）, markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts` — file-kind classification by extension, base64 data URLs, and `projectFilesFromTree`, the **one** source of the `@` picker's file candidates; it reads `projectStore.fileTree` rather than scanning the disk again, so a file added after the project opened is pickable as soon as the tree refreshes — see `docs/reference/architecture.md` → `@` 引用的候选文件), the model-bound video reader (`video.ts` — size checked with `readFileHead` **before** a byte is read, the 15MB / 2 s limits DashScope measured, and a pure MP4/MOV box parser for duration and frame size; the gate, part builder and ≈token estimate are `lib/ai/videoInput.ts` — see `docs/feature/video-input.md`), presentation reading (`pptx.ts` — the two IPC hops onto `src-tauri/src/pptx.rs`; here rather than in `lib/import/` because a .pptx has **two** readers, the importer and the agent's paged `read_slides`), export (`export.ts`), whole-project backup/restore (`projectBackup.ts` — wider scope than the lore bundle on purpose; see `docs/reference/architecture.md` → Export / Import), and the sidebar's two pure decision layers: `moveCopy.ts` (drop rejection, copy numbering) and `selection.ts` (visible-row flattening, ⇧-ranges, dropping nested/dead paths). `rowMeta.ts` is the third: what one row **is** (设计稿 01b 的七种行) —— `rowKind` 只看名字与父级（`assets/<组>` 由**位置**而不由名字决定），`pictureFolders` 再用一次自底向上的走查标出只装图片的目录（**内容优先、名字兜底**：子树里有文件就要求**全部**是图片——「大部分」要数数，而这个模块不数数；一个文件都没有才轮到名单，因为一个叫 `images` 却装章节的目录错标比漏标更糟），`resolveRowKind` 把两半合起来。图片目录**只有外观**：不进失配判定、不进「重新关联到…」，否则作者自建的 `images/` 会被改名并改写一份无关文档的正文（`docs/feature/file-tree-picture-folder-brief.md`）. The workspace is the whole project directory, so the tree is a file manager — multi-select, batch move/copy/delete, and a root that is reachable only through the tree container (it has no row of its own). See `docs/reference/architecture.md` → Organising files
+#### 文件工具与反向链接
+
+- Tauri file I/O wrappers (`fileio.ts`)
+- backlinks (`links.ts` 是「哪些文档链接到这个文件」——删除卡上**唯一一件删完就问不出来的事**：正文在备份里、大小在日志里，而文件一没，指向它的链接就只是断了，没人记得它们曾经是通的。只认真链接（markdown 的 `](path)` 与 `[[wiki]]`），不认光提到名字：一份叫 `序.md` 的稿子会让「被 12 个文档引用」变成没人再读第二遍的一行）
+- markdown render/frontmatter (`markdown.ts`)
+- image/text file utils (`images.ts` — file-kind classification by extension, base64 data URLs, and `projectFilesFromTree`, the **one** source of the `@` picker's file candidates; it reads `projectStore.fileTree` rather than scanning the disk again, so a file added after the project opened is pickable as soon as the tree refreshes — see `docs/reference/architecture.md` → `@` 引用的候选文件)
+
+#### 媒体与文档读取
+
+- the model-bound video reader (`video.ts` — size checked with `readFileHead` **before** a byte is read, the 15MB / 2 s limits DashScope measured, and a pure MP4/MOV box parser for duration and frame size; the gate, part builder and ≈token estimate are `lib/ai/videoInput.ts` — see `docs/feature/video-input.md`)
+- presentation reading (`pptx.ts` — the two IPC hops onto `src-tauri/src/pptx.rs`; here rather than in `lib/import/` because a .pptx has **two** readers, the importer and the agent's paged `read_slides`)
+- export (`export.ts`)
+- whole-project backup/restore (`projectBackup.ts` — wider scope than the lore bundle on purpose; see `docs/reference/architecture.md` → Export / Import)
+
+#### 侧栏与行判定
+
+- and the sidebar's two pure decision layers: `moveCopy.ts` (drop rejection, copy numbering) and `selection.ts` (visible-row flattening, ⇧-ranges, dropping nested/dead paths).
+- `rowMeta.ts` is the third: what one row **is** (设计稿 01b 的七种行) —— `rowKind` 只看名字与父级（`assets/<组>` 由**位置**而不由名字决定），`pictureFolders` 再用一次自底向上的走查标出只装图片的目录（**内容优先、名字兜底**：子树里有文件就要求**全部**是图片——「大部分」要数数，而这个模块不数数；一个文件都没有才轮到名单，因为一个叫 `images` 却装章节的目录错标比漏标更糟），`resolveRowKind` 把两半合起来。图片目录**只有外观**：不进失配判定、不进「重新关联到…」，否则作者自建的 `images/` 会被改名并改写一份无关文档的正文（`docs/feature/file-tree-picture-folder-brief.md`）.
+
+#### 文件树整体定位
+
+- The workspace is the whole project directory, so the tree is a file manager — multi-select, batch move/copy/delete, and a root that is reachable only through the tree container (it has no row of its own). See `docs/reference/architecture.md` → Organising files
 
 ### `src/lib/theme/`
 
-the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **only** writer of `data-theme` / `data-scheme` (the first is a cascade key nobody reads, the second the polarity everything reads). Appearance theme **files** (`appDataDir/themes/*.css`, tokens-only CSS with `--theme-name / --theme-scheme` metadata): `contract.ts` parses `tokens.css` into scale / core / derived and `contractData.ts` is that parse frozen by `scripts/gen-theme-contract.ts` (vitest stubs `.css` imports, so the runtime cannot read the file; the contract test fails when the constant drifts), `validate.ts` walks the browser's own `CSSRuleList` and drops what a ui theme may not do — with a reason per rule, never the whole file — `registry.ts` merges built-ins with the folder (missing / unusable / reserved-id cards), `install.ts` keeps the runtime registry, installs every usable file into one `<style>` in `tokens.user` and resolves which id actually applies, `export.ts` generates the exported document's palette from it (light on `:root`, dark under `prefers-color-scheme`), `exportFile.ts` writes 「把当前主题导出为文件」. **Typography theme files** (`--theme-kind: markdown`, in the same folder or a project's `.ai-writer/themes/`, project overriding by id) go through the same validator with a different fence — every selector starts at `.md-body`, `@font-face` / `@keyframes` allowed, `url()` relative or `data:` only — and are installed as a second `<style>` after the generator's with `data-md-theme` naming the built-in they extend; `assets.ts` inlines their fonts and textures as `data:` (the app retired the `ai-writer-asset:` protocol for its own pictures, so themes never use it), `sample.ts` builds the settings samples as sandboxed `<iframe srcdoc>` documents carrying the export's exact stylesheet. Boot reads only the selected files (`main.tsx`); Settings → 通用 → 外观 (`components/settings/panes/AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does). A refused rule carries a `ThemeReasonCode` + params, never a sentence: the locale files hold the sentences (`systemSettings.general.reason.*`), so add a code there in both languages when you add a rule. Built-in markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF. **Shipped example files** live in `themes/` at the repo root (a `.css` an author downloads into either folder, plus `themes/README.md` — the knob table and the fence in author's words); `__tests__/themeExamples.test.ts` walks each file's selectors and `url()`s through `isMdSelector` / `isAllowedUrl` / `readThemeMeta`, so an example that the validator would trim cannot ship. See `docs/reference/design-system.md` → Theming / Markdown 排版主题
+the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **only** writer of `data-theme` / `data-scheme` (the first is a cascade key nobody reads, the second the polarity everything reads).
+
+#### 外观主题文件（Appearance theme files）
+- Appearance theme **files** (`appDataDir/themes/*.css`, tokens-only CSS with `--theme-name / --theme-scheme` metadata):
+  - `contract.ts` parses `tokens.css` into scale / core / derived and `contractData.ts` is that parse frozen by `scripts/gen-theme-contract.ts` (vitest stubs `.css` imports, so the runtime cannot read the file; the contract test fails when the constant drifts)
+  - `validate.ts` walks the browser's own `CSSRuleList` and drops what a ui theme may not do — with a reason per rule, never the whole file —
+  - `registry.ts` merges built-ins with the folder (missing / unusable / reserved-id cards)
+  - `install.ts` keeps the runtime registry, installs every usable file into one `<style>` in `tokens.user` and resolves which id actually applies
+  - `export.ts` generates the exported document's palette from it (light on `:root`, dark under `prefers-color-scheme`)
+  - `exportFile.ts` writes 「把当前主题导出为文件」.
+
+#### 排版主题文件（Typography theme files）
+- **Typography theme files** (`--theme-kind: markdown`, in the same folder or a project's `.ai-writer/themes/`, project overriding by id) go through the same validator with a different fence — every selector starts at `.md-body`, `@font-face` / `@keyframes` allowed, `url()` relative or `data:` only — and are installed as a second `<style>` after the generator's with `data-md-theme` naming the built-in they extend
+  - `assets.ts` inlines their fonts and textures as `data:` (the app retired the `ai-writer-asset:` protocol for its own pictures, so themes never use it)
+  - `sample.ts` builds the settings samples as sandboxed `<iframe srcdoc>` documents carrying the export's exact stylesheet.
+
+#### 启动加载与设置面板
+- Boot reads only the selected files (`main.tsx`)
+- Settings → 通用 → 外观 (`components/settings/panes/AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does).
+
+#### 拒绝理由与内置排版主题
+- A refused rule carries a `ThemeReasonCode` + params, never a sentence: the locale files hold the sentences (`systemSettings.general.reason.*`), so add a code there in both languages when you add a rule.
+- Built-in markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF.
+
+#### 示例文件
+- **Shipped example files** live in `themes/` at the repo root (a `.css` an author downloads into either folder, plus `themes/README.md` — the knob table and the fence in author's words); `__tests__/themeExamples.test.ts` walks each file's selectors and `url()`s through `isMdSelector` / `isAllowedUrl` / `readThemeMeta`, so an example that the validator would trim cannot ship. See `docs/reference/design-system.md` → Theming / Markdown 排版主题
 
 ### `src/lib/image/`
 
-a document's illustrations: where they land and what links them (`assets.ts` — `assets/<文档名>/` beside the document, **relative** links, `saveDocumentAsset` for a generated picture / `importDocumentAsset` for one the author picked off disk, plus the move/delete follow-up that keeps links alive, and `relinkAssetGroup` — the repair behind the file tree's ⚠ on a group no document claims, which renames the folder **and** rewrites that document's links, because doing only the first is the step that actually breaks pictures that still resolved), and the approval→generate→file step (`illustrate.ts`). Also the **model-bound image reader** (`normalize.ts` → `imageForModel`, planned by the pure `downscalePlan.ts` and short-circuited by the header-only `imageSize.ts`): a picture past the author's long-edge ceiling (`app:imageMaxLongEdge`, default 4096, 设置 → AI 配置 → 上下文与记忆) or the 12MB cap is **re-encoded smaller instead of refused**. Which of the three readers a call site wants is decided by where the bytes end up, not by what the file is — `imageForModel` for the wire, `imageToDataUrl` for rendering, `readImageBytes` for writing to disk — and getting that wrong is silent in both directions (a downscaled preview, or a permanently re-encoded avatar). See `docs/feature/image-normalize-plan.md`. Generation itself runs through the `imagegen` subagent (bound model, `generate_image`/`edit_image` tools — not a delegate conversation), configured in `SubAgentsPane.tsx`; design: `docs/feature/image-generation-plan.md`. Lore entities use `lib/lore/gallery.ts` instead — they own a folder, a document is one file
+a document's illustrations: where they land and what links them
+
+#### 文档插图落点（assets.ts）
+- (`assets.ts` — `assets/<文档名>/` beside the document, **relative** links, `saveDocumentAsset` for a generated picture / `importDocumentAsset` for one the author picked off disk, plus the move/delete follow-up that keeps links alive, and `relinkAssetGroup` — the repair behind the file tree's ⚠ on a group no document claims, which renames the folder **and** rewrites that document's links, because doing only the first is the step that actually breaks pictures that still resolved), and the approval→generate→file step (`illustrate.ts`).
+
+#### 模型绑定的图片读取器
+- Also the **model-bound image reader** (`normalize.ts` → `imageForModel`, planned by the pure `downscalePlan.ts` and short-circuited by the header-only `imageSize.ts`): a picture past the author's long-edge ceiling (`app:imageMaxLongEdge`, default 4096, 设置 → AI 配置 → 上下文与记忆) or the 12MB cap is **re-encoded smaller instead of refused**.
+- Which of the three readers a call site wants is decided by where the bytes end up, not by what the file is — `imageForModel` for the wire, `imageToDataUrl` for rendering, `readImageBytes` for writing to disk — and getting that wrong is silent in both directions (a downscaled preview, or a permanently re-encoded avatar). See `docs/feature/image-normalize-plan.md`.
+
+#### 图片生成与图集
+- Generation itself runs through the `imagegen` subagent (bound model, `generate_image`/`edit_image` tools — not a delegate conversation), configured in `SubAgentsPane.tsx`; design: `docs/feature/image-generation-plan.md`.
+- Lore entities use `lib/lore/gallery.ts` instead — they own a folder, a document is one file
 
 ### `src/lib/import/`
 
-document import into the workspace: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges), PDF text extraction via lazy pdfjs (`pdf.ts`), pptx via the Rust `pptx_to_markdown` command (`lib/fs/pptx.ts` → `src-tauri/src/pptx.rs`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`). **Two entry points**, one write step: the import dialog, and `convertProjectFile` behind the file tree's 右键 →「转换文档」 for a document already in the workspace (dragged in, pulled from git, or imported before this app could convert it) — both end in the same `writeConversion`, and neither ever touches the source file, because conversion is lossy in ways the author cannot undo. The converters have a **third reader that writes nothing to the project**: the agent's `read_document` tool (`lib/agent/documentTools.ts`) runs the same `convertToMarkdown` and pages the result like `read_file`, but the markdown lands in a content-hash-keyed cache under `.ai-writer/tmp/convert/` (`cache.ts` pure judgements — key, sidecar, scan detection, sweep plan; `cachedConvert.ts` the one disk-touching module) — invisible to `list_files` / `read_file` / `search_text` / backups, reachable by `read_image` for the extracted pictures. `read_file` / `read_slides` / `read_document` refuse each other's formats by name in the same round rather than one of them guessing from the extension. Its write half is the L2 `convert_document` tool (`lib/agent/convertTools.ts` → `ConvertProposal` card): the conversion runs at proposal time through that same cache, and approval **copies the cached entry out** beside the source (`lib/import/materialize.ts`, relinking pictures to `assets/<文档名>/`) rather than converting again, so what the author approved is what lands; see `docs/feature/agent/document-read-plan.md` §10. Two dispositions, decided by extension (`importMode`; `convertExtOf` when the caller needs *which* format): docx/xlsx/pdf/pptx **convert to markdown** because **no model API accepts those binaries** — they are zip archives; converting is not a shortcut, it is the only option. PDF, docx and pptx conversions also extract embedded **raster** images (vector drawings are a format limit, like tables degrading to text): converters return `{markdown, assets}` and stay pure — the import loop is what writes `assets/<文档名>/` and the body keeps relative links; the pure op-walking + keep/drop rules (dedupe, cross-page decoration, tiny images) live in `pdfImages.ts`, pptx pulls its `ppt/media/` parts Rust-side (the agent's paged `read_slides` deliberately never carries the bytes), and the decisions in `docs/feature/import-images-plan.md`. Legacy .doc/.xls/.ppt stay out on purpose — no converter here reads them faithfully, and .ppt is an OLE compound binary the zip reader cannot open at all. txt/md/html and images are **copied in as-is** (same name, same extension; only a non-UTF-8 text encoding is normalised) — the app already opens all of them, so rewriting them would only destroy information. The copy list is `lib/fs/images`'s own kinds, not a second list here
+#### 转换器一览
+
+document import into the workspace:
+
+- docx via mammoth+turndown (`docx.ts`/`markdown.ts`)
+- xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges)
+- PDF text extraction via lazy pdfjs (`pdf.ts`)
+- pptx via the Rust `pptx_to_markdown` command (`lib/fs/pptx.ts` → `src-tauri/src/pptx.rs`)
+- GBK-aware text decode (`text.ts`)
+- dialog orchestration + naming (`index.ts`).
+
+#### 入口与只读缓存（导入对话框 / 转换文档 / read_document）
+
+- **Two entry points**, one write step: the import dialog, and `convertProjectFile` behind the file tree's 右键 →「转换文档」 for a document already in the workspace (dragged in, pulled from git, or imported before this app could convert it) — both end in the same `writeConversion`, and neither ever touches the source file, because conversion is lossy in ways the author cannot undo.
+- The converters have a **third reader that writes nothing to the project**: the agent's `read_document` tool (`lib/agent/documentTools.ts`) runs the same `convertToMarkdown` and pages the result like `read_file`, but the markdown lands in a content-hash-keyed cache under `.ai-writer/tmp/convert/` (`cache.ts` pure judgements — key, sidecar, scan detection, sweep plan; `cachedConvert.ts` the one disk-touching module) — invisible to `list_files` / `read_file` / `search_text` / backups, reachable by `read_image` for the extracted pictures.
+- `read_file` / `read_slides` / `read_document` refuse each other's formats by name in the same round rather than one of them guessing from the extension.
+
+#### 写入与落盘（convert_document）
+
+- Its write half is the L2 `convert_document` tool (`lib/agent/convertTools.ts` → `ConvertProposal` card): the conversion runs at proposal time through that same cache, and approval **copies the cached entry out** beside the source (`lib/import/materialize.ts`, relinking pictures to `assets/<文档名>/`) rather than converting again, so what the author approved is what lands; see `docs/feature/agent/document-read-plan.md` §10.
+
+#### 转换策略与图片抽取
+
+- Two dispositions, decided by extension (`importMode`; `convertExtOf` when the caller needs *which* format): docx/xlsx/pdf/pptx **convert to markdown** because **no model API accepts those binaries** — they are zip archives; converting is not a shortcut, it is the only option.
+- PDF, docx and pptx conversions also extract embedded **raster** images (vector drawings are a format limit, like tables degrading to text): converters return `{markdown, assets}` and stay pure — the import loop is what writes `assets/<文档名>/` and the body keeps relative links; the pure op-walking + keep/drop rules (dedupe, cross-page decoration, tiny images) live in `pdfImages.ts`, pptx pulls its `ppt/media/` parts Rust-side (the agent's paged `read_slides` deliberately never carries the bytes), and the decisions in `docs/feature/import-images-plan.md`.
+
+#### 排除与直通
+
+- Legacy .doc/.xls/.ppt stay out on purpose — no converter here reads them faithfully, and .ppt is an OLE compound binary the zip reader cannot open at all.
+- txt/md/html and images are **copied in as-is** (same name, same extension; only a non-UTF-8 text encoding is normalised) — the app already opens all of them, so rewriting them would only destroy information. The copy list is `lib/fs/images`'s own kinds, not a second list here
 
 ### `src/lib/` 根模块
 
-`project.ts`, `keyStore.ts`, `instance.ts` (multi-instance / 多开 — the app runs as several processes, one workspace each, VS Code-style: the advisory `.ai-writer/window.lock` plus the loopback focus channel that brings the *existing* window forward when a folder is opened twice (dialog only as fallback), the CLI workspace argument, and spawning a sibling instance for the 新窗口 buttons; paired with `src-tauri/src/instance.rs` and the prefs focus refresh + merged recents write. Separate processes are also why macOS's 「Window」 menu cannot list the siblings on its own — `src-tauri/src/windowmenu.rs` builds that list from a per-pid registry and switches via the same focus channel, and `useWindowTitle` is what gives each window a name to show. Both — see `docs/reference/architecture.md` → Multi-instance), `prefs.ts` (**every** app preference — theme, language, panel widths, model selections; backed by `config.db`, read synchronously from an in-memory cache that `main.tsx` hydrates *before* importing anything that reads one. Never add a `localStorage` call: add a key to `PREF_KEYS` instead — see `docs/reference/architecture.md` → Preferences), `appReset.ts` (重置应用配置 —— 清空 `config.db` 的配置表、全部偏好和钥匙串里的密钥，**钥匙串先于数据库**，因为 `providers` 那几行是「钥匙串里有哪些账户」的唯一记录；文档 / 知识库 / 用量一律不碰。见 `docs/reference/architecture.md` → 重置应用配置), `sqlTx.ts` (**the** way to run several writes as one transaction — the SQL plugin is a connection *pool*, so a hand-written `BEGIN`/`COMMIT` pair is not one transaction and deadlocks the pool; see `docs/reference/architecture.md` → Transactions), `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知), `http.ts`, `paths.ts`, `platform.ts`, `webviewCaps.ts` (渲染引擎的能力底线 — probed by **feature**, never by OS or UA version: the floor the build targets, reported once per missing set under the TitleBar and always in Settings → 关于. Fill where the dependency offers a fill — pdfjs loads its `legacy/build` for exactly this — and probe only what nobody polyfills for us; see `docs/reference/architecture.md` → 渲染引擎的能力底线)
+#### 多开与基础模块
+- `project.ts`
+- `keyStore.ts`
+- `instance.ts` (multi-instance / 多开 — the app runs as several processes, one workspace each, VS Code-style: the advisory `.ai-writer/window.lock` plus the loopback focus channel that brings the *existing* window forward when a folder is opened twice (dialog only as fallback), the CLI workspace argument, and spawning a sibling instance for the 新窗口 buttons
+  - paired with `src-tauri/src/instance.rs` and the prefs focus refresh + merged recents write.
+  - Separate processes are also why macOS's 「Window」 menu cannot list the siblings on its own — `src-tauri/src/windowmenu.rs` builds that list from a per-pid registry and switches via the same focus channel, and `useWindowTitle` is what gives each window a name to show.
+  - Both — see `docs/reference/architecture.md` → Multi-instance)
+
+#### 偏好与重置
+- `prefs.ts` (**every** app preference — theme, language, panel widths, model selections; backed by `config.db`, read synchronously from an in-memory cache that `main.tsx` hydrates *before* importing anything that reads one. Never add a `localStorage` call: add a key to `PREF_KEYS` instead — see `docs/reference/architecture.md` → Preferences)
+- `appReset.ts` (重置应用配置 —— 清空 `config.db` 的配置表、全部偏好和钥匙串里的密钥，**钥匙串先于数据库**，因为 `providers` 那几行是「钥匙串里有哪些账户」的唯一记录；文档 / 知识库 / 用量一律不碰。见 `docs/reference/architecture.md` → 重置应用配置)
+
+#### 事务与通知
+- `sqlTx.ts` (**the** way to run several writes as one transaction — the SQL plugin is a connection *pool*, so a hand-written `BEGIN`/`COMMIT` pair is not one transaction and deadlocks the pool; see `docs/reference/architecture.md` → Transactions)
+- `notify.ts` (系统通知 — the OS ping for "waiting for your approval" / "run finished" / "run failed", each its own switch, off by default, silent while the window has focus; the only thing it must never carry is the model's or the document's text, see `docs/reference/architecture.md` → 系统通知)
+
+#### 平台与能力探测
+- `http.ts`
+- `paths.ts`
+- `platform.ts`
+- `webviewCaps.ts` (渲染引擎的能力底线 — probed by **feature**, never by OS or UA version: the floor the build targets, reported once per missing set under the TitleBar and always in Settings → 关于. Fill where the dependency offers a fill — pdfjs loads its `legacy/build` for exactly this — and probe only what nobody polyfills for us; see `docs/reference/architecture.md` → 渲染引擎的能力底线)
 
 ## `src/stores/`
 
@@ -213,8 +658,68 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
 
 ## `src-tauri/`
 
-Rust 侧。`lib.rs` 是装配（插件、命令注册、启动时登记的根），`main.rs` 只有那句不许删的 Windows 控制台注解。**一条贯穿的分工**：凡是 zip + XML 的读写都在这边（`zip` 和 `quick-xml` 已经是直接依赖，前端再引一个是白加），凡是 markdown 方言都在 TS 那边。`commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。`scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。`protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme，从同一个 `FsScope` 后面把项目文件喂给 webview。`secrets.rs` 是 API 密钥的 OS 凭据管理器后端（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），取代了早先会在某些 macOS 上死锁的 stronghold 和中途那版明文 SQLite；IPC 面到处一样（按 id 存 / 取 / 删一条），存储形状不一样——macOS 把**所有**密钥折进单个钥匙串项，其余平台一个 id 一条凭据。`sqltx.rs` 是「一个事务跑在一条连接上」的那个命令：`tauri-plugin-sql` 交给前端的是**连接池**，分开发的 `BEGIN` / `COMMIT` 落在不同连接上，根本不构成一个事务（见 `lib/sqlTx.ts` 与 `docs/reference/architecture.md` → Transactions）。`transfer.rs` 是导入导出（知识库 zip 包、配置备份的 JSON），对话框全在 Rust 侧——照 `scope.rs` 立的规矩，webview 从不提供任意目标路径，只接收用户在原生对话框里亲手点的路径；zip-slip 防护也在这里。`lorehash.rs` 是条目的内容哈希：一个条目是一个**目录**（`index.md`、特征文件、`images.md`、头像、图集），同步需要一个「任何一样变了它就变、别的时候不变」的值，那也是服务器存的身份和客户端三路比对跑的东西。`instance.rs` 是多开协调（劝告式的 `.ai-writer/window.lock` + 回环 focus 通道），`windowmenu.rs` 是 macOS 的「窗口」菜单——AppKit 只会列**本进程**的窗口，而这里每个窗口都是独立进程，所以那份列表从 `instance.rs` 的注册表渲染、切换走同一条 focus 通道。`preview.rs` 是独立的 HTML 预览窗（`docs/feature/html-artifact-plan.md` 三期）：应用内预览是编辑器里的沙箱 iframe，适合迭代、不适合按真实视口判断一张宣传页，所以这一份给文档自己一个 webview，用自定义 scheme 直接从盘上喂项目文件，相对链接因此照常工作。`print.rs` 是原生打印——`window.print()` 在 macOS 的 Tauri 里是**静默空操作**（WebKit 把打印请求转给宿主的 `WKUIDelegate`，而 wry 的 delegate 只实现了四个方法、不含打印，Tauri 也没加自己的），什么都不抛，所以导出菜单看起来是死的。三个 Office 读写器各有自己的理由：`xlsx.rs`（calamine 读的是工作簿的**语义**——缓存的公式结果、真正的日期而不是序列号、合并区域，而可维护的 JS 选项要么做不到要么不可分发）、`xlsx_write.rs`（`rust_xlsxwriter` 本来就在树里给那边的往返测试造夹具，写的一半只多一次从 dev-dependency 的升格）、`pptx.rs`（一份 .pptx 的字节对模型毫无意义，而且它**按幻灯片区间**读——这是 `read_slides` 的那一半）、`docx.rs`（只读**排版参数**不读正文：格式便宜一个量级，正文保真要面对修订、域、内容控件、编号继承，所以导入端干脆放弃保真转 markdown）。`cmd.rs` 是 agent 的 `run_command` 的 Rust 一半，**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有）。测试内联在 `commands.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` 里。
+Rust 侧。
+
+#### 装配与分工总则
+
+- `lib.rs` 是装配（插件、命令注册、启动时登记的根）
+- `main.rs` 只有那句不许删的 Windows 控制台注解。
+- **一条贯穿的分工**：凡是 zip + XML 的读写都在这边（`zip` 和 `quick-xml` 已经是直接依赖，前端再引一个是白加），凡是 markdown 方言都在 TS 那边。
+
+#### 命令与路径安全
+
+- `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。
+- `scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。
+- `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme，从同一个 `FsScope` 后面把项目文件喂给 webview。
+
+#### 密钥、事务与传输
+
+- `secrets.rs` 是 API 密钥的 OS 凭据管理器后端（Windows 凭据管理器 / macOS 钥匙串 / Linux Secret Service），取代了早先会在某些 macOS 上死锁的 stronghold 和中途那版明文 SQLite；IPC 面到处一样（按 id 存 / 取 / 删一条），存储形状不一样——macOS 把**所有**密钥折进单个钥匙串项，其余平台一个 id 一条凭据。
+- `sqltx.rs` 是「一个事务跑在一条连接上」的那个命令：`tauri-plugin-sql` 交给前端的是**连接池**，分开发的 `BEGIN` / `COMMIT` 落在不同连接上，根本不构成一个事务（见 `lib/sqlTx.ts` 与 `docs/reference/architecture.md` → Transactions）。
+- `transfer.rs` 是导入导出（知识库 zip 包、配置备份的 JSON），对话框全在 Rust 侧——照 `scope.rs` 立的规矩，webview 从不提供任意目标路径，只接收用户在原生对话框里亲手点的路径；zip-slip 防护也在这里。
+- `lorehash.rs` 是条目的内容哈希：一个条目是一个**目录**（`index.md`、特征文件、`images.md`、头像、图集），同步需要一个「任何一样变了它就变、别的时候不变」的值，那也是服务器存的身份和客户端三路比对跑的东西。
+
+#### 多开、窗口与打印
+
+- `instance.rs` 是多开协调（劝告式的 `.ai-writer/window.lock` + 回环 focus 通道）
+- `windowmenu.rs` 是 macOS 的「窗口」菜单——AppKit 只会列**本进程**的窗口，而这里每个窗口都是独立进程，所以那份列表从 `instance.rs` 的注册表渲染、切换走同一条 focus 通道。
+- `preview.rs` 是独立的 HTML 预览窗（`docs/feature/html-artifact-plan.md` 三期）：应用内预览是编辑器里的沙箱 iframe，适合迭代、不适合按真实视口判断一张宣传页，所以这一份给文档自己一个 webview，用自定义 scheme 直接从盘上喂项目文件，相对链接因此照常工作。
+- `print.rs` 是原生打印——`window.print()` 在 macOS 的 Tauri 里是**静默空操作**（WebKit 把打印请求转给宿主的 `WKUIDelegate`，而 wry 的 delegate 只实现了四个方法、不含打印，Tauri 也没加自己的），什么都不抛，所以导出菜单看起来是死的。
+
+#### Office 读写器
+
+- 三个 Office 读写器各有自己的理由：
+  - `xlsx.rs`（calamine 读的是工作簿的**语义**——缓存的公式结果、真正的日期而不是序列号、合并区域，而可维护的 JS 选项要么做不到要么不可分发）
+  - `xlsx_write.rs`（`rust_xlsxwriter` 本来就在树里给那边的往返测试造夹具，写的一半只多一次从 dev-dependency 的升格）
+  - `pptx.rs`（一份 .pptx 的字节对模型毫无意义，而且它**按幻灯片区间**读——这是 `read_slides` 的那一半）
+  - `docx.rs`（只读**排版参数**不读正文：格式便宜一个量级，正文保真要面对修订、域、内容控件、编号继承，所以导入端干脆放弃保真转 markdown）。
+
+#### Shell 命令与测试
+
+- `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半，**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有）。
+- 测试内联在 `commands.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` 里。
 
 ## `server/`
 
-**not part of the app.** A standalone Rust/axum binary holding two unrelated resources that happen to share one host, one set of tokens and one data directory. **Knowledge bases** (`/v1/kbs`): the app pushes a project's lore tree up and pulls it back down on another machine (one-way whole-tree sync with a per-entry opt-out in the client's preview, per-entry content hashes). **Application-config backups** (`/v1/configs`): the app's providers / models / prompts / preferences, versioned per slot (newest N kept), arriving **encrypted whenever they carry API keys** — the password is derived on the author's machine and this server has neither it nor any code that would decrypt. It stores blobs and reports hashes — nothing in it parses markdown, knows what a facet is, or reads the config envelope (the `X-Config-Meta` display header is stored verbatim and handed back), so both formats can keep moving without it. Two departures from the knowledge-base design are deliberate and documented in `store.rs`: a config version's hash is computed **by the server** (unlike an entry's, it *is* recoverable from the uploaded bytes), and `configs/` keeps a `.meta` sidecar where `entries/` forbids one (that ban is about sidecars holding a *hash*, which the client's three-way rail cannot tell has drifted). Configuration is a **TOML file with environment-variable overrides** (`config.rs` resolves it and remembers each value's provenance; `confedit.rs` writes it back through `toml_edit` so an operator's comments survive), and it serves an **admin console** at `/admin` — three `include_str!`-ed files under `server/admin/`, no build step — covering knowledge bases, sync tokens, an activity log (`audit.log`, the one record it keeps that it cannot derive, deliberately outside the truth path), disk/backup/maintenance, and config editing. The console has its **own credential** (username+password in `[admin]`); a sync token cannot log into it and its session cookie cannot call `/v1`. Its own crate, its own CI job, its own `server/README.md` (what it is + API + the console) and `server/DEPLOY.md` (编译 / 密钥 / systemd / Docker / TLS / 轮换 / 排错); design in `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§19 and `docs/feature/knowledge-base/kb-admin-console.md` (the console's own trade-offs and where it departs from 设计稿 03e). The client side lives in `src/lib/sync/` + `src/components/sync/` + Settings → 知识库同步
+**not part of the app.** A standalone Rust/axum binary holding two unrelated resources that happen to share one host, one set of tokens and one data directory.
+
+#### 知识库与配置备份两类资源
+
+- **Knowledge bases** (`/v1/kbs`): the app pushes a project's lore tree up and pulls it back down on another machine (one-way whole-tree sync with a per-entry opt-out in the client's preview, per-entry content hashes).
+- **Application-config backups** (`/v1/configs`): the app's providers / models / prompts / preferences, versioned per slot (newest N kept), arriving **encrypted whenever they carry API keys** — the password is derived on the author's machine and this server has neither it nor any code that would decrypt.
+- It stores blobs and reports hashes — nothing in it parses markdown, knows what a facet is, or reads the config envelope (the `X-Config-Meta` display header is stored verbatim and handed back), so both formats can keep moving without it.
+
+#### 与知识库设计的两处差异
+
+- Two departures from the knowledge-base design are deliberate and documented in `store.rs`: a config version's hash is computed **by the server** (unlike an entry's, it *is* recoverable from the uploaded bytes), and `configs/` keeps a `.meta` sidecar where `entries/` forbids one (that ban is about sidecars holding a *hash*, which the client's three-way rail cannot tell has drifted).
+
+#### 配置文件与管理控制台
+
+- Configuration is a **TOML file with environment-variable overrides** (`config.rs` resolves it and remembers each value's provenance; `confedit.rs` writes it back through `toml_edit` so an operator's comments survive)
+- and it serves an **admin console** at `/admin` — three `include_str!`-ed files under `server/admin/`, no build step — covering knowledge bases, sync tokens, an activity log (`audit.log`, the one record it keeps that it cannot derive, deliberately outside the truth path), disk/backup/maintenance, and config editing.
+- The console has its **own credential** (username+password in `[admin]`); a sync token cannot log into it and its session cookie cannot call `/v1`.
+
+#### 归属与相关文档
+
+- Its own crate, its own CI job, its own `server/README.md` (what it is + API + the console) and `server/DEPLOY.md` (编译 / 密钥 / systemd / Docker / TLS / 轮换 / 排错); design in `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§19 and `docs/feature/knowledge-base/kb-admin-console.md` (the console's own trade-offs and where it departs from 设计稿 03e).
+- The client side lives in `src/lib/sync/` + `src/components/sync/` + Settings → 知识库同步
