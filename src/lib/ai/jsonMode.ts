@@ -25,8 +25,10 @@
  * when the model takes `json_schema`, what keeps the schema enforced there too.
  */
 
+import { capabilityVerdict } from "./capabilities";
 import { strictify } from "./jsonSchemaStrict";
 import { normalizeModelId } from "./modelLimits";
+import { resolvePlatform, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
 // ─── The author's declaration ─────────────────────────────────────────────────
@@ -96,6 +98,8 @@ interface JsonModeTarget {
   baseUrl?: string;
   /** The author's declaration on the model row; absent = auto. */
   structuredOutput?: StructuredOutputMode;
+  /** Which server this is (`ConnOptions.platform`); absent = inferred from the address. */
+  platform?: PlatformId;
 }
 
 /**
@@ -108,16 +112,25 @@ interface JsonModeTarget {
 export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutputMode {
   const family = familyOf(target.standard);
   if (family === "anthropic") return "off";
-  if (target.structuredOutput) return target.structuredOutput;
-  // The Responses family is OpenAI's own second wire: the same models, and
-  // the table's OpenAI rows were verified there (docs/api/responses.md §2.2).
-  // Gemini joins them from 2.5 on (`generationConfig.responseJsonSchema`, see
-  // the id table above) — but the lift stays keyed to a *family*, not to the id
-  // alone: a relay serving `gpt-4o` over `openai_compat` is a different endpoint
-  // with its own idea of what it accepts, and it earns the strict tier by
-  // declaration or not at all.
-  const lifts = family === "openai" || family === "responses" || family === "gemini";
-  return lifts && target.modelId && knownJsonSchemaModel(target.modelId)
+  // Whether this *wire* takes the strict tier is the capability table's
+  // `jsonSchema` cell — a fact about the platform, not the model id: 智谱
+  // serves GLM and ignores json_schema, DashScope serves GLM and honours it.
+  const wire = {
+    platform: resolvePlatform(target.platform, target.baseUrl ?? "", target.standard),
+    standard: target.standard,
+  };
+  const strict = capabilityVerdict("jsonSchema", wire).status;
+  if (target.structuredOutput) {
+    // A declaration the platform is measured to ignore is sent one tier down —
+    // the 200 it would get is prose, not the schema the author asked for.
+    return target.structuredOutput === "json_schema" && strict === "no" ? "json_object" : target.structuredOutput;
+  }
+  // The auto tier lifts only where the wire is *measured* to honour it
+  // (OpenAI's two wires, Gemini, DashScope's compatible-mode, xAI): a relay
+  // serving `gpt-4o` over `openai_compat` is a different endpoint with its own
+  // idea of what it accepts, and earns the strict tier by declaration or not
+  // at all. This used to be keyed on the family, which lifted exactly those.
+  return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId)
     ? "json_schema"
     : "json_object";
 }

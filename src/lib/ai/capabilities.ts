@@ -42,6 +42,7 @@ export type CapabilityId =
   | "textVerbosity"
   | "translateFormat"
   | "structuredOutput"
+  | "jsonSchema"
   | ServerToolId;
 
 /**
@@ -165,6 +166,14 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // `generationConfig.response*`). How strong is jsonMode.ts's business; the
   // Messages API has no JSON mode, so an Anthropic model's only option is off.
   structuredOutput: { families: ["openai", "responses", "gemini"], origin: "native" },
+  // The strict tier of it (`response_format.json_schema` / `text.format`
+  // json_schema / `responseJsonSchema`). The protocol defines it, but a
+  // platform may take it with a 200 and ignore it — 智谱 answers with prose in a
+  // code fence (landscape.md §7 第十四个样本) — so a platform nobody measured is
+  // `unknown`: an author's declaration is sent, the auto tier never lifts to
+  // it (jsonMode.ts). A capability of the wire, not the model id: DashScope
+  // serves GLM with json_schema working, 智谱 serves the same GLM ignoring it.
+  jsonSchema: { families: ["openai", "responses", "gemini"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
   // Anthropic's versioned `web_search_*` tool and the Responses built-in
   // `{type:"web_search"}` are the protocol's own; whether a relay passes them
   // on is unmeasured until a platform cell says so. Chat Completions has no
@@ -186,7 +195,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
   "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
-  "temperature", "textVerbosity", "translateFormat", "structuredOutput",
+  "temperature", "textVerbosity", "translateFormat", "structuredOutput", "jsonSchema",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
 
@@ -297,6 +306,9 @@ const DASHSCOPE: PlatformCapabilities = {
     // `enable_search` (+ `search_options.search_strategy: agent_max` for page
     // reading) and `enable_code_interpreter` — top-level body fields.
     openai: {
+      // The platform's own list (Qwen 3.7 / 3.8), and GLM / DeepSeek / Kimi
+      // strict on this host too (qianwen-compat-plan.md P7).
+      jsonSchema: true,
       web_search: true,
       web_extractor: true,
       code_interpreter: DASHSCOPE_CODE_INTERPRETER.openai,
@@ -329,15 +341,23 @@ const LOCAL: PlatformCapabilities = {
  */
 export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // Chat Completions: no server tool (official rejects unknown top-level fields).
-  openai: { families: { openai: { web_search: false }, responses: { web_search: true } } },
+  openai: {
+    families: {
+      all: { jsonSchema: true },
+      openai: { web_search: false },
+      responses: { web_search: true },
+    },
+  },
   anthropic: { families: { anthropic: { web_search: true } } },
-  google: {},
+  // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
+  google: { families: { gemini: { jsonSchema: true } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
   // `unknown` — unmeasured, not known absent.
   deepseek: { families: { openai: { web_search: false } } },
   dashscope: DASHSCOPE,
   "dashscope-intl": DASHSCOPE,
-  xai: { families: { responses: { web_search: true } } },
+  // json_schema with `strict:true`: 200, output matches (第十一个样本).
+  xai: { families: { responses: { web_search: true, jsonSchema: true } } },
   minimax: { families: { anthropic: { web_search: true } } },
   volcengine: {},
   // The one platform whose Anthropic `document` block was seen reaching the
@@ -350,7 +370,8 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   },
   // Takes `tool_choice: "auto"` only: forcing is ignored on some models and
   // refused on others with an error that never names the parameter (第十四个样本).
-  zhipu: { families: { all: { forcedToolChoice: false } } },
+  // json_schema: a 200 that ignores it — prose in a code fence, Chinese keys.
+  zhipu: { families: { all: { forcedToolChoice: false, jsonSchema: false } } },
   orcarouter: {},
   newapi: { relay: true },
   ollama: LOCAL,

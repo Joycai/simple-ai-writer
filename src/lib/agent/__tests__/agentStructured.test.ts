@@ -247,7 +247,8 @@ describe("runStructuredTask", () => {
 
   describe("skipping the forced-tool attempt", () => {
     const qwenThinking = {
-      modelId: "qwen3.8-max", baseUrl: "https://relay/v1", standard: "openai_compat" as const,
+      // DashScope: the platform whose compatible-mode is measured to take json_schema.
+      modelId: "qwen3.8-max", baseUrl: "https://relay/v1", standard: "openai_compat" as const, platform: "dashscope" as const,
       thinkingCategory: "qwen-budget" as const, reasoningEffort: "high" as const,
     };
 
@@ -290,7 +291,7 @@ describe("runStructuredTask", () => {
 
     it("also skips once this endpoint has said with a 400 that forcing is illegal", async () => {
       // DeepSeek V4's shape: nothing in the config predicts it, the memo does.
-      const ds = { modelId: "gpt-5", baseUrl: "https://relay/v1", standard: "openai_compat" as const };
+      const ds = { modelId: "gpt-5", baseUrl: "https://relay/v1", standard: "openai_compat" as const, platform: "openai" as const };
       noteForcedToolChoiceRefused(ds);
       mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
         opts.onChunk({ text: '{"name":"Ava"}' });

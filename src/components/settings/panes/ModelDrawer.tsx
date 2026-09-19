@@ -93,6 +93,7 @@ const MATRIX_ROW_KEY: Partial<Record<CapabilityId, string>> = {
   videoInput: "aiConfig.models.videoInputLabel",
   videoFps: "aiConfig.models.videoFpsLabel",
   structuredOutput: "aiConfig.models.soLabel",
+  jsonSchema: "aiConfig.models.soJsonSchema",
   textVerbosity: "aiConfig.models.verbosityLabel",
 };
 
@@ -483,12 +484,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const showEffortDial = !!formCategory && (formCategory.shape === "levels" || isOnOffCategory(formCategory));
   const showBudget = formCategory?.shape === "budget" && !!formCategory.budget;
 
-  // The structured-output options this family can honour (lib/ai/jsonMode.ts).
-  // Gemini 从 2.5 起也收严格档（generationConfig.responseJsonSchema），所以这里
-  // 不再把 json_schema 从它的选项里筛掉；只有 anthropic 仍然只有一档。
-  const soChoices: StructuredOutputMode[] = soWire ? STRUCTURED_OUTPUT_MODES : ["off"];
-  // 与 jsonMode.ts 的 `lifts` 同一份名单：自动档的抬升按**族**给，不按 id 单发。
-  const soAutoLifted = can("structuredOutput") && knownJsonSchemaModel(form.modelId);
+  // The structured-output options this wire can honour (lib/ai/jsonMode.ts).
+  // 严格档看能力表的 `jsonSchema` 格：实测会静默无视它的平台（智谱）不给这个
+  // 选项——发出去只会降一档，选了等于没选。已经存了的声明照样显示，免得选中项消失。
+  const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire);
+  const soChoices: StructuredOutputMode[] = !soWire
+    ? ["off"]
+    : STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema" || !soStrictNo || form.structuredOutput === m);
+  // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
+  // 且 id 在名单上才抬升。
+  const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire).status === "yes"
+    && knownJsonSchemaModel(form.modelId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
 
@@ -902,8 +908,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const matrixInput = matrixRows(["pdfInput", "vlHighResolution", "videoInput", "videoFps"], {
     pdfInput, vlHighResolution, videoInput, videoFps: videoInput && videoFpsText.trim() !== "",
   });
-  const matrixOutput = matrixRows(["structuredOutput", "textVerbosity"], {
-    structuredOutput: form.structuredOutput !== "auto", textVerbosity: form.textVerbosity !== "auto",
+  const matrixOutput = matrixRows(["structuredOutput", "jsonSchema", "textVerbosity"], {
+    structuredOutput: form.structuredOutput !== "auto", jsonSchema: form.structuredOutput === "json_schema",
+    textVerbosity: form.textVerbosity !== "auto",
   });
   const matrixProps = (current: ProtocolFamily) => ({
     routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type,
