@@ -259,6 +259,19 @@ describe("streamCompletion — OpenAI SSE", () => {
     ]);
   });
 
+  it("makes up an id for a call a relay sent with an empty one, distinct per call", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"","function":{"name":"a","arguments":"{}"}}]}}]}\n`,
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"","function":{"name":"b","arguments":"{}"}}]}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    const { toolCalls } = received.find((c) => "toolCalls" in c) as { toolCalls: { id: string }[] };
+    expect(toolCalls.map((c) => c.id).every((id) => id.startsWith("call_"))).toBe(true);
+    expect(new Set(toolCalls.map((c) => c.id)).size).toBe(2);
+  });
+
   it("emits done even when the stream ends without [DONE]", async () => {
     const { received } = await collect({
       chunks: [`data: {"choices":[{"delta":{"content":"tail"}}],"usage":{"prompt_tokens":1,"completion_tokens":2}}`],

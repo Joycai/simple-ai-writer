@@ -205,9 +205,15 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
 
   const emitToolCalls = () => {
     if (toolCallMap.size === 0) return;
+    // Some relays send the call id as "" rather than leaving it out. Kept, two
+    // calls of one round share the empty id, the next request is refused for
+    // a duplicate tool_call_id — and since history accumulates, so is every
+    // request after it. An empty id is a missing one: make one up, unique
+    // across rounds (the stamp) and within this one (the index).
+    const stamp = Date.now().toString(36);
     const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
       .sort(([a], [b]) => a - b)
-      .map(([index, tc]) => ({ index, id: tc.id, name: tc.name, arguments: tc.args }));
+      .map(([index, tc]) => ({ index, id: tc.id || `call_${stamp}_${index}`, name: tc.name, arguments: tc.args }));
     opts.onChunk({ toolCalls, ...(reasoning ? { _reasoning: reasoning } : {}) });
   };
 
