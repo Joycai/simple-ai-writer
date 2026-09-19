@@ -66,6 +66,7 @@ const ROOT_MODULE_TESTS: Readonly<Record<string, string>> = {
 /** 全库扫描的闸门：没有单一被测模块，被测对象是整个仓库。值是它扫什么。 */
 const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
   "agentsMdSync.test.ts": "扫仓库根的 CLAUDE.md 与 AGENTS.md——后者是前者换头生成的镜像，不许漂开",
+  "capabilityFamilyRatchet.test.ts": "扫 src/ 全部源码——能力有无不许在调用点按协议族判断（棘轮）",
   "cssKeyframeNames.test.ts": "扫 src/ 全部 .css——@keyframes 的命名空间是全局的",
   "docSourceRefs.test.ts": "扫 docs/ 与源码注释——不许写 `文件:行号`",
   "exportReach.test.ts": "扫 src/ 全部导出——每个 export 得有第二个文件用它",
