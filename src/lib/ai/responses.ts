@@ -58,7 +58,7 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
-import { wireOf } from "./platforms";
+import { platformResponsesInclude, wireOf } from "./platforms";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -215,7 +215,9 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
     opts.reasoningEffort,
   );
-  const serverTools = responsesServerTools(wireOf(opts), opts.serverTools, opts.modelId, {
+  const wire = wireOf(opts);
+  const include = platformResponsesInclude(wire.platform);
+  const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
     thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
   });
   // `text` has two writers — this model's verbosity and a structured task's
@@ -252,6 +254,9 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     // for this family (lib/ai/reasoning.ts); a legacy or cross-family
     // category reaches here as the family default too.
     ...reasoning,
+    // Only where the platform withholds something unless asked (xAI's
+    // encrypted reasoning) — see platformResponsesInclude.
+    ...(include.length ? { include: [...include] } : {}),
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
     ...(text ? { text } : {}),

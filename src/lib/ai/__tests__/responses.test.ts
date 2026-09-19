@@ -98,6 +98,19 @@ describe("Responses adapter — request shape", () => {
     expect(body).not.toHaveProperty("stream_options");
   });
 
+  it("asks xAI for encrypted reasoning, and sends no include anywhere else", async () => {
+    // xAI withholds encrypted_content unless asked; the echo without it still
+    // 200s, so the loss is silent (landscape.md §7 第十一个样本).
+    const xai = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "https://api.x.ai/v1", apiKey: "k", standard: "openai_responses_compat", modelId: "grok-4.6",
+      messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+    });
+    expect(xai[0].body.include).toEqual(["reasoning.encrypted_content"]);
+    const { calls } = await collect({ chunks: [COMPLETED] });
+    expect(calls[0].body).not.toHaveProperty("include");
+  });
+
   it("always sends `instructions`, even with no system message", async () => {
     // A relay that finds it absent injects its own system prompt (landscape.md
     // §7 第八个样本: 4.4K–7.5K tokens of Codex instructions per request).

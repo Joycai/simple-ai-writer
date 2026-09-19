@@ -132,6 +132,15 @@ interface PlatformProfile {
    * serves ({@link ModelCalibration}). Only ids a sample measured.
    */
   models?: Readonly<Record<string, ModelCalibration>>;
+  /**
+   * `include` entries the Responses route must ask for. Only for what a
+   * platform withholds unless asked: xAI returns a reasoning item's
+   * `encrypted_content` only on request, and the echo without it still 200s —
+   * the next turn just silently starts its reasoning over (landscape.md §7
+   * 第十一个样本). Absent = send no `include`, which is what the relays that
+   * attach it unasked were measured with (responses.md §2.4).
+   */
+  responsesInclude?: readonly string[];
   /** Where the entries above were measured. */
   source: string;
 }
@@ -221,6 +230,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "openai", path: "/v1" },
     ],
     hosts: ["api.x.ai"],
+    responsesInclude: ["reasoning.encrypted_content"],
     // web_search measured on grok-4.3; web_extractor and the image searches
     // are DashScope's names and are refused.
     source: "landscape.md §7 第十一个样本 (2026-09-14)",
@@ -488,6 +498,11 @@ export function platformModelCalibration(id: PlatformId, modelId: string): Model
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */
 export function platformSource(id: PlatformId): string {
   return PROFILES[id].source;
+}
+
+/** `include` entries a platform's Responses route must send — see {@link PlatformProfile.responsesInclude}. */
+export function platformResponsesInclude(id: PlatformId): readonly string[] {
+  return PROFILES[id]?.responsesInclude ?? [];
 }
 
 /** The routes a platform serves, primary first. */
