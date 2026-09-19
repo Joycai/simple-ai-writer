@@ -163,7 +163,8 @@ describe("formatLintFindings", () => {
 });
 
 describe("export_pptx's description", () => {
-  const registry = readFileSync(resolve(__dirname, "../../agent/registry.ts"), "utf8");
+  // The export tools' fragment of the tool table (lib/agent/toolTable/exports.ts).
+  const registry = readFileSync(resolve(__dirname, "../../agent/toolTable/exports.ts"), "utf8");
   const description = registry.match(/name: "export_pptx",\s*description:\s*"((?:[^"\\]|\\.)*)"/)?.[1] ?? "";
 
   it("tells the model the rules the source check enforces", () => {
