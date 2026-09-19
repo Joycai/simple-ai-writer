@@ -93,7 +93,7 @@
 |---|---|---|---|
 | P0 | 守卫：分层与循环的棘轮测试 | 已合并 | #644 |
 | P1 | 拆 `subagent.ts`：纯查询 / 执行 | 已合并 | #645 |
-| P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 进行中 | |
+| P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 已合并 | #646 |
 | P3 | `lib → stores` 归零 | 进行中 | |
 | P4 | store 环：项目生命周期协调 + 批处理标志 | 未开始 | |
 | P5 | `agentStore` 拆分 | 未开始 | |
