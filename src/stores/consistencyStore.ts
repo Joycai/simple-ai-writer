@@ -18,7 +18,7 @@ import i18n from "../i18n";
 import { resolveConn } from "../lib/ai/conn";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { CONSISTENCY_PRESET } from "../lib/agent/presets";
-import { resolveSubAgentConn, withSessionOverrides } from "../lib/agent/subagent";
+import { resolveSubAgentConn, withSessionOverrides } from "../lib/agent/subagentModel";
 import { plannedToolTokens } from "../lib/agent/toolCost";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { expandAuthorIntent } from "../lib/context/expand";

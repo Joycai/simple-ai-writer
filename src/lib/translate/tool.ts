@@ -23,7 +23,7 @@ import { fileExists, readFile } from "../fs/fileio";
 import { baseName, resolveWorkspacePath } from "../paths";
 import type { ToolContext } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
-import { subAgentModel } from "../agent/subagent";
+import { subAgentModel } from "../agent/subagentModel";
 import { parseFrontmatter } from "../fs/markdown";
 import { splitDocument } from "./chunk";
 import { isTranslateLoreEnabled, translateLinesPerChunk } from "./flag";

@@ -45,7 +45,7 @@ import { useAppStore } from "../../stores/appStore";
 import { replaceLocation } from "../../stores/navStore";
 import { useAiStore } from "../../stores/aiStore";
 import { loadApiKey } from "../../lib/keyStore";
-import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagent";
+import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagentModel";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { IMAGE_EXTENSIONS } from "../../lib/fs/images";

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET, presetFor, subAgentsFor } from "../presets";
-import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagent";
+import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
 
 const SCENE_TOOLS = [
   "list_scenes", "read_scene", "search_scenes", "read_scene_summary", "read_scene_memory",

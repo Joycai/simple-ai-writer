@@ -45,7 +45,7 @@ import {
 } from "../lib/agent/taskWorkspace";
 import { routeTools } from "../lib/agent/routing";
 import { plannedToolTokens } from "../lib/agent/toolCost";
-import { resolveSubAgentConn } from "../lib/agent/subagent";
+import { resolveSubAgentConn } from "../lib/agent/subagentModel";
 import { expandAuthorIntent } from "../lib/context/expand";
 
 /**

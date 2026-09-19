@@ -20,7 +20,7 @@
  */
 
 import type { TaskPreset } from "../agent/presets";
-import type { SubAgentConfig, SubAgentKind } from "../agent/subagent";
+import type { SubAgentConfig, SubAgentKind } from "../agent/subagentModel";
 
 export const ROLEPLAY_PRESET: TaskPreset = {
   id: "roleplay-character",

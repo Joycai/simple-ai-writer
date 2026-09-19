@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fallbackBrief, parseHandoffBrief, renderBrief, writerSystemPrompt } from "../handoff";
-import { subAgentModel, type SubAgentConfig, type SubAgentKind } from "../subagent";
+import { subAgentModel, type SubAgentConfig, type SubAgentKind } from "../subagentModel";
 import type { Model } from "../../ai/configDb";
 
 /** A work order the way a well-behaved model sends one. */

@@ -30,7 +30,7 @@
 import type { Model, Provider } from "../ai/configDb";
 import { presetForTools, toolBriefingFor } from "../agent/presets";
 import { plannedToolTokens } from "../agent/toolCost";
-import type { SubAgentConfig, SubAgentKind } from "../agent/subagent";
+import type { SubAgentConfig, SubAgentKind } from "../agent/subagentModel";
 import { promptParams } from "../profile/active";
 import type { ResolvedTask } from "../profile/resolve";
 import { BOOK_PREV_TAIL_CHARS } from "./bookContext";

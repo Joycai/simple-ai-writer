@@ -18,7 +18,7 @@ import { dirName, resolveWorkspacePath } from "../paths";
 import type { LoreEntity, LoreImage } from "../lore";
 import { categoryImageSlots, findImageSlot } from "../profile/active";
 import type { IllustrateProposal, ToolContext } from "./registry";
-import { subAgentModel } from "./subagent";
+import { subAgentModel } from "./subagentModel";
 import type { ToolResult } from "./tools";
 import { syncLore } from "./writeTools";
 import { baseName } from "../paths";

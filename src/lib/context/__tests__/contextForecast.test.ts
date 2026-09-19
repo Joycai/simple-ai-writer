@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { planForecast, type ForecastInput } from "../forecast";
 import { DEFAULT_TASKS, type TaskDef } from "../../profile/model";
 import { BOOK_PREV_TAIL_CHARS } from "../bookContext";
-import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagent";
+import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
 
 const NO_SUBS = Object.fromEntries(
   SUBAGENT_KINDS.map((k) => [k, { enabled: false, modelId: null } as unknown as SubAgentConfig]),

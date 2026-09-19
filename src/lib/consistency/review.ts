@@ -25,7 +25,7 @@ import { CONSISTENCY_PRESET } from "../agent/presets";
 import type { ToolContext } from "../agent/registry";
 import { routeTools } from "../agent/routing";
 import { runAgent } from "../agent/runtime";
-import type { SubAgentConfig, SubAgentKind } from "../agent/subagent";
+import type { SubAgentConfig, SubAgentKind } from "../agent/subagentModel";
 import { createTaskWorkspace } from "../agent/taskWorkspace";
 import { messageCeilingForTools } from "../agent/toolCost";
 import { contributingEntities, selectLore } from "../context/loreSelect";

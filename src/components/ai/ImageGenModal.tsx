@@ -28,7 +28,7 @@ import {
   IMAGE_ASPECTS,
 } from "../../lib/image";
 import { connOptions, resolveConn } from "../../lib/ai/conn";
-import { resolveVisionConn } from "../../lib/agent/subagent";
+import { resolveVisionConn } from "../../lib/agent/subagentModel";
 import { isComfyUiEnabled } from "../../lib/comfy/flag";
 import {
   buildImageChecklist, reviewImageAgainstChecklist, runCalibration,

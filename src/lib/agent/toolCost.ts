@@ -25,7 +25,7 @@ import { effectiveInputCeiling } from "../context/budget";
 import type { TaskPreset } from "./presets";
 import { getToolDefinitions, partitionByGroup, type ToolId } from "./registry";
 import { routePlannedTools, type RouteOptions } from "./routing";
-import type { SubAgentConfig, SubAgentKind } from "./subagent";
+import type { SubAgentConfig, SubAgentKind } from "./subagentModel";
 import type { SearchableTools } from "./toolSearch";
 
 /**

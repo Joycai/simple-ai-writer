@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { conversationalModels, isAsrOnly, parseAsrFormat, type Model } from "../../ai/configDb";
-import { subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagent";
+import { subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
 
 // 执行方案 §1 不变量 1：转写模型绝不进对话候选，`asr` 档位只收它，别的档位拒收它。
 

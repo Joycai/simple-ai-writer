@@ -32,7 +32,7 @@ import { isVideoExt, syncRefusal, transcribeExtOf, SYNC_ASR_EXTENSIONS, type Syn
 import { estimateCost, formatBytes } from "../../lib/asr/cost";
 import { probeDurationSeconds } from "../../lib/asr/duration";
 import { formatClock } from "../../lib/asr/render";
-import { subAgentModel } from "../../lib/agent/subagent";
+import { subAgentModel } from "../../lib/agent/subagentModel";
 import { useAiStore } from "../../stores/aiStore";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";

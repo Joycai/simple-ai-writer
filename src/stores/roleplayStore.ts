@@ -37,7 +37,7 @@ import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
 import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/taskWorkspace";
 import {
   resolveSubAgentConn, withSessionOverrides, type SubAgentKind,
-} from "../lib/agent/subagent";
+} from "../lib/agent/subagentModel";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
@@ -1402,7 +1402,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const subs = subAgentsFor(agent.kind, withSessionOverrides(
         subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
       ));
-      const { visionSubAgentModel } = await import("../lib/agent/subagent");
+      const { visionSubAgentModel } = await import("../lib/agent/subagentModel");
       // 正文已经常驻在上下文里的条目**不再内联第二份**：绑定块（或 system 层）
       // 一份、【引用资料】一份，是同一段文字在同一次请求里出现两遍，而且会一直
       // 留到那一轮被折叠。作者敲的 `@名字` 仍在正文里，模型照样知道他在说谁——

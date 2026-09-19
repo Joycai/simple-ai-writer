@@ -98,8 +98,8 @@ import { routeTools } from "../lib/agent/routing";
 import {
   resolveSubAgentConn, visionSubAgentModel, withSessionOverrides,
   type SubAgentConfig, type SubAgentKind,
-} from "../lib/agent/subagent";
-import { subAgentModel } from "../lib/agent/subagent";
+} from "../lib/agent/subagentModel";
+import { subAgentModel } from "../lib/agent/subagentModel";
 import { isAsrEnabled } from "../lib/asr/flag";
 import { newChatStateMemory } from "../lib/agent/stateFlag";
 import {

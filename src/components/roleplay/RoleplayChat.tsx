@@ -45,7 +45,7 @@ import { TraceBody, TraceToggle } from "./TurnTrace";
 import trace_ from "./TurnTrace.module.css";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
-} from "../../lib/agent/subagent";
+} from "../../lib/agent/subagentModel";
 import { MAX_IMAGE_BYTES } from "../../lib/fs/images";
 import { downscaleNote, imageForModel } from "../../lib/image/normalize";
 import { attachedKey } from "../../lib/lore/aiTask";
