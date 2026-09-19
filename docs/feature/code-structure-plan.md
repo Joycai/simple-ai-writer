@@ -97,7 +97,7 @@
 | P3 | `lib → stores` 归零 | 已合并 | #647 |
 | P4 | store 环：项目生命周期协调 + 批处理标志 | 已合并 | #648 |
 | P5 | `agentStore` 拆分 | 进行中 | |
-| P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 未开始 | |
+| P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 进行中 | |
 | P7 | 零碎：`readImageBytes` 复用、`codemap.md` 分段 | 未开始 | |
 
 状态只用 `未开始` / `进行中` / `已合并` / `放弃（见 §7）`。
@@ -232,6 +232,7 @@ pnpm build
 | 2026-09-19 | P3 | 四个读 AI 配置的文件没有复用 `resolveSubAgent`：它解析的是**连接**（带 key、套上本次对话的芯片开关），而 `imageTools` / `translate` / `asr` 读的是设置里原样的绑定，换成它会改变行为。于是加了 `ToolContext.appState: ToolAppState`（`aiSettings` / `docFormats` / `addImitatedFormat` 三个 getter，store 一侧是 `stores/toolAppState.ts`），`resolveAsrConn` 与 `runIllustration` 改为收参数（`FileTree` 的右键转写直接传 `useAiStore.getState()`）。`imitatedIdFor` / `isSessionImitated` 是纯函数，从 `docFormatStore` 搬进 `lib/docx/presets.ts`。批准插图的路径要 `aiStore`，`agentStore` 于是改为静态 import 它——`aiStore` 本来就不在 agentStore 的环里——原有的 4 处 `await import("./aiStore")` 一并去掉，这本是 P4 的活，提前了。 |
 | 2026-09-19 | P4 | 方案漏了一条环：`projectStore ↔ editorStore` 是**双向静态**导入（`editorStore` 写字数、读 `activeFilePath`；`projectStore` 冲刷与重置缓冲区），madge 列的 15 条环里没有单独出现它。拆法：字数 / 字符数从 `projectStore` 搬进 `editorStore`（它本来就是从内容算的，四个组件改订阅）；`closeDocument` 与写作焦点（`WritingFocus` 一族）搬进新文件 `stores/openDocument.ts`，它在两个 store 之上。项目切换照方案走 `stores/projectLifecycle.ts`，但做法是把聊天那两步作为**必填钩子**传进 `projectStore.openProject/closeProject`，而不是在协调函数里重排步骤——这样切换中途的顺序和出错时的回滚（包括 catch 里移出最近项目）一字不变。批处理照方案用 `{ fromBatch: true }`；唯一的差别是一个本来就到不了的窗口：批处理两条子句之间若有人从快捷键另起一个面板任务，原先它会因 `running` 而不出卡片，现在会出。环拆完后把不再为躲环的动态导入改成静态（`roleplayStore`、`aiTaskStore`、`projectStore` 归零），其中三处 fire-and-forget 的 `void import(…).then(…)` 变成同步调用（composer 清空、记忆重载、`rejectAll`），各自改的是另一个 store，先后不可观察。`agentStore` 保留 21 处：目标都会把 `appStore` 带进来，而 `appStore` 加载即写主题到 `document`——静态导入会让十来个 node 测试在加载时就碰 DOM；理由写进了守卫。**手动走查（开项目 A → 聊天中切 B → 取消 → 再切 → 关闭）在这个环境里做不了**（Tauri 窗口无法自动驱动），留给合并前手动确认。 |
 | 2026-09-19 | P5 | 照方案拆，另加一个文件：只搬 `proposalApply` / `chatJob` / 选择器，`agentStore` 仍有约 1850 行，于是把约 480 行的类型也搬进 `stores/agent/types.ts`，落到 1272 行。两个订阅 store 的钩子（`useActiveChat`、`useChatStateInputs`）留在 `agentStore`，因为 `selectors` 若 import store 就会与它成环；`chatSurface` 放在 `chatJob` 而不是 `selectors`，理由相同（两者互相要对方的一个函数）。`chatSystemPrompt` 只有聊天运行用，随 `chatJob` 走；`currentTime.test.ts` 登记的「聊天面」因此从 `agentStore.ts` 改为 `stores/agent/chatJob.ts`——打时间戳的代码搬了家，守卫跟着搬。`proposalApply` 的依赖由 `agentStore` 的 `proposalApplyDeps()` 一次 `await import("./projectStore")` 组装，原来五个 apply 函数各自一次，store 间动态导入因此从 21 降到 17（`agentStore` 13 + `chatJob` 4）。 |
+| 2026-09-19 | P6 | 快照先于拆分单独提交（`toolDefinitionsSnapshot.test.ts`：声明顺序、两种目录下的全部定义、驻留 / 延迟划分），拆完逐字节不变。`REGISTRY` 按**连续**的键段切成十个片段再按原顺序展开，而不是按领域重排——`allSearchable` / `partitionByGroup` 的输出跟着键序走，重排会改线上字节；代价是删除章节 / 目录的两个工具单成一个片段（它们在线上排在图像工具之后）。`writeTools.ts` 拆成 `write/` 下五个模块加一个 `shared.ts`：跨节共用的 `relocateInSnapshot` / `withAlias` 与提案计数器若留在原节，会让 `loreFiles ↔ loreAssets`、`planGate ↔ manuscript` 互相 import；计数器从模块级 `let` 改成 `nextProposalSeq()`，仍是同一个计数器。`pptxLint.test.ts` 读 `export_pptx` 描述的源码路径随之改到 `toolTable/exports.ts`。**指标「最大源文件 < 1500」按原意只覆盖本方案的三个大文件**（现为 `loreFiles` 1418、`manuscript` 1400、`agentStore` 1272）；仓库里仍超过 1500 行的 `profile/model.ts`（多为能力包数据）、`roleplayStore`、`runtime`、`tools.ts`、`ai/image.ts` 与 §6 排除的组件不在本方案范围，另立。 |
 
 ## 8. 复现 §1 的数字
 
