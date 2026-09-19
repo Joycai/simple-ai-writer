@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   categoriesForFamily,
   defaultCategoryId,
+  effortForCategory,
   parseThinkingCategory,
   forcesToolChoiceAuto,
   isOnOffCategory,
@@ -219,5 +220,28 @@ describe("glm-effort category", () => {
     expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
     expect(reasoningBody(cat, "max")).toEqual({ reasoning_effort: "max" });
     expect(reasoningBody(cat, "default")).toBeUndefined();
+  });
+});
+
+// Shared by the category chips and the model drawer's id prefill: an effort
+// picked under one category must not ride onto another that 400s on it.
+describe("effortForCategory", () => {
+  const C = THINKING_CATEGORIES;
+  it("replaces an effort the new menu lacks with the category's default, else send-nothing", () => {
+    // glm-5.2's off onto GLM-5.3 (cannot stop thinking) → its own default, max.
+    expect(effortForCategory(C.glm, "off")).toBe("max");
+    expect(effortForCategory(C.glm, "medium")).toBe("max");
+    expect(effortForCategory(C["glm-effort"], "low")).toBe("default");
+    expect(effortForCategory(undefined, "high")).toBe("default");
+  });
+  it("keeps an effort the menu offers, and send-nothing everywhere", () => {
+    expect(effortForCategory(C.glm, "low")).toBe("low");
+    expect(effortForCategory(C["glm-effort"], "off")).toBe("off");
+    expect(effortForCategory(C.glm, "default")).toBe("default");
+  });
+  it("keeps every effort on an on/off category, whose only question is off-or-not", () => {
+    expect(effortForCategory(C["glm-switch"], "off")).toBe("off");
+    expect(effortForCategory(C["glm-switch"], "high")).toBe("high");
+    expect(effortForCategory(C.minimax, "off")).toBe("off");
   });
 });

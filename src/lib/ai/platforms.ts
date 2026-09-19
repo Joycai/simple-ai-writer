@@ -418,7 +418,10 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   zhipu: {
     origin: "https://open.bigmodel.cn",
     endpoints: [{ family: "openai", path: "/api/paas/v4" }],
-    hosts: ["open.bigmodel.cn"],
+    // The standard path, not the bare host: a hand-made channel on the Coding
+    // Plan's `/api/coding/paas` or `/api/anthropic` is another bill and other
+    // terms, and must not be read as this platform (zhipu-plan.md G9).
+    hosts: ["open.bigmodel.cn/api/paas"],
     // Its search is a `tools[]` entry, not the top-level field this app spells
     // for DashScope — and it answers "searched" without searching unless intent
     // detection is turned off. Not offered until it is wired (plan P2).
@@ -550,8 +553,14 @@ export function platformForAddress(current: PlatformId, baseUrl: string, standar
   if (!isCompatStandard(standard)) return inferred;
   // The drawer's host field holds a bare host. Two platforms on one host
   // (火山方舟 按量 / Plan) differ only by path, so a bare host that is also the
-  // current platform's host says nothing against the current pick.
-  if (inferred !== "custom") return sharesBareHost(current, baseUrl) ? current : inferred;
+  // current platform's host says nothing against the current pick. And a bare
+  // host no platform names whole still belongs to the one that sits on it:
+  // 智谱 names only its `/api/paas` path (so a full Coding Plan URL stays
+  // custom), but this field never carries a path to tell them apart.
+  if (sharesBareHost(current, baseUrl)) return current;
+  if (inferred !== "custom") return inferred;
+  const onHost = PLATFORM_IDS.find((id) => sharesBareHost(id, baseUrl));
+  if (onHost) return onHost;
   return platformHasHosts(current) ? "custom" : current;
 }
 

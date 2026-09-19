@@ -234,6 +234,20 @@ describe("zhipu", () => {
     expect(platformEndpoints("zhipu")).toEqual([{ family: "openai", path: "/api/paas/v4" }]);
     expect(platformOrigin("zhipu")).toBe("https://open.bigmodel.cn");
   });
+  // The Coding Plan's paths share the host but not the bill (zhipu-plan.md G9).
+  it("names only the standard path; the Coding Plan's paths on the same host stay custom", () => {
+    expect(inferPlatform("https://open.bigmodel.cn/api/coding/paas/v4", "openai_compat")).toBe("custom");
+    expect(inferPlatform("https://open.bigmodel.cn/api/anthropic", "anthropic_compat")).toBe("custom");
+    expect(inferPlatform("https://open.bigmodel.cn", "openai_compat")).toBe("custom");
+  });
+  // The drawer's host field is bare — it cannot tell the two bills apart, so
+  // the bare host still means this platform (typed char by char, the platform
+  // passes through custom on the way).
+  it("follows the drawer's bare host field back to zhipu", () => {
+    expect(platformForAddress("zhipu", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
+    expect(platformForAddress("custom", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
+    expect(platformForAddress("zhipu", "https://open.bigmodel.c", "openai_compat")).toBe("custom");
+  });
   it("takes auto only, and spells no server tool yet", () => {
     const wire = { platform: "zhipu" as const, standard: "openai_compat" as const };
     expect(wireIgnoresForcedToolChoice(wire)).toBe(true);

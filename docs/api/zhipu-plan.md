@@ -50,7 +50,7 @@
 ### P1 ✅ 按量平台 + 基础对话（本次）
 
 - **平台 `zhipu`**（「智谱 BigModel」）：`origin https://open.bigmodel.cn`，只列 ① `/api/paas/v4` 一条线路，
-  `hosts: ["open.bigmodel.cn"]`。**不列** ②④ 与 coding ①（G9）。① 族没有已接的服务端工具（`serverTools.openai: []`，G8）。
+  `hosts: ["open.bigmodel.cn/api/paas"]`（带路径，理由见 §5 末「审查修正」）。**不列** ②④ 与 coding ①（G9）。① 族没有已接的服务端工具（`serverTools.openai: []`，G8）。
   PDF 走默认（①② 两族）。
 - **新类目 `glm-switch`**（「GLM 开关」，① 族，`onoff`）：开发 `thinking:{type:"enabled"}`，关发
   `thinking:{type:"disabled"}`，**不发 `reasoning_effort`**——4.x 与 5.0/5.1 收了也无视，发它只是给无效的档位
@@ -160,9 +160,24 @@ PDF 只在 5.3-flash 上实测过，flashx 按同一个模型的提速版推定�
 - **是预填，不是运行时默认。** 模型抽屉在作者点选拉取到的 id、或输完 id 离开输入框时写进表单；保存后与作者手填的值一样存进行里，
   线上发什么不再依赖这张表。所以不迁移旧行、不改「自动」的含义，改表也不会悄悄改变已存模型的请求。
 - **只写作者没动过的字段。** 一个字段在「未设置」或「仍是上一次预填的值」时才归预填管：改错 id 会重新预填，作者手选的类目、
-  手填的上限不会被覆盖。档位不预填（保持「跟随默认」＝端点默认）。
+  手填的上限不会被覆盖。档位不预填（保持「跟随默认」＝端点默认）；但类目被预填换掉时，旧档位若不在新类目的菜单里，
+  按与类目芯片同一规则（`reasoning.ts` 的 `effortForCategory`）纠正。
 - 起步模型也从同一张表取值（`ProviderDrawer` 的 `zhipuStarter`），两处不会不一致；`platforms.test.ts` 断言表里的输出上限
   与 `modelLimits.ts` 的上限表一致。
+
+**审查修正（2026-09-19，PR 审查时发现并修掉）**：
+
+- **预填换了类目，档位也要跟着合法。** 先填 glm-5.2 选「关」，再改成 glm-5.3：类目换成 `glm`，档位却还是 `off`，
+  请求发 `reasoning_effort:"none"`，GLM-5.3 对它 400（不能关思考），而且两个表盘上都没有高亮。修法：纠正规则从类目芯片的
+  onClick 抽成 `effortForCategory()`，芯片与预填共用，菜单外的档位退回类目默认（`glm` → max），否则「跟随默认」。开关类
+  类目（`glm-switch` / MiniMax / 千问开关）只看「关与不关」，任何档位都合法，原样保留——否则从别处带来的「关」会被悄悄变成开。
+- **同一个 id 再失焦不重写。** 「未设置」同时也是作者能主动选的值（类目点回「自动」、关掉 PDF、清空上下文）；每次失焦都预填
+  就会把这些手动选择悄悄改回去。修法：预填记住上次处理的 id（小写去空白），id 没变就不动。
+- **host 带上标准路径。** 只写裸 host `open.bigmodel.cn` 时，作者手建的「自定义」渠道若走 Coding Plan 的
+  `/api/coding/paas/v4` 或 `/api/anthropic`，会被推断成本平台：标上「按量扣余额」的平台名，并套用强制 `tool_choice` → `auto`
+  的降级（4.5-air 本来能真强制）。改成 `open.bigmodel.cn/api/paas` 后，只有标准路径的完整 URL 推断为智谱。
+  渠道抽屉的主机栏只存裸 host、本来就分不出两种计费，所以 `platformForAddress` 对裸 host 补一条：没有平台整名占这个 host 时，
+  归「host 落在它上面」的那个平台——作者在智谱渠道里逐字重敲主机，中途经过「自定义」，敲完仍回到智谱（浏览器实测）。
 
 ## 6. 为什么不把旧代 GLM 放进 `deepseek` 类目
 

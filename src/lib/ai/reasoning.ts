@@ -411,6 +411,21 @@ export function onEffort(category: ThinkingCategory): ReasoningEffort | undefine
   return category.family === "openai" ? "high" : undefined;
 }
 
+/**
+ * The stored effort after the model's category changes to `next` (undefined =
+ * 自动): kept when the new menu offers it, else the category's own default,
+ * else "default" (send nothing → endpoint default) — never `menu[0]`, which is
+ * "off" for most categories and would silently disable thinking. Without this
+ * a stale `off` or `medium` survives onto GLM-5.3, which 400s on both. An
+ * on/off category has no menu and reads only off-vs-not, so every effort is
+ * valid there and `off` must stay off.
+ */
+export function effortForCategory(next: ThinkingCategory | undefined, effort: ReasoningEffort): ReasoningEffort {
+  if (effort === "default" || (next && isOnOffCategory(next))) return effort;
+  if (next?.menu.includes(effort)) return effort;
+  return next?.defaultEffort ?? "default";
+}
+
 /** Whether an on/off toggle should read as "on" for this stored effort. */
 export function thinkingIsOn(category: ThinkingCategory, effort: ReasoningEffort | undefined): boolean {
   if (effort === "off") return false;
