@@ -222,6 +222,19 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "stop" });
   });
 
+  it("reads a part-array delta.content as its text, never as [object Object]", async () => {
+    // Relays fronting a Responses / Anthropic backend mirror its part arrays.
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":[{"type":"text","text":"Hel"}]}}]}\n`,
+        `data: {"choices":[{"delta":{"content":[{"type":"text","text":"lo"},{"type":"image"}]}}]}\n`,
+        `data: {"choices":[{"delta":{"content":"!"}}]}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(text(received)).toBe("Hello!");
+  });
+
   it("reassembles an SSE line split across network chunks", async () => {
     // One JSON line split mid-token — naive per-chunk parsing would drop it.
     const line = `data: {"choices":[{"delta":{"content":"whole"}}]}\n`;

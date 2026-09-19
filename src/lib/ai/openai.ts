@@ -45,6 +45,27 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
 }
 
 /**
+ * The text of a `delta.content`, whichever shape it arrived in.
+ *
+ * A string on the protocol's own endpoints; a part array
+ * (`[{type:"text",text}]`) on relays fronting a Responses- or Anthropic-shaped
+ * backend, which mirror their backend's content verbatim (measured on relay
+ * traffic 2026-08-14). Passed on as-is, an array became the text
+ * "[object Object]" in the manuscript. Only `text` is read from an array: a
+ * part with no text of its own has nothing for the answer.
+ */
+function deltaText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  let out = "";
+  for (const part of content) {
+    const t = (part as { text?: unknown } | null)?.text;
+    if (typeof t === "string") out += t;
+  }
+  return out;
+}
+
+/**
  * `tool_choice` for this request, with one endpoint-specific downgrade.
  *
  * The `switch` dialect describes endpoints whose thinking is a bare
@@ -225,7 +246,8 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     }
     const choice = json.choices?.[0];
     const delta = choice?.delta;
-    if (delta?.content) emit(inlineThink.push(delta.content));
+    const content = deltaText(delta?.content);
+    if (content) emit(inlineThink.push(content));
     // Thinking endpoints stream reasoning beside the answer, under a field name
     // they don't agree on. Streamed for display and accumulated for the echo;
     // an endpoint that sends none leaves both untouched.
