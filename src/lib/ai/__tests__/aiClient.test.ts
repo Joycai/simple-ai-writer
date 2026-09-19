@@ -523,6 +523,21 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(text(received)).toBe("ok");
   });
 
+  it("joins every system message into one systemInstruction, flattening part arrays", async () => {
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "gemini", modelId: "gemini-3-pro",
+      messages: [
+        { role: "system", content: "first" },
+        { role: "system", content: [{ type: "text", text: "second" }] },
+        { role: "user", content: "hi" },
+      ],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.systemInstruction).toEqual({ parts: [{ text: "first\n\nsecond" }] });
+    expect(calls[0].body.contents).toEqual([{ role: "user", parts: [{ text: "hi" }] }]);
+  });
+
   it("spells every Gemini field in camelCase", async () => {
     // Google accepts both spellings; relays fronting it document only camel,
     // and an unrecognised key is ignored rather than rejected — a snake_case

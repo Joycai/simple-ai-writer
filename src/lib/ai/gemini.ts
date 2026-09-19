@@ -182,20 +182,46 @@ export function geminiAuthHeaders(apiKey: string, authMode?: AuthMode): Record<s
   };
 }
 
+/**
+ * Every system message, joined — Gemini's one `systemInstruction`.
+ *
+ * Same hoist as the Anthropic adapter's `extractSystem`, for the same two
+ * reasons: this wire has no system role inside `contents`, so a second system
+ * message (a prefix, a pack instruction) must be joined in rather than left
+ * behind — it used to be, silently, when only the first was read — and
+ * part-array content is flattened to its text, where assigning it straight
+ * across put an array where a string belongs.
+ */
+function geminiSystemText(messages: StreamMessage[]): string | undefined {
+  const texts = messages
+    .filter((m) => m.role === "system")
+    .map((m) => {
+      const c = (m as { content: unknown }).content;
+      if (typeof c === "string") return c;
+      if (!Array.isArray(c)) return "";
+      return c
+        .filter((p): p is { type: "text"; text: string } => (p as { type?: unknown }).type === "text")
+        .map((p) => p.text)
+        .join("");
+    })
+    .filter((t) => t.trim());
+  return texts.length ? texts.join("\n\n") : undefined;
+}
+
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
   // into proxy/server logs and error messages.
   const url = geminiUrl(opts.baseUrl, `/models/${opts.modelId}:streamGenerateContent?alt=sse`);
 
-  const systemMsg = opts.messages.find((m) => m.role === "system");
+  const systemText = geminiSystemText(opts.messages);
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
 
   const body: Record<string, unknown> = {
     contents: convertToGeminiContents(nonSystemMsgs),
     ...opts.extraBody,
   };
-  if (systemMsg) {
-    body.systemInstruction = { parts: [{ text: systemMsg.content }] };
+  if (systemText) {
+    body.systemInstruction = { parts: [{ text: systemText }] };
   }
   if (opts.tools?.length) {
     body.tools = [{
