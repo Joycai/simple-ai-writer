@@ -711,7 +711,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const resolved = resolveConn(models, providers, activeModelId);
     const { projectPath } = useProjectStore.getState();
     // One atomic read of the focused document, held for the whole turn — see
-    // editorStore.WritingFocus for why this must not be recomposed per use.
+    // openDocument.WritingFocus for why this must not be recomposed per use.
     // Read now, not when the job starts: the author asked about the document
     // they were looking at when they pressed Enter.
     const focus = getWritingFocus();

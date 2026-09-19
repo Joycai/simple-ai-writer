@@ -28,7 +28,7 @@
 - **`printHtmlDocument()`（`lib/fs/export`）**：`.html` 的唯一导出。整份文档解析、图片就地内联（打印稿没有 base URL）、**先摘掉 `<script>`**——打印稿没什么要跑的，而两个打印面（应用内同源 iframe 受 CSP 管、macOS 是自己的一个 webview）对「脚本会不会跑」的答案不一致；摘掉它，两边印出来的是同一页，也不碰「独立预览窗口是页面脚本真正跑起来的唯一地方」那条规矩。
 - **图片尺寸**：`ImagePreview` 在 `img.onload` 时把 `naturalWidth × naturalHeight` 连同**路径**一起报进 `projectStore.imageSize`，顶栏比对路径后才显示——和 `WritingFocus` 防的是同一件事：一张图的尺寸绝不能挂在另一张图的名字下面。
 - **单位词**：顶栏原来读的是「3,124 字数」/「3,124 Words」（`statusBar.words` 是个**栏目名**）。新增 `titleBar.words` / `titleBar.chars`，读成「3,124 字」/「12,480 字符」。
-- **测试**：`docKind` 的五行 + 与导出口径不漂移（`exportScope.test.ts`）；`closeDocument` 的四条——干净直接关 · 脏的先落盘再关并留两秒痕迹 · 写盘失败不关 · 关图片时不碰缓冲区里那篇待写的文档（`editorStoreCloseDocument.test.ts`）。
+- **测试**：`docKind` 的五行 + 与导出口径不漂移（`exportScope.test.ts`）；`closeDocument` 的四条——干净直接关 · 脏的先落盘再关并留两秒痕迹 · 写盘失败不关 · 关图片时不碰缓冲区里那篇待写的文档（`openDocumentClose.test.ts`）。
 - **浏览器里核过的**（vite dev，store 直接喂状态）：三档在 1440 / 1100 / 900 上各让掉哪几件、四类文件各自的名单、空态、英文窄档不折行不溢出、⌘W 与 × 的两条路径、窄档两个菜单。**没核到的**：Tauri 里才有的那两件——mac 菜单让位后 `⌘W` 是不是真的落到页面上了（本机是 Windows，`windowmenu.rs` 连编译都轮不到：应用的 CI 只跑 ubuntu，那个模块是 `cfg(target_os = "macos")`），以及 `.html` 的「打印 · PDF」真去调打印对话框那一步。Windows 侧核过：`Ctrl+W` 关文档、`Ctrl+Shift+W` 仍然是关项目、`Ctrl+Alt+W` 什么都不做。
 
 ## 发出去之前先核对过的事实

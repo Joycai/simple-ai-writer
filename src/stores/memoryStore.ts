@@ -187,7 +187,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const { projectPath } = useProjectStore.getState();
     // Focus, not activeFilePath: the memory must describe the same document the
     // editor is actually holding, or a mid-switch load pairs one chapter's
-    // memory with another chapter's text (see editorStore.WritingFocus).
+    // memory with another chapter's text (see openDocument.WritingFocus).
     const { filePath: activeFilePath, text: doc } = getWritingFocus();
     if (!projectPath || !activeFilePath) {
       set({ docPath: null, memory: null, freshness: null, error: null, notice: null });
@@ -220,7 +220,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     // Focus, not activeFilePath: composing projectStore.activeFilePath (set
     // synchronously on click) with editorStore.content (set by an async
     // effect) can pair one chapter's text with another's path — see
-    // loadForActiveFile above and editorStore.WritingFocus.
+    // loadForActiveFile above and openDocument.WritingFocus.
     const { filePath: activeFilePath, text: content } = getWritingFocus();
     if (!projectPath || !activeFilePath) return;
     const resolved = resolveModel();

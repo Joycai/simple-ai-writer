@@ -335,7 +335,7 @@ export function CommandPalette() {
   const openDocument = (path: string) => {
     // The editor only loads files while it is the visible view, so opening one
     // without switching back leaves the writing focus pointing at the previous
-    // document (see editorStore.WritingFocus).
+    // document (see openDocument.WritingFocus).
     setActiveFilePath(path);
     setMainView("editor");
     // 树外打开即定位：树挂着时它自己的 effect 也会做，重复一次只是同一行再居中一次；

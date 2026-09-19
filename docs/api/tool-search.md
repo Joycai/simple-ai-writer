@@ -48,7 +48,7 @@
 
 本项目**已经在做按需加载**，只是不经模型、也不经端点：
 
-- `registry.ts` 的 `ToolGroup`（今天是 `lore_write` 16 个、`lore_organize` 4 个）由**运行状态**
+- `toolTypes.ts` 的 `ToolGroup`（经 `registry.ts` 转出）（今天是 `lore_write` 16 个、`lore_organize` 4 个）由**运行状态**
   自动装载——批准知识库方案那一刻进 `tools`，追加在常驻工具之后，保住工具数组的前缀
   （[`agent-tool-context-lld.md`](../feature/agent/agent-tool-context-lld.md) §5，实测每轮省 2,542）。
 - 「让模型自己开口要工具」的本地版 `load_tools` **实测否掉了**（同文 §6）：gemma4:12b 在
