@@ -19,7 +19,7 @@
 import type { Model } from "./configDb";
 import { effectiveStructuredOutput } from "./jsonMode";
 import {
-  reasoningBody, resolveThinkingCategory, supportsTemperature, thinkingBody,
+  reasoningBody, resolveThinkingCategory, thinkingBody,
 } from "./reasoning";
 import { effectiveServerTools, openaiServerToolsBody } from "./serverTools";
 import { wireOf, type PlatformId } from "./platforms";
@@ -104,7 +104,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
   if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
 
   if (family === "anthropic" && m.maxOutput) out.push({ key: "max_tokens", value: String(m.maxOutput) });
-  if (m.temperature !== undefined && supportsTemperature(standard, category.id)) {
+  if (m.temperature !== undefined && hasCapability("temperature", wire, { thinkingCategory: category.id })) {
     out.push({ key: "temperature", value: String(m.temperature) });
   }
   if (m.serverTools?.length && hasAnyServerTool(wire)) {
@@ -131,7 +131,7 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
         : { key: "response_format", value: so, scope: "structured" });
   }
   // Sent on every request, beside (not instead of) a structured task's text.format.
-  if (family === "responses" && m.textVerbosity) out.push({ key: "text.verbosity", value: m.textVerbosity });
+  if (m.textVerbosity && hasCapability("textVerbosity", wire)) out.push({ key: "text.verbosity", value: m.textVerbosity });
   if (m.vlHighResolution && hasCapability("vlHighResolution", wire)) out.push({ key: "vl_high_resolution_images", value: "true" });
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).

@@ -17,7 +17,7 @@
 import i18n from "../../i18n";
 import { fetch } from "../http";
 import {
-  forcesToolChoiceAuto, reasoningBody, resolveThinkingCategory, supportsTemperature,
+  forcesToolChoiceAuto, reasoningBody, resolveThinkingCategory,
   thinkingBody, type ThinkingCategory,
 } from "./reasoning";
 import {
@@ -29,6 +29,7 @@ import {
 } from "./serverTools";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { wireOf } from "./platforms";
+import { hasCapability } from "./capabilities";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -555,10 +556,10 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   if (thinking) baseBody.thinking = thinking;
   // Temperature, with this protocol's two constraints applied here rather than
   // at the setting: it caps at 1 (the other families allow 2), and a thinking
-  // request refuses everything but 1 — see `supportsTemperature`, which the
-  // model editor reads too so it never renders a control this would drop.
-  // 0 is a real value, hence the `!== undefined` test.
-  if (opts.temperature !== undefined && supportsTemperature(opts.standard, category.id)) {
+  // request refuses everything but 1 — the `temperature` rule in
+  // capabilities.ts, which the model editor asks too so it never renders a
+  // control this would drop. 0 is a real value, hence the `!== undefined` test.
+  if (opts.temperature !== undefined && hasCapability("temperature", wireOf(opts), { thinkingCategory: category.id })) {
     baseBody.temperature = Math.max(0, Math.min(1, opts.temperature));
   }
   // Absent unless the author set an effort on this model. Governs the whole

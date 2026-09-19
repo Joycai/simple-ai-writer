@@ -29,6 +29,7 @@ import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 import type { ModelType } from "./configDb";
 import type { PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
+import type { ThinkingCategoryId } from "./reasoning";
 
 /** What can be asked about. A server tool's id is a capability id. */
 export type CapabilityId =
@@ -37,6 +38,10 @@ export type CapabilityId =
   | "videoInput"
   | "videoFps"
   | "forcedToolChoice"
+  | "temperature"
+  | "textVerbosity"
+  | "translateFormat"
+  | "structuredOutput"
   | ServerToolId;
 
 /**
@@ -51,28 +56,30 @@ export type CapabilityId =
  */
 type CapabilityStatus = "yes" | "unknown" | "no";
 
-/** Why — a closed set so tests can assert it; the sentences live in the locale files. */
-type CapabilityReason =
-  /** The platform's table lists it for this family. */
-  | "measured"
-  /** Part of the protocol; no platform entry contradicts it. */
-  | "protocol"
-  /** The protocol defines it, but nobody measured whether this platform passes it on. */
-  | "unmeasured"
-  /** A private field on a relay that may front the platform that owns it. */
-  | "relay"
-  /** The platform's table says this wire does not take it (or takes and ignores it). */
-  | "platform-absent"
-  /** A private field, and this platform is not one that was measured taking it. */
-  | "platform-unlisted"
-  /** No spelling on this protocol family. */
-  | "family"
-  /** The platform runs it, but not for this model id. */
-  | "model"
-  /** The model's type rules it out (a text model reads no frames). */
-  | "model-type"
-  /** A capability it depends on is unavailable. */
-  | "requires";
+/**
+ * Why — a closed set so tests can assert it. The sentences live in the locale
+ * files only, as `aiConfig.capReason.<reason>` in both languages (the same
+ * split as `ThemeReasonCode`): a test can hold the reason, and the wording can
+ * change without touching the logic. `capabilities.test.ts` holds every reason
+ * to a sentence in each language.
+ *
+ *   - `measured`: the platform's table lists it for this family.
+ *   - `protocol`: part of the protocol; no platform entry contradicts it.
+ *   - `unmeasured`: the protocol defines it, but nobody measured whether this platform passes it on.
+ *   - `relay`: a private field on a relay that may front the platform that owns it.
+ *   - `platform-absent`: the platform's table says this wire does not take it (or takes and ignores it).
+ *   - `platform-unlisted`: a private field, and this platform is not one that was measured taking it.
+ *   - `family`: no spelling on this protocol family.
+ *   - `model`: the platform runs it, but not for this model id.
+ *   - `model-type`: the model's type rules it out (a text model reads no frames).
+ *   - `requires`: a capability it depends on is unavailable.
+ *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
+ */
+export const CAPABILITY_REASONS = [
+  "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
+  "family", "model", "model-type", "requires", "thinking",
+] as const;
+type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 
 interface CapabilityVerdict {
   status: CapabilityStatus;
@@ -106,6 +113,12 @@ interface CapabilityRule {
   modelTypes?: readonly ModelType[];
   /** Capabilities that must not be `no` on the same wire. */
   requires?: readonly CapabilityId[];
+  /**
+   * Families where it exists only while thinking is off — `no / thinking`
+   * for any other resolved category. Consulted only when the asker passes the
+   * model's resolved category.
+   */
+  thinkingOff?: readonly ProtocolFamily[];
 }
 
 const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
@@ -130,6 +143,24 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   videoFps: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES, requires: ["videoInput"] },
   // `tool_choice: required | {function}` being honoured.
   forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
+  // Sampling temperature: every family spells it, but the Messages API accepts
+  // `temperature: 1` and nothing else while extended thinking is on, and an
+  // Anthropic model thinks unless the author declares otherwise. Clamping the
+  // author's 0.2 up to the one legal value would send the opposite of what
+  // they asked for under the name of honouring it, so the adapter omits it —
+  // and the drawer, asking the same cell, never renders a control that does
+  // nothing.
+  temperature: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", thinkingOff: ["anthropic"] },
+  // `text.verbosity` exists on the Responses family only.
+  textVerbosity: { families: ["responses"], origin: "native" },
+  // The Sakura translation engine (lib/translate) runs a Chat Completions
+  // request with a fixed prompt; a text model only — a seeing model declared
+  // translate-only would silently leave the vision subagent's candidates.
+  translateFormat: { families: ["openai"], origin: "native", modelTypes: ["text"] },
+  // A JSON mode at all (`response_format` / `text.format` /
+  // `generationConfig.response*`). How strong is jsonMode.ts's business; the
+  // Messages API has no JSON mode, so an Anthropic model's only option is off.
+  structuredOutput: { families: ["openai", "responses", "gemini"], origin: "native" },
   // Anthropic's versioned `web_search_*` tool and the Responses built-in
   // `{type:"web_search"}` are the protocol's own; whether a relay passes them
   // on is unmeasured until a platform cell says so. Chat Completions has no
@@ -151,6 +182,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
   "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
+  "temperature", "textVerbosity", "translateFormat", "structuredOutput",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
 
@@ -306,6 +338,8 @@ export interface CapabilityWire {
 interface CapabilityModel {
   modelId?: string;
   type?: ModelType;
+  /** The *resolved* category (`resolveThinkingCategory`), never the row's possibly-absent one. */
+  thinkingCategory?: ThinkingCategoryId;
 }
 
 const verdict = (status: CapabilityStatus, reason: CapabilityReason): CapabilityVerdict => ({ status, reason });
@@ -316,8 +350,8 @@ function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId)
 }
 
 /**
- * The one answer. Order is fixed: model type → what it requires → the
- * platform's cell (a measurement wins) → the rule's families → its default.
+ * The one answer. Order is fixed: model type → what it requires → thinking →
+ * the platform's cell (a measurement wins) → the rule's families → its default.
  */
 export function capabilityVerdict(id: CapabilityId, wire: CapabilityWire, model: CapabilityModel = {}): CapabilityVerdict {
   return familyVerdict(id, wire.platform, familyOf(wire.standard), model);
@@ -329,6 +363,9 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (model.type && rule.modelTypes && !rule.modelTypes.includes(model.type)) return verdict("no", "model-type");
   for (const dep of rule.requires ?? []) {
     if (familyVerdict(dep, platform, family, model).status === "no") return verdict("no", "requires");
+  }
+  if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== undefined && model.thinkingCategory !== "off") {
+    return verdict("no", "thinking");
   }
 
   const cell = cellFor(platform, family, id);

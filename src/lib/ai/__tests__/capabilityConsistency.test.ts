@@ -30,6 +30,7 @@ import { streamAnthropic } from "../anthropic";
 import { streamGemini } from "../gemini";
 import { streamOpenAI } from "../openai";
 import { streamResponses } from "../responses";
+import { resolveThinkingCategory } from "../reasoning";
 import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } from "../types";
 import type { ServerToolId } from "../serverTools";
 
@@ -103,6 +104,27 @@ const PROBES: Record<CapabilityId, Probe> = {
   forcedToolChoice: async (ctx) => ({
     adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], toolChoice: "auto" }, { tools: [FUNCTION_TOOL], toolChoice: "required" }),
   }),
+  // The adapter and the summary both run with the row's (unset) category, so
+  // an Anthropic model thinks and the table says no — see `expected` below.
+  temperature: async (ctx) => ({
+    adapter: await adapterSends(ctx, {}, { temperature: 0.5 }),
+    summary: summarySends(ctx, {}, { temperature: 0.5 }),
+  }),
+  textVerbosity: async (ctx) => ({
+    adapter: await adapterSends(ctx, {}, { textVerbosity: "low" }),
+    summary: summarySends(ctx, {}, { textVerbosity: "low" }),
+  }),
+  // The one capability no request reads: the declaration takes the model out
+  // of every picker and hands it to lib/translate, and the drawer is what
+  // keeps it off a wire without the capability (cleared on save). Nothing
+  // here can observe that, so the probe names no asker — on purpose, not by
+  // omission.
+  translateFormat: async () => ({}),
+  // Strength is jsonMode.ts's (whitelisted body shaping); whether there is a
+  // JSON mode at all must match the table on the one surface that shows it.
+  structuredOutput: async (ctx) => ({
+    summary: summarySends(ctx, { structuredOutput: "off" }, { structuredOutput: "json_object" }),
+  }),
   web_search: serverTool("web_search"),
   web_extractor: serverTool("web_extractor"),
   web_search_image: serverTool("web_search_image"),
@@ -121,7 +143,9 @@ describe("every asker agrees with the capability table", () => {
       const standard = standardOf({ family: endpoint.family, official: !!endpoint.official });
       for (const modelId of MODEL_IDS) {
         const ctx = { platform, standard, modelId };
-        const expected = hasCapability(id, { platform, standard }, { modelId, type: TYPE });
+        // The model as the probes build it: no category declared, so the family default.
+        const thinkingCategory = resolveThinkingCategory({}, standard).id;
+        const expected = hasCapability(id, { platform, standard }, { modelId, type: TYPE, thinkingCategory });
         for (const [asker, sent] of Object.entries(await PROBES[id](ctx))) {
           if (sent !== expected) disagreements.push(`${platform}/${standard}/${modelId} ${asker}: sends ${sent}, table ${expected}`);
         }

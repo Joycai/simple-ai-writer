@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  CAPABILITY_IDS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability,
+  CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability,
   type CapabilityId, type CapabilityWire,
 } from "../capabilities";
 import { PLATFORM_IDS, platformEndpoints } from "../platforms";
@@ -118,6 +118,18 @@ describe("the rule table is well-formed", () => {
   });
 });
 
+// The reason is a code; the sentence is the locale files' (the ThemeReasonCode
+// split). A code without a sentence would show its raw key in the matrix tooltip.
+describe("every reason has a sentence", () => {
+  it.each(["en", "zh-CN"])("in %s", (lang) => {
+    const locale = JSON.parse(fs.readFileSync(`${process.cwd()}/src/i18n/locales/${lang}.json`, "utf8")) as {
+      aiConfig: { capReason: Record<string, string> };
+    };
+    expect(Object.keys(locale.aiConfig.capReason).sort()).toEqual([...CAPABILITY_REASONS].sort());
+    for (const r of CAPABILITY_REASONS) expect(locale.aiConfig.capReason[r], r).toMatch(/\S/);
+  });
+});
+
 describe("capabilityVerdict", () => {
   const chat = (platform: (typeof PLATFORM_IDS)[number]) => ({ platform, standard: "openai_compat" as const });
 
@@ -152,6 +164,22 @@ describe("capabilityVerdict", () => {
     expect(hasCapability("videoFps", chat("dashscope"), { type: "vision" })).toBe(true);
     expect(capabilityVerdict("videoFps", { platform: "newapi", standard: "anthropic_compat" }))
       .toEqual({ status: "no", reason: "requires" });
+  });
+
+  it("rules temperature out on Anthropic while the model thinks, and only when told the category", () => {
+    const anth = { platform: "anthropic" as const, standard: "anthropic" as const };
+    expect(capabilityVerdict("temperature", anth, { thinkingCategory: "claude-adaptive" })).toEqual({ status: "no", reason: "thinking" });
+    expect(hasCapability("temperature", anth, { thinkingCategory: "off" })).toBe(true);
+    expect(hasCapability("temperature", chat("dashscope"), { thinkingCategory: "qwen-budget" })).toBe(true);
+    expect(hasCapability("temperature", anth)).toBe(true);
+  });
+
+  it("keeps the output capabilities to the families that spell them", () => {
+    expect(hasCapability("textVerbosity", { platform: "xai", standard: "openai_responses_compat" })).toBe(true);
+    expect(capabilityVerdict("textVerbosity", chat("dashscope")).reason).toBe("family");
+    expect(capabilityVerdict("structuredOutput", { platform: "minimax", standard: "anthropic_compat" }).reason).toBe("family");
+    expect(hasCapability("translateFormat", chat("custom"), { type: "text" })).toBe(true);
+    expect(capabilityVerdict("translateFormat", chat("custom"), { type: "vision" }).reason).toBe("model-type");
   });
 });
 

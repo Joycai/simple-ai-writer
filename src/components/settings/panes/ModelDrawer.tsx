@@ -34,14 +34,14 @@ import {
 import { readFile } from "../../../lib/fs/fileio";
 import {
   categoriesForFamily, effortForCategory, isOnOffCategory, onEffort, resolveThinkingCategory,
-  supportsTemperature, thinkingIsOn, THINKING_CATEGORIES,
+  thinkingIsOn, THINKING_CATEGORIES,
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
-import { capabilityVerdict, hasAnyServerTool, hasCapability } from "../../../lib/ai/capabilities";
+import { capabilityVerdict, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -66,6 +66,7 @@ import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
 import r from "./Routes.module.css";
+import { CapabilityMatrix } from "./CapabilityMatrix";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -84,6 +85,16 @@ const WHY_KEYS = [
   "dialect", "route", "edit", "async", "comfy",
 ] as const;
 type WhyKey = (typeof WHY_KEYS)[number];
+
+/** A matrix row's name — the same words as the control it stands for. */
+const MATRIX_ROW_KEY: Partial<Record<CapabilityId, string>> = {
+  pdfInput: "aiConfig.models.pdfInputLabel",
+  vlHighResolution: "aiConfig.models.vlHiResLabel",
+  videoInput: "aiConfig.models.videoInputLabel",
+  videoFps: "aiConfig.models.videoFpsLabel",
+  structuredOutput: "aiConfig.models.soLabel",
+  textVerbosity: "aiConfig.models.verbosityLabel",
+};
 
 const SO_LABEL_KEY: Record<StructuredOutputMode, string> = {
   off: "aiConfig.models.soOff",
@@ -181,11 +192,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The route the author clicked, shown as a diff before the switch (屏 06).
   const [pendingRoute, setPendingRoute] = useState<ProtocolFamily | null>(null);
   const multiRoute = channelRoutes.length > 1;
+  // The current route's wire. Whether a control exists is asked of the
+  // capability table about this wire (lib/ai/capabilities.ts) — never of the
+  // family here: a family check is how DashScope's private field once reached
+  // 智谱. `family` below only picks spellings and wording.
+  const curWire = provider ? providerWire(provider) : undefined;
+  const can = (id: CapabilityId, m?: Parameters<typeof hasCapability>[2]) => !!curWire && hasCapability(id, curWire, m);
   // The wires with a whole-file content part the adapters map
   // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
   // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
   // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
-  const pdfWire = !!provider && hasCapability("pdfInput", providerWire(provider));
+  const pdfWire = can("pdfInput");
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -244,9 +261,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         provider.apiStandard,
       )
     : undefined;
-  const temperatureReaches = provider
-    ? supportsTemperature(provider.apiStandard, formCategory?.id)
-    : true;
+  const temperatureReaches = !curWire || hasCapability("temperature", curWire, { thinkingCategory: formCategory?.id });
   // What the probe wrote, and when — kept out of `form` because it is
   // provenance, not something the author edits. The values stay when the
   // author overwrites the field, so the badge can say what was measured.
@@ -411,10 +426,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // DashScope's private knobs — 智谱 takes both and ignores them — and fps also
   // requires the clip part itself (capabilities.ts `requires`). A `video_url`
   // part is Chat Completions only (lib/ai/videoInput).
-  const visionWire = provider ? providerWire(provider) : undefined;
-  const vlHiResWire = !!visionWire && hasCapability("vlHighResolution", visionWire, { type: form.type });
-  const videoWire = !!visionWire && hasCapability("videoInput", visionWire, { type: form.type });
-  const videoFpsWire = !!visionWire && hasCapability("videoFps", visionWire, { type: form.type });
+  // `text.verbosity` — the Responses family's field.
+  const verbosityWire = can("textVerbosity");
+  // The Sakura translation declaration: a text model on Chat Completions.
+  const translateWire = can("translateFormat", { type: form.type });
+  // Whether this wire has a JSON mode at all; with no channel yet every option is offered.
+  const soWire = !curWire || hasCapability("structuredOutput", curWire);
+  const vlHiResWire = can("vlHighResolution", { type: form.type });
+  const videoWire = can("videoInput", { type: form.type });
+  const videoFpsWire = can("videoFps", { type: form.type });
   const videoFps = videoFpsWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
@@ -433,7 +453,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // Server tools are asked of the provider's *platform* and family, not its
   // standard (lib/ai/platforms.ts): DeepSeek, a relay and DashScope all read
   // `openai_compat`, and only one of them has `enable_search`.
-  const toolWire = provider ? providerWire(provider) : undefined;
+  const toolWire = curWire;
   const offersServerTool = (id: ServerToolId) =>
     !!toolWire && hasCapability(id, toolWire, { modelId: form.modelId.trim() });
   // What is *stored*: the author's grant, whole — kept even where this wire
@@ -455,11 +475,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The structured-output options this family can honour (lib/ai/jsonMode.ts).
   // Gemini 从 2.5 起也收严格档（generationConfig.responseJsonSchema），所以这里
   // 不再把 json_schema 从它的选项里筛掉；只有 anthropic 仍然只有一档。
-  const soChoices: StructuredOutputMode[] = family === "anthropic" ? ["off"] : STRUCTURED_OUTPUT_MODES;
+  const soChoices: StructuredOutputMode[] = soWire ? STRUCTURED_OUTPUT_MODES : ["off"];
   // 与 jsonMode.ts 的 `lifts` 同一份名单：自动档的抬升按**族**给，不按 id 单发。
-  const soAutoLifted =
-    (family === "openai" || family === "responses" || family === "gemini")
-    && knownJsonSchemaModel(form.modelId);
+  const soAutoLifted = can("structuredOutput") && knownJsonSchemaModel(form.modelId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
 
@@ -479,7 +497,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
     thinkingBudget,
     structuredOutput: isImageModel ? undefined : structuredOutput,
-    textVerbosity: family === "responses" && !isImageModel && form.textVerbosity !== "auto"
+    textVerbosity: verbosityWire && !isImageModel && form.textVerbosity !== "auto"
       ? form.textVerbosity
       : undefined,
     vlHighResolution: vlHiResWire && vlHighResolution ? true : undefined,
@@ -630,14 +648,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // and a multimodal / vision row declared translate-only would silently
         // leave the vision subagent's candidates too.
         translateFormat:
-          family === "openai" && form.type === "text" && form.translateFormat
+          translateWire && form.translateFormat
             ? form.translateFormat
             : undefined,
         // "auto" stores as absent, like the category. An image model has no
         // structured tasks, so nothing is kept there either.
         structuredOutput: isImageModel ? undefined : structuredOutput,
         // Cleared off the Responses family, where no wire has the field.
-        textVerbosity: family === "responses" && !isImageModel && form.textVerbosity !== "auto"
+        textVerbosity: verbosityWire && !isImageModel && form.textVerbosity !== "auto"
           ? form.textVerbosity
           : undefined,
         // Travels with the type and only with it: the type already says, on the
@@ -704,11 +722,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     videoWire && videoInput && (videoFps !== undefined
       ? t("aiConfig.models.videoInputShortFps", { fps: videoFps })
       : t("aiConfig.models.videoInputShort")),
-    family === "openai" && form.type === "text" && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
+    translateWire && form.translateFormat && t(`aiConfig.models.translateFormat_${form.translateFormat}`),
     structuredOutput && t(SO_LABEL_KEY[structuredOutput]),
   ].filter(Boolean) as string[];
 
-  const verbositySet = family === "responses" && form.textVerbosity !== "auto";
+  const verbositySet = verbosityWire && form.textVerbosity !== "auto";
   const sampHas = form.temperature.trim() !== "" || form.prefix.trim() !== "" || verbositySet;
   const sampSum = [
     form.temperature.trim() !== "" && `T ${form.temperature.trim()}`,
@@ -840,7 +858,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         }),
         noteTone: "faint" as const,
       }
-    : form.structuredOutput !== "auto" || family === "anthropic"
+    : form.structuredOutput !== "auto" || !soWire
       ? undefined
       : soAutoLifted
         ? { note: t("aiConfig.models.noteSoSchema"), noteTone: "ok" as const }
@@ -862,6 +880,23 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     ? SERVER_TOOL_IDS.filter((id) => serverTools.includes(id)
       || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w); }))
     : [];
+  // The other matrices (屏 05, generalised): a row per capability some route
+  // of this channel has, or the model declares — so a declaration a route
+  // can't say is visible there too. Single-route channels have nothing to
+  // compare; the switches' own hints speak for the one route.
+  const matrixRows = (ids: readonly CapabilityId[], declared: Partial<Record<CapabilityId, boolean>>) => multiRoute
+    ? ids.filter((id) => declared[id]
+      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w, { type: form.type }); }))
+    : [];
+  const matrixInput = matrixRows(["pdfInput", "vlHighResolution", "videoInput", "videoFps"], {
+    pdfInput, vlHighResolution, videoInput, videoFps: videoInput && videoFpsText.trim() !== "",
+  });
+  const matrixOutput = matrixRows(["structuredOutput", "textVerbosity"], {
+    structuredOutput: form.structuredOutput !== "auto", textVerbosity: form.textVerbosity !== "auto",
+  });
+  const matrixProps = (current: ProtocolFamily) => ({
+    routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type,
+  });
   /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
   const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {
     const cat = p?.thinkingCategory;
@@ -1396,38 +1431,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   the same on every route; whether a route can *say* each one is
                   the platform's, per route. The current route's column is the
                   one the switches' hints speak for. */}
-              {matrixTools.length > 0 && route && (
-                <>
-                  <table className={r.matrix} aria-label={t("aiConfig.models.matrixLabel")}>
-                    <thead>
-                      <tr>
-                        <th />
-                        {channelRoutes.map((f) => (
-                          <th key={f} className={`${r.matrixHead} ${f === route ? r.matrixCur : ""}`}>{ROUTE_SHORT[f]}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {matrixTools.map((id) => (
-                        <tr key={id}>
-                          <td>{t(`aiConfig.models.serverTool_${id}`)}</td>
-                          {channelRoutes.map((f) => {
-                            const w = routeWire(f);
-                            const st = w ? capabilityVerdict(id, w, { modelId: form.modelId.trim() || undefined }).status : "no";
-                            return (
-                              <td key={f}
-                                className={`${st === "yes" ? r.cellYes : st === "unknown" ? r.cellUnknown : r.cellNo} ${f === route ? r.matrixCur : ""}`}
-                                title={t(`aiConfig.models.matrix_${st}`)}>
-                                {st === "yes" ? "✓" : st === "unknown" ? "?" : "—"}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <div className={r.url}>{t("aiConfig.models.matrixLegend")}</div>
-                </>
+              {route && (
+                <CapabilityMatrix label={t("aiConfig.models.matrixLabel")} ids={matrixTools}
+                  rowLabel={(id) => t(`aiConfig.models.serverTool_${id}`)} {...matrixProps(route)} />
               )}
             </Fold>
 
@@ -1491,6 +1497,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 </div>
               </Field>
             </Fold>
+            {route && (
+              <CapabilityMatrix label={t("aiConfig.models.matrixLabelInput")} ids={matrixInput}
+                rowLabel={(id) => t(MATRIX_ROW_KEY[id] ?? id)} {...matrixProps(route)} />
+            )}
 
             {/* How this model is asked for JSON on a structured task
                 (lib/ai/jsonMode.ts). Only the modes this family can honour are
@@ -1517,6 +1527,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 ))}
               </div>
             </Field>
+            {route && (
+              <CapabilityMatrix label={t("aiConfig.models.matrixLabelOutput")} ids={matrixOutput}
+                rowLabel={(id) => t(MATRIX_ROW_KEY[id] ?? id)} {...matrixProps(route)} />
+            )}
 
             {/* Dedicated translation models (Sakura). Family-gated for the same
                 reason as the PDF switch — they are served by local
@@ -1531,7 +1545,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 model or as any other subagent's model. The warning has to say
                 so — an author who ticks it and then cannot find their model in
                 the chat picker would otherwise read that as a bug. */}
-            <Fold open={family === "openai" && form.type === "text"}>
+            <Fold open={translateWire}>
               <Subhead label={t("aiConfig.models.capsGroupDedicated")} hint={t("aiConfig.models.capsGroupDedicatedHint")} />
               <Field label={t("aiConfig.models.translateLabel")} hint={t("aiConfig.models.briefTranslate")}
                 warn={form.translateFormat ? t("aiConfig.models.translateFormatHintOn") : undefined}>
@@ -1588,7 +1602,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             </Fold>
             {/* text.verbosity — the Responses family is the only wire with the
                 field, so the row exists only there. 自动 = dashed, nothing sent. */}
-            <Fold open={family === "responses"}>
+            <Fold open={verbosityWire}>
               <Field label={t("aiConfig.models.verbosityLabel")} scope={routeScope} hint={t("aiConfig.models.briefVerbosity")}
                 {...whyProps("verb", t("aiConfig.models.verbosityHint"))}>
                 <div className={s.chips}>
