@@ -30,10 +30,12 @@ describe("which server tool a wire offers a model", () => {
     }
   });
 
-  it("gates only the code interpreter by model id", () => {
+  it("gates only the code interpreter by model id — a measured refusal, not an unlisted id", () => {
     expect(offered(DS, "web_search", "anything")).toBe(true);
-    expect(offered(DS, "code_interpreter", "anything")).toBe(false);
+    expect(offered(DS, "code_interpreter", "qwen3.8-flash")).toBe(false);
     expect(offered(DS, "code_interpreter", "qwen3.5-plus")).toBe(true);
+    // Unmeasured: offered, the drawer saying so (capability-gating-plan §8.7).
+    expect(offered(DS, "code_interpreter", "anything")).toBe(true);
   });
 });
 

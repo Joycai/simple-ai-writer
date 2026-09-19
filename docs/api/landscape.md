@@ -687,7 +687,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   文档说「与 function calling 互斥」，实测只在 ① 面成立。本项目的处理：① 面上**本轮带函数工具就不发**
   `enable_code_interpreter`（agent 的工具不能让），所以 ① 面上它只惠及不带工具的请求；② 面上
   **思考档位为「关闭」就不发**这个工具。两处都是按请求丢掉，而不是发一个必然失败的请求。
-- **支持哪些模型，按 id 判断**（`capabilities.ts` 里 `DASHSCOPE_CODE_INTERPRETER` 的正则组，设置抽屉只对匹配的 id 显示开关；已开着的不匹配 id 显示「不发送」）：
+- **支持哪些模型，按 id 判断**（`capabilities.ts` 里 `DASHSCOPE_CODE_INTERPRETER` 的 `runs` / `refuses` 两组正则：`runs` 里的 id 是「能发」，`refuses` 里的 id 没有开关（已开着的显示「不发送」），两组都没有的 id 给开关、标「未实测」、照发——见 [`capability-gating-plan.md`](capability-gating-plan.md) §8.7）：
 
   | 模型 | ① 面 | ② 面 |
   | --- | --- | --- |
@@ -705,7 +705,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   | qwen3-vl-plus、qwen3-235b-a22b-thinking-2507 | 未测 | ❌ |
 
   ① 面「静默忽略」是按 id 判断而不是「开了试试」的原因：作者看不到任何报错，只会得到一个没算过的答案。
-  3.8 之后的新一代不预先放行，实测过再加。qwen3-coder-plus 在 ① 面也跑了，但文档没列，未收。
+  所以实测静默忽略的 id 进 `refuses`，没有开关；3.8 之后的新一代先落在「未实测」，开关旁写明可能被静默忽略；等官方文档的支持列表更新了再补进 `runs`（见 capability-gating-plan §8.7「名单从哪来」）。qwen3-coder-plus 在 ① 面也跑了，但文档没列，未收。
   另：qwen3-max 在 ① 面**开思考**时有一次思考文本来回重复、180 秒没出结果（1453 个数据块），只出现过一次。
 - **② 面的 item**：`output_item.added` 就带完整代码
   `{type:"code_interpreter_call", id, code, container_id:"", status:"in_progress"}`，之后是

@@ -50,7 +50,8 @@ export type CapabilityId =
  *   - `yes`: the platform lists it (measured), or the protocol itself defines
  *     it and nothing says this platform differs.
  *   - `unknown`: plausible but unmeasured — a relay that may or may not pass
- *     the field on. Offered and sent; the drawer says so.
+ *     the field on, or a model id the platform's list neither names nor
+ *     rules out. Offered and sent; the drawer says so.
  *   - `no`: nothing to send. A declaration on the model row is kept and simply
  *     not sent (channel-model-route-plan §7 invariant 4).
  */
@@ -70,14 +71,15 @@ type CapabilityStatus = "yes" | "unknown" | "no";
  *   - `platform-absent`: the platform's table says this wire does not take it (or takes and ignores it).
  *   - `platform-unlisted`: a private field, and this platform is not one that was measured taking it.
  *   - `family`: no spelling on this protocol family.
- *   - `model`: the platform runs it, but not for this model id.
+ *   - `model`: the platform runs it, but was measured refusing (or ignoring) it for this model id.
+ *   - `model-unlisted`: the platform runs it for some model ids, and this one was never measured.
  *   - `model-type`: the model's type rules it out (a text model reads no frames).
  *   - `requires`: a capability it depends on is unavailable.
  *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
-  "family", "model", "model-type", "requires", "thinking",
+  "family", "model", "model-unlisted", "model-type", "requires", "thinking",
 ] as const;
 type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 
@@ -198,13 +200,22 @@ const SERVER_TOOL_FLAGS: Record<ServerToolId, true> = {
 };
 export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as ServerToolId[];
 
-/** A model-id axis entry: the platform runs it for ids matching any pattern. */
-type ModelMatcher = readonly RegExp[];
+/**
+ * A model-id axis entry. `runs`: measured working for ids matching any
+ * pattern. `refuses`: measured refused, or accepted and silently ignored — it
+ * wins over `runs`. An id matching neither is `unknown / model-unlisted`:
+ * offered and sent, the drawer saying it is unmeasured (capability-gating-plan
+ * §8.7 — the platform has the tool, so a model the list hasn't caught up with
+ * gets the switch rather than losing it).
+ */
+interface ModelMatcher {
+  runs: readonly RegExp[];
+  refuses?: readonly RegExp[];
+}
 
 /**
  * One cell: `true` = measured working for every model on this wire, `false` =
- * measured absent (refused, or accepted and ignored), a matcher = working for
- * the model ids it names.
+ * measured absent (refused, or accepted and ignored), a matcher = per model id.
  */
 type CapabilityCell = boolean | ModelMatcher;
 
@@ -239,24 +250,41 @@ const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
  *     -27b), the 3.6 open-weight models except `qwen3.6-27b` (`Unsupported
  *     model`), and DeepSeek V4 as DashScope serves it.
  *
- * Deliberately anchored: `qwen3.5-omni-plus`, `qwen3-vl-plus`,
- * `qwen3.8-livetranslate-flash-realtime` share a prefix and none of them
- * takes the tool. A generation after 3.8 is not guessed at — a new family
- * earns its line here the way these did, by a measurement.
+ * `runs` is deliberately anchored: `qwen3.5-omni-plus`, `qwen3-vl-plus`,
+ * `qwen3.8-livetranslate-flash-realtime` share a prefix and are not in it.
+ * `refuses` holds only what a sample saw fail — a 400, `Unsupported model`, or
+ * (Chat Completions) a silent ignore. Everything else, including a generation
+ * after 3.8, is `unknown`: the switch is offered and says it is unmeasured.
+ * `runs` grows when the vendor's page adds a model to its list (plan §8.7);
+ * where that page and a sample disagree, the sample wins.
  */
 const DASHSCOPE_CODE_INTERPRETER: Record<"openai" | "responses", ModelMatcher> = {
-  openai: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-7]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.5-\d+b(?:-a\d+b)?$/,
-  ],
-  responses: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-8]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.(?:5|8)-[\d.]+[bt](?:-a\d+b)?$/,
-    /^qwen3\.6-(?!27b$)\d+b(?:-a\d+b)?$/,
-    /^deepseek-v4(?:\.\d+)?-(?:pro|flash)(?:-\d{4})?$/,
-  ],
+  openai: {
+    runs: [
+      /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
+      new RegExp(`^qwen3\\.[5-7]-(?:plus|max|flash)${SNAPSHOT}$`),
+      /^qwen3\.5-\d+b(?:-a\d+b)?$/,
+    ],
+    refuses: [
+      // Silently ignored — the reason this wire is gated by id at all.
+      /^qwen3-max-preview$/, /^qwen-max$/, /^qwen3\.5-omni-plus$/,
+      // `does not support the code_interpreter tool` for flash, max and 27b alike.
+      /^qwen3\.8-/,
+    ],
+  },
+  responses: {
+    runs: [
+      /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
+      new RegExp(`^qwen3\\.[5-8]-(?:plus|max|flash)${SNAPSHOT}$`),
+      /^qwen3\.(?:5|8)-[\d.]+[bt](?:-a\d+b)?$/,
+      /^qwen3\.6-(?!27b$)\d+b(?:-a\d+b)?$/,
+      /^deepseek-v4(?:\.\d+)?-(?:pro|flash)(?:-\d{4})?$/,
+    ],
+    refuses: [
+      /^qwen3-max-preview$/, /^qwen3\.6-27b$/, /^qwen-plus$/, /^qwen3\.5-omni-plus$/,
+      /^qwen3-vl-plus$/, /^qwen3-235b-a22b-thinking-2507$/,
+    ],
+  },
 };
 
 /**
@@ -377,9 +405,11 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (cell === false) return verdict("no", "platform-absent");
   if (cell === true) return verdict("yes", "measured");
   if (cell) {
-    if (model.modelId === undefined) return verdict("yes", "measured");
-    const mid = model.modelId.trim().toLowerCase();
-    return cell.some((re) => re.test(mid)) ? verdict("yes", "measured") : verdict("no", "model");
+    // Blank = nothing typed yet: the axis is not consulted.
+    const mid = model.modelId?.trim().toLowerCase();
+    if (!mid) return verdict("yes", "measured");
+    if (cell.refuses?.some((re) => re.test(mid))) return verdict("no", "model");
+    return cell.runs.some((re) => re.test(mid)) ? verdict("yes", "measured") : verdict("unknown", "model-unlisted");
   }
 
   if (!rule.families.includes(family)) return verdict("no", "family");

@@ -2630,6 +2630,7 @@
       "serverToolNotSent": "{{platform}} has no spelling for this tool: the switch is kept, but nothing is sent.",
       "serverToolNotForModel": "{{platform}} has this tool, but {{model}} doesn't run it: the switch is kept, but nothing is sent.",
       "serverToolUnmeasured": "Unmeasured on {{platform}}: this is the protocol's own tool, so it depends on whether the upstream passes it on — it may be rejected.",
+      "serverToolModelUnmeasured": "{{platform}} has this tool, but {{model}} was never measured with it: it is sent, and may be rejected or silently ignored.",
       "declNotOnRoute": "Kept on the model; the {{route}} route has no spelling for it, so nothing is sent on this route",
       "scopeRoute": "this route · {{route}}",
       "routeLabel": "Route",
@@ -2645,7 +2646,7 @@
       "matrixLabelInput": "Input · per route",
       "matrixLabelOutput": "Output · per route",
       "matrix_yes": "sent",
-      "matrix_unknown": "defined by the protocol, unmeasured on this platform",
+      "matrix_unknown": "unmeasured, sent anyway",
       "matrix_no": "not sent on this route",
       "matrixLegend": "✓ sent · ? unmeasured · — not sent. The switches above are your grant to this model, shared by every route; whether each route can say it is the platform's."
     },
@@ -2808,6 +2809,7 @@
       "platform-unlisted": "Another platform's private field, never measured on {{platform}}",
       "family": "This route's protocol has no spelling for it",
       "model": "{{platform}} has it, but {{model}} doesn't support it",
+      "model-unlisted": "{{platform}} has it, but {{model}} was never measured: sent anyway, and may not work",
       "model-type": "This model's type can't use it (a text model reads no pictures)",
       "requires": "Something it depends on is unavailable on this route",
       "thinking": "This route refuses it while thinking is on"
