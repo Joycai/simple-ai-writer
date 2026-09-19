@@ -97,7 +97,7 @@
 | P3 | `lib → stores` 归零 | 已合并 | #647 |
 | P4 | store 环：项目生命周期协调 + 批处理标志 | 已合并 | #648 |
 | P5 | `agentStore` 拆分 | 已合并 | #649 |
-| P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 进行中 | |
+| P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 已合并 | #650 |
 | P7 | 零碎：`readImageBytes` 复用、`codemap.md` 分段 | 进行中 | |
 
 状态只用 `未开始` / `进行中` / `已合并` / `放弃（见 §7）`。
