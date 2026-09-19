@@ -28,15 +28,6 @@ const SRC = fileURLToPath(new URL("../../", import.meta.url));
 
 /** 允许存在的循环组（成员按字母序），方案 §1.1。每组注明它会在哪个阶段被拆掉。 */
 const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {
-  // A2：工具执行时再跑一次 agent——delegate、run_pack、写手交接直接 import runAgent（P2）。
-  agent: [
-    "lib/agent/handoff.ts",
-    "lib/agent/packs.ts",
-    "lib/agent/registry.ts",
-    "lib/agent/runtime.ts",
-    "lib/agent/subagent.ts",
-    "lib/agent/toolCost.ts",
-  ],
   // B：lore/citations 读 loreStore（P3）。
   lore: [
     "lib/fs/markdown.ts",

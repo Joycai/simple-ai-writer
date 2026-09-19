@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Model, Provider } from "../../ai/configDb";
 import type { ToolContext } from "../registry";
 import type { ToolCall } from "../tools";
+import { messageCeilingForTools } from "../toolCost";
 
 const mockRunAgent = vi.fn();
 const mockPersistUsage = vi.fn();
 const mockWriteTaskNote = vi.fn();
 
-vi.mock("../runtime", () => ({
-  runAgent: (...args: unknown[]) => mockRunAgent(...args),
-}));
 
 vi.mock("../../ai/usage", () => ({
   persistUsage: (...args: unknown[]) => mockPersistUsage(...args),
@@ -73,6 +71,8 @@ describe("tool packs", () => {
       ensure: vi.fn(async () => ({ taskId: "task-123", isNew: false })),
     } as never,
     selfConn: { provider, model, apiKey: "k" },
+    // The runtime injects this on a real run (SubRunner); here it is the mock.
+    subRun: { run: (...args) => mockRunAgent(...args), messageCeilingForTools },
     contextUtilization: 0.5,
     ...overrides,
   });

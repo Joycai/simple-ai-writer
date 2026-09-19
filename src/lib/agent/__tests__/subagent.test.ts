@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Model, Provider } from "../../ai/configDb";
 import type { ToolContext } from "../registry";
 import type { ToolCall } from "../tools";
+import { messageCeilingForTools } from "../toolCost";
 
 const mockRunAgent = vi.fn();
 const mockPersistUsage = vi.fn();
 const mockWriteTaskNote = vi.fn();
 
-vi.mock("../runtime", () => ({
-  runAgent: (...args: unknown[]) => mockRunAgent(...args),
-}));
 
 vi.mock("../../ai/usage", () => ({
   persistUsage: (...args: unknown[]) => mockPersistUsage(...args),
@@ -334,6 +332,8 @@ describe("subagent", () => {
       multimodal: false,
       signal: new AbortController().signal,
       onNestedEvent: vi.fn(),
+      // The runtime injects this on a real run (SubRunner); here it is the mock.
+      subRun: { run: (...args) => mockRunAgent(...args), messageCeilingForTools },
       taskWorkspace: {
         taskId: "task-123",
         dir: "/test-project/.ai-writer/tasks/task-123",

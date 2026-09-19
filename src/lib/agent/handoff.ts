@@ -32,8 +32,7 @@ import { baseName, dirName, joinPath, resolveWorkspacePath } from "../paths";
 import type { AgentEvent } from "./events";
 import { locateMatches, occurrenceAt, sliceLines } from "./editApply";
 import { WRITER_PRESET } from "./presets";
-import type { ToolContext } from "./registry";
-import { runAgent } from "./runtime";
+import type { SubRunner, ToolContext } from "./registry";
 import { listTaskNotes } from "./taskWorkspace";
 
 /** The tool the runtime forces on the handoff round. Never in the registry. */
@@ -293,6 +292,12 @@ interface WriterHandoffArgs {
   degraded: boolean;
   /** The parent run's tool context; the writer gets a read-only slice of it. */
   ctx: ToolContext;
+  /**
+   * The runtime's own `runAgent`, passed in rather than imported: the runtime
+   * imports this module for the handoff stage, so an import back would close a
+   * cycle (docs/feature/code-structure-plan.md P2).
+   */
+  runAgent: SubRunner["run"];
   /** System-layer text the writer inherits — see {@link writerSystemPrompt}. */
   inheritedSystem?: string;
   signal: AbortSignal;
@@ -390,7 +395,7 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
   let text = "";
   let result;
   try {
-    result = await runAgent({
+    result = await args.runAgent({
       ...connOptions(conn),
       preset: WRITER_PRESET,
       messages,

@@ -25,6 +25,8 @@ vi.mock("../../ai", () => ({
 }));
 
 import { executeDelegate } from "../subagent";
+import { runAgent } from "../runtime";
+import { messageCeilingForTools } from "../toolCost";
 import { createTaskWorkspace, loadTaskDoc } from "../taskWorkspace";
 import type { ToolContext } from "../registry";
 import i18n from "../../../i18n";
@@ -48,6 +50,8 @@ function makeCtx(
     taskWorkspace: handle,
     signal: new AbortController().signal,
     onNestedEvent: () => {},
+    // The real runtime: these tests read what the sub-run actually sent.
+    subRun: { run: runAgent, messageCeilingForTools },
     resolveSubAgent: async () => ({
       provider: { id: "pv", name: "Prov", baseUrl, apiStandard },
       model, apiKey: "k",
@@ -85,6 +89,12 @@ describe("delegate naming and preconditions", () => {
     // The full instruction still survives, as the note's own title.
     expect(fs.get(notePath)).toContain(instruction.slice(0, 40));
     expect(res.content).toContain(stem);
+  });
+
+  it("outside a run (no injected SubRunner) it fails with a message instead of reaching for the runtime", async () => {
+    const res = await executeDelegate(call({ kind: "search", task: "查一下" }), makeCtx({ subRun: undefined }));
+    expect(res.content).toMatch(/^Error: .*sub-run/);
+    expect(sent).toHaveLength(0);
   });
 
   it("omits the references section entirely when there are no refs", async () => {

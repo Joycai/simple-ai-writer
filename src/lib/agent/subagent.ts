@@ -23,7 +23,7 @@ import { withCurrentTime } from "../context/clock";
 import { bytesToBase64, isImagePath } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
 import { isWorkspacePath, resolveRelativePath } from "../paths";
-import { runAgent, type AgentRunResult } from "./runtime";
+import type { AgentRunResult } from "./runtime";
 import type { ToolContext } from "./registry";
 import { loadProjectImage, shrunkNote, type ToolCall, type ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
@@ -246,11 +246,14 @@ export async function executeDelegate(
     { role: "user", content: userContent },
   ];
 
+  // Injected by the runtime; see `SubRunner` for why this is not an import.
+  if (!ctx.subRun) return fail("delegate needs the agent runtime to start a sub-run, and this call is not inside one.");
+
   let output = "";
   let result: AgentRunResult;
 
   try {
-    result = await runAgent({
+    result = await ctx.subRun.run({
       ...connOptions(conn),
       preset,
       messages,
