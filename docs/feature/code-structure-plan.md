@@ -1,6 +1,6 @@
 # 源码结构整改方案（分层与循环依赖）
 
-> 状态：`planned`——已决定，未动工。进度看 §2，每合一个 PR 改一行。
+> 状态：`shipped`——P0–P7 全部落地（2026-09-19），§3 是前后对照，§7 是与方案的每一处偏离。守卫 `src/lib/__tests__/layering.test.ts` 留在仓库里：零环、`lib → stores` 为零，store 间动态导入按文件封顶。
 > 背景：2026-09-19 对 `src/` 做了一次结构审查。顶层分层（`components → stores → lib → Tauri`）是健康的：`lib` 不依赖 `components`，`stores` 不依赖 `components`，`lib/` 27 个子目录各有 `__tests__/`。问题集中在 agent 子系统和几个几千行的文件，它们正在从内部侵蚀这套分层。这份方案把整改拆成可以单独合并的阶段，并在第一步装上守卫，让后面每一步只能往前走。
 
 ## 0. 这份文档怎么用
@@ -98,7 +98,7 @@
 | P4 | store 环：项目生命周期协调 + 批处理标志 | 已合并 | #648 |
 | P5 | `agentStore` 拆分 | 已合并 | #649 |
 | P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 已合并 | #650 |
-| P7 | 零碎：`readImageBytes` 复用、`codemap.md` 分段 | 进行中 | |
+| P7 | 零碎：`readImageBytes` 复用、`codemap.md` 分段 | 已合并 | #651 + 本 PR |
 
 状态只用 `未开始` / `进行中` / `已合并` / `放弃（见 §7）`。
 
