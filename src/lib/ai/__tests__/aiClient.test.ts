@@ -50,6 +50,7 @@ async function collect(opts: {
   temperature?: number;
   topP?: number;
   frequencyPenalty?: number;
+  vlHighResolution?: boolean;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -69,6 +70,7 @@ async function collect(opts: {
     temperature: opts.temperature,
     topP: opts.topP,
     frequencyPenalty: opts.frequencyPenalty,
+    vlHighResolution: opts.vlHighResolution,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -840,6 +842,27 @@ describe("streamCompletion — forced tool_choice on a platform that takes auto 
       chunks: done, standard: "openai_compat", baseUrl: "https://api.deepseek.com", tools: [tool], toolChoice: forced,
     });
     expect(calls[0].body.tool_choice).toEqual(forced);
+  });
+});
+
+// DashScope's vl_high_resolution_images is the platform's, not the family's:
+// 智谱 takes it with a 200 and bills the same tokens (landscape.md §7 第十四个样本).
+describe("streamCompletion — vl_high_resolution_images follows the platform", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const send = (baseUrl: string) => collect({ chunks: done, standard: "openai_compat", baseUrl, vlHighResolution: true });
+
+  it("sends it on DashScope and on a relay that may front it", async () => {
+    for (const baseUrl of ["https://dashscope.aliyuncs.com/compatible-mode/v1", "https://relay.example/v1"]) {
+      const { calls } = await send(baseUrl);
+      expect(calls[0].body.vl_high_resolution_images, baseUrl).toBe(true);
+    }
+  });
+
+  it("drops it on a platform that ignores it, even when declared", async () => {
+    for (const baseUrl of ["https://open.bigmodel.cn/api/paas/v4", "https://ark.cn-beijing.volces.com/api/v3"]) {
+      const { calls } = await send(baseUrl);
+      expect(calls[0].body, baseUrl).not.toHaveProperty("vl_high_resolution_images");
+    }
   });
 });
 

@@ -1421,6 +1421,11 @@ Responses adapter：
 >   的 PDF（PELICAN 7342）——本项目的 `file` 片段原样可用（同一张青色图，默认强度答 Teal、`low` 答 Blue：看得见，辨色随强度浮动）。**文本模型收到非 text 片段直接 400**
 >   `messages.content.type 参数非法，取值范围 ['text']`（4.7 / 4.5-air），不是静默丢图。5.3-flash 的图片
 >   `prompt_tokens` 只计 ~50——计费口径与别家（~1,300）不同，不能拿 prompt 数判断图有没有送到。
+> - **千问的两个视觉旋钮在这里是空操作**（2026-09-19 补测，glm-5.3-flash）：`vl_high_resolution_images:true` 收下、200，
+>   3000² 的图开与不开都是 **7,938** 输入 token（`detail:"high"` 也一样）——既不报错也不起作用。① `video_url`
+>   **读得出**（data URL mp4，3 秒先红后蓝 → 答「红、紫」/「红、紫、蓝」：看得见、辨色粗），但片段上的 `fps` 被无视：
+>   0.5 与 2 都是 **367** token。所以「高分辨率读图」与「抽帧频率」归千问平台，不归 ① 族（`platforms.ts` 的
+>   `qwenVisionParams`）；视频输入本身照常可用。
 > - **联网搜索（① 面）**：是 `tools[]` 里的一项 `{type:"web_search", web_search:{enable, search_engine, …}}`，
 >   不是顶层字段（千问是）。**默认开着「搜索意图识别」，意图不够就不搜——而模型照样回「根据联网搜索结果……」**
 >   （4.5-air，prompt 22 token、响应无 `web_search` 字段：一次没搜，话术却说搜了）。`search_intent:false`

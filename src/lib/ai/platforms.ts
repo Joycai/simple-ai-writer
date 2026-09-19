@@ -173,6 +173,15 @@ interface PlatformProfile {
    * serves ({@link ModelCalibration}). Only ids a sample measured.
    */
   models?: Readonly<Record<string, ModelCalibration>>;
+  /**
+   * Whether the ① wire honours DashScope's two vision knobs — the body's
+   * `vl_high_resolution_images` and a clip part's `fps`. Absent = only a
+   * platform no host names (New API, custom), which may front DashScope.
+   * Measured elsewhere as a silent no-op: 智谱 takes both with a 200 and
+   * bills the same tokens either way (landscape.md §7 第十四个样本), so the
+   * switch there would be a control that does nothing.
+   */
+  qwenVisionParams?: boolean;
   /** Where the entries above were measured. */
   source: string;
 }
@@ -331,6 +340,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     ],
     hosts: ["dashscope.aliyuncs.com"],
     serverTools: DASHSCOPE_SERVER_TOOLS,
+    qwenVisionParams: true,
     source: "landscape.md §7 第六个样本 (联网搜索与网页抓取 2026-09-14 · 代码解释器 2026-09-17)",
   },
   "dashscope-intl": {
@@ -342,6 +352,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     ],
     hosts: ["dashscope-intl.aliyuncs.com"],
     serverTools: DASHSCOPE_SERVER_TOOLS,
+    qwenVisionParams: true,
     source: "landscape.md §7 第六个样本, same surfaces as the domestic host",
   },
   xai: {
@@ -656,6 +667,13 @@ export function wireReadsPdf(wire: ServerToolWire): boolean {
 /** Whether this wire takes `tool_choice: "auto"` only (a forced choice is sent as `auto`). */
 export function wireIgnoresForcedToolChoice(wire: ServerToolWire): boolean {
   return PROFILES[wire.platform]?.forcedToolChoice === "ignored";
+}
+
+/** Whether this wire takes DashScope's `vl_high_resolution_images` and clip `fps` (see `qwenVisionParams`). */
+export function wireTakesQwenVisionParams(wire: ServerToolWire): boolean {
+  if (familyOf(wire.standard) !== "openai") return false;
+  const profile = PROFILES[wire.platform];
+  return profile?.qwenVisionParams ?? (!!profile && profile.hosts.length === 0);
 }
 
 /** What this platform knows about one of its model ids, or undefined — see {@link ModelCalibration}. */
