@@ -40,7 +40,7 @@ import {
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf, wireTakesQwenVisionParams } from "../../../lib/ai/platforms";
+import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf, wireTakesVideoFps, wireTakesVlHighResolution } from "../../../lib/ai/platforms";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -406,16 +406,17 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
   const isAsrModel = form.type === "asr";
   // DashScope's two vision knobs (hi-res, clip fps) are the platform's, not the
-  // family's: 智谱 takes both and ignores them (platforms.ts `qwenVisionParams`).
-  const qwenVisionWire = provider ? wireTakesQwenVisionParams(providerWire(provider)) : false;
+  // family's: 智谱 takes both and ignores them (capabilities.ts `vlHighResolution` / `videoFps`).
+  const hiResPlatform = provider ? wireTakesVlHighResolution(providerWire(provider)) : false;
+  const fpsPlatform = provider ? wireTakesVideoFps(providerWire(provider)) : false;
   // The hi-res switch exists where it reaches the wire: a model that reads
   // pictures, on a platform whose Chat Completions wire reads it (openai.ts).
-  const vlHiResWire = qwenVisionWire && canSeeImages(form);
+  const vlHiResWire = hiResPlatform && canSeeImages(form);
   // A `video_url` part exists only on Chat Completions, and only a model that
   // reads pictures reads frames (lib/ai/videoInput). The fps under it is the
   // platform's, like hi-res.
   const videoWire = family === "openai" && canSeeImages(form);
-  const videoFpsWire = videoWire && qwenVisionWire;
+  const videoFpsWire = videoWire && fpsPlatform;
   const videoFps = videoFpsWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
