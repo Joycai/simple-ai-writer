@@ -14,6 +14,7 @@ import {
   AsrHttpError,
   getUploadPolicy,
   pollTask,
+  retryAfterMs,
   submitBody,
   submitHeaders,
   submitTranscription,
@@ -139,6 +140,28 @@ describe("pollTask", () => {
     expect(err).toBeInstanceOf(AsrHttpError);
     expect((err as AsrHttpError).code).toBe("FILE_DOWNLOAD_FAILED");
     expect((err as AsrHttpError).message).toMatch(/resolve header/);
+  });
+  it("429 按 Retry-After 等，不计入失败次数；401 / 404 立刻抛", async () => {
+    const waits: number[] = [];
+    const rec = async (ms: number) => { waits.push(ms); };
+    for (let i = 0; i < 4; i++) {
+      responses.push(() => new Response("slow down", { status: 429, headers: { "retry-after": "7" } }));
+    }
+    responses.push(json({ output: { task_id: "t", task_status: "SUCCEEDED", output: { transcription_url: "https://r" } } }));
+    await expect(pollTask(conn, "t", undefined, undefined, () => 0, rec)).resolves.toMatchObject({ transcriptionUrl: "https://r" });
+    expect(waits.filter((ms) => ms === 7000)).toHaveLength(4);
+
+    responses.push(() => new Response("no", { status: 401 }));
+    await expect(pollTask(conn, "t", undefined, undefined, () => 0, wait)).rejects.toMatchObject({ status: 401 });
+    expect(responses).toHaveLength(0);
+    responses.push(() => new Response("gone", { status: 404 }));
+    await expect(pollTask(conn, "t", undefined, undefined, () => 0, wait)).rejects.toMatchObject({ status: 404 });
+  });
+  it("Retry-After：秒数、HTTP 日期、缺席、离谱值", () => {
+    expect(retryAfterMs("3")).toBe(3000);
+    expect(retryAfterMs(new Date(60_000).toUTCString(), 30_000)).toBe(30_000);
+    expect(retryAfterMs(null)).toBe(10_000);
+    expect(retryAfterMs("99999")).toBe(60_000);
   });
   it("网络抖动连续两次可以忍，第三次抛", async () => {
     responses.push(() => new Response("gateway", { status: 502 }));

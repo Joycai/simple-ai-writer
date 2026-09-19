@@ -36,6 +36,7 @@ vi.mock("../../fs/fileio", () => {
       return { size: sizes.get(p) ?? v.byteLength, head: v.subarray(0, max) };
     },
     removeDir: async (p: string) => { for (const k of under(p)) files.delete(k); },
+    removeFile: async (p: string) => { files.delete(p); },
     renamePath: async (from: string, to: string) => {
       for (const k of under(from)) {
         const v = files.get(k)!;

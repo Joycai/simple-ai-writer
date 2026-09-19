@@ -24,6 +24,7 @@ import {
   readFileHead,
   readFileRange,
   removeDir,
+  removeFile,
   renamePath,
   toBase64,
   writeFile,
@@ -49,6 +50,7 @@ import {
   type SweepEntry,
 } from "./cache";
 import {
+  AsrHttpError,
   fetchResultJson,
   getUploadPolicy,
   pollTask,
@@ -160,6 +162,55 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
   };
 }
 
+/**
+ * The filetrans checkpoint: a submitted task's id, written the moment the
+ * submit returns and removed once its result is in the cache.
+ *
+ * Submitting is the billed step. Without this, anything that stopped the run
+ * after it — 停止, the poll deadline, a crash, a 401 after the key rotated —
+ * left a paid task running on the platform with nobody to collect it, and the
+ * rerun uploaded and paid again (坑 121). A rerun of the same file, model and
+ * options now polls the task it already paid for.
+ *
+ * A sibling file of the cache directory, not a file in it: the directory only
+ * exists once a result has landed (it is renamed into place whole), and the
+ * sweep only looks at directories. Older than the platform keeps a task, it is
+ * ignored and overwritten.
+ */
+interface PendingTask {
+  taskId: string;
+  model: string;
+  submittedAt: number;
+}
+
+/** DashScope keeps a task (and its result link) for 24 hours. */
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+
+const pendingPathFor = (dir: string) => `${dir}.pending.json`;
+
+async function readPending(dir: string, modelId: string): Promise<PendingTask | null> {
+  try {
+    const raw = JSON.parse(await readFile(pendingPathFor(dir))) as Partial<PendingTask>;
+    if (typeof raw.taskId !== "string" || raw.model !== modelId || typeof raw.submittedAt !== "number") return null;
+    return Date.now() - raw.submittedAt < PENDING_TTL_MS ? (raw as PendingTask) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function dropPending(dir: string): Promise<void> {
+  try {
+    await removeFile(pendingPathFor(dir));
+  } catch {
+    // Absent, or already gone — either way nothing to resume.
+  }
+}
+
+/** A task the platform has no more: gone (404) or settled as failed. Its checkpoint is worthless. */
+function taskIsGone(e: unknown): boolean {
+  return e instanceof AsrHttpError && (e.status === 404 || (e.status === 200 && e.message.startsWith("Transcription failed")));
+}
+
 /** A synchronous request carries the whole file; 43s was the slowest measured. Five minutes is "the endpoint is gone". */
 const SYNC_DEADLINE_MS = 5 * 60_000;
 
@@ -235,17 +286,37 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
   } else {
     const deadline = withDeadline(req.signal, pollDeadlineMs(bytes.byteLength, null));
     try {
-      onProgress?.({ phase: "uploading" });
-      const policy = await getUploadPolicy(conn, deadline.signal);
-      const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
-      const taskId = await submitTranscription(conn, ossUrl, options, deadline.signal);
-      onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
-      const polled = await pollTask(
-        conn,
-        taskId,
-        (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
-        deadline.signal,
-      );
+      const submit = async (): Promise<string> => {
+        onProgress?.({ phase: "uploading" });
+        const policy = await getUploadPolicy(conn, deadline.signal);
+        const ossUrl = await uploadTemp(policy, bytes, baseName(sourcePath), MIME[ext] ?? "application/octet-stream", deadline.signal);
+        const id = await submitTranscription(conn, ossUrl, options, deadline.signal);
+        // Written before the first poll: from here on the task is paid for.
+        const pending: PendingTask = { taskId: id, model: conn.modelId, submittedAt: Date.now() };
+        await writeFile(pendingPathFor(dir), JSON.stringify(pending)).catch(() => {});
+        return id;
+      };
+      const poll = (id: string) => {
+        onProgress?.({ phase: "queued", polls: 0, elapsedMs: 0 });
+        return pollTask(
+          conn,
+          id,
+          (p) => onProgress?.({ phase: p.phase, polls: p.polls, elapsedMs: p.elapsedMs }),
+          deadline.signal,
+        );
+      };
+      const resumed = await readPending(dir, conn.modelId);
+      let polled;
+      try {
+        polled = await poll(resumed?.taskId ?? (await submit()));
+      } catch (e) {
+        if (!taskIsGone(e)) throw e; // keep the checkpoint: a rerun resumes this task
+        await dropPending(dir);
+        // The checkpoint pointed at a task the platform no longer has — the
+        // author approved one transcription, and this is the first real one.
+        if (!resumed) throw e;
+        polled = await poll(await submit());
+      }
       onProgress?.({ phase: "downloading" });
       resultJson = await fetchResultJson(polled.transcriptionUrl, deadline.signal);
       billedSeconds = polled.billedSeconds;
@@ -282,6 +353,7 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
       if (!(await fileExists(dir))) throw e;
     }
   }
+  if (!sync) await dropPending(dir);
   return { transcript, cacheDir: dir, cached: false, billedSeconds, bytes: bytes.byteLength };
 }
 

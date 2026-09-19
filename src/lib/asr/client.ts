@@ -248,6 +248,19 @@ interface PollResult {
 
 const POLL_MS = 3_000;
 const POLL_SLOW_MS = 5_000;
+/** 429 没带 Retry-After 时等多久；带了也封顶，别让一个离谱的值吃掉整个时限。 */
+const RATE_LIMIT_WAIT_MS = 10_000;
+const RATE_LIMIT_MAX_WAIT_MS = 60_000;
+
+/** `Retry-After`（秒数或 HTTP 日期）→ 毫秒。 */
+export function retryAfterMs(header: string | null, now: number = Date.now()): number {
+  const v = header?.trim();
+  if (!v) return RATE_LIMIT_WAIT_MS;
+  const secs = Number(v);
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(v) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return RATE_LIMIT_WAIT_MS;
+  return Math.min(ms, RATE_LIMIT_MAX_WAIT_MS);
+}
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -287,10 +300,19 @@ export async function pollTask(
     let json: { output?: TaskOutput; usage?: { duration?: number; seconds?: number } };
     try {
       const res = await fetch(`${base}/tasks/${encodeURIComponent(taskId)}`, { headers: authHeaders(conn), signal });
+      if (res.status === 429) {
+        // 限流不是故障：任务照跑，只是查得太勤。按 Retry-After 等（没给就 10 秒），
+        // 不计入失败次数——计进去的话，三次限流就会丢下一个已付费的任务。
+        await wait(retryAfterMs(res.headers.get("retry-after")), signal);
+        continue;
+      }
       if (!res.ok) throw new AsrHttpError("Transcription task error", res.status, await res.text());
       json = (await readJson(res, "Transcription task error")) as typeof json;
     } catch (e) {
-      // 任务已经付了钱，一次 GET 很便宜，网络抖一下值得等——但只等几次。
+      // 按「哪一步、什么状态」分类（16 §8）：401 / 403 是凭证问题、404 是任务已不在，
+      // 等下去都不会好，立刻交给调用方（它按状态决定留不留检查点）。其余当网络抖动：
+      // 任务已经付了钱，一次 GET 很便宜，值得等——但只等几次。
+      if (e instanceof AsrHttpError && (e.status === 401 || e.status === 403 || e.status === 404)) throw e;
       if (signal?.aborted || ++misses >= 3) throw e;
       continue;
     }
