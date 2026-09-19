@@ -90,6 +90,16 @@ const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
   ["deepseek-v4-pro", 393_216],
   ["glm-5.2", 131_072],
   ["kimi-k3", 1_000_000],
+  // ── 智谱 BigModel — the vendor's 核心参数 table, 2026-09 (landscape.md §7
+  // 第十四个样本; 4.5-air's 98,304 measured: one over is a 400 naming the range).
+  // `glm-5` covers every 5.x id (5-turbo, 5.1–5.3, 5.3-flash(x), 5v-turbo); the
+  // two vision rows exist because their text siblings' prefix would claim them.
+  ["glm-5", 131_072],
+  ["glm-4.7", 131_072],
+  ["glm-4.6", 131_072],
+  ["glm-4.6v", 32_768],
+  ["glm-4.5", 98_304],
+  ["glm-4.5v", 16_384],
   ["minimax-m2.5", 32_768],
 ];
 

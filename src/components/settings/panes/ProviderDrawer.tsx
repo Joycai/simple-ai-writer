@@ -14,7 +14,7 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformOrigin, serverToolStatus,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformModelCalibration, platformOrigin, serverToolStatus,
   type PlatformId,
 } from "../../../lib/ai/platforms";
 import {
@@ -159,12 +159,28 @@ const VOLCENGINE_MODELS: StarterModel[] = [
   seedream("doubao-seedream-5-0-pro-260628", "Seedream 5.0 Pro", "seedream-5-pro"),
 ];
 
+/**
+ * 智谱 BigModel — three of the eleven calibrated models (one per thinking
+ * control, plus the natively multimodal one), with their values read from the
+ * platform's calibration table so the starter rows and a hand-added row can
+ * never disagree (lib/ai/platforms.ts `ZHIPU_MODELS`).
+ */
+const zhipuStarter = (modelId: string, name: string): StarterModel => ({
+  modelId, name, ...platformModelCalibration("zhipu", modelId),
+});
+const ZHIPU_MODELS: StarterModel[] = [
+  zhipuStarter("glm-5.3-flash", "GLM-5.3-Flash"),
+  zhipuStarter("glm-4.7", "GLM-4.7"),
+  zhipuStarter("glm-4.5-air", "GLM-4.5-Air"),
+];
+
 /** Starter rows a new channel on a platform brings along (only on creation). */
 const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
   deepseek: DEEPSEEK_MODELS,
   dashscope: DASHSCOPE_MODELS,
   volcengine: VOLCENGINE_MODELS,
   "volcengine-plan": VOLCENGINE_PLAN_MODELS,
+  zhipu: ZHIPU_MODELS,
   orcarouter: ORCAROUTER_FREE_MODELS,
 };
 
@@ -694,11 +710,14 @@ function PlatformGrid({ current, onPick }: { current: PlatformId | null; onPick:
 /**
  * A caveat the author needs *before* typing a key (05k 屏 2a). Only where a
  * wrong pick fails in a way the connection test can't explain: 火山方舟's two
- * key kinds each 401 on the other's path, and both sit on one host.
+ * key kinds each 401 on the other's path, and both sit on one host. 智谱 the
+ * other way round: one key reaches every path, so nothing stops a plan key
+ * from quietly billing the balance here.
  */
 const PLATFORM_NOTES: Partial<Record<PlatformId, string>> = {
   volcengine: "aiConfig.providers.platformNoteVolcengine",
   "volcengine-plan": "aiConfig.providers.platformNoteVolcenginePlan",
+  zhipu: "aiConfig.providers.platformNoteZhipu",
 };
 
 /** What picking this platform will create (屏 02 right side): routes, their tools, starter rows. */

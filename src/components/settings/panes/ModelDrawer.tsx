@@ -21,7 +21,7 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -33,14 +33,14 @@ import {
 } from "../../../lib/comfy/workflow";
 import { readFile } from "../../../lib/fs/fileio";
 import {
-  categoriesForFamily, isOnOffCategory, onEffort, resolveThinkingCategory,
+  categoriesForFamily, effortForCategory, isOnOffCategory, onEffort, resolveThinkingCategory,
   supportsTemperature, thinkingIsOn, THINKING_CATEGORIES,
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
+import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -296,6 +296,52 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   };
   const toggleWhyAll = () => { setWhyAll((v) => !v); setWhy({}); };
   const whyProps = (k: WhyKey, text: string) => ({ why: text, whyOpen: whyOpen(k), onWhy: toggleWhy(k) });
+
+  // The platform's own values for a model id it knows (platforms.ts
+  // `ModelCalibration`), written into a *new* row's form when the author picks
+  // or finishes typing the id. A field is ours to write only while it is
+  // unset or still holds what the previous prefill put there — so correcting
+  // a typo re-prefills, and anything the author chose by hand stays.
+  // Keyed by the id it ran for: blurring the id field again without changing it
+  // must not take back a field the author has since set to its unset value.
+  const lastCalibration = useRef<{ id?: string; category?: ThinkingCategoryId; ctx?: string; out?: string; type?: ModelType; pdf?: boolean }>({});
+  const applyCalibration = (modelId: string) => {
+    if (existing || !provider) return;
+    const id = modelId.trim().toLowerCase();
+    if (id === lastCalibration.current.id) return;
+    const cal = platformModelCalibration(providerWire(provider).platform, modelId) ?? {};
+    // A category of another family would be refused by resolveThinkingCategory
+    // anyway; don't show one the route can't send.
+    const category = cal.thinkingCategory && THINKING_CATEGORIES[cal.thinkingCategory].family === family
+      ? cal.thinkingCategory : undefined;
+    const next = {
+      id,
+      category,
+      ctx: cal.contextSize ? String(cal.contextSize) : undefined,
+      out: cal.maxOutput ? String(cal.maxOutput) : undefined,
+      type: cal.type as ModelType | undefined,
+      pdf: cal.pdfInput,
+    };
+    const prev = lastCalibration.current;
+    const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
+    setForm((f) => {
+      const thinkingCategory = ours<ThinkingCategoryId | "auto">(f.thinkingCategory, "auto", prev.category)
+        ? (next.category ?? "auto") : f.thinkingCategory;
+      return {
+        ...f,
+        thinkingCategory,
+        // The same coercion as the category chips: an effort picked under the
+        // previous category (glm-5.2's off) is a 400 under the new one (glm-5.3).
+        reasoningEffort: thinkingCategory === f.thinkingCategory ? f.reasoningEffort
+          : effortForCategory(thinkingCategory === "auto" ? undefined : THINKING_CATEGORIES[thinkingCategory], f.reasoningEffort),
+        contextSize: ours(f.contextSize, "", prev.ctx) ? (next.ctx ?? "") : f.contextSize,
+        maxOutput: ours(f.maxOutput, "", prev.out) ? (next.out ?? "") : f.maxOutput,
+        type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type,
+      };
+    });
+    setPdfInput((cur) => (ours(cur, false, prev.pdf) ? !!next.pdf : cur));
+    lastCalibration.current = next;
+  };
 
   const handleFetch = async () => {
     setFetching(true);
@@ -1018,13 +1064,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     noResultsText={t("ai.modelPicker.noMatch", { defaultValue: "没有匹配的模型" })}
                     onChange={(v) => {
                       const m = fetchedList.find((x) => x.id === v);
-                      if (m) setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
+                      if (!m) return;
+                      setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
+                      applyCalibration(m.id);
                     }} />
                 )}
               </div>
             )}
             <input className={inputCls(false, s.mono)} placeholder="deepseek-flash" value={form.modelId}
-              onChange={(e) => setForm({ ...form, modelId: e.target.value })} />
+              onChange={(e) => setForm({ ...form, modelId: e.target.value })}
+              onBlur={(e) => applyCalibration(e.target.value)} />
           </Field>
           <Field label={t("aiConfig.models.displayNameLabel")} hint={t("aiConfig.models.briefName")}>
             <input className={inputCls(false)} placeholder={t("aiConfig.models.phNameSame")} value={form.name}
@@ -1190,25 +1239,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                         label={c === "auto" ? t("aiConfig.models.thinkingCatAuto") : t(THINKING_CATEGORIES[c].labelKey)}
                         active={form.thinkingCategory === c}
                         auto={c === "auto"}
-                        onClick={() => setForm((f) => {
-                          // Coerce an effort the new category's menu doesn't offer
-                          // back to a safe value, so a stale `medium` can't survive
-                          // onto e.g. a GLM model (low/high/max only). The fallback
-                          // is the category's own default, else "default" (send
-                          // nothing → endpoint default) — never `menu[0]`, which is
-                          // "off" for most categories and would silently disable
-                          // thinking the moment the author switched category.
-                          const next = c === "auto" ? undefined : THINKING_CATEGORIES[c];
-                          const menu = next?.menu ?? [];
-                          const keep = f.reasoningEffort === "default" || menu.includes(f.reasoningEffort);
-                          return {
-                            ...f,
-                            thinkingCategory: c,
-                            reasoningEffort: keep
-                              ? f.reasoningEffort
-                              : (next?.defaultEffort ?? ("default" as ReasoningEffort)),
-                          };
-                        })}
+                        onClick={() => setForm((f) => ({
+                          ...f,
+                          thinkingCategory: c,
+                          // A stale `medium` can't survive onto e.g. a GLM model (low/high/max only).
+                          reasoningEffort: effortForCategory(c === "auto" ? undefined : THINKING_CATEGORIES[c], f.reasoningEffort),
+                        }))}
                       />
                     </Fragment>
                   ))}

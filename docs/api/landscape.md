@@ -1367,6 +1367,121 @@ Responses adapter：
 > `docs/feature/image-generation-plan.md` PR7。协议事实的另一份（含 5.0 pro 图层拆分 / 透明背景）在
 > Joycai Image AI Toolkits 的 `docs/api/volcengine-ark.md`。
 
+### 第十四个样本：智谱 BigModel 开放平台（① 族为主，② ④ 各探一次；2026-09-19 实测 glm-4.5-air / glm-4.7 / glm-5.3-flash）
+
+> **实测结论**（先 curl 探形状，再用 `live.zhipu.test.ts` 驱动本项目真实 adapter，12 条**全过**；`GLM_KEY`，按量 key；平台画像 `zhipu`）：
+>
+> - **一台主机，四个前缀，一把 key 都通**：`open.bigmodel.cn` 下 ① `/api/paas/v4`（标准端点）、
+>   ① `/api/coding/paas/v4`、④ `/api/anthropic`、② `/api/v1`。后三个是文档里 **GLM Coding Plan** 的「编程端点」，
+>   同一把按量 key 在四处都回 200（④ 的 `/v1/models`、② 的 `/v1/models` 也都 200）。**key 不分两种**——
+>   与火山方舟（两种 key 各自 401 在对方路径上，第十二个样本）相反：这里是**路径决定扣哪笔钱**，文档原话
+>   「错误配置端点将导致无法使用 GLM Coding Plan 套餐额度」。套餐条款另有「仅限指定工具使用」「用于非支持
+>   工具将被限制权益」，违规可封号——所以按量 key 走标准端点是唯一不踩条款的组合。
+> - **`/models` 形状三样**：① 两个前缀是 OpenAI 的 `{object:"list", data:[{id,…}]}`（11 个 id，含
+>   glm-4.5 … glm-5.3-flashx）；④ 是 Anthropic 的 `{data:[{id, display_name, created_at}]}`；
+>   ② 的 `/api/v1/models` 却是 **Codex CLI 的模型目录**（`{models:[{slug, context_window,
+>   supported_reasoning_levels, input_modalities, …}]}`，只列 glm-5.3 / 5.3-flash / 5-turbo 三个）。
+> - **思考，① 面，三款三样**：
+>   - **默认都开**（glm-4.5-air「用一句话说你好」想 180 字，4.7 想 261 token，5.3-flash 想 104 token）。
+>   - **关**：`thinking:{type:"disabled"}`。4.5-air / 4.7 照关（0 推理）；**glm-5.3-flash 400**
+>     `1210 该模型始终思考，不支持关闭思考；请使用 low、high 或 max。`
+>   - **强度**：`reasoning_effort` **只在 5.3 代生效**，且只收 `low / high / max`；`medium` / `none` / 乱写
+>     一律 400，**报的是同一句「不支持关闭思考」**——错误文案不指向出错的值。**glm-4.7 与 glm-4.5-air
+>     对任何值（含 `none` 与乱写的 `bogus`）都 200 且照常思考**：字段被静默丢弃，没有档位可调。
+>   - `reasoning_effort:"high"` + `thinking:{type:"disabled"}` 同发**不报错**（4.7 照关）——与豆包相反。
+>   - 推理从 `reasoning_content` 流出；`usage.completion_tokens_details.reasoning_tokens` **4.7 / 5.3-flash
+>     有、4.5-air 没有**（4.5-air 的推理算进 `completion_tokens`，无从拆分）。
+>   - `thinking:{clear_thinking:false}`（缺 `type`）在三款上都 200——在千问转发时它在非 GLM 模型上 400，
+>     智谱自家端点本来就是它的主场。
+> - **工具，① 面**：函数调用三款都通；工具轮把 `reasoning_content` 原样回传 200（传与不传都 200，
+>   传了 prompt 多计 ~38 token——交错思考用得上它，文档要求回传）。**`tool_choice` 文档写「默认且仅支持
+>   `auto`」，实测三款三样**：
+>
+>   | | `required` | 具名 `{type:"function",…}` | `none` |
+>   | --- | --- | --- | --- |
+>   | glm-5.3-flash | 200，**不强制**（照常回答文本） | 200，**不强制** | 200，**照调工具**（被无视） |
+>   | glm-4.7 | 200，**不强制** | 思考开时 **400** `1210 API 调用参数有误，请检查文档。`；关时 200 不强制 | 200，生效（不给工具） |
+>   | glm-4.5-air | 200，**强制生效** | 200，**强制生效** | 200，生效 |
+>
+>   4.7 的 400 **不提 `tool_choice` 这几个字**——靠报错文案里的参数名认出「强制被拒」的办法在这里失效。
+>   另有一次（约十分之一）4.7 在工具结果后回 `finish_reason:"stop"` + **空 content**，重试十次未复现。
+> - **结构化输出**：`response_format` 文档只列 `text` / `json_object`。`json_object` 三款都出合法 JSON，
+>   **不查提示词里有没有 "json" 字样**（与千问、DeepSeek 不同）。**`json_schema` 静默忽略**：200，回的是
+>   包在 ```json 代码块里的文本，不合 schema——既不报错也不生效，是「看起来成功」的那种。
+> - **流式**：`stream_options:{include_usage:true}` 收下不报错；usage 与 `finish_reason` 同在最后一块，
+>   之后 `data: [DONE]`。`finish_reason` 除标准三个外还有 **`sensitive`**（内容审核拦截）、**`network_error`**
+>   （推理异常）、`model_context_window_exceeded`——文档写明**流式中途失败不回错误码，只在 `finish_reason`
+>   里说**。标准 `content_filter` 这个值它不用。
+> - **错误通道**：HTTP 状态 + `{"error":{"code":"<业务码字符串>","message":"…"}}`。实测：模型名错 400 `1211`；
+>   `temperature:1.5` 400 `1210 temperature参数非法：限制数值范围[0,1]`（**上限是 1**，不是 OpenAI 的 2）；
+>   `max_tokens` 超上限 400 并报范围（4.5-air `[1,98304]`）；错 key **401 `{"code":"401","message":"令牌已过期或验证不正确"}`**；
+>   流式请求的参数错也是非流式的 400（生成前就拒）。**未知顶层字段一律放过**（`foo_bar`、`frequency_penalty`、
+>   `max_completion_tokens` 都 200）。
+> - **多模态**：glm-5.3-flash 读得出 ① `image_url`（data URL，64² 纯色 → Teal）与 ① `{type:"file", file:{file_data, filename}}`
+>   的 PDF（PELICAN 7342）——本项目的 `file` 片段原样可用（同一张青色图，默认强度答 Teal、`low` 答 Blue：看得见，辨色随强度浮动）。**文本模型收到非 text 片段直接 400**
+>   `messages.content.type 参数非法，取值范围 ['text']`（4.7 / 4.5-air），不是静默丢图。5.3-flash 的图片
+>   `prompt_tokens` 只计 ~50——计费口径与别家（~1,300）不同，不能拿 prompt 数判断图有没有送到。
+> - **联网搜索（① 面）**：是 `tools[]` 里的一项 `{type:"web_search", web_search:{enable, search_engine, …}}`，
+>   不是顶层字段（千问是）。**默认开着「搜索意图识别」，意图不够就不搜——而模型照样回「根据联网搜索结果……」**
+>   （4.5-air，prompt 22 token、响应无 `web_search` 字段：一次没搜，话术却说搜了）。`search_intent:false`
+>   后三款都真搜：响应顶层多一个 `web_search[]`（标题 / 链接 / 摘要）。代价很重：`search_pro` 回 50 条、
+>   **prompt 24k token**；`search_std` 10 条、6.7k（`count:3` 两个引擎都无视）。搜索另按次计费。
+> - **② 面**（`/api/v1/responses`，只探两次）：推理是 `reasoning` output item，内容放在 **`content[].reasoning_text`**
+>   而不是 `summary[]`（summary 是空数组）；`reasoning:{effort:"none"}` 在 4.5-air 上被无视（照想，
+>   `reasoning_tokens` 却报 0）。
+> - **④ 面**（`/api/anthropic`，只探两次）：glm-4.7 在这里**默认不思考**（只回 text 块），与 ① 面相反；
+>   5.3-flash 回 `thinking` 块（无 `signature`）。`usage` 带 `server_tool_use.web_search_requests`。
+> - **上限**（文档「核心参数」表，4.5-air 已实测）：5.x 与 4.6 / 4.7 默认 65,536、最大 131,072；4.5 系列最大 98,304；
+>   4.6v 32,768；4.5v 16,384。上下文：5.3 / 5.3-flash / 5.2 1M，4.6–5.1 200K，4.5 系列 128K。
+> - **耗时**：多数 0.3–10 s；4.7 偶有长尾（一次关思考的工具轮 136 s）。
+>
+> **逐模型校准**（这把 key 的 `/models` 列出的全部 11 个 id，同日实测；「强度」一列用一道需推理的应用题各档跑两次比
+> `reasoning_tokens`，平凡题上各档差异淹没在噪声里）：
+>
+> | 模型 | `max_tokens` 上界 | 读图 | 默认思考 | `thinking:disabled` | `reasoning_effort` | 思考时具名强制 |
+> | --- | --- | --- | --- | --- | --- | --- |
+> | glm-5.3 | 131,072 | ✗ 400 | 开 | **400** | 只收 low/high/max，**真分档**（24–35 / 50 / 101–145） | 200，不强制 |
+> | glm-5.3-flash | 131,072 | ✓ | 开 | **400** | 同上 | 200，不强制 |
+> | glm-5.3-flashx | 131,072 | ✓（Teal） | 开 | **400** | 同上 | 200，不强制 |
+> | glm-5.2 | 131,072 | ✗ | 开 | 关 | 七值都收、乱写 400；**`none` 关不掉**（与 `low` 同想 ~350）；`max` 多 ~35% | 200，不强制 |
+> | glm-5.1 | 131,072 | ✗ | 开 | 关 | 乱写也 200——**无视** | 200，不强制 |
+> | glm-5-turbo | 131,072 | ✗ | 开 | 关 | 乱写也 200——无视 | 200，不强制 |
+> | glm-5 | 131,072 | ✗ | 开 | 关 | 乱写 400（文案是笼统的「参数有误」）；各档差异不稳定，按文档视为不支持 | 200，不强制 |
+> | glm-4.7 | 131,072 | ✗ | 开 | 关 | 无视 | **400** |
+> | glm-4.6 | 131,072 | ✗ | 开 | 关 | 无视 | **400** |
+> | glm-4.5 | **131,072**（文档写 96K） | ✗ | 开 | 关 | 无视 | **400** |
+> | glm-4.5-air | 98,304 | ✗ | 开 | 关 | 无视 | 200，**真强制** |
+>
+> 读图一列：文本模型收到 `image_url` 一律 400 `messages.content.type 参数非法，取值范围 ['text']`（生成前拒，不计费）。
+> 5.3 代的 400 文案对所有非法值都说「不支持关闭思考」——连关思考时发的图片请求也报这句，不指向真正的原因。
+> `reasoning_tokens` 在 glm-5 / 4.6 / 4.5 关思考时缺席（不是 0），其余模型给 0。上下文：5.3 / 5.3-flash(x) 1,048,576
+> （`/api/v1/models` 与文档一致）、5-turbo 204,800（同上）、5.2 1M、5.1 / 5 / 4.7 / 4.6 200K、4.5 系列 128K（后几项按文档）。
+>
+> **独立工具端点**（同一把 key、同一个 `/api/paas/v4` 前缀，与对话无关，2026-09-19 实测）：
+>
+> - **网络搜索 `POST /web_search`**：body `{search_query, search_engine, search_intent, count?, search_domain_filter?,
+>   search_recency_filter?, content_size?}`，前三个必填；回 `{search_intent:[{query, intent, keywords}], search_result:[{title,
+>   content, link, media, icon, refer, publish_date}]}`，**没有 `usage`**（按次计费）。0.3–1.4 s。
+>   - **这里 `search_intent` 默认 `false`**（意图恒为 `SEARCH_ALWAYS`）——与对话内 `web_search` 工具的默认（做意图识别）
+>     正相反。设 `true` 时闲聊（「你好呀」）回 **0 条**、意图 `SEARCH_NONE`：没搜是看得见的，不像对话内那样被话术盖住。
+>   - **`count` 四个引擎都无视**：`search_std` 回 ~10 条（`count:1` 也回 9 条），`search_pro` 与 `search_pro_sogou`
+>     恒回 50 条（`count:3`、`count:20` 都一样），`search_pro_quark` 10 条。结果正文总量：std 8.7k 字、pro 32k 字，
+>     `content_size:"high"` 把 std 抬到 13k 字。
+>   - **过滤器按引擎部分生效**：`search_domain_filter` 在 `search_pro` / `search_pro_sogou` 上生效（15 条全在该域名），
+>     在 `search_std` 上**无视**（38 条，杂站混入）；`search_recency_filter:"oneWeek"` 三个引擎都**无视**（照样出 2024 年的页面）。
+>   - 超过文档的 70 字上限的查询不报错、照搜。引擎写错回 400 `1211 模型不存在`（引擎被当成模型）；缺引擎 400 `1214`。
+> - **网页阅读 `POST /reader`**：body `{url, timeout?, no_cache?, return_format?, retain_images?, …}`；回
+>   `{model:"web-reader", reader_result:{title, description, url, content, metadata, external}}`，同样无 `usage`。0.6–1.6 s。
+>   - 默认 `markdown` 正文完整（tauri 文档页 3k 字，gov.cn 首页 5.7k 字含 47 张图的链接）。**`return_format:"text"` 是有损的**：
+>     gov.cn 首页只剩 108 字的页脚。`retain_images:false` 与 `with_links_summary` 实测**无效果**（图链照旧）。
+>   - **目标页 404 与主机不存在都回 500 `1234 网络错误，错误id：…，请稍后重试`**——分不出是页面不存在还是平台故障，且文案
+>     劝人重试；非 URL 是 400 `1214 URL格式无效`。
+>
+> **对本项目**：见 [`zhipu-plan.md`](zhipu-plan.md)——哪些 adapter 原样可用、哪些是缺口、先做哪片。
+
+来源（2026-09-19）：`docs.bigmodel.cn` 的「对话补全」（OpenAPI）「工具调用」「结构化输出」「流式消息」「思考模式」「深度思考」
+「核心参数」「模型概览」「错误码」「GLM-5.3-Flash」「GLM Coding Plan 快速开始 / 接入工具 / 使用须知」「网络搜索」「网页阅读」各页的 `.md` 原文，与上面的实测。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

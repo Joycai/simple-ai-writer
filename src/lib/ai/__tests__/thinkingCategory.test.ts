@@ -14,12 +14,16 @@ import { describe, expect, it } from "vitest";
 import {
   categoriesForFamily,
   defaultCategoryId,
+  effortForCategory,
   parseThinkingCategory,
   forcesToolChoiceAuto,
+  isOnOffCategory,
+  onEffort,
   reasoningBody,
   resolveThinkingCategory,
   THINKING_CATEGORIES,
   thinkingBody,
+  thinkingIsOn,
 } from "../reasoning";
 import type { ApiStandard } from "../types";
 
@@ -178,5 +182,66 @@ describe("doubao-switch category", () => {
   it("is offered only on the Anthropic family", () => {
     expect(categoriesForFamily("anthropic")).toContain("doubao-switch");
     expect(categoriesForFamily("openai")).not.toContain("doubao-switch");
+  });
+});
+
+// GLM before 5.3 on 智谱's own endpoint (landscape.md §7 第十四个样本): thinks by
+// default, ignores reasoning_effort, so the switch is the whole control.
+describe("glm-switch category", () => {
+  const cat = THINKING_CATEGORIES["glm-switch"];
+  it("sends the switch alone, never reasoning_effort", () => {
+    expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(cat, onEffort(cat))).toEqual({ thinking: { type: "enabled" } });
+    expect(reasoningBody(cat, "default")).toBeUndefined();
+    expect(reasoningBody(cat, undefined)).toBeUndefined();
+  });
+  it("is an on/off toggle that reads on while unset — the endpoint's own default", () => {
+    expect(isOnOffCategory(cat)).toBe(true);
+    expect(thinkingIsOn(cat, undefined)).toBe(true);
+    expect(thinkingIsOn(cat, "off")).toBe(false);
+    // Qwen's switch still reads off while unset.
+    expect(thinkingIsOn(THINKING_CATEGORIES["qwen-budget"], undefined)).toBe(false);
+  });
+  it("keeps forcing to the platform, not the category", () => {
+    expect(forcesToolChoiceAuto(cat, "high")).toBe(false);
+  });
+  it("is offered only on the OpenAI family", () => {
+    expect(categoriesForFamily("openai")).toContain("glm-switch");
+    expect(categoriesForFamily("anthropic")).not.toContain("glm-switch");
+  });
+});
+
+// GLM-5.2 (landscape.md §7 第十四个样本): `none` keeps thinking, so off is the
+// switch; low/medium fold into high, so the menu is off · high · max.
+describe("glm-effort category", () => {
+  const cat = THINKING_CATEGORIES["glm-effort"];
+  it("sends the switch alone for off and reasoning_effort otherwise", () => {
+    expect(cat.menu).toEqual(["off", "high", "max"]);
+    expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(cat, "max")).toEqual({ reasoning_effort: "max" });
+    expect(reasoningBody(cat, "default")).toBeUndefined();
+  });
+});
+
+// Shared by the category chips and the model drawer's id prefill: an effort
+// picked under one category must not ride onto another that 400s on it.
+describe("effortForCategory", () => {
+  const C = THINKING_CATEGORIES;
+  it("replaces an effort the new menu lacks with the category's default, else send-nothing", () => {
+    // glm-5.2's off onto GLM-5.3 (cannot stop thinking) → its own default, max.
+    expect(effortForCategory(C.glm, "off")).toBe("max");
+    expect(effortForCategory(C.glm, "medium")).toBe("max");
+    expect(effortForCategory(C["glm-effort"], "low")).toBe("default");
+    expect(effortForCategory(undefined, "high")).toBe("default");
+  });
+  it("keeps an effort the menu offers, and send-nothing everywhere", () => {
+    expect(effortForCategory(C.glm, "low")).toBe("low");
+    expect(effortForCategory(C["glm-effort"], "off")).toBe("off");
+    expect(effortForCategory(C.glm, "default")).toBe("default");
+  });
+  it("keeps every effort on an on/off category, whose only question is off-or-not", () => {
+    expect(effortForCategory(C["glm-switch"], "off")).toBe("off");
+    expect(effortForCategory(C["glm-switch"], "high")).toBe("high");
+    expect(effortForCategory(C.minimax, "off")).toBe("off");
   });
 });

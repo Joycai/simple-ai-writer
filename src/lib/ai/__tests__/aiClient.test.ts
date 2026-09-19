@@ -287,6 +287,47 @@ describe("streamCompletion — OpenAI SSE", () => {
     ).rejects.toThrow(/content_filter/);
   });
 
+  // 智谱's private finish reasons: a stream that fails mid-way says so only
+  // here, with no error body (landscape.md §7 第十四个样本).
+  it("rejects on a sensitive finish_reason as a safety block", async () => {
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"半"},"finish_reason":"sensitive"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4", apiKey: "k", standard: "openai_compat", modelId: "glm-4.7",
+        messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+      }),
+    ).rejects.toThrow(/content_filter/);
+  });
+
+  it("rejects on a network_error finish_reason instead of handing over half an answer", async () => {
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"half"},"finish_reason":"network_error"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4", apiKey: "k", standard: "openai_compat", modelId: "glm-4.7",
+        messages: [{ role: "user", content: "hi" }], onChunk: () => {},
+      }),
+    ).rejects.toThrow(/network_error/);
+  });
+
+  it("flags model_context_window_exceeded as truncated", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":"cut"}}]}\n`,
+        `data: {"choices":[{"delta":{},"finish_reason":"model_context_window_exceeded"}],"usage":{"prompt_tokens":1,"completion_tokens":2}}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+    });
+  });
+
   it("flags a length finish_reason as truncated rather than a plain success", async () => {
     const { received } = await collect({
       chunks: [
@@ -758,6 +799,45 @@ describe("streamCompletion — forced tool_choice under the OpenAI switch dialec
     const { calls } = await collect({
       chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
       reasoningEffort: "high",
+    });
+    expect(calls[0].body.tool_choice).toEqual(forced);
+  });
+});
+
+// 智谱 documents `auto` as tool_choice's only value; measured, glm-5.3-flash and
+// glm-4.7 ignore forcing and 4.7 refuses a named one with a bare 1210 that
+// never names the parameter (landscape.md §7 第十四个样本).
+describe("streamCompletion — forced tool_choice on a platform that takes auto only", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const tool: ToolDefinition = {
+    type: "function",
+    function: { name: "emit", description: "d", parameters: { type: "object", properties: {} } },
+  };
+  const forced = { type: "function" as const, function: { name: "emit" } };
+  const ZHIPU = "https://open.bigmodel.cn/api/paas/v4";
+
+  it("sends a named or required choice as auto, whatever the thinking state", async () => {
+    for (const toolChoice of [forced, "required" as const]) {
+      for (const reasoningEffort of ["off", "high", undefined] as const) {
+        const { calls } = await collect({
+          chunks: done, standard: "openai_compat", baseUrl: ZHIPU, tools: [tool], toolChoice,
+          reasoningEffort, thinkingCategory: "glm-switch",
+        });
+        expect(calls[0].body.tool_choice).toBe("auto");
+      }
+    }
+  });
+
+  it("leaves auto and none as they are", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", baseUrl: ZHIPU, tools: [tool], toolChoice: "none",
+    });
+    expect(calls[0].body.tool_choice).toBe("none");
+  });
+
+  it("does not touch another platform (regression guard)", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", baseUrl: "https://api.deepseek.com", tools: [tool], toolChoice: forced,
     });
     expect(calls[0].body.tool_choice).toEqual(forced);
   });

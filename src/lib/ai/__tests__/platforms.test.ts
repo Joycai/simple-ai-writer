@@ -4,14 +4,20 @@ import {
   inferPlatform,
   parsePlatform,
   PLATFORM_IDS,
+  platformEndpoints,
   platformForAddress,
   platformHasHosts,
+  platformModelCalibration,
+  platformOrigin,
   platformSource,
   platformToStore,
   resolvePlatform,
   serverToolStatus,
+  wireIgnoresForcedToolChoice,
   wireReadsPdf,
 } from "../platforms";
+import { THINKING_CATEGORIES } from "../reasoning";
+import { knownMaxOutput } from "../modelLimits";
 
 describe("inferPlatform", () => {
   it("names an official standard by its vendor, whatever the (empty) address", () => {
@@ -216,5 +222,67 @@ describe("wireReadsPdf", () => {
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
+  });
+});
+
+// 智谱 BigModel (landscape.md §7 第十四个样本): the pay-as-you-go standard
+// endpoint only; forcing a tool is sent as auto.
+describe("zhipu", () => {
+  const BASE = "https://open.bigmodel.cn/api/paas/v4";
+  it("is named by its host and lists the one standard route", () => {
+    expect(inferPlatform(BASE, "openai_compat")).toBe("zhipu");
+    expect(platformEndpoints("zhipu")).toEqual([{ family: "openai", path: "/api/paas/v4" }]);
+    expect(platformOrigin("zhipu")).toBe("https://open.bigmodel.cn");
+  });
+  // The Coding Plan's paths share the host but not the bill (zhipu-plan.md G9).
+  it("names only the standard path; the Coding Plan's paths on the same host stay custom", () => {
+    expect(inferPlatform("https://open.bigmodel.cn/api/coding/paas/v4", "openai_compat")).toBe("custom");
+    expect(inferPlatform("https://open.bigmodel.cn/api/anthropic", "anthropic_compat")).toBe("custom");
+    expect(inferPlatform("https://open.bigmodel.cn", "openai_compat")).toBe("custom");
+  });
+  // The drawer's host field is bare — it cannot tell the two bills apart, so
+  // the bare host still means this platform (typed char by char, the platform
+  // passes through custom on the way).
+  it("follows the drawer's bare host field back to zhipu", () => {
+    expect(platformForAddress("zhipu", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
+    expect(platformForAddress("custom", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
+    expect(platformForAddress("zhipu", "https://open.bigmodel.c", "openai_compat")).toBe("custom");
+  });
+  it("takes auto only, and spells no server tool yet", () => {
+    const wire = { platform: "zhipu" as const, standard: "openai_compat" as const };
+    expect(wireIgnoresForcedToolChoice(wire)).toBe(true);
+    expect(wireIgnoresForcedToolChoice({ platform: "deepseek", standard: "openai_compat" })).toBe(false);
+    expect(serverToolStatus(wire, "web_search")).toBe("no");
+  });
+});
+
+// G11 (docs/api/zhipu-plan.md): the family default is wrong on all eleven, so
+// the platform carries a per-id prefill. Every entry must be sendable on the
+// platform's one route, and agree with the app-wide output-cap table.
+describe("zhipu model calibration", () => {
+  const IDS = [
+    "glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo",
+    "glm-4.7", "glm-4.6", "glm-4.5", "glm-4.5-air",
+  ];
+  it("covers the eleven measured ids, one of the three GLM categories each", () => {
+    for (const id of IDS) {
+      const cal = platformModelCalibration("zhipu", id);
+      expect(cal, id).toBeDefined();
+      expect(["glm", "glm-effort", "glm-switch"]).toContain(cal!.thinkingCategory);
+      expect(THINKING_CATEGORIES[cal!.thinkingCategory!].family).toBe("openai");
+      expect(cal!.maxOutput).toBe(knownMaxOutput(id));
+    }
+    expect(platformModelCalibration("zhipu", "glm-5.3")?.thinkingCategory).toBe("glm");
+    expect(platformModelCalibration("zhipu", "glm-5.2")?.thinkingCategory).toBe("glm-effort");
+    expect(platformModelCalibration("zhipu", "glm-4.7")?.thinkingCategory).toBe("glm-switch");
+  });
+  it("only the 5.3 flash pair reads pictures and PDFs", () => {
+    const readers = IDS.filter((id) => platformModelCalibration("zhipu", id)?.type === "multimodal");
+    expect(readers).toEqual(["glm-5.3-flash", "glm-5.3-flashx"]);
+  });
+  it("matches ids case-insensitively, and knows nothing it did not measure", () => {
+    expect(platformModelCalibration("zhipu", " GLM-4.7 ")?.thinkingCategory).toBe("glm-switch");
+    expect(platformModelCalibration("zhipu", "glm-4.6v")).toBeUndefined();
+    expect(platformModelCalibration("dashscope", "glm-4.7")).toBeUndefined();
   });
 });
