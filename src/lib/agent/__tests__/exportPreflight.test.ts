@@ -22,22 +22,12 @@ vi.mock("../../fs/fileio", () => ({
   writeBinaryFile: vi.fn(async () => {}),
 }));
 
-// The format store reaches prefs and the DB on construction; the docx tool only
-// ever asks it which presets exist, so the built-ins stand in for it.
-vi.mock("../../../stores/docFormatStore", async () => {
-  const { BUILTIN_FORMATS, DEFAULT_FORMAT_ID } = await import("../../docx/format");
-  return {
-    currentFormats: () => ({ presets: BUILTIN_FORMATS, defaultId: DEFAULT_FORMAT_ID }),
-    imitatedIdFor: (p: string) => `imitated:${p}`,
-    useDocFormatStore: { getState: () => ({ addImitated: () => {} }) },
-  };
-});
-
 import { exportPptxTool } from "../pptxTools";
 import { exportDocxTool } from "../docxTools";
 import { outlineMarkdown } from "../../docx";
 import { WHOLE_PAGE_TIER } from "../../pptx/htmlSlides";
 import type { Proposal, ToolContext } from "../registry";
+import { BUILTIN_FORMATS, DEFAULT_FORMAT_ID } from "../../docx/format";
 
 const PROJECT = "/proj";
 const captured: Proposal[] = [];
@@ -47,6 +37,12 @@ const ctx = (): ToolContext =>
     projectPath: PROJECT,
     loreIndex: {},
     multimodal: false,
+    // The docx tool only asks which presets exist, so the built-ins stand in
+    // for docFormatStore (what stores/toolAppState hands a real run).
+    appState: {
+      docFormats: () => ({ presets: BUILTIN_FORMATS, defaultId: DEFAULT_FORMAT_ID }),
+      addImitatedFormat: () => {},
+    },
     requestApproval: async (p: Proposal) => {
       captured.push(p);
       return { approved: true as const, backupPath: "done" };

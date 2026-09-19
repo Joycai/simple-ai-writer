@@ -24,14 +24,11 @@ vi.mock("../../ai/image", () => ({
 }));
 
 let storeModels: unknown[] = [];
-vi.mock("../../../stores/aiStore", () => ({
-  useAiStore: {
-    getState: () => ({
-      models: storeModels,
-      providers: [{ id: "p1", name: "ComfyUI", baseUrl: "http://127.0.0.1:8188", apiStandard: "openai_compat" }],
-    }),
-  },
-}));
+// aiStore's rows, handed in the way agentStore's approval path does.
+const settings = () => ({
+  models: storeModels,
+  providers: [{ id: "p1", name: "ComfyUI", baseUrl: "http://127.0.0.1:8188", apiStandard: "openai_compat" }],
+}) as never;
 vi.mock("../../keyStore", () => ({ loadApiKey: async () => "" }));
 vi.mock("../assets", () => ({
   saveDocumentAsset: async () => ({ absPath: "/proj/assets/a/pic.png", relPath: "assets/a/pic.png" }),
@@ -77,7 +74,7 @@ beforeEach(() => {
 
 describe("runIllustration and the negative prompt", () => {
   it("sends it as its own wire field on the comfyui route", async () => {
-    await runIllustration(proposal({ negative: "watermark, blurry" }), "/proj");
+    await runIllustration(proposal({ negative: "watermark, blurry" }), "/proj", settings());
     const [, req] = generateImage.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
     expect(req.negative).toBe("watermark, blurry");
     // The positive is untouched — the two never merge.
@@ -85,14 +82,14 @@ describe("runIllustration and the negative prompt", () => {
   });
 
   it("drops it when the binding moved to a model without negative conditioning", async () => {
-    await runIllustration(proposal({ modelId: "m3", negative: "watermark" }), "/proj");
+    await runIllustration(proposal({ modelId: "m3", negative: "watermark" }), "/proj", settings());
     const [, req] = generateImage.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
     expect(req.negative).toBeUndefined();
     expect(req.prompt).toBe("a knight");
   });
 
   it("omits the field entirely when the proposal carried none", async () => {
-    await runIllustration(proposal(), "/proj");
+    await runIllustration(proposal(), "/proj", settings());
     const [, req] = generateImage.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
     expect("negative" in req).toBe(false);
   });

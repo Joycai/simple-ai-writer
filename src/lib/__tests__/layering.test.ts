@@ -28,15 +28,6 @@ const SRC = fileURLToPath(new URL("../../", import.meta.url));
 
 /** 允许存在的循环组（成员按字母序），方案 §1.1。每组注明它会在哪个阶段被拆掉。 */
 const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {
-  // B：lore/citations 读 loreStore（P3）。
-  lore: [
-    "lib/fs/markdown.ts",
-    "lib/lore/citations.ts",
-    "lib/lore/entity.ts",
-    "lib/lore/index.ts",
-    "lib/lore/transfer.ts",
-    "stores/loreStore.ts",
-  ],
   // C：切换 / 关闭项目时 projectStore 调 agentStore（P4）。
   project: [
     "stores/agentStore.ts",
@@ -48,20 +39,16 @@ const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {
   batch: ["stores/aiTaskStore.ts", "stores/batchStore.ts"],
 };
 
-/** `lib/` 下对 `stores/` 有值依赖的文件及其导入条数上限，方案 §1.2。没记的就是 0。 */
-const LIB_TO_STORES: Readonly<Record<string, number>> = {
-  "lib/agent/imageTools.ts": 1, // aiStore 的 models / subAgents（P3）
-  "lib/translate/tool.ts": 1, // aiStore（P3）
-  "lib/asr/conn.ts": 1, // aiStore（P3）
-  "lib/image/illustrate.ts": 1, // aiStore 的 models / providers（P3）
-  "lib/lore/citations.ts": 2, // loreStore + appStore（P3）
-  "lib/agent/docxTools.ts": 1, // docFormatStore（P3）
-  "lib/editor/aiSelection.ts": 1, // editorStore.editorView（P3）
-};
+/**
+ * `lib/` 下对 `stores/` 有值依赖的文件及其导入条数上限，方案 §1.2。没记的就是 0——
+ * P3 之后全部是 0。需要 store 里的东西，由调用方作参数传进来；agent 工具经
+ * `ToolContext.appState`（stores/toolAppState.ts）。
+ */
+const LIB_TO_STORES: Readonly<Record<string, number>> = {};
 
 /** `stores/` 之间 `import("./xStore")` 的条数上限，方案 §1.3。没记的就是 0。 */
 const STORE_DYNAMIC: Readonly<Record<string, number>> = {
-  "stores/agentStore.ts": 34,
+  "stores/agentStore.ts": 30,
   "stores/roleplayStore.ts": 18,
   "stores/aiTaskStore.ts": 5,
   "stores/projectStore.ts": 4,

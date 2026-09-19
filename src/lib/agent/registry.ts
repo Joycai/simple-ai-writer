@@ -21,7 +21,7 @@ import type { ToolDefinition } from "../ai/types";
 import type { EditMatch, Insertion } from "./editApply";
 import type { DocxOutline } from "../docx";
 import type { LintFinding } from "../pptx/lint";
-import type { DocFormat, SpecRow } from "../docx/format";
+import type { DocFormat, DocFormatPreset, SpecRow } from "../docx/format";
 import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import i18n from "../../i18n";
@@ -122,7 +122,7 @@ import {
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { reportIssueCall, reportPassCall, type ReviewSink } from "../consistency/reviewTools";
 import { executeDelegate } from "./subagent";
-import type { SubAgentKind } from "./subagentModel";
+import type { AiSettingsSnapshot, SubAgentKind } from "./subagentModel";
 import { executeRunPack } from "./packs";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
@@ -828,9 +828,32 @@ export interface SubRunner {
   ) => number;
 }
 
+/**
+ * Live app state a tool reads at call time — the author's AI settings and the
+ * .docx format list. Injected by the store that starts the run
+ * (`stores/toolAppState.ts`), because `lib/` never imports `stores/`: each of
+ * these used to be an `await import` of a store from inside a tool, which is
+ * how aiStore ended up inside the agent subsystem's import cycle
+ * (docs/feature/code-structure-plan.md P3). Getters, not values: a tool reads
+ * the settings as they are when it runs, the same moment the store read did.
+ */
+export interface ToolAppState {
+  aiSettings: () => AiSettingsSnapshot;
+  /** docFormatStore's list and default — what `export_docx` resolves `format_id` against. */
+  docFormats: () => { presets: DocFormatPreset[]; defaultId: string };
+  /** Park a format read from a .docx in this session's list (docFormatStore.addImitated). */
+  addImitatedFormat: (preset: DocFormatPreset) => void;
+}
+
 export interface ToolContext {
   projectPath: string;
   loreIndex: LoreIndex;
+  /**
+   * {@link ToolAppState}. Absent on surfaces whose presets carry none of the
+   * tools that read it (lore modals, the splitter); a tool reached without it
+   * says so instead of guessing.
+   */
+  appState?: ToolAppState;
   /**
    * Nested runs ({@link SubRunner}). Set by `runAgent` on the context it hands
    * its tools, so every caller gets it without passing it; absent only when a

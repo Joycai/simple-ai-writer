@@ -1,8 +1,8 @@
 /**
  * 绑定的转写模型 + 它的端点 + 凭据，或者说清为什么没有。
  *
- * 照 `lib/translate/tool.ts` 的 `resolveTranslateConn`：动态 import aiStore，因为
- * `lib/` 不反向依赖 `stores/`，而这里确实要读作者在设置里绑了什么。
+ * 设置由调用方传入（store 直接给，`transcribe_audio` 工具经 `ToolContext.appState`）：
+ * `lib/` 不反向依赖 `stores/`（docs/feature/code-structure-plan.md P3）。
  *
  * 走哪条路由**模型行**决定（`asrFormat`），不在两个模型之间自动挑：返回值带上
  * `format`，调用方据此分支。
@@ -10,7 +10,7 @@
 
 import type { AsrFormat, Model, Provider } from "../ai/configDb";
 import { loadApiKey } from "../keyStore";
-import { subAgentModel } from "../agent/subagentModel";
+import { subAgentModel, type AiSettingsSnapshot } from "../agent/subagentModel";
 import type { AsrConn } from "./client";
 import { asrIdMismatch, looksLikeFiletransModel } from "./formats";
 import { providerFor } from "../ai/routes";
@@ -31,9 +31,9 @@ export type AsrUnavailable =
 
 export { looksLikeFiletransModel };
 
-export async function resolveAsrConn(): Promise<ResolvedAsr | AsrUnavailable> {
-  const { useAiStore } = await import("../../stores/aiStore");
-  const { models, providers, subAgents } = useAiStore.getState();
+export async function resolveAsrConn(
+  { models, providers, subAgents }: AiSettingsSnapshot,
+): Promise<ResolvedAsr | AsrUnavailable> {
 
   const model = subAgentModel("asr", models, subAgents);
   if (!model) {

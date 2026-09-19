@@ -20,6 +20,7 @@ import { hashText, loadMemory, projectRelativePath } from "../lib/context/memory
 import { workflowBriefingSection } from "../lib/workflow";
 import { docxBriefingSection } from "../lib/docx/briefing";
 import { currentFormats } from "./docFormatStore";
+import { toolAppState } from "./toolAppState";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
@@ -636,6 +637,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             loreScope,
             organize: loreOrganizer(),
             multimodal: canSeeImages(model),
+            appState: toolAppState,
             // 同 agentStore：读图的是谁，只在 routeTools 判一次。
             visionDelegate: routed.visionDelegate,
             searchReadsPages: routed.searchReadsPages,

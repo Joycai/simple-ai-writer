@@ -92,7 +92,7 @@ describe("counted illustrate grant", () => {
     await useAgentStore.getState().requestApproval(illu(), run, { autoApproveKey: KEY, onApplyProgress });
 
     expect(runIllustration).toHaveBeenCalledTimes(1);
-    expect(runIllustration.mock.calls[0][3]).toBe(onApplyProgress);
+    expect(runIllustration.mock.calls[0][4]).toBe(onApplyProgress);
   });
 
   it("voids the leftover budget when the granting run ends — even for chat", () => {

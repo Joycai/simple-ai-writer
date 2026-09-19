@@ -21,7 +21,7 @@ import { missingFonts } from "../docx/fontCheck";
 import { readDocFormat } from "../docx/read";
 import { originName, FormatResolveError, resolveFormat, type DocFormatOverrides, type FormatOrigin } from "../docx/resolve";
 import type { DocFormatPreset } from "../docx/format";
-import { currentFormats, imitatedIdFor, isSessionImitated, useDocFormatStore } from "../../stores/docFormatStore";
+import { imitatedIdFor, isSessionImitated } from "../docx/presets";
 import type { DocxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -74,7 +74,9 @@ export async function exportDocxTool(
     return { toolCallId, content: `Error: "${target}" does not end in .docx.` };
   }
 
-  const { presets, defaultId } = currentFormats();
+  // docFormatStore, handed in by the surface — `lib/` does not import stores.
+  if (!ctx.appState) return { toolCallId, content: "Error: this surface does not hand tools the .docx format list — this tool cannot run here." };
+  const { presets, defaultId } = ctx.appState.docFormats();
   let resolved;
   try {
     resolved = resolveFormat(presets, defaultId, {
@@ -190,7 +192,9 @@ export async function readDocFormatTool(
 
   // 先当预设 id 认。作者说「用公文那套」时模型抄的就是清单里的 id，走这条路
   // 不碰盘。
-  const { presets, defaultId } = currentFormats();
+  // docFormatStore, handed in by the surface — `lib/` does not import stores.
+  if (!ctx.appState) return { toolCallId, content: "Error: this surface does not hand tools the .docx format list — this tool cannot run here." };
+  const { presets, defaultId } = ctx.appState.docFormats();
   const preset = presets.find((p) => p.id === target);
   if (preset) {
     return {
@@ -226,7 +230,7 @@ export async function readDocFormatTool(
 
   const file = baseName(path);
   const id = imitatedIdFor(path);
-  useDocFormatStore.getState().addImitated({
+  ctx.appState.addImitatedFormat({
     id,
     label: file,
     builtin: false,

@@ -39,6 +39,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import { baseName, isSamePath, projectRelative } from "../lib/paths";
 import { useAiStore } from "./aiStore";
+import { toolAppState } from "./toolAppState";
 import { activeChat, useAgentStore } from "./agentStore";
 import { useAppStore } from "./appStore";
 import { useEditorStore } from "./editorStore";
@@ -340,6 +341,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         providers: allProviders,
         contextUtilization: useAppStore.getState().contextUtilization,
         resolveSubAgent: (k) => resolveSubAgentConn(k, allModels, allProviders, subs, loadApiKey),
+        appState: toolAppState,
         expandFocus: async (intent, signal) => {
           const rc = await resolveSubAgentConn("retrieval", allModels, allProviders, subs, loadApiKey);
           if ("error" in rc) return [];

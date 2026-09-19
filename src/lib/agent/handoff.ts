@@ -402,6 +402,7 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
       toolContext: {
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
+        appState: ctx.appState,
         multimodal: canSeeImages(conn.model),
         // The parent's handle, passed as-is. Safe because WRITER_PRESET carries
         // no tool that writes into the workspace — the constraint is the

@@ -122,19 +122,25 @@ export function annotateCitations(root: HTMLElement, index: LoreIndex): void {
  * Delegated at the document so every surface that renders markdown (preview,
  * agent chat, approval cards) gets the behaviour without wiring of its own.
  * Returns the uninstaller; installed once from App.
+ *
+ * The index and the navigation come in from App rather than from the stores:
+ * `lib/` does not import `stores/`, and these two lazy imports were what put
+ * loreStore and the lore model into one import cycle
+ * (docs/feature/code-structure-plan.md P3).
  */
-export function installCitationNavigation(): () => void {
-  const onClick = async (event: MouseEvent) => {
+export function installCitationNavigation(nav: {
+  /** The live index, read at click time. */
+  index: () => LoreIndex;
+  /** Open this entry's detail view on the lore wall. */
+  open: (entity: LoreEntity) => void;
+}): () => void {
+  const onClick = (event: MouseEvent) => {
     const el = (event.target as HTMLElement | null)?.closest?.(`[${CITE_ATTR}]`);
     if (!el) return;
     const target = el.getAttribute(CITE_ATTR) ?? "";
-    // Lazy store imports keep this module store-free for tests.
-    const { useLoreStore } = await import("../../stores/loreStore");
-    const entity = resolveCitation(target, useLoreStore.getState().index);
+    const entity = resolveCitation(target, nav.index());
     if (!entity) return; // rendered as data-missing; nothing to navigate to
-    const { useAppStore } = await import("../../stores/appStore");
-    useLoreStore.getState().openDetail(entity.dirPath);
-    useAppStore.getState().setMainView("lore-wall");
+    nav.open(entity);
   };
   document.addEventListener("click", onClick);
   return () => document.removeEventListener("click", onClick);

@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useAiTaskStore, type SelectionRange } from "../../stores/aiTaskStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { useEditorStore } from "../../stores/editorStore";
 import { findTask, taskLabel } from "../../lib/profile";
 import { insideAiSurface, insideSelectableSurface, dropEditorMarker, resolveCommit } from "../../lib/editor/aiSelection";
 import { useAppStore } from "../../stores/appStore";
@@ -117,8 +118,9 @@ export function InlineAiBubble() {
   const flipped = above < 16;
 
   const commit = (): { text: string; range: SelectionRange | null } => {
-    const { text, range } = resolveCommit(live.text);
-    dropEditorMarker();
+    const { editorView } = useEditorStore.getState();
+    const { text, range } = resolveCommit(live.text, editorView);
+    dropEditorMarker(editorView);
     setSelection(text, range);
     return { text, range };
   };

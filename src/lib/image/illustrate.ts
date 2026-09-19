@@ -20,6 +20,7 @@ import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
 import { imageRequestParams, inputImageSize, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
 import { providerFor } from "../ai/routes";
+import type { AiSettingsSnapshot } from "../agent/subagentModel";
 
 /** `m:ss`, the same clock the execution log's round timer shows. */
 function clock(ms: number): string {
@@ -69,6 +70,12 @@ export async function runIllustration(
   proposal: IllustrateProposal,
   projectPath: string,
   /**
+   * The model rows and providers to find `proposal.modelId` in — aiStore's,
+   * handed in by the approving store because `lib/` does not import stores
+   * (docs/feature/code-structure-plan.md P3). Read at approval time, as before.
+   */
+  settings: Pick<AiSettingsSnapshot, "models" | "providers">,
+  /**
    * The approving run's abort signal. Approval removes the card from the
    * pending queue, so `rejectAll` can no longer cancel this — without the
    * signal, pressing 停止 still leaves a paid-for request running to
@@ -82,8 +89,7 @@ export async function runIllustration(
    */
   onProgress?: (p: ToolProgress) => void,
 ): Promise<IllustrationOutcome> {
-  const { useAiStore } = await import("../../stores/aiStore");
-  const { models, providers } = useAiStore.getState();
+  const { models, providers } = settings;
   const model = models.find((m) => m.id === proposal.modelId);
   const provider = model ? providerFor(model, providers) : null;
   if (!model || !provider) {

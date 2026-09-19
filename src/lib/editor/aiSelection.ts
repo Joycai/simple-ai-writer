@@ -3,8 +3,11 @@
  * into a committed AI-task selection. Shared by the InlineAiBubble UI and the
  * global Mod+Shift+E/L/M dispatcher (useGlobalShortcuts) — split out so
  * neither has to import the other.
+ *
+ * The editor view is a parameter (callers pass `editorStore.editorView`):
+ * `lib/` does not import `stores/` (docs/feature/code-structure-plan.md P3).
  */
-import { useEditorStore } from "../../stores/editorStore";
+import type { EditorView } from "@codemirror/view";
 import type { SelectionRange } from "../../stores/aiTaskStore";
 import { clearTarget } from "./aiTarget";
 
@@ -35,16 +38,17 @@ export function insideSelectableSurface(node: Node | null): boolean {
  * own store sync (which fires inside the dispatch) can't wipe the commit that
  * follows.
  */
-export function dropEditorMarker(): void {
-  const view = useEditorStore.getState().editorView;
+export function dropEditorMarker(view: EditorView | null): void {
   if (view) clearTarget(view);
 }
 
 /** Resolve precise source offsets for the current selection, if it lives in
  *  the focused CodeMirror editor. Falls back to the rendered-text selection
  *  (no offsets) otherwise. */
-export function resolveCommit(liveText: string): { text: string; range: SelectionRange | null } {
-  const view = useEditorStore.getState().editorView;
+export function resolveCommit(
+  liveText: string,
+  view: EditorView | null,
+): { text: string; range: SelectionRange | null } {
   if (view && view.hasFocus) {
     const sel = view.state.selection.main;
     if (!sel.empty) {

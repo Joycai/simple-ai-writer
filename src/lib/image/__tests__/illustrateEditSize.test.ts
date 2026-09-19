@@ -25,18 +25,15 @@ vi.mock("../../ai/image", () => ({
   isEditUnsupportedError: () => false,
 }));
 vi.mock("../normalize", () => ({ imageForModel: async () => ({ dataUrl: png(768, 1376) }) }));
-vi.mock("../../../stores/aiStore", () => ({
-  useAiStore: {
-    getState: () => ({
-      models: [{
-        id: "m1", providerId: "p1", modelId: "qwen-image-2.0", name: "Qwen", type: "image",
-        priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true,
-        caps: { dialect: "qwen-image", route: "dashscope", edit: true },
-      }],
-      providers: [{ id: "p1", name: "百炼", baseUrl: "https://dashscope.aliyuncs.com", apiStandard: "openai_compat" }],
-    }),
-  },
-}));
+// aiStore's rows, handed in the way agentStore's approval path does.
+const settings = () => ({
+  models: [{
+    id: "m1", providerId: "p1", modelId: "qwen-image-2.0", name: "Qwen", type: "image",
+    priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true,
+    caps: { dialect: "qwen-image", route: "dashscope", edit: true },
+  }],
+  providers: [{ id: "p1", name: "百炼", baseUrl: "https://dashscope.aliyuncs.com", apiStandard: "openai_compat" }],
+}) as never;
 vi.mock("../../keyStore", () => ({ loadApiKey: async () => "k" }));
 vi.mock("../assets", () => ({
   saveDocumentAsset: async () => ({ absPath: "/proj/assets/a/pic.png", relPath: "assets/a/pic.png" }),
@@ -62,7 +59,7 @@ beforeEach(() => generateImage.mockClear());
 
 describe("runIllustration — size on an image-conditioned call with no aspect", () => {
   it("follows a reference image's framing at 1K when there is no source picture", async () => {
-    await runIllustration(proposal({ refPaths: ["/proj/ref.png"] }), "/proj");
+    await runIllustration(proposal({ refPaths: ["/proj/ref.png"] }), "/proj", settings());
     const [, req] = generateImage.mock.calls[0] as unknown as [unknown, { size?: string; images?: string[] }];
     expect(req.images).toHaveLength(1);
     const [w, h] = req.size!.split("*").map(Number);

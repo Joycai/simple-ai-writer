@@ -15,7 +15,7 @@ const runIllustration = vi.fn(async (_p?: unknown, _root?: string, _signal?: Abo
   degraded: false,
 }));
 vi.mock("../../lib/image/illustrate", () => ({
-  runIllustration: (p: unknown, root: string, signal?: AbortSignal) => runIllustration(p, root, signal),
+  runIllustration: (p: unknown, root: string, _settings: unknown, signal?: AbortSignal) => runIllustration(p, root, signal),
 }));
 // applyProposal reaches for both stores; neither is loadable under vitest's
 // node environment, and the illustrate path only needs projectPath from them.
