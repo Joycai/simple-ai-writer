@@ -113,7 +113,14 @@ async function sweepOnce(projectPath: string, keep: string): Promise<void> {
     if (!(await fileExists(root))) return;
     const entries: SweepEntry[] = [];
     for (const entry of await readDir(root)) {
-      if (!entry.isDirectory) continue;
+      if (!entry.isDirectory) {
+        // A checkpoint whose task the platform has let go (or that no longer
+        // reads): nothing can resume it, and nothing else would remove it.
+        if (entry.name.endsWith(PENDING_SUFFIX) && entry.name !== `${keep}${PENDING_SUFFIX}` && !(await pendingIsLive(entry.path))) {
+          await removeFile(entry.path).catch(() => {});
+        }
+        continue;
+      }
       entries.push({ name: entry.name, meta: await readMeta(entry.path) });
     }
     for (const name of planSweep(entries, Date.now(), keep)) {
@@ -174,8 +181,8 @@ function withDeadline(signal: AbortSignal | undefined, ms: number): { signal: Ab
  *
  * A sibling file of the cache directory, not a file in it: the directory only
  * exists once a result has landed (it is renamed into place whole), and the
- * sweep only looks at directories. Older than the platform keeps a task, it is
- * ignored and overwritten.
+ * sweep's cache pass only looks at directories. Older than the platform keeps
+ * a task, it is ignored by a rerun and removed by the sweep.
  */
 interface PendingTask {
   taskId: string;
@@ -186,16 +193,27 @@ interface PendingTask {
 /** DashScope keeps a task (and its result link) for 24 hours. */
 const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
 
-const pendingPathFor = (dir: string) => `${dir}.pending.json`;
+const PENDING_SUFFIX = ".pending.json";
+const pendingPathFor = (dir: string) => `${dir}${PENDING_SUFFIX}`;
 
-async function readPending(dir: string, modelId: string): Promise<PendingTask | null> {
+async function readPendingFile(path: string): Promise<PendingTask | null> {
   try {
-    const raw = JSON.parse(await readFile(pendingPathFor(dir))) as Partial<PendingTask>;
-    if (typeof raw.taskId !== "string" || raw.model !== modelId || typeof raw.submittedAt !== "number") return null;
+    const raw = JSON.parse(await readFile(path)) as Partial<PendingTask>;
+    if (typeof raw.taskId !== "string" || typeof raw.model !== "string" || typeof raw.submittedAt !== "number") return null;
     return Date.now() - raw.submittedAt < PENDING_TTL_MS ? (raw as PendingTask) : null;
   } catch {
     return null;
   }
+}
+
+async function readPending(dir: string, modelId: string): Promise<PendingTask | null> {
+  const pending = await readPendingFile(pendingPathFor(dir));
+  return pending?.model === modelId ? pending : null;
+}
+
+/** Still inside the platform's keep window — the sweep leaves it for a rerun to resume. */
+async function pendingIsLive(path: string): Promise<boolean> {
+  return (await readPendingFile(path)) !== null;
 }
 
 async function dropPending(dir: string): Promise<void> {

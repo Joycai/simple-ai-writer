@@ -13,7 +13,17 @@ vi.mock("../../fs/fileio", () => {
   return {
     fileExists: async (p: string) => under(p).length > 0,
     makeDir: async () => {},
-    readDir: async () => [],
+    // Direct children only; a key with a deeper path makes its first segment a directory.
+    readDir: async (dir: string) => {
+      const kids = new Map<string, boolean>();
+      for (const k of files.keys()) {
+        if (!k.startsWith(`${dir}/`)) continue;
+        const rest = k.slice(dir.length + 1);
+        const name = rest.split("/")[0];
+        kids.set(name, (kids.get(name) ?? false) || rest.includes("/"));
+      }
+      return [...kids].map(([name, isDirectory]) => ({ name, path: `${dir}/${name}`, isDirectory }));
+    },
     readFile: async (p: string) => {
       const v = files.get(p);
       if (typeof v !== "string") throw new Error(`no text file ${p}`);
@@ -59,6 +69,7 @@ vi.mock("../client", async (orig) => {
 });
 
 import { transcribeFile } from "../run";
+import { cacheRootFor } from "../cache";
 import type { AsrConn } from "../client";
 
 const conn: AsrConn = {
@@ -101,6 +112,20 @@ describe("transcribeFile × filetrans checkpoint", () => {
     expect(net.submits).toBe(2);
     expect(net.polls).toEqual(["task-1", "task-1", "task-2"]);
     expect(pendingFiles()).toHaveLength(0);
+  });
+});
+
+describe("transcribeFile × stale checkpoints", () => {
+  it("the sweep removes a checkpoint past the platform's keep window, and leaves a live one", async () => {
+    // A project the sweep hasn't visited yet (it runs once per project).
+    const root = cacheRootFor("/q");
+    const day = 24 * 60 * 60 * 1000;
+    fsState.files.set("/q/a.wav", new Uint8Array([1, 2, 3, 4]));
+    fsState.files.set(`${root}/old.pending.json`, JSON.stringify({ taskId: "t-old", model: "m", submittedAt: Date.now() - 2 * day }));
+    fsState.files.set(`${root}/junk.pending.json`, "not json");
+    fsState.files.set(`${root}/live.pending.json`, JSON.stringify({ taskId: "t-live", model: "m", submittedAt: Date.now() - 1000 }));
+    await transcribeFile({ ...req, projectPath: "/q", sourcePath: "/q/a.wav" });
+    expect(pendingFiles().sort()).toEqual([`${root}/live.pending.json`]);
   });
 });
 
