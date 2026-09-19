@@ -13,7 +13,8 @@ import { describe, expect, it } from "vitest";
 import zlib from "node:zlib";
 import { streamCompletion } from "../index";
 import { imagePart } from "../imagePart";
-import { resolvePlatform, serverToolStatus } from "../platforms";
+import { resolvePlatform } from "../platforms";
+import { capabilityVerdict } from "../capabilities";
 import { testProviderConnection } from "../providerProbe";
 import type {
   ApiStandard, ContentPart, StreamChunk, StreamMessage, StreamOptions, ToolDefinition,
@@ -198,7 +199,7 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
     // Responses and Messages); the other two run the endpoint's own search.
     it.skipIf(standard === "openai_compat")("runs web_search on the route's own spelling", async () => {
       const wire0 = { platform: "volcengine-plan" as const, baseUrl: base, standard };
-      expect(serverToolStatus(wire0, "web_search")).toBe("yes");
+      expect(capabilityVerdict("web_search", wire0).status).toBe("yes");
       let searches = 0;
       let answer = "";
       await ask(wire, user("今天杭州天气如何？请联网搜索后回答。"), {

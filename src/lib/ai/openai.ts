@@ -8,7 +8,8 @@ import {
   resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
-import { wireIgnoresForcedToolChoice, wireOf, wireTakesVlHighResolution } from "./platforms";
+import { wireOf } from "./platforms";
+import { hasCapability } from "./capabilities";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
@@ -69,15 +70,15 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
  * the config to warn us (DeepSeek V4) are learned from their own 400 instead;
  * see `lib/ai/toolChoice.ts`.
  *
- * A platform can also declare `auto` its only value (`forcedToolChoice` in
- * platforms.ts) — 智谱, whose models ignore forcing or refuse it with an error
+ * A platform can also declare `auto` its only value (the `forcedToolChoice`
+ * cell in capabilities.ts) — 智谱, whose models ignore forcing or refuse it with an error
  * that never names the parameter, so the learned downgrade cannot catch it.
  */
 function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";
   const forced = tc === "required" || typeof tc === "object";
   if (!forced) return tc;
-  return forcesToolChoiceAuto(category, opts.reasoningEffort) || wireIgnoresForcedToolChoice(wireOf(opts)) ? "auto" : tc;
+  return forcesToolChoiceAuto(category, opts.reasoningEffort) || !hasCapability("forcedToolChoice", wireOf(opts)) ? "auto" : tc;
 }
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
@@ -123,7 +124,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // DashScope's high-resolution image reading, declared per model (see
       // Model.vlHighResolution). Absent unless declared, same rule as above —
       // and unless the platform reads it (智谱 takes it and ignores it).
-      ...(opts.vlHighResolution && wireTakesVlHighResolution(wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
+      ...(opts.vlHighResolution && hasCapability("vlHighResolution", wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
       // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),

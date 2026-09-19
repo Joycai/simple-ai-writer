@@ -18,9 +18,11 @@
  *     as the third axis. Endpoint-run tools live here too: which tool a wire
  *     runs is a fact about the platform and the model id, like any other.
  *
- * {@link familyVerdict} is the only reader in the app (the tables are exported
- * for the tests that walk them). This file never imports `platforms.ts` at
- * runtime — that file delegates here — so the two cannot form a cycle.
+ * Every asker — the adapters, the 将发送 summary, the drawers, the chat
+ * surface — calls {@link capabilityVerdict} or {@link hasCapability} here
+ * directly; there are no per-capability wrappers to drift apart (the tables
+ * are exported for the tests that walk them). This file never imports
+ * `platforms.ts` at runtime, so the two cannot form a cycle.
  */
 
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
@@ -47,7 +49,7 @@ export type CapabilityId =
  *   - `no`: nothing to send. A declaration on the model row is kept and simply
  *     not sent (channel-model-route-plan §7 invariant 4).
  */
-export type CapabilityStatus = "yes" | "unknown" | "no";
+type CapabilityStatus = "yes" | "unknown" | "no";
 
 /** Why — a closed set so tests can assert it; the sentences live in the locale files. */
 type CapabilityReason =
@@ -154,7 +156,7 @@ export const CAPABILITY_IDS: readonly CapabilityId[] = [
 
 /**
  * The ids that are endpoint-run tools. A `Record` so that a new
- * `ServerToolId` does not compile until it is listed — `wireHasServerTools`
+ * `ServerToolId` does not compile until it is listed — {@link hasAnyServerTool}
  * walks this, and an id it skipped would fold the drawer's section shut.
  */
 const SERVER_TOOL_FLAGS: Record<ServerToolId, true> = {
@@ -295,7 +297,7 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
 };
 
 /** The wire a question is about — the same pair `platforms.ts` calls `ServerToolWire`. */
-interface CapabilityWire {
+export interface CapabilityWire {
   platform: PlatformId;
   standard: ApiStandard;
 }
@@ -350,4 +352,19 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
 /** Whether the wire has it — `unknown` counts: it is offered and sent. */
 export function hasCapability(id: CapabilityId, wire: CapabilityWire, model?: CapabilityModel): boolean {
   return capabilityVerdict(id, wire, model).status !== "no";
+}
+
+/**
+ * Whether this wire has any endpoint-run tool at all — the drawer's section gate.
+ *
+ * Asked of the **platform and family**, never of the standard alone. The
+ * standard used to be the whole answer, and `openai_compat` quietly meant
+ * "DashScope": every DeepSeek, New API, OrcaRouter or Ollama row could declare
+ * 联网搜索 and sent DashScope's private `enable_search` to a server that had
+ * never heard of it (docs/feature/channel-model-route-plan.md §1). Offering
+ * the setting where the adapter would drop it is the failure this guards
+ * against — the same rule `supportsThinkingLevel` follows.
+ */
+export function hasAnyServerTool(wire: CapabilityWire): boolean {
+  return SERVER_TOOL_CAPABILITIES.some((id) => hasCapability(id, wire));
 }

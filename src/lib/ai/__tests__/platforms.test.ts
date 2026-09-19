@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  dashscopeRunsCodeInterpreter,
   inferPlatform,
   parsePlatform,
   PLATFORM_IDS,
@@ -12,11 +11,6 @@ import {
   platformSource,
   platformToStore,
   resolvePlatform,
-  serverToolStatus,
-  wireIgnoresForcedToolChoice,
-  wireTakesVideoFps,
-  wireTakesVlHighResolution,
-  wireReadsPdf,
 } from "../platforms";
 import { THINKING_CATEGORIES } from "../reasoning";
 import { knownMaxOutput } from "../modelLimits";
@@ -105,81 +99,9 @@ describe("platformToStore", () => {
   });
 });
 
-describe("serverToolStatus", () => {
-  it("answers yes where the platform lists a tool, unknown for a protocol-native one it doesn't, no otherwise", () => {
-    expect(serverToolStatus({ platform: "minimax", standard: "anthropic_compat" }, "web_search")).toBe("yes");
-    expect(serverToolStatus({ platform: "orcarouter", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
-    expect(serverToolStatus({ platform: "newapi", standard: "openai_responses_compat" }, "web_search")).toBe("unknown");
-    expect(serverToolStatus({ platform: "newapi", standard: "openai_responses_compat" }, "web_extractor")).toBe("no");
-    expect(serverToolStatus({ platform: "newapi", standard: "openai_compat" }, "web_search")).toBe("no");
-    expect(serverToolStatus({ platform: "openai", standard: "openai" }, "web_search")).toBe("no");
-    expect(serverToolStatus({ platform: "google", standard: "gemini" }, "web_search")).toBe("no");
-    // A local server runs no tools: explicit, not "unknown".
-    expect(serverToolStatus({ platform: "ollama", standard: "anthropic_compat" }, "web_search")).toBe("no");
-    expect(serverToolStatus({ platform: "deepseek", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
-  });
-
-  it("consults the model gate only when given a model id", () => {
-    const wire = { platform: "dashscope", standard: "openai_compat" } as const;
-    expect(serverToolStatus(wire, "code_interpreter")).toBe("yes");
-    expect(serverToolStatus(wire, "code_interpreter", "qwen3.8-flash")).toBe("no");
-    expect(serverToolStatus(wire, "code_interpreter", "qwen3.5-plus")).toBe("yes");
-  });
-});
-
 describe("profiles", () => {
   it("say where every entry was measured", () => {
     for (const id of PLATFORM_IDS) expect(platformSource(id), id).toMatch(/\S/);
-  });
-});
-
-// The code interpreter's model table is a measurement, not a guess: every id
-// below was sent to DashScope on 2026-09-17 (landscape.md §7 第六个样本「代码解释器」).
-describe("dashscopeRunsCodeInterpreter", () => {
-  it("matches what Chat Completions compat ran", () => {
-    for (const id of [
-      "qwen3-max", "qwen3-max-2026-01-23", "qwen3.5-plus", "qwen3.5-plus-2026-04-20", "qwen3.6-plus",
-      "qwen3.7-plus", "qwen3.7-max", "qwen3.6-max-preview", "qwen3.5-flash", "qwen3.6-flash", "qwen3.5-397b-a17b",
-      "Qwen3.5-Plus",
-    ]) {
-      expect(dashscopeRunsCodeInterpreter("openai", id), id).toBe(true);
-    }
-  });
-
-  it("refuses what Chat Completions compat refused or silently ignored", () => {
-    for (const id of [
-      // 400 `does not support the code_interpreter tool`
-      "qwen3.8-flash", "qwen3.8-max", "qwen3.8-27b",
-      // accepted, but the prompt never grew: ignored
-      "qwen-max", "qwen3-max-preview", "qwen3.5-omni-plus",
-      "gpt-5.6", "",
-    ]) {
-      expect(dashscopeRunsCodeInterpreter("openai", id), id).toBe(false);
-    }
-  });
-
-  it("matches what Responses compat ran", () => {
-    for (const id of [
-      "qwen3-max", "qwen3.5-plus", "qwen3.5-flash", "qwen3.7-plus", "qwen3.7-max", "qwen3.8-max", "qwen3.8-max-0902",
-      "qwen3.8-flash", "qwen3.6-max-preview", "qwen3.5-397b-a17b", "qwen3.5-27b", "qwen3.6-35b-a3b", "qwen3.8-27b",
-      "qwen3.8-2.4t-a95b", "deepseek-v4-pro", "deepseek-v4-flash-0731", "deepseek-v4.1-flash",
-    ]) {
-      expect(dashscopeRunsCodeInterpreter("responses", id), id).toBe(true);
-    }
-  });
-
-  it("refuses what Responses compat failed", () => {
-    for (const id of [
-      "qwen3.6-27b", "qwen3-max-preview", "qwen3-235b-a22b-thinking-2507", "qwen3-vl-plus", "qwen3.5-omni-plus",
-      "qwen-plus", "qwen3.8-livetranslate-flash-realtime", "qwen3.7-text-embedding",
-    ]) {
-      expect(dashscopeRunsCodeInterpreter("responses", id), id).toBe(false);
-    }
-  });
-
-  it("has no table outside the two OpenAI-shaped wires", () => {
-    expect(dashscopeRunsCodeInterpreter("anthropic", "qwen3.5-plus")).toBe(false);
-    expect(dashscopeRunsCodeInterpreter("gemini", "qwen3.5-plus")).toBe(false);
   });
 });
 
@@ -206,25 +128,6 @@ describe("volcengine: two platforms on one host", () => {
     expect(platformToStore({ platform: "volcengine-plan", baseUrl: `${HOST}/api/plan/v3`, apiStandard: "openai_compat" }))
       .toBeUndefined();
   });
-
-  it("spells the plan's measured tools: Anthropic web_search yes, Chat none", () => {
-    expect(serverToolStatus({ platform: "volcengine-plan", standard: "anthropic_compat" }, "web_search")).toBe("yes");
-    expect(serverToolStatus({ platform: "volcengine-plan", standard: "openai_compat" }, "web_search")).toBe("no");
-    expect(serverToolStatus({ platform: "volcengine-plan", standard: "openai_responses_compat" }, "web_search")).toBe("yes");
-    expect(serverToolStatus({ platform: "volcengine", standard: "openai_responses_compat" }, "web_search")).toBe("unknown");
-  });
-});
-
-describe("wireReadsPdf", () => {
-  it("is Chat + Responses by default, and Anthropic only where a platform measured it", () => {
-    expect(wireReadsPdf({ platform: "custom", standard: "openai_compat" })).toBe(true);
-    expect(wireReadsPdf({ platform: "custom", standard: "openai_responses_compat" })).toBe(true);
-    expect(wireReadsPdf({ platform: "deepseek", standard: "anthropic_compat" })).toBe(false);
-    expect(wireReadsPdf({ platform: "google", standard: "gemini" })).toBe(false);
-    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
-    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
-    expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
-  });
 });
 
 // 智谱 BigModel (landscape.md §7 第十四个样本): the pay-as-you-go standard
@@ -249,12 +152,6 @@ describe("zhipu", () => {
     expect(platformForAddress("zhipu", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
     expect(platformForAddress("custom", "https://open.bigmodel.cn", "openai_compat")).toBe("zhipu");
     expect(platformForAddress("zhipu", "https://open.bigmodel.c", "openai_compat")).toBe("custom");
-  });
-  it("takes auto only, and spells no server tool yet", () => {
-    const wire = { platform: "zhipu" as const, standard: "openai_compat" as const };
-    expect(wireIgnoresForcedToolChoice(wire)).toBe(true);
-    expect(wireIgnoresForcedToolChoice({ platform: "deepseek", standard: "openai_compat" })).toBe(false);
-    expect(serverToolStatus(wire, "web_search")).toBe("no");
   });
 });
 
@@ -289,21 +186,3 @@ describe("zhipu model calibration", () => {
   });
 });
 
-// DashScope's vision knobs belong to the platforms that read them: its own two,
-// plus the host-less relays that may front it — never a hosted vendor that
-// merely speaks the same family (智谱 ignores both, landscape.md §7 第十四个样本).
-describe.each([
-  ["wireTakesVlHighResolution", wireTakesVlHighResolution],
-  ["wireTakesVideoFps", wireTakesVideoFps],
-] as const)("%s", (_name, takes) => {
-  const on = (platform: Parameters<typeof takes>[0]["platform"], standard: Parameters<typeof takes>[0]["standard"] = "openai_compat") =>
-    takes({ platform, standard });
-  it("is DashScope's, and a relay's that may front it", () => {
-    for (const p of ["dashscope", "dashscope-intl", "newapi", "custom"] as const) expect(on(p), p).toBe(true);
-  });
-  it("is no hosted vendor's, and no family but Chat Completions", () => {
-    for (const p of ["zhipu", "volcengine", "deepseek", "xai", "orcarouter", "ollama"] as const) expect(on(p), p).toBe(false);
-    expect(on("openai", "openai")).toBe(false);
-    expect(on("dashscope", "openai_responses_compat")).toBe(false);
-  });
-});

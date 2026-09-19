@@ -1741,9 +1741,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // a mentioned recording is pointed at the tool only when it is there.
         transcribe: isAsrEnabled()
           && subAgentModel("asr", useAiStore.getState().models, effectiveSubs) !== null,
-        // Declared on the model AND on the Chat Completions family — a clip on
+        // Declared on the model AND a wire with a `video_url` part — a clip on
         // any other wire is at best an empty answer (docs/feature/video-input.md).
-        allowVideo: canReadVideo(model, provider.apiStandard),
+        allowVideo: canReadVideo(model, provider),
         videoFps: sentVideoFps(model, provider),
       },
     );

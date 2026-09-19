@@ -186,13 +186,14 @@ export function AgentChat() {
   // attaches a file the message can neither carry nor hand to a tool.
   const canTranscribe = isAsrEnabled() && subAgentModel("asr", models, effectiveSubs) !== null;
   // A clip travels as content only to the active model itself — declared
-  // videoInput, on the Chat Completions family (agentStore's allowVideo is the
-  // same call). There is no video subagent to fall back on.
-  const activeStandard = useAiStore((s) => (activeModel ? providerFor(activeModel, s.providers) : undefined)?.apiStandard);
-  const canVideo = canReadVideo(activeModel, activeStandard);
+  // videoInput, on a wire the capability table gives `videoInput` (agentStore's
+  // allowVideo is the same call). There is no video subagent to fall back on.
+  // Derived outside the selector: providerFor may build a fresh object.
+  const activeProvider = activeModel ? providerFor(activeModel, providers) : undefined;
+  const canVideo = canReadVideo(activeModel, activeProvider);
   // The fps the clip will really carry (none where the wire ignores it), so
   // the chip's estimate follows the request rather than the declaration.
-  const activeVideoFps = sentVideoFps(activeModel, activeModel ? providerFor(activeModel, providers) : undefined);
+  const activeVideoFps = sentVideoFps(activeModel, activeProvider);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 

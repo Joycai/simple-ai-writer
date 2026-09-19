@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   canReadVideo, clampVideoFps, DEFAULT_VIDEO_FPS, estimateVideoTokens, videoPart,
 } from "../videoInput";
+import type { ApiStandard } from "../types";
+import type { PlatformId } from "../platforms";
 
 describe("estimateVideoTokens", () => {
   // [width, height, seconds, fps | undefined, measured video_tokens]
@@ -70,17 +72,25 @@ describe("videoPart", () => {
 
 describe("canReadVideo", () => {
   const vl = { type: "vision" as const, videoInput: true };
-  it("needs the declaration, a model that sees, and the Chat Completions family", () => {
-    expect(canReadVideo(vl, "openai_compat")).toBe(true);
-    expect(canReadVideo({ ...vl, type: "multimodal" }, "openai")).toBe(true);
-    expect(canReadVideo({ ...vl, videoInput: undefined }, "openai_compat")).toBe(false);
-    expect(canReadVideo({ ...vl, type: "text" }, "openai_compat")).toBe(false);
+  const on = (apiStandard: ApiStandard, platform: PlatformId = "dashscope") => ({ platform, baseUrl: "", apiStandard });
+  it("needs the declaration, a model that sees, and a wire with a video_url part", () => {
+    expect(canReadVideo(vl, on("openai_compat"))).toBe(true);
+    expect(canReadVideo({ ...vl, type: "multimodal" }, on("openai", "openai"))).toBe(true);
+    expect(canReadVideo({ ...vl, videoInput: undefined }, on("openai_compat"))).toBe(false);
+    expect(canReadVideo({ ...vl, type: "text" }, on("openai_compat"))).toBe(false);
     // Responses: qwen3-vl-plus is Unsupported model there, and a clip once
     // came back as an empty answer. Gemini / Anthropic have no spelling.
     for (const s of ["openai_responses_compat", "gemini_compat", "anthropic_compat"] as const) {
-      expect(canReadVideo(vl, s)).toBe(false);
+      expect(canReadVideo(vl, on(s))).toBe(false);
     }
-    expect(canReadVideo(undefined, "openai")).toBe(false);
+    expect(canReadVideo(undefined, on("openai", "openai"))).toBe(false);
     expect(canReadVideo(vl, undefined)).toBe(false);
+  });
+
+  // Family-wide until measured per platform (capability-gating-plan C4).
+  it("is the same on every platform's Chat Completions wire today", () => {
+    for (const p of ["zhipu", "deepseek", "newapi", "custom", "ollama"] as const) {
+      expect(canReadVideo(vl, on("openai_compat", p)), p).toBe(true);
+    }
   });
 });

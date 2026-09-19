@@ -11,8 +11,9 @@
  */
 
 import type { Model } from "./configDb";
-import { familyOf, type ApiStandard, type ContentPart } from "./types";
-import { providerWire, wireTakesVideoFps } from "./platforms";
+import type { ContentPart } from "./types";
+import { providerWire } from "./platforms";
+import { hasCapability } from "./capabilities";
 
 /** Lowest `fps` the settings field accepts. Only 0.5–4 were measured. */
 export const MIN_VIDEO_FPS = 0.1;
@@ -39,7 +40,9 @@ export function clampVideoFps(value: unknown): number | undefined {
  *
  * Three conditions, all required: the author declared it (no probe can ask
  * without spending a real clip), the model reads pictures at all, and the
- * provider speaks Chat Completions. The last is not a formality — on
+ * provider's wire has a `video_url` part — the capability table's
+ * `videoInput`, today Chat Completions on every platform (per-platform cells
+ * are shelved until measured, capability-gating-plan C4). The family is not a formality — on
  * DashScope's Responses surface qwen3-vl-plus is `Unsupported model`, and a
  * `video_url` part there once came back as an empty answer with no error; the
  * Gemini and Anthropic adapters have no spelling for the part. Gating here is
@@ -47,11 +50,10 @@ export function clampVideoFps(value: unknown): number | undefined {
  */
 export function canReadVideo(
   model: Pick<Model, "type" | "videoInput"> | null | undefined,
-  standard: ApiStandard | null | undefined,
+  provider: Parameters<typeof providerWire>[0] | null | undefined,
 ): boolean {
-  if (!model || !standard || !model.videoInput) return false;
-  if (model.type !== "multimodal" && model.type !== "vision") return false;
-  return familyOf(standard) === "openai";
+  if (!model || !provider || !model.videoInput) return false;
+  return hasCapability("videoInput", providerWire(provider), { type: model.type });
 }
 
 /**
@@ -65,7 +67,7 @@ export function sentVideoFps(
   provider: Parameters<typeof providerWire>[0] | null | undefined,
 ): number | undefined {
   if (!model || !provider) return undefined;
-  return wireTakesVideoFps(providerWire(provider)) ? model.videoFps : undefined;
+  return hasCapability("videoFps", providerWire(provider)) ? model.videoFps : undefined;
 }
 
 /** The one builder for a clip's content part. `fps` absent = endpoint default. */

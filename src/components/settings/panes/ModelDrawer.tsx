@@ -38,9 +38,10 @@ import {
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
 import {
-  effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
+  effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf, wireTakesVideoFps, wireTakesVlHighResolution } from "../../../lib/ai/platforms";
+import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
+import { capabilityVerdict, hasAnyServerTool, hasCapability } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -184,7 +185,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
   // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
   // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
-  const pdfWire = provider ? wireReadsPdf(providerWire(provider)) : false;
+  const pdfWire = !!provider && hasCapability("pdfInput", providerWire(provider));
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -405,18 +406,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // one per-second cell, and 「将发送」 lists the file endpoint (设计稿 02f 屏 1b).
   // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
   const isAsrModel = form.type === "asr";
-  // DashScope's two vision knobs (hi-res, clip fps) are the platform's, not the
-  // family's: 智谱 takes both and ignores them (capabilities.ts `vlHighResolution` / `videoFps`).
-  const hiResPlatform = provider ? wireTakesVlHighResolution(providerWire(provider)) : false;
-  const fpsPlatform = provider ? wireTakesVideoFps(providerWire(provider)) : false;
-  // The hi-res switch exists where it reaches the wire: a model that reads
-  // pictures, on a platform whose Chat Completions wire reads it (openai.ts).
-  const vlHiResWire = hiResPlatform && canSeeImages(form);
-  // A `video_url` part exists only on Chat Completions, and only a model that
-  // reads pictures reads frames (lib/ai/videoInput). The fps under it is the
-  // platform's, like hi-res.
-  const videoWire = family === "openai" && canSeeImages(form);
-  const videoFpsWire = videoWire && fpsPlatform;
+  // The three vision capabilities, asked of the table with the model's type:
+  // each exists only for a model that reads pictures. Hi-res and clip fps are
+  // DashScope's private knobs — 智谱 takes both and ignores them — and fps also
+  // requires the clip part itself (capabilities.ts `requires`). A `video_url`
+  // part is Chat Completions only (lib/ai/videoInput).
+  const visionWire = provider ? providerWire(provider) : undefined;
+  const vlHiResWire = !!visionWire && hasCapability("vlHighResolution", visionWire, { type: form.type });
+  const videoWire = !!visionWire && hasCapability("videoInput", visionWire, { type: form.type });
+  const videoFpsWire = !!visionWire && hasCapability("videoFps", visionWire, { type: form.type });
   const videoFps = videoFpsWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
@@ -437,7 +435,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // `openai_compat`, and only one of them has `enable_search`.
   const toolWire = provider ? providerWire(provider) : undefined;
   const offersServerTool = (id: ServerToolId) =>
-    !!toolWire && supportsServerToolFor(toolWire, id, form.modelId.trim());
+    !!toolWire && hasCapability(id, toolWire, { modelId: form.modelId.trim() });
   // What is *stored*: the author's grant, whole — kept even where this wire
   // can't say an id (the switch stays on and says 不发送), because the grant is
   // the author's and a provider can move platform under it (plan §7 invariant
@@ -862,7 +860,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // matrix rows (屏 05). Columns are the channel's routes.
   const matrixTools = multiRoute
     ? SERVER_TOOL_IDS.filter((id) => serverTools.includes(id)
-      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && serverToolStatus(w, id) !== "no"; }))
+      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w); }))
     : [];
   /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
   const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {
@@ -1348,12 +1346,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 goes in · what comes out · what narrows the model to one use.
                 The standing-grant sentence is the tools group's head, said
                 once instead of under every switch. */}
-            <Fold open={(!!toolWire && supportsServerTools(toolWire)) || shownServerTools.length > 0 || matrixTools.length > 0}>
+            <Fold open={(!!toolWire && hasAnyServerTool(toolWire)) || shownServerTools.length > 0 || matrixTools.length > 0}>
               <Subhead label={t("aiConfig.models.capsGroupTools")} hint={t("aiConfig.models.briefTools")} />
               {/* Offered ids, plus any switched on that this wire can't send
                   (shownServerTools). The code interpreter is offered only for
                   a model id that runs it on this wire
-                  (dashscopeRunsCodeInterpreter in lib/ai/platforms) — type the
+                  (the code_interpreter cells in lib/ai/capabilities) — type the
                   id first. */}
               {shownServerTools.map((id) => (
                 <ToggleField
@@ -1363,10 +1361,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     // Two reasons, said apart: the platform has no spelling,
                     // or it has one this model id doesn't run (the code
                     // interpreter's per-model gate).
-                    ? t(toolWire && serverToolStatus(toolWire, id) !== "no"
+                    ? t(toolWire && hasCapability(id, toolWire)
                       ? "aiConfig.models.serverToolNotForModel"
                       : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
-                    : toolWire && serverToolStatus(toolWire, id) === "unknown"
+                    : toolWire && capabilityVerdict(id, toolWire).status === "unknown"
                       ? t("aiConfig.models.serverToolUnmeasured", { platform: platformName })
                       : ""}
                   on={serverTools.includes(id)}
@@ -1415,7 +1413,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                           <td>{t(`aiConfig.models.serverTool_${id}`)}</td>
                           {channelRoutes.map((f) => {
                             const w = routeWire(f);
-                            const st = w ? serverToolStatus(w, id, form.modelId.trim() || undefined) : "no";
+                            const st = w ? capabilityVerdict(id, w, { modelId: form.modelId.trim() || undefined }).status : "no";
                             return (
                               <td key={f}
                                 className={`${st === "yes" ? r.cellYes : st === "unknown" ? r.cellUnknown : r.cellNo} ${f === route ? r.matrixCur : ""}`}

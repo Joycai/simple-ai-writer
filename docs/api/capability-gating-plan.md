@@ -246,3 +246,36 @@ C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单�
 5. **`requires` 是无保护的递归。** 规则表里写出一个环，就是抽屉和适配器里的栈溢出。加一条遍历规则表的无环测试。
 6. **矩阵文档的章节顺序靠对象键顺序。** 整理规则表的行序会把整份文档重排，淹没真正变了的那一格。`CAPABILITY_IDS` 改为显式列出，测试保证齐全。
 7. **§2–§4 的旧设计原地没有标注。** 已在各处加上指向本节的标记。
+
+## 8. C1–C3 实施记录（2026-09-19）
+
+**三期合成一个 PR、分三笔提交。** §4 原定每期一个 PR；但本仓库不叠 PR（CI 只对指向 `main` 的 PR 跑），而 PR 由作者合并，
+三期串行开要等三轮合并。三期都不改行为，每笔提交各自能过全部门禁，评审时按提交看即可。
+
+### 8.1 C1：调用点直接问表
+
+- **删掉了全部转调函数**：`platforms.ts` 的 `serverToolStatus` / `wireHasServerTools` / `dashscopeRunsCodeInterpreter` /
+  `wireReadsPdf` / `wireIgnoresForcedToolChoice` / `wireTakesVlHighResolution` / `wireTakesVideoFps`，`serverTools.ts` 的
+  `supportsServerTools` / `supportsServerToolFor`。调用点（`openai.ts`、`modelSummary.ts`、`videoInput.ts`、`configDb.readsPdf`、
+  `serverTools.ts` 自身、模型抽屉、渠道抽屉）一律问 `hasCapability(id, wire, { modelId?, type? })` 或 `capabilityVerdict`。
+  「这条线有没有任何服务端工具」是唯一的聚合问题，收成 `capabilities.ts` 里的 `hasAnyServerTool`。
+- **`canReadVideo` 的第二个参数从 `ApiStandard` 改成渠道**，读 `videoInput` 格。今天 `videoInput` 只有族缺省、没有平台格，
+  所以行为不变；但 C4 一旦给平台写格子，聊天面与 `agentStore` 不必再改——它们本来就只看得到 standard，看不到平台。
+- **抽屉的三个视觉开关带上模型类型问表**（`{ type: form.type }`），不再在表外再乘一个 `canSeeImages`：类型门槛本来就是规则行的
+  `modelTypes`，fps 对视频的依赖本来就是 `requires`。
+- **没有做 `capabilitySent` / `useCapability`**（§2.3、§2.4 的设想）。每个能力的「作者声明」形状不同（布尔、数组、fps 数值），
+  而每个提问者手里本来就拿着自己那一个；做一个统一的 `capabilitySent` 需要再登记一张「声明怎么读」的表，那是又一份要保持同步的副本——
+  正是 §7.5 那七条的成因。「声明 && `hasCapability`」是一个 `&&`，留在调用点。
+- 被删函数的测试没有删：挪进 `capabilities.test.ts`，改成对表提问，每一格原样保留（它们都是有人花钱测出来的）。
+
+### 8.2 第二道闸：一致性测试（`capabilityConsistency.test.ts`）
+
+对 16 个平台 × 各自的线路 × 全部能力 × 三个模型 id，把**真正动手的地方**拿来问：适配器的请求体、「将发送」摘要、
+聊天面的视频闸（`canReadVideo` / `sentVideoFps`）、PDF 的 `readsPdf`。判据是**观察**而不是复述：带声明构造一次、不带声明构造一次，
+两者不同 = 发出去了；必须与 `hasCapability` 相同。
+
+- 适配器的请求体在 `fetch` 处截获，不发网络请求。
+- `PROBES` 是 `Record<CapabilityId, …>`：新增一个能力，不写它由谁执行就编译不过。
+- 它也会抓到**反方向**的错：给某个族写了平台格，而那个族的适配器根本不读这个能力（例如给 Anthropic 线写 `forcedToolChoice: false`，
+  而 `anthropic.ts` 没有这道闸），测试会报「表说不发，请求体照发」。
+- 验过它会报：临时去掉 `openai.ts` 里高分辨率的闸，官方 OpenAI 的 Chat 线立刻三格报错。

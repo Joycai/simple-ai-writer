@@ -670,7 +670,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
 官方文档：`platform.qianwenai.com/docs/developer-guides/tool-calling/code-interpreter`。实测用 curl
 扫了一遍 `/models` 里的候选 id，再用 `live.qianwen.test.ts` 的「server tools: code_interpreter」组
 走真实 adapter 复核；提示词「请用代码计算 123 的 21 次方」（44 位数，模型背不出来，答对即说明真跑了）。
-本项目的实现在 `src/lib/ai/serverTools.ts` 与 `platforms.ts`（`dashscopeRunsCodeInterpreter` / `openaiServerToolsBody` /
+本项目的实现在 `src/lib/ai/serverTools.ts` 与 `capabilities.ts`（`code_interpreter` 的模型 id 格 / `openaiServerToolsBody` /
 `responsesServerTools` / `codeInterpreterEvent`）。
 
 - **两个面的拼写和条件都不一样**：
@@ -687,7 +687,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   文档说「与 function calling 互斥」，实测只在 ① 面成立。本项目的处理：① 面上**本轮带函数工具就不发**
   `enable_code_interpreter`（agent 的工具不能让），所以 ① 面上它只惠及不带工具的请求；② 面上
   **思考档位为「关闭」就不发**这个工具。两处都是按请求丢掉，而不是发一个必然失败的请求。
-- **支持哪些模型，按 id 判断**（`platforms.ts` 的 `dashscopeRunsCodeInterpreter`，设置抽屉只对匹配的 id 显示开关；已开着的不匹配 id 显示「不发送」）：
+- **支持哪些模型，按 id 判断**（`capabilities.ts` 里 `DASHSCOPE_CODE_INTERPRETER` 的正则组，设置抽屉只对匹配的 id 显示开关；已开着的不匹配 id 显示「不发送」）：
 
   | 模型 | ① 面 | ② 面 |
   | --- | --- | --- |

@@ -14,9 +14,10 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformModelCalibration, platformOrigin, serverToolStatus,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformModelCalibration, platformOrigin,
   type PlatformId,
 } from "../../../lib/ai/platforms";
+import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, channelHost, endpointBaseUrl, newChannelEndpoints, normalizeChannel,
   ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
@@ -737,14 +738,14 @@ function PlatformPreview({ platform, starters }: { platform: PlatformId; starter
       </div>
       {routes.map((e) => {
         const wire = { platform, standard: standardOf(e) };
-        const tools = SERVER_TOOL_IDS.filter((id) => serverToolStatus(wire, id) !== "no");
+        const tools = SERVER_TOOL_IDS.filter((id) => hasCapability(id, wire));
         return (
           <div key={e.family} className={r.previewRow}>
             <span className={r.previewLabel}>{ROUTE_SHORT[e.family]}</span>
             <span>
               {tools.length
                 ? tools.map((id) => t(`aiConfig.models.serverTool_${id}`)
-                  + (serverToolStatus(wire, id) === "unknown" ? ` (${t("aiConfig.providers.previewUnmeasured")})` : "")).join(" · ")
+                  + (capabilityVerdict(id, wire).status === "unknown" ? ` (${t("aiConfig.providers.previewUnmeasured")})` : "")).join(" · ")
                 : t("aiConfig.providers.previewNoTools")}
             </span>
           </div>
