@@ -7,6 +7,7 @@ import {
   isTransient,
   judgeTruncation,
   makePadding,
+  outputRunCapped,
   parseLimitFromMessage,
   parseOllamaParameters,
   readEntryLimits,
@@ -259,10 +260,41 @@ describe("suggestSettings", () => {
     expect(s.maxOutput).toBe(8192);
   });
 
+  it("never lets a clean generation run (a floor) pull a declared cap down", () => {
+    // Asked for 16k, got 16k cleanly: that proves 16k is reachable, not that
+    // 64k is not — the declared 64k stands.
+    const floor = finding({ source: "measured", detail: "generation", maxOutput: 16384, confidence: "low" });
+    expect(suggestSettings([finding({ maxOutput: 65536, detail: "outputTokenLimit" }), floor]).maxOutput).toBe(65536);
+    // Alone, a floor suggests no cap at all.
+    expect(suggestSettings([floor]).maxOutput).toBeUndefined();
+    // A floor above a declared cap contradicts it, and says so.
+    const s = suggestSettings([finding({ maxOutput: 8192, detail: "outputTokenLimit" }), { ...floor, maxOutput: 16384 }]);
+    expect(s.maxOutput).toBe(8192);
+    expect(s.conflicts.join()).toContain("16,384");
+    // A capped run is a measured ceiling and wins as before.
+    const capped = finding({ source: "measured", detail: "generation", maxOutput: 4096, confidence: "high" });
+    expect(suggestSettings([finding({ maxOutput: 65536, detail: "outputTokenLimit" }), capped]).maxOutput).toBe(4096);
+  });
+
   it("returns nothing rather than a guess when there are no findings", () => {
     const s = suggestSettings([]);
     expect(s.contextWindow).toBeUndefined();
     expect(s.maxOutput).toBeUndefined();
+  });
+});
+
+describe("outputRunCapped", () => {
+  it("counts a run as capped only when something other than the model stopped it short", () => {
+    expect(outputRunCapped(16384, 4096, "length")).toBe(true);
+    expect(outputRunCapped(16384, 4096, "MAX_TOKENS")).toBe(true);
+    // A relay that clamps silently reports nothing useful.
+    expect(outputRunCapped(16384, 4096, undefined)).toBe(true);
+    // The model ending on its own is not a ceiling, however short.
+    expect(outputRunCapped(16384, 4096, "stop")).toBe(false);
+    expect(outputRunCapped(16384, 4096, "STOP")).toBe(false);
+    expect(outputRunCapped(16384, 4096, "end_turn")).toBe(false);
+    // Reaching the request is never a cap.
+    expect(outputRunCapped(16384, 16000, "length")).toBe(false);
   });
 });
 

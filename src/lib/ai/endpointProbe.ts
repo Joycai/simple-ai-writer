@@ -26,7 +26,7 @@
 import { fetch, isLocalUrl } from "../http";
 import {
   calibrate, classifyProbeError, estimateProbeCost, expectedPromptTokens,
-  isTransient, judgeTruncation, makePadding, parseOllamaParameters, readEntryLimits,
+  isTransient, judgeTruncation, makePadding, outputRunCapped, parseOllamaParameters, readEntryLimits,
   suggestSettings,
   type Calibration, type FindingConfidence, type ProbeCost, type ProbeFinding,
   type ProbeSuggestion, type TruncationResult,
@@ -820,9 +820,9 @@ async function measureOutputLength(
     requested,
     produced,
     finishReason: res.finishReason,
-    // Stopping well short of the request without hitting a length limit means
-    // the server enforces a lower ceiling than the parameter suggested.
-    capped: produced < requested * 0.9,
+    // Stopped well short of the request by something other than the model
+    // itself: the server enforces a lower ceiling than the parameter said.
+    capped: outputRunCapped(requested, produced, res.finishReason),
   };
 }
 
