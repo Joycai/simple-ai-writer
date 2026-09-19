@@ -84,6 +84,47 @@ function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamO
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const body: Record<string, unknown> = {
+    model: opts.modelId,
+    messages: toWireMessages(opts.messages),
+    stream: true,
+    stream_options: { include_usage: true },
+    // Absent unless the author set one on this model, for the same reason as
+    // the reasoning fields below: an unset model must keep sending exactly
+    // what it sent before this setting existed. 0 is a real value here, so
+    // the test is `!== undefined` rather than truthiness.
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    // Same `!== undefined` rule, and for the same reason: 0 is a real value
+    // for both (frequency_penalty 0 is the vendor's own default). These two
+    // come from the task rather than from the model's config — today only the
+    // Sakura translation engine sets them — so a request that doesn't ask for
+    // them is byte-identical to one from before they existed.
+    ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
+    ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
+    ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
+    // A standing permission the author granted this model, spelled the way
+    // this wire wants it (enable_search / enable_code_interpreter — see
+    // lib/ai/serverTools.ts). Empty object for every model without the
+    // declaration, so their requests are byte-identical to before this existed.
+    ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
+    // Absent unless the author set an effort on this model — an unset model
+    // must keep sending exactly what it sent before this existed, because a
+    // volunteered field is a field some relay can reject. The category carries
+    // the vendor spelling (reasoning_effort / enable_thinking / disable
+    // switch); the budget is read only by Qwen's budget category.
+    ...reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget),
+    // DashScope's high-resolution image reading, declared per model (see
+    // Model.vlHighResolution). Absent unless declared, same rule as above —
+    // and unless the platform reads it (智谱 takes it and ignores it).
+    ...(opts.vlHighResolution && hasCapability("vlHighResolution", wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
+    // Last: extraBody is the per-request escape hatch and outranks config.
+    ...opts.extraBody,
+  };
+  // This family carries the most thinking spellings of the four (effort,
+  // enable_thinking, the disable switch, budgets) and the log's request entry
+  // shows only the caller's messages — without the wire body there is no way
+  // to tell whether the field the author chose ever went out.
+  opts._onRequestBody?.(body);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -92,42 +133,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // rather than sending an empty bearer token.
       ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
     },
-    body: JSON.stringify({
-      model: opts.modelId,
-      messages: toWireMessages(opts.messages),
-      stream: true,
-      stream_options: { include_usage: true },
-      // Absent unless the author set one on this model, for the same reason as
-      // the reasoning fields below: an unset model must keep sending exactly
-      // what it sent before this setting existed. 0 is a real value here, so
-      // the test is `!== undefined` rather than truthiness.
-      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-      // Same `!== undefined` rule, and for the same reason: 0 is a real value
-      // for both (frequency_penalty 0 is the vendor's own default). These two
-      // come from the task rather than from the model's config — today only the
-      // Sakura translation engine sets them — so a request that doesn't ask for
-      // them is byte-identical to one from before they existed.
-      ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
-      ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
-      ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
-      // A standing permission the author granted this model, spelled the way
-      // this wire wants it (enable_search / enable_code_interpreter — see
-      // lib/ai/serverTools.ts). Empty object for every model without the
-      // declaration, so their requests are byte-identical to before this existed.
-      ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
-      // Absent unless the author set an effort on this model — an unset model
-      // must keep sending exactly what it sent before this existed, because a
-      // volunteered field is a field some relay can reject. The category carries
-      // the vendor spelling (reasoning_effort / enable_thinking / disable
-      // switch); the budget is read only by Qwen's budget category.
-      ...reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget),
-      // DashScope's high-resolution image reading, declared per model (see
-      // Model.vlHighResolution). Absent unless declared, same rule as above —
-      // and unless the platform reads it (智谱 takes it and ignores it).
-      ...(opts.vlHighResolution && hasCapability("vlHighResolution", wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
-      // Last: extraBody is the per-request escape hatch and outranks config.
-      ...opts.extraBody,
-    }),
+    body: JSON.stringify(body),
     signal: opts.signal,
   });
 
@@ -142,6 +148,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   let outputTokens = 0;
   let cachedTokens = 0;
   let truncated = false;
+  // The endpoint's own finish_reason, last non-empty one seen — reported on the
+  // done chunk so the log can say why a turn ended (stop / length / tool_calls
+  // / a vendor's own word), not just that it did.
+  let stopReason: string | undefined;
   // Index-keyed map for accumulating streamed tool_calls across SSE chunks
   const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
   // Accumulated across the whole response so the tool-call chunk below can hand
@@ -259,6 +269,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (choice?.finish_reason === "network_error") {
       throw new Error("OpenAI: the endpoint stopped generating mid-response (finish_reason: network_error)");
     }
+    if (typeof choice?.finish_reason === "string" && choice.finish_reason) stopReason = choice.finish_reason;
     if (choice?.finish_reason === "length" || choice?.finish_reason === "model_context_window_exceeded") truncated = true;
   };
 
@@ -278,6 +289,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
         opts.onChunk({
           done: true, inputTokens, outputTokens,
           ...(truncated ? { truncated } : {}),
+          ...(stopReason ? { stopReason } : {}),
           ...(cachedTokens ? { cachedTokens } : {}),
         });
         return;
@@ -297,6 +309,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   opts.onChunk({
     done: true, inputTokens, outputTokens,
     ...(truncated ? { truncated } : {}),
+    ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
   });
 }

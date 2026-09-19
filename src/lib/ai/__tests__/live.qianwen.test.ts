@@ -332,8 +332,8 @@ describe.skipIf(!KEY)("LIVE Qianwen", () => {
     }, 120_000);
 
     it("fps 0.5 beside video_url reaches the endpoint: the same clip costs less than the default", async () => {
-      // openai.ts has no `_onRequestBody` hook, so the proof is the bill: the
-      // drop only happens if `fps` arrived where the endpoint reads it. The
+      // The body hook would only show `fps` was sent; the proof is the bill:
+      // the drop only happens if `fps` arrived where the endpoint reads it. The
       // part's shape itself is pinned in videoInput.test.ts.
       const [def, low] = await Promise.all([ask("v6s_320_10fps.mp4"), ask("v6s_320_10fps.mp4", 0.5)]);
       // Measured 482 → 162 video tokens.

@@ -203,6 +203,25 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
   });
 
+  it("hands the wire body to _onRequestBody and reports the finish_reason as stopReason", async () => {
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"x"},"finish_reason":null}]}\n`,
+      `data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    const bodies: unknown[] = [];
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], reasoningEffort: "high",
+      _onRequestBody: (b) => bodies.push(b),
+      onChunk: (c) => received.push(c),
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ model: "m", reasoning_effort: "high", stream: true });
+    expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "stop" });
+  });
+
   it("reassembles an SSE line split across network chunks", async () => {
     // One JSON line split mid-token — naive per-chunk parsing would drop it.
     const line = `data: {"choices":[{"delta":{"content":"whole"}}]}\n`;
@@ -326,7 +345,7 @@ describe("streamCompletion — OpenAI SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true, stopReason: "model_context_window_exceeded",
     });
   });
 
@@ -339,7 +358,7 @@ describe("streamCompletion — OpenAI SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true, stopReason: "length",
     });
   });
 
