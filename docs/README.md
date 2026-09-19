@@ -183,6 +183,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [motion-enter-only-hidden-tab.md](issues/motion-enter-only-hidden-tab.md) | `clarified` | 「enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`」是**测量产物**：预览面板标签页 `visibilityState === 'hidden'`，rAF 不派发。代码无缺陷，实测读数与正确的验动画方法记在文内 |
 | [asr-currency.md](issues/asr-currency.md) | `open` | 转写按人民币计费，却写进了 `cost_usd` 列：用量页合计是两种货币的和。两条出路（用量表记货币 / 设置里定汇率），作者定为不急的待办 |
 | [tiered-pricing.md](issues/tiered-pricing.md) | `open` | 千问按输入长度分档计价（顶档 3×），平价 `priceIn/Out` 表达不了；显式缓存写入价同缺。只失真成本统计，典型任务不跨 256K 门槛，故仅留档 + 设计草案 |
+| [video-capability-per-platform.md](issues/video-capability-per-platform.md) | `open` | 能力判定 C4，作者定为搁置的待办：视频输入仍按协议族放行（① 族任何平台），而 `video_url` 是千问一族的扩展，只在百炼、智谱实测过。做法是改成按平台点名、中继 `unknown`、其余实测前 `no`；前提是 OpenAI 官方 / DeepSeek / xAI / 火山方舟各一条 ① 线路样本 |
 
 ---
 
