@@ -33,6 +33,7 @@ export {
   writeTranscript,
   recordTranscriptionUsage,
   pollDeadlineMs,
+  speakersMissing,
   MAX_TRANSCRIBE_BYTES,
   type TranscribePhase,
   type TranscribeProgress,

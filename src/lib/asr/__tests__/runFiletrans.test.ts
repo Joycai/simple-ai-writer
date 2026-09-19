@@ -103,3 +103,15 @@ describe("transcribeFile × filetrans checkpoint", () => {
     expect(pendingFiles()).toHaveLength(0);
   });
 });
+
+describe("speakersMissing", () => {
+  const t = (speakers: boolean, n = 1) => ({ sentences: Array.from({ length: n }, () => ({ text: "x" })), speakers }) as never;
+  it("is true only when separation was asked for and no sentence carries a speaker", async () => {
+    const { speakersMissing } = await import("../run");
+    expect(speakersMissing(true, t(false))).toBe(true);
+    expect(speakersMissing(true, t(true))).toBe(false);
+    expect(speakersMissing(false, t(false))).toBe(false);
+    // Nothing recognised at all (silence) is not a missing speaker column.
+    expect(speakersMissing(true, t(false, 0))).toBe(false);
+  });
+});

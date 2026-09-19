@@ -1256,12 +1256,15 @@ export function FileTree() {
       setActiveFilePath(target);
       const seconds = outcome.billedSeconds ?? Math.round(outcome.transcript.durationMs / 1000);
       const name = baseName(target);
+      const done = outcome.cached
+        ? t("fileTree.transcribedCached", { seconds, name })
+        : cost !== null
+          ? t("fileTree.transcribedCost", { seconds, cost: cost.toFixed(2), name })
+          : t("fileTree.transcribed", { seconds, name });
       setNotice({
-        text: outcome.cached
-          ? t("fileTree.transcribedCached", { seconds, name })
-          : cost !== null
-            ? t("fileTree.transcribedCost", { seconds, cost: cost.toFixed(2), name })
-            : t("fileTree.transcribed", { seconds, name }),
+        text: asr.speakersMissing(diarization && !ask.sync, outcome.transcript)
+          ? `${done} · ${t("fileTree.transcribeNoSpeakers")}`
+          : done,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -357,6 +357,17 @@ export async function transcribeFile(req: TranscribeRequest): Promise<Transcribe
   return { transcript, cacheDir: dir, cached: false, billedSeconds, bytes: bytes.byteLength };
 }
 
+/**
+ * 要了说话人分离，结果里却一个编号都没有（坑 115）。
+ *
+ * 分离真的生效时，哪怕只有一个人说话也带 `speaker_id`（0 号），所以「一句都没有」
+ * 只能是端点把开关静默丢了——百炼的同步接口就这样，文档还写着支持。请求照常 200，
+ * 不报错；但作者要的那一列没有，得告诉他，而不是交出一份看起来正常的稿子。
+ */
+export function speakersMissing(requested: boolean, transcript: Transcript): boolean {
+  return requested && !transcript.speakers && transcript.sentences.length > 0;
+}
+
 /** 产物落点：源文件旁边的 `<stem>.md`；已存在就编号，绝不覆盖。 */
 export async function transcriptTargetFor(sourcePath: string): Promise<string> {
   const name = baseName(sourcePath);

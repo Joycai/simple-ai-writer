@@ -916,6 +916,9 @@ async function applyProposal(
         report: [
           `Transcribed ${proposal.sourcePath} to ${landed} (${formatClock(outcome.transcript.durationMs)}, ${outcome.transcript.sentences.length} sentences${outcome.transcript.speakers ? ", speakers labelled" : ""}). Read it with read_file.`,
           outcome.cached ? "Served from the transcription cache — the file had been transcribed before with the same settings, so nothing was billed." : `Billed ${seconds} seconds of audio.`,
+          ...(asr.speakersMissing(proposal.diarization, outcome.transcript)
+            ? ["Speaker separation was requested, but the result carries no speaker labels — the endpoint ignored it. Tell the author the transcript is unlabelled; do not retry, the same request gets the same answer."]
+            : []),
         ].join("\n"),
       };
     }
