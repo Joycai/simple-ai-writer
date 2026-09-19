@@ -115,7 +115,21 @@ const GEMINI_BLOCKED_FINISH_REASONS = new Set([
   "RECITATION",
   "SPII",
   "IMAGE_SAFETY",
+  "IMAGE_PROHIBITED_CONTENT",
+  "IMAGE_RECITATION",
 ]);
+
+/**
+ * The `finishReason` values that mean the turn ended the way it meant to:
+ * `STOP`, `MAX_TOKENS` (truncated but real, flagged below), and the
+ * unspecified default some relays fill in. **Every other value fails the
+ * request** — the known ones with their own wording below, the rest naming the
+ * value. The alternative, reading an unrecognised reason as success, is the
+ * silent kind of failure: `MALFORMED_FUNCTION_CALL` arrives with empty parts on
+ * HTTP 200, and an agent loop reading that as "no tool call, no text" ends the
+ * run as completed.
+ */
+const GEMINI_NORMAL_FINISH_REASONS = new Set(["STOP", "MAX_TOKENS", "FINISH_REASON_UNSPECIFIED"]);
 
 /**
  * `finishReason` values that report a malformed *request* rather than a refused
@@ -138,6 +152,13 @@ const GEMINI_REQUEST_FAULTS: Record<string, string> = {
   // The server cut a runaway tool loop short.
   TOO_MANY_TOOL_CALLS: "the model called tools too many times in a row",
   MALFORMED_RESPONSE: "the model returned a malformed response",
+  // The model tried to call a tool and produced something that doesn't parse
+  // as a call — the parts come back empty.
+  MALFORMED_FUNCTION_CALL: "the model produced a tool call that could not be parsed",
+  // The model declined to answer in the language of the request.
+  LANGUAGE: "the request's language is not supported by this model",
+  // An image-output model that produced no image.
+  NO_IMAGE: "the model was expected to return an image but returned none",
 };
 
 /**
@@ -332,6 +353,9 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
     }
     if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
+    if (candidate?.finishReason && !GEMINI_NORMAL_FINISH_REASONS.has(candidate.finishReason)) {
+      throw new Error(`Gemini ended this response abnormally (finishReason: ${candidate.finishReason}).`);
+    }
   };
 
   while (true) {

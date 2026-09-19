@@ -504,6 +504,25 @@ describe("streamCompletion — Gemini SSE", () => {
     })).rejects.toThrow(/didn't declare/);
   });
 
+  it("fails on a finishReason it does not know instead of completing silently", async () => {
+    // MALFORMED_FUNCTION_CALL comes back HTTP 200 with empty parts; read as
+    // success, an agent loop ends the run as completed with nothing done.
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[]},"finishReason":"MALFORMED_FUNCTION_CALL"}]}\n`],
+    })).rejects.toThrow(/tool call that could not be parsed/);
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hm"}]},"finishReason":"SOME_FUTURE_REASON"}]}\n`],
+    })).rejects.toThrow(/abnormally \(finishReason: SOME_FUTURE_REASON\)/);
+    // The unspecified default is not a failure.
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"FINISH_REASON_UNSPECIFIED"}]}\n`],
+    });
+    expect(text(received)).toBe("ok");
+  });
+
   it("spells every Gemini field in camelCase", async () => {
     // Google accepts both spellings; relays fronting it document only camel,
     // and an unrecognised key is ignored rather than rejected — a snake_case
