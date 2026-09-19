@@ -170,6 +170,18 @@ const ZHIPU_MODELS: Record<string, ModelCalibration> = {
   "glm-4.5-air": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
 };
 
+/**
+ * DeepSeek's two listed models (landscape.md §2.1, `/models` 2026-09-17). The
+ * `deepseek` category is the point: the family default spells off as
+ * `reasoning_effort:"none"`, which DeepSeek does not read as off — its off is
+ * the `thinking:{type:"disabled"}` switch (qianwen-compat-plan.md P1). Without
+ * this a hand-added row thought on after the author pressed 关.
+ */
+const DEEPSEEK_MODELS: Record<string, ModelCalibration> = {
+  "deepseek-flash": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216, type: "multimodal" },
+  "deepseek-v4-pro": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 },
+};
+
 const PROFILES: Record<PlatformId, PlatformProfile> = {
   openai: {
     origin: "https://api.openai.com",
@@ -198,6 +210,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.deepseek.com"],
+    models: DEEPSEEK_MODELS,
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {

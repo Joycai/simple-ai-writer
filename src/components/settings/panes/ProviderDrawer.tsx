@@ -88,9 +88,11 @@ const ORCAROUTER_FREE_MODELS: StarterModel[] = [
  * The older `deepseek-chat` / `deepseek-reasoner` ids are deliberately absent:
  * they still resolve, but a starter list is a recommendation, not an archive.
  */
+// Values from the platform's calibration table, so a starter row and a
+// hand-added row of the same id can never disagree (lib/ai/platforms.ts).
 const DEEPSEEK_MODELS: StarterModel[] = [
-  { modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash", contextSize: 1_048_576, maxOutput: 393_216, thinkingCategory: "deepseek", type: "multimodal" },
-  { modelId: "deepseek-v4-pro", name: "DeepSeek V4 Pro", contextSize: 1_048_576, maxOutput: 393_216, thinkingCategory: "deepseek" },
+  { modelId: "deepseek-flash", name: "DeepSeek V4.1 Flash", ...platformModelCalibration("deepseek", "deepseek-flash") },
+  { modelId: "deepseek-v4-pro", name: "DeepSeek V4 Pro", ...platformModelCalibration("deepseek", "deepseek-v4-pro") },
 ];
 
 /**
