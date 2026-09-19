@@ -49,7 +49,8 @@ import {
   useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX, LORE_BUDGET_OPTIONS,
 } from "../../stores/appStore";
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
-import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
+import { useEditorStore } from "../../stores/editorStore";
+import { focusBlockedByImage, useWritingFocus } from "../../stores/openDocument";
 import { useLoreStore } from "../../stores/loreStore";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { useMemoryStore } from "../../stores/memoryStore";

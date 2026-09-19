@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Pencil, RotateCcw, X } from "lucide-react";
 import { flushDirtyDocuments, useProjectStore } from "../../../stores/projectStore";
+import { openProject } from "../../../stores/projectLifecycle";
 import { exportProjectBundle, restoreProjectBundle } from "../../../lib/fs/projectBackup";
 import {
   BUILTIN_PROFILES,
@@ -584,7 +585,6 @@ function CustomCategoriesSection() {
 function ProjectBackupSection() {
   const { t } = useTranslation();
   const projectPath = useProjectStore((s) => s.projectPath);
-  const openProject = useProjectStore((s) => s.openProject);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 

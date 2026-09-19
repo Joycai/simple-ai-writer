@@ -28,7 +28,8 @@ import { useLoreStore } from "./stores/loreStore";
 import { IS_TAURI } from "./lib/platform";
 import { isCliEnabled } from "./lib/cli/flag";
 import { shellInfo } from "./lib/cli/shell";
-import { useMainView, useProjectStore } from "./stores/projectStore";
+import { useMainView } from "./stores/projectStore";
+import { openProject } from "./stores/projectLifecycle";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { useExternalFileRefresh } from "./useExternalFileRefresh";
@@ -139,7 +140,7 @@ export default function App() {
       const path = await launchProjectPath();
       if (!path) return;
       try {
-        const outcome = await useProjectStore.getState().openProject(path);
+        const outcome = await openProject(path);
         // `code <folder>` behaviour: the folder was already open in another
         // window, that window has just been brought forward, and this fresh
         // process was launched *for* that folder — it has nothing to show,

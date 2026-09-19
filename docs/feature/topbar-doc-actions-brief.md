@@ -24,7 +24,7 @@
 - **新分类器** `lib/fs/docKind.ts`：`DocKind` 的五个值就是表 B 的五行，`isTextKind()` 决定字数 / 保存点 / 「已修改」在不在。刻意与 `isChapterFile`（大纲、书脊用的那个）分开：为大纲的理由放宽它，不该顺手给一个文件发一枚导出按钮。
 - **文档段拆成 `DocActions.tsx`**：视图切换（宽/中三格连体 + 窄档一格下拉）、导出 / 打印 · PDF、图片尺寸、转换文档、用默认应用打开、字数 + 保存点。窄档的成色与宽档的成色**都渲染出来**、由容器查询藏掉一种——查询能换布局，换不了词（`design-system.md`）。
 - **`TitleBar.tsx`**：`.flow` 那一格是让位的量程（平台让位留在它外面）；面包屑末尾的 ×、两秒痕迹、窄档的 ⋯ 菜单（主题 · 语言）。
-- **`closeDocument()`（`editorStore`）**：三个入口共用；`⌘W` 进了 `useGlobalShortcuts` + `SHORTCUTS` 注册表（与 `⌘⇧W` 关闭项目成对），文件树右键的「关闭」只长在当前打开的那一行上。**mac 上 `⌘W` 起初到不了 webview**——菜单挂的 `PredefinedMenuItem::close_window` 固定带着它，而一个窗口就是一个工作区，于是「关文档」按下去关掉的是整个项目窗口。先补过一条 `⌃⌘W` 后备（2026-09-10），随后按 VS Code 的分层整理成三层并撤掉了它：**文档 ⌘W · 项目 ⇧⌘W · 窗口 ⌥⌘W**（窗口那一项在 `windowmenu.rs` 换成自定义菜单项，把 ⌘W 让回页面）。表在 `CLOSE_DOC_COMBOS` 的注释里。
+- **`closeDocument()`（`stores/openDocument.ts`，原在 `editorStore`）**：三个入口共用；`⌘W` 进了 `useGlobalShortcuts` + `SHORTCUTS` 注册表（与 `⌘⇧W` 关闭项目成对），文件树右键的「关闭」只长在当前打开的那一行上。**mac 上 `⌘W` 起初到不了 webview**——菜单挂的 `PredefinedMenuItem::close_window` 固定带着它，而一个窗口就是一个工作区，于是「关文档」按下去关掉的是整个项目窗口。先补过一条 `⌃⌘W` 后备（2026-09-10），随后按 VS Code 的分层整理成三层并撤掉了它：**文档 ⌘W · 项目 ⇧⌘W · 窗口 ⌥⌘W**（窗口那一项在 `windowmenu.rs` 换成自定义菜单项，把 ⌘W 让回页面）。表在 `CLOSE_DOC_COMBOS` 的注释里。
 - **`printHtmlDocument()`（`lib/fs/export`）**：`.html` 的唯一导出。整份文档解析、图片就地内联（打印稿没有 base URL）、**先摘掉 `<script>`**——打印稿没什么要跑的，而两个打印面（应用内同源 iframe 受 CSP 管、macOS 是自己的一个 webview）对「脚本会不会跑」的答案不一致；摘掉它，两边印出来的是同一页，也不碰「独立预览窗口是页面脚本真正跑起来的唯一地方」那条规矩。
 - **图片尺寸**：`ImagePreview` 在 `img.onload` 时把 `naturalWidth × naturalHeight` 连同**路径**一起报进 `projectStore.imageSize`，顶栏比对路径后才显示——和 `WritingFocus` 防的是同一件事：一张图的尺寸绝不能挂在另一张图的名字下面。
 - **单位词**：顶栏原来读的是「3,124 字数」/「3,124 Words」（`statusBar.words` 是个**栏目名**）。新增 `titleBar.words` / `titleBar.chars`，读成「3,124 字」/「12,480 字符」。

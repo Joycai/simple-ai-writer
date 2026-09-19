@@ -22,7 +22,8 @@ import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
-import { getWritingFocus, useEditorStore } from "./editorStore";
+import { useEditorStore } from "./editorStore";
+import { getWritingFocus } from "./openDocument";
 import { isSamePath } from "../lib/paths";
 
 /** Tail of the previous summary handed to the next segment for continuity. */

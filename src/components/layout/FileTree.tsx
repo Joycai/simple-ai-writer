@@ -41,7 +41,8 @@ import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { useAppStore } from "../../stores/appStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useAgentStore } from "../../stores/agentStore";
-import { closeDocument, useEditorStore } from "../../stores/editorStore";
+import { useEditorStore } from "../../stores/editorStore";
+import { closeDocument } from "../../stores/openDocument";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { loreEntityCount } from "../../lib/lore";
@@ -613,7 +614,7 @@ function shortCount(n: number): string {
 
 function FooterCounts() {
   const { t } = useTranslation();
-  const wordCount = useProjectStore((s) => s.wordCount);
+  const wordCount = useEditorStore((s) => s.wordCount);
   const fileTree = useProjectStore((s) => s.fileTree);
   const loreCount = useLoreStore((s) => loreEntityCount(s.index));
   const terms = useTerms();

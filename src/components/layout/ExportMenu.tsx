@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, Download } from "lucide-react";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { exportHtml, exportMarkdown, exportPdf, isExportableDocument } from "../../lib/fs/export";
-import { getWritingFocus, useWritingFocus } from "../../stores/editorStore";
+import { getWritingFocus, useWritingFocus } from "../../stores/openDocument";
 import styles from "./TitleBar.module.css";
 import { baseName, dirName } from "../../lib/paths";
 

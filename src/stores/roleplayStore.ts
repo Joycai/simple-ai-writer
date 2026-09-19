@@ -39,6 +39,7 @@ import {
   resolveSubAgentConn, withSessionOverrides, type SubAgentKind,
 } from "../lib/agent/subagentModel";
 import { toolAppState } from "./toolAppState";
+import { useAppStore } from "./appStore";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
@@ -101,6 +102,9 @@ import { contributingEntities } from "../lib/context/loreSelect";
 import { readEntityFile } from "../lib/lore/entity";
 import type { AttachedItem } from "../lib/lore/aiTask";
 import type { LoreEntity, LoreIndex } from "../lib/lore/model";
+import { useLoreStore } from "./loreStore";
+import { useAgentStore } from "./agentStore";
+import { useAiStore } from "./aiStore";
 
 interface Job {
   agentId: string;
@@ -482,7 +486,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     const { projectPath } = get();
     const agent = get().agents[agentId];
     if (!projectPath || !agent) return;
-    const { useLoreStore } = await import("./loreStore");
     const { preflight } = await inspectAgent({
       projectPath, agent,
       persona: agent.authorPersona ?? get().authorPersona,
@@ -510,9 +513,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     const agent = get().agents[job.agentId];
     if (!projectPath || !agent) return;
 
-    const [{ useAiStore }, { useLoreStore }, { useAppStore }] = await Promise.all([
-      import("./aiStore"), import("./loreStore"), import("./appStore"),
-    ]);
     const { models, providers, activeModelId, subAgents } = useAiStore.getState();
     const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
     if (!resolved.ok) {
@@ -755,7 +755,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
                 reviseRecord(doc, recId, patch, Math.floor(Date.now() / 1000))),
           } satisfies AgentMemoryStore,
           requestApproval: async (p, onApplyProgress) => {
-            const { useAgentStore } = await import("./agentStore");
             // key 用本 agent 的 controller，绝不能是 CHAT_AUTO_APPROVE_KEY 那样
             // 的字面量——几个 agent 共用一个字面量会让 A 的「本次都批准」
             // 悄悄覆盖到 B。
@@ -784,13 +783,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         // 这边没有恢复已暂停任务的入口，给了就是一个存进去再也拿不出来的按钮。
         ...(agent.kind === "narrator" ? {
           onRoundLimit: async (roundsUsed: number) => {
-            const { useAgentStore } = await import("./agentStore");
             return useAgentStore.getState().requestRoundExtension(
               roundsUsed, preset.maxRounds, controller, false, agent.id,
             );
           },
           onTruncationLimit: async (recoveries: number) => {
-            const { useAgentStore } = await import("./agentStore");
             return useAgentStore.getState()
               .requestTruncationDecision(recoveries, controller, agent.id);
           },
@@ -885,7 +882,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
       }
     } finally {
-      const { useAgentStore } = await import("./agentStore");
       useAgentStore.getState().rejectAll("roleplay run ended", controller);
 
       patchSession(job.agentId, (x) => ({ ...x, contextVersion: x.contextVersion + 1 }));
@@ -1079,9 +1075,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const turns = get().sessions[id]?.turns ?? [];
       if (!turns.length) return null;
 
-      const [{ useAiStore }, { useLoreStore }] = await Promise.all([
-        import("./aiStore"), import("./loreStore"),
-      ]);
       const { models, providers, activeModelId } = useAiStore.getState();
       const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
       if (!resolved.ok) {
@@ -1371,8 +1364,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
       const persona = agent.authorPersona ?? get().authorPersona;
       const personaName = persona.mode === "lore" && persona.dirPath
-        ? (await import("./loreStore").then((m) =>
-            indexByDir(m.useLoreStore.getState().index).get(persona.dirPath!)?.name ?? ""))
+        ? indexByDir(useLoreStore.getState().index).get(persona.dirPath!)?.name ?? ""
         : "";
 
       // 先落盘，再排队。模型跑不动只是一次重试，写不进去是数据丢失。
@@ -1398,7 +1390,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 解析和 runJob 里那一句必须是同一句话（§2.14）。识图子代理开着时另外
       // 告诉模型「图在这个路径上，可以 delegate」，那和把 base64 塞给一个读不
       // 了图的模型是两件事（docs/feature/agent/subagent-lld.md §6.1）。
-      const { useAiStore } = await import("./aiStore");
       const { models, activeModelId, subAgents } = useAiStore.getState();
       const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));
       const subs = subAgentsFor(agent.kind, withSessionOverrides(
@@ -1411,7 +1402,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 那段设定本来就在它眼前。芯片也保留：作者说过要带上，界面不该偷偷抹掉。
       const resident = residentCoreDirs(
         agent, get().sessions[agentId]?.meta ?? null,
-        (await import("./loreStore")).useLoreStore.getState().index,
+        useLoreStore.getState().index,
       );
       const inlined = refs.filter((r) => !(r.kind === "lore" && resident.has(r.entity.dirPath)));
       const composed = await buildChatMessage(body, quote, inlined, {
@@ -1451,9 +1442,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         aborts: { ...st.aborts, [agentId]: controller },
       }));
       try {
-        const [{ useAiStore }, { useAppStore }] = await Promise.all([
-          import("./aiStore"), import("./appStore"),
-        ]);
         const { models, providers, activeModelId, subAgents } = useAiStore.getState();
         const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
         if (!resolved.ok) {
@@ -1535,9 +1523,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 而 abort 不会让它 reject。所以这里要像 stopChat 一样主动排空本次运行
       // 的队列，否则「停止」按下去之后这个 agent 会永远卡在那张卡片上。
       if (controller) {
-        void import("./agentStore").then((m) =>
-          m.useAgentStore.getState().rejectAll("aborted by user", controller),
-        );
+        useAgentStore.getState().rejectAll("aborted by user", controller);
       }
       set((st) => ({ queue: st.queue.filter((j) => j.agentId !== agentId) }));
     },
@@ -1670,7 +1656,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (!projectPath || !agent) return;
       if (get().compacting.includes(agentId)) return;
 
-      const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
       const session = get().sessions[agentId];
       const persona = agent.authorPersona ?? get().authorPersona;
@@ -1844,7 +1829,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     checkBindings: async () => {
       const { projectPath, order } = get();
       if (!projectPath) return;
-      const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
 
       const next: Record<string, boolean> = {};

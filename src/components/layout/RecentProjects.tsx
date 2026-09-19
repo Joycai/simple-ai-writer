@@ -24,6 +24,7 @@ import { ChevronDown, Copy, ExternalLink, Folder, Pin, PinOff, X } from "lucide-
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { openProject } from "../../stores/projectLifecycle";
 import { openInNewWindow } from "../../lib/instance";
 import { isProjectPinned, openedAtKind, splitProjects } from "../../lib/recentProjects";
 import { baseName } from "../../lib/paths";
@@ -48,7 +49,6 @@ export function RecentProjects() {
   const removeRecentProject = useAppStore((s) => s.removeRecentProject);
   const pinProject = useAppStore((s) => s.pinProject);
   const unpinProject = useAppStore((s) => s.unpinProject);
-  const openProject = useProjectStore((s) => s.openProject);
   const isLoading = useProjectStore((s) => s.isLoading);
 
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);

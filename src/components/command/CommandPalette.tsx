@@ -22,6 +22,7 @@ import {
 import { useAppStore } from "../../stores/appStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
+import { openProject } from "../../stores/projectLifecycle";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { useNavStore } from "../../stores/navStore";
@@ -138,7 +139,6 @@ export function CommandPalette() {
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
   const revealPath = useProjectStore((s) => s.revealPath);
-  const openProject = useProjectStore((s) => s.openProject);
   // This component is always mounted (App renders it unconditionally). Subscribing
   // to the document — and to the navigation history — only while open keeps every
   // editor keystroke from re-rendering, and re-searching, a palette nobody can see.

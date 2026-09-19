@@ -79,11 +79,25 @@ export async function flushDirtyDocuments(): Promise<void> {
 }
 
 /**
+ * What the chat side does around a project switch. Passed in by
+ * `stores/projectLifecycle.ts` rather than imported: agentStore reads this
+ * store, so importing it back closed a cycle (docs/feature/code-structure-plan.md
+ * P4). Required, not optional, so a caller that skips the coordinator fails to
+ * compile instead of silently switching without asking.
+ */
+export interface ProjectSwitchHooks {
+  /** Asked before leaving the open project; false cancels. `name` is null when closing. */
+  confirmLeave: (name: string | null) => Promise<boolean>;
+  /** Once the switch can no longer fail: restore the new project's chats (null = closed). */
+  onSwitched: (projectPath: string | null) => Promise<void>;
+}
+
+/**
  * How `openProject` ended. Callers that care are rare — the launch-argument
  * path in App.tsx closes its fresh window on `"focused-existing"`, the way
  * `code <folder>` hands off to the window that already has the folder.
  */
-type OpenProjectOutcome = "opened" | "cancelled" | "focused-existing";
+export type OpenProjectOutcome = "opened" | "cancelled" | "focused-existing";
 
 /**
  * The advisory multi-instance guard: claim the workspace, and when a live
@@ -178,12 +192,12 @@ interface ProjectState {
    * held a single entry would quietly drop the rest of a multi-selection cut.
    */
   clipboard: { entries: { path: string; isDir: boolean }[]; mode: TransferMode } | null;
-  wordCount: number;
-  charCount: number;
   isLoading: boolean;
 
-  openProject: (path?: string) => Promise<OpenProjectOutcome>;
-  closeProject: () => Promise<void>;
+  /** Call through `stores/projectLifecycle.ts`, which supplies the chat side's hooks. */
+  openProject: (path: string | undefined, hooks: ProjectSwitchHooks) => Promise<OpenProjectOutcome>;
+  /** Call through `stores/projectLifecycle.ts`, which supplies the chat side's hooks. */
+  closeProject: (hooks: ProjectSwitchHooks) => Promise<void>;
   refreshFileTree: () => Promise<void>;
   /**
    * Change the open project's pack selection: persist it, scaffold any new
@@ -297,12 +311,6 @@ interface ProjectState {
   /** 最近一次 `revealPath`；`seq` 单调递增，树按它判断「这条我处理过没有」。 */
   revealRequest: { path: string; seq: number } | null;
   /**
-   * Both counters in one `set()`: the caller (editorStore.setContent) runs on
-   * every keystroke, and two separate writes meant every subscriber of this
-   * store got notified twice per character typed.
-   */
-  setDocCounts: (words: number, chars: number) => void;
-  /**
    * 打开的图片的原始像素尺寸——顶栏在图片这一类里唯一有的读数（设计稿 01e 屏
    * 1d-3）。由 `ImagePreview` 在 `img.onload` 时报上来：它手里已经有解好的那张
    * 图，顶栏自己再解一次等于把一张 12MB 的图读两遍。
@@ -384,11 +392,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   expandedDirs: {},
   revealRequest: null,
   clipboard: null,
-  wordCount: 0,
-  charCount: 0,
   isLoading: false,
 
-  openProject: async (path) => {
+  openProject: async (path, hooks) => {
     // `path` is passed when reopening from the recent-projects list; otherwise prompt.
     const target = typeof path === "string" ? path : await openProjectFolder();
     if (!target) return "cancelled";
@@ -399,8 +405,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // may not remember, so ask once, listing them (设计稿 02b 屏 1j). Idle
     // everywhere resolves true without a dialog.
     if (!isSamePath(get().projectPath, target)) {
-      const { useAgentStore } = await import("./agentStore");
-      const leave = await useAgentStore.getState().confirmProjectSwitch(baseName(target) || target);
+      const leave = await hooks.confirmLeave(baseName(target) || target);
       if (!leave) return "cancelled";
     }
 
@@ -441,7 +446,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+      useEditorStore.getState().setDocCounts(0, 0);
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -449,10 +455,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // lock back, so a sibling instance opening it warns no longer.
       if (previous && freshClaim) void releaseProjectLock(previous);
       // Chat sessions are project-scoped: drop the previous project's from
-      // view and restore this one's newest. Lazy import — agentStore reaches
-      // back into this store (see its module doc on circular deps).
-      const { useAgentStore } = await import("./agentStore");
-      await useAgentStore.getState().resetChatForProject(target);
+      // view and restore this one's newest.
+      await hooks.onSwitched(target);
       useComposerStore.getState().resetAll();
       return "opened";
     } catch (err) {
@@ -470,23 +474,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  closeProject: async () => {
+  closeProject: async (hooks) => {
     const closing = get().projectPath;
     // Same question as openProject's, for the same reason.
-    {
-      const { useAgentStore } = await import("./agentStore");
-      if (!(await useAgentStore.getState().confirmProjectSwitch(null))) return;
-    }
+    if (!(await hooks.confirmLeave(null))) return;
     await flushDirtyDocuments();
     resetDocuments();
-    const { useAgentStore } = await import("./agentStore");
-    await useAgentStore.getState().resetChatForProject(null);
+    await hooks.onSwitched(null);
     useComposerStore.getState().resetAll();
     resetDb();
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+    useEditorStore.getState().setDocCounts(0, 0);
     if (closing) void releaseProjectLock(closing);
   },
 
@@ -828,8 +829,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       for (const dir of closed) next[dir] = true;
       return { expandedDirs: next, revealRequest: { path, seq } };
     }),
-  setDocCounts: (words, chars) =>
-    set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
   imageSize: null,
   setImageSize: (size) => set({ imageSize: size }),
 }));
