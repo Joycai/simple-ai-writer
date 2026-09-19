@@ -115,8 +115,10 @@ interface CapabilityRule {
   requires?: readonly CapabilityId[];
   /**
    * Families where it exists only while thinking is off — `no / thinking`
-   * for any other resolved category. Consulted only when the asker passes the
-   * model's resolved category.
+   * for any category but `off`. An absent category counts as thinking: every
+   * family's default category thinks (`defaultCategoryId`), so a caller that
+   * forgot to resolve it gets the safe answer, not a field the endpoint
+   * refuses. Only an explicit `off` opens it.
    */
   thinkingOff?: readonly ProtocolFamily[];
 }
@@ -338,7 +340,10 @@ export interface CapabilityWire {
 interface CapabilityModel {
   modelId?: string;
   type?: ModelType;
-  /** The *resolved* category (`resolveThinkingCategory`), never the row's possibly-absent one. */
+  /**
+   * The *resolved* category (`resolveThinkingCategory`). Consulted only by a
+   * `thinkingOff` rule, where absent reads as the family default — thinking.
+   */
   thinkingCategory?: ThinkingCategoryId;
 }
 
@@ -364,7 +369,7 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   for (const dep of rule.requires ?? []) {
     if (familyVerdict(dep, platform, family, model).status === "no") return verdict("no", "requires");
   }
-  if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== undefined && model.thinkingCategory !== "off") {
+  if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== "off") {
     return verdict("no", "thinking");
   }
 

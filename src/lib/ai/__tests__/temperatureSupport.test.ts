@@ -9,8 +9,8 @@
  * stops matching what the request does — which is the failure the shared rule
  * exists to prevent.
  *
- * Both askers pass the *resolved* category, so this does too: an absent one
- * is not consulted by the table.
+ * Both askers pass the *resolved* category, so this does too; the table reads
+ * an absent one as the family default (thinking), which one case below pins.
  */
 import { describe, expect, it } from "vitest";
 import { hasCapability } from "../capabilities";
@@ -43,6 +43,10 @@ describe("temperature", () => {
     for (const c of ["claude-adaptive", "claude-budget", "minimax"] as const) {
       expect(temperatureReaches("anthropic", c)).toBe(false);
     }
+  });
+
+  it("reads an unresolved (absent) category as thinking — the safe default", () => {
+    expect(hasCapability("temperature", { platform: "anthropic", standard: "anthropic" })).toBe(false);
   });
 
   it("is true only once the author declares the model doesn't think", () => {

@@ -166,12 +166,14 @@ describe("capabilityVerdict", () => {
       .toEqual({ status: "no", reason: "requires" });
   });
 
-  it("rules temperature out on Anthropic while the model thinks, and only when told the category", () => {
+  it("rules temperature out on Anthropic unless the model is declared not to think", () => {
     const anth = { platform: "anthropic" as const, standard: "anthropic" as const };
     expect(capabilityVerdict("temperature", anth, { thinkingCategory: "claude-adaptive" })).toEqual({ status: "no", reason: "thinking" });
     expect(hasCapability("temperature", anth, { thinkingCategory: "off" })).toBe(true);
     expect(hasCapability("temperature", chat("dashscope"), { thinkingCategory: "qwen-budget" })).toBe(true);
-    expect(hasCapability("temperature", anth)).toBe(true);
+    // No category = the family default, which thinks: the safe answer for a caller that forgot to resolve it.
+    expect(capabilityVerdict("temperature", anth)).toEqual({ status: "no", reason: "thinking" });
+    expect(hasCapability("temperature", { platform: "google", standard: "gemini" })).toBe(true);
   });
 
   it("keeps the output capabilities to the families that spell them", () => {

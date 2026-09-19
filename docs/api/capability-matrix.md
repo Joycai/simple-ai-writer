@@ -128,21 +128,21 @@
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
 | openai | ✓ protocol | ✓ protocol |  |  |
-| anthropic |  |  |  | ✓ protocol |
+| anthropic |  |  |  | · |
 | google |  |  | ✓ protocol |  |
-| deepseek | ✓ protocol | ✓ protocol |  | ✓ protocol |
-| dashscope | ✓ protocol | ✓ protocol |  | ✓ protocol |
+| deepseek | ✓ protocol | ✓ protocol |  | · |
+| dashscope | ✓ protocol | ✓ protocol |  | · |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
-| minimax | ✓ protocol |  |  | ✓ protocol |
+| minimax | ✓ protocol |  |  | · |
 | volcengine | ✓ protocol | ✓ protocol |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | · |
 | zhipu | ✓ protocol |  |  |  |
-| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
-| newapi | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
+| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ protocol | ✓ protocol | ✓ protocol | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
+| custom | ✓ protocol | ✓ protocol | ✓ protocol | · |
 
 ## textVerbosity
 

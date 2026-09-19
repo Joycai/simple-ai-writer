@@ -64,13 +64,50 @@ function sources(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** 去掉块注释（含 JSX 的 `{/* … *\/}`）与整行注释；字符串里的 `//` 不碰。 */
+/**
+ * 去掉注释、清空字符串与模板文字的内容，只留代码——按词法走一遍，而不是用正则删 `/* … *\/`：
+ * 字符串里的 `/*`（`"image/*"`、`${id}/*.md`）会让正则一直吞到下一个 `*\/`，把中间的真代码一起删掉，
+ * 棘轮就少数、放过违规；行尾的 `// family === "x"` 注释不删又会多数。
+ * 字符串保留引号、清空内容，所以 `family === "openai"` 仍能被数到，字符串里写的同样文字不会。
+ * 模板里的 `${…}` 是代码，照常扫。不认正则字面量——本仓库的正则里没有能骗过它的写法，测试钉着几种。
+ */
 function code(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((line) => !/^\s*\/\//.test(line))
-    .join("\n");
+  let out = "";
+  let i = 0;
+  // 模板嵌套：`tpl` = 在模板文字里；数字 = 在 `${` 里，记着未闭合的 `{` 数。
+  const stack: ("tpl" | number)[] = [];
+  while (i < src.length) {
+    const c = src[i];
+    const n = src[i + 1];
+    const top = stack[stack.length - 1];
+    if (top === "tpl") {
+      if (c === "\\") { i += 2; continue; }
+      if (c === "`") { stack.pop(); out += c; i++; continue; }
+      if (c === "$" && n === "{") { stack.push(0); out += "${"; i += 2; continue; }
+      i++;
+      continue;
+    }
+    if (c === "/" && n === "/") { while (i < src.length && src[i] !== "\n") i++; continue; }
+    if (c === "/" && n === "*") { const end = src.indexOf("*/", i + 2); i = end < 0 ? src.length : end + 2; continue; }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < src.length && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
+      out += c + c;
+      i = j + 1;
+      continue;
+    }
+    if (c === "`") { stack.push("tpl"); out += c; i++; continue; }
+    if (typeof top === "number") {
+      if (c === "{") stack[stack.length - 1] = top + 1;
+      else if (c === "}") {
+        if (top === 0) { stack.pop(); out += c; i++; continue; }
+        stack[stack.length - 1] = top - 1;
+      }
+    }
+    out += c;
+    i++;
+  }
+  return out;
 }
 
 const counts = new Map<string, number>();
@@ -81,6 +118,16 @@ for (const file of sources(SRC)) {
 }
 
 describe("能力有无不在调用点按协议族判断", () => {
+  it("只数代码：注释与字符串里的同样文字不算，字符串里的 /* 不吞代码", () => {
+    const count = (src: string) => code(src).match(FAMILY_TEST)?.length ?? 0;
+    expect(count('const a = `${id}/*.md`;\nif (family === "openai") x();\n/* tail */')).toBe(1);
+    expect(count('const accept = "image/*";\nif (family === "gemini") x();\n// */')).toBe(1);
+    expect(count('x(); // family === "openai"\n/* family === "gemini" */\n{/* family === "anthropic" */}')).toBe(0);
+    expect(count('const s = \'family === "openai"\';')).toBe(0);
+    expect(count('const t = `a ${family === "responses" ? 1 : 2} b`;')).toBe(1);
+    expect(count('const u = "a\\"b"; if (x.family !== "gemini") y();')).toBe(1);
+  });
+
   it("白名单与上限里的文件都还在", () => {
     for (const rel of [...Object.keys(WIRE_SHAPE), ...Object.keys(CEILING)]) {
       expect(() => statSync(join(SRC, rel)), rel).not.toThrow();
