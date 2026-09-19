@@ -159,12 +159,30 @@ const VOLCENGINE_MODELS: StarterModel[] = [
   seedream("doubao-seedream-5-0-pro-260628", "Seedream 5.0 Pro", "seedream-5-pro"),
 ];
 
+/**
+ * 智谱 BigModel — the three models the sample measured on the standard endpoint
+ * (docs/api/landscape.md §7 第十四个样本; windows and caps from the vendor's
+ * 模型概览 / 核心参数 pages). glm-5.3-flash is the natively multimodal one: it
+ * read the app's image part and its PDF `file` part, and it cannot stop
+ * thinking, so it takes the `glm` levels. The two text models think by default
+ * and ignore `reasoning_effort`, so their only real control is `glm-switch`.
+ */
+const ZHIPU_MODELS: StarterModel[] = [
+  {
+    modelId: "glm-5.3-flash", name: "GLM-5.3-Flash", contextSize: 1_048_576, maxOutput: 131_072,
+    thinkingCategory: "glm", type: "multimodal", pdfInput: true,
+  },
+  { modelId: "glm-4.7", name: "GLM-4.7", contextSize: 204_800, maxOutput: 131_072, thinkingCategory: "glm-switch" },
+  { modelId: "glm-4.5-air", name: "GLM-4.5-Air", contextSize: 131_072, maxOutput: 98_304, thinkingCategory: "glm-switch" },
+];
+
 /** Starter rows a new channel on a platform brings along (only on creation). */
 const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
   deepseek: DEEPSEEK_MODELS,
   dashscope: DASHSCOPE_MODELS,
   volcengine: VOLCENGINE_MODELS,
   "volcengine-plan": VOLCENGINE_PLAN_MODELS,
+  zhipu: ZHIPU_MODELS,
   orcarouter: ORCAROUTER_FREE_MODELS,
 };
 
@@ -694,11 +712,14 @@ function PlatformGrid({ current, onPick }: { current: PlatformId | null; onPick:
 /**
  * A caveat the author needs *before* typing a key (05k 屏 2a). Only where a
  * wrong pick fails in a way the connection test can't explain: 火山方舟's two
- * key kinds each 401 on the other's path, and both sit on one host.
+ * key kinds each 401 on the other's path, and both sit on one host. 智谱 the
+ * other way round: one key reaches every path, so nothing stops a plan key
+ * from quietly billing the balance here.
  */
 const PLATFORM_NOTES: Partial<Record<PlatformId, string>> = {
   volcengine: "aiConfig.providers.platformNoteVolcengine",
   "volcengine-plan": "aiConfig.providers.platformNoteVolcenginePlan",
+  zhipu: "aiConfig.providers.platformNoteZhipu",
 };
 
 /** What picking this platform will create (屏 02 right side): routes, their tools, starter rows. */

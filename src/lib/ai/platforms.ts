@@ -42,6 +42,7 @@ export type PlatformId =
   | "minimax"
   | "volcengine"
   | "volcengine-plan"
+  | "zhipu"
   | "orcarouter"
   | "newapi"
   | "ollama"
@@ -51,7 +52,7 @@ export type PlatformId =
 /** Selectable values, in the order the provider drawer lists them. */
 export const PLATFORM_IDS: readonly PlatformId[] = [
   "openai", "anthropic", "google", "deepseek", "dashscope", "dashscope-intl", "xai",
-  "minimax", "volcengine", "volcengine-plan", "orcarouter", "newapi", "ollama", "comfyui", "custom",
+  "minimax", "volcengine", "volcengine-plan", "zhipu", "orcarouter", "newapi", "ollama", "comfyui", "custom",
 ];
 
 /**
@@ -138,6 +139,14 @@ interface PlatformProfile {
    * exists to keep the PDF subagent out of.
    */
   pdfFamilies?: readonly ProtocolFamily[];
+  /**
+   * `ignored`: the platform takes `tool_choice: "auto"` only, so a forced
+   * choice (`required` or a named function) is sent as `auto`. For a platform
+   * whose endpoint ignores forcing on some models and refuses it on others
+   * with an error that never names the parameter — which `toolChoice.ts`'s
+   * learn-from-the-400 cannot recognise (智谱, landscape.md §7 第十四个样本).
+   */
+  forcedToolChoice?: "ignored";
   /** Where the entries above were measured. */
   source: string;
 }
@@ -349,6 +358,24 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // one Anthropic-shaped wire measured to do so.
     pdfFamilies: ["openai", "responses", "anthropic"],
     source: "landscape.md §7 第十二个样本 (2026-09-18)",
+  },
+  // 智谱 BigModel. One key reaches four prefixes on this host; the path, not
+  // the key, decides whether a call bills the balance or a GLM Coding Plan —
+  // and the plan's terms confine it to named tools this app is not among. So
+  // only the pay-as-you-go standard endpoint is listed (docs/api/zhipu-plan.md
+  // P1, P3 for the plan's routes).
+  zhipu: {
+    origin: "https://open.bigmodel.cn",
+    endpoints: [{ family: "openai", path: "/api/paas/v4" }],
+    hosts: ["open.bigmodel.cn"],
+    // Its search is a `tools[]` entry, not the top-level field this app spells
+    // for DashScope — and it answers "searched" without searching unless intent
+    // detection is turned off. Not offered until it is wired (plan P2).
+    serverTools: { openai: [] },
+    // Documented `auto` only; measured: 5.3-flash / 4.7 ignore forcing, 4.7
+    // refuses a named one while thinking with a bare 1210.
+    forcedToolChoice: "ignored",
+    source: "landscape.md §7 第十四个样本 (2026-09-19)",
   },
   orcarouter: {
     origin: "https://api.orcarouter.ai",
@@ -563,6 +590,11 @@ const PDF_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses"];
  */
 export function wireReadsPdf(wire: ServerToolWire): boolean {
   return (PROFILES[wire.platform]?.pdfFamilies ?? PDF_FAMILIES).includes(familyOf(wire.standard));
+}
+
+/** Whether this wire takes `tool_choice: "auto"` only (a forced choice is sent as `auto`). */
+export function wireIgnoresForcedToolChoice(wire: ServerToolWire): boolean {
+  return PROFILES[wire.platform]?.forcedToolChoice === "ignored";
 }
 
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */

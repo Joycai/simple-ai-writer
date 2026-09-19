@@ -122,7 +122,7 @@ type ThinkingShape = "levels" | "onoff" | "budget" | "none";
  */
 export type ThinkingCategoryId =
   | "off"
-  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "doubao"
+  | "openai-generic" | "deepseek" | "qwen-budget" | "qwen-effort" | "glm" | "glm-switch" | "doubao"
   | "responses-effort"
   | "gemini3"
   | "claude-adaptive" | "claude-budget" | "minimax" | "doubao-switch";
@@ -160,6 +160,12 @@ export interface ThinkingCategory {
   effortWire?: Partial<Record<Exclude<ReasoningEffort, "default">, string>>;
   /** A static fragment always merged into the request while this category is on. */
   extra?: Record<string, unknown>;
+  /**
+   * Whether the endpoint thinks when the request says nothing — what an on/off
+   * toggle shows for an unset effort. Absent = the family's habit (Anthropic
+   * categories on, the rest off); see `thinkingIsOn`.
+   */
+  defaultOn?: boolean;
 }
 
 /**
@@ -218,6 +224,17 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // GLM-5.3 cannot disable thinking, so there is no `off`; it defaults to max.
     menu: ["low", "high", "max"], defaultEffort: "max",
     extra: { thinking: { clear_thinking: false } },
+  },
+  // GLM before 5.3 (4.5 / 4.6 / 4.7 / 5 / 5.1) on 智谱's own endpoint: thinking
+  // is on unless `thinking.type` says `disabled`, and `reasoning_effort` is
+  // dropped without a word — any value, even a made-up one, is a 200 that
+  // thinks as usual (landscape.md §7 第十四个样本). So the only real control is
+  // the switch; a level menu here would be three chips that all mean "on".
+  "glm-switch": {
+    id: "glm-switch",
+    labelKey: "aiConfig.models.thinkingCatGlmSwitch",
+    hintKey: "aiConfig.models.thinkingCatGlmSwitchHint",
+    family: "openai", dialect: "switch", shape: "onoff", menu: [], defaultOn: true,
   },
   doubao: {
     id: "doubao",
@@ -384,8 +401,9 @@ export function onEffort(category: ThinkingCategory): ReasoningEffort | undefine
 /** Whether an on/off toggle should read as "on" for this stored effort. */
 export function thinkingIsOn(category: ThinkingCategory, effort: ReasoningEffort | undefined): boolean {
   if (effort === "off") return false;
-  // Unset/default: MiniMax defaults on; Qwen's switch defaults to send-nothing.
-  if (effort === undefined || effort === "default") return category.family === "anthropic";
+  // Unset/default: the category says (GLM's switch thinks unless told not to),
+  // else MiniMax defaults on and Qwen's switch defaults to send-nothing.
+  if (effort === undefined || effort === "default") return category.defaultOn ?? category.family === "anthropic";
   return true;
 }
 
@@ -509,6 +527,10 @@ export function reasoningBody(
           return on
             ? { enable_thinking: true, reasoning_effort: effortWire(category, eff, OPENAI_EFFORT) }
             : { enable_thinking: false };
+        case "glm-switch":
+          // The switch alone: GLM before 5.3 ignores reasoning_effort, so
+          // sending it would only dress a no-op up as a setting.
+          return { thinking: { type: on ? "enabled" : "disabled" } };
         case "deepseek":
         case "doubao":
           // DeepSeek (and Doubao on 火山方舟) turns thinking off with the disable switch, not

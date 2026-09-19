@@ -16,10 +16,13 @@ import {
   defaultCategoryId,
   parseThinkingCategory,
   forcesToolChoiceAuto,
+  isOnOffCategory,
+  onEffort,
   reasoningBody,
   resolveThinkingCategory,
   THINKING_CATEGORIES,
   thinkingBody,
+  thinkingIsOn,
 } from "../reasoning";
 import type { ApiStandard } from "../types";
 
@@ -178,5 +181,31 @@ describe("doubao-switch category", () => {
   it("is offered only on the Anthropic family", () => {
     expect(categoriesForFamily("anthropic")).toContain("doubao-switch");
     expect(categoriesForFamily("openai")).not.toContain("doubao-switch");
+  });
+});
+
+// GLM before 5.3 on 智谱's own endpoint (landscape.md §7 第十四个样本): thinks by
+// default, ignores reasoning_effort, so the switch is the whole control.
+describe("glm-switch category", () => {
+  const cat = THINKING_CATEGORIES["glm-switch"];
+  it("sends the switch alone, never reasoning_effort", () => {
+    expect(reasoningBody(cat, "off")).toEqual({ thinking: { type: "disabled" } });
+    expect(reasoningBody(cat, onEffort(cat))).toEqual({ thinking: { type: "enabled" } });
+    expect(reasoningBody(cat, "default")).toBeUndefined();
+    expect(reasoningBody(cat, undefined)).toBeUndefined();
+  });
+  it("is an on/off toggle that reads on while unset — the endpoint's own default", () => {
+    expect(isOnOffCategory(cat)).toBe(true);
+    expect(thinkingIsOn(cat, undefined)).toBe(true);
+    expect(thinkingIsOn(cat, "off")).toBe(false);
+    // Qwen's switch still reads off while unset.
+    expect(thinkingIsOn(THINKING_CATEGORIES["qwen-budget"], undefined)).toBe(false);
+  });
+  it("keeps forcing to the platform, not the category", () => {
+    expect(forcesToolChoiceAuto(cat, "high")).toBe(false);
+  });
+  it("is offered only on the OpenAI family", () => {
+    expect(categoriesForFamily("openai")).toContain("glm-switch");
+    expect(categoriesForFamily("anthropic")).not.toContain("glm-switch");
   });
 });

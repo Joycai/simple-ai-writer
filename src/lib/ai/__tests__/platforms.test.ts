@@ -4,12 +4,15 @@ import {
   inferPlatform,
   parsePlatform,
   PLATFORM_IDS,
+  platformEndpoints,
   platformForAddress,
   platformHasHosts,
+  platformOrigin,
   platformSource,
   platformToStore,
   resolvePlatform,
   serverToolStatus,
+  wireIgnoresForcedToolChoice,
   wireReadsPdf,
 } from "../platforms";
 
@@ -216,5 +219,22 @@ describe("wireReadsPdf", () => {
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
     expect(wireReadsPdf({ platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
+  });
+});
+
+// 智谱 BigModel (landscape.md §7 第十四个样本): the pay-as-you-go standard
+// endpoint only; forcing a tool is sent as auto.
+describe("zhipu", () => {
+  const BASE = "https://open.bigmodel.cn/api/paas/v4";
+  it("is named by its host and lists the one standard route", () => {
+    expect(inferPlatform(BASE, "openai_compat")).toBe("zhipu");
+    expect(platformEndpoints("zhipu")).toEqual([{ family: "openai", path: "/api/paas/v4" }]);
+    expect(platformOrigin("zhipu")).toBe("https://open.bigmodel.cn");
+  });
+  it("takes auto only, and spells no server tool yet", () => {
+    const wire = { platform: "zhipu" as const, standard: "openai_compat" as const };
+    expect(wireIgnoresForcedToolChoice(wire)).toBe(true);
+    expect(wireIgnoresForcedToolChoice({ platform: "deepseek", standard: "openai_compat" })).toBe(false);
+    expect(serverToolStatus(wire, "web_search")).toBe("no");
   });
 });

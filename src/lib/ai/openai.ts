@@ -8,7 +8,7 @@ import {
   resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
-import { wireOf } from "./platforms";
+import { wireIgnoresForcedToolChoice, wireOf } from "./platforms";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
@@ -68,11 +68,16 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
  * dialect says forcing is illegal. Endpoints that refuse it with nothing in
  * the config to warn us (DeepSeek V4) are learned from their own 400 instead;
  * see `lib/ai/toolChoice.ts`.
+ *
+ * A platform can also declare `auto` its only value (`forcedToolChoice` in
+ * platforms.ts) — 智谱, whose models ignore forcing or refuse it with an error
+ * that never names the parameter, so the learned downgrade cannot catch it.
  */
 function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";
   const forced = tc === "required" || typeof tc === "object";
-  return forced && forcesToolChoiceAuto(category, opts.reasoningEffort) ? "auto" : tc;
+  if (!forced) return tc;
+  return forcesToolChoiceAuto(category, opts.reasoningEffort) || wireIgnoresForcedToolChoice(wireOf(opts)) ? "auto" : tc;
 }
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
@@ -241,7 +246,18 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (choice?.finish_reason === "content_filter") {
       throw new Error("OpenAI: response was blocked (finish_reason: content_filter)");
     }
-    if (choice?.finish_reason === "length") truncated = true;
+    // 智谱's names for the same three outcomes (landscape.md §7 第十四个样本).
+    // A stream that fails mid-way reports it *only* here — no error body — so
+    // read as a normal stop, these hand a half answer over as whole. The
+    // moderation stop keeps the `content_filter` wording so the safety-block
+    // memory (modelHealth.isSafetyBlockMessage) sees it.
+    if (choice?.finish_reason === "sensitive") {
+      throw new Error("OpenAI: response was blocked by the endpoint's moderation (finish_reason: sensitive, content_filter)");
+    }
+    if (choice?.finish_reason === "network_error") {
+      throw new Error("OpenAI: the endpoint stopped generating mid-response (finish_reason: network_error)");
+    }
+    if (choice?.finish_reason === "length" || choice?.finish_reason === "model_context_window_exceeded") truncated = true;
   };
 
   while (true) {
