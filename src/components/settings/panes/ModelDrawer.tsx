@@ -21,7 +21,7 @@
  * The 「将发送」 line above the buttons is built by `lib/ai/modelSummary` from
  * the adapters' own body functions, so it cannot drift from the request.
  */
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -40,7 +40,7 @@ import {
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
+import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -296,6 +296,39 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   };
   const toggleWhyAll = () => { setWhyAll((v) => !v); setWhy({}); };
   const whyProps = (k: WhyKey, text: string) => ({ why: text, whyOpen: whyOpen(k), onWhy: toggleWhy(k) });
+
+  // The platform's own values for a model id it knows (platforms.ts
+  // `ModelCalibration`), written into a *new* row's form when the author picks
+  // or finishes typing the id. A field is ours to write only while it is
+  // unset or still holds what the previous prefill put there — so correcting
+  // a typo re-prefills, and anything the author chose by hand stays.
+  const lastCalibration = useRef<{ category?: ThinkingCategoryId; ctx?: string; out?: string; type?: ModelType; pdf?: boolean }>({});
+  const applyCalibration = (modelId: string) => {
+    if (existing || !provider) return;
+    const cal = platformModelCalibration(providerWire(provider).platform, modelId) ?? {};
+    // A category of another family would be refused by resolveThinkingCategory
+    // anyway; don't show one the route can't send.
+    const category = cal.thinkingCategory && THINKING_CATEGORIES[cal.thinkingCategory].family === family
+      ? cal.thinkingCategory : undefined;
+    const next = {
+      category,
+      ctx: cal.contextSize ? String(cal.contextSize) : undefined,
+      out: cal.maxOutput ? String(cal.maxOutput) : undefined,
+      type: cal.type as ModelType | undefined,
+      pdf: cal.pdfInput,
+    };
+    const prev = lastCalibration.current;
+    const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
+    setForm((f) => ({
+      ...f,
+      thinkingCategory: ours<ThinkingCategoryId | "auto">(f.thinkingCategory, "auto", prev.category) ? (next.category ?? "auto") : f.thinkingCategory,
+      contextSize: ours(f.contextSize, "", prev.ctx) ? (next.ctx ?? "") : f.contextSize,
+      maxOutput: ours(f.maxOutput, "", prev.out) ? (next.out ?? "") : f.maxOutput,
+      type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type,
+    }));
+    setPdfInput((cur) => (ours(cur, false, prev.pdf) ? !!next.pdf : cur));
+    lastCalibration.current = next;
+  };
 
   const handleFetch = async () => {
     setFetching(true);
@@ -1018,13 +1051,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     noResultsText={t("ai.modelPicker.noMatch", { defaultValue: "没有匹配的模型" })}
                     onChange={(v) => {
                       const m = fetchedList.find((x) => x.id === v);
-                      if (m) setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
+                      if (!m) return;
+                      setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
+                      applyCalibration(m.id);
                     }} />
                 )}
               </div>
             )}
             <input className={inputCls(false, s.mono)} placeholder="deepseek-flash" value={form.modelId}
-              onChange={(e) => setForm({ ...form, modelId: e.target.value })} />
+              onChange={(e) => setForm({ ...form, modelId: e.target.value })}
+              onBlur={(e) => applyCalibration(e.target.value)} />
           </Field>
           <Field label={t("aiConfig.models.displayNameLabel")} hint={t("aiConfig.models.briefName")}>
             <input className={inputCls(false)} placeholder={t("aiConfig.models.phNameSame")} value={form.name}

@@ -30,6 +30,7 @@
 
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode, type ProtocolFamily } from "./types";
 import type { ServerToolId } from "./serverTools";
+import type { ThinkingCategoryId } from "./reasoning";
 
 export type PlatformId =
   | "openai"
@@ -106,6 +107,26 @@ const GENERIC_ENDPOINTS: readonly PlatformEndpoint[] = [
   { family: "anthropic", path: "" },
 ];
 
+/**
+ * What a platform knows about one of its own model ids — the values a model
+ * row should start with when the author adds that id. A prefill, never a
+ * runtime default: the model drawer writes these into the form (only into
+ * fields the author has not touched) and the row stores them like anything
+ * the author typed, so nothing on the wire depends on this table afterwards.
+ *
+ * It exists because the family default is wrong for a whole platform: on 智谱
+ * the ① family's `reasoning_effort` fails silently on every one of eleven
+ * models, in three different ways (docs/api/zhipu-plan.md G11).
+ */
+export interface ModelCalibration {
+  thinkingCategory?: ThinkingCategoryId;
+  contextSize?: number;
+  maxOutput?: number;
+  /** Absent = the drawer's own default (`text`). */
+  type?: "multimodal";
+  pdfInput?: true;
+}
+
 interface PlatformProfile {
   /** `scheme://host` of the platform's own server; absent = the author types it (New API, custom). */
   origin?: string;
@@ -147,6 +168,11 @@ interface PlatformProfile {
    * learn-from-the-400 cannot recognise (智谱, landscape.md §7 第十四个样本).
    */
   forcedToolChoice?: "ignored";
+  /**
+   * Per-model prefills, keyed by the exact lower-case model id the platform
+   * serves ({@link ModelCalibration}). Only ids a sample measured.
+   */
+  models?: Readonly<Record<string, ModelCalibration>>;
   /** Where the entries above were measured. */
   source: string;
 }
@@ -161,6 +187,31 @@ interface PlatformProfile {
 const NATIVE_SERVER_TOOLS: Partial<Record<ProtocolFamily, readonly ServerToolSpelling[]>> = {
   anthropic: [{ id: "web_search" }],
   responses: [{ id: "web_search" }],
+};
+
+/**
+ * 智谱's eleven chat models, all measured 2026-09-19 (landscape.md §7 第十四个样本
+ * 「逐模型校准」). Three thinking controls: the 5.3 generation cannot stop and
+ * takes low/high/max (`glm`); 5.2 stops only via the switch and has two real
+ * levels (`glm-effort`); everything older ignores reasoning_effort (`glm-switch`).
+ * Output caps are the measured `max_tokens` bounds, except glm-4.5 — it
+ * accepts 131,072 but its documented cap is 96K, and the lower number never 400s.
+ */
+const GLM_1M = 1_048_576;
+const GLM_200K = 204_800;
+const GLM_128K = 131_072;
+const ZHIPU_MODELS: Record<string, ModelCalibration> = {
+  "glm-5.3": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072 },
+  "glm-5.3-flash": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072, type: "multimodal", pdfInput: true },
+  "glm-5.3-flashx": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072, type: "multimodal", pdfInput: true },
+  "glm-5.2": { thinkingCategory: "glm-effort", contextSize: GLM_1M, maxOutput: 131_072 },
+  "glm-5.1": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
+  "glm-5": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
+  "glm-5-turbo": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
+  "glm-4.7": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
+  "glm-4.6": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
+  "glm-4.5": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
+  "glm-4.5-air": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
 };
 
 /** A released id's tail: nothing, a date stamp, a four-digit snapshot, or `-preview`. */
@@ -375,6 +426,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // Documented `auto` only; measured: 5.3-flash / 4.7 ignore forcing, 4.7
     // refuses a named one while thinking with a bare 1210.
     forcedToolChoice: "ignored",
+    models: ZHIPU_MODELS,
     source: "landscape.md §7 第十四个样本 (2026-09-19)",
   },
   orcarouter: {
@@ -595,6 +647,11 @@ export function wireReadsPdf(wire: ServerToolWire): boolean {
 /** Whether this wire takes `tool_choice: "auto"` only (a forced choice is sent as `auto`). */
 export function wireIgnoresForcedToolChoice(wire: ServerToolWire): boolean {
   return PROFILES[wire.platform]?.forcedToolChoice === "ignored";
+}
+
+/** What this platform knows about one of its model ids, or undefined — see {@link ModelCalibration}. */
+export function platformModelCalibration(id: PlatformId, modelId: string): ModelCalibration | undefined {
+  return PROFILES[id]?.models?.[modelId.trim().toLowerCase()];
 }
 
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */

@@ -14,7 +14,7 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformOrigin, serverToolStatus,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformModelCalibration, platformOrigin, serverToolStatus,
   type PlatformId,
 } from "../../../lib/ai/platforms";
 import {
@@ -160,20 +160,18 @@ const VOLCENGINE_MODELS: StarterModel[] = [
 ];
 
 /**
- * 智谱 BigModel — the three models the sample measured on the standard endpoint
- * (docs/api/landscape.md §7 第十四个样本; windows and caps from the vendor's
- * 模型概览 / 核心参数 pages). glm-5.3-flash is the natively multimodal one: it
- * read the app's image part and its PDF `file` part, and it cannot stop
- * thinking, so it takes the `glm` levels. The two text models think by default
- * and ignore `reasoning_effort`, so their only real control is `glm-switch`.
+ * 智谱 BigModel — three of the eleven calibrated models (one per thinking
+ * control, plus the natively multimodal one), with their values read from the
+ * platform's calibration table so the starter rows and a hand-added row can
+ * never disagree (lib/ai/platforms.ts `ZHIPU_MODELS`).
  */
+const zhipuStarter = (modelId: string, name: string): StarterModel => ({
+  modelId, name, ...platformModelCalibration("zhipu", modelId),
+});
 const ZHIPU_MODELS: StarterModel[] = [
-  {
-    modelId: "glm-5.3-flash", name: "GLM-5.3-Flash", contextSize: 1_048_576, maxOutput: 131_072,
-    thinkingCategory: "glm", type: "multimodal", pdfInput: true,
-  },
-  { modelId: "glm-4.7", name: "GLM-4.7", contextSize: 204_800, maxOutput: 131_072, thinkingCategory: "glm-switch" },
-  { modelId: "glm-4.5-air", name: "GLM-4.5-Air", contextSize: 131_072, maxOutput: 98_304, thinkingCategory: "glm-switch" },
+  zhipuStarter("glm-5.3-flash", "GLM-5.3-Flash"),
+  zhipuStarter("glm-4.7", "GLM-4.7"),
+  zhipuStarter("glm-4.5-air", "GLM-4.5-Air"),
 ];
 
 /** Starter rows a new channel on a platform brings along (only on creation). */

@@ -7,6 +7,7 @@ import {
   platformEndpoints,
   platformForAddress,
   platformHasHosts,
+  platformModelCalibration,
   platformOrigin,
   platformSource,
   platformToStore,
@@ -15,6 +16,8 @@ import {
   wireIgnoresForcedToolChoice,
   wireReadsPdf,
 } from "../platforms";
+import { THINKING_CATEGORIES } from "../reasoning";
+import { knownMaxOutput } from "../modelLimits";
 
 describe("inferPlatform", () => {
   it("names an official standard by its vendor, whatever the (empty) address", () => {
@@ -236,5 +239,36 @@ describe("zhipu", () => {
     expect(wireIgnoresForcedToolChoice(wire)).toBe(true);
     expect(wireIgnoresForcedToolChoice({ platform: "deepseek", standard: "openai_compat" })).toBe(false);
     expect(serverToolStatus(wire, "web_search")).toBe("no");
+  });
+});
+
+// G11 (docs/api/zhipu-plan.md): the family default is wrong on all eleven, so
+// the platform carries a per-id prefill. Every entry must be sendable on the
+// platform's one route, and agree with the app-wide output-cap table.
+describe("zhipu model calibration", () => {
+  const IDS = [
+    "glm-5.3", "glm-5.3-flash", "glm-5.3-flashx", "glm-5.2", "glm-5.1", "glm-5", "glm-5-turbo",
+    "glm-4.7", "glm-4.6", "glm-4.5", "glm-4.5-air",
+  ];
+  it("covers the eleven measured ids, one of the three GLM categories each", () => {
+    for (const id of IDS) {
+      const cal = platformModelCalibration("zhipu", id);
+      expect(cal, id).toBeDefined();
+      expect(["glm", "glm-effort", "glm-switch"]).toContain(cal!.thinkingCategory);
+      expect(THINKING_CATEGORIES[cal!.thinkingCategory!].family).toBe("openai");
+      expect(cal!.maxOutput).toBe(knownMaxOutput(id));
+    }
+    expect(platformModelCalibration("zhipu", "glm-5.3")?.thinkingCategory).toBe("glm");
+    expect(platformModelCalibration("zhipu", "glm-5.2")?.thinkingCategory).toBe("glm-effort");
+    expect(platformModelCalibration("zhipu", "glm-4.7")?.thinkingCategory).toBe("glm-switch");
+  });
+  it("only the 5.3 flash pair reads pictures and PDFs", () => {
+    const readers = IDS.filter((id) => platformModelCalibration("zhipu", id)?.type === "multimodal");
+    expect(readers).toEqual(["glm-5.3-flash", "glm-5.3-flashx"]);
+  });
+  it("matches ids case-insensitively, and knows nothing it did not measure", () => {
+    expect(platformModelCalibration("zhipu", " GLM-4.7 ")?.thinkingCategory).toBe("glm-switch");
+    expect(platformModelCalibration("zhipu", "glm-4.6v")).toBeUndefined();
+    expect(platformModelCalibration("dashscope", "glm-4.7")).toBeUndefined();
   });
 });
