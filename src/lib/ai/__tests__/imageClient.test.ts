@@ -1174,6 +1174,13 @@ describe("isEditUnsupportedError", () => {
     expect(isEditUnsupportedError(http(400, "only imagen models are supported"))).toBe(true);
   });
 
+  it("never reads an error from an accepted task as a missing route", () => {
+    // A 404 while polling is the task gone, not the endpoint — regenerating
+    // would bill a second picture for it.
+    expect(isEditUnsupportedError(new ImageHttpError("Image task error", 404, "Not Found", "task"))).toBe(false);
+    expect(isEditUnsupportedError(new ImageHttpError("Image task error", 200, "edit not supported", "task"))).toBe(false);
+  });
+
   it("leaves a genuine refusal alone", () => {
     expect(isEditUnsupportedError(http(400, "your prompt was rejected by the safety system"))).toBe(false);
     expect(isEditUnsupportedError(http(429, "rate limit exceeded"))).toBe(false);

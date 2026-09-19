@@ -171,8 +171,15 @@ export class ImageHttpError extends Error {
   readonly code?: string;
   /** OpenAI-shaped `error.param` — the field the endpoint objected to. */
   readonly param?: string;
+  /**
+   * `task` when the endpoint had already *accepted* the job — raised while
+   * polling it or by the job's own failure. The route evidently exists then,
+   * so nothing about this error can mean "this endpoint cannot edit"; a 404
+   * here is a task that vanished. Absent = the request itself.
+   */
+  readonly stage?: "task";
 
-  constructor(label: string, status: number, body: string) {
+  constructor(label: string, status: number, body: string, stage?: "task") {
     const structured = parseErrorBody(body);
     super(`${label} ${status}: ${structured.message ?? body}`);
     this.name = "ImageHttpError";
@@ -180,6 +187,7 @@ export class ImageHttpError extends Error {
     this.body = body;
     this.code = structured.code;
     this.param = structured.param;
+    if (stage) this.stage = stage;
   }
 }
 
@@ -331,6 +339,9 @@ export function isEditUnsupportedError(err: unknown): boolean {
   // billable generation.
   if (err instanceof NoImageError) return false;
   if (!(err instanceof ImageHttpError)) return false;
+  // The job was accepted, so the route is there: a 404 while polling is the
+  // task gone missing, and falling back would bill a second generation for it.
+  if (err.stage === "task") return false;
 
   // "There is no such endpoint / method here" — unambiguous, and the case the
   // fallback exists for.
@@ -1219,7 +1230,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
           headers: dashscopeHeaders(conn),
           signal: deadline.signal,
         });
-        if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text());
+        if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text(), "task");
         json = (await readJson(poll, "Image task error")) as { output?: DashscopeOutput };
       } catch (e) {
         // The generation is already paid for and a poll is a cheap GET, so a
@@ -1246,7 +1257,7 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
       }
       // FAILED / CANCELED / anything unrecognized. The failure's code and
       // message live inside `output`, which parseErrorBody reads top-level.
-      throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json));
+      throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json), "task");
     }
   } finally {
     deadline.done();
@@ -1562,7 +1573,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
       let entry: ComfyHistoryEntry | undefined;
       try {
         const poll = await fetch(`${base}/history/${promptId}`, { signal: deadline.signal });
-        if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text());
+        if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text(), "task");
         const json = (await readJson(poll, "ComfyUI task error")) as Record<string, ComfyHistoryEntry>;
         entry = json[promptId];
       } catch (e) {
@@ -1584,7 +1595,7 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
         continue;
       }
       if (entry.status?.status_str === "error") {
-        throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status));
+        throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status), "task");
       }
 
       const files = collectComfyFiles(entry);
