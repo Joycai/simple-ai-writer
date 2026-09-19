@@ -621,9 +621,11 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // block announces its id and name in content_block_start, then streams its
   // arguments as input_json_delta fragments that have to be concatenated.
   const toolBlocks = new Map<number, { id: string; name: string; args: string }>();
-  // Index-keyed so the blocks go back in the order the model produced them —
-  // a reordered sequence is a 400.
-  const thinkingBlocks = new Map<number, Record<string, unknown>>();
+  // Kept in the order the model produced them — a reordered sequence is a 400.
+  // Keyed by leg *and* block index: a resumed request (pause_turn) numbers its
+  // blocks from 0 again, so an index alone let the second leg's thinking
+  // overwrite the first's.
+  const thinkingBlocks: { leg: number; index: number; block: Record<string, unknown> }[] = [];
   /** `server_tool_use` id → tool name, for labelling the result block. */
   const serverToolNames = new Map<string, string>();
   let finished = false;
@@ -650,7 +652,9 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         // loop sees a call it can't parse.
         arguments: tc.args.trim() ? tc.args : "{}",
       }));
-    const blocks = [...thinkingBlocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
+    const blocks = [...thinkingBlocks]
+      .sort((a, b) => a.leg - b.leg || a.index - b.index)
+      .map((t) => t.block);
     opts.onChunk({
       toolCalls,
       // Only on a tool round: between plain turns the API filters prior
@@ -679,7 +683,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
    * Per-request state (the SSE line buffer, the blocks of *this* response)
    * lives here; anything the caller hears about once per turn lives outside.
    */
-  const runOnce = async (messages: AnthropicMessage[]): Promise<Attempt> => {
+  const runOnce = async (messages: AnthropicMessage[], leg: number): Promise<Attempt> => {
     const requestBody = { ...baseBody, messages };
     opts._onRequestBody?.(requestBody);
     const res = await fetch(url, {
@@ -809,7 +813,10 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
           // they are replayed on the next round of the agent loop, not just
           // within this turn. Redacted ones carry only an opaque payload.
           if (block.type === "thinking" || block.type === "redacted_thinking") {
-            thinkingBlocks.set(index, turnBlocks.get(index)!);
+            const at = thinkingBlocks.findIndex((t) => t.leg === leg && t.index === index);
+            const entry = { leg, index, block: turnBlocks.get(index)! };
+            if (at >= 0) thinkingBlocks[at] = entry;
+            else thinkingBlocks.push(entry);
           }
           if (block.type === "tool_use") {
             toolBlocks.set(index, {
@@ -999,7 +1006,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
    */
   let messages = convertToAnthropicMessages(opts.messages, opts.modelId);
   for (let attempt = 0; ; attempt++) {
-    const outcome = await runOnce(messages);
+    const outcome = await runOnce(messages, attempt);
     if (!outcome.resume) break;
     // An unfinished turn can't also be a tool round — the API answers a mixed
     // parallel call with `tool_use` instead, leaving the search unrun — but if

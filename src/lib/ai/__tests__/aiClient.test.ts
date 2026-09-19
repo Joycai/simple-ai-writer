@@ -2183,6 +2183,42 @@ describe("streamCompletion — Anthropic SSE", () => {
     expect(done[0]).toMatchObject({ outputTokens: 42, stopReason: "end_turn" });
   });
 
+  it("keeps both legs' thinking, in order, when a resumed leg numbers its blocks from 0 again", async () => {
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => sseResponse(
+        call++ === 0
+          ? [
+              `data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"leg one"}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"S1"}}\n\n`,
+              `data: {"type":"content_block_stop","index":0}\n\n`,
+              `data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":1}}\n\n`,
+              `data: {"type":"message_stop"}\n\n`,
+            ]
+          : [
+              `data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"leg two"}}\n\n`,
+              `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"S2"}}\n\n`,
+              `data: {"type":"content_block_stop","index":0}\n\n`,
+              `data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"read_file"}}\n\n`,
+              `data: {"type":"content_block_stop","index":1}\n\n`,
+              `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":1}}\n\n`,
+              `data: {"type":"message_stop"}\n\n`,
+            ],
+      )),
+    );
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "anthropic", modelId: "m",
+      serverTools: ["web_search"], messages: [{ role: "user", content: "hi" }],
+      onChunk: (c) => received.push(c),
+    });
+    const tc = received.find((c) => "toolCalls" in c) as { _thinkingBlocks?: { blocks: Record<string, unknown>[] } };
+    expect(tc._thinkingBlocks?.blocks.map((b) => b.signature)).toEqual(["S1", "S2"]);
+  });
+
   it("resumes a turn that stopped on its search results reporting end_turn", async () => {
     // Reproduces a real MiniMax-M3 response: an opening line, eight searches,
     // then `stop_reason: "end_turn"` with nothing after the results. The
