@@ -273,10 +273,10 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     };
   }
 
-  console.debug("[Gemini request]", {
-    model: opts.modelId,
-    safetySettings: body.safetySettings ?? "(none)",
-  });
+  // The wire body is a different shape from the caller's messages (contents,
+  // not messages; thinking inside generationConfig), so the log's request entry
+  // alone cannot show what was sent.
+  opts._onRequestBody?.(body);
 
   const res = await fetch(url, {
     method: "POST",
@@ -296,6 +296,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   let outputTokens = 0;
   let cachedTokens = 0;
   let truncated = false;
+  // The candidate's finishReason, for the log — see the Chat Completions adapter.
+  let stopReason: string | undefined;
   const geminiToolCalls: AccumulatedToolCall[] = [];
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
@@ -378,6 +380,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     if (fault) {
       throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
     }
+    if (candidate?.finishReason) stopReason = candidate.finishReason;
     if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
     if (candidate?.finishReason && !GEMINI_NORMAL_FINISH_REASONS.has(candidate.finishReason)) {
       throw new Error(`Gemini ended this response abnormally (finishReason: ${candidate.finishReason}).`);
@@ -401,6 +404,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   opts.onChunk({
     done: true, inputTokens, outputTokens,
     ...(truncated ? { truncated } : {}),
+    ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
   });
 }

@@ -523,6 +523,19 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(text(received)).toBe("ok");
   });
 
+  it("hands the wire body to _onRequestBody", async () => {
+    mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}\n`]);
+    const bodies: unknown[] = [];
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "", apiKey: "k", standard: "gemini", modelId: "gemini-3-pro",
+      messages: [{ role: "user", content: "hi" }], _onRequestBody: (b) => bodies.push(b),
+      onChunk: (c) => received.push(c),
+    });
+    expect(bodies[0]).toMatchObject({ contents: [{ role: "user", parts: [{ text: "hi" }] }] });
+    expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "STOP" });
+  });
+
   it("joins every system message into one systemInstruction, flattening part arrays", async () => {
     const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
     await streamCompletion({
@@ -628,7 +641,7 @@ describe("streamCompletion — Gemini SSE", () => {
       ],
     });
     expect(received[received.length - 1]).toEqual({
-      done: true, inputTokens: 4, outputTokens: 8, truncated: true,
+      done: true, inputTokens: 4, outputTokens: 8, truncated: true, stopReason: "MAX_TOKENS",
     });
   });
 
