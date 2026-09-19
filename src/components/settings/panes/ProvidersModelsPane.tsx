@@ -288,14 +288,21 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
    * Platforms made `openai_compat` stop meaning DashScope, so a proxy of
    * DashScope's, or a DeepSeek row with 联网搜索 on, quietly stopped sending
    * it; each drawer says so, and this line says it once, where the list is.
-   * Gone as soon as every such switch is off or its platform picked.
+   * Gone as soon as every such switch is off or its platform picked. Each
+   * entry names the tool, not just the model — "a server tool" alone sent the
+   * author hunting through the drawer for which switch was meant.
    */
   const unsentGrants = useMemo(() => models.flatMap((m) => {
     const provider = providerFor(m, providers);
     if (!provider || !m.serverTools?.length || m.type === "asr") return [];
     const sent = serverToolsSent(m, providers) ?? [];
-    return m.serverTools.some((id) => !sent.includes(id)) ? [`${m.name}（${provider.name}）`] : [];
-  }), [models, providers]);
+    const unsent = m.serverTools.filter((id) => !sent.includes(id));
+    return unsent.length ? [t("aiConfig.hub.serverToolsNotSentItem", {
+      model: m.name,
+      provider: provider.name,
+      tools: unsent.map((id) => t(`aiConfig.models.serverTool_${id}`)).join(" · "),
+    })] : [];
+  }), [models, providers, t]);
 
   const openProviderDrawer = async (providerId: string | null) => {
     setError(null);
