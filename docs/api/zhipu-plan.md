@@ -1,6 +1,7 @@
 # 智谱 BigModel 开放平台：现状对照与接入方案
 
 > **状态：`partial`——P1（按量平台 + 对话模型）已实现并实测；P2–P5 是 `proposal`，每片写明还缺什么。**
+> P2 的两个独立端点（网络搜索、网页阅读）已于同日实测，事实在第十四个样本的「独立工具端点」一段。
 > 协议事实（逐条实测，2026-09-19，`GLM_KEY` 按量 key，glm-4.5-air / glm-4.7 / glm-5.3-flash）在
 > [`landscape.md`](landscape.md) §7 第十四个样本；本文只放**本项目的对照、取舍与计划**。
 > 实测工具：`src/lib/ai/__tests__/live.zhipu.test.ts`——走真实的 `streamCompletion` /
@@ -39,7 +40,7 @@
 | G5 | **上限表缺 GLM**：`modelLimits.ts` 只有 `glm-5.2` | 未填上限的 GLM 模型按全局默认规划，不是它真实的 128K / 96K | 低 |
 | G6 | **`json_schema` 静默无视**：自动档不会选它，但作者能在模型抽屉里手动声明 | 声明了也只拿到代码块包着的文本 | 低（要作者主动选错） |
 | G7 | **temperature 上限是 1**：抽屉允许到 `MAX_TEMPERATURE` | 400，报错明确 | 低（会响） |
-| G8 | **联网搜索**：`tools[]` 里的 `{type:"web_search", …}`，本项目 ① 族的服务端工具只会拼顶层字段（千问）；且默认的意图识别会让模型**没搜也说搜了** | 暂时不提供，无害 | 功能缺失 |
+| G8 | **联网**：对话内的 `web_search` 是 `tools[]` 项，本项目 ① 族服务端工具只会拼顶层字段（千问），且默认意图识别会让模型**没搜也说搜了**；另有独立的 `/web_search` 与 `/reader` 端点，本项目没有「应用执行的联网工具」这一类 | 暂时不提供，无害 | 功能缺失（P2） |
 | G9 | **GLM Coding Plan 的三条编程端点**（① `/api/coding/paas/v4`、④ `/api/anthropic`、② `/api/v1`）同一把 key 都通，但走哪条决定扣套餐还是余额，且套餐条款只许「指定工具」 | 不提供 | 需作者决策 |
 | G10 | **保留式思考**：`glm` 类目恒发 `thinking.clear_thinking:false`（厂商对 5.3-flash 的推荐值）。它要求**跨轮**原样回传历史 `reasoning_content`，本项目只在工具轮内回传 | 效果未量 | 未知 |
 
@@ -69,13 +70,41 @@
 - **抽屉提示条**（复用设计稿 05k TURN 2 的 `previewNote`，没有新组件，所以这一片不需要新的设计稿）：
   说明这是按量的标准端点，套餐 key 在这里扣余额、套餐额度要走编程端点且条款限定工具。
 
-### P2 联网搜索（`proposal`，缺：一次计费评估 + 作者决定引擎）
+### P2 联网：两条路，先定走哪条（`proposal`，缺：作者决定）
 
-在 `serverTools` 的 ① 族拼法里给 `zhipu` 加一个 `tools[]` 项：`{type:"web_search", web_search:{enable:true,
-search_engine:"search_std", search_intent:false, search_result:true}}`。**`search_intent:false` 是必需的**——默认的
-意图识别不搜时模型照样说「根据联网搜索结果」，这是本项目「服务端工具永不静默」的原则最怕的样子。响应的
-`web_search[]` 映射成执行日志里的来源。引擎选 `search_std`：`search_pro` 一次灌 24k token 进 prompt。
-与函数工具同发已实测 200（`ws+fn`），但与本项目 agent 预设同发未测。
+智谱给了两种形态，本项目**现在只有第一种的框架**：
+
+| | A. 对话内工具（端点执行） | B. 独立的搜索 / 阅读端点（应用执行） |
+| --- | --- | --- |
+| 报文 | 对话请求 `tools[]` 里一项 `{type:"web_search", web_search:{…}}` | `POST /api/paas/v4/web_search`、`POST /api/paas/v4/reader`，与对话无关 |
+| 谁能用 | 只有这个渠道上的 GLM 模型 | **任何模型**——DeepSeek、本地 Ollama 都能借一把智谱 key 联网 |
+| 本项目的位置 | `serverTools`（`lib/ai/serverTools.ts`）：按模型声明、端点执行、日志只读 | **没有这一类**：今天所有联网都是服务端工具；B 是第一批「应用自己发 HTTP 的联网工具」 |
+| 看得见吗 | 默认意图识别会**没搜也说搜了**；须 `search_intent:false` | 结果是结构化数组，没搜就是 0 条，天然可记进执行日志 |
+| 代价 | 结果整段灌进 prompt：`search_pro` 24k token、`search_std` 6.7k，`count` 无效，控制不住 | 应用自己截断：取前 N 条、摘要限长后再给模型，token 可控 |
+| 网页阅读 | 对话内没有这个工具 | `reader` 返回 markdown 正文，补上「打开链接读全文」 |
+
+**建议走 B**，理由是它补的是本项目的结构性缺口而不是一个厂商的开关：
+
+1. **能力与模型解耦。** 现在「搜索子代理」只能绑在自带服务端搜索的模型上（`subAgentModel("search")` 查
+   `serverToolsSent(...).includes("web_search")`）——DeepSeek、GLM、本地模型都绑不上。B 把联网变成应用的能力，任何
+   模型都能用。
+2. **结果由应用掌握。** 条数、正文长度、去重、来源展示都在应用这侧决定，不受 `count` 失效之累；「没搜」也不会被话术掩盖。
+3. **阅读补上了没有的一环。** 千问的 `web_extractor` 必须和搜索绑在同一次请求里；`reader` 是独立的一次调用，可以只读作者贴来的链接。
+
+B 要先回答的设计问题（所以是提案，不是这次顺手做）：
+
+- **放在哪。** 两个应用执行的工具（暂名 `web_search` / `read_webpage`）进 `lib/agent/registry.ts`，只挂在搜索子代理上，
+  不进 `AGENT_ASSIST_PRESET`——主预设的固定头成本有 `agentToolBudget.test.ts` 的棘轮，而且「委派给搜索子代理」已经是
+  主代理的联网入口（[`agent-tool-context.md`](../feature/agent/agent-tool-context.md)、[`tool-presence.md`](../reference/tool-presence.md)）。
+- **钥匙从哪来。** 子代理设置里选「联网服务：智谱」并指向一个 `zhipu` 渠道（复用它的 key），而不是再存一份。
+- **要不要逐次批准。** 两个工具只读，但**按次计费**，且查询词会离开本机发给智谱。倾向：不逐次审批，但每次运行设调用上限，
+  执行日志逐条记查询词与来源——与服务端搜索「开启即允许」的口径一致（`serverToolsHint` 的措辞）。
+- **引擎与过滤。** 默认 `search_std` + `search_intent:false`；只在 `search_pro` / `sogou` 上发域名过滤（`std` 无视它），不发时间过滤
+  （三个引擎都无视），`count` 不发、由应用截断。`reader` 只用 `markdown`（`text` 有损）。
+- **错误。** `reader` 的 404 / 死链都是 500 `1234`，工具结果要写成「这个页面读不到」，不能让模型当成平台故障去重试。
+
+A 作为补充仍可做（给直接在 GLM 上聊天、不走子代理的场景），拼法固定为 `search_std` + `search_intent:false` +
+`search_result:true`，把响应顶层的 `web_search[]` 映射进日志；但它的 token 代价控制不住，优先级低于 B。
 
 ### P3 GLM Coding Plan 平台（`proposal`，缺：作者决定是否提供）
 

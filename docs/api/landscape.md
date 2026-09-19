@@ -1435,10 +1435,30 @@ Responses adapter：
 >   4.6v 32,768；4.5v 16,384。上下文：5.3 / 5.3-flash / 5.2 1M，4.6–5.1 200K，4.5 系列 128K。
 > - **耗时**：多数 0.3–10 s；4.7 偶有长尾（一次关思考的工具轮 136 s）。
 >
+> **独立工具端点**（同一把 key、同一个 `/api/paas/v4` 前缀，与对话无关，2026-09-19 实测）：
+>
+> - **网络搜索 `POST /web_search`**：body `{search_query, search_engine, search_intent, count?, search_domain_filter?,
+>   search_recency_filter?, content_size?}`，前三个必填；回 `{search_intent:[{query, intent, keywords}], search_result:[{title,
+>   content, link, media, icon, refer, publish_date}]}`，**没有 `usage`**（按次计费）。0.3–1.4 s。
+>   - **这里 `search_intent` 默认 `false`**（意图恒为 `SEARCH_ALWAYS`）——与对话内 `web_search` 工具的默认（做意图识别）
+>     正相反。设 `true` 时闲聊（「你好呀」）回 **0 条**、意图 `SEARCH_NONE`：没搜是看得见的，不像对话内那样被话术盖住。
+>   - **`count` 四个引擎都无视**：`search_std` 回 ~10 条（`count:1` 也回 9 条），`search_pro` 与 `search_pro_sogou`
+>     恒回 50 条（`count:3`、`count:20` 都一样），`search_pro_quark` 10 条。结果正文总量：std 8.7k 字、pro 32k 字，
+>     `content_size:"high"` 把 std 抬到 13k 字。
+>   - **过滤器按引擎部分生效**：`search_domain_filter` 在 `search_pro` / `search_pro_sogou` 上生效（15 条全在该域名），
+>     在 `search_std` 上**无视**（38 条，杂站混入）；`search_recency_filter:"oneWeek"` 三个引擎都**无视**（照样出 2024 年的页面）。
+>   - 超过文档的 70 字上限的查询不报错、照搜。引擎写错回 400 `1211 模型不存在`（引擎被当成模型）；缺引擎 400 `1214`。
+> - **网页阅读 `POST /reader`**：body `{url, timeout?, no_cache?, return_format?, retain_images?, …}`；回
+>   `{model:"web-reader", reader_result:{title, description, url, content, metadata, external}}`，同样无 `usage`。0.6–1.6 s。
+>   - 默认 `markdown` 正文完整（tauri 文档页 3k 字，gov.cn 首页 5.7k 字含 47 张图的链接）。**`return_format:"text"` 是有损的**：
+>     gov.cn 首页只剩 108 字的页脚。`retain_images:false` 与 `with_links_summary` 实测**无效果**（图链照旧）。
+>   - **目标页 404 与主机不存在都回 500 `1234 网络错误，错误id：…，请稍后重试`**——分不出是页面不存在还是平台故障，且文案
+>     劝人重试；非 URL 是 400 `1214 URL格式无效`。
+>
 > **对本项目**：见 [`zhipu-plan.md`](zhipu-plan.md)——哪些 adapter 原样可用、哪些是缺口、先做哪片。
 
 来源（2026-09-19）：`docs.bigmodel.cn` 的「对话补全」（OpenAPI）「工具调用」「结构化输出」「流式消息」「思考模式」「深度思考」
-「核心参数」「模型概览」「错误码」「GLM-5.3-Flash」「GLM Coding Plan 快速开始 / 接入工具 / 使用须知」各页的 `.md` 原文，与上面的实测。
+「核心参数」「模型概览」「错误码」「GLM-5.3-Flash」「GLM Coding Plan 快速开始 / 接入工具 / 使用须知」「网络搜索」「网页阅读」各页的 `.md` 原文，与上面的实测。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 
