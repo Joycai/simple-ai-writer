@@ -14,6 +14,7 @@ import {
   resolvePlatform,
   serverToolStatus,
   wireIgnoresForcedToolChoice,
+  wireTakesQwenVisionParams,
   wireReadsPdf,
 } from "../platforms";
 import { THINKING_CATEGORIES } from "../reasoning";
@@ -284,5 +285,21 @@ describe("zhipu model calibration", () => {
     expect(platformModelCalibration("zhipu", " GLM-4.7 ")?.thinkingCategory).toBe("glm-switch");
     expect(platformModelCalibration("zhipu", "glm-4.6v")).toBeUndefined();
     expect(platformModelCalibration("dashscope", "glm-4.7")).toBeUndefined();
+  });
+});
+
+// DashScope's vision knobs belong to the platforms that read them: its own two,
+// plus the host-less relays that may front it — never a hosted vendor that
+// merely speaks the same family (智谱 ignores both, landscape.md §7 第十四个样本).
+describe("wireTakesQwenVisionParams", () => {
+  const on = (platform: Parameters<typeof wireTakesQwenVisionParams>[0]["platform"], standard: Parameters<typeof wireTakesQwenVisionParams>[0]["standard"] = "openai_compat") =>
+    wireTakesQwenVisionParams({ platform, standard });
+  it("is DashScope's, and a relay's that may front it", () => {
+    for (const p of ["dashscope", "dashscope-intl", "newapi", "custom"] as const) expect(on(p), p).toBe(true);
+  });
+  it("is no hosted vendor's, and no family but Chat Completions", () => {
+    for (const p of ["zhipu", "volcengine", "deepseek", "xai", "orcarouter", "ollama"] as const) expect(on(p), p).toBe(false);
+    expect(on("openai", "openai")).toBe(false);
+    expect(on("dashscope", "openai_responses_compat")).toBe(false);
   });
 });

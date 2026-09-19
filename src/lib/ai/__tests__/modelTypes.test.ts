@@ -59,6 +59,9 @@ describe("vision", () => {
     const m = { ...vl, vlHighResolution: true };
     expect(wireSummary(m, "openai_compat")).toContainEqual({ key: "vl_high_resolution_images", value: "true" });
     expect(wireSummary(m, "anthropic_compat").map((i) => i.key)).not.toContain("vl_high_resolution_images");
+    // …and on a platform whose ① wire reads it — 智谱 ignores it.
+    expect(wireSummary(m, "openai_compat", "https://open.bigmodel.cn/api/paas/v4").map((i) => i.key))
+      .not.toContain("vl_high_resolution_images");
   });
 });
 

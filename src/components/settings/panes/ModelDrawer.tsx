@@ -40,7 +40,7 @@ import {
 import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, supportsServerToolFor, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf } from "../../../lib/ai/platforms";
+import { platformModelCalibration, providerWire, serverToolStatus, wireReadsPdf, wireTakesQwenVisionParams } from "../../../lib/ai/platforms";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -405,13 +405,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // one per-second cell, and 「将发送」 lists the file endpoint (设计稿 02f 屏 1b).
   // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
   const isAsrModel = form.type === "asr";
+  // DashScope's two vision knobs (hi-res, clip fps) are the platform's, not the
+  // family's: 智谱 takes both and ignores them (platforms.ts `qwenVisionParams`).
+  const qwenVisionWire = provider ? wireTakesQwenVisionParams(providerWire(provider)) : false;
   // The hi-res switch exists where it reaches the wire: a model that reads
-  // pictures, on the Chat Completions family (openai.ts sends it; nothing else does).
-  const vlHiResWire = family === "openai" && canSeeImages(form);
-  // Same gate, same reason: a `video_url` part exists only on Chat Completions,
-  // and only a model that reads pictures reads frames (lib/ai/videoInput).
+  // pictures, on a platform whose Chat Completions wire reads it (openai.ts).
+  const vlHiResWire = qwenVisionWire && canSeeImages(form);
+  // A `video_url` part exists only on Chat Completions, and only a model that
+  // reads pictures reads frames (lib/ai/videoInput). The fps under it is the
+  // platform's, like hi-res.
   const videoWire = family === "openai" && canSeeImages(form);
-  const videoFps = videoWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
+  const videoFpsWire = videoWire && qwenVisionWire;
+  const videoFps = videoFpsWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
   const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
   const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
@@ -1472,7 +1477,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 {...whyProps("video", t("aiConfig.models.videoInputHint"))}
               />
             </Fold>
-            <Fold open={videoWire && videoInput}>
+            <Fold open={videoFpsWire && videoInput}>
               <Field label={t("aiConfig.models.videoFpsLabel")} hint={t("aiConfig.models.briefVideoFps")}
                 {...whyProps("videoFps", t("aiConfig.models.videoFpsHint"))}>
                 <div className={s.numRow}>

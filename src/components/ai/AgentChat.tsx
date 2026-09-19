@@ -35,7 +35,7 @@ import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { isAsrEnabled } from "../../lib/asr/flag";
-import { canReadVideo, estimateVideoTokens } from "../../lib/ai/videoInput";
+import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/videoInput";
 import { videoMimeOf } from "../../lib/fs/video";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
@@ -190,6 +190,9 @@ export function AgentChat() {
   // same call). There is no video subagent to fall back on.
   const activeStandard = useAiStore((s) => (activeModel ? providerFor(activeModel, s.providers) : undefined)?.apiStandard);
   const canVideo = canReadVideo(activeModel, activeStandard);
+  // The fps the clip will really carry (none where the wire ignores it), so
+  // the chip's estimate follows the request rather than the declaration.
+  const activeVideoFps = sentVideoFps(activeModel, activeModel ? providerFor(activeModel, providers) : undefined);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -961,7 +964,7 @@ export function AgentChat() {
             // the fps this model will send. Size only when the header gave no
             // duration (WebM): a guessed number would read as a measurement.
             const videoTokens = r.kind === "video"
-              ? estimateVideoTokens({ ...r, fps: activeModel?.videoFps })
+              ? estimateVideoTokens({ ...r, fps: activeVideoFps })
               : null;
             const videoCost = r.kind === "video"
               ? videoTokens !== null
@@ -974,7 +977,7 @@ export function AgentChat() {
             const videoNote = r.kind === "video" && videoTokens !== null
               ? t("ai.chat.videoEstimateTitle", {
                   defaultValue: "估算（按抽帧频率 {{fps}} 帧/秒）；每一轮工具调用都会重新计费，对话里只保留最新的一段",
-                  fps: activeModel?.videoFps ?? 2,
+                  fps: activeVideoFps ?? 2,
                 })
               : null;
             return (

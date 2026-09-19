@@ -12,6 +12,7 @@
 
 import type { Model } from "./configDb";
 import { familyOf, type ApiStandard, type ContentPart } from "./types";
+import { providerWire, wireTakesQwenVisionParams } from "./platforms";
 
 /** Lowest `fps` the settings field accepts. Only 0.5–4 were measured. */
 export const MIN_VIDEO_FPS = 0.1;
@@ -51,6 +52,20 @@ export function canReadVideo(
   if (!model || !standard || !model.videoInput) return false;
   if (model.type !== "multimodal" && model.type !== "vision") return false;
   return familyOf(standard) === "openai";
+}
+
+/**
+ * The `fps` a clip to this model actually carries: its declared value where the
+ * wire reads DashScope's knob, else none — 智谱 reads the clip but ignores the
+ * field (same tokens at 0.5 and 2, landscape.md §7 第十四个样本), so sending it
+ * or estimating by it would only misstate the bill.
+ */
+export function sentVideoFps(
+  model: Pick<Model, "videoFps"> | null | undefined,
+  provider: Parameters<typeof providerWire>[0] | null | undefined,
+): number | undefined {
+  if (!model || !provider) return undefined;
+  return wireTakesQwenVisionParams(providerWire(provider)) ? model.videoFps : undefined;
 }
 
 /** The one builder for a clip's content part. `fps` absent = endpoint default. */

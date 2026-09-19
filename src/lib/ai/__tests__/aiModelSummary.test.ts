@@ -26,6 +26,14 @@ describe("wireSummary: video fps", () => {
     expect(wireSummary({ ...vl, videoFps: 0.5 }, "openai_compat")).toEqual([]);
     expect(wireSummary({ ...vl, videoInput: true, videoFps: 0.5 }, "openai_responses_compat")).toEqual([]);
   });
+
+  it("drops fps on a platform that reads the clip but ignores the field (智谱)", () => {
+    const m = { ...vl, videoInput: true, videoFps: 0.5 };
+    expect(wireSummary(m, "openai_compat", "https://open.bigmodel.cn/api/paas/v4")).toEqual([]);
+    expect(wireSummary(m, "openai_compat", "https://dashscope.aliyuncs.com/compatible-mode/v1")).toEqual([
+      { key: "video_url.fps", value: "0.5", scope: "video" },
+    ]);
+  });
 });
 
 describe("wireSummary", () => {
