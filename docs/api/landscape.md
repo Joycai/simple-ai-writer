@@ -705,7 +705,7 @@ qwen3.8-flash 可用，qwen3-vl-plus 在这个面上根本不存在，见下「�
   | qwen3-vl-plus、qwen3-235b-a22b-thinking-2507 | 未测 | ❌ |
 
   ① 面「静默忽略」是按 id 判断而不是「开了试试」的原因：作者看不到任何报错，只会得到一个没算过的答案。
-  所以实测静默忽略的 id 进 `refuses`，没有开关；3.8 之后的新一代不进 `runs`，落在「未实测」，开关旁写明可能被静默忽略。qwen3-coder-plus 在 ① 面也跑了，但文档没列，未收。
+  所以实测静默忽略的 id 进 `refuses`，没有开关；3.8 之后的新一代先落在「未实测」，开关旁写明可能被静默忽略；等官方文档的支持列表更新了再补进 `runs`（见 capability-gating-plan §8.7「名单从哪来」）。qwen3-coder-plus 在 ① 面也跑了，但文档没列，未收。
   另：qwen3-max 在 ① 面**开思考**时有一次思考文本来回重复、180 秒没出结果（1453 个数据块），只出现过一次。
 - **② 面的 item**：`output_item.added` 就带完整代码
   `{type:"code_interpreter_call", id, code, container_id:"", status:"in_progress"}`，之后是

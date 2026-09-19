@@ -255,6 +255,8 @@ const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
  * `refuses` holds only what a sample saw fail — a 400, `Unsupported model`, or
  * (Chat Completions) a silent ignore. Everything else, including a generation
  * after 3.8, is `unknown`: the switch is offered and says it is unmeasured.
+ * `runs` grows when the vendor's page adds a model to its list (plan §8.7);
+ * where that page and a sample disagree, the sample wins.
  */
 const DASHSCOPE_CODE_INTERPRETER: Record<"openai" | "responses", ModelMatcher> = {
   openai: {
