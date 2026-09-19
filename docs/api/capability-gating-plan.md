@@ -1,6 +1,7 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`proposal`——未动代码。** 起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
+> **状态：`partial`——C0 已实现（能力表 + 裁决函数 + 矩阵文档，行为逐格不变）；C1–C3 待做；C4（视频按平台）搁置。**
+> 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
 > 分层的原则在 [`provider-layering.md`](provider-layering.md)，平台画像在
@@ -178,3 +179,50 @@ C0–C3 不需要 key、不改行为，可以连续做；C4 依赖实测，单�
 2. **OrcaRouter 算中继还是算平台？** 它有主机、有画像，按规则 4 私有能力会是 `no`。它背后若转发千问，高分辨率就该是 `unknown`。
    需要一条实测，或者给画像加一个 `relay: true` 标记取代 `hosts.length === 0` 这个间接判据——后者更诚实，倾向于在 C0 里就这么做。
 3. **C4 之前，视频在未实测平台上显示什么？** C0–C3 保持现状（按族放行）以守住「无行为变化」；是否提前给这些平台挂「未实测」注，等 C4 的样本出来再定。
+
+## 7. 决定与 C0 实施记录（2026-09-19）
+
+作者看过 §1–§6 后定了三件事，C0 按它们做，与上文有出入处以本节为准：
+
+1. **C0–C3 照做。**
+2. **C4（视频按平台）搁置。** 视频仍按族放行（`videoInput` 在规则表里是 `native`、只有 ① 族），没有平台格。
+   待决 3 随之搁置。
+3. **服务端工具不是 C5 的可选项，而是表的一部分。** 理由是作者给的：哪个工具能用是**平台 + 模型 id** 的事实，
+   与其它能力同一性质。所以表的形状定为 **平台 × 协议族 × 能力，第三轴是模型 id**，服务端工具的 id 直接就是能力 id；
+   §2.2 说的「`serverTools` 不并入」作废，C5 取消。拼法（同一个 id 在不同平台拼成什么 body）仍在 `serverTools.ts`——
+   表只回答有无，不回答怎么写。
+
+### 7.1 落成的形状（`src/lib/ai/capabilities.ts`）
+
+- `CAPABILITY_RULES: Record<CapabilityId, …>`——协议一侧。`Record` 是故意的：新增一个能力 id，没有规则行就编译不过。
+- `PLATFORM_CAPABILITIES: Record<PlatformId, …>`——平台一侧，`families[族 | "all"][能力] = true | false | 模型 id 正则组`。
+  `true` = 实测可用；`false` = 实测不收或收了无效；正则组 = 只对点名的模型 id 可用（千问的代码解释器）。
+  **不写 = 不知道**，落到规则缺省；`false` 只留给实测过的否定。
+- `capabilityVerdict(id, wire, { modelId?, type? })` → `{ status, reason }`。顺序：模型类型 → 先决能力 → **平台格（实测永远赢）** →
+  规则的族 → 规则缺省。与 §2.3 的出入：族检查挪到了平台格之后，因为有两个实测格落在规则缺省的族之外
+  （千问 ① 族的 `enable_search`、火山方舟 Plan ④ 族的 `document` 块）；让格子先说话，就不需要为它们各写一条例外。
+- 待决 2 按倾向做了：`relay: true` 是平台格上的显式标记（New API、自定义），取代 `hosts.length === 0` 这个间接判据。
+  OrcaRouter 有主机、没标 `relay`，私有能力仍是 `no`——与迁移前相同，要改需一条实测。
+- 待决 1 取「`unknown` 照发」，与迁移前的行为一致。
+
+### 7.2 「纯重构」的证明
+
+分两笔提交。第一笔只新增 `capabilities.ts` 和一个等价测试：在 16 平台 × 7 个 `ApiStandard` × 全部能力 × 8 个模型 id
+（4480 余格）上，与当时仍在的 `serverToolStatus` / `wireReadsPdf` / `wireTakesQwenVisionParams` /
+`wireIgnoresForcedToolChoice` / `wireHasServerTools` / `canReadVideo` 逐格比对，全部相同。第二笔才把这些函数改成对表的
+一行转调、删掉画像里的 `serverTools` / `pdfFamilies` / `forcedToolChoice` / `qwenVisionParams` 四个字段和
+`NATIVE_SERVER_TOOLS`，并把已成同义反复的等价测试换成 §3 的第一道闸。
+
+### 7.3 第一道闸落成的样子
+
+§3 说的「矩阵快照」没有用 vitest 的 snapshot（本仓库不用它），而是照 `AGENTS.md` 的套路：
+[`capability-matrix.md`](capability-matrix.md) 是表的渲染结果，`capabilities.test.ts` 断言文件与渲染一致。好处是矩阵同时是一份
+**人能读的文档**——「智谱上到底有哪些能力」不必读代码。另加一条**防泄漏**测试，它遍历规则表而不是点名：
+任何 `private` 能力，在有主机且没有格子的平台上必须是 `no`，在中继上不得好于 `unknown`。明天新增的私有字段自动被罩住。
+
+### 7.4 C0 没做的
+
+- 调用点没动（C1）：`wireReadsPdf` 等旧名字还在，只是不再自己算；`canReadVideo` 仍是自己的族判断（它的签名里没有平台，改它就是改调用点）。
+- `CapabilityReason` 的句子还没进语言文件（C2）；四个类型暂未导出，因为 `exportReach.test.ts` 不许没有第二个使用者的导出，C1 的调用点会用到它们。
+- 表目前只到「平台 × 族 × 模型 id → 有无」。按模型 id 给**能力**（而不只是预填）下结论——比如智谱只有 glm-5.3-flash / flashx 读 PDF——
+  形状上已经能写（一个正则组），但那是行为变化，且对没见过的新 id 该判 `no` 还是 `unknown` 需要先定，留到 C1 之后单独提。

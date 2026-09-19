@@ -406,7 +406,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The type is the identity (configDb isAsrOnly); asrFormat only names the endpoint.
   const isAsrModel = form.type === "asr";
   // DashScope's two vision knobs (hi-res, clip fps) are the platform's, not the
-  // family's: 智谱 takes both and ignores them (platforms.ts `qwenVisionParams`).
+  // family's: 智谱 takes both and ignores them (capabilities.ts `vlHighResolution` / `videoFps`).
   const qwenVisionWire = provider ? wireTakesQwenVisionParams(providerWire(provider)) : false;
   // The hi-res switch exists where it reaches the wire: a model that reads
   // pictures, on a platform whose Chat Completions wire reads it (openai.ts).

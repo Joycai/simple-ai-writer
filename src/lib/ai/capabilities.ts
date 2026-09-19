@@ -49,7 +49,7 @@ export type CapabilityId =
 export type CapabilityStatus = "yes" | "unknown" | "no";
 
 /** Why — a closed set so tests can assert it; the sentences live in the locale files. */
-export type CapabilityReason =
+type CapabilityReason =
   /** The platform's table lists it for this family. */
   | "measured"
   /** Part of the protocol; no platform entry contradicts it. */
@@ -71,7 +71,7 @@ export type CapabilityReason =
   /** A capability it depends on is unavailable. */
   | "requires";
 
-export interface CapabilityVerdict {
+interface CapabilityVerdict {
   status: CapabilityStatus;
   reason: CapabilityReason;
 }
@@ -277,13 +277,13 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
 };
 
 /** The wire a question is about — the same pair `platforms.ts` calls `ServerToolWire`. */
-export interface CapabilityWire {
+interface CapabilityWire {
   platform: PlatformId;
   standard: ApiStandard;
 }
 
 /** What is known of the model. Every field optional: an absent one is not consulted. */
-export interface CapabilityModel {
+interface CapabilityModel {
   modelId?: string;
   type?: ModelKind;
 }
@@ -300,14 +300,18 @@ function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId)
  * platform's cell (a measurement wins) → the rule's families → its default.
  */
 export function capabilityVerdict(id: CapabilityId, wire: CapabilityWire, model: CapabilityModel = {}): CapabilityVerdict {
+  return familyVerdict(id, wire.platform, familyOf(wire.standard), model);
+}
+
+/** {@link capabilityVerdict} for a caller that already holds the family. */
+export function familyVerdict(id: CapabilityId, platform: PlatformId, family: ProtocolFamily, model: CapabilityModel = {}): CapabilityVerdict {
   const rule = CAPABILITY_RULES[id];
   if (model.type && rule.modelTypes && !rule.modelTypes.includes(model.type)) return verdict("no", "model-type");
-  const family = familyOf(wire.standard);
   for (const dep of rule.requires ?? []) {
-    if (capabilityVerdict(dep, wire, model).status === "no") return verdict("no", "requires");
+    if (familyVerdict(dep, platform, family, model).status === "no") return verdict("no", "requires");
   }
 
-  const cell = cellFor(wire.platform, family, id);
+  const cell = cellFor(platform, family, id);
   if (cell === false) return verdict("no", "platform-absent");
   if (cell === true) return verdict("yes", "measured");
   if (cell) {
@@ -318,7 +322,7 @@ export function capabilityVerdict(id: CapabilityId, wire: CapabilityWire, model:
 
   if (!rule.families.includes(family)) return verdict("no", "family");
   if (rule.origin === "private") {
-    return rule.relay && PLATFORM_CAPABILITIES[wire.platform]?.relay
+    return rule.relay && PLATFORM_CAPABILITIES[platform]?.relay
       ? verdict(rule.relay, "relay")
       : verdict("no", "platform-unlisted");
   }

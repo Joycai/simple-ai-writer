@@ -137,7 +137,7 @@ A 作为补充仍可做（给直接在 GLM 上聊天、不走子代理的场景�
 
 ### P6 ✅ 千问视觉旋钮归平台（2026-09-19，G12）
 
-平台画像加 `qwenVisionParams`：只有千问两个平台为真；没有 host 的中转平台（New API、自定义）缺省为真，因为它们可能
+平台画像加 `qwenVisionParams`（此后收进能力表 `capabilities.ts` 的 `vlHighResolution` / `videoFps` 两格，判据不变，见 [`capability-gating-plan.md`](capability-gating-plan.md)）：只有千问两个平台为真；没有 host 的中转平台（New API、自定义）缺省为真，因为它们可能
 转发千问；其余有 host 的平台（智谱、火山方舟、DeepSeek、xAI、OrcaRouter、Ollama……）缺省为假。它同时管三处：抽屉里的
 两个控件（高分辨率读图、抽帧频率）、请求体（`openai.ts` 只在为真时发 `vl_high_resolution_images`；对话里片段的
 `fps` 经 `sentVideoFps()` 取值，AgentChat 的 token 估算也用它）、「将发送」一行。已存的声明不迁移、不清除，只是在不认

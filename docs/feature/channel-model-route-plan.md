@@ -405,7 +405,7 @@ P1–P4 在一个 PR 里落地（作者要求一次做完；§8「每期一个 P
    只有路径能分。`/api/planner` 不算 `/api/plan`。§4 规则 3 不变：地址能认出的平台照旧不存（`platformToStore`）。
 3. **抽屉的主机框只填主机时，保留作者选的平台。** 主机框里从来只有主机，按规则 2 它会被认成按量平台，把作者刚点的套餐冲掉。
    `platformForAddress` 因此多一条：地址是**光主机**、且正是当前平台的主机时，不改；带了路径才由路径决定。
-4. **能不能读 PDF 按「平台 × 线路」回答（`pdfFamilies` · `wireReadsPdf`）。** 以前按族：①② 能、④ 不能——因为多数 ④ 兼容端把
+4. **能不能读 PDF 按「平台 × 线路」回答（`pdfFamilies` · `wireReadsPdf`；`pdfFamilies` 此后收进能力表 `capabilities.ts` 的 `pdfInput` 格，见 `docs/api/capability-gating-plan.md`）。** 以前按族：①② 能、④ 不能——因为多数 ④ 兼容端把
    `document` 块静默换成占位符（DeepSeek，§2.1），那是这道闸要挡的。方舟 Plan 的 ④ 面真读到了 PDF 内容，所以画像里列出 ④；
    没实测过的平台仍是默认的 ①②。`readsPdf` 的第二个参数因此从 `standard` 变成渠道（要平台）。
 5. **两个思考类目，而不是借现成的。** ① 面：`doubao`（关闭 · low · medium · high）——拼法同 `deepseek`（关 = 只发

@@ -24,12 +24,17 @@
  *      measurement updates every row that names the platform, with no
  *      migration. An id this build does not know reads as `custom`.
  *
+ * What a platform *can do* — server tools, PDF input, a vendor's private knobs —
+ * moved to the capability table (`capabilities.ts`); this file keeps where a
+ * platform lives (hosts, routes) and what it knows about its own model ids.
+ *
  * Every entry should point back at a measurement — the `source` field says
  * which one.
  */
 
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode, type ProtocolFamily } from "./types";
 import type { ServerToolId } from "./serverTools";
+import { capabilityVerdict, familyVerdict, hasCapability, type CapabilityStatus } from "./capabilities";
 import type { ThinkingCategoryId } from "./reasoning";
 
 export type PlatformId =
@@ -55,26 +60,6 @@ export const PLATFORM_IDS: readonly PlatformId[] = [
   "openai", "anthropic", "google", "deepseek", "dashscope", "dashscope-intl", "xai",
   "minimax", "volcengine", "volcengine-plan", "zhipu", "orcarouter", "newapi", "ollama", "comfyui", "custom",
 ];
-
-/**
- * How sure the app is that a server tool works on one platform's wire.
- *
- *   - `yes`: the platform lists it — measured, or the vendor's own tool on its
- *     own endpoint.
- *   - `unknown`: the protocol defines it and the platform relays that protocol,
- *     but nobody measured whether the relay passes it on. Offered (the author
- *     may take the risk — the same behaviour the Anthropic family has always
- *     had on relays), and said so in the drawer.
- *   - `no`: nothing to send. The declaration is kept on the model and simply
- *     not sent (plan §7 invariant 4).
- */
-type ServerToolStatus = "yes" | "unknown" | "no";
-
-interface ServerToolSpelling {
-  id: ServerToolId;
-  /** Model-id gate; absent = every model on this wire. */
-  gate?: (modelId: string) => boolean;
-}
 
 /**
  * One route a platform serves: a protocol family at a path below the platform's
@@ -145,58 +130,13 @@ interface PlatformProfile {
    */
   hosts: readonly string[];
   /**
-   * Server tools this platform spells, per family. A family listed here
-   * *replaces* the protocol-native list for it (so a platform can also narrow
-   * one); a family not listed falls back to {@link NATIVE_SERVER_TOOLS} at
-   * `unknown`.
-   */
-  serverTools?: Partial<Record<ProtocolFamily, readonly ServerToolSpelling[]>>;
-  /**
-   * Families whose wire reads a whole PDF (`readsPdf`), when not the default
-   * Chat Completions + Responses. A platform lists the Anthropic family here
-   * only after a sample showed its `document` block actually reaching the
-   * model — most Anthropic-shaped relays swap it for a placeholder and answer
-   * 200 (DeepSeek, landscape.md §2.1), which is the silent failure this gate
-   * exists to keep the PDF subagent out of.
-   */
-  pdfFamilies?: readonly ProtocolFamily[];
-  /**
-   * `ignored`: the platform takes `tool_choice: "auto"` only, so a forced
-   * choice (`required` or a named function) is sent as `auto`. For a platform
-   * whose endpoint ignores forcing on some models and refuses it on others
-   * with an error that never names the parameter — which `toolChoice.ts`'s
-   * learn-from-the-400 cannot recognise (智谱, landscape.md §7 第十四个样本).
-   */
-  forcedToolChoice?: "ignored";
-  /**
    * Per-model prefills, keyed by the exact lower-case model id the platform
    * serves ({@link ModelCalibration}). Only ids a sample measured.
    */
   models?: Readonly<Record<string, ModelCalibration>>;
-  /**
-   * Whether the ① wire honours DashScope's two vision knobs — the body's
-   * `vl_high_resolution_images` and a clip part's `fps`. Absent = only a
-   * platform no host names (New API, custom), which may front DashScope.
-   * Measured elsewhere as a silent no-op: 智谱 takes both with a 200 and
-   * bills the same tokens either way (landscape.md §7 第十四个样本), so the
-   * switch there would be a control that does nothing.
-   */
-  qwenVisionParams?: boolean;
   /** Where the entries above were measured. */
   source: string;
 }
-
-/**
- * What each protocol itself defines as an endpoint-run tool, independent of who
- * serves it: Anthropic's versioned `web_search_*` tool and the Responses
- * built-in `{type:"web_search"}`. Chat Completions and Gemini have none this
- * app spells — every server tool on Chat Completions is a platform's private
- * body field.
- */
-const NATIVE_SERVER_TOOLS: Partial<Record<ProtocolFamily, readonly ServerToolSpelling[]>> = {
-  anthropic: [{ id: "web_search" }],
-  responses: [{ id: "web_search" }],
-};
 
 /**
  * 智谱's eleven chat models, all measured 2026-09-19 (landscape.md §7 第十四个样本
@@ -223,89 +163,17 @@ const ZHIPU_MODELS: Record<string, ModelCalibration> = {
   "glm-4.5-air": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
 };
 
-/** A released id's tail: nothing, a date stamp, a four-digit snapshot, or `-preview`. */
-const SNAPSHOT = String.raw`(?:-(?:\d{4}-\d{2}-\d{2}|\d{4}|preview))?`;
-
-/**
- * Which model ids run DashScope's code interpreter, per wire — the vendor's
- * list (developer-guides/tool-calling/code-interpreter) as id patterns,
- * corrected by a sweep over the live model list on 2026-09-17 (landscape.md §7
- * 第六个样本「代码解释器」).
- *
- *   - **Both wires**: `qwen3-max` and its dated snapshots (not
- *     `qwen3-max-preview` — refused on Responses, silently ignored on Chat
- *     Completions); the 3.5 / 3.6 / 3.7 generation's plus / max / flash; the
- *     3.5 open-weight models (`qwen3.5-397b-a17b`, `qwen3.5-27b`).
- *   - **Responses only**: the 3.8 generation (Chat Completions answers
- *     `does not support the code_interpreter tool` for qwen3.8-flash / -max /
- *     -27b), the 3.6 open-weight models except `qwen3.6-27b` (`Unsupported
- *     model`), and DeepSeek V4 as DashScope serves it.
- *
- * Deliberately anchored: `qwen3.5-omni-plus`, `qwen3-vl-plus`,
- * `qwen3.8-livetranslate-flash-realtime` share a prefix and none of them
- * takes the tool. A generation after 3.8 is not guessed at — a new family
- * earns its line here the way these did, by a measurement.
- */
-const CODE_INTERPRETER_MODELS: Record<"openai" | "responses", readonly RegExp[]> = {
-  openai: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-7]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.5-\d+b(?:-a\d+b)?$/,
-  ],
-  responses: [
-    /^qwen3-max(?:-\d{4}-\d{2}-\d{2})?$/,
-    new RegExp(`^qwen3\\.[5-8]-(?:plus|max|flash)${SNAPSHOT}$`),
-    /^qwen3\.(?:5|8)-[\d.]+[bt](?:-a\d+b)?$/,
-    /^qwen3\.6-(?!27b$)\d+b(?:-a\d+b)?$/,
-    /^deepseek-v4(?:\.\d+)?-(?:pro|flash)(?:-\d{4})?$/,
-  ],
-};
-
-/** Whether `modelId` runs DashScope's code interpreter on this family's wire (see the table above). */
-export function dashscopeRunsCodeInterpreter(family: ProtocolFamily, modelId: string): boolean {
-  if (family !== "openai" && family !== "responses") return false;
-  const id = modelId.trim().toLowerCase();
-  return CODE_INTERPRETER_MODELS[family].some((re) => re.test(id));
-}
-
-/**
- * DashScope's private vocabulary, shared by the domestic and international
- * deployments. Measured on the domestic host; the international host serves the
- * same compatible-mode and `/responses` surfaces, and treating it the same is
- * what every row pointed at it has done so far — so this keeps behaviour.
- */
-const DASHSCOPE_SERVER_TOOLS: Partial<Record<ProtocolFamily, readonly ServerToolSpelling[]>> = {
-  // `enable_search` (+ `search_options.search_strategy: agent_max` for page
-  // reading) and `enable_code_interpreter` — top-level body fields.
-  openai: [
-    { id: "web_search" },
-    { id: "web_extractor" },
-    { id: "code_interpreter", gate: (m) => dashscopeRunsCodeInterpreter("openai", m) },
-  ],
-  // Built-in `tools[]` entries; the two image searches exist on this wire only.
-  responses: [
-    { id: "web_search" },
-    { id: "web_extractor" },
-    { id: "web_search_image" },
-    { id: "image_search" },
-    { id: "code_interpreter", gate: (m) => dashscopeRunsCodeInterpreter("responses", m) },
-  ],
-};
-
 const PROFILES: Record<PlatformId, PlatformProfile> = {
   openai: {
     origin: "https://api.openai.com",
     endpoints: [{ family: "openai", path: "", official: true }, { family: "responses", path: "", official: true }],
     hosts: ["api.openai.com"],
-    // Chat Completions: none (official rejects unknown top-level fields).
-    serverTools: { openai: [], responses: [{ id: "web_search" }] },
     source: "docs/api/responses.md §10 (GPT-5.6, 2026-09-14)",
   },
   anthropic: {
     origin: "https://api.anthropic.com",
     endpoints: [{ family: "anthropic", path: "", official: true }],
     hosts: ["api.anthropic.com"],
-    serverTools: { anthropic: [{ id: "web_search" }] },
     source: "Anthropic's own versioned web_search tool",
   },
   google: {
@@ -323,10 +191,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.deepseek.com"],
-    // Chat Completions: none (no native tool, no private field). Its
-    // Anthropic-shaped path falls back to the protocol's own web_search at
-    // "unknown" — unmeasured, not known absent.
-    serverTools: { openai: [] },
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {
@@ -339,8 +203,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/apps/anthropic" },
     ],
     hosts: ["dashscope.aliyuncs.com"],
-    serverTools: DASHSCOPE_SERVER_TOOLS,
-    qwenVisionParams: true,
     source: "landscape.md §7 第六个样本 (联网搜索与网页抓取 2026-09-14 · 代码解释器 2026-09-17)",
   },
   "dashscope-intl": {
@@ -351,8 +213,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       // Whether this host serves /apps/anthropic is unverified — not offered.
     ],
     hosts: ["dashscope-intl.aliyuncs.com"],
-    serverTools: DASHSCOPE_SERVER_TOOLS,
-    qwenVisionParams: true,
     source: "landscape.md §7 第六个样本, same surfaces as the domestic host",
   },
   xai: {
@@ -365,7 +225,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     hosts: ["api.x.ai"],
     // web_search measured on grok-4.3; web_extractor and the image searches
     // are DashScope's names and are refused.
-    serverTools: { responses: [{ id: "web_search" }] },
     source: "landscape.md §7 第十一个样本 (2026-09-14)",
   },
   minimax: {
@@ -375,7 +234,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.minimaxi.com", "api.minimax.io"],
-    serverTools: { anthropic: [{ id: "web_search" }] },
     source: "landscape.md §7 第四个样本",
   },
   // 火山方舟. Two platforms on one host, told apart by path, because the key
@@ -399,7 +257,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // rather than 豆包搜索, which nobody has measured. The vendor also serves
     // Messages to these keys, but at a path a plan key cannot find (auth runs
     // before routing: every path is a 401), so no Anthropic route is listed.
-    serverTools: { openai: [] },
     source: "Ark docs (文本生成 · 图片理解 · 文档理解, 2026-09-08); pay-as-you-go wire unmeasured",
   },
   "volcengine-plan": {
@@ -415,10 +272,8 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // on all three sampled models; on a plan key the bare Responses
     // `{type:"web_search"}` bills to the `doubao` source (豆包搜索 Custom,
     // plan-covered) with no `sources` field. Chat Completions has no field.
-    serverTools: { openai: [], responses: [{ id: "web_search" }], anthropic: [{ id: "web_search" }] },
     // A base64 `document` block was read (the secret word came back) — the
     // one Anthropic-shaped wire measured to do so.
-    pdfFamilies: ["openai", "responses", "anthropic"],
     source: "landscape.md §7 第十二个样本 (2026-09-18)",
   },
   // 智谱 BigModel. One key reaches four prefixes on this host; the path, not
@@ -436,10 +291,8 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // Its search is a `tools[]` entry, not the top-level field this app spells
     // for DashScope — and it answers "searched" without searching unless intent
     // detection is turned off. Not offered until it is wired (plan P2).
-    serverTools: { openai: [] },
     // Documented `auto` only; measured: 5.3-flash / 4.7 ignore forcing, 4.7
     // refuses a named one while thinking with a bare 1210.
-    forcedToolChoice: "ignored",
     models: ZHIPU_MODELS,
     source: "landscape.md §7 第十四个样本 (2026-09-19)",
   },
@@ -467,14 +320,12 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     hosts: ["localhost:11434", "127.0.0.1:11434"],
     // A local server runs no tools of its own on any wire — say so rather
     // than inherit the protocol-native search at "unknown".
-    serverTools: { openai: [], responses: [], anthropic: [] },
     source: "local server; no server tools",
   },
   comfyui: {
     origin: "http://127.0.0.1:8188",
     endpoints: [{ family: "openai", path: "" }],
     hosts: ["localhost:8188", "127.0.0.1:8188"],
-    serverTools: { openai: [], responses: [], anthropic: [] },
     source: "local render server; reached through caps.route, not a chat wire",
   },
   custom: {
@@ -628,52 +479,51 @@ export function platformToStore(p: { platform?: PlatformId; baseUrl: string; api
   return p.platform === inferPlatform(p.baseUrl, p.apiStandard) ? undefined : p.platform;
 }
 
-/** The spellings one wire has, before any model gate. */
-function spellings(wire: ServerToolWire): readonly ServerToolSpelling[] {
-  const family = familyOf(wire.standard);
-  return PROFILES[wire.platform]?.serverTools?.[family] ?? NATIVE_SERVER_TOOLS[family] ?? [];
-}
+/**
+ * The capability questions below are one-line readers of the capability table
+ * (`lib/ai/capabilities.ts` — platform × family × capability, model id as the
+ * third axis). They keep their names because their callers ask a yes/no; the
+ * answer is no longer computed here. docs/api/capability-gating-plan.md.
+ */
+
+const SERVER_TOOLS: readonly ServerToolId[] = ["web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter"];
 
 /**
  * Whether one id can be said on this wire — and, given a model id, whether
  * that model takes it. Omitting `modelId` answers for the wire alone (the
- * gate is not consulted).
+ * model axis is not consulted).
  */
-export function serverToolStatus(wire: ServerToolWire, id: ServerToolId, modelId?: string): ServerToolStatus {
-  const family = familyOf(wire.standard);
-  const listed = PROFILES[wire.platform]?.serverTools?.[family];
-  const spelling = (listed ?? NATIVE_SERVER_TOOLS[family] ?? []).find((s) => s.id === id);
-  if (!spelling) return "no";
-  if (modelId !== undefined && spelling.gate && !spelling.gate(modelId)) return "no";
-  return listed ? "yes" : "unknown";
+export function serverToolStatus(wire: ServerToolWire, id: ServerToolId, modelId?: string): CapabilityStatus {
+  return capabilityVerdict(id, wire, { modelId }).status;
 }
 
 /** Whether this wire has any server tool at all — the drawer's section gate. */
 export function wireHasServerTools(wire: ServerToolWire): boolean {
-  return spellings(wire).length > 0;
+  return SERVER_TOOLS.some((id) => hasCapability(id, wire));
 }
 
-const PDF_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses"];
+/** Whether `modelId` runs DashScope's code interpreter on this family's wire. */
+export function dashscopeRunsCodeInterpreter(family: ProtocolFamily, modelId: string): boolean {
+  return familyVerdict("code_interpreter", "dashscope", family, { modelId }).status === "yes";
+}
 
 /**
  * Whether this wire hands a whole PDF to the model: Chat Completions' `file`
  * part and Responses' `input_file` everywhere, plus the families a platform
- * measured beyond that (`pdfFamilies`).
+ * measured beyond that.
  */
 export function wireReadsPdf(wire: ServerToolWire): boolean {
-  return (PROFILES[wire.platform]?.pdfFamilies ?? PDF_FAMILIES).includes(familyOf(wire.standard));
+  return hasCapability("pdfInput", wire);
 }
 
 /** Whether this wire takes `tool_choice: "auto"` only (a forced choice is sent as `auto`). */
 export function wireIgnoresForcedToolChoice(wire: ServerToolWire): boolean {
-  return PROFILES[wire.platform]?.forcedToolChoice === "ignored";
+  return !hasCapability("forcedToolChoice", wire);
 }
 
-/** Whether this wire takes DashScope's `vl_high_resolution_images` and clip `fps` (see `qwenVisionParams`). */
+/** Whether this wire takes DashScope's `vl_high_resolution_images` and clip `fps`. */
 export function wireTakesQwenVisionParams(wire: ServerToolWire): boolean {
-  if (familyOf(wire.standard) !== "openai") return false;
-  const profile = PROFILES[wire.platform];
-  return profile?.qwenVisionParams ?? (!!profile && profile.hosts.length === 0);
+  return hasCapability("vlHighResolution", wire);
 }
 
 /** What this platform knows about one of its model ids, or undefined — see {@link ModelCalibration}. */
