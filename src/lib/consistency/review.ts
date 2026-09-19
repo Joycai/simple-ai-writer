@@ -82,6 +82,8 @@ interface ReviewRunArgs {
   providers: Provider[];
   contextUtilization: number;
   resolveSubAgent: ToolContext["resolveSubAgent"];
+  /** Handed to the run's tools as-is — `ToolContext.appState`. */
+  appState: ToolContext["appState"];
   /** The retrieval subagent's expansion of `focus` into knowledge-base terms; absent = none. */
   expandFocus?: (intent: string, signal: AbortSignal) => Promise<string[]>;
   signal: AbortSignal;
@@ -337,6 +339,7 @@ async function runWindow(
       reviewSink: sink,
       taskWorkspace: workspace,
       resolveSubAgent: args.resolveSubAgent,
+      appState: args.appState,
       contextUtilization: args.contextUtilization,
     };
 

@@ -36,10 +36,9 @@ let proposalCounter = 0;
  * routing, and it must name the actual switch rather than send the author
  * hunting through model settings.
  */
-async function activeImageModel() {
-  const { useAiStore } = await import("../../stores/aiStore");
-  const { models, subAgents } = useAiStore.getState();
-  return subAgentModel("imagegen", models, subAgents);
+function activeImageModel(ctx: ToolContext) {
+  const settings = ctx.appState?.aiSettings();
+  return settings ? subAgentModel("imagegen", settings.models, settings.subAgents) : null;
 }
 
 /**
@@ -70,7 +69,7 @@ async function proposeIllustration(
       content: "Error: this surface cannot review image generation — do not call this tool here.",
     };
   }
-  const model = await activeImageModel();
+  const model = activeImageModel(ctx);
   if (!model) {
     return {
       toolCallId,

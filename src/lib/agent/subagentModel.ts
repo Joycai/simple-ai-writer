@@ -71,6 +71,19 @@ export type DelegateKind =
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
+/**
+ * The author's AI settings as `lib/` sees them: model rows, providers and
+ * subagent bindings, exactly as Settings has them (no per-chat chip
+ * overrides). `lib/` never reads aiStore itself (docs/feature/code-structure-plan.md
+ * P3); whoever holds the store hands this in — a store directly, a tool
+ * through `ToolContext.appState`.
+ */
+export interface AiSettingsSnapshot {
+  models: Model[];
+  providers: Provider[];
+  subAgents: Record<SubAgentKind, SubAgentConfig>;
+}
+
 export interface SubAgentConfig {
   kind: SubAgentKind;
   /** Model.id, or null if unconfigured. */

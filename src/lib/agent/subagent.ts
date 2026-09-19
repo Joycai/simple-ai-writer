@@ -260,6 +260,7 @@ export async function executeDelegate(
       toolContext: {
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
+        appState: ctx.appState,
         // 围栏跟着子对话走。不继承的话，把活派给子代理就成了绕过取材范围的方法
         // ——而那正是「委派」最不该有的副作用。
         loreScope: ctx.loreScope,

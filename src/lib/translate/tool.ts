@@ -23,7 +23,7 @@ import { fileExists, readFile } from "../fs/fileio";
 import { baseName, resolveWorkspacePath } from "../paths";
 import type { ToolContext } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
-import { subAgentModel } from "../agent/subagentModel";
+import { subAgentModel, type AiSettingsSnapshot } from "../agent/subagentModel";
 import { parseFrontmatter } from "../fs/markdown";
 import { splitDocument } from "./chunk";
 import { isTranslateLoreEnabled, translateLinesPerChunk } from "./flag";
@@ -36,12 +36,12 @@ let proposalCounter = 0;
 /**
  * 绑定的翻译模型 + 它的端点 + 凭据，或者说清为什么没有。
  *
- * 动态 import aiStore，和 `imageTools.activeImageModel` 同一条理由：`lib/` 不
- * 反向依赖 `stores/`，而这个工具确实需要读作者在设置里绑了什么。
+ * 设置从 `ToolContext.appState` 来：`lib/` 不反向依赖 `stores/`，而这个工具确实
+ * 需要读作者在设置里绑了什么（docs/feature/code-structure-plan.md P3）。
  */
-async function resolveTranslateConn(): Promise<AiConn | { error: string }> {
-  const { useAiStore } = await import("../../stores/aiStore");
-  const { models, providers, subAgents } = useAiStore.getState();
+async function resolveTranslateConn(
+  { models, providers, subAgents }: AiSettingsSnapshot,
+): Promise<AiConn | { error: string }> {
 
   const model = subAgentModel("translate", models, subAgents);
   if (!model) {
@@ -187,7 +187,8 @@ export async function translateTool(
     return fail("give either 'text' or 'path', not both.");
   }
 
-  const conn = await resolveTranslateConn();
+  if (!ctx.appState) return fail("this surface does not hand tools the author's AI settings — translate cannot run here.");
+  const conn = await resolveTranslateConn(ctx.appState.aiSettings());
   if ("error" in conn) return fail(conn.error);
 
   return path

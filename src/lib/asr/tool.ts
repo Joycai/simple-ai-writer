@@ -66,7 +66,8 @@ export async function transcribeAudioTool(
   if (!(await fileExists(source))) {
     return { toolCallId, content: `Error: there is no file at ${source}. Check the path with list_files.` };
   }
-  const conn = await resolveAsrConn();
+  if (!ctx.appState) return { toolCallId, content: "Error: this surface does not hand tools the author's AI settings — transcribe_audio cannot run here." };
+  const conn = await resolveAsrConn(ctx.appState.aiSettings());
   if (isAsrUnavailable(conn)) {
     return { toolCallId, content: `Error: ${conn.error}` };
   }

@@ -60,6 +60,8 @@ function wavHeader(seconds: number): { size: number; head: Uint8Array } {
 let proposals: TranscribeProposal[] = [];
 const ctx = {
   projectPath: "/p",
+  // resolveAsrConn is mocked above; the settings it would be handed don't matter here.
+  appState: { aiSettings: () => ({ models: [], providers: [], subAgents: {} }) },
   requestApproval: vi.fn(async (p: TranscribeProposal) => {
     proposals.push(p);
     return { approved: true, backupPath: null };

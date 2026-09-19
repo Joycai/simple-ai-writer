@@ -22,7 +22,8 @@ import { Pane, PaneHeader } from "./bits";
 import { PaperPreview } from "./PaperPreview";
 import { DocFormatDrawer } from "./DocFormatDrawer";
 import { DocxImportModal } from "./DocxImportModal";
-import { imitatedIdFor, nextCustomId, useDocFormatStore } from "../../../stores/docFormatStore";
+import { nextCustomId, useDocFormatStore } from "../../../stores/docFormatStore";
+import { imitatedIdFor } from "../../../lib/docx/presets";
 import {
   BUILTIN_FORMATS,
   bodyRegionMm,

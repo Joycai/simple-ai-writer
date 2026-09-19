@@ -38,6 +38,7 @@ import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/task
 import {
   resolveSubAgentConn, withSessionOverrides, type SubAgentKind,
 } from "../lib/agent/subagentModel";
+import { toolAppState } from "./toolAppState";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
@@ -721,6 +722,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreIndex,
           loreScope: useLoreStore.getState().scope,
           multimodal: canSeeImages(model),
+          appState: toolAppState,
           visionDelegate: routed.visionDelegate,
           searchReadsPages: routed.searchReadsPages,
           taskWorkspace: workspace,

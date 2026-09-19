@@ -1229,7 +1229,7 @@ export function FileTree() {
     setTransferError(null);
     try {
       const asr = await import("../../lib/asr");
-      const conn = await asr.resolveAsrConn();
+      const conn = await asr.resolveAsrConn(useAiStore.getState());
       if (asr.isAsrUnavailable(conn)) throw new Error(conn.error);
       const outcome = await asr.transcribeFile({
         projectPath,

@@ -93,8 +93,8 @@
 |---|---|---|---|
 | P0 | 守卫：分层与循环的棘轮测试 | 已合并 | #644 |
 | P1 | 拆 `subagent.ts`：纯查询 / 执行 | 已合并 | #645 |
-| P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 进行中 | |
-| P3 | `lib → stores` 归零 | 未开始 | |
+| P2 | `runAgent` 经 `ToolContext` 注入，解 A2 | 已合并 | #646 |
+| P3 | `lib → stores` 归零 | 进行中 | |
 | P4 | store 环：项目生命周期协调 + 批处理标志 | 未开始 | |
 | P5 | `agentStore` 拆分 | 未开始 | |
 | P6 | `registry.ts` / `writeTools.ts` 按领域拆分 | 未开始 | |
@@ -106,10 +106,10 @@
 
 | 指标 | 起点 | P1 后 | P2 后 | P3 后 | P4 后 | 终点目标 |
 |---|---|---|---|---|---|---|
-| 循环依赖：组 / 文件（§1.1） | 4 / 24 | 4 / 18 | 3 / 12 | | | 0 / 0 |
-| `lib → stores` 值依赖文件数（§1.2） | 7 | 7 | 7 | | | 0 |
-| store 间 `await import`（§1.3） | 61 | 61 | 61 | | | 只剩写明理由的几处 |
-| 最大源文件行数 | 4246 | 4246 | 4274 | | | < 1500 |
+| 循环依赖：组 / 文件（§1.1） | 4 / 24 | 4 / 18 | 3 / 12 | 2 / 6 | | 0 / 0 |
+| `lib → stores` 值依赖文件数（§1.2） | 7 | 7 | 7 | 0 | | 0 |
+| store 间 `await import`（§1.3） | 61 | 61 | 61 | 57 | | 只剩写明理由的几处 |
+| 最大源文件行数 | 4246 | 4246 | 4274 | 4297 | | < 1500 |
 
 每一列在对应 PR 合并时填实际值。「P1 后」「P2 后」的循环数是预期会降的地方；没降，就是方案错了，先回来改文档。
 
@@ -229,6 +229,7 @@ pnpm build
 | 2026-09-19 | P0 | 守卫实测修正两个盘点数字：agent 组 12 个文件而不是 13（`events.ts` 只经注释里的 `import("…")` 示例入组，那不是边）；store 间动态导入 61 处而不是 50（盘点的 grep 按行计数）。§1、§3 已改成实测值。 |
 | 2026-09-19 | P1 | 预期之外的收获：`stores/aiStore` 也离开了 agent 组——它只经 `subagent.ts` 被拉进环，拆开后环里只剩 A2 的 6 个文件（`handoff` `packs` `registry` `runtime` `subagent` `toolCost`）。`MAX_PDF_BYTES` / `MAX_PDF_FILES` 也搬进了 `subagentModel`：它们是设置面板要显示的常量，不该让面板为此 import 执行路径。 |
 | 2026-09-19 | P2 | 只注入 `runAgent` 解不开整个组：`registry → packs → toolCost → registry` 这条环不经过 runtime——`run_pack` 要用 `messageCeilingForTools` 给子运行定上限，而 `toolCost` 要读 registry 的工具定义。所以注入的是 `ToolContext.subRun: SubRunner`（`run` + `messageCeilingForTools`）而不是单个 `runSubAgent`。字段设为可选而不是方案写的必填：`runAgent` 在它交给工具的上下文上统一填入，调用方一个都不用改；不在运行里调用（只有测试）时，`delegate` / `run_pack` 返回一条说明而不是去找 runtime。写手交接照方案，`runAgent` 作参数传入。结果 agent 组整组消失，不只是静态部分。 |
+| 2026-09-19 | P3 | 四个读 AI 配置的文件没有复用 `resolveSubAgent`：它解析的是**连接**（带 key、套上本次对话的芯片开关），而 `imageTools` / `translate` / `asr` 读的是设置里原样的绑定，换成它会改变行为。于是加了 `ToolContext.appState: ToolAppState`（`aiSettings` / `docFormats` / `addImitatedFormat` 三个 getter，store 一侧是 `stores/toolAppState.ts`），`resolveAsrConn` 与 `runIllustration` 改为收参数（`FileTree` 的右键转写直接传 `useAiStore.getState()`）。`imitatedIdFor` / `isSessionImitated` 是纯函数，从 `docFormatStore` 搬进 `lib/docx/presets.ts`。批准插图的路径要 `aiStore`，`agentStore` 于是改为静态 import 它——`aiStore` 本来就不在 agentStore 的环里——原有的 4 处 `await import("./aiStore")` 一并去掉，这本是 P4 的活，提前了。 |
 
 ## 8. 复现 §1 的数字
 

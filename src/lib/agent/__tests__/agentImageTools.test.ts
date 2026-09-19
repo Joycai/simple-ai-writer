@@ -26,11 +26,6 @@ vi.mock("../../fs/fileio", async (orig) => ({
 // The tools reach for their model through the imagegen subagent's binding.
 let storeModels: unknown[] = [];
 let storeSubAgents: Record<string, unknown> = {};
-vi.mock("../../../stores/aiStore", () => ({
-  useAiStore: {
-    getState: () => ({ models: storeModels, providers: [], subAgents: storeSubAgents }),
-  },
-}));
 
 const { generateImageTool, editImageTool, redrawLoreImageTool } = await import("../imageTools");
 
@@ -55,6 +50,8 @@ function ctxWith(decision: { approved: boolean; reason?: string } = { approved: 
     projectPath: "/proj",
     loreIndex: LORE,
     multimodal: true,
+    // What the surface hands in from aiStore (stores/toolAppState).
+    appState: { aiSettings: () => ({ models: storeModels, providers: [], subAgents: storeSubAgents }) },
     requestApproval: vi.fn(async (p) => { seen.push(p as IllustrateProposal); return decision; }),
   } as unknown as ToolContext;
   return { ctx, seen };

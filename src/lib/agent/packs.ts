@@ -348,6 +348,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
       toolContext: {
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
+        appState: ctx.appState,
         // 围栏跟着子运行走——把活派给 pack 不能成为绕过取材范围的方法（同 delegate）。
         loreScope: ctx.loreScope,
         organize: ctx.organize,

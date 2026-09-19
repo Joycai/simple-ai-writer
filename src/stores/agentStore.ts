@@ -115,6 +115,8 @@ import { workflowBriefingSection } from "../lib/workflow";
 import { docxBriefingSection } from "../lib/docx/briefing";
 import { formatLintFindings } from "../lib/pptx/lint";
 import { currentFormats } from "./docFormatStore";
+import { useAiStore } from "./aiStore";
+import { toolAppState } from "./toolAppState";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -875,7 +877,7 @@ async function applyProposal(
       // through `onProgress` so the tool row shows where the wait is
       // (docs/feature/asr/01-execution-plan.md §5).
       const asr = await import("../lib/asr");
-      const conn = await asr.resolveAsrConn();
+      const conn = await asr.resolveAsrConn(useAiStore.getState());
       if (asr.isAsrUnavailable(conn)) throw new Error(conn.error);
       const { formatBytes, formatClock } = asr;
       const label = (p: import("../lib/asr").TranscribeProgress): string => {
@@ -934,7 +936,7 @@ async function applyProposal(
       // proposal time — a rejected card costs nothing.
       const { runIllustration } = await import("../lib/image/illustrate");
       const { projectPath: root } = useProjectStore.getState();
-      const outcome = await runIllustration(proposal, root ?? "", signal, onProgress);
+      const outcome = await runIllustration(proposal, root ?? "", useAiStore.getState(), signal, onProgress);
       if (proposal.dest.kind === "lore") {
         // The gallery grew — refresh so the entity view shows it at once.
         // Awaited: this function's caller reports the outcome to the model, and
@@ -1194,7 +1196,6 @@ function notifyApproval(bodyKey: string, params?: Record<string, string>): void 
  * a stale one steers the model into "Unknown tool" on every write attempt.
  */
 async function chatSystemPrompt(projectPath: string, orchestrating: boolean): Promise<string> {
-  const { useAiStore } = await import("./aiStore");
   const { prompts, activePromptId } = useAiStore.getState();
   const writingPrompt =
     prompts.find((p) => p.id === activePromptId)?.content ?? profileSystemPrompt();
@@ -1700,7 +1701,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Stores are reached lazily throughout this module: aiTaskStore imports
     // *this* one at the top level, so agentStore must stay free of static store
     // imports or the cycle closes. See docs/reference/architecture.md → Circular deps.
-    const { useAiStore } = await import("./aiStore");
     const { useProjectStore } = await import("./projectStore");
     const { getWritingFocus } = await import("./editorStore");
 
@@ -1867,7 +1867,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const meta = chat.meta;
     if (!history || !meta) return;
 
-    const { useAiStore } = await import("./aiStore");
     const { useAppStore } = await import("./appStore");
     const { models, providers, activeModelId } = useAiStore.getState();
     const resolved = resolveConn(models, providers, activeModelId);
@@ -2385,7 +2384,6 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     key, projectPath, focus, message, quoted, refs, model, provider, effectiveSubs,
     wireMessage, composed, assistantTurnId,
   } = job;
-  const { useAiStore } = await import("./aiStore");
   const { useLoreStore } = await import("./loreStore");
   const { useAppStore } = await import("./appStore");
   const activeFilePath = focus.filePath;
@@ -2886,6 +2884,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         loreScope: useLoreStore.getState().scope,
         organize: loreOrganizer(),
         multimodal: canSeeImages(model),
+        appState: toolAppState,
         // 谁来读图，由 routeTools 一处判定（它同时也是摘掉 read_lore_image
         // 的那一处）。图集清单据此说出真正走得通的那条路。
         visionDelegate: routed.visionDelegate,

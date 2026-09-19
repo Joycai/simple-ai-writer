@@ -24,6 +24,7 @@ import { clampSidebarWidth, useAppStore } from "./stores/appStore";
 // whether or not Settings has ever been opened.
 import "./stores/themeStore";
 import { useAiStore } from "./stores/aiStore";
+import { useLoreStore } from "./stores/loreStore";
 import { IS_TAURI } from "./lib/platform";
 import { isCliEnabled } from "./lib/cli/flag";
 import { shellInfo } from "./lib/cli/shell";
@@ -114,7 +115,17 @@ export default function App() {
 
   // Lore-citation clicks navigate from any markdown surface (preview, chat,
   // cards) — one document-level delegate instead of per-component wiring.
-  useEffect(() => installCitationNavigation(), []);
+  useEffect(
+    () =>
+      installCitationNavigation({
+        index: () => useLoreStore.getState().index,
+        open: (entity) => {
+          useLoreStore.getState().openDetail(entity.dirPath);
+          useAppStore.getState().setMainView("lore-wall");
+        },
+      }),
+    [],
+  );
 
   // Back / forward: records where the author has been (whatever moved them
   // there) and binds the mouse's side buttons. Keys live in useGlobalShortcuts.

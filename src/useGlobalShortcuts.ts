@@ -133,8 +133,9 @@ export function useGlobalShortcuts() {
           !insideSelectableSurface(sel?.anchorNode ?? null)
         ) return;
         e.preventDefault();
-        const { text: committed, range } = resolveCommit(text);
-        dropEditorMarker();
+        const { editorView } = useEditorStore.getState();
+        const { text: committed, range } = resolveCommit(text, editorView);
+        dropEditorMarker(editorView);
         const { setSelection, setRequestedTask } = useAiTaskStore.getState();
         setSelection(committed, range);
         setRequestedTask(task);
