@@ -130,6 +130,17 @@ describe("volcengine: two platforms on one host", () => {
   });
 });
 
+// MiniMax: Chat Completions under `/v1` — the bare root is an nginx 404 page.
+describe("minimax", () => {
+  it("routes Chat Completions under /v1 and Messages under /anthropic", () => {
+    expect(platformEndpoints("minimax")).toEqual([
+      { family: "openai", path: "/v1" },
+      { family: "anthropic", path: "/anthropic" },
+    ]);
+    expect(inferPlatform("https://api.minimaxi.com/v1", "openai_compat")).toBe("minimax");
+  });
+});
+
 // 智谱 BigModel (landscape.md §7 第十四个样本): the pay-as-you-go standard
 // endpoint only; forcing a tool is sent as auto.
 describe("zhipu", () => {

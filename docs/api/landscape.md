@@ -397,6 +397,10 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 `/anthropic/v1/messages`），是"协议族与厂商正交"最直白的证据：选哪个族是调用方
 的事，不是厂商的属性。
 
+① 族的 `/v1` 不能省：无 key 探测（2026-09-19）根路径 `/chat/completions` 回 nginx
+的 404 HTML，`/v1/chat/completions` 回 401 JSON。平台行因此把 ① 的路径记为
+`/v1` —— 此前记的是空串，新建的 ① 渠道一律 404。
+
 与官方 ④ 的差异：
 
 - **端点带前缀**：`/anthropic/v1/messages`，不是 `/v1/messages`。

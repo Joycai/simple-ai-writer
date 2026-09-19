@@ -228,7 +228,10 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   minimax: {
     origin: "https://api.minimaxi.com",
     endpoints: [
-      { family: "openai", path: "" },
+      // Chat Completions lives under `/v1`: the bare root is nginx's 404 page
+      // (no-key probe 2026-09-19 — root 404 text/html, `/v1/chat/completions`
+      // 401 JSON). The adapter appends `/chat/completions` and nothing else.
+      { family: "openai", path: "/v1" },
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.minimaxi.com", "api.minimax.io"],
