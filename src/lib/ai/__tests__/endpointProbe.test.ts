@@ -4,6 +4,7 @@ import {
   calibrate,
   classifyProbeError,
   expectedPromptTokens,
+  generationFinding,
   isTransient,
   judgeTruncation,
   makePadding,
@@ -295,6 +296,24 @@ describe("outputRunCapped", () => {
     expect(outputRunCapped(16384, 4096, "end_turn")).toBe(false);
     // Reaching the request is never a cap.
     expect(outputRunCapped(16384, 16000, "length")).toBe(false);
+  });
+});
+
+describe("generationFinding", () => {
+  it("records a ceiling only for a capped run, and never a floor above what was produced", () => {
+    expect(generationFinding(16384, 4096, true)).toEqual({ maxOutput: 4096, confidence: "high" });
+    // Reached the request: the request is the floor.
+    expect(generationFinding(16384, 16000, false)).toEqual({ maxOutput: 16384, confidence: "low" });
+    // The model stopped itself at 2k: it proved 2k, not 16k.
+    expect(generationFinding(16384, 2000, false)).toEqual({ maxOutput: 2000, confidence: "low" });
+  });
+
+  it("does not turn an early natural stop into a conflict with a real cap below the request", () => {
+    const run: ProbeFinding = { source: "measured", detail: "generation", ...generationFinding(16384, 2000, false) };
+    const declared: ProbeFinding = { source: "models-endpoint", detail: "outputTokenLimit", confidence: "medium", maxOutput: 8192 };
+    const s = suggestSettings([declared, run]);
+    expect(s.maxOutput).toBe(8192);
+    expect(s.conflicts).toEqual([]);
   });
 });
 

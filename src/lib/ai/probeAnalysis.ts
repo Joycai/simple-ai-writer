@@ -381,6 +381,23 @@ export function outputRunCapped(requested: number, produced: number, finishReaso
   return !(finishReason && NATURAL_STOPS.has(finishReason.toLowerCase()));
 }
 
+/**
+ * What a generation run tells the settings: a capped run measures the ceiling
+ * (what it produced, high confidence); anything else is only a floor (low) —
+ * the request when the run reached it, and what it actually produced when the
+ * model stopped itself short. Recording the request in that last case claimed
+ * output the model never wrote, and raised a false conflict against a real
+ * cap below the request.
+ */
+export function generationFinding(
+  requested: number,
+  produced: number,
+  capped: boolean,
+): { maxOutput: number; confidence: FindingConfidence } {
+  if (capped) return { maxOutput: produced, confidence: "high" };
+  return { maxOutput: produced >= requested * 0.9 ? requested : produced, confidence: "low" };
+}
+
 // ─── Aggregation ─────────────────────────────────────────────────────────────
 
 type FindingSource =
