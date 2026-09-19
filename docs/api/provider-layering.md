@@ -226,3 +226,6 @@ task takes"，`SummarizeRequestConfig` 写着 "same fields sendChat holds"。看
 - **preset 机制的形态** —— 内置表、可导入、还是允许作者另存为模板。
 - **L2 继承默认值给 L3** 要不要做（比如端点级的"默认思考强度"）。倾向于不做：
   多一层默认值来源就多一份"为什么它是这个值"的困惑。
+- **能力判定散在各提问者手里** —— 同一个「能不能 X」在抽屉、适配器、摘要、会话面各算一遍，
+  私有字段按族放行的缺陷（智谱 G12）由此而来。收成一张登记表加一个裁决函数的方案在
+  [`capability-gating-plan.md`](capability-gating-plan.md)（`proposal`）。
