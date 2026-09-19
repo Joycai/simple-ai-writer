@@ -116,7 +116,7 @@ vi.mock("../agentStore", () => ({
     getState: () => ({ rejectAll: vi.fn(), requestApproval: vi.fn(), requestPlanApproval: vi.fn() }),
   },
 }));
-vi.mock("../editorStore", () => ({
+vi.mock("../openDocument", () => ({
   getWritingFocus: () => ({ text: "document body", filePath: "/proj/writing/a.md", settled: true }),
 }));
 vi.mock("../loreStore", () => ({
@@ -262,7 +262,7 @@ describe("runTask — sourceFilePath", () => {
   it("records the file the run's context was assembled from", async () => {
     await useAiTaskStore.getState().runTask("polish");
     // The mocked getWritingFocus() always names this file — see the
-    // ../../stores/editorStore mock above.
+    // ../../stores/openDocument mock above.
     expect(useAiTaskStore.getState().sourceFilePath).toBe("/proj/writing/a.md");
   });
 

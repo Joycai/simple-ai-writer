@@ -37,8 +37,8 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
   const isDirty = useEditorStore((s) => s.isDirty);
-  const wordCount = useProjectStore((s) => s.wordCount);
-  const charCount = useProjectStore((s) => s.charCount);
+  const wordCount = useEditorStore((s) => s.wordCount);
+  const charCount = useEditorStore((s) => s.charCount);
   const imageSize = useProjectStore((s) => s.imageSize);
   const [viewMenuAt, setViewMenuAt] = useState<{ x: number; y: number } | null>(null);
 

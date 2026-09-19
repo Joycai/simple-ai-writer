@@ -21,6 +21,7 @@ import { workflowBriefingSection } from "../lib/workflow";
 import { docxBriefingSection } from "../lib/docx/briefing";
 import { currentFormats } from "./docFormatStore";
 import { toolAppState } from "./toolAppState";
+import { useMemoryStore } from "./memoryStore";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
@@ -48,6 +49,7 @@ import { routeTools } from "../lib/agent/routing";
 import { plannedToolTokens } from "../lib/agent/toolCost";
 import { resolveSubAgentConn } from "../lib/agent/subagentModel";
 import { expandAuthorIntent } from "../lib/context/expand";
+import { getWritingFocus } from "./openDocument";
 
 /**
  * A task id, as declared by the active profile's `tasks` (see lib/profile).
@@ -160,7 +162,20 @@ interface AiTaskState {
   /** Drop the committed target, but only if `source` is the one that set it. */
   clearSelectionFrom: (source: "marker" | "commit") => void;
   setRequestedTask: (kind: TaskKind | null, instruction?: string) => void;
-  runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
+  runTask: (
+    kind: TaskKind,
+    customInstruction?: string,
+    continueLength?: number,
+    extras?: TaskExtras,
+    /**
+     * `fromBatch`: this run is one clause of a batch sweep (batchStore passes
+     * it). The batch modal covers the panel, so no mid-run card — ask_author,
+     * round cap, truncation — may block on it. A flag the caller sets rather
+     * than a read of `batchStore.running`, because batchStore imports this
+     * store (docs/feature/code-structure-plan.md P4).
+     */
+    opts?: { fromBatch?: boolean },
+  ) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
   setActiveDraft: (id: string) => void;
@@ -217,7 +232,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   appendAgentEvent: (event) =>
     set((s) => ({ agentLog: appendAgentEventTo(s.agentLog, event) })),
 
-  runTask: async (kind, customInstruction, continueLength, extras) => {
+  runTask: async (kind, customInstruction, continueLength, extras, opts) => {
     if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races
     const { activeModelId, activePromptId, models, providers, prompts, subAgents } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
@@ -274,7 +289,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // change the selection mid-setup. Use nothing else for the rest of the
     // run: file identity, text, and selection all come from this one atomic
     // read, never re-fetched via get(). (Lazy import — avoids a store cycle.)
-    const { getWritingFocus } = await import("./editorStore");
     const focus = getWritingFocus();
     const documentText = focus.text;
     const activeFilePath = focus.filePath;
@@ -608,10 +622,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // ask_author needs someone watching the panel: the full-tool Agent
         // mode outside a batch run. A batch covers the panel with its modal,
         // so a question card there would block the sweep unseen — same rule
-        // as onRoundLimit below. Dynamic import for the same cycle reason.
-        const { useBatchStore } = await import("./batchStore");
-        const canAsk =
-          preset === AGENT_ASSIST_PRESET && !useBatchStore.getState().running;
+        // as onRoundLimit below.
+        const inBatch = opts?.fromBatch === true;
+        const canAsk = preset === AGENT_ASSIST_PRESET && !inBatch;
         // commands: the same variable on purpose — a run that can show the
         // question card is exactly a run that can show a command's card.
         const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk, commands: canAsk, providers });
@@ -654,9 +667,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               return useLoreStore.getState().index;
             },
             onMemoryChanged: () => {
-              void import("./memoryStore").then((m) =>
-                m.useMemoryStore.getState().loadForActiveFile(),
-              );
+              void useMemoryStore.getState().loadForActiveFile();
             },
             // L2 approvals: the AiPanel card resolves these (agent mode only —
             // continue's preset has no propose_edit). Scoped to this run's own
@@ -694,18 +705,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // the panel can show the card, a batch run cannot, and a batch that
           // blocked on an invisible card would hang the whole sweep.
           onTruncationLimit: async (recoveries) => {
-            const { useBatchStore } = await import("./batchStore");
-            if (useBatchStore.getState().running) return { action: "stop" };
+            if (inBatch) return { action: "stop" };
             return useAgentStore.getState().requestTruncationDecision(recoveries, controller);
           },
           // At the round cap, block on the AiPanel's 继续/收尾 card instead of
           // force-ending. Skipped during a batch run: the batch modal covers
           // the panel, and a card nobody can see would hang the whole sweep.
           onRoundLimit: async (roundsUsed) => {
-            // Must stay dynamic: batchStore imports this module at the top
-            // level, so a static import back would close the cycle.
-            const { useBatchStore } = await import("./batchStore");
-            if (useBatchStore.getState().running) return { action: "finish" };
+            if (inBatch) return { action: "finish" };
             return useAgentStore
               .getState()
               .requestRoundExtension(

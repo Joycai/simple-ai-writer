@@ -109,7 +109,7 @@ export const useBatchStore = create<BatchState>((set, get) => ({
         // The clause becomes the committed selection — exactly what a manual
         // per-clause run would send, so needsSelection tasks run unchanged.
         useAiTaskStore.getState().setSelection(item.text, null, "commit");
-        await useAiTaskStore.getState().runTask(taskId);
+        await useAiTaskStore.getState().runTask(taskId, undefined, undefined, undefined, { fromBatch: true });
 
         const after = useAiTaskStore.getState();
         const draft =

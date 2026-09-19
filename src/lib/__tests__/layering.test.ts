@@ -26,18 +26,11 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("../../", import.meta.url));
 
-/** 允许存在的循环组（成员按字母序），方案 §1.1。每组注明它会在哪个阶段被拆掉。 */
-const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {
-  // C：切换 / 关闭项目时 projectStore 调 agentStore（P4）。
-  project: [
-    "stores/agentStore.ts",
-    "stores/editorStore.ts",
-    "stores/memoryStore.ts",
-    "stores/projectStore.ts",
-  ],
-  // C：runTask 问 batchStore.running（P4）。
-  batch: ["stores/aiTaskStore.ts", "stores/batchStore.ts"],
-};
+/**
+ * 允许存在的循环组（成员按字母序），方案 §1.1。P4 之后为空：`src/` 的值导入图没有环。
+ * 真要加一组，先回方案 §7 写明为什么拆不开。
+ */
+const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {};
 
 /**
  * `lib/` 下对 `stores/` 有值依赖的文件及其导入条数上限，方案 §1.2。没记的就是 0——
@@ -46,12 +39,16 @@ const ALLOWED_CYCLES: Readonly<Record<string, readonly string[]>> = {
  */
 const LIB_TO_STORES: Readonly<Record<string, number>> = {};
 
-/** `stores/` 之间 `import("./xStore")` 的条数上限，方案 §1.3。没记的就是 0。 */
+/**
+ * `stores/` 之间 `import("./…")` 的条数上限，方案 §1.3。没记的就是 0。
+ *
+ * 环拆完之后留下的只有一种理由：**加载顺序**，不是循环。
+ */
 const STORE_DYNAMIC: Readonly<Record<string, number>> = {
-  "stores/agentStore.ts": 30,
-  "stores/roleplayStore.ts": 18,
-  "stores/aiTaskStore.ts": 5,
-  "stores/projectStore.ts": 4,
+  // projectStore / appStore / openDocument / memoryStore 都会把 appStore 带进来，而 appStore 在
+  // 模块加载时就把主题写上 document（main.tsx 的 boot 依赖这一点，首帧就是作者的主题）。
+  // agentStore 被十来个 node 环境的测试直接 import，静态导入会让它们在加载时就碰 DOM。
+  "stores/agentStore.ts": 21,
 };
 
 function sources(dir: string, out: string[] = []): string[] {

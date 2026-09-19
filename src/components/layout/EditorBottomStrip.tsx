@@ -16,7 +16,7 @@ interface Props {
 export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props) {
   const { t, i18n } = useTranslation();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
-  const wordCount = useProjectStore((s) => s.wordCount);
+  const wordCount = useEditorStore((s) => s.wordCount);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const editorView = useEditorStore((s) => s.editorView);
   const aiTarget = useEditorStore((s) => s.aiTarget);

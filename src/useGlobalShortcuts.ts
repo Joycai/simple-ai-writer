@@ -17,7 +17,8 @@ import {
 } from "./lib/shortcuts";
 import { navBack, navForward } from "./stores/navStore";
 import { screenNeedsProject, useAppStore } from "./stores/appStore";
-import { closeDocument, useEditorStore } from "./stores/editorStore";
+import { useEditorStore } from "./stores/editorStore";
+import { closeDocument } from "./stores/openDocument";
 import { useProjectStore } from "./stores/projectStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
 import { findTask } from "./lib/profile";

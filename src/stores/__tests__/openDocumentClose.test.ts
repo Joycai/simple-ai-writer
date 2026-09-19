@@ -21,7 +21,8 @@ vi.mock("../../lib/fs/fileio", () => ({
   writeFile: h.writeFile,
 }));
 
-import { closeDocument, useEditorStore } from "../editorStore";
+import { useEditorStore } from "../editorStore";
+import { closeDocument } from "../openDocument";
 import { useProjectStore } from "../projectStore";
 
 const DOC = "/proj/writing/第十二章.md";
@@ -40,8 +41,9 @@ describe("closeDocument", () => {
     vi.useFakeTimers();
     h.writeFile.mockClear();
     h.writeFile.mockImplementation(async () => {});
-    useProjectStore.setState({ activeFilePath: DOC, wordCount: 3124, charCount: 12480 });
+    useProjectStore.setState({ activeFilePath: DOC });
     openBuffer(DOC, false);
+    useEditorStore.setState({ wordCount: 3124, charCount: 12480 });
   });
 
   afterEach(() => {
@@ -58,7 +60,7 @@ describe("closeDocument", () => {
     expect(useEditorStore.getState().filePath).toBeNull();
     expect(useEditorStore.getState().content).toBe("");
     // 计数归零而不是留着上一篇的——空稿页上没有「3,124 字」这回事。
-    expect(useProjectStore.getState().wordCount).toBe(0);
+    expect(useEditorStore.getState().wordCount).toBe(0);
     expect(useEditorStore.getState().closeNotice).toBeNull();
   });
 

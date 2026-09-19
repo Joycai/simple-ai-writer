@@ -266,7 +266,7 @@ export function LibraryView() {
   const projectPath = useProjectStore((s) => s.projectPath);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
-  const wordCount = useProjectStore((s) => s.wordCount);
+  const wordCount = useEditorStore((s) => s.wordCount);
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);

@@ -70,7 +70,7 @@ import type { ChatSnapshot, TurnExport } from "../lib/agent/chatSession";
 import { MAX_CONCURRENT_RUNS, nextRunnableJobIndex, ownerBusy } from "../lib/agent/scheduler";
 import { chatState, mostUrgent, type ChatState } from "../lib/agent/chatState";
 import { sessionLabel } from "../lib/agent/sessionDb";
-import type { WritingFocus } from "./editorStore";
+import type { WritingFocus } from "./openDocument";
 import { appendAgentEventTo, type AgentEvent, type ToolProgress } from "../lib/agent/events";
 import { undoWrites } from "../lib/agent/undo";
 import { turnWrites } from "../lib/agent/planLedger";
@@ -117,6 +117,9 @@ import { formatLintFindings } from "../lib/pptx/lint";
 import { currentFormats } from "./docFormatStore";
 import { useAiStore } from "./aiStore";
 import { toolAppState } from "./toolAppState";
+import { useEditorStore } from "./editorStore";
+import { useLoreStore } from "./loreStore";
+import { useComposerStore } from "./composerStore";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -667,7 +670,6 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
   if (isSamePath(activeFilePath, proposal.path)) {
     // The file is open — go through the editor so unsaved edits are kept
     // and the change is visible (and autosaved) immediately.
-    const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(rewrite(content));
     await flushEditor(useEditorStore.getState());
@@ -693,7 +695,6 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
   if (isSamePath(activeFilePath, proposal.path)) {
     // Same reason as applyEdit: go through the editor so the change is visible
     // and autosaved rather than being clobbered by the open buffer on next save.
-    const { useEditorStore } = await import("./editorStore");
     useEditorStore.getState().setContent(proposal.content);
     await flushEditor(useEditorStore.getState());
   } else {
@@ -719,7 +720,6 @@ async function applyAppend(proposal: AppendProposal): Promise<string | null> {
   if (isSamePath(activeFilePath, proposal.path)) {
     // Same reason as applyEdit/applyRewrite: through the editor, so the open
     // buffer doesn't overwrite the append on its next autosave.
-    const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(content + proposal.content);
     await flushEditor(useEditorStore.getState());
@@ -750,7 +750,6 @@ async function applyInsert(proposal: InsertProposal): Promise<string | null> {
   if (isSamePath(activeFilePath, proposal.path)) {
     // Same reason as applyEdit: through the editor, so unsaved work survives
     // and the change is visible and autosaved at once.
-    const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
     setContent(splice(content));
     await flushEditor(useEditorStore.getState());
@@ -944,7 +943,6 @@ async function applyProposal(
         // One folder when the index still knows it; the walk otherwise (the
         // proposal carries the folder, not the entry, and only the walk can
         // place a folder the index has lost track of).
-        const { useLoreStore } = await import("./loreStore");
         if (root) {
           const lore = useLoreStore.getState();
           const dir = proposal.dest.entityDir;
@@ -1589,9 +1587,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       "",
     );
     endGrantFor(set, get, key);
-    void import("./composerStore").then((m) =>
-      m.useComposerStore.getState().clearChatComposer(key),
-    );
+    useComposerStore.getState().clearChatComposer(key);
     set((st) => {
       const { [key]: _gone, ...chats } = st.chats;
       const order = st.chatOrder.filter((k) => k !== key);
@@ -1702,7 +1698,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // *this* one at the top level, so agentStore must stay free of static store
     // imports or the cycle closes. See docs/reference/architecture.md → Circular deps.
     const { useProjectStore } = await import("./projectStore");
-    const { getWritingFocus } = await import("./editorStore");
+    const { getWritingFocus } = await import("./openDocument");
 
     // Resolved at *send* time and carried on the job: a queued question runs on
     // the model that was active when it was asked, not on whatever the header
@@ -1984,7 +1980,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Saved first, so "is the file still what the write left" sees it and
     // refuses — rather than restoring underneath the buffer, whose next
     // autosave would put the undone text straight back.
-    const { useEditorStore } = await import("./editorStore");
     const editor = useEditorStore.getState();
     if (editor.isDirty && editor.filePath) await flushEditor(editor);
     const events = await undoWrites(projectPath, turn.log, toolCallIds);
@@ -2001,7 +1996,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // What came back into the knowledge base has to be in the index before the
     // next turn resolves a name against it.
     if (paths.some((p) => p.startsWith(".ai-writer/lore/"))) {
-      const { useLoreStore } = await import("./loreStore");
       await useLoreStore.getState().scanProject(projectPath);
     }
     // A document: the tree shows what was restored or removed, and the open
@@ -2384,7 +2378,6 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     key, projectPath, focus, message, quoted, refs, model, provider, effectiveSubs,
     wireMessage, composed, assistantTurnId,
   } = job;
-  const { useLoreStore } = await import("./loreStore");
   const { useAppStore } = await import("./appStore");
   const activeFilePath = focus.filePath;
 

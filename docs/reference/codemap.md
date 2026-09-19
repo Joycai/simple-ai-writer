@@ -32,7 +32,7 @@ Main layout structure (TitleBar, IconRail, Sidebar, ProjectRow (项目名那一�
 - **跟着文档走的读数认的是缓冲区，不是 `activeFilePath`。** 打开图片（或任何编辑器读不出来的文件）时缓冲区**故意**停在上一篇文档——AI 那一侧靠 `WritingFocus.settled` 判断"还没就绪"（`stores/editorStore`），所以缓冲区不能清。代价是顶栏自己认路：`ExportMenu` 用 `useWritingFocus()` + `isExportableDocument`，字数 / 保存点 / 面包屑的「已修改」用 `isTextKind(docKindOf(...))`。用 `activeFilePath` 当条件的写法都错，而且错得很安静（图片打开时导出的是上一篇的正文、文件名却取自图片名）。
 - **让位靠容器查询，量的是 `.flow` 的宽度**（顶栏减去平台让位：mac 56px 红绿灯位、无边框 Windows 138px 三键）——按窗口宽判会让两种边框形态在不同窗口宽度上跳档。三档 ≥1160 / 900–1159 / <900，让位顺序在 `TitleBar.module.css` 末尾那一段注释里（＝设计稿表 A，实现逐行照抄）。右侧每一件 `nowrap` + `flex-shrink:0`，整条里唯一让宽的是面包屑：中文标签被压到字宽以下会逐字折行成「编 辑」。两种档位的成色都渲染出来、由 CSS 藏掉一种——查询能换布局，换不了词。
 
-**关闭文档只有一处实现**：`editorStore` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
+**关闭文档只有一处实现**：`stores/openDocument.ts` 的 `closeDocument()`（面包屑末尾的 ×、⌘W、文件树右键三个入口共用）。**「关闭」是三层，三平台同一套**（`lib/shortcuts.ts` 的 `CLOSE_DOC_COMBOS` 顶上有那张表）：文档 ⌘W · 项目 ⇧⌘W（`ProjectRow`，项目开着时才挂）· 窗口 ⌥⌘W（仅 mac，`windowmenu.rs` 的菜单项）。窗口那一层**不能**用 `PredefinedMenuItem::close_window`：预置项在 macOS 上固定带 ⌘W，而原生菜单先于 webview 收键——一个窗口就是一个工作区，于是「关文档」的 ⌘W 实际关掉的是整个项目窗口。先 flush 再置空，**写盘失败就不关**（缓冲区是那几行字唯一的副本），痕迹是面包屑尾巴两秒的一行；关的是图片时不碰缓冲区里那篇待写的文档。四条都钉在 `editorStoreCloseDocument.test.ts`。设计稿的两张表与出入表在 `docs/feature/topbar-doc-actions-brief.md`。
 
 ### `src/components/editor/`
 
@@ -185,14 +185,14 @@ document import into the workspace: docx via mammoth+turndown (`docx.ts`/`markdo
 Zustand stores。一个 store 一个关注点，**存的是「现在是什么」，不是「怎么做」**：决策形状的东西住在对应的 `lib/` 子系统里，store 只做时序、订阅和缓存。从 `CLAUDE.md` 搬来（2026-09-16），那边只留一份名字索引。
 
 - **`appStore`** — 主题、语言（i18n）、侧栏 / 面板折叠、活动标签页。持久化的字段经 `lib/prefs` 的 `prefBackedState()` 拿初值；配置导入之后由 `reloadFromPrefs()` 重新派生，因为那些字段只在启动时读过一次偏好。
-- **`projectStore`** — 当前项目路径、文件树、活动文件、字数 / 字符数，以及解析好的 `workspace`（启用了哪些能力包）。**组件订阅的是这里的 `workspace`**，不是 `lib/profile/active` 那个单例——单例不是响应式的。
-- **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度。
+- **`projectStore`** — 当前项目路径、文件树、活动文件，以及解析好的 `workspace`（启用了哪些能力包）。**组件订阅的是这里的 `workspace`**，不是 `lib/profile/active` 那个单例——单例不是响应式的。
+- **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度、字数 / 字符数（从内容算出，所以跟内容住一起）。**不 import `projectStore`**——要同时看两边的东西放在 `openDocument.ts`。
 - **`loreStore`** — 已索引的知识库条目、别名映射、条目摘要；项目打开时自动扫 `.ai-writer/lore/`（`scanLore`）。
 - **`aiStore`** — 供应商、模型、提示词。**API 密钥不在这里**：它们经 Rust 的 `secret_*` 命令住在 OS 钥匙串里（`src/lib/keyStore.ts`），这个 store 只存「有哪些 provider」，而那几行也是「钥匙串里有哪些账户」的唯一记录（见 `appReset` 的顺序规矩）。
 - **`aiTaskStore`** — 正在跑的 AI 任务：流式输出、token 用量、中断信号。任务按声明的 `tools` / `target` / `continuation` 分支，**从不按 id 分支**。
 - **`agentStore`** — 对话助手的家：L2 审批队列 **和** 会话状态。同时开几个会话（`chats: Record<key, LiveChat>` + `activeChatKey` 一根轴，`runningChats` / `chatQueue` 另一根，信号量在 `lib/agent/scheduler.ts`，与 roleplay 共用）；每张卡片带 `surface: chat:<key>`，「本次都批准」的 key 是 `chatAutoApproveKey(key)` 而不是一个共享字面量。
 - **`navStore`** — 前进 / 后退历史，靠**观察**其他 store 记录——没有任何调用点登记什么。位置是作者真正在其间移动的那个三元组（哪个主视图 / 哪个文件 / 哪个条目）。
-- **`batchStore`** — 批处理（`batch: true` 的任务）：对拆出来的子句顺序循环调 `runTask`，结果逐条追加进一个输出文件。
+- **`batchStore`** — 批处理（`batch: true` 的任务）：对拆出来的子句顺序循环调 `runTask`（带 `{ fromBatch: true }`——`aiTaskStore` 据此不出任何中途卡片，而不是反过来读 `batchStore.running`，那会成环），结果逐条追加进一个输出文件。
 - **`composerStore`** — 作者打了但还没发的内容。**按会话存，永不持久化**：AI 抽屉是 `AnimatePresence` 的子节点，关闭即卸载，原来放在 `useState` 里的半句话跟着一起死；而一句写了一半的指令属于作者，不属于正在显示它的那个界面。
 - **`memoryStore`** — 每份文档的故事记忆片段（`lib/context/memory`）：覆盖范围、新鲜度、以及那次做摘要的运行。
 - **`imageStore`** — 一次对话式的图像会话（初次生成，然后在其上编辑，每轮产出候选供作者挑）。轮次链是**树，不是线**——作者经常退回两轮再岔出去——并且每一轮都记下走的是哪条 provider 路径。
@@ -204,6 +204,8 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
 - **`themeStore`** — 设置页看到的主题注册表；是 `lib/theme/install` 的一层薄 React 面孔（经 `subscribeRegistry` 镜像），状态的主人在那边。
 - **`digestStore`** — 集合摘要（`lib/context` 的 collection digests）的运行状态。
 - **`configImportRefresh.ts`** — 不是 store，是「一份配置落地之后（从文件或从同步服务器）必须重读哪些东西」的**那一个**函数。两条路线共用它；**顺序就是全部的重点**：先从 prefs 取选择（恢复刚把它们写进去，而 store 只在启动时读），再 `loadConfig`（它的失效 id 清扫必须拿*那些* id 去比合并后的表，先跑就会把新的扫掉并持久化），最后才是外观偏好和排版格式预设。
+- **`projectLifecycle.ts`** — 不是 store，是打开 / 切换 / 关闭项目的**唯一入口**（`openProject(path?)`、`closeProject()`）。`projectStore` 负责切换本身；聊天那一侧在切换里有两步——离开前问一句正在跑的对话、切换不会再失败之后恢复新项目的聊天——以 `ProjectSwitchHooks` 传进 `projectStore`，位置和顺序与原先一样（顺序写在文件头注释里）。钩子是**必填**参数：绕过这里直接调 `projectStore.openProject` 编译不过，而不是悄悄不问就切。原先是 `projectStore` 里 `await import("./agentStore")`，与 `agentStore` 成环（docs/feature/code-structure-plan.md P4）。
+- **`openDocument.ts`** — 编辑器里打开的那篇文档，按项目与编辑器**合起来**看：`closeDocument()`，以及每个 AI 动作认的「写作焦点」（`WritingFocus`、`getWritingFocus` / `useWritingFocus`、`focusBlockedByImage`）。它们要同时读 `projectStore.activeFilePath` 和 `editorStore` 的缓冲区，原先住在 `editorStore`，于是 `editorStore` 与 `projectStore` 互相 import。
 - **`toolAppState.ts`** — 不是 store，是 `ToolContext.appState` 的 store 一侧：agent 工具能读到的那几样活状态（`aiStore` 的模型 / 渠道 / 子代理绑定，`docFormatStore` 的格式清单与本次会话的「照 .docx 模仿」槽位）。每个启动运行的面（`agentStore`、`aiTaskStore`、`roleplayStore`、`consistencyStore`）传的都是这同一个对象，所以「工具看见的是哪份设置」只有一个答案；嵌套运行（`delegate`、`run_pack`、写手交接）原样转交。给的是 getter，工具在调用那一刻读——和原先工具里 `await import` store 的时刻一样。
 
 ## `src-tauri/`

@@ -80,7 +80,7 @@ vi.mock("../loreStore", () => ({
 }));
 vi.mock("../editorStore", () => ({
   useEditorStore: {
-    getState: () => ({ saveTimer: null, isDirty: false, filePath: null, saveNow: vi.fn() }),
+    getState: () => ({ saveTimer: null, isDirty: false, filePath: null, saveNow: vi.fn(), setDocCounts: vi.fn() }),
     setState: vi.fn(),
   },
 }));
@@ -94,6 +94,7 @@ vi.mock("../appStore", () => ({
 }));
 
 import { useProjectStore } from "../projectStore";
+import { closeProject, openProject } from "../projectLifecycle";
 import { activeWorkspace, loreCategoryIds, resetActiveWorkspace } from "../../lib/profile/active";
 import { BID_PROFILE, NOVEL_PROFILE, TTRPG_PROFILE } from "../../lib/profile/model";
 import type { ProfileSelection } from "../../lib/profile/file";
@@ -127,7 +128,7 @@ describe("openProject", () => {
   it("activates the project's packs and scaffolds their categories", async () => {
     h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
 
-    await useProjectStore.getState().openProject("D:/projects/module");
+    await openProject("D:/projects/module");
 
     expect(activePackIds()).toEqual(["ttrpg"]);
     expect(lastScaffoldCategories()).toEqual([
@@ -139,7 +140,7 @@ describe("openProject", () => {
   it("scaffolds the union of a multi-pack selection's categories", async () => {
     h.loadProfileFileMock.mockResolvedValue(selectionOf(NOVEL_PROFILE, BID_PROFILE));
 
-    await useProjectStore.getState().openProject("D:/projects/kb");
+    await openProject("D:/projects/kb");
 
     expect(activePackIds()).toEqual(["novel", "bid"]);
     const novelIds = NOVEL_PROFILE.categories.map((c) => c.id);
@@ -160,7 +161,7 @@ describe("openProject", () => {
       issues: [],
     } satisfies ProfileSelection);
 
-    await useProjectStore.getState().openProject("D:/projects/kb");
+    await openProject("D:/projects/kb");
 
     expect(loreCategoryIds()).toContain("meetings");
     expect(useProjectStore.getState().customCategories.map((c) => c.id)).toEqual(["meetings"]);
@@ -168,7 +169,7 @@ describe("openProject", () => {
   });
 
   it("treats a project with no profile.json as a novel project", async () => {
-    await useProjectStore.getState().openProject("D:/projects/old-book");
+    await openProject("D:/projects/old-book");
 
     expect(activePackIds()).toEqual(["novel"]);
     expect(lastScaffoldCategories()).toEqual([
@@ -179,7 +180,7 @@ describe("openProject", () => {
 
   it("scaffolds before the lore scan, so the folders exist when it runs", async () => {
     h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
-    await useProjectStore.getState().openProject("D:/projects/module");
+    await openProject("D:/projects/module");
     expect(h.calls.indexOf("scaffold")).toBeLessThan(h.calls.indexOf("scanLore"));
   });
 
@@ -187,12 +188,11 @@ describe("openProject", () => {
     // The failure has to land *after* the selection is resolved, which is the
     // window the store's ordering comment is about: activating early would point
     // the still-open project's lore/prompt code at the failed project.
-    const previous = useProjectStore.getState();
-    await previous.openProject("D:/projects/module");
+    await openProject("D:/projects/module");
     h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
     h.getDb.mockRejectedValueOnce(new Error("db is corrupt"));
 
-    await expect(useProjectStore.getState().openProject("D:/projects/broken")).rejects.toThrow(
+    await expect(openProject("D:/projects/broken")).rejects.toThrow(
       "db is corrupt",
     );
 
@@ -205,10 +205,10 @@ describe("openProject", () => {
 describe("closeProject", () => {
   it("resets the workspace so nothing still reads the closed project's categories", async () => {
     h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
-    await useProjectStore.getState().openProject("D:/projects/module");
+    await openProject("D:/projects/module");
     expect(activePackIds()).toEqual(["ttrpg"]);
 
-    await useProjectStore.getState().closeProject();
+    await closeProject();
 
     expect(activePackIds()).toEqual(["novel"]);
     expect(useProjectStore.getState().projectPath).toBeNull();
@@ -217,7 +217,7 @@ describe("closeProject", () => {
 
 describe("setPacks", () => {
   beforeEach(async () => {
-    await useProjectStore.getState().openProject("D:/projects/book");
+    await openProject("D:/projects/book");
     h.calls.length = 0;
     vi.clearAllMocks();
   });
@@ -290,7 +290,7 @@ describe("setPacks", () => {
   });
 
   it("refuses to change packs with no project open", async () => {
-    await useProjectStore.getState().closeProject();
+    await closeProject();
     await expect(useProjectStore.getState().setPacks(["ttrpg"])).rejects.toThrow(
       /Open a project/,
     );
@@ -300,7 +300,7 @@ describe("setPacks", () => {
 
 describe("setCustomCategories", () => {
   beforeEach(async () => {
-    await useProjectStore.getState().openProject("D:/projects/book");
+    await openProject("D:/projects/book");
     h.calls.length = 0;
     vi.clearAllMocks();
   });

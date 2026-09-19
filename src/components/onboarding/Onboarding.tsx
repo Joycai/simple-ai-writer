@@ -4,6 +4,7 @@ import { Key, ArrowRight, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { openProject } from "../../stores/projectLifecycle";
 import { BUILTIN_PROFILES, NOVEL_PROFILE, profileLabel } from "../../lib/profile";
 import { MOD_KEY, MOD_K } from "../../lib/platform";
 import { readPref, writePref } from "../../lib/prefs";
@@ -41,7 +42,6 @@ export function Onboarding() {
   const isZh = i18n.language === "zh-CN";
   const { showOnboarding, setShowOnboarding } = useAppStore();
   const { providers, addProvider } = useAiStore();
-  const { openProject } = useProjectStore();
 
   const [step, setStep] = useState(1);
   // First-run curtain call — not a dismissible-by-backdrop modal, but the

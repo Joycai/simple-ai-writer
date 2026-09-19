@@ -18,6 +18,7 @@ import { baseName } from "../../lib/paths";
 import { comboLabel, matchesCombo } from "../../lib/shortcuts";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { closeProject, openProject } from "../../stores/projectLifecycle";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./Sidebar.module.css";
 
@@ -27,8 +28,6 @@ const CLOSE_COMBO = { mod: true, shift: true, key: "w" } as const;
 export function ProjectRow() {
   const { t } = useTranslation();
   const projectPath = useProjectStore((s) => s.projectPath);
-  const openProject = useProjectStore((s) => s.openProject);
-  const closeProject = useProjectStore((s) => s.closeProject);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
