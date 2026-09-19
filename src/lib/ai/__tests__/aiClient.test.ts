@@ -2870,6 +2870,17 @@ describe("streamCompletion — top_p / frequency_penalty", () => {
     expect(cfg?.topP).toBeUndefined();
     expect(calls[0].body.top_p).toBeUndefined();
   });
+
+  it("sends a task's maxTokens as max_tokens, and never the model's maxOutput", async () => {
+    const capped = await collect({ chunks: [`data: [DONE]\n`], maxOutput: 8192 });
+    expect(capped.calls[0].body).not.toHaveProperty("max_tokens");
+    const calls = mockFetch([`data: [DONE]\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai", modelId: "m",
+      messages: [{ role: "user", content: "hi" }], maxOutput: 8192, maxTokens: 1600, onChunk: () => {},
+    });
+    expect(calls[0].body.max_tokens).toBe(1600);
+  });
 });
 
 /**

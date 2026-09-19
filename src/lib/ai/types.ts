@@ -513,6 +513,19 @@ export interface StreamOptions {
    */
   frequencyPenalty?: number;
   /**
+   * This request's own output cap, sent as `max_tokens`, or absent to send
+   * nothing. **OpenAI wire only**, same as `topP` — the Anthropic path already
+   * sends `maxOutput` as its required `max_tokens`.
+   *
+   * Not `ConnOptions.maxOutput`: that one is the model's cap, planning-only on
+   * this wire because a volunteered `max_tokens` is refused by OpenAI's own
+   * reasoning models. This is the task's: the translation engine sizes it per
+   * chunk so that a degenerate chunk stops there and reads as truncated
+   * (docs/feature/translate/01-execution-plan.md invariant 4) instead of
+   * running to the server's own limit.
+   */
+  maxTokens?: number;
+  /**
    * How hard the model should think, in this app's own vocabulary. Translated
    * per protocol family by `lib/ai/reasoning.ts`; absent (and `"default"`) sends
    * nothing at all, leaving the endpoint's own default alone.

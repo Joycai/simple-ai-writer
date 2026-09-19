@@ -90,6 +90,10 @@ async function requestOnce(
     // 覆盖模型行上的配置：这三个值属于这个**格式**，不属于作者对某个端点的偏好。
     ...SAKURA_SAMPLING,
     frequencyPenalty: freq,
+    // 两处都要：`maxTokens` 是真正发出去的 ① 族 `max_tokens`（模型行的 maxOutput
+    // 在 ① 上只用于规划、从不发出）；`maxOutput` 留给 ④ 族，它把这个值当必填的
+    // max_tokens。没有上限，退化的块会一直生成到服务端自己的上限，截断判据形同虚设。
+    maxTokens: maxTokensFor(chunk.lines.length),
     maxOutput: maxTokensFor(chunk.lines.length),
     // 工具永远不传：见文件头第 1 条。服务端工具（联网搜索、代码解释器）同理——
     // 翻译只处理手头这块原文，没什么可查、可算的，带上只会多花钱。

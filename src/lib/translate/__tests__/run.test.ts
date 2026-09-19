@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * the document loop — which requests get made, with what frequency penalty, and
  * what lands in the file when one of them never comes good.
  */
-const calls: { freq?: number; maxOutput?: number; lineCount: number; messages: unknown[]; tools?: unknown; serverTools?: unknown }[] = [];
+const calls: { freq?: number; maxOutput?: number; maxTokens?: number; lineCount: number; messages: unknown[]; tools?: unknown; serverTools?: unknown }[] = [];
 type Reply = { text: string; truncated?: boolean; outputTokens?: number } | "abort";
 let script: Reply[] = [];
 
@@ -13,6 +13,7 @@ vi.mock("../../ai", () => ({
   streamCompletion: async (o: {
     frequencyPenalty?: number;
     maxOutput?: number;
+    maxTokens?: number;
     tools?: unknown;
     serverTools?: unknown;
     messages: { role: string; content: string }[];
@@ -23,6 +24,7 @@ vi.mock("../../ai", () => ({
     calls.push({
       freq: o.frequencyPenalty,
       maxOutput: o.maxOutput,
+      maxTokens: o.maxTokens,
       lineCount: src.split("\n").length,
       messages: o.messages,
       tools: o.tools,
@@ -134,6 +136,8 @@ describe("runChunk — 重试阶梯", () => {
     script = [{ text: zh(50) }];
     await runChunk(oneChunk(50), { conn: CONN });
     expect(calls[0].maxOutput).toBe(1600);
+    // The one the ① wire actually sends — maxOutput is planning-only there.
+    expect(calls[0].maxTokens).toBe(1600);
   });
 
   it("永远不带工具 —— 它没有工具调用可循环", async () => {

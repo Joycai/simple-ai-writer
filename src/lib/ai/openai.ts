@@ -122,6 +122,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // them is byte-identical to one from before they existed.
     ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
+    // A task's per-request cap (StreamOptions.maxTokens), never the model's
+    // maxOutput — see the field for why the two are kept apart.
+    ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
     ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
     // A standing permission the author granted this model, spelled the way
     // this wire wants it (enable_search / enable_code_interpreter — see
