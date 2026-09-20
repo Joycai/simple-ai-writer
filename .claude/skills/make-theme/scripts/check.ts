@@ -148,6 +148,24 @@ function checkUi(t: Parsed, r: Report): void {
   }
 }
 
+/**
+ * WebKit (the app's engine on macOS) cannot serialise a shorthand that holds a
+ * var() once a longhand of the same family follows it in the block: cssText
+ * comes back as `background-image: ; background-color: ; …` and the validator,
+ * which re-emits rules from cssText, installs the rule without it. Chrome
+ * serialises it fine, so the preview here will not show the loss.
+ */
+const NOT_LONGHANDS = /^border-(radius|collapse|spacing)$/;
+function lostShorthands(ds: [string, string][]): string[] {
+  const out: string[] = [];
+  ds.forEach(([name, value], i) => {
+    if (name.startsWith("--") || !/var\(/.test(value)) return;
+    const later = ds.slice(i + 1).find(([n]) => n.startsWith(`${name}-`) && !NOT_LONGHANDS.test(n));
+    if (later) out.push(`${name} (var) + ${later[0]}`);
+  });
+  return out;
+}
+
 const LITERAL_COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgb|rgba|hsl|hsla|oklch|oklab)\(/i;
 
 function checkMarkdown(t: Parsed, r: Report): void {
@@ -175,6 +193,9 @@ function checkMarkdown(t: Parsed, r: Report): void {
     }
     for (const sel of splitSelectors(head)) {
       if (!isMdSelector(sel)) r.errors.push(`selector outside the fence: "${sel}" — must start at .md-body and stay inside (no top-level + / ~)`);
+    }
+    for (const lost of lostShorthands(decls(b.body))) {
+      r.errors.push(`${head} { ${lost} } — WebKit drops a var() shorthand when a longhand of its family follows; write longhands only (background-image + background-size), or fold the longhand into the shorthand`);
     }
     for (const [n, v] of decls(b.body)) {
       if (n.startsWith("--")) own.add(n);

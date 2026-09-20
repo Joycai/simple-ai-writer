@@ -188,6 +188,9 @@ A typography theme is a stylesheet that **only touches the rendered document**. 
 | `@media` `@supports` `@container`（里面的规则守同一条围栏）、`@font-face`、`@keyframes` | 其它 at-rule：`@import` `@layer` `@page` … |
 | `url()` 相对路径或 `data:` / relative or `data:` | 远程、绝对路径、`..` 向上走的 `url()`<br>remote, absolute, or `..` paths |
 
+**一个引擎的坑 / One engine trap.** 带 `var()` 的简写后面别再跟同族的长写（`background: linear-gradient(var(--a), …)` 之后的 `background-size`，`border` 之后的 `border-left`，`font` 之后的 `font-size`）：macOS 上的 WebKit 序列化不回这条简写，它会整条丢掉，卡片上记为「简写没装上」。全写成长写（`background-image` + `background-size`）就没事。
+A `var()` shorthand must not be followed by a longhand of its family (`background-size` after `background: linear-gradient(var(--a), …)`, `border-left` after `border`, `font-size` after `font`): WebKit on macOS cannot serialise the shorthand back and it is lost whole — the card lists it as a lost shorthand. Write longhands only (`background-image` + `background-size`).
+
 外观主题的围栏更窄：它**不是样式表，是一组令牌**。
 An appearance theme's fence is narrower still: it **is not a stylesheet, it is a set of tokens**.
 

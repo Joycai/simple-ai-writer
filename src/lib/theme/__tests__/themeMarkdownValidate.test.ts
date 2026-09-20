@@ -194,6 +194,23 @@ describe("validateMarkdownRules", () => {
     expect(r.problems).toEqual([{ rule: 1, selector: ".md-body background-image", reason: REASON.mdUrl }]);
   });
 
+  it("says so when the engine lost a var() shorthand, and does not read the empty longhands as literal colours", () => {
+    // WebKit's serialisation of `background: linear-gradient(var(--a), var(--b)); background-size: 200% auto`.
+    const decls: Record<string, string> = { "background-image": "", "background-color": "", "background-size": "200% auto", color: "var(--color-on-accent)" };
+    const engineStyle: RuleLike["style"] = {
+      get length() { return Object.keys(decls).length; },
+      item: (i) => Object.keys(decls)[i],
+      getPropertyValue: (n) => decls[n] ?? "",
+      getPropertyPriority: () => "",
+      removeProperty: (n) => { const v = decls[n]; delete decls[n]; return v; },
+      get cssText() { return "background-image: ; background-color: ; background-size: 200% auto; color: var(--color-on-accent);"; },
+    };
+    const r = validateMarkdownRules([{ type: 1, selectorText: ".md-body h2", style: engineStyle }]);
+    expect(r.css).toBe(`${P} .md-body h2 { background-size: 200% auto; color: var(--color-on-accent); }`);
+    expect(r.problems).toEqual([{ rule: 1, selector: ".md-body h2 background", reason: REASON.mdShorthandLost, params: { property: "background" } }]);
+    expect(r.ownColors).toBe(false);
+  });
+
   it("does not count a var()-based font or colour as the theme's own", () => {
     const r = validateMarkdownRules([rule(".md-body", { "--md-font-body": "var(--font-sans)", "--md-color-accent": "var(--color-amber)" })]);
     expect(r.ownFonts).toBe(false);
