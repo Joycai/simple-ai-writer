@@ -13,6 +13,8 @@
 > `lib/agent/approvalRouting.ts`（只是用法，规则不动）、`stores/composerStore.ts`。
 > 角色扮演一行不改，但它的并发模型（`roleplayStore` + `lib/roleplay/scheduler.ts`）是
 > 这份稿的蓝本，§4 逐条对照。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`agentStore.ts` 里的 `runChatJob` 与多会话辅助现位于 `stores/agent/chatJob.ts`，读侧选择器（`activeChat` · `chatStateOf` · `isChatBusy` …）现位于 `stores/agent/selectors.ts`，`LiveChat` / `ChatTurn` 等类型现位于 `stores/agent/types.ts`。**只有后两者由 `agentStore` 整份重新导出**（组件的 import 一行没改）；`chatJob` 那半只转出 `buildResumeSeed` / `chatSurface` / `emptyChat` 三个名字，`runChatJob` 本身是模块私有的，要读它得直接打开 `chatJob.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 0. 一句话
 

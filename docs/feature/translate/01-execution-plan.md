@@ -2,6 +2,8 @@
 
 > 状态：`shipped`（Beta 开关后）· 四个开放问题已由作者拍板 · **四片全部完成**
 > 前置阅读：[`00-sakura-feasibility.html`](00-sakura-feasibility.html)（可行性分析 + 实机实测记录，浏览器打开）
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`subagent.ts` 的 `SUBAGENT_KINDS` · `DelegateKind` · `subAgentModel` 现位于 `lib/agent/subagentModel.ts`（老路径不转出它们）；`registry.ts` 的 `translate` 工具条目现位于 `toolTable/subRuns.ts`，`ToolId` 等类型现位于 `toolTypes.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 分析文档回答"能不能做、落在哪"，这一份回答"按什么顺序做、每片交付什么、怎么算做完"。
 

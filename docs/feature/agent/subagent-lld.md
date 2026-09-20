@@ -4,6 +4,8 @@
 > **关联 High-Level Design**：[`docs/feature/agent/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](../../api/anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。搬了家的是文件、不是设计：`subagent.ts` 只剩 `executeDelegate`，`SUB_PRESETS` · `searchReadsPages` · `chainCanSeeImages` · `MAX_PDF_FILES` / `MAX_PDF_BYTES` 等纯查询现位于 `lib/agent/subagentModel.ts`（老路径不转出它们，照本文去找会扑空）；§8 的目录树同理。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ---
 

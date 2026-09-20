@@ -3,6 +3,8 @@
 > **状态**：`shipped` `unverified`（PR-1 + PR-2 + PR-3，一次落地）。§3 的触发时机在实现中改过一次，原因与原方案错在哪里记在 §3.1；**实机从未验证**，见 §9 末尾。
 > **范围**：**只有对话助手**（AiDrawer chat 模式 / `components/ai/AgentChat.tsx`）。角色扮演与 AiPanel 写作任务**明确不在第一期**，理由见 §7。
 > **关联**：[`subagent-plan.md`](subagent-plan.md)（§5 的边界条款在这里被**绕开而不是推翻**，见 §5.5）、[`subagent-lld.md`](subagent-lld.md)（任务工作区就是本设计的交接地基）、[`unified-agent-plan.md`](unified-agent-plan.md)（`finishPolicy` 是本设计唯一的新缝）
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`subagent.ts` 里的 `SubAgentKind` · `DELEGATE_KINDS` · `subAgentModel` 现位于 `lib/agent/subagentModel.ts`（老路径不转出它们）；`registry.ts` 引的工具描述现位于 `lib/agent/toolTable/` 对应片段，提案类型现位于 `toolTypes.ts`（`registry.ts` 仍转出类型）。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ---
 

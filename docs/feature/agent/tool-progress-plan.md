@@ -3,6 +3,8 @@
 > Status: `shipped` — 清点定下的五片全部并入：§2.0 / §2.2 A / §3.1（[#420](https://github.com/Joycai/simple-ai-writer/pull/420)）、§2.1（[#421](https://github.com/Joycai/simple-ai-writer/pull/421)）、§2.2 B（[#424](https://github.com/Joycai/simple-ai-writer/pull/424)）、§2.3 生图那一半（[#425](https://github.com/Joycai/simple-ai-writer/pull/425)）。**故意没做**的两处写在 §2.3 末尾和 §4。
 >
 > 起因：作者实机反馈「跑整文件翻译时等的心里没底」，随后要求对**所有长/大文件操作**（html / md / txt）做同一件事的清点。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`agentStore.applyProposal`（导出与生图真正干活的地方）现位于 `lib/agent/proposalApply.ts`——`agentStore` 只组装它的依赖，并仍在 `settleApproval` 里调用它，`onApplyProgress` 那条缝原样保留。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 0. 一句话结论
 

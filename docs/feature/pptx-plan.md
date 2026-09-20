@@ -2,6 +2,8 @@
 
 > 状态：**读取端一期 + 二期已实施**（PR #223）。**生成端已实施，作为 Settings → AI 配置 → 实验室 里的 Beta 开关**（§4）。
 > 背景：作者需要 AI 助手能读演示文稿（招标材料、路演稿、培训课件常以 .pptx 交付），并且要能处理几百页的大文件。生成是另一件事，成本和风险高一个量级，所以拆开做、拆开记。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `read_slides` 条目现位于 `lib/agent/toolTable/read.ts`、`export_pptx` 现位于 `toolTable/exports.ts`；`subagent.ts` 的 `longread` 档现位于 `lib/agent/subagentModel.ts` 的 `SUB_PRESETS`。完整对照见 [`code-structure-plan.md`](code-structure-plan.md) §9。
 
 ## 1. 现状盘点（规划前逐项核实）
 

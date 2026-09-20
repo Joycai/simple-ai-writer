@@ -6,6 +6,8 @@
 >
 > 前置阅读：[lore-facet-plan.md](lore-facet-plan.md)（特征的激活模型）、
 > [lore-collection-plan.md](lore-collection-plan.md)（取材范围围栏为什么只挡自动发现）。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。§1.1 表里「对话首轮 / 后续轮」那两行记的 `stores/agentStore.ts`，以及紧接着说「`extraMatchText` 全仓只有 `agentStore` 传」的那个调用点，现位于 `stores/agent/chatJob.ts`（`aiTaskStore` 一侧没动）；§8 里 PR-C 那行点的 `lib/agent/subagent.ts` 现位于 `lib/agent/subagentModel.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ---
 

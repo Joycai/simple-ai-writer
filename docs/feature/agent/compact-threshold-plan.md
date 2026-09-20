@@ -3,6 +3,8 @@
 > 状态：`shipped`（2026-09-02，PR #456）。设计稿已回（`02e 归纳阈值 Compaction.dc.html`——任务书里叫 19，19 号已被「模型编辑」占用），PR 2（语义 + 管线 + 扮演页手动归纳）与 PR 3（滑块组件 + 条的关闭态）合在同一个 PR 里落地。设计稿的决定与实现出入记在文末 §C。
 >
 > 这份文件分两半：`---` 以后到 §B 之前是**自包含的**，可以整段复制丢给 Claude Design，不需要它读代码库。§B 是给实现者的计划，设计稿回来后对照它逐条落地。压缩机制本身的设计在 [chat-memory-plan.md](chat-memory-plan.md)（§4 触发、§6 常量、§10 手动归纳）；这份文件只改「什么时候触发」和「谁来触发」。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。自动归纳的触发（`autoCompact` 判断与 `compactTriggerFor`）现位于 `stores/agent/chatJob.ts`——`sendChat` / `sendChatTo` 仍在 `agentStore.ts`，只是把活交了出去。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ---
 

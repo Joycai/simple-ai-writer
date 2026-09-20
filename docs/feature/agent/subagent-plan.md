@@ -4,6 +4,8 @@
 > 落地细节与验收标准见 [`subagent-lld.md`](subagent-lld.md)。
 > 已实现的 agent 体系见 [`unified-agent-plan.md`](unified-agent-plan.md)，
 > 对话侧的上下文折叠见 [`chat-memory-plan.md`](chat-memory-plan.md)。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。§3.3 标题里的 `lib/agent/subagent.ts` 今天只剩 `executeDelegate`——种类（`SubAgentKind` / `DelegateKind`）、绑定与连接解析全部现位于 `lib/agent/subagentModel.ts`，老路径不转出它们；§3.1 那四个任务工具「注册进 `registry.ts`」现位于 `toolTable/scratchpad.ts`（`registry.ts` 只转出类型，工具定义字面量不在那里了）。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 0. 问题从哪来
 
