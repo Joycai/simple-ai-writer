@@ -252,3 +252,29 @@ grep -oE 'import\("\./[a-zA-Z]+Store"\)' src/stores/*.ts | cut -d: -f1 | sort | 
 ```
 
 权威数字以 `src/lib/__tests__/layering.test.ts` 为准——它去掉注释再解析。
+
+## 9. 位置对照（整改前 → 整改后）
+
+P1–P7 只搬文件、不改行为，但仓库里几十份**写在整改之前**的设计文档留下了当时的文件名。
+它们是设计记录不是活文档（`docs/README.md` 的 `shipped`：保留的是「为什么不走另一条路」），
+**照着今天的代码重写会把记录改成假的**——那份方案当时确实是那么写的。所以这些文档不改正文，
+只在开头加一行「位置注记」，指回这张表。活文档（`reference/` 与 `api/`）反过来：
+直接改成今天的位置，那是 #653 做的事。
+
+判据是**打开那个文件还能不能找到它**：能（`writeTools.ts` 整份重新导出、`registry.ts`
+`export type *`）就只是多一跳；不能（`subagent.ts` 的纯查询、`agentStore` 的 `applyProposal`）
+才是真的找不到，注记里点名。
+
+| 整改前文档里写的位置 | 现位于 | 阶段 |
+|---|---|---|
+| `lib/agent/subagent.ts` 的纯查询：`SubAgentKind` · `SUBAGENT_KINDS` · `DELEGATE_KINDS` · `SUB_PRESETS`（含 `longread` 档） · `subAgentModel` · `searchReadsPages` · `visionSubAgentModel` · `withSessionOverrides` · `chainCanSeeImages` · `MAX_PDF_BYTES` / `MAX_PDF_FILES` | `lib/agent/subagentModel.ts`。**`subagent.ts` 不转出它们**，按老路径去找会扑空 | P1 |
+| `lib/agent/subagent.ts` 的 `executeDelegate` | 原地不动——它是唯一可以 import `runtime` 的那一半 | P1 |
+| `lib/agent/registry.ts` 的类型：`Proposal` 家族 · `ToolContext` · `RegisteredTool` · `ToolId` · `ToolGroup` | `lib/agent/toolTypes.ts`。`registry.ts` 有 `export type * from "./toolTypes"`，老 import 照样编译 | P6 |
+| `lib/agent/registry.ts` 的工具定义字面量 | `lib/agent/toolTable/` 的十个片段（按 `REGISTRY` 里的展开顺序：`read` · `lore` · `collectors` · `manuscript` · `exports` · `image` · `manuscriptDelete` · `scratchpad` · `roleplay` · `subRuns`，共用件在 `shared`）。`registry.ts` 按原键序展开成 `REGISTRY`，线上字节不变 | P6 |
+| `lib/agent/writeTools.ts` 的处理器 | `lib/agent/write/` 的 `planGate` · `loreFiles` · `loreAssets` · `memory` · `manuscript`（共用件在 `shared`）。`writeTools.ts` 整份重新导出，老 import 照样编译 | P6 |
+| `stores/agentStore.ts` 的 `applyProposal` / `applyEdit` 一族 | `lib/agent/proposalApply.ts`。`agentStore` 只组装 `ProposalApplyDeps` 并在 `settleApproval` 里调用它 | P5 |
+| `stores/agentStore.ts` 的 `runChatJob`、多会话辅助、聊天简报、自动归纳的触发、`inputCeilingFor` 那一路取上限 | `stores/agent/chatJob.ts`（`sendChat` / `sendChatTo` 仍在 `agentStore`，只是把活交出去） | P5 |
+| `stores/agentStore.ts` 的读侧选择器与类型 | `stores/agent/selectors.ts` / `stores/agent/types.ts`；`agentStore` 重新导出，组件的 import 一行没改 | P5 |
+| `stores/editorStore.ts` 的 `closeDocument` 与 `WritingFocus` 一族 | `stores/openDocument.ts`（它在 `editorStore` 与 `projectStore` 之上） | P4 |
+| 开 / 关项目直接调 `stores/projectStore.ts` | 入口是 `stores/projectLifecycle.ts`；聊天那两步作为必填钩子传进 `projectStore` | P4 |
+| 工具要读 AI 设置 / 要起嵌套运行，于是 `lib/agent` 反向 import store | 走 `ToolContext` 的注入口：`appState`（`stores/toolAppState.ts`）与 `subRun` | P2 / P3 |

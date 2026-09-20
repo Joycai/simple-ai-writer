@@ -12,6 +12,8 @@
 > **2026-09-17 重开 5b**，以 `search_tools` 的形态落地（`file_ops` / `image` 两组，
 > 模型按需装载）：重开的理由、与原设计的三处不同、实测，见 §6.1。
 > §7 的结论已并进 `CLAUDE.md`。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。§1.3 的表里记在 `stores/agentStore.ts` 名下的那两行——`inputCeilingFor(model.contextSize, util)` 与压缩触发——现位于 `stores/agent/chatJob.ts`，「必须和同一个数对齐」这条约束不变。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 0. 定下来的取舍
 

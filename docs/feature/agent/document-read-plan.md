@@ -1,6 +1,8 @@
 # Agent 直读 Office / PDF 文档（`read_document` + 转换缓存）
 
 > **Status: `shipped` `unverified`** — 2026-09-03 起草并同日实现（读的一半 PR #463 已合并；写的一半 `convert_document` 随后补上，见 §10；两半都未真机验证——见 §9）。读的一半**不含 UI 变动**：新增的只有一个 agent 只读工具、一层落在 `.ai-writer/tmp/` 下的转换缓存，以及执行日志里一条工具标签字符串（§5.3）。写的一半是一张新审批卡（D11 预告的那个 UI），照 `export_xlsx` 的形状做。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`subagent.ts` 的 `longread` 档现位于 `lib/agent/subagentModel.ts` 的 `SUB_PRESETS`；`registry.ts` 的 `read_document` 条目现位于 `toolTable/read.ts`、`convert_document` 现位于 `toolTable/exports.ts`；`agentStore.applyProposal` 的 `convert` 分支现位于 `lib/agent/proposalApply.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 1. 背景与现状
 

@@ -3,6 +3,8 @@
 > 状态：`shipped`（Beta 开关后）· PR 1–3 合在 [#514](https://github.com/Joycai/simple-ai-writer/pull/514) 的三次提交里（地基 / 工具与审批卡 + 设置三处 / 文件树入口）· PR 4（热词）未做 · 前置阅读：[`00-research.md`](00-research.md)（协议事实 + 实测记录）· UI 任务书与实现出入：[`02-ui-brief.md`](02-ui-brief.md)
 >
 > 研究稿回答"能不能做、落在哪"，这一份回答"按什么顺序做、每片交付什么、怎么算做完"。
+>
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`subagent.ts` 的 `SubAgentKind` / `SUBAGENT_KINDS` / `subAgentModel` 现位于 `lib/agent/subagentModel.ts`（老路径不转出它们）；`transcribe_audio` 的工具条目现位于 `toolTable/exports.ts`，§5 说的「`agentStore` apply」现位于 `lib/agent/proposalApply.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ---
 
