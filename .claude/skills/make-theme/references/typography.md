@@ -164,6 +164,30 @@ author.
 - Pseudo-element `content` strings, gradients, `box-shadow`, `transform`,
   `:hover` are all fine — it is a real stylesheet inside the fence.
 
+## The one engine trap: a `var()` shorthand followed by its longhand
+
+The app runs on WebKit (macOS) and installs a theme by re-serialising each
+rule from the CSSOM. WebKit cannot serialise a shorthand that contains `var()`
+once a longhand of the same family follows it in the block:
+
+```css
+.md-body h2 {
+  background: linear-gradient(110deg, var(--a), var(--b));  /* ← lost */
+  background-size: 200% auto;
+}
+```
+
+comes back as `background-image: ; background-color: ; …` — the ground is gone,
+and a pill heading becomes reversed text on bare paper. The same happens with
+`border` + `border-left`, `margin` + `margin-top`, `font` + `font-size`. Write
+the longhands (`background-image` + `background-size`), or fold everything into
+the one shorthand. Longhand-then-shorthand, and `border` + `border-radius`
+(not the same family), are fine.
+
+**The preview cannot show this** — the browser pane is Chromium, which
+serialises it correctly. `check-theme.mjs` flags it as `✗`; the app reports it
+on the theme's card as `mdShorthandLost`.
+
 ## Checking the dark render
 
 `check-theme.mjs --preview` renders the file over a light *and* a dark

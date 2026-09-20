@@ -101,6 +101,7 @@ export const REASON = {
   mdRoot: "mdRoot",
   mdAtRule: "mdAtRule",
   mdUrl: "mdUrl",
+  mdShorthandLost: "mdShorthandLost",
 } as const satisfies Record<string, ThemeReasonCode>;
 
 // ─── The metadata pre-pass ───────────────────────────────────────────────────
@@ -367,7 +368,9 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
         continue;
       }
       for (const u of urls) if (!/^data:/i.test(u)) assets.add(u);
-      const literal = !/var\(/.test(value);
+      // A longhand of a var()-holding shorthand enumerates with an empty value
+      // (pending substitution) — that is not a literal, it is not a value at all.
+      const literal = value !== "" && !/var\(/.test(value);
       if (literal && FONT_PROPS.test(name)) ownFonts = true;
       if (literal && COLOR_PROPS.test(name)) ownColors = true;
       const priority = style.getPropertyPriority?.(name);
@@ -376,9 +379,31 @@ export function validateMarkdownRules(rules: ArrayLike<RuleLike>): MarkdownTheme
     if (!kept.length) return "";
     if (style.removeProperty && typeof style.cssText === "string") {
       for (const name of dropped) style.removeProperty(name);
-      return style.cssText.trim();
+      return withoutLostShorthands(style.cssText.trim(), selector, n);
     }
     return kept.join(" ");
+  };
+
+  /**
+   * WebKit cannot serialise a shorthand that holds a `var()` once a longhand
+   * of the same family follows it in the block (a gradient `background` built
+   * from tokens, then `background-size: 200%`): `cssText` comes back as
+   * `background-image: ; background-color: ; …` and `getPropertyValue` of the
+   * shorthand is empty too, so the declaration is gone before this walker
+   * sees it (measured on WebKit 2026-09; Blink serialises it whole). The empty
+   * declarations are invalid and would be dropped on install anyway — what
+   * matters is that the loss is **said**: a pill heading that lost its ground
+   * is reversed text on paper, and nothing on the card explained why.
+   */
+  const withoutLostShorthands = (cssText: string, selector: string, n: number): string => {
+    const lost = [...cssText.matchAll(/(?:^|;)\s*([\w-]+):\s*(?=;)/g)].map((m) => m[1]);
+    if (!lost.length) return cssText;
+    for (const family of new Set(lost.map((name) => name.split("-")[0]))) {
+      problems.push({ rule: n, selector: `${selector} ${family}`, reason: REASON.mdShorthandLost, params: { property: family } });
+    }
+    // Remove the empty declarations together with their own `;` — never split
+    // the block on `;`, a `data:` url carries one.
+    return cssText.replace(/(?<=^|;)\s*[\w-]+:\s*;/g, "").trim();
   };
 
   const walk = (list: ArrayLike<RuleLike>, topLevel: boolean, parentN: number): string[] => {

@@ -129,7 +129,12 @@
   padding: 0.26em 0.7em;
   border-radius: 9px;
   color: var(--color-on-accent);
-  background: linear-gradient(
+  /* background-image，不写 background 简写：带 var() 的简写后面再跟一条
+     background-size，WebKit 序列化不回来，整块底就丢了，只剩反白字。
+     background-image, not the shorthand: WebKit cannot serialise a var()
+     shorthand once background-size follows it — the ground is lost and the
+     reversed text is left on bare paper. */
+  background-image: linear-gradient(
     110deg,
     var(--color-accent-hover),
     var(--md-color-accent) 55%,
