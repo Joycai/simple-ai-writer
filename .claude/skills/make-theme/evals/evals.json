@@ -1,0 +1,26 @@
+{
+  "skill_name": "make-theme",
+  "evals": [
+    {
+      "id": 1,
+      "name": "nord-appearance-pair",
+      "prompt": "给我做一套 Nord 配色的外观主题，浅色深色都要，我自己用，不进仓库。强调色用 Nord 的 frost 蓝。",
+      "expected_output": "两份外观主题 css（light / dark 各一），各写满 41 个核心令牌，强调色与正文对比度过线，能被应用原样接受",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "typora-lapis-port",
+      "prompt": "把 Typora 的 lapis 主题（https://github.com/YiNNx/typora-theme-lapis）搬到我们这个应用里来，我想在预览和导出里用它那种标题和引用的样子。先自己用，不进仓库。",
+      "expected_output": "一份不写死颜色、围栏内的排版主题，加上承载 lapis 配色的外观主题；出处与许可写在文件头",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "gongwen-typography-from-description",
+      "prompt": "我有个写标书的项目，想要一套公文味的 markdown 排版：篇名居中加粗，正文首行缩进两字、行距宽一点，二级标题前面自动编「一、二、三、」，三级标题「（一）（二）」，表格用三线表，引用块别用斜体、做成浅底的说明框。深色模式下也要能看。只给那个项目用。",
+      "expected_output": "一份 --theme-kind: markdown 的排版主题，CSS 计数器做中文编号，全部颜色走令牌，明暗两档都可读，并说明放进项目的 .ai-writer/themes/",
+      "files": []
+    }
+  ]
+}
