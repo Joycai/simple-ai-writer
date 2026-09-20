@@ -5,7 +5,7 @@
 > 尺子沿用 [`edit-loop-plan.md`](edit-loop-plan.md) §1：**贵的是轮数，不是正文；省一轮 ≈ 15k+ token**。五期按收益排序，每期独立可交付，单人顺序执行。
 > 相关：[`edit-loop-plan.md`](edit-loop-plan.md)（行号契约 / 回执 / `write` 档，本文全部机制的地基）、[`agent-tool-context-lld.md`](agent-tool-context-lld.md) §5（新工具入驻的成本纪律）
 >
-> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `InsertProposal` 现位于 `lib/agent/toolTypes.ts`；`writeTools.ts` 的 `insertLinesTool` 现位于 `lib/agent/write/manuscript.ts`（工具定义在 `toolTable/manuscript.ts`，两个老文件都整份转出）；`agentStore.applyProposal` 的 `applyInsert` 现位于 `lib/agent/proposalApply.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `InsertProposal` 现位于 `lib/agent/toolTypes.ts`；`writeTools.ts` 的 `insertLinesTool` 现位于 `lib/agent/write/manuscript.ts`——`writeTools.ts` 整份转出处理器，老 import 照样编译；工具定义字面量则在 `toolTable/manuscript.ts`，`registry.ts` **只转出类型不转出定义**（`REGISTRY` 是模块私有的），按老路径去找那段字面量会扑空；`agentStore.applyProposal` 的 `applyInsert` 现位于 `lib/agent/proposalApply.ts`。完整对照见 [`code-structure-plan.md`](../code-structure-plan.md) §9。
 
 ## 0. 不变量（在 edit-loop-plan 的 I1–I4 之上）
 

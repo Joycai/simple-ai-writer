@@ -14,7 +14,7 @@
 > [`lore/lore-collection-plan.md`](lore/lore-collection-plan.md)（围栏只挡自动发现）、
 > [`lore/lore-retrieval-plan.md`](lore/lore-retrieval-plan.md) §5（检索子代理把作者的话展开成知识库词）。
 >
-> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。`registry.ts` 的 `ToolContext.review?: ReviewSink` 现位于 `lib/agent/toolTypes.ts`（`registry.ts` 仍转出类型），两个收集器的工具条目现位于 `toolTable/collectors.ts`。完整对照见 [`code-structure-plan.md`](code-structure-plan.md) §9。
+> **位置注记（2026-09-20）**：本文写于源码结构整改（#643–#652）之前，代码位置按当时的文件名写。§6.2 与 §12 写的 `ToolContext.review` / `ToolContext.review?: ReviewSink` 落地时改叫 **`reviewSink?`**（这一处不是搬家，是方案与实现的出入），字段现位于 `lib/agent/toolTypes.ts`（`registry.ts` 仍转出类型），`ReviewSink` 这个类型本身一直在 `lib/consistency/reviewTools.ts`；`report_issue` / `report_pass` 两个收集器的工具条目现位于 `toolTable/collectors.ts`。完整对照见 [`code-structure-plan.md`](code-structure-plan.md) §9。
 
 ---
 
