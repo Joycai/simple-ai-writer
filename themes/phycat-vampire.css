@@ -1,0 +1,108 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   物理猫 · 吸血鬼 — 外观主题 / Phycat · Vampire — an appearance theme
+
+   配色取自 Typora 主题 Phycat（物理猫 · sumruler/typora-theme-phycat · MIT）
+   暗色系的「Vampire」。色相是原主题的，明度台阶是本应用内置的（夜 Night / 墨 Ink），
+   强调色则一路压到在自己的底上 4.5:1 才收手——它同时当 1px 细线、
+   填色按钮和焦点环用，浅一点就有一样东西看不清。
+   The hues are the Phycat Typora theme's (MIT); the lightness ramp is this
+   app's own built-ins'; and the accent is pushed until it clears 4.5:1 on
+   its own ground, because it doubles as a hairline, a filled button and the
+   focus ring — one step lighter and one of the three stops reading.
+
+   配套的排版主题 / the typography theme that goes with it:
+   phycat-neon.css — 灯带与光影 / neon strips and glow
+
+   怎么用 / How to use
+     1. 设置 → 通用 → 外观 → 「打开主题文件夹」，把这个文件放进去。
+        Settings → General → Appearance → "Open themes folder", drop it in.
+        外观主题只能装在这里；项目的 .ai-writer/themes/ 只收排版主题。
+        Appearance themes install here only; a project's .ai-writer/themes/
+        takes typography themes.
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「外观主题」里选中它——它排在「深色时」那一档。
+        Pick it under "Appearance themes", in the "When dark" band.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（phycat-vampire.css → phycat-vampire）。复制一份改个名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 只有下面这 41 个核心令牌要写，其余两百多个界面颜色应用自己按公式推；
+       所以改一个 --color-sienna，整个应用的强调色都跟着走。
+       Only the 41 core tokens below need writing — the app derives the other
+       two hundred-odd from them, so moving --color-sienna moves the accent
+       everywhere at once.
+     · 写别的（别的选择器、普通 CSS 属性、@media）会被逐条丢弃并在设置卡片上
+       列出原因，文件本身永远不会被改写。
+       Anything else (other selectors, plain properties, @media) is dropped
+       rule by rule and listed on the settings card with a reason; the file on
+       disk is never rewritten.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 物理猫 · 吸血鬼; /* 网格里显示的名字 / the name the grid shows */
+  --theme-kind: ui;              /* 外观主题，不是排版主题 / an appearance theme, not a typography one */
+  --theme-scheme: dark;          /* 归哪一档 · 必填 / which band it belongs to; required */
+  --theme-extends: night;        /* 同一档的内置基底 / the same-polarity built-in */
+  --theme-version: 1;
+  --theme-author: Phycat (sumruler) · simple-ai-writer;
+}
+
+/* ── 令牌 / Tokens ───────────────────────────────────────────────────────── */
+:root {
+  /* 底 / Grounds */
+  --color-bg-base:            #282A36;
+  --color-bg-surface:         #21232E;
+  --color-bg-elevated:        #343644;
+  --color-bg-hover:           #3E4151;
+  --color-bg-tinted:          #343644;   /* ＝浮起的一层 / = the elevated ground */
+  --color-bg-overlay:         rgba(0, 0, 0, 0.55);
+
+  /* 文字 / Text */
+  --color-text-primary:       #F8F8F2;
+  --color-text-secondary:     #CCCCC7;
+  --color-text-muted:         #A6A6A0;
+  --color-text-faint:         #65655F;
+  --color-text-ghost:         #454541;
+
+  /* 强调 / Accent */
+  --color-sienna:             #FF5555;   /* 唯一强调色：1px 线、填底、焦点环三用 / the one accent: rules, fills, focus ring */
+  --color-sienna-hover:       #FF8982;
+  --color-amber:              #BD93F9;   /* 第二色：强线、标签、渐变的另一端 / the companion: strong rules, tags, the other end of a gradient */
+  --color-amber-soft:         rgba(189, 147, 249, 0.28);
+
+  /* 线 / Rules */
+  --color-border:             #30323E;
+  --color-border-soft:        #30323E;
+  --color-border-strong:      #65655F;   /* ＝第二色 / = the companion */
+
+  /* 状态 / Status */
+  --color-success:            #8CB57E;
+  --color-warning:            #C9A45A;
+  --color-error:              #D4756B;
+
+  /* 模型能力标签 / Model-type tags */
+  --color-type-text-bg:       rgba(192, 197, 131, 0.18);
+  --color-type-text-fg:       #C0C583;
+  --color-type-multimodal-bg: rgba(237, 176, 139, 0.18);
+  --color-type-multimodal-fg: #EDB08B;
+  --color-type-image-bg:      rgba(221, 172, 223, 0.18);
+  --color-type-image-fg:      #DDACDF;
+  --color-type-video-bg:      rgba(143, 198, 245, 0.18);
+  --color-type-video-fg:      #8FC6F5;
+  --color-type-vision-bg:     rgba(153, 207, 159, 0.18);
+  --color-type-vision-fg:     #99CF9F;
+  --color-type-asr-bg:        rgba(241, 168, 180, 0.18);
+  --color-type-asr-fg:        #F1A8B4;
+
+  /* 投影与毛玻璃 / Elevation and glass */
+  --shadow-sm:                0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md:                0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-lg:                0 8px 32px rgba(0, 0, 0, 0.50);
+  --shadow-xl:                0 16px 56px rgba(0, 0, 0, 0.60);
+  --shadow-drawer:            -28px 0 56px rgba(0, 0, 0, 0.55);
+  --glass-bg:                 rgba(33, 35, 46, 0.8);
+  --glass-bg-strong:          rgba(33, 35, 46, 0.62);
+  --glass-border:             1px solid rgba(255, 85, 85, 0.1);
+}

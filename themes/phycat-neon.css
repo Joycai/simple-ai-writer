@@ -1,0 +1,289 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   物理猫 · 灯带 — 排版主题 / Phycat · Neon — a typography theme
+
+   Typora 主题 Phycat（物理猫 · sumruler/typora-theme-phycat · MIT）暗色系的
+   排版语言：不画框，用线和光——标题旁边一条会发光的灯带，引文是一块压在底
+   上的玻璃，代码块只留一道边光，分隔线从中间亮到两头暗。
+   The typography language of the Phycat Typora theme's neon series (MIT): no
+   boxes, just lines and light — a glowing strip beside each heading, quotes
+   as a pane of glass over the ground, a code block lit along one edge, and a
+   rule that fades out at both ends.
+
+   **配深色外观主题用。** 这里一个颜色都没有写死，全部读 var(--color-*)，
+   也就是跟着当前外观主题走；但「发光」这件事只在暗底上成立，配浅色主题会
+   变成一层脏灰。暗色系请选同目录的 phycat-vampire / -radiation / -abyss，
+   或内置的「夜」「墨」「靛」。亮色系请改用 phycat.css。
+   **Pair it with a dark appearance theme.** Nothing here is a literal colour —
+   every value follows the appearance theme in force — but glow only reads as
+   glow on a dark ground; over a light one it turns into grime. Take
+   phycat-vampire / -radiation / -abyss beside it, or a built-in dark theme.
+   For the light series use phycat.css instead.
+
+   怎么用 / How to use
+     1. 把这个文件放进主题文件夹：设置 → 通用 → 外观 → 「打开主题文件夹」；
+        或放进某个项目的 .ai-writer/themes/（只对那个项目生效，随仓库走）。
+        Drop the file in the themes folder (Settings → General → Appearance →
+        "Open themes folder"), or in a project's .ai-writer/themes/.
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「排版」一栏选中它。预览、知识库、导出的 HTML / PDF 一起换。
+        Pick it in the typography row. Preview, knowledge base and exported
+        HTML / PDF all follow.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（phycat-neon.css → phycat-neon）。复制改名即新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 光的强度是一个旋钮：--phycat-glow。不想要光就设成 0 0 0 transparent。
+       The glow is one knob: --phycat-glow. Set it to 0 0 0 transparent for none.
+     · 围栏：每条选择器都从 .md-body 开始，并且留在里面（不用 + / ~ 往外走）。
+       The fence: every selector starts at .md-body and stays inside.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 物理猫 · 灯带;  /* 网格里显示的名字 / the name the grid shows */
+  --theme-kind: markdown;       /* 排版主题 / a typography theme (not ui) */
+  --theme-extends: clean;       /* 没写到的旋钮从「素雅」取 / knobs left out come from Clean */
+  --theme-version: 1;
+  --theme-author: Phycat (sumruler) · simple-ai-writer;
+}
+
+/* ── 旋钮 / Knobs ────────────────────────────────────────────────────────── */
+.md-body {
+  --md-font-body: var(--font-sans);
+  --md-scale: 0.98;
+  --md-line: 1.88;
+  --md-para-gap: 1.2em;
+  --md-para-indent: 0;
+
+  --md-h-weight: 600;
+  --md-h-space-top: 1.9em;
+  --md-h-space-bottom: 0.75em;
+  --md-h1-size: 1.8em;
+  --md-h1-weight: 600;
+  --md-h1-align: center;
+  --md-h1-letter: 0.01em;
+  --md-h2-size: 1.34em;
+  --md-h3-size: 1.16em;
+  --md-h4-size: 1.04em;
+  --md-list-indent: 1.7em;
+
+  --md-quote-style: normal;
+  --md-quote-border: none;
+  --md-quote-bg: var(--glass-bg);
+  --md-hr-line: none;
+  --md-hr-mark: "";
+  --md-hr-height: 2px;
+
+  /* 这套主题自己的两个旋钮 / this theme's own two knobs */
+  --phycat-glow: 0 0 10px var(--color-accent-ring);  /* 光；不要就设 0 0 0 transparent
+                                                        the glow; 0 0 0 transparent = none */
+  --phycat-strip: 3px;  /* 灯带的粗细 / how thick a strip is */
+}
+
+/* ── 篇名：一条淡出的横线 / The title: a rule that fades out ─────────────── */
+.md-body h1 {
+  position: relative;
+  padding-bottom: 0.5em;
+  text-shadow: var(--phycat-glow);
+}
+.md-body h1::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--md-color-accent) 50%,
+    transparent
+  );
+}
+
+/* ── 二级标题：灯带 + 一层底光 / h2: a strip over a wash ─────────────────── */
+.md-body h2 {
+  position: relative;
+  padding: 0.2em 0 0.3em 0.75em;
+  background: radial-gradient(
+    ellipse at left bottom,
+    var(--color-accent-tint),
+    transparent 70%
+  );
+}
+.md-body h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  bottom: 0.12em;
+  width: var(--phycat-strip);
+  border-radius: 2px;
+  background: var(--md-color-accent);
+  box-shadow: var(--phycat-glow);
+}
+
+/* ── 三、四级标题 / h3, h4 ───────────────────────────────────────────────── */
+.md-body h3 {
+  color: var(--md-color-accent);
+}
+.md-body h3::before {
+  content: "▍";
+  margin-right: 0.35em;
+  color: var(--md-color-accent);
+  text-shadow: var(--phycat-glow);
+}
+.md-body h4::before {
+  content: "◈";
+  margin-right: 0.45em;
+  font-size: 0.8em;
+  color: var(--color-amber);
+}
+.md-body h5,
+.md-body h6 {
+  color: var(--color-amber);
+  font-weight: 600;
+}
+
+/* ── 引文：一块玻璃 / Quotes: a pane of glass ────────────────────────────── */
+.md-body blockquote {
+  position: relative;
+  padding: 0.95em 1.15em 0.95em 1.3em;
+  border: var(--glass-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.md-body blockquote::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--phycat-strip);
+  background: var(--md-color-accent);
+  box-shadow: var(--phycat-glow);
+}
+.md-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── 代码：沿一条边亮起来 / Code: lit along one edge ─────────────────────── */
+.md-body code {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--color-accent-tint);
+  border: 1px solid var(--color-accent-ring);
+}
+.md-body pre {
+  position: relative;
+  padding: 1em 1.15em;
+  border-radius: 10px;
+  border: var(--glass-border);
+  background: var(--color-bg-surface);
+  overflow: hidden;
+}
+.md-body pre::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--md-color-accent);
+  box-shadow: var(--phycat-glow);
+}
+.md-body pre code {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+/* ── 列表 / Lists ────────────────────────────────────────────────────────── */
+.md-body ul ul { list-style-type: circle; }
+.md-body ul ul ul { list-style-type: square; }
+.md-body ol ol { list-style-type: lower-alpha; }
+.md-body ol ol ol { list-style-type: lower-roman; }
+.md-body li::marker {
+  color: var(--md-color-accent);
+}
+
+/* ── 表格：只留横线 / Tables: horizontal rules only ──────────────────────── */
+.md-body table {
+  border-collapse: collapse;
+  border: none;
+}
+.md-body th,
+.md-body td {
+  border: none;
+  border-bottom: 1px solid var(--md-color-border);
+  padding: 8px 12px;
+}
+.md-body th {
+  background: none;
+  color: var(--md-color-accent);
+  border-bottom: 2px solid var(--md-color-accent);
+  white-space: nowrap;
+}
+.md-body tbody tr:last-child td { border-bottom: none; }
+
+/* ── 分隔线、图、链接、着重 / Rules, images, links, emphasis ─────────────── */
+/* 分隔线不是边框而是一条渐变，才能两头淡出去。
+   The rule is a gradient, not a border — a border cannot fade at its ends. */
+.md-body hr {
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--md-color-accent) 50%,
+    transparent
+  );
+  box-shadow: var(--phycat-glow);
+  opacity: 0.75;
+}
+.md-body img {
+  border-radius: 10px;
+  border: var(--glass-border);
+  margin-left: auto;
+  margin-right: auto;
+}
+.md-body a {
+  text-decoration: none;
+  border-bottom: 1px solid var(--color-accent-ring);
+  padding-bottom: 1px;
+}
+.md-body strong {
+  color: var(--md-color-accent);
+  text-shadow: var(--phycat-glow);
+}
+
+/* ── 动效 / Motion ───────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .md-body h2::before,
+  .md-body hr,
+  .md-body a,
+  .md-body code,
+  .md-body blockquote {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  .md-body blockquote:hover { background: var(--glass-bg-strong); }
+  .md-body hr:hover { opacity: 1; }
+  .md-body a:hover {
+    border-bottom-color: var(--md-color-accent);
+    text-shadow: var(--phycat-glow);
+  }
+  .md-body code:hover { border-color: var(--md-color-accent); }
+}
+
+/* ── 打印 / Print ────────────────────────────────────────────────────────── */
+/* 纸上没有暗底，也就没有光：打印时把灯带收成实线，玻璃收成一条左边框。
+   Paper has no dark ground, so it has no glow: on print the strips become
+   plain rules and the glass becomes a left border. */
+@media print {
+  .md-body { --phycat-glow: 0 0 0 transparent; }
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4 { break-after: avoid; }
+  .md-body pre, .md-body table, .md-body blockquote, .md-body img { break-inside: avoid; }
+  .md-body h2 { background: none; }
+  .md-body blockquote { background: none; border-left: 2px solid var(--md-color-accent); }
+}

@@ -1,0 +1,108 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   物理猫 · 普鲁士蓝 — 外观主题 / Phycat · Prussian — an appearance theme
+
+   配色取自 Typora 主题 Phycat（物理猫 · sumruler/typora-theme-phycat · MIT）
+   亮色系的「Prussian」。色相是原主题的，明度台阶是本应用内置的（纸 Paper / 石 Stone），
+   强调色则一路压到在自己的底上 4.6:1 才收手——它同时当 1px 细线、
+   填色按钮和焦点环用，浅一点就有一样东西看不清。
+   The hues are the Phycat Typora theme's (MIT); the lightness ramp is this
+   app's own built-ins'; and the accent is pushed until it clears 4.6:1 on
+   its own ground, because it doubles as a hairline, a filled button and the
+   focus ring — one step lighter and one of the three stops reading.
+
+   配套的排版主题 / the typography theme that goes with it:
+   phycat.css — 气泡 / bubbles
+
+   怎么用 / How to use
+     1. 设置 → 通用 → 外观 → 「打开主题文件夹」，把这个文件放进去。
+        Settings → General → Appearance → "Open themes folder", drop it in.
+        外观主题只能装在这里；项目的 .ai-writer/themes/ 只收排版主题。
+        Appearance themes install here only; a project's .ai-writer/themes/
+        takes typography themes.
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「外观主题」里选中它——它排在「浅色时」那一档。
+        Pick it under "Appearance themes", in the "When light" band.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（phycat-prussian.css → phycat-prussian）。复制一份改个名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 只有下面这 41 个核心令牌要写，其余两百多个界面颜色应用自己按公式推；
+       所以改一个 --color-sienna，整个应用的强调色都跟着走。
+       Only the 41 core tokens below need writing — the app derives the other
+       two hundred-odd from them, so moving --color-sienna moves the accent
+       everywhere at once.
+     · 写别的（别的选择器、普通 CSS 属性、@media）会被逐条丢弃并在设置卡片上
+       列出原因，文件本身永远不会被改写。
+       Anything else (other selectors, plain properties, @media) is dropped
+       rule by rule and listed on the settings card with a reason; the file on
+       disk is never rewritten.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 物理猫 · 普鲁士蓝; /* 网格里显示的名字 / the name the grid shows */
+  --theme-kind: ui;                /* 外观主题，不是排版主题 / an appearance theme, not a typography one */
+  --theme-scheme: light;           /* 归哪一档 · 必填 / which band it belongs to; required */
+  --theme-extends: paper;          /* 同一档的内置基底 / the same-polarity built-in */
+  --theme-version: 1;
+  --theme-author: Phycat (sumruler) · simple-ai-writer;
+}
+
+/* ── 令牌 / Tokens ───────────────────────────────────────────────────────── */
+:root {
+  /* 底 / Grounds */
+  --color-bg-base:            #EAF2FC;
+  --color-bg-surface:         #F6FAFF;
+  --color-bg-elevated:        #DCE8F7;
+  --color-bg-hover:           #CFDDF0;
+  --color-bg-tinted:          #EAF2FC;   /* ＝底 / = the ground */
+  --color-bg-overlay:         rgba(25, 33, 43, 0.3);
+
+  /* 文字 / Text */
+  --color-text-primary:       #19212B;
+  --color-text-secondary:     #4E5762;
+  --color-text-muted:         #79838F;
+  --color-text-faint:         #A5ADB9;
+  --color-text-ghost:         #BDC5CF;
+
+  /* 强调 / Accent */
+  --color-sienna:             #3D6EAC;   /* 唯一强调色：1px 线、填底、焦点环三用 / the one accent: rules, fills, focus ring */
+  --color-sienna-hover:       #275894;
+  --color-amber:              #5D94BD;   /* 第二色：强线、标签、渐变的另一端 / the companion: strong rules, tags, the other end of a gradient */
+  --color-amber-soft:         #C8E6FD;
+
+  /* 线 / Rules */
+  --color-border:             #D6E0EC;
+  --color-border-soft:        #E1E9F3;
+  --color-border-strong:      #5D94BD;   /* ＝第二色 / = the companion */
+
+  /* 状态 / Status */
+  --color-success:            #6F9C63;
+  --color-warning:            #AF883D;
+  --color-error:              #B0524A;
+
+  /* 模型能力标签 / Model-type tags */
+  --color-type-text-bg:       #E2E4D1;
+  --color-type-text-fg:       #646716;
+  --color-type-multimodal-bg: #F1DED3;
+  --color-type-multimodal-fg: #92532A;
+  --color-type-image-bg:      #EBDCEC;
+  --color-type-image-fg:      #825085;
+  --color-type-video-bg:      #D4E4F3;
+  --color-type-video-fg:      #286797;
+  --color-type-vision-bg:     #D7E7D8;
+  --color-type-vision-fg:     #34703F;
+  --color-type-asr-bg:        #F2DBDE;
+  --color-type-asr-fg:        #954B5B;
+
+  /* 投影与毛玻璃 / Elevation and glass */
+  --shadow-sm:                0 1px 3px rgba(25, 33, 43, 0.07);
+  --shadow-md:                0 2px 16px rgba(25, 33, 43, 0.11);
+  --shadow-lg:                0 4px 24px rgba(25, 33, 43, 0.11);
+  --shadow-xl:                0 16px 56px rgba(25, 33, 43, 0.24);
+  --shadow-drawer:            -28px 0 56px rgba(25, 33, 43, 0.18);
+  --glass-bg:                 rgba(246, 250, 255, 0.85);
+  --glass-bg-strong:          rgba(246, 250, 255, 0.72);
+  --glass-border:             1px solid rgba(25, 33, 43, 0.09);
+}

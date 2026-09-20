@@ -1,0 +1,329 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   物理猫 · 气泡 — 排版主题 / Phycat · Bubbles — a typography theme
+
+   Typora 主题 Phycat（物理猫 · sumruler/typora-theme-phycat · MIT）亮色系的
+   排版语言，搬到这里：居中的标题配一小段渐变横杠、二级标题是一枚药丸、三级
+   标题左边一道圆头竖条、引文是一个带角标的气泡、表格圆角、分隔线是一条虚线。
+   The typography language of the Phycat Typora theme's light series (MIT):
+   a centred title over a short gradient bar, an h2 shaped like a pill, a
+   round-capped rule beside each h3, quotes as bubbles with a corner mark,
+   rounded tables, and a dashed rule.
+
+   **一套排版，十一种颜色。** 这里一个颜色都没有写死：所有颜色都读
+   var(--color-*) / var(--md-color-*)，也就是跟着当前的外观主题走。配同目录
+   的 phycat-cherry / -caramel / -forest / -mint / -sky / -prussian / -sakura /
+   -mauve 任意一套外观主题，就是原主题那一款配色；配内置的「纸」「石」「霜」
+   也照样成立。暗色系请改用 phycat-neon.css。
+   **One typography, eleven colours.** Nothing here is a literal colour: every
+   value reads var(--color-*) / var(--md-color-*), i.e. the appearance theme in
+   force. Pair it with any phycat-* appearance theme beside it for that
+   scheme's exact look — or with a built-in; it holds either way. For the dark
+   series use phycat-neon.css instead.
+
+   怎么用 / How to use
+     1. 把这个文件放进主题文件夹：设置 → 通用 → 外观 → 「打开主题文件夹」；
+        或放进某个项目的 .ai-writer/themes/（只对那个项目生效，随仓库走）。
+        Drop the file in the themes folder (Settings → General → Appearance →
+        "Open themes folder"), or in a project's .ai-writer/themes/ (that
+        project only; it travels with the repository).
+     2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。
+        The folder is watched while Settings is open; otherwise hit Reload.
+     3. 在「排版」一栏选中它。预览、知识库、导出的 HTML / PDF 一起换。
+        Pick it in the typography row. Preview, knowledge base and exported
+        HTML / PDF all follow.
+
+   改它 / Making it yours
+     · 文件名就是主题 id（phycat.css → phycat）。复制一份改个名，就是新主题。
+       The file name is the theme id. Copy and rename = a new theme.
+     · 上半部分是旋钮（--md-*），改数字就行；下半部分是规则，删掉不喜欢的段。
+       The top half is knobs (--md-*): change numbers. The bottom half is
+       rules: delete the blocks you don't want.
+     · 围栏：每条选择器都从 .md-body 开始，并且留在里面（不用 + / ~ 往外走）。
+       越界的规则会被丢弃并在设置卡片上列出原因，文件本身不会被改写。
+       The fence: every selector starts at .md-body and stays inside (no
+       + / ~ walking out). Out-of-bounds rules are dropped and listed on the
+       settings card with a reason; the file on disk is never rewritten.
+     · 完整旋钮表见同目录的 README.md。
+       The full knob table lives in README.md beside this file.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 元数据 / Metadata ───────────────────────────────────────────────────── */
+:root {
+  --theme-name: 物理猫 · 气泡;  /* 网格里显示的名字 / the name the grid shows */
+  --theme-kind: markdown;       /* 排版主题 / a typography theme (not ui) */
+  --theme-extends: clean;       /* 没写到的旋钮从「素雅」取 / knobs left out come from Clean */
+  --theme-version: 1;
+  --theme-author: Phycat (sumruler) · simple-ai-writer;
+}
+
+/* ── 旋钮 / Knobs ────────────────────────────────────────────────────────── */
+.md-body {
+  --md-font-body: var(--font-sans);
+  --md-scale: 0.98;
+  --md-line: 1.85;
+  --md-para-gap: 1.15em;
+  --md-para-indent: 0;
+
+  --md-h-weight: 700;
+  --md-h-space-top: 1.85em;
+  --md-h-space-bottom: 0.7em;
+  --md-h1-size: 1.85em;
+  --md-h1-weight: 700;
+  --md-h1-align: center;
+  --md-h1-letter: normal;
+  --md-h2-size: 1.34em;
+  --md-h3-size: 1.18em;
+  --md-h4-size: 1.05em;
+  --md-list-indent: 1.7em;
+
+  --md-quote-style: normal;
+  --md-quote-border: none;
+  --md-quote-bg: var(--color-accent-tint);
+  --md-hr-line: 3px dashed var(--md-color-accent);
+  --md-hr-mark: "";
+
+  /* 这套主题自己的两个旋钮 / this theme's own two knobs */
+  --phycat-radius: 14px;   /* 气泡、代码块、表格的圆角 / the corner radius everywhere */
+  --phycat-quote-mark: "✦";  /* 引文左上角那个符号；换成 "✨" 就是原主题的样子
+                                the mark in a quote's corner; "✨" is the original's */
+}
+
+/* ── 篇名 / The title ────────────────────────────────────────────────────── */
+/* 盒子收到文字宽度再居中，那截渐变横杠才对得上文字而不是对上整行。
+   The box hugs the text before centring, so the bar lines up with the words
+   rather than with the column. */
+.md-body h1 {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 0.4em;
+}
+.md-body h1::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 46px;
+  height: 4px;
+  border-radius: 4px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    to right,
+    var(--color-amber),
+    var(--md-color-accent) 50%,
+    var(--color-amber)
+  );
+}
+
+/* ── 二级标题：一枚药丸 / h2: a pill ─────────────────────────────────────── */
+/* 渐变两端都是强调色的深浅两级，不掺第二色：药丸上写的是反白字，掺进来的
+   浅色会让那几个字掉到 3:1 以下。
+   Both ends of the gradient are shades of the accent, not the companion: the
+   pill carries reversed text, and the lighter companion would drop it under
+   3:1. */
+.md-body h2 {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.26em 0.7em;
+  border-radius: 9px;
+  color: var(--color-on-accent);
+  background: linear-gradient(
+    110deg,
+    var(--color-accent-hover),
+    var(--md-color-accent) 55%,
+    var(--color-accent-hover)
+  );
+  background-size: 200% auto;
+  box-shadow: 0 2px 8px var(--color-accent-tint-strong);
+}
+
+/* ── 三、四级标题：竖条与圆点 / h3, h4: a rule and a dot ─────────────────── */
+.md-body h3 {
+  position: relative;
+  padding-left: 0.62em;
+}
+.md-body h3::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.16em;
+  bottom: 0.16em;
+  width: 5px;
+  border-radius: 4px;
+  background: var(--md-color-accent);
+}
+.md-body h4 {
+  position: relative;
+  padding-left: 0.72em;
+}
+.md-body h4::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-amber);
+}
+.md-body h5,
+.md-body h6 {
+  color: var(--md-color-accent);
+  font-weight: 600;
+}
+
+/* ── 引文：一个气泡 / Quotes: a bubble ───────────────────────────────────── */
+.md-body blockquote {
+  position: relative;
+  padding: 1em 1.15em 1em 2.5em;
+  border-radius: var(--phycat-radius);
+}
+.md-body blockquote::before {
+  content: var(--phycat-quote-mark);
+  position: absolute;
+  left: 0.95em;
+  top: 0.92em;
+  line-height: 1.5;
+  color: var(--md-color-accent);
+}
+.md-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── 行内与块代码 / Code ─────────────────────────────────────────────────── */
+.md-body code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--color-accent-tint);
+}
+.md-body pre {
+  padding: 1em 1.15em;
+  border-radius: var(--phycat-radius);
+  border: 1px solid var(--md-color-border);
+  background: var(--color-bg-stream);
+}
+.md-body pre code {
+  padding: 0;
+  border-radius: 0;
+}
+
+/* ── 列表 / Lists ────────────────────────────────────────────────────────── */
+.md-body ul ul { list-style-type: circle; }
+.md-body ul ul ul { list-style-type: square; }
+.md-body ol ol { list-style-type: lower-alpha; }
+.md-body ol ol ol { list-style-type: lower-roman; }
+.md-body li::marker {
+  color: var(--md-color-accent);
+}
+
+/* ── 表格：圆角卡片 / Tables: a rounded card ─────────────────────────────── */
+/* border-collapse: separate + overflow: hidden 才能让四个角真的是圆的；
+   collapse 下边框会盖住圆角。
+   separate + overflow: hidden is what actually rounds the corners; under
+   collapse the borders paint over them. */
+.md-body table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--md-color-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.md-body th,
+.md-body td {
+  border: none;
+  border-right: 1px solid var(--md-color-border);
+  border-bottom: 1px solid var(--md-color-border);
+  padding: 8px 12px;
+}
+.md-body th:last-child,
+.md-body td:last-child { border-right: none; }
+.md-body tbody tr:last-child td { border-bottom: none; }
+.md-body th {
+  background: var(--color-accent-tint);
+  color: var(--md-color-accent);
+  white-space: nowrap;
+}
+
+/* ── 分隔线、图、链接、着重 / Rules, images, links, emphasis ─────────────── */
+.md-body hr {
+  opacity: 0.5;
+  transform: scaleX(0.82);
+}
+.md-body img {
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-left: auto;
+  margin-right: auto;
+}
+.md-body a {
+  text-decoration: none;
+  padding: 1px 4px;
+  margin: 0 -3px;
+  border-radius: 5px;
+  font-weight: 500;
+}
+.md-body strong {
+  color: var(--md-color-accent);
+}
+
+/* ── 动效 / Motion ───────────────────────────────────────────────────────── */
+/* 原主题的灵动在悬停上：药丸会晃一下，横杠会长开，虚线会撑满。跟着系统的
+   「减弱动态效果」走——关掉时上面的静态样子就是全部。
+   The original's liveliness lives in hover. It follows the system's
+   reduce-motion setting: with motion off, the static look above is all of it. */
+@media (prefers-reduced-motion: no-preference) {
+  .md-body h1::after,
+  .md-body h2,
+  .md-body h3,
+  .md-body h3::before,
+  .md-body hr,
+  .md-body a,
+  .md-body code,
+  .md-body img {
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  .md-body h1:hover::after { width: 100%; }
+  .md-body h2:hover {
+    background-position: 100% center;
+    box-shadow: 0 6px 16px var(--color-accent-tint-strong);
+  }
+  .md-body h3:hover { padding-left: 1em; }
+  .md-body h3:hover::before { width: 7px; }
+  .md-body hr:hover { opacity: 1; transform: scaleX(1); }
+  .md-body a:hover { background: var(--color-accent-tint); }
+  .md-body code:hover { background: var(--color-accent-tint-strong); }
+  .md-body img:hover { box-shadow: var(--shadow-md); }
+}
+
+/* ── 打印 / Print ────────────────────────────────────────────────────────── */
+/* 药丸和气泡的底色默认会被浏览器的「不印背景」吃掉，这里要回来；
+   标题也不许落在页脚上。
+   Browsers drop the pill's and the bubble's grounds by default; ask for them
+   back, and keep a heading off the bottom of a page. */
+@media print {
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4 { break-after: avoid; }
+  .md-body pre, .md-body table, .md-body blockquote, .md-body img { break-inside: avoid; }
+  .md-body h2, .md-body blockquote, .md-body th, .md-body code {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ── 进阶 · 自带字体 / Advanced · own fonts ───────────────────────────────
+   原主题用的是霞鹜文楷 LXGW WenKai。字体文件不随主题分发（一份 25 MB），
+   自己下一份放进与这个 css 同名的文件夹（phycat/），去掉下面的注释即可；
+   安装和导出时会内联进样式表。远程 url() 会被拒绝。
+   The original sets LXGW WenKai. The font is not shipped with the theme (25 MB
+   a file); download one, put it in a folder named after this css (phycat/),
+   and uncomment. It is inlined on install and export; a remote url() is
+   refused.
+
+@font-face {
+  font-family: "LXGW WenKai";
+  src: url("phycat/LXGWWenKai-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+.md-body { --md-font-body: "LXGW WenKai", var(--font-sans); }
+*/

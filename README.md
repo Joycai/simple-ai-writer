@@ -249,7 +249,7 @@ src/
 src-tauri/             # Tauri/Rust desktop backend
 server/                # optional standalone sync/config-backup server
 docs/                  # living architecture, API, feature, and issue documentation
-themes/                # example downloadable themes
+themes/                # downloadable themes: 1 typography sample + the Phycat suite (11 appearances, 2 typographies)
 ```
 
 For the maintained source map and subsystem invariants, read [`docs/reference/codemap.md`](docs/reference/codemap.md). [`docs/README.md`](docs/README.md) indexes all design and implementation documents with their current status.
