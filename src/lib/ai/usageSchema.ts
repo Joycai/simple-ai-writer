@@ -20,7 +20,8 @@ type Db = Awaited<ReturnType<typeof Database.load>>;
  * 几列的语义值得写下来：
  * - `prompt_tokens` 是**全部** prompt token，`cached_tokens` 是它的**子集**
  *   ——这是这张表从第一天起的口径，算钱时才分成不重叠的两段
- *   （`billedOfRow`）。改口径会让每一行历史被重新读成别的数。
+ *   （`rowToBilled`，lib/ai/usageBackfill.ts）。改口径会让每一行历史被重新
+ *   读成别的数。
  * - `cache_price` **可空**：只有在缓存价存在之前写的行上为空，读时回退到
  *   `input_price`。
  * - `reported_cost` **可空**：空 = 上游没报；`0` = 上游说这次免费。
@@ -57,6 +58,22 @@ const SNAPSHOT_COLUMNS: [string, string][] = [
   ["input_units", "REAL"],
   ["input_unit_price", "REAL"],
   ["reported_cost", "REAL"],
+  // 分项的钱：`costOf()` 的七项经 `segmentsOf()` 折成的六段，记账那一刻抄下来。
+  // 跟 `cost_usd` 同一条规矩——**结果落盘，不是第二套口径**：读的那一侧只
+  // `SUM` 它们，不在 SQL 里把算式重写一遍。
+  //
+  // 落在写入时而不是读出时，还顺带解决了一件读的那侧永远解不开的事：`spec`
+  // 那笔钱数的是张还是秒，只有 `output_unit` 知道，而 `GROUP BY` 之后一个桶里
+  // 可能混着两种单位。写的那一刻单位是确定的单值，拆完再存，聚合就不必再问。
+  //
+  // **空 ≠ 零**：NULL = 这一行没有分项快照（老行），不是「这一段是 0」。用量页
+  // 据此把分不出段的钱单独数成一份，而不是假装它不存在。
+  ["cost_input", "REAL"],
+  ["cost_cache", "REAL"],
+  ["cost_output", "REAL"],
+  ["cost_count", "REAL"],
+  ["cost_duration", "REAL"],
+  ["cost_other", "REAL"],
 ];
 
 async function addUsageColumn(db: Db, existing: Set<string>, name: string, type: string) {

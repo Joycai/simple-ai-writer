@@ -22,7 +22,10 @@
 
 import { getDb, getGlobalDb } from "../project";
 import { billedForSpec, feeOf, type Model } from "./configDb";
-import { costOf, totalOf, type Billed, type OutputSpec, type PricedSpec } from "./feeGroup";
+import {
+  costOf, segmentsOf, totalOf,
+  type Billed, type CostSegments, type OutputSpec, type PricedSpec,
+} from "./feeGroup";
 
 // ── 记一行 ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +63,8 @@ export interface UsageRowValues {
   cachedTokens: number;
   completionTokens: number;
   costUsd: number;
+  /** 这笔钱分别花在哪一种量上。`costUsd` 是它六段之和，同一次 `costOf()` 的结果。 */
+  segments: CostSegments;
   billed: Billed;
   priced: PricedSpec;
   createdAt: number;
@@ -84,13 +89,17 @@ export function buildUsageRow(input: RecordUsageInput, nowMs: number = Date.now(
     input.reportedCost ?? null,
   );
   const withRequests: Billed = { ...billed, requests: Math.max(0, input.requests ?? 1) };
+  // `costOf()` 只调一次，总额与分项都从这一次的结果来——调两次就有了两个
+  // 可能不一致的数，而它们不一致的时候没有任何东西会报错。
+  const parts = costOf(withRequests);
   return {
     modelId: input.model.id,
     task: input.task,
     promptTokens: prompt,
     cachedTokens: cached,
     completionTokens: completion,
-    costUsd: totalOf(costOf(withRequests)),
+    costUsd: totalOf(parts),
+    segments: segmentsOf(parts, priced.outputUnit),
     billed: withRequests,
     priced,
     createdAt: Math.floor(nowMs / 1000),
@@ -102,10 +111,12 @@ const INSERT_COLUMNS = [
   "billing_mode", "input_price", "cache_price", "output_price", "request_price", "request_count",
   "output_units", "output_unit_price", "output_unit", "output_spec", "spec_matched",
   "input_images", "input_units", "input_unit_price", "reported_cost",
+  "cost_input", "cost_cache", "cost_output", "cost_count", "cost_duration", "cost_other",
 ];
 
 function insertValues(r: UsageRowValues): unknown[] {
   const b = r.billed;
+  const s = r.segments;
   // 规格快照只在 `matched` 之外还带上规格本身：没命中的行正是用户该抄进
   // 档位表的那一行，把它丢掉等于让用户去猜要补什么。
   const spec: OutputSpec & { matched: boolean } = { ...r.priced.spec, matched: r.priced.matched };
@@ -114,6 +125,7 @@ function insertValues(r: UsageRowValues): unknown[] {
     b.billingMode, b.inputPrice, b.cachePrice, b.outputPrice, b.requestPrice, b.requests,
     b.outputUnits, b.outputUnitPrice, r.priced.outputUnit, JSON.stringify(spec), r.priced.matched ? 1 : 0,
     r.priced.inputImages, b.inputUnits, b.inputUnitPrice, b.reportedCost,
+    s.input, s.cache, s.output, s.count, s.duration, s.other,
   ];
 }
 
