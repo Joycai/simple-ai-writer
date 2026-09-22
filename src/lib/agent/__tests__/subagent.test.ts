@@ -5,12 +5,14 @@ import type { ToolCall } from "../tools";
 import { messageCeilingForTools } from "../toolCost";
 
 const mockRunAgent = vi.fn();
-const mockPersistUsage = vi.fn();
+const mockRecordUsage = vi.fn();
 const mockWriteTaskNote = vi.fn();
 
 
-vi.mock("../../ai/usage", () => ({
-  persistUsage: (...args: unknown[]) => mockPersistUsage(...args),
+// 记账现在只有一个写入口，而且一次请求记两处（项目 + 总账）——把入口本身
+// 换掉，测的就是「这一次到底交了哪些事实上去」，与两处 sink 无关。
+vi.mock("../../ai/usageRow", () => ({
+  recordUsage: (...args: unknown[]) => mockRecordUsage(...args),
 }));
 
 vi.mock("../taskWorkspace", () => ({
@@ -400,15 +402,13 @@ describe("subagent", () => {
       const res = await executeDelegate(call, ctx);
 
       expect(mockRunAgent).toHaveBeenCalledTimes(1);
-      expect(mockPersistUsage).toHaveBeenCalledWith(
-        "/test-project",
-        "m-search",
-        50,
-        100,
-        expect.any(Number),
-        "subagent:search",
-        0,
-      );
+      expect(mockRecordUsage).toHaveBeenCalledWith("/test-project", {
+        model: expect.objectContaining({ id: "m-search" }),
+        task: "subagent:search",
+        promptTokens: 50,
+        cachedTokens: 0,
+        completionTokens: 100,
+      });
       expect(mockWriteTaskNote).toHaveBeenCalledTimes(1);
       expect(res.content).toContain(".ai-writer/tasks/task-123/notes/search-find-facts.md");
       expect(res.content).toContain("Here is the detailed research report on topic X.");

@@ -35,6 +35,18 @@ Things that are silent when broken, or that a source-scanning test enforces. Eac
 - Several writes as one transaction = `lib/sqlTx.ts`. A hand-written `BEGIN`/`COMMIT` is not one transaction on the pool and deadlocks it.
 - `appReset`: keyring before database — the `providers` rows are the only record of which keyring accounts exist.
 
+**计费与用量**
+- 价格只在**计费组**上（`lib/ai/feeGroup`），模型只持有 `feeGroupId`；算钱一律
+  读 `Model.fee`（`configDb.feeOf`），模型行上的 `price_*` 旧列**只剩迁移在读**。
+- 用量行**自带价格**：`recordUsage` 是唯一写入口，把当时的单价 / 数量 / 规格抄在
+  行上。改组、删组、换组都动不了历史；删组只置空引用，不碰用量行。
+- `costOf()` 是**全应用唯一的一份算式**。`cost_usd` 是它的结果落了盘，读那一侧
+  `SUM` 它——不要在别处再算一遍。
+- **「没有」与「零」分得开**：缓存价可空（空 = 同输入价，`0` = 真免费）、上游报价
+  可空（空 = 没报，`0` = 上游说免费）、档位条件可空（空 = 匹配一切）。
+- 一次请求**记两处**：项目 `.ai-writer/project.db` 与 appDataDir 的 `config.db`
+  （多一列 `project`）。两张表的结构共用 `lib/ai/usageSchema.ts` 一处定义。
+
 **Providers & models**
 - A provider/model transport field is declared **once**, in `ConnOptions` (`lib/ai/conn.ts`); per-request knobs that vary between retries (`top_p`, `frequency_penalty`) live in `StreamOptions` instead. See `docs/api/provider-layering.md`.
 - Models flagged `translateFormat` / `asrFormat` **never appear in any conversational picker** (`conversationalModels` is the invariant's name). Translate, ASR, image generation are tool-shaped subagents: in `SUBAGENT_KINDS`, not `DELEGATE_KINDS`.
@@ -101,7 +113,7 @@ The UI vocabulary is **app-level and uniform** (`useTerms()`: 文档/分组/知�
 ## Project Structure
 
 **Filesystem**
-- `.ai-writer/project.db` — SQLite database (project-scoped)
+- `.ai-writer/project.db` — SQLite database (project-scoped; **本项目**用量在这里，跟着项目文件夹走)
 - `.ai-writer/profile.json` — Enabled capability packs + user-defined categories (v3; v1/v2 still read; absent = novel)
 - `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter; facets and `collections:` beside it
 - `.ai-writer/tasks/`, `tmp/`, `themes/`, `workflows/`, `roleplay/` — agent workspaces, conversion/ASR caches, project typography themes, workflow-card overrides, roleplay sessions + memory areas
@@ -112,10 +124,10 @@ The UI vocabulary is **app-level and uniform** (`useTerms()`: 文档/分组/知�
 - `src/components/editor/` — CodeMirror wrapper, `EditorToolbar` (icon-only and stateless on purpose), preview renderer + zoom
 - `src/components/ai/` — AiPanel, AgentChat, the card family (approval / plan / question / round-limit / proposals), AgentLog, ConsistencyCheck, 提示词库
 - `src/components/lore/` — browser, wall, read mode (R), `collections/`, facet / dict modals, generator
-- `src/components/settings/` — full-window settings, one file per pane under `panes/`; 实验室 holds **every** Beta switch; the model drawer
+- `src/components/settings/` — full-window settings, one file per pane under `panes/`; 实验室 holds **every** Beta switch; the model drawer; 计费组列表与编辑抽屉
 - `src/components/common/` — shared primitives (`Slider` is the app's one slider)
 - `src/components/command/`, `onboarding/`, `library/`, `roleplay/`, `sync/` — palette + global search, onboarding, 文库, roleplay UI, sync modals
-- `src/lib/ai/` — streaming client for four protocol families, `conn.ts`, JSON-mode / tool-choice shaping learned per endpoint, server-side tools, probing, output caps, drafts, snippets, usage
+- `src/lib/ai/` — streaming client for four protocol families, `conn.ts`, JSON-mode / tool-choice shaping learned per endpoint, server-side tools, probing, output caps, drafts, snippets, 计费组 + 用量（`feeGroup` / `feeGroupDb` / `feeGroupLabel` / `usageSchema` / `usageRow` / `usage`）
 - `src/lib/agent/` — runtime, registry, presets, events, tools, compaction / rewind / structured state, plan gate, write + edit tools, approved-proposal apply, `inspect_html`, subagents, handoff, packs
 - `src/lib/lore/` — model, entity CRUD, collections + the 取材范围 fence (narrows *discovery* only), facets / slots, citations, gallery, generator
 - `src/lib/profile/` — capability packs (model / resolve / file / active / store)
@@ -155,6 +167,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/feature/lore/lore-entry-type-plan.md`](docs/feature/lore/lore-entry-type-plan.md)** — the entry type system (slots as a category's schema; the three invariants that let entries degrade rather than vanish). Read before changing `ProfileCategory`, facet frontmatter or `scanLore`'s category enum.
 - **[`docs/feature/roleplay/`](docs/feature/roleplay/README.md)** — roleplay design, transcript / context layering, memory (`10-memory-system.html`), transitions. Read before touching `src/lib/roleplay/`, `roleplayStore`, `lib/roleplay/context.ts`, `memory.ts`, or `compact.ts`'s ceiling.
 - **[`docs/feature/translate/`](docs/feature/translate/01-execution-plan.md)** — Sakura 日中翻译: twelve live measurements and six invariants. Read before touching `src/lib/translate/`, `SUBAGENT_KINDS`, or any model picker.
+- **[`docs/feature/billing/01-fee-groups.md`](docs/feature/billing/01-fee-groups.md)** — 计费组与两本用量账：八条不变量、迁移为什么用 `fee_migrated`、备份 v3。Read before touching `src/lib/ai/feeGroup*`, `usageRow`, `usage`, or anything that prices a request.
 - **[`docs/feature/docx/01-agent-design.md`](docs/feature/docx/01-agent-design.md)** — markdown → .docx: the invariants that shape it (the format is a reference not a parameter, three-source pure-function resolve, Beta off = the tool is absent from the run). Read before touching `src/lib/docx/`, `docFormatStore`, or `src-tauri/src/docx.rs`.
 - **[`docs/feature/pptx-plan.md`](docs/feature/pptx-plan.md)** — .pptx read (Rust) and write (HTML → PPTX). Read before touching `src-tauri/src/pptx.rs`, `read_slides` or `src/lib/pptx/`.
 - **[`docs/feature/knowledge-base/kb-admin-console.md`](docs/feature/knowledge-base/kb-admin-console.md)** — the server's admin console. Read before touching `server/src/config.rs`, `server/src/admin.rs` or `server/admin/*`.

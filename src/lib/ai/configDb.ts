@@ -28,6 +28,12 @@ import type { ProtocolFamily } from "./types";
 import { parseStructuredOutputMode, type StructuredOutputMode } from "./jsonMode";
 import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
+import { ensureFeeGroupSchema, listFeeGroups, migrateModelPricesToFeeGroups } from "./feeGroupDb";
+import { ensureUsageSchema } from "./usageSchema";
+import {
+  costOf, feeConfigOf, priceSpec, totalOf, ZERO_BILLED, ZERO_FEE,
+  type Billed, type FeeConfig, type FeeGroup, type PricedSpec,
+} from "./feeGroup";
 
 /**
  * What a model row *is*, for the app's forms and candidate lists — never sent.
@@ -196,6 +202,14 @@ export interface Provider {
    * its familiar order. The first move rewrites positions for the whole list.
    */
   sortOrder?: number;
+  /**
+   * 这个渠道下新建 / 发现的模型预填哪个计费组。
+   *
+   * 一个渠道的模型通常同价，或者至少「同一家的对话模型一个价、出图模型
+   * 另一个价」——预填让加十个模型不用挑十次组。只是预填：模型自己的
+   * `feeGroupId` 一旦写上就是它自己的，改渠道默认不会追着改。
+   */
+  defaultFeeGroupId?: string;
   createdAt: number;
 }
 
@@ -205,6 +219,23 @@ export interface Model {
   modelId: string;
   name: string;
   type: ModelType;
+  /**
+   * 这个模型按哪个计费组算钱（lib/ai/feeGroup.ts）。空 = 没绑组，一分不收
+   * （量照记）。组删掉时这里被置空，模型不动。
+   */
+  feeGroupId?: string;
+  /**
+   * 绑定的组解析出来的价，**不是列**——`listModels` 读出来时一并挂上，
+   * 所以 `costFor(model, …)` 这类调用点不用各自去查组。
+   *
+   * 空 = 还没解析过（备份里的行、测试里手搭的行）：按 `ZERO_FEE` 读。
+   */
+  fee?: FeeConfig;
+  /**
+   * 旧的模型级价格列，**只剩迁移在读**（`migrateModelPricesToFeeGroups`）。
+   * 新代码一律走 `fee`；这几个字段留着只是为了让一台机器从老版本升上来
+   * 时价格不丢，以及让一个老版本导出的备份还能读进来。
+   */
   priceIn: number;      // USD per 1M input tokens
   priceCachedIn: number;
   priceOut: number;     // USD per 1M output tokens
@@ -535,45 +566,137 @@ export function canAutoSelectAsChat(m: Model): boolean {
 }
 
 /**
- * USD cost of one completion, accounting for the model's cheaper cached-input
- * rate. `cachedTokens` is a subset of `inputTokens` — both OpenAI's and
- * Gemini's usage reporting count it that way — so only the uncached
- * remainder bills at the full input rate.
+ * 模型绑定的组解析出来的价。没绑组 / 组已删 ⇒ `ZERO_FEE`（一分不收，量照记）。
+ *
+ * 解析发生在读模型的时候（`listModels`、`attachFees`），之后算钱的每一处都
+ * 只读这个扁平结构，不再回头查组——回头查当前价，改一次价历史全变。
+ */
+export function feeOf(model: Pick<Model, "fee">): FeeConfig {
+  return model.fee ?? ZERO_FEE;
+}
+
+/**
+ * 把计费组解析进模型行。`listModels` 与每个从备份 / store 里拿到模型的地方
+ * 都走它，所以「模型 → 价」只有这一条路径。
+ */
+export function attachFees(models: Model[], groups: FeeGroup[]): Model[] {
+  const byId = new Map(groups.map((g) => [g.id, feeConfigOf(g)]));
+  return models.map((m) => {
+    const fee = m.feeGroupId ? byId.get(m.feeGroupId) : undefined;
+    return fee ? { ...m, fee } : m.fee ? { ...m, fee: undefined } : m;
+  });
+}
+
+/**
+ * 一次对话请求的成本。
+ *
+ * `cachedTokens` 是 `inputTokens` 的**子集**（OpenAI、Gemini 的 usage 都这么
+ * 报），而行上存的是**不重叠**的两个数，所以这里先把未命中的余量分出来再
+ * 交给唯一的那份算式。
+ *
+ * 组不是 token 模式时（一个按次计价的中转挂了对话模型）照它自己的模式算：
+ * 模式在组上，不在调用点上。
  */
 export function costFor(
-  model: Model,
+  model: Pick<Model, "fee">,
   inputTokens: number,
   outputTokens: number,
   cachedTokens = 0,
 ): number {
-  const uncachedInput = Math.max(0, inputTokens - cachedTokens);
-  return (
-    (uncachedInput * model.priceIn + cachedTokens * model.priceCachedIn + outputTokens * model.priceOut) /
-    1_000_000
-  );
+  return totalOf(costOf(billedForTokens(feeOf(model), inputTokens, outputTokens, cachedTokens)));
+}
+
+/** 一次对话请求的全部计费依据——记账把它原样快照进用量行。 */
+function billedForTokens(
+  fee: FeeConfig,
+  inputTokens: number,
+  outputTokens: number,
+  cachedTokens = 0,
+): Billed {
+  const cache = Math.max(0, Math.min(cachedTokens, inputTokens));
+  return {
+    ...ZERO_BILLED,
+    billingMode: fee.billingMode,
+    inputTokens: Math.max(0, inputTokens - cache),
+    cacheTokens: cache,
+    outputTokens: Math.max(0, outputTokens),
+    inputPrice: fee.inputPrice,
+    cachePrice: fee.cachePrice,
+    outputPrice: fee.outputPrice,
+    requests: 1,
+    requestPrice: fee.requestPrice,
+  };
 }
 
 /**
- * USD cost of one image run. Two billing shapes exist and a model may use
- * either, so both are summed rather than switched between: `pricePerImage`
- * covers the per-image endpoints (xAI, Imagen), and the token terms cover the
- * providers that meter image generation as tokens (OpenAI's image models) and
- * report usage on the response. A model configures whichever applies; the
- * unset side contributes zero.
+ * 一次出图 / 转写请求的全部计费依据。
  *
- * Deliberately separate from `costFor` — folding two billing units into one
- * function makes both call sites read as if they know something they don't.
+ * 按规格的组数出的是「响应真的带回来几张 / 请求了多少秒」并去档位表里
+ * 匹配单价；按 token 的组（gpt-image 那一类把出图计进 token 的）读回包的
+ * usage。**不再是两种价相加**——旧的 `imageCostFor` 把 `pricePerImage` 与
+ * token 价一并加上去，于是一个两边都填了的模型会被收两次；模式在组上，
+ * 一次请求只按一种方式算。
+ */
+export function billedForSpec(
+  fee: FeeConfig,
+  counted: { outputUnits: number; inputImages?: number },
+  raw: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number },
+  reportedCost: number | null = null,
+): { billed: Billed; priced: PricedSpec } {
+  const priced = priceSpec(fee, raw, {
+    outputUnits: counted.outputUnits,
+    inputImages: counted.inputImages ?? 0,
+  });
+  const base = billedForTokens(fee, usage?.inputTokens ?? 0, usage?.outputTokens ?? 0, usage?.cachedTokens ?? 0);
+  return {
+    billed: {
+      ...base,
+      outputUnits: priced.outputUnits,
+      outputUnitPrice: priced.outputUnitPrice,
+      inputUnits: priced.inputUnits,
+      inputUnitPrice: priced.inputUnitPrice,
+      reportedCost,
+    },
+    priced,
+  };
+}
+
+/**
+ * 一次出图运行的成本估算（确认卡、生成对话框的「≈ $…」用它）。
+ *
+ * 估算时还没有响应，所以规格取请求参数、张数取要生成的张数；真正记账走
+ * `billedForSpec` + `recordUsage`，两边共用 `priceSpec`，所以估的和记的不会
+ * 是两套口径。
  */
 export function imageCostFor(
-  model: Model,
+  model: Pick<Model, "fee">,
   images: number,
   usage?: { inputTokens: number; outputTokens: number },
+  raw: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
+  inputImages = 0,
 ): number {
-  const perImage = (model.pricePerImage ?? 0) * Math.max(0, images);
-  const perToken = usage
-    ? (usage.inputTokens * model.priceIn + usage.outputTokens * model.priceOut) / 1_000_000
-    : 0;
-  return perImage + perToken;
+  const fee = feeOf(model);
+  const { billed } = billedForSpec(fee, { outputUnits: Math.max(0, images), inputImages }, raw, usage);
+  return totalOf(costOf(billed));
+}
+
+/**
+ * 按规格计费的组在某个规格下的**单价**（每张 / 每秒 / 每条）。
+ *
+ * 确认卡上要写「¥0.00022 / 秒」这类费率，而费率现在是档位表里被这次规格
+ * 命中的那一行。组不是按规格计价、没绑组、或者这个规格没命中任何档位时
+ * 返回 undefined——卡上那一格随即写成虚线，而不是印一个 0 让人以为免费。
+ */
+export function unitRateFor(
+  model: Pick<Model, "fee">,
+  raw: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
+): number | undefined {
+  const fee = feeOf(model);
+  if (fee.billingMode !== "spec") return undefined;
+  // 数量取 1 只是为了让 `priceSpec` 认为「交付了」，它返回的单价与数量无关。
+  const priced = priceSpec(fee, raw, { outputUnits: 1, inputImages: 0 });
+  return priced.matched ? priced.outputUnitPrice : undefined;
 }
 
 /** Upper bound for the per-model context size setting (tokens). */
@@ -650,6 +773,9 @@ async function addColumn(
 }
 
 export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load>>) {
+  await ensureFeeGroupSchema(db);
+  // 总体用量：跨项目、比任何一个项目活得久（lib/ai/usageRow.ts 的两处 sink）。
+  await ensureUsageSchema(db, "global");
   await db.execute(`
     CREATE TABLE IF NOT EXISTS providers (
       id TEXT PRIMARY KEY,
@@ -674,6 +800,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   // read as the one route its base_url / api_standard describe (legacyEndpoint).
   await addColumn(db, providerCols, "providers", "host", "TEXT");
   await addColumn(db, providerCols, "providers", "endpoints", "TEXT");
+  // 计费组：这个渠道下新模型预填的组（feeGroup.ts）。
+  await addColumn(db, providerCols, "providers", "default_fee_group_id", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -718,6 +846,11 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   // P2: the route this model takes, and the other routes' parked fields.
   await addColumn(db, modelCols, "models", "active_route", "TEXT");
   await addColumn(db, modelCols, "models", "routes", "TEXT");
+  // 计费组。价格从此不在模型行上（老的 price_* 列留着不删：一台机器可能
+  // 从老版本升上来，迁移要读它们；删列还会让老版本读这张表直接失败）。
+  await addColumn(db, modelCols, "models", "fee_group_id", "TEXT");
+  // 「这一行的旧价格搬进组了」。NULL = 还没搬（包括老版本新加的行）。
+  await addColumn(db, modelCols, "models", "fee_migrated", "INTEGER");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -735,6 +868,15 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, promptCols, "prompts", "use_count", "INTEGER");
   await addColumn(db, promptCols, "prompts", "last_used_at", "INTEGER");
 
+  // 表结构就位之后才能搬数据：把模型行上的旧价格列归并成计费组。幂等、
+  // 每行一次（`models.fee_migrated`），所以放在这里跑而不是另找一个启动钩子
+  // ——凡是读这个库的路径都先过 ensureAiSchema，漏掉哪一条都会读到没价的模型。
+  try {
+    await migrateModelPricesToFeeGroups(db);
+  } catch (e) {
+    // 搬不动不该挡住应用启动：模型还在，价暂时读成 0，下次启动再试。
+    console.warn("[configDb] 计费组迁移未完成：", e);
+  }
 }
 
 // ─── Legacy plaintext key storage (migration only) ────────────────────────────
@@ -806,7 +948,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   // Explicitly ordered rows first, in their order; never-moved rows (NULL)
   // after them, oldest first — see Provider.sortOrder.
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
   );
   return rows.map(rowToProvider);
 }
@@ -833,6 +975,7 @@ function rowToProvider(r: Record<string, unknown>): Provider {
     host: typeof r.host === "string" ? r.host : undefined,
     endpoints: parseEndpoints(r.endpoints),
     sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
+    defaultFeeGroupId: typeof r.default_fee_group_id === "string" && r.default_fee_group_id ? r.default_fee_group_id : undefined,
     createdAt: r.created_at as number,
   }, writtenBaseOf(r.endpoints));
 }
@@ -931,8 +1074,8 @@ export function providerUpsert(p: Provider): SqlStatement {
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   return {
-    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
@@ -942,7 +1085,8 @@ export function providerUpsert(p: Provider): SqlStatement {
        sort_order = excluded.sort_order,
        platform = excluded.platform,
        host = excluded.host,
-       endpoints = excluded.endpoints`,
+       endpoints = excluded.endpoints,
+       default_fee_group_id = excluded.default_fee_group_id`,
     values: [
       c.id,
       c.name,
@@ -962,6 +1106,7 @@ export function providerUpsert(p: Provider): SqlStatement {
       // platform convention that moved since (they still do) — routes.ts
       // `writtenBaseOf`.
       JSON.stringify(c.endpoints!.map((e, i) => (i === 0 ? { ...e, writtenBase: c.baseUrl } : e))),
+      c.defaultFeeGroupId ?? null,
       c.createdAt,
     ],
   };
@@ -1010,17 +1155,19 @@ export async function listModels(
     : "SELECT * FROM models ORDER BY name ASC";
   const args = providerId ? [providerId] : [];
   const rows = await db.select<Record<string, unknown>[]>(sql, args);
-  return rows.map(rowToModel);
+  // 价在这里就解析好挂上：往后每个算钱的调用点只读 `Model.fee`，没有第二条
+  // 「模型 → 价」的路径可以走岔。
+  return attachFees(rows.map(rowToModel), await listFeeGroups(db));
 }
 
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null],
   };
 }
 
@@ -1117,6 +1264,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     structuredOutput: parseStructuredOutputMode(r.structured_output),
     asrFormat: parseAsrFormat(r.asr_format),
     pricePerSecond: typeof r.price_per_second === "number" ? r.price_per_second : undefined,
+    feeGroupId: typeof r.fee_group_id === "string" && r.fee_group_id ? r.fee_group_id : undefined,
     activeRoute: parseRouteFamily(r.active_route),
     routes: parseRouteProfiles(r.routes),
   });

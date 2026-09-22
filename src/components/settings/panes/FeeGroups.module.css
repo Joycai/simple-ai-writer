@@ -1,0 +1,252 @@
+/*
+ * 计费组的样式 — 设计稿 05l · 计费组与用量 · 屏 1a–1d。
+ *
+ * 三条规则贯穿整页，这里每个类都在为其中一条服务：
+ *
+ *   1. **实心 ＝ 配了价，虚线 ＝ 什么也不收。** 行首那个 7px 方块、空着的
+ *      输入框、档位表里留空的条件格，穿的是同一身虚线——和模型抽屉的节目录
+ *      （ModelDrawer.module.css `.indexMark`）是同一个记号，作者不用学第二套。
+ *   2. **不收的费不出现。** 输入图那一栏只在按次 / 按规格时才有；价格标签
+ *      里「其他规格按 0 计」只在没有兜底行时才写。
+ *   3. **价格只有一种写法。** 标签、抽屉脚、模型抽屉的折行摘要都来自
+ *      `lib/ai/feeGroupLabel.ts` 的同两个函数——界面上有两种写法，作者就会
+ *      以为是两回事。
+ *
+ * 颜色一律走设置面板色板（`--stg-*`）与共享角色，不写字面色值：
+ * `themeTokenParity.test.ts` 会读这棵树下的每一个模块。
+ */
+
+/* ─── 列表 ──────────────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3);
+  border: none;
+  border-top: 1px solid var(--color-border-soft);
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.row:hover { background: var(--color-bg-elevated); }
+.row:first-of-type { border-top: none; }
+
+/* 7px 方块：实心 ＝ 这组真的会收钱，虚线 ＝ 全是 0。 */
+.mark {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border: 1px dashed var(--stg-border-menu);
+}
+.markSet {
+  border-style: solid;
+  border-color: var(--color-text-primary);
+  background: var(--color-text-primary);
+}
+
+/* 名字与「N 个模型」是两行。行里的元素是 span（整行本身是一个 button，
+   里面不能有第二个 button），所以要显式 block——否则两段文字排成一行，
+   计数读起来像名字的一部分。 */
+.name {
+  flex: none;
+  width: 190px;
+  min-width: 0;
+  display: block;
+}
+.nameText,
+.bind { display: block; }
+.nameText {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bind {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+}
+
+.tags {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.tag {
+  padding: 1px var(--space-2);
+  background: var(--stg-stat);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+/* 继承来的值（缓存价留空 ＝ 同输入价）与「其他规格按 0 计」：斜体、无底，
+   说的是「这不是你填的，是推出来的」。 */
+.tagDerived {
+  background: none;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+.rowActions {
+  flex: none;
+  display: flex;
+  gap: var(--space-3);
+}
+
+.act {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.act:hover { color: var(--color-accent); }
+
+.foot {
+  margin-top: var(--space-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.8;
+  color: var(--color-text-muted);
+}
+
+/* ─── 抽屉 ──────────────────────────────────────────────────────────────── */
+
+.seg {
+  display: flex;
+  border: 1px solid var(--color-border);
+}
+.segBtn {
+  flex: 1;
+  padding: var(--space-2) 0;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.segBtn:first-child { border-left: none; }
+.segBtn:hover:not(.segOn) { background: var(--color-bg-elevated); }
+.segOn {
+  background: var(--stg-accent);
+  color: var(--stg-bg-input);
+  font-weight: 500;
+}
+
+.hint {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.75;
+  color: var(--color-text-muted);
+}
+
+.triple {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-2);
+}
+.cellSub {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.cellSubUnset { color: var(--color-text-faint); }
+
+.unitRow {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* 档位表：五列，和表头对齐。删除列窄到只放一个 ×。
+   宽度按 478px 抽屉减去 `drawerBody` 的左右内边距算出来——多一列就溢出，
+   而溢出的那一列是单价，正是这张表唯一必填的一格。 */
+.rateGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px 80px 16px;
+  gap: var(--space-1);
+  align-items: center;
+}
+.rateHead {
+  margin-bottom: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+}
+.rateHeadRight { text-align: right; }
+.rateRow + .rateRow { margin-top: var(--space-2); }
+
+.drop {
+  padding: 0;
+  justify-self: center;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.drop:hover { color: var(--color-accent); }
+
+.addRate {
+  margin-top: var(--space-2);
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.addRate:hover { opacity: 0.75; }
+
+/* 输入图一侧：一条发丝线之下——它不是档位表的一部分，是另一侧的账。 */
+.inputSide {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-soft);
+}
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.summary {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.summaryUnset { color: var(--color-text-faint); }
+
+/* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。 */
+.badPrice { border-color: var(--color-accent); }
+
+/* 档位表里的格比抽屉里别处的输入框紧一档：一行五格，共享 478px。 */
+.rateGrid .cell {
+  padding: 6px 8px;
+  font-size: var(--font-size-sm);
+}

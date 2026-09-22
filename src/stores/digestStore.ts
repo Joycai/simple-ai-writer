@@ -15,8 +15,8 @@ import {
 } from "../lib/context/memory";
 import { chapterTitle, type Volume } from "../lib/context/outline";
 import { readFile } from "../lib/fs/fileio";
-import { costFor, type Model } from "../lib/ai/configDb";
-import { persistUsage } from "../lib/ai/usage";
+import { type Model } from "../lib/ai/configDb";
+import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
 import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
@@ -149,6 +149,11 @@ export const useDigestStore = create<DigestState>((set, get) => ({
 /** Persist digest token usage (best-effort). */
 function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
   if (usage.in <= 0 && usage.out <= 0) return;
-  const cost = costFor(model, usage.in, usage.out, usage.cached);
-  void persistUsage(projectPath, model.id, usage.in, usage.out, cost, "digest", usage.cached);
+  void recordUsageRow(projectPath, {
+    model,
+    task: "digest",
+    promptTokens: usage.in,
+    cachedTokens: usage.cached,
+    completionTokens: usage.out,
+  });
 }

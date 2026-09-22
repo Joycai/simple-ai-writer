@@ -28,7 +28,7 @@ import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
-import { persistUsage } from "../lib/ai/usage";
+import { recordUsage } from "../lib/ai/usageRow";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { defaultMaxOutput, effectiveMaxOutput } from "../lib/ai/modelLimits";
 import { useAppStore } from "./appStore";
@@ -782,7 +782,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         if (get().abortController === controller) {
           get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
         }
-        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
+        void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -848,7 +848,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   });
                   // One row per draft: each is a separate billed call, and a
                   // single summed row would misreport the run's shape.
-                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
+                  void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
                 } else if ("text" in chunk) {
                   pendingAppends.set(draft.id, (pendingAppends.get(draft.id) ?? "") + chunk.text);
                   stream.schedule();

@@ -26,6 +26,8 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
+import { feeSummary } from "../../../lib/ai/feeGroupLabel";
+import { useFeeLabelWords } from "./feeWords";
 import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type ProtocolFamily, type TextVerbosity } from "../../../lib/ai/types";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
 import {
@@ -123,9 +125,6 @@ const ROUTE_LABEL_KEY: Record<string, string> = {
   "ark": "aiConfig.models.capsRouteArk",
 };
 
-/** "Has a value" — the fold rule's one predicate. 0 and "" are both unset here. */
-const isSet = (v: string): boolean => v.trim() !== "" && Number(v) !== 0;
-
 const shortDate = (ms: number): string => {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -140,7 +139,7 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
   const m = existing;
   const caps = m?.caps;
   return {
-    price: add || !!(m && (m.priceIn || m.priceCachedIn || m.priceOut || m.pricePerImage || m.pricePerSecond)),
+    price: add || !!m?.feeGroupId,
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
@@ -166,8 +165,14 @@ interface Props {
 
 export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const { t } = useTranslation();
-  const { providers, models, addModel, updateModel, fetchAndImportModels } = useAiStore();
+  const { providers, models, feeGroups, addModel, updateModel, fetchAndImportModels } = useAiStore();
+  const feeWords = useFeeLabelWords();
   const existing = modelId ? models.find((m) => m.id === modelId) : undefined;
+  /**
+   * 新建时预填渠道的默认计费组。只是预填：一旦写上，它就是这个模型自己的，
+   * 改渠道默认不会追着改（`Provider.defaultFeeGroupId`）。
+   */
+  const defaultFeeGroupId = providers.find((p) => p.id === providerId)?.defaultFeeGroupId;
   /**
    * A second, cheaper source of the same seed: the provider already has a
    * ComfyUI model. An author adding their second workflow to the same instance
@@ -247,6 +252,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // audio, so it carries its own price cell and the token prices mean nothing.
     asrFormat: (existing?.asrFormat ?? "") as AsrFormat | "",
     pricePerSecond: existing?.pricePerSecond !== undefined ? String(existing.pricePerSecond) : "",
+    /** 绑定的计费组 id；空串 ＝ 未绑定（一分不收，量照记）。 */
+    feeGroupId: existing?.feeGroupId ?? defaultFeeGroupId ?? "",
     // "auto" ↔ stored undefined, like the category (lib/ai/jsonMode.ts).
     structuredOutput: (existing?.structuredOutput ?? "auto") as StructuredOutputMode | "auto",
     // "auto" ↔ stored undefined: nothing sent (Responses family only).
@@ -614,6 +621,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         modelId: form.modelId,
         name: form.name || form.modelId,
         type: form.type,
+        feeGroupId: form.feeGroupId || undefined,
+        // 旧的价格列不再被任何算钱的路径读（`lib/ai/configDb.feeOf`），
+        // 只作为「这行搬过了」之前的原始值留在库里；保存时原样带过去。
         priceIn: parseFloat(form.priceIn) || 0,
         priceCachedIn: parseFloat(form.priceCachedIn) || 0,
         priceOut: parseFloat(form.priceOut) || 0,
@@ -701,14 +711,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   };
 
   // ── Section summaries (what a folded header says) ──────────────────────────
-  const priceHas = isAsrModel
-    ? isSet(form.pricePerSecond)
-    : isSet(form.priceIn) || isSet(form.priceCachedIn) || isSet(form.priceOut)
-      || (isImageModel && isSet(form.pricePerImage));
-  const priceSum = isAsrModel
-    ? `¥${form.pricePerSecond || "0"} / s`
-    : `$${form.priceIn || "0"} / ${form.priceCachedIn || "0"} / ${form.priceOut || "0"}`
-      + (isImageModel && isSet(form.pricePerImage) ? ` · ${form.pricePerImage}/img` : "");
+  const boundFeeGroup = feeGroups.find((g) => g.id === form.feeGroupId) ?? null;
+  // 这一节「有值」＝ 绑了组。全 0 的组（本机 Ollama）也算绑了：作者做过
+  // 一个决定，只是那个决定是「不收钱」。
+  const priceHas = !!form.feeGroupId;
 
   const limitsHas = parsedCtx > 0 || parsedOut > 0;
   const limitsSum = [
@@ -1139,58 +1145,35 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         </Section>
 
         {/* ── 计费 ───────────────────────────────────────────────────────────── */}
+        {/*
+          价格不在这张表上，在组里（设计稿 05l 屏 1e）。这一节从「三格单价」
+          变成「选一个组」：同一家十几个模型抄同一份价、改价要改十几处，那是
+          这次改动要解决的问题本身。这个模型的历史用量一分不动——每一行都抄
+          着当时的价（lib/ai/usageRow）。
+        */}
         <Section
           label={t("aiConfig.models.secPricing")}
           open={open.price}
           onToggle={() => toggleSection("price")}
-          summary={priceHas ? priceSum : t("aiConfig.models.secPricingUnset")}
-          unset={!priceHas}
+          summary={feeSummary(boundFeeGroup, feeWords)}
+          unset={!boundFeeGroup}
         >
-          <Fold open={!isAsrModel}>
-          <Field label={t("aiConfig.models.priceLabel")} sub={t("aiConfig.models.unitUsdPerM")}
-            hint={t("aiConfig.models.briefPrice")} {...whyProps("price", t("aiConfig.models.whyPrice"))}>
-            <div className={s.triple}>
-              {([
-                ["priceIn", t("aiConfig.models.priceInput")],
-                ["priceCachedIn", t("aiConfig.models.priceCachedInput")],
-                ["priceOut", t("aiConfig.models.priceOutput")],
-              ] as const).map(([key, label]) => (
-                <div key={key} className={s.tripleCell}>
-                  <input className={inputCls(!isSet(form[key]))} type="number" min="0" step="0.01" placeholder="0"
-                    value={form[key]}
-                    onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
-                  <div className={s.tripleSub}>{label}</div>
-                </div>
+          <Field label={t("aiConfig.models.feeGroupLabel")} hint={
+            boundFeeGroup ? t("aiConfig.models.feeGroupHint") : t("aiConfig.models.feeGroupHintUnbound")
+          }>
+            <select
+              className={`${s.select} ${form.feeGroupId ? "" : s.unset}`}
+              value={form.feeGroupId}
+              onChange={(e) => setForm({ ...form, feeGroupId: e.target.value })}
+            >
+              <option value="">{t("aiConfig.fees.unbound")}</option>
+              {feeGroups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {`${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`}
+                </option>
               ))}
-            </div>
+            </select>
           </Field>
-          </Fold>
-          {/* Billed by the second of audio (设计稿 02f 屏 1b): one cell, in the
-              currency DashScope bills in. Dashed = empty = the usage page cannot
-              price a run and the confirmation card's estimate stays dashed. */}
-          <Fold open={isAsrModel}>
-            <Field label={t("aiConfig.models.pricePerSecondLabel")} sub={t("aiConfig.models.unitYuanPerSecond")}
-              hint={t("aiConfig.models.briefPricePerSecond")}>
-              <div className={s.numRow}>
-                <input className={inputCls(!isSet(form.pricePerSecond), s.num)} type="number" min="0" step="0.00001"
-                  placeholder="0.00022"
-                  value={form.pricePerSecond}
-                  onChange={(e) => setForm({ ...form, pricePerSecond: e.target.value })} />
-                <span className={s.unit}>¥ / s</span>
-              </div>
-            </Field>
-          </Fold>
-          <Fold open={isImageModel}>
-            <Field label={t("aiConfig.models.pricePerImageLabel")} hint={t("aiConfig.models.briefPricePerImage")}>
-              <div className={s.numRow}>
-                <input className={inputCls(!isSet(form.pricePerImage), s.num)} type="number" min="0" step="0.001"
-                  placeholder={t("aiConfig.models.phNotSent")}
-                  value={form.pricePerImage}
-                  onChange={(e) => setForm({ ...form, pricePerImage: e.target.value })} />
-                <span className={s.unit}>USD</span>
-              </div>
-            </Field>
-          </Fold>
         </Section>
 
         {/* ── Text-model sections: 限额 / 思考 / 能力 / 采样 ──────────────────── */}

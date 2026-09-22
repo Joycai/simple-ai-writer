@@ -270,6 +270,7 @@ export type SettingsTab =
   | "workspace"
   | "docx-format"
   | "providers-models"
+  | "fees"
   | "subagents"
   | "prompts"
   | "usage"

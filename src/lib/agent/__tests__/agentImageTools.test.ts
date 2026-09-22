@@ -32,6 +32,14 @@ const { generateImageTool, editImageTool, redrawLoreImageTool } = await import("
 const IMAGE_MODEL = {
   id: "m1", providerId: "p1", modelId: "img-1", name: "Nano", type: "image",
   priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, pricePerImage: 0.04,
+  // 价来自绑定的计费组（lib/ai/feeGroup），解析结果挂在 `Model.fee` 上。
+  feeGroupId: "fg-img",
+  fee: {
+    billingMode: "spec" as const, outputUnit: "image" as const,
+    outputRates: [{ price: 0.04 }],
+    inputPrice: 0, cachePrice: 0, outputPrice: 0, requestPrice: 0,
+    inputUnitPrice: 0, inputFreeUnits: 0,
+  },
 };
 
 const ENTITY = {

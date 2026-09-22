@@ -710,3 +710,35 @@
   .usageGrid { grid-template-columns: minmax(120px, 1fr) 52px 60px 66px 60px 76px; }
   .usageGrid > .hideNarrow { display: none; }
 }
+
+/* 用量页顶部的两排 chip：范围在上、时间窗在下——先问「哪一份账」，
+   再问「哪一段时间」。 */
+.usageScopeStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+/* 「N 次请求没匹配到档位，按 0 计」：跨满整行、缩进到名字列之后。
+   不用警示色——没配档位不是错误，是还没配完。 */
+.usageGap {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.usageGapLink {
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--color-border-accent);
+  background: none;
+  font: inherit;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.usageGapLink:hover { color: var(--color-text-primary); border-bottom-color: var(--color-text-primary); }

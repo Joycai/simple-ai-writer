@@ -313,7 +313,26 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
  * the author actually paid.
  */
 function bill(ctx: RunContext, task: "image-gen" | "image-edit", result: ImageResult): void {
-  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage);
+  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage, specOf(ctx), inputsOf(task));
+}
+
+/**
+ * 这次请求的规格，交给计费组去档位表里匹配（lib/ai/feeGroup.matchRate）。
+ *
+ * 作者打进去的像素尺寸优先，其次是方言的分辨率档——两种都可能，归一化在
+ * 匹配那一侧（`1024*1024` 与 `1k` 都认）。上游没有回显规格的通道，所以这里
+ * 用的是**请求的**值。
+ */
+function specOf(ctx: RunContext): { size?: string; quality?: string } {
+  return { size: ctx.size || ctx.resolution, quality: ctx.quality };
+}
+
+/**
+ * 编辑一次至少交一张参考图；生成不交。张数在这里只能是 1——这条路径每次
+ * 只送一张底图（`images[0]`）。
+ */
+function inputsOf(task: "image-gen" | "image-edit"): number {
+  return task === "image-edit" ? 1 : 0;
 }
 
 /** Write a result's candidates to scratch and bill the run. */
@@ -331,6 +350,8 @@ async function materialize(
     turn.parentId ? "image-edit" : "image-gen",
     result.images.length,
     result.usage,
+    specOf(ctx),
+    inputsOf(turn.parentId ? "image-edit" : "image-gen"),
   );
   return { id, ...turn, candidates, chosen: 0, text: result.text };
 }

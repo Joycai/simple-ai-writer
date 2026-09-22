@@ -8,6 +8,9 @@ import {
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
 import { normalizeChannel, routeProvider } from "../lib/ai/routes";
+import { attachFees } from "../lib/ai/configDb";
+import { feeGroupDeleteStatements, feeGroupUpsert, listFeeGroups } from "../lib/ai/feeGroupDb";
+import type { FeeGroup } from "../lib/ai/feeGroup";
 import { mergeStatements, planMerge, type MergePlan } from "../lib/ai/channelMerge";
 import { remapUsageModelIds } from "../lib/ai/usage";
 import type { ProtocolFamily } from "../lib/ai/types";
@@ -122,6 +125,12 @@ interface AiState {
   providers: Provider[];
   models: Model[];
   prompts: Prompt[];
+  /**
+   * 计费组（lib/ai/feeGroup）。价格从模型行上搬出来之后，它是「一次请求
+   * 多少钱」的唯一来源；模型只持有一个 id，解析出来的 `Model.fee` 由
+   * `attachFees` 挂上——所以改一个组，绑着它的模型下一次请求就按新价算。
+   */
+  feeGroups: FeeGroup[];
   activeModelId: string | null;
   activePromptId: string | null;
   /** Model used for Story-Memory summarization; falls back to activeModelId. */
@@ -162,6 +171,14 @@ interface AiState {
   moveProvider: (id: string, move: ProviderMove) => Promise<void>;
   getApiKey: (providerId: string) => Promise<string | null>;
 
+  /** 新建 / 改一个组。改了价之后 `models` 上挂的 `fee` 一并刷新。 */
+  saveFeeGroup: (g: Omit<FeeGroup, "id" | "createdAt"> & { id?: string; createdAt?: number }) => Promise<string>;
+  /**
+   * 删一个组。引用置空、模型不删、**用量行一分不动**——每一行都抄着当时
+   * 的价，历史不会因为今天删了一个组而变。
+   */
+  removeFeeGroup: (id: string) => Promise<void>;
+
   addModel: (m: Omit<Model, "id">) => Promise<void>;
   updateModel: (m: Model) => Promise<void>;
   removeModel: (id: string) => Promise<void>;
@@ -186,6 +203,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   providers: [],
   models: [],
   prompts: [],
+  feeGroups: [],
   activeModelId: readSelection("activeModelId"),
   activePromptId: readSelection("activePromptId"),
   memoryModelId: readSelection("memoryModelId"),
@@ -198,12 +216,15 @@ export const useAiStore = create<AiState>((set, get) => ({
     set({ isLoading: true });
     try {
       const d = await db();
-      const [providers, models, prompts] = await Promise.all([
+      const [providers, models, prompts, feeGroups] = await Promise.all([
         listProviders(d),
         listModels(d),
         listPrompts(d),
+        listFeeGroups(d),
       ]);
-      set({ providers, models, prompts });
+      // `listModels` 已经把组解析进 `Model.fee` 了（同一个库、同一次读），
+      // 所以这里不用再 attach 一遍。
+      set({ providers, models, prompts, feeGroups });
       // A restored selection can outlive what it pointed at: the model may
       // have been deleted on another launch, or the config replaced by an
       // import from a different machine, where the ids are all different.
@@ -359,6 +380,46 @@ export const useAiStore = create<AiState>((set, get) => ({
   },
 
   getApiKey: (providerId) => loadApiKey(providerId),
+
+  saveFeeGroup: async (g) => {
+    const group: FeeGroup = {
+      ...g,
+      id: g.id ?? nanoid(),
+      createdAt: g.createdAt ?? Math.floor(Date.now() / 1000),
+    };
+    if (isTauri) {
+      const d = await db();
+      const { sql, values } = feeGroupUpsert(group);
+      await d.execute(sql, values);
+    }
+    set((s) => {
+      const feeGroups = s.feeGroups.some((x) => x.id === group.id)
+        ? s.feeGroups.map((x) => (x.id === group.id ? group : x))
+        : [...s.feeGroups, group];
+      // 价变了，挂在模型上的那份解析结果就过期了——重挂一次，而不是让
+      // 每个算钱的调用点自己去想「我手里这份还新鲜吗」。
+      return { feeGroups, models: attachFees(s.models, feeGroups) };
+    });
+    return group.id;
+  },
+
+  removeFeeGroup: async (id) => {
+    if (isTauri) {
+      // 事务走文件而不是这个句柄：SQL 插件是连接池，`sqlTransaction` 要自己
+      // 开一条连接（lib/sqlTx）。先 `db()` 一次确保表结构已经就位。
+      await db();
+      // 三条语句一个事务：半删掉的组会让模型指着一个不存在的 id。
+      await sqlTransaction(await getGlobalDbPath(), feeGroupDeleteStatements(id));
+    }
+    set((s) => {
+      const feeGroups = s.feeGroups.filter((g) => g.id !== id);
+      const models = s.models.map((m) => (m.feeGroupId === id ? { ...m, feeGroupId: undefined } : m));
+      const providers = s.providers.map((p) =>
+        p.defaultFeeGroupId === id ? { ...p, defaultFeeGroupId: undefined } : p,
+      );
+      return { feeGroups, providers, models: attachFees(models, feeGroups) };
+    });
+  },
 
   addModel: async (m) => {
     const model: Model = { ...m, id: nanoid() };

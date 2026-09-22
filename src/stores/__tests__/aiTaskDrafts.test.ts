@@ -100,6 +100,8 @@ vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
 vi.mock("../../lib/keyStore", () => ({ loadApiKey: vi.fn(async () => "key") }));
 vi.mock("../../lib/ai/modelHealth", () => ({ recordRunOutcome: vi.fn() }));
+// 一次请求记两处（lib/ai/usageRow）：项目库与 appDataDir 的总账。这里只
+// 收集项目那一处——两处写的是同一行，重复断言不会多守住什么。
 vi.mock("../../lib/project", () => ({
   getDb: vi.fn(async () => ({
     execute: vi.fn(async (_sql: string, params: unknown[]) => {
@@ -110,6 +112,7 @@ vi.mock("../../lib/project", () => ({
       });
     }),
   })),
+  getGlobalDb: vi.fn(async () => ({ execute: vi.fn(async () => {}) })),
 }));
 vi.mock("../agentStore", () => ({
   useAgentStore: {
@@ -165,9 +168,18 @@ import { MAX_DRAFTS, draftCountFor, totalUsage, type Draft } from "../../lib/ai/
 import { DEFAULT_TASKS, type TaskDef } from "../../lib/profile/model";
 import { useAiStore } from "../aiStore";
 
+// 价格现在来自模型绑定的计费组，解析结果挂在 `Model.fee` 上（lib/ai/configDb
+// 的 `attachFees`）；旧的 price_* 列不再被任何算钱的路径读。
 const MODEL = {
   id: "m1", providerId: "p1", modelId: "gpt-x", name: "GPT-X",
   contextSize: 8000, priceIn: 1, priceCachedIn: 0, priceOut: 2, type: "text", prefix: "",
+  feeGroupId: "fg1",
+  fee: {
+    billingMode: "token" as const,
+    inputPrice: 1, cachePrice: 0, outputPrice: 2,
+    requestPrice: 0, outputUnit: "image" as const, outputRates: [],
+    inputUnitPrice: 0, inputFreeUnits: 0,
+  },
 };
 const PROVIDER = { id: "p1", name: "P", baseUrl: "https://api.test/v1", apiStandard: "openai" };
 

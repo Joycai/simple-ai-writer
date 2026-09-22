@@ -30,9 +30,9 @@
 
 import i18n from "../../i18n";
 import type { StreamMessage } from "../ai/types";
-import { canSeeImages, costFor, type Model } from "../ai/configDb";
+import { canSeeImages, type Model } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
-import { persistUsage } from "../ai/usage";
+import { recordUsage } from "../ai/usageRow";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
 import { withCurrentTime } from "../context/clock";
 import { AGENT_ASSIST_PRESET, type TaskPreset } from "./presets";
@@ -397,16 +397,13 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     parentStep: call.id,
   });
   const model: Model = conn.model;
-  const cost = costFor(model, result.inputTokens, result.outputTokens, result.cachedTokens);
-  await persistUsage(
-    ctx.projectPath,
-    model.id,
-    result.inputTokens,
-    result.outputTokens,
-    cost,
-    `pack:${pack}`,
-    result.cachedTokens,
-  );
+  await recordUsage(ctx.projectPath, {
+    model,
+    task: `pack:${pack}`,
+    promptTokens: result.inputTokens,
+    cachedTokens: result.cachedTokens,
+    completionTokens: result.outputTokens,
+  });
 
   if (!output.trim()) {
     return fail(`the ${pack} pack returned no report. Check the execution log for what it did, or retry with a clearer brief.`);

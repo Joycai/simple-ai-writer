@@ -15,9 +15,8 @@
  * 因为它们根本没被送进模型（见 `chunk.isTranslatable`）。
  */
 
-import { costFor } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
-import { persistUsage } from "../ai/usage";
+import { recordUsage as recordUsageRow } from "../ai/usageRow";
 import { loadApiKey } from "../keyStore";
 import { fileExists, readFile } from "../fs/fileio";
 import { baseName, resolveWorkspacePath } from "../paths";
@@ -161,14 +160,12 @@ async function recordUsage(
   usage: { inputTokens: number; outputTokens: number },
 ): Promise<void> {
   if (!ctx.projectPath) return;
-  await persistUsage(
-    ctx.projectPath,
-    conn.model.id,
-    usage.inputTokens,
-    usage.outputTokens,
-    costFor(conn.model, usage.inputTokens, usage.outputTokens),
-    "subagent:translate",
-  );
+  await recordUsageRow(ctx.projectPath, {
+    model: conn.model,
+    task: "subagent:translate",
+    promptTokens: usage.inputTokens,
+    completionTokens: usage.outputTokens,
+  });
 }
 
 export async function translateTool(

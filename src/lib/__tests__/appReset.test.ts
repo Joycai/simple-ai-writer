@@ -112,7 +112,9 @@ describe("resetApp", () => {
   it("drops every config table, models before the providers they reference", async () => {
     await resetApp();
 
-    expect(txTables()).toEqual(["models", "providers", "prompts"]);
+    // 计费组排在引用它的两张表之后；总体用量跟着配置库一起清（项目文件夹
+    // 里的那一份不动——那是作者的稿子那一边的东西）。
+    expect(txTables()).toEqual(["models", "providers", "prompts", "fee_groups", "token_usage"]);
     // 排版格式和遗留的明文密钥表没有外键牵连，走事务外的尽力而为一路。
     expect(h.execute.mock.calls.map((c) => String(c[0]))).toContain("DELETE FROM doc_format");
     expect(h.timeline).toContain("legacy:dropped");

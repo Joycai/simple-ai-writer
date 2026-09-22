@@ -43,7 +43,7 @@ import { useAppStore } from "./appStore";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
-import { persistUsage } from "../lib/ai/usage";
+import { recordUsage } from "../lib/ai/usageRow";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
 import { measureCharsPerToken } from "../lib/context/budget";
 import { messageCeilingFor } from "../lib/agent/toolCost";
@@ -849,11 +849,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         },
       }));
       recordRunOutcome(model.id, null);
-      void persistUsage(
-        projectPath, model.id, result.inputTokens, result.outputTokens, cost,
-        agent.kind === "narrator" ? "roleplay:narrator" : "roleplay:character",
-        result.cachedTokens,
-      );
+      void recordUsage(projectPath, {
+        model,
+        task: agent.kind === "narrator" ? "roleplay:narrator" : "roleplay:character",
+        promptTokens: result.inputTokens,
+        cachedTokens: result.cachedTokens,
+        completionTokens: result.outputTokens,
+      });
       if (get().activeAgentId !== job.agentId) {
         set((st) => ({ unread: { ...st.unread, [job.agentId]: true } }));
         notify("done", i18n.t("notify.doneTitle"), i18n.t("roleplay.notify.replied", {

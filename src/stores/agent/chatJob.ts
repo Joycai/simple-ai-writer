@@ -24,7 +24,7 @@ import { routeTools } from "../../lib/agent/routing";
 import { resolveSubAgentConn } from "../../lib/agent/subagentModel";
 import { newChatStateMemory } from "../../lib/agent/stateFlag";
 import { repairToolCallPairing, runAgent } from "../../lib/agent/runtime";
-import { persistUsage } from "../../lib/ai/usage";
+import { recordUsage } from "../../lib/ai/usageRow";
 import { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } from "../../lib/context/budget";
 import { messageCeilingFor } from "../../lib/agent/toolCost";
 import { workflowBriefingSection } from "../../lib/workflow";
@@ -867,7 +867,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // the next turn.
     bumpContext();
     recordRunOutcome(model.id, null);
-    void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, "chat", cachedTokens);
+    void recordUsage(projectPath, { model, task: "chat", promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
   } catch (e) {
     // Whatever streamed before the failure is still the author's to read.
     stream.flush();

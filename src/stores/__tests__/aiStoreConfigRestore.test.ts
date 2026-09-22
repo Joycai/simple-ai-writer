@@ -21,7 +21,8 @@ vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
 
 const models = [{ id: "old" }, { id: "restored" }, { id: "other" }];
 vi.mock("../../lib/project", () => ({
-  getGlobalDb: async () => ({}),
+  // 计费组和 providers / models 同一个库：`loadConfig` 现在也读 `fee_groups`。
+  getGlobalDb: async () => ({ select: async () => [] }),
   getGlobalDbPath: async () => "/app-data/config.db",
 }));
 vi.mock("../../lib/keyStore", () => ({

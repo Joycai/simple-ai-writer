@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
+import { feeSummary } from "../../../lib/ai/feeGroupLabel";
+import { useFeeLabelWords } from "./feeWords";
 import type { Model, Provider } from "../../../lib/ai/configDb";
 import { authModesFor, type AuthMode, type ProtocolFamily } from "../../../lib/ai/types";
 import { anthropicUrl, defaultBaseFor, geminiUrl, openaiUrl } from "../../../lib/ai/urls";
@@ -230,11 +232,20 @@ interface Form {
   host: string;
   /** Enabled routes, primary first. */
   endpoints: Endpoint[];
+  /**
+   * 这个渠道下新建 / 发现的模型预填哪个计费组。空串 ＝ 不预填。
+   *
+   * 只是预填：模型自己的 `feeGroupId` 一旦写上就是它自己的，改这里不会
+   * 追着改已有的模型——否则作者给一个模型单独配的价会被渠道的默认悄悄
+   * 抹掉，而那种抹法不报错。
+   */
+  defaultFeeGroupId: string;
 }
 
 export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
   const { t } = useTranslation();
-  const { providers, models, addProvider, updateProvider, addModel, updateModel } = useAiStore();
+  const { providers, models, feeGroups, addProvider, updateProvider, addModel, updateModel } = useAiStore();
+  const feeWords = useFeeLabelWords();
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
   const [form, setForm] = useState<Form | null>(() =>
@@ -245,6 +256,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           platform: existing.platform ?? "custom",
           host: channelHost(existing),
           endpoints: channelEndpoints(existing),
+          defaultFeeGroupId: existing.defaultFeeGroupId ?? "",
         }
       : null,
   );
@@ -275,6 +287,9 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
       platform,
       host: platformOrigin(platform),
       endpoints: newChannelEndpoints(platform),
+      // 换平台不该丢掉作者已经挑好的默认计费组——那是关于钱的选择，
+      // 和这台服务器说什么协议无关。
+      defaultFeeGroupId: f?.defaultFeeGroupId ?? "",
     }));
   };
 
@@ -306,6 +321,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
   const draft: Provider = normalizeChannel({
     id: existing?.id ?? "draft",
     name: form.name,
+    defaultFeeGroupId: form.defaultFeeGroupId || undefined,
     baseUrl: "",
     apiStandard: standardOf(form.endpoints[0]),
     platform: comfyMode ? "comfyui" : form.platform,
@@ -471,6 +487,25 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           <label className={styles.label}>{t("aiConfig.providers.nameLabel")}</label>
           <input className={styles.input} value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+
+        {/* 这个渠道下新模型预填的计费组（设计稿 05l）。一个渠道的模型通常
+            同价，预填让加十个模型不用挑十次组。 */}
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("aiConfig.providers.defaultFeeGroup")}</label>
+          <select
+            className={styles.input}
+            value={form.defaultFeeGroupId}
+            onChange={(e) => setForm({ ...form, defaultFeeGroupId: e.target.value })}
+          >
+            <option value="">{t("aiConfig.fees.unbound")}</option>
+            {feeGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {`${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`}
+              </option>
+            ))}
+          </select>
+          <div className={styles.hint}>{t("aiConfig.providers.defaultFeeGroupHint")}</div>
         </div>
 
         {/* The platform: which private fields this server takes beyond its

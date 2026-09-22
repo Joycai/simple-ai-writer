@@ -6,19 +6,30 @@ import {
   clearUsage,
   formatTokenCount,
   formatUsd,
+  groupBuckets,
   loadUsage,
   sortUsageBuckets,
   USAGE_WINDOWS,
   type UsageBucket,
+  type UsageScope,
   type UsageSortKey,
   type UsageSummary,
   type UsageWindow,
 } from "../../../lib/ai/usage";
+import { feeSummary } from "../../../lib/ai/feeGroupLabel";
+import { useFeeLabelWords } from "./feeWords";
+import { baseName } from "../../../lib/paths";
 import { findTask, taskLabel, taskPackLabel } from "../../../lib/profile";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow } from "./bits";
 import ui from "../settingsUi.module.css";
 
-type Dimension = "model" | "task";
+/**
+ * 明细按什么卷。`group` 是这一轮新加的那一维——价格从模型搬到组之后，
+ * 「这个月哪一类支出最大」问的是组，不是模型。
+ *
+ * `project` 只在总体范围下有意义：项目库里每一行都是这个项目的。
+ */
+type Dimension = "group" | "model" | "task" | "project";
 
 /** `cachedTokens` is a subset of `promptTokens` (see configDb.costFor), so the
  *  "fresh input" column is the difference, not the raw prompt figure. */
@@ -32,17 +43,26 @@ function hitRate(b: UsageBucket): string {
 }
 
 /**
- * What the `token_usage` rows add up to. Project-scoped, like the workspace
- * pane, because that is where the table lives.
+ * 两本账加起来是多少 — 设计稿 05l 屏 1f / 1g。
+ *
+ * **本项目**读项目文件夹里的 `.ai-writer/project.db`，跟着项目走；**全部**
+ * 读应用数据目录里的 `config.db`，比任何一个项目活得久。切范围就是换一个
+ * 库（`lib/ai/usage` 的 `UsageScope`），不是在同一张表上加个过滤条件。
+ *
+ * 「按计费组」那一维不看行上的快照，而是问模型**现在**绑着哪个组：重新
+ * 分组之后历史跟着走。行上快照的是**价**，不是归属。
  */
-export function UsagePane() {
+export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   const { t, i18n: i18nInst } = useTranslation();
   const isZh = i18nInst.language.startsWith("zh");
   const projectPath = useProjectStore((s) => s.projectPath);
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
+  const feeGroups = useAiStore((s) => s.feeGroups);
+  const words = useFeeLabelWords();
+  const [scope, setScope] = useState<UsageScope>("project");
   const [window, setWindow] = useState<UsageWindow>("30d");
-  const [dimension, setDimension] = useState<Dimension>("model");
+  const [dimension, setDimension] = useState<Dimension>("group");
   // Cost-descending is the default the lib already ordered rows by, so the
   // first render is unchanged until the author clicks a column.
   const [sort, setSort] = useState<{ key: UsageSortKey; dir: "asc" | "desc" }>({
@@ -53,28 +73,43 @@ export function UsagePane() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // 总体那份不需要开着项目：它正是「项目删了、移走了，这一年花了多少还在」
+  // 的那本账。只有本项目那一份要项目在。
   useEffect(() => {
-    if (!projectPath) {
+    if (scope === "project" && !projectPath) {
       setSummary(null);
       return;
     }
     let cancelled = false;
     setBusy(true);
     setError(null);
-    loadUsage(projectPath, window)
+    loadUsage(scope, projectPath, window)
       .then((s) => { if (!cancelled) setSummary(s); })
       .catch((e) => { if (!cancelled) setError(String(e)); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [projectPath, window]);
+  }, [scope, projectPath, window]);
 
+  // 「按项目」在本项目范围下永远只有一行——切回去时把维度带回来，免得
+  // 作者看到一个只有一行、还是自己的表。
+  useEffect(() => {
+    if (scope === "project" && dimension === "project") setDimension("group");
+  }, [scope, dimension]);
+
+  /**
+   * 清的永远是当前范围那一份。
+   *
+   * 清掉一个项目的记录不是在说「这半年我没花过钱」，所以本项目那次清除不
+   * 碰总账；要清总账得先切到「全部」再清一次，那是另一次确认。
+   */
   const handleClear = async () => {
-    if (!projectPath || busy) return;
-    if (!globalThis.confirm(t("systemSettings.usage.clearConfirm"))) return;
+    if (busy) return;
+    const key = scope === "global" ? "clearConfirmGlobal" : "clearConfirm";
+    if (!globalThis.confirm(t(`systemSettings.usage.${key}`))) return;
     setBusy(true);
     try {
-      await clearUsage(projectPath);
-      setSummary(await loadUsage(projectPath, window));
+      await clearUsage(scope, scope === "global" ? null : projectPath);
+      setSummary(await loadUsage(scope, projectPath, window));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -110,18 +145,57 @@ export function UsagePane() {
     return { name: t(`systemSettings.usage.kinds.${id}`, { defaultValue: id }), sub: "" };
   };
 
-  if (!projectPath) {
+  /**
+   * 计费组那一行。归属取自模型**现在**绑着的组，不是行上的快照——重新分组
+   * 之后历史跟着走，这是故意的（行上快照的是价，不是归属）。
+   *
+   * 已经删掉的组、没绑组的模型，都落进空 key 那个桶，写「未绑定」。
+   */
+  const groupRow = (id: string): { name: string; sub: string } => {
+    const g = feeGroups.find((x) => x.id === id);
+    if (!g) return { name: t("aiConfig.fees.unbound"), sub: t("systemSettings.usage.unboundSub") };
+    return { name: g.name || t("aiConfig.fees.untitled"), sub: feeSummary(g, words) };
+  };
+
+  /** 总体那份才有：路径是身份，名字只是它的尾巴。 */
+  const projectRow = (path: string): { name: string; sub: string } => {
+    if (!path) return { name: t("systemSettings.usage.unknownProject"), sub: "" };
+    return { name: baseName(path) || path, sub: path };
+  };
+
+  if (scope === "project" && !projectPath) {
     return (
       <Pane width="wide">
         <PaneHeader title={t("systemSettings.tabs.usage")} sub={t("systemSettings.usage.paneSub")} />
-        <div className={ui.emptyNote}>{t("systemSettings.usage.noProject")}</div>
+        <div className={ui.emptyNote}>{t("systemSettings.usage.noProjectScoped")}</div>
+        <Section label={t("systemSettings.usage.scope")}>
+          <Row title={t("systemSettings.usage.scopes.global")} desc={t("systemSettings.usage.scopeGlobalSub")} last>
+            <button className={ui.rowBtn} onClick={() => setScope("global")}>
+              {t("systemSettings.usage.switchToGlobal")}
+            </button>
+          </Row>
+        </Section>
       </Pane>
     );
   }
 
   const total = summary?.total;
-  const rawBuckets = summary ? (dimension === "model" ? summary.byModel : summary.byTask) : [];
-  const label = dimension === "model" ? modelRow : taskRow;
+  const feeGroupIdOf = (modelId: string) =>
+    (models.find((x) => x.id === modelId) ?? models.find((x) => x.modelId === modelId))?.feeGroupId;
+  const rawBuckets = !summary
+    ? []
+    : dimension === "group"
+      ? groupBuckets(summary.byModel, feeGroupIdOf)
+      : dimension === "model"
+        ? summary.byModel
+        : dimension === "project"
+          ? summary.byProject
+          : summary.byTask;
+  const label =
+    dimension === "group" ? groupRow
+      : dimension === "model" ? modelRow
+        : dimension === "project" ? projectRow
+          : taskRow;
   const buckets = sortUsageBuckets(rawBuckets, sort.key, sort.dir, (k) => label(k).name);
   const maxCalls = Math.max(1, ...buckets.map((b) => b.calls));
 
@@ -190,18 +264,32 @@ export function UsagePane() {
     <Pane width="wide">
       <PaneHeader
         title={t("systemSettings.tabs.usage")}
-        sub={t("systemSettings.usage.paneSub")}
+        /* 副标题直接说这一份账存在哪：两本账的差别是「存在哪、活多久」，
+           把它写在页顶就不必让作者去读脚注。 */
+        sub={t(`systemSettings.usage.scopeSub.${scope}`)}
         action={
-          <ChipRow>
-            {USAGE_WINDOWS.map((w) => (
-              <Chip
-                key={w}
-                label={t(`systemSettings.usage.windows.${w}`)}
-                active={window === w}
-                onClick={() => setWindow(w)}
-              />
-            ))}
-          </ChipRow>
+          <div className={ui.usageScopeStack}>
+            <ChipRow>
+              {(["project", "global"] as UsageScope[]).map((sc) => (
+                <Chip
+                  key={sc}
+                  label={t(`systemSettings.usage.scopes.${sc}`)}
+                  active={scope === sc}
+                  onClick={() => setScope(sc)}
+                />
+              ))}
+            </ChipRow>
+            <ChipRow>
+              {USAGE_WINDOWS.map((w) => (
+                <Chip
+                  key={w}
+                  label={t(`systemSettings.usage.windows.${w}`)}
+                  active={window === w}
+                  onClick={() => setWindow(w)}
+                />
+              ))}
+            </ChipRow>
+          </div>
         }
       />
 
@@ -223,8 +311,13 @@ export function UsagePane() {
         label={t("systemSettings.usage.detail")}
         action={
           <ChipRow>
+            <Chip label={t("systemSettings.usage.byGroup")} active={dimension === "group"} onClick={() => setDimension("group")} />
             <Chip label={t("systemSettings.usage.byModel")} active={dimension === "model"} onClick={() => setDimension("model")} />
             <Chip label={t("systemSettings.usage.byTask")} active={dimension === "task"} onClick={() => setDimension("task")} />
+            {/* 项目库里每一行都是这个项目的：这一维只在总体那份里有意义。 */}
+            {scope === "global" && (
+              <Chip label={t("systemSettings.usage.byProject")} active={dimension === "project"} onClick={() => setDimension("project")} />
+            )}
           </ChipRow>
         }
       >
@@ -267,23 +360,40 @@ export function UsagePane() {
                   <span className={`${ui.usageNum} ${ui.usageNumCost}`}>
                     {b.costUsd > 0 ? formatUsd(b.costUsd) : "—"}
                   </span>
+                  {/* 没命中任何档位的请求按 0 计——不是错误，是还没配完，所以
+                      写成一行提示而不是警示色，并且给一条直达补表的路。 */}
+                  {b.uncovered > 0 && (
+                    <div className={ui.usageGap}>
+                      <span>{t("systemSettings.usage.uncovered", { n: b.uncovered })}</span>
+                      {dimension === "group" && b.key && (
+                        <button type="button" className={ui.usageGapLink} onClick={() => onOpenFees?.()}>
+                          {t("systemSettings.usage.goFixRates")}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
             <div className={ui.usageFootRule} />
-            <div className={ui.usageFoot}>{t("systemSettings.usage.footnote")}</div>
+            <div className={ui.usageFoot}>{t(`systemSettings.usage.footnote.${scope}`)}</div>
           </>
         )}
       </Section>
 
       <Section label={t("systemSettings.usage.maintenance")}>
-        <Row title={t("systemSettings.usage.clear")} desc={t("systemSettings.usage.clearHint")} last>
+        {/* 按钮文字跟着范围换：清的是哪一份，按钮上就写哪一份。 */}
+        <Row
+          title={t(`systemSettings.usage.clearLabel.${scope}`)}
+          desc={t(`systemSettings.usage.clearHint.${scope}`)}
+          last
+        >
           <button
             className={ui.rowBtn}
             onClick={handleClear}
             disabled={busy || !summary || summary.total.calls === 0}
           >
-            {t("systemSettings.usage.clear")}
+            {t(`systemSettings.usage.clearLabel.${scope}`)}
           </button>
         </Row>
       </Section>

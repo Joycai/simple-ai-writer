@@ -120,6 +120,15 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 - SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`.
 - Panes are built from the shared row/section/card/chip vocabulary in `settingsUi.module.css` + `panes/bits.tsx`; `settingsCommon.module.css` holds the form controls used inside the edit drawers.
 - 渠道与模型 is a single merged pane (grouped list + right-hand drawer), and Prompt has a drawer of its own.
+- 计费组（`FeeGroupsPane` + `FeeGroupDrawer`，设计稿 05l）紧跟「渠道与模型」——它是
+  那一页的价格那一半；中间隔着子代理，作者会以为它属于「用量」。编辑抽屉的表单是
+  一个完整的 `FeeGroup`（三种方式的字段全在），分段控件只改 `billingMode`：**切方式
+  只换下面的字段区，不清空别的方式的值**。列表行首 7px 方块沿用模型抽屉节目录的记号
+  （实心 = 配了价，虚线 = 全是 0）。
+- 用量页有两排 chip：范围（本项目 / 全部）在上，时间窗在下——先问「哪一份账」，再问
+  「哪一段时间」。分组条只有一个强调色、长度表示占比（份额用长度，种类用词：这个
+  仓库只有一个强调色，把成本拆成五段上色要么互相认不出，要么逼出一套新色板）。
+  「按项目」只在总体范围下出现，它同时是「为什么有两本账」的自我解释。
 
 #### 模型抽屉
 
@@ -229,7 +238,31 @@ CommandPalette, onboarding flow, library view (文库: book-spine ordering + per
 - per-reply output caps (`modelLimits.ts` — the built-in table + the app-wide default behind `effectiveMaxOutput`, the one resolver both the wire and the budget planner read; see `docs/reference/architecture.md` → Large outputs)
 - multi-draft output vocabulary (`drafts.ts`)
 - the snippet library's pure layer (`snippets.ts` — grouping/search/hit-slicing shared by the picker and Settings → Prompt, so both surfaces section a library the same way; see `docs/feature/prompt-snippets-ui-brief.md`)
-- token/cost accounting read side (`usage.ts` — the `token_usage` rollups behind Settings → 用量)
+#### 计费与用量（`docs/feature/billing/01-fee-groups.md`）
+- **价格是一个实体，不是模型上的几列。** `feeGroup.ts` 是纯逻辑：三种计价方式
+  （`token` / `request` / `spec`）、规格归一化（`1k`→`1K`、`1024*1024`→`1024x1024`、
+  `auto`→空，三方都过同一个函数，匹配才敢是纯相等）、档位匹配（**空条件匹配一切，
+  填得最多的行赢，同样多先写的赢，同样多时精确尺寸压过按面积落进来的档位**），
+  以及**全应用唯一的一份** `costOf()`。
+- `feeGroupDb.ts` 是行与列：`fee_groups`（和 providers / models 同在全局
+  `config.db`——组是配置，不是某个项目的数据），加上从模型行的旧价格列一次性迁出来
+  的那一步。迁移标记在 `models.fee_migrated` 而不是「表里已有组」或「清零旧列」：
+  前者会让用户删光组之后下次启动又长回来，后者会让同机的旧版本读到一堆零价。
+  老的 `price_cached_in` 是 `NOT NULL DEFAULT 0`，它的 0 迁成 **null**（= 同输入价）
+  ——照搬成 0 会让所有老配置一夜之间缓存免费，而那笔错账不报错。
+- `feeGroupLabel.ts` 是价格在界面上的**唯一一种写法**（摘要 / 标签），纯的，措辞由
+  调用方经 `panes/feeWords.ts` 递进来，所以它在 node 环境的测试里直接可用。
+- **一次请求记两处**（`usageRow.ts` 的唯一写入口 `recordUsage`）：项目
+  `.ai-writer/project.db`（跟着项目文件夹走）与 appDataDir 的 `config.db`（多一列
+  `project`，比任何一个项目活得久）。两处各自 try、永不抛错——记账不能把一次
+  已经交付并且上游已经收了钱的请求变成失败。两张表的结构共用 `usageSchema.ts`
+  一处定义（长歪了，用量页在「本项目 / 全部」之间一切就会少掉几列，而那种少法不报错）。
+- **行自带价格**：`buildUsageRow` 把当时的模式 / 单价 / 数量 / 规格抄在行上，
+  `cost_usd` 是 `costOf()` 的结果落了盘。所以改组、删组、换组都动不了历史，
+  而读那一侧 `SUM(cost_usd)` 不是第二套口径——也因此不需要检查点。
+- `usage.ts` 是读那一侧：范围（`project` / `global` = 两个库）、四种卷法
+  （模型 / 任务 / 计费组 / 项目）、清除。**「按计费组」按模型当前绑的组归并**，
+  不看行上的快照：行上快照的是价，不是归属，重新分组之后历史跟着走是故意的。
 
 #### 图片与日志
 - the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1)
