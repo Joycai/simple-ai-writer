@@ -93,7 +93,7 @@
 
 ### 3.3 `stashId`：为什么不是会话行 id
 
-`sessionId` 要到第一次 `persistChat` 才有（`types.ts:192`），而贴图发生在发送
+`sessionId` 要到第一次 `persistChat` 才有（`stores/agent/types.ts` 的 `LiveChat`），而贴图发生在发送
 之前。所以：
 
 - `stashId` 是一个 uuid，**第一次贴图时**才生成，挂在 chat 状态上，并写进会话
@@ -128,7 +128,7 @@
   发过（同哈希同文件），那一轮的气泡缩略图还指着它。文件的死只由 §4 负责。
 - 当前模型不是 multimodal：芯片照样能贴，走 `buildChatMessage` 既有的分支——有
   看图子代理时提示 `delegate(vision, refs:[路径])`，没有时说「当前模型读不了图」。
-  暂存路径对子代理有效（它与 `read_image` 同一套路径规则，`tools.ts:687`）。
+  暂存路径对子代理有效（它与 `read_image` 同一套路径规则，`tools.ts` 的 `loadProjectImage`）。
 - 拖拽进输入框：同一个处理函数可以接 `onDrop`，但 Tauri 的文件拖放事件与 DOM
   的不是一回事，**不在第一片里**，别让它拖住粘贴。
 - 写成一个 hook（`usePasteImages(chatKey)`），`RoleplayChat` 与
