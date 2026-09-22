@@ -99,11 +99,13 @@ export function LoreWall() {
 
   const [filter, setFilter] = useState<string>("all");
   // 分类说明的摘要行（设计稿 01b TURN 2 屏 2e-2）：筛到某分类时读一次它的 index.md，
-  // 缓存在 store 里；「全部」不读，没有说明时这一行不存在。
-  const categoryNote = useLoreStore((s) => (filter === "all" ? null : s.categoryNotes[filter] ?? null));
+  // 缓存在 store 里；「全部」不读，没有说明时这一行不存在。缓存项本身是依赖：助手的
+  // describe 写盘后把它逐出（undefined），墙正筛在这个分类上时也要跟着重读。
+  const cachedNote = useLoreStore((s) => (filter === "all" ? null : s.categoryNotes[filter]));
+  const categoryNote = cachedNote ?? null;
   useEffect(() => {
-    if (filter !== "all" && projectPath) void loadCategoryNote(projectPath, filter);
-  }, [filter, projectPath, loadCategoryNote]);
+    if (filter !== "all" && projectPath && cachedNote === undefined) void loadCategoryNote(projectPath, filter);
+  }, [filter, projectPath, cachedNote, loadCategoryNote]);
   /**
    * 装订栏的筛选——**只影响眼睛**，和取材范围是两件事。
    *
