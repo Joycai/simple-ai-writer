@@ -71,6 +71,17 @@ describe("第 1 档 · 有费用就按费用占比", () => {
     expect(m.segments[0].share).toBe(1);
     expect(m.hasUnsplit).toBe(true);
   });
+  // commit-5 的 review 点出的退路：`costUsd > 0` 而七段全 0。今天到不了——
+  // 写入口六列同写、回填六列同 SET 且过对账闸门、`cost_unsplit` 在 SQL 那侧
+  // 兜底——但那是**三处互不相邻的东西**共同保证的，这个模块一个字都管不着。
+  // 真到了的话，条必须说「这笔钱分不出来」，而不是说「没有费用」：同一行的
+  // 行尾正印着一个真实金额，两者打架的话读者只会以为界面坏了。
+  it("有钱但七段全 0 时整笔归未分项，不退到「没有费用」", () => {
+    const m = meterSegments(bucket({ costUsd: 0.42 }));
+    expect(m.mode).toBe("cost");
+    expect(m.segments).toEqual([{ key: "unsplit", value: 0.42, share: 1 }]);
+    expect(m.hasUnsplit).toBe(true);
+  });
 });
 
 describe("第 2 档 · 一分钱都没有就按 token 占比", () => {

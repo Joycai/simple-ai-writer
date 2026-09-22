@@ -717,7 +717,7 @@
         "barCost": "按费用占比：{{parts}}",
         "barToken": "没有可算的费用，按 TOKEN 占比：{{parts}}",
         "barNone": "这一段时间里没有可以分项的费用或 TOKEN",
-        "unsplitNote": "升级前记下的行没有分项，整笔算作未分项"
+        "unsplitNote": "升级前记下的行没有分项，那部分算作未分项"
       }
     },
     "projectBackup": {

@@ -260,8 +260,9 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
    */
   const meterBar = (b: UsageBucket) => {
     const m = meterSegments(b);
+    const tip = barTip(m);
     return (
-      <div className={ui.usageBarWrap} role="img" aria-label={barTip(m)} title={barTip(m)}>
+      <div className={ui.usageBarWrap} role="img" aria-label={tip} title={tip}>
         <div className={ui.usageBar}>
           <div
             className={ui.usageBarFill}

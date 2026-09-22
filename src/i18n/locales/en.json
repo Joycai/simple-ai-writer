@@ -720,7 +720,7 @@
         "barCost": "Share of cost: {{parts}}",
         "barToken": "No cost to split — share of tokens: {{parts}}",
         "barNone": "No cost or tokens to break down in this period",
-        "unsplitNote": "Rows recorded before the upgrade carry no breakdown; the whole amount counts as unsplit"
+        "unsplitNote": "Rows recorded before the upgrade carry no breakdown; that part counts as unsplit"
       }
     },
     "projectBackup": {
