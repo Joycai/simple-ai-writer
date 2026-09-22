@@ -2928,7 +2928,10 @@
       "inputImageTag": "input ${{price}}/img",
       "inputFreeTag": "first {{n}} free",
       "inputHintOn": "The free allowance is per request (“first one free” = the first image of each request). A request that delivered nothing is charged no input fee.",
-      "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page."
+      "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page.",
+      "vendorNone": "No vendor",
+      "pickSearch": "Search fee groups…",
+      "pickNoMatch": "No matching fee group"
     }
   },
   "lore": {

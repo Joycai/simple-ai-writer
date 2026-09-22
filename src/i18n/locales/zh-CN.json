@@ -2920,7 +2920,10 @@
       "inputImageTag": "输入图 ${{price}}/张",
       "inputFreeTag": "首 {{n}} 张免费",
       "inputHintOn": "免费张数按每次请求算（「首张免费」＝ 每次请求的第一张）。一张都没交付的请求不收输入费。",
-      "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。"
+      "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。",
+      "vendorNone": "未填厂商",
+      "pickSearch": "搜索计费组…",
+      "pickNoMatch": "没有匹配的计费组"
     }
   },
   "lore": {

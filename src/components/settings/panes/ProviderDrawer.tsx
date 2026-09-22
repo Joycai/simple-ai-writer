@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { feeSummary } from "../../../lib/ai/feeGroupLabel";
+import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { useFeeLabelWords } from "./feeWords";
 import type { Model, Provider } from "../../../lib/ai/configDb";
 import { authModesFor, type AuthMode, type ProtocolFamily } from "../../../lib/ai/types";
@@ -493,18 +494,22 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             同价，预填让加十个模型不用挑十次组。 */}
         <div className={styles.fieldGroup}>
           <label className={styles.label}>{t("aiConfig.providers.defaultFeeGroup")}</label>
-          <select
-            className={styles.input}
+          <Select
             value={form.defaultFeeGroupId}
-            onChange={(e) => setForm({ ...form, defaultFeeGroupId: e.target.value })}
-          >
-            <option value="">{t("aiConfig.fees.unbound")}</option>
-            {feeGroups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {`${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: t("aiConfig.fees.unbound") },
+              ...feeGroupOptions(
+                feeGroups,
+                (g) => `${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`,
+                t("aiConfig.fees.vendorNone"),
+              ),
+            ]}
+            ariaLabel={t("aiConfig.providers.defaultFeeGroup")}
+            searchable
+            searchPlaceholder={t("aiConfig.fees.pickSearch")}
+            noResultsText={t("aiConfig.fees.pickNoMatch")}
+            onChange={(v) => setForm({ ...form, defaultFeeGroupId: v })}
+          />
           <div className={styles.hint}>{t("aiConfig.providers.defaultFeeGroupHint")}</div>
         </div>
 
