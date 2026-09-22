@@ -169,10 +169,58 @@ describe("backfillUsageParts · 游标与幂等", () => {
     expect(txMock).not.toHaveBeenCalled();
   });
 
+  // commit-4 的 review 构造出来的挂死：一整批 1000 行的 `id` 全读不成数字
+  // （`num()` 把它们读成 0），且全部对不上账 → 游标不推进、行又永远写不进去
+  // → 同一批被无限重取。这一趟挂在 openProject 的 await 链上，`try/catch`
+  // 捕获抛错但捕获不了挂死，表现是**项目再也开不出来且没有任何征兆**。
+  it("游标推不动时收工，不无限重取同一批", async () => {
+    const rows: Row[] = Array.from({ length: 1000 }, () => ({
+      id: "坏格", cost_usd: 0.42, cost_input: null,
+    }));
+    const select = vi.fn(async () => rows.slice(0, 1000));
+    const db = { select } as unknown as Db;
+    const r = await backfillUsageParts(db, "/db");
+    expect(r.filled).toBe(0);
+    // **收工了**——这是这条测试的全部意义。第一趟游标从 -1 的哨兵挪到 0
+    // （`num("坏格")` 读成 0）算推进过，第二趟才发现推不动、收工；所以是
+    // 两批而不是一批。要紧的是它有限，不是它等于几。
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(r.skipped).toBe(2000);
+  });
+
   it("空表不炸", async () => {
     const { db } = fakeDb([]);
     expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 0, skipped: 0 });
     expect(txMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("backfillUsageParts · 口径与写入口一致", () => {
+  // commit-4 的 review 点出的不对称：`buildUsageRow` 的 requests 默认 1，
+  // `rowToBilled` 读 request_count 缺失时是 0。今天不会算错钱——request_count
+  // 和 billing_mode 是同一个 commit 加的，缺前者的行后者也为 NULL，走 token
+  // 分支根本不读 requests。但这份无害性是**借来的**，钉住它：哪天真出现
+  // 半套快照，该拦住的是闸门，不是运气。
+  it("按次的行缺 request_count 时算出 0，与行上记的钱对不上，被闸门拦下", async () => {
+    const halfSnapshot: Row = {
+      id: 1, billing_mode: "request", request_price: 0.04,
+      // request_count 缺失
+      cost_usd: 0.12, cost_input: null,
+    };
+    const { db } = fakeDb([halfSnapshot]);
+    expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 0, skipped: 1 });
+    expect(txMock).not.toHaveBeenCalled();
+  });
+
+  it("按次的行带着 request_count 时对得上，照常补", async () => {
+    const full: Row = {
+      id: 1, billing_mode: "request", request_price: 0.04, request_count: 3,
+      cost_usd: 0.12, cost_input: null,
+    };
+    const { db } = fakeDb([full]);
+    expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 1, skipped: 0 });
+    // 按次的固定价五段装不下，进「其它」。
+    expect(segsOf(statementsOf()[0]).other).toBeCloseTo(0.12, 12);
   });
 });
 

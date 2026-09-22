@@ -124,9 +124,13 @@ export async function backfillUsageParts(db: Db, dbPath: string): Promise<Backfi
   for (;;) {
     const rows = await db.select<Record<string, unknown>[]>(SELECT_SQL, [after, BATCH]);
     if (rows.length === 0) break;
+    const before = after;
     const updates: SqlStatement[] = [];
     for (const r of rows) {
-      after = Math.max(after, num(r.id));
+      // id 只读一次，游标和 `WHERE id = ?` 用**同一个**值：两处各读各的，
+      // 一个走 `num()` 一个走裸值，它们就可能在坏数据上指向不同的行。
+      const id = num(r.id);
+      after = Math.max(after, id);
       const parts = costOf(rowToBilled(r));
       if (!reconciles(totalOf(parts), num(r.cost_usd))) {
         skipped++;
@@ -135,11 +139,18 @@ export async function backfillUsageParts(db: Db, dbPath: string): Promise<Backfi
       const s = segmentsOf(parts, rowUnit(r.output_unit));
       updates.push({
         sql: UPDATE_SQL,
-        values: [s.input, s.cache, s.output, s.count, s.duration, s.other, r.id],
+        values: [s.input, s.cache, s.output, s.count, s.duration, s.other, id],
       });
     }
     if (updates.length > 0) await sqlTransaction(dbPath, updates);
     filled += updates.length;
+    // **游标没动就收工。** 正常情况下不可能——`id` 是自增主键，`ORDER BY id`
+    // 取回来的一定比 `after` 大。但只要有一整批的 `id` 读不成数字（`num()`
+    // 把它们全读成 0），`after` 就不会推进，而对不上账的行永远写不进去、
+    // 每次都被重新选中——于是这里原地打转。这一趟挂在 `openProject` 的
+    // await 链上，挂死的表现是**项目再也开不出来，且没有任何征兆**，
+    // 所以宁可在一个不该发生的情况下提前收工。
+    if (after <= before) break;
     if (rows.length < BATCH) break;
   }
   return { filled, skipped };
@@ -151,10 +162,16 @@ export async function backfillUsageParts(db: Db, dbPath: string): Promise<Backfi
  * 回填失败只是有些行停在「未分项」，不该让用量页打不开、更不该让项目开不了
  * ——这和写入口「记账永不抛错」是同一条脾气：账目的事不配让已经能用的东西失败。
  */
-export async function backfillUsagePartsQuietly(db: Db, dbPath: string): Promise<void> {
+export async function backfillUsagePartsQuietly(db: Db, dbPath: string, label: string): Promise<void> {
   try {
-    await backfillUsageParts(db, dbPath);
-  } catch {
-    /* 停在「未分项」就好，不挡路 */
+    const { filled, skipped } = await backfillUsageParts(db, dbPath);
+    // **说出来。** 闸门是这一片唯一的安全装置，而「挡掉 3 行远古记录」和
+    // 「口径写歪了、挡掉三万行」在界面上长得一模一样——都只是条变灰，
+    // 没有任何东西报错。数字留一行在控制台，出事时才有得查。
+    if (filled > 0 || skipped > 0) {
+      console.info(`[usageBackfill] ${label}: filled ${filled} row(s), left ${skipped} unsplit.`);
+    }
+  } catch (e) {
+    console.warn(`[usageBackfill] ${label}: backfill failed, rows stay unsplit:`, e);
   }
 }

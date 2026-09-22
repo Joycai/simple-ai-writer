@@ -111,5 +111,13 @@ export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Pr
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_project ON token_usage (project, created_at)`);
   }
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_created ON token_usage (created_at)`);
+  // 还没有分项的行。**部分索引**，不是整列索引：`lib/ai/usageBackfill` 每次
+  // 开库都会去找它们，而对不上账的远古行永远补不上、永远命中这个条件——
+  // 没有索引的话那就是每次开项目一次全表扫描，且随表增长只会更慢。
+  // 有了它，回填跑完之后这个索引里只剩那几行对不上的，再开库就是一次很小的
+  // 索引查找。行补上之后会自动退出索引，索引也就跟着缩。
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_usage_unsplit ON token_usage (id) WHERE cost_input IS NULL`,
+  );
 }
 

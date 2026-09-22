@@ -184,7 +184,7 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>, project
   await ensureUsageSchema(db, "project");
   // 补列之后把老行的分项补上——只补对得上账的那些，路径要单独传是因为事务
   // 走不了这个句柄（lib/sqlTx）。它自己吞掉异常：账目的事不配让项目开不了。
-  await backfillUsagePartsQuietly(db, getProjectDbPath(projectPath));
+  await backfillUsagePartsQuietly(db, getProjectDbPath(projectPath), "project.db");
 
   // Persisted 对话助手 sessions — one JSON blob per session, newest few kept
   // (lib/agent/sessionDb owns the cap and all reads/writes). `pinned` is the

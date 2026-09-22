@@ -129,9 +129,13 @@ async function db() {
   }
   await legacyKeysSwept;
   if (!usagePartsBackfilled) {
-    usagePartsBackfilled = getGlobalDbPath().then((path) =>
-      backfillUsagePartsQuietly(globalDb, path),
-    );
+    usagePartsBackfilled = getGlobalDbPath()
+      .then((path) => backfillUsagePartsQuietly(globalDb, path, "config.db"))
+      // `backfillUsagePartsQuietly` 自己吞错，但 `getGlobalDbPath()` 没人兜：
+      // 它一旦 reject，这个**永不重置**的 promise 就永久是 rejected，下面每次
+      // `await` 都抛，整个 AI 配置面板再也打不开。上面那句注释说它没有资格让
+      // 配置加载失败——这一行是兑现那句话的地方。
+      .catch((e) => console.warn("[aiStore] usage backfill could not start:", e));
   }
   await usagePartsBackfilled;
   return globalDb;
