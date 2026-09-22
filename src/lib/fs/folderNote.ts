@@ -20,7 +20,7 @@
 
 import { parseFrontmatter } from "./markdown";
 import { readFile } from "./fileio";
-import { isPathWithin } from "../paths";
+import { isPathWithin, pathKey } from "../paths";
 
 /** The reserved filename. Same word as the knowledge base's headword on purpose. */
 export const FOLDER_NOTE_FILE = "index.md";
@@ -114,6 +114,14 @@ function normalize(p: string): string {
  * file's own folder to the project root, plus whether any folder on that walk
  * is `deprecated` (a chapter three levels under 废稿/ is still a discarded
  * chapter, whatever its own folder says).
+ *
+ * A folder note opened as the document is not its own context: the walk then
+ * starts one level up, so the brief never quotes the file to itself.
+ *
+ * The walk compares folders through `pathKey`, never raw strings: on Windows
+ * the project path and the file path can differ in case (`D:/Proj` vs
+ * `d:/proj/…`), and a raw comparison would never meet the root — each step
+ * awaiting a failing read, for ever. The segment budget is the second stop.
  */
 export async function nearestFolderNote(
   projectPath: string,
@@ -121,20 +129,29 @@ export async function nearestFolderNote(
 ): Promise<FolderNoteContext | null> {
   const root = normalize(projectPath);
   if (!root) return null;
-  let dir = normalize(filePath);
-  dir = dir.slice(0, dir.lastIndexOf("/"));
+  const file = normalize(filePath);
+  const cut = file.lastIndexOf("/");
+  if (cut < 0 || !isPathWithin(root, file)) return null;
+  let dir = file.slice(0, cut);
+  if (isFolderNoteFile(file.slice(cut + 1))) {
+    if (pathKey(dir) === pathKey(root)) return null;
+    dir = dir.slice(0, dir.lastIndexOf("/"));
+  }
   if (!isPathWithin(root, dir)) return null;
 
   let nearest: { dir: string; note: FolderNote } | null = null;
   let deprecated = false;
-  for (;;) {
+  const rootKey = pathKey(root);
+  for (let depth = dir.split("/").length; depth > 0; depth--) {
     const note = await readFolderNote(dir);
     if (note) {
       nearest ??= { dir, note };
       if (note.status === "deprecated") deprecated = true;
     }
-    if (dir === root) break;
-    dir = dir.slice(0, dir.lastIndexOf("/"));
+    if (pathKey(dir) === rootKey) break;
+    const up = dir.lastIndexOf("/");
+    if (up < 0) break;
+    dir = dir.slice(0, up);
   }
   return nearest ? { ...nearest, deprecated } : null;
 }

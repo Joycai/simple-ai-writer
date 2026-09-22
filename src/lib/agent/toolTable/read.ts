@@ -300,7 +300,7 @@ export const READ_TOOLS = {
       function: {
         name: "search_text",
         description:
-          "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \"entity · file\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+          "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders — except a folder whose own index.md says deprecated; pass it as 'folder' to search it) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \"entity · file\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
         parameters: {
           type: "object",
           properties: {

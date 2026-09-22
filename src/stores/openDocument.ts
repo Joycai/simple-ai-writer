@@ -135,3 +135,36 @@ export function useWritingFocus(): WritingFocus {
 export function focusBlockedByImage(focus: WritingFocus): boolean {
   return !focus.settled && !!focus.pendingPath && isImagePath(focus.pendingPath);
 }
+
+/**
+ * Resolves `true` once the editor holds `path`, or `false` after `timeoutMs`
+ * without it (or once the author has opened something else meanwhile).
+ *
+ * For a gesture that opens a file *and* sends a turn about it: `setActiveFilePath`
+ * is synchronous, the editor's load is an effect that runs after the commit,
+ * and a turn sent between the two snapshots the *previous* document as its
+ * focus (the composer has no `settled` gate — the author typing there is
+ * already looking at the editor). Waiting here is what keeps 「新建目录说明并
+ * 交给助手」 from running on the chapter that was open before the click.
+ */
+export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolean> {
+  if (isSamePath(useEditorStore.getState().filePath, path)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unsubEditor();
+      unsubProject();
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    const unsubEditor = useEditorStore.subscribe((s) => {
+      if (isSamePath(s.filePath, path)) finish(true);
+    });
+    const unsubProject = useProjectStore.subscribe((s) => {
+      if (s.activeFilePath !== null && !isSamePath(s.activeFilePath, path)) finish(false);
+    });
+  });
+}

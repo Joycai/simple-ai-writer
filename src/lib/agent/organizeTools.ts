@@ -51,6 +51,7 @@
  */
 
 import i18n from "../../i18n";
+import { parseFolderNote } from "../fs/folderNote";
 import { writeCategoryNote } from "../lore/categoryNote";
 import { sameCollection, type LoreEntity } from "../lore";
 import { loreCategories } from "../profile/active";
@@ -377,10 +378,21 @@ async function describeCategory(
   }
   const g = gate(toolCallId, ctx, "update", id, "category");
   if ("refusal" in g) return g.refusal;
+  // The listing quotes the note's first prose paragraph and nothing else — a
+  // note that is all heading and list would be written and then never shown.
+  // Say so now, while the model can still rewrite it, not after the write.
+  if (!parseFolderNote(text).summary) {
+    return {
+      toolCallId,
+      content: "Error: the note needs a paragraph of plain prose (not a heading, list or comment) — that first paragraph is what list_lore_entities quotes under the category. Rewrite 'description' with one and call again.",
+    };
+  }
   await writeCategoryNote(ctx.projectPath, id, text);
   const shown = declared ? categoryRef(declared, isZh) : id;
+  const empty = !(ctx.loreIndex[id]?.length);
   return {
     toolCallId,
-    content: `Wrote the note for ${shown} (${id}/index.md). list_lore_entities now quotes its first sentence under the category.`,
+    content: `Wrote the note for ${shown} (${id}/index.md). list_lore_entities quotes its first paragraph under the category` +
+      (empty ? " once the category has an entry (an empty category is listed by name only)." : "."),
   };
 }

@@ -251,11 +251,12 @@ describe("list_files", () => {
 
       expect(out).toContain("1 file in 2 folders");
       expect(out).toContain(
-        `${PROJECT}/废稿\n  (index.md: deprecated — 第一版旧稿，人设以 v2 为准。 · 3 files here not listed; read_file still opens any of them by path`,
+        // Two, not three: the note itself was read and quoted, so it is not "not listed".
+        `${PROJECT}/废稿\n  (index.md: deprecated — 第一版旧稿，人设以 v2 为准。 · 2 files here not listed; read_file still opens any of them by path`,
       );
       expect(out).not.toContain(`${PROJECT}/废稿/卷一`);
       expect(out).not.toContain("第2章.md");
-      expect(out).toContain("[3 files in 1 folder marked deprecated in its index.md was not listed");
+      expect(out).toContain("[2 files in 1 folder marked deprecated in its index.md was not listed");
     });
 
     it("lists a deprecated folder in full when it is the folder the model asked for", async () => {
@@ -268,8 +269,20 @@ describe("list_files", () => {
       expect(out).toContain("3 files in 2 folders under 废稿");
       expect(out).toContain("第1章.md");
       expect(out).toContain(`${PROJECT}/废稿/卷一\n  第2章.md`);
-      expect(out).toContain("(index.md: deprecated — 旧稿。 · 0 files here not listed");
-      expect(out).not.toContain("marked deprecated in its index.md was not listed");
+      // Listed in full, so no "not listed" count and no advice to do what it just did.
+      expect(out).toContain("(index.md: deprecated — 旧稿。)\n  index.md");
+      expect(out).not.toContain("not listed");
+      expect(out).not.toContain("lists it anyway");
+    });
+
+    it("says a deprecated folder holding nothing but its note is empty, and is not 'no files'", async () => {
+      fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n旧稿。");
+
+      const out = await list();
+
+      expect(out).not.toContain("No files found");
+      expect(out).toContain("(index.md: deprecated — 旧稿。 · nothing else here)");
+      expect(out).not.toContain("marked deprecated");
     });
 
     it("is not 'no files' when everything is in a deprecated folder", async () => {
@@ -279,7 +292,7 @@ describe("list_files", () => {
       const out = await list();
 
       expect(out).not.toContain("No files found");
-      expect(out).toContain("2 files in 1 folder marked deprecated");
+      expect(out).toContain("1 file in 1 folder marked deprecated");
     });
   });
 });

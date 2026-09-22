@@ -790,14 +790,26 @@ interface DirListing {
   files: string[];
   /** The folder's own `index.md`, when it has one (`lib/fs/folderNote`). */
   note: FolderNote | null;
-  /** Files under a `deprecated` folder that the listing leaves out, this folder's subtree included. */
+  /**
+   * A `deprecated` folder the listing did not expand: `files` is empty and
+   * `hidden` counts what it left out. False for the same folder when the model
+   * asked for it by name — then it is listed like any other.
+   */
+  collapsed: boolean;
+  /**
+   * Files a collapsed folder's subtree holds besides the note itself — the
+   * note was read and quoted, so it is not "not listed".
+   */
   hidden: number;
 }
 
-/** Every file in a subtree — what a `deprecated` folder's stub line reports. */
-function countFiles(nodes: FileNode[]): number {
+/** Every file in a subtree except the folder's own note — what a stub line reports. */
+function countFiles(nodes: FileNode[], top = true): number {
   let n = 0;
-  for (const node of nodes) n += node.is_dir ? countFiles(node.children ?? []) : 1;
+  for (const node of nodes) {
+    if (node.is_dir) n += countFiles(node.children ?? [], false);
+    else if (!(top && isFolderNoteFile(node.name))) n++;
+  }
   return n;
 }
 
@@ -821,11 +833,11 @@ async function collectListings(
   const files = nodes.filter((n) => !n.is_dir).map((n) => n.name);
   const note = files.some(isFolderNoteFile) ? await readFolderNote(dir) : null;
   if (note?.status === "deprecated" && !explicit) {
-    out.push({ dir, files: [], note, hidden: countFiles(nodes) });
+    out.push({ dir, files: [], note, collapsed: true, hidden: countFiles(nodes) });
     return;
   }
   files.sort(naturalCompare);
-  out.push({ dir, files, note, hidden: 0 });
+  out.push({ dir, files, note, collapsed: false, hidden: 0 });
 
   const subdirs = nodes.filter((n) => n.is_dir);
   subdirs.sort((a, b) => naturalCompare(a.name, b.name));
@@ -837,10 +849,14 @@ async function collectListings(
  * the author said about the folder, at the moment it is looking at it.
  */
 function noteLine(listing: DirListing): string {
-  const { note, hidden } = listing;
+  const { note, hidden, collapsed } = listing;
   if (!note) return "";
   if (note.status === "deprecated") {
     const what = note.summary ?? "no description";
+    // The way through is only worth saying when something was left out — a
+    // folder the model asked for by name is already listed in full below.
+    if (!collapsed) return `  (index.md: deprecated — ${what})`;
+    if (hidden === 0) return `  (index.md: deprecated — ${what} · nothing else here)`;
     return `  (index.md: deprecated — ${what} · ${hidden} file${hidden === 1 ? "" : "s"} here not listed; ` +
       "read_file still opens any of them by path, and passing this folder as 'folder' lists it anyway)";
   }
@@ -884,23 +900,24 @@ export async function listWritingFiles(
 
   const totalFiles = listings.reduce((n, l) => n + l.files.length, 0);
   const hiddenFiles = listings.reduce((n, l) => n + l.hidden, 0);
-  const hiddenDirs = listings.filter((l) => l.hidden > 0 || (l.note?.status === "deprecated" && l.files.length === 0)).length;
-  if (totalFiles === 0 && hiddenFiles === 0) {
+  const hiddenDirs = listings.filter((l) => l.hidden > 0).length;
+  // A collapsed folder with nothing but its note is still a folder the model
+  // should hear about, so "no files" needs the notes to be absent too.
+  if (totalFiles === 0 && hiddenFiles === 0 && listings.every((l) => !l.note)) {
     return { toolCallId, content: `No files found in ${scope}.` };
   }
 
   const blocks: string[] = [];
   let shown = 0;
   for (const listing of listings) {
-    const { dir, files, note } = listing;
+    const { dir, files } = listing;
     const room = Math.max(0, LIST_MAX_FILES - shown);
     const visible = files.slice(0, room);
     shown += visible.length;
     const omitted = files.length - visible.length;
-    const stub = note?.status === "deprecated" && files.length === 0;
     const body = visible.length
       ? visible.map((f) => `  ${f}`).join("\n")
-      : omitted > 0 || stub
+      : omitted > 0 || listing.collapsed
         ? ""
         : "  (empty)";
     blocks.push(

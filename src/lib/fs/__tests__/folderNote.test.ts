@@ -31,6 +31,12 @@ describe("parseFolderNote", () => {
     expect(parseFolderNote("只有正文。").status).toBe("stable");
   });
 
+  it("reads a note saved with Windows line endings", () => {
+    const note = parseFolderNote("---\r\nstatus: draft\r\n---\r\n# 卷一\r\n\r\n草稿卷。\r\n第二行。\r\n\r\n后文。");
+    expect(note.status).toBe("draft");
+    expect(note.summary).toBe("草稿卷。 第二行。");
+  });
+
   it("tolerates a status it does not know, and a note with no frontmatter at all", () => {
     expect(parseFolderNote("---\nstatus: archived\nowner: me\n---\nx").status).toBe("stable");
     expect(parseFolderNote("").status).toBe("stable");
@@ -100,5 +106,27 @@ describe("readFolderNote / nearestFolderNote", () => {
     files.set("/elsewhere/index.md", "x");
     expect(await nearestFolderNote("/p", "/elsewhere/a.md")).toBeNull();
     expect(await nearestFolderNote("", "/p/a.md")).toBeNull();
+    expect(await nearestFolderNote("/p", "a.md")).toBeNull();
+  });
+
+  it("terminates on a Windows path whose case differs from the project's", async () => {
+    files.set("D:/Proj/卷一/index.md", "第一卷。");
+    files.set("d:/proj/卷一/index.md", "第一卷。");
+
+    const ctx = await nearestFolderNote("D:/Proj", "d:\\proj\\卷一\\第1章.md");
+
+    expect(ctx?.note.summary).toBe("第一卷。");
+    expect(ctx?.deprecated).toBe(false);
+  });
+
+  it("does not quote a note to itself: an open index.md takes its parent's note", async () => {
+    files.set("/p/index.md", "整个项目。");
+    files.set("/p/卷一/index.md", "---\nstatus: deprecated\n---\n第一卷。");
+
+    const ctx = await nearestFolderNote("/p", "/p/卷一/index.md");
+
+    expect(ctx?.dir).toBe("/p");
+    expect(ctx?.deprecated).toBe(false);
+    expect(await nearestFolderNote("/p", "/p/index.md")).toBeNull();
   });
 });

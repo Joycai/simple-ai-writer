@@ -279,8 +279,10 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   // document the tail window doesn't reach. Only the "text withheld, read it
   // yourself" line is conditional.
   // The open file's folder note (nearest index.md up the tree, and whether any
-  // ancestor is deprecated) — one line in the brief, read on every turn because
-  // the author may have just written it.
+  // ancestor is deprecated) — one line in the brief. Like the rest of the
+  // brief it reaches the model when the file is first described (the seed, or
+  // a switch onto it), not every turn: a note written mid-conversation shows
+  // up when the author next opens a file under it.
   const { nearestFolderNote } = await import("../../lib/fs/folderNote");
   const folder = activeFilePath ? await nearestFolderNote(projectPath, activeFilePath) : null;
   const docBrief = docRelPath

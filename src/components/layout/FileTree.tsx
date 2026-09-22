@@ -43,7 +43,7 @@ import { useAppStore } from "../../stores/appStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useEditorStore } from "../../stores/editorStore";
-import { closeDocument } from "../../stores/openDocument";
+import { closeDocument, whenFocusSettles } from "../../stores/openDocument";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { loreEntityCount } from "../../lib/lore";
@@ -738,7 +738,8 @@ export function FileTree() {
       let n = 0;
       for (const child of node.children ?? []) {
         if (child.is_dir) n += walk(child);
-        else if (/\.md$/i.test(child.name)) n++;
+        // The folder's own note is labelled 说明 on its row, not counted as a 篇.
+        else if (/\.md$/i.test(child.name) && !isFolderNoteFile(child.name)) n++;
       }
       counts.set(node.path, n);
       return n;
@@ -1533,6 +1534,13 @@ export function FileTree() {
     treeOpenedRef.current = path;
     setActiveFilePath(path);
     useAppStore.getState().setShowAiDrawer(true, "chat");
+    // The turn's focus is whatever the editor holds when it is sent — wait for
+    // the note itself to be loaded, or the assistant rewrites the chapter that
+    // was open before the click (stores/openDocument.whenFocusSettles).
+    if (!(await whenFocusSettles(path))) {
+      setTransferError(t("ai.errors.focusNotReady"));
+      return;
+    }
     void useAgentStore.getState().sendChat(t("fileTree.folderNotePrompt", { name: node.name, path: node.path }));
   };
 

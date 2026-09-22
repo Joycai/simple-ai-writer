@@ -258,6 +258,25 @@ describe("manage_category · describe", () => {
     expect(r.content).toContain("'description' is required");
     expect(notes).toEqual([]);
   });
+
+  it("refuses a note with no prose paragraph — the listing would never show it", async () => {
+    const r = await manageCategoryTool(
+      "c1", { op: "describe", category: "人物", description: "# 人物\n\n* [a](a) - x" }, ctxWith([step("characters")]),
+    );
+    expect(r.content).toContain("paragraph of plain prose");
+    expect(notes).toEqual([]);
+  });
+
+  it("says when the note will only show once the category has an entry", async () => {
+    const ctx = ctxWith([step("world")]);
+    ctx.loreIndex = { ...INDEX, world: [] };
+    const r = await manageCategoryTool("c1", { op: "describe", category: "世界观", description: "地名与势力。" }, ctx);
+    expect(r.content).toContain("once the category has an entry");
+    const r2 = await manageCategoryTool(
+      "c1", { op: "describe", category: "人物", description: "有名字的人。" }, ctxWith([step("characters")]),
+    );
+    expect(r2.content).not.toContain("once the category");
+  });
 });
 
 describe("manage_category · create", () => {
