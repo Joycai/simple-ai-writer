@@ -2941,7 +2941,9 @@
       "noResultsHint": "Names, vendors and every group's bound models were all searched.",
       "sectionCount": "{{n}}",
       "matchedModels": "Matched model {{models}}",
-      "matchedModelsMore": "Matched model {{models}} and {{n}} more"
+      "matchedModelsMore": "Matched model {{models}} and {{more}} more",
+      "listCount": "{{groups}} groups · {{vendors}} vendors",
+      "listCountNone": "{{groups}} groups · {{vendors}} vendors · {{none}} without one"
     }
   },
   "lore": {

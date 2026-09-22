@@ -2933,7 +2933,9 @@
       "noResultsHint": "组名、厂商、以及每个组绑着的模型都搜过了。",
       "sectionCount": "{{n}} 组",
       "matchedModels": "命中模型 {{models}}",
-      "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个"
+      "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个",
+      "listCount": "{{groups}} 个组 · {{vendors}} 个厂商",
+      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填"
     }
   },
   "lore": {

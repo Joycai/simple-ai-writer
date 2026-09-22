@@ -288,3 +288,27 @@
 /* 「命中模型 …」。它替换的是同一行的「N 个模型」，所以只换颜色不换字号——
    这一行说的始终是「这个组和哪些模型有关」。 */
 .bindHit { color: var(--color-accent); }
+
+/* 搜索框的「有内容」态。类名写两遍是为了压过 hub 的 .searchInput
+   （同样 0-1-0，谁赢取决于两个模块在 bundle 里的先后）。 */
+.searchOn.searchOn input {
+  border-color: var(--color-accent);
+}
+.searchOn.searchOn svg {
+  color: var(--color-accent);
+}
+
+.searchClear {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.searchClear:hover { color: var(--color-accent); }
