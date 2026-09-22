@@ -535,20 +535,48 @@
   color: var(--color-text-muted);
 }
 
-/* Share-of-calls bar — the one thing that makes the table scannable. */
-.usageBar {
-  margin-top: var(--space-2);
+/* 计量条。两个读法各占一个视觉通道：
+   **长度** = 这一行的调用次数相对同批最大值（让表格一眼扫得出谁最大，没变），
+   **颜色** = 这笔钱花在哪一种量上（输入 / 缓存 / 输出 / 张数 / 时长 / 其它）。
+
+   段与段紧贴、不描边、不给最小宽度：150px 的条上 5 道 1px 缝是 3.3% 的长度，
+   而最窄的段本来就只有 1–2px——给缝等于让「有这么一笔钱」变成「没有这笔钱」。
+   相邻靠颜色解决（六色两两 ΔEok ≥ 0.099）。 */
+.usageBarWrap {
+  margin-top: var(--space-1);
+  /* 透明上下边：条只有 8px，指针停不住。这一层把命中高度撑到 16px，
+     而且它不画任何东西，视觉上这一块仍然只有 8px。 */
+  padding: var(--space-1) 0;
   width: 100%;
   max-width: 150px;
-  height: 3px;
+}
+.usageBar {
+  height: var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--color-border);
 }
 .usageBarFill {
-  height: 3px;
+  display: flex;
+  height: var(--space-2);
   border-radius: var(--radius-pill);
-  background: var(--stg-bar);
+  /* 圆角挂在整条上、不挂在段上：哪天全局圆角被拧起来，只有两头圆，
+     首尾段由这一行裁进去——段自己永远不需要知道圆角这回事。 */
+  overflow: hidden;
 }
+.usageSeg {
+  display: block;
+  height: 100%;
+}
+.usageSegInput { background: var(--usage-seg-input); }
+.usageSegCache { background: var(--usage-seg-cache); }
+.usageSegOutput { background: var(--usage-seg-output); }
+.usageSegCount { background: var(--usage-seg-count); }
+.usageSegDuration { background: var(--usage-seg-duration); }
+/* 「其它」与「未分项」同色：一个是钱落在五段之外的维度，一个是这一行没有分项
+   快照。两者都是「说不出花在哪儿」，视觉上就该是同一种灰——它们不是一回事这件
+   事，由各自的 tooltip 说。 */
+.usageSegOther,
+.usageSegUnsplit { background: var(--usage-seg-other); }
 
 .usageNum {
   text-align: right;

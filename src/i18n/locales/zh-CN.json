@@ -701,7 +701,24 @@
         "project": "清除本项目记录",
         "global": "清除全部记录"
       },
-      "clearConfirmGlobal": "清空总体用量记录？各个项目文件夹里的那份不受影响。不可撤销。"
+      "clearConfirmGlobal": "清空总体用量记录？各个项目文件夹里的那份不受影响。不可撤销。",
+      "seg": {
+        "input": "输入",
+        "cache": "缓存输入",
+        "output": "输出",
+        "count": "张数",
+        "duration": "时长",
+        "other": "其它",
+        "unsplit": "未分项"
+      },
+      "segTip": {
+        "cost": "{{label}} · {{amount}} · {{pct}}",
+        "token": "{{label}} · {{tokens}} tk · {{pct}}",
+        "barCost": "按费用占比：{{parts}}",
+        "barToken": "没有可算的费用，按 TOKEN 占比：{{parts}}",
+        "barNone": "这一段时间里没有可以分项的费用或 TOKEN",
+        "unsplitNote": "升级前记下的行没有分项，整笔算作未分项"
+      }
     },
     "projectBackup": {
       "section": "项目备份",

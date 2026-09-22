@@ -16,6 +16,7 @@ import {
   type UsageSummary,
   type UsageWindow,
 } from "../../../lib/ai/usage";
+import { meterSegments, type UsageMeter, type UsageSegKey } from "../../../lib/ai/usageMeter";
 import { feeSummary } from "../../../lib/ai/feeGroupLabel";
 import { useFeeLabelWords } from "./feeWords";
 import { baseName } from "../../../lib/paths";
@@ -35,6 +36,27 @@ type Dimension = "group" | "model" | "task" | "project";
  *  "fresh input" column is the difference, not the raw prompt figure. */
 function uncached(b: UsageBucket): number {
   return Math.max(0, b.promptTokens - b.cachedTokens);
+}
+
+/**
+ * 段 → 类名。**静态字面量，不是 `ui[`usageSeg_${key}`]`**：
+ * `cssModuleClassRefs.test.ts` 对模板字符串下标完全失明，那样写打错一个字
+ * 不会报错，只会在界面上悄悄没有样式。
+ */
+const SEG_CLASS: Record<UsageSegKey, string> = {
+  input: ui.usageSegInput,
+  cache: ui.usageSegCache,
+  output: ui.usageSegOutput,
+  count: ui.usageSegCount,
+  duration: ui.usageSegDuration,
+  other: ui.usageSegOther,
+  unsplit: ui.usageSegUnsplit,
+};
+
+/** 占比写成整数百分比。渲染出来的段不能在文字里说自己是 0。 */
+function pctText(share: number): string {
+  const pct = Math.round(share * 100);
+  return pct < 1 ? "<1%" : `${pct}%`;
 }
 
 function hitRate(b: UsageBucket): string {
@@ -199,6 +221,67 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
   const buckets = sortUsageBuckets(rawBuckets, sort.key, sort.dir, (k) => label(k).name);
   const maxCalls = Math.max(1, ...buckets.map((b) => b.calls));
 
+  const segLabel = (k: UsageSegKey) => t(`systemSettings.usage.seg.${k}`);
+
+  /** 一段的 tooltip：维度 · 金额（或 token 数）· 占比。 */
+  const segTip = (m: UsageMeter, key: UsageSegKey, value: number, share: number) =>
+    m.mode === "cost"
+      ? t("systemSettings.usage.segTip.cost", {
+          label: segLabel(key), amount: formatUsd(value), pct: pctText(share),
+        })
+      : t("systemSettings.usage.segTip.token", {
+          label: segLabel(key), tokens: formatTokenCount(value), pct: pctText(share),
+        });
+
+  /**
+   * 整条的 tooltip：细到没法 hover 的段、以及调用少的短条，都靠它兜底。
+   * `parts` 按**占比降序**拼，不按段序——这里回答的是「主要花在哪」。
+   */
+  const barTip = (m: UsageMeter) => {
+    if (m.mode === "none") return t("systemSettings.usage.segTip.barNone");
+    const parts = [...m.segments]
+      .sort((a, b) => b.share - a.share)
+      .map((s) => `${segLabel(s.key)} ${pctText(s.share)}`)
+      .join(" · ");
+    const head = t(
+      m.mode === "cost" ? "systemSettings.usage.segTip.barCost" : "systemSettings.usage.segTip.barToken",
+      { parts },
+    );
+    // 整条灰的时候必须说清楚这是「没有分项」而不是「出错了」。
+    return m.hasUnsplit ? `${head}\n${t("systemSettings.usage.segTip.unsplitNote")}` : head;
+  };
+
+  /**
+   * 条：长度是调用次数相对同批最大值，颜色是这笔钱花在哪一种量上。
+   *
+   * 地板 12% 而不是 4%：150px × 4% = 6px，6px 里塞不下两段——颜色这个通道
+   * 在那种短条上等于不存在。抬到 18px 才够放下两三段。代价是 4%–12% 之间的
+   * 长度差别被压平，调用很少的几行彼此不再区分长短，这是知道并且认了的。
+   */
+  const meterBar = (b: UsageBucket) => {
+    const m = meterSegments(b);
+    return (
+      <div className={ui.usageBarWrap} role="img" aria-label={barTip(m)} title={barTip(m)}>
+        <div className={ui.usageBar}>
+          <div
+            className={ui.usageBarFill}
+            style={{ width: `${Math.max(12, Math.round((b.calls / maxCalls) * 100))}%` }}
+          >
+            {m.segments.map((s) => (
+              <span
+                key={s.key}
+                className={`${ui.usageSeg} ${SEG_CLASS[s.key]}`}
+                style={{ flexGrow: s.share }}
+                title={m.mode === "none" ? undefined : segTip(m, s.key, s.value, s.share)}
+                aria-hidden="true"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // A repeat click on the active column flips direction; a new column starts
   // descending for the figures (largest first — the usual question) and
   // ascending for the name (A→Z).
@@ -343,12 +426,7 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
                       {name}
                       {sub && <span className={ui.usageSub}>{sub}</span>}
                     </div>
-                    <div className={ui.usageBar}>
-                      <div
-                        className={ui.usageBarFill}
-                        style={{ width: `${Math.max(4, Math.round((b.calls / maxCalls) * 100))}%` }}
-                      />
-                    </div>
+                    {meterBar(b)}
                   </div>
                   <span className={ui.usageNum}>{b.calls.toLocaleString("en-US")}</span>
                   <span className={ui.usageNum}>{formatTokenCount(uncached(b))}</span>
