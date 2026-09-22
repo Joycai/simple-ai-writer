@@ -84,9 +84,10 @@ describe("matchFeeGroups", () => {
 
   it("命中模型只在组名和厂商都没命中时才写出来", () => {
     const by = new Map(matchFeeGroups(GROUPS, MODELS, "qwen").map((h) => [h.group.id, h.matchedModels]));
-    // g3 / g4 的组名是中文，是被模型命中的——要说出是哪几个。
-    expect(by.get("g3")).toEqual(["通义千问 Flash", "通义千问 Plus", "视觉理解"]);
-    expect(by.get("g4")).toEqual(["录音文件识别"]);
+    // g3 / g4 的组名是中文，是被模型命中的——要说出是哪几个，而且写的是
+    // **含有查询词的那个字段**：这里 qwen 在 id 上，所以写 id。
+    expect(by.get("g3")).toEqual(["qwen3.8-flash", "qwen3.8-plus", "[API]qwen3-vl-flash"]);
+    expect(by.get("g4")).toEqual(["qwen3-asr-flash"]);
     // g5 的组名里就有 qwen，再挂一串模型名只是噪音。
     expect(by.get("g5")).toEqual([]);
   });
@@ -102,6 +103,30 @@ describe("matchFeeGroups", () => {
     const models: BoundModelRef[] = [{ feeGroupId: "g1", name: "foo", modelId: "bar" }];
     expect(matchFeeGroups([GROUPS[0]], models, "oo b")).toEqual([]);
     expect(matchFeeGroups([GROUPS[0]], models, "foo")[0].matchedModels).toEqual(["foo"]);
+  });
+
+  it("命中的是 id 就写 id，不写显示名——否则作者敲的词一个字都不出现", () => {
+    const hits = matchFeeGroups(GROUPS, MODELS, "qwen3.8-flash");
+    expect(hits.map((h) => h.group.id)).toEqual(["g3"]);
+    expect(hits[0].matchedModels).toEqual(["qwen3.8-flash"]);
+  });
+
+  it("命中的是显示名就写显示名", () => {
+    expect(matchFeeGroups(GROUPS, MODELS, "录音文件")[0].matchedModels).toEqual(["录音文件识别"]);
+  });
+
+  it("两个字段都含有查询词时写显示名——那一行已经能看出理由", () => {
+    const models: BoundModelRef[] = [{ feeGroupId: "g1", name: "qwen 大杯", modelId: "qwen-max" }];
+    expect(matchFeeGroups([GROUPS[0]], models, "qwen")[0].matchedModels).toEqual(["qwen 大杯"]);
+  });
+
+  it("同名的两行只写一次——同一个模型在两条线路上各加一行是常事", () => {
+    // 组名是中文，所以这一行只可能是被模型命中的。
+    const models: BoundModelRef[] = [
+      { feeGroupId: "g3", name: "Sonnet", modelId: "claude-sonnet-4.5" },
+      { feeGroupId: "g3", name: "Sonnet", modelId: "claude-sonnet-4.5" },
+    ];
+    expect(matchFeeGroups([GROUPS[2]], models, "sonnet")[0].matchedModels).toEqual(["Sonnet"]);
   });
 
   it("模型没有显示名时退回 modelId", () => {

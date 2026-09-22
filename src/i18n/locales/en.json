@@ -2939,11 +2939,12 @@
       "searchCount": "“{{query}}” · {{n}} matching",
       "noResults": "No fee group matches “{{query}}”.",
       "noResultsHint": "Names, vendors and every group's bound models were all searched.",
-      "sectionCount": "{{n}}",
+      "sectionCount": "{{count}} groups",
       "matchedModels": "Matched model {{models}}",
       "matchedModelsMore": "Matched model {{models}} and {{more}} more",
       "listCount": "{{groups}} groups · {{vendors}} vendors",
-      "listCountNone": "{{groups}} groups · {{vendors}} vendors · {{none}} without one"
+      "listCountNone": "{{groups}} groups · {{vendors}} vendors · {{none}} without one",
+      "sectionCount_one": "{{count}} group"
     }
   },
   "lore": {

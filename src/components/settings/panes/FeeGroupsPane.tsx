@@ -147,7 +147,7 @@ export function FeeGroupsPane() {
               key={editing.group?.id ?? "new"}
               group={editing.group}
               boundModels={editing.group ? boundCount(editing.group.id) : 0}
-              vendors={knownVendors(feeGroups)}
+              vendors={vendors}
               onSave={async (g) => {
                 await saveFeeGroup(
                   editing.group ? { ...g, id: editing.group.id, createdAt: editing.group.createdAt } : g,
@@ -229,7 +229,7 @@ export function FeeGroupsPane() {
                 <Section
                   key={sec.vendor || "\u0000none"}
                   label={sec.vendor || t("aiConfig.fees.vendorNone")}
-                  action={<span className={s.sectionCount}>{t("aiConfig.fees.sectionCount", { n: sec.hits.length })}</span>}
+                  action={<span className={s.sectionCount}>{t("aiConfig.fees.sectionCount", { count: sec.hits.length })}</span>}
                 >
                   {sec.hits.map(renderRow)}
                 </Section>

@@ -2931,7 +2931,7 @@
       "searchCount": "搜「{{query}}」· {{n}} 个组命中",
       "noResults": "没有匹配「{{query}}」的计费组。",
       "noResultsHint": "组名、厂商、以及每个组绑着的模型都搜过了。",
-      "sectionCount": "{{n}} 组",
+      "sectionCount": "{{count}} 组",
       "matchedModels": "命中模型 {{models}}",
       "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个",
       "listCount": "{{groups}} 个组 · {{vendors}} 个厂商",

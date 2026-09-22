@@ -248,8 +248,13 @@
 
    类名写两遍是这个仓库的约定（理由在 common/Select.tsx 的文件头）：单写
    一次是 0-1-0，和 settingsCommon 的 .input 打平，谁赢取决于 bundle 里
-   两个模块的先后——那不是一个能靠代码保证的结果。 */
-.unset.unset {
+   两个模块的先后——那不是一个能靠代码保证的结果。
+
+   `:not(:focus)` 不是为了「聚焦时不画虚线」，是为了**别和 .input:focus
+   打平**：那一条也是 0-2-0，两条 0-2-0 又回到看 bundle 顺序。写进 :not()
+   之后这一条是 0-3-0，聚焦时确定地让位给焦点态——反正焦点本身由全局的
+   :focus-visible 环表达（design-system.md：不要靠边框色表达焦点）。 */
+.unset.unset:not(:focus) {
   border-style: dashed;
   border-color: var(--stg-border-menu);
   color: var(--color-text-faint);
@@ -290,9 +295,11 @@
 .bindHit { color: var(--color-accent); }
 
 /* 搜索框的「有内容」态。类名写两遍是为了压过 hub 的 .searchInput
-   （同样 0-1-0，谁赢取决于两个模块在 bundle 里的先后）。 */
+   （同样 0-1-0，谁赢取决于两个模块在 bundle 里的先后）。
+   右内边距是给那个绝对定位的 × 让位的——不让，打满一行的查询会钻到它底下。 */
 .searchOn.searchOn input {
   border-color: var(--color-accent);
+  padding-right: var(--space-8);
 }
 .searchOn.searchOn svg {
   color: var(--color-accent);

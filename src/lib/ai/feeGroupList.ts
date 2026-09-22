@@ -99,9 +99,19 @@ function hasText(v: string | undefined, q: string): boolean {
   return !!v && v.toLowerCase().includes(q);
 }
 
-/** 一个模型在搜索里能被什么词找到：显示名和端点认的 id。 */
-function modelLabel(m: BoundModelRef): string {
-  return (m.name ?? "").trim() || (m.modelId ?? "").trim();
+/**
+ * 这个模型被查询命中了吗；命中了就返回**含有查询词的那一个字段**。
+ *
+ * 不能一律返回显示名：命中的是 `modelId` 而模型另有显示名时，行上写出来的
+ * 「命中模型 通义千问 Flash」里，作者刚敲进去的 `qwen3.8-flash` 一个字都不
+ * 出现——那一行看起来仍然没有理由，而这正是这句话本来要消除的东西。
+ */
+function modelHit(m: BoundModelRef, q: string): string | null {
+  const name = (m.name ?? "").trim();
+  const id = (m.modelId ?? "").trim();
+  if (hasText(name, q)) return name;
+  if (hasText(id, q)) return id;
+  return null;
 }
 
 /**
@@ -129,10 +139,13 @@ export function matchFeeGroups(
     const own = g.name.toLowerCase().includes(q) || vendorKey(g.vendor).includes(q);
     // 两个字段**分别**比，不拼成一个字符串再整体比：拼接会在接缝上造出
     // 一个原文里不存在的词，`name:"foo" modelId:"bar"` 会被 `oo b` 命中。
-    const matched = boundTo(g.id, models)
-      .filter((m) => hasText(m.name, q) || hasText(m.modelId, q))
-      .map(modelLabel)
-      .filter(Boolean);
+    // 去重：同一个模型在两条线路上各加了一行、名字一样时，行上不该写成
+    // 「命中模型 Sonnet / Sonnet」。
+    const matched = [...new Set(
+      boundTo(g.id, models)
+        .map((m) => modelHit(m, q))
+        .filter((hit): hit is string => !!hit),
+    )];
     if (!own && !matched.length) continue;
     out.push({ group: g, matchedModels: own ? [] : matched });
   }
