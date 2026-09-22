@@ -1,7 +1,7 @@
 # 「文件」面板 · 目录说明 `index.md` —— 设计任务书
 
-> 状态：`designed`（设计稿已画，等待同步进设计项目；实现随
-> [`folder-note-plan.md`](lore/folder-note-plan.md) 同一个 PR）。设计项目
+> 状态：`designed`（设计稿已同步进设计项目 `01b 文件面板（一）` 的 TURN 2，2026-09-22；实现随
+> [`folder-note-plan.md`](lore/folder-note-plan.md) 同一个 PR，§7 的落点已按稿子落地，2e-2 等提案押后见该文档 §8）。设计项目
 > [`17a6a5ce-f60e-4996-8f94-5948958206d0`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0)，
 > 目标文件 **`17 文件面板 Files Panel`**（文件后来改号为 `01b 文件面板（一）`，以 `list_files` 为准），
 > 本稿作为 **TURN 2** 叠在 TURN 1（01b）现有内容上方；知识库墙那一屏（2e）**放在同一文件里**，
