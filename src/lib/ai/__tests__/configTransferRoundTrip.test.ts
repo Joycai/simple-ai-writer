@@ -152,6 +152,7 @@ const model: Required<Omit<Model, "fee">> = {
 const feeGroup: Required<FeeGroup> = {
   id: "fg1",
   name: "即梦 4.0 · 按张",
+  vendor: "字节 · 火山方舟",
   billingMode: "spec",
   inputPrice: 5,
   // 0 而不是 null：null 是「没填」，它序列化成 JSON 之后还是 null，而这份

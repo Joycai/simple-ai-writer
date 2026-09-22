@@ -71,6 +71,11 @@ export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
  * 把它们归并成组——和一台机器从老版本升上来走的是同一条路，不是第二条。
  * 只认 v2 的构建会**整体拒绝**一个 v3 的包，而不是导到一半：版本检查一直
  * 就是为这件事准备的。
+ *
+ * 计费组后来多了一个可空的 `vendor`（厂商，只用来把列表分段），**没有涨到 4**：
+ * 版本号该涨的条件是「老版本读到新格式会出错或读错」，而这里两个方向都是合法
+ * 状态——老版本读新包，没人读那一键，厂商丢掉而价格一个字段不差；新版本读老包，
+ * 厂商读成空。为一个整理标签涨版本号，只会让老版本整体拒掉一份价格完整的备份。
  */
 const CONFIG_BACKUP_VERSION = 3;
 
@@ -366,6 +371,7 @@ export function parseConfigBundle(
     feeGroups.push(rowToFeeGroup({
       id,
       name: r.name,
+      vendor: r.vendor,
       billing_mode: r.billingMode,
       input_price: r.inputPrice,
       cache_input_price: r.cacheInputPrice,

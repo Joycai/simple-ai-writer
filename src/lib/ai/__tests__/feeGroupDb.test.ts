@@ -8,8 +8,9 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { parseSpecRates, planFeeGroupsFromLegacy, rowToFeeGroup, serializeSpecRates } from "../feeGroupDb";
+import { feeGroupUpsert, parseSpecRates, planFeeGroupsFromLegacy, rowToFeeGroup, serializeSpecRates } from "../feeGroupDb";
 import type { LegacyPricedModel } from "../feeGroupDb";
+import type { FeeGroup } from "../feeGroup";
 
 describe("rowToFeeGroup", () => {
   it("读一行正常的组", () => {
@@ -36,6 +37,59 @@ describe("rowToFeeGroup", () => {
 
   it("未知的计价方式按 token 读——这个应用历史上唯一的解释", () => {
     expect(rowToFeeGroup({ billing_mode: "按心情" }).billingMode).toBe("token");
+  });
+
+  it("厂商：缺列、空串、只有空白，三种都读成没填", () => {
+    // 缺列是老库刚补上 vendor 之前的每一行；空串是手改过的库和跨版本的备份。
+    // 三种都必须是同一个 undefined，否则列表会长出一个名字是空的厂商段。
+    expect(rowToFeeGroup({ id: "g1" }).vendor).toBeUndefined();
+    expect(rowToFeeGroup({ vendor: "" }).vendor).toBeUndefined();
+    expect(rowToFeeGroup({ vendor: "   " }).vendor).toBeUndefined();
+    expect(rowToFeeGroup({ vendor: 42 }).vendor).toBeUndefined();
+  });
+
+  it("厂商前后的空白去掉，中间的写法原样留着", () => {
+    expect(rowToFeeGroup({ vendor: "  字节 · 火山方舟 " }).vendor).toBe("字节 · 火山方舟");
+  });
+});
+
+/**
+ * 写的那一侧**没有编译器兜底**：列清单、`VALUES` 的占位符、`ON CONFLICT DO
+ * UPDATE SET` 与 `values` 数组是四份互相独立的名单，漏掉一处不会报错，只会
+ * 让那一列永远存不进去（或者整条语句参数对不上）。所以这里按数量与顺序钉。
+ */
+describe("feeGroupUpsert", () => {
+  const group = (patch: Partial<FeeGroup> = {}): FeeGroup => ({
+    id: "g1", name: "即梦 4.0", billingMode: "spec",
+    inputPrice: 0, cacheInputPrice: null, outputPrice: 0, requestPrice: 0,
+    outputUnit: "image", outputRates: [{ price: 0.04 }],
+    inputUnitPrice: 0, inputFreeUnits: 0, createdAt: 100, ...patch,
+  });
+
+  const columnsOf = (sql: string) => /\(([^)]*)\)\s*VALUES/.exec(sql)![1].split(",").map((c) => c.trim());
+
+  it("列清单、占位符、values 三者长度一致", () => {
+    const { sql, values } = feeGroupUpsert(group());
+    const columns = columnsOf(sql);
+    const placeholders = /VALUES\s*\(([^)]*)\)/.exec(sql)![1].split(",").length;
+    expect(columns).toHaveLength(values.length);
+    expect(placeholders).toBe(values.length);
+  });
+
+  it("vendor 在四处名单上都有，且 values 里的位置和列清单对得上", () => {
+    const { sql, values } = feeGroupUpsert(group({ vendor: "字节 · 火山方舟" }));
+    const columns = columnsOf(sql);
+    expect(columns).toContain("vendor");
+    expect(sql).toMatch(/vendor = excluded\.vendor/);
+    expect(values[columns.indexOf("vendor")]).toBe("字节 · 火山方舟");
+  });
+
+  it("没填的厂商写 null，不写空串——库里「没填」只有一种长相", () => {
+    const columns = columnsOf(feeGroupUpsert(group()).sql);
+    for (const v of [undefined, "", "   "]) {
+      const { values } = feeGroupUpsert(group({ vendor: v }));
+      expect(values[columns.indexOf("vendor")]).toBeNull();
+    }
   });
 });
 

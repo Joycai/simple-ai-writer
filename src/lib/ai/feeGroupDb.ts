@@ -25,12 +25,15 @@ type Db = Awaited<ReturnType<typeof Database.load>>;
  *   `DEFAULT 0` 加这一列会让所有老组一夜之间缓存全免费。
  * - `input_unit_price` / `input_free_units` 默认 0：0 就是「不收」，多数组的
  *   真实状态。
+ * - `vendor` **可空、无默认**：厂商是词不是数，「没填」只有一种长相（NULL），
+ *   空串在读和写两侧都折成它。
  */
 export async function ensureFeeGroupSchema(db: Db) {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS fee_groups (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      vendor TEXT,
       billing_mode TEXT NOT NULL DEFAULT 'token',
       input_price REAL NOT NULL DEFAULT 0,
       cache_input_price REAL,
@@ -44,6 +47,33 @@ export async function ensureFeeGroupSchema(db: Db) {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+  // 表建完之后补老库缺的列。这一步归这个模块自己管，和 usageSchema.ts 一样：
+  // 表结构的唯一归属在哪，补列就在哪。`configDb.ts` 里有一个同样的私有
+  // `addColumn`，但它 import 了这个文件（`ensureAiSchema` 第一行），反向借用
+  // 会成环——layering.test.ts 的零环约束会当场拦下。
+  const cols = await db.select<{ name: string }[]>(`PRAGMA table_info(fee_groups)`);
+  await addFeeGroupColumn(db, cols, "vendor", "TEXT");
+}
+
+/**
+ * `ALTER TABLE … ADD COLUMN`，列已经在就跳过，抢输了也算成功。
+ *
+ * 「先读列、再补缺的」不是原子的，而这套 schema 检查历史上不止一处跑过：
+ * 另一个进程（或另一个窗口）在读和写之间把列加上了，SQLite 会回
+ * `duplicate column name`——那正是这个函数本来就想要的结果。
+ */
+async function addFeeGroupColumn(
+  db: Db,
+  existing: { name: string }[],
+  column: string,
+  type: string,
+): Promise<void> {
+  if (existing.some((c) => c.name === column)) return;
+  try {
+    await db.execute(`ALTER TABLE fee_groups ADD COLUMN ${column} ${type}`);
+  } catch (e) {
+    if (!/duplicate column name/i.test(String(e))) throw e;
+  }
 }
 
 /** 空、空白、坏 JSON、非数组都读成**空表**——组按 0 计、用量页标「未覆盖」，不抛。 */
@@ -98,10 +128,17 @@ function nullableReal(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+/** 厂商：空串、空白、缺失、坏类型都是「没填」。存下来的写法原样留着。 */
+function vendorOf(v: unknown): string | undefined {
+  const s = typeof v === "string" ? v.trim() : "";
+  return s || undefined;
+}
+
 export function rowToFeeGroup(r: Record<string, unknown>): FeeGroup {
   return {
     id: String(r.id ?? ""),
     name: typeof r.name === "string" ? r.name : "",
+    vendor: vendorOf(r.vendor),
     billingMode: parseBillingMode(r.billing_mode),
     inputPrice: real(r.input_price),
     cacheInputPrice: nullableReal(r.cache_input_price),
@@ -134,11 +171,12 @@ export async function listFeeGroups(db: Db): Promise<FeeGroup[]> {
 export function feeGroupUpsert(g: FeeGroup): { sql: string; values: unknown[] } {
   return {
     sql: `INSERT INTO fee_groups
-      (id, name, billing_mode, input_price, cache_input_price, output_price, request_price,
+      (id, name, vendor, billing_mode, input_price, cache_input_price, output_price, request_price,
        output_unit, output_rates, input_unit_price, input_free_units, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
+        vendor = excluded.vendor,
         billing_mode = excluded.billing_mode,
         input_price = excluded.input_price,
         cache_input_price = excluded.cache_input_price,
@@ -149,7 +187,9 @@ export function feeGroupUpsert(g: FeeGroup): { sql: string; values: unknown[] } 
         input_unit_price = excluded.input_unit_price,
         input_free_units = excluded.input_free_units`,
     values: [
-      g.id, g.name, g.billingMode, g.inputPrice, g.cacheInputPrice, g.outputPrice, g.requestPrice,
+      // 空厂商写 null 而不是空串：库里「没填」也只有一种长相。
+      g.id, g.name, g.vendor?.trim() || null,
+      g.billingMode, g.inputPrice, g.cacheInputPrice, g.outputPrice, g.requestPrice,
       g.outputUnit, serializeSpecRates(g.outputRates), g.inputUnitPrice, g.inputFreeUnits,
       g.createdAt || Math.floor(Date.now() / 1000),
     ],
