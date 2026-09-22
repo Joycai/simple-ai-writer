@@ -695,6 +695,13 @@ mod tests {
         assert_eq!(r.stdout.len(), MAX_STREAM_BYTES);
     }
 
+    /// The wall clock below is read against the command's own 30s sleep, not
+    /// against a budget: `timed_out` alone can't tell "the timeout tore the
+    /// child down" from "the run sat there until the sleep ended by itself",
+    /// so the bound has to stay — but it's half the sleep, not a few seconds.
+    /// Nothing here is a performance claim; a tight bound would be measuring
+    /// the runner's spawn latency instead (see the note on
+    /// `a_command_that_reads_stdin_fails_fast`).
     #[test]
     fn timeout_kills_the_run() {
         #[cfg(unix)]
@@ -706,8 +713,8 @@ mod tests {
         assert!(r.timed_out, "{r:?}");
         assert!(!r.killed);
         assert!(
-            started.elapsed() < Duration::from_secs(10),
-            "took {:?}",
+            started.elapsed() < Duration::from_secs(15),
+            "took {:?} — the timeout never ended the child, the sleep did",
             started.elapsed()
         );
     }
@@ -734,8 +741,11 @@ mod tests {
         let running = Running::default();
         let table = running.clone();
         let worker = thread::spawn(move || run_in(&table, "k", cmd, 30_000));
-        // Wait for the run to register, then do what `cmd_kill` does.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        // Wait for the run to register, then do what `cmd_kill` does. The
+        // deadline only breaks the loop if the worker died before registering
+        // — registration follows the spawn, which a loaded runner can stall
+        // for seconds, so it is generous rather than tight on purpose.
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             if let Some(entry) = running.0.lock().unwrap().get("k") {
                 entry.killed.store(true, Ordering::SeqCst);
@@ -755,14 +765,21 @@ mod tests {
 
     /// stdin is closed, so a command that wants input gets EOF and fails at
     /// once instead of parking the run on a prompt nobody can see.
+    ///
+    /// `!r.timed_out` is the whole assertion: a prompt nobody can answer would
+    /// sit there until the ceiling, so coming back inside it means the child
+    /// exited on its own. This used to also bound the wall clock at 5s, which
+    /// measured process-spawn latency rather than any of that and failed on a
+    /// loaded CI runner (6.5s for a test that takes milliseconds locally, with
+    /// no Rust source changed in the PR). It is not a performance test, so it
+    /// no longer times anything, and the ceiling is loose enough that spawn
+    /// latency can't reach it either.
     #[cfg(unix)]
     #[test]
     fn a_command_that_reads_stdin_fails_fast() {
-        let started = Instant::now();
-        let r = run("read x", 10_000);
+        let r = run("read x", 30_000);
         assert_ne!(r.exit_code, Some(0));
-        assert!(!r.timed_out);
-        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(!r.timed_out, "{r:?}");
     }
 
     /// The `-Command` wrapper's whole reason: a native program's failure must
