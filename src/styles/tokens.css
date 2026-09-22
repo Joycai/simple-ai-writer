@@ -746,7 +746,10 @@
     --stg-line-section:     #E7DCC4;   /* section-title rules */
     --stg-kbd-border:       #DFD3B8;
     --stg-knob:             #A99C7F;   /* switch off-knob */
-    --stg-bar:              #C68B5A;   /* usage share bars */
+    /* 计量条 2026-09 改成按维度分段（--usage-seg-*），这个 token 不再有人画。
+       留着不删：它是契约里的 derived 名字，删掉会让外面已经声明过它的主题
+       文件从「保留」变成「丢弃 + 问题卡」，代价大于收益。 */
+    --stg-bar:              #C68B5A;
     --stg-focus-ring:       rgba(169, 81, 43, 0.3);
     --stg-overlay:          rgba(72, 63, 48, 0.30);
     --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
