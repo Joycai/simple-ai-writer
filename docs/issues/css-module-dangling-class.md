@@ -28,7 +28,7 @@
 | `FileTree.tsx` `styles.creating` | 死代码 | 设计稿 17 给内联新建的只有「26px 行 + 赭石 1px 边框」；图标该是什么样由 `.filled` 和图标组件本身决定，没有第三件事要说 |
 | `AppearanceThemes.tsx` `s.cardMd` | 死代码 | 排版主题卡窄一档，已经由容器上的 `.gridMd` 和样张上的 `.slotMd` 做掉了，卡片这一层没有剩下的差别 |
 | `DocFormatDrawer.tsx` `styles.onBlockExText`（两处） | 死代码 | mono 字体、字号、颜色全从 `.onBlockExample` 继承，这两个 `<span>` 只需要是 flex item |
-| `FeeGroupDrawer.tsx` `hub.input` / `hub.unset` | **真缺陷** | 无。输入框退回浏览器原生样式 —— 在 `feat/fee-group-search-and-vendor` 上修，故本轮未动 |
+| `FeeGroupDrawer.tsx` `hub.input` / `hub.unset` | **真缺陷**（唯一一处） | 无 —— 抽屉里全部输入框退回浏览器原生样式。见下一节 |
 
 九处的观感用 Vite dev server 逐个核过：动态 `import()` 真实的 `.module.css` 拿哈希
 类名 → 按组件真实的 DOM 结构挂一份 → 量几何、截图对照（`css-modules-global-keyframes.md`
@@ -75,8 +75,8 @@ JSX，同步、全库 865 个 .ts/.tsx 不到 1 秒）。第 1 类误报**天然
 第二条断言把这张弃检名单**钉死成精确相等**，因为它不是不变量，是覆盖率的账：涨了
 要有人看见。新增一行之前先想想能不能把导入改个不重名的名字，那比弃检划算。
 
-`PENDING` 那张表装的是「还没修的」，不是豁免清单：眼下只有 `FeeGroupDrawer` 那两
-行，`feat/fee-group-search-and-vendor` 落地后就该删掉，让它回到空的。
+`PENDING` 那张表装的是「还没修的」，不是豁免清单。它开张时装着 `FeeGroupDrawer`
+那两行，两天后随那处修复清空，**此后一直是空的**。
 
 ### 为什么不是别的做法
 
@@ -88,3 +88,60 @@ JSX，同步、全库 865 个 .ts/.tsx 不到 1 秒）。第 1 类误报**天然
 - **构建期插件**能拿到 CSS Modules 转换后的真实导出映射（比正则准），但它拿不到
   「这个成员访问指向哪个导入」——作用域那一半问题原样还在，而它只在 `vite build`
   时跑，`pnpm test` 看不见。
+
+## 那一处真缺陷：`FeeGroupDrawer` 的 `.input` / `.unset`（2026-09-22 修）
+
+九处死类名之外，只有这一处元素**本该有样式而没有**：抽屉里每一个输入框——组名、
+三个单价、档位表里的五个格、输入图的两格——都没有边框、没有底色、没有内边距，
+是浏览器原生控件贴在深色抽屉上。
+
+**它不是「漏写了 CSS」，是「写错了模块」。** `NumInput` 的 className 一眼就能看出
+出处：
+
+```
+`${hub.input} ${s.cell} ${hub.mono} ${unset ? hub.unset : ""} …`
+```
+
+它是 `ModelDrawer.tsx` 那个 `inputCls` 的复制件——
+
+```ts
+const inputCls = (unset: boolean, extra = "") => `${s.input} ${unset ? s.unset : ""} ${extra}`;
+```
+
+——而 `ModelDrawer` 的 `s` 是它自己的 `ModelDrawer.module.css`（`.input` 与 `.unset`
+都定义在那里），复制过来时前缀跟着抄成了 `hub`，指向 `ProvidersModels.module.css`。
+那个模块只有 `.mono`（所以 `hub.mono` 一直是好的，四个类里唯一没坏的那个），
+`.input` / `.unset` 从来不在里面。
+
+**该有的样子是有据可查的，不用猜。** 三处各自独立地写着同一条规则：
+`design-system.md` 的 **Dashed = nothing sent**（「an empty input (`.unset`)」）、
+`FeeGroups.module.css` 自己的头注第 1 条（「实心 ＝ 配了价，虚线 ＝ 什么也不收……
+空着的输入框……」）、以及 `FeeGroupDrawer.tsx` 里 `numField` 上那句「空着的格画虚线：
+它说的是「没填」，而填了 0 的格是实线——0 是一个决定」。
+
+**修法：把这一对定义在 `FeeGroups.module.css`，调用点改 `s.input` / `s.unset`。**
+不借 `settingsCommon.module.css` 的 `.input`（它在那儿，而且长得一样），理由是
+**抢同一个 `border-color` 的三条规则必须待在同一个文件里**：
+
+| 规则 | 特异性 | 靠什么赢 |
+| --- | --- | --- |
+| `.input` 起底 `1px solid var(--color-border)` | `0,1,0` | — |
+| `.unset` 改 `dashed` + `--stg-border-menu` | `0,1,0` | 源码顺序（在 `.input` 后） |
+| `.badPrice` 改 `--color-accent` | `0,1,0` | 源码顺序（**必须在 `.unset` 后**） |
+| `.rateGrid .cell` 收紧 padding / 字号 | `0,2,0` | 特异性，与顺序无关 |
+
+前三条特异性相同，胜负只由源码顺序决定，而**跨文件的顺序是打包器按模块图排的、
+不由调用方做主**——这正是 `docs/feature/file-panel-redesign-brief.md` 记过的那个坑
+（「容器查询不改变特异性……由源码顺序决定胜负」）。`ModelDrawer` 明明也 import 了
+`settingsCommon`，却仍旧自备一份 `.input`，是同一个理由。
+
+**为什么 `.badPrice` 必须排在 `.unset` 后面**：`badRate` 判的是 `num(price) <= 0`，
+空串正好落进去，所以档位表里没填价的那一格**两个类同时在身上**。作者要先看见
+「这是错的」（赭石），虚线只负责说「这格是空的」。
+
+**实测（Vite dev server，两套主题）**：组名 `1px solid rgb(46,40,32)`（`--color-border`）；
+空着的单价格 `1px dashed rgb(74,66,56)`（`--stg-border-menu`）；档位表里没填价的那格
+`1px dashed rgb(217,146,91)`——虚线来自 `.unset`、赭石来自 `.badPrice`，两条都生效且
+各归其位；档位格 `6px/8px · 12px` 来自 `.rateGrid .cell`，格外的输入图两格 `8px/12px · 13px`
+来自 `.input`。把这两个类名换回 `undefined` 就能看见修复前的样子：一排亮灰圆角的
+浏览器原生控件。

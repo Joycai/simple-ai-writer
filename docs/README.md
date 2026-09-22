@@ -186,7 +186,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 |---|---|---|
 | [thinking-verification.md](issues/thinking-verification.md) | `open` | Thinking support is implemented and unit-tested across three families, but unit tests prove *what we sent*, not *what the endpoint did*. MiniMax-M3 cleared part of §2.6; the rest stands |
 | [css-modules-global-keyframes.md](issues/css-modules-global-keyframes.md) | `fixed` | CSS Modules 哈希化 animation-name、global.css 的 keyframes 悬空 —— 40+ 处入场/spinner 动画从未播过。已切 LightningCSS（`cssModules.animation: false`）修复；待一轮真机目检 |
-| [css-module-dangling-class.md](issues/css-module-dangling-class.md) | `fixed` | `styles.foo` 指向 `.module.css` 里没有的类时会拼出字面量类名 `"undefined"`，元素一点样式都没有，三道门禁全绿。全库 11 处已清（九处是从未存在过规则的死类名），并上了 AST 门禁 `cssModuleClassRefs.test.ts`；零误报怎么做到的、为什么不生成 `.d.ts`，都在文内 |
+| [css-module-dangling-class.md](issues/css-module-dangling-class.md) | `fixed` | `styles.foo` 指向 `.module.css` 里没有的类时会拼出字面量类名 `"undefined"`，元素一点样式都没有，三道门禁全绿。全库 11 处已清：九处是从未存在过规则的死类名，一处（`FeeGroupDrawer` 的 `.input` / `.unset`）是真缺陷——从 `ModelDrawer` 复制时抄错了模块前缀，修法与「为什么不借 `settingsCommon`」在文内。已上 AST 门禁 `cssModuleClassRefs.test.ts`，零误报怎么做到的、为什么不生成 `.d.ts`，同文 |
 | [motion-enter-only-hidden-tab.md](issues/motion-enter-only-hidden-tab.md) | `clarified` | 「enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`」是**测量产物**：预览面板标签页 `visibilityState === 'hidden'`，rAF 不派发。代码无缺陷，实测读数与正确的验动画方法记在文内 |
 | [asr-currency.md](issues/asr-currency.md) | `open` | 转写按人民币计费，却写进了 `cost_usd` 列：用量页合计是两种货币的和。两条出路（用量表记货币 / 设置里定汇率），作者定为不急的待办 |
 | [tiered-pricing.md](issues/tiered-pricing.md) | `open` | 千问按输入长度分档计价（顶档 3×），平价 `priceIn/Out` 表达不了；显式缓存写入价同缺。只失真成本统计，典型任务不跨 256K 门槛，故仅留档 + 设计草案 |
