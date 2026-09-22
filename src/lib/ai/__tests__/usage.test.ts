@@ -187,19 +187,41 @@ describe("sumBuckets", () => {
 // 拼错一个别名、或者加了一条 SUM 忘了在 `rowToBucket` 里读，那一段就恒为 0
 // ——条上少一块颜色，一个字都不报。
 describe("ROLLUP_SELECT 的别名与 rowToBucket 读的 key 一一对上", () => {
-  it("每个别名都被读成一个字段，没有一个落空", () => {
+  // **映射判据，不是集合判据。** 只检查「每个值都出现过」的话，把 `cost_input`
+  // 和 `cost_cache` 两行读**反**也照样通过——两个值都在，只是进错了字段。
+  // 所以这里写死每个别名该落到哪个字段，一一比对。
+  const ALIAS_FIELD: Record<string, keyof UsageBucket> = {
+    calls: "calls",
+    prompt_tokens: "promptTokens",
+    cached_tokens: "cachedTokens",
+    completion_tokens: "completionTokens",
+    output_units: "outputUnits",
+    uncovered: "uncovered",
+    cost_usd: "costUsd",
+    cost_input: "costInput",
+    cost_cache: "costCache",
+    cost_output: "costOutput",
+    cost_count: "costCount",
+    cost_duration: "costDuration",
+    cost_other: "costOther",
+    cost_unsplit: "costUnsplit",
+  };
+
+  it("SQL 里的别名和上表恰好一一对应——加了 SUM 忘了读，或读错字段，都拦得住", () => {
     const aliases = [...ROLLUP_SELECT.matchAll(/AS\s+(\w+)/g)].map((m) => m[1]);
-    expect(aliases.length).toBeGreaterThanOrEqual(14);
-    // 每个别名喂一个互不相同的值，读回来必须一个不少地出现。
+    // SQL 多了一个别名而上表没有 → 那一段没人读，条上恒少一块颜色。
+    expect(aliases.filter((a) => !(a in ALIAS_FIELD))).toEqual([]);
+    // 上表有而 SQL 没有 → 别名拼错了或那条 SUM 被删了。
+    expect(Object.keys(ALIAS_FIELD).filter((a) => !aliases.includes(a))).toEqual([]);
+
+    // 每个别名喂一个互不相同的值，检查它**落到了哪个字段**。
     const row: Record<string, unknown> = { key: "m1" };
     aliases.forEach((a, i) => { row[a] = i + 1; });
     const b = rowToBucket(row);
-    const got = new Set(Object.values(b).filter((v) => typeof v === "number"));
-    const missing = aliases
-      .map((a, i) => ({ a, v: i + 1 }))
-      .filter(({ v }) => !got.has(v))
-      .map(({ a }) => a);
-    expect(missing).toEqual([]);
+    const wrong = aliases
+      .map((a, i) => ({ a, want: i + 1, got: b[ALIAS_FIELD[a]] }))
+      .filter(({ want, got }) => got !== want);
+    expect(wrong).toEqual([]);
   });
 });
 

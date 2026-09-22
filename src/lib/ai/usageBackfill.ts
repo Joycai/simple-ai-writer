@@ -140,11 +140,14 @@ const UPDATE_SQL = `UPDATE token_usage
 const MARK_SQL = `UPDATE token_usage SET cost_split_checked = 1 WHERE id = ?`;
 
 /**
- * 把这个库里还没有分项的行补上。
+ * 把这个库里**还没看过**的行看一遍。
  *
- * **幂等**：写过的行不再命中 `cost_input IS NULL`。对不上账的行会被反复选中
- * 却永远写不进去，所以每一批都必须**推进游标**（`WHERE id > lastId`），
- * 否则一批全是对不上的行时会原地打转。
+ * **幂等**：看过的行盖了章（`cost_split_checked = 1`），不再命中谓词——
+ * 补上了的和对不上账留白的，两种都不再命中。
+ *
+ * 即便如此，每一批仍然**推进游标**（`WHERE id > lastId`）：盖章那一步万一
+ * 没落盘（事务失败、库被别的连接锁着），同一批就会被重新取回来，而它们
+ * 一个都写不进去——那就是原地打转。游标是这件事的兜底，不是优化。
  */
 export async function backfillUsageParts(db: Db, dbPath: string): Promise<BackfillResult> {
   let filled = 0;

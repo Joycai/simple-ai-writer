@@ -112,6 +112,11 @@ const INSERT_COLUMNS = [
   "output_units", "output_unit_price", "output_unit", "output_spec", "spec_matched",
   "input_images", "input_units", "input_unit_price", "reported_cost",
   "cost_input", "cost_cache", "cost_output", "cost_count", "cost_duration", "cost_other",
+  // 新行**当场盖章**。回填找的是「没看过的行」（`cost_split_checked IS NULL`），
+  // 不盖的话每一行新用量都会在下次开项目 / 下次加载配置时被重扫、重算、原样
+  // 重写一遍——写的值一模一样，不是数据损坏，但收敛就没了：那个部分索引再也
+  // 空不下来，而这一趟挂在 `openProject` 的 await 链上。
+  "cost_split_checked",
 ];
 
 function insertValues(r: UsageRowValues): unknown[] {
@@ -125,7 +130,7 @@ function insertValues(r: UsageRowValues): unknown[] {
     b.billingMode, b.inputPrice, b.cachePrice, b.outputPrice, b.requestPrice, b.requests,
     b.outputUnits, b.outputUnitPrice, r.priced.outputUnit, JSON.stringify(spec), r.priced.matched ? 1 : 0,
     r.priced.inputImages, b.inputUnits, b.inputUnitPrice, b.reportedCost,
-    s.input, s.cache, s.output, s.count, s.duration, s.other,
+    s.input, s.cache, s.output, s.count, s.duration, s.other, 1,
   ];
 }
 

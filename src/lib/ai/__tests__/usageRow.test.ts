@@ -246,6 +246,9 @@ describe("buildUsageRow · 分项的钱", () => {
     expect(row.cost_count).toBe(0);
     expect(row.cost_duration).toBe(0);
     expect(row.cost_other).toBe(0);
+    // 当场盖章。不盖的话回填每次开库都会把这一行重扫重算一遍——写的值一样，
+    // 但那个「还没看过」的部分索引再也空不下来，收敛就没了。
+    expect(row.cost_split_checked).toBe(1);
   });
 });
 
