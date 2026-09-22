@@ -71,4 +71,17 @@ describe("whenFocusSettles", () => {
     useEditorStore.setState({ loadError: { path: NOTE, message: "not utf-8" } });
     await expect(p).resolves.toBe(false);
   });
+
+  it("ignores a load error left behind by an earlier attempt on the same file", async () => {
+    useEditorStore.setState({ loadError: { path: NOTE, message: "earlier" } });
+    const p = whenFocusSettles(NOTE);
+    useEditorStore.setState({ wordCount: 3 });
+    buffer(NOTE);
+    await expect(p).resolves.toBe(true);
+  });
+
+  it("is over before it starts when nobody opened that file", async () => {
+    useProjectStore.setState({ activeFilePath: OLD });
+    await expect(whenFocusSettles(NOTE)).resolves.toBe(false);
+  });
 });

@@ -152,6 +152,13 @@ export function focusBlockedByImage(focus: WritingFocus): boolean {
  */
 export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolean> {
   if (isSamePath(useEditorStore.getState().filePath, path)) return Promise.resolve(true);
+  // Call after `setActiveFilePath(path)`: the wait is for the editor to catch
+  // up with what the author opened, so a `path` nobody has opened is over
+  // before it starts, not something to sit five seconds on.
+  if (!isSamePath(useProjectStore.getState().activeFilePath, path)) return Promise.resolve(false);
+  // Only an error raised by *this* attempt ends the wait — the previous load
+  // of the same file may have failed and left its `loadError` behind.
+  const staleError = useEditorStore.getState().loadError;
   return new Promise((resolve) => {
     let done = false;
     const finish = (ok: boolean) => {
@@ -165,7 +172,7 @@ export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolea
     const timer = setTimeout(() => finish(false), timeoutMs);
     const unsubEditor = useEditorStore.subscribe((s) => {
       if (isSamePath(s.filePath, path)) finish(true);
-      else if (s.loadError && isSamePath(s.loadError.path, path)) finish(false);
+      else if (s.loadError && s.loadError !== staleError && isSamePath(s.loadError.path, path)) finish(false);
     });
     const unsubProject = useProjectStore.subscribe((s) => {
       if (!isSamePath(s.activeFilePath, path)) finish(false);
