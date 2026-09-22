@@ -277,6 +277,20 @@ describe("manage_category · describe", () => {
     );
     expect(r2.content).not.toContain("once the category");
   });
+
+  it("tells the app which note it wrote — the wall's summary line is a cache no rescan refreshes", async () => {
+    const written: string[] = [];
+    const ctx = ctxWith([step("characters")]);
+    // Only the notice matters here; the getters stand in as stubs.
+    ctx.appState = {
+      categoryNoteWritten: (id: string) => { written.push(id); },
+    } as unknown as ToolContext["appState"];
+    await manageCategoryTool("c1", { op: "describe", category: "人物", description: "有名字的人。" }, ctx);
+    expect(written).toEqual(["characters"]);
+    // A refused write must not evict a summary that is still true.
+    await manageCategoryTool("c1", { op: "describe", category: "人物", description: "# 只有标题" }, ctx);
+    expect(written).toEqual(["characters"]);
+  });
 });
 
 describe("manage_category · create", () => {

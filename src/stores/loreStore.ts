@@ -24,6 +24,7 @@ import {
   serializeScope,
   type LoreScope,
 } from "../lib/lore";
+import { readCategoryNotes } from "../lib/lore/categoryNote";
 import { makeDir, renamePath } from "../lib/fs/fileio";
 import { deletePref, LORE_SCOPE_PREFIX, readPref, writePref } from "../lib/prefs";
 
@@ -73,8 +74,20 @@ interface LoreState {
    * 而不是各自记一份。
    */
   scope: LoreScope;
+  /**
+   * 分类说明的摘要，按分类 id：墙筛到某分类时读一次 `lore/<id>/index.md` 的首段
+   * （`null` ＝ 没有说明，或说明里没有一段正文）；没读过就没有这个键。
+   * 会话内缓存，换项目时随索引一起清；`manage_category` 的 `describe` 写盘后经
+   * `categoryNoteWritten` 逐出那一条。**不进** `LoreIndex`——分类一级的东西一进索引
+   * 就得过 `selectLore`，而那条不变量是只读特征 frontmatter（folder-note-plan.md §4.2）。
+   */
+  categoryNotes: Record<string, string | null>;
 
   scanProject: (projectPath: string) => Promise<void>;
+  /** 读一次这个分类的说明摘要进 `categoryNotes`；已读过就不再读盘。 */
+  loadCategoryNote: (projectPath: string, categoryId: string) => Promise<void>;
+  /** 说明刚被写过：逐出缓存，墙下一次筛到它时重读。 */
+  categoryNoteWritten: (categoryId: string) => void;
   /**
    * 只重读**一个条目**的文件夹并换进索引——代理的写工具在一次改动没离开条目
    * 文件夹时走这条（`ToolContext.onLoreChanged` 带着条目地址来）。全量
@@ -164,8 +177,11 @@ async function walkProject(projectPath: string): Promise<void> {
     // 这里不会把会话中途的切换覆盖掉。`parseScopePref` 兼容旧的单集合裸字符串。
     const scope = parseScopePref(readPref(`${LORE_SCOPE_PREFIX}${projectPath}`));
     const index = await scanLore(projectPath);
+    // 换了项目，上一个项目的分类说明不能跟着来；同一项目重扫时留着（说明不在索引里，
+    // 重扫不会重读它，写盘那一侧自己会逐出）。
+    const switched = scannedPath !== projectPath;
     scannedPath = projectPath;
-    useLoreStore.setState({ index, scope });
+    useLoreStore.setState(switched ? { index, scope, categoryNotes: {} } : { index, scope });
   } finally {
     if (--activeScans === 0) useLoreStore.setState({ isLoading: false });
   }
@@ -184,6 +200,20 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   detailMode: parseDetailMode(readPref(LORE_DETAIL_MODE_PREF)),
   pendingExtract: null,
   scope: null,
+  categoryNotes: {},
+
+  loadCategoryNote: async (projectPath, categoryId) => {
+    if (!projectPath || get().categoryNotes[categoryId] !== undefined) return;
+    const notes = await readCategoryNotes(projectPath, [categoryId]);
+    // 读的时候项目换了：这份摘要属于旧项目，扔掉。
+    if (scannedPath !== null && scannedPath !== projectPath) return;
+    set({ categoryNotes: { ...get().categoryNotes, [categoryId]: notes[categoryId] ?? null } });
+  },
+  categoryNoteWritten: (categoryId) => {
+    const { [categoryId]: _gone, ...rest } = get().categoryNotes;
+    void _gone;
+    set({ categoryNotes: rest });
+  },
 
   requestExtract: (text) => set({ pendingExtract: text }),
   takePendingExtract: () => {

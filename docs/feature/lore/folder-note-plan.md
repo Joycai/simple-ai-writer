@@ -147,6 +147,16 @@ status: deprecated
 （rename / delete 那两项的禁用规则不适用，见 §4.2）。提示词让助手先读这一类的条目，再
 以 `describe` 提一份只有一步的方案。
 
+**摘要行**（任务书 2e-2，2026-09-22 第二个 PR 采纳）：筛到某分类时，chip 行下一行显示它的
+说明首段——13px `NotebookText`（faint）+ 12px 衬线 muted 正文（单行省略）+ 右端 10px sans
+「右键分类可更新」把入口指回去；「全部」不显示，没有说明（或说明没有正文段）时这一行
+**不存在**，不留空高；只读。数据走 `loreStore.categoryNotes`：墙筛到某分类时
+`loadCategoryNote` 读一次 `lore/<id>/index.md`，`null` 也缓存（没有说明的分类不为每次
+点击付一次读盘）；换项目随索引清空，同一项目重扫保留（说明不在索引里，重扫不会重读它）；
+`describe` 写盘后经 `ToolAppState.categoryNoteWritten` 逐出那一条，下次筛到时重读。
+**不进** `scanLore` / `LoreIndex` / `IndexedCategory`——理由同 §4.2。作者在应用外手改
+说明文件，本会话看到的仍是旧摘要，下次打开项目才刷新；没有文件监视器，接受。
+
 ## 6. 决策记录
 
 | 决策 | 取 | 理由 |
@@ -159,6 +169,7 @@ status: deprecated
 | 分类的 `status` / `title` | 不做 | `selectLore` 不变量；`title` 要进扫描结果，先做只有一个消费点的 description |
 | 提示词入口 | 自动发送 | 菜单项本身就是指令；写入仍过卡 |
 | `search_text` 搜不搜 `index.md` | 搜 | 说明里的话正是该被找到的 |
+| 墙上的摘要行怎么失效 | `describe` 经 `ToolAppState.categoryNoteWritten` 逐出一条，不走 `syncLore` | `syncLore` 的重扫读的是条目文件夹，永远读不到分类说明；空数组的 `syncLore` 又是「磁盘没变」的意思。`lib/` 不能引 `stores/`，`ToolAppState` 是工具回报应用的既有通路（`addImitatedFormat` 先例） |
 | `describe` 写盘前校验 | 说明必须有一段正文，否则拒写 | 清单只引首段正文；全是标题和列表的说明会写进去然后永远不显示，拒在模型还能改的时候（`tool-presence.md`：结果不承诺做不到的事）；分类还没有条目时结果句也说明「有条目后才显示」 |
 
 ## 7. 测试与守卫
@@ -176,10 +187,8 @@ status: deprecated
 
 ## 8. 押后与不做
 
-任务书里标为「提案」、这一轮没做的：
+任务书里标为「提案」、还没做的（2e-2 摘要行已在 §5.2 落地）：
 
-- **分类头下显示说明摘要**（任务书 2e-2）：界面上分类说明目前只能靠助手读到；采纳时
-  在墙筛到某分类时读一次 `lore/<id>/index.md`，缓存到 `describe` 写盘。
 - **说明行固定排在分组之首**（`commands.rs` 的比较器）与**消息时间行的来源后缀**：
   各要动 Rust 排序和消息 meta，等有第二个用例再动。
 

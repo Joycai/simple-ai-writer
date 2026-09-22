@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff, NotebookPen } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff, NotebookPen, NotebookText } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
@@ -76,6 +76,7 @@ export function LoreWall() {
   const { index, scanProject, refreshEntity, createNewEntity, deleteEntity, moveToCategory, detailPath, detailEditing, openDetail } = useLoreStore();
   const scope = useLoreStore((s) => s.scope);
   const setScope = useLoreStore((s) => s.setScope);
+  const loadCategoryNote = useLoreStore((s) => s.loadCategoryNote);
   const { projectPath } = useProjectStore();
   const collections = useProjectStore((s) => s.collections);
   const fileIntoCollections = useProjectStore((s) => s.fileIntoCollections);
@@ -97,6 +98,14 @@ export function LoreWall() {
   }, [projectPath, scanProject]);
 
   const [filter, setFilter] = useState<string>("all");
+  // 分类说明的摘要行（设计稿 01b TURN 2 屏 2e-2）：筛到某分类时读一次它的 index.md，
+  // 缓存在 store 里；「全部」不读，没有说明时这一行不存在。缓存项本身是依赖：助手的
+  // describe 写盘后把它逐出（undefined），墙正筛在这个分类上时也要跟着重读。
+  const cachedNote = useLoreStore((s) => (filter === "all" ? null : s.categoryNotes[filter]));
+  const categoryNote = cachedNote ?? null;
+  useEffect(() => {
+    if (filter !== "all" && projectPath && cachedNote === undefined) void loadCategoryNote(projectPath, filter);
+  }, [filter, projectPath, cachedNote, loadCategoryNote]);
   /**
    * 装订栏的筛选——**只影响眼睛**，和取材范围是两件事。
    *
@@ -893,6 +902,13 @@ export function LoreWall() {
                     ? t("lore.collections.scope.chipsNote")
                     : t("lore.collections.axisNote")}
                 </span>
+              )}
+              {categoryNote && (
+                <div className={styles.categoryNote} title={categoryNote}>
+                  <NotebookText size={13} strokeWidth={1.8} className={styles.categoryNoteIcon} />
+                  <span className={styles.categoryNoteText}>{categoryNote}</span>
+                  <span className={styles.categoryNoteMore}>{t("lore.categoryNote.hint")}</span>
+                </div>
               )}
             </div>
           <div className={styles.gridArea}>

@@ -3259,6 +3259,7 @@
       "failed": "These could not be moved: {{list}}"
     },
     "categoryNote": {
+      "hint": "Right-click the category to update it",
       "menu": "Write category note via assistant",
       "prompt": "Write the category note for the {{kb}} category \"{{label}}\" (id: {{id}}). Read this category's entries first, then propose a one-step plan for manage_category's describe (target category, action update, entity {{id}}): one or two sentences on what this category holds, how its entries divide the ground, and when to consult it while writing."
     },

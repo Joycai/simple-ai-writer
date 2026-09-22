@@ -388,6 +388,9 @@ async function describeCategory(
     };
   }
   await writeCategoryNote(ctx.projectPath, id, text);
+  // The note is not on LoreIndex, so no `syncLore` rescan would carry it to the
+  // wall's summary line; tell the store directly (folder-note-plan.md §5.2).
+  ctx.appState?.categoryNoteWritten(id);
   const shown = declared ? categoryRef(declared, isZh) : id;
   const empty = !(ctx.loreIndex[id]?.length);
   return {

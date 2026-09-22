@@ -722,10 +722,11 @@ export interface SubRunner {
 
 /**
  * Live app state a tool reads at call time — the author's AI settings and the
- * .docx format list. Injected by the store that starts the run
- * (`stores/toolAppState.ts`), because `lib/` never imports `stores/`: each of
- * these used to be an `await import` of a store from inside a tool, which is
- * how aiStore ended up inside the agent subsystem's import cycle
+ * .docx format list — plus the two notices a tool sends the other way.
+ * Injected by the store that starts the run (`stores/toolAppState.ts`),
+ * because `lib/` never imports `stores/`: each of these used to be an
+ * `await import` of a store from inside a tool, which is how aiStore ended up
+ * inside the agent subsystem's import cycle
  * (docs/feature/code-structure-plan.md P3). Getters, not values: a tool reads
  * the settings as they are when it runs, the same moment the store read did.
  */
@@ -735,6 +736,12 @@ export interface ToolAppState {
   docFormats: () => { presets: DocFormatPreset[]; defaultId: string };
   /** Park a format read from a .docx in this session's list (docFormatStore.addImitated). */
   addImitatedFormat: (preset: DocFormatPreset) => void;
+  /**
+   * `manage_category`'s `describe` just wrote `lore/<id>/index.md`. The
+   * category note is not on `LoreIndex`, so no rescan carries it; this is how
+   * the wall's cached summary line learns to re-read (loreStore.categoryNotes).
+   */
+  categoryNoteWritten: (categoryId: string) => void;
 }
 
 /** Everything an executor may need about the running project. */
