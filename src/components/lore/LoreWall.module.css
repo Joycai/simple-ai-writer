@@ -154,6 +154,36 @@
   color: var(--color-sienna);
 }
 .chipActive .chipCount { color: var(--color-card); opacity: 0.75; }
+/* 分类说明的摘要行（设计稿 01b TURN 2 屏 2e-2）：筛到某分类时 chip 行下一行，只读。
+   衬线 muted 正文 + faint 的叶子图标，右端一句 sans faint 把入口指回右键；没有说明时
+   这一行不渲染，不留空高。占满一整行靠 flex-basis，仍在 .filters 的边线之内。 */
+.categoryNote {
+  flex-basis: 100%;
+  max-width: 520px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0 0 2px;
+  font: 400 12px/1.55 var(--font-serif);
+  color: var(--color-text-muted);
+}
+.categoryNoteIcon {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--color-text-faint);
+}
+.categoryNoteText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.categoryNoteMore {
+  flex-shrink: 0;
+  font: 400 10px/1.55 var(--font-sans);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
 
 /* ── 两栏：装订栏（集合） | 主区（分类 chips + 格纸 + 页边 + 底条） ────────── */
 .body {

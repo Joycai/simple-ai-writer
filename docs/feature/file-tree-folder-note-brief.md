@@ -1,7 +1,7 @@
 # 「文件」面板 · 目录说明 `index.md` —— 设计任务书
 
 > 状态：`shipped`（设计稿已同步进设计项目 `01b 文件面板（一）` 的 TURN 2，2026-09-22；实现随
-> [`folder-note-plan.md`](lore/folder-note-plan.md) 同一个 PR，§7 的落点已按稿子落地，2e-2 等提案押后见该文档 §8）。设计项目
+> [`folder-note-plan.md`](lore/folder-note-plan.md) 同一个 PR，§7 的落点已按稿子落地；2e-2 摘要行在第二个 PR 落地，见该文档 §5.2，其余提案押后见 §8）。设计项目
 > [`17a6a5ce-f60e-4996-8f94-5948958206d0`](https://claude.ai/design/p/17a6a5ce-f60e-4996-8f94-5948958206d0)，
 > 目标文件 **`17 文件面板 Files Panel`**（文件后来改号为 `01b 文件面板（一）`，以 `list_files` 为准），
 > 本稿作为 **TURN 2** 叠在 TURN 1（01b）现有内容上方；知识库墙那一屏（2e）**放在同一文件里**，
@@ -135,7 +135,7 @@
 | 2c 提示词 | 四个要点按序：先列后读（folder 直指）→ 整篇重写 → status 怎么写 → 保留仍正确的话 | 见 §6 |
 | 2e 措辞 | **一个标签覆盖新建与更新**：让助手写分类说明 / `Write category note via assistant` | 墙不知道 index.md 在不在；「写」在两种情况下都是真话。日后有 `hasNote` 再换词 |
 | 2e 位置 | 菜单最上、与删除隔一条线；三种分类都有 | 造在毁前 |
-| 2e-2 提案 | **建议显示**：筛到某分类时 chip 行下一行 | 12px 衬线 `--color-text-muted` + 13px `NotebookText`（`--color-text-faint`）+ 单行省略 + 右端 10px「右键分类可更新」；「全部」不显示、没有说明时**这一行不存在**；只读 |
+| 2e-2 提案（已采纳） | **建议显示**：筛到某分类时 chip 行下一行 | 12px 衬线 `--color-text-muted` + 13px `NotebookText`（`--color-text-faint`）+ 单行省略 + 右端 10px「右键分类可更新」；「全部」不显示、没有说明时**这一行不存在**；只读 |
 | 2e-2 代价 | 筛到某分类时读一次 `lore/<分类>/index.md`，会话内缓存，`describe` 写盘后失效 | **不进** `scanLore`，不动 `selectLore` 不变量 |
 
 三条**提案**（便宜，未画进主屏）：
@@ -199,6 +199,6 @@ status: deprecated
 | locale | `fileTree.noteLabel` 说明 / NOTE · `fileTree.noteCreate` · `fileTree.noteUpdate` · `fileTree.notePrompt`（含 `{{group}}` `{{path}}`）· `fileTree.noteSentBy`（时间行后缀）· `lore.categoryNote.menu` · `lore.categoryNote.prompt` · `lore.categoryNote.updateHint`（2e-2 采纳时） |
 | `folderNoteTemplate` | 中文句子里「目录」→ `{{group}}`（`promptParams` 或直接 `useTerms`），英文 `folder` → `group` |
 | `commands.rs` `sort_by`（提案 1） | 同一分组内 `index.md` 先于其他文件 |
-| 2e-2（若采纳） | `LoreWall` 在 `filter` 变为某分类时读 `lore/<id>/index.md` → `parseFolderNote(...).summary`，缓存到 `describe` 写盘 |
+| 2e-2（已采纳） | `LoreWall` 在 `filter` 变为某分类时 `loreStore.loadCategoryNote` → `readCategoryNotes`，缓存在 `loreStore.categoryNotes`，`describe` 经 `ToolAppState.categoryNoteWritten` 逐出 |
 
 设计稿文件：`17 文件面板 · TURN 2 目录说明 Folder Note.dc.html`（本地渲染核对过浅深两套；同步进设计项目的步骤见文首）。

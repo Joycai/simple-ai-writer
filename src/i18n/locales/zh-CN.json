@@ -3251,6 +3251,7 @@
       "failed": "这几条没能移动：{{list}}"
     },
     "categoryNote": {
+      "hint": "右键分类可更新",
       "menu": "让助手写分类说明",
       "prompt": "请为{{kb}}分类「{{label}}」（id：{{id}}）写分类说明。先读这一类的条目，再用 manage_category 的 describe 提一份只有一步的方案（target 为 category、action 为 update、entity 为 {{id}}）：一两句话说这一类装什么、条目之间怎么分工，写作时什么情况下该查它。"
     },

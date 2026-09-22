@@ -12,6 +12,7 @@
 import type { ToolAppState } from "../lib/agent/registry";
 import { useAiStore } from "./aiStore";
 import { currentFormats, useDocFormatStore } from "./docFormatStore";
+import { useLoreStore } from "./loreStore";
 
 export const toolAppState: ToolAppState = {
   aiSettings: () => {
@@ -20,4 +21,5 @@ export const toolAppState: ToolAppState = {
   },
   docFormats: currentFormats,
   addImitatedFormat: (preset) => useDocFormatStore.getState().addImitated(preset),
+  categoryNoteWritten: (categoryId) => useLoreStore.getState().categoryNoteWritten(categoryId),
 };
