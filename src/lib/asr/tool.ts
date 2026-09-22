@@ -15,6 +15,7 @@ import { fileExists, readFileHead, readFileRange } from "../fs/fileio";
 import { baseName, projectRelative, resolveWorkspacePath } from "../paths";
 import type { ToolContext, TranscribeProposal } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
+import { unitRateFor } from "../ai/configDb";
 import { estimateCost } from "./cost";
 import { probeDurationSeconds } from "./duration";
 import { isAsrDiarizationDefault } from "./flag";
@@ -115,7 +116,8 @@ export async function transcribeAudioTool(
       };
     }
   }
-  const price = conn.model.pricePerSecond;
+  // 费率来自模型绑定的按秒计费组（lib/ai/feeGroup），不再是模型行上的一列。
+  const price = unitRateFor(conn.model, { seconds: seconds ?? undefined });
   const hints = (args.language_hints ?? []).filter((h): h is string => typeof h === "string" && !!h).slice(0, 4);
 
   const proposal: TranscribeProposal = {

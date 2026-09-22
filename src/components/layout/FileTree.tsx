@@ -30,6 +30,7 @@ import { useImeGuard } from "../../lib/ime";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { isAsrEnabled, isAsrDiarizationDefault, isAsrTimestampsEnabled } from "../../lib/asr/flag";
 import { isVideoExt, syncRefusal, transcribeExtOf, SYNC_ASR_EXTENSIONS, type SyncRefusal } from "../../lib/asr/formats";
+import { unitRateFor } from "../../lib/ai/configDb";
 import { estimateCost, formatBytes } from "../../lib/asr/cost";
 import { probeDurationSeconds } from "../../lib/asr/duration";
 import { formatClock } from "../../lib/asr/render";
@@ -1201,7 +1202,8 @@ export function FileTree() {
       // 必要时再读几段有界的区间，从不整个读进来。真实大小要传进去——流式写出的
       // WAV 的时长只能由「data 块到文件末尾」反推，CBR 的 mp3 也按剩余字节算。
       const seconds = await probeDurationSeconds(ext, head, (offset, length) => readFileRange(node.path, offset, length));
-      const pricePerSecond = asrModel?.pricePerSecond;
+      // 费率来自模型绑定的按秒计费组（lib/ai/feeGroup），不再是模型行上的一列。
+      const pricePerSecond = asrModel ? unitRateFor(asrModel, { seconds: seconds ?? undefined }) : undefined;
       const sync = asrModel?.asrFormat === "dashscope-sync";
       setTranscribeAsk({
         path: node.path,

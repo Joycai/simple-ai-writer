@@ -1,39 +1,54 @@
 /**
- * Reading the `token_usage` rows back out of a project's database.
+ * 读 `token_usage`：把行卷成汇总，给用量页。
  *
- * Four call sites write that table (a generative task, a chat turn, a memory
- * summarisation, an image run) and until now nothing read it — the numbers
- * accumulated with no way to see them and no way to clear them. This module is
- * the read side: two `GROUP BY` rollups over a time window, plus the delete
- * that gives the author a way to reset the count.
+ * 两个范围，两个库（lib/ai/usageRow.ts 写的那两处）：
+ * - **本项目**读项目目录的 `.ai-writer/project.db`——那份账跟着项目文件夹走。
+ * - **全部**读 appDataDir 的 `config.db`——项目删了、移走了，这一年花了多少还在，
+ *   并且能按项目再分一层。
  *
- * The aggregation deliberately happens in SQL and the arithmetic across
- * buckets in TypeScript: `total` is derived from `byModel` rather than fetched
- * separately, so the headline figure can never disagree with the rows printed
- * underneath it.
+ * 聚合在 SQL 里做、跨桶的加法在 TypeScript 里做：`total` 从 `byModel` 加出来
+ * 而不是另发一条查询，所以抬头那个数不可能和它下面那几行对不上。
+ *
+ * **钱只有一个来源**：`cost_usd` 列，它是 `feeGroup.costOf()` 在记账那一刻
+ * 写下来的结果。这里 `SUM` 它，不重算——重算就是第二套口径，而第二套口径
+ * 记错钱的时候不报错。
+ *
+ * 「按计费组」这一层**不看行上的快照**，而是拿 `byModel` 去问模型**当前**
+ * 绑在哪个组（`groupBuckets`）：重新分组之后历史跟着走，这是故意的。行上
+ * 快照的是**价**，不是归属。
  */
 
-import { getDb } from "../project";
+import { getDb, getGlobalDb } from "../project";
 
 export type UsageWindow = "today" | "7d" | "30d" | "all";
 
 export const USAGE_WINDOWS: UsageWindow[] = ["today", "7d", "30d", "all"];
 
 export interface UsageBucket {
-  /** A model id, a task id, or `"total"` for the rollup. */
+  /** 模型 id、任务 id、项目路径、计费模式，或 `"total"`。空串 = 那一维没有值。 */
   key: string;
   calls: number;
+  /** **全部** prompt token；`cachedTokens` 是它的子集（表的口径，见 usageSchema.ts）。 */
   promptTokens: number;
   cachedTokens: number;
   completionTokens: number;
+  /** 按规格计费的量之和：张 / 秒 / 条。混在一个桶里时单位可能不同，只作参考。 */
+  outputUnits: number;
+  /** 按规格计费却没命中任何档位、上游也没报价的请求数——按 0 计的那些。 */
+  uncovered: number;
   costUsd: number;
 }
 
 export interface UsageSummary {
+  scope: UsageScope;
   window: UsageWindow;
   total: UsageBucket;
   byModel: UsageBucket[];
   byTask: UsageBucket[];
+  /** 按计费模式（token / request / spec）。老行的 `billing_mode` 是空串。 */
+  byMode: UsageBucket[];
+  /** 按项目——只有总体那份有，项目库里这一维永远是空的。 */
+  byProject: UsageBucket[];
 }
 
 const DAY_SECONDS = 86_400;
@@ -86,6 +101,8 @@ export function rowToBucket(r: Record<string, unknown>): UsageBucket {
     promptTokens: num(r.prompt_tokens),
     cachedTokens: num(r.cached_tokens),
     completionTokens: num(r.completion_tokens),
+    outputUnits: num(r.output_units),
+    uncovered: num(r.uncovered),
     costUsd: num(r.cost_usd),
   };
 }
@@ -98,9 +115,11 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       promptTokens: acc.promptTokens + b.promptTokens,
       cachedTokens: acc.cachedTokens + b.cachedTokens,
       completionTokens: acc.completionTokens + b.completionTokens,
+      outputUnits: acc.outputUnits + b.outputUnits,
+      uncovered: acc.uncovered + b.uncovered,
       costUsd: acc.costUsd + b.costUsd,
     }),
-    { key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, costUsd: 0 },
+    { key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0, uncovered: 0, costUsd: 0 },
   );
 }
 
@@ -195,43 +214,101 @@ export function sortUsageBuckets(
   });
 }
 
-// The grouped column is a literal in each statement, never interpolated: the
-// only two rollups this module offers are the two written out here.
-const BY_MODEL_SQL = `
-  SELECT model_id AS key, COUNT(*) AS calls,
-         SUM(prompt_tokens) AS prompt_tokens,
-         SUM(cached_tokens) AS cached_tokens,
-         SUM(completion_tokens) AS completion_tokens,
-         SUM(cost_usd) AS cost_usd
-  FROM token_usage WHERE created_at >= ? GROUP BY model_id`;
+/**
+ * 哪一份账。`project` = 这个项目目录里的，`global` = appDataDir 里的全部。
+ *
+ * 不是同一张表的两个过滤条件，是两个库：项目那份跟着项目文件夹走（复制一份
+ * 项目过去，账也过去），总体那份比任何一个项目活得久。
+ */
+export type UsageScope = "project" | "global";
 
-const BY_TASK_SQL = `
-  SELECT task AS key, COUNT(*) AS calls,
+/**
+ * 分组的那一列是每条语句里的**字面量**，从不拼接：这个模块只提供写在
+ * 这里的这几种卷法。
+ *
+ * `uncovered` 数的是「按规格计费却没命中任何档位、上游也没报价」的请求——
+ * 那些请求按 0 计，用量页据此提醒用户去补档位表。`spec_matched IS NULL` 的
+ * 老行不算：它们记下来的时候还没有档位表这回事。
+ */
+const ROLLUP_SELECT = `COUNT(*) AS calls,
          SUM(prompt_tokens) AS prompt_tokens,
          SUM(cached_tokens) AS cached_tokens,
          SUM(completion_tokens) AS completion_tokens,
-         SUM(cost_usd) AS cost_usd
-  FROM token_usage WHERE created_at >= ? GROUP BY task`;
+         SUM(COALESCE(output_units, 0)) AS output_units,
+         SUM(CASE WHEN spec_matched = 0 AND reported_cost IS NULL THEN 1 ELSE 0 END) AS uncovered,
+         SUM(cost_usd) AS cost_usd`;
+
+const rollupSql = (column: "model_id" | "task" | "project" | "billing_mode") =>
+  `SELECT COALESCE(${column}, '') AS key, ${ROLLUP_SELECT}
+   FROM token_usage WHERE created_at >= ? GROUP BY ${column}`;
+
+async function dbFor(scope: UsageScope, projectPath: string | null) {
+  if (scope === "global") return getGlobalDb();
+  if (!projectPath) throw new Error("project usage needs an open project");
+  return getDb(projectPath);
+}
 
 export async function loadUsage(
-  projectPath: string,
+  scope: UsageScope,
+  projectPath: string | null,
   window: UsageWindow,
   nowMs: number = Date.now(),
 ): Promise<UsageSummary> {
-  const db = await getDb(projectPath);
+  const db = await dbFor(scope, projectPath);
   const since = windowStartSeconds(window, nowMs);
-  const [modelRows, taskRows] = await Promise.all([
-    db.select<Record<string, unknown>[]>(BY_MODEL_SQL, [since]),
-    db.select<Record<string, unknown>[]>(BY_TASK_SQL, [since]),
+  const q = (col: Parameters<typeof rollupSql>[0]) =>
+    db.select<Record<string, unknown>[]>(rollupSql(col), [since]);
+  // 按项目只在总体那份里有意义——项目库里每一行都是这个项目的。
+  const [modelRows, taskRows, modeRows, projectRows] = await Promise.all([
+    q("model_id"), q("task"), q("billing_mode"),
+    scope === "global" ? q("project") : Promise.resolve([]),
   ]);
   const byModel = sortBuckets(modelRows.map(rowToBucket));
-  const byTask = sortBuckets(taskRows.map(rowToBucket));
-  return { window, total: sumBuckets("total", byModel), byModel, byTask };
+  return {
+    scope,
+    window,
+    total: sumBuckets("total", byModel),
+    byModel,
+    byTask: sortBuckets(taskRows.map(rowToBucket)),
+    byMode: sortBuckets(modeRows.map(rowToBucket)),
+    byProject: sortBuckets(projectRows.map(rowToBucket)),
+  };
 }
 
-/** Drop every recorded run for this project. Not undoable — the caller confirms. */
-export async function clearUsage(projectPath: string): Promise<void> {
-  const db = await getDb(projectPath);
+/**
+ * 把按模型的桶折成按**当前**计费组的桶。
+ *
+ * 归属取自模型现在绑着的组，不是行上的快照——重新分组之后历史跟着走。
+ * 没绑组的模型（以及已经删掉的模型）落进 `key: ""` 那个桶，界面写「未绑定」。
+ */
+export function groupBuckets(
+  byModel: UsageBucket[],
+  feeGroupIdOf: (modelId: string) => string | undefined,
+): UsageBucket[] {
+  const acc = new Map<string, UsageBucket[]>();
+  for (const b of byModel) {
+    const key = feeGroupIdOf(b.key) ?? "";
+    const list = acc.get(key);
+    if (list) list.push(b);
+    else acc.set(key, [b]);
+  }
+  return sortBuckets([...acc].map(([key, list]) => sumBuckets(key, list)));
+}
+
+/**
+ * 清掉一份账。不可撤销——调用方先确认。
+ *
+ * 清「本项目」只动项目库：总体那份是另一本账，作者清掉一个项目的记录不是
+ * 在说「这半年我没花过钱」。要清总体的得在总体范围里再清一次，那是另一次
+ * 确认（`scope: "global"` + `projectPath: null`）。
+ * 在总体范围里带上 `projectPath` 则只清这个项目在总账里的那些行。
+ */
+export async function clearUsage(scope: UsageScope, projectPath: string | null): Promise<void> {
+  const db = await dbFor(scope, projectPath);
+  if (scope === "global" && projectPath) {
+    await db.execute("DELETE FROM token_usage WHERE project = ?", [projectPath]);
+    return;
+  }
   await db.execute("DELETE FROM token_usage");
 }
 
@@ -259,46 +336,27 @@ export function formatUsd(n: number): string {
 }
 
 /**
- * Record a single completed LLM call into the project's `token_usage` table.
- * Best-effort and non-critical (never throws).
+ * 把合并掉的模型 id 指向留下来的那个（lib/ai/channelMerge.ts）。
+ *
+ * 两个库都改：总体那份里别的项目的行也在同一张表里，不跟着改就会显示成
+ * 「已删除的模型」。尽力而为——配置那一侧的合并已经落地了，这一步失败
+ * 只是历史少了个名字。
  */
-export async function persistUsage(
-  projectPath: string,
-  modelId: string,
-  inputTokens: number,
-  outputTokens: number,
-  cost: number,
-  task: string,
-  cachedTokens = 0,
+export async function remapUsageModelIds(
+  projectPath: string | null,
+  remap: Record<string, string>,
 ): Promise<void> {
-  try {
-    const db = await getDb(projectPath);
-    await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [modelId, task, inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)],
-    );
-  } catch {
-    // non-critical: usage accounting must not crash the caller
-  }
-}
-
-
-/**
- * Point the open project's usage rows at the ids that replaced merged-away
- * models (lib/ai/channelMerge.ts). Best-effort like `persistUsage`: other
- * projects' rows are not reachable from here and read as a deleted model's
- * usage does — the same as deleting the model outright would leave them.
- */
-export async function remapUsageModelIds(projectPath: string, remap: Record<string, string>): Promise<void> {
   const entries = Object.entries(remap);
   if (entries.length === 0) return;
-  try {
-    const db = await getDb(projectPath);
+  const run = async (db: Awaited<ReturnType<typeof getGlobalDb>>) => {
     for (const [from, to] of entries) {
       await db.execute("UPDATE token_usage SET model_id = ? WHERE model_id = ?", [to, from]);
     }
-  } catch {
-    // non-critical: the configuration merge already landed
-  }
+  };
+  await Promise.all([
+    projectPath
+      ? getDb(projectPath).then(run).catch((e) => console.warn("[usage] 项目用量的模型 id 未改写：", e))
+      : Promise.resolve(),
+    getGlobalDb().then(run).catch((e) => console.warn("[usage] 总体用量的模型 id 未改写：", e)),
+  ]);
 }

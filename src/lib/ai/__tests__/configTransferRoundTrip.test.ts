@@ -36,6 +36,8 @@ vi.mock("../../fs/transfer", () => ({
 const { listModels, listPrompts, listProviders, modelUpsert, promptUpsert, providerUpsert } =
   await import("../configDb");
 const { parseConfigBundle, CONFIG_BACKUP_KIND } = await import("../configTransfer");
+const { feeGroupUpsert } = await import("../feeGroupDb");
+type FeeGroup = import("../feeGroup").FeeGroup;
 type Provider = import("../configDb").Provider;
 type Model = import("../configDb").Model;
 type Prompt = import("../configDb").Prompt;
@@ -64,6 +66,7 @@ async function throughDb<T>(stmt: SqlStatement, read: (db: never) => Promise<T[]
 // an overridden path and one on the platform's convention (no `path`).
 const provider: Required<Provider> = {
   id: "p1",
+  defaultFeeGroupId: "fg1",
   name: "Relay",
   baseUrl: "https://relay.example/gemini-v1beta",
   apiStandard: "gemini_compat",
@@ -93,8 +96,15 @@ const caps: Required<ImageCaps> = {
   comfy: { workflow: '{"3":{"class_type":"KSampler","inputs":{}}}' },
 };
 
-const model: Required<Model> = {
+/**
+ * `fee` 不在这里：它不是一列，是 `listModels` 读出来时按 `feeGroupId` 解析
+ * 挂上去的（`attachFees`）。它**不该**跨机器带过去——另一台机器上那个组
+ * 可能已经改了价，而这一行的价该由那台机器的组说了算。所以这份夹具只
+ * 覆盖真正落库的字段，`fee` 的缺席是断言的一部分。
+ */
+const model: Required<Omit<Model, "fee">> = {
   id: "m1",
+  feeGroupId: "fg1",
   providerId: "p1",
   modelId: "qwen3.8-max",
   name: "Qwen",
@@ -138,6 +148,26 @@ const model: Required<Model> = {
   },
 };
 
+/** 计费组：整行都要跨机器带过去，价才不会在新机器上变成 0。 */
+const feeGroup: Required<FeeGroup> = {
+  id: "fg1",
+  name: "即梦 4.0 · 按张",
+  billingMode: "spec",
+  inputPrice: 5,
+  // 0 而不是 null：null 是「没填」，它序列化成 JSON 之后还是 null，而这份
+  // 夹具要的是「每个字段都带着一个能被认出来的值」。null 的那一支由
+  // feeGroupDb.test.ts 钉。
+  cacheInputPrice: 0.5,
+  outputPrice: 40,
+  requestPrice: 0.04,
+  outputUnit: "image",
+  outputRates: [{ size: "1K", price: 0.04 }, { size: "2K", quality: "high", seconds: 8, price: 0.1 }],
+  inputUnitPrice: 0.01,
+  inputFreeUnits: 1,
+  sortOrder: 2,
+  createdAt: 1_700_000_000_000,
+};
+
 const prompt: Required<Prompt> = {
   id: "s1",
   name: "Opening line",
@@ -165,10 +195,11 @@ describe("config backup · every field round-trips", () => {
     // a field that only exists as `undefined` never reaches the other machine.
     const wire = JSON.parse(JSON.stringify({
       kind: CONFIG_BACKUP_KIND,
-      version: 2,
+      version: 3,
       providers: [fromDb.provider],
       models: [fromDb.model],
       prompts: [fromDb.prompt],
+      feeGroups: [feeGroup],
       prefs: [],
     }));
     const parsed = parseConfigBundle(wire, []);
@@ -176,6 +207,7 @@ describe("config backup · every field round-trips", () => {
     expect(parsed.providers).toEqual([provider]);
     expect(parsed.models).toEqual([model]);
     expect(parsed.prompts).toEqual([prompt]);
+    expect(parsed.feeGroups).toEqual([feeGroup]);
   });
 
   it("writes back the same rows the restore read", async () => {
@@ -183,13 +215,15 @@ describe("config backup · every field round-trips", () => {
     // the transaction is the same statement the original row came from.
     const parsed = parseConfigBundle(JSON.parse(JSON.stringify({
       kind: CONFIG_BACKUP_KIND,
-      version: 2,
+      version: 3,
       providers: [provider],
       models: [model],
       prompts: [prompt],
+      feeGroups: [feeGroup],
     })), []);
     expect(providerUpsert(parsed.providers[0])).toEqual(providerUpsert(provider));
     expect(modelUpsert(parsed.models[0])).toEqual(modelUpsert(model));
     expect(promptUpsert(parsed.prompts[0])).toEqual(promptUpsert(prompt));
+    expect(feeGroupUpsert(parsed.feeGroups[0])).toEqual(feeGroupUpsert(feeGroup));
   });
 });

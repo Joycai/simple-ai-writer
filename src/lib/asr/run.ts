@@ -29,7 +29,7 @@ import {
   toBase64,
   writeFile,
 } from "../fs/fileio";
-import type { AsrFormat } from "../ai/configDb";
+import type { AsrFormat, Model } from "../ai/configDb";
 import { baseName, dirName } from "../paths";
 import { uniqueImportPath } from "../import";
 import { probeDurationSeconds } from "./duration";
@@ -420,22 +420,34 @@ export async function writeTranscript(
 }
 
 /**
- * 把一次转写记进 `token_usage`：按秒 × 模型行的每秒单价，token 两列为 0，任务名
- * `asr`。命中缓存的那次没付钱，不记；没填单价记不了，返回 null——用量页那一列
- * 就少这一笔，确认卡上的估价格已经提前说过这件事。
+ * 把一次转写记进用量。
+ *
+ * 单价不再在模型行上：转写模型绑一个**按秒**的计费组，秒数交上去由档位表
+ * 定单价（`lib/ai/feeGroup`）。命中缓存的那次没付钱，不记；没绑组或表里
+ * 没有能匹配的档位时照样记一行（量在、钱是 0），用量页会把它标成「未覆盖」
+ * ——比悄悄不记强：不记的那一笔，作者永远不知道自己漏了什么。
  *
  * 两个入口（右键 / `transcribe_audio` 的 apply）都走这里，账才只有一种算法。
- * 已知的账目不一致：这一列叫 `cost_usd`，而 DashScope 按人民币计——记进去的
- * 是 ¥ 数（02-ui-brief.md「设计稿改了方案的三处」第 2 条）。
+ * 已知的账目不一致：金额那一列叫 `cost_usd`，而 DashScope 按人民币计——
+ * 记进去的是 ¥ 数（02-ui-brief.md「设计稿改了方案的三处」第 2 条）。
  */
 export async function recordTranscriptionUsage(
   projectPath: string,
-  model: { id: string; pricePerSecond?: number },
+  model: Pick<Model, "id" | "fee">,
   outcome: TranscribeOutcome,
 ): Promise<number | null> {
-  if (outcome.cached || outcome.billedSeconds === null || model.pricePerSecond === undefined) return null;
-  const cost = outcome.billedSeconds * model.pricePerSecond;
-  const { persistUsage } = await import("../ai/usage");
-  await persistUsage(projectPath, model.id, 0, 0, cost, "asr");
-  return cost;
+  if (outcome.cached || outcome.billedSeconds === null) return null;
+  const { recordUsage } = await import("../ai/usageRow");
+  const { buildUsageRow } = await import("../ai/usageRow");
+  const input = {
+    model,
+    task: "asr",
+    outputUnits: outcome.billedSeconds,
+    spec: { seconds: outcome.billedSeconds },
+  } as const;
+  await recordUsage(projectPath, input);
+  // 确认卡上要显示「这次花了多少」，而那个数必须和记进库里的是同一个——
+  // 重算一遍就是第二套口径。
+  const cost = buildUsageRow(input).costUsd;
+  return cost > 0 ? cost : null;
 }

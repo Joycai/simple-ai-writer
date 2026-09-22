@@ -4,10 +4,10 @@
  * the other provider adapters.
  */
 
-import { imageCostFor, type ImageCaps, type Model } from "../ai/configDb";
+import { type ImageCaps, type Model } from "../ai/configDb";
 import { imageDialect, type ImageParamOptions, type ImageWireParams } from "../ai/imageDialects";
 import { readImageHeader } from "./imageSize";
-import { getDb } from "../project";
+import { recordUsage } from "../ai/usageRow";
 import type { ImageAspect } from "./promptGen";
 
 export * from "./promptGen";
@@ -90,43 +90,36 @@ export function sizeForAspect(
 }
 
 /**
- * Record one image run in `token_usage`.
+ * 记一次出图运行。
  *
- * Reuses the token table rather than adding a second one: the cost column is
- * the only field the usage UI aggregates, and an image row simply reports zero
- * tokens when the provider bills per image. `task` distinguishes the rows.
+ * 走的是全应用唯一的写入口（`lib/ai/usageRow.recordUsage`），所以出图和
+ * 对话的账进同一张表、用同一份算式，并且同样一式两份（项目 + 总体）。
+ *
+ * 出图端点常按**规格**计价（同一个模型 1K 一个价、2K 另一个价），所以这里
+ * 把请求的尺寸 / 质量一并交上去——计费组按张计价时拿它去档位表里匹配，
+ * 按 token 计价时（gpt-image 那一类）它只是行上的一条记录。
+ * `inputImages` 是发出去的参考图张数：编辑 / 垫图在多数端点上另收。
  */
 export async function recordImageUsage(
-  /** Null before a project is open — nothing to record against, so it no-ops. */
+  /** Null before a project is open — 总体那份照记，项目那份跳过。 */
   projectPath: string | null,
   model: Model,
   task: string,
   images: number,
   usage?: { inputTokens: number; outputTokens: number },
+  spec: { size?: unknown; quality?: unknown; seconds?: unknown } = {},
+  inputImages = 0,
 ): Promise<void> {
-  if (!projectPath) return;
-  try {
-    const db = await getDb(projectPath);
-    await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        // `model.id`, not `model.modelId`: every other writer records the
-        // configured model's internal id, and this site recording the
-        // provider's model string instead put two different identifier spaces
-        // in one column — so the usage rollup could not name the model an
-        // image run was billed to. Rows written before this fix still carry
-        // the old shape; the reader matches both.
-        model.id,
-        task,
-        usage?.inputTokens ?? 0,
-        0,
-        usage?.outputTokens ?? 0,
-        imageCostFor(model, images, usage),
-        Math.floor(Date.now() / 1000),
-      ],
-    );
-  } catch {
-    // non-critical — usage accounting must never break a successful generation
-  }
+  // `model.id`，不是 `model.modelId`：别的写入方记的都是配置里的内部 id，
+  // 这里曾经记供应商的模型串，于是同一列里混了两套标识空间，用量卷不出
+  // 这笔账算在哪个模型头上。老行还是老样子，读那一侧两种都认。
+  await recordUsage(projectPath, {
+    model,
+    task,
+    promptTokens: usage?.inputTokens ?? 0,
+    completionTokens: usage?.outputTokens ?? 0,
+    outputUnits: images,
+    spec,
+    inputImages,
+  });
 }

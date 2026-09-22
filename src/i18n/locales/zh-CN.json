@@ -263,7 +263,8 @@
       "subagents": "子代理",
       "dataGroup": "数据",
       "sync": "同步与备份",
-      "docxFormat": "排版格式"
+      "docxFormat": "排版格式",
+      "fees": "计费组"
     },
     "workspace": {
       "profileSection": "能力包",
@@ -637,7 +638,10 @@
       "byTask": "按任务",
       "empty": "这个时间段内还没有记录。",
       "clear": "清空统计…",
-      "clearHint": "只删除用量记录，不影响正文、知识库和任何配置。",
+      "clearHint": {
+        "project": "只清这个项目文件夹里的那份。总账不动——清掉一个项目的记录不是在说「这半年我没花过钱」。不可撤销。",
+        "global": "清空总账。各个项目文件夹里的那份不受影响。不可撤销。"
+      },
       "clearConfirm": "清空本项目的全部用量记录？此操作不可撤销。",
       "kinds": {
         "chat": "对话",
@@ -651,7 +655,10 @@
       "detail": "明细",
       "maintenance": "维护",
       "unknownModel": "已删除的模型",
-      "footnote": "成本按「渠道与模型」页填写的单价估算；未填写价格的模型显示 — 且不计入合计。缓存命中率 = 缓存输入 ÷ 全部输入。",
+      "footnote": {
+        "project": "每一行都抄着计费时的单价、数量和规格。把这个项目文件夹复制到别的机器，这份账也跟着过去；总账留在本机。",
+        "global": "一次请求记两处：项目那份跟着项目文件夹走，这一份留在应用数据目录里。两处的金额都是记账那一刻按当时的价算好写下的——之后改组、删组、换组都不会让它变。"
+      },
       "colName": "名称",
       "colCalls": "调用",
       "colInput": "输入",
@@ -671,7 +678,30 @@
         "cost": "估算成本",
         "costSub": "未定价模型不计入"
       },
-      "noProject": "打开一个项目后可以查看它的用量统计。"
+      "noProject": "打开一个项目后可以查看它的用量统计。",
+      "scopes": {
+        "project": "本项目",
+        "global": "全部"
+      },
+      "scopeSub": {
+        "project": "这个项目的用量，存在项目文件夹的 .ai-writer/project.db 里——跟着项目走。",
+        "global": "这台机器上所有项目的用量，存在应用数据目录的 config.db 里——项目删了、移走了，这一年花了多少还在。"
+      },
+      "scope": "范围",
+      "scopeGlobalSub": "总体那份不需要开着项目。",
+      "switchToGlobal": "看全部",
+      "noProjectScoped": "本项目的用量要先打开一个项目——那份账就在项目文件夹里。",
+      "byGroup": "按计费组",
+      "byProject": "按项目",
+      "unboundSub": "没绑组 / 组已删",
+      "unknownProject": "（未记项目）",
+      "uncovered": "{{n}} 次请求没匹配到档位，按 0 计",
+      "goFixRates": "去补档位 →",
+      "clearLabel": {
+        "project": "清除本项目记录",
+        "global": "清除全部记录"
+      },
+      "clearConfirmGlobal": "清空总体用量记录？各个项目文件夹里的那份不受影响。不可撤销。"
     },
     "projectBackup": {
       "section": "项目备份",
@@ -2357,7 +2387,9 @@
       "routeOwnHost": "已改 · 独立主机",
       "routeOwnHostCell": "独立主机",
       "routeRoot": "根路径",
-      "routeRestore": "恢复默认"
+      "routeRestore": "恢复默认",
+      "defaultFeeGroup": "默认计费组",
+      "defaultFeeGroupHint": "这个渠道下新建 / 发现的模型预填这个组。只是预填：已有模型自己的绑定不会被改。"
     },
     "models": {
       "add": "添加",
@@ -2644,7 +2676,10 @@
       "matrix_yes": "能发",
       "matrix_unknown": "未实测，照发",
       "matrix_no": "这条线路不发",
-      "matrixLegend": "✓ 能发 · ? 未实测 · — 不发。上面的开关是你给这个模型的授权，各线路共用；每条线路能不能说出来，看平台。"
+      "matrixLegend": "✓ 能发 · ? 未实测 · — 不发。上面的开关是你给这个模型的授权，各线路共用；每条线路能不能说出来，看平台。",
+      "feeGroupLabel": "计费组",
+      "feeGroupHint": "价不在这张表上，在组里。同一组的模型改一次价全改；这个模型的历史用量一分不动——每一行都抄着当时的价。",
+      "feeGroupHintUnbound": "没绑组 ＝ 一分不收，但请求数和 token 照样记下来。补上组之后，之前那些行仍按当时的价（也就是 0）算。"
     },
     "probe": {
       "title": "探测真实上限",
@@ -2809,6 +2844,83 @@
       "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
       "requires": "它依赖的另一项在这条线路上不可用",
       "thinking": "思考开着时这条线路不收它"
+    },
+    "fees": {
+      "paneSub": "一组价格，被任意多个模型共用。改一次价，所有绑着它的模型一起改；已经记下的用量一分不动。",
+      "listLabel": "{{groups}} 个组 · {{models}} 个模型绑着它们",
+      "empty": "还没有计费组。新建一个，再到「渠道与模型」里把模型绑上去。",
+      "untitled": "未命名",
+      "unbound": "未绑定",
+      "boundModels": "{{n}} 个模型",
+      "deleteFoot": "删掉一个组不会删模型，也不会动已经记下的用量：模型退回「未绑定」，历史仍按当时的价算。",
+      "deleteConfirm": "删掉「{{name}}」？{{n}} 个模型会退回「未绑定」。已经记下的用量不受影响，不可撤销。",
+      "unboundLabel": "没绑组的模型",
+      "unboundNote": "{{n}} 个模型没绑组 —— 它们的请求照样记下数量，只是一分钱也算不出来。",
+      "addTitle": "新建计费组",
+      "editTitle": "编辑计费组",
+      "drawerTitle": "计费组",
+      "drawerSub": "{{n}} 个模型用着这组价 · 改价对它们同时生效，已记下的用量不动",
+      "nameLabel": "名称",
+      "namePlaceholder": "给这组价起个名",
+      "modeLabel": "计价方式",
+      "modes": {
+        "token": "按 token",
+        "request": "按次",
+        "spec": "按规格"
+      },
+      "modeHint": {
+        "token": "按进出的 token 计价。多数对话模型是这一种。",
+        "request": "每次请求一个价，和回了多少 token 无关。",
+        "spec": "按出来的东西计价，单价可以随尺寸 / 质量 / 时长变。"
+      },
+      "tokenPrices": "单价",
+      "perMillionUnit": "USD / 1M tokens",
+      "perMillion": "/M",
+      "perRequestSuffix": "/次",
+      "input": "输入",
+      "cached": "缓存输入",
+      "output": "输出",
+      "cachePlaceholder": "＝ 输入价",
+      "cacheHint": "缓存价留空 ＝ 和输入价一样；填 0 ＝ 缓存真的不要钱。两件事差着整笔钱，所以不能都写成 0。",
+      "requestPrice": "每次请求（$）",
+      "requestHint": "不论回了多少 token 都按一次收。失败的请求不记。",
+      "unitLabel": "一次请求数什么",
+      "units": {
+        "image": "张",
+        "second": "秒",
+        "clip": "条"
+      },
+      "perUnit": {
+        "image": "按张",
+        "second": "按秒",
+        "clip": "按条"
+      },
+      "unitHint": {
+        "image": "数响应里真的带回来的图片张数。一张都没出来的请求算 0，输入图也不收——没出图不是一次事件。",
+        "second": "数请求的时长。上游在完成时报了实际秒数，就按实际结算。",
+        "clip": "每次一条，不管内容多长。"
+      },
+      "rateTable": "档位表",
+      "colSize": "尺寸",
+      "colQuality": "质量",
+      "colSeconds": "时长",
+      "colPrice": "单价（$）",
+      "anyValue": "任意",
+      "addRate": "＋ 加一档",
+      "dropRate": "删掉这一档",
+      "tiers": "{{n}} 档",
+      "noRates": "未填档位",
+      "otherSpecsZero": "其他规格按 0 计",
+      "rateHintCatchAll": "三个条件留空的那一行是兜底价。填得最多的行赢，所以不用排序——「2K + high」自然压过「2K」压过兜底。",
+      "rateHintNoCatchAll": "三个条件都留空的行是兜底价；现在没有，没命中任何一档的请求会按 0 记，用量页会提示。",
+      "inputImagesRef": "输入图（参考图 / 底图）",
+      "inputImagesFrame": "输入图（首帧 / 尾帧 / 参考图）",
+      "inputUnitPrice": "每张单价（$）",
+      "inputFreeUnits": "每次免费张数",
+      "inputImageTag": "输入图 ${{price}}/张",
+      "inputFreeTag": "首 {{n}} 张免费",
+      "inputHintOn": "免费张数按每次请求算（「首张免费」＝ 每次请求的第一张）。一张都没交付的请求不收输入费。",
+      "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。"
     }
   },
   "lore": {

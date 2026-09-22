@@ -40,6 +40,8 @@ import {
   type Provider,
 } from "./configDb";
 import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
+import { feeGroupUpsert, listFeeGroups, rowToFeeGroup } from "./feeGroupDb";
+import type { FeeGroup } from "./feeGroup";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
 import { parsePlatform } from "./platforms";
@@ -60,7 +62,17 @@ export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
  * migration, not two. A build that knows only v1 refuses a v2 bundle — the
  * version check below was always there for exactly this.
  */
-const CONFIG_BACKUP_VERSION = 2;
+/**
+ * 3：价格从模型行搬进**计费组**（`fee_groups`），模型只持有 `feeGroupId`，
+ * 渠道带一个 `defaultFeeGroupId`（docs/feature/billing/01-fee-groups.md）。
+ *
+ * v2 的包读得进来：它的模型行还带着 `priceIn` / `pricePerImage` 这些旧列，
+ * 落库之后 `ensureAiSchema` 的那一步迁移（`fee_migrated` 为 NULL 的行）会
+ * 把它们归并成组——和一台机器从老版本升上来走的是同一条路，不是第二条。
+ * 只认 v2 的构建会**整体拒绝**一个 v3 的包，而不是导到一半：版本检查一直
+ * 就是为这件事准备的。
+ */
+const CONFIG_BACKUP_VERSION = 3;
 
 interface ProviderBackup extends Provider {
   /** Present only when the backup was exported with "include API keys". */
@@ -75,6 +87,8 @@ export interface ConfigBackup {
   providers: ProviderBackup[];
   models: Model[];
   prompts: Prompt[];
+  /** 计费组。v2 及更早的包没有这一项——它们的价还在模型行上。 */
+  feeGroups?: FeeGroup[];
   /** Portable preferences as `[key, value]` pairs. Absent in v1 backups written before they were included. */
   prefs?: [string, string][];
   /**
@@ -102,10 +116,13 @@ async function configDb() {
  */
 export async function buildConfigBundle(includeKeys: boolean): Promise<ConfigBackup> {
   const db = await configDb();
-  const [providers, models, prompts, docFormats] = await Promise.all([
+  const [providers, models, prompts, feeGroups, docFormats] = await Promise.all([
     listProviders(db),
     listModels(db),
     listPrompts(db),
+    // 价跟着配置走：只带模型而不带它绑的组，导到新机器上每个模型都会变成
+    // 「未绑定」，而那种缺失不报错，只是从此一分钱记不出来。
+    listFeeGroups(db),
     // Installation-level like everything else here: one 公文 format is reused
     // across every project, so it belongs in the thing you carry to a new
     // machine. Failing to read them must not sink the whole backup.
@@ -135,6 +152,7 @@ export async function buildConfigBundle(includeKeys: boolean): Promise<ConfigBac
     providers: providerBackups,
     models,
     prompts,
+    feeGroups,
     prefs: portablePrefEntries(),
     docFormats,
   };
@@ -160,6 +178,7 @@ export interface ParsedConfigBundle {
   providers: ProviderBackup[];
   models: Model[];
   prompts: Prompt[];
+  feeGroups: FeeGroup[];
   prefs: [string, string][];
   docFormats: DocFormatPreset[];
   /** How many imported providers carry an embedded API key. */
@@ -242,6 +261,9 @@ export function parseConfigBundle(
       // address, the same answer reading an old DB row gives. An id this
       // build doesn't know reads as `custom` (parsePlatform).
       platform: parsePlatform(r.platform),
+      // 这个渠道下新模型预填的计费组。v2 及更早的包没有它——那时价还在
+      // 模型行上，没有组可以指。
+      defaultFeeGroupId: str(r.defaultFeeGroupId) || undefined,
       // v1 has neither: readChannel builds the one route the flat fields
       // describe, exactly as for a pre-routes DB row.
       host: typeof r.host === "string" ? r.host : undefined,
@@ -300,6 +322,10 @@ export function parseConfigBundle(
       translateFormat: parseTranslateFormat(r.translateFormat),
       // Same degradation for a transcription format this build doesn't know.
       asrFormat: parseAsrFormat(r.asrFormat),
+      // 绑定的计费组。v2 及更早的包没有它，落库之后 `ensureAiSchema` 的
+      // 那一步迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
+      // 走的是同一条路。
+      feeGroupId: str(r.feeGroupId) || undefined,
       pricePerSecond: typeof r.pricePerSecond === "number" ? r.pricePerSecond : undefined,
       // Unknown value → auto, which sends what an undeclared model always sent.
       structuredOutput: parseStructuredOutputMode(r.structuredOutput),
@@ -328,6 +354,32 @@ export function parseConfigBundle(
       useCount: typeof r.useCount === "number" ? r.useCount : 0,
       lastUsedAt: typeof r.lastUsedAt === "number" ? r.lastUsedAt : 0,
     });
+  }
+
+  // 计费组：一行一行按列读回来（`rowToFeeGroup` 认的就是这些键），坏掉的
+  // 格读作缺失而不是让整个包作废——和从库里读一行是同一条路径。
+  const feeGroups: FeeGroup[] = [];
+  for (const item of Array.isArray(root.feeGroups) ? root.feeGroups : []) {
+    const r = item as Record<string, unknown>;
+    const id = str(r.id);
+    if (!id) continue;
+    feeGroups.push(rowToFeeGroup({
+      id,
+      name: r.name,
+      billing_mode: r.billingMode,
+      input_price: r.inputPrice,
+      cache_input_price: r.cacheInputPrice,
+      output_price: r.outputPrice,
+      request_price: r.requestPrice,
+      output_unit: r.outputUnit,
+      // 库里这一列存的是 JSON 文本，备份里是数组——序列化一次再交给同一个
+      // 解析器，「读一个组」就仍然只有一份代码。
+      output_rates: JSON.stringify(Array.isArray(r.outputRates) ? r.outputRates : []),
+      input_unit_price: r.inputUnitPrice,
+      input_free_units: r.inputFreeUnits,
+      sort_order: r.sortOrder,
+      created_at: r.createdAt,
+    }));
   }
 
   // Shape-checked here; which keys are actually allowed through is `lib/prefs`'
@@ -360,6 +412,7 @@ export function parseConfigBundle(
     providers.length === 0 &&
     models.length === 0 &&
     prompts.length === 0 &&
+    feeGroups.length === 0 &&
     prefs.length === 0 &&
     docFormats.length === 0
   ) {
@@ -370,6 +423,7 @@ export function parseConfigBundle(
     providers,
     models,
     prompts,
+    feeGroups,
     prefs,
     docFormats,
     keyCount: providers.filter((p) => p.apiKey).length,
@@ -425,6 +479,10 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
   await configDb();
 
   await sqlTransaction(await getGlobalDbPath(), [
+    // 组先于引用它的两张表：`models.fee_group_id` 与 `providers
+    // .default_fee_group_id` 没有外键（组可以先于模型被删掉，引用置空就行），
+    // 但让写入顺序自己成立比依赖「反正没约束」清楚。
+    ...staged.feeGroups.map(feeGroupUpsert),
     ...staged.providers.map(({ apiKey: _apiKey, ...provider }) => providerUpsert(provider)),
     ...staged.models.map(modelUpsert),
     ...staged.prompts.map(promptUpsert),

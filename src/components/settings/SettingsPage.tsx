@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users,
+import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Tags, Users,
   RefreshCw, FileType, FlaskConical, Scroll,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
@@ -11,6 +11,7 @@ import { GeneralPane } from "./panes/GeneralPane";
 import { WorkspacePane } from "./panes/WorkspacePane";
 import { SyncPane } from "./panes/SyncPane";
 import { UsagePane } from "./panes/UsagePane";
+import { FeeGroupsPane } from "./panes/FeeGroupsPane";
 import { PromptsPane } from "./panes/PromptsPane";
 import { ShortcutsPane } from "./panes/ShortcutsPane";
 import { AboutPane } from "./panes/AboutPane";
@@ -134,6 +135,10 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           </div>
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
+          {/* Tags（设计稿 05l）：一张价签挂在多个东西上，正是计费组在说的事。
+              紧跟「渠道与模型」——它是那一页的价格那一半；中间隔着子代理，
+              作者会以为它属于「用量」。 */}
+          {navBtn("fees", <Tags size={15} />, "systemSettings.tabs.fees")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
           {/* Scroll (设计稿 05b): what a conversation reads into the model is
@@ -158,7 +163,8 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
-            {activeTab === "usage" && <UsagePane />}
+            {activeTab === "fees" && <FeeGroupsPane />}
+            {activeTab === "usage" && <UsagePane onOpenFees={() => setActiveTab("fees")} />}
             {activeTab === "context-memory" && <ContextMemoryPane />}
             {activeTab === "lab" && <LabPane onDocxToggled={handleDocxToggled} onNavigate={setActiveTab} />}
             {activeTab === "sync" && <SyncPane />}

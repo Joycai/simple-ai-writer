@@ -44,6 +44,7 @@ import type { StagedConfigImport } from "../configTransfer";
 
 const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => ({
   path: "/backup.json",
+  feeGroups: [],
   providers: [
     { id: "p1", name: "Relay", baseUrl: "https://x/v1", apiStandard: "openai_compat", createdAt: 1 },
   ],

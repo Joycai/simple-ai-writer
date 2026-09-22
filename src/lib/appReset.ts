@@ -3,8 +3,12 @@
  *
  * ## 清什么，不清什么
  *
- * 清的是**装机级配置**：`config.db` 里的供应商 / 模型 / Prompt / 排版格式、
- * `lib/prefs` 里的全部偏好，以及 OS 钥匙串里这个应用存的密钥。
+ * 清的是**装机级配置**：`config.db` 里的供应商 / 模型 / 计费组 / Prompt /
+ * 排版格式、`lib/prefs` 里的全部偏好，以及 OS 钥匙串里这个应用存的密钥。
+ *
+ * **总体用量**（`config.db` 的 `token_usage`）跟着一起清：它是配置库的一部分，
+ * 而重置之后模型和计费组都不在了，留着一堆指向不存在的模型的行只会在用量页上
+ * 显示成一串「已删除的模型」。项目文件夹里的那一份不动——理由在下一段。
  *
  * **不碰**作者的稿子：项目文件夹里的文档、`.ai-writer/` 下的知识库、
  * `project.db` 里的用量与对话记录，一个字节都不动——它们在文件系统上，不属于
@@ -123,6 +127,10 @@ export async function resetApp(): Promise<ResetSummary> {
     { sql: "DELETE FROM models", values: [] },
     { sql: "DELETE FROM providers", values: [] },
     { sql: "DELETE FROM prompts", values: [] },
+    // 组在引用它的两张表之后：删空的顺序自己成立，比依赖「反正没外键」清楚。
+    { sql: "DELETE FROM fee_groups", values: [] },
+    // 总体用量。项目文件夹里的那一份不动——那是作者的稿子那一边的东西。
+    { sql: "DELETE FROM token_usage", values: [] },
   ]);
 
   // 3. 排版格式和历史遗留的明文密钥表都不在上面那个事务里，理由和

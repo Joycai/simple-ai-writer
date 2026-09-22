@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+
+import { ensureUsageSchema } from "./ai/usageSchema";
 import { toPosixPath } from "./paths";
 
 export interface FileNode {
@@ -163,18 +165,10 @@ async function dropDeadTables(db: Awaited<ReturnType<typeof Database.load>>) {
 }
 
 async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS token_usage (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      model_id TEXT NOT NULL,
-      task TEXT NOT NULL,
-      prompt_tokens INTEGER NOT NULL DEFAULT 0,
-      cached_tokens INTEGER NOT NULL DEFAULT 0,
-      completion_tokens INTEGER NOT NULL DEFAULT 0,
-      cost_usd REAL NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
-    )
-  `);
+  // 项目用量。表结构与 appDataDir 里的那份总体用量共用一处定义
+  // （lib/ai/usageSchema.ts）——两张表长歪了，用量页在「本项目 / 全部」
+  // 之间一切就会少掉几列，而那种少法不报错。
+  await ensureUsageSchema(db, "project");
 
   // Persisted 对话助手 sessions — one JSON blob per session, newest few kept
   // (lib/agent/sessionDb owns the cap and all reads/writes). `pinned` is the

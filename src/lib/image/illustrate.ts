@@ -203,7 +203,8 @@ export async function runIllustration(
     aspect: proposal.aspect,
     ...(degraded ? { degraded: true } : {}),
     createdAt: Date.now(),
-    costUsd: imageCostFor(model, 1, result.usage),
+    // `req.size` 是真正发出去的尺寸（方言解析之后），不是作者填的那个。
+    costUsd: imageCostFor(model, 1, result.usage, { size: req.size, quality: proposal.quality }),
   });
 
   return { path, markdown, degraded };

@@ -263,7 +263,8 @@
       "subagents": "Subagents",
       "dataGroup": "Data",
       "sync": "Sync & Backup",
-      "docxFormat": "Word format"
+      "docxFormat": "Word format",
+      "fees": "Fee groups"
     },
     "workspace": {
       "profileSection": "Capability packs",
@@ -640,7 +641,10 @@
       "byTask": "By task",
       "empty": "Nothing recorded in this period yet.",
       "clear": "Clear usage…",
-      "clearHint": "Deletes the usage rows only — documents, knowledge base and configuration are untouched.",
+      "clearHint": {
+        "project": "Clears only the copy in this project folder. The all-projects ledger is untouched — clearing one project does not mean you spent nothing this year. Cannot be undone.",
+        "global": "Empties the all-projects ledger. The copies inside each project folder are untouched. Cannot be undone."
+      },
       "clearConfirm": "Delete every usage record for this project? This cannot be undone.",
       "kinds": {
         "chat": "Chat",
@@ -654,7 +658,10 @@
       "detail": "Breakdown",
       "maintenance": "Maintenance",
       "unknownModel": "deleted model",
-      "footnote": "Cost is estimated from the prices set on the Channels & Models page; models with no price show — and are left out of the total. Cache hit rate = cached input ÷ all input.",
+      "footnote": {
+        "project": "Every row carries the rate, the counts and the spec it was billed at. Copy this project folder elsewhere and this ledger goes with it; the all-projects one stays here.",
+        "global": "One request is recorded twice: once in the project folder, once here. Both amounts were worked out at billing time from the prices of that moment — changing, deleting or reassigning a group later never moves them."
+      },
       "colName": "Name",
       "colCalls": "Calls",
       "colInput": "Input",
@@ -674,7 +681,30 @@
         "cost": "Estimated cost",
         "costSub": "Unpriced models excluded"
       },
-      "noProject": "Open a project to see its usage."
+      "noProject": "Open a project to see its usage.",
+      "scopes": {
+        "project": "This project",
+        "global": "All projects"
+      },
+      "scopeSub": {
+        "project": "This project's usage, kept in .ai-writer/project.db inside the project folder — it travels with the project.",
+        "global": "Every project on this machine, kept in config.db under the app data directory — it outlives any one project."
+      },
+      "scope": "Scope",
+      "scopeGlobalSub": "The all-projects ledger does not need a project open.",
+      "switchToGlobal": "Show all",
+      "noProjectScoped": "Per-project usage needs a project open — that ledger lives inside the project folder.",
+      "byGroup": "By fee group",
+      "byProject": "By project",
+      "unboundSub": "no group, or the group was deleted",
+      "unknownProject": "(no project recorded)",
+      "uncovered": "{{n}} request(s) matched no tier and billed 0",
+      "goFixRates": "Fill in the tiers →",
+      "clearLabel": {
+        "project": "Clear this project's records",
+        "global": "Clear all records"
+      },
+      "clearConfirmGlobal": "Empty the all-projects usage ledger? The copies inside each project folder are untouched. This cannot be undone."
     },
     "projectBackup": {
       "section": "Project backup",
@@ -2365,7 +2395,9 @@
       "routeOwnHost": "changed · own host",
       "routeOwnHostCell": "own host",
       "routeRoot": "root",
-      "routeRestore": "Restore default"
+      "routeRestore": "Restore default",
+      "defaultFeeGroup": "Default fee group",
+      "defaultFeeGroupHint": "New or discovered models under this channel start bound to this group. A prefill only: bindings already made are left alone."
     },
     "models": {
       "add": "Add",
@@ -2652,7 +2684,10 @@
       "matrix_yes": "sent",
       "matrix_unknown": "unmeasured, sent anyway",
       "matrix_no": "not sent on this route",
-      "matrixLegend": "✓ sent · ? unmeasured · — not sent. The switches above are your grant to this model, shared by every route; whether each route can say it is the platform's."
+      "matrixLegend": "✓ sent · ? unmeasured · — not sent. The switches above are your grant to this model, shared by every route; whether each route can say it is the platform's.",
+      "feeGroupLabel": "Fee group",
+      "feeGroupHint": "The price lives in the group, not on this form. One edit re-prices every model in it; this model's recorded usage does not move — each row carries the rate of its day.",
+      "feeGroupHintUnbound": "No group = nothing is charged, though requests and tokens are still counted. Binding one later leaves the earlier rows at the rate of their day — which is zero."
     },
     "probe": {
       "title": "Probe real limits",
@@ -2817,6 +2852,83 @@
       "model-type": "This model's type can't use it (a text model reads no pictures)",
       "requires": "Something it depends on is unavailable on this route",
       "thinking": "This route refuses it while thinking is on"
+    },
+    "fees": {
+      "paneSub": "One set of prices, shared by any number of models. Change it once and every model bound to it follows; usage already recorded does not move.",
+      "listLabel": "{{groups}} groups · {{models}} models bound",
+      "empty": "No fee groups yet. Create one, then bind models to it under Channels & models.",
+      "untitled": "Untitled",
+      "unbound": "Unbound",
+      "boundModels": "{{n}} models",
+      "deleteFoot": "Deleting a group deletes no model and touches no recorded usage: the models fall back to Unbound, and history still bills at the price of the day.",
+      "deleteConfirm": "Delete “{{name}}”? {{n}} model(s) fall back to Unbound. Recorded usage is unaffected. This cannot be undone.",
+      "unboundLabel": "Models with no group",
+      "unboundNote": "{{n}} model(s) have no fee group — their requests are still counted, they just cost nothing this app can work out.",
+      "addTitle": "New fee group",
+      "editTitle": "Edit fee group",
+      "drawerTitle": "Fee group",
+      "drawerSub": "{{n}} model(s) bill at this group · a price change hits all of them, recorded usage stays put",
+      "nameLabel": "Name",
+      "namePlaceholder": "Name this set of prices",
+      "modeLabel": "Billing mode",
+      "modes": {
+        "token": "Per token",
+        "request": "Per request",
+        "spec": "Per spec"
+      },
+      "modeHint": {
+        "token": "Billed on tokens in and out. Most chat models work this way.",
+        "request": "One price per request, whatever came back.",
+        "spec": "Billed on what comes out, at a rate that can vary by size / quality / duration."
+      },
+      "tokenPrices": "Prices",
+      "perMillionUnit": "USD / 1M tokens",
+      "perMillion": "/M",
+      "perRequestSuffix": "/req",
+      "input": "Input",
+      "cached": "Cached input",
+      "output": "Output",
+      "cachePlaceholder": "= input price",
+      "cacheHint": "Leave the cache price empty and it matches the input price; type 0 and cache reads really are free. Those differ by a whole bill, so neither can be written as the other.",
+      "requestPrice": "Per request ($)",
+      "requestHint": "One charge per request regardless of the reply. Failed requests are not recorded.",
+      "unitLabel": "What one request counts",
+      "units": {
+        "image": "Images",
+        "second": "Seconds",
+        "clip": "Clips"
+      },
+      "perUnit": {
+        "image": "Per image",
+        "second": "Per second",
+        "clip": "Per clip"
+      },
+      "unitHint": {
+        "image": "Counts the images the response actually carried. A request that produced none counts 0 — and is charged no input fee either, because nothing happened.",
+        "second": "Counts the duration requested. When the provider reports the real length on completion, that settles it.",
+        "clip": "One per request, whatever its length."
+      },
+      "rateTable": "Rate table",
+      "colSize": "Size",
+      "colQuality": "Quality",
+      "colSeconds": "Seconds",
+      "colPrice": "Price ($)",
+      "anyValue": "any",
+      "addRate": "+ Add a tier",
+      "dropRate": "Remove this tier",
+      "tiers": "{{n}} tiers",
+      "noRates": "no tiers",
+      "otherSpecsZero": "other specs bill 0",
+      "rateHintCatchAll": "The row with all three conditions blank is the fallback. The most specific row wins, so no ordering is needed — “2K + high” beats “2K” beats the fallback.",
+      "rateHintNoCatchAll": "A row with all three conditions blank would be the fallback; there is none, so a request matching no tier records 0 and the Usage page says so.",
+      "inputImagesRef": "Input images (reference / base)",
+      "inputImagesFrame": "Input images (first / last frame, references)",
+      "inputUnitPrice": "Price per image ($)",
+      "inputFreeUnits": "Free per request",
+      "inputImageTag": "input ${{price}}/img",
+      "inputFreeTag": "first {{n}} free",
+      "inputHintOn": "The free allowance is per request (“first one free” = the first image of each request). A request that delivered nothing is charged no input fee.",
+      "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page."
     }
   },
   "lore": {

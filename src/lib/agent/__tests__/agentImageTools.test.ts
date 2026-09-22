@@ -32,6 +32,14 @@ const { generateImageTool, editImageTool, redrawLoreImageTool } = await import("
 const IMAGE_MODEL = {
   id: "m1", providerId: "p1", modelId: "img-1", name: "Nano", type: "image",
   priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, pricePerImage: 0.04,
+  // 价来自绑定的计费组（lib/ai/feeGroup），解析结果挂在 `Model.fee` 上。
+  feeGroupId: "fg-img",
+  fee: {
+    billingMode: "spec" as const, outputUnit: "image" as const,
+    outputRates: [{ price: 0.04 }],
+    inputPrice: 0, cachePrice: 0, outputPrice: 0, requestPrice: 0,
+    inputUnitPrice: 0, inputFreeUnits: 0,
+  },
 };
 
 const ENTITY = {
@@ -88,6 +96,22 @@ describe("generate_image", () => {
     expect(onLoreChanged).toHaveBeenCalledWith({
       category: "characters", id: "elden", dirPath: ENTITY.dirPath,
     });
+  });
+
+  /**
+   * 估价要带上这次请求的规格。按尺寸分档的组，不带规格会在卡上估成 $0——
+   * 而一张卡上写着「≈ $0」比没有估价更糟：作者会以为这次不要钱。
+   */
+  it("prices by the tier the requested resolution falls into, not a flat rate", async () => {
+    const tiered = (storeModels as { type: string; fee?: object }[]).map((m) => m.type === "image"
+      ? { ...m, fee: { ...m.fee, outputRates: [{ size: "1K", price: 0.04 }, { size: "2K", price: 0.12 }] } }
+      : m);
+    const { ctx, seen } = ctxWith();
+    (ctx as { appState?: unknown }).appState = {
+      aiSettings: () => ({ models: tiered, providers: [], subAgents: storeSubAgents }),
+    };
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登", resolution: "2K" }, ctx);
+    expect(seen[0].costUsd).toBeCloseTo(0.12, 10);
   });
 
   it("does not resync when the author rejected — nothing changed", async () => {

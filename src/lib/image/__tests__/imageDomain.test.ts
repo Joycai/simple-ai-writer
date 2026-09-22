@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { defaultImageCaps, imageCostFor, type Model } from "../../ai/configDb";
+import { ZERO_FEE, type FeeConfig } from "../../ai/feeGroup";
 import type { ApiStandard } from "../../ai/types";
 
 // index.ts reaches for the project DB to record usage; the pure helpers under
@@ -84,24 +85,85 @@ describe("defaultImageCaps", () => {
   });
 });
 
+/**
+ * 计价方式在**组**上，不在调用点上：同一个 `imageCostFor` 按组的模式走
+ * 哪一条算式。旧版把 `pricePerImage` 与 token 价**相加**，于是一个两边都
+ * 填了的模型会被收两次——那笔糊涂账是这一轮要改掉的东西之一。
+ */
+function fee(over: Partial<FeeConfig> = {}): FeeConfig {
+  return { ...ZERO_FEE, ...over };
+}
+
 describe("imageCostFor", () => {
-  it("bills per image when the model has a per-image price", () => {
-    expect(imageCostFor(model({ pricePerImage: 0.07 }), 3)).toBeCloseTo(0.21, 10);
+  it("按张的组：张数 × 命中档位的单价", () => {
+    const m = model({ fee: fee({ billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.07 }] }) });
+    expect(imageCostFor(m, 3)).toBeCloseTo(0.21, 10);
   });
 
-  it("bills tokens when the provider reported usage instead", () => {
-    const m = model({ priceIn: 5, priceOut: 40 });
+  it("按张的组：档位随尺寸变，请求的尺寸决定单价", () => {
+    const m = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image",
+      outputRates: [{ size: "1K", price: 0.04 }, { size: "2K", price: 0.06 }],
+    }) });
+    expect(imageCostFor(m, 1, undefined, { size: "2k" })).toBeCloseTo(0.06, 10);
+    expect(imageCostFor(m, 1, undefined, { size: "1K" })).toBeCloseTo(0.04, 10);
+  });
+
+  it("按 token 的组：把出图计进 token 的端点按回包的 usage 算", () => {
+    const m = model({ fee: fee({ inputPrice: 5, outputPrice: 40 }) });
     expect(imageCostFor(m, 1, { inputTokens: 1000, outputTokens: 1290 }))
       .toBeCloseTo((1000 * 5 + 1290 * 40) / 1_000_000, 10);
   });
 
-  it("sums both shapes rather than choosing one", () => {
-    const m = model({ pricePerImage: 0.01, priceIn: 1000000, priceOut: 0 });
-    expect(imageCostFor(m, 2, { inputTokens: 1, outputTokens: 0 })).toBeCloseTo(1.02, 10);
+  it("两种价不再相加：按张的组不看 token 价", () => {
+    const m = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.01 }],
+      inputPrice: 1_000_000,
+    }) });
+    expect(imageCostFor(m, 2, { inputTokens: 1, outputTokens: 0 })).toBeCloseTo(0.02, 10);
   });
 
-  it("costs nothing when neither price is configured", () => {
+  it("没命中任何档位就按 0 计，而不是悄悄挑一行凑数", () => {
+    const m = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image", outputRates: [{ quality: "high", price: 0.04 }],
+    }) });
+    expect(imageCostFor(m, 1, undefined, { quality: "low" })).toBe(0);
+  });
+
+  it("像素尺寸落进表里真有的那个档——只在表里有的档之间比", () => {
+    // 表只写了 1K，自由尺寸端点回显 512x512（0.26MP）：它落 1K，而不是
+    // 因为「不等于字符串 1K」就变成未覆盖。
+    const one = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image", outputRates: [{ size: "1K", price: 0.04 }],
+    }) });
+    expect(imageCostFor(one, 1, undefined, { size: "512x512" })).toBeCloseTo(0.04, 10);
+    // 表里同时有 1K 与 2K 时，1696x960（1.63MP）在对数尺度上离 1K 更近。
+    const two = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image",
+      outputRates: [{ size: "1K", price: 0.04 }, { size: "2K", price: 0.06 }],
+    }) });
+    expect(imageCostFor(two, 1, undefined, { size: "1696x960" })).toBeCloseTo(0.04, 10);
+  });
+
+  it("没绑组 ＝ 一分不收", () => {
     expect(imageCostFor(model(), 4)).toBe(0);
+  });
+
+  it("输入图单独收：免费额度按每次请求扣", () => {
+    const m = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.04 }],
+      inputUnitPrice: 0.01, inputFreeUnits: 1,
+    }) });
+    // 出 1 张 + 交 3 张参考图，首张免费 ⇒ 0.04 + 2 × 0.01
+    expect(imageCostFor(m, 1, undefined, {}, 3)).toBeCloseTo(0.06, 10);
+  });
+
+  it("一张都没交付：输出 0，输入图也不收", () => {
+    const m = model({ fee: fee({
+      billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.04 }],
+      inputUnitPrice: 0.01,
+    }) });
+    expect(imageCostFor(m, 0, undefined, {}, 2)).toBe(0);
   });
 });
 

@@ -5,12 +5,14 @@ import type { ToolCall } from "../tools";
 import { messageCeilingForTools } from "../toolCost";
 
 const mockRunAgent = vi.fn();
-const mockPersistUsage = vi.fn();
+const mockRecordUsage = vi.fn();
 const mockWriteTaskNote = vi.fn();
 
 
-vi.mock("../../ai/usage", () => ({
-  persistUsage: (...args: unknown[]) => mockPersistUsage(...args),
+// 记账现在只有一个写入口，而且一次请求记两处（项目 + 总账）——把入口本身
+// 换掉，测的就是「这一次到底交了哪些事实上去」，与两处 sink 无关。
+vi.mock("../../ai/usageRow", () => ({
+  recordUsage: (...args: unknown[]) => mockRecordUsage(...args),
 }));
 
 vi.mock("../taskWorkspace", () => ({
@@ -292,9 +294,13 @@ describe("tool packs", () => {
 
       expect(res.content).toContain("pack-file_write-x.md");
       expect(res.content).toContain("Report:");
-      expect(mockPersistUsage).toHaveBeenCalledWith(
-        "/test-project", "m-main", 500, 200, expect.any(Number), "pack:file_write", 0,
-      );
+      expect(mockRecordUsage).toHaveBeenCalledWith("/test-project", {
+        model: expect.objectContaining({ id: "m-main" }),
+        task: "pack:file_write",
+        promptTokens: 500,
+        cachedTokens: 0,
+        completionTokens: 200,
+      });
     });
 
     it("keeps the pack's spend out of the parent's totals via a nested run-done", async () => {

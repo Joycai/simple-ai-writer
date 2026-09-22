@@ -29,6 +29,8 @@ const bucket = (over: Partial<UsageBucket>): UsageBucket => ({
   promptTokens: 0,
   cachedTokens: 0,
   completionTokens: 0,
+  outputUnits: 0,
+  uncovered: 0,
   costUsd: 0,
   ...over,
 });

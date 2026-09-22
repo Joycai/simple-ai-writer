@@ -16,9 +16,9 @@ import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { serverToolsSent } from "../ai/serverTools";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
-import { canSeeImages, costFor, readsPdf, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
-import { persistUsage } from "../ai/usage";
+import { recordUsage } from "../ai/usageRow";
 import { withCurrentTime } from "../context/clock";
 import { bytesToBase64, isImagePath } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
@@ -299,16 +299,13 @@ export async function executeDelegate(
     parentStep: call.id,
   });
 
-  const cost = costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens);
-  await persistUsage(
-    ctx.projectPath,
-    conn.model.id,
-    result.inputTokens,
-    result.outputTokens,
-    cost,
-    `subagent:${kind}`,
-    result.cachedTokens,
-  );
+  await recordUsage(ctx.projectPath, {
+    model: conn.model,
+    task: `subagent:${kind}`,
+    promptTokens: result.inputTokens,
+    cachedTokens: result.cachedTokens,
+    completionTokens: result.outputTokens,
+  });
 
   if (!output.trim()) {
     return fail(`the ${kind} subagent returned nothing. Try a narrower task, or do it yourself.`);
