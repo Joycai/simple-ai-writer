@@ -12,11 +12,14 @@
  */
 
 import { ASSETS_DIR, safeAssetName } from "../image/assets";
+import { isFolderNoteFile } from "./folderNote";
 
-/** The seven row kinds 设计稿 01b draws. */
+/** The seven row kinds 设计稿 01b draws, plus the folder note. */
 export type RowKind =
   /** A folder the author made. */
   | "folder"
+  /** A folder's own `index.md` — the note on what the folder holds (`folderNote.ts`). */
+  | "note"
   /** One document's illustration folder — `assets/<文档名>/`. */
   | "assets"
   /** A folder of the author's own that holds pictures and nothing else. */
@@ -54,6 +57,9 @@ export function extOf(name: string): string {
  */
 export function rowKind(name: string, isDir: boolean, parentName: string | null): RowKind {
   if (isDir) return parentName === ASSETS_DIR ? "assets" : "folder";
+  // Decided by name alone, like everything here: the note is `index.md`
+  // wherever it sits, so the author can tell it from a chapter at a glance.
+  if (isFolderNoteFile(name)) return "note";
   const ext = extOf(name);
   if (DOC_EXTS.has(ext)) return "doc";
   if (HTML_EXTS.has(ext)) return "deliverable";
@@ -79,7 +85,8 @@ export function isSecondary(kind: RowKind): boolean {
  * column never has to yield.
  */
 export function extLabel(name: string, kind: RowKind): string | null {
-  if (kind === "assets" || kind === "pictures" || kind === "folder") return null;
+  // The note's column says what it is (`fileTree.noteLabel`), not its suffix.
+  if (kind === "assets" || kind === "pictures" || kind === "folder" || kind === "note") return null;
   const ext = extOf(name);
   if (!ext || ext === "md" || ext === "markdown") return null;
   return ext.toUpperCase();

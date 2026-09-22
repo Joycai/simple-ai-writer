@@ -38,6 +38,13 @@ describe("isChapterFile", () => {
     expect(isChapterFile("a.png")).toBe(false);
     expect(isChapterFile("a")).toBe(false);
   });
+
+  it("keeps the folder note off the spine", () => {
+    // index.md describes the volume; it is not chapter zero of it.
+    expect(isChapterFile("index.md")).toBe(false);
+    expect(isChapterFile("Index.md")).toBe(false);
+    expect(isChapterFile("index.txt")).toBe(true);
+  });
 });
 
 describe("normalizeChapterFileName", () => {

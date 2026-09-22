@@ -29,6 +29,7 @@ import {
 } from "../paths";
 import { extractHeadings } from "../fs/markdown";
 import { readDirRecursive, type FileNode } from "../project";
+import { isFolderNoteFile, readFolderNote, type FolderNote } from "../fs/folderNote";
 import { numberLines } from "./lineEcho";
 import type { ChangeRecord, PlanRecord, ToolProgress } from "./events";
 import i18n from "../../i18n";
@@ -74,6 +75,8 @@ export function formatLoreIndex(
   scope?: LoreScope,
   declared?: readonly string[],
   isZh = false,
+  /** Category notes — `<category>/index.md` summaries (`lib/lore/categoryNote`), keyed by id. */
+  notes?: Readonly<Record<string, string>>,
 ): string {
   // Normalise away an empty array so `[]` never reads as an active fence.
   const active = scope && scope.length > 0 ? scope : null;
@@ -119,7 +122,11 @@ export function formatLoreIndex(
     const orphan = cat
       ? ""
       : "  (no enabled capability pack declares this category — you can read and edit these entries, but you cannot create or move entries into it)";
-    lines.push(`[${cat ? categoryRef(cat, isZh) : category}]${orphan}`);
+    // The category's own note, when the author (or the assistant) wrote one:
+    // the one line that says what this category is *for*, which the id alone
+    // never does for an orphan and only barely does for a declared one.
+    const about = notes?.[category] ? ` — ${notes[category]}` : "";
+    lines.push(`[${cat ? categoryRef(cat, isZh) : category}]${about}${orphan}`);
     for (const e of entities) {
       // 归属跟在名字后面，未归集的什么都不写——「没有方括号」就是未归集，比写一个
       // "(unfiled)" 便宜，而且让一眼扫下去哪些还没分家变得显眼。
@@ -781,21 +788,80 @@ interface DirListing {
   /** Absolute directory path — the prefix its filenames join onto. */
   dir: string;
   files: string[];
+  /** The folder's own `index.md`, when it has one (`lib/fs/folderNote`). */
+  note: FolderNote | null;
+  /**
+   * A `deprecated` folder the listing did not expand: `files` is empty and
+   * `hidden` counts what it left out. False for the same folder when the model
+   * asked for it by name — then it is listed like any other.
+   */
+  collapsed: boolean;
+  /**
+   * Files a collapsed folder's subtree holds besides the note itself — the
+   * note was read and quoted, so it is not "not listed".
+   */
+  hidden: number;
+}
+
+/** Every file in a subtree except the folder's own note — what a stub line reports. */
+function countFiles(nodes: FileNode[], top = true): number {
+  let n = 0;
+  for (const node of nodes) {
+    if (node.is_dir) n += countFiles(node.children ?? [], false);
+    else if (!(top && isFolderNoteFile(node.name))) n++;
+  }
+  return n;
 }
 
 /**
  * Flatten a recursive tree into one listing per directory, parents before
  * children and each level in natural order. Empty directories are kept: a
  * volume folder with no chapters yet is information, not noise.
+ *
+ * A folder whose note says `status: deprecated` is not expanded — its line
+ * stays, with the note and a count of what it holds, so the listing never
+ * silently shrinks. `explicit` is the folder the model *asked* for: that one is
+ * always expanded, whatever its note says, because naming it is the explicit
+ * reference the fence lets through (folder-note-plan.md §3).
  */
-function collectListings(nodes: FileNode[], dir: string, out: DirListing[]): void {
+async function collectListings(
+  nodes: FileNode[],
+  dir: string,
+  out: DirListing[],
+  explicit: boolean,
+): Promise<void> {
   const files = nodes.filter((n) => !n.is_dir).map((n) => n.name);
+  const note = files.some(isFolderNoteFile) ? await readFolderNote(dir) : null;
+  if (note?.status === "deprecated" && !explicit) {
+    out.push({ dir, files: [], note, collapsed: true, hidden: countFiles(nodes) });
+    return;
+  }
   files.sort(naturalCompare);
-  out.push({ dir, files });
+  out.push({ dir, files, note, collapsed: false, hidden: 0 });
 
   const subdirs = nodes.filter((n) => n.is_dir);
   subdirs.sort((a, b) => naturalCompare(a.name, b.name));
-  for (const sub of subdirs) collectListings(sub.children ?? [], sub.path, out);
+  for (const sub of subdirs) await collectListings(sub.children ?? [], sub.path, out, false);
+}
+
+/**
+ * The note's line under a folder's path — the one place the model learns what
+ * the author said about the folder, at the moment it is looking at it.
+ */
+function noteLine(listing: DirListing): string {
+  const { note, hidden, collapsed } = listing;
+  if (!note) return "";
+  if (note.status === "deprecated") {
+    const what = note.summary ?? "no description";
+    // The way through is only worth saying when something was left out — a
+    // folder the model asked for by name is already listed in full below.
+    if (!collapsed) return `  (index.md: deprecated — ${what})`;
+    if (hidden === 0) return `  (index.md: deprecated — ${what} · nothing else here)`;
+    return `  (index.md: deprecated — ${what} · ${hidden} file${hidden === 1 ? "" : "s"} here not listed; ` +
+      "read_file still opens any of them by path, and passing this folder as 'folder' lists it anyway)";
+  }
+  if (note.status === "draft") return `  (index.md: draft — ${note.summary ?? "no description"})`;
+  return note.summary ? `  (index.md: ${note.summary})` : "";
 }
 
 /**
@@ -827,30 +893,35 @@ export async function listWritingFiles(
   let listings: DirListing[];
   try {
     listings = [];
-    collectListings(await readDirRecursive(target), target, listings);
+    await collectListings(await readDirRecursive(target), target, listings, true);
   } catch (e) {
     return { toolCallId, content: `Error listing files: ${String(e)}` };
   }
 
   const totalFiles = listings.reduce((n, l) => n + l.files.length, 0);
-  if (totalFiles === 0) {
+  const hiddenFiles = listings.reduce((n, l) => n + l.hidden, 0);
+  const hiddenDirs = listings.filter((l) => l.hidden > 0).length;
+  // A collapsed folder with nothing but its note is still a folder the model
+  // should hear about, so "no files" needs the notes to be absent too.
+  if (totalFiles === 0 && hiddenFiles === 0 && listings.every((l) => !l.note)) {
     return { toolCallId, content: `No files found in ${scope}.` };
   }
 
   const blocks: string[] = [];
   let shown = 0;
-  for (const { dir, files } of listings) {
+  for (const listing of listings) {
+    const { dir, files } = listing;
     const room = Math.max(0, LIST_MAX_FILES - shown);
     const visible = files.slice(0, room);
     shown += visible.length;
     const omitted = files.length - visible.length;
     const body = visible.length
       ? visible.map((f) => `  ${f}`).join("\n")
-      : omitted > 0
+      : omitted > 0 || listing.collapsed
         ? ""
         : "  (empty)";
     blocks.push(
-      [dir, body, omitted > 0 ? `  [... ${omitted} more file(s) here ...]` : ""]
+      [dir, noteLine(listing), body, omitted > 0 ? `  [... ${omitted} more file(s) here ...]` : ""]
         .filter(Boolean)
         .join("\n"),
     );
@@ -864,7 +935,13 @@ export async function listWritingFiles(
     shown < totalFiles
       ? `\n\n[... ${totalFiles - shown} file(s) not shown — pass 'folder' to list one volume at a time ...]`
       : "";
-  return { toolCallId, content: `${header}\n\n${blocks.join("\n")}${trailer}` };
+  // Reported, not hidden: a listing that quietly lost three folders reads as
+  // "the project has no old drafts", and the model then tells the author so.
+  const fence =
+    hiddenFiles > 0
+      ? `\n\n[${hiddenFiles} file${hiddenFiles === 1 ? "" : "s"} in ${hiddenDirs} folder${hiddenDirs === 1 ? "" : "s"} marked deprecated in its index.md ${hiddenDirs === 1 ? "was" : "were"} not listed — those folders are not consulted unless the author points at them.]`
+      : "";
+  return { toolCallId, content: `${header}\n\n${blocks.join("\n")}${trailer}${fence}` };
 }
 
 // ─── search_text ─────────────────────────────────────────────────────────────
@@ -1067,7 +1144,9 @@ function hitWithContext(lines: string[], hit: HitAt, needleLen: number): string 
  * not a chapter (docs/feature/html-artifact-plan.md §3 三期).
  */
 function isSearchableFile(name: string): boolean {
-  return isChapterFile(name) || isHtmlPath(name);
+  // The folder note is searchable though it is not a chapter: "人设以 v2 为准"
+  // written in a note is exactly the sentence a search should find.
+  return isChapterFile(name) || isHtmlPath(name) || isFolderNoteFile(name);
 }
 
 /**
@@ -1140,10 +1219,43 @@ function searchProgress(done: number, total: number, hits: number): ToolProgress
   };
 }
 
-/** Searchable files under a recursively-listed tree, depth-first. */
-function collectChapterFiles(nodes: FileNode[], out: string[]): void {
+/** What a search left out because a folder note said `deprecated`. */
+interface SkippedByNote {
+  files: number;
+  dirs: number;
+}
+
+function countSearchable(nodes: FileNode[]): number {
+  let n = 0;
+  for (const node of nodes) {
+    n += node.is_dir ? countSearchable(node.children ?? []) : isSearchableFile(node.name) ? 1 : 0;
+  }
+  return n;
+}
+
+/**
+ * Searchable files under a recursively-listed tree, depth-first — minus the
+ * subtrees whose folder note says `deprecated`, which are counted instead
+ * (the same fence `list_files` applies, folder-note-plan.md §3). `explicit`
+ * is the folder the model asked for, searched whatever its note says.
+ */
+async function collectChapterFiles(
+  nodes: FileNode[],
+  dir: string,
+  out: string[],
+  skipped: SkippedByNote,
+  explicit: boolean,
+): Promise<void> {
+  if (!explicit && nodes.some((n) => !n.is_dir && isFolderNoteFile(n.name))) {
+    const note = await readFolderNote(dir);
+    if (note?.status === "deprecated") {
+      skipped.dirs++;
+      skipped.files += countSearchable(nodes);
+      return;
+    }
+  }
   for (const n of nodes) {
-    if (n.is_dir) collectChapterFiles(n.children ?? [], out);
+    if (n.is_dir) await collectChapterFiles(n.children ?? [], n.path, out, skipped, false);
     else if (isSearchableFile(n.name)) out.push(n.path);
   }
 }
@@ -1228,8 +1340,9 @@ export async function searchWritingFiles(
   }
 
   const files: string[] = [];
+  const skipped: SkippedByNote = { files: 0, dirs: 0 };
   try {
-    collectChapterFiles(await readDirRecursive(target), files);
+    await collectChapterFiles(await readDirRecursive(target), target, files, skipped, true);
   } catch (e) {
     return { toolCallId, content: `Error searching: ${String(e)}` };
   }
@@ -1283,11 +1396,17 @@ export async function searchWritingFiles(
 
   const hidden = scanLore ? outOfScopeCount(loreIndex!, loreScope ?? null) : 0;
   const fenceNote =
-    hidden > 0 && loreScope
+    (hidden > 0 && loreScope
       ? `\n\n(The knowledge-base scan was limited to ${scopeWhere(loreScope)}; ${hidden} further ` +
         `${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and were not searched. You can still ` +
         "read one by name with read_lore_entity if the author asks for it.)"
-      : "";
+      : "") +
+    // Same shape as the knowledge-base fence: what was left out is counted,
+    // and the way through (name the folder) is stated.
+    (skipped.files > 0
+      ? `\n\n(${skipped.files} document${skipped.files === 1 ? "" : "s"} in ${skipped.dirs} folder${skipped.dirs === 1 ? "" : "s"} marked deprecated in its index.md ${skipped.dirs === 1 ? "was" : "were"} not searched. ` +
+        "Pass that folder as 'folder' to search it anyway.)"
+      : "");
 
   if (docs.total + lore.total === 0) {
     const searched = scanLore

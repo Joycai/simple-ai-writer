@@ -135,3 +135,47 @@ export function useWritingFocus(): WritingFocus {
 export function focusBlockedByImage(focus: WritingFocus): boolean {
   return !focus.settled && !!focus.pendingPath && isImagePath(focus.pendingPath);
 }
+
+/**
+ * Resolves `true` once the editor holds `path`, or `false` as soon as it never
+ * will: the author opened, closed or deleted something meanwhile (any change
+ * of `activeFilePath` away from `path` — `null` included, since every writer
+ * of `null` is a real "nothing is focused any more"), the load of `path`
+ * failed, or `timeoutMs` passed.
+ *
+ * For a gesture that opens a file *and* sends a turn about it: `setActiveFilePath`
+ * is synchronous, the editor's load is an effect that runs after the commit,
+ * and a turn sent between the two snapshots the *previous* document as its
+ * focus (the composer has no `settled` gate — the author typing there is
+ * already looking at the editor). Waiting here is what keeps 「新建目录说明并
+ * 交给助手」 from running on the chapter that was open before the click.
+ */
+export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolean> {
+  if (isSamePath(useEditorStore.getState().filePath, path)) return Promise.resolve(true);
+  // Call after `setActiveFilePath(path)`: the wait is for the editor to catch
+  // up with what the author opened, so a `path` nobody has opened is over
+  // before it starts, not something to sit five seconds on.
+  if (!isSamePath(useProjectStore.getState().activeFilePath, path)) return Promise.resolve(false);
+  // Only an error raised by *this* attempt ends the wait — the previous load
+  // of the same file may have failed and left its `loadError` behind.
+  const staleError = useEditorStore.getState().loadError;
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      unsubEditor();
+      unsubProject();
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    const unsubEditor = useEditorStore.subscribe((s) => {
+      if (isSamePath(s.filePath, path)) finish(true);
+      else if (s.loadError && s.loadError !== staleError && isSamePath(s.loadError.path, path)) finish(false);
+    });
+    const unsubProject = useProjectStore.subscribe((s) => {
+      if (!isSamePath(s.activeFilePath, path)) finish(false);
+    });
+  });
+}

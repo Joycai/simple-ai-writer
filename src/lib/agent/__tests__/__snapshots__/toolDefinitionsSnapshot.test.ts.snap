@@ -171,7 +171,7 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
   "type": "function",
   "function": {
    "name": "list_files",
-   "description": "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like \`ls -R\`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \\"/\\" + the filename. Use this to see what files exist; to find where something is written, use search_text instead.",
+   "description": "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like \`ls -R\`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \\"/\\" + the filename. A folder's own index.md (the author's note on it) is quoted under the folder line; a folder whose note says deprecated is only counted, not expanded. Use this to see what files exist; to find where something is written, use search_text instead.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -275,7 +275,7 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
   "type": "function",
   "function": {
    "name": "search_text",
-   "description": "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \\"entity · file\\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+   "description": "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders — except a folder whose own index.md says deprecated; pass it as 'folder' to search it) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \\"entity · file\\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -952,7 +952,7 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
   "type": "function",
   "function": {
    "name": "manage_category",
-   "description": "Create, rename or delete a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. Requires an approved plan step with target 'category'.",
+   "description": "Create, rename, delete or describe a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. 'describe' writes the category's note (its folder's index.md: one paragraph on what belongs here and how to use it) and works on any category, pack-declared or not; list_lore_entities quotes the first sentence after the category's header. Requires an approved plan step with target 'category' (action 'update' for describe).",
    "parameters": {
     "type": "object",
     "properties": {
@@ -961,7 +961,8 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
       "enum": [
        "create",
        "rename",
-       "delete"
+       "delete",
+       "describe"
       ],
       "description": "What to do"
      },
@@ -972,6 +973,10 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
      "new_label": {
       "type": "string",
       "description": "rename only: the new author-facing label"
+     },
+     "description": {
+      "type": "string",
+      "description": "describe only: the whole note as markdown — a first paragraph saying what this category holds and how entries in it are used; optionally a list below. Replaces any existing note."
      }
     },
     "required": [
@@ -2711,7 +2716,7 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
   "type": "function",
   "function": {
    "name": "list_files",
-   "description": "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like \`ls -R\`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \\"/\\" + the filename. Use this to see what files exist; to find where something is written, use search_text instead.",
+   "description": "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like \`ls -R\`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \\"/\\" + the filename. A folder's own index.md (the author's note on it) is quoted under the folder line; a folder whose note says deprecated is only counted, not expanded. Use this to see what files exist; to find where something is written, use search_text instead.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -2815,7 +2820,7 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
   "type": "function",
   "function": {
    "name": "search_text",
-   "description": "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \\"entity · file\\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+   "description": "Full-text search across the project's documents AND its knowledge-base entries. Scans every document file in the workspace (recursively, including subfolders — except a folder whose own index.md says deprecated; pass it as 'folder' to search it) plus the body of every entry, returning each hit as a line number and the text around it. This is the way to locate a scene, a name, or a piece of foreshadowing — and the way to find which entry mentions something, instead of opening entries one by one with read_lore_entity. Knowledge-base blocks are headed \\"entity · file\\", the two arguments edit_lore_file takes. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -3492,7 +3497,7 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
   "type": "function",
   "function": {
    "name": "manage_category",
-   "description": "Create, rename or delete a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. Requires an approved plan step with target 'category'.",
+   "description": "Create, rename, delete or describe a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. 'describe' writes the category's note (its folder's index.md: one paragraph on what belongs here and how to use it) and works on any category, pack-declared or not; list_lore_entities quotes the first sentence after the category's header. Requires an approved plan step with target 'category' (action 'update' for describe).",
    "parameters": {
     "type": "object",
     "properties": {
@@ -3501,7 +3506,8 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
       "enum": [
        "create",
        "rename",
-       "delete"
+       "delete",
+       "describe"
       ],
       "description": "What to do"
      },
@@ -3512,6 +3518,10 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
      "new_label": {
       "type": "string",
       "description": "rename only: the new author-facing label"
+     },
+     "description": {
+      "type": "string",
+      "description": "describe only: the whole note as markdown — a first paragraph saying what this category holds and how entries in it are used; optionally a list below. Replaces any existing note."
      }
     },
     "required": [

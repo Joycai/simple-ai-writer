@@ -578,17 +578,21 @@ export const LORE_TOOLS = {
       function: {
         name: "manage_category",
         description:
-          "Create, rename or delete a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. Requires an approved plan step with target 'category'.",
+          "Create, rename, delete or describe a knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同). Create one only when no existing category can hold a kind of entry; to group by project use a collection instead. A rename changes only the author-facing LABEL: the folder id never moves, so no entry, citation or pin is disturbed. A delete drops the declaration alone — it removes no folder and no entry, and it refuses a category that still holds entries (move those out with move_lore_entity first, under its own plan step). Rename and delete apply only to categories the AUTHOR created; one a pack declares goes away by turning that pack off. 'describe' writes the category's note (its folder's index.md: one paragraph on what belongs here and how to use it) and works on any category, pack-declared or not; list_lore_entities quotes the first sentence after the category's header. Requires an approved plan step with target 'category' (action 'update' for describe).",
         parameters: {
           type: "object",
           properties: {
-            op: { type: "string", enum: ["create", "rename", "delete"], description: "What to do" },
+            op: { type: "string", enum: ["create", "rename", "delete", "describe"], description: "What to do" },
             category: {
               type: "string",
               description:
                 "The category to act on — its id or its author-facing label. For 'create', the label you are giving it (the folder id is derived from it).",
             },
             new_label: { type: "string", description: "rename only: the new author-facing label" },
+            description: {
+              type: "string",
+              description: "describe only: the whole note as markdown — a first paragraph saying what this category holds and how entries in it are used; optionally a list below. Replaces any existing note.",
+            },
           },
           required: ["op", "category"],
         },

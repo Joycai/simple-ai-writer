@@ -9,6 +9,7 @@
 
 
 import { isChapterFile, normalizeChapterFileName, parentDir } from "../../context/outline";
+import { isFolderNoteFile } from "../../fs/folderNote";
 import { readDir, readFile } from "../../fs/fileio";
 import { readDirRecursive, type FileNode } from "../../project";
 import { modifiedAt } from "../../fs/modified";
@@ -186,9 +187,13 @@ export async function createChapterTool(
   const dir = parentDir(target.path);
   const name = normalizeChapterFileName(target.path.slice(dir.length + 1));
   if (!isChapterFile(name)) {
+    // The one .md that is not a chapter gets its own sentence: the generic
+    // refusal would tell the model that index.md "must end in .md".
     return {
       toolCallId,
-      content: `Error: "${name}" is not a manuscript file — chapters must end in .md, .markdown or .txt.`,
+      content: isFolderNoteFile(name)
+        ? `Error: "${name}" is a folder note (the folder's own description), not a chapter — create it with create_file.`
+        : `Error: "${name}" is not a manuscript file — chapters must end in .md, .markdown or .txt.`,
     };
   }
   const path = `${dir}/${name}`;

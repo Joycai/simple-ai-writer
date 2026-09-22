@@ -17,6 +17,7 @@
  */
 
 import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
+import { isFolderNoteFile } from "../fs/folderNote";
 import { ASSETS_DIR } from "../image/assets";
 import { projectRelativePath } from "./memory";
 import { baseName, dirName, toPosixPath } from "../paths";
@@ -76,8 +77,14 @@ export interface BookSpine {
 
 const CHAPTER_EXTS = ["md", "markdown", "txt"];
 
-/** Manuscript files count as chapters; images / other files don't. */
+/**
+ * Manuscript files count as chapters; images / other files don't — and neither
+ * does a folder's own `index.md`, the folder note (`lib/fs/folderNote`): it
+ * describes the volume, it is not chapter zero of it, and letting it into the
+ * spine would feed it to 续写 as the previous chapter.
+ */
 export function isChapterFile(name: string): boolean {
+  if (isFolderNoteFile(name)) return false;
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   return CHAPTER_EXTS.includes(ext);
 }

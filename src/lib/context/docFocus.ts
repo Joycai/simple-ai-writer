@@ -26,6 +26,7 @@
 
 import i18n from "../../i18n";
 import { countWords, extractHeadings } from "../fs/markdown";
+import type { FolderNoteContext } from "../fs/folderNote";
 
 /** How much of the heading outline the brief carries. */
 const MAX_OUTLINE_HEADINGS = 12;
@@ -83,7 +84,15 @@ function documentOutline(text: string): string | null {
  */
 export function documentBrief(
   text: string,
-  opts: { withheld?: boolean } = {},
+  opts: {
+    withheld?: boolean;
+    /**
+     * The folder note that applies to the open file (`nearestFolderNote`).
+     * The author editing 废稿/第三章.md is the case: the assistant should know
+     * it is a discarded draft before it offers to continue it.
+     */
+    folder?: FolderNoteContext | null;
+  } = {},
 ): string {
   const label = (key: string, fallback: string) =>
     i18n.t(`ai.instructions.docBrief.${key}`, { defaultValue: fallback });
@@ -106,6 +115,15 @@ export function documentBrief(
 
   const outline = documentOutline(text);
   if (outline) lines.push(`${label("outline", "小节")}:\n${outline}`);
+
+  const folder = opts.folder;
+  if (folder?.note.summary) {
+    const status = folder.note.status === "stable" ? "" : `（${folder.note.status}）`;
+    lines.push(`${label("folderNote", "所在目录说明")}${status}: ${folder.note.summary}`);
+  }
+  if (folder?.deprecated) {
+    lines.push(label("folderDeprecated", "（这个文件在一个标为 deprecated、不再参考的目录里。）"));
+  }
 
   // Only when the text really was withheld. Sent beside an injected window it
   // would contradict what the model can plainly see, and a context block that

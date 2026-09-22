@@ -1010,6 +1010,8 @@
         "empty": "空文件（还没有任何内容）",
         "words": "约 {{n}} 字",
         "moreHeadings": "…还有 {{n}} 个小节",
+        "folderNote": "所在目录说明",
+        "folderDeprecated": "（这个文件在一个标为 deprecated、不再参考的目录里。）",
         "notice": "（正文没有随本次对话注入。判断这个文件与作者的问题有关时，用 read_file 读上面那个路径；只想定位其中某处就用 search_text。作者说「这一段」「本章」「继续写」这类话时，正文会自动附上。）"
       },
       "taskResume": "【恢复任务】\n以下是此前已暂停的任务进度与相关笔记索引：\n\n## 任务状态与规划\n{{body}}\n\n## 已有笔记索引\n{{notes}}{{stale}}\n\n请直接根据当前规划和笔记，继续推进未完成的步骤。如果需要查阅笔记详情，使用 `read_note` 读取对应路径。",
@@ -3248,6 +3250,10 @@
       "note": "分类是磁盘上的文件夹，这一批会连文件夹一起搬走；写成 [[lore:分类/id]] 的引用会改指新位置。",
       "failed": "这几条没能移动：{{list}}"
     },
+    "categoryNote": {
+      "menu": "让助手写分类说明",
+      "prompt": "请为{{kb}}分类「{{label}}」（id：{{id}}）写分类说明。先读这一类的条目，再用 manage_category 的 describe 提一份只有一步的方案（target 为 category、action 为 update、entity 为 {{id}}）：一两句话说这一类装什么、条目之间怎么分工，写作时什么情况下该查它。"
+    },
     "categoryDelete": {
       "menu": "删除分类…",
       "menuEmpty": "把 {{n}} 条搬走并清空…",
@@ -3524,6 +3530,11 @@
     "dragCount": "{{count}} 项",
     "newFileHere": "在此新建文档",
     "newFolderHere": "在此新建分组",
+    "noteLabel": "说明",
+    "folderNoteCreate": "新建目录说明并交给助手",
+    "folderNoteUpdate": "让助手更新目录说明",
+    "folderNoteFailed": "没能新建「{{name}}」的目录说明。",
+    "folderNotePrompt": "请为分组「{{name}}」写目录说明（{{path}}/index.md）。先列出这个分组里的文件，抽读两三份主要的；再整篇重写 index.md：第一段用一两句话说这个分组装什么、写作时该怎么参考；如果它已经不再参考，在最顶上加 `status: deprecated` 的 frontmatter（草稿写 draft，正常参考就不写）；下面可以列主要文件，每行 `* [文件名](文件名) - 一句话`。现有说明里仍然正确的话保留。",
     "collapseAll": "全部折叠",
     "expandAll": "全部展开",
     "collapsedGroups": "已折叠 {{count}} 个分组",

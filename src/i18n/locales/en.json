@@ -1013,6 +1013,8 @@
         "empty": "empty file (nothing written yet)",
         "words": "~{{n}} words",
         "moreHeadings": "…and {{n}} more sections",
+        "folderNote": "Folder note",
+        "folderDeprecated": "(This file sits in a folder marked deprecated — no longer consulted.)",
         "notice": "(The text itself was NOT injected into this conversation. If this file turns out to be relevant to the author's question, read the path above with read_file — or use search_text to find one spot in it. When the author says \"this passage\", \"this chapter\", \"continue writing\" and the like, the text comes along automatically.)"
       },
       "taskResume": "[Resumed Task]\nBelow is the saved progress and notes index for this task:\n\n## Task Status & Plan\n{{body}}\n\n## Saved Notes Index\n{{notes}}{{stale}}\n\nPlease proceed directly with the unfinished steps based on the current plan and notes. Use read_note to read full note contents if needed.",
@@ -3256,6 +3258,10 @@
       "note": "A category is a folder on disk, so these entries move with it; [[lore:category/id]] citations re-point to the new location.",
       "failed": "These could not be moved: {{list}}"
     },
+    "categoryNote": {
+      "menu": "Write category note via assistant",
+      "prompt": "Write the category note for the {{kb}} category \"{{label}}\" (id: {{id}}). Read this category's entries first, then propose a one-step plan for manage_category's describe (target category, action update, entity {{id}}): one or two sentences on what this category holds, how its entries divide the ground, and when to consult it while writing."
+    },
     "categoryDelete": {
       "menu": "Delete category…",
       "menuEmpty": "Move {{n}} out and empty…",
@@ -3531,6 +3537,11 @@
     "deleteMany": "Delete {{count}} items",
     "dragCount": "{{count}} items",
     "newFileHere": "New document here",
+    "noteLabel": "NOTE",
+    "folderNoteCreate": "New folder note via assistant",
+    "folderNoteUpdate": "Update folder note via assistant",
+    "folderNoteFailed": "Could not create the folder note for \"{{name}}\".",
+    "folderNotePrompt": "Write the folder note for the group \"{{name}}\" ({{path}}/index.md). List the files in this group and read two or three of the main ones; then rewrite index.md as a whole: in the first paragraph, one or two sentences on what this group holds and how to use it when writing; if it should no longer be consulted, put `status: deprecated` frontmatter at the very top (draft for work in progress; nothing for normal use); below, optionally list the main files, one per line as `* [name](name) - one line`. Keep whatever in the existing note is still true.",
     "newFolderHere": "New group here",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
