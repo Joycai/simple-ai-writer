@@ -96,6 +96,14 @@ describe("matchFeeGroups", () => {
     expect(matchFeeGroups(GROUPS, MODELS, "gemma")).toEqual([]);
   });
 
+  it("名字和 id 分别比，查询词不能跨过两者的接缝", () => {
+    // 拼成 `${name} ${modelId}` 再整体比，会造出一个原文里不存在的词：
+    // 「oo b」在任何一个字段里都不存在，却能命中拼接后的 "foo bar"。
+    const models: BoundModelRef[] = [{ feeGroupId: "g1", name: "foo", modelId: "bar" }];
+    expect(matchFeeGroups([GROUPS[0]], models, "oo b")).toEqual([]);
+    expect(matchFeeGroups([GROUPS[0]], models, "foo")[0].matchedModels).toEqual(["foo"]);
+  });
+
   it("模型没有显示名时退回 modelId", () => {
     const models: BoundModelRef[] = [{ feeGroupId: "g8", modelId: "relay-any" }];
     expect(matchFeeGroups(GROUPS, models, "relay")[0].matchedModels).toEqual(["relay-any"]);

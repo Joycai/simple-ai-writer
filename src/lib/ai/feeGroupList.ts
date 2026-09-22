@@ -94,6 +94,11 @@ function boundTo(groupId: string, models: BoundModelRef[]): BoundModelRef[] {
   return models.filter((m) => m.feeGroupId === groupId);
 }
 
+/** 一个字段里有没有这个词。空字段永远不命中（空串的 includes 恒为真）。 */
+function hasText(v: string | undefined, q: string): boolean {
+  return !!v && v.toLowerCase().includes(q);
+}
+
 /** 一个模型在搜索里能被什么词找到：显示名和端点认的 id。 */
 function modelLabel(m: BoundModelRef): string {
   return (m.name ?? "").trim() || (m.modelId ?? "").trim();
@@ -122,8 +127,10 @@ export function matchFeeGroups(
       continue;
     }
     const own = g.name.toLowerCase().includes(q) || vendorKey(g.vendor).includes(q);
+    // 两个字段**分别**比，不拼成一个字符串再整体比：拼接会在接缝上造出
+    // 一个原文里不存在的词，`name:"foo" modelId:"bar"` 会被 `oo b` 命中。
     const matched = boundTo(g.id, models)
-      .filter((m) => `${m.name ?? ""} ${m.modelId ?? ""}`.toLowerCase().includes(q))
+      .filter((m) => hasText(m.name, q) || hasText(m.modelId, q))
       .map(modelLabel)
       .filter(Boolean);
     if (!own && !matched.length) continue;
