@@ -242,8 +242,22 @@
 }
 .summaryUnset { color: var(--color-text-faint); }
 
-/* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。 */
-.badPrice { border-color: var(--color-accent); }
+/* 空着的格画虚线：它说的是「没填」，而填了 0 的格是实线——0 是一个决定。
+   和列表行头上那个 7px 方块同一个记号（.mark 虚线 ＝ 没配价），所以作者
+   不用学第二套。
+
+   类名写两遍是这个仓库的约定（理由在 common/Select.tsx 的文件头）：单写
+   一次是 0-1-0，和 settingsCommon 的 .input 打平，谁赢取决于 bundle 里
+   两个模块的先后——那不是一个能靠代码保证的结果。 */
+.unset.unset {
+  border-style: dashed;
+  border-color: var(--stg-border-menu);
+  color: var(--color-text-faint);
+}
+
+/* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。
+   同样要压过 .input 的 border 简写，所以同样写两遍。 */
+.badPrice.badPrice { border-color: var(--color-accent); }
 
 /* 档位表里的格比抽屉里别处的输入框紧一档：一行五格，共享 478px。 */
 .rateGrid .cell {
