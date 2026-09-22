@@ -15,6 +15,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import {
   formatTokenCount,
   formatUsd,
+  groupBuckets,
+  ROLLUP_SELECT,
   rowToBucket,
   sortBuckets,
   sortUsageBuckets,
@@ -178,6 +180,61 @@ describe("sumBuckets", () => {
     const split = total.costInput + total.costCache + total.costOutput
       + total.costCount + total.costDuration + total.costOther + total.costUnsplit;
     expect(split).toBeCloseTo(total.costUsd, 12);
+  });
+});
+
+// `ROLLUP_SELECT` 的每个 `AS 别名` 都得有人读。两边是**手工对齐**的：
+// 拼错一个别名、或者加了一条 SUM 忘了在 `rowToBucket` 里读，那一段就恒为 0
+// ——条上少一块颜色，一个字都不报。
+describe("ROLLUP_SELECT 的别名与 rowToBucket 读的 key 一一对上", () => {
+  it("每个别名都被读成一个字段，没有一个落空", () => {
+    const aliases = [...ROLLUP_SELECT.matchAll(/AS\s+(\w+)/g)].map((m) => m[1]);
+    expect(aliases.length).toBeGreaterThanOrEqual(14);
+    // 每个别名喂一个互不相同的值，读回来必须一个不少地出现。
+    const row: Record<string, unknown> = { key: "m1" };
+    aliases.forEach((a, i) => { row[a] = i + 1; });
+    const b = rowToBucket(row);
+    const got = new Set(Object.values(b).filter((v) => typeof v === "number"));
+    const missing = aliases
+      .map((a, i) => ({ a, v: i + 1 }))
+      .filter(({ v }) => !got.has(v))
+      .map(({ a }) => a);
+    expect(missing).toEqual([]);
+  });
+});
+
+// 用量页的**默认维度**走这一支：把 byModel 按模型当前绑的组折起来。
+// 它漏折一个分项字段，默认视图下每一根条都会不对，而且不报错。
+describe("groupBuckets", () => {
+  it("按当前绑的组折起来，分项字段一个不落", () => {
+    const rows = [
+      bucket({ key: "m1", calls: 2, costUsd: 0.6, costInput: 0.1, costOutput: 0.5 }),
+      bucket({ key: "m2", calls: 1, costUsd: 0.4, costInput: 0.2, costCount: 0.1, costUnsplit: 0.1 }),
+      bucket({ key: "m3", calls: 5, costUsd: 1, costDuration: 1 }),
+    ];
+    const [first, second] = groupBuckets(rows, (id) => (id === "m3" ? "g2" : "g1"));
+    expect(first.key).toBe("g1");
+    expect(first.calls).toBe(3);
+    expect(first.costInput).toBeCloseTo(0.3, 12);
+    expect(first.costOutput).toBeCloseTo(0.5, 12);
+    expect(first.costCount).toBeCloseTo(0.1, 12);
+    expect(first.costUnsplit).toBeCloseTo(0.1, 12);
+    // 守恒律在折起来之后仍然成立。
+    const split = first.costInput + first.costCache + first.costOutput
+      + first.costCount + first.costDuration + first.costOther + first.costUnsplit;
+    expect(split).toBeCloseTo(first.costUsd, 12);
+    expect(second.key).toBe("g2");
+    expect(second.costDuration).toBeCloseTo(1, 12);
+  });
+
+  it("没绑组的模型折进同一个空 key，而不是各自成行", () => {
+    const out = groupBuckets(
+      [bucket({ key: "m1", costUsd: 1 }), bucket({ key: "m2", costUsd: 2 })],
+      () => undefined,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].key).toBe("");
+    expect(out[0].costUsd).toBe(3);
   });
 });
 

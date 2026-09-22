@@ -74,6 +74,17 @@ const SNAPSHOT_COLUMNS: [string, string][] = [
   ["cost_count", "REAL"],
   ["cost_duration", "REAL"],
   ["cost_other", "REAL"],
+  // 这一行的分项**看过了没有**。1 = 看过（补上了，或者算出来对不上账、按设计
+  // 留白）；NULL = 还没看过。
+  //
+  // 为什么需要它：1.73.0 之前的行连计费快照列都没有，重算恒为 0，对账闸门
+  // 恒不通过——只看 `cost_input IS NULL` 的话，这些行**每次开库都会被重新捞
+  // 出来算一遍，而且永远补不上**。有了这个标记，看过一次就不再看，回填才是
+  // 收敛的。同构的先例是 `models.fee_migrated`。
+  //
+  // 它是**记账用的标记，不是钱**：对不上账的行 `cost_input` 仍然保持 NULL，
+  // 「空 ≠ 零」没有被破坏，`cost_unsplit` 照样把它们数进「分不出段的钱」。
+  ["cost_split_checked", "INTEGER"],
 ];
 
 async function addUsageColumn(db: Db, existing: Set<string>, name: string, type: string) {
@@ -111,13 +122,16 @@ export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Pr
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_project ON token_usage (project, created_at)`);
   }
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_created ON token_usage (created_at)`);
-  // 还没有分项的行。**部分索引**，不是整列索引：`lib/ai/usageBackfill` 每次
-  // 开库都会去找它们，而对不上账的远古行永远补不上、永远命中这个条件——
-  // 没有索引的话那就是每次开项目一次全表扫描，且随表增长只会更慢。
-  // 有了它，回填跑完之后这个索引里只剩那几行对不上的，再开库就是一次很小的
-  // 索引查找。行补上之后会自动退出索引，索引也就跟着缩。
+  // 还**没看过**的行。**部分索引**，不是整列索引：`lib/ai/usageBackfill` 每次
+  // 开库都会去找它们，没有索引的话那就是每次开项目一次全表扫描。
+  //
+  // 条件是「没看过」而不是「没有分项」：对不上账的远古行永远补不上，按后者
+  // 它们会永远留在索引里、每次开库重捞一遍。按前者，回填跑完一趟之后这个
+  // 索引就是**空的**，再开库只是一次落空的索引查找。
+  await db.execute(`DROP INDEX IF EXISTS idx_usage_unsplit`);
   await db.execute(
-    `CREATE INDEX IF NOT EXISTS idx_usage_unsplit ON token_usage (id) WHERE cost_input IS NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_usage_unchecked
+       ON token_usage (id) WHERE cost_split_checked IS NULL`,
   );
 }
 

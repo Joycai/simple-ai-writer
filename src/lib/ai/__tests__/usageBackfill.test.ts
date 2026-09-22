@@ -38,7 +38,7 @@ function fakeDb(rows: Row[]) {
   const select = vi.fn(async (_sql: string, params: unknown[]) => {
     const [after, limit] = params as [number, number];
     return rows
-      .filter((r) => r.cost_input == null && (r.id as number) > after)
+      .filter((r) => r.cost_split_checked == null && (r.id as number) > after)
       .sort((a, b) => (a.id as number) - (b.id as number))
       .slice(0, limit);
   });
@@ -115,7 +115,13 @@ describe("backfillUsageParts · 对账闸门", () => {
     const { db } = fakeDb([ancient]);
     const r = await backfillUsageParts(db, "/db");
     expect(r).toEqual({ filled: 0, skipped: 1 });
-    expect(txMock).not.toHaveBeenCalled();
+    // 一个分项都不写，但**打标记**——不打的话它每次开库都被重捞一遍却永远
+    // 补不上，回填就不收敛。标记不是钱：cost_input 仍然是 NULL。
+    const stmts = statementsOf();
+    expect(stmts).toHaveLength(1);
+    expect(stmts[0].sql).toContain("SET cost_split_checked = 1");
+    expect(stmts[0].sql).not.toContain("cost_input =");
+    expect(stmts[0].values).toEqual([7]);
   });
 
   it("一批里混着对得上和对不上的，各行其是", async () => {
@@ -123,7 +129,10 @@ describe("backfillUsageParts · 对账闸门", () => {
     const { db } = fakeDb([tokenRow({ id: 1 }), ancient, tokenRow({ id: 3 })]);
     const r = await backfillUsageParts(db, "/db");
     expect(r).toEqual({ filled: 2, skipped: 1 });
-    expect(statementsOf().map((s) => segsOf(s).id)).toEqual([1, 3]);
+    const filledIds = statementsOf().filter((s) => s.sql.includes("cost_input =")).map((s) => segsOf(s).id);
+    expect(filledIds).toEqual([1, 3]);
+    // 对不上的那一行也在同一个事务里被打上标记。
+    expect(statementsOf().filter((s) => !s.sql.includes("cost_input ="))).toHaveLength(1);
   });
 
   // 没配价的模型：重算是 0，行上也是 0。两边都是 0 算对得上——这一行的
@@ -146,7 +155,7 @@ describe("backfillUsageParts · 游标与幂等", () => {
     txMock.mockImplementation(async (_path, stmts) => {
       for (const s of stmts) {
         const row = rows.find((r) => r.id === segsOf(s).id);
-        if (row) row.cost_input = segsOf(s).input;
+        if (row) { row.cost_input = segsOf(s).input; row.cost_split_checked = 1; }
       }
     });
     expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 2, skipped: 0 });
@@ -166,7 +175,9 @@ describe("backfillUsageParts · 游标与幂等", () => {
     expect(r).toEqual({ filled: 0, skipped: 500 });
     // 200 + 200 + 100：最后一批不满一批就收工，不多花一次往返去确认空。
     expect(select).toHaveBeenCalledTimes(3);
-    expect(txMock).not.toHaveBeenCalled();
+    // 三批各一个事务，全是「只打标记」——一个分项都没写。
+    expect(txMock).toHaveBeenCalledTimes(3);
+    expect(statementsOf().every((s) => !s.sql.includes("cost_input ="))).toBe(true);
   });
 
   // commit-4 的 review 构造出来的挂死：一整批 1000 行的 `id` 全读不成数字
@@ -186,6 +197,36 @@ describe("backfillUsageParts · 游标与幂等", () => {
     // 两批而不是一批。要紧的是它有限，不是它等于几。
     expect(select).toHaveBeenCalledTimes(2);
     expect(r.skipped).toBe(400);
+    expect(r.filled).toBe(0);
+  });
+
+  // 整体 review 第 2 轮实测出来的那条：1.73.0 之前的行连计费快照都没有，重算
+  // 恒为 0、闸门恒不通过。只按「有没有分项」来找的话，它们**每次开库都被重捞
+  // 一遍而且永远补不上**——而回填挂在 openProject 的 await 链上。按「有没有
+  // 看过」来找，第二趟才是空的。
+  it("对不上账的远古行也只看一次：第二趟一行都捞不到", async () => {
+    const rows: Row[] = Array.from({ length: 300 }, (_, i) => ({
+      id: i + 1, billing_mode: null, input_price: null, output_price: null,
+      prompt_tokens: 1000, completion_tokens: 200,
+      cost_usd: 0.42, cost_input: null, cost_split_checked: null,
+    }));
+    const { db, select } = fakeDb(rows);
+    txMock.mockImplementation(async (_path, stmts) => {
+      for (const s of stmts) {
+        const row = rows.find((r) => r.id === s.values[s.values.length - 1]);
+        if (row) row.cost_split_checked = 1;
+      }
+    });
+    expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 0, skipped: 300 });
+    // 一个分项都没补上——它们确实对不上账，留白是对的。
+    expect(rows.every((r) => r.cost_input == null)).toBe(true);
+
+    select.mockClear();
+    txMock.mockClear();
+    // 第二趟：一行都捞不到，一个事务都不发。**这就是收敛。**
+    expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 0, skipped: 0 });
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(txMock).not.toHaveBeenCalled();
   });
 
   it("空表不炸", async () => {
@@ -209,7 +250,8 @@ describe("backfillUsageParts · 口径与写入口一致", () => {
     };
     const { db } = fakeDb([halfSnapshot]);
     expect(await backfillUsageParts(db, "/db")).toEqual({ filled: 0, skipped: 1 });
-    expect(txMock).not.toHaveBeenCalled();
+    expect(statementsOf()[0].sql).toContain("SET cost_split_checked = 1");
+    expect(statementsOf()[0].sql).not.toContain("cost_input =");
   });
 
   it("按次的行带着 request_count 时对得上，照常补", async () => {

@@ -185,9 +185,10 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>, project
   // 补列之后把老行的分项补上——只补对得上账的那些，路径要单独传是因为事务
   // 走不了这个句柄（lib/sqlTx）。它自己吞掉异常：账目的事不配让项目开不了。
   //
-  // **故意 `await`，没有放飞。** 挡在这里，升级后第一次打开项目会慢一下
-  // （之后每次都不慢：`idx_usage_unsplit` 是个部分索引，回填跑完它里面只剩
-  // 那几行永远对不上的）。换成不 await 的话，回填会和「项目已经能用了」之后
+  // **故意 `await`，没有放飞。** 挡在这里，升级后第一次打开项目会慢一下；
+  // 之后每次都不慢——每行只看一次（`cost_split_checked`），看完
+  // `idx_usage_unchecked` 这个部分索引就是空的，再开库只是一次落空的查找。
+  // 换成不 await 的话，回填会和「项目已经能用了」之后
   // 的 `recordUsage` 抢同一张表的写锁，而 `recordUsage` 撞上 locked 只会被
   // 自己的 try 吞掉——账少一行，没有任何东西报错。**一次性的慢，好过悄悄
   // 掉一行账。**

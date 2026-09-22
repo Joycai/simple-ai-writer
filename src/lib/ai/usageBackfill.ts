@@ -15,6 +15,11 @@
  * 为什么要回填而不是等新数据攒起来：不回填的话，升级当天打开用量页，历史数据
  * 的条整条是灰的，这个功能对老用户等于不存在。
  *
+ * **每一行只看一次。** 看过就写 `cost_split_checked = 1`，不管补上了还是留白。
+ * 1.73.0 之前的行连计费快照都没有，重算恒为 0、闸门恒不通过——只按「有没有
+ * 分项」来找的话，这些行每次开库都被重捞一遍、而且永远补不上。按「有没有
+ * 看过」来找，这一趟才是收敛的：跑完一遍，`idx_usage_unchecked` 就是空的。
+ *
  * **库文件路径由调用点传进来**，这个模块不自己去 `lib/project` 要。理由和
  * `usageSchema.ts` 被单独拆出来是同一个：项目库那一侧由 `lib/project` 建表并
  * 调用这里，这个模块再回头 import 它就成了环（src/lib/__tests__/layering.test.ts
@@ -116,13 +121,23 @@ const SELECT_SQL = `SELECT id, cost_usd, billing_mode, prompt_tokens, cached_tok
          completion_tokens, input_price, cache_price, output_price,
          request_price, request_count, output_units, output_unit_price,
          output_unit, input_units, input_unit_price, reported_cost
-   FROM token_usage WHERE cost_input IS NULL AND id > ?
+   FROM token_usage WHERE cost_split_checked IS NULL AND id > ?
    ORDER BY id LIMIT ?`;
 
 const UPDATE_SQL = `UPDATE token_usage
    SET cost_input = ?, cost_cache = ?, cost_output = ?,
-       cost_count = ?, cost_duration = ?, cost_other = ?
+       cost_count = ?, cost_duration = ?, cost_other = ?,
+       cost_split_checked = 1
    WHERE id = ?`;
+
+/**
+ * 对不上账的行：**只打标记，一个分项都不写**。
+ *
+ * 不打标记的话它们永远命中「还没看过」，每次开库被重捞一遍却永远写不进去。
+ * 打了标记，`cost_input` 仍然是 NULL——「空 ≠ 零」没破，`cost_unsplit` 照样
+ * 把这一行的钱数进「分不出段的」。
+ */
+const MARK_SQL = `UPDATE token_usage SET cost_split_checked = 1 WHERE id = ?`;
 
 /**
  * 把这个库里还没有分项的行补上。
@@ -148,16 +163,17 @@ export async function backfillUsageParts(db: Db, dbPath: string): Promise<Backfi
       const parts = costOf(rowToBilled(r));
       if (!reconciles(totalOf(parts), num(r.cost_usd))) {
         skipped++;
+        updates.push({ sql: MARK_SQL, values: [id] });
         continue;
       }
       const s = segmentsOf(parts, rowUnit(r.output_unit));
+      filled++;
       updates.push({
         sql: UPDATE_SQL,
         values: [s.input, s.cache, s.output, s.count, s.duration, s.other, id],
       });
     }
     if (updates.length > 0) await sqlTransaction(dbPath, updates);
-    filled += updates.length;
     // **游标没动就收工。** 正常情况下不可能——`id` 是自增主键，`ORDER BY id`
     // 取回来的一定比 `after` 大。但只要有一整批的 `id` 读不成数字（`num()`
     // 把它们全读成 0），`after` 就不会推进，而对不上账的行永远写不进去、

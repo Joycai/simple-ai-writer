@@ -263,6 +263,26 @@ CommandPalette, onboarding flow, library view (文库: book-spine ordering + per
 - `usage.ts` 是读那一侧：范围（`project` / `global` = 两个库）、四种卷法
   （模型 / 任务 / 计费组 / 项目）、清除。**「按计费组」按模型当前绑的组归并**，
   不看行上的快照：行上快照的是价，不是归属，重新分组之后历史跟着走是故意的。
+- **分项的钱也落盘，跟 `cost_usd` 同一条规矩**（2026-09）：`segmentsOf()` 把
+  `costOf()` 的七项**分流**（不重算）成六段，`recordUsage` 一并抄在行上，读那一侧
+  只 `SUM`。拆分放在**写入时**，是因为 `spec` 那笔钱数的是张还是秒只有
+  `output_unit` 知道，而 `GROUP BY` 之后一个桶里可能混着两种单位——写的那一刻
+  单位是确定的单值，于是读那侧永远解不开的歧义根本不存在。守恒律：
+  **六段 + `cost_unsplit` ≡ `cost_usd`**。
+- `usageBackfill.ts` 是**唯一会改写历史行的地方**：给升级前的老行补分项。
+  它不违反 `usageSchema.ts` 那条「老行不回填价格」——**补的不是价，是同一笔钱的
+  分法**，价全在行上，喂给同一个 `costOf()` 重算，**总额对得上 `cost_usd` 才写，
+  对不上就留白**（留白 ≠ 零，那些钱在用量页里是「未分项」）。
+  每行只看一次（`cost_split_checked`，同构于 `models.fee_migrated`）：1.73.0 之前
+  的行连快照都没有、重算恒为 0、闸门恒不通过，按「有没有分项」来找的话它们每次
+  开库都被重捞一遍却永远补不上。分批 200 是为了缩短持写锁的时间——多开窗口时
+  对面的 `recordUsage` 撞上 locked 只会被自己的 try 吞掉，账少一行不报错。
+- `usageMeter.ts` 决定用量页那根条画成哪几段。**长度回答「用得多不多」
+  （调用次数 / 同批最大值），颜色回答「钱花在哪儿」**，两个问题各占一个视觉通道。
+  三档退化：有费用按费用占比 / 一分钱都没有按 token 占比 / 都没有画成一段中性色。
+  第一档与第二档的分界是 **`costUsd === 0`，不是「六段全 0」**——钱全在
+  `costUnsplit` 里的老行费用是**有**的，只是分不出来，误判成「没花钱」会让它
+  去画 token 占比。段的顺序只在这里定义一次，条与 tooltip 都读它。
 
 #### 图片与日志
 - the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1)

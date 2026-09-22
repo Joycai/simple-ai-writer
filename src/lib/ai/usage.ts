@@ -275,7 +275,7 @@ export type UsageScope = "project" | "global";
  * `cost_input IS NULL` 就是「这一行没有分项快照」的判据：新行六列必写（哪怕
  * 是 0），老行六列全空。所以拿第一列判一次就够，不必六列都查。
  */
-const ROLLUP_SELECT = `COUNT(*) AS calls,
+export const ROLLUP_SELECT = `COUNT(*) AS calls,
          SUM(prompt_tokens) AS prompt_tokens,
          SUM(cached_tokens) AS cached_tokens,
          SUM(completion_tokens) AS completion_tokens,

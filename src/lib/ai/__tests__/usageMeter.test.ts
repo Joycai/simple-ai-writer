@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { readFileSync } from "node:fs";
+
 import { meterSegments, USAGE_SEGMENT_ORDER, type UsageSegKey } from "../usageMeter";
 import type { UsageBucket } from "../usage";
 
@@ -26,6 +28,25 @@ describe("USAGE_SEGMENT_ORDER", () => {
     expect(USAGE_SEGMENT_ORDER).toEqual([
       "input", "cache", "output", "count", "duration", "other", "unsplit",
     ]);
+  });
+});
+
+// 段的标签是**拼出来**的 key（`systemSettings.usage.seg.${k}`），所以 TypeScript
+// 管不着它：少一个 key，i18next 会把 `systemSettings.usage.seg.duration` 这串
+// 原样印进 tooltip，一个字都不报。两种语言都钉住。
+describe("每个段在两种语言里都有标签", () => {
+  const locale = (name: string) =>
+    JSON.parse(readFileSync(`src/i18n/locales/${name}.json`, "utf-8"))
+      .systemSettings.usage;
+
+  it.each(["zh-CN", "en"])("%s", (name) => {
+    const usage = locale(name);
+    const missing = USAGE_SEGMENT_ORDER.filter((k) => typeof usage.seg?.[k] !== "string");
+    expect(missing).toEqual([]);
+    // tooltip 的模板也一样：少一条就是把 key 印给读者看。
+    for (const k of ["cost", "token", "barCost", "barToken", "barNone", "unsplitNote"]) {
+      expect(typeof usage.segTip?.[k]).toBe("string");
+    }
   });
 });
 
