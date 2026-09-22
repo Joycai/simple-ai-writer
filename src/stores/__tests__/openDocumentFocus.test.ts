@@ -3,7 +3,7 @@
  *
  * `setActiveFilePath` 是同步的，编辑器的载入是提交后的 effect；中间发出的那一轮
  * 取到的焦点是点击前的那一篇。这里钉的是它的三条：已经是那一篇就立刻回 ·
- * 缓冲区追上就回 true · 超时或作者转头打开了别的就回 false。
+ * 缓冲区追上就回 true · 超时、载入失败、作者转头打开或关掉了别的就回 false。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,6 +57,18 @@ describe("whenFocusSettles", () => {
   it("gives up when the author opens something else in the meantime", async () => {
     const p = whenFocusSettles(NOTE);
     useProjectStore.setState({ activeFilePath: "/proj/卷二/第1章.md" });
+    await expect(p).resolves.toBe(false);
+  });
+
+  it("gives up at once when the document is closed or deleted, not after the timeout", async () => {
+    const p = whenFocusSettles(NOTE);
+    useProjectStore.setState({ activeFilePath: null });
+    await expect(p).resolves.toBe(false);
+  });
+
+  it("gives up at once when the load of that file fails", async () => {
+    const p = whenFocusSettles(NOTE);
+    useEditorStore.setState({ loadError: { path: NOTE, message: "not utf-8" } });
     await expect(p).resolves.toBe(false);
   });
 });

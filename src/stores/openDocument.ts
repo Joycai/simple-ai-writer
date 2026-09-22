@@ -137,8 +137,11 @@ export function focusBlockedByImage(focus: WritingFocus): boolean {
 }
 
 /**
- * Resolves `true` once the editor holds `path`, or `false` after `timeoutMs`
- * without it (or once the author has opened something else meanwhile).
+ * Resolves `true` once the editor holds `path`, or `false` as soon as it never
+ * will: the author opened, closed or deleted something meanwhile (any change
+ * of `activeFilePath` away from `path` — `null` included, since every writer
+ * of `null` is a real "nothing is focused any more"), the load of `path`
+ * failed, or `timeoutMs` passed.
  *
  * For a gesture that opens a file *and* sends a turn about it: `setActiveFilePath`
  * is synchronous, the editor's load is an effect that runs after the commit,
@@ -162,9 +165,10 @@ export function whenFocusSettles(path: string, timeoutMs = 5000): Promise<boolea
     const timer = setTimeout(() => finish(false), timeoutMs);
     const unsubEditor = useEditorStore.subscribe((s) => {
       if (isSamePath(s.filePath, path)) finish(true);
+      else if (s.loadError && isSamePath(s.loadError.path, path)) finish(false);
     });
     const unsubProject = useProjectStore.subscribe((s) => {
-      if (s.activeFilePath !== null && !isSamePath(s.activeFilePath, path)) finish(false);
+      if (!isSamePath(s.activeFilePath, path)) finish(false);
     });
   });
 }
