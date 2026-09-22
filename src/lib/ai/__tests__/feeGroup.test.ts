@@ -9,9 +9,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   costOf, feeConfigOf, hasReportedCost, matchRate, normalizeSeconds, normalizeSize,
-  normalizeSpec, priceSpec, specLabel, specificity, tierOf, totalOf,
+  normalizeSpec, priceSpec, segmentsOf, specLabel, specificity, sumSegments, tierOf, totalOf,
   ZERO_BILLED, ZERO_FEE,
-  type Billed, type CostParts, type FeeConfig, type FeeGroup, type SpecRate,
+  type Billed, type CostParts, type CostSegments, type FeeConfig, type FeeGroup, type OutputUnit,
+  type SpecRate,
 } from "../feeGroup";
 
 const group = (over: Partial<FeeGroup> = {}): FeeGroup => ({
@@ -84,6 +85,75 @@ describe("costOf", () => {
       inputPrice: "坏格" as unknown as number,
     }));
     expect(totalOf(p)).toBe(0);
+  });
+});
+
+describe("segmentsOf · 七项折成计量条的六段", () => {
+  const parts = (over: Partial<CostParts> = {}): CostParts => ({
+    input: 0, cache: 0, output: 0, request: 0, spec: 0, specInput: 0, reported: 0, ...over,
+  });
+
+  it("按 token：三段原样过去，另外三段空着", () => {
+    const s: CostSegments = segmentsOf(parts({ input: 1, cache: 2, output: 4 }), null);
+    expect(s).toEqual({ input: 1, cache: 2, output: 4, count: 0, duration: 0, other: 0 });
+  });
+
+  it("按张：spec 与输入图合并进「张数」——阶段 0 拍板不拆两段", () => {
+    const s = segmentsOf(parts({ spec: 0.12, specInput: 0.02 }), "image");
+    expect(s.count).toBeCloseTo(0.14, 12);
+    expect(s.duration).toBe(0);
+    expect(s.other).toBe(0);
+  });
+
+  it("按秒：spec 进「时长」，而输入图仍然是按张的钱", () => {
+    const s = segmentsOf(parts({ spec: 0.3, specInput: 0.02 }), "second");
+    expect(s.duration).toBeCloseTo(0.3, 12);
+    expect(s.count).toBeCloseTo(0.02, 12);
+    expect(s.other).toBe(0);
+  });
+
+  it("按条：五段装不下，进「其它」而不是硬塞给张数", () => {
+    const s = segmentsOf(parts({ spec: 0.5 }), "clip");
+    expect(s.other).toBeCloseTo(0.5, 12);
+    expect(s.count).toBe(0);
+    expect(s.duration).toBe(0);
+  });
+
+  it("单位拿不到时不猜：spec 归「其它」", () => {
+    const s = segmentsOf(parts({ spec: 0.5 }), null);
+    expect(s.other).toBeCloseTo(0.5, 12);
+    expect(s.count).toBe(0);
+  });
+
+  it("按次的固定价进「其它」，输入图仍归「张数」", () => {
+    const s = segmentsOf(parts({ request: 0.12, specInput: 0.02 }), null);
+    expect(s.other).toBeCloseTo(0.12, 12);
+    expect(s.count).toBeCloseTo(0.02, 12);
+  });
+
+  it("上游报价不可拆——报过来就是一个数，整笔进「其它」", () => {
+    const s = segmentsOf(parts({ reported: 0.07 }), "image");
+    expect(s.other).toBeCloseTo(0.07, 12);
+    expect(sumSegments(s)).toBeCloseTo(0.07, 12);
+  });
+
+  // 折算只是分流，不是重算。一分钱都不能在这里丢掉或凭空长出来——
+  // 丢了段长相加就不等于总额，长出来的那部分则谁也解释不了。
+  it("守恒律：任意 parts × 任意 unit，六段之和 === totalOf", () => {
+    const units: (OutputUnit | null)[] = ["image", "second", "clip", null];
+    let seed = 20260922;
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return (seed / 0x7fffffff) * 10;
+    };
+    for (let i = 0; i < 400; i++) {
+      const p = parts({
+        input: rnd(), cache: rnd(), output: rnd(),
+        request: rnd(), spec: rnd(), specInput: rnd(), reported: rnd(),
+      });
+      const unit = units[i % units.length];
+      expect(sumSegments(segmentsOf(p, unit))).toBeCloseTo(totalOf(p), 10);
+    }
   });
 });
 
