@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin, ImageOff, NotebookPen } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
@@ -434,7 +434,7 @@ export function LoreWall() {
     // 文件夹里而不在声明里，改名/删除那条「只许作者自建」的规矩管不到它；孤儿分类
     // 反而最需要它。提示词作为一条消息发出去，写入仍要过方案卡。
     const describe: ContextMenuEntry = {
-      kind: "item", icon: <Sparkles size={13} />, label: t("lore.categoryNote.menu"),
+      kind: "item", icon: <NotebookPen size={13} />, label: t("lore.categoryNote.menu"),
       action: () => {
         setCatMenu(null);
         useAppStore.getState().setShowAiDrawer(true, "chat");

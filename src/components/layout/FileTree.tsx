@@ -1572,6 +1572,7 @@ export function FileTree() {
     };
 
     if (!node) {
+      const rootHasNote = fileTree.some((c) => !c.is_dir && isFolderNoteFile(c.name));
       return [
         { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFile"),
           shortcut: comboLabel(COMBO_NEW_DOC),
@@ -1584,6 +1585,12 @@ export function FileTree() {
         { kind: "divider" },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => { if (projectPath) void handleImport(projectPath); } },
+        // 项目根也是一个分组：空白处右键同样能给它一份目录说明。
+        ...(projectPath ? [{
+          kind: "item", icon: <NotebookPen size={13} />,
+          label: t(rootHasNote ? "fileTree.folderNoteUpdate" : "fileTree.folderNoteCreate"),
+          action: () => void askFolderNote({ path: projectPath, name: baseName(projectPath), is_dir: true, children: fileTree }, rootHasNote),
+        } as ContextMenuEntry] : []),
         ...(hasAnyFolder ? [{
           kind: "item", icon: <ChevronsDownUp size={13} />, label: t("fileTree.collapseAll"),
           shortcut: comboLabel(COMBO_COLLAPSE_ALL), action: toggleCollapseAll,
@@ -1707,6 +1714,15 @@ export function FileTree() {
           disabled: busy !== null || !asrModel,
           hint: asrModel ? undefined : t("fileTree.transcribeUnbound"),
           action: () => void askTranscribe(node),
+        });
+      }
+      // 说明行自己的右键也能让助手更新它——作者盯着的就是这一行，不该让他先找到
+      // 父分组再右键。父分组只从路径推，树上不必再找那个节点。
+      if (isFolderNoteFile(node.name)) {
+        const dir = parentDirOf(node.path);
+        items.push({
+          kind: "item", icon: <NotebookPen size={13} />, label: t("fileTree.folderNoteUpdate"),
+          action: () => void askFolderNote({ path: dir, name: baseNameOf(dir), is_dir: true }, true),
         });
       }
       // Only on files the assistant can take (the `@` picker's own kinds) —

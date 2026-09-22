@@ -148,21 +148,21 @@ export async function nearestFolderNote(
 export function folderNoteTemplate(folderName: string, isZh: boolean): string {
   const help = isZh
     ? [
-        "目录说明：第一段用一两句话写这个目录装什么、写作时该怎么参考。",
-        "不再参考的目录，在文件最顶上加三行：",
+        "目录说明：第一段用一两句话写这个分组装什么、写作时该怎么参考。",
+        "不再参考的分组，在文件最顶上加三行：",
         "---",
         "status: deprecated",
         "---",
-        "（草稿目录写 draft；不写就是正常参考。）",
+        "（草稿分组写 draft；不写就是正常参考。）",
         "下面可以列出主要文件，每行一个：* [文件名](文件名) - 一句话",
       ]
     : [
-        "Folder note: in the first paragraph, say in a sentence or two what this folder holds and how to use it.",
-        "For a folder that should no longer be consulted, add three lines at the very top:",
+        "Folder note: in the first paragraph, say in a sentence or two what this group holds and how to use it.",
+        "For a group that should no longer be consulted, add three lines at the very top:",
         "---",
         "status: deprecated",
         "---",
-        "(draft for work in progress; nothing means the folder is consulted as usual.)",
+        "(draft for work in progress; nothing means the group is consulted as usual.)",
         "Below, optionally list the main files, one per line: * [name](name) - one line",
       ];
   return `# ${folderName}\n\n<!--\n${help.join("\n")}\n-->\n`;

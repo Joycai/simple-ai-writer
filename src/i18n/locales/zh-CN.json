@@ -3252,7 +3252,7 @@
     },
     "categoryNote": {
       "menu": "让助手写分类说明",
-      "prompt": "请为{{kb}}分类「{{label}}」（id：{{id}}）写分类说明。先用 list_lore_entities 看这一类有哪些条目，用 read_lore_entity 抽读两三条；然后用 propose_lore_plan 提一份只有一步的方案（target 为 category、action 为 update、entity 为 {{id}}），批准后用 manage_category（op 为 describe）写入：第一段用一两句话说明这一类装什么、条目在写作时怎么用；可以再列几条代表性的条目。写完不用再解释。"
+      "prompt": "请为{{kb}}分类「{{label}}」（id：{{id}}）写分类说明。先读这一类的条目，再用 manage_category 的 describe 提一份只有一步的方案（target 为 category、action 为 update、entity 为 {{id}}）：一两句话说这一类装什么、条目之间怎么分工，写作时什么情况下该查它。"
     },
     "categoryDelete": {
       "menu": "删除分类…",
@@ -3534,7 +3534,7 @@
     "folderNoteCreate": "新建目录说明并交给助手",
     "folderNoteUpdate": "让助手更新目录说明",
     "folderNoteFailed": "没能新建「{{name}}」的目录说明。",
-    "folderNotePrompt": "请为目录「{{name}}」写目录说明，文件是 {{path}}/index.md。先用 list_files（folder 传这个目录）看清里面有什么，必要时用 read_file 抽读几份文件的开头；然后用 rewrite_document 把 {{path}}/index.md 整篇改成：第一行标题；第一段用一两句话写这个目录装什么、写作时该怎么参考；下面按「* [文件名](文件名) - 一句话」列出主要文件和子目录。如果这个目录已经不该再被参考（旧稿、废稿），在文件最顶上加 frontmatter `status: deprecated`；草稿目录写 `status: draft`；正常目录不写 frontmatter。写完不用再解释。",
+    "folderNotePrompt": "请为分组「{{name}}」写目录说明（{{path}}/index.md）。先列出这个分组里的文件，抽读两三份主要的；再整篇重写 index.md：第一段用一两句话说这个分组装什么、写作时该怎么参考；如果它已经不再参考，在最顶上加 `status: deprecated` 的 frontmatter（草稿写 draft，正常参考就不写）；下面可以列主要文件，每行 `* [文件名](文件名) - 一句话`。现有说明里仍然正确的话保留。",
     "collapseAll": "全部折叠",
     "expandAll": "全部展开",
     "collapsedGroups": "已折叠 {{count}} 个分组",

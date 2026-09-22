@@ -3259,8 +3259,8 @@
       "failed": "These could not be moved: {{list}}"
     },
     "categoryNote": {
-      "menu": "Have the assistant describe this category",
-      "prompt": "Write the note for the {{kb}} category \"{{label}}\" (id: {{id}}). First call list_lore_entities to see what is in it and read_lore_entity on two or three entries; then submit a one-step plan with propose_lore_plan (target category, action update, entity {{id}}), and once approved call manage_category with op describe to write it: a first paragraph of one or two sentences on what belongs in this category and how its entries are used when writing, optionally followed by a few representative entries. No explanation afterwards."
+      "menu": "Write category note via assistant",
+      "prompt": "Write the category note for the {{kb}} category \"{{label}}\" (id: {{id}}). Read this category's entries first, then propose a one-step plan for manage_category's describe (target category, action update, entity {{id}}): one or two sentences on what this category holds, how its entries divide the ground, and when to consult it while writing."
     },
     "categoryDelete": {
       "menu": "Delete category…",
@@ -3538,10 +3538,10 @@
     "dragCount": "{{count}} items",
     "newFileHere": "New document here",
     "noteLabel": "NOTE",
-    "folderNoteCreate": "New folder note, filled by the assistant",
-    "folderNoteUpdate": "Have the assistant update the folder note",
+    "folderNoteCreate": "New folder note via assistant",
+    "folderNoteUpdate": "Update folder note via assistant",
     "folderNoteFailed": "Could not create the folder note for \"{{name}}\".",
-    "folderNotePrompt": "Write the folder note for \"{{name}}\" — the file is {{path}}/index.md. First call list_files with that folder to see what it holds, and read_file the opening of a few files if needed; then use rewrite_document to replace {{path}}/index.md entirely with: a title line; a first paragraph of one or two sentences saying what this folder holds and how to use it when writing; below it, the main files and subfolders as `* [name](name) - one line`. If the folder should no longer be consulted (an old or discarded draft), put `status: deprecated` in frontmatter at the very top; a work-in-progress folder gets `status: draft`; a normal folder gets no frontmatter. No explanation afterwards.",
+    "folderNotePrompt": "Write the folder note for the group \"{{name}}\" ({{path}}/index.md). List the files in this group and read two or three of the main ones; then rewrite index.md as a whole: in the first paragraph, one or two sentences on what this group holds and how to use it when writing; if it should no longer be consulted, put `status: deprecated` frontmatter at the very top (draft for work in progress; nothing for normal use); below, optionally list the main files, one per line as `* [name](name) - one line`. Keep whatever in the existing note is still true.",
     "newFolderHere": "New group here",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",
