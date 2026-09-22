@@ -49,6 +49,16 @@
    把「这次请求的事实 + 模型绑的价」变成要写下去的那一行。
 8. **「按计费组」统计按当前归属，不按快照。** 行上快照的是**价**，不是归属；
    重新分组之后历史跟着走，这是故意的。
+9. **分项的钱也是落盘的结果，不是第二套口径**（2026-09）。`costOf()` 的七项经
+   `segmentsOf(parts, outputUnit)` **分流**（不重算）成六段，和 `cost_usd` 一起
+   写在行上（`cost_input` / `cost_cache` / `cost_output` / `cost_count` /
+   `cost_duration` / `cost_other`）；读那一侧只 `SUM` 它们。拆分放在**写入时**
+   是因为 `spec` 那笔钱数的是张还是秒只有 `output_unit` 知道，而 `GROUP BY`
+   之后一个桶里可能混着两种单位——写的那一刻单位是确定的单值。
+   **守恒律：六段 + `cost_unsplit` ≡ `cost_usd`**（`cost_unsplit` 是分项列还是
+   NULL 的老行贡献的那部分）。这条一破，用量页的条就会比行尾那个金额短一截或
+   长一截，而那种不一致不报错。老行由 `usageBackfill` 补，**对得上账才补，
+   对不上就留白**——回填的不是价，是同一笔钱的分法。
 
 ## 模块
 
@@ -60,7 +70,9 @@
 | `src/lib/ai/feeGroupList.ts` | 列表怎么分段、怎么过滤，以及两个下拉的选项表。纯的，不碰库也不碰 store |
 | `src/lib/ai/usageSchema.ts` | `token_usage` 的表结构，两个库共用一处定义 |
 | `src/lib/ai/usageRow.ts` | 唯一的写入口 + 两处 sink |
-| `src/lib/ai/usage.ts` | 读那一侧：范围（项目 / 全部）、四种卷法、清除 |
+| `src/lib/ai/usage.ts` | 读那一侧：范围（项目 / 全部）、四种卷法、清除；分项的七条 `SUM` |
+| `src/lib/ai/usageBackfill.ts` | **唯一会改写历史行的地方**：给老行补分项，带对账闸门（重算总额对不上 `cost_usd` 就不写）。分批 + 游标 + 幂等，永不抛错 |
+| `src/lib/ai/usageMeter.ts` | 用量页那根条画成哪几段：三档退化（有费用按费用占比 / 零费用按 token 占比 / 都没有画成一段中性色），段的顺序只在这里定义一次 |
 | `src/components/settings/panes/FeeGroupsPane.tsx` · `FeeGroupDrawer.tsx` | 列表与编辑抽屉 |
 
 ## 迁移

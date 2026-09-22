@@ -272,6 +272,11 @@ export function UsagePane({ onOpenFees }: { onOpenFees?: () => void } = {}) {
               <span
                 key={s.key}
                 className={`${ui.usageSeg} ${SEG_CLASS[s.key]}`}
+                /* `share` 而**不是** `value`：段的 flex-basis 是 0，grow 因子
+                   之和**小于 1** 时 flex 只按那个比例分配可用空间。费用是美元，
+                   六段之和常常远小于 1——一行一共 $0.42 的话，写 value 画出来
+                   的条只有 42% 长。`share` 之和恒等于 1，条正好填满。
+                   这条错法是静默的（条短一截，什么都不报），别「简化」回去。 */
                 style={{ flexGrow: s.share }}
                 title={m.mode === "none" ? undefined : segTip(m, s.key, s.value, s.share)}
                 aria-hidden="true"

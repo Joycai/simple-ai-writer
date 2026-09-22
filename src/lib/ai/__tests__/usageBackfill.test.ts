@@ -158,13 +158,13 @@ describe("backfillUsageParts · 游标与幂等", () => {
   // 对不上账的行永远写不进去，所以它们会被每一次 SELECT 重新选中。游标不推进
   // 的话，一整批都对不上时循环就再也退不出来——这是这个模块唯一会挂死的地方。
   it("一整批都对不上时靠游标退出，不原地打转", async () => {
-    const many: Row[] = Array.from({ length: 2500 }, (_, i) => ({
+    const many: Row[] = Array.from({ length: 500 }, (_, i) => ({
       id: i + 1, cost_usd: 0.42, cost_input: null,
     }));
     const { db, select } = fakeDb(many);
     const r = await backfillUsageParts(db, "/db");
-    expect(r).toEqual({ filled: 0, skipped: 2500 });
-    // 1000 + 1000 + 500：最后一批不满一批就收工，不多花一次往返去确认空。
+    expect(r).toEqual({ filled: 0, skipped: 500 });
+    // 200 + 200 + 100：最后一批不满一批就收工，不多花一次往返去确认空。
     expect(select).toHaveBeenCalledTimes(3);
     expect(txMock).not.toHaveBeenCalled();
   });
@@ -174,10 +174,10 @@ describe("backfillUsageParts · 游标与幂等", () => {
   // → 同一批被无限重取。这一趟挂在 openProject 的 await 链上，`try/catch`
   // 捕获抛错但捕获不了挂死，表现是**项目再也开不出来且没有任何征兆**。
   it("游标推不动时收工，不无限重取同一批", async () => {
-    const rows: Row[] = Array.from({ length: 1000 }, () => ({
+    const rows: Row[] = Array.from({ length: 200 }, () => ({
       id: "坏格", cost_usd: 0.42, cost_input: null,
     }));
-    const select = vi.fn(async () => rows.slice(0, 1000));
+    const select = vi.fn(async () => rows.slice(0, 200));
     const db = { select } as unknown as Db;
     const r = await backfillUsageParts(db, "/db");
     expect(r.filled).toBe(0);
@@ -185,7 +185,7 @@ describe("backfillUsageParts · 游标与幂等", () => {
     // （`num("坏格")` 读成 0）算推进过，第二趟才发现推不动、收工；所以是
     // 两批而不是一批。要紧的是它有限，不是它等于几。
     expect(select).toHaveBeenCalledTimes(2);
-    expect(r.skipped).toBe(2000);
+    expect(r.skipped).toBe(400);
   });
 
   it("空表不炸", async () => {

@@ -31,8 +31,22 @@ import type Database from "@tauri-apps/plugin-sql";
 
 type Db = Awaited<ReturnType<typeof Database.load>>;
 
-/** 一批多少行。够大，几万行不至于跑上几百个事务；够小，一个事务不会锁太久。 */
-const BATCH = 1000;
+/**
+ * 一批多少行。
+ *
+ * 定在 200 而不是 1000，是为了**缩短每次持写锁的时间**。这一趟走
+ * `sqlTransaction`，Rust 那侧开一条私有连接，一批的 UPDATE 全落在一个事务里，
+ * 期间 SQLite 的写锁归它。而 `recordUsage` 是**永不抛错**的——它撞上
+ * `database is locked` 只会被自己的 try 吞掉，于是账少一行，没有任何东西报错。
+ *
+ * 同一个窗口里这不太会发生（回填挡在项目打开 / 配置加载的 await 上，那时还没有
+ * 请求能完成），但这个应用**允许多开**：A 窗口正在跑一个请求、B 窗口刚开一个
+ * 项目，两边都写 `config.db` 的同一张表。批小五倍，锁窗口就短五倍，对面的
+ * busy timeout 就更容易等得过去。
+ *
+ * 再小就不划算了：几万行意味着几百个事务，每个都要一次 IPC 往返。
+ */
+const BATCH = 200;
 
 /** SQLite 的 REAL / INTEGER 列里塞得进别的东西，读出来的坏格当 0。 */
 function num(v: unknown): number {
