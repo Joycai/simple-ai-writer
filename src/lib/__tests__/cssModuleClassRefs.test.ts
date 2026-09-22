@@ -48,15 +48,11 @@ const ROOT = process.cwd();
 /**
  * 还没修的，连同修它的去处。**这张表要回到空的**——它不是豁免清单，是排队。
  *
- * `FeeGroupDrawer.tsx` 的 `hub.input` / `hub.unset` 指向
- * `ProvidersModels.module.css` 里没有的两个类，整个抽屉的输入框因此退回浏览器
- * 原生样式。发现于计费组那期，正在 `feat/fee-group-search-and-vendor` 上修，
- * 所以 2026-09-22 清理另外九处时没有一并动——那边落地后，删掉这两行。
+ * 2026-09-22 起是空的，也该一直是空的：上一批（九处死类名）与 `FeeGroupDrawer`
+ * 的 `hub.input` / `hub.unset`（唯一一处真缺陷）都已清掉。往里加一行之前先确认
+ * 真的修不动——这张表**不是豁免清单**，它只推迟，不赦免。
  */
-const PENDING: ReadonlySet<string> = new Set([
-  "src/components/settings/panes/FeeGroupDrawer.tsx  hub.input",
-  "src/components/settings/panes/FeeGroupDrawer.tsx  hub.unset",
-]);
+const PENDING: ReadonlySet<string> = new Set<string>([]);
 
 /** ESTree 节点，只用到通用形状：oxc 会给出 TS / JSX 专有的类型，这里不区分。 */
 type Node = { type: string } & Record<string, unknown>;

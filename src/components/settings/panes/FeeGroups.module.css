@@ -242,6 +242,36 @@
 }
 .summaryUnset { color: var(--color-text-faint); }
 
+/* 抽屉里的输入框。
+ *
+ * 和模型抽屉（ModelDrawer.module.css）各写一份、不借 settingsCommon 的 `.input`，
+ * 是为了让**抢同一个 border-color 的三条规则待在同一个文件里**：`.input` 起底、
+ * `.unset` 改虚线、`.badPrice` 改赭石，三者特异性相同，胜负只由源码顺序决定，
+ * 而跨文件的顺序是打包器按模块图排的、不由这里做主。所以顺序即契约：
+ * **`.badPrice` 必须留在 `.unset` 后面**——档位表里没填价的格两个类同时在身上
+ * （`badRate` 判的就是 `num(price) <= 0`，空串正好落进去），作者要先看见「这是错的」。
+ * 只有 `.rateGrid .cell` 靠特异性赢，与顺序无关。 */
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  background: var(--stg-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.input:focus { border-color: var(--color-accent); }
+.input::placeholder { color: var(--stg-text-placeholder); }
+
+/* 头注第 1 条的「空着的输入框」就是这一条：虚线 ＝ 什么也不收。由组件按值是不是
+   空串来挂，不用 :placeholder-shown —— 占位符写的是「0」「任意值」，它们是**这一格
+   留空时的含义**，不是一个待填的样例，靠 CSS 去猜会把含义读反。 */
+.unset { border-style: dashed; border-color: var(--stg-border-menu); }
+
 /* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。 */
 .badPrice { border-color: var(--color-accent); }
 

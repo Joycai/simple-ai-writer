@@ -42,7 +42,7 @@ type NumFieldProps = ReturnType<typeof numField>;
 function NumInput({ value, placeholder, onChange, unset, bad, align = "right" }: NumFieldProps & { align?: "left" | "right" }) {
   return (
     <input
-      className={`${hub.input} ${s.cell} ${hub.mono} ${unset ? hub.unset : ""} ${bad ? s.badPrice : ""}`}
+      className={`${s.input} ${s.cell} ${hub.mono} ${unset ? s.unset : ""} ${bad ? s.badPrice : ""}`}
       type="text"
       inputMode={align === "right" ? "decimal" : "text"}
       value={value}
@@ -179,7 +179,7 @@ export function FeeGroupDrawer({
         <div>
           <div className={ui.sectionLabel}>{t("aiConfig.fees.nameLabel")}</div>
           <input
-            className={hub.input}
+            className={s.input}
             value={d.name}
             placeholder={t("aiConfig.fees.namePlaceholder")}
             onChange={(e) => patch({ name: e.target.value })}
