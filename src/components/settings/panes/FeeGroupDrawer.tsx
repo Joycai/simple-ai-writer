@@ -9,10 +9,6 @@
  * - 缓存价的占位符写「＝ 输入价」而不是「0」——留空是「跟输入价一样」，
  *   填 0 是「缓存真免费」，两件事差着整笔钱。
  * - 档位表三个条件的占位符写「任意」——空条件匹配一切，不是「忘了填」。
- *
- * 输入框用的是设置页自己的那一份（`settingsCommon.module.css` 的 `.input`，
- * 渠道抽屉用的同一个），不是 `ProvidersModels.module.css`——那个文件里没有
- * 输入框样式。
  */
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,7 +23,6 @@ import { feeSummary, hasCatchAllRate, isPriced } from "../../../lib/ai/feeGroupL
 import { useFeeLabelWords } from "./feeWords";
 import hub from "./ProvidersModels.module.css";
 import s from "./FeeGroups.module.css";
-import common from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 
 /** 空着的格画虚线：它说的是「没填」，而填了 0 的格是实线——0 是一个决定。 */
@@ -47,7 +42,7 @@ type NumFieldProps = ReturnType<typeof numField>;
 function NumInput({ value, placeholder, onChange, unset, bad, align = "right" }: NumFieldProps & { align?: "left" | "right" }) {
   return (
     <input
-      className={`${common.input} ${s.cell} ${hub.mono} ${unset ? s.unset : ""} ${bad ? s.badPrice : ""}`}
+      className={`${s.input} ${s.cell} ${hub.mono} ${unset ? s.unset : ""} ${bad ? s.badPrice : ""}`}
       type="text"
       inputMode={align === "right" ? "decimal" : "text"}
       value={value}
@@ -195,7 +190,7 @@ export function FeeGroupDrawer({
         <div>
           <div className={ui.sectionLabel}>{t("aiConfig.fees.nameLabel")}</div>
           <input
-            className={common.input}
+            className={s.input}
             value={d.name}
             placeholder={t("aiConfig.fees.namePlaceholder")}
             onChange={(e) => patch({ name: e.target.value })}
@@ -208,7 +203,7 @@ export function FeeGroupDrawer({
               常被好几个渠道共用，而枚举挡住中转站、自建端点和作者自己想出来
               的整理维度。补全只负责让写法一致。 */}
           <input
-            className={common.input}
+            className={s.input}
             value={d.vendor}
             list="fee-group-vendors"
             placeholder={t("aiConfig.fees.vendorPlaceholder")}

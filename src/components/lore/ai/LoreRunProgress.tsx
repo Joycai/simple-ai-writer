@@ -136,7 +136,7 @@ export function LoreRunSteps({ steps }: { steps: RunStep[] }) {
   return (
     <div className={styles.steps}>
       {steps.map((s, i) => (
-        <div key={i} className={styles.stepBlock}>
+        <div key={i}>
           {i > 0 && <div className={styles.stepConnector} />}
           <div className={`${styles.stepRow} ${s.status === "pending" ? styles.stepPending : ""}`}>
             {s.status === "done" && <span className={styles.stepDone}>✓</span>}

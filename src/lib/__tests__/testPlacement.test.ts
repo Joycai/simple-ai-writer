@@ -68,6 +68,7 @@ const REPO_WIDE_TESTS: Readonly<Record<string, string>> = {
   "agentsMdSync.test.ts": "扫仓库根的 CLAUDE.md 与 AGENTS.md——后者是前者换头生成的镜像，不许漂开",
   "capabilityFamilyRatchet.test.ts": "扫 src/ 全部源码——能力有无不许在调用点按协议族判断（棘轮）",
   "cssKeyframeNames.test.ts": "扫 src/ 全部 .css——@keyframes 的命名空间是全局的",
+  "cssModuleClassRefs.test.ts": "扫 src/ 全部 .tsx 的 AST 与 .module.css——styles.foo 的 foo 必须真的有",
   "docSourceRefs.test.ts": "扫 docs/ 与源码注释——不许写 `文件:行号`",
   "exportReach.test.ts": "扫 src/ 全部导出——每个 export 得有第二个文件用它",
   "focusRing.test.ts": "扫 src/styles/——焦点环只能由 token 画",

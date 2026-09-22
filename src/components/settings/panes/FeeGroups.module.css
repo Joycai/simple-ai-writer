@@ -242,27 +242,38 @@
 }
 .summaryUnset { color: var(--color-text-faint); }
 
-/* 空着的格画虚线：它说的是「没填」，而填了 0 的格是实线——0 是一个决定。
-   和列表行头上那个 7px 方块同一个记号（.mark 虚线 ＝ 没配价），所以作者
-   不用学第二套。
-
-   类名写两遍是这个仓库的约定（理由在 common/Select.tsx 的文件头）：单写
-   一次是 0-1-0，和 settingsCommon 的 .input 打平，谁赢取决于 bundle 里
-   两个模块的先后——那不是一个能靠代码保证的结果。
-
-   `:not(:focus)` 不是为了「聚焦时不画虚线」，是为了**别和 .input:focus
-   打平**：那一条也是 0-2-0，两条 0-2-0 又回到看 bundle 顺序。写进 :not()
-   之后这一条是 0-3-0，聚焦时确定地让位给焦点态——反正焦点本身由全局的
-   :focus-visible 环表达（design-system.md：不要靠边框色表达焦点）。 */
-.unset.unset:not(:focus) {
-  border-style: dashed;
-  border-color: var(--stg-border-menu);
-  color: var(--color-text-faint);
+/* 抽屉里的输入框。
+ *
+ * 和模型抽屉（ModelDrawer.module.css）各写一份、不借 settingsCommon 的 `.input`，
+ * 是为了让**抢同一个 border-color 的三条规则待在同一个文件里**：`.input` 起底、
+ * `.unset` 改虚线、`.badPrice` 改赭石，三者特异性相同，胜负只由源码顺序决定，
+ * 而跨文件的顺序是打包器按模块图排的、不由这里做主。所以顺序即契约：
+ * **`.badPrice` 必须留在 `.unset` 后面**——档位表里没填价的格两个类同时在身上
+ * （`badRate` 判的就是 `num(price) <= 0`，空串正好落进去），作者要先看见「这是错的」。
+ * 只有 `.rateGrid .cell` 靠特异性赢，与顺序无关。 */
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  background: var(--stg-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
 }
+.input:focus { border-color: var(--color-accent); }
+.input::placeholder { color: var(--stg-text-placeholder); }
 
-/* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。
-   同样要压过 .input 的 border 简写，所以同样写两遍。 */
-.badPrice.badPrice { border-color: var(--color-accent); }
+/* 头注第 1 条的「空着的输入框」就是这一条：虚线 ＝ 什么也不收。由组件按值是不是
+   空串来挂，不用 :placeholder-shown —— 占位符写的是「0」「任意值」，它们是**这一格
+   留空时的含义**，不是一个待填的样例，靠 CSS 去猜会把含义读反。 */
+.unset { border-style: dashed; border-color: var(--stg-border-menu); }
+
+/* 只有「这一行没填价」是真错误：整行按 0 计，而作者以为自己配好了。 */
+.badPrice { border-color: var(--color-accent); }
 
 /* 档位表里的格比抽屉里别处的输入框紧一档：一行五格，共享 478px。 */
 .rateGrid .cell {
@@ -294,9 +305,10 @@
    这一行说的始终是「这个组和哪些模型有关」。 */
 .bindHit { color: var(--color-accent); }
 
-/* 搜索框的「有内容」态。类名写两遍是为了压过 hub 的 .searchInput
-   （同样 0-1-0，谁赢取决于两个模块在 bundle 里的先后）。
-   右内边距是给那个绝对定位的 × 让位的——不让，打满一行的查询会钻到它底下。 */
+/* 搜索框的「有内容」态。搜索框本身借的是 ProvidersModels 的 .searchInput
+   （那一份只管布局，不参与这个文件里 border-color 的顺序契约），所以这里
+   把类名写两遍压过它。右内边距是给那个绝对定位的 × 让位的——不让，打满一行
+   的查询会钻到它底下。 */
 .searchOn.searchOn input {
   border-color: var(--color-accent);
   padding-right: var(--space-8);

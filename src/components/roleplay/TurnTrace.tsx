@@ -510,7 +510,7 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea, onUnbind, onEditBi
   return (
     <div className={styles.body}>
       {/* ── 常驻 · 单线，上下出血 ── */}
-      <section className={styles.resident}>
+      <section>
         {resident.length > 0 && <span className={styles.bindResident} aria-hidden />}
         <SectionHead
           label={t("roleplay.trace.resident", {
@@ -590,7 +590,7 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea, onUnbind, onEditBi
       </section>
 
       {/* ── 知识库 · 同一根线，两端有止笔 ── */}
-      <section className={styles.hits}>
+      <section>
         {lore.length > 0 && <span className={styles.bindHit} aria-hidden />}
         <SectionHead
           label={t("roleplay.trace.hits", { n: lore.length, defaultValue: `知识库 · 本轮 ${lore.length}` })}
@@ -666,7 +666,7 @@ export function TraceBody({ trace, onRaiseBudget, onOpenArea, onUnbind, onEditBi
       {/* ── 引用 · 作者轮那道 2px 赭石线 ──
           refs 只有 name 与 dirPath，所以这一段不出现字数。 */}
       {trace.refs.length > 0 && (
-        <section className={styles.refs}>
+        <section>
           <span className={styles.bindRef} aria-hidden />
           <SectionHead
             label={t("roleplay.trace.refs", { n: trace.refs.length, defaultValue: `引用 · 你 @ 的 · ${trace.refs.length}` })}
