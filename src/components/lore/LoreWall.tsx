@@ -45,6 +45,7 @@ import cs from "./collections/collections.module.css";
 import { IMAGE_EXTENSIONS, readImageBytes } from "../../lib/fs/images";
 import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
+import { useAgentStore } from "../../stores/agentStore";
 import { useImageThumbnails } from "./useImageDataUrl";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { useImeGuard } from "../../lib/ime";
@@ -429,10 +430,25 @@ export function LoreWall() {
 
   const categoryMenuItems = (cat: IndexedCategory): ContextMenuEntry[] => {
     const n = counts[cat.id] ?? 0;
+    // 分类说明（docs/feature/lore/folder-note-plan.md §5.2）：三种分类都有——说明住在
+    // 文件夹里而不在声明里，改名/删除那条「只许作者自建」的规矩管不到它；孤儿分类
+    // 反而最需要它。提示词作为一条消息发出去，写入仍要过方案卡。
+    const describe: ContextMenuEntry = {
+      kind: "item", icon: <Sparkles size={13} />, label: t("lore.categoryNote.menu"),
+      action: () => {
+        setCatMenu(null);
+        useAppStore.getState().setShowAiDrawer(true, "chat");
+        void useAgentStore.getState().sendChat(
+          t("lore.categoryNote.prompt", { label: isZh ? cat.labelZh : cat.labelEn, id: cat.id, kb: terms.kb }),
+        );
+      },
+    };
     if (cat.orphan) {
       // orphan ＝ 有条目、但没有能力包声明它。删不了「声明」（本来就没有），但把条目
       // 搬走是真的出路——搬空之后这个文件夹就不再是一个分类。
       return [
+        describe,
+        { kind: "divider" },
         { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.categoryDelete.menuEmpty", { n }),
           action: () => setDeleteCat(cat) },
       ];
@@ -440,11 +456,15 @@ export function LoreWall() {
     if (!isUserCategory(cat.id)) {
       // 藏掉菜单项会让作者以为自己点错了地方。留着、禁用、把理由写在标签上。
       return [
+        describe,
+        { kind: "divider" },
         { kind: "item", icon: <Trash2 size={13} />, label: t("lore.categoryDelete.menu"),
           hint: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
       ];
     }
     return [
+      describe,
+      { kind: "divider" },
       { kind: "item", icon: <Trash2 size={13} />, danger: true, label: t("lore.categoryDelete.menu"),
         action: () => setDeleteCat(cat) },
     ];

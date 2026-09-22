@@ -51,6 +51,7 @@
  */
 
 import i18n from "../../i18n";
+import { writeCategoryNote } from "../lore/categoryNote";
 import { sameCollection, type LoreEntity } from "../lore";
 import { loreCategories } from "../profile/active";
 import { categoryRef } from "../profile/model";
@@ -236,7 +237,7 @@ function categoryList(isZh: boolean): string {
 
 export async function manageCategoryTool(
   toolCallId: string,
-  args: { op?: string; category?: string; new_label?: string },
+  args: { op?: string; category?: string; new_label?: string; description?: string },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const org = organizerOf(toolCallId, ctx);
@@ -277,8 +278,10 @@ export async function manageCategoryTool(
     };
   }
 
+  if (op === "describe") return describeCategory(toolCallId, name, args.description, ctx);
+
   if (op !== "rename" && op !== "delete") {
-    return { toolCallId, content: "Error: 'op' must be one of: create, rename, delete." };
+    return { toolCallId, content: "Error: 'op' must be one of: create, rename, delete, describe." };
   }
 
   const target = findCategory(name);
@@ -340,5 +343,44 @@ export async function manageCategoryTool(
     toolCallId,
     content:
       `Deleted the category ${categoryRef(target, isZh)}. It was empty, so no entry was affected; its (empty) folder stays on disk and is simply no longer offered as a destination.`,
+  };
+}
+
+/**
+ * `manage_category` op `describe`: write the category's note
+ * (`.ai-writer/lore/<id>/index.md`, `lib/lore/categoryNote`).
+ *
+ * Any category with a folder qualifies — declared by a pack, made by the
+ * author, or an orphan the scan found. The note lives in the folder, not in
+ * the declaration, so the "author-made only" rule that guards rename and
+ * delete has nothing to protect here; and an orphan is the category that
+ * needs a description most, since its folder name is all it has.
+ */
+async function describeCategory(
+  toolCallId: string,
+  name: string,
+  description: string | undefined,
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const isZh = i18n.language === "zh-CN";
+  const text = String(description ?? "").trim();
+  if (!text) {
+    return { toolCallId, content: "Error: 'description' is required for 'describe' — the note's whole text, a paragraph at least." };
+  }
+  const declared = findCategory(name);
+  const orphanId = declared
+    ? null
+    : Object.keys(ctx.loreIndex).find((id) => id.toLowerCase() === name.toLowerCase()) ?? null;
+  const id = declared?.id ?? orphanId;
+  if (!id) {
+    return { toolCallId, content: `Error: there is no category "${name}". Existing categories: ${categoryList(isZh)}.` };
+  }
+  const g = gate(toolCallId, ctx, "update", id, "category");
+  if ("refusal" in g) return g.refusal;
+  await writeCategoryNote(ctx.projectPath, id, text);
+  const shown = declared ? categoryRef(declared, isZh) : id;
+  return {
+    toolCallId,
+    content: `Wrote the note for ${shown} (${id}/index.md). list_lore_entities now quotes its first sentence under the category.`,
   };
 }

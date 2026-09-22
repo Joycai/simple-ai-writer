@@ -64,6 +64,12 @@ describe("backlinksOf", () => {
     expect(byTarget.get(TARGET)).toEqual(["大纲.md"]);
   });
 
+  it("counts a folder note's file list — it is a linking document, chapter or not", async () => {
+    fs.set(`${P}/废稿/index.md`, "旧稿。\n\n* [第五章旧版.md](第五章旧版.md) - 被 v2 重写\n");
+    const { byTarget } = await backlinksOf(P, [TARGET]);
+    expect(byTarget.get(TARGET)).toEqual(["废稿/index.md"]);
+  });
+
   it("resolves ../ out of a subfolder", async () => {
     fs.set(`${P}/正稿/第五章.md`, "旧版在 [这里](../废稿/第五章旧版.md)。\n");
     const { byTarget } = await backlinksOf(P, [TARGET]);

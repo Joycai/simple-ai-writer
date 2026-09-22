@@ -212,6 +212,76 @@ describe("list_files", () => {
   it("reports an empty manuscript", async () => {
     expect(await list()).toContain("No files found in the project folder.");
   });
+
+  /**
+   * The folder note (lib/fs/folderNote, docs/feature/lore/folder-note-plan.md).
+   * Two invariants borrowed from the 取材范围 fence: it narrows automatic
+   * discovery only, and what it hides is counted.
+   */
+  describe("folder notes", () => {
+    it("quotes a folder's index.md under its line, with the draft mark when it has one", async () => {
+      fs.set(`${PROJECT}/卷一/index.md`, "# 卷一\n\n主线的前十章，人物设定以此为准。\n\n* [第1章.md](第1章.md) - 开场");
+      fs.set(`${PROJECT}/卷一/第1章.md`, "x");
+      fs.set(`${PROJECT}/草稿/index.md`, "---\nstatus: draft\n---\n随手记的片段。");
+      fs.set(`${PROJECT}/草稿/片段.md`, "x");
+
+      const out = await list();
+
+      expect(out).toContain(`${PROJECT}/卷一\n  (index.md: 主线的前十章，人物设定以此为准。)\n  index.md\n  第1章.md`);
+      expect(out).toContain(`${PROJECT}/草稿\n  (index.md: draft — 随手记的片段。)\n`);
+    });
+
+    it("says nothing for a note with no prose yet — the unfilled template is not a description", async () => {
+      fs.set(`${PROJECT}/卷一/index.md`, "# 卷一\n\n<!-- 怎么填 -->\n");
+      fs.set(`${PROJECT}/卷一/第1章.md`, "x");
+
+      const out = await list();
+
+      expect(out).toContain(`${PROJECT}/卷一\n  index.md\n  第1章.md`);
+      expect(out).not.toContain("(index.md:");
+    });
+
+    it("does not expand a deprecated folder, but counts what it holds and says the way through", async () => {
+      fs.set(`${PROJECT}/第1章.md`, "x");
+      fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n第一版旧稿，人设以 v2 为准。");
+      fs.set(`${PROJECT}/废稿/第1章.md`, "x");
+      fs.set(`${PROJECT}/废稿/卷一/第2章.md`, "x");
+
+      const out = await list();
+
+      expect(out).toContain("1 file in 2 folders");
+      expect(out).toContain(
+        `${PROJECT}/废稿\n  (index.md: deprecated — 第一版旧稿，人设以 v2 为准。 · 3 files here not listed; read_file still opens any of them by path`,
+      );
+      expect(out).not.toContain(`${PROJECT}/废稿/卷一`);
+      expect(out).not.toContain("第2章.md");
+      expect(out).toContain("[3 files in 1 folder marked deprecated in its index.md was not listed");
+    });
+
+    it("lists a deprecated folder in full when it is the folder the model asked for", async () => {
+      fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n旧稿。");
+      fs.set(`${PROJECT}/废稿/第1章.md`, "x");
+      fs.set(`${PROJECT}/废稿/卷一/第2章.md`, "x");
+
+      const out = await list({ folder: "废稿" });
+
+      expect(out).toContain("3 files in 2 folders under 废稿");
+      expect(out).toContain("第1章.md");
+      expect(out).toContain(`${PROJECT}/废稿/卷一\n  第2章.md`);
+      expect(out).toContain("(index.md: deprecated — 旧稿。 · 0 files here not listed");
+      expect(out).not.toContain("marked deprecated in its index.md was not listed");
+    });
+
+    it("is not 'no files' when everything is in a deprecated folder", async () => {
+      fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n旧稿。");
+      fs.set(`${PROJECT}/废稿/第1章.md`, "x");
+
+      const out = await list();
+
+      expect(out).not.toContain("No files found");
+      expect(out).toContain("2 files in 1 folder marked deprecated");
+    });
+  });
 });
 
 describe("read_file", () => {
@@ -722,6 +792,36 @@ describe("search_text", () => {
     expect(await search({ query: "broken sword" })).toContain("L1: The Broken Sword lay there.");
   });
 
+  it("skips a deprecated folder's documents and reports how many, with the way through", async () => {
+    fs.set(`${PROJECT}/卷一/第1章.md`, "他握紧那柄断剑。");
+    fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n旧稿。断剑在这里出现过。");
+    fs.set(`${PROJECT}/废稿/第1章.md`, "断剑。");
+    fs.set(`${PROJECT}/废稿/卷一/第2章.md`, "断剑又出现了。");
+
+    const out = await search({ query: "断剑" });
+
+    expect(out).toContain("1 matching line in 1 document");
+    expect(out).not.toContain("废稿");
+    expect(out).toContain("(3 documents in 1 folder marked deprecated in its index.md was not searched. Pass that folder as 'folder' to search it anyway.)");
+  });
+
+  it("searches a deprecated folder when it is the folder asked for, the note included", async () => {
+    fs.set(`${PROJECT}/废稿/index.md`, "---\nstatus: deprecated\n---\n旧稿。断剑在这里出现过。");
+    fs.set(`${PROJECT}/废稿/第1章.md`, "断剑。");
+
+    const out = await search({ query: "断剑", folder: "废稿" });
+
+    expect(out).toContain("2 matching lines in 2 documents");
+    expect(out).toContain(`${PROJECT}/废稿/index.md`);
+    expect(out).not.toContain("was not searched");
+  });
+
+  it("finds what a stable folder's note says — the note is a document too", async () => {
+    fs.set(`${PROJECT}/卷一/index.md`, "人设以 v2 为准。");
+
+    expect(await search({ query: "v2" })).toContain(`${PROJECT}/卷一/index.md`);
+  });
+
   it("scopes to a subfolder when 'folder' is given", async () => {
     fs.set(`${PROJECT}/卷一/第1章.md`, "断剑");
     fs.set(`${PROJECT}/卷二/第1章.md`, "断剑");
@@ -1091,6 +1191,21 @@ describe("formatLoreIndex", () => {
     expect(out).toContain("[characters(人物)]");
     // The pairing sentence rides along: parameters take the id, not the label.
     expect(out).toContain("take the id, never the label");
+  });
+
+  it("quotes a category's note after its header, and only for categories that have one", () => {
+    const out = formatLoreIndex(
+      {
+        characters: [{ name: "Aria", summary: "骑士" } as never],
+        npcs: [{ name: "Guard", summary: "" } as never],
+      },
+      null,
+      undefined,
+      true,
+      { characters: "有名字、会推动剧情的人。" },
+    );
+    expect(out).toContain("[characters(人物)] — 有名字、会推动剧情的人。\n");
+    expect(out).toMatch(/\[npcs\] {2}\(no enabled capability pack/);
   });
 
   it("lists declared-but-empty categories as valid targets instead of hiding them", () => {

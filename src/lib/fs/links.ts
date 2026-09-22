@@ -15,6 +15,7 @@
 
 import { readDirRecursive, type FileNode } from "../project";
 import { isChapterFile } from "../context/outline";
+import { isFolderNoteFile } from "./folderNote";
 import { readFile } from "./fileio";
 import { baseName, dirName, joinPath, projectRelative, toPosixPath } from "../paths";
 
@@ -94,12 +95,17 @@ export async function workspaceDocuments(projectPath: string): Promise<string[]>
   return documentsIn(await readDirRecursive(projectPath));
 }
 
-/** Text documents only — a picture cannot link to anything. */
+/**
+ * Text documents only — a picture cannot link to anything. The folder note is
+ * not a chapter but it *is* a linking document: its file list points at the
+ * folder's files by name, and "index.md links to this" is exactly what the
+ * author wants to hear before deleting one of them.
+ */
 function documentsIn(nodes: readonly FileNode[]): string[] {
   const out: string[] = [];
   for (const node of nodes) {
     if (node.is_dir) out.push(...documentsIn(node.children ?? []));
-    else if (isChapterFile(node.name)) out.push(node.path);
+    else if (isChapterFile(node.name) || isFolderNoteFile(node.name)) out.push(node.path);
   }
   return out;
 }

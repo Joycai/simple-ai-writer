@@ -22,6 +22,13 @@ describe("rowKind", () => {
     expect(rowKind("README", false, null)).toBe("original");
   });
 
+  it("knows the folder note by its name, wherever it sits", () => {
+    expect(rowKind("index.md", false, null)).toBe("note");
+    expect(rowKind("index.md", false, "第一卷")).toBe("note");
+    expect(isSecondary("note")).toBe(false);
+    expect(extLabel("index.md", "note")).toBeNull();
+  });
+
   it("makes a folder an assets group by its parent, not by its name", () => {
     // An author may well have an ordinary group called 插图.
     expect(rowKind("插图", true, "素材")).toBe("folder");

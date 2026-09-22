@@ -122,6 +122,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [lore-retrieval-plan.md](feature/lore/lore-retrieval-plan.md) | `shipped` | 取材准确度第 0–2 级：作者意图进匹配靶、`[[lore:…]]` 引用图扩展、查询扩展喂回子串匹配器。三条不变量（子串通道优先 · 每条命中都要可解释可动手 · 无静默截断）；向量通道为什么推迟，以及重启条件（§6.1）。实现出入在 §9——尤其 §9.1：引用带入的条目**不能**挂 L0 保底层，那一层不受预算限制 |
 | [lore-granularity-research.md](feature/lore/lore-granularity-research.md) | `research` | Six directions surveyed. 1+3 became the facet plan; 2, 4, 6 are still open |
 | [okf-folder-metadata-research.md](feature/lore/okf-folder-metadata-research.md) | `research` | 目录说明文件与 OKF 元数据（2026-09-22）：先核实助手只在自己调 `list_files` / `search_text` / `read_file` 时才碰工作区文档，从不整体注入；Google 的 Open Knowledge Format v0.2 是什么、知识库已经是它的形状而注入语义比它多；两处工程约束（`serializeEntityFrontmatter` 丢未知键、`parseFrontmatter` 读不了嵌套）；三步建议：条目 `status` → 工作区 `index.md` 说明文件（借取材范围围栏的两条不变量）→ 分类 `index.md`；明确不做 `log.md` 与数字参考度 |
+| [folder-note-plan.md](feature/lore/folder-note-plan.md) | `implemented` | 目录说明文件 `index.md`（2026-09-22）：任意目录（含知识库分类文件夹）可放一份，`status: draft/stable/deprecated` 是唯一机读键、首段是摘要；读侧三处（`list_files` 挂摘要且 `deprecated` 不展开只报数、`search_text` 跳过并报数、当前文件简报多一行），书脊不读它；写侧工作区不加工具、分类走 `manage_category` 的 `describe`；入口是文件树目录右键与知识库墙分类右键，提示词作为一条消息发出、写入仍过卡 |
 | [lore-category-manage-plan.md](feature/lore/lore-category-manage-plan.md) | `shipped` | 分类的管理面三片：墙上多选批量改分类（含置顶重指）·「删除分类」的两出口确认（两扇门共用一次，orphan 拿到搬空这条出路）· agent 方案卡的分类 target 轴（一行替十二行，含「哪种步骤装哪组延迟工具」那条踩过的坑）。为什么分类和集合的管理面天生不对称 |
 
 ### feature/knowledge-base/ — the sync server

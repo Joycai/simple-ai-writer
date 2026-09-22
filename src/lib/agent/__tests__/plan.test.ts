@@ -250,6 +250,11 @@ describe("planLoadsEntityWrites / planLoadsOrganize", () => {
   it("新建分类要的是组织结构工具", () => {
     expect(planLoadsOrganize([categoryCreate])).toBe(true);
     expect(planLoadsEntityWrites([categoryCreate])).toBe(false);
+    // The category note (manage_category 'describe') is a category/update
+    // step, and the tool that writes it lives in lore_organize too.
+    const categoryDescribe = { ...categoryCreate, action: "update" as const };
+    expect(planLoadsOrganize([categoryDescribe])).toBe(true);
+    expect(planLoadsEntityWrites([categoryDescribe])).toBe(false);
   });
 
   it("两组互不牵连：改正文的方案不该顺手拿到集合工具，反过来也一样", () => {

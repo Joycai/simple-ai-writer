@@ -8,10 +8,11 @@ import { AudioLines,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
   ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
-  Monitor, Presentation, X,
+  Monitor, Presentation, X, NotebookPen, NotebookText,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
+import { FOLDER_NOTE_FILE, folderNoteTemplate, isFolderNoteFile } from "../../lib/fs/folderNote";
 import { fileExists, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
@@ -208,6 +209,8 @@ function RowIcon({ kind, open, orphan }: { kind: RowKind; open: boolean; orphan:
       // ——「插图」绑着一份文档、有修复动作，「图片」就是个目录。
       case "pictures": return <Images size={16} strokeWidth={1.5} />;
       case "doc": return <FileText size={16} strokeWidth={1.6} />;
+      // 目录说明：同一枚「本子」——它说的是这个目录，不是一章。
+      case "note": return <NotebookText size={16} strokeWidth={1.6} />;
       case "deliverable": return <FileCode size={16} strokeWidth={1.6} />;
       case "image": return <FileImage size={16} strokeWidth={1.5} />;
       default: return <File size={16} strokeWidth={1.6} />;
@@ -489,6 +492,7 @@ const TreeNode = memo(function TreeNode({
     }
     if (kind === "assets") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.assetsLabel")}</span>;
     if (kind === "pictures") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.picturesLabel")}</span>;
+    if (kind === "note") return <span className={`${styles.rightCol} ${styles.ext}`}>{t("fileTree.noteLabel")}</span>;
     if (node.is_dir) {
       return docCount > 0
         ? <span className={styles.rightCol} title={t("fileTree.dirCount", { count: docCount })}>{docCount}</span>
@@ -657,7 +661,7 @@ interface CtxMenuState { x: number; y: number; node: FileNode | null }
 // ── Main FileTree ─────────────────────────────────────────────────────────────
 
 export function FileTree() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Field selectors, not a whole-store destructure: projectStore is also where
   // the word/char counters live, and those are written on every keystroke —
   // an unselected subscription re-rendered the entire tree per character typed.
@@ -1509,6 +1513,29 @@ export function FileTree() {
     useAppStore.getState().setShowAiDrawer(true, "chat");
   };
 
+  /**
+   * 目录说明（docs/feature/lore/folder-note-plan.md §5.1）：目录里没有 index.md 就
+   * 先写入模板并在编辑器里打开，然后把填写提示词**作为一条消息发出去**——菜单项
+   * 的名字就是「交给助手」，作者点它就是在下这条指令，再让他按一次回车是把一次
+   * 点击拆成两次。写入本身仍走 rewrite_document 的批准卡，作者照样要点一次头。
+   */
+  const askFolderNote = async (node: FileNode, exists: boolean) => {
+    setMenu(null);
+    const path = `${node.path}/${FOLDER_NOTE_FILE}`;
+    if (!exists) {
+      try {
+        await createEntry(node.path, FOLDER_NOTE_FILE, "file", folderNoteTemplate(node.name, i18n.language === "zh-CN"));
+      } catch (e) {
+        setTransferError(`${t("fileTree.folderNoteFailed", { name: node.name })} ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+    }
+    treeOpenedRef.current = path;
+    setActiveFilePath(path);
+    useAppStore.getState().setShowAiDrawer(true, "chat");
+    void useAgentStore.getState().sendChat(t("fileTree.folderNotePrompt", { name: node.name, path: node.path }));
+  };
+
   const reveal = (path: string) => {
     revealItemInDir(path).catch(() => { /* best-effort */ });
   };
@@ -1610,6 +1637,13 @@ export function FileTree() {
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => void handleImport(node.path) },
       );
+      // 目录说明还是「造」的一种：没有就新建并交给助手，有了就让助手更新。
+      const hasNote = (node.children ?? []).some((c) => !c.is_dir && isFolderNoteFile(c.name));
+      items.push({
+        kind: "item", icon: <NotebookPen size={13} />,
+        label: t(hasNote ? "fileTree.folderNoteUpdate" : "fileTree.folderNoteCreate"),
+        action: () => void askFolderNote(node, hasNote),
+      });
       // 只长在戴着 ⚠ 的那种分组上，而且只在真有可选的文档时 —— 一项点开发现
       // 「没有候选」的菜单项，比没有这一项更糟。
       if (orphanAssets.has(node.path) && relinkCandidates(fileTree, node.path).length > 0) {

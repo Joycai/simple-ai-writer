@@ -261,8 +261,16 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../packs";
  * asymmetry that justified the gap turned out to rest on a wrong premise —
  * a category's id *is* its folder, and a rename only rewrites the label, so
  * nothing moves on disk. See `agent/organizeTools`' header.
+ *
+ * **17,040** (cap 16,900 → 17,100) with the folder note
+ * (docs/feature/lore/folder-note-plan.md): one sentence on `list_files`
+ * (~46 tokens, resident — the only way the model learns that the line under a
+ * folder is the author's note and that a deprecated folder was counted, not
+ * listed; the rest of the rule rides in the tool result, on purpose) and
+ * `manage_category`'s `describe` op (~120 tokens, all deferred in
+ * `lore_organize`).
  */
-const AGENT_ASSIST_CAP = 16_900;
+const AGENT_ASSIST_CAP = 17_100;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
@@ -291,8 +299,8 @@ const AGENT_ASSIST_CAP = 16_900;
  * route to those files is the author converting each by hand first.
  */
 const WRITE_CAP = 4_800;
-/** The read tier a 续写 carries. Measured 1,738; 1,964 with `read_document`. */
-const CONTINUE_CAP = 2_000;
+/** The read tier a 续写 carries. Measured 1,738; 1,964 with `read_document`; 2,010 with the folder-note sentence on `list_files`. */
+const CONTINUE_CAP = 2_100;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
 const NARRATOR_CAP = 7_000;
 const ROLEPLAY_CAP = 2_500;
@@ -451,12 +459,14 @@ describe("tool schema budget", () => {
     // more that load only when the shared plan gate's steps demand),
     // export 2,889. The caps have the usual ratchet slack; a trip means a
     // pack quietly grew past what the dispatch was supposed to buy.
+    // file_write 5,433 once `list_files` learned the folder note (the same
+    // sentence priced on the assistant above).
     expect(estimateToolsTokens(getToolDefinitions(["run_pack"]))).toBeLessThanOrEqual(400);
     const residentOf = (pack: keyof typeof PACK_PRESETS) =>
       estimateToolsTokens(getToolDefinitions(
         partitionByGroup(PACK_PRESETS[pack].tools, PACK_PRESETS[pack].residentGroups).resident,
       ));
-    expect(residentOf("file_write")).toBeLessThanOrEqual(5_400);
+    expect(residentOf("file_write")).toBeLessThanOrEqual(5_500);
     expect(residentOf("lore_edit")).toBeLessThanOrEqual(2_600);
     expect(residentOf("export")).toBeLessThanOrEqual(3_200);
   });

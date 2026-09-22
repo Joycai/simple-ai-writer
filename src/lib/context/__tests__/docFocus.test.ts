@@ -97,3 +97,24 @@ describe("documentBrief", () => {
     expect(brief).toMatch(/空文件|empty file/);
   });
 });
+
+describe("documentBrief · folder note", () => {
+  const note = (status: "draft" | "stable" | "deprecated", summary: string | null) =>
+    ({ dir: "/p/卷一", note: { status, summary }, deprecated: status === "deprecated" });
+
+  it("adds the nearest folder note as one line, with the status when it is not stable", () => {
+    expect(documentBrief(DOC, { folder: note("stable", "主线。") })).toContain("所在目录说明: 主线。");
+    expect(documentBrief(DOC, { folder: note("draft", "草稿。") })).toContain("所在目录说明（draft）: 草稿。");
+  });
+
+  it("says the file sits in a deprecated folder, even when the nearest note has no prose", () => {
+    const out = documentBrief(DOC, { folder: note("deprecated", null) });
+    expect(out).not.toContain("所在目录说明");
+    expect(out).toContain("标为 deprecated");
+  });
+
+  it("says nothing about folders when there is no note", () => {
+    const out = documentBrief(DOC, { folder: null });
+    expect(out).not.toContain("目录");
+  });
+});

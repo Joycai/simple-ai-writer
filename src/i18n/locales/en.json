@@ -1013,6 +1013,8 @@
         "empty": "empty file (nothing written yet)",
         "words": "~{{n}} words",
         "moreHeadings": "…and {{n}} more sections",
+        "folderNote": "Folder note",
+        "folderDeprecated": "(This file sits in a folder marked deprecated — no longer consulted.)",
         "notice": "(The text itself was NOT injected into this conversation. If this file turns out to be relevant to the author's question, read the path above with read_file — or use search_text to find one spot in it. When the author says \"this passage\", \"this chapter\", \"continue writing\" and the like, the text comes along automatically.)"
       },
       "taskResume": "[Resumed Task]\nBelow is the saved progress and notes index for this task:\n\n## Task Status & Plan\n{{body}}\n\n## Saved Notes Index\n{{notes}}{{stale}}\n\nPlease proceed directly with the unfinished steps based on the current plan and notes. Use read_note to read full note contents if needed.",
@@ -3256,6 +3258,10 @@
       "note": "A category is a folder on disk, so these entries move with it; [[lore:category/id]] citations re-point to the new location.",
       "failed": "These could not be moved: {{list}}"
     },
+    "categoryNote": {
+      "menu": "Have the assistant describe this category",
+      "prompt": "Write the note for the {{kb}} category \"{{label}}\" (id: {{id}}). First call list_lore_entities to see what is in it and read_lore_entity on two or three entries; then submit a one-step plan with propose_lore_plan (target category, action update, entity {{id}}), and once approved call manage_category with op describe to write it: a first paragraph of one or two sentences on what belongs in this category and how its entries are used when writing, optionally followed by a few representative entries. No explanation afterwards."
+    },
     "categoryDelete": {
       "menu": "Delete category…",
       "menuEmpty": "Move {{n}} out and empty…",
@@ -3531,6 +3537,11 @@
     "deleteMany": "Delete {{count}} items",
     "dragCount": "{{count}} items",
     "newFileHere": "New document here",
+    "noteLabel": "NOTE",
+    "folderNoteCreate": "New folder note, filled by the assistant",
+    "folderNoteUpdate": "Have the assistant update the folder note",
+    "folderNoteFailed": "Could not create the folder note for \"{{name}}\".",
+    "folderNotePrompt": "Write the folder note for \"{{name}}\" — the file is {{path}}/index.md. First call list_files with that folder to see what it holds, and read_file the opening of a few files if needed; then use rewrite_document to replace {{path}}/index.md entirely with: a title line; a first paragraph of one or two sentences saying what this folder holds and how to use it when writing; below it, the main files and subfolders as `* [name](name) - one line`. If the folder should no longer be consulted (an old or discarded draft), put `status: deprecated` in frontmatter at the very top; a work-in-progress folder gets `status: draft`; a normal folder gets no frontmatter. No explanation afterwards.",
     "newFolderHere": "New group here",
     "collapseAll": "Collapse all",
     "expandAll": "Expand all",

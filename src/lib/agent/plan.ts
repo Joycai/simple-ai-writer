@@ -106,9 +106,9 @@ export function stepTarget(step: LorePlanStep): LorePlanTarget {
  *
  *   lore_write     条目步骤（写正文/元数据/改名…），以及**搬进某个分类**那种
  *                  category 步骤——兑现它的是 `move_lore_entity`，它在这一组里。
- *   lore_organize  集合步骤（建/改名/删/归集），以及**新建分类**那种 category
- *                  步骤——兑现它们的是 `manage_collection` / `file_lore_entries` /
- *                  `manage_category`。
+ *   lore_organize  集合步骤（建/改名/删/归集），以及**新建分类**、**写分类说明**
+ *                  （category/update）那两种 category 步骤——兑现它们的是
+ *                  `manage_collection` / `file_lore_entries` / `manage_category`。
  *
  * 两边都不是「有非条目步骤就全装」：批准一份「改写条目正文」的方案不该顺手把集合
  * 工具塞进来，反过来也一样。
@@ -122,7 +122,11 @@ export function planLoadsEntityWrites(steps: readonly LorePlanStep[]): boolean {
 /** @see planLoadsEntityWrites */
 export function planLoadsOrganize(steps: readonly LorePlanStep[]): boolean {
   return steps.some(
-    (s) => stepTarget(s) === "collection" || (stepTarget(s) === "category" && s.action === "create"),
+    (s) =>
+      stepTarget(s) === "collection" ||
+      // create → manage_category; update → its 'describe' op (the category
+      // note). Both live in lore_organize, so both have to load it.
+      (stepTarget(s) === "category" && (s.action === "create" || s.action === "update")),
   );
 }
 

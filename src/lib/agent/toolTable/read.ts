@@ -15,6 +15,8 @@ import { readMemoryTool } from "../writeTools";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../../workflow";
 import { describeSearchTools, runSearchTools } from "../toolSearch";
 
+import { readCategoryNotes } from "../../lore/categoryNote";
+
 import { parseArgs, cursorArg, CATEGORY_PLACEHOLDER, galleryViewer } from "./shared";
 import type { RegisteredTool, ToolId } from "../toolTypes";
 
@@ -32,7 +34,13 @@ export const READ_TOOLS = {
     },
     execute: async (call, ctx) => ({
       toolCallId: call.id,
-      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope, ctx.organize?.collections, i18n.language === "zh-CN"),
+      content: formatLoreIndex(
+        ctx.loreIndex, ctx.loreScope, ctx.organize?.collections, i18n.language === "zh-CN",
+        // Read here, at call time, rather than carried on the run snapshot:
+        // a note written mid-run (manage_category 'describe') shows up on the
+        // next listing without anyone folding it back in.
+        await readCategoryNotes(ctx.projectPath, Object.keys(ctx.loreIndex)),
+      ),
     }),
   },
 
@@ -148,7 +156,7 @@ export const READ_TOOLS = {
       function: {
         name: "list_files",
         description:
-          "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like `ls -R`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \"/\" + the filename. Use this to see what files exist; to find where something is written, use search_text instead.",
+          "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like `ls -R`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \"/\" + the filename. A folder's own index.md (the author's note on it) is quoted under the folder line; a folder whose note says deprecated is only counted, not expanded. Use this to see what files exist; to find where something is written, use search_text instead.",
         parameters: {
           type: "object",
           properties: {

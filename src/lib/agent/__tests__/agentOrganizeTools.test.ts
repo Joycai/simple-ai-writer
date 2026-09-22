@@ -21,6 +21,13 @@ import {
 import type { LoreOrganizer, ToolContext } from "../registry";
 import type { LoreEntity, LoreEntityAddress, LoreIndex } from "../../lore";
 
+// The category note is written straight to disk (no organizer method: it is a
+// file in the folder, not part of the declaration). Captured here.
+const notes: [string, string, string][] = [];
+vi.mock("../../lore/categoryNote", () => ({
+  writeCategoryNote: vi.fn(async (p: string, id: string, text: string) => { notes.push([p, id, text]); }),
+}));
+
 function entity(name: string, collections: string[] = []): LoreEntity {
   return {
     id: name.toLowerCase(),
@@ -108,6 +115,7 @@ const collectionStep = (p: Partial<LorePlanStep> & { action: LorePlanStep["actio
   ({ target: "collection", detail: "—", ...p });
 
 beforeEach(() => {
+  notes.length = 0;
   calls = { created: [], renamed: [], deleted: [], filed: [], categories: [], renamedCategories: [], deletedCategories: [] };
   declared = ["小说A", "小说B"];
   userCategories = [];
@@ -217,6 +225,38 @@ describe("file_lore_entries", () => {
     const r = await fileLoreEntriesTool("c1", { entities: ["Aria"], remove: ["小说A"] }, ctxWith([open]));
     expect(calls.filed).toHaveLength(1);
     expect(r.content).toContain("out of");
+  });
+});
+
+describe("manage_category · describe", () => {
+  const step = (entity: string): LorePlanStep => ({ target: "category", action: "update", entity, detail: "—" });
+
+  it("writes the note for a pack-declared category once a category/update step approves it", async () => {
+    const r = await manageCategoryTool(
+      "c1", { op: "describe", category: "人物", description: "有名字、会推动剧情的人。" }, ctxWith([step("characters")]),
+    );
+    expect(notes).toEqual([["/p", "characters", "有名字、会推动剧情的人。"]]);
+    expect(r.content).toContain("characters/index.md");
+  });
+
+  it("writes it for an orphan folder too — the category that needs a description most", async () => {
+    const ctx = ctxWith([step("npcs")]);
+    ctx.loreIndex = { ...INDEX, npcs: [entity("Guard")] };
+    const r = await manageCategoryTool("c1", { op: "describe", category: "NPCs", description: "路人。" }, ctx);
+    expect(notes.map((n) => n[1])).toEqual(["npcs"]);
+    expect(r.content).toContain("npcs/index.md");
+  });
+
+  it("refuses without the step, and refuses a category that does not exist", async () => {
+    let r = await manageCategoryTool("c1", { op: "describe", category: "人物", description: "x" }, ctxWith([]));
+    expect(r.content).toContain("need an approved plan");
+    r = await manageCategoryTool("c1", { op: "describe", category: "人物", description: "x" }, ctxWith([step("world")]));
+    expect(r.content).toContain("does not cover");
+    r = await manageCategoryTool("c1", { op: "describe", category: "幽灵", description: "x" }, ctxWith([step("幽灵")]));
+    expect(r.content).toContain('no category "幽灵"');
+    r = await manageCategoryTool("c1", { op: "describe", category: "人物" }, ctxWith([step("characters")]));
+    expect(r.content).toContain("'description' is required");
+    expect(notes).toEqual([]);
   });
 });
 
