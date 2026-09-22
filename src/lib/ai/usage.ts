@@ -37,6 +37,25 @@ export interface UsageBucket {
   /** 按规格计费却没命中任何档位、上游也没报价的请求数——按 0 计的那些。 */
   uncovered: number;
   costUsd: number;
+  /**
+   * `costUsd` 按「钱花在哪一种量上」拆开的六份，用量页的计量条按它上色。
+   *
+   * 不是在这里算出来的：每一行记账时就把 `costOf()` 的结果折成六段抄在行上
+   * （lib/ai/usageRow.ts），这里只 `SUM` 那几列。**不重算，就没有第二套口径。**
+   */
+  costInput: number;
+  costCache: number;
+  costOutput: number;
+  costCount: number;
+  costDuration: number;
+  costOther: number;
+  /**
+   * 这个桶里**分不出段**的钱：来自分项列还是 NULL 的老行。
+   *
+   * 单独数成一份而不是摊进六段，也不是假装它不存在——`costInput + … +
+   * costOther + costUnsplit` 必须等于 `costUsd`，条才不会比行尾那个金额短一截。
+   */
+  costUnsplit: number;
 }
 
 export interface UsageSummary {
@@ -104,6 +123,13 @@ export function rowToBucket(r: Record<string, unknown>): UsageBucket {
     outputUnits: num(r.output_units),
     uncovered: num(r.uncovered),
     costUsd: num(r.cost_usd),
+    costInput: num(r.cost_input),
+    costCache: num(r.cost_cache),
+    costOutput: num(r.cost_output),
+    costCount: num(r.cost_count),
+    costDuration: num(r.cost_duration),
+    costOther: num(r.cost_other),
+    costUnsplit: num(r.cost_unsplit),
   };
 }
 
@@ -118,8 +144,20 @@ export function sumBuckets(key: string, buckets: UsageBucket[]): UsageBucket {
       outputUnits: acc.outputUnits + b.outputUnits,
       uncovered: acc.uncovered + b.uncovered,
       costUsd: acc.costUsd + b.costUsd,
+      costInput: acc.costInput + b.costInput,
+      costCache: acc.costCache + b.costCache,
+      costOutput: acc.costOutput + b.costOutput,
+      costCount: acc.costCount + b.costCount,
+      costDuration: acc.costDuration + b.costDuration,
+      costOther: acc.costOther + b.costOther,
+      costUnsplit: acc.costUnsplit + b.costUnsplit,
     }),
-    { key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0, uncovered: 0, costUsd: 0 },
+    {
+      key, calls: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0, outputUnits: 0,
+      uncovered: 0, costUsd: 0,
+      costInput: 0, costCache: 0, costOutput: 0, costCount: 0, costDuration: 0, costOther: 0,
+      costUnsplit: 0,
+    },
   );
 }
 
@@ -229,6 +267,13 @@ export type UsageScope = "project" | "global";
  * `uncovered` 数的是「按规格计费却没命中任何档位、上游也没报价」的请求——
  * 那些请求按 0 计，用量页据此提醒用户去补档位表。`spec_matched IS NULL` 的
  * 老行不算：它们记下来的时候还没有档位表这回事。
+ *
+ * 六条 `cost_*` 是计量条的分段，`cost_unsplit` 是这个桶里分不出段的钱。
+ * 它们**一样是 `SUM` 一个落了盘的结果**，不是在 SQL 里把 `costOf()` 的分支
+ * 重写一遍——那会是第二套口径，而第二套口径记错钱的时候不报错。
+ *
+ * `cost_input IS NULL` 就是「这一行没有分项快照」的判据：新行六列必写（哪怕
+ * 是 0），老行六列全空。所以拿第一列判一次就够，不必六列都查。
  */
 const ROLLUP_SELECT = `COUNT(*) AS calls,
          SUM(prompt_tokens) AS prompt_tokens,
@@ -236,7 +281,14 @@ const ROLLUP_SELECT = `COUNT(*) AS calls,
          SUM(completion_tokens) AS completion_tokens,
          SUM(COALESCE(output_units, 0)) AS output_units,
          SUM(CASE WHEN spec_matched = 0 AND reported_cost IS NULL THEN 1 ELSE 0 END) AS uncovered,
-         SUM(cost_usd) AS cost_usd`;
+         SUM(cost_usd) AS cost_usd,
+         SUM(COALESCE(cost_input, 0)) AS cost_input,
+         SUM(COALESCE(cost_cache, 0)) AS cost_cache,
+         SUM(COALESCE(cost_output, 0)) AS cost_output,
+         SUM(COALESCE(cost_count, 0)) AS cost_count,
+         SUM(COALESCE(cost_duration, 0)) AS cost_duration,
+         SUM(COALESCE(cost_other, 0)) AS cost_other,
+         SUM(CASE WHEN cost_input IS NULL THEN cost_usd ELSE 0 END) AS cost_unsplit`;
 
 const rollupSql = (column: "model_id" | "task" | "project" | "billing_mode") =>
   `SELECT COALESCE(${column}, '') AS key, ${ROLLUP_SELECT}

@@ -32,6 +32,13 @@ const bucket = (over: Partial<UsageBucket>): UsageBucket => ({
   outputUnits: 0,
   uncovered: 0,
   costUsd: 0,
+  costInput: 0,
+  costCache: 0,
+  costOutput: 0,
+  costCount: 0,
+  costDuration: 0,
+  costOther: 0,
+  costUnsplit: 0,
   ...over,
 });
 
@@ -95,6 +102,37 @@ describe("rowToBucket", () => {
   it("survives a row whose key is missing rather than rendering 'undefined'", () => {
     expect(rowToBucket({ calls: 1 }).key).toBe("");
   });
+
+  it("reads the six cost segments and the unsplit remainder", () => {
+    const b = rowToBucket({
+      key: "m1", calls: 4, cost_usd: 1,
+      cost_input: 0.2, cost_cache: 0.05, cost_output: 0.5,
+      cost_count: 0.1, cost_duration: 0.05, cost_other: 0.02,
+      cost_unsplit: 0.08,
+    });
+    expect(b.costInput).toBe(0.2);
+    expect(b.costCache).toBe(0.05);
+    expect(b.costOutput).toBe(0.5);
+    expect(b.costCount).toBe(0.1);
+    expect(b.costDuration).toBe(0.05);
+    expect(b.costOther).toBe(0.02);
+    expect(b.costUnsplit).toBe(0.08);
+  });
+
+  // 一个全是老行的桶：六列都没有，钱全在 `cost_unsplit` 里。NULL 要读成 0，
+  // 否则每一段都变成 NaN，条的 flexGrow 就全塌了。
+  it("coerces the segment NULLs an all-legacy group returns", () => {
+    const b = rowToBucket({
+      key: "m1", calls: 9, cost_usd: 2,
+      cost_input: null, cost_cache: null, cost_output: null,
+      cost_count: null, cost_duration: null, cost_other: null,
+      cost_unsplit: 2,
+    });
+    expect(b.costInput + b.costCache + b.costOutput + b.costCount + b.costDuration + b.costOther)
+      .toBe(0);
+    expect(b.costUnsplit).toBe(2);
+    expect(Number.isNaN(b.costInput + 1)).toBe(false);
+  });
 });
 
 describe("sumBuckets", () => {
@@ -110,6 +148,36 @@ describe("sumBuckets", () => {
 
   it("is zero, not undefined, with nothing recorded", () => {
     expect(sumBuckets("total", [])).toEqual(bucket({ key: "total" }));
+  });
+
+  // 抬头那个总数是从 `byModel` 加出来的，所以这里漏掉一个分项字段，抬头的条
+  // 就会和它下面那几行对不上——而那种对不上不报错。
+  it("adds the cost segments too, not just the total", () => {
+    const total = sumBuckets("total", [
+      bucket({ key: "a", costUsd: 0.6, costInput: 0.1, costCache: 0.05, costOutput: 0.3, costCount: 0.1, costDuration: 0.05, costOther: 0 }),
+      bucket({ key: "b", costUsd: 0.4, costInput: 0.2, costCache: 0, costOutput: 0.1, costCount: 0, costDuration: 0, costOther: 0.05, costUnsplit: 0.05 }),
+    ]);
+    expect(total.costInput).toBeCloseTo(0.3, 12);
+    expect(total.costCache).toBeCloseTo(0.05, 12);
+    expect(total.costOutput).toBeCloseTo(0.4, 12);
+    expect(total.costCount).toBeCloseTo(0.1, 12);
+    expect(total.costDuration).toBeCloseTo(0.05, 12);
+    expect(total.costOther).toBeCloseTo(0.05, 12);
+    expect(total.costUnsplit).toBeCloseTo(0.05, 12);
+  });
+
+  // 守恒律：六段 + 分不出段的那份 === 总额。条按六段画、行尾印的是总额，
+  // 两者对不上就是条比金额短一截或长一截。
+  it("keeps segments + unsplit equal to the total", () => {
+    const parts = [
+      bucket({ key: "a", costUsd: 1, costInput: 0.2, costCache: 0.1, costOutput: 0.5, costCount: 0.15, costDuration: 0.05, costOther: 0 }),
+      bucket({ key: "b", costUsd: 0.5, costUnsplit: 0.5 }),
+      bucket({ key: "c", costUsd: 0.25, costOther: 0.25 }),
+    ];
+    const total = sumBuckets("total", parts);
+    const split = total.costInput + total.costCache + total.costOutput
+      + total.costCount + total.costDuration + total.costOther + total.costUnsplit;
+    expect(split).toBeCloseTo(total.costUsd, 12);
   });
 });
 
