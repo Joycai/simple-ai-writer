@@ -338,9 +338,9 @@ export function DocFormatDrawer({
                 </div>
                 <div className={styles.onBlockExample}>
                   <span className={styles.onBlockExLabel}>{t("docxFormat.drawer.numberingExLabel")}</span>
-                  <span className={styles.onBlockExText}>{exPrefix}{exRest}</span>
+                  <span>{exPrefix}{exRest}</span>
                   <span className={styles.onBlockArrow}>→</span>
-                  <span className={styles.onBlockExText}>{exPrefix}<mark className={styles.onBlockDup}>{exPrefix}</mark>{exRest}</span>
+                  <span>{exPrefix}<mark className={styles.onBlockDup}>{exPrefix}</mark>{exRest}</span>
                 </div>
                 <div className={styles.onBlockFoot}>{t("docxFormat.drawer.numberingOnFoot")}</div>
               </div>
