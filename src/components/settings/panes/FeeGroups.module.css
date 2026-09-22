@@ -264,3 +264,27 @@
   padding: 6px 8px;
   font-size: var(--font-size-sm);
 }
+
+/* ─── 搜索与厂商分段（设计稿 05l 屏 2a/2b/2c）────────────────────────────── */
+
+/* 搜索框满栏：这一页没有工具条，它是列表之上唯一的一行控件。 */
+.searchRow {
+  margin-top: var(--space-6);
+}
+
+.searchCount {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+/* 段首右边的「N 组」。等宽，因为它是个数。 */
+.sectionCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+/* 「命中模型 …」。它替换的是同一行的「N 个模型」，所以只换颜色不换字号——
+   这一行说的始终是「这个组和哪些模型有关」。 */
+.bindHit { color: var(--color-accent); }

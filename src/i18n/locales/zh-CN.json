@@ -2926,7 +2926,14 @@
       "pickNoMatch": "没有匹配的计费组",
       "vendorLabel": "厂商",
       "vendorPlaceholder": "留空 ＝ 不分段",
-      "vendorHint": "自由填写，已经用过的写法会自动补上。它只用来把列表分段，不参与算钱。"
+      "vendorHint": "自由填写，已经用过的写法会自动补上。它只用来把列表分段，不参与算钱。",
+      "searchPlaceholder": "搜索组名 / 厂商 / 绑着的模型…",
+      "searchCount": "搜「{{query}}」· {{n}} 个组命中",
+      "noResults": "没有匹配「{{query}}」的计费组。",
+      "noResultsHint": "组名、厂商、以及每个组绑着的模型都搜过了。",
+      "sectionCount": "{{n}} 组",
+      "matchedModels": "命中模型 {{models}}",
+      "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个"
     }
   },
   "lore": {

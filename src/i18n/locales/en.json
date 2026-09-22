@@ -2934,7 +2934,14 @@
       "pickNoMatch": "No matching fee group",
       "vendorLabel": "Vendor",
       "vendorPlaceholder": "Leave empty for no section",
-      "vendorHint": "Free text; names you have used before autocomplete. It only groups the list — it never affects what anything costs."
+      "vendorHint": "Free text; names you have used before autocomplete. It only groups the list — it never affects what anything costs.",
+      "searchPlaceholder": "Search name / vendor / bound models…",
+      "searchCount": "“{{query}}” · {{n}} matching",
+      "noResults": "No fee group matches “{{query}}”.",
+      "noResultsHint": "Names, vendors and every group's bound models were all searched.",
+      "sectionCount": "{{n}}",
+      "matchedModels": "Matched model {{models}}",
+      "matchedModelsMore": "Matched model {{models}} and {{n}} more"
     }
   },
   "lore": {
