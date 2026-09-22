@@ -294,7 +294,7 @@ function DetailBlock({ label, body, cap, truncated }: {
 }) {
   const { t } = useTranslation();
   return (
-    <div className={styles.detailBlock}>
+    <div>
       <div className={styles.detailLabel}>
         {label}
         {detailTruncated(truncated, body, cap) && (

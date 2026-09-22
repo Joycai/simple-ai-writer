@@ -190,7 +190,6 @@ function ThemeCard({
   const selectable = entry.usable && !absent;
   const cls = [
     s.card,
-    md ? s.cardMd : "",
     active ? s.cardActive : "",
     absent ? s.cardAbsent : "",
     unreadable ? s.cardUnreadable : "",

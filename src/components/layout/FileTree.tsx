@@ -310,7 +310,7 @@ function CreateInput({ depth }: { depth: number }) {
       depth={depth + 1}
       // 图标先于名字：「我正在造一个什么」不需要文案说明。
       icon={
-        <span className={`${styles.nodeIcon} ${styles.creating} ${creatingType === "folder" ? styles.filled : ""}`}>
+        <span className={`${styles.nodeIcon} ${creatingType === "folder" ? styles.filled : ""}`}>
           {creatingType === "folder"
             ? <Folder size={16} strokeWidth={1.6} />
             : <FileText size={16} strokeWidth={1.6} />}
