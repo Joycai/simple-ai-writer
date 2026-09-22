@@ -121,6 +121,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [lore-category-dict-ui-brief.md](feature/lore/lore-category-dict-ui-brief.md) | `shipped` | 补稿任务书（设计稿 `03f 设定集 · 分类操作与词典 Lore C`，已回并对齐）：三个已实装、没有设计稿的面——删除分类（两张并列出口卡 / 空分类·orphan·无处可搬三种降级 / 「不可逆」不用红）、移到分类（影响面先于动作、点一下就搬、与归集清单并排却要分得开）、词典标准化（模型只搬运格式由代码渲染这句要被看见 / 结果是词表还是文本 / 「N 条逐字找不到」不是错误）+ 条目 AI 中心的第五格；含数据边界与不要做 |
 | [lore-retrieval-plan.md](feature/lore/lore-retrieval-plan.md) | `shipped` | 取材准确度第 0–2 级：作者意图进匹配靶、`[[lore:…]]` 引用图扩展、查询扩展喂回子串匹配器。三条不变量（子串通道优先 · 每条命中都要可解释可动手 · 无静默截断）；向量通道为什么推迟，以及重启条件（§6.1）。实现出入在 §9——尤其 §9.1：引用带入的条目**不能**挂 L0 保底层，那一层不受预算限制 |
 | [lore-granularity-research.md](feature/lore/lore-granularity-research.md) | `research` | Six directions surveyed. 1+3 became the facet plan; 2, 4, 6 are still open |
+| [okf-folder-metadata-research.md](feature/lore/okf-folder-metadata-research.md) | `research` | 目录说明文件与 OKF 元数据（2026-09-22）：先核实助手只在自己调 `list_files` / `search_text` / `read_file` 时才碰工作区文档，从不整体注入；Google 的 Open Knowledge Format v0.2 是什么、知识库已经是它的形状而注入语义比它多；两处工程约束（`serializeEntityFrontmatter` 丢未知键、`parseFrontmatter` 读不了嵌套）；三步建议：条目 `status` → 工作区 `index.md` 说明文件（借取材范围围栏的两条不变量）→ 分类 `index.md`；明确不做 `log.md` 与数字参考度 |
 | [lore-category-manage-plan.md](feature/lore/lore-category-manage-plan.md) | `shipped` | 分类的管理面三片：墙上多选批量改分类（含置顶重指）·「删除分类」的两出口确认（两扇门共用一次，orphan 拿到搬空这条出路）· agent 方案卡的分类 target 轴（一行替十二行，含「哪种步骤装哪组延迟工具」那条踩过的坑）。为什么分类和集合的管理面天生不对称 |
 
 ### feature/knowledge-base/ — the sync server
