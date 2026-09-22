@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { draftToGroup } from "../FeeGroupDrawer";
 
 const draft = (over: Partial<Parameters<typeof draftToGroup>[0]> = {}) => ({
-  name: " 千问 ", billingMode: "token" as const,
+  name: " 千问 ", vendor: "", billingMode: "token" as const,
   inputPrice: "0.8", cacheInputPrice: "", outputPrice: "2.4", requestPrice: "",
   outputUnit: "image" as const, rates: [], inputUnitPrice: "", inputFreeUnits: "",
   ...over,
@@ -27,6 +27,22 @@ describe("draftToGroup", () => {
 
   it("名字去空白", () => {
     expect(draftToGroup(draft()).name).toBe("千问");
+  });
+
+  it("厂商去空白", () => {
+    expect(draftToGroup(draft({ vendor: " 阿里云百炼 " })).vendor).toBe("阿里云百炼");
+  });
+
+  it("没填的厂商落成 undefined，不是空串——「没填」只有一种长相", () => {
+    expect(draftToGroup(draft()).vendor).toBeUndefined();
+    expect(draftToGroup(draft({ vendor: "    " })).vendor).toBeUndefined();
+  });
+
+  it("只改名字不该把厂商弄丢——这一行漏掉时 tsc 不会拦", () => {
+    // vendor 是可选字段，所以「draftToGroup 的字面量里忘了写它」编译得过，
+    // 而后果是：导入一份带厂商的备份，在抽屉里点一次保存就把它抹成 NULL。
+    const g = draftToGroup(draft({ name: "新名字", vendor: "Anthropic" }));
+    expect(g).toMatchObject({ name: "新名字", vendor: "Anthropic" });
   });
 
   it("档位里留空的条件不写进去——空条件匹配一切，写成空串会匹配不上任何东西", () => {

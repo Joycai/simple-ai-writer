@@ -27,6 +27,7 @@ import { X } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
 import { feeSummary } from "../../../lib/ai/feeGroupLabel";
+import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
 import { useFeeLabelWords } from "./feeWords";
 import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type ProtocolFamily, type TextVerbosity } from "../../../lib/ai/types";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
@@ -1161,18 +1162,25 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           <Field label={t("aiConfig.models.feeGroupLabel")} hint={
             boundFeeGroup ? t("aiConfig.models.feeGroupHint") : t("aiConfig.models.feeGroupHintUnbound")
           }>
-            <select
-              className={`${s.select} ${form.feeGroupId ? "" : s.unset}`}
+            {/* 应用自己的下拉，不是原生 `<select>`：浏览器的弹出菜单没法主题化，
+                而这个列表要按厂商分段、还要能搜。「未绑定」是一个 value 为空的
+                **真选择**（不是 placeholder），所以它在列表里排第一。 */}
+            <Select
               value={form.feeGroupId}
-              onChange={(e) => setForm({ ...form, feeGroupId: e.target.value })}
-            >
-              <option value="">{t("aiConfig.fees.unbound")}</option>
-              {feeGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {`${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: t("aiConfig.fees.unbound") },
+                ...feeGroupOptions(
+                  feeGroups,
+                  (g) => `${g.name || t("aiConfig.fees.untitled")} — ${feeSummary(g, feeWords)}`,
+                  t("aiConfig.fees.vendorNone"),
+                ),
+              ]}
+              ariaLabel={t("aiConfig.models.feeGroupLabel")}
+              searchable
+              searchPlaceholder={t("aiConfig.fees.pickSearch")}
+              noResultsText={t("aiConfig.fees.pickNoMatch")}
+              onChange={(v) => setForm({ ...form, feeGroupId: v })}
+            />
           </Field>
         </Section>
 

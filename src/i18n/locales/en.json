@@ -2928,7 +2928,23 @@
       "inputImageTag": "input ${{price}}/img",
       "inputFreeTag": "first {{n}} free",
       "inputHintOn": "The free allowance is per request (“first one free” = the first image of each request). A request that delivered nothing is charged no input fee.",
-      "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page."
+      "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page.",
+      "vendorNone": "No vendor",
+      "pickSearch": "Search fee groups…",
+      "pickNoMatch": "No matching fee group",
+      "vendorLabel": "Vendor",
+      "vendorPlaceholder": "Leave empty for no section",
+      "vendorHint": "Free text; names you have used before autocomplete. It only groups the list — it never affects what anything costs.",
+      "searchPlaceholder": "Search name / vendor / bound models…",
+      "searchCount": "“{{query}}” · {{n}} matching",
+      "noResults": "No fee group matches “{{query}}”.",
+      "noResultsHint": "Names, vendors and every group's bound models were all searched.",
+      "sectionCount": "{{count}} groups",
+      "matchedModels": "Matched model {{models}}",
+      "matchedModelsMore": "Matched model {{models}} and {{more}} more",
+      "listCount": "{{groups}} groups · {{vendors}} vendors",
+      "listCountNone": "{{groups}} groups · {{vendors}} vendors · {{none}} without one",
+      "sectionCount_one": "{{count}} group"
     }
   },
   "lore": {

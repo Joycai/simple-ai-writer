@@ -280,3 +280,54 @@
   padding: 6px 8px;
   font-size: var(--font-size-sm);
 }
+
+/* ─── 搜索与厂商分段（设计稿 05l 屏 2a/2b/2c）────────────────────────────── */
+
+/* 搜索框满栏：这一页没有工具条，它是列表之上唯一的一行控件。 */
+.searchRow {
+  margin-top: var(--space-6);
+}
+
+.searchCount {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+/* 段首右边的「N 组」。等宽，因为它是个数。 */
+.sectionCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+/* 「命中模型 …」。它替换的是同一行的「N 个模型」，所以只换颜色不换字号——
+   这一行说的始终是「这个组和哪些模型有关」。 */
+.bindHit { color: var(--color-accent); }
+
+/* 搜索框的「有内容」态。搜索框本身借的是 ProvidersModels 的 .searchInput
+   （那一份只管布局，不参与这个文件里 border-color 的顺序契约），所以这里
+   把类名写两遍压过它。右内边距是给那个绝对定位的 × 让位的——不让，打满一行
+   的查询会钻到它底下。 */
+.searchOn.searchOn input {
+  border-color: var(--color-accent);
+  padding-right: var(--space-8);
+}
+.searchOn.searchOn svg {
+  color: var(--color-accent);
+}
+
+.searchClear {
+  position: absolute;
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  padding: 0 var(--space-1);
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.searchClear:hover { color: var(--color-accent); }

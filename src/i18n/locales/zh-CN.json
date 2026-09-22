@@ -2920,7 +2920,22 @@
       "inputImageTag": "输入图 ${{price}}/张",
       "inputFreeTag": "首 {{n}} 张免费",
       "inputHintOn": "免费张数按每次请求算（「首张免费」＝ 每次请求的第一张）。一张都没交付的请求不收输入费。",
-      "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。"
+      "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。",
+      "vendorNone": "未填厂商",
+      "pickSearch": "搜索计费组…",
+      "pickNoMatch": "没有匹配的计费组",
+      "vendorLabel": "厂商",
+      "vendorPlaceholder": "留空 ＝ 不分段",
+      "vendorHint": "自由填写，已经用过的写法会自动补上。它只用来把列表分段，不参与算钱。",
+      "searchPlaceholder": "搜索组名 / 厂商 / 绑着的模型…",
+      "searchCount": "搜「{{query}}」· {{n}} 个组命中",
+      "noResults": "没有匹配「{{query}}」的计费组。",
+      "noResultsHint": "组名、厂商、以及每个组绑着的模型都搜过了。",
+      "sectionCount": "{{count}} 组",
+      "matchedModels": "命中模型 {{models}}",
+      "matchedModelsMore": "命中模型 {{models}} 等 {{n}} 个",
+      "listCount": "{{groups}} 个组 · {{vendors}} 个厂商",
+      "listCountNone": "{{groups}} 个组 · {{vendors}} 个厂商 · {{none}} 个没填"
     }
   },
   "lore": {

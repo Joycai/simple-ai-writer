@@ -61,6 +61,16 @@ export interface SpecRate {
 export interface FeeGroup {
   id: string;
   name: string;
+  /**
+   * 谁定的这份价，**只用来把列表分段**。
+   *
+   * 自由文本，不是枚举也不是渠道的外键：一份价常被好几个渠道共用（直连一个、
+   * 中转一个，同一个厂商），而枚举挡住中转站、自建端点、以及作者自己想出来的
+   * 整理维度。空 ＝ 没填，它自己聚成一段排最后。
+   *
+   * 它不进 `FeeConfig`——那个接口的存在意义就是「算钱只读这些」。
+   */
+  vendor?: string;
   billingMode: BillingMode;
   /** token 模式：每百万输入 token。 */
   inputPrice: number;

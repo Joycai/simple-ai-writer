@@ -33,3 +33,6 @@ read-cost-report.txt
 # being 5934 NUL bytes it made git treat it as binary noise in every clone.
 __pycache__/
 *.pyc
+
+# dev-workflow 阶段产物（设计稿归档另行提交）
+.claude/tasks/

@@ -57,6 +57,7 @@ function NumInput({ value, placeholder, onChange, unset, bad, align = "right" }:
  *  作者的一次编辑中途，不该当场变成 0。保存时才落成数。 */
 interface Draft {
   name: string;
+  vendor: string;
   billingMode: BillingMode;
   inputPrice: string;
   cacheInputPrice: string;
@@ -74,6 +75,7 @@ const numStr = (n: number | null | undefined): string =>
 function toDraft(g: FeeGroup | null): Draft {
   return {
     name: g?.name ?? "",
+    vendor: g?.vendor ?? "",
     billingMode: g?.billingMode ?? "token",
     inputPrice: numStr(g?.inputPrice),
     // null（＝同输入价）与 0（＝真免费）在表单里也必须分得开：前者是空串。
@@ -109,6 +111,9 @@ export function draftToGroup(d: Draft): Omit<FeeGroup, "id" | "createdAt"> {
   });
   return {
     name: d.name.trim(),
+    // 空 ＝ 没填，只有一种长相：这一行漏掉就会在保存时把一个已经填好的厂商
+    // 静默抹掉（`vendor` 是可选字段，tsc 不会拦）。
+    vendor: d.vendor.trim() || undefined,
     billingMode: d.billingMode,
     inputPrice: num(d.inputPrice),
     cacheInputPrice: d.cacheInputPrice.trim() === "" ? null : num(d.cacheInputPrice),
@@ -124,12 +129,18 @@ export function draftToGroup(d: Draft): Omit<FeeGroup, "id" | "createdAt"> {
 export function FeeGroupDrawer({
   group,
   boundModels,
+  vendors,
   onSave,
   onClose,
 }: {
   /** null ＝ 新建。 */
   group: FeeGroup | null;
   boundModels: number;
+  /**
+   * 已经用过的厂商，给补全用。由列表页算好传进来——这个抽屉不读 store，
+   * 它拿到什么就画什么。
+   */
+  vendors: string[];
   onSave: (g: Omit<FeeGroup, "id" | "createdAt">) => Promise<void>;
   onClose: () => void;
 }) {
@@ -184,6 +195,24 @@ export function FeeGroupDrawer({
             placeholder={t("aiConfig.fees.namePlaceholder")}
             onChange={(e) => patch({ name: e.target.value })}
           />
+        </div>
+
+        <div>
+          <div className={ui.sectionLabel}>{t("aiConfig.fees.vendorLabel")}</div>
+          {/* 自由文本 + 已有值补全，不是下拉：厂商不绑渠道也不绑平台，一份价
+              常被好几个渠道共用，而枚举挡住中转站、自建端点和作者自己想出来
+              的整理维度。补全只负责让写法一致。 */}
+          <input
+            className={s.input}
+            value={d.vendor}
+            list="fee-group-vendors"
+            placeholder={t("aiConfig.fees.vendorPlaceholder")}
+            onChange={(e) => patch({ vendor: e.target.value })}
+          />
+          <datalist id="fee-group-vendors">
+            {vendors.map((v) => <option key={v} value={v} />)}
+          </datalist>
+          <div className={s.hint}>{t("aiConfig.fees.vendorHint")}</div>
         </div>
 
         <div>

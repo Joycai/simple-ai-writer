@@ -493,18 +493,3 @@
   white-space: nowrap;
 }
 
-/* 计费组选择器（设计稿 05l 屏 1e）。原生 `select`：一个「从一张现成的表里
-   挑一个」的控件不值得自造弹层，何况这里的选项文字本来就要一行读完
-   （名字 — 摘要）。虚线 ＝ 未绑定，和这个抽屉里别的「什么也不发」同一身。 */
-.select {
-  width: 100%;
-  box-sizing: border-box;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--stg-bg-input);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  cursor: pointer;
-}
-.select:focus { border-color: var(--color-accent); outline: none; }
