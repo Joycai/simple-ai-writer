@@ -346,7 +346,9 @@ export const useAiStore = create<AiState>((set, get) => ({
         subAgents,
       };
     });
-    if (projectPath) await remapUsageModelIds(projectPath, plan.remap);
+    // 项目那份可能没有（没开项目），总账那份一定在：不改它，合并掉的模型
+    // 会在「全部」范围里永远显示成一个叫不出名字的 id。
+    await remapUsageModelIds(projectPath ?? null, plan.remap);
     if (isTauri) {
       try {
         await deleteApiKey(absorbId);
