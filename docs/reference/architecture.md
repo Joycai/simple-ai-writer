@@ -10,7 +10,7 @@ Initialized in `src/lib/project.ts` and extended in `src/lib/ai/configDb.ts`:
 
 ```
 project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens,
-                          cost_usd, created_at, + 计费快照 15 列 — lib/ai/usageSchema.ts)
+                          cost_usd, created_at, + 计费快照与分项 22 列 — lib/ai/usageSchema.ts)
 config.db    token_usage 同上 + project          -- 总账：比任何一个项目活得久
 config.db    fee_groups  (id, name, billing_mode, input_price, cache_input_price, output_price,
                           request_price, output_unit, output_rates, input_unit_price,

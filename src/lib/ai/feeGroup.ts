@@ -410,6 +410,50 @@ export function totalOf(p: CostParts): number {
   return p.input + p.cache + p.output + p.request + p.spec + p.specInput + p.reported;
 }
 
+/**
+ * 计量条的六段：钱花在**哪一种量**上。
+ *
+ * 这不是第二套口径——钱还是 `costOf()` 算的那七个数，这里只把它们分流：
+ * 七项里 `spec` 一项混着「按张的钱」和「按秒的钱」，`costOf()` 分不开它们
+ * （`Billed` 里没有单位），得再看一眼 `outputUnit` 才知道该归哪一段。
+ *
+ * 五个具名段之外留一个 `other`：按次的固定价、上游直接报的总价（它**不可拆**，
+ * 报过来就是一个数）、按条计价——这几笔钱五段装不下。不硬塞进最近的段
+ * （塞进哪个都是谎），也不丢掉（丢了段长相加就不等于总额）。
+ */
+export interface CostSegments {
+  input: number;
+  cache: number;
+  output: number;
+  /** 按张的钱：出图的张数 + 作为参考图发出去的输入图。 */
+  count: number;
+  /** 按秒的钱：转写、视频这类按时长计价的。 */
+  duration: number;
+  /** 分不进上面五段的：按次的固定价、上游报的总价、按条计价。 */
+  other: number;
+}
+
+/**
+ * 七项折成六段。`unit` 是这一行的 `output_unit` 快照——**只有它知道**
+ * `spec` 那笔钱数的是张还是秒；拿不到（老行、非 spec 模式）时归 `other`，
+ * 而不是猜一个。
+ */
+export function segmentsOf(p: CostParts, unit: OutputUnit | null): CostSegments {
+  return {
+    input: p.input,
+    cache: p.cache,
+    output: p.output,
+    count: p.specInput + (unit === "image" ? p.spec : 0),
+    duration: unit === "second" ? p.spec : 0,
+    other: p.request + p.reported + (unit === "image" || unit === "second" ? 0 : p.spec),
+  };
+}
+
+/** 六段之和。对任意 `parts` 与任意 `unit`，它必须等于 `totalOf(parts)`。 */
+export function sumSegments(s: CostSegments): number {
+  return s.input + s.cache + s.output + s.count + s.duration + s.other;
+}
+
 // ── 数量：从一次请求数出计费用的量 ──────────────────────────────────────────
 
 /** `priceSpec()` 数出来的东西——用量行输出 / 输入两侧的快照。 */

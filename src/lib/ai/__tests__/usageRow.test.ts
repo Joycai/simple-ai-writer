@@ -153,6 +153,105 @@ describe("buildUsageRow · 上游报价", () => {
   });
 });
 
+describe("buildUsageRow · 分项的钱", () => {
+  // 分项是 `costOf()` 同一次结果的分流，不是重算。一行上六段加起来对不上
+  // 这一行的总额，用量页的条就会比行尾那个金额短一截或长一截——而那种
+  // 不一致没有任何东西会报错。
+  const sumSeg = (r: UsageRowValues) => {
+    const s = r.segments;
+    return s.input + s.cache + s.output + s.count + s.duration + s.other;
+  };
+
+  it("按 token：三段落到输入 / 缓存 / 输出，其余三段空着", () => {
+    const r = buildUsageRow({
+      model: model(fee({ inputPrice: 3, cachePrice: 0.3, outputPrice: 15 })),
+      task: "chat", promptTokens: 1000, cachedTokens: 400, completionTokens: 200,
+    });
+    expect(r.segments.input).toBeCloseTo(600 * 3 / 1e6, 12);
+    expect(r.segments.cache).toBeCloseTo(400 * 0.3 / 1e6, 12);
+    expect(r.segments.output).toBeCloseTo(200 * 15 / 1e6, 12);
+    expect(r.segments.count + r.segments.duration + r.segments.other).toBe(0);
+    expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
+  });
+
+  it("按张：出图与输入图都落进「张数」这一段", () => {
+    const r = buildUsageRow({
+      model: model(fee({
+        billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.04 }],
+        inputUnitPrice: 0.01,
+      })),
+      task: "image-gen", outputUnits: 2, inputImages: 3,
+    });
+    expect(r.segments.count).toBeCloseTo(2 * 0.04 + 3 * 0.01, 12);
+    expect(r.segments.duration).toBe(0);
+    expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
+  });
+
+  it("按秒：规格的钱落进「时长」，输入图仍然算「张数」", () => {
+    const r = buildUsageRow({
+      model: model(fee({
+        billingMode: "spec", outputUnit: "second", outputRates: [{ price: 0.002 }],
+        inputUnitPrice: 0.01,
+      })),
+      task: "transcribe", outputUnits: 300, inputImages: 1,
+    });
+    expect(r.segments.duration).toBeCloseTo(300 * 0.002, 12);
+    expect(r.segments.count).toBeCloseTo(0.01, 12);
+    expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
+  });
+
+  it("按次：固定价五段装不下，落进「其它」", () => {
+    const r = buildUsageRow({
+      model: model(fee({ billingMode: "request", requestPrice: 0.04 })),
+      task: "chat", promptTokens: 1000, completionTokens: 500, requests: 3,
+    });
+    expect(r.segments.other).toBeCloseTo(0.12, 12);
+    expect(r.segments.input + r.segments.output).toBe(0);
+    expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
+  });
+
+  it("上游报价不可拆，整笔进「其它」——哪怕这是个按张的组", () => {
+    const r = buildUsageRow({
+      model: model(fee({ billingMode: "spec", outputUnit: "image", outputRates: [{ price: 0.04 }] })),
+      task: "image-gen", outputUnits: 2, reportedCost: 0.07,
+    });
+    expect(r.segments.other).toBeCloseTo(0.07, 12);
+    expect(r.segments.count).toBe(0);
+    expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
+  });
+
+  // commit-2 的 review 指出的潜在坑：`priced.outputUnit` 在**非 spec 模式**下
+  // 也不是 null，而是组上那个默认值。今天无害——`costOf()` 的 token 分支让
+  // `spec` / `specInput` 恒为 0，单位再错也乘不动任何非零的数。钉在这里，是为了
+  // 哪天有人让 token 模式也产生规格侧的钱时，坏的是一条测试而不是一批人的账。
+  it("按 token 的组即使单位写着「按秒」，钱也不会跑进「时长」段", () => {
+    const r = buildUsageRow({
+      model: model(fee({ outputUnit: "second", inputPrice: 3, outputPrice: 15 })),
+      task: "chat", promptTokens: 1000, completionTokens: 200,
+    });
+    expect(r.segments.duration).toBe(0);
+    expect(r.segments.count).toBe(0);
+    expect(r.segments.input + r.segments.output).toBeCloseTo(r.costUsd, 12);
+  });
+
+  it("六段跟着 INSERT 一起写下去，列名对得上", async () => {
+    await recordUsage("/proj", {
+      model: model(fee({ inputPrice: 3, outputPrice: 15 })),
+      task: "chat", promptTokens: 1000, completionTokens: 200,
+    });
+    const row = rowOf(projectExecute.mock.calls[0]);
+    expect(row.cost_input).toBeCloseTo(1000 * 3 / 1e6, 12);
+    expect(row.cost_output).toBeCloseTo(200 * 15 / 1e6, 12);
+    expect(row.cost_cache).toBe(0);
+    expect(row.cost_count).toBe(0);
+    expect(row.cost_duration).toBe(0);
+    expect(row.cost_other).toBe(0);
+    // 当场盖章。不盖的话回填每次开库都会把这一行重扫重算一遍——写的值一样，
+    // 但那个「还没看过」的部分索引再也空不下来，收敛就没了。
+    expect(row.cost_split_checked).toBe(1);
+  });
+});
+
 describe("recordUsage", () => {
   it("一次请求记两处：项目库和总账，总账那一行多带项目路径", async () => {
     await recordUsage("/proj", {

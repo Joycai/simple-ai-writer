@@ -20,7 +20,8 @@ type Db = Awaited<ReturnType<typeof Database.load>>;
  * 几列的语义值得写下来：
  * - `prompt_tokens` 是**全部** prompt token，`cached_tokens` 是它的**子集**
  *   ——这是这张表从第一天起的口径，算钱时才分成不重叠的两段
- *   （`billedOfRow`）。改口径会让每一行历史被重新读成别的数。
+ *   （`rowToBilled`，lib/ai/usageBackfill.ts）。改口径会让每一行历史被重新
+ *   读成别的数。
  * - `cache_price` **可空**：只有在缓存价存在之前写的行上为空，读时回退到
  *   `input_price`。
  * - `reported_cost` **可空**：空 = 上游没报；`0` = 上游说这次免费。
@@ -57,6 +58,33 @@ const SNAPSHOT_COLUMNS: [string, string][] = [
   ["input_units", "REAL"],
   ["input_unit_price", "REAL"],
   ["reported_cost", "REAL"],
+  // 分项的钱：`costOf()` 的七项经 `segmentsOf()` 折成的六段，记账那一刻抄下来。
+  // 跟 `cost_usd` 同一条规矩——**结果落盘，不是第二套口径**：读的那一侧只
+  // `SUM` 它们，不在 SQL 里把算式重写一遍。
+  //
+  // 落在写入时而不是读出时，还顺带解决了一件读的那侧永远解不开的事：`spec`
+  // 那笔钱数的是张还是秒，只有 `output_unit` 知道，而 `GROUP BY` 之后一个桶里
+  // 可能混着两种单位。写的那一刻单位是确定的单值，拆完再存，聚合就不必再问。
+  //
+  // **空 ≠ 零**：NULL = 这一行没有分项快照（老行），不是「这一段是 0」。用量页
+  // 据此把分不出段的钱单独数成一份，而不是假装它不存在。
+  ["cost_input", "REAL"],
+  ["cost_cache", "REAL"],
+  ["cost_output", "REAL"],
+  ["cost_count", "REAL"],
+  ["cost_duration", "REAL"],
+  ["cost_other", "REAL"],
+  // 这一行的分项**看过了没有**。1 = 看过（补上了，或者算出来对不上账、按设计
+  // 留白）；NULL = 还没看过。
+  //
+  // 为什么需要它：1.73.0 之前的行连计费快照列都没有，重算恒为 0，对账闸门
+  // 恒不通过——只看 `cost_input IS NULL` 的话，这些行**每次开库都会被重新捞
+  // 出来算一遍，而且永远补不上**。有了这个标记，看过一次就不再看，回填才是
+  // 收敛的。同构的先例是 `models.fee_migrated`。
+  //
+  // 它是**记账用的标记，不是钱**：对不上账的行 `cost_input` 仍然保持 NULL，
+  // 「空 ≠ 零」没有被破坏，`cost_unsplit` 照样把它们数进「分不出段的钱」。
+  ["cost_split_checked", "INTEGER"],
 ];
 
 async function addUsageColumn(db: Db, existing: Set<string>, name: string, type: string) {
@@ -73,8 +101,13 @@ async function addUsageColumn(db: Db, existing: Set<string>, name: string, type:
 /**
  * 建表 + 补列。`scope: "global"` 的那份多一列 `project`。
  *
- * 只加列、不改列：老行不回填价格——它们本来就是按当时的模型价记的，
+ * 只加列、不改列：老行**不回填价格**——它们本来就是按当时的模型价记的，
  * 回填等于捏造历史。
+ *
+ * 那六列 `cost_*` 分项是这条规矩之内的一个例外，而不是对它的破例：
+ * `lib/ai/usageBackfill` 补的**不是价，是同一笔钱的分法**——价全在行上，
+ * 拿它们喂给同一个 `costOf()`，重算的总额必须等于行上已经存着的 `cost_usd`
+ * 才写，对不上就留白。没有一行的钱会因为回填而变成另一个数。
  */
 export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Promise<void> {
   await db.execute(
@@ -89,5 +122,16 @@ export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Pr
     await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_project ON token_usage (project, created_at)`);
   }
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_usage_created ON token_usage (created_at)`);
+  // 还**没看过**的行。**部分索引**，不是整列索引：`lib/ai/usageBackfill` 每次
+  // 开库都会去找它们，没有索引的话那就是每次开项目一次全表扫描。
+  //
+  // 条件是「没看过」而不是「没有分项」：对不上账的远古行永远补不上，按后者
+  // 它们会永远留在索引里、每次开库重捞一遍。按前者，回填跑完一趟之后这个
+  // 索引就是**空的**，再开库只是一次落空的索引查找。
+  await db.execute(`DROP INDEX IF EXISTS idx_usage_unsplit`);
+  await db.execute(
+    `CREATE INDEX IF NOT EXISTS idx_usage_unchecked
+       ON token_usage (id) WHERE cost_split_checked IS NULL`,
+  );
 }
 

@@ -704,7 +704,24 @@
         "project": "Clear this project's records",
         "global": "Clear all records"
       },
-      "clearConfirmGlobal": "Empty the all-projects usage ledger? The copies inside each project folder are untouched. This cannot be undone."
+      "clearConfirmGlobal": "Empty the all-projects usage ledger? The copies inside each project folder are untouched. This cannot be undone.",
+      "seg": {
+        "input": "Input",
+        "cache": "Cached input",
+        "output": "Output",
+        "count": "Images",
+        "duration": "Duration",
+        "other": "Other",
+        "unsplit": "Unsplit"
+      },
+      "segTip": {
+        "cost": "{{label}} · {{amount}} · {{pct}}",
+        "token": "{{label}} · {{tokens}} tk · {{pct}}",
+        "barCost": "Share of cost: {{parts}}",
+        "barToken": "No cost to split — share of tokens: {{parts}}",
+        "barNone": "No cost or tokens to break down in this period",
+        "unsplitNote": "Rows recorded before the upgrade carry no breakdown; that part counts as unsplit"
+      }
     },
     "projectBackup": {
       "section": "Project backup",

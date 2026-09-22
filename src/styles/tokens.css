@@ -280,6 +280,22 @@
     --lore-cat-event:       color-mix(in oklab, var(--color-sienna), var(--color-amber) 60%);
     --lore-cat-faction:     var(--color-text-secondary);
     --lore-cat-concept:     var(--color-type-video-fg);
+
+    /* ── 用量计量条的分段色 ──
+       五个具名维度各借一个**已经存在**的语义色相，第六段是中性的「分不出来」。
+       借谁不是随手挑的：张数借图片能力标签的色相、时长借视频（按秒）那一支、
+       输入借文本那一支，输出留给这套 UI 唯一的强调色——钱主要花在这一段上。
+       缓存借成功绿：缓存是省下来的那部分输入，绿色读作省。
+       六色在明暗两套下**任意两两** ΔEok ≥ 0.099（判据与 15 对实测值见
+       .claude 任务目录的 03-ui-spec.md §3.4）——8px 高的条上相邻段靠颜色分开，
+       不靠缝隙，所以段与段之间紧贴、不描边、不给最小宽度。
+       这六个是 derived 不是核心契约：外观主题不写就跟着公式走，想定制可以覆盖。 */
+    --usage-seg-input:      var(--color-type-text-fg);
+    --usage-seg-cache:      var(--color-success);
+    --usage-seg-output:     var(--color-sienna);
+    --usage-seg-count:      var(--color-type-image-fg);
+    --usage-seg-duration:   var(--color-type-video-fg);
+    --usage-seg-other:      color-mix(in oklab, var(--color-text-dim), var(--color-border) 25%);
     --lore-wall-bg:         color-mix(in oklab, var(--color-bg-base), var(--color-bg-elevated) 50%);
     --lore-wall-grid:       color-mix(in srgb, var(--color-text-primary) 3%, transparent);
     --lore-bg-input:        var(--stg-bg-input);
@@ -434,6 +450,7 @@
       --color-hairline:       var(--color-bg-elevated);
       --color-accent-mid:     var(--color-amber);
       --color-text-dim:       var(--color-text-secondary);
+      --usage-seg-other:      var(--color-text-dim);
       --color-success-border: var(--color-success);
       --color-diff-add-text:  var(--color-success);
       --color-diff-add-bg:    var(--color-bg-elevated);
@@ -729,7 +746,10 @@
     --stg-line-section:     #E7DCC4;   /* section-title rules */
     --stg-kbd-border:       #DFD3B8;
     --stg-knob:             #A99C7F;   /* switch off-knob */
-    --stg-bar:              #C68B5A;   /* usage share bars */
+    /* 计量条 2026-09 改成按维度分段（--usage-seg-*），这个 token 不再有人画。
+       留着不删：它是契约里的 derived 名字，删掉会让外面已经声明过它的主题
+       文件从「保留」变成「丢弃 + 问题卡」，代价大于收益。 */
+    --stg-bar:              #C68B5A;
     --stg-focus-ring:       rgba(169, 81, 43, 0.3);
     --stg-overlay:          rgba(72, 63, 48, 0.30);
     --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);

@@ -18,6 +18,7 @@ import { moveId, type ProviderMove } from "../lib/ai/providerOrder";
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb, getGlobalDbPath } from "../lib/project";
+import { backfillUsagePartsQuietly } from "../lib/ai/usageBackfill";
 import { sqlTransaction } from "../lib/sqlTx";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import {
@@ -99,6 +100,15 @@ let schemaReady: Promise<void> | null = null;
  */
 let legacyKeysSwept: Promise<void> | null = null;
 
+/**
+ * 总账里老行的分项回填，一次就好，跟在 schema 后面。
+ *
+ * 和上面那个清理一样：**失败不重置、不抛出**。回填失败只是有些行在用量页里
+ * 停在「未分项」，而一个补历史数据的动作没有资格让触发它的配置加载失败。
+ * 项目库那一份在 `lib/project` 的 `initSchema` 里，各走各的。
+ */
+let usagePartsBackfilled: Promise<void> | null = null;
+
 async function db() {
   const globalDb = await getGlobalDb();
   if (!schemaReady) {
@@ -118,6 +128,16 @@ async function db() {
       .catch((e) => console.warn("[aiStore] legacy key sweep failed:", e));
   }
   await legacyKeysSwept;
+  if (!usagePartsBackfilled) {
+    usagePartsBackfilled = getGlobalDbPath()
+      .then((path) => backfillUsagePartsQuietly(globalDb, path, "config.db"))
+      // `backfillUsagePartsQuietly` 自己吞错，但 `getGlobalDbPath()` 没人兜：
+      // 它一旦 reject，这个**永不重置**的 promise 就永久是 rejected，下面每次
+      // `await` 都抛，整个 AI 配置面板再也打不开。上面那句注释说它没有资格让
+      // 配置加载失败——这一行是兑现那句话的地方。
+      .catch((e) => console.warn("[aiStore] usage backfill could not start:", e));
+  }
+  await usagePartsBackfilled;
   return globalDb;
 }
 
