@@ -220,6 +220,20 @@ describe("buildUsageRow · 分项的钱", () => {
     expect(sumSeg(r)).toBeCloseTo(r.costUsd, 12);
   });
 
+  // commit-2 的 review 指出的潜在坑：`priced.outputUnit` 在**非 spec 模式**下
+  // 也不是 null，而是组上那个默认值。今天无害——`costOf()` 的 token 分支让
+  // `spec` / `specInput` 恒为 0，单位再错也乘不动任何非零的数。钉在这里，是为了
+  // 哪天有人让 token 模式也产生规格侧的钱时，坏的是一条测试而不是一批人的账。
+  it("按 token 的组即使单位写着「按秒」，钱也不会跑进「时长」段", () => {
+    const r = buildUsageRow({
+      model: model(fee({ outputUnit: "second", inputPrice: 3, outputPrice: 15 })),
+      task: "chat", promptTokens: 1000, completionTokens: 200,
+    });
+    expect(r.segments.duration).toBe(0);
+    expect(r.segments.count).toBe(0);
+    expect(r.segments.input + r.segments.output).toBeCloseTo(r.costUsd, 12);
+  });
+
   it("六段跟着 INSERT 一起写下去，列名对得上", async () => {
     await recordUsage("/proj", {
       model: model(fee({ inputPrice: 3, outputPrice: 15 })),

@@ -90,8 +90,13 @@ async function addUsageColumn(db: Db, existing: Set<string>, name: string, type:
 /**
  * 建表 + 补列。`scope: "global"` 的那份多一列 `project`。
  *
- * 只加列、不改列：老行不回填价格——它们本来就是按当时的模型价记的，
+ * 只加列、不改列：老行**不回填价格**——它们本来就是按当时的模型价记的，
  * 回填等于捏造历史。
+ *
+ * 那六列 `cost_*` 分项是这条规矩之内的一个例外，而不是对它的破例：
+ * `lib/ai/usageBackfill` 补的**不是价，是同一笔钱的分法**——价全在行上，
+ * 拿它们喂给同一个 `costOf()`，重算的总额必须等于行上已经存着的 `cost_usd`
+ * 才写，对不上就留白。没有一行的钱会因为回填而变成另一个数。
  */
 export async function ensureUsageSchema(db: Db, scope: "project" | "global"): Promise<void> {
   await db.execute(

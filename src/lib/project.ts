@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 
 import { ensureUsageSchema } from "./ai/usageSchema";
+import { backfillUsagePartsQuietly } from "./ai/usageBackfill";
 import { toPosixPath } from "./paths";
 
 export interface FileNode {
@@ -82,13 +83,25 @@ function normalizeTree(nodes: FileNode[]): FileNode[] {
 // the same path share one load instead of racing separate Database.load calls.
 const dbCache = new Map<string, Promise<Awaited<ReturnType<typeof Database.load>>>>();
 
+/**
+ * 这个项目那本账在磁盘上的位置。
+ *
+ * 单独一个函数而不是在用到的两处各写一遍那串字面量：事务走不了下面那个句柄
+ * ——SQL 插件是连接池，`sqlTransaction`（lib/sqlTx）要自己开一条连接，所以它
+ * 要的是文件本身。在一处派生，通往同一个库的两条路就不可能对「这是哪个文件」
+ * 产生分歧（`getGlobalDbPath()` 是同一条理由，只是它有模块外的调用方才导出）。
+ */
+function getProjectDbPath(projectPath: string): string {
+  return `${projectPath}/.ai-writer/project.db`;
+}
+
 export async function getDb(projectPath: string) {
   let dbPromise = dbCache.get(projectPath);
   if (!dbPromise) {
     dbPromise = (async () => {
-      const dbPath = `${projectPath}/.ai-writer/project.db`;
+      const dbPath = getProjectDbPath(projectPath);
       const db = await Database.load(`sqlite:${dbPath}`);
-      await initSchema(db);
+      await initSchema(db, projectPath);
       return db;
     })();
     dbCache.set(projectPath, dbPromise);
@@ -164,11 +177,14 @@ async function dropDeadTables(db: Awaited<ReturnType<typeof Database.load>>) {
   }
 }
 
-async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
+async function initSchema(db: Awaited<ReturnType<typeof Database.load>>, projectPath: string) {
   // 项目用量。表结构与 appDataDir 里的那份总体用量共用一处定义
   // （lib/ai/usageSchema.ts）——两张表长歪了，用量页在「本项目 / 全部」
   // 之间一切就会少掉几列，而那种少法不报错。
   await ensureUsageSchema(db, "project");
+  // 补列之后把老行的分项补上——只补对得上账的那些，路径要单独传是因为事务
+  // 走不了这个句柄（lib/sqlTx）。它自己吞掉异常：账目的事不配让项目开不了。
+  await backfillUsagePartsQuietly(db, getProjectDbPath(projectPath));
 
   // Persisted 对话助手 sessions — one JSON blob per session, newest few kept
   // (lib/agent/sessionDb owns the cap and all reads/writes). `pinned` is the
