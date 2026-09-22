@@ -9,10 +9,17 @@
 Initialized in `src/lib/project.ts` and extended in `src/lib/ai/configDb.ts`:
 
 ```
-project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-config.db    providers   (id, name, base_url, api_standard, safety_settings, created_at)
-config.db    models      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out,
-                          enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
+project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens,
+                          cost_usd, created_at, + 计费快照 15 列 — lib/ai/usageSchema.ts)
+config.db    token_usage 同上 + project          -- 总账：比任何一个项目活得久
+config.db    fee_groups  (id, name, billing_mode, input_price, cache_input_price, output_price,
+                          request_price, output_unit, output_rates, input_unit_price,
+                          input_free_units, sort_order, created_at)
+config.db    providers   (id, name, base_url, api_standard, safety_settings, default_fee_group_id, created_at)
+config.db    models      (id, provider_id, model_id, name, type, fee_group_id, fee_migrated,
+                          enabled, prefix, context_size, max_output, probed_at, caps,
+                          price_in / price_cached_in / price_out / price_per_image /
+                          price_per_second — 旧价格列，只剩迁移在读)
 config.db    prompts     (id, name, content, scene)
 config.db    prefs       (key, value)          -- see Preferences below
 ```
@@ -22,10 +29,19 @@ travels with the project folder, `config.db` (in `appDataDir`) belongs to the
 installation. That is also the line the two backup features draw — see
 Export / Import below.
 
-`token_usage` is the only project-scoped table. Its `model_id` holds the
-configured model's internal id; rows written by image runs before that was
-corrected hold the provider's own model string instead, so `lib/ai/usage.ts`
-matches both when naming a model.
+`token_usage` 存在**两个库里**，结构共用一处定义（`lib/ai/usageSchema.ts`）：
+项目那份跟着项目文件夹走，`config.db` 那份多一列 `project`、比任何一个项目
+活得久。一次请求两处各记一行（`lib/ai/usageRow.recordUsage`，唯一写入口）。
+行上除了计数还快照了**当时的价**——模式、三个 token 单价、按次价、按规格的
+数量 / 单价 / 单位 / 规格三元组 / 命中与否、输入图的发出张数 / 计费张数 /
+单价，以及可空的上游报价。所以改组、删组、换组都动不了历史。
+`cost_usd` 是 `feeGroup.costOf()` 在记账那一刻的结果落了盘，读那一侧 `SUM`
+它——不是第二套口径，也因此不需要检查点。价格本身在 `fee_groups`，见
+`docs/feature/billing/01-fee-groups.md`。
+
+`model_id` holds the configured model's internal id; rows written by image runs
+before that was corrected hold the provider's own model string instead, so
+`lib/ai/usage.ts` matches both when naming a model.
 
 **Removed:** `settings` and `lore_entities` were created on every project open
 and never read or written by anything — `lore_entities` (note
@@ -37,9 +53,11 @@ opening.
 
 ### Usage accounting (Settings → 用量)
 
-`src/lib/ai/usage.ts` is the read side of `token_usage`: two `GROUP BY`
-rollups (by model, by task) over a 7d / 30d / all window, plus the delete
-behind 清空统计. `total` is summed from the by-model buckets rather than
+`src/lib/ai/usage.ts` is the read side of `token_usage`: 先选**哪一份账**
+（`UsageScope`：`project` = 项目库，`global` = `config.db` 的总账），再四个
+`GROUP BY` rollups（模型 / 任务 / 计价方式 / 项目）over a 7d / 30d / all
+window, plus the delete behind 清空统计。「按计费组」那一维在 TypeScript 里
+从按模型的桶折出来，按模型**当前**绑的组归并——行上快照的是价，不是归属。 `total` is summed from the by-model buckets rather than
 queried separately, so the headline can never disagree with the rows under it.
 `SUM()` over an empty group returns NULL, which is coerced at the row boundary
 — left alone it propagates as `NaN` through every later addition. Sorting is
