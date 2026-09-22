@@ -2931,7 +2931,10 @@
       "inputHintOff": "Leave empty to charge nothing for input images. Only a price above zero puts them in the summary, the tags and the Usage page.",
       "vendorNone": "No vendor",
       "pickSearch": "Search fee groups…",
-      "pickNoMatch": "No matching fee group"
+      "pickNoMatch": "No matching fee group",
+      "vendorLabel": "Vendor",
+      "vendorPlaceholder": "Leave empty for no section",
+      "vendorHint": "Free text; names you have used before autocomplete. It only groups the list — it never affects what anything costs."
     }
   },
   "lore": {

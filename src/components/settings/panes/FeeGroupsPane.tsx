@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../../stores/aiStore";
 import type { FeeGroup } from "../../../lib/ai/feeGroup";
 import { feeTags, isPriced } from "../../../lib/ai/feeGroupLabel";
+import { knownVendors } from "../../../lib/ai/feeGroupList";
 import { useFeeLabelWords } from "./feeWords";
 import { FeeGroupDrawer } from "./FeeGroupDrawer";
 import { Pane, PaneHeader, Section } from "./bits";
@@ -65,6 +66,7 @@ export function FeeGroupsPane() {
               key={editing.group?.id ?? "new"}
               group={editing.group}
               boundModels={editing.group ? boundCount(editing.group.id) : 0}
+              vendors={knownVendors(feeGroups)}
               onSave={async (g) => {
                 await saveFeeGroup(
                   editing.group ? { ...g, id: editing.group.id, createdAt: editing.group.createdAt } : g,

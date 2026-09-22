@@ -2923,7 +2923,10 @@
       "inputHintOff": "留空 ＝ 不收输入图的钱。填了它才会出现在摘要、标签和用量页里。",
       "vendorNone": "未填厂商",
       "pickSearch": "搜索计费组…",
-      "pickNoMatch": "没有匹配的计费组"
+      "pickNoMatch": "没有匹配的计费组",
+      "vendorLabel": "厂商",
+      "vendorPlaceholder": "留空 ＝ 不分段",
+      "vendorHint": "自由填写，已经用过的写法会自动补上。它只用来把列表分段，不参与算钱。"
     }
   },
   "lore": {
