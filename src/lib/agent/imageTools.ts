@@ -90,7 +90,8 @@ async function proposeIllustration(
     note: spec.note,
     modelId: model.id,
     modelName: model.name,
-    costUsd: imageCostFor(model, 1),
+    // 规格一并交上去：按尺寸 / 质量分档的组，不带规格会在卡上估成 $0。
+    costUsd: imageCostFor(model, 1, undefined, { size: spec.resolution, quality: spec.quality }),
     aspect: spec.aspect,
     resolution: spec.resolution,
     quality: spec.quality,

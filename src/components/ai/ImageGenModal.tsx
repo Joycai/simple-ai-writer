@@ -194,7 +194,10 @@ export function ImageGenModal({ target, onClose }: Props) {
   const busy = building || generating || saving || calibrating;
   /** What this run will actually ask for — the chat route only ever returns one. */
   const effectiveCount = chatRoute ? 1 : count;
-  const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount) : 0;
+  // 带上作者选的规格：按尺寸 / 质量分档的组，不带规格会估成 $0，而卡上一个
+  // 假的 0 比没有估价更糟。估和记共用 `priceSpec`，口径只有一份。
+  const estimateSpec = { size: size.trim() || resolution, quality };
+  const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount, undefined, estimateSpec) : 0;
 
   const handleBuildPrompt = async () => {
     const resolved = resolveConn(models, providers, promptModelId);
@@ -448,7 +451,7 @@ export function ImageGenModal({ target, onClose }: Props) {
         aspect,
         ...(currentTurn.degraded ? { degraded: true } : {}),
         createdAt: Date.now(),
-        costUsd: imageModel ? imageCostFor(imageModel, 1) : 0,
+        costUsd: imageModel ? imageCostFor(imageModel, 1, undefined, estimateSpec) : 0,
       });
 
       // Saving does not end the session: the usual next move is to keep

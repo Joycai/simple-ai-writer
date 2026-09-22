@@ -98,6 +98,22 @@ describe("generate_image", () => {
     });
   });
 
+  /**
+   * 估价要带上这次请求的规格。按尺寸分档的组，不带规格会在卡上估成 $0——
+   * 而一张卡上写着「≈ $0」比没有估价更糟：作者会以为这次不要钱。
+   */
+  it("prices by the tier the requested resolution falls into, not a flat rate", async () => {
+    const tiered = (storeModels as { type: string; fee?: object }[]).map((m) => m.type === "image"
+      ? { ...m, fee: { ...m.fee, outputRates: [{ size: "1K", price: 0.04 }, { size: "2K", price: 0.12 }] } }
+      : m);
+    const { ctx, seen } = ctxWith();
+    (ctx as { appState?: unknown }).appState = {
+      aiSettings: () => ({ models: tiered, providers: [], subAgents: storeSubAgents }),
+    };
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登", resolution: "2K" }, ctx);
+    expect(seen[0].costUsd).toBeCloseTo(0.12, 10);
+  });
+
   it("does not resync when the author rejected — nothing changed", async () => {
     const { ctx } = ctxWith({ approved: false });
     const onLoreChanged = vi.fn();
