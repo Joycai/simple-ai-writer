@@ -106,6 +106,19 @@ export function resolveRelayUpstream(
 }
 
 /**
+ * What `connOptions()` and every other reader holding the channel carry
+ * forward: the resolved upstream, or `"none"` — never absent, so nothing
+ * downstream infers again over the author's table.
+ */
+export function relayUpstreamFor(
+  platform: PlatformId | undefined,
+  model: { modelId?: string; relayUpstream?: RelayUpstreamChoice },
+  channel: { upstreamPrefixes?: readonly UpstreamPrefix[] } | undefined,
+): RelayUpstreamChoice {
+  return resolveRelayUpstream(platform, model.modelId, model.relayUpstream, channel?.upstreamPrefixes).upstream ?? "none";
+}
+
+/**
  * The model half of a capability question, from a request's options.
  * `relayUpstream` is what `connOptions()` resolved from the channel and the
  * model; when it is absent — options built by hand, as the live probes and

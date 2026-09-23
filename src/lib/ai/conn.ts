@@ -26,7 +26,7 @@ import type { GeminiSafetySettings } from "./safety";
 import { resolvePlatform, type PlatformId } from "./platforms";
 import { activeFamily, channelEndpoints, ROUTE_LONG, routeProvider } from "./routes";
 import type { ServerToolId } from "./serverTools";
-import type { RelayUpstreamChoice } from "./relayUpstream";
+import { relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
@@ -123,13 +123,14 @@ export interface ConnOptions {
  */
 export function connOptions(conn: AiConn): ConnOptions {
   const { provider, model, apiKey } = conn;
+  const platform = resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard);
   return {
     baseUrl: provider.baseUrl,
     apiKey,
     standard: provider.apiStandard,
     safetySettings: provider.safetySettings,
     authMode: provider.authMode,
-    platform: resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard),
+    platform,
     modelId: model.modelId,
     prefix: model.prefix,
     contextSize: model.contextSize,
@@ -147,6 +148,9 @@ export function connOptions(conn: AiConn): ConnOptions {
     structuredOutput: model.structuredOutput,
     textVerbosity: model.textVerbosity,
     vlHighResolution: model.vlHighResolution,
+    // Resolved here, the one place with the channel's prefix table in hand;
+    // "none" rather than absent, so the adapters don't infer over the table.
+    relayUpstream: relayUpstreamFor(platform, model, provider),
   };
 }
 

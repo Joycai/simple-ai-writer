@@ -66,7 +66,26 @@ describe("connOptions", () => {
       thinkingBudget: 4000,
       serverTools: ["web_search"],
       structuredOutput: "json_schema",
+      // A relay with no table and an id naming no upstream: resolved, to none.
+      relayUpstream: "none",
     });
+  });
+
+  it("resolves the relay upstream from the model, then the channel's table, then the id", () => {
+    const relay = { ...provider, platform: "newapi" as const, upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" as const }] };
+    const on = (modelId: string, relayUpstream?: Model["relayUpstream"]) =>
+      connOptions({ ...conn, provider: relay, model: { ...model, modelId, relayUpstream } }).relayUpstream;
+    expect(on("[CC量]claude-opus-5")).toBe("cc");
+    expect(on("[CC量]claude-opus-5", "anti")).toBe("anti");
+    expect(on("[CC量]claude-opus-5", "none")).toBe("none");
+    expect(on("[kiro]claude-opus-5")).toBe("kiro");
+    expect(on("[anti量]claude-opus-4-6")).toBe("none");
+    // Not a relay: the table and the model's choice mean nothing there.
+    expect(connOptions({
+      ...conn,
+      provider: { ...relay, platform: "dashscope" },
+      model: { ...model, modelId: "[CC量]claude-opus-5", relayUpstream: "cc" },
+    }).relayUpstream).toBe("none");
   });
 
   it("carries the stored platform, except where an official standard names the vendor", () => {

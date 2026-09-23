@@ -83,6 +83,23 @@ describe("parseConfigBundle · models", () => {
     expect(out.models[0].structuredOutput).toBeUndefined();
   });
 
+  it("carries the relay upstream: a model's choice and the channel's table", () => {
+    const out = parseConfigBundle({
+      ...bundle([
+        { ...base, id: "a", relayUpstream: "bedrock" },
+        { ...base, id: "b", relayUpstream: "none" },
+        { ...base, id: "c", relayUpstream: "someday-upstream" },
+      ]),
+      providers: [{
+        id: "p1", name: "Relay", baseUrl: "https://relay.example/v1", apiStandard: "openai_compat", createdAt: 0,
+        platform: "newapi",
+        upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }, { prefix: "", upstream: "cc" }, { prefix: "[x]", upstream: "nope" }],
+      }],
+    }, []);
+    expect(out.models.map((m) => m.relayUpstream)).toEqual(["bedrock", "none", undefined]);
+    expect(out.providers[0].upstreamPrefixes).toEqual([{ prefix: "[CC量]", upstream: "cc" }]);
+  });
+
   it("opens a bundle written before the declaration existed", () => {
     const out = parseConfigBundle(bundle([base]), []);
     expect(out.models).toHaveLength(1);

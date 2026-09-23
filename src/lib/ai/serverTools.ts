@@ -101,7 +101,7 @@
 import { familyOf } from "./types";
 import { providerWire, type ServerToolWire } from "./platforms";
 import { hasCapability } from "./capabilities";
-import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
+import { capabilityModelOf, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
 
@@ -208,12 +208,14 @@ export function effectiveServerTools(
  * missing provider answers `undefined` — don't promise what can't be checked.
  */
 export function serverToolsSent(
-  model: Pick<Model, "providerId" | "modelId" | "serverTools" | "activeRoute">,
+  model: Pick<Model, "providerId" | "modelId" | "serverTools" | "activeRoute" | "relayUpstream">,
   providers?: readonly Provider[],
 ): ServerToolId[] | undefined {
   if (!providers) return model.serverTools;
   const provider = providerFor(model, providers);
-  return provider ? effectiveServerTools(providerWire(provider), model.serverTools, model.modelId) : undefined;
+  if (!provider) return undefined;
+  const wire = providerWire(provider);
+  return effectiveServerTools(wire, model.serverTools, model.modelId, relayUpstreamFor(wire.platform, model, provider));
 }
 
 /**
