@@ -28,7 +28,7 @@
         "script-src": "'self' 'sha256-Km98Diebt4QW6XukauXydRAPjSaCIvjDaEgjGD8yllE='",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: ai-writer-asset: http://ai-writer-asset.localhost",
-        "font-src": "'self' data:",
+        "font-src": "'self' data: ai-writer-font: http://ai-writer-font.localhost",
         "connect-src": "'self' ipc: http://ipc.localhost https: http:",
         "frame-src": "'self' about: blob: data:",
         "worker-src": "'self' blob:",
