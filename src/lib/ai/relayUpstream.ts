@@ -139,16 +139,24 @@ export function capabilityModelOf(o: {
  * The bracketed prefixes (`[CC量]`) the channel's models start with that no
  * row covers yet, most frequent first — what the channel drawer offers to add.
  * It reads the shape New API catalogues use, not any one relay's names.
+ * Grouped without regard to case, as a row matches: `[CC量]` and `[cc量]` are
+ * one suggestion, spelled the way most of the ids spell it.
  */
 export function bracketPrefixes(modelIds: readonly string[], rows: readonly { prefix: string }[] = []): string[] {
   const have = new Set(rows.map((r) => r.prefix.trim().toLowerCase()));
-  const counts = new Map<string, number>();
+  const groups = new Map<string, { total: number; spellings: Map<string, number> }>();
   for (const id of modelIds) {
     const m = /^\[[^\]\s]+\]/.exec(id.trim());
-    if (!m || have.has(m[0].toLowerCase())) continue;
-    counts.set(m[0], (counts.get(m[0]) ?? 0) + 1);
+    const key = m?.[0].toLowerCase();
+    if (!m || !key || have.has(key)) continue;
+    const g = groups.get(key) ?? { total: 0, spellings: new Map<string, number>() };
+    g.total++;
+    g.spellings.set(m[0], (g.spellings.get(m[0]) ?? 0) + 1);
+    groups.set(key, g);
   }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
+  return [...groups.values()]
+    .sort((a, b) => b.total - a.total)
+    .map((g) => [...g.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0]);
 }
 
 const fromJson = (v: unknown): unknown => {

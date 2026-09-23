@@ -270,11 +270,24 @@ describe("relay upstreams", () => {
     });
   });
 
+  // The one verdict inference changes for a model nobody configured (design
+  // §4, on purpose): `bedrock` in a Claude id names the upstream, which has no
+  // server tools (every request carrying one is a 400) and reads PDFs.
+  it("infers Bedrock from the id, and with it drops web search and opens the PDF block", () => {
+    for (const platform of RELAYS) {
+      const m = inferred("bedrock/claude-opus-4-6");
+      expect(capabilityVerdict("web_search", anth(platform), m)).toEqual({ status: "no", reason: "upstream" });
+      expect(capabilityVerdict("pdfInput", anth(platform), m)).toEqual({ status: "yes", reason: "upstream" });
+    }
+  });
+
   it("answers each upstream's measured cells, both ways", () => {
     const opus = (upstream: (typeof RELAY_UPSTREAMS)[number]) => ({ modelId: "[x]claude-opus-4-6", upstream });
     expect(capabilityVerdict("web_search", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "upstream" });
     expect(capabilityVerdict("pdfInput", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "upstream" });
     expect(capabilityVerdict("forcedToolChoice", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "protocol" });
+    // Probed without thinking only on Chat: no cell, the rule's answer.
+    expect(capabilityVerdict("forcedToolChoice", chat("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "protocol" });
     expect(capabilityVerdict("forcedToolChoice", chat("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });
     expect(capabilityVerdict("pdfInput", chat("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });
     expect(capabilityVerdict("web_search", anth("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });

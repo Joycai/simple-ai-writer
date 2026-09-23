@@ -403,13 +403,15 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * web search (`server_tool_use` with a result block) that a writing request
    * does not trigger, a forced tool honoured without thinking. With adaptive
    * thinking a forced tool is called about half the time (3 in 8, 4 in 8) —
-   * left to the rule, not `false`: the structured task's fallback covers a
-   * missed call, and `false` would lose the calls that do happen.
+   * left to the rule on both wires, not `false`: the structured task's
+   * fallback covers a missed call, and `false` would lose the calls that do
+   * happen. Chat was probed without thinking only, so it says no more than
+   * Messages does.
    */
   cc: {
     models: CLAUDE,
     families: {
-      openai: { pdfInput: true, forcedToolChoice: true },
+      openai: { pdfInput: true },
       anthropic: { pdfInput: true, web_search: true },
     },
   },

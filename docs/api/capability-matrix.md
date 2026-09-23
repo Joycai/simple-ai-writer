@@ -361,7 +361,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | pdfInput | Chat | · | ✓ | · | ✓ |  |
 | pdfInput | Anth |  | ✓ |  | ✓ |  |
-| forcedToolChoice | Chat | · | ✓ | · | ✓ |  |
+| forcedToolChoice | Chat | · |  | · | ✓ |  |
 | forcedToolChoice | Anth | · |  | · | ✓ |  |
 | structuredOutput | Chat | · |  |  |  |  |
 | web_search | Anth | · | ✓ | · | · |  |

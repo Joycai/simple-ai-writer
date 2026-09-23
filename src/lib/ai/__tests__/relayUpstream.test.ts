@@ -88,10 +88,11 @@ describe("bracketPrefixes", () => {
   it("lists the unmapped bracketed prefixes, most frequent first", () => {
     const ids = [
       "[anti量]claude-opus-4-6", "[CC量]claude-opus-5", "[官key量]claude-opus-5", "[anti量]claude-sonnet-5",
-      "claude-opus-5", "[cc量]claude-sonnet-5", " [anti量]gemini-3-pro",
+      "claude-opus-5", "[cc量]claude-sonnet-5", " [anti量]gemini-3-pro", "[CC量]claude-sonnet-5",
     ];
     expect(bracketPrefixes(ids, TABLE)).toEqual(["[anti量]", "[官key量]"]);
-    expect(bracketPrefixes(ids)).toEqual(["[anti量]", "[CC量]", "[官key量]", "[cc量]"]);
+    // Case-insensitive, like a row: one suggestion, in the spelling most ids use.
+    expect(bracketPrefixes(ids)).toEqual(["[anti量]", "[CC量]", "[官key量]"]);
     expect(bracketPrefixes([])).toEqual([]);
   });
 });
