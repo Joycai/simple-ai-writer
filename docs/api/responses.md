@@ -202,6 +202,10 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 `reasoning.mode:"pro"` 回显 `standard`、`include_obfuscation:false` 无效、60s 上游超时
 （504 / 502 频繁，5.6-sol 尤甚）、假模型名 503、`/v1/models` 带 `supported_endpoint_types`。
 
+同一台中转站上 5.6-sol 的四个上游（`[特价Pro]` / `[Plus]` / `[Pro]` / `[Azure]`）逐项对照在第十七个样本（2026-09-24）：
+`[Pro]` 两种写法的 `text.format` 都丢、`[Azure]` 在 `instructions` 后追加一段不许写小说的护栏且没有 `web_search`、
+三个 ChatGPT 账号档的 `usage.attribution` 能直接读出注入了多少 token。
+
 ## 9. 未验
 
 - 官方端点本身（以上全部经中转站）；`reasoning.mode: "pro"` 与 `background` 在官方上的行为
