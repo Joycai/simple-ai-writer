@@ -40,7 +40,7 @@ import {
   type Provider,
 } from "./configDb";
 import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
-import { feeGroupUpsert, listFeeGroups, rowToFeeGroup } from "./feeGroupDb";
+import { feeGroupUpsert, listFeeGroups, migrateModelPricesToFeeGroups, rowToFeeGroup } from "./feeGroupDb";
 import type { FeeGroup } from "./feeGroup";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
@@ -491,7 +491,7 @@ export async function stageConfigImport(
 export async function applyConfigImport(staged: ParsedConfigBundle): Promise<void> {
   // Not for the writes below — this is what guarantees the tables and their
   // added columns exist before the transaction's own connection touches them.
-  await configDb();
+  const db = await configDb();
 
   await sqlTransaction(await getGlobalDbPath(), [
     // 组先于引用它的两张表：`models.fee_group_id` 与 `providers
@@ -502,6 +502,21 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
     ...staged.models.map((m) => modelUpsert(m, staged.legacyPrices ? "legacy" : "fee-group")),
     ...staged.prompts.map(promptUpsert),
   ]);
+
+  // 上面那次 `configDb()` 跑迁移时，这批行还没落库。旧版备份（`legacyPrices`）
+  // 的模型带着 NULL 标记进来，不在这里补跑就要等下次启动——`aiStore` 的
+  // schema 检查一个进程只跑一次，还原之后的刷新读到的全是「未绑定」，这期间
+  // 发出的请求一分钱都记不下来。总是跑而不是只在旧包时跑：幂等，没有待迁移
+  // 的行时就是一条 SELECT。
+  //
+  // 放在事务外：迁移不是还原的一部分，是落库之后的一步派生计算；失败了配置
+  // 已经在库里，不该把一次成功的还原报成失败——下次启动的 `ensureAiSchema`
+  // 会再试，和它自己对迁移失败的处理一样。
+  try {
+    await migrateModelPricesToFeeGroups(db);
+  } catch (e) {
+    console.warn("[config] 还原后的计费组迁移未完成，下次启动再试：", e);
+  }
 
   // Preferences are not part of the transaction and deliberately land after
   // it: they are the cosmetic half of the restore, and a failure here must not

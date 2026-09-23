@@ -151,3 +151,40 @@ describe("applyConfigImport · fee_migrated", () => {
     expect(modelRow()).toMatchObject({ price_in: 1, price_out: 2, fee_migrated: null });
   });
 });
+
+/**
+ * 还原之后当场迁移。迁移在事务**之后**跑才看得见刚落库的行——事务之前那次
+ * （`configDb()` 里的 `ensureAiSchema`）只扫得到还原之前就在库里的行。
+ */
+describe("applyConfigImport · 事务之后的迁移", () => {
+  const isMigrationScan = (sql: string) => /FROM models WHERE fee_migrated IS NULL/.test(sql);
+
+  it("事务提交之后再扫一遍待迁移的行", async () => {
+    const order: string[] = [];
+    h.invoke.mockImplementation(async (cmd: string) => { order.push(cmd); return undefined; });
+    h.select.mockImplementation((async (sql: string) => {
+      if (isMigrationScan(sql)) order.push("migrate");
+      return [];
+    }) as never);
+
+    await applyConfigImport(staged({ legacyPrices: true }));
+
+    // 第一次扫描是事务前 ensureAiSchema 的，最后一次必须在事务之后。
+    expect(order.lastIndexOf("migrate")).toBeGreaterThan(order.indexOf("sqlite_transaction"));
+  });
+
+  it("迁移失败不把一次已经落库的还原报成失败", async () => {
+    let scans = 0;
+    h.select.mockImplementation((async (sql: string) => {
+      // 事务前那次放过（ensureAiSchema 自己会吞），事务后那次抛。
+      if (isMigrationScan(sql) && ++scans > 1) throw new Error("database is locked");
+      return [];
+    }) as never);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toBeUndefined();
+    expect(scans).toBe(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
