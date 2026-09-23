@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteDisplayIndex, takePasted,
+  classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteDisplayIndex,
 } from "../pasteImages";
 
 const file = (type: string) => ({ kind: "file", type });
@@ -36,16 +36,6 @@ describe("classifyPaste", () => {
   it("leaves an empty or string-only clipboard to the textarea", () => {
     expect(classifyPaste([], false)).toBe("passthrough");
     expect(classifyPaste([str("text/html")], false)).toBe("passthrough");
-  });
-});
-
-describe("takePasted", () => {
-  it("takes the first ones up to the cap and refuses the rest", () => {
-    expect(takePasted(0, 3, 5)).toEqual({ take: 3, refuse: 0 });
-    expect(takePasted(3, 4, 5)).toEqual({ take: 2, refuse: 2 });
-    expect(takePasted(5, 1, 5)).toEqual({ take: 0, refuse: 1 });
-    // Already over (a pre-cap @ list): nothing more, never a negative take.
-    expect(takePasted(6, 2, 5)).toEqual({ take: 0, refuse: 2 });
   });
 });
 

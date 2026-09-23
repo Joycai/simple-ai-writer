@@ -48,15 +48,6 @@ export function classifyPaste(
 }
 
 /**
- * How many of `incoming` new pictures fit beside the `existing` ones under
- * `max`: the first ones in clipboard order, the rest refused.
- */
-export function takePasted(existing: number, incoming: number, max: number): { take: number; refuse: number } {
-  const take = Math.max(0, Math.min(incoming, max - existing));
-  return { take, refuse: incoming - take };
-}
-
-/**
  * True for a path inside a chat's scratch area (`.ai-writer/tmp/chat/`), in
  * either separator spelling.
  */
