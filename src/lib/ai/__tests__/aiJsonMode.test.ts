@@ -96,6 +96,19 @@ describe("resolveStructuredOutput", () => {
     })).toBe("json_schema");
   });
 
+  it("lifts Doubao Seed 2.1 on the measured plan wire only", () => {
+    const plan = "https://ark.cn-beijing.volces.com/api/plan/v3";
+    for (const standard of ["openai_compat", "openai_responses_compat"] as const) {
+      expect(resolveStructuredOutput({ standard, baseUrl: plan, modelId: "doubao-seed-2.1-turbo" })).toBe("json_schema");
+      // 2.0-lite answered past the schema: stays on json_object.
+      expect(resolveStructuredOutput({ standard, baseUrl: plan, modelId: "doubao-seed-2.0-lite" })).toBe("json_object");
+      // The pay-as-you-go wire is unmeasured.
+      expect(resolveStructuredOutput({
+        standard, baseUrl: "https://ark.cn-beijing.volces.com/api/v3", modelId: "doubao-seed-2-1-pro-260915",
+      })).toBe("json_object");
+    }
+  });
+
   it("sends a json_schema declaration one tier down where the platform ignores it (智谱)", () => {
     const zhipu = { standard: "openai_compat" as const, baseUrl: "https://open.bigmodel.cn/api/paas/v4", modelId: "glm-5.3" };
     expect(resolveStructuredOutput({ ...zhipu, structuredOutput: "json_schema" })).toBe("json_object");

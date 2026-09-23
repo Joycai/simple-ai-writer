@@ -362,9 +362,14 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   volcengine: {},
   // The one platform whose Anthropic `document` block was seen reaching the
   // model (landscape.md §7 第十二个样本).
+  // json_schema: an enum the prompt contradicts held on 2.1-turbo — ① with
+  // `strict:true`, ② on this app's `text.format` without it. The wire takes
+  // it; 2.0-lite does not (both routes answered past the schema), which is
+  // why `KNOWN_JSON_SCHEMA` lists 2.1 only (第十二个样本, 2026-09-23).
   "volcengine-plan": {
     families: {
-      responses: { web_search: true },
+      openai: { jsonSchema: true },
+      responses: { web_search: true, jsonSchema: true },
       anthropic: { web_search: true, pdfInput: true },
     },
   },

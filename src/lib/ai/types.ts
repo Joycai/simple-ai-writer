@@ -364,8 +364,8 @@ export type StreamMessage =
        * A separate field from `_reasoning` because the shape is genuinely
        * different: this is an ordered array of blocks — some carrying only an
        * opaque `data` payload with no text at all — and the API rejects a turn
-       * whose blocks were reordered, edited, or partially dropped. A
-       * `{field, text}` pair cannot express that.
+       * whose blocks were reordered, edited, or partially dropped. One text
+       * plus at most one sealed payload (`NativeReasoning`) cannot express that.
        *
        * Carries `modelId` because thinking blocks are bound to the model that
        * produced them. Switching models mid-conversation (which this app

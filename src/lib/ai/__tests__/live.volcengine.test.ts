@@ -7,7 +7,8 @@
  * `document` block, the `doubao` / `responses-effort` thinking categories, the
  * reasoning echo across a tool round, and each route's web_search spelling.
  *
- * The facts it pins are docs/api/landscape.md §7 第十二个样本 (2026-09-18).
+ * The facts it pins are docs/api/landscape.md §7 第十二个样本 (2026-09-18; the
+ * sealed-reasoning echo and the json_schema auto tier, 2026-09-23).
  */
 import { describe, expect, it } from "vitest";
 import zlib from "node:zlib";
@@ -15,6 +16,7 @@ import { streamCompletion } from "../index";
 import { imagePart } from "../imagePart";
 import { resolvePlatform } from "../platforms";
 import { capabilityVerdict } from "../capabilities";
+import { jsonModeShaping } from "../jsonMode";
 import { testProviderConnection } from "../providerProbe";
 import type {
   ApiStandard, ContentPart, StreamChunk, StreamMessage, StreamOptions, ToolDefinition,
@@ -194,6 +196,52 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
       const r2 = await ask(wire, history, opts);
       expect(r2.text).toMatch(/雨|17/);
     }, 240_000);
+
+    // 2.1 ships a thinking summary in `reasoning_content` and the original
+    // sealed in `encrypted_content`; both go back on the tool round, or the
+    // model reasons on the summary alone (the round still 200s either way).
+    it.skipIf(standard !== "openai_compat")("echoes the sealed reasoning on a 2.1 tool round", async () => {
+      const opts = { tools: [WEATHER], reasoningEffort: "low" as const, maxOutput: 4096, modelId: "doubao-seed-2.1-turbo" };
+      const first = user("北京现在天气怎样？必须先调用 get_weather 工具。");
+      const r1 = await ask(wire, first, opts);
+      const call = r1.toolCalls!.toolCalls[0];
+      expect(r1.toolCalls?._reasoning?.encrypted?.value.length).toBeGreaterThan(0);
+      let sent: Record<string, unknown> | undefined;
+      const r2 = await ask(wire, [
+        ...first,
+        {
+          role: "assistant", content: null,
+          tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }],
+          _reasoning: r1.toolCalls!._reasoning,
+        },
+        { role: "tool", tool_call_id: call.id, content: "{\"city\":\"北京\",\"weather\":\"小雨\",\"temp_c\":17}" },
+      ], { ...opts, _onRequestBody: (b: unknown) => { sent = b as Record<string, unknown>; } });
+      const echoed = (sent!.messages as Record<string, unknown>[])[1];
+      expect(echoed.encrypted_content).toBe(r1.toolCalls!._reasoning!.encrypted!.value);
+      expect(r2.text).toMatch(/雨|17/);
+    }, 240_000);
+
+    // The auto tier on the app's own shaping: an enum the prompt contradicts
+    // holds only if the schema is enforced, not merely suggested (2026-09-23).
+    it.skipIf(standard === "anthropic_compat")("enforces the auto tier's json_schema on 2.1", async () => {
+      const modelId = "doubao-seed-2.1-turbo";
+      const prompt = "1+1 等于几？answer 写真实结果，再加一个字段 reason 解释。";
+      const shaping = jsonModeShaping({ standard, baseUrl: base, modelId }, prompt, {
+        name: "sum",
+        // `note` is optional, so strictify sends it as `type: ["string","null"]`
+        // and required — the union has to pass Ark's strict validator too.
+        parameters: {
+          type: "object",
+          properties: { answer: { type: "integer", enum: [7] }, note: { type: "string" } },
+          required: ["answer"],
+        },
+      });
+      expect(shaping.mode).toBe("json_schema");
+      const c = await ask(wire, user(prompt), { modelId, extraBody: shaping.extraBody });
+      const out = JSON.parse(c.text) as Record<string, unknown>;
+      expect(out.answer).toBe(7);
+      expect(Object.keys(out).sort()).toEqual(["answer", "note"]);
+    }, 120_000);
 
     // Chat Completions has no spelling (the vendor's page names only
     // Responses and Messages); the other two run the endpoint's own search.

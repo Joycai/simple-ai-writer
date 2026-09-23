@@ -146,6 +146,7 @@
 | --- | --- | --- |
 | **① OpenAI 官方** | **没有内容**，只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | 想看思维链，官方 Chat Completions 这条路是不通的 |
 | **① 兼容层扩展** | `delta.reasoning_content`（DeepSeek）/ `delta.reasoning`（OpenRouter 等）/ 部分中继内联 `<think>…</think>` | **字段名没有标准**，见 §2.1 |
+| **① 火山方舟（豆包 Seed 2.1 起）** | `delta.reasoning_content` 是**思考摘要**；原文加密在 `delta.encrypted_content`，整串落在某一个 delta 上 | 摘要默认开；密文只为回传，不显示（landscape.md §7 第十二个样本，2026-09-23） |
 | **②** | `reasoning` 条目的 `summary[]`（需 opt-in `summary: auto/concise/detailed`，流式走 `response.reasoning_summary_text.delta`）+ `store:false` 时默认自带的 `encrypted_content` | 是摘要不是原文；**模型没推理（`reasoning_tokens: 0`）时连条目都没有**，同一请求两次可能一有一无 |
 | **③** | 经典 surface：`part.thought === true` 的文本 part + `thoughtSignature`。Interactions：`steps[]` 里 `type:"thought"` 的 step，含 `signature` 与 `summary` | 摘要；Interactions 需 `thinking_summaries: "auto"` 开启 |
 | **④** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 摘要；**且默认可能一个字都不给**，见 §2.3 |
@@ -204,6 +205,7 @@
 | --- | --- | --- |
 | **① 官方** | 无（本来就没有内容） | — |
 | **① DeepSeek** | 两个 user 消息之间**如果模型进行了工具调用**，中间 assistant 的 `reasoning_content` 必须参与拼接，且"在后续所有 user 交互轮次中必须回传"；**没有**工具调用时无需回传（传了会被忽略） | 文档原文：**"若您的代码中未正确回传 `reasoning_content`，API 会返回 400 报错"** |
+| **① 火山方舟** | 工具轮把 `reasoning_content`（摘要）与 `encrypted_content`（原文密文）一起回传；密文优先，只绑产出它的模型 | **不报错**：只回传摘要时模型在摘要上推理（厂商原话「推理效果下降」） |
 | **②** | 无状态模式（`store:false`）下回传 reasoning item 的 `encrypted_content`（原样带回整个条目即可） | 丢失推理上下文；**不报错**（2026-09 实测去掉条目、去掉 `encrypted_content` 都 200），5.5 / 5.6 默认 `context:"all_turns"` 时往轮推理就渲染不回去了 |
 | **③** | 无状态模式下**必须**原样回传带签名的思考块；有状态模式（Interactions 的 `store`/`previous_interaction_id`）由服务端管 | 多轮推理连续性断裂 |
 | **④** | 工具轮必须原样带回该轮的 thinking block（含 `signature`）与 `redacted_thinking` block | **分两种，见 §3.3**：缺失 → 静默降级；改动 → 400 |
