@@ -73,6 +73,26 @@ describe("planMerge", () => {
     expect(providerFor(moved, [plan.channel])!.baseUrl).toBe("https://api.minimaxi.com/anthropic");
   });
 
+  it("keeps both relay prefix tables and an upstream only the absorbed model chose", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
+      platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
+    });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", {
+      platform: "newapi",
+      upstreamPrefixes: [{ prefix: "[cc量]", upstream: "anti" }, { prefix: "[正向AWSb量]", upstream: "bedrock" }],
+    });
+    const relayPlan = planMerge(keep, absorb, [
+      model("k1", "r1", "[x]claude-opus-5"),
+      model("a1", "r2", "[x]claude-opus-5", { relayUpstream: "bedrock" }),
+    ]);
+    // The kept row wins a prefix both tables name; a row only the absorbed one had survives.
+    expect(relayPlan.channel.upstreamPrefixes).toEqual([
+      { prefix: "[CC量]", upstream: "cc" },
+      { prefix: "[正向AWSb量]", upstream: "bedrock" },
+    ]);
+    expect(relayPlan.upserts.find((m) => m.id === "k1")?.relayUpstream).toBe("bedrock");
+  });
+
   it("writes the channel, then the models, then the deletes", () => {
     const stmts = mergeStatements(plan, "mmc");
     expect(stmts[0].sql).toMatch(/INSERT INTO providers/);

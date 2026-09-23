@@ -21,6 +21,7 @@ import type { SqlStatement } from "../sqlTx";
 import { modelUpsert, providerUpsert, type Model, type Provider } from "./configDb";
 import { resolvePlatform } from "./platforms";
 import { activeFamily, channelEndpoints, channelHost, normalizeChannel, routeProfileOf } from "./routes";
+import { parseUpstreamPrefixes } from "./relayUpstream";
 
 /** Two channels the author may fold into one: `absorb`'s routes and models move to `keep`. */
 export interface MergeCandidate {
@@ -96,6 +97,11 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
   const channel = normalizeChannel({
     ...keep,
     endpoints: [...channelEndpoints(keep), ...channelEndpoints(absorb)],
+    // Both relay tables, `keep`'s rows first: a prefix both name keeps
+    // `keep`'s upstream (parseUpstreamPrefixes drops the later repeat). The
+    // absorbed row is deleted, so a row only it had would otherwise be lost —
+    // and with it the upstream its models resolve to.
+    upstreamPrefixes: parseUpstreamPrefixes([...(keep.upstreamPrefixes ?? []), ...(absorb.upstreamPrefixes ?? [])]),
   });
   const keepModels = models.filter((m) => m.providerId === keep.id);
   const updated = new Map<string, Model>();
@@ -114,6 +120,9 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
       updated.set(current.id, {
         ...current,
         routes: { ...(m.routes ?? {}), ...(current.routes ?? {}), [family]: routeProfileOf(m) },
+        // A model-level field, not a route one: the same model id, so an
+        // upstream only the absorbed row chose still names this model's.
+        relayUpstream: current.relayUpstream ?? m.relayUpstream,
       });
       deletes.push(m.id);
       remap[m.id] = current.id;
