@@ -224,6 +224,14 @@ export interface LiveChat {
    * reconnects to its own notes (`workspaceForSnapshot`).
    */
   taskWorkspace: TaskWorkspaceHandle | null;
+  /**
+   * This conversation's scratch directory under `.ai-writer/tmp/chat/`, where
+   * pasted pictures are written (lib/agent/chatStash). Null until the first
+   * paste — not the row id, because a paste happens before the first send and
+   * `sessionId` only exists after the first persist. Rides in the session
+   * blob and in its own `chat_sessions.stash_id` column.
+   */
+  stashId: string | null;
   error: string | null;
   /** Subagents temporarily disabled for this conversation (session-level override). */
   disabledSubAgents: SubAgentKind[];
@@ -422,6 +430,12 @@ export interface AgentState {
    * while it is open and busy. An open idle one loses its tab as well.
    */
   deleteChatSession: (id: number) => Promise<boolean>;
+  /**
+   * This conversation's scratch directory id, made on first use (a paste —
+   * lib/agent/chatStash). Synchronous: the id exists before any byte is
+   * written under it.
+   */
+  ensureChatStash: (key?: string) => string;
 
   /** Send to the active conversation. */
   sendChat: (

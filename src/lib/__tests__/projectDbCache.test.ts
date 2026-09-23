@@ -133,7 +133,7 @@ describe("initSchema", () => {
     h.load.mockImplementationOnce(async (path: string) => ({
       path,
       execute: vi.fn(async (_sql: string) => {}),
-      select: vi.fn(async (_sql: string) => [{ name: "id" }, { name: "pinned" }, { name: "title" }]),
+      select: vi.fn(async (_sql: string) => [{ name: "id" }, { name: "pinned" }, { name: "title" }, { name: "stash_id" }]),
     }));
 
     const sql = (await statements("/proj-current")).join("\n");
@@ -145,6 +145,13 @@ describe("initSchema", () => {
     // would prune a conversation the author had named.
     const sql = (await statements("/proj-b")).join("\n");
     expect(sql).toMatch(/ALTER TABLE chat_sessions ADD COLUMN title\b/);
+  });
+
+  it("adds chat_sessions.stash_id to a database that predates it", async () => {
+    // The pasted-picture sweep reads live ids from this column; without it a
+    // session's scratch directory would look orphaned (lib/agent/chatStash).
+    const sql = (await statements("/proj-c")).join("\n");
+    expect(sql).toMatch(/ALTER TABLE chat_sessions ADD COLUMN stash_id\b/);
   });
 
   it("drops them from projects that already have them", async () => {

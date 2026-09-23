@@ -187,6 +187,19 @@ describe("chat session round-trip", () => {
     expect(Array.isArray(withVideo.content)).toBe(true);
   });
 
+  it("carries the scratch directory id, and tolerates blobs from before it existed", () => {
+    // The pasted pictures live under it; a restored session must keep claiming
+    // them, or the next sweep would take the files its thumbnails point at.
+    const snap = makeSnapshot();
+    snap.stashId = "Ab3dE9xYz_";
+    expect(deserializeChatSession(serializeChatSession(snap))!.stashId).toBe("Ab3dE9xYz_");
+
+    const bare = makeSnapshot();
+    const json = serializeChatSession(bare);
+    expect(json).not.toContain("stashId");
+    expect(deserializeChatSession(json)!.stashId).toBeNull();
+  });
+
   it("carries the task workspace id, and tolerates blobs from before it existed", () => {
     // With a workspace: the restored session must reconnect to its own notes.
     const snap = makeSnapshot();

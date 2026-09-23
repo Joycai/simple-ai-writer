@@ -357,7 +357,7 @@ describe("saving", () => {
       { ...withTurns("c2"), sessionId: 13 },
     ]);
     await state().persistChat("c0");
-    expect(db.upsert).toHaveBeenCalledWith("/p", null, "{}", "first line", { title: "第三章", keep: [12, 13] });
+    expect(db.upsert).toHaveBeenCalledWith("/p", null, "{}", "first line", { title: "第三章", keep: [12, 13], stashId: null });
     // The new row's id is adopted, so the next save updates in place.
     expect(chat("c0").sessionId).toBe(41);
     expect(db.list).toHaveBeenCalledWith("/p", [41, 12, 13]);

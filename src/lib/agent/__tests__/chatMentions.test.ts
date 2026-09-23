@@ -196,6 +196,38 @@ describe("buildChatMessage", () => {
     expect(out.text).toContain("2. b.png");
   });
 
+  it("says where each sent picture is, relative to the project", async () => {
+    // The pixels leave the context after a turn or two; this line does not.
+    // Without the path, "read it again" had nothing to read.
+    const out = await buildChatMessage("看看", undefined, [imageRef("a.png")], {
+      allowImages: true, projectPath: "/p",
+    });
+    expect(out.text).toContain("1. a.png — 参考图/a.png");
+    // Without a project root the absolute path still travels.
+    const bare = await buildChatMessage("看看", undefined, [imageRef("a.png")], { allowImages: true });
+    expect(bare.text).toContain("1. a.png — /p/参考图/a.png");
+  });
+
+  it("marks a pasted picture as session scratch", async () => {
+    // A scratch file goes with the session; a link to it in the manuscript
+    // would break then, so the model is told what it is.
+    const pasted = {
+      kind: "image" as const,
+      file: { name: "粘贴的图片 1", path: "/p/.ai-writer/tmp/chat/s1/abc123def456.png", kind: "image" as const },
+      dataUrl: "data:image/png;base64,x",
+    };
+    const out = await buildChatMessage("看看", undefined, [pasted, imageRef("b.png")], {
+      allowImages: true, projectPath: "/p",
+    });
+    expect(out.text).toContain("1. 粘贴的图片 1 — .ai-writer/tmp/chat/s1/abc123def456.png（会话暂存，随会话删除）");
+    expect(out.text).toContain("2. b.png — 参考图/b.png\n");
+  });
+
+  it("carries five pictures on one message", () => {
+    // Pasted and @-attached share this one number (chat-image-paste-plan §3.4).
+    expect(MAX_MESSAGE_IMAGES).toBe(5);
+  });
+
   it("tells a text-only model the picture could not travel", async () => {
     // Silently dropping it makes the assistant look like it ignored the
     // author; naming it lets the assistant say what happened.
@@ -217,7 +249,7 @@ describe("buildChatMessage", () => {
     expect(out.imagePaths).toHaveLength(MAX_MESSAGE_IMAGES);
     // The ones that didn't fit are named rather than vanishing.
     // …and the reason given is the cap, not a blindness the model doesn't have.
-    expect(out.text).toMatch(/没有随本条消息发送——单条消息最多带 4 张/);
+    expect(out.text).toMatch(new RegExp(`没有随本条消息发送——单条消息最多带 ${MAX_MESSAGE_IMAGES} 张`));
     expect(out.text).not.toMatch(/读不了图/);
     expect(out.text).toContain(`${MAX_MESSAGE_IMAGES + 1}.png`);
   });

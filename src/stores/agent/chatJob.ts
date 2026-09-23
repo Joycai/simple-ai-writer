@@ -11,7 +11,8 @@ import { coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, recor
 import { compactChatHistory, summarizeForCompaction } from "../../lib/agent/compactRun";
 import { requestStateUpdate, updateSkillState } from "../../lib/agent/skillStateRun";
 import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
-import { listChatSessions } from "../../lib/agent/sessionDb";
+import { listChatSessions, listChatStashIds } from "../../lib/agent/sessionDb";
+import { sweepChatStash } from "../../lib/agent/chatStash";
 import type { ChatSnapshot } from "../../lib/agent/chatSession";
 import { MAX_CONCURRENT_RUNS, nextRunnableJobIndex } from "../../lib/agent/scheduler";
 import { appendAgentEventTo, type AgentEvent } from "../../lib/agent/events";
@@ -95,7 +96,7 @@ export function newChatKey(): string {
 export function emptyChat(key: string): LiveChat {
   return {
     key, sessionId: null, title: "", turns: [], history: null, meta: null, usage: null,
-    contextVersion: 0, taskWorkspace: null, error: null,
+    contextVersion: 0, taskWorkspace: null, stashId: null, error: null,
     disabledSubAgents: [], planMode: false, stateMemory: false, unread: false,
   };
 }
@@ -127,7 +128,7 @@ export function chatFromSnapshot(
   return {
     sessionId, title,
     turns: snap.turns, history: snap.history, meta: snap.meta, usage: snap.usage,
-    contextVersion: 0, taskWorkspace, error: null,
+    contextVersion: 0, taskWorkspace, stashId: snap.stashId ?? null, error: null,
     disabledSubAgents: [], planMode: false, stateMemory: snap.meta.stateMode, unread: false,
   };
 }
@@ -164,6 +165,25 @@ export async function refreshSessionList(set: Set, get: Get): Promise<void> {
   const { projectPath } = useProjectStore.getState();
   if (!projectPath) return;
   set({ chatSessions: await listChatSessions(projectPath, openSessionIds(get())) });
+}
+
+/**
+ * Reconcile `.ai-writer/tmp/chat/` against the sessions this project has: every
+ * id a row claims, plus every open tab's (a tab that pasted but never sent has
+ * no row yet). Once per project per launch — chatStash keeps the tally.
+ * Best-effort from end to end: a failed sweep is stray pictures in tmp.
+ */
+export async function sweepStashFor(projectPath: string, s: AgentState): Promise<void> {
+  try {
+    const live = new Set(await listChatStashIds(projectPath));
+    for (const k of s.chatOrder) {
+      const id = s.chats[k]?.stashId;
+      if (id) live.add(id);
+    }
+    await sweepChatStash(projectPath, live);
+  } catch {
+    // Not reading the live ids means not knowing what is orphaned: skip.
+  }
 }
 
 /**

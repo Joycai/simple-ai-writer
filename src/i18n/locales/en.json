@@ -1949,6 +1949,7 @@
       "previewImage": "Click to preview",
       "refBlockLabel": "【Referenced material】",
       "imageBlockLabel": "【Attached images】",
+      "imageStashNote": " (session scratch — deleted with the session)",
       "imagesNotSent": "(These images could not travel with this message — the active model cannot read images:\n{{list}})",
       "imagesOverCap": "(These images did not travel with this message — one message carries at most {{max}} images, {{mb}} MB in total:\n{{list}})",
       "videoBlockLabel": "【Attached video】",
