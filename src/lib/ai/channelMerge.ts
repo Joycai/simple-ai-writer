@@ -21,7 +21,7 @@ import type { SqlStatement } from "../sqlTx";
 import { modelUpsert, providerUpsert, type Model, type Provider } from "./configDb";
 import { resolvePlatform } from "./platforms";
 import { activeFamily, channelEndpoints, channelHost, normalizeChannel, routeProfileOf } from "./routes";
-import { parseUpstreamPrefixes } from "./relayUpstream";
+import { parseUpstreamPrefixes, resolveRelayUpstream } from "./relayUpstream";
 
 /** Two channels the author may fold into one: `absorb`'s routes and models move to `keep`. */
 export interface MergeCandidate {
@@ -130,6 +130,25 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
       moved.push({ ...m, providerId: keep.id, activeRoute: family });
     }
   }
+
+  // The merged table may answer differently for a model than its own channel's
+  // did — the two tables name one prefix with two upstreams, or `absorb` has a
+  // longer prefix that now wins for a `keep` model. A merge must not change
+  // what any model can do, so such a model keeps what it had, as its own choice.
+  const platform = resolvePlatform(channel.platform, channel.baseUrl, channel.apiStandard);
+  const pin = (m: Model, before: Provider["upstreamPrefixes"]): Model => {
+    if (m.relayUpstream) return m;
+    const was = resolveRelayUpstream(platform, m.modelId, undefined, before).upstream;
+    const now = resolveRelayUpstream(platform, m.modelId, undefined, channel.upstreamPrefixes).upstream;
+    return was === now ? m : { ...m, relayUpstream: was ?? "none" };
+  };
+  for (const k of keepModels) {
+    const current = updated.get(k.id) ?? k;
+    const pinned = pin(current, keep.upstreamPrefixes);
+    if (pinned !== k) updated.set(k.id, pinned);
+  }
+  for (let i = 0; i < moved.length; i++) moved[i] = pin(moved[i], absorb.upstreamPrefixes);
+
   return {
     channel,
     upserts: [...updated.values(), ...moved],

@@ -93,6 +93,28 @@ describe("planMerge", () => {
     expect(relayPlan.upserts.find((m) => m.id === "k1")?.relayUpstream).toBe("bedrock");
   });
 
+  it("changes no model's upstream when the two tables disagree", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
+      platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
+    });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", {
+      platform: "newapi",
+      upstreamPrefixes: [{ prefix: "[CC量]", upstream: "anti" }, { prefix: "[CC量]claude-opus", upstream: "bedrock" }],
+    });
+    const conflictPlan = planMerge(keep, absorb, [
+      model("k1", "r1", "[CC量]claude-opus-4-6"),
+      model("k2", "r1", "[CC量]gpt-5"),
+      model("a1", "r2", "[CC量]claude-sonnet-5"),
+    ]);
+    const byId = new Map(conflictPlan.upserts.map((m) => [m.id, m]));
+    // Moved from absorb: it was anti there; the merged table would say cc (keep wins the shared prefix).
+    expect(byId.get("a1")?.relayUpstream).toBe("anti");
+    // Kept, but absorb's longer prefix would now win for it: pinned to what keep's table gave.
+    expect(byId.get("k1")?.relayUpstream).toBe("cc");
+    // Answered the same before and after: untouched, not even written.
+    expect(byId.has("k2")).toBe(false);
+  });
+
   it("writes the channel, then the models, then the deletes", () => {
     const stmts = mergeStatements(plan, "mmc");
     expect(stmts[0].sql).toMatch(/INSERT INTO providers/);

@@ -385,8 +385,9 @@ function thinkingFor(
  * Endpoints that refuse a forced choice with nothing in the config to predict
  * it are handled the other way round, from their own 400 — see
  * `lib/ai/toolChoice.ts`. Ones that take it with a 200 and ignore it are the
- * capability table's `forcedToolChoice` cell (a relay's Kiro-served Claude,
- * landscape.md §7 第十五个样本): a silent ignore teaches the memo nothing.
+ * capability table's `forcedToolChoice` cell — on a relay, the upstream's
+ * (`UPSTREAM_CAPABILITIES`: Kiro and anti ignore it, landscape.md §7 第十五、
+ * 十六个样本): a silent ignore teaches the memo nothing.
  */
 function toolChoiceBody(
   opts: StreamOptions,

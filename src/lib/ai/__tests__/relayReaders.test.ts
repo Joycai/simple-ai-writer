@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 import { readsPdf, type Model, type Provider } from "../configDb";
 import { serverToolsSent } from "../serverTools";
+import { upstreamDropping } from "../relayUpstream";
 
 const relay = (endpointStandard: Provider["apiStandard"], upstreamPrefixes?: Provider["upstreamPrefixes"]): Provider => ({
   id: "r", name: "Relay", baseUrl: "https://relay.example", apiStandard: endpointStandard, platform: "newapi",
@@ -52,5 +53,19 @@ describe("serverToolsSent on a relay", () => {
     expect(serverToolsSent(model("[CC量]claude-opus-5", { ...declared, relayUpstream: "anti" }), providers)).toBeUndefined();
     expect(serverToolsSent(model("[正向AWSb量]claude-opus-4-6", { ...declared, relayUpstream: "none" }), providers))
       .toEqual(["web_search"]);
+  });
+});
+
+// The subagent texts say *which* reason: the upstream, or the platform / route.
+describe("upstreamDropping", () => {
+  it("names the upstream only when it is the reason", () => {
+    const anth = relay("anthropic_compat", [...TABLE, { prefix: "[anti量]", upstream: "anti" }]);
+    expect(upstreamDropping("web_search", model("[正向AWSb量]claude-opus-4-6"), anth)).toBe("bedrock");
+    expect(upstreamDropping("web_search", model("[CC量]claude-opus-5"), anth)).toBeUndefined();
+    expect(upstreamDropping("pdfInput", model("[anti量]claude-opus-4-6"), relay("openai_compat", [{ prefix: "[anti量]", upstream: "anti" }])))
+      .toBe("anti");
+    // On Anthropic the protocol rule already refuses anti's PDF: not the upstream's doing.
+    expect(upstreamDropping("pdfInput", model("[anti量]claude-opus-4-6"), anth)).toBeUndefined();
+    expect(upstreamDropping("web_search", model("[正向AWSb量]claude-opus-4-6", { relayUpstream: "none" }), anth)).toBeUndefined();
   });
 });

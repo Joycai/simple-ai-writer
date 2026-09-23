@@ -226,10 +226,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // 智谱. `family` below only picks spellings and wording.
   const curWire = provider ? providerWire(provider) : undefined;
   const can = (id: CapabilityId, m?: Parameters<typeof hasCapability>[2]) => !!curWire && hasCapability(id, curWire, m);
-  // The wires with a whole-file content part the adapters map
-  // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
-  // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
-  // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -966,7 +962,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // compare; the switches' own hints speak for the one route.
   const matrixRows = (ids: readonly CapabilityId[], declared: Partial<Record<CapabilityId, boolean>>) => multiRoute
     ? ids.filter((id) => declared[id]
-      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w, { type: form.type }); }))
+      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w, { ...capModel, type: form.type }); }))
     : [];
   const matrixInput = matrixRows(["pdfInput", "vlHighResolution", "videoInput", "videoFps"], {
     pdfInput, vlHighResolution, videoInput, videoFps: videoInput && videoFpsText.trim() !== "",

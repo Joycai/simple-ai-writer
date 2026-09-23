@@ -225,10 +225,11 @@ export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as Server
  *
  * Without `runs` the matcher only singles ids out: an id `refuses` names is
  * `no / model`, and every other id — or a blank one — gets whatever the rule
- * gives this platform, as if the cell were absent. That is the shape for a
- * relay, where one upstream behind it was measured and the rest were not: the
- * measured ids must not drag every other model on the relay down to
- * `model-unlisted`.
+ * gives this platform, as if the cell were absent — for a platform where one
+ * family of ids was measured and the rest were not, which must not drag every
+ * other model down to `model-unlisted` (§8.10). The relay's Kiro cells were
+ * its first use; they moved to {@link UPSTREAM_CAPABILITIES} (§8.11), and no
+ * cell uses the shape today. Kept for the next per-id finding on a platform.
  */
 interface ModelMatcher {
   runs?: readonly RegExp[];

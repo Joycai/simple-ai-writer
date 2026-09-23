@@ -796,6 +796,8 @@
       "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
       "warnSearchNotSent": "该模型开了联网搜索，但它所在平台没有服务端搜索，请求里不会发送——子代理无法联网。换一个支持搜索的平台上的模型。",
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
+      "warnSearchUpstream": "该模型背后的中转站上游「{{upstream}}」实测不支持联网搜索，请求里不会发送——子代理无法联网。换一个走别的上游的模型。",
+      "warnPdfUpstream": "该模型背后的中转站上游「{{upstream}}」实测会丢掉 PDF，子代理读不到文件。换一个走别的上游的模型。",
       "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
       "enable": "启用",
       "imagegen": "图片生成",

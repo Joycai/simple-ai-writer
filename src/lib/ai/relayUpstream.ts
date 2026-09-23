@@ -19,8 +19,9 @@
  * docs/api/capability-gating-plan.md §8.11.
  */
 
-import { PLATFORM_CAPABILITIES } from "./capabilities";
-import type { PlatformId } from "./platforms";
+import { PLATFORM_CAPABILITIES, capabilityVerdict, type CapabilityId } from "./capabilities";
+import { providerWire, type PlatformId } from "./platforms";
+import type { ApiStandard } from "./types";
 
 /** The built-in upstreams, in the order the drawers list them. */
 export const RELAY_UPSTREAMS = ["kiro", "cc", "anti", "bedrock", "official"] as const;
@@ -116,6 +117,23 @@ export function relayUpstreamFor(
   channel: { upstreamPrefixes?: readonly UpstreamPrefix[] } | undefined,
 ): RelayUpstreamChoice {
   return resolveRelayUpstream(platform, model.modelId, model.relayUpstream, channel?.upstreamPrefixes).upstream ?? "none";
+}
+
+/**
+ * The upstream that keeps this capability off this model on this channel —
+ * when that, and not the platform or the route, is why it is not sent. For
+ * the texts that tell the author (or the model) what to change.
+ */
+export function upstreamDropping(
+  id: CapabilityId,
+  model: { modelId?: string; relayUpstream?: RelayUpstreamChoice },
+  channel: { platform?: PlatformId; baseUrl: string; apiStandard: ApiStandard; upstreamPrefixes?: readonly UpstreamPrefix[] },
+): RelayUpstreamId | undefined {
+  const wire = providerWire(channel);
+  const relayUpstream = relayUpstreamFor(wire.platform, model, channel);
+  if (relayUpstream === "none") return undefined;
+  const v = capabilityVerdict(id, wire, capabilityModelOf({ modelId: model.modelId, relayUpstream }));
+  return v.status === "no" && v.reason === "upstream" ? relayUpstream : undefined;
 }
 
 /**
