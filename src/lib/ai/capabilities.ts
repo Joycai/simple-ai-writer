@@ -216,9 +216,16 @@ export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as Server
  * offered and sent, the drawer saying it is unmeasured (capability-gating-plan
  * §8.7 — the platform has the tool, so a model the list hasn't caught up with
  * gets the switch rather than losing it).
+ *
+ * Without `runs` the matcher only singles ids out: an id `refuses` names is
+ * `no / model`, and every other id — or a blank one — gets whatever the rule
+ * gives this platform, as if the cell were absent. That is the shape for a
+ * relay, where one upstream behind it was measured and the rest were not: the
+ * measured ids must not drag every other model on the relay down to
+ * `model-unlisted`.
  */
 interface ModelMatcher {
-  runs: readonly RegExp[];
+  runs?: readonly RegExp[];
   refuses?: readonly RegExp[];
 }
 
@@ -326,6 +333,45 @@ const DASHSCOPE: PlatformCapabilities = {
   },
 };
 
+/**
+ * Claude served by a relay's Kiro channel (AWS's IDE backend, translated to
+ * the Messages and Chat Completions shapes by the relay). The channel shows in
+ * the id the author copies from the relay's catalogue — `[特价kiro量]claude-opus-5`,
+ * `特价kiro | claude-opus-4-6`, `[kiro2]kiro-claude-sonnet-5` — so the id is
+ * the one handle there is (landscape.md §7 第十五个样本, 2026-09-23).
+ *
+ * Measured on opus-4-6 and opus-5 only. Sonnet is included by inference: every
+ * gap below is the relay's translation layer, not the model, and both Opus
+ * behaved identically on every probe.
+ *
+ *   - Chat `file` part: dropped, the model answers that it sees no document.
+ *   - A forced `tool_choice`, both wires: honoured on the relay's non-streamed
+ *     path only. Streamed — the only way this app calls — the model answers
+ *     in prose (Anth 1 call in 32, Chat 0 in 4, thinking on or off).
+ *   - Chat `response_format` (`json_object` and `json_schema`): ignored,
+ *     prose with a fenced JSON block. `off` sends the cue alone, which is all
+ *     that reached the model anyway.
+ *   - Anthropic `web_search_*`: the relay answers it itself. As the request's
+ *     only tool it hijacks the request — the first user message is searched
+ *     verbatim and a canned result list comes back, no model run. Beside a
+ *     function tool on a stream it runs a real search. This app sends the
+ *     tool on every request of the model, tool-less ones included, so a
+ *     writing request would come back as a page of search results.
+ */
+const KIRO_CLAUDE: ModelMatcher = { refuses: [/^(?=.*kiro)(?=.*claude)/] };
+
+/**
+ * `newapi` and `custom` alike: a New API relay lands on `custom` unless the
+ * author picks New API, and the channel is in the model id either way.
+ */
+const RELAY: PlatformCapabilities = {
+  relay: true,
+  families: {
+    openai: { pdfInput: KIRO_CLAUDE, forcedToolChoice: KIRO_CLAUDE, structuredOutput: KIRO_CLAUDE },
+    anthropic: { forcedToolChoice: KIRO_CLAUDE, web_search: KIRO_CLAUDE },
+  },
+};
+
 /** A local server: the protocol's own tools are known absent, not unmeasured. */
 const LOCAL: PlatformCapabilities = {
   families: { all: { web_search: false } },
@@ -378,10 +424,10 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // json_schema: a 200 that ignores it — prose in a code fence, Chinese keys.
   zhipu: { families: { all: { forcedToolChoice: false, jsonSchema: false } } },
   orcarouter: {},
-  newapi: { relay: true },
+  newapi: RELAY,
   ollama: LOCAL,
   comfyui: LOCAL,
-  custom: { relay: true },
+  custom: RELAY,
 };
 
 /** The wire a question is about — the same pair `platforms.ts` calls `ServerToolWire`. */
@@ -433,9 +479,12 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (cell) {
     // Blank = nothing typed yet: the axis is not consulted.
     const mid = model.modelId?.trim().toLowerCase();
-    if (!mid) return verdict("yes", "measured");
-    if (cell.refuses?.some((re) => re.test(mid))) return verdict("no", "model");
-    return cell.runs.some((re) => re.test(mid)) ? verdict("yes", "measured") : verdict("unknown", "model-unlisted");
+    if (mid && cell.refuses?.some((re) => re.test(mid))) return verdict("no", "model");
+    if (cell.runs) {
+      if (!mid) return verdict("yes", "measured");
+      return cell.runs.some((re) => re.test(mid)) ? verdict("yes", "measured") : verdict("unknown", "model-unlisted");
+    }
+    // A refuses-only matcher: the ids it does not name fall to the rule below.
   }
 
   if (!rule.families.includes(family)) return verdict("no", "family");

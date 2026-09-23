@@ -115,14 +115,19 @@ interface JsonModeTarget {
 export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutputMode {
   const family = familyOf(target.standard);
   if (family === "anthropic") return "off";
-  // Whether this *wire* takes the strict tier is the capability table's
-  // `jsonSchema` cell — a fact about the platform, not the model id: 智谱
-  // serves GLM and ignores json_schema, DashScope serves GLM and honours it.
   const wire = {
     platform: resolvePlatform(target.platform, target.baseUrl ?? "", target.standard),
     standard: target.standard,
   };
-  const strict = capabilityVerdict("jsonSchema", wire).status;
+  // A wire measured to ignore JSON mode for this model gets the cue alone —
+  // what Anthropic gets. The declaration stays on the row, not sent (a relay's
+  // Kiro-served Claude answers `response_format` with fenced prose).
+  const model = { modelId: target.modelId };
+  if (capabilityVerdict("structuredOutput", wire, model).status === "no") return "off";
+  // Whether this *wire* takes the strict tier is the capability table's
+  // `jsonSchema` cell — a fact about the platform, not the model id: 智谱
+  // serves GLM and ignores json_schema, DashScope serves GLM and honours it.
+  const strict = capabilityVerdict("jsonSchema", wire, model).status;
   if (target.structuredOutput) {
     // A declaration the platform is measured to ignore is sent one tier down —
     // the 200 it would get is prose, not the schema the author asked for.

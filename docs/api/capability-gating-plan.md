@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7）。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -388,3 +388,25 @@ C1 之后它已经没有调用方了：四族都有思考参数的拼法，它�
   模型抽屉在这种线路上不再给严格档选项，已经存了的声明仍显示，免得选中项凭空消失。
 - 代价：百炼 ② 上的 Qwen 原来被自动抬升，现在停在 `json_object`，因为 ② 面没人测过。这是少一次升级，
   不是一次失败。实测之后补格子即可。
+
+### 8.10 中转站上按模型 id 挑出不支持的：只写 `refuses` 的模型格（2026-09-23）
+
+**问题。** 中转站（`newapi` / `custom`）没有可识别的主机，同一台背后挂着许多上游渠道，渠道只在模型 id 里看得出来
+（`[特价kiro量]claude-opus-5`）。第十五个样本实测了 Kiro 渠道的 Claude：Chat 面的 `file` 片段被丢、`response_format`
+被无视，两面的强制 `tool_choice` 在流式下被无视，Anth 面单独挂着的 `web_search_*` 会被中转站劫持成一页搜索结果
+（landscape.md §7 第十五个样本）。这些都是 200 不报错，学习型的降级（`toolChoice.ts`、`jsonMode` 的备忘）学不到。
+
+§8.7 的模型格有 `runs` 就有「名单外 = 未实测」这一档。放到中转站上，会把同一台上**别的所有模型**从 `protocol` 拉成
+`model-unlisted`，而它们既没测过、也不该因为 Kiro 被连累。
+
+**决定。** `runs` 改成可选。**只写 `refuses` 的格子只负责点名**：名单里的 id 判 `no / model`，名单外的 id（和空 id）
+照规则走，跟这个格子不存在一样。矩阵文档里这种格子也标「按模型」。
+
+- 格子写在 `newapi` 和 `custom` 两个平台上：New API 中转站不手选平台时落在 `custom`，渠道又都写在 id 里。
+- 一起修了几个查表时不带模型 id 的调用点，否则矩阵说「不发」，适配器照发，一致性测试会抓出来：
+  `openai.ts` 的强制工具、`anthropic.ts` 新增的强制工具判断（④ 族以前没问过这一格）、`anthropicServerTools`、
+  `readsPdf`、`jsonMode.resolveStructuredOutput`。`structuredOutput` 判 `no` 时 JSON 模式降到 `off`，只发提示语，
+  和 ④ 族一样。一致性测试的模型 id 加了一个 Kiro 的。
+- **Sonnet 按推断收进 `refuses`（作者决定，2026-09-23）**。这是 §8.7「`refuses` 只收实测」的例外，理由是：
+  这些缺口都在中转站的翻译层，不在模型；两款 Opus 在每一项上表现都一样。所以正则按渠道 × 家族写，
+  规则是同时带 `kiro` 和 `claude`，不按具体型号。别的渠道（`[anti]` 等）没测，不在里面。
