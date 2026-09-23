@@ -114,11 +114,19 @@ async function proposeIllustration(
       content: `Error: the image model "${model.name}" is declared as not accepting input images, so references cannot be used. Call generate_image without references, describing the reference's look in the prompt instead.`,
     };
   }
+  // The limit is on input images, and an edit's source is one of them: it
+  // rides the same field as the references (illustrate.ts). Counting only the
+  // references let an edit with a full set through the card and into a 400
+  // the author had already approved.
   const maxRefs = model.caps?.maxRefs;
-  if (maxRefs && spec.refPaths && spec.refPaths.length > maxRefs) {
+  const inputs = (spec.sourcePath ? 1 : 0) + (spec.refPaths?.length ?? 0);
+  if (maxRefs && inputs > maxRefs) {
+    const given = spec.sourcePath
+      ? `${inputs} were given, counting the picture being changed`
+      : `${inputs} were given`;
     return {
       toolCallId,
-      content: `Error: the image model "${model.name}" takes at most ${maxRefs} reference image(s); ${spec.refPaths.length} were given. Keep the most important one(s).`,
+      content: `Error: the image model "${model.name}" takes at most ${maxRefs} input image(s); ${given}. Keep the most important reference(s).`,
     };
   }
 

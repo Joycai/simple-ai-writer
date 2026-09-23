@@ -279,6 +279,47 @@ describe("edit_image", () => {
   });
 });
 
+// The model's cap is on input images, and the picture being changed is one:
+// Seedream 5.0 pro answers an eleventh with 400 "cannot exceed 10" — after
+// the author approved the card, had the source not been counted.
+describe("input-image cap", () => {
+  beforeEach(() => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { edit: true, maxRefs: 2 } }];
+    onDisk = new Set(["/proj/插图/参考.png", "/proj/插图/b.png", "/proj/插图/c.png", "/proj/第一章.md"]);
+  });
+
+  it("counts the source of an edit against the cap, before the card", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", {
+      source: "插图/参考.png", instruction: "x", references: ["插图/b.png", "插图/c.png"],
+    }, ctx);
+    expect(seen).toHaveLength(0);
+    expect(res.content).toMatch(/at most 2 input image/);
+    expect(res.content).toMatch(/3 were given, counting the picture being changed/);
+  });
+
+  it("counts the gallery picture a redraw starts from, too", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", {
+      entity: "艾尔登", file: "a.png", instruction: "x", references: ["插图/b.png", "插图/c.png"],
+    }, ctx);
+    expect(seen).toHaveLength(0);
+    expect(res.content).toMatch(/counting the picture being changed/);
+  });
+
+  it("lets an edit through at exactly the cap", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "x", references: ["插图/b.png"] }, ctx);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("gives a fresh drawing the whole cap for references", async () => {
+    const { ctx, seen } = ctxWith();
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登", references: ["插图/b.png", "插图/c.png"] }, ctx);
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe("redraw_lore_image", () => {
   it("carries the source picture and files the result as a new gallery entry", async () => {
     const { ctx, seen } = ctxWith();
