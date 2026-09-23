@@ -1213,7 +1213,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // crash that loses a session never announces itself first.
       void get().persistChat(k);
     }
-    return target.text;
+    // The pictures as paths: the turn keeps no pixels, so the composer
+    // rebuilds the chips (usePasteImages' restore).
+    return { text: target.text, images: target.images ?? [] };
   },
 
   resumeTask: async (taskId: string) => {

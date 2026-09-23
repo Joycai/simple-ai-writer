@@ -27,7 +27,7 @@ vi.mock("../../lore/entity", () => ({
 }));
 
 const { findMention, filterMentions } = await import("../../../components/common/MentionPicker");
-const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP } = await import("../chatRefs");
+const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP, refsAhead } = await import("../chatRefs");
 
 describe("findMention", () => {
   it("opens on a bare @ and tracks what follows", () => {
@@ -103,6 +103,15 @@ describe("hasMessage", () => {
     // A file with nothing asked of it is material, not a question.
     const file = { kind: "text" as const, file: { name: "a.md", path: "/p/a.md", kind: "markdown" as const }, content: "x" };
     expect(hasMessage("", [file as never])).toBe(false);
+  });
+});
+
+describe("refsAhead", () => {
+  it("puts handed-back chips first and does not double one already there", () => {
+    const img = (name: string) =>
+      ({ kind: "image" as const, file: { name, path: `/p/${name}`, kind: "image" as const }, dataUrl: "data:," });
+    const out = refsAhead([img("a.png"), img("b.png")], [img("c.png"), img("a.png")]);
+    expect(out.map((r) => (r.kind === "image" ? r.file.name : ""))).toEqual(["a.png", "b.png", "c.png"]);
   });
 });
 
