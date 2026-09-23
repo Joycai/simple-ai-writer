@@ -17,8 +17,19 @@ const db = vi.hoisted(() => ({
   upsert: vi.fn(async () => 41),
   list: vi.fn(async () => [] as unknown[]),
   setTitle: vi.fn(async () => {}),
-  del: vi.fn(async () => {}),
+  del: vi.fn(async (): Promise<string | null> => null),
   load: vi.fn(async () => "{}"),
+  stashIds: vi.fn(async () => ["row-a"]),
+}));
+// The scratch area's disk half; what the store hands it is the subject here.
+const stash = vi.hoisted(() => ({
+  remove: vi.fn(async () => {}),
+  sweep: vi.fn(async () => {}),
+}));
+vi.mock("../chatStash", () => ({
+  removeChatStash: stash.remove,
+  sweepChatStash: stash.sweep,
+  newStashId: () => "stash-new",
 }));
 vi.mock("../sessionDb", () => ({
   loadChatSession: db.load,
@@ -26,6 +37,7 @@ vi.mock("../sessionDb", () => ({
   upsertChatSession: db.upsert,
   setChatSessionTitle: db.setTitle,
   deleteChatSession: db.del,
+  listChatStashIds: db.stashIds,
   normalizeSessionTitle: (t: string) => t.replace(/\s+/g, " ").trim(),
   sessionLabel: (row: { title?: string; preview?: string } | null, untitled: string) =>
     row?.title || row?.preview || untitled,
@@ -392,6 +404,64 @@ describe("saving", () => {
     expect(await state().deleteChatSession(8)).toBe(true);
     expect(db.del).toHaveBeenCalledWith("/p", 8);
     expect(state().chatOrder).toEqual(["c0"]);
+  });
+});
+
+describe("pasted pictures' scratch directory (chat-image-paste-plan §3.3, §4)", () => {
+  it("is made on first use and then kept", () => {
+    expect(chat("c0").stashId).toBeNull();
+    expect(state().ensureChatStash("c0")).toBe("stash-new");
+    expect(chat("c0").stashId).toBe("stash-new");
+    useAgentStore.setState((st) => ({ chats: { ...st.chats, c0: { ...st.chats.c0, stashId: "kept" } } }));
+    expect(state().ensureChatStash("c0")).toBe("kept");
+  });
+
+  it("stays with a reused empty tab that never saved — its unsent chips point there", () => {
+    seed([{ ...emptyChat("c0"), stashId: "pasted" }]);
+    state().newChat();
+    expect(chat("c0").stashId).toBe("pasted");
+  });
+
+  it("does not follow a tab rewound to empty into the new conversation", () => {
+    // The row still claims it; two sessions on one directory means deleting
+    // either takes the other's pictures.
+    seed([{ ...emptyChat("c0"), sessionId: 3, stashId: "row-owned" }]);
+    state().newChat();
+    expect(chat("c0").stashId).toBeNull();
+    expect(chat("c0").sessionId).toBeNull();
+  });
+
+  it("keeps a tab with pasted, unsent pictures when a saved conversation is opened", async () => {
+    seed([{ ...emptyChat("c0"), stashId: "pasted" }]);
+    await state().switchChatSession(7);
+    expect(state().chatOrder).toHaveLength(2);
+    expect(chat("c0").stashId).toBe("pasted");
+  });
+
+  it("rides along on every save", async () => {
+    seed([{ ...withTurns("c0"), history: [{ role: "system", content: "s" }], meta: {} as never, stashId: "s1" }]);
+    await state().persistChat("c0");
+    expect(db.upsert).toHaveBeenCalledWith(
+      "/p", null, "{}", "first line", expect.objectContaining({ stashId: "s1" }),
+    );
+  });
+
+  it("goes with the session when the author deletes it", async () => {
+    seed([withTurns("c0"), { ...withTurns("c1"), sessionId: 8, stashId: "tab-id" }]);
+    db.del.mockResolvedValueOnce("row-id");
+    await state().deleteChatSession(8);
+    expect(stash.remove).toHaveBeenCalledWith("/p", "row-id");
+
+    // A row saved before the column existed: the open tab knows the id.
+    seed([withTurns("c0"), { ...withTurns("c1"), sessionId: 9, stashId: "tab-id" }]);
+    await state().deleteChatSession(9);
+    expect(stash.remove).toHaveBeenLastCalledWith("/p", "tab-id");
+  });
+
+  it("is reconciled on project open against every row and every open tab", async () => {
+    await state().resetChatForProject("/p");
+    await vi.waitFor(() => expect(stash.sweep).toHaveBeenCalled());
+    expect(stash.sweep).toHaveBeenCalledWith("/p", new Set(["row-a"]));
   });
 });
 

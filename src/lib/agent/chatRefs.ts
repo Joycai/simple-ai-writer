@@ -226,13 +226,15 @@ export async function buildChatMessage(
   // the path in it, "read it again" has something to read. A pasted picture
   // is marked as scratch so the model never links it into the manuscript:
   // the file goes when the session does.
+  const stashNote = (a: AttachedImage) => isChatStashPath(a.file.path)
+    ? i18n.t("ai.chat.imageStashNote", { defaultValue: "（会话暂存，随会话删除）" })
+    : "";
   if (sent.length) {
-    const stashNote = i18n.t("ai.chat.imageStashNote", { defaultValue: "（会话暂存，随会话删除）" });
     parts.push(
       `${i18n.t("ai.chat.imageBlockLabel", { defaultValue: "【附图】" })}\n${
         sent.map((a, i) => {
           const where = (opts.projectPath && projectRelative(opts.projectPath, a.file.path)) || a.file.path;
-          return `${i + 1}. ${a.file.name} — ${where}${isChatStashPath(a.file.path) ? stashNote : ""}`;
+          return `${i + 1}. ${a.file.name} — ${where}${stashNote(a)}`;
         }).join("\n")
       }`,
     );
@@ -242,7 +244,9 @@ export async function buildChatMessage(
     // still be *read* — by the vision subagent, which takes a path. Naming the
     // file alone left the model with something it could see was missing and no
     // way to go and get it.
-    const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}`).join("\n");
+    // The scratch note here too: a text-only model is told about a pasted
+    // picture only through this list, and must not link it into the text.
+    const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}${stashNote(a)}`).join("\n");
     parts.push(
       opts.visionDelegate
         ? i18n.t("ai.chat.imagesNotSentDelegate", {

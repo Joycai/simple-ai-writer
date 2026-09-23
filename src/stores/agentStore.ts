@@ -569,9 +569,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     });
     const key = empty ?? newChatKey();
     endGrantFor(set, get, key);
-    // A reused empty tab keeps its scratch id: pictures pasted into it and not
-    // sent yet are still on the composer, and their files live there.
-    const stashId = empty ? s.chats[empty]?.stashId ?? null : null;
+    // A reused empty tab keeps its scratch id when it never saved: pictures
+    // pasted into it and not sent yet are still on the composer, and their
+    // files live there. One that did save (rewound back to its first
+    // question) shares the id with its row — handing it on would make two
+    // sessions claim one directory, and deleting either would take the
+    // other's pictures.
+    const reused = empty ? s.chats[empty] : undefined;
+    const stashId = reused && reused.sessionId === null ? reused.stashId : null;
     set((st) => ({
       chats: { ...st.chats, [key]: { ...freshChat(key), stashId } },
       chatOrder: empty ? st.chatOrder : [...st.chatOrder, key],
@@ -1098,7 +1103,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // into a new one — the conversation the author was in stays open.
       const s1 = get();
       const active = s1.chats[s1.activeChatKey];
-      const reuse = active && active.turns.length === 0
+      // Not one holding a scratch directory, though: its pasted chips are
+      // still on the composer, and the restored session would claim another
+      // directory than the one they point into — nothing would claim theirs.
+      const reuse = active && active.turns.length === 0 && !active.stashId
         && !ownerBusy(s1.activeChatKey, s1.runningChats, s1.compactingChats, s1.chatQueue);
       const key = reuse ? s1.activeChatKey : newChatKey();
       endGrantFor(set, get, key);

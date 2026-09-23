@@ -1408,6 +1408,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       );
       const inlined = refs.filter((r) => !(r.kind === "lore" && resident.has(r.entity.dirPath)));
       const composed = await buildChatMessage(body, quote, inlined, {
+        // Project-relative paths in the 【附图】 list, as the assistant's.
+        projectPath: get().projectPath ?? undefined,
         allowImages: !!model && canSeeImages(model),
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });

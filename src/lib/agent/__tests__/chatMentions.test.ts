@@ -223,6 +223,18 @@ describe("buildChatMessage", () => {
     expect(out.text).toContain("2. b.png — 参考图/b.png\n");
   });
 
+  it("marks a pasted picture as scratch even when it cannot travel", async () => {
+    // A text-only model learns of the picture only from this list — and must
+    // not link a scratch path into the manuscript either.
+    const pasted = {
+      kind: "image" as const,
+      file: { name: "粘贴的图片 1", path: "/p/.ai-writer/tmp/chat/s1/abc123def456.png", kind: "image" as const },
+      dataUrl: "data:image/png;base64,x",
+    };
+    const out = await buildChatMessage("看看", undefined, [pasted]);
+    expect(out.text).toContain("abc123def456.png（会话暂存，随会话删除）");
+  });
+
   it("carries five pictures on one message", () => {
     // Pasted and @-attached share this one number (chat-image-paste-plan §3.4).
     expect(MAX_MESSAGE_IMAGES).toBe(5);
