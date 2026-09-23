@@ -17,7 +17,8 @@ import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
-import { imageRequestParams, inputImageSize, recordImageUsage } from "./index";
+import { imageRequestParams, inputImageSize, mayBeTransparentPng, recordImageUsage } from "./index";
+import { keepsTransparentBackground } from "../ai/imageDialects";
 import { recordGeneration } from "./session";
 import { providerFor } from "../ai/routes";
 import type { AiSettingsSnapshot } from "../agent/subagentModel";
@@ -151,7 +152,22 @@ export async function runIllustration(
     // Always passed: a dialect handed no size may have to omit it, and on
     // qwen-image an omitted size bills the 2K tier.
     const editParams = imageRequestParams(model.caps, sel, { edit: true, inputSize: inputImageSize(images[0]) });
-    const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress };
+    // Keep a transparent source's background transparent, unless the agent
+    // said the result needs a filled one: the mode promises a see-through
+    // background, so "add a sky behind it" gets the sky painted inside the
+    // subject and still bills (docs/api/landscape.md §7 第十三个样本,
+    // 2026-09-23). Edits only — generate_image has no way to say no, and a
+    // reference is a look to follow, not a picture to keep the background
+    // of. And a lone input: the endpoint refuses the mode with references.
+    const keepTransparent = !!proposal.sourcePath
+      && proposal.keepTransparency !== false
+      && keepsTransparentBackground(model.caps)
+      && images.length === 1
+      && mayBeTransparentPng(images[0]);
+    const editReq = {
+      prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress,
+      ...(keepTransparent ? { transparentBackground: true } : {}),
+    };
     try {
       result = await generateImage(conn, { ...editReq, images });
     } catch (err) {

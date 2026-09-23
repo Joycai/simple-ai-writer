@@ -279,6 +279,104 @@ describe("edit_image", () => {
   });
 });
 
+// The model's cap is on input images, and the picture being changed is one:
+// Seedream 5.0 pro answers an eleventh with 400 "cannot exceed 10" — after
+// the author approved the card, had the source not been counted.
+describe("input-image cap", () => {
+  beforeEach(() => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { edit: true, maxRefs: 2 } }];
+    onDisk = new Set(["/proj/插图/参考.png", "/proj/插图/b.png", "/proj/插图/c.png", "/proj/第一章.md"]);
+  });
+
+  it("counts the source of an edit against the cap, before the card", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", {
+      source: "插图/参考.png", instruction: "x", references: ["插图/b.png", "插图/c.png"],
+    }, ctx);
+    expect(seen).toHaveLength(0);
+    expect(res.content).toMatch(/at most 2 input image/);
+    expect(res.content).toMatch(/3 were given, counting the picture being changed/);
+  });
+
+  it("counts the gallery picture a redraw starts from, too", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", {
+      entity: "艾尔登", file: "a.png", instruction: "x", references: ["插图/b.png", "插图/c.png"],
+    }, ctx);
+    expect(seen).toHaveLength(0);
+    expect(res.content).toMatch(/counting the picture being changed/);
+  });
+
+  it("lets an edit through at exactly the cap", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "x", references: ["插图/b.png"] }, ctx);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("gives a fresh drawing the whole cap for references", async () => {
+    const { ctx, seen } = ctxWith();
+    await generateImageTool("c1", { prompt: "x", entity: "艾尔登", references: ["插图/b.png", "插图/c.png"] }, ctx);
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe("keep_transparency", () => {
+  it("carries only an explicit false onto the proposal — keeping is the default", async () => {
+    const off = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky behind it", keep_transparency: false }, off.ctx);
+    expect(off.seen[0].keepTransparency).toBe(false);
+
+    const on = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "make it blue", keep_transparency: true }, on.ctx);
+    expect(on.seen[0]).not.toHaveProperty("keepTransparency");
+  });
+
+  it("rides redraw_lore_image too", async () => {
+    const { ctx, seen } = ctxWith();
+    await redrawLoreImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "x", keep_transparency: false }, ctx);
+    expect(seen[0].keepTransparency).toBe(false);
+  });
+
+  it("reads a boolean sent as a string", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky", keep_transparency: "false" }, ctx);
+    expect(seen[0].keepTransparency).toBe(false);
+  });
+
+  it("tells the model when the bound model cannot keep a background transparent", async () => {
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue", keep_transparency: true }, ctx);
+    expect(res.content).toMatch(/'keep_transparency' was ignored/);
+  });
+
+  it("tells the model when references alongside rule the mode out", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 } }];
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", {
+      source: "插图/参考.png", instruction: "blue", references: ["a.png"], keep_transparency: true,
+    }, ctx);
+    expect(res.content).toMatch(/'keep_transparency' was ignored — a transparent background can only be kept with no references/);
+  });
+
+  it("says nothing when the agent turned it off — nothing was asked to be kept", async () => {
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky", keep_transparency: false }, ctx);
+    expect(res.content).not.toMatch(/keep_transparency/);
+  });
+
+  it("says nothing on a model that can, or when the agent never spoke to it", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 } }];
+    const can = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue", keep_transparency: true }, can.ctx);
+    expect(res.content).not.toMatch(/keep_transparency/);
+
+    storeModels = [IMAGE_MODEL];
+    const silent = ctxWith();
+    const quiet = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue" }, silent.ctx);
+    expect(quiet.content).not.toMatch(/keep_transparency/);
+  });
+});
+
 describe("redraw_lore_image", () => {
   it("carries the source picture and files the result as a new gallery entry", async () => {
     const { ctx, seen } = ctxWith();

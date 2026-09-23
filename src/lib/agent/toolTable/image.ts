@@ -130,6 +130,10 @@ export const IMAGE_TOOLS = {
               enum: ["low", "medium", "high"],
               description: "Quality tier (GPT-Image only); omit for default.",
             },
+            keep_transparency: {
+              type: "boolean",
+              description: "Transparent source, on a model that keeps transparency: false when the result needs a filled background (adding a background or scene behind the subject).",
+            },
             desc: {
               type: "string",
               description: "One line describing the new picture, used as its alt text when it is placed in a document.",
@@ -203,6 +207,10 @@ export const IMAGE_TOOLS = {
               type: "string",
               enum: ["low", "medium", "high"],
               description: "Quality tier (GPT-Image only); omit for default.",
+            },
+            keep_transparency: {
+              type: "boolean",
+              description: "Transparent source, on a model that keeps transparency: false when the result needs a filled background (adding a background or scene behind the subject).",
             },
             desc: {
               type: "string",

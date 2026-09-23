@@ -2449,7 +2449,7 @@
       "capsDialectGptImage2": "GPT Image 2 (OpenAI)",
       "capsDialectWan27": "Wan 2.7 (DashScope)",
       "capsDialectQwenImage": "Qwen-Image 3.0 (DashScope)",
-      "capsDialectSeedream5Pro": "Seedream 5.0 pro (火山方舟)",
+      "capsDialectSeedream5Pro": "Seedream 5.0 pro / flash (火山方舟)",
       "capsDialectSeedream5Lite": "Seedream 5.0 lite (火山方舟)",
       "capsDialectSeedream4": "Seedream 4.5 / 4.0 (火山方舟)",
       "capsEditLabel": "Supports image edits",

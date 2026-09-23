@@ -12,6 +12,7 @@
  */
 
 import { imageCostFor } from "../ai/configDb";
+import { keepsTransparentBackground } from "../ai/imageDialects";
 import { fileExists } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { dirName, resolveWorkspacePath } from "../paths";
@@ -60,6 +61,8 @@ async function proposeIllustration(
     negative?: string;
     sourcePath?: string;
     refPaths?: string[];
+    /** The raw `keep_transparency` argument — a model may send the boolean as a string. */
+    keepTransparency?: boolean | string;
     reason?: string;
   },
 ): Promise<ToolResult> {
@@ -79,6 +82,22 @@ async function proposeIllustration(
 
   const negative = spec.negative?.trim();
   const comfyRoute = model.caps?.route === "comfyui";
+  const keepOff = spec.keepTransparency === false || spec.keepTransparency === "false";
+  // Said out loud only when the agent asked to keep it and the app will not
+  // ask for it: the result may well come back opaque, and without this the
+  // run could tell the author their cut-out survived. Worded as "not
+  // requested", not "opaque" — a ComfyUI workflow with its own matting node
+  // can still return transparency the app knows nothing about. Two reasons known before the card — the
+  // model cannot, or references ride along (the mode takes exactly one input,
+  // illustrate.ts). A source that turns out not to be a transparent PNG is
+  // not one: then there was nothing to keep.
+  const transparencyIgnored = spec.keepTransparency !== undefined && !keepOff
+    ? !keepsTransparentBackground(model.caps)
+      ? `"${model.name}" cannot keep a background transparent`
+      : spec.sourcePath && spec.refPaths?.length
+        ? "a transparent background can only be kept with no references alongside"
+        : null
+    : null;
 
   const proposal: IllustrateProposal = {
     kind: "illustrate",
@@ -103,6 +122,7 @@ async function proposeIllustration(
     ...(negative && comfyRoute ? { negative } : {}),
     sourcePath: spec.sourcePath,
     ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
+    ...(keepOff ? { keepTransparency: false as const } : {}),
     reason: spec.reason,
   };
 
@@ -114,11 +134,19 @@ async function proposeIllustration(
       content: `Error: the image model "${model.name}" is declared as not accepting input images, so references cannot be used. Call generate_image without references, describing the reference's look in the prompt instead.`,
     };
   }
+  // The limit is on input images, and an edit's source is one of them: it
+  // rides the same field as the references (illustrate.ts). Counting only the
+  // references let an edit with a full set through the card and into a 400
+  // the author had already approved.
   const maxRefs = model.caps?.maxRefs;
-  if (maxRefs && spec.refPaths && spec.refPaths.length > maxRefs) {
+  const inputs = (spec.sourcePath ? 1 : 0) + (spec.refPaths?.length ?? 0);
+  if (maxRefs && inputs > maxRefs) {
+    const given = spec.sourcePath
+      ? `${inputs} were given, counting the picture being changed`
+      : `${inputs} were given`;
     return {
       toolCallId,
-      content: `Error: the image model "${model.name}" takes at most ${maxRefs} reference image(s); ${spec.refPaths.length} were given. Keep the most important one(s).`,
+      content: `Error: the image model "${model.name}" takes at most ${maxRefs} input image(s); ${given}. Keep the most important reference(s).`,
     };
   }
 
@@ -155,6 +183,9 @@ async function proposeIllustration(
       // it listed.
       + (negative && !comfyRoute
         ? `\nNote: 'negative' was ignored — "${model.name}" is not a local ComfyUI model, so it has no negative conditioning. Put what matters into the prompt itself.`
+        : "")
+      + (transparencyIgnored
+        ? `\nNote: 'keep_transparency' was ignored — ${transparencyIgnored}, so keeping it was not requested. Do not tell the author the transparency was kept.`
         : ""),
   };
 }
@@ -362,7 +393,7 @@ export async function editImageTool(
   args: {
     source?: string; path?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean | string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -439,6 +470,7 @@ export async function editImageTool(
     // reference would send the same picture twice and spend one of the model's
     // `maxRefs` slots on it.
     refPaths: refs.paths.filter((p) => p !== sourcePath),
+    keepTransparency: args.keep_transparency,
     dest,
     destination,
     path: destPath,
@@ -459,7 +491,7 @@ export async function redrawLoreImageTool(
   args: {
     entity?: string; file?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean | string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -504,6 +536,7 @@ export async function redrawLoreImageTool(
     negative: args.negative,
     reason: args.reason,
     refPaths: refs.paths.filter((p) => p !== image.absPath),
+    keepTransparency: args.keep_transparency,
     dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },
     destination: entity.name,
     path: entity.dirPath,

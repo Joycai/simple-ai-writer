@@ -269,8 +269,22 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../packs";
  * listed; the rest of the rule rides in the tool result, on purpose) and
  * `manage_category`'s `describe` op (~120 tokens, all deferred in
  * `lore_organize`).
+ *
+ * **17,167** (cap 17,100 → 17,200; measured against main's 17,062) with
+ * `keep_transparency` on `edit_image` / `redraw_lore_image` — +105, and
+ * **none of it resident**: both tools sit in the deferred `image` group behind
+ * `search_tools`, so a run pays it only once it has gone looking for a drawing
+ * tool. Two words on the wire, but a decision only the
+ * model can make: Seedream's transparent mode promises a see-through
+ * background, so "add a sky behind her" paints the sky *inside* her and still
+ * bills (docs/api/landscape.md §7 第十三个样本, measured 2026-09-23). Deciding
+ * it from the input alone gets that edit wrong; deciding it from the prompt's
+ * words is guessing in two languages. The description is the fourth draft —
+ * the first stated the default and the model support twice over (+160); the
+ * third said "pixels outside its shape", which a pose change measured to be
+ * wrong (the subject may change shape; only the background is kept).
  */
-const AGENT_ASSIST_CAP = 17_100;
+const AGENT_ASSIST_CAP = 17_200;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
  * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),

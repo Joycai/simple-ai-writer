@@ -353,6 +353,14 @@ export interface IllustrateProposal extends ProposalBase {
    * reviewable next to it.
    */
   refPaths?: string[];
+  /**
+   * The agent said this edit's result needs a filled background, so a
+   * transparent source's see-through background must not be kept. Only the
+   * explicit `false` is stored: keeping it is the default, and it applies only
+   * where the model can (`keepsTransparentBackground`) and the source is a
+   * lone PNG with alpha (illustrate.ts).
+   */
+  keepTransparency?: false;
 }
 
 /**

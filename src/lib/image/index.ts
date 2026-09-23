@@ -44,6 +44,12 @@ export function imageRequestParams(
  * accepts or the URL isn't a data URL.
  */
 export function inputImageSize(dataUrl: string): { width: number; height: number } | undefined {
+  const header = inputImageHeader(dataUrl);
+  return header ? { width: header.width, height: header.height } : undefined;
+}
+
+/** The header of an input image's data URL — from its first 64KB only, as above. */
+function inputImageHeader(dataUrl: string): ReturnType<typeof readImageHeader> | undefined {
   const comma = dataUrl.indexOf(",");
   if (!dataUrl.startsWith("data:") || comma === -1) return undefined;
   const head = dataUrl.slice(comma + 1, comma + 1 + 64 * 1024).replace(/[^A-Za-z0-9+/=]/g, "");
@@ -51,11 +57,21 @@ export function inputImageSize(dataUrl: string): { width: number; height: number
     const binary = atob(head.slice(0, head.length - (head.length % 4)));
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const header = readImageHeader(bytes);
-    return header ? { width: header.width, height: header.height } : undefined;
+    return readImageHeader(bytes) ?? undefined;
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Whether an input image may carry transparency the endpoint could keep: a
+ * PNG whose header declares alpha. "May" — an alpha channel can be fully
+ * opaque, and only a decode would tell; the ark route lets the endpoint say
+ * so for free (image.ts `isNoTransparentPixelError`) rather than decoding here.
+ */
+export function mayBeTransparentPng(dataUrl: string): boolean {
+  if (!/^data:image\/png[;,]/i.test(dataUrl)) return false;
+  return inputImageHeader(dataUrl)?.alpha === true;
 }
 
 /**

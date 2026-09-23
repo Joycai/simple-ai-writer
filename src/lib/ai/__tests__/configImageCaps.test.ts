@@ -70,6 +70,7 @@ describe("parseImageCaps", () => {
     expect(parseImageCaps({ edit: "yes", asyncTask: 1, route: "dashscope" })).toEqual({ route: "dashscope" });
   });
 
+
   it("keeps the ark route and the Seedream dialects (火山方舟 starter rows declare them)", () => {
     for (const dialect of ["seedream-5-pro", "seedream-5-lite", "seedream-4"]) {
       const caps = { route: "ark", dialect, edit: true, maxRefs: 14 };

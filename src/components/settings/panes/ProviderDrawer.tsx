@@ -159,10 +159,16 @@ const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
   seedream("doubao-seedream-5.0-lite", "Seedream 5.0 Lite", "seedream-5-lite"),
   seedream("doubao-seedream-5.0-pro", "Seedream 5.0 Pro", "seedream-5-pro"),
 ];
-/** Pay-as-you-go: the text models were not measured on this key, the image ids are the documented ones. */
+/**
+ * Pay-as-you-go: the text models were not measured on this key, the image ids are the documented ones.
+ * 5.0 flash is here and not on the plan, which answers all three of its spellings with 404
+ * UnsupportedModel (2026-09-23). It speaks pro's size table — same tiers, same pixel range in
+ * both documents — so it takes pro's dialect; unmeasured, as no pay-as-you-go key was to hand.
+ */
 const VOLCENGINE_MODELS: StarterModel[] = [
   seedream("doubao-seedream-5-0-lite-260128", "Seedream 5.0 Lite", "seedream-5-lite"),
   seedream("doubao-seedream-5-0-pro-260628", "Seedream 5.0 Pro", "seedream-5-pro"),
+  seedream("doubao-seedream-5-0-flash-260915", "Seedream 5.0 Flash", "seedream-5-pro"),
 ];
 
 /**

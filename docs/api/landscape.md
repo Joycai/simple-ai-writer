@@ -1395,6 +1395,36 @@ Responses adapter：
 > 两个火山方舟平台各带两个 Seedream 起步模型（套餐用 `5.0` 拼写，按量用带日期的 id）。取舍见
 > `docs/feature/image-generation-plan.md` PR7。协议事实的另一份（含 5.0 pro 图层拆分 / 透明背景）在
 > Joycai Image AI Toolkits 的 `docs/api/volcengine-ark.md`。
+>
+> **2026-09-23 增补**（对照 09-22 版文档：新增 5.0 flash、透明背景两款都支持；套餐 key，**31 次零成本探测**
+> + **4 张计费**——3 张 curl、1 张 live 用例）。**每个不支持的参数都在出图前 400**，报错文案点名字段，所以下面的
+> 探测都不花钱：
+>
+> | 请求 | 回应 |
+> | --- | --- |
+> | 5.0 flash，三种拼法（`doubao-seedream-5.0-flash` / `-5-0-flash` / `-5-0-flash-260915`） | 404 `UnsupportedModel`——**flash 只在按量线路**；4.5 / 4.0 同样 404 |
+> | pro 带日期 id `doubao-seedream-5-0-pro-260628` | 套餐也收（与 lite 不同） |
+> | pro 11 张参考图 / lite 15 张 | 400「cannot exceed 10」/「cannot exceed 14」——数的是**全部输入图**，改图的源图也算 |
+> | pro `sequential_image_generation:"auto"` / `stream:true` / `tools:[web_search]` | 各 400「is not supported by the current model」 |
+> | lite `optimize_prompt_options.mode:"fast"` | 400「mode must be 'standard'」（fast 只 pro 收） |
+> | `output_format:"webp"` | 400「must be one of: jpeg, png」 |
+> | `background:"transparent"`，无图 / 两张图 | 400「transparent background requires exactly one input image」 |
+> | 同上 + 一张 RGB PNG，或无 tRNS 的调色板 PNG | 400 `param:"image"`「requires a PNG input with at least one transparent pixel」 |
+> | 同上 + RGBA PNG + `output_format:"jpeg"` | 400「must be png when background is transparent」 |
+>
+> **透明模式保的是「背景透明」，不是原图的形状**（pro，`background:"transparent"`，各 1 张）：
+>
+> - 透明底红色圆「改成蓝色」→ png，圆外依旧全透明 ✅（live 用例 `keeps a transparent PNG transparent` 复测一次）。
+> - 透明底向右箭头「改成竖直向上」→ 箭头按新形状重画，新箭尖处（源图里透明）不透明、旧箭杆处变透明 ✅——
+>   主体可以变形、换姿势。
+> - 透明底红色圆「加上蓝天白云背景」→ 圆外**依旧全透明**，天空被画进了圆里 ❌——「要一个填满的背景」与这个
+>   模式的承诺矛盾，模型折中成了在主体里画背景，照样计费。
+>
+> 响应 `data[]` 多了 `output_format:"png"`，`usage` 多了 `input_images:1`。
+>
+> **对本项目**：透明能力按 **ark 线路 + `seedream-5-pro` 方言** 推导（该方言恰好是 pro / flash）；改图工具的
+> `keep_transparency` 由 agent 决定——结果要填满的背景时设 `false`；「没有透明像素」那条 400 免费，adapter 去掉
+> 两个字段重试一次。按量平台加 5.0 flash 起步行（未实测）。取舍见 `docs/feature/image-generation-plan.md` PR7 的「09-23 增补」。
 
 ### 第十四个样本：智谱 BigModel 开放平台（① 族为主，② ④ 各探一次；2026-09-19 实测 glm-4.5-air / glm-4.7 / glm-5.3-flash）
 
