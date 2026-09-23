@@ -169,7 +169,9 @@ describe("applyConfigImport · 事务之后的迁移", () => {
 
     await applyConfigImport(staged({ legacyPrices: true }));
 
-    // 第一次扫描是事务前 ensureAiSchema 的，最后一次必须在事务之后。
+    // 第一次扫描是事务前 ensureAiSchema 的，最后一次必须在事务之后。先确认
+    // 事务真的发出了，否则 indexOf 是 -1，下面那条恒真。
+    expect(order).toContain("sqlite_transaction");
     expect(order.lastIndexOf("migrate")).toBeGreaterThan(order.indexOf("sqlite_transaction"));
   });
 
@@ -181,10 +183,41 @@ describe("applyConfigImport · 事务之后的迁移", () => {
       return [];
     }) as never);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toBeUndefined();
+      expect(scans).toBe(2);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 
-    await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toBeUndefined();
-    expect(scans).toBe(2);
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+  it("效果而不只是时机：v2 的模型在 applyConfigImport 返回之前已经绑上了组", async () => {
+    // 事务把模型行「写进库」之后，迁移那次扫描才看得见它——事务前那次看不见。
+    // 这里只模拟这一件事：事务发出之后，待迁移的扫描答出这一行。
+    let committed = false;
+    h.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "sqlite_transaction") committed = true;
+      return undefined;
+    });
+    h.select.mockImplementation((async (sql: string) => {
+      if (isMigrationScan(sql) && committed) {
+        return [{
+          id: "m1", name: "GPT-X", fee_group_id: null,
+          price_in: 1, price_cached_in: 0, price_out: 2, price_per_image: null, price_per_second: null,
+        }];
+      }
+      return [];
+    }) as never);
+
+    await applyConfigImport(staged({ legacyPrices: true }));
+
+    // 迁移走的是池化句柄（和 aiStore 刷新时读的是同一个库），不是事务那条连接。
+    const pooled = h.execute.mock.calls as unknown as [string, unknown[]?][];
+    const inserted = pooled.find(([sql]) => /INSERT INTO fee_groups/.test(sql));
+    expect(inserted, "迁移应当按旧价建一个组").toBeDefined();
+    const groupId = inserted![1]![0];
+    const bound = pooled.find(([sql, v]) => /UPDATE models SET fee_group_id/.test(sql) && v?.[1] === "m1");
+    expect(bound?.[1]?.[0]).toBe(groupId);
   });
 });
