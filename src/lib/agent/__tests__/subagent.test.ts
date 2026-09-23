@@ -464,6 +464,28 @@ describe("subagent", () => {
       expect(res.content).not.toContain("not declared");
     });
 
+    it("offers another route even when the relay upstream is what drops the PDF", async () => {
+      const { normalizeChannel, routeProvider } = await import("../../ai/routes");
+      const relay = normalizeChannel({
+        id: "r", name: "Relay", baseUrl: "https://relay.example", apiStandard: "openai_compat", platform: "newapi", createdAt: 0,
+        endpoints: [{ family: "openai", official: false }, { family: "responses", official: false }],
+      });
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({
+          provider: routeProvider(relay, "openai")!,
+          model: { ...dummyTextModel, modelId: "kiro-claude-opus-4-6", pdfInput: true },
+          apiKey: "k",
+        })),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "pdf", task: "读这份文件", refs: ["docs/spec.pdf"] }),
+      };
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain(`relay upstream behind it ("kiro") was measured dropping the file`);
+      expect(res.content).toContain("move the model to its Responses route");
+    });
+
     it("fails a pdf delegation that carries no .pdf refs", async () => {
       const pdfModel: Model = { ...dummyTextModel, id: "m-pdf", name: "Qwen3.8-Max", pdfInput: true };
       const ctx = makeCtx({

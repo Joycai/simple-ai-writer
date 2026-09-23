@@ -85,6 +85,18 @@ describe("pdfRouteFor", () => {
     expect(pdfRouteFor({ ...model("claude-opus-5"), pdfInput: true }, onAnth)).toBe("openai");
   });
 
+  it("answers the same whatever the reason the current route loses the file", () => {
+    // New API's default four routes; Kiro drops the file on Chat (measured) and
+    // Anthropic has no spelling — Responses is unmeasured for Kiro, so it sends.
+    const four = normalizeChannel({
+      ...relay("openai_compat"),
+      endpoints: (["openai", "responses", "gemini", "anthropic"] as const).map((family) => ({ family, official: false })),
+    });
+    const kiro = { ...model("kiro-claude-opus-4-6"), pdfInput: true };
+    expect(pdfRouteFor(kiro, routeProvider(four, "openai")!)).toBe("responses");
+    expect(pdfRouteFor(kiro, routeProvider(four, "anthropic")!)).toBe("responses");
+  });
+
   it("names none when the upstream behind the other route drops the file too", () => {
     expect(pdfRouteFor({ ...model("kiro-claude-opus-4-6"), pdfInput: true }, onAnth)).toBeUndefined();
     expect(pdfRouteFor({ ...model("claude-opus-5"), pdfInput: true }, relay("anthropic_compat"))).toBeUndefined();

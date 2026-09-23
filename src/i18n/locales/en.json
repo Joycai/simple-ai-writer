@@ -801,6 +801,7 @@
       "warnNotMultimodal": "This model is text-only and cannot read images.",
       "warnSearchUpstream": "The relay upstream behind this model (\"{{upstream}}\") was measured dropping web search, so it isn't sent — the subagent can't search. Bind a model behind another upstream.",
       "warnPdfUpstream": "The relay upstream behind this model (\"{{upstream}}\") was measured dropping PDFs, so the subagent can't read the file. Bind a model behind another upstream.",
+      "warnPdfUpstreamOtherRoute": "On this model's current route ({{route}}), the relay upstream behind it (\"{{upstream}}\") was measured dropping PDFs, so the subagent can't read the file. Move the model to its {{target}} route, or bind a model behind another upstream.",
       "warnPdfOtherRoute": "This model has PDF input switched on, but its current route ({{route}}) can't carry a PDF, so nothing is sent — the subagent can't read the file. Move the model to its {{target}} route, or bind another model.",
       "warnPdfNotSent": "This model has PDF input switched on, but its current route ({{route}}) can't carry a PDF, so nothing is sent, and no other route on this channel can — the subagent can't read the file. Bind another model.",
       "warnNoPdf": "This model is not declared to accept PDF file input (check it in the model's settings), so the subagent cannot read PDFs.",

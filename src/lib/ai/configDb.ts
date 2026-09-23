@@ -547,7 +547,9 @@ export function readsPdf(
  * `provider` is the channel as the model's route sees it (`providerFor`), so its
  * own family is the one being left. A hint that says "move the model to another
  * route" names this one — on a relay, a route that merely *has* a PDF spelling
- * may still lose the file to the upstream behind it.
+ * may still lose the file to the upstream behind it. "Would carry" is
+ * `readsPdf`'s answer, so an unmeasured route counts as carrying, the same as
+ * the request would treat it.
  */
 export function pdfRouteFor(
   m: Pick<Model, "pdfInput" | "relayUpstream"> & { modelId?: string },
