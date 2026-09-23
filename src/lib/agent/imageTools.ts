@@ -83,9 +83,11 @@ async function proposeIllustration(
   const negative = spec.negative?.trim();
   const comfyRoute = model.caps?.route === "comfyui";
   const keepOff = spec.keepTransparency === false || spec.keepTransparency === "false";
-  // Said out loud only when the agent asked to keep it and it cannot be kept:
-  // the result comes back opaque, and without this the run could tell the
-  // author their cut-out survived. Two reasons known before the card — the
+  // Said out loud only when the agent asked to keep it and the app will not
+  // ask for it: the result may well come back opaque, and without this the
+  // run could tell the author their cut-out survived. Worded as "not
+  // requested", not "opaque" — a ComfyUI workflow with its own matting node
+  // can still return transparency the app knows nothing about. Two reasons known before the card — the
   // model cannot, or references ride along (the mode takes exactly one input,
   // illustrate.ts). A source that turns out not to be a transparent PNG is
   // not one: then there was nothing to keep.
@@ -183,7 +185,7 @@ async function proposeIllustration(
         ? `\nNote: 'negative' was ignored — "${model.name}" is not a local ComfyUI model, so it has no negative conditioning. Put what matters into the prompt itself.`
         : "")
       + (transparencyIgnored
-        ? `\nNote: 'keep_transparency' was ignored — ${transparencyIgnored}, so the result's background is opaque.`
+        ? `\nNote: 'keep_transparency' was ignored — ${transparencyIgnored}, so keeping it was not requested. Do not tell the author the transparency was kept.`
         : ""),
   };
 }
