@@ -132,7 +132,7 @@ describe("planMerge", () => {
     expect(plan.upserts.find((m) => m.id === "k2")?.relayUpstream).toBeUndefined();
   });
 
-  it("folds an absorbed row's own choice in over the kept row's table, but not over its own choice", () => {
+  it("folds an absorbed row's own choice in over the kept row's table", () => {
     const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
       platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
     });
