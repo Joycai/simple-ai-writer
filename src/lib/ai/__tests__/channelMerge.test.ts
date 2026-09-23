@@ -93,7 +93,7 @@ describe("planMerge", () => {
     expect(relayPlan.upserts.find((m) => m.id === "k1")?.relayUpstream).toBe("bedrock");
   });
 
-  it("changes no model's upstream when the two tables disagree", () => {
+  it("keeps every upstream a model had, where the two tables disagree", () => {
     const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
       platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
     });
@@ -101,18 +101,51 @@ describe("planMerge", () => {
       platform: "newapi",
       upstreamPrefixes: [{ prefix: "[CC量]", upstream: "anti" }, { prefix: "[CC量]claude-opus", upstream: "bedrock" }],
     });
-    const conflictPlan = planMerge(keep, absorb, [
+    const plan = planMerge(keep, absorb, [
       model("k1", "r1", "[CC量]claude-opus-4-6"),
       model("k2", "r1", "[CC量]gpt-5"),
       model("a1", "r2", "[CC量]claude-sonnet-5"),
     ]);
-    const byId = new Map(conflictPlan.upserts.map((m) => [m.id, m]));
-    // Moved from absorb: it was anti there; the merged table would say cc (keep wins the shared prefix).
+    const byId = new Map(plan.upserts.map((m) => [m.id, m]));
+    // Moved from absorb: anti there; the merged table would say cc (keep wins the shared prefix).
     expect(byId.get("a1")?.relayUpstream).toBe("anti");
     // Kept, but absorb's longer prefix would now win for it: pinned to what keep's table gave.
     expect(byId.get("k1")?.relayUpstream).toBe("cc");
     // Answered the same before and after: untouched, not even written.
     expect(byId.has("k2")).toBe(false);
+  });
+
+  it("lets a model with no upstream follow the merged table, not freeze it as none", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", { platform: "newapi" });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", {
+      platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
+    });
+    const plan = planMerge(keep, absorb, [
+      model("k1", "r1", "[CC量]claude-opus-4-6"),
+      model("k2", "r1", "[CC量]claude-sonnet-5"),
+      model("a2", "r2", "[CC量]claude-sonnet-5"),
+    ]);
+    // No upstream before, none written: it resolves through the merged table (cc).
+    expect(plan.upserts.find((m) => m.id === "k1")).toBeUndefined();
+    expect(plan.channel.upstreamPrefixes).toEqual([{ prefix: "[CC量]", upstream: "cc" }]);
+    // Folded: the kept row had nothing either; still no manual choice.
+    expect(plan.upserts.find((m) => m.id === "k2")?.relayUpstream).toBeUndefined();
+  });
+
+  it("folds an absorbed row's own choice in only where the kept row had no upstream", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
+      platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
+    });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", { platform: "newapi" });
+    const plan = planMerge(keep, absorb, [
+      model("k1", "r1", "[CC量]claude-opus-4-6"),
+      model("a1", "r2", "[CC量]claude-opus-4-6", { relayUpstream: "anti" }),
+      model("k2", "r1", "[x]claude-sonnet-5"),
+      model("a2", "r2", "[x]claude-sonnet-5", { relayUpstream: "bedrock" }),
+    ]);
+    const byId = new Map(plan.upserts.map((m) => [m.id, m]));
+    expect(byId.get("k1")?.relayUpstream).toBeUndefined();
+    expect(byId.get("k2")?.relayUpstream).toBe("bedrock");
   });
 
   it("writes the channel, then the models, then the deletes", () => {

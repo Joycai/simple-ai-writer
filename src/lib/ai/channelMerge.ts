@@ -21,7 +21,7 @@ import type { SqlStatement } from "../sqlTx";
 import { modelUpsert, providerUpsert, type Model, type Provider } from "./configDb";
 import { resolvePlatform } from "./platforms";
 import { activeFamily, channelEndpoints, channelHost, normalizeChannel, routeProfileOf } from "./routes";
-import { parseUpstreamPrefixes, resolveRelayUpstream } from "./relayUpstream";
+import { parseUpstreamPrefixes, resolveRelayUpstream, type RelayUpstreamChoice } from "./relayUpstream";
 
 /** Two channels the author may fold into one: `absorb`'s routes and models move to `keep`. */
 export interface MergeCandidate {
@@ -108,6 +108,8 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
   const moved: Model[] = [];
   const deletes: string[] = [];
   const remap: Record<string, string> = {};
+  // A folded-in row's own upstream choice, by the kept row it joined.
+  const foldedChoice = new Map<string, RelayUpstreamChoice>();
 
   for (const m of models.filter((x) => x.providerId === absorb.id)) {
     const family = activeFamily(m, absorb);
@@ -120,10 +122,8 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
       updated.set(current.id, {
         ...current,
         routes: { ...(m.routes ?? {}), ...(current.routes ?? {}), [family]: routeProfileOf(m) },
-        // A model-level field, not a route one: the same model id, so an
-        // upstream only the absorbed row chose still names this model's.
-        relayUpstream: current.relayUpstream ?? m.relayUpstream,
       });
+      if (m.relayUpstream) foldedChoice.set(current.id, m.relayUpstream);
       deletes.push(m.id);
       remap[m.id] = current.id;
     } else {
@@ -131,23 +131,27 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
     }
   }
 
-  // The merged table may answer differently for a model than its own channel's
-  // did — the two tables name one prefix with two upstreams, or `absorb` has a
-  // longer prefix that now wins for a `keep` model. A merge must not change
-  // what any model can do, so such a model keeps what it had, as its own choice.
+  // Upstreams across the merge (capability-gating-plan §8.11). The two rows
+  // are one relay, so the merged table describes it better than either half:
+  // a model that had **no** upstream before follows it — for a folded row,
+  // the absorbed row's own choice first, since it was made for this model id.
+  // A model that **had** one keeps it: where the merged table would answer
+  // differently (one prefix mapped two ways, or `absorb`'s longer prefix now
+  // winning for a `keep` model), the old answer becomes the model's own choice.
   const platform = resolvePlatform(channel.platform, channel.baseUrl, channel.apiStandard);
-  const pin = (m: Model, before: Provider["upstreamPrefixes"]): Model => {
+  const settle = (m: Model, before: Provider["upstreamPrefixes"], fallback?: RelayUpstreamChoice): Model => {
     if (m.relayUpstream) return m;
     const was = resolveRelayUpstream(platform, m.modelId, undefined, before).upstream;
+    if (!was) return fallback ? { ...m, relayUpstream: fallback } : m;
     const now = resolveRelayUpstream(platform, m.modelId, undefined, channel.upstreamPrefixes).upstream;
-    return was === now ? m : { ...m, relayUpstream: was ?? "none" };
+    return was === now ? m : { ...m, relayUpstream: was };
   };
   for (const k of keepModels) {
     const current = updated.get(k.id) ?? k;
-    const pinned = pin(current, keep.upstreamPrefixes);
-    if (pinned !== k) updated.set(k.id, pinned);
+    const settled = settle(current, keep.upstreamPrefixes, foldedChoice.get(k.id));
+    if (settled !== k) updated.set(k.id, settled);
   }
-  for (let i = 0; i < moved.length; i++) moved[i] = pin(moved[i], absorb.upstreamPrefixes);
+  for (let i = 0; i < moved.length; i++) moved[i] = settle(moved[i], absorb.upstreamPrefixes);
 
   return {
     channel,
