@@ -8,14 +8,14 @@
  *
  *   SEEDREAM_IMAGE_KEY=… pnpm vitest run live.volcengine-image
  *
- * Two cases bill one picture each; the other two are refused before any
+ * Three cases bill one picture each; the other three are refused before any
  * drawing. Base defaults to the plan (`/api/plan/v3`); set SEEDREAM_IMAGE_BASE
  * for a pay-as-you-go key. Findings: docs/api/landscape.md §7 第十三个样本.
  */
 import { describe, expect, it } from "vitest";
 import { generateImage, ImageHttpError, type GeneratedImage, type ImageConn } from "../image";
 import { imageDialect } from "../imageDialects";
-import { dimensions } from "./liveImageBytes";
+import { dimensions, discPng, fullyTransparentPixels } from "./liveImageBytes";
 
 const KEY = process.env.SEEDREAM_IMAGE_KEY ?? "";
 const BASE = process.env.SEEDREAM_IMAGE_BASE ?? "https://ark.cn-beijing.volces.com/api/plan/v3";
@@ -59,5 +59,40 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Seedream (ark route)", () => {
     const d = dimensions(res.images[0]);
     expect([d.w, d.h]).toEqual([1248, 832]);
     expect(res.usage).toBeUndefined();
+  }, 300_000);
+
+  // ── Transparency (5.0 pro / flash, `caps.transparent`) ────────────────────
+
+  it("refuses transparency for a PNG with nothing transparent in it, before drawing (free probe)", async () => {
+    // Straight at the endpoint, not through generateImage: the adapter retries
+    // this exact 400 without the two fields, which would draw and bill. What is
+    // pinned is the wording its retry keys on (image.ts isNoTransparentPixelError).
+    const res = await fetch(`${BASE}/images/generations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${KEY}` },
+      body: JSON.stringify({
+        model: PRO.modelId, prompt: "x", size: "2K", image: discPng(64, false),
+        background: "transparent", output_format: "png",
+      }),
+    });
+    expect(res.status).toBe(400);
+    const { error } = (await res.json()) as { error: { param?: string; message: string } };
+    expect(error.param).toBe("image");
+    expect(error.message).toMatch(/transparent pixel/i);
+  }, 60_000);
+
+  it("5.0 pro: keeps a transparent PNG transparent through an edit", async () => {
+    const res = await generateImage(PRO, {
+      prompt: "把红色圆形改成蓝色，其余保持不变",
+      images: [discPng(512, true)],
+      size: "1K",
+      transparentBackground: true,
+    });
+    expect(res.images).toHaveLength(1);
+    const d = dimensions(res.images[0]);
+    expect(d.mime).toBe("image/png");
+    expect(res.images[0].mime).toBe("image/png");
+    // The field outside the disc stays see-through — most of the picture.
+    expect(fullyTransparentPixels(res.images[0])).toBeGreaterThan((d.w * d.h) / 3);
   }, 300_000);
 });

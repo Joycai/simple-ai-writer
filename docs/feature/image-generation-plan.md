@@ -628,10 +628,28 @@ image-conditioned 通道，`dest.kind === "document"` 早就会存盘并回传 m
 在 `…/v3` 下，套餐的 Anthropic 线路是 `/api/plan`，作者若把它排到首位，没钉住的出图行就会拼出不存在的路径。两个平台的
 id 拼法不同：套餐用它文档里的 `doubao-seedream-5.0-*`，按量用带日期的 id（lite 用带 `lite` 的那个，两边都收）。
 
-**明确不做（这一期）**：5.0 pro 的图层拆分（`layer_decomposition`）与透明背景（`background:"transparent"`）——都是
-「恰好一张参考图」的互斥模式，结果是底图 + 多个带透明通道的图层，需要新的落盘形态，不是一个开关；组图；5.0 lite 的
-出图联网搜索（`tools:[{type:"web_search"}]`）；`stream:true` 逐张推送；`optimize_prompt_options` 与 `output_format`
-（后者只有 5.0 收，不发则全系默认 jpeg，mime 按字节嗅探）。都可以经 `extraBody` 自行加。
+**明确不做（这一期）**：5.0 pro 的图层拆分（`layer_decomposition`）——结果是底图 + 多个带透明通道的图层，需要新的
+落盘形态，不是一个开关；组图；5.0 lite 的出图联网搜索（`tools:[{type:"web_search"}]`）；`stream:true` 逐张推送；
+`optimize_prompt_options` 与 `output_format`（后者只有 5.0 收，不发则全系默认 jpeg，mime 按字节嗅探）。
+~~都可以经 `extraBody` 自行加~~——**不成立**（2026-09-23 更正）：图片请求的 `extraBody` 没有任何 UI 入口
+（`configDb.ts` 自述「internal escape hatch with no UI」），作者够不着。这些参数不做，就是真的不可用。
+
+**09-23 增补**（对照 09-22 版文档，实测见 `landscape.md` 第十三个样本的增补）：
+
+- **透明背景做了，但开关在 agent 手里。** 改一张透明 PNG 不发 `background:"transparent"`，回来的是不透明 jpeg——
+  立绘、贴纸类素材改一次就丢了透明。可透明模式**锁死原图的 alpha 遮罩**：「加上蓝天背景」把天空画进了剪影里，
+  照样计费。所以「输入透明就自动开」是错的，看提示词关键词判断是两种语言里的猜测；改动需不需要形状外的像素，
+  只有写指令的 agent 知道。于是：模型声明 `caps.transparent`（能力，不从方言推导——lite 与 pro 同族却不收），
+  `edit_image` / `redraw_lore_image` 各带一个 `keep_transparency`（默认保留，要画形状外的内容时设 `false`；
+  助手预设 +97 token），应用层再要求**恰好一张输入**、**头部带 alpha 的 PNG**。头部只说「可能透明」，不做解码：
+  全不透明的 PNG 上游出图前免费 400，adapter 去掉两个字段重试一次，画出来的东西与不带这两个字段时一样。
+  模型设置里**不加开关**（作者决定）：手加的 pro 行没有这个声明，不享受保留透明。交互式出图会话也不覆盖。
+- **参考图上限数的是全部输入图**：改图的源图也占一张。此前只数参考图，源图 + 满额参考图会通过卡片，批准后才 400。
+- **5.0 flash 起步行只加在按量平台**：套餐 key 对 flash 的三种拼法都 404。尺寸档与像素区间与 pro 相同，复用
+  `seedream-5-pro` 方言。未实测。
+- **仍不做**：fast 模式（只 pro 收，换的是时延不是钱，要新设置 + UI）；`output_format` 设置（真要 png 的只有透明，
+  已覆盖）；教 agent 写 `<bbox>` / `<point>` 坐标或做画框 UI（坐标原样透传，作者手写即可用；让模型估坐标不可靠）；
+  agent 用 1.5K 档（与 1K 同价、略好，但要改工具枚举，吃 schema 预算）。
 
 ## 9. 风险与对策
 
