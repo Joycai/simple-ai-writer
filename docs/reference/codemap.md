@@ -347,6 +347,8 @@ unified agent runtime (
 
 - `imageHistory.ts` the one definition of how a picture lives in — and leaves — the wire history
 - `chatImages.ts` the mirror of that on the way back — where a picture link **the model wrote** resolves (the project root, since a chat turn is not a file) and which ones are refused unread; see `docs/reference/architecture.md` → Images in context)
+- `imageLease.ts` 按**轮**给图片计租期（`IMAGE_LEASE_TURNS = 1`）：一轮里的图（作者附的与工具读的）保留到下一轮结束，再下一轮开头去像素留文字。**只在 `chatJob` 里新问题入历史那一刻调**，从不在一轮中间——那时模型正看着它们，改前缀还会在每个工具轮次打掉前缀缓存。`trimHistory` 的 3 条 / 24 MiB 两道上限照旧，先到者生效
+- `pasteImages.ts` · `chatStash.ts` 输入框贴图（`docs/feature/agent/chat-image-paste-plan.md`）：**贴图 = 会话暂存区里的一个真文件**（`.ai-writer/tmp/chat/<stashId>/<内容哈希>.<ext>`），之后按 `@` 附图原样走。`pasteImages` 是纯判定（剪贴板有文字就贴文字；四种格式白名单；贴图序号）。`chatStash` 管生死：`stashId` 首次贴图才生成，存进会话 blob 并镜像到 `chat_sessions.stash_id` 一列；作者删会话立即删目录，其余死法（SQL 自动修剪没有回调、没发过的标签页没有行）交给**对账式清扫**——每个项目每次启动一次，不被任何会话认领且超过 24 小时才删（宽限防另一个窗口里已贴未发的会话被误删）。【附图】块（`chatRefs.ts`）因此每行带项目相对路径，暂存图注明随会话删除：像素退场后模型能 `read_image` 取回，也不会把暂存路径写进正文
 
 ### `src/lib/lore/`
 

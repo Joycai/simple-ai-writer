@@ -255,7 +255,8 @@ GIF 在 `IMAGE_EXTS` 里，canvas 重编码会把它压成第一帧。HEIC 也�
 ### 2.9 一次请求的图片合计上限（2026-09-17 补）
 
 `MAX_IMAGE_BYTES` 只管单张。能一次带多张的路径——对话 `@` 每条 4 张
-（`MAX_MESSAGE_IMAGES`）、看图子代理 8 张、历史里留 3 条带图消息
+（`MAX_MESSAGE_IMAGES`；2026-09-23 起贴图与 `@` 合计 5 张，见
+`agent/chat-image-paste-plan.md` §3.4）、看图子代理 8 张、历史里留 3 条带图消息
 （`MAX_IMAGE_RESULTS`，按**消息**数，一条消息可以带 4 张）——合起来没有任何上限。
 四张 12 MB 的 PNG 截图 base64 后约 64 MB，超过 Anthropic 的 32 MB 和 DeepSeek 的
 48 MiB 请求体上限。失败方式和 §2.1 当初要修的一样：上传几分钟，然后 413 或者

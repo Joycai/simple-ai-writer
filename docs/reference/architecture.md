@@ -455,6 +455,7 @@ A picture reaches a model exactly one way: an `image_url` part on a `role: "user
 | `read_lore_image` tool | the model | one entity's avatar / gallery image, by name + filename |
 | `read_image` tool | the model | any image file **inside the project** — document illustrations in a sibling `assets/`, reference art anywhere else |
 | chat `@`-mention | the author | any image `scanProjectFiles` found; inlined by `lib/agent/chatRefs`, ≤ `MAX_MESSAGE_IMAGES` per message |
+| chat paste (⌘V) | the author | a picture from the clipboard, written to the session's scratch area `.ai-writer/tmp/chat/<stashId>/` first and then attached exactly like an `@` one — the same `MAX_MESSAGE_IMAGES`, shared (`docs/feature/agent/chat-image-paste-plan.md`) |
 
 The model only *knows* a lore picture exists because the injected 【知识库】 block says so — `selectLore` writes one bounded 配图 line per matched entity (filenames + descriptions, never pixels). See RAG → 配图在注入里 below.
 
