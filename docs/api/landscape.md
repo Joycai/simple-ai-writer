@@ -1761,9 +1761,9 @@ Responses adapter：
 >
 > | 特性 | 特价Pro | Plus | Pro | Azure（terra） |
 > | --- | --- | --- | --- | --- |
-> | 基础对话、流式事件序列 | ✅ 标准；但时快时慢（同一请求 3 s 到 60 s，一次 212 s 超时） | ✅ | ✅ 最快（2–8 s） | ✅ |
+> | 基础对话、流式事件序列 | ✅ 标准；但时快时慢（同一个 `temperature` 请求三次 6.6 / 9.7 / 62 s；另一道难题 xhigh 三次里一次 212 s 超时） | ✅ | ✅ 最快（2–8 s） | ✅ |
 > | 带 `instructions` 时的输入 token（「Say OK.」） | 19（不注入） | 19 | 19 | **1,209**——网关在 `instructions` 后面追加约 1.2K token 的护栏，响应的 `instructions` 字段原样回显 |
-> | 不带 `instructions` | 时有时无：9（不注入）或 29（注入 11 token 的「You are a helpful coding assistant…」） | **4,389**：注入 Codex 提示（`usage.attribution.request_fields.instructions.input_tokens: 4380`），与第八、十个样本同一条 | 9（不注入） | 9（不注入，护栏也不加） |
+> | 不带 `instructions` | 时有时无：「Say OK.」3 次都不注入（9）；创作题 2 次都多出 11 token（回显「You are a helpful coding assistant…」） | **4,389**：注入 Codex 提示（`usage.attribution.request_fields.instructions.input_tokens: 4380`），与第八、十个样本同一条 | 9（不注入） | 9（不注入，护栏也不加） |
 > | `reasoning.effort` 各档回显 | 原样（`none` 除外） | 原样（`none` 除外） | 原样（`none` 除外） | 原样（`none` 除外） |
 > | `effort: "none"` | **关不掉**：回显 `medium`，照样推理（四档一致，与第十个样本 terra 一致） | ← | ← | ← |
 > | `effort` 真分档？（同一道数论题各 3 次，`reasoning_tokens` low / xhigh） | ✅ 295–428 / 583–588 | ✅ 197–237 / 344–356 | ✅ 170–200 / 259–349 | 弱：131–155 / 163–245 |
@@ -1798,7 +1798,7 @@ Responses adapter：
 > | `reasoning_effort: "none"` | **关不掉**，照样推理 | 关不掉 | 关不掉 | ✅ **真关**：没有推理，同一道数论题 3 次答 1944 / 3645 / 405（有推理时都答 648） |
 > | 乱写 `reasoning_effort` | 流里一个「Upstream service temporarily unavailable」错误 | 502 | ✅ 400，官方原文 | 500 |
 > | `temperature: 0.5` | 200 | 200 | 200 | **200**（② 面是 500；① 面是否生效分不出） |
-> | `max_completion_tokens: 16` | ❌ 无视 | ❌ 无视 | ❌ 无视 | ✅ `finish_reason: length` |
+> | `max_completion_tokens: 16` | ❌ 无视 | ❌ 无视 | ❌ 无视 | ✅ `finish_reason: length`，但 `completion_tokens` 128——截断发生了，上限不是 16（② 面恰好停在 16） |
 > | 顶层 `verbosity` | 看不出效果 | 看不出效果 | 看不出效果 | 看不出效果 |
 > | `response_format: json_schema`（strict） | ✅ 执行 | ✅ 执行 | ❌ **被丢**（4/4，答 `{"answer":2}`） | ✅ 执行 |
 > | `tool_choice: required` | ✅ | ✅ | ✅ | ✅ |
