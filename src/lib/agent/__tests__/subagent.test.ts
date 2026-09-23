@@ -459,6 +459,8 @@ describe("subagent", () => {
       };
       const res = await executeDelegate(call, ctx);
       expect(res.content).toContain("has PDF input switched on, but its route (Gemini");
+      // A one-route channel: no route to move to, so the advice is another model.
+      expect(res.content).toContain("No other route on that channel carries one");
       expect(res.content).not.toContain("not declared");
     });
 

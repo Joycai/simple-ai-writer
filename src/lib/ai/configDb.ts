@@ -9,7 +9,7 @@ import type { ComfyWorkflowConfig } from "../comfy/workflow";
 import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
 import {
-  authModesFor, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
+  authModesFor, familyOf, parseTextVerbosity, type ApiStandard, type AuthMode, type ImageRoute, type TextVerbosity,
 } from "./types";
 import type { ImageDialect } from "./imageDialects";
 import {
@@ -24,8 +24,8 @@ import {
   type RelayUpstreamChoice, type UpstreamPrefix,
 } from "./relayUpstream";
 import {
-  legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
-  standardOf, writtenBaseOf,
+  channelEndpoints, legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily,
+  parseRouteProfiles, routeProvider, standardOf, writtenBaseOf,
   type Endpoint, type RouteProfile,
 } from "./routes";
 import type { ProtocolFamily } from "./types";
@@ -540,6 +540,25 @@ export function readsPdf(
   const wire = providerWire(provider);
   const relayUpstream = relayUpstreamFor(wire.platform, m, provider);
   return hasCapability("pdfInput", wire, capabilityModelOf({ modelId: m.modelId, relayUpstream }));
+}
+
+/**
+ * Another route on the model's channel that would carry its PDF, or undefined.
+ * `provider` is the channel as the model's route sees it (`providerFor`), so its
+ * own family is the one being left. A hint that says "move the model to another
+ * route" names this one — on a relay, a route that merely *has* a PDF spelling
+ * may still lose the file to the upstream behind it.
+ */
+export function pdfRouteFor(
+  m: Pick<Model, "pdfInput" | "relayUpstream"> & { modelId?: string },
+  provider: Provider,
+): ProtocolFamily | undefined {
+  const current = familyOf(provider.apiStandard);
+  return channelEndpoints(provider).map((e) => e.family).find((f) => {
+    if (f === current) return false;
+    const route = routeProvider(provider, f);
+    return !!route && readsPdf(m, route);
+  });
 }
 
 /**

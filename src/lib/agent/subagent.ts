@@ -14,11 +14,11 @@
 
 import i18n from "../../i18n";
 import { familyOf, type ContentPart, type MessageContent, type StreamMessage } from "../ai/types";
-import { ROUTE_SHORT } from "../ai/routes";
+import { ROUTE_LONG } from "../ai/routes";
 import { serverToolsSent } from "../ai/serverTools";
 import { upstreamDropping } from "../ai/relayUpstream";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
-import { canSeeImages, readsPdf, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, pdfRouteFor, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
 import { recordUsage } from "../ai/usageRow";
 import { withCurrentTime } from "../context/clock";
@@ -161,6 +161,7 @@ export async function executeDelegate(
   }
   if (kind === "pdf" && !readsPdf(conn.model, conn.provider)) {
     const upstream = conn.model.pdfInput ? upstreamDropping("pdfInput", conn.model, conn.provider) : undefined;
+    const pdfRoute = conn.model.pdfInput && !upstream ? pdfRouteFor(conn.model, conn.provider) : undefined;
     return fail(
       upstream
         ? `the pdf subagent's model "${conn.model.name}" accepts PDF input, but the relay upstream behind it ("${upstream}") ` +
@@ -168,8 +169,10 @@ export async function executeDelegate(
             `or read the document another way.`
         : conn.model.pdfInput
         ? `the pdf subagent's model "${conn.model.name}" has PDF input switched on, but its route ` +
-            `(${ROUTE_SHORT[familyOf(conn.provider.apiStandard)]} on "${conn.provider.name}") cannot carry a PDF, so nothing is sent. ` +
-            `Tell the author to move the model to a route that carries PDFs, or bind another model (Settings → Subagents), ` +
+            `(${ROUTE_LONG[familyOf(conn.provider.apiStandard)]} on "${conn.provider.name}") cannot carry a PDF, so nothing is sent. ` +
+            (pdfRoute
+              ? `Tell the author to move the model to its ${ROUTE_LONG[pdfRoute]} route, or bind another model (Settings → Subagents), `
+              : `No other route on that channel carries one either: tell the author to bind another model (Settings → Subagents), `) +
             `or read the document another way.`
         : `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
             `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,

@@ -12,7 +12,7 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagentModel";
-import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, readsPdf, type Model } from "../../../lib/ai/configDb";
+import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, pdfRouteFor, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { upstreamDropping } from "../../../lib/ai/relayUpstream";
 import {
@@ -36,7 +36,7 @@ import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import css from "./SubAgents.module.css";
-import { providerFor, ROUTE_SHORT } from "../../../lib/ai/routes";
+import { providerFor, ROUTE_LONG } from "../../../lib/ai/routes";
 import { familyOf } from "../../../lib/ai/types";
 
 /**
@@ -137,9 +137,14 @@ export function SubAgentsPane() {
       const channel = providerFor(model, providers);
       const upstream = channel && model.pdfInput ? upstreamDropping("pdfInput", model, channel) : undefined;
       if (upstream) return t("systemSettings.subagents.warnPdfUpstream", { upstream: t(`aiConfig.upstream.name.${upstream}`) });
-      // Declared, but the route it speaks can't carry the file (platform or protocol).
+      // Declared, but the route it speaks can't carry the file (platform or protocol):
+      // name a route on this channel that can, or say there is none.
       if (channel && model.pdfInput) {
-        return t("systemSettings.subagents.warnPdfNotSent", { route: ROUTE_SHORT[familyOf(channel.apiStandard)] });
+        const route = ROUTE_LONG[familyOf(channel.apiStandard)];
+        const target = pdfRouteFor(model, channel);
+        return target
+          ? t("systemSettings.subagents.warnPdfOtherRoute", { route, target: ROUTE_LONG[target] })
+          : t("systemSettings.subagents.warnPdfNotSent", { route });
       }
       return t("systemSettings.subagents.warnNoPdf");
     }

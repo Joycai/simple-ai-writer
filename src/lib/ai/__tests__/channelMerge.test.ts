@@ -132,7 +132,7 @@ describe("planMerge", () => {
     expect(plan.upserts.find((m) => m.id === "k2")?.relayUpstream).toBeUndefined();
   });
 
-  it("folds an absorbed row's own choice in only where the kept row had no upstream", () => {
+  it("folds an absorbed row's own choice in over the kept row's table, but not over its own choice", () => {
     const keep = channel("r1", "https://relay.example/v1", "openai_compat", {
       platform: "newapi", upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }],
     });
@@ -144,7 +144,8 @@ describe("planMerge", () => {
       model("a2", "r2", "[x]claude-sonnet-5", { relayUpstream: "bedrock" }),
     ]);
     const byId = new Map(plan.upserts.map((m) => [m.id, m]));
-    expect(byId.get("k1")?.relayUpstream).toBeUndefined();
+    // A choice made for this model id is finer than the kept row's `[CC量]` table row.
+    expect(byId.get("k1")?.relayUpstream).toBe("anti");
     expect(byId.get("k2")?.relayUpstream).toBe("bedrock");
   });
 

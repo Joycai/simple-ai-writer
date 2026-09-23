@@ -131,21 +131,22 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
     }
   }
 
-  // Upstreams across the merge (capability-gating-plan §8.11). The two rows
-  // are one relay, so the merged table describes it better than either half:
-  // a model the author gave **no** upstream follows it — for a folded row,
-  // the absorbed row's own choice first, since it was made for this model id.
-  // A model whose upstream came from its row's **table** keeps it: where the
-  // merged table would answer differently (one prefix mapped two ways, or
-  // `absorb`'s longer prefix now winning for a `keep` model), the old answer
-  // becomes the model's own choice. An upstream only *read off the id* (kiro,
-  // bedrock) is no one's setting — the id is the same after the merge, so it
-  // needs no pinning, and it must not outrank a choice the author made.
+  // Upstreams across the merge (capability-gating-plan §8.11). A model's own
+  // choice outranks any table, so it stands: the kept row's first, then — for a
+  // folded row — the absorbed row's, made for this very model id. Without one,
+  // the two rows are one relay and the merged table describes it better than
+  // either half, with one exception: an upstream the model got from its row's
+  // **table** is kept, and where the merged table would answer differently
+  // (one prefix mapped two ways, or `absorb`'s longer prefix now winning for a
+  // `keep` model) the old answer becomes the model's own choice. An upstream
+  // only *read off the id* (kiro, bedrock) is no one's setting: it follows the
+  // merged table like a model with none, and is never pinned as a choice.
   const platform = resolvePlatform(channel.platform, channel.baseUrl, channel.apiStandard);
-  const settle = (m: Model, before: Provider["upstreamPrefixes"], fallback?: RelayUpstreamChoice): Model => {
+  const settle = (m: Model, before: Provider["upstreamPrefixes"], folded?: RelayUpstreamChoice): Model => {
     if (m.relayUpstream) return m;
+    if (folded) return { ...m, relayUpstream: folded };
     const was = resolveRelayUpstream(platform, m.modelId, undefined, before);
-    if (was.source !== "prefix") return fallback ? { ...m, relayUpstream: fallback } : m;
+    if (was.source !== "prefix") return m;
     const now = resolveRelayUpstream(platform, m.modelId, undefined, channel.upstreamPrefixes).upstream;
     return was.upstream === now ? m : { ...m, relayUpstream: was.upstream };
   };

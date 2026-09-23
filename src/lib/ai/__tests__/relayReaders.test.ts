@@ -7,9 +7,10 @@
  * request sends (capability-gating-plan §8.11).
  */
 import { describe, expect, it } from "vitest";
-import { readsPdf, type Model, type Provider } from "../configDb";
+import { pdfRouteFor, readsPdf, type Model, type Provider } from "../configDb";
 import { serverToolsSent } from "../serverTools";
 import { upstreamDropping } from "../relayUpstream";
+import { normalizeChannel, routeProvider } from "../routes";
 
 const relay = (endpointStandard: Provider["apiStandard"], upstreamPrefixes?: Provider["upstreamPrefixes"]): Provider => ({
   id: "r", name: "Relay", baseUrl: "https://relay.example", apiStandard: endpointStandard, platform: "newapi",
@@ -67,5 +68,25 @@ describe("upstreamDropping", () => {
     // On Anthropic the protocol rule already refuses anti's PDF: not the upstream's doing.
     expect(upstreamDropping("pdfInput", model("[anti量]claude-opus-4-6"), anth)).toBeUndefined();
     expect(upstreamDropping("web_search", model("[正向AWSb量]claude-opus-4-6", { relayUpstream: "none" }), anth)).toBeUndefined();
+  });
+});
+
+// The PDF hint's "move the model to another route" names one that would carry
+// the file — on a relay, a route with a PDF spelling can still lose it upstream.
+describe("pdfRouteFor", () => {
+  const twoRoutes = normalizeChannel({
+    ...relay("anthropic_compat", TABLE),
+    endpoints: [{ family: "anthropic", official: false }, { family: "openai", official: false }],
+  });
+  const onAnth = routeProvider(twoRoutes, "anthropic")!;
+
+  it("names a route of the channel where the model's PDF would be sent", () => {
+    expect(readsPdf({ ...model("claude-opus-5"), pdfInput: true }, onAnth)).toBe(false);
+    expect(pdfRouteFor({ ...model("claude-opus-5"), pdfInput: true }, onAnth)).toBe("openai");
+  });
+
+  it("names none when the upstream behind the other route drops the file too", () => {
+    expect(pdfRouteFor({ ...model("kiro-claude-opus-4-6"), pdfInput: true }, onAnth)).toBeUndefined();
+    expect(pdfRouteFor({ ...model("claude-opus-5"), pdfInput: true }, relay("anthropic_compat"))).toBeUndefined();
   });
 });
