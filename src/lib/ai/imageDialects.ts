@@ -375,3 +375,17 @@ export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [
 export function imageDialect(id: string | undefined): ImageDialectSpec | null {
   return IMAGE_DIALECTS.find((d) => d.id === id) ?? null;
 }
+
+/**
+ * Whether the model can keep an edit's background transparent — Seedream's
+ * `background: "transparent"` on the ark route. Read off the dialect rather
+ * than declared: `seedream-5-pro` is exactly 5.0 pro and flash, the two
+ * versions that take the field (5.0 lite and 4.x have dialects of their own),
+ * so the answer follows every row that speaks it — starter rows added before
+ * this existed, hand-added rows, and rows re-saved from the model drawer,
+ * which rebuilds caps from its form and would drop a declaration it has no
+ * control for (docs/feature/image-generation-plan.md PR7, 09-23 增补).
+ */
+export function keepsTransparentBackground(caps: { route?: string; dialect?: string } | undefined): boolean {
+  return caps?.route === "ark" && caps.dialect === "seedream-5-pro";
+}

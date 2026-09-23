@@ -354,11 +354,11 @@ export interface IllustrateProposal extends ProposalBase {
    */
   refPaths?: string[];
   /**
-   * The agent said this edit needs pixels outside a transparent source's
-   * shape (a background, a wider scene), so its transparency must not be
-   * kept. Only the explicit `false` is stored: keeping it is the default, and
-   * it applies only where the model declares `caps.transparent` and the
-   * source is a lone PNG with alpha (illustrate.ts).
+   * The agent said this edit's result needs a filled background, so a
+   * transparent source's see-through background must not be kept. Only the
+   * explicit `false` is stored: keeping it is the default, and it applies only
+   * where the model can (`keepsTransparentBackground`) and the source is a
+   * lone PNG with alpha (illustrate.ts).
    */
   keepTransparency?: false;
 }

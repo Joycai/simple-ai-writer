@@ -126,11 +126,13 @@ interface ImageRequest {
    */
   quality?: string;
   /**
-   * Keep the (single, PNG) input's transparency — the ark route's
-   * `background: "transparent"` + `output_format: "png"`. The caller decides:
-   * it locks the input's alpha mask, so an edit that needs pixels outside the
-   * shape ("add a sky behind it") must not ask for it (docs/api/landscape.md
-   * §7 第十三个样本). The other routes have no such field and ignore it.
+   * Keep the (single, PNG) input's background transparent — the ark route's
+   * `background: "transparent"` + `output_format: "png"`. The subject may
+   * still change shape (an arrow turned from right to up stays a cut-out);
+   * what is promised is a see-through background, so an edit that asks for
+   * one to be filled ("add a sky behind it") must not ask for this — measured,
+   * it paints the sky *inside* the subject instead (docs/api/landscape.md §7
+   * 第十三个样本). The other routes have no such field and ignore it.
    */
   transparentBackground?: boolean;
   /** Extra top-level request fields, mirroring StreamOptions.extraBody. */

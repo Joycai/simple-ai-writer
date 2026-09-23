@@ -12,6 +12,7 @@
  */
 
 import { imageCostFor } from "../ai/configDb";
+import { keepsTransparentBackground } from "../ai/imageDialects";
 import { fileExists } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { dirName, resolveWorkspacePath } from "../paths";
@@ -60,7 +61,8 @@ async function proposeIllustration(
     negative?: string;
     sourcePath?: string;
     refPaths?: string[];
-    keepTransparency?: boolean;
+    /** The raw `keep_transparency` argument — a model may send the boolean as a string. */
+    keepTransparency?: boolean | string;
     reason?: string;
   },
 ): Promise<ToolResult> {
@@ -80,6 +82,11 @@ async function proposeIllustration(
 
   const negative = spec.negative?.trim();
   const comfyRoute = model.caps?.route === "comfyui";
+  const keepOff = spec.keepTransparency === false || spec.keepTransparency === "false";
+  // Said out loud only when the agent spoke to it: a model that cannot keep a
+  // background transparent returns an opaque one, and without this the run
+  // could tell the author their cut-out survived.
+  const transparencyIgnored = spec.keepTransparency !== undefined && !keepsTransparentBackground(model.caps);
 
   const proposal: IllustrateProposal = {
     kind: "illustrate",
@@ -104,7 +111,7 @@ async function proposeIllustration(
     ...(negative && comfyRoute ? { negative } : {}),
     sourcePath: spec.sourcePath,
     ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
-    ...(spec.keepTransparency === false ? { keepTransparency: false as const } : {}),
+    ...(keepOff ? { keepTransparency: false as const } : {}),
     reason: spec.reason,
   };
 
@@ -165,6 +172,9 @@ async function proposeIllustration(
       // it listed.
       + (negative && !comfyRoute
         ? `\nNote: 'negative' was ignored — "${model.name}" is not a local ComfyUI model, so it has no negative conditioning. Put what matters into the prompt itself.`
+        : "")
+      + (transparencyIgnored
+        ? `\nNote: 'keep_transparency' was ignored — "${model.name}" cannot keep a background transparent, so the result's background is opaque.`
         : ""),
   };
 }
@@ -372,7 +382,7 @@ export async function editImageTool(
   args: {
     source?: string; path?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string; keep_transparency?: boolean;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean | string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -470,7 +480,7 @@ export async function redrawLoreImageTool(
   args: {
     entity?: string; file?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string; keep_transparency?: boolean;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean | string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {

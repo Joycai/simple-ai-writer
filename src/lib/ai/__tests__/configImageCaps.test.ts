@@ -34,7 +34,6 @@ const full: Required<ImageCaps> = {
   dialect: "gpt-image-2",
   sizes: ["1024x1024", "1536x1024"],
   maxRefs: 16,
-  transparent: true,
   route: "images-api",
   asyncTask: false,
   comfy: { workflow: '{"3":{"class_type":"KSampler","inputs":{}}}' },
@@ -54,7 +53,7 @@ describe("parseImageCaps", () => {
       route: "ftp",
       dialect: "dall-e-9",
     });
-    expect(out).toEqual({ edit: false, asyncTask: false, transparent: true, comfy: full.comfy });
+    expect(out).toEqual({ edit: false, asyncTask: false, comfy: full.comfy });
   });
 
   it("keeps only the text entries of a mixed size list", () => {
@@ -68,13 +67,9 @@ describe("parseImageCaps", () => {
   });
 
   it("wants booleans to be booleans", () => {
-    expect(parseImageCaps({ edit: "yes", asyncTask: 1, transparent: "true", route: "dashscope" })).toEqual({ route: "dashscope" });
+    expect(parseImageCaps({ edit: "yes", asyncTask: 1, route: "dashscope" })).toEqual({ route: "dashscope" });
   });
 
-  it("keeps the transparency declaration Seedream 5.0 pro / flash starter rows carry", () => {
-    const caps = { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10, transparent: true };
-    expect(parseImageCaps(JSON.stringify(caps))).toEqual(caps);
-  });
 
   it("keeps the ark route and the Seedream dialects (火山方舟 starter rows declare them)", () => {
     for (const dialect of ["seedream-5-pro", "seedream-5-lite", "seedream-4"]) {

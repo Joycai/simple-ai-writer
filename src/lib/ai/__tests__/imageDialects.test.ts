@@ -8,7 +8,7 @@
  * into paid-for failures.
  */
 import { describe, it, expect } from "vitest";
-import { gptImageSize, imageDialect, qwenImageSize, wanImageSize, IMAGE_DIALECTS } from "../imageDialects";
+import { gptImageSize, imageDialect, keepsTransparentBackground, qwenImageSize, wanImageSize, IMAGE_DIALECTS } from "../imageDialects";
 import { imageRequestParams, inputImageSize } from "../../image";
 
 describe("gptImageSize", () => {
@@ -280,5 +280,16 @@ describe("inputImageSize", () => {
     const p = imageRequestParams({ dialect: "qwen-image" }, {}, { edit: true, inputSize: inputImageSize(png(768, 1376)) });
     // The input's ratio re-spelled at the 1K area (floored to 16), not its pixels.
     expect(p.size).toBe("752*1360");
+  });
+});
+
+describe("keepsTransparentBackground", () => {
+  it("is 5.0 pro / flash on the ark route, and nothing else", () => {
+    expect(keepsTransparentBackground({ route: "ark", dialect: "seedream-5-pro" })).toBe(true);
+    expect(keepsTransparentBackground({ route: "ark", dialect: "seedream-5-lite" })).toBe(false);
+    expect(keepsTransparentBackground({ route: "ark", dialect: "seedream-4" })).toBe(false);
+    expect(keepsTransparentBackground({ route: "images-api", dialect: "seedream-5-pro" })).toBe(false);
+    expect(keepsTransparentBackground({ route: "ark" })).toBe(false);
+    expect(keepsTransparentBackground(undefined)).toBe(false);
   });
 });

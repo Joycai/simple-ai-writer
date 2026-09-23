@@ -1,9 +1,9 @@
 /**
- * When an approved edit asks the endpoint to keep a transparent source
- * transparent. The mode locks the input's alpha mask (measured on Seedream
- * 5.0 pro, 2026-09-23: "add a sky behind it" painted the sky inside the
- * silhouette), so it needs every condition at once — and the agent's word
- * that the change stays inside the shape.
+ * When an approved edit asks the endpoint to keep a transparent source's
+ * background transparent. The mode promises a see-through background
+ * (measured on Seedream 5.0 pro, 2026-09-23: "add a sky behind it" painted
+ * the sky inside the subject instead), so it needs every condition at once —
+ * and the agent's word that the result wants no filled background.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IllustrateProposal } from "../../agent/registry";
@@ -69,22 +69,31 @@ async function sent(p: IllustrateProposal): Promise<unknown> {
 
 beforeEach(() => {
   generateImage.mockClear();
-  caps = { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10, transparent: true };
+  caps = { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 };
   onDisk = { "/proj/sprite.png": png(6), "/proj/ref.png": png(6), "/proj/photo.png": png(2), "/proj/photo.jpg": JPEG };
 });
 
 describe("runIllustration — keeping a transparent source transparent", () => {
-  it("asks for it on a lone RGBA PNG when the model declares it", async () => {
+  it("asks for it on a lone RGBA PNG source when the dialect is 5.0 pro / flash", async () => {
     expect(await sent(proposal({}))).toBe(true);
   });
 
-  it("does not when the agent said the change needs pixels outside the shape", async () => {
+  it("does not when the agent said the result needs a filled background", async () => {
     expect(await sent(proposal({ keepTransparency: false }))).toBeUndefined();
   });
 
-  it("does not on a model that has not declared it", async () => {
+  it("does not on a model whose dialect cannot — 5.0 lite, or pro's table off the ark route", async () => {
     caps = { route: "ark", dialect: "seedream-5-lite", edit: true, maxRefs: 14 };
     expect(await sent(proposal({}))).toBeUndefined();
+    generateImage.mockClear();
+    caps = { route: "images-api", dialect: "seedream-5-pro", edit: true };
+    expect(await sent(proposal({}))).toBeUndefined();
+  });
+
+  it("does not on a fresh drawing that only leans on a transparent reference", async () => {
+    // generate_image has no keep_transparency to say no with, and a reference
+    // is a look to follow — its see-through background is not the result's.
+    expect(await sent(proposal({ sourcePath: undefined, refPaths: ["/proj/ref.png"] }))).toBeUndefined();
   });
 
   it("does not with references alongside — the endpoint takes exactly one input", async () => {

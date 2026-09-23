@@ -132,7 +132,7 @@ export const IMAGE_TOOLS = {
             },
             keep_transparency: {
               type: "boolean",
-              description: "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene).",
+              description: "Transparent source, on a model that keeps transparency: false when the result needs a filled background (adding a background or scene behind the subject).",
             },
             desc: {
               type: "string",
@@ -210,7 +210,7 @@ export const IMAGE_TOOLS = {
             },
             keep_transparency: {
               type: "boolean",
-              description: "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene).",
+              description: "Transparent source, on a model that keeps transparency: false when the result needs a filled background (adding a background or scene behind the subject).",
             },
             desc: {
               type: "string",

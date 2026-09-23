@@ -336,6 +336,30 @@ describe("keep_transparency", () => {
     await redrawLoreImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "x", keep_transparency: false }, ctx);
     expect(seen[0].keepTransparency).toBe(false);
   });
+
+  it("reads a boolean sent as a string", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky", keep_transparency: "false" }, ctx);
+    expect(seen[0].keepTransparency).toBe(false);
+  });
+
+  it("tells the model when the bound model cannot keep a background transparent", async () => {
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue", keep_transparency: true }, ctx);
+    expect(res.content).toMatch(/'keep_transparency' was ignored/);
+  });
+
+  it("says nothing on a model that can, or when the agent never spoke to it", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 } }];
+    const can = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue", keep_transparency: true }, can.ctx);
+    expect(res.content).not.toMatch(/keep_transparency/);
+
+    storeModels = [IMAGE_MODEL];
+    const silent = ctxWith();
+    const quiet = await editImageTool("c1", { source: "插图/参考.png", instruction: "blue" }, silent.ctx);
+    expect(quiet.content).not.toMatch(/keep_transparency/);
+  });
 });
 
 describe("redraw_lore_image", () => {

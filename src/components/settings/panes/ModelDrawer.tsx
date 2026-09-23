@@ -602,6 +602,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         ? {
             edit: isComfy ? comfySlots > 0 : capsEdit,
             ...(isComfy && comfySlots > 0 ? { maxRefs: comfySlots } : {}),
+            // Off comfyui the drawer has no control for the cap, so it keeps
+            // the one the row came with (a starter row's 10 / 14). Rebuilding
+            // without it silently lifted the input-image limit on every save.
+            ...(!isComfy && existing?.caps?.maxRefs ? { maxRefs: existing.caps.maxRefs } : {}),
             // A dialect belongs to cloud parameter vocabularies; on comfyui
             // the free-form sizes list is the whole story.
             ...(!isComfy && form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),

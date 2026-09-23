@@ -91,7 +91,6 @@ const caps: Required<ImageCaps> = {
   dialect: "qwen-image",
   sizes: ["1024x1024", "1328x1328"],
   maxRefs: 3,
-  transparent: true,
   route: "comfyui",
   asyncTask: true,
   comfy: { workflow: '{"3":{"class_type":"KSampler","inputs":{}}}' },

@@ -270,15 +270,17 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../packs";
  * `manage_category`'s `describe` op (~120 tokens, all deferred in
  * `lore_organize`).
  *
- * **17,159** (cap 17,100 → 17,200; measured against main's 17,062) with
- * `keep_transparency` on `edit_image` / `redraw_lore_image` — +97, resident,
+ * **17,167** (cap 17,100 → 17,200; measured against main's 17,062) with
+ * `keep_transparency` on `edit_image` / `redraw_lore_image` — +105, resident,
  * because both tools are. Two words on the wire, but a decision only the
- * model can make: Seedream's transparent mode locks the source's alpha mask,
- * so "add a sky behind her" paints the sky *inside* her silhouette and still
+ * model can make: Seedream's transparent mode promises a see-through
+ * background, so "add a sky behind her" paints the sky *inside* her and still
  * bills (docs/api/landscape.md §7 第十三个样本, measured 2026-09-23). Deciding
  * it from the input alone gets that edit wrong; deciding it from the prompt's
- * words is guessing in two languages. The description is the third draft —
- * the first stated the default and the model support twice over (+160).
+ * words is guessing in two languages. The description is the fourth draft —
+ * the first stated the default and the model support twice over (+160); the
+ * third said "pixels outside its shape", which a pose change measured to be
+ * wrong (the subject may change shape; only the background is kept).
  */
 const AGENT_ASSIST_CAP = 17_200;
 /**

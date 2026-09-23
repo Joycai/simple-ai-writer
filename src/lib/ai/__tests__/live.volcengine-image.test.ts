@@ -61,7 +61,7 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Seedream (ark route)", () => {
     expect(res.usage).toBeUndefined();
   }, 300_000);
 
-  // ── Transparency (5.0 pro / flash, `caps.transparent`) ────────────────────
+  // ── Transparency (5.0 pro / flash — `keepsTransparentBackground`) ─────────
 
   it("refuses transparency for a PNG with nothing transparent in it, before drawing (free probe)", async () => {
     // Straight at the endpoint, not through generateImage: the adapter retries
