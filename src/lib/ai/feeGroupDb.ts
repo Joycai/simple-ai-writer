@@ -298,16 +298,24 @@ export function planFeeGroupsFromLegacy(
  *
  * 旧的价格列**不清零**：迁移读它们，老版本也还在读它们。新代码一律走
  * `Model.fee`（`configDb.feeOf`）。
+ *
+ * **只替还没绑组的行建组。** `fee_group_id` 有值的行一定是新代码写的——老
+ * 版本不认识这一列，它的 `INSERT OR REPLACE` 只会把它写成 NULL——绑定已经
+ * 是决定过的，旧价没资格再造一个组，这种行只盖章。不这样的话，一行只要因为
+ * 什么原因丢了标记（`modelUpsert` 曾经每写一次都把它清回 NULL），而它的组价
+ * 后来改过，旧价就对不上任何组，迁移会按模型名插一个旧价的重复组——绑定被
+ * `COALESCE` 保住了，组却已经插进去了。
  */
 export async function migrateModelPricesToFeeGroups(db: Db): Promise<number> {
   const rows = await db.select<Record<string, unknown>[]>(
-    `SELECT id, name, price_in, price_cached_in, price_out, price_per_image, price_per_second
+    `SELECT id, name, fee_group_id, price_in, price_cached_in, price_out, price_per_image, price_per_second
      FROM models WHERE fee_migrated IS NULL ORDER BY name, id`,
   );
   if (!rows.length) return 0;
 
   const existing = await listFeeGroups(db);
-  const legacy: LegacyPricedModel[] = rows.map((r) => ({
+  const unbound = rows.filter((r) => !(typeof r.fee_group_id === "string" && r.fee_group_id));
+  const legacy: LegacyPricedModel[] = unbound.map((r) => ({
     id: String(r.id ?? ""),
     name: typeof r.name === "string" && r.name ? r.name : String(r.id ?? ""),
     priceIn: real(r.price_in),

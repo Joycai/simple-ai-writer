@@ -9,8 +9,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ensureFeeGroupSchema, feeGroupUpsert, parseSpecRates, planFeeGroupsFromLegacy,
-  rowToFeeGroup, serializeSpecRates,
+  ensureFeeGroupSchema, feeGroupUpsert, migrateModelPricesToFeeGroups, parseSpecRates,
+  planFeeGroupsFromLegacy, rowToFeeGroup, serializeSpecRates,
 } from "../feeGroupDb";
 import type { LegacyPricedModel } from "../feeGroupDb";
 import type { FeeGroup } from "../feeGroup";
@@ -229,5 +229,124 @@ describe("ensureFeeGroupSchema", () => {
       if (/ALTER TABLE/i.test(sql)) throw new Error("database or disk is full");
     });
     await expect(ensureFeeGroupSchema(db)).rejects.toThrow(/disk is full/);
+  });
+});
+
+/**
+ * 真正读写库的那一步。仓库里没有真 SQLite，这里用一张够用的内存表：只认
+ * 这个函数发出的四类语句（选未迁移的模型行、列出组、插一个组、按 id 更新
+ * 模型行），别的语句一律抛——函数多发了一条没预料到的语句，测试应当知道。
+ *
+ * 要钉的是：**已经绑了组的行，不管旧价是多少，都只盖章不造组。** 标记曾经
+ * 被 `modelUpsert` 每写一次就清回 NULL，组价又改过的话，旧价对不上任何组，
+ * 迁移就会按模型名插一个重复组。
+ */
+describe("migrateModelPricesToFeeGroups", () => {
+  interface ModelRow {
+    id: string; name: string;
+    fee_group_id: string | null; fee_migrated: number | null;
+    price_in: number; price_cached_in: number; price_out: number;
+    price_per_image: number | null; price_per_second: number | null;
+  }
+
+  function memoryDb(models: ModelRow[], groups: Record<string, unknown>[]) {
+    const db = {
+      select: async (sql: string) => {
+        if (/FROM models WHERE fee_migrated IS NULL/.test(sql)) {
+          return models
+            .filter((m) => m.fee_migrated === null)
+            .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+            .map((m) => ({ ...m }));
+        }
+        if (/FROM fee_groups/.test(sql)) return groups.map((g) => ({ ...g }));
+        throw new Error(`unexpected select: ${sql}`);
+      },
+      execute: async (sql: string, values: unknown[] = []) => {
+        if (/^\s*INSERT INTO fee_groups/.test(sql)) {
+          const cols = /\(([^)]*)\)\s*VALUES/.exec(sql)![1].split(",").map((c) => c.trim());
+          groups.push(Object.fromEntries(cols.map((c, i) => [c, values[i]])));
+        } else if (/^\s*UPDATE models SET fee_group_id = COALESCE\(fee_group_id, \?\), fee_migrated = 1 WHERE id = \?/.test(sql)) {
+          const m = models.find((x) => x.id === values[1])!;
+          m.fee_group_id = m.fee_group_id ?? (values[0] as string | null);
+          m.fee_migrated = 1;
+        } else {
+          throw new Error(`unexpected execute: ${sql}`);
+        }
+        return { rowsAffected: 1, lastInsertId: 0 };
+      },
+    };
+    return db as unknown as Parameters<typeof migrateModelPricesToFeeGroups>[0];
+  }
+
+  const model = (patch: Partial<ModelRow> & { id: string }): ModelRow => ({
+    name: patch.id, fee_group_id: null, fee_migrated: null,
+    price_in: 0, price_cached_in: 0, price_out: 0, price_per_image: null, price_per_second: null,
+    ...patch,
+  });
+  /** 组价后来被改过的那一组：输入 2.5，而模型行上的旧价还是 3。 */
+  const editedGroup = () => ({
+    id: "g-edited", name: "Sonnet", billing_mode: "token",
+    input_price: 2.5, cache_input_price: null, output_price: 15, request_price: 0,
+    output_unit: "image", output_rates: null, input_unit_price: 0, input_free_units: 0,
+    created_at: 1,
+  });
+
+  it("已绑组的行丢了标记、旧价又对不上组价：不造组、绑定不变、盖章", async () => {
+    const models = [model({ id: "m1", fee_group_id: "g-edited", price_in: 3, price_out: 15 })];
+    const groups = [editedGroup()];
+    const created = await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(created).toBe(0);
+    expect(groups.map((g) => g.id)).toEqual(["g-edited"]);
+    expect(models[0]).toMatchObject({ fee_group_id: "g-edited", fee_migrated: 1 });
+  });
+
+  it("没绑组、带旧价的行：建一个组并绑上——老版本升上来的正路", async () => {
+    const models = [model({ id: "m1", name: "Sonnet", price_in: 3, price_out: 15 })];
+    const groups: Record<string, unknown>[] = [];
+    const created = await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(created).toBe(1);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ name: "Sonnet", input_price: 3, output_price: 15 });
+    expect(models[0]).toMatchObject({ fee_group_id: groups[0].id, fee_migrated: 1 });
+  });
+
+  it("没绑组、旧价和现有的组一样：复用那个组，不长重复的", async () => {
+    const same = { ...editedGroup(), id: "g-same", input_price: 3 };
+    const models = [model({ id: "m1", price_in: 3, price_out: 15 })];
+    const groups = [same];
+    const created = await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(created).toBe(0);
+    expect(groups).toHaveLength(1);
+    expect(models[0]).toMatchObject({ fee_group_id: "g-same", fee_migrated: 1 });
+  });
+
+  it("没绑组、旧价全是 0：不造组、保持未绑定、盖章", async () => {
+    const models = [model({ id: "m1" })];
+    const groups: Record<string, unknown>[] = [];
+    await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(groups).toHaveLength(0);
+    expect(models[0]).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+  });
+
+  it("已经盖过章的行不被读，也不被写", async () => {
+    const models = [model({ id: "m1", price_in: 3, fee_migrated: 1 })];
+    const groups: Record<string, unknown>[] = [];
+    const created = await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(created).toBe(0);
+    expect(groups).toHaveLength(0);
+    expect(models[0]).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+  });
+
+  it("一批里有绑的有没绑的：只有没绑的那几行进归并", async () => {
+    const models = [
+      model({ id: "bound", fee_group_id: "g-edited", price_in: 3, price_out: 15 }),
+      model({ id: "free", price_in: 1, price_out: 2 }),
+    ];
+    const groups = [editedGroup()];
+    const created = await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(created).toBe(1);
+    expect(groups.map((g) => g.input_price)).toEqual([2.5, 1]);
+    expect(models.find((m) => m.id === "bound")).toMatchObject({ fee_group_id: "g-edited", fee_migrated: 1 });
+    expect(models.find((m) => m.id === "free")!.fee_group_id).toBe(groups[1].id);
   });
 });
