@@ -478,6 +478,14 @@ export async function stageConfigImport(
  * is reported as exactly what it is: the configuration landed, the keys did
  * not.
  *
+ * That report is a **return value, not a throw.** A throw here meant "the
+ * import failed" to both callers, so they skipped `refreshAfterConfigImport`
+ * over rows that had in fact been committed — the stores kept showing the
+ * pre-restore config, and saving from a stale drawer could overwrite what the
+ * restore had just written. A throw from this function now means the rows did
+ * not land; anything after the commit comes back in `ConfigImportResult`, and
+ * `keyFailureMessage` words it.
+ *
  * That transaction runs through `sqlTransaction`, **not** as `db.execute`d
  * BEGIN/COMMIT around the usual per-row helpers. The SQL plugin hands out a
  * connection pool, so those three calls were three different connections: the
@@ -489,7 +497,7 @@ export async function stageConfigImport(
  * Providers are written before the models that reference them: sqlx connects
  * with `foreign_keys = ON`, and `models.provider_id` is a real foreign key.
  */
-export async function applyConfigImport(staged: ParsedConfigBundle): Promise<void> {
+export async function applyConfigImport(staged: ParsedConfigBundle): Promise<ConfigImportResult> {
   // Not for the writes below — this is what guarantees the tables and their
   // added columns exist before the transaction's own connection touches them.
   const db = await configDb();
@@ -544,9 +552,17 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
       failed.push(name);
     }
   }
-  if (failed.length) {
-    throw new Error(
-      `Imported the configuration, but could not store the API key for: ${failed.join(", ")}. Enter those keys by hand.`,
-    );
-  }
+  return { failedKeys: failed };
+}
+
+/** What a restore that committed its rows still has to tell the author. */
+export interface ConfigImportResult {
+  /** Names of the providers whose embedded API key did not reach the keyring. */
+  failedKeys: string[];
+}
+
+/** The author-facing sentence for `failedKeys`; null when every key landed. */
+export function keyFailureMessage(failedKeys: string[]): string | null {
+  if (!failedKeys.length) return null;
+  return `Imported the configuration, but could not store the API key for: ${failedKeys.join(", ")}. Enter those keys by hand.`;
 }

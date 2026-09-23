@@ -73,6 +73,7 @@ vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "1.23.1" }));
 // what these tests are about.
 let built = { keys: false };
 const applied: unknown[] = [];
+let failedKeys: string[] = [];
 vi.mock("../../lib/ai/configTransfer", async () => {
   const bundle = (withKeys: boolean) => ({
     kind: "ai-writer-config-backup" as const,
@@ -109,7 +110,11 @@ vi.mock("../../lib/ai/configTransfer", async () => {
           .length ?? 0,
       };
     },
-    applyConfigImport: async (staged: unknown) => void applied.push(staged),
+    applyConfigImport: async (staged: unknown) => {
+      applied.push(staged);
+      return { failedKeys };
+    },
+    keyFailureMessage: (names: string[]) => (names.length ? `keys failed: ${names.join(", ")}` : null),
   };
 });
 
@@ -154,6 +159,7 @@ const slot = (current: { atMs: number; hash: string; size: number; meta: string 
 beforeEach(() => {
   uploads.length = 0;
   applied.length = 0;
+  failedKeys = [];
   remembered.clear();
   slots = [];
   built = { keys: false };
@@ -265,6 +271,34 @@ describe("restore", () => {
     // 「完成」 over a provider list nothing re-read is the bug this pins: the
     // server route used to refresh only the appearance prefs.
     expect(refreshed).toBe(1);
+  });
+
+  it("still refreshes when only the keyring step failed, and says which keys", async () => {
+    // The rows are committed at that point. Treating it as a failed restore
+    // skipped the refresh and left the stores on the pre-restore config — and
+    // left the preview up, inviting a second merge of the same bundle.
+    downloadBytes = (await sealBundle(bundleFor(true), {
+      device: "laptop",
+      appVersion: "1.23.1",
+      password: "pw",
+    })).bytes;
+    remembered.set("http://box:8787:desk", "pw");
+    useConfigSyncStore.setState({
+      slots: [slot({ atMs: 7, hash: "h", size: 1, meta: null })],
+      remember: true,
+    });
+    await useConfigSyncStore.getState().startRestore("desk");
+    remembered.clear();
+
+    failedKeys = ["OpenAI"];
+    refreshed = 0;
+    await useConfigSyncStore.getState().confirmRestore();
+
+    expect(refreshed).toBe(1);
+    expect(useConfigSyncStore.getState().phase).toBe("done");
+    expect(useConfigSyncStore.getState().error).toBe("keys failed: OpenAI");
+    // The envelope did open with it; the key miss is a keyring fact, not a password one.
+    expect(remembered.get("http://box:8787:desk")).toBe("pw");
   });
 
   it("asks for a password when the envelope is encrypted", async () => {
