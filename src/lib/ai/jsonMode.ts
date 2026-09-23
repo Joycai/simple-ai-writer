@@ -129,10 +129,10 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
     return target.structuredOutput === "json_schema" && strict === "no" ? "json_object" : target.structuredOutput;
   }
   // The auto tier lifts only where the wire is *measured* to honour it
-  // (OpenAI's two wires, Gemini, DashScope's compatible-mode, xAI): a relay
-  // serving `gpt-4o` over `openai_compat` is a different endpoint with its own
-  // idea of what it accepts, and earns the strict tier by declaration or not
-  // at all. This used to be keyed on the family, which lifted exactly those.
+  // (OpenAI's two wires, Gemini, DashScope's compatible-mode, xAI, 火山方舟's
+  // plan wires): a relay serving `gpt-4o` over `openai_compat` is a different
+  // endpoint with its own idea of what it accepts, and earns the strict tier by
+  // declaration or not at all. This used to be keyed on the family, which lifted exactly those.
   return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId)
     ? "json_schema"
     : "json_object";
