@@ -19,7 +19,7 @@ import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MAX_MESSAGE_IMAGES } from "../../lib/agent/chatRefs";
 import { pastedImagePath, writePastedImage } from "../../lib/agent/chatStash";
-import { classifyPaste, PASTE_IMAGE_EXT, pasteDisplayIndex } from "../../lib/agent/pasteImages";
+import { classifyPaste, PASTE_IMAGE_EXT, pasteNumber } from "../../lib/agent/pasteImages";
 import { attachedKey, attachProjectFile, type AttachedItem } from "../../lib/lore/aiTask";
 import { useAgentStore } from "../../stores/agentStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
@@ -40,6 +40,13 @@ function probe(dt: DataTransfer): void {
   });
 }
 
+/**
+ * Numbers handed out per conversation this launch, by path (see
+ * `pasteNumber`). Module state because the composer remounts on tab switches
+ * and a number must not be handed out twice in one session.
+ */
+const assignedNumbers = new Map<string, Map<string, number>>();
+
 export function usePasteImages(
   chatKey: string,
   setRefs: (update: (prev: AttachedItem[]) => AttachedItem[]) => void,
@@ -52,8 +59,14 @@ export function usePasteImages(
 
   const take = useCallback(async (files: { file: File; ext: string }[]) => {
     const projectPath = useProjectStore.getState().projectPath;
-    if (!projectPath) return;
-    const stashId = useAgentStore.getState().ensureChatStash(chatKey);
+    // The tab can have closed while this paste waited its turn.
+    if (!projectPath || !useAgentStore.getState().chats[chatKey]) return;
+    // The directory id is made only when a file is about to be written: a
+    // paste that turns out to be a duplicate or over the cap leaves the tab
+    // as it was. Until then no pasted chip can exist, so no duplicate either.
+    let stashId = useAgentStore.getState().chats[chatKey]?.stashId ?? null;
+    let assigned = assignedNumbers.get(chatKey);
+    if (!assigned) { assigned = new Map(); assignedNumbers.set(chatKey, assigned); }
     // Read live, not from the render that registered the handler: a previous
     // paste in the queue may just have added chips.
     const current = chatComposerOf(useComposerStore.getState(), chatKey).refs;
@@ -72,13 +85,14 @@ export function usePasteImages(
       let path: string;
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        path = await pastedImagePath(projectPath, stashId, bytes, ext);
         // The same picture again is the same file (content-named): already a
         // chip, so neither taken nor refused.
-        if (keys.has(`file:${path}`)) continue;
+        if (stashId && keys.has(`file:${await pastedImagePath(projectPath, stashId, bytes, ext)}`)) continue;
         // Full before the bytes are written: a refused picture leaves nothing
         // behind in the scratch area.
         if (images >= MAX_MESSAGE_IMAGES) { refused++; continue; }
+        stashId ??= useAgentStore.getState().ensureChatStash(chatKey);
+        path = await pastedImagePath(projectPath, stashId, bytes, ext);
         await writePastedImage(path, bytes);
       } catch (e) {
         failures.push(t("ai.chat.pasteFailed", {
@@ -87,10 +101,8 @@ export function usePasteImages(
         }));
         continue;
       }
-      const name = t("ai.chat.pastedImageName", {
-        defaultValue: "粘贴的图片 {{n}}",
-        n: pasteDisplayIndex(path, known),
-      });
+      const n = pasteNumber(path, assigned, known);
+      const name = t("ai.chat.pastedImageName", { defaultValue: "粘贴的图片 {{n}}", n });
       const outcome = await attachProjectFile({ name, path, kind: "image" });
       if (!outcome.ok) {
         failures.push(outcome.reason === "too-large"
@@ -103,6 +115,7 @@ export function usePasteImages(
       }
       keys.add(`file:${path}`);
       known.push(path);
+      assigned.set(path, n);
       images++;
       taken++;
       setRefs((prev) => [...prev, outcome.item]);
@@ -139,13 +152,22 @@ export function usePasteImages(
       }));
       return;
     }
-    e.preventDefault();
     // `getAsFile` only answers during the event; the bytes are read after.
     const files = items.flatMap((i) => {
       const ext = i.kind === "file" ? PASTE_IMAGE_EXT[i.type] : undefined;
       const file = ext ? i.getAsFile() : null;
       return file && ext ? [{ file, ext }] : [];
     });
+    // Announced as a picture, handed over as nothing (a WebView can do this —
+    // plan §8): say so, and leave the paste to the textarea rather than
+    // swallowing it silently.
+    if (files.length === 0) {
+      setError(t("ai.chat.pasteUnreadable", {
+        defaultValue: "剪贴板里的图片读不出来——先存成文件再用 @ 附上",
+      }));
+      return;
+    }
+    e.preventDefault();
     queue.current = queue.current.then(() => take(files)).catch(() => {});
   }, [take, setError, t]);
 }

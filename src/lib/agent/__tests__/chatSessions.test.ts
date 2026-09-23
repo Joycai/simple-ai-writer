@@ -65,6 +65,7 @@ import {
   mostUrgentChatState, pickChatStateInputs, useAgentStore, type LiveChat,
 } from "../../../stores/agentStore";
 import { chatAutoApproveKey } from "../autoApprove";
+import { useComposerStore } from "../../../stores/composerStore";
 import type { Proposal } from "../registry";
 
 const state = () => useAgentStore.getState();
@@ -408,6 +409,15 @@ describe("saving", () => {
 });
 
 describe("pasted pictures' scratch directory (chat-image-paste-plan §3.3, §4)", () => {
+  const pastedChip = (stashId: string) => ({
+    kind: "image" as const,
+    file: { name: "粘贴的图片 1", path: `/p/.ai-writer/tmp/chat/${stashId}/abc.png`, kind: "image" as const },
+    dataUrl: "data:image/png;base64,x",
+  });
+  beforeEach(() => {
+    useComposerStore.getState().clearChatComposer("c0");
+  });
+
   it("is made on first use and then kept", () => {
     expect(chat("c0").stashId).toBeNull();
     expect(state().ensureChatStash("c0")).toBe("stash-new");
@@ -422,6 +432,15 @@ describe("pasted pictures' scratch directory (chat-image-paste-plan §3.3, §4)"
     expect(chat("c0").stashId).toBe("pasted");
   });
 
+  it("does not hand a rewound tab with pasted chips to a new conversation", () => {
+    // Its id stays with its row, so the chips' files would belong to no one.
+    seed([{ ...emptyChat("c0"), sessionId: 3, stashId: "row-owned" }]);
+    useComposerStore.getState().setChatRefs("c0", [pastedChip("row-owned")]);
+    const key = state().newChat();
+    expect(key).not.toBe("c0");
+    expect(chat("c0").stashId).toBe("row-owned");
+  });
+
   it("does not follow a tab rewound to empty into the new conversation", () => {
     // The row still claims it; two sessions on one directory means deleting
     // either takes the other's pictures.
@@ -433,6 +452,7 @@ describe("pasted pictures' scratch directory (chat-image-paste-plan §3.3, §4)"
 
   it("keeps a tab with pasted, unsent pictures when a saved conversation is opened", async () => {
     seed([{ ...emptyChat("c0"), stashId: "pasted" }]);
+    useComposerStore.getState().setChatRefs("c0", [pastedChip("pasted")]);
     await state().switchChatSession(7);
     expect(state().chatOrder).toHaveLength(2);
     expect(chat("c0").stashId).toBe("pasted");

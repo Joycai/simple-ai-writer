@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteDisplayIndex,
+  classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteNumber,
 } from "../pasteImages";
 
 const file = (type: string) => ({ kind: "file", type });
@@ -48,17 +48,24 @@ describe("isChatStashPath", () => {
   });
 });
 
-describe("pasteDisplayIndex", () => {
+describe("pasteNumber", () => {
   const a = "/p/.ai-writer/tmp/chat/s/aaa.png";
   const b = "/p/.ai-writer/tmp/chat/s/bbb.png";
-  it("numbers pasted pictures by first appearance, ignoring other files", () => {
+  const c = "/p/.ai-writer/tmp/chat/s/ccc.png";
+  const none = new Map<string, number>();
+
+  it("numbers a restored session's pictures by first appearance, ignoring other files", () => {
     const known = ["/p/assets/x.png", a, a, b];
-    expect(pasteDisplayIndex(a, known)).toBe(1);
-    expect(pasteDisplayIndex(b, known)).toBe(2);
+    expect(pasteNumber(a, none, known)).toBe(1);
+    expect(pasteNumber(b, none, known)).toBe(2);
+    expect(pasteNumber(c, none, known)).toBe(3);
   });
 
-  it("gives a new picture the next number", () => {
-    expect(pasteDisplayIndex("/p/.ai-writer/tmp/chat/s/ccc.png", [a, b])).toBe(3);
-    expect(pasteDisplayIndex(a, [])).toBe(1);
+  it("never reuses a number after a chip is removed", () => {
+    // Pasted a (1) and b (2), removed a's chip: c must not be 「2」 again.
+    const assigned = new Map([[a, 1], [b, 2]]);
+    expect(pasteNumber(c, assigned, [b])).toBe(3);
+    // And a pasted again is still 1.
+    expect(pasteNumber(a, assigned, [b])).toBe(1);
   });
 });

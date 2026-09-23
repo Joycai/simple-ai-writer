@@ -90,7 +90,8 @@ import { activeChat, type ChatStateInputs, pickChatStateInputs, chatStateOf } fr
 import { applyProposal, flushEditor, type ProposalApplyDeps } from "../lib/agent/proposalApply";
 import { useEditorStore } from "./editorStore";
 import { useLoreStore } from "./loreStore";
-import { useComposerStore } from "./composerStore";
+import { chatComposerOf, useComposerStore } from "./composerStore";
+import { isChatStashPath } from "../lib/agent/pasteImages";
 import type { ApprovalDecision, AskAnswer } from "../lib/agent/registry";
 import { fileExists } from "../lib/fs/fileio";
 import { loadApiKey } from "../lib/keyStore";
@@ -218,6 +219,16 @@ function notifyApproval(bodyKey: string, params?: Record<string, string>): void 
 /** Basename, for a notification that must fit on one line. */
 function fileLabel(path: string): string {
   return baseName(path) || path;
+}
+
+/**
+ * Pasted pictures waiting on this conversation's composer — files in its
+ * scratch directory that only the chips point at so far. A tab holding some
+ * is not handed to another conversation (chat-image-paste-plan §9).
+ */
+function hasPastedChips(key: string): boolean {
+  return chatComposerOf(useComposerStore.getState(), key).refs
+    .some((r) => r.kind === "image" && isChatStashPath(r.file.path));
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -565,7 +576,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // fresh start, and chips left on from before are not fresh.
     const empty = s.chatOrder.find((k) => {
       const c = s.chats[k];
-      return c && c.turns.length === 0 && !ownerBusy(k, s.runningChats, s.compactingChats, s.chatQueue);
+      return c && c.turns.length === 0 && !ownerBusy(k, s.runningChats, s.compactingChats, s.chatQueue)
+        // A saved tab (rewound to its first question) with pasted chips still
+        // on its composer: its scratch id stays with its row (below), so the
+        // new conversation could not claim the files those chips point into.
+        && !(c.sessionId !== null && hasPastedChips(k));
     });
     const key = empty ?? newChatKey();
     endGrantFor(set, get, key);
@@ -1103,10 +1118,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // into a new one — the conversation the author was in stays open.
       const s1 = get();
       const active = s1.chats[s1.activeChatKey];
-      // Not one holding a scratch directory, though: its pasted chips are
-      // still on the composer, and the restored session would claim another
-      // directory than the one they point into — nothing would claim theirs.
-      const reuse = active && active.turns.length === 0 && !active.stashId
+      // Not one with pasted chips on its composer, though: the restored
+      // session would claim another directory than the one they point into,
+      // and nothing would claim theirs.
+      const reuse = active && active.turns.length === 0 && !hasPastedChips(s1.activeChatKey)
         && !ownerBusy(s1.activeChatKey, s1.runningChats, s1.compactingChats, s1.chatQueue);
       const key = reuse ? s1.activeChatKey : newChatKey();
       endGrantFor(set, get, key);

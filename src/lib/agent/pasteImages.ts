@@ -56,16 +56,26 @@ export function isChatStashPath(path: string): boolean {
 }
 
 /**
- * The number in 「粘贴的图片 N」: the picture's place among this session's
- * pasted pictures, in the order they were first seen.
+ * The number in 「粘贴的图片 N」.
  *
  * A content hash names the file, and is a name for neither the author nor the
- * model; "the second pasted picture" is something the author actually says. A
+ * model; "the second pasted picture" is something the author actually says.
+ * `assigned` is what this window has already numbered in the session (kept
+ * because a chip can be removed — a number derived from what is *visible*
+ * would hand the next picture a number still on screen); `known` is what the
+ * session's turns and chips show, which is all there is after a restart. A
  * picture pasted again keeps its number because it is the same file.
  */
-export function pasteDisplayIndex(path: string, known: readonly string[]): number {
+export function pasteNumber(
+  path: string,
+  assigned: ReadonlyMap<string, number>,
+  known: readonly string[],
+): number {
+  const had = assigned.get(path);
+  if (had !== undefined) return had;
   const seen: string[] = [];
   for (const p of known) if (isChatStashPath(p) && !seen.includes(p)) seen.push(p);
   const i = seen.indexOf(path);
-  return i >= 0 ? i + 1 : seen.length + 1;
+  if (i >= 0) return i + 1;
+  return Math.max(seen.length, 0, ...assigned.values()) + 1;
 }
