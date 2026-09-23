@@ -58,6 +58,7 @@ const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => (
   prefs: [],
   docFormats: [],
   keyCount: 0,
+  legacyPrices: false,
   ...over,
 });
 
@@ -129,5 +130,24 @@ describe("applyConfigImport", () => {
     await applyConfigImport(staged({ providers: [], models: [], prompts: [], prefs: [["app:theme", "dark"]] }));
 
     expect(h.invoke.mock.calls.filter((c) => c[0] === "sqlite_transaction")).toHaveLength(0);
+  });
+});
+
+describe("applyConfigImport · fee_migrated", () => {
+  /** 事务里那条模型语句，列名和值拉成一行。 */
+  function modelRow(): Record<string, unknown> {
+    const stmt = batch().find((x) => /INTO models/.test(x.sql))!;
+    const cols = /\(([^)]*)\)\s*VALUES/.exec(stmt.sql)![1].split(",").map((c) => c.trim());
+    return Object.fromEntries(cols.map((c, i) => [c, stmt.values[i]]));
+  }
+
+  it("v3 的包：模型盖章，不管绑没绑组", async () => {
+    await applyConfigImport(staged());
+    expect(modelRow()).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+  });
+
+  it("v2 及更早的包：留 NULL，交给迁移按旧价归组", async () => {
+    await applyConfigImport(staged({ legacyPrices: true }));
+    expect(modelRow()).toMatchObject({ price_in: 1, price_out: 2, fee_migrated: null });
   });
 });

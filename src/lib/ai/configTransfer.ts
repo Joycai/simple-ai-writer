@@ -188,6 +188,13 @@ export interface ParsedConfigBundle {
   docFormats: DocFormatPreset[];
   /** How many imported providers carry an embedded API key. */
   keyCount: number;
+  /**
+   * 包早于计费组（版本 < 3）：模型行上只有旧的 `price_*` 列可信，落库时留着
+   * `fee_migrated` 为 NULL，交给迁移按旧价归组。v3 的模型不管绑没绑组都是
+   * 源机器上决定过的，盖章——否则一个在源机器上主动不绑的模型，会被迁移按
+   * 旧价绑回去。
+   */
+  legacyPrices: boolean;
 }
 
 export interface StagedConfigImport extends ParsedConfigBundle {
@@ -234,6 +241,7 @@ export function parseConfigBundle(
   if (!root || root.kind !== CONFIG_BACKUP_KIND || num(root.version, 0) > CONFIG_BACKUP_VERSION) {
     throw new Error("invalid-backup");
   }
+  const legacyPrices = num(root.version, 0) < 3;
 
   const providers: ProviderBackup[] = [];
   for (const item of Array.isArray(root.providers) ? root.providers : []) {
@@ -433,6 +441,7 @@ export function parseConfigBundle(
     prefs,
     docFormats,
     keyCount: providers.filter((p) => p.apiKey).length,
+    legacyPrices,
   };
 }
 
@@ -490,7 +499,7 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
     // 但让写入顺序自己成立比依赖「反正没约束」清楚。
     ...staged.feeGroups.map(feeGroupUpsert),
     ...staged.providers.map(({ apiKey: _apiKey, ...provider }) => providerUpsert(provider)),
-    ...staged.models.map(modelUpsert),
+    ...staged.models.map((m) => modelUpsert(m, staged.legacyPrices ? "legacy" : "fee-group")),
     ...staged.prompts.map(promptUpsert),
   ]);
 

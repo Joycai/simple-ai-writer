@@ -182,14 +182,14 @@ const prompt: Required<Prompt> = {
 describe("config backup · every field round-trips", () => {
   it("through the config database and back out", async () => {
     expect(await throughDb(providerUpsert(provider), listProviders)).toEqual(provider);
-    expect(await throughDb(modelUpsert(model), (db) => listModels(db))).toEqual(model);
+    expect(await throughDb(modelUpsert(model, "fee-group"), (db) => listModels(db))).toEqual(model);
     expect(await throughDb(promptUpsert(prompt), listPrompts)).toEqual(prompt);
   });
 
   it("through a backup bundle and its parser", async () => {
     const fromDb = {
       provider: await throughDb(providerUpsert(provider), listProviders),
-      model: await throughDb(modelUpsert(model), (db) => listModels(db)),
+      model: await throughDb(modelUpsert(model, "fee-group"), (db) => listModels(db)),
       prompt: await throughDb(promptUpsert(prompt), listPrompts),
     };
     // Serialized, because that is what the file and the envelope both carry:
@@ -223,8 +223,33 @@ describe("config backup · every field round-trips", () => {
       feeGroups: [feeGroup],
     })), []);
     expect(providerUpsert(parsed.providers[0])).toEqual(providerUpsert(provider));
-    expect(modelUpsert(parsed.models[0])).toEqual(modelUpsert(model));
+    expect(modelUpsert(parsed.models[0], "fee-group")).toEqual(modelUpsert(model, "fee-group"));
     expect(promptUpsert(parsed.prompts[0])).toEqual(promptUpsert(prompt));
     expect(feeGroupUpsert(parsed.feeGroups[0])).toEqual(feeGroupUpsert(feeGroup));
+  });
+});
+
+/**
+ * `fee_migrated` 不在 `Model` 上，上面的往返测试看不见它——而它正是会被悄悄
+ * 写丢的那一列：`INSERT OR REPLACE` 删了旧行再插，列清单里没有的列回到默认值
+ * （这一列没有默认值，就是 NULL），下次启动迁移就按旧价重新归组。
+ */
+describe("modelUpsert · fee_migrated", () => {
+  it("列清单、占位符、values 三者等长", () => {
+    const { sql, values } = modelUpsert(model, "fee-group");
+    const placeholders = /VALUES\s*\(([^)]*)\)/.exec(sql)![1].split(",").length;
+    expect(placeholders).toBe(values.length);
+    expect(Object.keys(rowOf({ sql, values }))).toHaveLength(values.length);
+  });
+
+  it("新代码决定的绑定盖章，旧版备份的留给迁移", () => {
+    expect(rowOf(modelUpsert(model, "fee-group")).fee_migrated).toBe(1);
+    expect(rowOf(modelUpsert(model, "legacy")).fee_migrated).toBeNull();
+  });
+
+  it("主动不绑组的模型也盖章——否则迁移会按旧价把它绑回去", () => {
+    const row = rowOf(modelUpsert({ ...model, feeGroupId: undefined }, "fee-group"));
+    expect(row.fee_group_id).toBeNull();
+    expect(row.fee_migrated).toBe(1);
   });
 });

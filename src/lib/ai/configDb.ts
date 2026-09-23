@@ -1160,14 +1160,33 @@ export async function listModels(
   return attachFees(rows.map(rowToModel), await listFeeGroups(db));
 }
 
-export function modelUpsert(m: Model): SqlStatement {
+/**
+ * 这一行的价从哪里来，决定 `fee_migrated` 写什么：
+ * - `fee-group`：新代码决定的绑定——包括主动不绑（`feeGroupId` 为空）。盖章，
+ *   迁移不再碰它。
+ * - `legacy`：只有旧的 `price_*` 列可信（v2 及更早的备份包），留 NULL，让
+ *   `ensureAiSchema` 的那一步迁移按旧价归组——和老机器升上来是同一条路。
+ */
+type ModelPricing = "fee-group" | "legacy";
+
+/**
+ * `INSERT OR REPLACE` 是先删旧行再插新行，列清单里没有的列一律回到默认值。
+ * `fee_migrated` 没有默认值，所以它**必须在列清单里**：漏掉它，每写一次模型
+ * 行（抽屉保存、渠道合并、配置还原）标记就被清回 NULL，下次启动迁移把这行
+ * 当成老版本留下的，按从不清零的旧价列重新归组——改过价的组长出重复组，
+ * 主动解绑的模型被绑回去。
+ *
+ * `pricing` 是必填的：`.map(modelUpsert)` 会把下标塞进第二个参数，必填加
+ * 字面量联合让编译器当场点名，每个调用方都得想清楚这一行算哪一种。
+ */
+export function modelUpsert(m: Model, pricing: ModelPricing): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, fee_migrated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, pricing === "legacy" ? null : 1],
   };
 }
 
@@ -1175,7 +1194,8 @@ export async function saveModel(
   db: Awaited<ReturnType<typeof Database.load>>,
   m: Model
 ): Promise<void> {
-  const { sql, values } = modelUpsert(m);
+  // 抽屉、探测回写、新增：这些都是新代码手里的 `Model`，绑定是决定过的。
+  const { sql, values } = modelUpsert(m, "fee-group");
   await db.execute(sql, values);
 }
 

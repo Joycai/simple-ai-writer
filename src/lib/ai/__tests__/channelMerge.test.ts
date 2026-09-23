@@ -79,4 +79,11 @@ describe("planMerge", () => {
     expect(stmts.slice(1, 1 + plan.upserts.length).every((x) => /INTO models/.test(x.sql))).toBe(true);
     expect(stmts[stmts.length - 1]).toEqual({ sql: "DELETE FROM providers WHERE id = ?", values: ["mmc"] });
   });
+
+  it("换渠道的模型盖着迁移的章——它们的绑定早就决定过了", () => {
+    for (const x of mergeStatements(plan, "mmc").filter((x) => /INTO models/.test(x.sql))) {
+      const cols = /\(([^)]*)\)\s*VALUES/.exec(x.sql)![1].split(",").map((c) => c.trim());
+      expect(x.values[cols.indexOf("fee_migrated")]).toBe(1);
+    }
+  });
 });
