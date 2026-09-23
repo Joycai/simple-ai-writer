@@ -150,6 +150,20 @@ function initialOpen(existing: Model | undefined, add: boolean): Record<SectionK
   };
 }
 
+/**
+ * 抽屉打开时计费组下拉的初值；空串 ＝ 未绑定。
+ *
+ * 渠道默认组**只给新建的模型**预填。已有的模型读它自己的绑定，空就是空：
+ * 它可能是作者故意不绑的，也可能是组被删了（删组把引用置空）。编辑时拿渠道
+ * 默认去填，价格段对未绑定的行又是收起的，改个名字一保存就悄悄绑上、开始
+ * 计费——「删组 = 从此不按这份价计」也跟着失效
+ * （docs/feature/billing/01-fee-groups.md → 渠道默认组只预填新模型）。
+ */
+export function initialFeeGroupId(existing: Pick<Model, "feeGroupId"> | undefined, channelDefault: string | undefined): string {
+  if (existing) return existing.feeGroupId ?? "";
+  return channelDefault ?? "";
+}
+
 interface Props {
   /** The group this drawer was opened from — a model cannot change hands. */
   providerId: string;
@@ -170,8 +184,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const feeWords = useFeeLabelWords();
   const existing = modelId ? models.find((m) => m.id === modelId) : undefined;
   /**
-   * 新建时预填渠道的默认计费组。只是预填：一旦写上，它就是这个模型自己的，
-   * 改渠道默认不会追着改（`Provider.defaultFeeGroupId`）。
+   * 新建时预填渠道的默认计费组（`initialFeeGroupId`；编辑时不填）。只是预填：
+   * 一旦写上，它就是这个模型自己的，改渠道默认不会追着改（`Provider.defaultFeeGroupId`）。
    */
   const defaultFeeGroupId = providers.find((p) => p.id === providerId)?.defaultFeeGroupId;
   /**
@@ -254,7 +268,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     asrFormat: (existing?.asrFormat ?? "") as AsrFormat | "",
     pricePerSecond: existing?.pricePerSecond !== undefined ? String(existing.pricePerSecond) : "",
     /** 绑定的计费组 id；空串 ＝ 未绑定（一分不收，量照记）。 */
-    feeGroupId: existing?.feeGroupId ?? defaultFeeGroupId ?? "",
+    feeGroupId: initialFeeGroupId(existing, defaultFeeGroupId),
     // "auto" ↔ stored undefined, like the category (lib/ai/jsonMode.ts).
     structuredOutput: (existing?.structuredOutput ?? "auto") as StructuredOutputMode | "auto",
     // "auto" ↔ stored undefined: nothing sent (Responses family only).
