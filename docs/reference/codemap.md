@@ -256,6 +256,11 @@ CommandPalette, onboarding flow, library view (文库: book-spine ordering + per
   `config.db`——组是配置，不是某个项目的数据），加上从模型行的旧价格列一次性迁出来
   的那一步。迁移标记在 `models.fee_migrated` 而不是「表里已有组」或「清零旧列」：
   前者会让用户删光组之后下次启动又长回来，后者会让同机的旧版本读到一堆零价。
+  这个标记**写模型行的人自己盖**：`configDb.modelUpsert(m, pricing)` 是
+  `INSERT OR REPLACE`，列清单漏了它就每写一次清回 NULL（1.76.1 之前正是如此）。
+  `pricing` 三种——`local`（本机保存，没绑组时沿用原行标记）、`restored`（v3 还原，
+  盖章）、`legacy`（v2 还原，留给迁移）——理由在 `billing/01-fee-groups.md`。迁移
+  也只替 `fee_group_id` 为空的行建组，已绑组的行只盖章。
   老的 `price_cached_in` 是 `NOT NULL DEFAULT 0`，它的 0 迁成 **null**（= 同输入价）
   ——照搬成 0 会让所有老配置一夜之间缓存免费，而那笔错账不报错。
 - `feeGroupLabel.ts` 是价格在界面上的**唯一一种写法**（摘要 / 标签），纯的，措辞由
