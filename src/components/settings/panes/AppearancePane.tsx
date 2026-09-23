@@ -10,7 +10,7 @@
  * is how they meet while writing. Cards, bands and the three broken-theme
  * states are 05i's and live in `AppearanceThemes.tsx`.
  */
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { FONT_PACK_FALLBACK, useAppStore, type ThemeMode, type FontScheme } from "../../../stores/appStore";
@@ -55,6 +55,10 @@ export function AppearancePane() {
   const { t } = useTranslation();
   const { theme, setTheme, fontScheme, setFontScheme } = useAppStore();
   const chosenPack = useAppStore((st) => (isFontPackId(st.fontScheme) ? st.fontPacks[st.fontScheme].status : null));
+  const refreshFontPacks = useAppStore((st) => st.refreshFontPacks);
+  // Another window may have downloaded or deleted a pack since startup — the
+  // cards should say what is on disk now, not what was there at launch.
+  useEffect(() => refreshFontPacks(), [refreshFontPacks]);
   const refs = {
     ui: useRef<HTMLDivElement>(null),
     font: useRef<HTMLDivElement>(null),

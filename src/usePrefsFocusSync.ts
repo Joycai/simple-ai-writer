@@ -39,6 +39,9 @@ export function usePrefsFocusSync() {
       void refreshPrefs().then((changed) => {
         if (changed.length) useAppStore.getState().reloadFromPrefs(changed);
       });
+      // Another window may have downloaded or deleted a font pack — that's on
+      // disk, not in the preferences, so look regardless of what changed.
+      useAppStore.getState().refreshFontPacks();
     });
     return () => { void unlistenPromise.then((unlisten) => unlisten()); };
   }, []);

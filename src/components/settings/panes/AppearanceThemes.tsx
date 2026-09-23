@@ -30,6 +30,7 @@ import { SCHEME_ATTR, THEME_ATTR, useScheme, type ColorScheme } from "../../../l
 import { exportThemeToFolder } from "../../../lib/theme/exportFile";
 import { TOKEN_CONTRACT } from "../../../lib/theme/contractData";
 import { inlinedMarkdownCss } from "../../../lib/theme/install";
+import { isFontPackId } from "../../../lib/theme/fontPacks";
 import { sampleDocument, type SampleSize } from "../../../lib/theme/sample";
 import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
 import type { ThemeProblem } from "../../../lib/theme/manifest";
@@ -446,7 +447,7 @@ function MdSample({
 }) {
   const [userCss, setUserCss] = useState<string>("");
   // The frame can't see the page's `@font-face` rules — hand the packs' in.
-  const faces = useAppStore((st) => st.fontFaces);
+  const faces = useAppStore((st) => (isFontPackId(fontScheme) ? st.fontFaces[fontScheme] ?? "" : ""));
   useEffect(() => {
     let cancelled = false;
     if (entry.source === "builtin" || !entry.css) { setUserCss(""); return; }

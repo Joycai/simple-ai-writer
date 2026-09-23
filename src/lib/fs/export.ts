@@ -143,7 +143,7 @@ async function documentCss(opts: { faces?: boolean } = {}): Promise<string> {
   // loadable by the print window, meaningless in a file opened elsewhere, so
   // only the PDF path asks for them; the .html export names the family and
   // lets the stack fall back (docs/feature/downloadable-fonts-plan.md).
-  const faces = opts.faces ? currentFontFaces() : "";
+  const faces = opts.faces ? currentFontFaces(fontScheme) : "";
   return `${faces ? `${faces}\n` : ""}${palette}
 body {
   background: var(--color-bg-base);

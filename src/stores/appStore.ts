@@ -344,8 +344,12 @@ interface AppState {
   language: Language;
   fontScheme: FontScheme;
   fontPacks: Record<FontPackId, FontPackState>;
-  /** The installed packs' `@font-face` rules — also handed to the sandboxed samples, which can't see the page's. */
-  fontFaces: string;
+  /**
+   * Each installed pack's `@font-face` rules, as injected into the page — also
+   * handed to the sandboxed samples, which can't see the page's. Per pack, so a
+   * sample or a PDF carries only the font it draws.
+   */
+  fontFaces: Partial<Record<FontPackId, string>>;
   markdownTheme: string;
   /**
    * How large the rendered preview draws, as a factor on the ladder in
@@ -442,8 +446,14 @@ interface AppState {
   setLanguage: (lang: Language) => void;
   /** Pick a font scheme; a pack that isn't on this machine starts downloading. */
   setFontScheme: (scheme: FontScheme) => void;
-  /** Read which packs are on disk, inject their faces, and fetch the chosen one if it's missing. */
-  initFontPacks: () => Promise<void>;
+  /**
+   * Read which packs are on disk and inject their faces. With `download`
+   * (the default — startup), also fetch the chosen pack if it's missing;
+   * without (another window may have changed the disk), only look.
+   */
+  initFontPacks: (opts?: { download?: boolean }) => Promise<void>;
+  /** Re-read the packs off disk without downloading — the settings page and a window regaining focus. No-op outside Tauri. */
+  refreshFontPacks: () => void;
   /** Download (or retry) a pack. Resolves when it settles either way; state says how. */
   downloadFontPack: (id: FontPackId) => Promise<void>;
   /** Delete a pack from this machine; if it's the one in use, switch to the fallback first. */
@@ -591,11 +601,13 @@ const initialFontPacks = (): Record<FontPackId, FontPackState> =>
 
 /** One download per pack at a time — a second pick or a retry joins the running one. */
 const packDownloads = new Map<FontPackId, Promise<void>>();
+/** A removal in flight — a download of the same pack waits for it rather than racing it on the same folder. */
+const packRemovals = new Map<FontPackId, Promise<void>>();
 
 export const useAppStore = create<AppState>((set, get) => ({
   ...prefBackedState(),
   fontPacks: initialFontPacks(),
-  fontFaces: "",
+  fontFaces: {},
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   activeSideTab: "files",
@@ -651,45 +663,61 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ fontScheme });
     applyFontScheme(fontScheme);
     // Picking the card *is* asking for the download — there is no second step.
-    // Until it lands, the stack falls through to 黑's faces on its own.
-    if (isFontPackId(fontScheme) && get().fontPacks[fontScheme].status !== "ready") {
-      void get().downloadFontPack(fontScheme);
-    }
+    // Until it lands, the stack falls through to 黑's faces on its own. Asked
+    // even when the state says "ready": another window may have deleted it,
+    // and `downloadFontPack` checks the disk before fetching anything.
+    if (isFontPackId(fontScheme)) void get().downloadFontPack(fontScheme);
   },
 
-  initFontPacks: async () => {
-    const packs = get().fontPacks;
-    const next = { ...packs };
+  initFontPacks: async ({ download = true } = {}) => {
+    // Busy = a download or removal in this window owns the pack's state.
+    const busy = (id: FontPackId) => packDownloads.has(id) || packRemovals.has(id);
     for (const id of FONT_PACK_IDS) {
       const total = packBytes(await fontPackData(id));
-      // A download already under way owns its own state.
-      if (packs[id].status === "downloading") continue;
+      if (busy(id)) continue;
       const here = await readInstalled(id);
-      next[id] = { status: here ? "ready" : "absent", done: here ? total : 0, total };
+      // Judged on the state *now*, not a snapshot from before the awaits: a
+      // download that started or ended meanwhile keeps what it wrote.
+      set((s) => {
+        const cur = s.fontPacks[id];
+        if (busy(id) || cur.status === "downloading") return {};
+        const next: FontPackState = here
+          ? { status: "ready", done: total, total }
+          : cur.status === "error"
+            ? { ...cur, done: 0, total }
+            : { status: "absent", done: 0, total };
+        return { fontPacks: { ...s.fontPacks, [id]: next } };
+      });
+      await syncPackFaces(id);
     }
-    set((s) => ({ fontPacks: { ...next, ...pick(s.fontPacks, "downloading") } }));
-    await refreshFontFaces();
     const chosen = get().fontScheme;
-    if (isFontPackId(chosen) && get().fontPacks[chosen].status !== "ready") void get().downloadFontPack(chosen);
+    if (download && isFontPackId(chosen) && get().fontPacks[chosen].status !== "ready") void get().downloadFontPack(chosen);
+  },
+
+  refreshFontPacks: () => {
+    if (IS_TAURI) void get().initFontPacks({ download: false }).catch((e) => console.warn("[fontPacks] refresh failed", e));
   },
 
   downloadFontPack: (id) => {
     const running = packDownloads.get(id);
     if (running) return running;
-    if (get().fontPacks[id].status === "ready") return Promise.resolve();
     const patch = (p: Partial<FontPackState>) =>
       set((s) => ({ fontPacks: { ...s.fontPacks, [id]: { ...s.fontPacks[id], ...p } } }));
-    patch({ status: "downloading", error: undefined });
+    // Feedback at once for a pack that isn't here; a "ready" one is only
+    // re-checked, and stays drawn as ready unless the disk says otherwise.
+    if (get().fontPacks[id].status !== "ready") patch({ status: "downloading", error: undefined });
     const run = (async () => {
       try {
-        // Already here (a pick raced startup's disk read)? Then nothing to fetch.
+        await packRemovals.get(id);
         if (!(await readInstalled(id))) {
+          patch({ status: "downloading", error: undefined, done: 0 });
           await installFontPack(id, { onProgress: (done, total) => patch({ done, total }) });
         }
-        patch({ status: "ready", done: get().fontPacks[id].total });
-        await refreshFontFaces();
+        patch({ status: "ready", done: get().fontPacks[id].total, error: undefined });
+        await syncPackFaces(id);
       } catch (e) {
         patch({ status: "error", error: e instanceof FontPackError ? e.code : "network" });
+        await syncPackFaces(id);
       } finally {
         packDownloads.delete(id);
       }
@@ -698,20 +726,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     return run;
   },
 
-  removeFontPack: async (id) => {
-    // The card offers no delete while downloading; a stray call waits it out.
-    await packDownloads.get(id);
-    if (get().fontScheme === id) get().setFontScheme(FONT_PACK_FALLBACK);
-    try {
-      await deleteFontPackFiles(id);
-      set((s) => ({ fontPacks: { ...s.fontPacks, [id]: { ...s.fontPacks[id], status: "absent", done: 0, error: undefined } } }));
-    } catch (e) {
-      // Whatever is still on disk decides; the marker may or may not have gone.
-      console.warn("[fontPacks] remove failed", e);
-      const here = await readInstalled(id).catch(() => false);
-      set((s) => ({ fontPacks: { ...s.fontPacks, [id]: { ...s.fontPacks[id], status: here ? "ready" : "absent" } } }));
-    }
-    await refreshFontFaces();
+  removeFontPack: (id) => {
+    const already = packRemovals.get(id);
+    if (already) return already;
+    const patch = (p: Partial<FontPackState>) =>
+      set((s) => ({ fontPacks: { ...s.fontPacks, [id]: { ...s.fontPacks[id], ...p } } }));
+    const removal = (async () => {
+      // The card offers no delete while downloading; a stray call waits it out.
+      const running = packDownloads.get(id);
+      if (running) await running;
+      if (get().fontScheme === id) get().setFontScheme(FONT_PACK_FALLBACK);
+      // Absent from the moment the removal starts — synchronously, when no
+      // download was running: a pick in the meantime then asks for a
+      // download, which waits for the removal to finish first.
+      patch({ status: "absent", done: 0, error: undefined });
+      try {
+        await deleteFontPackFiles(id);
+      } catch (e) {
+        // Whatever is still on disk decides; the marker may or may not have gone.
+        console.warn("[fontPacks] remove failed", e);
+        if (await readInstalled(id).catch(() => false)) patch({ status: "ready", done: get().fontPacks[id].total });
+      } finally {
+        packRemovals.delete(id);
+      }
+      await syncPackFaces(id);
+    })();
+    packRemovals.set(id, removal);
+    return removal;
   },
 
   setMarkdownTheme: (markdownTheme) => {
@@ -951,9 +992,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (touched(FONT_KEY)) {
       applyFontScheme(next.fontScheme);
-      // An imported choice may name a pack this machine hasn't downloaded yet.
       const chosen = next.fontScheme;
-      if (isFontPackId(chosen) && get().fontPacks[chosen].status !== "ready") void get().downloadFontPack(chosen);
+      if (!changedKeys) {
+        // A config import: the choice may name a pack this machine hasn't
+        // downloaded yet, and choosing it is the author's consent.
+        if (isFontPackId(chosen)) void get().downloadFontPack(chosen);
+      } else {
+        // Another window changed it (focus sync). That window is fetching the
+        // pack if it needs fetching — here only look at what is on disk, or
+        // two processes would download the same pack into the same folder.
+        get().refreshFontPacks();
+      }
     }
     if (touched(MD_THEME_KEY)) {
       const selected = selectedThemes(next);
@@ -1028,24 +1077,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   applyTheme(s.theme, selectedThemes(s));
   applyFontScheme(s.fontScheme);
   applyMarkdownTheme(s.markdownTheme);
-  // Off disk, so after the first paint; outside Tauri there is no disk to read.
+  // Off disk; outside Tauri there is no disk to read. The chosen pack's faces
+  // are already in (main.tsx's boot() preloads them before the first paint);
+  // this fills in the rest of the state and fetches a chosen pack that's missing.
   if (IS_TAURI) void s.initFontPacks().catch((e) => console.warn("[fontPacks] init failed", e));
 }
 
-/** The entries of `packs` in the given status. */
-function pick(packs: Record<FontPackId, FontPackState>, status: FontPackState["status"]) {
-  return Object.fromEntries(Object.entries(packs).filter(([, p]) => p.status === status));
-}
-
-/** Inject the faces of every pack that's ready — all of them, so each card's preview draws in its own font. */
-async function refreshFontFaces(): Promise<void> {
-  const ready = FONT_PACK_IDS.filter((id) => useAppStore.getState().fontPacks[id].status === "ready");
+/**
+ * Bring one pack's injected faces in line with its status: read them if it's
+ * ready, drop them otherwise. Per pack, so one unreadable `faces.css` can't
+ * take the other pack's faces down with it; and the status is looked at again
+ * after the read, so a removal that finished meanwhile wins over stale rules.
+ */
+async function syncPackFaces(id: FontPackId): Promise<void> {
+  const ready = () => useAppStore.getState().fontPacks[id].status === "ready";
   let css = "";
-  try {
-    css = ready.length ? await packFacesCss(ready) : "";
-  } catch (e) {
-    console.warn("[fontPacks] faces unreadable", e);
+  if (ready()) {
+    try {
+      css = await packFacesCss([id]);
+    } catch (e) {
+      console.warn(`[fontPacks] ${id} faces unreadable`, e);
+    }
   }
-  applyFontFaces(css);
-  useAppStore.setState({ fontFaces: css });
+  if (!ready()) css = "";
+  applyFontFaces(id, css);
+  useAppStore.setState((st) => ({ fontFaces: { ...st.fontFaces, [id]: css } }));
 }

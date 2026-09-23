@@ -30,7 +30,8 @@ const h = vi.hoisted(() => {
     installed: new Set<string>(),
     install: vi.fn(),
     faces: vi.fn(async (ids: string[]) => ids.map((id) => `/*${id}*/`).join("\n")),
-    applied: [] as string[],
+    applied: [] as [string, string][],
+    removeGate: null as Promise<void> | null,
   };
 });
 
@@ -42,12 +43,15 @@ vi.mock("../../lib/theme/fontPacks", async (orig) => {
     readInstalled: async (id: string) => h.installed.has(id),
     installFontPack: h.install,
     packFacesCss: h.faces,
-    removeFontPack: async (id: string) => void h.installed.delete(id),
+    removeFontPack: async (id: string) => {
+      if (h.removeGate) await h.removeGate;
+      h.installed.delete(id);
+    },
   };
 });
 vi.mock("../../lib/theme/install", async (orig) => ({
   ...(await orig<typeof import("../../lib/theme/install")>()),
-  applyFontFaces: (css: string) => void h.applied.push(css),
+  applyFontFaces: (id: string, css: string) => void h.applied.push([id, css]),
 }));
 
 import { FontPackError } from "../../lib/theme/fontPacks";
@@ -57,7 +61,7 @@ const state = () => useAppStore.getState();
 const fresh = () =>
   useAppStore.setState({
     fontScheme: "manuscript",
-    fontFaces: "",
+    fontFaces: {},
     fontPacks: {
       harmonyos: { status: "absent", done: 0, total: 0 },
       misans: { status: "absent", done: 0, total: 0 },
@@ -67,6 +71,8 @@ const fresh = () =>
 beforeEach(() => {
   h.installed.clear();
   h.applied.length = 0;
+  h.removeGate = null;
+  h.faces.mockReset().mockImplementation(async (ids: string[]) => ids.map((id) => `/*${id}*/`).join("\n"));
   h.install.mockReset().mockImplementation(async (id: string, opts?: { onProgress?: (d: number, t: number) => void }) => {
     opts?.onProgress?.(50, 100);
     opts?.onProgress?.(100, 100);
@@ -83,8 +89,8 @@ describe("setFontScheme × font packs", () => {
     await state().downloadFontPack("misans"); // joins the running one
     expect(h.install).toHaveBeenCalledTimes(1);
     expect(state().fontPacks.misans).toMatchObject({ status: "ready", done: 100 });
-    expect(state().fontFaces).toBe("/*misans*/");
-    expect(h.applied[h.applied.length - 1]).toBe("/*misans*/");
+    expect(state().fontFaces.misans).toBe("/*misans*/");
+    expect(h.applied[h.applied.length - 1]).toEqual(["misans", "/*misans*/"]);
     expect(localStorage.getItem("app:fontScheme")).toBe("misans");
   });
 
@@ -128,7 +134,8 @@ describe("removeFontPack", () => {
     await state().removeFontPack("misans");
     expect(state().fontScheme).toBe("hei");
     expect(state().fontPacks.misans.status).toBe("absent");
-    expect(state().fontFaces).toBe("");
+    expect(state().fontFaces.misans).toBe("");
+    expect(h.applied[h.applied.length - 1]).toEqual(["misans", ""]);
     expect(h.install).toHaveBeenCalledTimes(1); // switching to 黑 downloads nothing
   });
 
@@ -141,13 +148,69 @@ describe("removeFontPack", () => {
   });
 });
 
+describe("the disk is the truth, not the state", () => {
+  it("re-picking a pack another window deleted fetches it again", async () => {
+    useAppStore.setState({ fontPacks: { ...state().fontPacks, misans: { status: "ready", done: 100, total: 100 } } });
+    state().setFontScheme("misans"); // state says ready; the disk doesn't have it
+    await state().downloadFontPack("misans");
+    expect(h.install).toHaveBeenCalledTimes(1);
+    expect(state().fontPacks.misans.status).toBe("ready");
+  });
+
+  it("a pick during a removal waits for it, then downloads", async () => {
+    await state().downloadFontPack("misans");
+    state().setFontScheme("song");
+    let open!: () => void;
+    h.removeGate = new Promise<void>((r) => (open = r));
+    const removing = state().removeFontPack("misans");
+    try {
+      expect(state().fontPacks.misans.status).toBe("absent");
+      state().setFontScheme("misans"); // picked again mid-removal
+    } finally {
+      open(); // never leave a removal hanging for the tests after this one
+    }
+    await removing;
+    await state().downloadFontPack("misans");
+    expect(h.install).toHaveBeenCalledTimes(2);
+    expect(state().fontPacks.misans.status).toBe("ready");
+    expect(h.installed.has("misans")).toBe(true);
+  });
+
+  it("one pack's unreadable faces don't take the other pack's down", async () => {
+    h.installed.add("harmonyos").add("misans");
+    h.faces.mockImplementation(async (ids: string[]) => {
+      if (ids.includes("misans")) throw new Error("gone");
+      return "/*harmonyos*/";
+    });
+    await state().initFontPacks();
+    expect(state().fontFaces).toEqual({ harmonyos: "/*harmonyos*/", misans: "" });
+  });
+});
+
+describe("reloadFromPrefs × font packs", () => {
+  it("a config import (no keys) fetches the chosen pack", async () => {
+    localStorage.setItem("app:fontScheme", "misans");
+    state().reloadFromPrefs();
+    await state().downloadFontPack("misans");
+    expect(h.install).toHaveBeenCalledTimes(1);
+  });
+
+  it("another window's change (focus sync) only looks — it never downloads", async () => {
+    localStorage.setItem("app:fontScheme", "misans");
+    state().reloadFromPrefs(["app:fontScheme"]);
+    await Promise.resolve();
+    expect(state().fontScheme).toBe("misans");
+    expect(h.install).not.toHaveBeenCalled();
+  });
+});
+
 describe("initFontPacks", () => {
   it("reads which packs are here, sets their sizes, injects their faces", async () => {
     h.installed.add("harmonyos");
     await state().initFontPacks();
     expect(state().fontPacks.harmonyos).toEqual({ status: "ready", done: 100, total: 100 });
     expect(state().fontPacks.misans).toEqual({ status: "absent", done: 0, total: 100 });
-    expect(state().fontFaces).toBe("/*harmonyos*/");
+    expect(state().fontFaces).toEqual({ harmonyos: "/*harmonyos*/", misans: "" });
     expect(h.install).not.toHaveBeenCalled();
   });
 
@@ -157,6 +220,19 @@ describe("initFontPacks", () => {
     await state().downloadFontPack("misans");
     expect(h.install).toHaveBeenCalledTimes(1);
     expect(state().fontPacks.misans.status).toBe("ready");
+  });
+
+  it("without download, it only looks", async () => {
+    useAppStore.setState({ fontScheme: "misans" });
+    await state().initFontPacks({ download: false });
+    expect(h.install).not.toHaveBeenCalled();
+    expect(state().fontPacks.misans.status).toBe("absent");
+  });
+
+  it("keeps a failure's error code when the pack still isn't here", async () => {
+    useAppStore.setState({ fontPacks: { ...state().fontPacks, misans: { status: "error", error: "integrity", done: 0, total: 0 } } });
+    await state().initFontPacks({ download: false });
+    expect(state().fontPacks.misans).toEqual({ status: "error", error: "integrity", done: 0, total: 100 });
   });
 
   it("the stored choice survives validation", () => {

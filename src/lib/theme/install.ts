@@ -124,21 +124,25 @@ export const LAYER_ORDER = "@layer tokens.scale, tokens.derive, tokens.scheme, t
 export const userLayerCss = (css: string) => (css ? `${LAYER_ORDER}\n@layer tokens.user {\n${css}\n}` : "");
 
 /**
- * The downloaded font packs' `@font-face` rules (lib/theme/fontPacks). A sheet
- * of its own rather than a layer: `@font-face` is not a cascaded declaration,
- * so where it sits in the document doesn't matter. Empty removes it.
+ * One downloaded font pack's `@font-face` rules (lib/theme/fontPacks), in a
+ * sheet of its own per pack. Not a layer: `@font-face` is not a cascaded
+ * declaration, so where it sits in the document doesn't matter. Empty removes it.
  */
-export function applyFontFaces(css: string): void {
-  setStyle(FONT_FACES_ID, css);
+export function applyFontFaces(packId: string, css: string): void {
+  setStyle(FONT_FACES_PREFIX + packId, css);
 }
 
-/** What {@link applyFontFaces} last installed — read off the DOM, the way the export reads `data-font`. */
-export function currentFontFaces(): string {
-  if (typeof document === "undefined" || typeof document.getElementById !== "function") return "";
-  return document.getElementById(FONT_FACES_ID)?.textContent ?? "";
+/**
+ * The rules {@link applyFontFaces} installed for the font scheme `scheme` —
+ * empty for a system scheme. Read off the DOM, the way the export reads
+ * `data-font`, so the PDF carries exactly the one font it draws.
+ */
+export function currentFontFaces(scheme: string | null | undefined): string {
+  if (!scheme || typeof document === "undefined" || typeof document.getElementById !== "function") return "";
+  return document.getElementById(FONT_FACES_PREFIX + scheme)?.textContent ?? "";
 }
 
-const FONT_FACES_ID = "font-pack-faces";
+const FONT_FACES_PREFIX = "font-pack-faces-";
 
 function setStyle(id: string, css: string): void {
   // Several store tests stand in a bare `{ documentElement }` for `document`.
