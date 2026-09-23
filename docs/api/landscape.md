@@ -1383,9 +1383,9 @@ Responses adapter：
 >   厂商文档写 `file_url` **仅 ②**，① 实测也收。对本项目用处不大：作者的 PDF 在本地，公网 URL 无从谈起，
 >   base64 内联仍是唯一实用的路。
 > - **④ 的签名**：2.1-turbo 的 thinking 块带 `signature`（非流式在块上，流式走 `signature_delta`，`dj…` 开头，
->   与 ① 的 `encrypted_content` 同一种密文）；2.0-mini / 2.0-lite 流式非流式都没有。上文「thinking 块没有
+>   与 ① 的 `encrypted_content` 前缀相同，推测是同一种密文）；2.0-mini / 2.0-lite 流式非流式都没有。上文「thinking 块没有
 >   `signature`」只对 2.0 系成立。工具轮把第一轮 content 回传时，**原样、篡改末尾、删掉 `signature` 三种都 200**——
->   与 Anthropic 官方（篡改即 400）不同，回传错了不会响。`anthropic.ts` 本来就累加 `signature_delta` 并整块回传
+>   与 Anthropic 官方文档的口径（篡改即 400；本次未对官方端点复测）不同，回传错了不会响。`anthropic.ts` 本来就累加 `signature_delta` 并整块回传
 >   `_thinkingBlocks`，不用改；删签名是否像 ① 那样让推理变差，未比。
 
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
