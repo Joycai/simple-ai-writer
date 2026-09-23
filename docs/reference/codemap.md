@@ -127,7 +127,9 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
   外壳两栏同外观卡样张，自带 `data-theme`/`data-scheme`；中间一页是排版样张 iframe，
   `sampleDocument` 的 `sizing` 放大到阅读字号）。卡、带、坏主题三态全在
   `AppearanceThemes.tsx`（05i）。通用页顶的路标和导航上的「新」只活到第一次打开外观
-  （`app:appearanceSeen`，机器本地）。
+  （`app:appearanceSeen`，机器本地）。字体方案一节是两条带（设计稿 05n）：系统字体即选
+  即用；鸿蒙黑体 / MiSans 是 `FontPackCard`——点卡即下载，状态行说本机有没有，外层是
+  div（状态行里有删除 / 重试按钮，按钮里不能嵌按钮），删正在用的那款先卡内确认。
 - 计费组（`FeeGroupsPane` + `FeeGroupDrawer`，设计稿 05l）紧跟「渠道与模型」——它是
   那一页的价格那一半；中间隔着子代理，作者会以为它属于「用量」。编辑抽屉的表单是
   一个完整的 `FeeGroup`（三种方式的字段全在），分段控件只改 `billingMode`：**切方式
@@ -606,8 +608,11 @@ the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **onl
   - `assets.ts` inlines their fonts and textures as `data:` (the app retired the `ai-writer-asset:` protocol for its own pictures, so themes never use it)
   - `sample.ts` builds the settings samples as sandboxed `<iframe srcdoc>` documents carrying the export's exact stylesheet.
 
+#### 可下载字体包（Font packs）
+- `fontPacks.ts` downloads, verifies and installs 鸿蒙黑体 / MiSans into `appDataDir/fonts/<id>/<version>/`; `fontPackData.ts` is the pinned table (size + sha256 of every file) that `scripts/gen-font-packs.ts` generates — the only thing trusted; sources just deliver bytes. Lib layer: `appStore` drives it and holds `fontPacks` (on this machine, read off disk — never a preference) apart from `fontScheme` (the choice, a preference). The stacks are ordinary `tokens.css` blocks; only the `@font-face` rules are injected, one `<style>` per pack (`install.ts` `applyFontFaces`). Reasoning: `docs/feature/downloadable-fonts-plan.md`.
+
 #### 启动加载与设置面板
-- Boot reads only the selected files (`main.tsx`)
+- Boot reads only the selected files (`main.tsx`) — and the chosen font pack's faces, so the first frame is already in that font
 - Settings → 外观 (`components/settings/panes/AppearancePane.tsx` composes it, 设计稿 05m; the cards and bands are `AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does).
 
 #### 拒绝理由与内置排版主题
@@ -736,6 +741,7 @@ Rust 侧。
 - `commands.rs` 是自建的文件系统命令，全部 `async` 并把活交给 `blocking.rs`——一个不带 `async` 的 Tauri 命令跑在**主线程**上，而一次知识库扫描会连着调几百次 `fs_exists`，每次先 canonicalize，把窗口的事件循环一段段卡住；而光 `async` 也不够，那只是挪到 tokio 的 worker 上（有几个核就有几个），一块慢盘或一次钥匙串弹窗能占住其中一个任意久。
 - `scope.rs` 是这些命令的运行期路径围栏：否则它们接受任意绝对路径，一个被攻陷的 webview 就能读写删任意文件；根只从可信来源登记（原生文件夹选择器、带 `.ai-writer` 标记的重开项目，而那个标记 webview 在已允许的根之外造不出来）。
 - `protocol.rs` 注册 `ai-writer-asset:` 自定义 scheme，从同一个 `FsScope` 后面把项目文件喂给 webview。
+- `fontproto.rs` 注册 `ai-writer-font:`：只服务 `appDataDir/fonts/` 下的 `.woff2`（下载来的字体包），围栏比 `FsScope` 更窄，而且**先按字面判定再碰磁盘**——Windows 上把网页可控的 `//host/share` 交给 canonicalize 会发起 SMB 连接。异步协议，响应带 ACAO `*`（主窗口、沙箱样张、打印窗口都是跨源取字体）。
 
 #### 密钥、事务与传输
 
@@ -762,7 +768,7 @@ Rust 侧。
 #### Shell 命令与测试
 
 - `cmd.rs` 是 agent 的 `run_command` 的 Rust 一半，**刻意不用** `tauri-plugin-shell`（它唯一的安全机制是静态允许清单，对模型运行时现写的一行只能配成 `cmd: pwsh, args: true`，等于把清单关掉；而这个功能真正需要的超时、杀整棵进程树、输出封顶它都没有）。
-- 测试内联在 `commands.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` 里。
+- 测试内联在 `commands.rs` / `fontproto.rs` / `lorehash.rs` / `pptx.rs` / `preview.rs` / `protocol.rs` / `scope.rs` / `secrets.rs` / `sqltx.rs` / `transfer.rs` / `xlsx.rs` 里。
 
 ## `server/`
 

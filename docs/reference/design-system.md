@@ -41,7 +41,10 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 
 ### 字体方案 (Font schemes — `data-font`)
 
-User-switchable CJK × Western pairings, selected in Settings → 外观. Chosen like themes: `<html data-font="…">` + override blocks in `tokens.css` that follow `:root` (equal specificity → later block wins). State + persistence live in `appStore` (`fontScheme` / `setFontScheme`, `localStorage["app:fontScheme"]`, re-applied on load). **System fonts only — nothing is bundled**, so every scheme ships a full Win/Mac/Linux fallback stack.
+User-switchable CJK × Western pairings, selected in Settings → 外观. Chosen like themes: `<html data-font="…">` + override blocks in `tokens.css` that follow `:root` (equal specificity → later block wins). State + persistence live in `appStore` (`fontScheme` / `setFontScheme`, the `app:fontScheme` preference, re-applied on load). **Nothing is bundled.** Two kinds of scheme, shown as two bands in Settings (设计稿 05n):
+
+- **System** (`manuscript` / `song` / `hei` / `kai`) name faces the OS already has, each with a full Win/Mac/Linux fallback stack.
+- **Downloaded** (`harmonyos` / `misans`) name a font the author downloads the first time they pick it. The *stack* is still a static `tokens.css` block (family first, then `hei`'s stack) — so exports, samples and print need no branch — and only the `@font-face` bytes arrive at runtime, served by the `ai-writer-font:` scheme. Until they're here the family simply isn't found and the stack falls to `hei`. Why each piece is the way it is: `docs/feature/downloadable-fonts-plan.md`.
 
 | `data-font` | 名称 | 西文 | 中文正文 | 观感 |
 |-------------|------|------|----------|------|
@@ -49,8 +52,10 @@ User-switchable CJK × Western pairings, selected in Settings → 外观. Chosen
 | `song` | 宋体书卷 | Georgia / Cambria | 思源宋 → 苹方宋 → SimSun | Printed-book serif |
 | `hei` | 黑体清晰 | 系统无衬线 | 苹方 → 微软雅黑 → 思源黑 | All-sans, modern screen |
 | `kai` | 楷体临帖 | Iowan / Georgia | 楷体 → STKaiti | Handwritten manuscript |
+| `harmonyos` | 鸿蒙黑体 | HarmonyOS Sans SC（下载） | 同左，回退到 `hei` | All-sans, HarmonyOS |
+| `misans` | MiSans | MiSans（下载） | 同左，回退到 `hei` | All-sans, MiUI |
 
-Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/AppearancePane.tsx`, and add `systemSettings.appearance.font*` labels to both locales.
+Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/AppearancePane.tsx`, and add `systemSettings.appearance.font*` labels to both locales. A **downloaded** scheme additionally needs its package pinned in `scripts/gen-font-packs.ts` (run it with `--verify`), its id in `FONT_PACK_IDS` + `FONT_PACK_SOURCES` + `FONT_PACK_LICENSE` (`lib/theme/fontPacks.ts`), and a `PACK_FONTS` entry rather than a system card.
 
 ### Markdown 排版主题 (Markdown themes — `data-md-theme`)
 
