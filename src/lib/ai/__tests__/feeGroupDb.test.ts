@@ -253,10 +253,13 @@ describe("migrateModelPricesToFeeGroups", () => {
     const db = {
       select: async (sql: string) => {
         if (/FROM models WHERE fee_migrated IS NULL/.test(sql)) {
+          // 按 SELECT 的列清单投影，和真库一样：这次修复成立的前提就是那条
+          // SELECT 带出了 `fee_group_id`，整行照给的话把它删掉测试也看不出来。
+          const cols = /SELECT\s+([\s\S]*?)\s+FROM/.exec(sql)![1].split(",").map((c) => c.trim());
           return models
             .filter((m) => m.fee_migrated === null)
             .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
-            .map((m) => ({ ...m }));
+            .map((m) => Object.fromEntries(cols.map((c) => [c, m[c as keyof ModelRow]])));
         }
         if (/FROM fee_groups/.test(sql)) return groups.map((g) => ({ ...g }));
         throw new Error(`unexpected select: ${sql}`);
@@ -265,9 +268,9 @@ describe("migrateModelPricesToFeeGroups", () => {
         if (/^\s*INSERT INTO fee_groups/.test(sql)) {
           const cols = /\(([^)]*)\)\s*VALUES/.exec(sql)![1].split(",").map((c) => c.trim());
           groups.push(Object.fromEntries(cols.map((c, i) => [c, values[i]])));
-        } else if (/^\s*UPDATE models SET fee_group_id = COALESCE\(fee_group_id, \?\), fee_migrated = 1 WHERE id = \?/.test(sql)) {
+        } else if (/^\s*UPDATE models SET fee_group_id = COALESCE\(NULLIF\(fee_group_id, ''\), \?\), fee_migrated = 1 WHERE id = \?/.test(sql)) {
           const m = models.find((x) => x.id === values[1])!;
-          m.fee_group_id = m.fee_group_id ?? (values[0] as string | null);
+          m.fee_group_id = (m.fee_group_id === "" ? null : m.fee_group_id) ?? (values[0] as string | null);
           m.fee_migrated = 1;
         } else {
           throw new Error(`unexpected execute: ${sql}`);
@@ -326,6 +329,16 @@ describe("migrateModelPricesToFeeGroups", () => {
     await migrateModelPricesToFeeGroups(memoryDb(models, groups));
     expect(groups).toHaveLength(0);
     expect(models[0]).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+  });
+
+  it("空串的 fee_group_id 算没绑：建的组真的绑得上，不留孤儿组", async () => {
+    // 应用里的写入都把空串折成 NULL，手改过的库才有这种行。过滤和写回必须
+    // 是同一个定义，否则组插进去了、绑定却写不上，这一行还被盖了章。
+    const models = [model({ id: "m1", fee_group_id: "", price_in: 3, price_out: 15 })];
+    const groups: Record<string, unknown>[] = [];
+    await migrateModelPricesToFeeGroups(memoryDb(models, groups));
+    expect(groups).toHaveLength(1);
+    expect(models[0]).toMatchObject({ fee_group_id: groups[0].id, fee_migrated: 1 });
   });
 
   it("已经盖过章的行不被读，也不被写", async () => {

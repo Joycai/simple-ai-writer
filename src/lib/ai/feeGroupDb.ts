@@ -358,8 +358,10 @@ export async function migrateModelPricesToFeeGroups(db: Db): Promise<number> {
     const id = String(r.id ?? "");
     const bound = binding.get(id);
     const target = bound ? (remap.get(bound) ?? bound) : null;
+    // `NULLIF`：空串和上面的过滤、和 `rowToModel` 一样算「没绑」。只写
+    // `COALESCE` 的话，空串在 SQLite 里不是 NULL——组插进去了却绑不上。
     await db.execute(
-      `UPDATE models SET fee_group_id = COALESCE(fee_group_id, ?), fee_migrated = 1 WHERE id = ?`,
+      `UPDATE models SET fee_group_id = COALESCE(NULLIF(fee_group_id, ''), ?), fee_migrated = 1 WHERE id = ?`,
       [target, id],
     );
   }
