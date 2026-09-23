@@ -253,12 +253,12 @@ describe("closing", () => {
 
 describe("queue", () => {
   const job = (key: string, n: number) =>
-    ({ key, message: `q${n}`, userTurnId: `${key}-u${n}`, assistantTurnId: `${key}-a${n}` }) as never;
+    ({ key, message: `q${n}`, refs: [], userTurnId: `${key}-u${n}`, assistantTurnId: `${key}-a${n}` }) as never;
 
   it("取消排队 hands the words back and drops both placeholder turns", () => {
     seed([{ ...emptyChat("c0"), turns: [turn("c0-u1"), turn("c0-a1", "assistant")] }, withTurns("c1")]);
     useAgentStore.setState({ runningChats: ["x", "y", "z"], chatQueue: [job("c1", 0), job("c0", 1)] });
-    expect(state().dequeueChat("c0")).toBe("q1");
+    expect(state().dequeueChat("c0")).toEqual({ text: "q1", refs: [] });
     expect(state().chatQueue.map((j) => j.key)).toEqual(["c1"]);
     expect(chat("c0").turns).toEqual([]);
     expect(state().dequeueChat("c0")).toBeNull();

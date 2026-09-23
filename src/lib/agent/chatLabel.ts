@@ -9,7 +9,7 @@
  * *kind*, which is what the typography keys off.
  */
 
-import { sessionPreview, type PersistedTurn } from "./chatSession";
+import { sessionPreview } from "./chatSession";
 
 type ChatLabelKind = "title" | "preview" | "none";
 
@@ -31,8 +31,7 @@ export function liveLabel(chat: {
   turns: readonly { role: "user" | "assistant"; text: string }[];
 }): ChatLabel {
   if (chat.title) return { text: chat.title, kind: "title" };
-  // sessionPreview reads only role + text; the structural type here says so.
-  const preview = sessionPreview(chat.turns as readonly PersistedTurn[]);
+  const preview = sessionPreview(chat.turns);
   if (preview) return { text: preview, kind: "preview" };
   return { text: "", kind: "none" };
 }

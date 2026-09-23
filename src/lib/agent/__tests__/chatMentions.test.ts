@@ -27,7 +27,7 @@ vi.mock("../../lore/entity", () => ({
 }));
 
 const { findMention, filterMentions } = await import("../../../components/common/MentionPicker");
-const { buildChatMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP } = await import("../chatRefs");
+const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP } = await import("../chatRefs");
 
 describe("findMention", () => {
   it("opens on a bare @ and tracks what follows", () => {
@@ -91,6 +91,18 @@ describe("filterMentions", () => {
     expect(filterMentions(items, "")).toHaveLength(2);
     expect(filterMentions([{ type: "file", file: { name: "Chapter.md", path: "/p/c.md", kind: "text" } }], "chap"))
       .toHaveLength(1);
+  });
+});
+
+describe("hasMessage", () => {
+  it("counts words or a picture, not a bare file chip", () => {
+    expect(hasMessage("  ", [])).toBe(false);
+    expect(hasMessage("看看", [])).toBe(true);
+    const picture = { kind: "image" as const, file: { name: "a.png", path: "/p/a.png", kind: "image" as const }, dataUrl: "data:," };
+    expect(hasMessage("", [picture])).toBe(true);
+    // A file with nothing asked of it is material, not a question.
+    const file = { kind: "text" as const, file: { name: "a.md", path: "/p/a.md", kind: "markdown" as const }, content: "x" };
+    expect(hasMessage("", [file as never])).toBe(false);
   });
 });
 
@@ -244,6 +256,17 @@ describe("buildChatMessage", () => {
     const out = await buildChatMessage("看看", undefined, [pasted]);
     expect(out.text).toContain("abc123def456.png（会话暂存，随会话删除）");
     expect(out.matchText).not.toContain(".ai-writer");
+  });
+
+  it("sends a picture on its own as just the 【附图】 block", async () => {
+    // "Screenshot, ⌘V, Enter": the picture is the question (plan §10). No
+    // empty part after it — the block is the whole of the text.
+    const out = await buildChatMessage("", undefined, [imageRef("a.png")], {
+      allowImages: true, projectPath: "/p",
+    });
+    expect(out.text).toBe("【附图】\n1. a.png — 参考图/a.png");
+    expect(Array.isArray(out.content)).toBe(true);
+    expect(out.imagePaths).toEqual(["/p/参考图/a.png"]);
   });
 
   it("carries five pictures on one message", () => {

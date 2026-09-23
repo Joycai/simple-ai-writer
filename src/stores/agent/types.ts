@@ -459,10 +459,10 @@ export interface AgentState {
   /** Stop one conversation's run (and drop its queued sends). Others keep going. */
   stopChat: (key?: string) => void;
   /**
-   * 取消排队: drop a conversation's queued sends and hand the first one's text
-   * back (for the composer). The conversation itself stays.
+   * 取消排队: drop a conversation's queued sends and hand the first one's words
+   * and chips back (for the composer). The conversation itself stays.
    */
-  dequeueChat: (key: string) => string | null;
+  dequeueChat: (key: string) => { text: string; refs: AttachedItem[] } | null;
   /** 插到最前: this conversation's queued sends go to the head of the queue. */
   promoteChat: (key: string) => void;
   /**
