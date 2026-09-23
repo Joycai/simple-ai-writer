@@ -431,6 +431,10 @@
   margin-bottom: var(--space-2);
 }
 .fetchSelect { flex: 1; min-width: 0; }
+/* A Select directly under a Field spans the field like the text inputs do.
+   The trigger is a <button>, which shrinks to its value in block flow — the
+   fee-group picker read 「未绑定」 in a box a fifth the drawer's width. */
+.fieldSelect { width: 100%; }
 
 .comfyRow {
   display: flex;

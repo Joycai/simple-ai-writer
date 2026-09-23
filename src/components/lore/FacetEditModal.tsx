@@ -34,6 +34,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
 import { ModalShell } from "../common/ModalShell";
+import { Combobox } from "../common/Combobox";
 import { useImeGuard } from "../../lib/ime";
 import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
 import styles from "./FacetEditModal.module.css";
@@ -411,16 +412,13 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose, onSa
                 </span>
                 {prefilled.group && <span className={styles.prefillBadge}>{prefillLabel}</span>}
               </label>
-              <input
+              <Combobox
                 className={styles.input}
                 value={group}
-                onChange={(e) => { setGroup(e.target.value); own("group"); }}
-                list="facet-group-suggestions"
+                suggestions={knownGroups}
+                onChange={(v) => { setGroup(v); own("group"); }}
                 placeholder={t("lore.facet.groupPlaceholder", { defaultValue: "可留空；同组同时命中只注入优先级最高的一个（如 outfit）" })}
               />
-              <datalist id="facet-group-suggestions">
-                {knownGroups.map((g) => <option key={g} value={g} />)}
-              </datalist>
             </div>
             <div className={styles.fieldNarrow}>
               <label className={styles.label}>

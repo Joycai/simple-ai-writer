@@ -1166,6 +1166,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 而这个列表要按厂商分段、还要能搜。「未绑定」是一个 value 为空的
                 **真选择**（不是 placeholder），所以它在列表里排第一。 */}
             <Select
+              className={s.fieldSelect}
               value={form.feeGroupId}
               options={[
                 { value: "", label: t("aiConfig.fees.unbound") },
@@ -1700,7 +1701,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={!isComfy}>
               <Field label={t("aiConfig.models.capsDialectLabel")} hint={t("aiConfig.models.briefDialect")}
                 {...whyProps("dialect", t("aiConfig.models.capsDialectHint"))}>
-                <Select value={form.capsDialect}
+                <Select className={s.fieldSelect} value={form.capsDialect}
                   options={[
                     { value: "", label: t("aiConfig.models.capsDialectGeneric") },
                     { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
@@ -1733,7 +1734,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             </Fold>
             <Field label={t("aiConfig.models.capsRouteLabel")} hint={t("aiConfig.models.briefRoute")}
               {...whyProps("route", t("aiConfig.models.capsRouteHint"))}>
-              <Select value={form.capsRoute}
+              <Select className={s.fieldSelect} value={form.capsRoute}
                 options={[
                   { value: "", label: t("aiConfig.models.capsRouteAuto") },
                   { value: "images-api", label: t("aiConfig.models.capsRouteImages") },
