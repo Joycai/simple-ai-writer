@@ -48,7 +48,7 @@ import {
 } from "../lib/theme/install";
 import {
   FONT_PACK_IDS, FontPackError, fontPackData, installFontPack, isFontPackId, packBytes, packFacesCss, pruneOtherVersions,
-  readInstalled,
+  leftoverBytes, readInstalled,
   removeFontPack as deleteFontPackFiles, type FontPackErrorCode, type FontPackId,
 } from "../lib/theme/fontPacks";
 import { IS_TAURI } from "../lib/platform";
@@ -71,6 +71,11 @@ export interface FontPackState {
   done: number;
   total: number;
   error?: FontPackErrorCode;
+  /**
+   * Bytes an unfinished download left on disk (not "ready" only; absent = none).
+   * What the card's 清除 would free; a pick resumes from them instead.
+   */
+  leftover?: number;
 }
 
 /** Where deleting the pack in use leaves the author: the sans stack both packs fall back to. */
@@ -457,7 +462,7 @@ interface AppState {
   refreshFontPacks: () => void;
   /** Download (or retry) a pack. Resolves when it settles either way; state says how. */
   downloadFontPack: (id: FontPackId) => Promise<void>;
-  /** Delete a pack from this machine; if it's the one in use, switch to the fallback first. */
+  /** Delete a pack from this machine — installed, or what a failed download left; if it's the one in use, switch to the fallback first. */
   removeFontPack: (id: FontPackId) => Promise<void>;
   setMarkdownTheme: (id: string) => void;
   /** Set the preview zoom, snapped to the ladder. */
@@ -678,6 +683,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (busy(id)) continue;
       if (download) void pruneOtherVersions(id); // once a launch, not on every refresh
       const here = await readInstalled(id);
+      const leftover = here ? 0 : await leftoverBytes(id);
       // Judged on the state *now*, not a snapshot from before the awaits: a
       // download that started or ended meanwhile keeps what it wrote.
       set((s) => {
@@ -686,8 +692,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         const next: FontPackState = here
           ? { status: "ready", done: total, total }
           : cur.status === "error"
-            ? { ...cur, done: 0, total }
-            : { status: "absent", done: 0, total };
+            ? { ...cur, done: 0, total, leftover: leftover || undefined }
+            : { status: "absent", done: 0, total, leftover: leftover || undefined };
         return { fontPacks: { ...s.fontPacks, [id]: next } };
       });
       await syncPackFaces(id);
@@ -715,10 +721,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           patch({ status: "downloading", error: undefined, done: 0 });
           await installFontPack(id, { onProgress: (done, total) => patch({ done, total }) });
         }
-        patch({ status: "ready", done: get().fontPacks[id].total, error: undefined });
+        patch({ status: "ready", done: get().fontPacks[id].total, error: undefined, leftover: undefined });
         await syncPackFaces(id);
       } catch (e) {
         patch({ status: "error", error: e instanceof FontPackError ? e.code : "network" });
+        // What the failed attempt kept — the card offers to clear it.
+        patch({ leftover: (await leftoverBytes(id)) || undefined });
         await syncPackFaces(id);
       } finally {
         packDownloads.delete(id);
@@ -741,13 +749,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       // Absent from the moment the removal starts — synchronously, when no
       // download was running: a pick in the meantime then asks for a
       // download, which waits for the removal to finish first.
-      patch({ status: "absent", done: 0, error: undefined });
+      patch({ status: "absent", done: 0, error: undefined, leftover: undefined });
       try {
         await deleteFontPackFiles(id);
       } catch (e) {
         // Whatever is still on disk decides; the marker may or may not have gone.
         console.warn("[fontPacks] remove failed", e);
         if (await readInstalled(id).catch(() => false)) patch({ status: "ready", done: get().fontPacks[id].total });
+        else patch({ leftover: (await leftoverBytes(id)) || undefined });
       } finally {
         packRemovals.delete(id);
       }

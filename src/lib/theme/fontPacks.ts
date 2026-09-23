@@ -404,6 +404,33 @@ export async function pruneOtherVersions(id: FontPackId): Promise<void> {
   }
 }
 
+/**
+ * Bytes a pack holds on disk — for a pack that isn't installed, what an
+ * unfinished download left behind (chunks, stale `.part` files, an older
+ * version's folder). 0 when there is nothing, or nothing readable: this only
+ * decides whether the card offers 清除, and a wrong 0 just hides the offer.
+ */
+export async function leftoverBytes(id: FontPackId): Promise<number> {
+  const walk = async (dir: string, depth: number): Promise<number> => {
+    let sum = 0;
+    for (const entry of await readDir(dir)) {
+      if (entry.isDirectory) {
+        if (depth > 0) sum += await walk(entry.path, depth - 1);
+      } else {
+        sum += (await statPath(entry.path).catch(() => null))?.size ?? 0;
+      }
+    }
+    return sum;
+  };
+  try {
+    const root = await packRoot(id);
+    // <root>/<version>/<chunk> — nothing the install writes goes deeper.
+    return (await fileExists(root)) ? await walk(root, 1) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /** Delete a pack from this machine. Missing already = done. */
 export async function removeFontPack(id: FontPackId): Promise<void> {
   forgetFaces(id);

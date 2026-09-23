@@ -32,6 +32,8 @@ const h = vi.hoisted(() => {
     faces: vi.fn(async (ids: string[]) => ids.map((id) => `/*${id}*/`).join("\n")),
     applied: [] as [string, string][],
     removeGate: null as Promise<void> | null,
+    /** Bytes on disk per pack while it isn't installed. */
+    leftover: new Map<string, number>(),
   };
 });
 
@@ -41,11 +43,13 @@ vi.mock("../../lib/theme/fontPacks", async (orig) => {
     ...real,
     fontPackData: async (id: string) => ({ id, version: "1", weights: [{ weight: 400, sheet: ["s.css", 10, ""], chunks: [["a.woff2", 90, ""]] }] }),
     readInstalled: async (id: string) => h.installed.has(id),
+    leftoverBytes: async (id: string) => (h.installed.has(id) ? 0 : (h.leftover.get(id) ?? 0)),
     installFontPack: h.install,
     packFacesCss: h.faces,
     removeFontPack: async (id: string) => {
       if (h.removeGate) await h.removeGate;
       h.installed.delete(id);
+      h.leftover.delete(id);
     },
   };
 });
@@ -70,6 +74,7 @@ const fresh = () =>
 
 beforeEach(() => {
   h.installed.clear();
+  h.leftover.clear();
   h.applied.length = 0;
   h.removeGate = null;
   h.faces.mockReset().mockImplementation(async (ids: string[]) => ids.map((id) => `/*${id}*/`).join("\n"));
@@ -145,6 +150,40 @@ describe("removeFontPack", () => {
     await state().removeFontPack("harmonyos");
     expect(state().fontScheme).toBe("song");
     expect(state().fontPacks.harmonyos.status).toBe("absent");
+  });
+});
+
+describe("what a failed download leaves behind", () => {
+  it("a failure records the bytes it left, and clearing the pack in use switches to 黑 and forgets them", async () => {
+    h.install.mockImplementation(async (id: string) => {
+      h.leftover.set(id, 2_600_000);
+      throw new FontPackError("network", "down");
+    });
+    state().setFontScheme("misans");
+    await state().downloadFontPack("misans");
+    expect(state().fontPacks.misans).toMatchObject({ status: "error", leftover: 2_600_000 });
+
+    await state().removeFontPack("misans");
+    expect(state().fontScheme).toBe("hei");
+    expect(state().fontPacks.misans.status).toBe("absent");
+    expect(state().fontPacks.misans.leftover).toBeUndefined();
+  });
+
+  it("a failure that left nothing offers nothing to clear", async () => {
+    h.install.mockRejectedValue(new FontPackError("network", "down"));
+    await state().downloadFontPack("misans");
+    expect(state().fontPacks.misans.leftover).toBeUndefined();
+  });
+
+  it("the leftovers outlive a restart (the error doesn't), and a finished download drops them", async () => {
+    h.leftover.set("misans", 1_000);
+    await state().initFontPacks({ download: false });
+    expect(state().fontPacks.misans).toMatchObject({ status: "absent", leftover: 1_000 });
+    expect(state().fontPacks.harmonyos.leftover).toBeUndefined();
+
+    await state().downloadFontPack("misans");
+    expect(state().fontPacks.misans.status).toBe("ready");
+    expect(state().fontPacks.misans.leftover).toBeUndefined();
   });
 });
 

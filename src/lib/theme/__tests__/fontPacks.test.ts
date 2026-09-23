@@ -84,6 +84,7 @@ import {
   pruneOtherVersions,
   fontUrl,
   installFontPack,
+  leftoverBytes,
   packFacesCss,
   readInstalled,
   removeFontPack,
@@ -289,6 +290,28 @@ describe("readInstalled / packFacesCss / removeFontPack", () => {
 
   it("removing a pack that was never downloaded is a no-op", async () => {
     await expect(removeFontPack("misans")).resolves.toBeUndefined();
+  });
+});
+
+describe("leftoverBytes", () => {
+  it("is 0 when the pack has no folder", async () => {
+    expect(await leftoverBytes("misans")).toBe(0);
+  });
+
+  it("counts what a failed download left — chunks, stray .part files, an older version — and 0 once removed", async () => {
+    // b.1 never arrives: a.0 and the 700 chunk land, then the install fails.
+    serve({ "registry.npmmirror.com": (path) => (path.endsWith("b.1.woff2") ? 404 : honest(path)) });
+    await expect(installFontPack("misans")).rejects.toThrow();
+    const landed = h.bytes["lib/N/a.0.woff2"].length + h.bytes["lib/N/c.2.woff2"].length;
+    expect(await readInstalled("misans")).toBe(false);
+    expect(await leftoverBytes("misans")).toBe(landed);
+
+    h.files.set(`${DIR}/b.1.woff2.cafebabe.part`, "BBB");
+    h.files.set("/data/fonts/misans/4.0.0/old.woff2", "OLD!");
+    expect(await leftoverBytes("misans")).toBe(landed + 3 + 4);
+
+    await removeFontPack("misans");
+    expect(await leftoverBytes("misans")).toBe(0);
   });
 });
 

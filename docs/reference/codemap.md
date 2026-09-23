@@ -129,7 +129,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
   `AppearanceThemes.tsx`（05i）。通用页顶的路标和导航上的「新」只活到第一次打开外观
   （`app:appearanceSeen`，机器本地）。字体方案一节是两条带（设计稿 05n）：系统字体即选
   即用；鸿蒙黑体 / MiSans 是 `FontPackCard`——点卡即下载，状态行说本机有没有，外层是
-  div（状态行里有删除 / 重试按钮，按钮里不能嵌按钮），删正在用的那款先卡内确认。
+  div（状态行里有删除 / 重试 / 清除按钮，按钮里不能嵌按钮），删正在用的那款先卡内确认；
+  清除没下完的文件不确认（字形本来就是黑体的）。
 - 计费组（`FeeGroupsPane` + `FeeGroupDrawer`，设计稿 05l）紧跟「渠道与模型」——它是
   那一页的价格那一半；中间隔着子代理，作者会以为它属于「用量」。编辑抽屉的表单是
   一个完整的 `FeeGroup`（三种方式的字段全在），分段控件只改 `billingMode`：**切方式

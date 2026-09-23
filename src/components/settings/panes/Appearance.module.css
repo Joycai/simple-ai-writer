@@ -142,6 +142,9 @@
 .packAction:hover { color: var(--color-accent); }
 .packAction:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 2px; }
 .packActionAccent { color: var(--color-accent); }
+/* 重试 + 清除 side by side; each keeps its own underline. */
+.packActions { margin-left: auto; flex: none; display: flex; gap: var(--space-2); }
+.packActions > .packAction { margin-left: 0; }
 
 /* 删除正在用的那一款：卡内确认，说清楚会顺带改掉选择。 */
 .packConfirm {
