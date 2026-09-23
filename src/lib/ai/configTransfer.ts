@@ -499,7 +499,7 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
     // 但让写入顺序自己成立比依赖「反正没约束」清楚。
     ...staged.feeGroups.map(feeGroupUpsert),
     ...staged.providers.map(({ apiKey: _apiKey, ...provider }) => providerUpsert(provider)),
-    ...staged.models.map((m) => modelUpsert(m, staged.legacyPrices ? "legacy" : "fee-group")),
+    ...staged.models.map((m) => modelUpsert(m, staged.legacyPrices ? "legacy" : "restored")),
     ...staged.prompts.map(promptUpsert),
   ]);
 
