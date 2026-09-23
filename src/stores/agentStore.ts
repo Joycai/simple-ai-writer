@@ -769,7 +769,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // the model is resolved, because whether an attached picture can travel at
     // all is a property of the model.
     const { buildChatMessage } = await import("../lib/agent/chatRefs");
-    const { text: wireMessage, content: composed, imagePaths } = await buildChatMessage(
+    const { text: wireMessage, matchText, content: composed, imagePaths } = await buildChatMessage(
       message, quoted, refs,
       {
         // The 【附图】 list names each picture by its project-relative path,
@@ -815,7 +815,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set((s) => ({
       chatQueue: [...s.chatQueue, {
         key, projectPath, focus, message, quoted, refs, opts,
-        model, provider, effectiveSubs, wireMessage, composed, imagePaths,
+        model, provider, effectiveSubs, wireMessage, matchText, composed, imagePaths,
         userTurnId: userTurn.id,
         assistantTurnId: assistantTurn.id,
       }],

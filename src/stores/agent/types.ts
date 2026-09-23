@@ -271,6 +271,8 @@ export interface ChatJob {
   provider: ConnPair["provider"];
   effectiveSubs: Record<SubAgentKind, SubAgentConfig>;
   wireMessage: string;
+  /** `wireMessage` with pictures named but not located — what lore matching reads (chatRefs). */
+  matchText: string;
   composed: MessageContent;
   imagePaths: string[];
   /** The author's turn already on screen — what 取消排队 hands back to the composer. */

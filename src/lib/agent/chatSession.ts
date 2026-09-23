@@ -25,6 +25,7 @@ import { createSessionMeta, type ChatSessionMeta } from "./compact";
 import { validateSkillState, type SkillState } from "./skillState";
 import { contentWithoutMedia, hasMediaParts } from "./imageHistory";
 import { toPosixPath } from "../paths";
+import { isStashId } from "./pasteImages";
 
 /**
  * Replaces a picture in the *saved* history. Restoring a session brings back
@@ -318,7 +319,8 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     meta,
     usage: data.usage ?? null,
     taskId: typeof data.taskId === "string" ? data.taskId : null,
-    stashId: typeof data.stashId === "string" && data.stashId ? data.stashId : null,
+    // An id of the wrong shape is dropped, not trusted: a paste writes under it.
+    stashId: isStashId(data.stashId) ? data.stashId : null,
   };
 }
 

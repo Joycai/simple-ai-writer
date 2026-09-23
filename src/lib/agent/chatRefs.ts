@@ -111,6 +111,14 @@ interface ChatMessagePayload {
    * text half stays a string whatever the wire form turns out to be.
    */
   text: string;
+  /**
+   * {@link text} with every picture reduced to its name — what the knowledge
+   * base's name matching and the retrieval expansion read. The paths and the
+   * scratch note are for the model to go and fetch a picture again; to a
+   * substring match they are noise that can name entries (`.ai-writer` holds
+   * "AI", "deleted" holds "Ted", `assets/<文档名>/` a character's name).
+   */
+  matchText: string;
   /** What goes on the wire — the text alone, or the text plus image parts. */
   content: MessageContent;
   /** Absolute paths of the pictures actually attached, for the transcript. */
@@ -187,6 +195,8 @@ export async function buildChatMessage(
   } = {},
 ): Promise<ChatMessagePayload> {
   const parts: string[] = [];
+  // Where `matchText` says something other than `text`: part index → its words.
+  const forMatch = new Map<number, string>();
 
   const quoted = quote?.trim();
   if (quoted) {
@@ -230,6 +240,7 @@ export async function buildChatMessage(
     ? i18n.t("ai.chat.imageStashNote", { defaultValue: "（会话暂存，随会话删除）" })
     : "";
   if (sent.length) {
+    forMatch.set(parts.length, sent.map((a) => a.file.name).join("\n"));
     parts.push(
       `${i18n.t("ai.chat.imageBlockLabel", { defaultValue: "【附图】" })}\n${
         sent.map((a, i) => {
@@ -247,6 +258,7 @@ export async function buildChatMessage(
     // The scratch note here too: a text-only model is told about a pasted
     // picture only through this list, and must not link it into the text.
     const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}${stashNote(a)}`).join("\n");
+    forMatch.set(parts.length, unsent.map((a) => a.file.name).join("\n"));
     parts.push(
       opts.visionDelegate
         ? i18n.t("ai.chat.imagesNotSentDelegate", {
@@ -329,6 +341,7 @@ export async function buildChatMessage(
 
   return {
     text,
+    matchText: parts.map((p, i) => forMatch.get(i) ?? p).join("\n\n"),
     content: sent.length || videoParts.length
       ? [
           { type: "text", text },

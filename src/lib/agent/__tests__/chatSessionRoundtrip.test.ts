@@ -198,6 +198,12 @@ describe("chat session round-trip", () => {
     const json = serializeChatSession(bare);
     expect(json).not.toContain("stashId");
     expect(deserializeChatSession(json)!.stashId).toBeNull();
+
+    // A paste writes under this id: one that could climb out of the scratch
+    // root is dropped, not trusted.
+    const edited = JSON.parse(serializeChatSession(snap));
+    edited.stashId = "../../参考";
+    expect(deserializeChatSession(JSON.stringify(edited))!.stashId).toBeNull();
   });
 
   it("carries the task workspace id, and tolerates blobs from before it existed", () => {

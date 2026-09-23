@@ -56,6 +56,17 @@ export function isChatStashPath(path: string): boolean {
 }
 
 /**
+ * Whether a string can be a chat's scratch id: one path segment in nanoid's
+ * alphabet, nothing that could climb out of the scratch root. The id comes
+ * back from a saved session and a database column, both hand-editable — and
+ * a paste *writes* under it, so the fence has to hold before the first write,
+ * not only when something is deleted.
+ */
+export function isStashId(id: unknown): id is string {
+  return typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id);
+}
+
+/**
  * The number in 「粘贴的图片 N」.
  *
  * A content hash names the file, and is a name for neither the author nor the

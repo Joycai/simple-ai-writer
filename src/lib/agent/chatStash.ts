@@ -18,6 +18,7 @@ import { nanoid } from "nanoid";
 import { fileExists, readDir, removeDir, statPath, writeBinaryFile } from "../fs/fileio";
 import { sha256Hex } from "../import/cache";
 import { isStrictDescendant, joinPath } from "../paths";
+import { isStashId } from "./pasteImages";
 
 /** Under the project root. `.ai-writer/tmp/` is outside backups and sync. */
 const CHAT_STASH_DIR = ".ai-writer/tmp/chat";
@@ -61,6 +62,9 @@ export async function pastedImagePath(
   bytes: Uint8Array,
   ext: string,
 ): Promise<string> {
+  // The store only hands out well-formed ids; this is the backstop for one
+  // that arrived some other way — refuse rather than write outside the root.
+  if (!isStashId(stashId)) throw new Error(`invalid scratch id: ${stashId}`);
   const hash = (await sha256Hex(bytes)).slice(0, 12);
   return joinPath(chatStashDir(projectPath, stashId), `${hash}.${ext}`);
 }
@@ -93,7 +97,7 @@ export function stashSweepPlan(
  */
 async function removeStashDir(projectPath: string, stashId: string): Promise<void> {
   const dir = chatStashDir(projectPath, stashId);
-  if (!stashId || !isStrictDescendant(stashRoot(projectPath), dir)) return;
+  if (!isStashId(stashId) || !isStrictDescendant(stashRoot(projectPath), dir)) return;
   await removeDir(dir);
 }
 
@@ -119,15 +123,27 @@ export async function removeChatStash(projectPath: string, stashId: string | nul
  * chips would land in a conversation that does not claim their directory.
  */
 const pasting = new Map<string, number>();
+const pastingListeners = new Set<() => void>();
 
 export function markPasting(chatKey: string, on: boolean): void {
   const n = (pasting.get(chatKey) ?? 0) + (on ? 1 : -1);
   if (n > 0) pasting.set(chatKey, n);
   else pasting.delete(chatKey);
+  for (const l of pastingListeners) l();
 }
 
 export function isPasting(chatKey: string): boolean {
   return pasting.has(chatKey);
+}
+
+/**
+ * For the composer, which must not send while a paste is still turning into
+ * chips — the message would go without the picture, and the chip would land
+ * in the emptied composer to ride along with the next one.
+ */
+export function subscribePasting(listener: () => void): () => void {
+  pastingListeners.add(listener);
+  return () => { pastingListeners.delete(listener); };
 }
 
 /** Projects swept this launch. Module state on purpose: one sweep per launch is the contract. */

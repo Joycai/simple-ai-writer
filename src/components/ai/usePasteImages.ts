@@ -15,10 +15,12 @@
  * the assistant.
  */
 
-import { useCallback, useRef } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { MAX_MESSAGE_IMAGES } from "../../lib/agent/chatRefs";
-import { markPasting, pastedImagePath, writePastedImage } from "../../lib/agent/chatStash";
+import {
+  isPasting, markPasting, pastedImagePath, subscribePasting, writePastedImage,
+} from "../../lib/agent/chatStash";
 import { classifyPaste, PASTE_IMAGE_EXT, pasteNumber } from "../../lib/agent/pasteImages";
 import { attachedKey, attachProjectFile, type AttachedItem } from "../../lib/lore/aiTask";
 import { useAgentStore } from "../../stores/agentStore";
@@ -53,15 +55,22 @@ function numbersFor(stashId: string): Map<string, number> {
   return m;
 }
 
+/**
+ * One paste at a time per tab: two quick ⌘Vs would otherwise both count the
+ * chips before either added its own, walk past the cap together and draw the
+ * same number. Module state for the same reason as `assignedNumbers` — a
+ * per-instance queue would be a fresh, empty one after switching away and
+ * back mid-paste.
+ */
+const queues = new Map<string, Promise<void>>();
+
 export function usePasteImages(
   chatKey: string,
   setRefs: (update: (prev: AttachedItem[]) => AttachedItem[]) => void,
   setError: (message: string | null) => void,
-): (e: React.ClipboardEvent<HTMLTextAreaElement>) => void {
+): { onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void; pasting: boolean } {
   const { t } = useTranslation();
-  // One paste at a time: two quick ⌘Vs would otherwise both count the chips
-  // before either added its own, and walk past the cap together.
-  const queue = useRef<Promise<void>>(Promise.resolve());
+  const pasting = useSyncExternalStore(subscribePasting, () => isPasting(chatKey));
 
   const take = useCallback(async (files: { file: File; ext: string }[]) => {
     const projectPath = useProjectStore.getState().projectPath;
@@ -150,7 +159,7 @@ export function usePasteImages(
     if (!aborted) setError(lines.length ? lines.join("；") : null);
   }, [chatKey, setRefs, setError, t]);
 
-  return useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const onPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const dt = e.clipboardData;
     if (!dt) return;
     probe(dt);
@@ -185,10 +194,16 @@ export function usePasteImages(
     // Marked from the event on, not from when the queue reaches it: the tab
     // is spoken for as soon as the author pressed ⌘V.
     markPasting(chatKey, true);
-    queue.current = queue.current
+    const next = (queues.get(chatKey) ?? Promise.resolve())
       .then(() => take(files))
       .catch(() => {})
-      .finally(() => markPasting(chatKey, false));
+      .finally(() => {
+        markPasting(chatKey, false);
+        if (queues.get(chatKey) === next) queues.delete(chatKey);
+      });
+    queues.set(chatKey, next);
   }, [take, setError, t, chatKey]);
+
+  return { onPaste, pasting };
 }
 

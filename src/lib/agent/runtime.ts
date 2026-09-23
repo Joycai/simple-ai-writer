@@ -270,8 +270,8 @@ function elideOldImageResults(history: StreamMessage[]): number {
  * Strip the oldest pictures until the history's pictures fit one request body
  * together (`MAX_REQUEST_IMAGE_CHARS`).
  *
- * The count cap above counts *messages*, and one message can carry four
- * attachments — so three kept messages can still be a body no endpoint takes.
+ * The count cap above counts *messages*, and one message can carry
+ * `MAX_MESSAGE_IMAGES` attachments — so three kept messages can still be a body no endpoint takes.
  *
  * Two things are never touched, and for the same reason: they are what the
  * model is about to look at. The round in progress (M1, see `trimHistory`) —

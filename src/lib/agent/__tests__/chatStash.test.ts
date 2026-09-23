@@ -19,6 +19,7 @@ vi.mock("../../fs/fileio", () => ({
 
 import {
   chatStashDir, isPasting, markPasting, pastedImagePath, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
+  subscribePasting,
   stashSweepPlan, sweepChatStash, writePastedImage,
 } from "../chatStash";
 import { writeBinaryFile } from "../../fs/fileio";
@@ -71,6 +72,11 @@ describe("writePastedImage", () => {
     // Written once: the second paste found the file already there.
     expect(writeBinaryFile).toHaveBeenCalledTimes(1);
   });
+
+  it("refuses to build a path under an id that could leave the scratch root", async () => {
+    // A hand-edited session blob; the write must not land in the manuscript.
+    await expect(pastedImagePath("/p", "../../参考", new Uint8Array([1]), "png")).rejects.toThrow();
+  });
 });
 
 describe("sweepChatStash", () => {
@@ -99,6 +105,19 @@ describe("markPasting", () => {
     expect(isPasting("c0")).toBe(true);
     markPasting("c0", false);
     expect(isPasting("c0")).toBe(false);
+  });
+
+  it("tells subscribers when a tab starts and stops pasting", () => {
+    // The composer's send button reads this: no send while a paste is still
+    // becoming chips.
+    const seen: boolean[] = [];
+    const off = subscribePasting(() => seen.push(isPasting("c1")));
+    markPasting("c1", true);
+    markPasting("c1", false);
+    off();
+    markPasting("c1", true);
+    markPasting("c1", false);
+    expect(seen).toEqual([true, false]);
   });
 });
 

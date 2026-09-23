@@ -221,6 +221,13 @@ describe("buildChatMessage", () => {
     });
     expect(out.text).toContain("1. 粘贴的图片 1 — .ai-writer/tmp/chat/s1/abc123def456.png（会话暂存，随会话删除）");
     expect(out.text).toContain("2. b.png — 参考图/b.png\n");
+    // What lore matching reads names the pictures but never locates them: a
+    // path or the scratch note would name entries by accident.
+    expect(out.matchText).toContain("粘贴的图片 1\nb.png");
+    expect(out.matchText).not.toContain(".ai-writer");
+    expect(out.matchText).not.toContain("参考图/");
+    expect(out.matchText).not.toContain("会话暂存");
+    expect(out.matchText).toContain("看看");
   });
 
   it("marks a pasted picture as scratch even when it cannot travel", async () => {
@@ -233,6 +240,7 @@ describe("buildChatMessage", () => {
     };
     const out = await buildChatMessage("看看", undefined, [pasted]);
     expect(out.text).toContain("abc123def456.png（会话暂存，随会话删除）");
+    expect(out.matchText).not.toContain(".ai-writer");
   });
 
   it("carries five pictures on one message", () => {

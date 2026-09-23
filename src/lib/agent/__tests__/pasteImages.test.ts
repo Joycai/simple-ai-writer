@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteNumber,
+  classifyPaste, isChatStashPath, isStashId, PASTE_IMAGE_EXT, pasteNumber,
 } from "../pasteImages";
 
 const file = (type: string) => ({ kind: "file", type });
@@ -36,6 +36,16 @@ describe("classifyPaste", () => {
   it("leaves an empty or string-only clipboard to the textarea", () => {
     expect(classifyPaste([], false)).toBe("passthrough");
     expect(classifyPaste([str("text/html")], false)).toBe("passthrough");
+  });
+});
+
+describe("isStashId", () => {
+  it("accepts one segment in nanoid's alphabet and nothing that could climb out", () => {
+    expect(isStashId("Ab3dE9xYz_")).toBe(true);
+    expect(isStashId("a-b")).toBe(true);
+    for (const bad of ["", "..", "../../参考", "a/b", "a\\b", "x".repeat(65), 42, null, undefined]) {
+      expect(isStashId(bad)).toBe(false);
+    }
   });
 });
 

@@ -234,7 +234,7 @@ export function pump(set: Set, get: Get): void {
 async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   const {
     key, projectPath, focus, message, quoted, refs, model, provider, effectiveSubs,
-    wireMessage, composed, assistantTurnId,
+    wireMessage, matchText, composed, assistantTurnId,
   } = job;
   const { useAppStore } = await import("../appStore");
   const activeFilePath = focus.filePath;
@@ -427,10 +427,10 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // 只有首轮走这里；后续轮在 assembleTurnInjection 那侧（见下）。
       // 没绑模型 / 超时 / 出错都退回未扩展的行为，绝不让一次取材优化变成一次
       // 失败的对话。见 docs/feature/lore/lore-retrieval-plan.md §5.3
-      const seedTerms = await expandForRetrieval(wireMessage, controller.signal);
+      const seedTerms = await expandForRetrieval(matchText, controller.signal);
       const seedMatch = seedTerms.length
-        ? `${wireMessage}\n${seedTerms.join(" ")}`
-        : wireMessage;
+        ? `${matchText}\n${seedTerms.join(" ")}`
+        : matchText;
 
       const bundle = await assembleContext(
         systemPrompt,
@@ -620,12 +620,12 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         // Same expansion as the seed, per turn: the question changes every
         // turn, and 「那根杖呢」 is exactly the sort of turn whose words reach
         // nothing on their own.
-        const turnTerms = await expandForRetrieval(wireMessage, controller.signal);
+        const turnTerms = await expandForRetrieval(matchText, controller.signal);
         const inj = await assembleTurnInjection({
           loreIndex: loreIdx,
           // Same match targets as the seed: the question (with its quote and
           // @refs inlined) plus the document's tail neighborhood.
-          matchTarget: wireMessage + focus.text.slice(-500)
+          matchTarget: matchText + focus.text.slice(-500)
             + (turnTerms.length ? `\n${turnTerms.join(" ")}` : ""),
           // Per layer, not per entity: an entity already introduced keeps
           // its body out of the wire and still brings a facet the author

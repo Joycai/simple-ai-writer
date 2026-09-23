@@ -265,7 +265,7 @@ export function AgentChat() {
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
-  const handlePaste = usePasteImages(activeKey, setRefs, setRefError);
+  const { onPaste: handlePaste, pasting } = usePasteImages(activeKey, setRefs, setRefError);
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -471,7 +471,9 @@ export function AgentChat() {
   const attachedQuote = !detached && selection ? selection : undefined;
   // chatCompacting too: a manual compaction is swapping the history a send
   // would append onto, so the composer waits it out (agentStore guards as well).
-  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !!activeModelId;
+  // Not while a paste is still becoming chips: the message would leave without
+  // the picture the author pasted a moment before pressing Enter.
+  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
