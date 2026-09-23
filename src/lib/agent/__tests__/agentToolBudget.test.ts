@@ -271,8 +271,10 @@ import { ORCHESTRATOR_PRESET, PACK_PRESETS } from "../packs";
  * `lore_organize`).
  *
  * **17,167** (cap 17,100 → 17,200; measured against main's 17,062) with
- * `keep_transparency` on `edit_image` / `redraw_lore_image` — +105, resident,
- * because both tools are. Two words on the wire, but a decision only the
+ * `keep_transparency` on `edit_image` / `redraw_lore_image` — +105, and
+ * **none of it resident**: both tools sit in the deferred `image` group behind
+ * `search_tools`, so a run pays it only once it has gone looking for a drawing
+ * tool. Two words on the wire, but a decision only the
  * model can make: Seedream's transparent mode promises a see-through
  * background, so "add a sky behind her" paints the sky *inside* her and still
  * bills (docs/api/landscape.md §7 第十三个样本, measured 2026-09-23). Deciding

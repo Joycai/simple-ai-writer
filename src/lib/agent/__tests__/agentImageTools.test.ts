@@ -349,6 +349,21 @@ describe("keep_transparency", () => {
     expect(res.content).toMatch(/'keep_transparency' was ignored/);
   });
 
+  it("tells the model when references alongside rule the mode out", async () => {
+    storeModels = [{ ...IMAGE_MODEL, caps: { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 } }];
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", {
+      source: "插图/参考.png", instruction: "blue", references: ["a.png"], keep_transparency: true,
+    }, ctx);
+    expect(res.content).toMatch(/'keep_transparency' was ignored — a transparent background can only be kept with no references/);
+  });
+
+  it("says nothing when the agent turned it off — nothing was asked to be kept", async () => {
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky", keep_transparency: false }, ctx);
+    expect(res.content).not.toMatch(/keep_transparency/);
+  });
+
   it("says nothing on a model that can, or when the agent never spoke to it", async () => {
     storeModels = [{ ...IMAGE_MODEL, caps: { route: "ark", dialect: "seedream-5-pro", edit: true, maxRefs: 10 } }];
     const can = ctxWith();
