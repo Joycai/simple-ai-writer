@@ -82,6 +82,9 @@ const KNOWN_JSON_SCHEMA: ReadonlyArray<string> = [
   "gpt-5", "gpt-4.1", "gpt-4o",
   // ── Google — `responseJsonSchema` is documented from Gemini 2.5 on ──
   "gemini-2.5", "gemini-3",
+  // ── 火山方舟 Doubao Seed 2.1 — plan alias and dated id both. Not 2.0:
+  // 2.0-lite answered past a strict schema on both routes (第十二个样本) ──
+  "doubao-seed-2.1", "doubao-seed-2-1",
 ];
 
 /** Whether this model id is documented to accept strict `json_schema` mode. */

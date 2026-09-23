@@ -7,7 +7,8 @@
  * `document` block, the `doubao` / `responses-effort` thinking categories, the
  * reasoning echo across a tool round, and each route's web_search spelling.
  *
- * The facts it pins are docs/api/landscape.md §7 第十二个样本 (2026-09-18).
+ * The facts it pins are docs/api/landscape.md §7 第十二个样本 (2026-09-18; the
+ * sealed-reasoning echo and the json_schema auto tier, 2026-09-23).
  */
 import { describe, expect, it } from "vitest";
 import zlib from "node:zlib";
@@ -15,6 +16,7 @@ import { streamCompletion } from "../index";
 import { imagePart } from "../imagePart";
 import { resolvePlatform } from "../platforms";
 import { capabilityVerdict } from "../capabilities";
+import { jsonModeShaping } from "../jsonMode";
 import { testProviderConnection } from "../providerProbe";
 import type {
   ApiStandard, ContentPart, StreamChunk, StreamMessage, StreamOptions, ToolDefinition,
@@ -218,6 +220,20 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
       expect(echoed.encrypted_content).toBe(r1.toolCalls!._reasoning!.encrypted!.value);
       expect(r2.text).toMatch(/雨|17/);
     }, 240_000);
+
+    // The auto tier on the app's own shaping: an enum the prompt contradicts
+    // holds only if the schema is enforced, not merely suggested (2026-09-23).
+    it.skipIf(standard === "anthropic_compat")("enforces the auto tier's json_schema on 2.1", async () => {
+      const modelId = "doubao-seed-2.1-turbo";
+      const prompt = "1+1 等于几？answer 写真实结果，再加一个字段 reason 解释。";
+      const shaping = jsonModeShaping({ standard, baseUrl: base, modelId }, prompt, {
+        name: "sum",
+        parameters: { type: "object", properties: { answer: { type: "integer", enum: [7] } }, required: ["answer"] },
+      });
+      expect(shaping.mode).toBe("json_schema");
+      const c = await ask(wire, user(prompt), { modelId, extraBody: shaping.extraBody });
+      expect(JSON.parse(c.text)).toEqual({ answer: 7 });
+    }, 120_000);
 
     // Chat Completions has no spelling (the vendor's page names only
     // Responses and Messages); the other two run the endpoint's own search.

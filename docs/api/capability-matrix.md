@@ -228,7 +228,7 @@
 | xai | ? unmeasured | ✓ measured |  |  |
 | minimax | ? unmeasured |  |  | · |
 | volcengine | ? unmeasured | ? unmeasured |  |  |
-| volcengine-plan | ? unmeasured | ? unmeasured |  | · |
+| volcengine-plan | ✓ measured | ✓ measured |  | · |
 | zhipu | · |  |  |  |
 | orcarouter | ? unmeasured | ? unmeasured | ? unmeasured | · |
 | newapi | ? unmeasured | ? unmeasured | ? unmeasured | · |
