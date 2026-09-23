@@ -1,6 +1,6 @@
 # 可下载字体：鸿蒙黑体与 MiSans
 
-- **状态**：`shipped`（v1.77.0；Windows / Linux 未实测，见 §8）
+- **状态**：`shipped`（v1.77.0，v1.78.0 补上清除没下完的文件；Windows / Linux 未实测，见 §8）
 - **设计稿**：claude.ai/design「Simple AI Writer UI redesign」→ `05n 可下载字体 Font Packs`
 - **代码**：`src/lib/theme/fontPacks.ts`（下载器）· `src/lib/theme/fontPackData.ts`（生成的锁定表）· `scripts/gen-font-packs.ts` · `src-tauri/src/fontproto.rs`（`ai-writer-font:`）· `stores/appStore.ts`（`fontPacks`）· `components/settings/panes/FontPackCard.tsx`
 
@@ -78,6 +78,7 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 | 另一个窗口改了选择（焦点同步，有 keys） | **只重读磁盘，不下载**。否则两个进程会往同一目录下同一个包。窗口每次获得焦点、外观页每次挂载都会重读一次磁盘，这样另一个窗口的下载和删除都能看到。 |
 | 下载中切到别的方案 | 不取消，下完留着，下次选中立刻生效。 |
 | 删除正在用的包 | 先切回 **黑**（两款的回退栈就是它，删完之后字形变化最小），再删。删除一开始就同步标成「缺席」；删除途中再选中，会等删完之后重新下载。 |
+| 清除没下完的文件（v1.78.0） | 下载失败后，已经落盘的分片留在 `fonts/<id>/`，卡片状态行在「重试」旁边给出「清除」；重启之后错误不再记得，但文件还在，卡片写「没下完 · 2.6 / 6.1 MB」，同样给「清除」。字节数由 `leftoverBytes()` 读盘得出（`fontPacks[id].leftover`），为 0 就不显示入口。清除走同一个 `removeFontPack`：整包目录删掉，在用的先切回 **黑**。**不弹确认**，这一点和删除已下载的包不同：没装好的包本来就在用 黑 的字形，切过去屏幕上什么都不变；而已装好的包删掉会换字形，所以那边要先让作者看见。不清除时，再选中会接着这些文件续传。 |
 | 重置应用 | 删 `appDataDir/fonts`：它是本机缓存，刚装好的应用本来就没有。 |
 
 `@font-face` 按包各注入一张 `<style id="font-pack-faces-<id>">`。主窗口注入全部已装的包，让每张卡片用自己的字体预览；**样张和 PDF 只带当前方案那一个包**，免得每个 iframe 都解析几百 KB 用不到的规则。
@@ -102,7 +103,8 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 - **单元测试**：
   - `fontPacks.test.ts`：校验、换源、源记忆、续传、`.part`、标记最后写、首个失败停队列、改写规则。
   - `fontPackData.test.ts`：锁定表的形状。
-  - `appStoreFontPacks.test.ts`：状态机、多窗口、删除途中再选中、按包注入。
+  - `fontPacks.test.ts` 另有 `leftoverBytes`：失败后留下的分片、陈旧 `.part`、旧版本目录都计入，删除后归零。
+  - `appStoreFontPacks.test.ts`：状态机、多窗口、删除途中再选中、按包注入；失败记下残留字节、重启后仍在、清除在用的包切回 黑。
   - `themeExport.test.ts`：字体栈、样张带 faces。
   - `appReset.test.ts`。
   - Rust `fontproto` 13 条：字面判定、UNC、`..`、文件和目录符号链接、响应头、URL 层的 403 / 404。
@@ -112,6 +114,5 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
   - **字体加载**：经 `ai-writer-font:` 加载，400 / 500 / 700 三档都成功（MiSans 18 条 face、鸿蒙 12 条都是 loaded，0 条 error）。同一串字的宽度与回退字体不同，说明画的是真字形。
   - **`fetch()` 直接取字体会失败**（`Load failed`）。推测是 `connect-src` 没列这个 scheme，没有深究：应用里没有任何代码用 fetch 取字体，字体只走 `font-src`，而那一路已经加载成功。
   - **要肉眼看的**：外观页样张 iframe（沙箱，不透明源）的字形，以及长文加粗体导出 PDF。PDF 已经改成等 `document.fonts.ready` 再打印（上表），但「确实不混排」还要在打包产物里看一眼。实测结果补在这里。
-- **已知限制**：下载失败后，已经落盘的分片留在 `fonts/<id>/<version>/` 里（最多一个包的体积），卡片上只有「重试」、没有「删除」；重试会用上它们，重置应用会清掉。
 - **已知限制**：启动时清旧版本目录，默认只有一个版本的应用在跑。将来升级字体版本后，如果新旧两个版本的应用同时开着，新版本启动时可能删掉旧版本进程正在用的目录；旧进程里那款字体会退到黑体，直到它重启（旧版本会把自己那版重新下回来）。
 - **未验证**：Windows（`http://ai-writer-font.localhost` 形式只有解析层单测）、Linux（webkitgtk 对自定义 scheme 的跨源字体请求）。

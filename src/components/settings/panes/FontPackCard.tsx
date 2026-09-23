@@ -9,7 +9,7 @@
  * rather than a picture of a font that isn't here.
  *
  * Not a single `<button>` like the system cards: the status line holds a
- * second control (删除 / 重试), and a button can't contain a button. The
+ * second control (删除 / 重试 / 清除), and a button can't contain a button. The
  * selecting part is its own button; the status actions sit beside it.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -75,6 +75,26 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [showConfirm]);
 
+  // 清除: what a failed download left. No confirmation, even for the pack in
+  // use — a pack that isn't here already draws in 黑's faces, so switching
+  // the choice to 黑 changes nothing on screen (docs/feature/downloadable-fonts-plan.md §5).
+  const leftover = !here && !downloading ? pack.leftover ?? 0 : 0;
+  const clear =
+    leftover > 0 ? (
+      <button
+        type="button"
+        className={a.packAction}
+        title={t("systemSettings.appearance.fontPackClearTitle", { size: mb(leftover) })}
+        onClick={() => {
+          void removeFontPack(id);
+          // The button is about to go; the card's own button stays.
+          requestAnimationFrame(() => selectRef.current?.focus());
+        }}
+      >
+        {t("systemSettings.appearance.fontPackClear")}
+      </button>
+    ) : null;
+
   const onDelete = () => {
     // Deleting the pack in use also changes the author's choice — show that first.
     if (active) setConfirming(true);
@@ -124,12 +144,20 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
       tone = a.packStatusError;
       left = t(`systemSettings.appearance.fontPackErr${pack.error === "integrity" ? "Integrity" : pack.error === "disk" ? "Disk" : "Network"}`);
       right = (
-        // Retries the download only — a failed pack the author has since moved
-        // away from must not take the font choice back with it.
-        <button type="button" className={`${a.packAction} ${a.packActionAccent}`} onClick={() => void downloadFontPack(id)}>
-          {t("systemSettings.appearance.fontPackRetry")}
-        </button>
+        <span className={a.packActions}>
+          {/* Retries the download only — a failed pack the author has since moved
+              away from must not take the font choice back with it. */}
+          <button type="button" className={`${a.packAction} ${a.packActionAccent}`} onClick={() => void downloadFontPack(id)}>
+            {t("systemSettings.appearance.fontPackRetry")}
+          </button>
+          {clear}
+        </span>
       );
+    } else if (leftover > 0 && pack.total > 0) {
+      // Absent, with a failed download's files still here (the error itself
+      // doesn't outlive a restart). A pick resumes from them.
+      left = t("systemSettings.appearance.fontPackPartial", { done: (leftover / 1e6).toFixed(1), total: mb(pack.total) });
+      right = clear;
     } else if (pack.total > 0) {
       // Absent. Before the startup disk read lands `total` is still 0 — show nothing rather than "0.0 MB".
       left = `↓ ${mb(pack.total)}`;
