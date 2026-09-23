@@ -41,11 +41,17 @@ function probe(dt: DataTransfer): void {
 }
 
 /**
- * Numbers handed out per conversation this launch, by path (see
- * `pasteNumber`). Module state because the composer remounts on tab switches
- * and a number must not be handed out twice in one session.
+ * Numbers handed out this launch, per conversation — keyed by its scratch
+ * id, not the tab, because a tab can be handed to another conversation and
+ * one conversation can be reopened in another tab (see `pasteNumber`). Module
+ * state because the composer remounts on tab switches.
  */
 const assignedNumbers = new Map<string, Map<string, number>>();
+function numbersFor(stashId: string): Map<string, number> {
+  let m = assignedNumbers.get(stashId);
+  if (!m) { m = new Map(); assignedNumbers.set(stashId, m); }
+  return m;
+}
 
 export function usePasteImages(
   chatKey: string,
@@ -64,9 +70,13 @@ export function usePasteImages(
     // The directory id is made only when a file is about to be written: a
     // paste that turns out to be a duplicate or over the cap leaves the tab
     // as it was. Until then no pasted chip can exist, so no duplicate either.
-    let stashId = useAgentStore.getState().chats[chatKey]?.stashId ?? null;
-    let assigned = assignedNumbers.get(chatKey);
-    if (!assigned) { assigned = new Map(); assignedNumbers.set(chatKey, assigned); }
+    const stashNow = () => useAgentStore.getState().chats[chatKey]?.stashId ?? null;
+    let stashId = stashNow();
+    // The tab can be handed to another conversation while a file is being
+    // read (opening a saved one reuses an empty tab). Past that point these
+    // pictures would be chips of a conversation that does not claim their
+    // directory — stop instead.
+    const moved = () => stashId !== null && stashNow() !== stashId;
     // Read live, not from the render that registered the handler: a previous
     // paste in the queue may just have added chips.
     const current = chatComposerOf(useComposerStore.getState(), chatKey).refs;
@@ -91,6 +101,7 @@ export function usePasteImages(
         // Full before the bytes are written: a refused picture leaves nothing
         // behind in the scratch area.
         if (images >= MAX_MESSAGE_IMAGES) { refused++; continue; }
+        if (moved() || !useAgentStore.getState().chats[chatKey]) break;
         stashId ??= useAgentStore.getState().ensureChatStash(chatKey);
         path = await pastedImagePath(projectPath, stashId, bytes, ext);
         await writePastedImage(path, bytes);
@@ -101,6 +112,7 @@ export function usePasteImages(
         }));
         continue;
       }
+      const assigned = numbersFor(stashId);
       const n = pasteNumber(path, assigned, known);
       const name = t("ai.chat.pastedImageName", { defaultValue: "粘贴的图片 {{n}}", n });
       const outcome = await attachProjectFile({ name, path, kind: "image" });
@@ -113,6 +125,7 @@ export function usePasteImages(
           : t("ai.chat.refUnreadable", { defaultValue: "读不到 {{name}}", name }));
         continue;
       }
+      if (moved()) break;
       keys.add(`file:${path}`);
       known.push(path);
       assigned.set(path, n);

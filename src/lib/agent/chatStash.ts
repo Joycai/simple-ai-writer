@@ -27,8 +27,11 @@ const CHAT_STASH_DIR = ".ai-writer/tmp/chat";
  *
  * `window.lock` warns rather than refuses, so one project can be open in two
  * windows — and the other window's "pasted, not sent yet" session has no row
- * this window can see. A day's grace means the sweep never takes what someone
- * is still holding; the price is an orphan living one day longer.
+ * this window can see. A day's grace covers that "just pasted" case; the price
+ * is an orphan living one day longer. It is measured from the directory's last
+ * write, not the session's last use, so an older session open in another
+ * window whose row was pruned here is not covered — an accepted multi-window
+ * edge (chat-image-paste-plan §4).
  */
 export const STASH_GRACE_MS = 24 * 60 * 60 * 1000;
 
@@ -96,7 +99,8 @@ async function removeStashDir(projectPath: string, stashId: string): Promise<voi
 
 /**
  * The author deleted the session: its pictures go now, without the grace
- * period — a deleted session cannot still be live in another window.
+ * period — the author asked for exactly that. (With the project open in two
+ * windows, the other one may still show the session; plan §4 accepts it.)
  * Best-effort: a failure leaves the directory to the next sweep.
  */
 export async function removeChatStash(projectPath: string, stashId: string | null | undefined): Promise<void> {
