@@ -241,9 +241,10 @@ const MAX_SEARCHES_PER_REQUEST = 10;
 export function anthropicServerTools(
   wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
+  modelId?: string,
 ): { type: string; name: string; max_uses?: number }[] {
   if (familyOf(wire.standard) !== "anthropic") return [];
-  return (ids ?? []).filter((id) => hasCapability(id, wire)).flatMap((id) => {
+  return (ids ?? []).filter((id) => hasCapability(id, wire, { modelId })).flatMap((id) => {
     const type = ANTHROPIC_WIRE_TYPE[id];
     if (!type) return [];
     return [{

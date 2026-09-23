@@ -35,8 +35,12 @@ import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } f
 import type { ServerToolId } from "../serverTools";
 
 const BASE_URL = "https://capability-consistency.invalid/v1";
-/** One id that runs DashScope's code interpreter on both wires, one on Responses only, one nobody names. */
-const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model"];
+/**
+ * One id that runs DashScope's code interpreter on both wires, one on Responses
+ * only, one nobody names, and a relay's Kiro-served Claude (singled out on the
+ * relay platforms).
+ */
+const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5"];
 const TYPE = "multimodal" as const;
 
 const ADAPTERS: Record<ProtocolFamily, (o: StreamOptions) => Promise<void>> = {
@@ -90,7 +94,7 @@ const FUNCTION_TOOL = { type: "function" as const, function: { name: "pick", des
 
 const PROBES: Record<CapabilityId, Probe> = {
   // The PDF subagent's eligibility and the delegation gate both ask readsPdf.
-  pdfInput: async (ctx) => ({ readsPdf: readsPdf({ pdfInput: true }, provider(ctx)) }),
+  pdfInput: async (ctx) => ({ readsPdf: readsPdf({ pdfInput: true, modelId: ctx.modelId }, provider(ctx)) }),
   vlHighResolution: async (ctx) => ({
     adapter: await adapterSends(ctx, {}, { vlHighResolution: true }),
     summary: summarySends(ctx, {}, { vlHighResolution: true }),

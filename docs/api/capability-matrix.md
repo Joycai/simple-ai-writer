@@ -24,10 +24,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ measured |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | · | · |
-| newapi | ✓ protocol | ✓ protocol | · | · |
+| newapi | ✓ 按模型 protocol | ✓ protocol | · | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | ✓ protocol | · | · |
+| custom | ✓ 按模型 protocol | ✓ protocol | · | · |
 
 ## vlHighResolution
 
@@ -116,10 +116,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | zhipu | · |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
-| newapi | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
+| newapi | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | ✓ 按模型 protocol |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
+| custom | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | ✓ 按模型 protocol |
 
 ## temperature
 
@@ -208,10 +208,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | · |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
-| newapi | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| custom | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | · |
 
 ## jsonSchema
 
@@ -254,10 +254,10 @@
 | volcengine-plan | · | ✓ measured |  | ✓ measured |
 | zhipu | · |  |  |  |
 | orcarouter | · | ? unmeasured | · | ? unmeasured |
-| newapi | · | ? unmeasured | · | ? unmeasured |
+| newapi | · | ? unmeasured | · | ? 按模型 unmeasured |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
-| custom | · | ? unmeasured | · | ? unmeasured |
+| custom | · | ? unmeasured | · | ? 按模型 unmeasured |
 
 ## web_extractor
 

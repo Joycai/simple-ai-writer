@@ -1568,11 +1568,12 @@ Responses adapter：
 来源（2026-09-19）：`docs.bigmodel.cn` 的「对话补全」（OpenAPI）「工具调用」「结构化输出」「流式消息」「思考模式」「深度思考」
 「核心参数」「模型概览」「错误码」「GLM-5.3-Flash」「GLM Coding Plan 快速开始 / 接入工具 / 使用须知」「网络搜索」「网页阅读」各页的 `.md` 原文，与上面的实测。
 
-### 第十五个样本：New API 中转站上 Kiro 渠道的 ④ 族（`[特价kiro量]claude-opus-4-6` / `-opus-5`，2026-09-23 实测）
+### 第十五个样本：New API 中转站上 Kiro 渠道的 Claude（① ④ 两族，`[特价kiro量]claude-opus-4-6` / `-opus-5`，2026-09-23 实测）
 
-> **实测结论**（先 curl 约 150 次探形状，再用 `live.relay-kiro.test.ts` 驱动本项目真实 adapter——`anthropic_compat`、
-> `claude-adaptive`、平台 `newapi`——14 条**全过**；`CHENMO_KEY`）。主机是第十个样本那台 `42.240.165.241:3000`，
-> 这次走 `/v1/messages`。目录里 Kiro 渠道挂着 `[kiro]` `[kiro1]`…`[kiro3]` `[kiro-200k]` `[特价kiro量]` 等多档，
+> **实测结论**（先 curl 约 200 次探形状，再用 `live.relay-kiro.test.ts` 驱动本项目真实 adapter——④ `anthropic_compat` +
+> `claude-adaptive`、① `openai_compat` + `openai-generic`，平台 `newapi`——31 条**全过**；`CHENMO_KEY`）。主机是第十个样本那台
+> `42.240.165.241:3000`，走 `/v1/messages` 与 `/v1/chat/completions`；**没有 ② ③ 线路**（`/v1/responses`、`/v1beta` 都回 500
+> `convert_request_failed`「not implemented」）。目录里 Kiro 渠道挂着 `[kiro]` `[kiro1]`…`[kiro3]` `[kiro-200k]` `[特价kiro量]` 等多档，
 > `supported_endpoint_types` 一律 `null`。Kiro 是 AWS 的 IDE 产品，它的后端不是 Anthropic API——中转站在
 > 两者之间翻译，**下面凡是「官方有、这里没有」的，都是翻译层没做，且几乎全部 200、不报错**。
 >
@@ -1618,16 +1619,39 @@ Responses adapter：
 >    `page_age`，搜完接着思考、作答。本项目的 adapter 永远流式，agent 场景落在这一种。
 > 3. **与函数工具同发、非流式**：`web_search` 被丢，模型说「我没有联网搜索工具，只有 get_weather」。
 >
-> **对本项目**：adapter 一处没改。这台中转站自建、没有可识别的主机，行为又按上游渠道（`[kiro…]` 前缀）而非平台变，
-> 放进平台画像只会误伤同一台上的别的渠道；所以只记在这里，给作者的建议是：
+> **① Chat Completions 面**（New API 把它翻成 Messages 再发：`usage.billing_usage.source` 写着 `claude_messages`，
+> 所以 ④ 面的缺口这里一样有，外加 ① 自己的几条）：
 >
-> - **别在这类模型上打开联网搜索**。`anthropicServerTools` 把服务端工具当作模型的常设权限，**连不带工具的请求也发**
->   （`tools` 档为 `none` 的任务、普通续写），而那类请求正好落进情形 1——作者的续写会被换成一页搜索结果。agent 场景
->   （带函数工具）能搜，但同一个模型开关管不了「只在 agent 里开」。
-> - **别给它声明 PDF 输入**：`document` 块会被丢，模型答「没看到文件」。图片可以（本项目发 base64）。
-> - 结构化任务（一致性检查、条目拆分…）会比官方多花一轮：强制工具在流式下不生效，`agent/structured.ts` 看到「没有调用」
->   后退回 JSON 模式重跑。思考类目选「关闭」也救不回来（关思考流式下同样不生效）。
-> - 思考类目选 `claude-adaptive` 可用；力度只有「关闭」（发 `low`）会真的变浅，其余几档等价。
+> | 特性 | 结果 |
+> | --- | --- |
+> | 基础对话、`system`、`stop`、流式（`stream_options.include_usage` 末块有 usage） | ✅ |
+> | `max_tokens` / `max_completion_tokens` | ❌ 都无视 |
+> | `reasoning_effort` | `low` / `medium` / `high` → 思考开，从 `reasoning_content` 流出（`completion_tokens_details.reasoning_tokens` 恒为 0，思考算在 `completion_tokens` 里）；**`max`、`none`、乱写的值 → 不想**。`openai-generic` 菜单的「最高」发的正是 `max`，在这里等于关 |
+> | 顶层 `thinking`（`enabled + budget_tokens` / `adaptive`） | 静默忽略，不想 |
+> | 函数工具、`tool_choice: none` | ✅ |
+> | `tool_choice: required` / 具名 | 和 ④ 一样：**非流式生效**（拿「讲个笑话」也调用了 `get_weather`），**流式无视**（4 次 0 次调用；具名那条模型甚至复述「你要我调用 get_weather」，但没调用）。流式的 `prompt_tokens` 301，非流式 102，说明两条路径的转换不是同一套 |
+> | `response_format`：`json_object` / `json_schema`（strict） | ❌ 都被忽略：答 ```` ```json ```` 代码块，键名自拟（`result` 而不是被 enum 锁死的 `answer: 7`） |
+> | `image_url`：data URL / http URL | data URL ✅；http URL 静默丢弃 |
+> | `file` 片段（PDF） | ❌ 静默丢弃，33 s |
+> | `web_search_options` | 转成 ④ 的 `web_search` 后**同样被劫持**：返回「Here are the search results for "…"」，模型没跑 |
+>
+> **对本项目**（能力表的「模型 id 轴」，见 [`capability-gating-plan.md`](capability-gating-plan.md) §8.10）：这台中转站自建、
+> 没有可识别的主机，行为按上游渠道（id 里的 `kiro`）变，所以不写成平台画像，而是在 `newapi` / `custom` 两个平台上
+> 加了一个**只点名**的模型格 `KIRO_CLAUDE`（id 同时含 `kiro` 与 `claude`，Sonnet 按推断一并收）。点到名的判「不发」，
+> 同一台上别的模型照旧：
+>
+> | 线路 | 能力 | 改后 | 为什么 |
+> | --- | --- | --- | --- |
+> | Chat | `pdfInput` | 不发 | `file` 被丢，PDF 子代理不会选中这个模型 |
+> | Chat | `forcedToolChoice` | 发 `auto` | 流式无视强制；结构化任务仍先试工具调用，没调用就退回 JSON |
+> | Chat | `structuredOutput`（`jsonSchema` 随之） | JSON 模式降到 `off`，只发提示语 | `response_format` 被无视 |
+> | Anth | `forcedToolChoice` | 发 `{type:"auto"}` | 同上；④ 适配器以前不查这一格，这次补上 |
+> | Anth | `web_search` | 不发 | 本项目对不带工具的请求也发服务端工具，那种请求会被劫持成一页搜索结果。代价是 agent 场景里本来能用的真搜索（情形 2）也关了——同一个模型开关分不出两种场景 |
+>
+> 其余给作者的建议：
+>
+> - 思考：④ 选 `claude-adaptive`，只有「关闭」（发 `low`）会真变浅，其余几档等价；① 选 `openai-generic` 时**别选「最高」**
+>   （发 `max` = 不想），低 / 中 / 高都在想。
 > - `anthropic_compat` 本来就不发 `cache_control`（`cachesPrompt` 只对官方标准开），在这里恰好是对的：这台只写不读，
 >   打了断点也换不来缓存命中。它报的 `cache_read` 是估算拼出来的，用量页上这部分的缓存价不可信。
 

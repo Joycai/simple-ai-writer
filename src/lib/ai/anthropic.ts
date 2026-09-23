@@ -383,7 +383,9 @@ function thinkingFor(
  *
  * Endpoints that refuse a forced choice with nothing in the config to predict
  * it are handled the other way round, from their own 400 — see
- * `lib/ai/toolChoice.ts`.
+ * `lib/ai/toolChoice.ts`. Ones that take it with a 200 and ignore it are the
+ * capability table's `forcedToolChoice` cell (a relay's Kiro-served Claude,
+ * landscape.md §7 第十五个样本): a silent ignore teaches the memo nothing.
  */
 function toolChoiceBody(
   opts: StreamOptions,
@@ -393,6 +395,7 @@ function toolChoiceBody(
   if (!tc || tc === "auto") return { type: "auto" };
   if (tc === "none") return { type: "none" };
   if (forcesToolChoiceAuto(category, opts.reasoningEffort)) return { type: "auto" };
+  if (!hasCapability("forcedToolChoice", wireOf(opts), { modelId: opts.modelId })) return { type: "auto" };
   if (tc === "required") return { type: "any" };
   return { type: "tool", name: tc.function.name };
 }
@@ -569,7 +572,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
   // a standing permission on the model, not something a task opts into.
-  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools);
+  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools, opts.modelId);
   if (opts.tools?.length || serverTools.length) {
     const tools: Record<string, unknown>[] = [
       ...serverTools,

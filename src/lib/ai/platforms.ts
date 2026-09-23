@@ -336,7 +336,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   newapi: {
     endpoints: GENERIC_ENDPOINTS,
     hosts: [],
-    source: "landscape.md §7 New API 样本 — relay; protocol-native tools depend on the upstream",
+    source: "landscape.md §7 New API 样本 — relay; protocol-native tools depend on the upstream; Kiro-served Claude singled out by id (第十五个样本)",
   },
   ollama: {
     origin: "http://localhost:11434",
@@ -355,7 +355,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   custom: {
     endpoints: GENERIC_ENDPOINTS,
     hosts: [],
-    source: "protocol vocabulary only",
+    source: "protocol vocabulary only; Kiro-served Claude singled out by id, as on newapi (第十五个样本)",
   },
 };
 

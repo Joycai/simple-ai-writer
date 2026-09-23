@@ -37,7 +37,9 @@ function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family:
   if (!platformEndpoints(platform).some((e) => e.family === family)) return "";
   const v = familyVerdict(id, platform, family);
   if (v.status === "no") return "·";
-  const perModel = familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).reason === "model-unlisted";
+  const families = PLATFORM_CAPABILITIES[platform].families;
+  const matcher = typeof (families?.[family]?.[id] ?? families?.all?.[id]) === "object";
+  const perModel = matcher || familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).reason === "model-unlisted";
   return (v.status === "yes" ? "✓" : "?") + (perModel ? " 按模型" : "") + ` ${v.reason}`;
 }
 
@@ -186,6 +188,43 @@ describe("capabilityVerdict", () => {
     expect(capabilityVerdict("structuredOutput", { platform: "minimax", standard: "anthropic_compat" }).reason).toBe("family");
     expect(hasCapability("translateFormat", chat("custom"), { type: "text" })).toBe(true);
     expect(capabilityVerdict("translateFormat", chat("custom"), { type: "vision" }).reason).toBe("model-type");
+  });
+});
+
+// A relay's Kiro-served Claude, measured 2026-09-23 on both routes of one New
+// API relay (landscape.md §7 第十五个样本). The matcher only singles ids out:
+// every other model on the relay keeps the rule's answer.
+describe("a relay's Kiro-served Claude", () => {
+  const KIRO = ["[特价kiro量]claude-opus-5", "特价kiro | claude-opus-4-6", "[kiro2]kiro-claude-sonnet-5"];
+  const RELAYS = ["newapi", "custom"] as const;
+  const chat = (platform: (typeof RELAYS)[number]) => ({ platform, standard: "openai_compat" as const });
+  const anth = (platform: (typeof RELAYS)[number]) => ({ platform, standard: "anthropic_compat" as const });
+
+  it("is not sent what the relay drops or ignores", () => {
+    for (const platform of RELAYS) for (const modelId of KIRO) {
+      for (const id of ["pdfInput", "forcedToolChoice", "structuredOutput"] as const) {
+        expect(capabilityVerdict(id, chat(platform), { modelId }), `${platform} ${id} ${modelId}`).toEqual({ status: "no", reason: "model" });
+      }
+      expect(capabilityVerdict("jsonSchema", chat(platform), { modelId })).toEqual({ status: "no", reason: "requires" });
+      for (const id of ["forcedToolChoice", "web_search"] as const) {
+        expect(capabilityVerdict(id, anth(platform), { modelId }), `${platform} ${id} ${modelId}`).toEqual({ status: "no", reason: "model" });
+      }
+    }
+  });
+
+  it("keeps what works", () => {
+    for (const modelId of KIRO) {
+      expect(hasCapability("temperature", chat("newapi"), { modelId })).toBe(true);
+      expect(hasCapability("temperature", anth("newapi"), { modelId, thinkingCategory: "off" })).toBe(true);
+    }
+  });
+
+  it("leaves every other model on the relay, and a blank id, to the rule", () => {
+    for (const modelId of [undefined, "", "claude-opus-5", "[anti]claude-opus-4-6", "kiro-deepseek-v4"]) {
+      expect(capabilityVerdict("pdfInput", chat("newapi"), { modelId })).toEqual({ status: "yes", reason: "protocol" });
+      expect(capabilityVerdict("forcedToolChoice", anth("custom"), { modelId })).toEqual({ status: "yes", reason: "protocol" });
+      expect(capabilityVerdict("web_search", anth("newapi"), { modelId })).toEqual({ status: "unknown", reason: "unmeasured" });
+    }
   });
 });
 
