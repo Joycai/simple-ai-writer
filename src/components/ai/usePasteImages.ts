@@ -18,7 +18,7 @@
 import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MAX_MESSAGE_IMAGES } from "../../lib/agent/chatRefs";
-import { writePastedImage } from "../../lib/agent/chatStash";
+import { pastedImagePath, writePastedImage } from "../../lib/agent/chatStash";
 import { classifyPaste, PASTE_IMAGE_EXT, pasteDisplayIndex } from "../../lib/agent/pasteImages";
 import { attachedKey, attachProjectFile, type AttachedItem } from "../../lib/lore/aiTask";
 import { useAgentStore } from "../../stores/agentStore";
@@ -66,36 +66,39 @@ export function usePasteImages(
     let images = current.filter((r) => r.kind === "image").length;
     let taken = 0;
     let refused = 0;
-    let failure: string | null = null;
+    const failures: string[] = [];
 
     for (const { file, ext } of files) {
-      // Full before the bytes are written: a refused picture leaves nothing
-      // behind in the scratch area.
-      if (images >= MAX_MESSAGE_IMAGES) { refused++; continue; }
       let path: string;
       try {
-        path = await writePastedImage(projectPath, stashId, new Uint8Array(await file.arrayBuffer()), ext);
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        path = await pastedImagePath(projectPath, stashId, bytes, ext);
+        // The same picture again is the same file (content-named): already a
+        // chip, so neither taken nor refused.
+        if (keys.has(`file:${path}`)) continue;
+        // Full before the bytes are written: a refused picture leaves nothing
+        // behind in the scratch area.
+        if (images >= MAX_MESSAGE_IMAGES) { refused++; continue; }
+        await writePastedImage(path, bytes);
       } catch (e) {
-        failure = t("ai.chat.pasteFailed", {
+        failures.push(t("ai.chat.pasteFailed", {
           defaultValue: "贴图没能存下来：{{error}}",
           error: e instanceof Error ? e.message : String(e),
-        });
+        }));
         continue;
       }
-      // The same picture again is the same file (content-named): already a chip.
-      if (keys.has(`file:${path}`)) continue;
       const name = t("ai.chat.pastedImageName", {
         defaultValue: "粘贴的图片 {{n}}",
         n: pasteDisplayIndex(path, known),
       });
       const outcome = await attachProjectFile({ name, path, kind: "image" });
       if (!outcome.ok) {
-        failure = outcome.reason === "too-large"
+        failures.push(outcome.reason === "too-large"
           ? t("ai.chat.imageTooLarge", {
               defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
               name, size: outcome.sizeMb, max: outcome.maxMb,
             })
-          : t("ai.chat.refUnreadable", { defaultValue: "读不到 {{name}}", name });
+          : t("ai.chat.refUnreadable", { defaultValue: "读不到 {{name}}", name }));
         continue;
       }
       keys.add(`file:${path}`);
@@ -105,14 +108,19 @@ export function usePasteImages(
       setRefs((prev) => [...prev, outcome.item]);
     }
 
-    setError(
-      refused > 0
-        ? t("ai.chat.pasteOverCap", {
+    // Every reason, not the first or the last: a paste that hit the cap and
+    // also had one picture fail must say both, or the author cannot tell
+    // which picture is missing and why.
+    const lines = [
+      ...(refused > 0
+        ? [t("ai.chat.pasteOverCap", {
             defaultValue: "一条消息最多 {{max}} 张图：收了 {{taken}} 张，{{refused}} 张没收",
             max: MAX_MESSAGE_IMAGES, taken, refused,
-          })
-        : failure,
-    );
+          })]
+        : []),
+      ...failures,
+    ];
+    setError(lines.length ? lines.join("；") : null);
   }, [chatKey, setRefs, setError, t]);
 
   return useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {

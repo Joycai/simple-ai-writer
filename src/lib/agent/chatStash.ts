@@ -46,22 +46,25 @@ export function chatStashDir(projectPath: string, stashId: string): string {
 }
 
 /**
- * Write one pasted picture; returns its path.
- *
- * Named by content (the first 12 hex digits of its SHA-256), so the same
- * picture pasted twice is the same file and the same `attachedKey` — the chip
- * row dedupes it without a second mechanism.
+ * Where a pasted picture lives: named by content (the first 12 hex digits of
+ * its SHA-256), so the same picture pasted twice is the same file and the same
+ * `attachedKey` — the chip row dedupes it without a second mechanism. Known
+ * before anything is written, so a picture that is already a chip is
+ * recognised as one before it is counted against the cap.
  */
-export async function writePastedImage(
+export async function pastedImagePath(
   projectPath: string,
   stashId: string,
   bytes: Uint8Array,
   ext: string,
 ): Promise<string> {
   const hash = (await sha256Hex(bytes)).slice(0, 12);
-  const path = joinPath(chatStashDir(projectPath, stashId), `${hash}.${ext}`);
+  return joinPath(chatStashDir(projectPath, stashId), `${hash}.${ext}`);
+}
+
+/** Write a pasted picture at {@link pastedImagePath}'s answer, unless it is already there. */
+export async function writePastedImage(path: string, bytes: Uint8Array): Promise<void> {
   if (!(await fileExists(path))) await writeBinaryFile(path, bytes);
-  return path;
 }
 
 /**

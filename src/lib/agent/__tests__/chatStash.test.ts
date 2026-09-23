@@ -18,7 +18,7 @@ vi.mock("../../fs/fileio", () => ({
 }));
 
 import {
-  chatStashDir, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
+  chatStashDir, pastedImagePath, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
   stashSweepPlan, sweepChatStash, writePastedImage,
 } from "../chatStash";
 import { writeBinaryFile } from "../../fs/fileio";
@@ -61,10 +61,13 @@ describe("stashSweepPlan", () => {
 describe("writePastedImage", () => {
   it("names the file by content, so a second paste is the same file", async () => {
     const bytes = new TextEncoder().encode("same picture");
-    const first = await writePastedImage("/p", "s1", bytes, "png");
-    const second = await writePastedImage("/p", "s1", bytes, "png");
+    const first = await pastedImagePath("/p", "s1", bytes, "png");
+    const second = await pastedImagePath("/p", "s1", bytes, "png");
     expect(first).toBe(second);
     expect(first).toMatch(/^\/p\/\.ai-writer\/tmp\/chat\/s1\/[0-9a-f]{12}\.png$/);
+    expect(await pastedImagePath("/p", "s1", new TextEncoder().encode("other"), "png")).not.toBe(first);
+    await writePastedImage(first, bytes);
+    await writePastedImage(second, bytes);
     // Written once: the second paste found the file already there.
     expect(writeBinaryFile).toHaveBeenCalledTimes(1);
   });
