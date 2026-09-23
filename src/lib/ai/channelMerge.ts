@@ -133,18 +133,21 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
 
   // Upstreams across the merge (capability-gating-plan §8.11). The two rows
   // are one relay, so the merged table describes it better than either half:
-  // a model that had **no** upstream before follows it — for a folded row,
+  // a model the author gave **no** upstream follows it — for a folded row,
   // the absorbed row's own choice first, since it was made for this model id.
-  // A model that **had** one keeps it: where the merged table would answer
-  // differently (one prefix mapped two ways, or `absorb`'s longer prefix now
-  // winning for a `keep` model), the old answer becomes the model's own choice.
+  // A model whose upstream came from its row's **table** keeps it: where the
+  // merged table would answer differently (one prefix mapped two ways, or
+  // `absorb`'s longer prefix now winning for a `keep` model), the old answer
+  // becomes the model's own choice. An upstream only *read off the id* (kiro,
+  // bedrock) is no one's setting — the id is the same after the merge, so it
+  // needs no pinning, and it must not outrank a choice the author made.
   const platform = resolvePlatform(channel.platform, channel.baseUrl, channel.apiStandard);
   const settle = (m: Model, before: Provider["upstreamPrefixes"], fallback?: RelayUpstreamChoice): Model => {
     if (m.relayUpstream) return m;
-    const was = resolveRelayUpstream(platform, m.modelId, undefined, before).upstream;
-    if (!was) return fallback ? { ...m, relayUpstream: fallback } : m;
+    const was = resolveRelayUpstream(platform, m.modelId, undefined, before);
+    if (was.source !== "prefix") return fallback ? { ...m, relayUpstream: fallback } : m;
     const now = resolveRelayUpstream(platform, m.modelId, undefined, channel.upstreamPrefixes).upstream;
-    return was === now ? m : { ...m, relayUpstream: was };
+    return was.upstream === now ? m : { ...m, relayUpstream: was.upstream };
   };
   for (const k of keepModels) {
     const current = updated.get(k.id) ?? k;

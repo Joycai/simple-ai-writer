@@ -148,6 +148,40 @@ describe("planMerge", () => {
     expect(byId.get("k2")?.relayUpstream).toBe("bedrock");
   });
 
+  // An upstream read off the id (kiro, bedrock) is no one's setting: it never
+  // outranks a choice the author made, and it is never pinned as one.
+  it("lets an absorbed row's choice, `none` included, win over an upstream the id only implies", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", { platform: "newapi" });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", { platform: "newapi" });
+    const plan = planMerge(keep, absorb, [
+      model("k1", "r1", "kiro-claude-opus-4-6"),
+      model("a1", "r2", "kiro-claude-opus-4-6", { relayUpstream: "cc" }),
+      model("k2", "r1", "bedrock/claude-opus-4-6"),
+      model("a2", "r2", "bedrock/claude-opus-4-6", { relayUpstream: "none" }),
+      // The kept row's own choice still stands.
+      model("k3", "r1", "kiro-claude-sonnet-5", { relayUpstream: "official" }),
+      model("a3", "r2", "kiro-claude-sonnet-5", { relayUpstream: "cc" }),
+    ]);
+    const byId = new Map(plan.upserts.map((m) => [m.id, m]));
+    expect(byId.get("k1")?.relayUpstream).toBe("cc");
+    expect(byId.get("k2")?.relayUpstream).toBe("none");
+    expect(byId.get("k3")?.relayUpstream).toBe("official");
+  });
+
+  it("never writes an id-implied upstream as the model's own choice when the merged table disagrees", () => {
+    const keep = channel("r1", "https://relay.example/v1", "openai_compat", { platform: "newapi" });
+    const absorb = channel("r2", "https://relay.example", "anthropic_compat", {
+      platform: "newapi", upstreamPrefixes: [{ prefix: "[特价kiro量]", upstream: "anti" }],
+    });
+    const plan = planMerge(keep, absorb, [
+      model("k1", "r1", "[特价kiro量]claude-opus-5"),
+      model("a1", "r2", "kiro-claude-sonnet-5"),
+    ]);
+    // k1 inferred kiro before; the merged table now says anti — it follows the table.
+    expect(plan.upserts.find((m) => m.id === "k1")).toBeUndefined();
+    expect(plan.upserts.find((m) => m.id === "a1")?.relayUpstream).toBeUndefined();
+  });
+
   it("writes the channel, then the models, then the deletes", () => {
     const stmts = mergeStatements(plan, "mmc");
     expect(stmts[0].sql).toMatch(/INSERT INTO providers/);
