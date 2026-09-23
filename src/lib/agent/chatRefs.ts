@@ -112,7 +112,8 @@ interface ChatMessagePayload {
    */
   text: string;
   /**
-   * {@link text} with every picture reduced to its name — what the knowledge
+   * {@link text} with every picture reduced to its name (a pasted one, whose
+   * name the app made up, to nothing) — what the knowledge
    * base's name matching and the retrieval expansion read. The paths and the
    * scratch note are for the model to go and fetch a picture again; to a
    * substring match they are noise that can name entries (`.ai-writer` holds
@@ -239,8 +240,12 @@ export async function buildChatMessage(
   const stashNote = (a: AttachedImage) => isChatStashPath(a.file.path)
     ? i18n.t("ai.chat.imageStashNote", { defaultValue: "（会话暂存，随会话删除）" })
     : "";
+  // A pasted picture's name is made up by the app (「粘贴的图片 N」, "Pasted
+  // image N" — which holds "ted"), not the author's word: left out of matching.
+  const matchNames = (list: AttachedImage[]) =>
+    list.filter((a) => !isChatStashPath(a.file.path)).map((a) => a.file.name).join("\n");
   if (sent.length) {
-    forMatch.set(parts.length, sent.map((a) => a.file.name).join("\n"));
+    forMatch.set(parts.length, matchNames(sent));
     parts.push(
       `${i18n.t("ai.chat.imageBlockLabel", { defaultValue: "【附图】" })}\n${
         sent.map((a, i) => {
@@ -258,7 +263,7 @@ export async function buildChatMessage(
     // The scratch note here too: a text-only model is told about a pasted
     // picture only through this list, and must not link it into the text.
     const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}${stashNote(a)}`).join("\n");
-    forMatch.set(parts.length, unsent.map((a) => a.file.name).join("\n"));
+    forMatch.set(parts.length, matchNames(unsent));
     parts.push(
       opts.visionDelegate
         ? i18n.t("ai.chat.imagesNotSentDelegate", {

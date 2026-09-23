@@ -223,7 +223,10 @@ describe("buildChatMessage", () => {
     expect(out.text).toContain("2. b.png — 参考图/b.png\n");
     // What lore matching reads names the pictures but never locates them: a
     // path or the scratch note would name entries by accident.
-    expect(out.matchText).toContain("粘贴的图片 1\nb.png");
+    expect(out.matchText).toContain("b.png");
+    // A pasted picture's name is the app's, not the author's ("Pasted image"
+    // holds "ted").
+    expect(out.matchText).not.toContain("粘贴的图片");
     expect(out.matchText).not.toContain(".ai-writer");
     expect(out.matchText).not.toContain("参考图/");
     expect(out.matchText).not.toContain("会话暂存");

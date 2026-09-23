@@ -493,15 +493,17 @@ export function AgentChat() {
   // 2d: the composer stays typeable during a run, and Enter queues the draft
   // instead of sending — it goes on the wire the moment the run settles. A
   // manual stop (Esc or the ■ button) clears the queue: stopping is an
-  // intervention, and auto-firing the held message would undo it.
+  // intervention, and auto-firing the held message would undo it. A paste
+  // still becoming chips holds it too — sending now would leave the picture
+  // behind (and `canSend` would refuse, dropping the queue for nothing).
   const [queued, setQueued] = useState(false);
   useEffect(() => {
-    if (chatRunning || !queued) return;
+    if (chatRunning || pasting || !queued) return;
     setQueued(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, queued]);
+  }, [chatRunning, pasting, queued]);
 
   const handleStop = () => {
     setQueued(false);
