@@ -612,7 +612,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (ownerBusy(key, s.runningChats, s.compactingChats, s.chatQueue)) return false;
     await get().persistChat(key);
     const label = sessionLabel(
-      { title: chat.title, preview: chat.turns.find((tn) => tn.role === "user")?.text ?? "" },
+      // sessionPreview, like the saved row: the first question with words.
+      { title: chat.title, preview: sessionPreview(chat.turns) },
       "",
     );
     endGrantFor(set, get, key);
@@ -729,7 +730,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   sendChatTo: async (key, text, quote, refs = [], opts) => {
     const message = text.trim();
     const chat = get().chats[key];
-    if (!message || !chat) return;
+    if (!chat) return;
+    // Words or a picture: chatRefs' hasMessage, spelled out because that
+    // module is only loaded further down.
+    if (!message && !refs.some((r) => r.kind === "image")) return;
     // A manual compaction is about to swap the history this send would append
     // onto. (Running is *not* a reason to refuse any more: the job queues
     // behind the turn in flight and runs when it settles.)
@@ -792,6 +796,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       },
     );
 
+    const attachedImages = refs.flatMap((r) => (r.kind === "image" ? [r.file.path] : []));
     const userTurn: ChatTurn = {
       id: `t${++turnCounter}`, role: "user",
       // The wire gets `message`; the transcript can show something shorter. A
@@ -799,7 +804,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // but a wall of machine-written text attributed to the author on screen.
       text: opts?.displayText ?? message,
       log: [], at: Date.now(), quote: quoted,
-      images: imagePaths.length ? imagePaths : undefined,
+      // Every picture the author attached, not only those that travelled: the
+      // transcript is the record of what was asked, and a picture sent on its
+      // own to a model that cannot read it would otherwise leave a blank turn.
+      // (Whether it travelled the model is told in words — chatRefs.)
+      images: attachedImages.length ? attachedImages : undefined,
     };
     const assistantTurn: ChatTurn = {
       id: `t${++turnCounter}`, role: "assistant", text: "", log: [], at: Date.now(),
@@ -861,7 +870,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const gone = new Set(mine.flatMap((j) => [j.userTurnId, j.assistantTurnId]));
     set((s) => ({ chatQueue: s.chatQueue.filter((j) => j.key !== key) }));
     patchChat(set, key, (c) => ({ turns: c.turns.filter((tn) => !gone.has(tn.id)) }));
-    return mine[0].message;
+    // The chips too, not just the words: a picture sent on its own has no
+    // words, and handing back only the text would drop the whole message.
+    return { text: mine[0].message, refs: mine[0].refs };
   },
 
   promoteChat: (key) => {

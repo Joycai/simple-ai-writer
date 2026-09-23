@@ -33,6 +33,7 @@ import { imageToThumbnailDataUrl } from "../../lib/fs/images";
 import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
+import { hasMessage } from "../../lib/agent/chatRefs";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagentModel";
 import { isAsrEnabled } from "../../lib/asr/flag";
 import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/videoInput";
@@ -473,7 +474,8 @@ export function AgentChat() {
   // would append onto, so the composer waits it out (agentStore guards as well).
   // Not while a paste is still becoming chips: the message would leave without
   // the picture the author pasted a moment before pressing Enter.
-  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
+  // hasMessage: words, or a picture on its own (chat-image-paste-plan §10).
+  const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -624,7 +626,7 @@ export function AgentChat() {
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       if (chatRunning) {
-        if (draftRef.current.trim() && activeModelId) setQueued(true);
+        if (hasMessage(draftRef.current, refs) && activeModelId) setQueued(true);
         return;
       }
       handleSend();
@@ -856,7 +858,18 @@ export function AgentChat() {
             <button
               type="button"
               className={styles.queueBtn}
-              onClick={() => { const text = dequeueChat(activeKey); if (text) setDraft(text); }}
+              onClick={() => {
+                const back = dequeueChat(activeKey);
+                if (!back) return;
+                if (back.text) setDraft(back.text);
+                if (back.refs.length) {
+                  // Ahead of whatever was attached meanwhile, without doubles.
+                  setRefs((prev) => {
+                    const had = new Set(back.refs.map(attachedKey));
+                    return [...back.refs, ...prev.filter((r) => !had.has(attachedKey(r)))];
+                  });
+                }
+              }}
             >
               {t("ai.chat.queueCancel", { defaultValue: "取消排队" })}
             </button>
@@ -1323,7 +1336,8 @@ const UserTurn = memo(function UserTurn({ turn, onCtx, onRewind, confirm, doomed
           <div className={styles.quoteBody}>{turn.quote}</div>
         </div>
       )}
-      <div className={styles.userTurn}><MentionText text={turn.text} /></div>
+      {/* A picture sent on its own has no words: no empty bubble above it. */}
+      {turn.text && <div className={styles.userTurn}><MentionText text={turn.text} /></div>}
       {/* Below the words, unlike an assistant turn's pictures: there the
           prose is a caption for the image, here it is the instruction
           the image came with. */}

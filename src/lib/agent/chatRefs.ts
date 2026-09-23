@@ -29,6 +29,18 @@ import type {
 } from "../lore/aiTask";
 
 /**
+ * Whether the composer holds something to send: words, or a picture.
+ *
+ * A picture on its own is a message — "screenshot, ⌘V, Enter" is the paste
+ * feature's commonest path, and the picture is the question. Other chips are
+ * not: a file or entry with no words is material with nothing asked of it
+ * (docs/feature/agent/chat-image-paste-plan.md §10).
+ */
+export function hasMessage(text: string, refs: readonly AttachedItem[]): boolean {
+  return !!text.trim() || refs.some((r) => r.kind === "image");
+}
+
+/**
  * Longest slice of one referenced file that is inlined. Generous enough for a
  * normal chapter, small enough that four of them don't dominate the window.
  */
@@ -333,7 +345,9 @@ export async function buildChatMessage(
     );
   }
 
-  parts.push(message);
+  // A picture sent on its own has no words to put last; the 【附图】 block is
+  // the whole question, and an empty part would only leave a trailing gap.
+  if (message) parts.push(message);
   const text = parts.join("\n\n");
 
   const videoParts = sentVideos.map((v) => {

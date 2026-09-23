@@ -324,9 +324,13 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
   };
 }
 
-/** Session list label: the first question, collapsed and clipped. */
-export function sessionPreview(turns: readonly PersistedTurn[]): string {
-  const first = turns.find((t) => t.role === "user");
+/**
+ * Session list label: the first question, collapsed and clipped. The first
+ * one *with words* — a picture sent on its own has none, and a blank label
+ * would read as 未命名 while the next question says what the session is about.
+ */
+export function sessionPreview(turns: readonly Pick<PersistedTurn, "role" | "text">[]): string {
+  const first = turns.find((t) => t.role === "user" && t.text.trim());
   if (!first) return "";
   const line = first.text.replace(/\s+/g, " ").trim();
   return line.length > 60 ? line.slice(0, 59) + "…" : line;

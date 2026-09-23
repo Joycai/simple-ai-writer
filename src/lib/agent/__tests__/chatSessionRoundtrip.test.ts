@@ -247,6 +247,16 @@ describe("sessionPreview", () => {
     expect(sessionPreview(long)).toHaveLength(60);
     expect(sessionPreview(long).endsWith("…")).toBe(true);
   });
+
+  it("skips a question that was only a picture", () => {
+    // A blank preview reads as 未命名; the next question says what it is about.
+    const turns: PersistedTurn[] = [
+      { id: "t1", role: "user", text: "", log: [], at: 1, images: ["/p/a.png"] },
+      { id: "t2", role: "assistant", text: "一张截图", log: [], at: 2 },
+      { id: "t3", role: "user", text: "按图改第三段", log: [], at: 3 },
+    ];
+    expect(sessionPreview(turns)).toBe("按图改第三段");
+  });
 });
 
 describe("maxTurnId", () => {
