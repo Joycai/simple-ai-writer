@@ -3,6 +3,7 @@
 > **状态：open。** 2026-09-23 对照厂商四页文档（流式输出 · 深度思考 · 结构化输出(beta) · 文档理解）调研时记下。
 > 行为今天不出错——PDF 走 base64 内联，在 50MB 以内都能用；缺的是大文件与跨轮复用的那条路，以及按量 key 的实测。
 > 实测与上下文见 [`../api/landscape.md`](../api/landscape.md) §7 第十二个样本（含 2026-09-23 补测）。
+> **2026-09-23 复测**（对照厂商「文件输入(Files API)」页）后更正了现象 1、2：套餐 key 确实没有 Files API，但 `file_url` 不止 ② 能用。
 
 ## 现象
 
@@ -10,16 +11,22 @@
    ① 发 `{type:"file", file:{…}}`、② 发 `input_file`。厂商文档另有两条路：
    - **Files API**（推荐）：`POST /api/v3/files`（multipart，`purpose=user_data`），≤512MB，默认存 7 天（1–30），
      状态变 `active` 后 ①② 都用 `file_id` 引用；
-   - **`file_url`**：仅 ②，公网 URL，≤50MB。
+   - **`file_url`**：厂商写仅 ②，公网 URL，≤50MB。**实测套餐 ①②④ 都收**（① `{type:"file",file:{file_url}}`、
+     ④ `document` + `source:{type:"url"}`）。
 
    base64 的上限是文件 <50MB、请求体 ≤64MB；同一文档每轮都重新上传一次。
-2. **套餐 key 用不了它**：`GET /api/plan/v3/files` 404。所以这条路只对按量 key（平台 `volcengine`，`/api/v3`）有意义。
+2. **套餐 key 用不了它**：`/api/plan/v3/files`、`/api/plan/files`、`/api/plan/v1/files` 的列表、上传、检索、删除
+   全 404（路由不存在）；同一把 key 打按量的 `/api/v3/files` 是 401（套餐 key 过不了按量鉴权）。套餐对话端点认
+   `file_id` 字段（假 id 回 404 `ResourceNotFound`，不是 400），但套餐这边没有上传入口。所以 Files API 只对按量 key
+   （平台 `volcengine`，`/api/v3`）有意义；按量上传的文件能否被套餐 key 引用未测。
 3. **按量线路本身从未实测。** 手头只有套餐 key；`volcengine` 画像的请求形状是照文档与套餐实测「假设」出来的
    （`platforms.ts` 的 `source` 写明 *pay-as-you-go wire unmeasured*），能力表对它一个格也没写。
    这次改动（① 回传 `encrypted_content`、json_schema 自动挡）也只在套餐线路测过：前者是协议级改动，两条线路一样生效；
    后者只点了套餐画像，按量仍是 `unknown`。
 
 ## 为什么不现在做
+
+- `file_url` 虽然套餐上三面都通，但它要一个公网可访问的 URL；作者的 PDF 在本地，这条路对本项目等于不存在。
 
 - 写作场景的 PDF 多数远小于 50MB，导入流程（`src/lib/import/`）已会把 PDF 转成 markdown 再用；
   直接喂 PDF 的只有 PDF 子代理（`src/lib/agent/subagent.ts`）。收益只在超大文件或同一文档多轮复用时出现。

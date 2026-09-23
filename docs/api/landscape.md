@@ -1316,6 +1316,7 @@ Responses adapter：
 >   推理从 `reasoning_content` 流出，`usage.completion_tokens_details.reasoning_tokens` 有数。
 > - **思考，④ 面**：同样默认开；`thinking:{type:"disabled"}` 关，`adaptive` 与 `enabled+budget_tokens` 都收，
 >   `output_config.effort` 不报错（效果未比）。thinking 块**没有 `signature`**，原样回传后工具轮第二轮照样 200。
+>   （**2026-09-23 更正**：这只对 2.0 系成立；2.1-turbo 的 thinking 块带 `signature`，见下方补测「④ 的签名」。）
 >   Claude 的两个类目关不掉它（`claude-budget` 不论档位都发 `enabled`，`off` 什么都不发 = 在想），所以加了
 >   `doubao-switch`（adaptive / disabled，同 MiniMax 的拼法）；**强制 `tool_choice` 在思考开时照常可用**
 >   （① `required` / 具名、④ `{type:"tool"}` 三种都 200），所以它不像 `minimax` 那样把强制降成 auto。
@@ -1360,11 +1361,32 @@ Responses adapter：
 >   `json_object`（作者手动声明照发）。`strictify` 把可选字段写成 `type:["string","null"]` 并列入 `required`，①（strict）② 都收下（200，两键齐全）。
 > - **PDF，② 面**：`input_file`（base64 `file_data` + `filename`）三款都读到 PELICAN 7342（`live.volcengine.test.ts`
 >   三族同跑；上文只写了 ①④）。
-> - **Files API**：套餐前缀 `GET /api/plan/v3/files` **404**——`file_id` 与 `file_url`（仅 ②）只可能在按量 key 上用，
->   本项目未支持也未测，见 `docs/issues/volcengine-files-api.md`。
+> - **Files API**：套餐 key 用不了——见下一段 2026-09-23 复测（本条原写「`file_id` 与 `file_url`（仅 ②）只可能在按量
+>   key 上用」，后半句被复测推翻：`file_url` 在套餐 ①②④ 都通）。
 > - **思考开关**：厂商文档列出的模型只写 `enabled`（默认）/ `disabled`，没有一个列 `auto`，所以 `doubao` 类目不发
 >   `thinking:{type:"enabled"|"auto"}` 不是缺口；`reasoning_effort` 七档对 2.x 的映射（xhigh / max → high，
 >   minimal / none = 关）与 `off / low / medium / high` 菜单一致。
+
+> **Files API 复测（2026-09-23，同一把套餐 key；对照厂商「文件输入(Files API)」页，2026.09.08 版）**：
+>
+> - **套餐前缀没有 Files API**：`/api/plan/v3/files`、`/api/plan/files`、`/api/plan/v1/files` 的 `GET`（列表）与
+>   `POST`（multipart `purpose=user_data` + `file`）全 **404**，`/api/plan/v3/files/{id}` 的 `GET` / `DELETE` 也 404——
+>   是路由不存在，不是鉴权失败。同一把 key 打按量的 `/api/v3/files`：**401** `AuthenticationError`，套餐 key 过不了
+>   按量鉴权。厂商这页没提套餐；「接入视觉模型」页给 `/api/plan` 列的端点只有 chat / responses / images / 视频任务。
+>   → 与百炼不同：火山的 Files API 只对按量 key 开放。
+> - **`file_id` 字段在套餐对话端点是认的**：①（`{type:"file",file:{file_id}}`）② （`input_file.file_id`）给一个假 id
+>   都回 **404 `ResourceNotFound`**「The specified resource file is not found」，不是字段错的 400——端点会去查，只是套餐
+>   这边没有上传的入口。按量 key 上传的文件能不能被套餐 key 引用：**未测**（没有按量 key）。
+>   ④ `document` 的 `source.type:"file"` 是 400，报错列出支持值 `base64` / `text` / `url` / `content`。
+> - **`file_url` 三面都通**（公网 PDF，w3.org 的 `dummy.pdf`，2.1-turbo，思考关）：② `input_file.file_url`、
+>   ① `{type:"file",file:{file_url}}`、④ `document` + `source:{type:"url",url}` 都 200 并答出首行「Dummy PDF file」。
+>   厂商文档写 `file_url` **仅 ②**，① 实测也收。对本项目用处不大：作者的 PDF 在本地，公网 URL 无从谈起，
+>   base64 内联仍是唯一实用的路。
+> - **④ 的签名**：2.1-turbo 的 thinking 块带 `signature`（非流式在块上，流式走 `signature_delta`，`dj…` 开头，
+>   与 ① 的 `encrypted_content` 同一种密文）；2.0-mini / 2.0-lite 流式非流式都没有。上文「thinking 块没有
+>   `signature`」只对 2.0 系成立。工具轮把第一轮 content 回传时，**原样、篡改末尾、删掉 `signature` 三种都 200**——
+>   与 Anthropic 官方（篡改即 400）不同，回传错了不会响。`anthropic.ts` 本来就累加 `signature_delta` 并整块回传
+>   `_thinkingBlocks`，不用改；删签名是否像 ① 那样让推理变差，未比。
 
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
