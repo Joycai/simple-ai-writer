@@ -113,7 +113,7 @@ usage 只在开了 `stream_options.include_usage` 时随最后一个 chunk 到�
   （`MAX_IMAGE_EDGE`，image-normalize-plan.md §2.2）；**一次请求的图片合计
   ≤ 24 MiB**（按 data URL 字符数计，`MAX_REQUEST_IMAGE_CHARS`，§2.9）——这一道是
   为 Anthropic 的 32 MB 请求上限定的，DeepSeek 的 48 MiB 顺带满足。单请求张数
-  到不了 15（对话每条 4 张、历史留 3 条、看图子代理 8 张，且都先撞上合计上限）。
+  到不了 15（对话每条 5 张（2026-09-23 前是 4）、历史留 3 条、看图子代理 8 张，且都先撞上合计上限）。
 - **计费**：进模型前统一缩放（小于约 544² 放大，更大的缩到约 1300² 的总像素），
   因此**每张图最多 1024 token**——`lib/ai/tokenEstimate.ts` 的 800/张是同量级。
 - **另外两族同款**：`https://api.deepseek.com/anthropic` 收 ④ 族的

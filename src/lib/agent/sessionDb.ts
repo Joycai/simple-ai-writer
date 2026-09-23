@@ -57,6 +57,13 @@ interface UpsertChatSessionOptions {
   title?: string;
   /** Ids of sessions open right now — never pruned. */
   keep?: readonly number[];
+  /**
+   * The session's scratch directory id (lib/agent/chatStash), mirrored out of
+   * the blob into its own column so the sweep can read every live id without
+   * parsing a single `data`. A null never clears a stored id: a save from a
+   * session that has not pasted anything yet says nothing about the column.
+   */
+  stashId?: string | null;
 }
 
 /**
@@ -79,16 +86,16 @@ export async function upsertChatSession(
   let rowId = id;
   if (rowId !== null) {
     const res = await db.execute(
-      `UPDATE chat_sessions SET data = ?, preview = ?, updated_at = ? WHERE id = ?`,
-      [data, preview, now, rowId],
+      `UPDATE chat_sessions SET data = ?, preview = ?, updated_at = ?, stash_id = COALESCE(?, stash_id) WHERE id = ?`,
+      [data, preview, now, opts.stashId ?? null, rowId],
     );
     // The row can be gone — pruned by another save, or the DB was reset.
     if (res.rowsAffected === 0) rowId = null;
   }
   if (rowId === null) {
     const res = await db.execute(
-      `INSERT INTO chat_sessions (preview, title, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-      [preview, normalizeSessionTitle(opts.title ?? ""), data, now, now],
+      `INSERT INTO chat_sessions (preview, title, data, created_at, updated_at, stash_id) VALUES (?, ?, ?, ?, ?, ?)`,
+      [preview, normalizeSessionTitle(opts.title ?? ""), data, now, now, opts.stashId ?? null],
     );
     rowId = res.lastInsertId ?? 0;
   }
@@ -187,10 +194,36 @@ export async function setChatSessionTitle(
  * Remove one session for good. The only deliberate deletion in this module —
  * the prune above is the other, automatic one. Callers own the confirmation
  * (plan §3.5); this function assumes it was given.
+ *
+ * Returns the row's scratch directory id, read before the row goes, so the
+ * caller can remove the session's pasted pictures with it (chatStash).
  */
-export async function deleteChatSession(projectPath: string, id: number): Promise<void> {
+export async function deleteChatSession(projectPath: string, id: number): Promise<string | null> {
   const db = await getDb(projectPath);
+  let stashId: string | null = null;
+  try {
+    const rows = await db.select<{ stash_id: string | null }[]>(
+      `SELECT stash_id FROM chat_sessions WHERE id = ?`,
+      [id],
+    );
+    stashId = rows[0]?.stash_id ?? null;
+  } catch {
+    // The pictures are the sweep's then; the row still goes.
+  }
   await db.execute(`DELETE FROM chat_sessions WHERE id = ?`, [id]);
+  return stashId;
+}
+
+/**
+ * Every scratch directory id a row still claims — pruned-to-the-cap or not,
+ * since a row that exists is a session that can still be opened.
+ */
+export async function listChatStashIds(projectPath: string): Promise<string[]> {
+  const db = await getDb(projectPath);
+  const rows = await db.select<{ stash_id: string }[]>(
+    `SELECT stash_id FROM chat_sessions WHERE stash_id IS NOT NULL AND stash_id <> ''`,
+  );
+  return rows.map((r) => r.stash_id);
 }
 
 /**

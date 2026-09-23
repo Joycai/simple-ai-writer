@@ -1,0 +1,137 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const fs = vi.hoisted(() => ({
+  files: new Map<string, Uint8Array>(),
+  dirs: [] as { name: string; path: string; isDirectory: boolean; mtimeMs: number | null }[],
+  removed: [] as string[],
+}));
+vi.mock("../../fs/fileio", () => ({
+  fileExists: vi.fn(async (p: string) =>
+    fs.files.has(p) || p.endsWith("/tmp/chat") || fs.dirs.some((d) => d.path === p)),
+  writeBinaryFile: vi.fn(async (p: string, data: Uint8Array) => { fs.files.set(p, data); }),
+  readDir: vi.fn(async () => fs.dirs.map(({ name, path, isDirectory }) => ({ name, path, isDirectory }))),
+  statPath: vi.fn(async (p: string) => {
+    const d = fs.dirs.find((x) => x.path === p);
+    return d ? { isDir: true, size: 0, modifiedMs: d.mtimeMs } : null;
+  }),
+  removeDir: vi.fn(async (p: string) => { fs.removed.push(p); }),
+}));
+
+import {
+  chatStashDir, isPasting, markPasting, pastedImagePath, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
+  subscribePasting,
+  stashSweepPlan, sweepChatStash, writePastedImage,
+} from "../chatStash";
+import { writeBinaryFile } from "../../fs/fileio";
+
+const NOW = 1_800_000_000_000;
+const ROOT = "/p/.ai-writer/tmp/chat";
+const dir = (name: string, ageMs: number | null) =>
+  ({ name, path: `${ROOT}/${name}`, isDirectory: true, mtimeMs: ageMs === null ? null : NOW - ageMs });
+
+beforeEach(() => {
+  fs.files.clear();
+  fs.dirs = [];
+  fs.removed = [];
+  resetChatStashSweepForTests();
+  vi.clearAllMocks();
+});
+
+describe("stashSweepPlan", () => {
+  const old = NOW - STASH_GRACE_MS - 1;
+  it("removes only unclaimed directories past the grace period", () => {
+    const plan = stashSweepPlan(
+      [
+        { id: "live", mtimeMs: old },
+        { id: "orphan", mtimeMs: old },
+        { id: "fresh-orphan", mtimeMs: NOW - 60_000 },
+      ],
+      new Set(["live"]),
+      NOW,
+    );
+    // A live session keeps its pictures whatever their age; an orphan inside
+    // the grace period may be another window's unsent paste.
+    expect(plan).toEqual(["orphan"]);
+  });
+
+  it("keeps a directory whose age is unknown", () => {
+    expect(stashSweepPlan([{ id: "x", mtimeMs: null }], new Set(), NOW)).toEqual([]);
+  });
+});
+
+describe("writePastedImage", () => {
+  it("names the file by content, so a second paste is the same file", async () => {
+    const bytes = new TextEncoder().encode("same picture");
+    const first = await pastedImagePath("/p", "s1", bytes, "png");
+    const second = await pastedImagePath("/p", "s1", bytes, "png");
+    expect(first).toBe(second);
+    expect(first).toMatch(/^\/p\/\.ai-writer\/tmp\/chat\/s1\/[0-9a-f]{12}\.png$/);
+    expect(await pastedImagePath("/p", "s1", new TextEncoder().encode("other"), "png")).not.toBe(first);
+    await writePastedImage(first, bytes);
+    await writePastedImage(second, bytes);
+    // Written once: the second paste found the file already there.
+    expect(writeBinaryFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to build a path under an id that could leave the scratch root", async () => {
+    // A hand-edited session blob; the write must not land in the manuscript.
+    await expect(pastedImagePath("/p", "../../参考", new Uint8Array([1]), "png")).rejects.toThrow();
+  });
+});
+
+describe("sweepChatStash", () => {
+  it("removes orphans past the grace period, once per project per launch", async () => {
+    fs.dirs = [dir("live", STASH_GRACE_MS * 3), dir("gone", STASH_GRACE_MS * 3), dir("new", 1000)];
+    await sweepChatStash("/p", new Set(["live"]), NOW);
+    expect(fs.removed).toEqual([`${ROOT}/gone`]);
+
+    // Second call in the same launch: the contract is one sweep.
+    await sweepChatStash("/p", new Set(), NOW);
+    expect(fs.removed).toEqual([`${ROOT}/gone`]);
+  });
+
+  it("never lets a hand-edited id reach outside the scratch root", async () => {
+    fs.dirs = [{ ...dir("..", STASH_GRACE_MS * 3) }];
+    await sweepChatStash("/p", new Set(), NOW);
+    expect(fs.removed).toEqual([]);
+  });
+});
+
+describe("markPasting", () => {
+  it("counts overlapping pastes, so the first to finish does not free the tab", () => {
+    markPasting("c0", true);
+    markPasting("c0", true);
+    markPasting("c0", false);
+    expect(isPasting("c0")).toBe(true);
+    markPasting("c0", false);
+    expect(isPasting("c0")).toBe(false);
+  });
+
+  it("tells subscribers when a tab starts and stops pasting", () => {
+    // The composer's send button reads this: no send while a paste is still
+    // becoming chips.
+    const seen: boolean[] = [];
+    const off = subscribePasting(() => seen.push(isPasting("c1")));
+    markPasting("c1", true);
+    markPasting("c1", false);
+    off();
+    markPasting("c1", true);
+    markPasting("c1", false);
+    expect(seen).toEqual([true, false]);
+  });
+});
+
+describe("removeChatStash", () => {
+  it("removes a deleted session's directory without waiting", async () => {
+    fs.dirs = [dir("s1", 1000)];
+    await removeChatStash("/p", "s1");
+    expect(fs.removed).toEqual([chatStashDir("/p", "s1")]);
+  });
+
+  it("does nothing for a session that never pasted, or an id that escapes", async () => {
+    await removeChatStash("/p", null);
+    fs.dirs = [dir("..", 1000)];
+    await removeChatStash("/p", "..");
+    expect(fs.removed).toEqual([]);
+  });
+});

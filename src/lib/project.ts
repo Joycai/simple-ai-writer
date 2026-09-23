@@ -204,12 +204,14 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>, project
       data TEXT NOT NULL,
       pinned INTEGER NOT NULL DEFAULT 0,
       title TEXT NOT NULL DEFAULT '',
+      stash_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
   await addChatSessionPinned(db);
   await addChatSessionTitle(db);
+  await addChatSessionStashId(db);
 
   await dropDeadTables(db);
 }
@@ -237,6 +239,18 @@ async function addChatSessionPinned(db: Awaited<ReturnType<typeof Database.load>
  */
 async function addChatSessionTitle(db: Awaited<ReturnType<typeof Database.load>>) {
   await addChatSessionColumn(db, "title", "TEXT NOT NULL DEFAULT ''");
+}
+
+/**
+ * `stash_id` on an existing project's `chat_sessions` — the session's scratch
+ * directory under `.ai-writer/tmp/chat/` (lib/agent/chatStash). A column, not
+ * `json_extract(data)`: the sweep reads every live id at project open, and a
+ * blob can be hundreds of KB. Lower stakes than `pinned` / `title` — a missing
+ * column only means a session's pictures get swept a day after it goes quiet —
+ * but the same ALTER discipline.
+ */
+async function addChatSessionStashId(db: Awaited<ReturnType<typeof Database.load>>) {
+  await addChatSessionColumn(db, "stash_id", "TEXT");
 }
 
 async function addChatSessionColumn(

@@ -56,7 +56,7 @@ describe("chat session titles", () => {
     mockExecute.mockResolvedValueOnce({ rowsAffected: 0, lastInsertId: 0 }); // UPDATE misses
     await upsertChatSession("/p", 3, "{}", "hello", { title: "  第三章\n改稿  " });
     const [sql, params] = stmt(/^\s*INSERT INTO chat_sessions/);
-    expect(flat(sql)).toContain("(preview, title, data, created_at, updated_at)");
+    expect(flat(sql)).toContain("(preview, title, data, created_at, updated_at, stash_id)");
     // Normalised on the way in, like every other spelling of a title write.
     expect(params[1]).toBe("第三章 改稿");
   });
@@ -99,6 +99,23 @@ describe("chat session titles", () => {
     // not reorder the recents. Not pinned: the two axes are independent.
     expect(flat(sql)).toBe("UPDATE chat_sessions SET title = ? WHERE id = ?");
     expect(params).toEqual(["第三章 改稿", 4]);
+  });
+
+  it("mirrors the scratch id into its column, and a null never clears it", async () => {
+    await upsertChatSession("/p", 3, "{}", "hello", { stashId: "s1" });
+    const [sql, params] = stmt(/^\s*UPDATE chat_sessions SET data/);
+    expect(flat(sql)).toContain("stash_id = COALESCE(?, stash_id)");
+    expect(params).toContain("s1");
+    vi.clearAllMocks();
+    mockExecute.mockResolvedValue({ rowsAffected: 1, lastInsertId: 7 });
+    await upsertChatSession("/p", 3, "{}", "hello");
+    const [, nullParams] = stmt(/^\s*UPDATE chat_sessions SET data/);
+    expect(nullParams).toEqual(["{}", "hello", expect.any(Number), null, 3]);
+  });
+
+  it("hands back the deleted row's scratch id so its pictures can go too", async () => {
+    mockSelect.mockResolvedValueOnce([{ stash_id: "s9" }]);
+    expect(await deleteChatSession("/p", 4)).toBe("s9");
   });
 
   it("deletes one row, and only on purpose", async () => {

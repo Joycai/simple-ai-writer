@@ -397,6 +397,17 @@
    session words on the right are state and are never cut. */
 .attachChip { max-width: 320px; }
 .attachChip > span, .attachChip { white-space: nowrap; }
+/* A picture chip's own preview (pasted or @). 16px sits inside the chip's
+   18px line box, so a chip with a thumbnail is as tall as one without; the
+   hairline keeps a white screenshot visible on the accent wash. */
+.attachThumb {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border: 1px solid var(--color-border-muted);
+  border-radius: var(--radius-sm);
+}
 
 .attachChipGhost {
   display: inline-flex;

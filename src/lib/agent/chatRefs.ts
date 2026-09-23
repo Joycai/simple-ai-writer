@@ -22,6 +22,8 @@ import { imagePart, imagesWithinBudget, MAX_REQUEST_IMAGE_CHARS } from "../ai/im
 import { noteVideoTokens } from "../ai/tokenEstimate";
 import { estimateVideoTokens, videoPart } from "../ai/videoInput";
 import { readEntityFile } from "../lore/entity";
+import { projectRelative } from "../paths";
+import { isChatStashPath } from "./pasteImages";
 import type {
   AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText, AttachedVideo,
 } from "../lore/aiTask";
@@ -43,15 +45,20 @@ export const REF_CHAR_CAP = 6000;
 const REF_TOTAL_CHAR_BUDGET = 18_000;
 
 /**
- * Most pictures one message may carry.
+ * Most pictures one message may carry — pasted and `@`-attached together.
  *
  * Separate from the session-wide cap in `trimHistory`: that one keeps a long
  * conversation's *accumulated* images bounded, and counts a message as one
  * entry however many pictures are on it. Without a per-message cap, ten
  * attachments would be ten base64 payloads in a single request body — the
  * request that has to succeed before any trimming ever runs.
+ *
+ * One number for both sources, never a separate paste cap: they are the same
+ * base64 on the same wire (docs/feature/agent/chat-image-paste-plan.md §3.4).
+ * The binding constraint on five is usually the request's byte budget, which
+ * still sends what fits and lists the rest.
  */
-export const MAX_MESSAGE_IMAGES = 4;
+export const MAX_MESSAGE_IMAGES = 5;
 
 /**
  * Most video clips one message may carry: one.
@@ -104,6 +111,15 @@ interface ChatMessagePayload {
    * text half stays a string whatever the wire form turns out to be.
    */
   text: string;
+  /**
+   * {@link text} with every picture reduced to its name (a pasted one, whose
+   * name the app made up, to nothing) — what the knowledge
+   * base's name matching and the retrieval expansion read. The paths and the
+   * scratch note are for the model to go and fetch a picture again; to a
+   * substring match they are noise that can name entries (`.ai-writer` holds
+   * "AI", "deleted" holds "Ted", `assets/<文档名>/` a character's name).
+   */
+  matchText: string;
   /** What goes on the wire — the text alone, or the text plus image parts. */
   content: MessageContent;
   /** Absolute paths of the pictures actually attached, for the transcript. */
@@ -175,9 +191,13 @@ export async function buildChatMessage(
     allowVideo?: boolean;
     /** The model's declared `videoFps`; absent sends no `fps`. */
     videoFps?: number;
+    /** Lets the 【附图】 list name pictures by project-relative path; absent keeps them absolute. */
+    projectPath?: string;
   } = {},
 ): Promise<ChatMessagePayload> {
   const parts: string[] = [];
+  // Where `matchText` says something other than `text`: part index → its words.
+  const forMatch = new Map<number, string>();
 
   const quoted = quote?.trim();
   if (quoted) {
@@ -212,10 +232,26 @@ export async function buildChatMessage(
   const unsent = images.slice(sent.length);
   // Named, not just shown: "第二张图里的那件外套" only resolves if the model
   // knows which picture is which, and the parts array carries no filenames.
+  // And located: the pixels leave the context after a turn or two (the image
+  // lease, trimHistory's caps, the saved session), this text does not — with
+  // the path in it, "read it again" has something to read. A pasted picture
+  // is marked as scratch so the model never links it into the manuscript:
+  // the file goes when the session does.
+  const stashNote = (a: AttachedImage) => isChatStashPath(a.file.path)
+    ? i18n.t("ai.chat.imageStashNote", { defaultValue: "（会话暂存，随会话删除）" })
+    : "";
+  // A pasted picture's name is made up by the app (「粘贴的图片 N」, "Pasted
+  // image N" — which holds "ted"), not the author's word: left out of matching.
+  const matchNames = (list: AttachedImage[]) =>
+    list.filter((a) => !isChatStashPath(a.file.path)).map((a) => a.file.name).join("\n");
   if (sent.length) {
+    forMatch.set(parts.length, matchNames(sent));
     parts.push(
       `${i18n.t("ai.chat.imageBlockLabel", { defaultValue: "【附图】" })}\n${
-        sent.map((a, i) => `${i + 1}. ${a.file.name}`).join("\n")
+        sent.map((a, i) => {
+          const where = (opts.projectPath && projectRelative(opts.projectPath, a.file.path)) || a.file.path;
+          return `${i + 1}. ${a.file.name} — ${where}${stashNote(a)}`;
+        }).join("\n")
       }`,
     );
   }
@@ -224,7 +260,10 @@ export async function buildChatMessage(
     // still be *read* — by the vision subagent, which takes a path. Naming the
     // file alone left the model with something it could see was missing and no
     // way to go and get it.
-    const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}`).join("\n");
+    // The scratch note here too: a text-only model is told about a pasted
+    // picture only through this list, and must not link it into the text.
+    const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}${stashNote(a)}`).join("\n");
+    forMatch.set(parts.length, matchNames(unsent));
     parts.push(
       opts.visionDelegate
         ? i18n.t("ai.chat.imagesNotSentDelegate", {
@@ -307,6 +346,7 @@ export async function buildChatMessage(
 
   return {
     text,
+    matchText: parts.map((p, i) => forMatch.get(i) ?? p).join("\n\n"),
     content: sent.length || videoParts.length
       ? [
           { type: "text", text },

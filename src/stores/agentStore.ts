@@ -66,6 +66,7 @@ import {
   deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
 } from "../lib/agent/chatSession";
 import { applyRewindCut, planRewind } from "../lib/agent/rewind";
+import { isPasting, removeChatStash, newStashId } from "../lib/agent/chatStash";
 import { deleteChatSession as deleteChatSessionRow, listChatSessions, loadChatSession, normalizeSessionTitle, setChatSessionPinned, setChatSessionTitle, upsertChatSession } from "../lib/agent/sessionDb";
 import { ownerBusy } from "../lib/agent/scheduler";
 import { sessionLabel } from "../lib/agent/sessionDb";
@@ -84,12 +85,13 @@ import { repairToolCallPairing, type RoundLimitDecision, type TruncationDecision
 import { messageCeilingFor } from "../lib/agent/toolCost";
 import { useAiStore } from "./aiStore";
 import type { PendingApproval, ChatTurn, LiveChat, AgentState } from "./agent/types";
-import { newChatKey, freshChat, chatFromSnapshot, patchChat, openSessionIds, refreshSessionList, noteCardFor, endGrantFor, pump, workspaceForSnapshot, buildResumeSeed } from "./agent/chatJob";
+import { newChatKey, freshChat, chatFromSnapshot, patchChat, openSessionIds, refreshSessionList, sweepStashFor, noteCardFor, endGrantFor, pump, workspaceForSnapshot, buildResumeSeed } from "./agent/chatJob";
 import { activeChat, type ChatStateInputs, pickChatStateInputs, chatStateOf } from "./agent/selectors";
 import { applyProposal, flushEditor, type ProposalApplyDeps } from "../lib/agent/proposalApply";
 import { useEditorStore } from "./editorStore";
 import { useLoreStore } from "./loreStore";
-import { useComposerStore } from "./composerStore";
+import { chatComposerOf, useComposerStore } from "./composerStore";
+import { isChatStashPath } from "../lib/agent/pasteImages";
 import type { ApprovalDecision, AskAnswer } from "../lib/agent/registry";
 import { fileExists } from "../lib/fs/fileio";
 import { loadApiKey } from "../lib/keyStore";
@@ -217,6 +219,17 @@ function notifyApproval(bodyKey: string, params?: Record<string, string>): void 
 /** Basename, for a notification that must fit on one line. */
 function fileLabel(path: string): string {
   return baseName(path) || path;
+}
+
+/**
+ * Pasted pictures waiting on this conversation's composer — files in its
+ * scratch directory that only the chips point at so far — or a paste still
+ * on its way there. A tab holding some
+ * is not handed to another conversation (chat-image-paste-plan §9).
+ */
+function hasPastedChips(key: string): boolean {
+  return isPasting(key) || chatComposerOf(useComposerStore.getState(), key).refs
+    .some((r) => r.kind === "image" && isChatStashPath(r.file.path));
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
@@ -564,12 +577,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // fresh start, and chips left on from before are not fresh.
     const empty = s.chatOrder.find((k) => {
       const c = s.chats[k];
-      return c && c.turns.length === 0 && !ownerBusy(k, s.runningChats, s.compactingChats, s.chatQueue);
+      return c && c.turns.length === 0 && !ownerBusy(k, s.runningChats, s.compactingChats, s.chatQueue)
+        // A saved tab (rewound to its first question) with pasted chips still
+        // on its composer: its scratch id stays with its row (below), so the
+        // new conversation could not claim the files those chips point into.
+        && !(c.sessionId !== null && hasPastedChips(k));
     });
     const key = empty ?? newChatKey();
     endGrantFor(set, get, key);
+    // A reused empty tab keeps its scratch id when it never saved: pictures
+    // pasted into it and not sent yet are still on the composer, and their
+    // files live there. One that did save (rewound back to its first
+    // question) shares the id with its row — handing it on would make two
+    // sessions claim one directory, and deleting either would take the
+    // other's pictures.
+    const reused = empty ? s.chats[empty] : undefined;
+    const stashId = reused && reused.sessionId === null ? reused.stashId : null;
     set((st) => ({
-      chats: { ...st.chats, [key]: freshChat(key) },
+      chats: { ...st.chats, [key]: { ...freshChat(key), stashId } },
       chatOrder: empty ? st.chatOrder : [...st.chatOrder, key],
       activeChatKey: key,
       lastClosedLabel: null,
@@ -659,12 +684,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const { useProjectStore } = await import("./projectStore");
     const { projectPath } = useProjectStore.getState();
     if (!projectPath) return false;
+    let stashId: string | null = null;
     try {
-      await deleteChatSessionRow(projectPath, id);
+      stashId = await deleteChatSessionRow(projectPath, id);
     } catch (e) {
       console.warn("chat session delete failed:", e);
       return false;
     }
+    // "删掉后也清理掉": the session's pasted pictures go with it, now — not
+    // at the next sweep. Fire-and-forget, best-effort (chatStash).
+    void removeChatStash(projectPath, stashId ?? (openKey ? s.chats[openKey]?.stashId : null));
     if (openKey) {
       // Same tab bookkeeping as closeChat, minus the persist — the row is
       // gone on purpose, and saving would resurrect it.
@@ -683,6 +712,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
     await refreshSessionList(set, get);
     return true;
+  },
+
+  ensureChatStash: (key) => {
+    const k = key ?? get().activeChatKey;
+    const existing = get().chats[k]?.stashId;
+    if (existing) return existing;
+    const id = newStashId();
+    patchChat(set, k, { stashId: id });
+    return id;
   },
 
   sendChat: (text, quote, refs = [], opts) =>
@@ -731,9 +769,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // the model is resolved, because whether an attached picture can travel at
     // all is a property of the model.
     const { buildChatMessage } = await import("../lib/agent/chatRefs");
-    const { text: wireMessage, content: composed, imagePaths } = await buildChatMessage(
+    const { text: wireMessage, matchText, content: composed, imagePaths } = await buildChatMessage(
       message, quoted, refs,
       {
+        // The 【附图】 list names each picture by its project-relative path,
+        // so one whose pixels later leave the context can be read again.
+        projectPath,
         // Unchanged and deliberately narrow: base64 goes only to a model that
         // can read it. What widened is the *fallback* — see visionDelegate.
         allowImages: canSeeImages(model),
@@ -774,7 +815,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set((s) => ({
       chatQueue: [...s.chatQueue, {
         key, projectPath, focus, message, quoted, refs, opts,
-        model, provider, effectiveSubs, wireMessage, composed, imagePaths,
+        model, provider, effectiveSubs, wireMessage, matchText, composed, imagePaths,
         userTurnId: userTurn.id,
         assistantTurnId: assistantTurn.id,
       }],
@@ -1033,13 +1074,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const data = serializeChatSession({
         turns, history, meta, usage,
         taskId: chat.taskWorkspace?.taskId ?? null,
+        stashId: chat.stashId,
       });
       const id = await upsertChatSession(
         projectPath, chat.sessionId, data, sessionPreview(turns),
         // The title rides only into a *new* row (a rename on an existing one
         // goes through setChatSessionTitle); every open tab is exempt from
         // the prune, whatever its age.
-        { title, keep: openSessionIds(get()) },
+        { title, keep: openSessionIds(get()), stashId: chat.stashId },
       );
       // Another persist may have raced ahead (approve() lands mid-run) — only
       // adopt the id if nothing changed the session underneath.
@@ -1077,7 +1119,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // into a new one — the conversation the author was in stays open.
       const s1 = get();
       const active = s1.chats[s1.activeChatKey];
-      const reuse = active && active.turns.length === 0
+      // Not one with pasted chips on its composer, though: the restored
+      // session would claim another directory than the one they point into,
+      // and nothing would claim theirs.
+      const reuse = active && active.turns.length === 0 && !hasPastedChips(s1.activeChatKey)
         && !ownerBusy(s1.activeChatKey, s1.runningChats, s1.compactingChats, s1.chatQueue);
       const key = reuse ? s1.activeChatKey : newChatKey();
       endGrantFor(set, get, key);
@@ -1247,6 +1292,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     } catch (e) {
       console.warn("chat session restore failed:", e);
     }
+    void sweepStashFor(projectPath, get());
   },
 }));
 

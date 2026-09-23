@@ -25,6 +25,7 @@ import { createSessionMeta, type ChatSessionMeta } from "./compact";
 import { validateSkillState, type SkillState } from "./skillState";
 import { contentWithoutMedia, hasMediaParts } from "./imageHistory";
 import { toPosixPath } from "../paths";
+import { isStashId } from "./pasteImages";
 
 /**
  * Replaces a picture in the *saved* history. Restoring a session brings back
@@ -110,6 +111,12 @@ export interface ChatSnapshot {
    * the previous session's handle live, filing new notes under another task.
    */
   taskId: string | null;
+  /**
+   * The session's scratch directory under `.ai-writer/tmp/chat/` — where its
+   * pasted pictures live (lib/agent/chatStash). Absent until the first paste;
+   * optional so every snapshot built before pasting existed still type-checks.
+   */
+  stashId?: string | null;
 }
 
 /**
@@ -161,6 +168,8 @@ interface SerializedChat {
   usage: PersistedUsage | null;
   /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
   taskId?: string;
+  /** Additive since 1.77 — same terms as `taskId`. */
+  stashId?: string;
 }
 
 export function serializeChatSession(snap: ChatSnapshot): string {
@@ -198,6 +207,7 @@ export function serializeChatSession(snap: ChatSnapshot): string {
     },
     usage: snap.usage,
     ...(snap.taskId ? { taskId: snap.taskId } : {}),
+    ...(snap.stashId ? { stashId: snap.stashId } : {}),
   };
   return JSON.stringify(data);
 }
@@ -309,6 +319,8 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     meta,
     usage: data.usage ?? null,
     taskId: typeof data.taskId === "string" ? data.taskId : null,
+    // An id of the wrong shape is dropped, not trusted: a paste writes under it.
+    stashId: isStashId(data.stashId) ? data.stashId : null,
   };
 }
 

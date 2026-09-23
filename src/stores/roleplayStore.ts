@@ -1408,6 +1408,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       );
       const inlined = refs.filter((r) => !(r.kind === "lore" && resident.has(r.entity.dirPath)));
       const composed = await buildChatMessage(body, quote, inlined, {
+        // Project-relative paths in the 【附图】 list, as the assistant's.
+        projectPath: get().projectPath ?? undefined,
         allowImages: !!model && canSeeImages(model),
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
@@ -1415,7 +1417,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         queue: [...st.queue, {
           agentId,
           wire: composed.content,
-          match: composed.text,
+          match: composed.matchText,
           // 只记**真的内联了**的那些：常驻的早已在账本里，重复记一笔只会把
           // carrier 换成这条问句，等它折叠掉，绑定块里还在的正文就被当成没了。
           refDirs: inlined.flatMap((r) => (r.kind === "lore" ? [r.entity.dirPath] : [])),

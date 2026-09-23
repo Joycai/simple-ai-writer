@@ -13,7 +13,7 @@ vi.mock("../../fs/fileio", () => ({
   fileExists: vi.fn(async () => true),
 }));
 
-import { buildChatMessage } from "../chatRefs";
+import { buildChatMessage, MAX_MESSAGE_IMAGES } from "../chatRefs";
 import type { AttachedItem } from "../../lore/aiTask";
 
 const image = {
@@ -78,10 +78,11 @@ describe("buildChatMessage with more picture than one request carries", () => {
   });
 
   it("names count overflow the same way", async () => {
-    const five = ["1", "2", "3", "4", "5"].map((n) => ({ ...(image as object), file: { name: `${n}.png`, path: `/proj/${n}.png` } }) as AttachedItem);
-    const res = await buildChatMessage("看图", undefined, five, { allowImages: true });
-    expect(res.imagePaths).toHaveLength(4);
-    expect(res.text).toContain("/proj/5.png");
+    const over = Array.from({ length: MAX_MESSAGE_IMAGES + 1 }, (_, i) => String(i + 1))
+      .map((n) => ({ ...(image as object), file: { name: `${n}.png`, path: `/proj/${n}.png` } }) as AttachedItem);
+    const res = await buildChatMessage("看图", undefined, over, { allowImages: true });
+    expect(res.imagePaths).toHaveLength(MAX_MESSAGE_IMAGES);
+    expect(res.text).toContain(`/proj/${MAX_MESSAGE_IMAGES + 1}.png`);
     expect(res.text).not.toContain("读不了图");
   });
 });

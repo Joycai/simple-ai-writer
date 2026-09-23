@@ -11,7 +11,8 @@ import { coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, recor
 import { compactChatHistory, summarizeForCompaction } from "../../lib/agent/compactRun";
 import { requestStateUpdate, updateSkillState } from "../../lib/agent/skillStateRun";
 import { isSkillStateEnabled } from "../../lib/agent/stateFlag";
-import { listChatSessions } from "../../lib/agent/sessionDb";
+import { listChatSessions, listChatStashIds } from "../../lib/agent/sessionDb";
+import { sweepChatStash } from "../../lib/agent/chatStash";
 import type { ChatSnapshot } from "../../lib/agent/chatSession";
 import { MAX_CONCURRENT_RUNS, nextRunnableJobIndex } from "../../lib/agent/scheduler";
 import { appendAgentEventTo, type AgentEvent } from "../../lib/agent/events";
@@ -24,6 +25,7 @@ import { routeTools } from "../../lib/agent/routing";
 import { resolveSubAgentConn } from "../../lib/agent/subagentModel";
 import { newChatStateMemory } from "../../lib/agent/stateFlag";
 import { repairToolCallPairing, runAgent } from "../../lib/agent/runtime";
+import { elideExpiredTurnImages } from "../../lib/agent/imageLease";
 import { recordUsage } from "../../lib/ai/usageRow";
 import { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } from "../../lib/context/budget";
 import { messageCeilingFor } from "../../lib/agent/toolCost";
@@ -95,7 +97,7 @@ export function newChatKey(): string {
 export function emptyChat(key: string): LiveChat {
   return {
     key, sessionId: null, title: "", turns: [], history: null, meta: null, usage: null,
-    contextVersion: 0, taskWorkspace: null, error: null,
+    contextVersion: 0, taskWorkspace: null, stashId: null, error: null,
     disabledSubAgents: [], planMode: false, stateMemory: false, unread: false,
   };
 }
@@ -127,7 +129,7 @@ export function chatFromSnapshot(
   return {
     sessionId, title,
     turns: snap.turns, history: snap.history, meta: snap.meta, usage: snap.usage,
-    contextVersion: 0, taskWorkspace, error: null,
+    contextVersion: 0, taskWorkspace, stashId: snap.stashId ?? null, error: null,
     disabledSubAgents: [], planMode: false, stateMemory: snap.meta.stateMode, unread: false,
   };
 }
@@ -164,6 +166,25 @@ export async function refreshSessionList(set: Set, get: Get): Promise<void> {
   const { projectPath } = useProjectStore.getState();
   if (!projectPath) return;
   set({ chatSessions: await listChatSessions(projectPath, openSessionIds(get())) });
+}
+
+/**
+ * Reconcile `.ai-writer/tmp/chat/` against the sessions this project has: every
+ * id a row claims, plus every open tab's (a tab that pasted but never sent has
+ * no row yet). Once per project per launch — chatStash keeps the tally.
+ * Best-effort from end to end: a failed sweep is stray pictures in tmp.
+ */
+export async function sweepStashFor(projectPath: string, s: AgentState): Promise<void> {
+  try {
+    const live = new Set(await listChatStashIds(projectPath));
+    for (const k of s.chatOrder) {
+      const id = s.chats[k]?.stashId;
+      if (id) live.add(id);
+    }
+    await sweepChatStash(projectPath, live);
+  } catch {
+    // Not reading the live ids means not knowing what is orphaned: skip.
+  }
 }
 
 /**
@@ -213,7 +234,7 @@ export function pump(set: Set, get: Get): void {
 async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
   const {
     key, projectPath, focus, message, quoted, refs, model, provider, effectiveSubs,
-    wireMessage, composed, assistantTurnId,
+    wireMessage, matchText, composed, assistantTurnId,
   } = job;
   const { useAppStore } = await import("../appStore");
   const activeFilePath = focus.filePath;
@@ -406,10 +427,10 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       // 只有首轮走这里；后续轮在 assembleTurnInjection 那侧（见下）。
       // 没绑模型 / 超时 / 出错都退回未扩展的行为，绝不让一次取材优化变成一次
       // 失败的对话。见 docs/feature/lore/lore-retrieval-plan.md §5.3
-      const seedTerms = await expandForRetrieval(wireMessage, controller.signal);
+      const seedTerms = await expandForRetrieval(matchText, controller.signal);
       const seedMatch = seedTerms.length
-        ? `${wireMessage}\n${seedTerms.join(" ")}`
-        : wireMessage;
+        ? `${matchText}\n${seedTerms.join(" ")}`
+        : matchText;
 
       const bundle = await assembleContext(
         systemPrompt,
@@ -599,12 +620,12 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         // Same expansion as the seed, per turn: the question changes every
         // turn, and 「那根杖呢」 is exactly the sort of turn whose words reach
         // nothing on their own.
-        const turnTerms = await expandForRetrieval(wireMessage, controller.signal);
+        const turnTerms = await expandForRetrieval(matchText, controller.signal);
         const inj = await assembleTurnInjection({
           loreIndex: loreIdx,
           // Same match targets as the seed: the question (with its quote and
           // @refs inlined) plus the document's tail neighborhood.
-          matchTarget: wireMessage + focus.text.slice(-500)
+          matchTarget: matchText + focus.text.slice(-500)
             + (turnTerms.length ? `\n${turnTerms.join(" ")}` : ""),
           // Per layer, not per entity: an entity already introduced keeps
           // its body out of the wire and still brings a facet the author
@@ -660,6 +681,10 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       const questionMsg: StreamMessage = { role: "user", content: wireContent };
       if (meta) noteTurnStart(meta, questionMsg);
       history.push(questionMsg);
+      // A new turn is the one place pictures leave by lease (lib/agent/imageLease):
+      // never mid-turn, where the model is looking at them and the prompt
+      // cache would be broken on every tool round.
+      if (meta) elideExpiredTurnImages(history, meta);
       bumpContext();
     }
 

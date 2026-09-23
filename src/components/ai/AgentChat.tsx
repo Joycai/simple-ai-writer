@@ -38,6 +38,7 @@ import { isAsrEnabled } from "../../lib/asr/flag";
 import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/videoInput";
 import { videoMimeOf } from "../../lib/fs/video";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
+import { usePasteImages } from "./usePasteImages";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
 import {
@@ -263,6 +264,15 @@ export function AgentChat() {
   useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
+  // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
+  const { onPaste: handlePaste, pasting } = usePasteImages(activeKey, setRefs, setRefError);
+  // The chips' own previews — every picture chip, `@` and pasted alike, since
+  // a row where half the pictures show and half don't reads as two mechanisms.
+  // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
+  const refThumbs = useImageThumbnails(
+    refs.flatMap((r) => (r.kind === "image" ? [r.file.path] : [])),
+    48,
+  );
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
@@ -461,7 +471,9 @@ export function AgentChat() {
   const attachedQuote = !detached && selection ? selection : undefined;
   // chatCompacting too: a manual compaction is swapping the history a send
   // would append onto, so the composer waits it out (agentStore guards as well).
-  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !!activeModelId;
+  // Not while a paste is still becoming chips: the message would leave without
+  // the picture the author pasted a moment before pressing Enter.
+  const canSend = !!draft.trim() && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -481,15 +493,17 @@ export function AgentChat() {
   // 2d: the composer stays typeable during a run, and Enter queues the draft
   // instead of sending — it goes on the wire the moment the run settles. A
   // manual stop (Esc or the ■ button) clears the queue: stopping is an
-  // intervention, and auto-firing the held message would undo it.
+  // intervention, and auto-firing the held message would undo it. A paste
+  // still becoming chips holds it too — sending now would leave the picture
+  // behind (and `canSend` would refuse, dropping the queue for nothing).
   const [queued, setQueued] = useState(false);
   useEffect(() => {
-    if (chatRunning || !queued) return;
+    if (chatRunning || pasting || !queued) return;
     setQueued(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, queued]);
+  }, [chatRunning, pasting, queued]);
 
   const handleStop = () => {
     setQueued(false);
@@ -991,8 +1005,12 @@ export function AgentChat() {
                 title={[label, shrunk, videoCost, videoNote, t("ai.chat.removeRef")].filter(Boolean).join(" · ")}
               >
                 {/* A picture is the one attachment whose cost the author can't
-                    read off its name — mark it as what it is. */}
-                {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                    read off its name — mark it as what it is: its own pixels
+                    once they are read, the icon until then (same slot, so
+                    the chip doesn't jump). */}
+                {r.kind === "image" && (refThumbs[r.file.path]
+                  ? <img className={styles.attachThumb} src={refThumbs[r.file.path]} alt="" />
+                  : <ImageIcon size={10} strokeWidth={2} />)}
                 {/* A recording travels as a path, not content — the mark says so. */}
                 {r.kind === "media" && <AudioLines size={10} strokeWidth={2} />}
                 {r.kind === "video" && <Film size={10} strokeWidth={2} />}
@@ -1075,6 +1093,7 @@ export function AgentChat() {
             value={draft}
             onChange={handleDraftChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onContextMenu={snippetSave.onTextareaContextMenu}
             {...ime.imeProps}
             placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
