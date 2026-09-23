@@ -2,7 +2,8 @@
 
 > **状态：`open`**（2026-09-23）。事实已实测并记在 [`api/landscape.md`](../api/landscape.md) §7 第十五、十六个样本。
 > **渠道（上游）部分已解决**：改成作者声明的上游 + 内置画像，见 [`api/capability-gating-plan.md`](../api/capability-gating-plan.md) §8.11
-> （`KIRO_CLAUDE` 已迁成按 id 推断出的 Kiro 上游）。**仍未决的是下面第 1 条的 New API 转换层**。
+> （`KIRO_CLAUDE` 已迁成按 id 推断出的 Kiro 上游）。**仍未决的是下面「做的时候」第 1 条的 New API 转换层与第 3 条的官 key 补测**。
+> 本文写于「上游」一词确定之前，文中的「渠道」指中转站背后的后端，即现在的「上游」（[`reference/terminology.md`](../reference/terminology.md)）。
 
 ## 是什么
 
