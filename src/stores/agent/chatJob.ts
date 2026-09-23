@@ -25,6 +25,7 @@ import { routeTools } from "../../lib/agent/routing";
 import { resolveSubAgentConn } from "../../lib/agent/subagentModel";
 import { newChatStateMemory } from "../../lib/agent/stateFlag";
 import { repairToolCallPairing, runAgent } from "../../lib/agent/runtime";
+import { elideExpiredTurnImages } from "../../lib/agent/imageLease";
 import { recordUsage } from "../../lib/ai/usageRow";
 import { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } from "../../lib/context/budget";
 import { messageCeilingFor } from "../../lib/agent/toolCost";
@@ -680,6 +681,10 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       const questionMsg: StreamMessage = { role: "user", content: wireContent };
       if (meta) noteTurnStart(meta, questionMsg);
       history.push(questionMsg);
+      // A new turn is the one place pictures leave by lease (lib/agent/imageLease):
+      // never mid-turn, where the model is looking at them and the prompt
+      // cache would be broken on every tool round.
+      if (meta) elideExpiredTurnImages(history, meta);
       bumpContext();
     }
 
