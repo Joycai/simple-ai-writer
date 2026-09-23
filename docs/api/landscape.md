@@ -1341,6 +1341,29 @@ Responses adapter：
 > `pdfFamilies` 与 `wireReadsPdf`、三个起步模型（多模态 + PDF，Anth 线路停放 `doubao-switch`）、
 > 连通测试在 401 时的二次确认、抽屉里的平台提示条（设计稿 05k TURN 2）。
 
+> **补测（2026-09-23，同一把套餐 key；对照厂商「流式输出」「深度思考」「结构化输出(beta)」「文档理解」四页）**：
+>
+> - **思考摘要与加密原文，① 面**：2.1 系（及 seed-evolving、2.0-lite-260428 起）默认开「思考摘要」——`reasoning_content`
+>   只是摘要，原始思维链加密在 `encrypted_content` 里。流式下它**整串出现在某一个 delta 上**
+>   （`{"delta":{"reasoning_content":"\n","encrypted_content":"djEN…"}}`）。厂商要求工具轮把两者一起回传
+>   （`encrypted_content` 优先；只回传摘要「推理效果下降」但不报错——上面 39 条全过正因如此）。此前 ① 适配器只收
+>   `reasoning_content`；现在 `_reasoning.encrypted` 带上它和产出它的模型，同一模型才回传（换模型解不开）。
+>   ② 不受影响：整条 reasoning output item 本来就原样回传，`encrypted_content` 默认就在。
+> - **usage**：① 末尾 `choices:[]` 的 chunk 带 `completion_tokens_details.reasoning_tokens`；② 是
+>   `output_tokens_details.reasoning_tokens`。本项目两族都不读它（`completion_tokens` 已含，计费不受影响）。
+> - **结构化输出的 strict 语义**：schema 让 `answer` 只能是 `7`，prompt 却要真实结果并多给一个 `reason` 字段——
+>   只有真被约束才会守住。2.1-turbo：① `strict:true` 2/2 守住，① 不带 strict 1/2 越过；② 本项目的 `text.format`
+>   （不带 `strict`）2/2 守住。2.0-lite：① strict 与 ② 都答了 `2` 加 `reason`（**不守 schema**）；2.0-mini：① 守住，
+>   ② 值守住但多出字段。→ 套餐画像 ①② 的 `jsonSchema` 记实测 `yes`，`KNOWN_JSON_SCHEMA` 只收 2.1 系，2.0 仍停在
+>   `json_object`（作者手动声明照发）。
+> - **PDF，② 面**：`input_file`（base64 `file_data` + `filename`）三款都读到 PELICAN 7342（`live.volcengine.test.ts`
+>   三族同跑；上文只写了 ①④）。
+> - **Files API**：套餐前缀 `GET /api/plan/v3/files` **404**——`file_id` 与 `file_url`（仅 ②）只可能在按量 key 上用，
+>   本项目未支持也未测，见 `docs/issues/volcengine-files-api.md`。
+> - **思考开关**：厂商文档列出的模型只写 `enabled`（默认）/ `disabled`，没有一个列 `auto`，所以 `doubao` 类目不发
+>   `thinking:{type:"enabled"|"auto"}` 不是缺口；`reasoning_effort` 七档对 2.x 的映射（xhigh / max → high，
+>   minimal / none = 关）与 `off / low / medium / high` 菜单一致。
+
 来源（2026-09-18）：方舟控制台文档「文本生成」「图片理解」「文档理解」「联网搜索工具」「Function Calling」「Agent Plan 套餐概览」
 （`console.volcengine.com/ark/region:cn-beijing/docs/ark/…`），与上面的实测。
 
