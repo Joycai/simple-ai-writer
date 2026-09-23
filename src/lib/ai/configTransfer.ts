@@ -67,8 +67,9 @@ export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
  * 渠道带一个 `defaultFeeGroupId`（docs/feature/billing/01-fee-groups.md）。
  *
  * v2 的包读得进来：它的模型行还带着 `priceIn` / `pricePerImage` 这些旧列，
- * 落库之后 `ensureAiSchema` 的那一步迁移（`fee_migrated` 为 NULL 的行）会
- * 把它们归并成组——和一台机器从老版本升上来走的是同一条路，不是第二条。
+ * 以 `fee_migrated` 为 NULL 落库，`applyConfigImport` 在事务之后当场跑的
+ * 那一步迁移（和 `ensureAiSchema` 里的是同一个函数）把它们归并成组——和一台
+ * 机器从老版本升上来走的是同一条路，不是第二条。
  * 只认 v2 的构建会**整体拒绝**一个 v3 的包，而不是导到一半：版本检查一直
  * 就是为这件事准备的。
  *
@@ -335,9 +336,9 @@ export function parseConfigBundle(
       translateFormat: parseTranslateFormat(r.translateFormat),
       // Same degradation for a transcription format this build doesn't know.
       asrFormat: parseAsrFormat(r.asrFormat),
-      // 绑定的计费组。v2 及更早的包没有它，落库之后 `ensureAiSchema` 的
-      // 那一步迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
-      // 走的是同一条路。
+      // 绑定的计费组。v2 及更早的包没有它，落库之后 `applyConfigImport`
+      // 当场跑的迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
+      // 走的是同一个函数。
       feeGroupId: str(r.feeGroupId) || undefined,
       pricePerSecond: typeof r.pricePerSecond === "number" ? r.pricePerSecond : undefined,
       // Unknown value → auto, which sends what an undeclared model always sent.
