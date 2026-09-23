@@ -13,7 +13,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { capabilityVerdict, type CapabilityId } from "../../../lib/ai/capabilities";
-import { capabilityModelOf } from "../../../lib/ai/relayUpstream";
+import { capabilityModelOf, type RelayUpstreamChoice } from "../../../lib/ai/relayUpstream";
 import { ROUTE_SHORT } from "../../../lib/ai/routes";
 import type { ServerToolWire } from "../../../lib/ai/platforms";
 import type { ModelType } from "../../../lib/ai/configDb";
@@ -24,7 +24,7 @@ const GLYPH = { yes: "✓", unknown: "?", no: "—" } as const;
 const CELL = { yes: r.cellYes, unknown: r.cellUnknown, no: r.cellNo } as const;
 
 export function CapabilityMatrix({
-  label, ids, rowLabel, routes, current, wireFor, modelId, type,
+  label, ids, rowLabel, routes, current, wireFor, modelId, type, relayUpstream,
 }: {
   /** The table's accessible name, e.g. 「服务端工具 · 各线路可用性」. */
   label: string;
@@ -38,10 +38,16 @@ export function CapabilityMatrix({
   /** Blank = the model-id axis is not consulted (nothing typed yet). */
   modelId: string;
   type: ModelType;
+  /**
+   * The relay upstream the model resolves to (`resolveRelayUpstream`), the
+   * same on every route — the prefix table is the channel's. Absent = a
+   * product name in the id, as for any hand-built request.
+   */
+  relayUpstream?: RelayUpstreamChoice;
 }) {
   const { t } = useTranslation();
   if (ids.length === 0) return null;
-  const model = { ...capabilityModelOf({ modelId: modelId.trim() || undefined }), type };
+  const model = { ...capabilityModelOf({ modelId: modelId.trim() || undefined, relayUpstream }), type };
   return (
     <>
       <table className={r.matrix} aria-label={label}>
@@ -69,6 +75,7 @@ export function CapabilityMatrix({
                   <td key={f} className={`${CELL[v.status]} ${f === current ? r.matrixCur : ""}`}
                     title={`${t(`aiConfig.models.matrix_${v.status}`)} — ${why}`}>
                     {GLYPH[v.status]}
+                    {v.reason === "upstream" && <span className={r.upstreamTag}>{t("aiConfig.upstream.matrixTag")}</span>}
                   </td>
                 );
               })}

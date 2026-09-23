@@ -45,7 +45,9 @@ import {
 } from "../../../lib/ai/serverTools";
 import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
 import { capabilityVerdict, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
-import { capabilityModelOf } from "../../../lib/ai/relayUpstream";
+import {
+  capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
+} from "../../../lib/ai/relayUpstream";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -71,6 +73,7 @@ import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
 import r from "./Routes.module.css";
 import { CapabilityMatrix } from "./CapabilityMatrix";
+import { UpstreamSection } from "./UpstreamFields";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -80,8 +83,8 @@ const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
   "not-api-format": "aiConfig.models.comfyErrNotApi",
 };
 
-type SectionKey = "price" | "limits" | "think" | "caps" | "samp" | "image" | "asr";
-const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", "image", "asr"];
+type SectionKey = "price" | "limits" | "think" | "upstream" | "caps" | "samp" | "image" | "asr";
+const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "upstream", "caps", "samp", "image", "asr"];
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
@@ -137,13 +140,16 @@ const shortDate = (ms: number): string => {
  * Which sections a stored row opens with. Computed from the *row*, once, and
  * never from the live form — see rule 1 in the file header.
  */
-function initialOpen(existing: Model | undefined, add: boolean): Record<SectionKey, boolean> {
+function initialOpen(existing: Model | undefined, add: boolean, hasUpstream: boolean): Record<SectionKey, boolean> {
   const m = existing;
   const caps = m?.caps;
   return {
     price: add || !!m?.feeGroupId,
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
+    // Open when the model has an upstream — its own choice, the channel's
+    // table or a product name in the id — since it decides the caps below.
+    upstream: !!m?.relayUpstream || hasUpstream,
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
@@ -224,7 +230,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
   // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
   // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
-  const pdfWire = can("pdfInput");
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -305,6 +310,21 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // Same reason — a list is not a string. Endpoint-run tools the author grants
   // this model (lib/ai/serverTools).
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
+  // The relay upstream (lib/ai/relayUpstream): the model's own choice, absent
+  // = follow the channel's prefix table. Only offered on a relay platform.
+  const [relayUpstream, setRelayUpstream] = useState<RelayUpstreamChoice | undefined>(existing?.relayUpstream);
+  const onRelay = isRelayPlatform(curWire?.platform);
+  const followedUpstream = resolveRelayUpstream(curWire?.platform, form.modelId, undefined, channel?.upstreamPrefixes);
+  const resolvedUpstream = resolveRelayUpstream(curWire?.platform, form.modelId, relayUpstream, channel?.upstreamPrefixes);
+  // What every capability question below carries, and 「将发送」 with it.
+  const upstreamChoice: RelayUpstreamChoice = resolvedUpstream.upstream ?? "none";
+  const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
+  // The wires with a whole-file content part the adapters map
+  // (openai.ts `file`, responses.ts `input_file`), plus an Anthropic
+  // `document` block where a platform or the relay's upstream measured it
+  // reaching the model. Asked with the upstream: a relay upstream that drops
+  // the part gets no switch, one that reads it gets one on Anthropic too.
+  const pdfWire = can("pdfInput", capModel);
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
@@ -319,7 +339,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // ── Fold state (rule 1) and the 「为什么」 blocks (rule 3) ──────────────────
-  const [open, setOpen] = useState<Record<SectionKey, boolean>>(() => initialOpen(existing, !existing));
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>(() => initialOpen(existing, !existing, !!resolvedUpstream.upstream));
   const toggleSection = (k: SectionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const expandAll = () => setOpen(Object.fromEntries(SECTION_KEYS.map((k) => [k, true])) as Record<SectionKey, boolean>);
   const [why, setWhy] = useState<Partial<Record<WhyKey, boolean>>>({});
@@ -479,7 +499,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // `openai_compat`, and only one of them has `enable_search`.
   const toolWire = curWire;
   const offersServerTool = (id: ServerToolId) =>
-    !!toolWire && hasCapability(id, toolWire, capabilityModelOf({ modelId: form.modelId.trim() }));
+    !!toolWire && hasCapability(id, toolWire, capModel);
   // What is *stored*: the author's grant, whole — kept even where this wire
   // can't say an id (the switch stays on and says 不发送), because the grant is
   // the author's and a provider can move platform under it (plan §7 invariant
@@ -487,7 +507,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const declaredServerTools = form.type !== "asr" ? normalizeServerTools(serverTools) : undefined;
   // What is *sent*: the grant cut to this wire, in canonical form (extraction
   // only beside search). The summary line and 将发送 read this one.
-  const grantedServerTools = toolWire ? effectiveServerTools(toolWire, declaredServerTools, form.modelId.trim()) : undefined;
+  const grantedServerTools = toolWire ? effectiveServerTools(toolWire, declaredServerTools, form.modelId.trim(), upstreamChoice) : undefined;
   // Shown: every id the wire offers, plus any the author switched on that it
   // doesn't — so a grant that isn't sent is visible and can be turned off.
   const shownServerTools = SERVER_TOOL_IDS.filter((id) => offersServerTool(id) || serverTools.includes(id));
@@ -497,7 +517,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // was never tried with it (capability-gating-plan §8.7). Either way it is sent.
   const unmeasuredToolHint = (id: ServerToolId) => {
     const modelId = form.modelId.trim();
-    const v = toolWire ? capabilityVerdict(id, toolWire, capabilityModelOf({ modelId })) : undefined;
+    const v = toolWire ? capabilityVerdict(id, toolWire, capModel) : undefined;
     if (v?.status !== "unknown") return "";
     return v.reason === "model-unlisted"
       ? t("aiConfig.models.serverToolModelUnmeasured", { platform: platformName, model: modelId })
@@ -724,6 +744,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // the channel's primary route while it still takes it.
         activeRoute: !existing?.activeRoute && route === channelRoutes[0] ? undefined : route,
         routes: routesToSave(),
+        // Kept off a relay too: the choice is the author's, and a platform
+        // moved back to a relay should find it (it is only read there).
+        relayUpstream,
       };
       if (existing) {
         await updateModel({ ...existing, ...shared });
@@ -876,7 +899,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard, provider.baseUrl, provider.platform)
+      }, provider.apiStandard, provider.baseUrl, provider.platform, upstreamChoice)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────
@@ -947,14 +970,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     textVerbosity: form.textVerbosity !== "auto",
   });
   const matrixProps = (current: ProtocolFamily) => ({
-    routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type,
+    routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type, relayUpstream: upstreamChoice,
   });
   /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
   const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {
     const cat = p?.thinkingCategory;
     const effort = p?.reasoningEffort && p.reasoningEffort !== "default" ? effortLabel(p.reasoningEffort) : null;
     const w = routeWire(f);
-    const tools = w ? effectiveServerTools(w, declaredServerTools, form.modelId.trim()) : undefined;
+    const tools = w ? effectiveServerTools(w, declaredServerTools, form.modelId.trim(), upstreamChoice) : undefined;
     return [
       {
         key: t("aiConfig.models.secThinking"),
@@ -1397,6 +1420,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               )}
             </Fold>
           </Section>
+
+          {onRelay && (
+            <UpstreamSection
+              open={open.upstream}
+              onToggle={() => toggleSection("upstream")}
+              choice={relayUpstream}
+              onChoice={setRelayUpstream}
+              resolved={resolvedUpstream}
+              followed={followedUpstream}
+              modelId={form.modelId}
+            />
+          )}
 
           <Section
             label={t("aiConfig.models.secCaps")}

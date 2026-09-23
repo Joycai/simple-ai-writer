@@ -550,7 +550,7 @@ function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId)
 }
 
 /** Whether an upstream's measurements cover this model id. A blank id is covered by none. */
-function upstreamApplies(upstream: RelayUpstreamId, modelId: string | undefined): boolean {
+export function upstreamApplies(upstream: RelayUpstreamId, modelId: string | undefined): boolean {
   const mid = modelId?.trim().toLowerCase();
   return !!mid && UPSTREAM_CAPABILITIES[upstream].models.test(mid);
 }

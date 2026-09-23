@@ -43,7 +43,7 @@ const PRODUCT_NAMES: readonly { word: string; upstream: RelayUpstreamId }[] = [
 type ProductName = "kiro" | "bedrock";
 
 /** A model's upstream and where it came from — the drawer says the second as well. */
-interface ResolvedUpstream {
+export interface ResolvedUpstream {
   upstream?: RelayUpstreamId;
   /**
    * `model`: the model's own choice (`"none"` leaves `upstream` absent).
@@ -140,7 +140,7 @@ export function capabilityModelOf(o: {
  * row covers yet, most frequent first — what the channel drawer offers to add.
  * It reads the shape New API catalogues use, not any one relay's names.
  */
-export function bracketPrefixes(modelIds: readonly string[], rows: readonly UpstreamPrefix[] = []): string[] {
+export function bracketPrefixes(modelIds: readonly string[], rows: readonly { prefix: string }[] = []): string[] {
   const have = new Set(rows.map((r) => r.prefix.trim().toLowerCase()));
   const counts = new Map<string, number>();
   for (const id of modelIds) {

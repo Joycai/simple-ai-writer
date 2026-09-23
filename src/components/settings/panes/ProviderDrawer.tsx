@@ -26,10 +26,12 @@ import {
   ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
 } from "../../../lib/ai/routes";
 import { SERVER_TOOL_IDS } from "../../../lib/ai/serverTools";
+import { isRelayPlatform, parseUpstreamPrefixes } from "../../../lib/ai/relayUpstream";
 import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 import r from "./Routes.module.css";
+import { UpstreamPrefixTable, type PrefixRow } from "./UpstreamFields";
 
 /**
  * The channel drawer — 设计稿 05k 屏 02 (添加渠道 · 选平台) and 屏 03 (线路表).
@@ -247,6 +249,12 @@ interface Form {
    * 抹掉，而那种抹法不报错。
    */
   defaultFeeGroupId: string;
+  /**
+   * The relay's prefix table as edited (UpstreamFields): rows may be half
+   * typed. Saved through `parseUpstreamPrefixes`, which keeps the complete,
+   * first-of-each-prefix rows only.
+   */
+  upstreamPrefixes: PrefixRow[];
 }
 
 export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
@@ -264,6 +272,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
           host: channelHost(existing),
           endpoints: channelEndpoints(existing),
           defaultFeeGroupId: existing.defaultFeeGroupId ?? "",
+          upstreamPrefixes: existing.upstreamPrefixes?.map((row) => ({ ...row })) ?? [],
         }
       : null,
   );
@@ -297,6 +306,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
       // 换平台不该丢掉作者已经挑好的默认计费组——那是关于钱的选择，
       // 和这台服务器说什么协议无关。
       defaultFeeGroupId: f?.defaultFeeGroupId ?? "",
+      upstreamPrefixes: f?.upstreamPrefixes ?? [],
     }));
   };
 
@@ -336,6 +346,8 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     // it would send `host//api/…`.
     host: official ? "" : form.host.trim().replace(/\/+$/, ""),
     endpoints: form.endpoints,
+    // Present even when empty, so saving an emptied table clears the stored one.
+    upstreamPrefixes: parseUpstreamPrefixes(form.upstreamPrefixes),
     createdAt: existing?.createdAt ?? 0,
   });
   const keyRequired = !comfyMode && !isLocalEndpoint(draft.host ?? "");
@@ -537,6 +549,17 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
               }} />
             <div className={styles.hint}>{t("aiConfig.providers.platformHint")}</div>
           </div>
+        )}
+
+        {/* The relay's upstreams (UpstreamFields): only where a platform fronts
+            several — New API or a typed-in relay. Kept in the form when the
+            platform moves off a relay, and read only while it is one. */}
+        {!comfyMode && !official && isRelayPlatform(form.platform) && (
+          <UpstreamPrefixTable
+            rows={form.upstreamPrefixes}
+            onChange={(upstreamPrefixes) => setForm({ ...form, upstreamPrefixes })}
+            modelIds={existing ? models.filter((m) => m.providerId === existing.id).map((m) => m.modelId) : []}
+          />
         )}
 
         {!official && (

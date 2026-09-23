@@ -2925,6 +2925,47 @@
       "upstream": "Measured on the relay's upstream \"{{upstream}}\""
     },
     "upstream": {
+      "label": "Upstream",
+      "prefixCol": "Model id prefix",
+      "upstreamCol": "Upstream",
+      "prefixPlaceholder": "[prefix]",
+      "pick": "Pick an upstream",
+      "remove": "Remove this row",
+      "addPrefix": "Add a prefix",
+      "found": "Also in this channel's models:",
+      "upstreamHint": "The same model behaves differently behind different upstreams (PDF, forced tools, web search). Map prefixes to upstreams and both the availability matrix and the requests follow what was measured there. Unmapped models are inferred only from a product name in the id (kiro, bedrock); anything else stays unknown.",
+      "modelHint": "Which upstream the relay sends this model to decides what it can actually do. By default it follows the channel's prefix table.",
+      "followNow": "Follow channel · now: {{upstream}}",
+      "none": "No upstream",
+      "noneSub": "protocol defaults",
+      "kindReverse": "Reverse proxy",
+      "kindForward": "Forwarded",
+      "kindOther": "Other",
+      "unmeasured": "unmeasured",
+      "src": {
+        "prefix": "{{upstream}} · prefix {{prefix}}",
+        "inferred": "{{upstream}} · inferred from \"{{word}}\" in the id",
+        "model": "Chosen here",
+        "modelNone": "Chosen here: no upstream",
+        "unsetBracket": "Not set — map {{prefix}} to an upstream in the channel",
+        "unset": "Not set"
+      },
+      "sumUnset": "Not set · protocol defaults",
+      "sumNone": "No upstream · protocol defaults",
+      "notClaude": "This upstream was only measured with Claude; it does not apply to this model, which gets the protocol defaults.",
+      "matrixTag": "upstream",
+      "err": {
+        "dup": "Duplicate prefix — only the first is saved",
+        "empty": "The prefix can't be empty",
+        "noUpstream": "Pick an upstream, or this row won't be saved"
+      },
+      "note": {
+        "kiro": "Measured: thinks, but only \"low\" is actually shallower; ignores the output cap; PDF, forced tools and JSON mode are dropped; web search on its own is hijacked by the relay.",
+        "cc": "Measured: web search, web fetch, PDF and caching are real; no parameter validation. opus-5 returns no thinking text.",
+        "anti": "Measured: never thinks (every thinking parameter is ignored); forced tools, PDFs and text documents are dropped; no caching, about 30 extra tokens per request.",
+        "bedrock": "Measured: validates like the official API and effort levels are real; no web search (a 400 if sent); URL images are refused.",
+        "official": "Unmeasured: unavailable on the day it was tested; protocol defaults apply."
+      },
       "name": {
         "kiro": "Kiro (reverse)",
         "cc": "CC-style (reverse)",
