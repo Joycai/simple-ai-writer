@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11）。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -413,3 +413,46 @@ C1 之后它已经没有调用方了：四族都有思考参数的拼法，它�
 - **后续（2026-09-23）**：同一台中转站又测了 CC / anti / AWSb 三个渠道（landscape.md §7 第十六个样本）。① 面「`response_format` 被丢」
   其实是这台 New API 的转换，所有渠道都一样，不是 Kiro 特有；anti / AWSb 也各有该点名的格子。这些还没进表，原因和做法见
   [`issues/relay-claude-channel-gating.md`](../issues/relay-claude-channel-gating.md)。
+- **再后续（同日）**：按渠道点名改成了上游画像，`KIRO_CLAUDE` 迁成按 id 推断出的 Kiro 上游，见 §8.11。
+
+### 8.11 中转站上游画像：上游由作者声明，能力由内置画像决定（2026-09-23）
+
+**问题。** §8.10 的 `KIRO_CLAUDE` 按 id 正则点名，只点得了 Kiro：第十六个样本在同一台中转站上又测了 CC、anti、AWSb，
+同一个 `claude-opus-4-6` 在四个上游下 PDF、强制工具、联网搜索各不相同（CC 真搜、anti 丢、Bedrock 发了就 400、Kiro 劫持）。
+可这些上游只写在站主自定的前缀里（`[CC量]`、`[anti量]`、`[正向AWSb量1]`），写进正则就是为一台中转站硬编码
+（[`issues/relay-claude-channel-gating.md`](../issues/relay-claude-channel-gating.md)）。
+
+**决定。** 把「这个模型背后是哪个上游」做成独立的一轴，由**作者的数据**给出，能力由**代码里的内置画像**给出：
+
+- **解析**（`src/lib/ai/relayUpstream.ts`）：模型手选（`models.relay_upstream`，含 `"none"`）→ 渠道的「前缀 → 上游」表
+  （`providers.upstream_prefixes`，取最长的匹配前缀，不分大小写）→ id 里的**上游产品名**（`kiro`、`bedrock`）→ 无。
+  只在中转站平台（`newapi` / `custom`）上有意义。`connOptions()` 解析成某个上游或 `"none"`，恒有值——适配器不会再按 id
+  推断盖过作者的表；手搭请求（live 探测、端点探测）缺省时才按 id 推断，行为与 §8.10 相同。
+- **画像**（`capabilities.ts` 的 `UPSTREAM_CAPABILITIES`）：kiro / cc / anti / bedrock / official 五种，每格只写
+  `true` / `false`、只写样本里测过的；作用域只有 Claude（`/claude/`，别的模型没测过）。`familyVerdict` 在 thinking 之后、
+  平台格之前查它，原因码 `upstream`。official 没有格子（当天 502 没测到），选它只表示「这个前缀分过类」。
+- **`KIRO_CLAUDE` 迁移**成「按 id 推断出 Kiro」：五格逐格保持原状态（测试锁住），原因码从 `model` 变成 `upstream`。
+  推断 `bedrock` 是唯一的新行为（作者决定）：id 同时含 `bedrock` 与 `claude` 的模型 ④ 面不再发 `web_search`（Bedrock 没有
+  服务端工具，发了整条请求 400），④ PDF 可发。
+- **界面**：渠道抽屉的「上游」前缀表（列出这个渠道的模型里还没配的 `[…]` 前缀）；模型抽屉的「上游」分节（跟随渠道 /
+  手选 / 不按上游，说明来源，并写一句该上游实测到而能力格表达不了的事——anti 不思考、Kiro 不看输出上限等，只告知不改发送）；
+  可用性矩阵里原因为 `upstream` 的格子带「上游」小标。界面上「渠道」指 provider 行，中转站背后的叫「上游」
+  （[`terminology.md`](../reference/terminology.md)）。
+
+**为什么不是别的做法。**
+
+| 做法 | 为什么没选 |
+| --- | --- |
+| 按站主缩写写正则（§8.10 的推广） | 缩写是一台中转站的私事；换一台就漏点名，也可能误中别家的同名缩写 |
+| 只在模型行上选上游 | 同一上游的模型多时要逐个选；保留为覆盖 |
+| 作者自定义画像、逐格开关 | 作者填的格子没有实测依据，矩阵却会说「实测」；UI 与数据也大得多（作者决定不做） |
+| 把上游做成合成平台（`relay-kiro`） | 平台是渠道级的，上游是模型级的；`PlatformId` 会按上游数翻倍 |
+
+**有意留下的。**
+
+- **New API 的 ①→④ 转换层**（① 面 `response_format` 被丢、`reasoning_effort: "max"` = 不想，四个上游都一样）不进画像：
+  它属于平台，不属于上游，但只有一台 New API 的样本。唯一的例外是 Kiro 画像保留 ① `structuredOutput: false`——那是
+  `KIRO_CLAUDE` 原来就判的，注释写明了真实归属，等转换层那一步落地时挪走。
+- **CC 的强制工具**两面都不写：不带思考时全调用，带 adaptive 思考时 3/8、4/8。判「不发」会丢掉能调用的那部分，
+  结构化任务的回退链本来就兜得住「没调」。
+- **合并渠道**（`channelMerge.ts`）时两张前缀表取并集，同一前缀以保留的一行为准；同 id 模型折叠时保留被吸收行手选的上游。

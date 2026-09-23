@@ -193,7 +193,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [tiered-pricing.md](issues/tiered-pricing.md) | `open` | 千问按输入长度分档计价（顶档 3×），平价 `priceIn/Out` 表达不了；显式缓存写入价同缺。只失真成本统计，典型任务不跨 256K 门槛，故仅留档 + 设计草案 |
 | [volcengine-files-api.md](issues/volcengine-files-api.md) | `open` | 火山方舟 PDF 只走 base64 内联（<50MB），厂商推荐的 Files API / `file_id` 与 `file_url` 未支持；套餐 key 没有 Files API（`/api/plan/…/files` 全 404、`/api/v3/files` 401，2026-09-23 复测），只对按量 key 有意义——而按量线路整条都未实测；`file_url` 套餐三面都通但要公网 URL，对本地文件无用。前提是一把按量 key |
 | [video-capability-per-platform.md](issues/video-capability-per-platform.md) | `open` | 能力判定 C4，作者定为搁置的待办：视频输入仍按协议族放行（① 族任何平台），而 `video_url` 是千问一族的扩展，只在百炼、智谱实测过。做法是改成按平台点名、中继 `unknown`、其余实测前 `no`；前提是 OpenAI 官方 / DeepSeek / xAI / 火山方舟各一条 ① 线路样本 |
-| [relay-claude-channel-gating.md](issues/relay-claude-channel-gating.md) | `open` | 中转站上 Claude 的能力裁决只点了 Kiro：同一台 New API 的 ① 面对所有渠道都丢 `response_format`、`reasoning_effort: "max"` 等于不想；anti / AWSb 各有该点名的格子。没改的原因是渠道前缀是站主自定的缩写，转换层那两条又只有一台 New API 的样本；先补样本（第十五、十六个样本） |
+| [relay-claude-channel-gating.md](issues/relay-claude-channel-gating.md) | `open` | 中转站上 Claude 的能力裁决。按上游裁决已做（作者在渠道上配前缀 → 上游，内置画像，capability-gating-plan §8.11）；仍未决的是 New API 的 ①→④ 转换层：① 面对所有上游都丢 `response_format`、`reasoning_effort: "max"` 等于不想，只有一台 New API 的样本，先补样本 |
 
 ---
 

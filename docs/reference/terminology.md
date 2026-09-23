@@ -99,6 +99,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | Channel（设置里的 provider 行） | 渠道 | 弃「供应商」（2026-09-18）。一行 = 一把 key + 一个平台，下面挂几条线路；「供应商」读起来是一家公司，而同一家公司两把 key 是两个渠道、一把 key 打三个协议是一个渠道。代码里的 `Provider` / `providers` 表不改名。见 `docs/feature/channel-model-route-plan.md` §12 第 10 条 |
 | Route（渠道下的一个协议） | 线路 | 界面上用协议名徽标（`Chat` · `Resp` · `Gemini` · `Anth`），不用编号——编号要背（同文 §6.1） |
 | Platform | 平台 | 这台服务器在协议之外认哪些私有字段（阿里云百炼、DeepSeek 官方、New API……）；不是「厂商」，一个中转站也是一个平台 |
+| Relay upstream（中转站背后的后端） | 上游 | 同一台中转站把同一个模型 id 转给 Kiro、Bedrock……，能力随之不同（2026-09-23，`docs/api/capability-gating-plan.md` §8.11）。**不叫「渠道」**——「渠道」已经是 provider 行，叫了会读成「渠道里的渠道」；选项写「Kiro 反代」「Bedrock 正向」这类名字。代码里是 `relayUpstream` / `upstreamPrefixes` |
 | Folder note（目录自己的 `index.md`） | 目录说明 | 不叫「索引」——清单是可选的，说明才是必有的；文件树右列也只写「说明」（2026-09-22，`docs/feature/lore/folder-note-plan.md` §6） |
 | Category note（`.ai-writer/lore/<分类>/index.md`） | 分类说明 | 同上；与条目的「主条目」是同一个文件名、两个东西，措辞上靠前缀分开 |
 
