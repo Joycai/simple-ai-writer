@@ -625,6 +625,7 @@
       "exportFailed": "导出失败：",
       "importConfirm": "从备份导入 {{providers}} 个渠道、{{models}} 个模型、{{prompts}} 个 Prompt？相同 ID 的配置将被覆盖。",
       "importKeysNote": "备份中包含 {{count}} 个 API Key，导入后将写入系统凭据管理器。",
+      "importFeeGroupsNote": "备份中还包含 {{count}} 个计费组（模型的价格），相同 ID 的将被覆盖。",
       "imported": "导入完成。",
       "importFailed": "导入失败：",
       "invalidFile": "这不是有效的配置备份文件。",
@@ -4060,7 +4061,8 @@
     "cfgRestoreDone": "已合并。",
     "cfgRestoreDoneNote": "渠道、模型和 Prompt 已经按 ID 合并，界面偏好已经生效。",
     "cfgRestoreClose": "完成",
-    "cfgRestoreFormatsNote": "还带着 {{count}} 套自建的排版格式（导出 Word 用的版式），同 ID 的会被覆盖。内置那几套随版本走，不受备份影响。"
+    "cfgRestoreFormatsNote": "还带着 {{count}} 套自建的排版格式（导出 Word 用的版式），同 ID 的会被覆盖。内置那几套随版本走，不受备份影响。",
+    "cfgRestoreFeeGroupsNote": "还带着 {{count}} 个计费组（模型的价格），同 ID 的会被覆盖。"
   },
   "roleplay": {
     "areaBrowser": {

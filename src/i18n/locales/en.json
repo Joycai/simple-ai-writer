@@ -628,6 +628,7 @@
       "exportFailed": "Export failed:",
       "importConfirm": "Import {{providers}} channels, {{models}} models and {{prompts}} prompts from this backup? Entries with the same ID will be replaced.",
       "importKeysNote": "The backup contains {{count}} API key(s); they will be saved to the OS credential manager.",
+      "importFeeGroupsNote": "The backup also carries {{count}} fee group(s) (what your models cost); entries with the same ID will be replaced.",
       "imported": "Import complete.",
       "importFailed": "Import failed:",
       "invalidFile": "This is not a valid config backup file.",
@@ -4069,7 +4070,8 @@
     "cfgRestoreDone": "Merged.",
     "cfgRestoreDoneNote": "Channels, models and prompts have been merged by ID, and the interface preferences are already in effect.",
     "cfgRestoreClose": "Done",
-    "cfgRestoreFormatsNote": "It also carries {{count}} of your own Word layout presets; ones with the same id are overwritten. The built-in presets ship with the app and are untouched by a restore."
+    "cfgRestoreFormatsNote": "It also carries {{count}} of your own Word layout presets; ones with the same id are overwritten. The built-in presets ship with the app and are untouched by a restore.",
+    "cfgRestoreFeeGroupsNote": "It also carries {{count}} fee group(s) (what your models cost); ones with the same ID are replaced."
   },
   "roleplay": {
     "areaBrowser": {

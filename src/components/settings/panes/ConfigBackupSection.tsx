@@ -19,6 +19,7 @@ import { refreshAfterConfigImport } from "../../../stores/configImportRefresh";
 import { useConfigSyncStore, slotHeader } from "../../../stores/configSyncStore";
 import {
   applyConfigImport,
+  keyFailureMessage,
   exportAiConfig,
   stageConfigImport,
 } from "../../../lib/ai/configTransfer";
@@ -98,13 +99,23 @@ export function ConfigBackupSection({ connected }: { connected: boolean }) {
       if (staged.keyCount > 0) {
         confirmMsg += `\n${t("systemSettings.backup.importKeysNote", { count: staged.keyCount })}`;
       }
+      if (staged.feeGroups.length > 0) {
+        confirmMsg += `\n${t("systemSettings.backup.importFeeGroupsNote", { count: staged.feeGroups.length })}`;
+      }
       if (staged.prefs.length > 0) {
         confirmMsg += `\n${t("systemSettings.backup.importPrefsNote", { count: staged.prefs.length })}`;
       }
       if (!window.confirm(confirmMsg)) return;
-      await applyConfigImport(staged);
+      const { failedKeys } = await applyConfigImport(staged);
+      // The rows are committed even when a key missed the keyring, so the
+      // refresh runs either way — skipping it left the stores on the old config.
       await refreshAfterConfigImport();
-      setFileStatus({ ok: true, text: t("systemSettings.backup.imported") });
+      const keyFailure = keyFailureMessage(failedKeys);
+      setFileStatus(
+        keyFailure
+          ? { ok: false, text: keyFailure }
+          : { ok: true, text: t("systemSettings.backup.imported") },
+      );
     } catch (e) {
       const invalid = e instanceof Error && e.message === "invalid-backup";
       setFileStatus({

@@ -33,6 +33,7 @@ import {
 } from "../lib/configsync/password";
 import {
   applyPull,
+  keyFailureMessage,
   preparePull,
   pushConfig,
   pushNeedsPassword,
@@ -269,13 +270,15 @@ export const useConfigSyncStore = create<ConfigSyncState>((set, get) => ({
     if (!prepared) return;
     set({ phase: "applying", error: null });
     try {
-      await applyPull(prepared);
+      const { failedKeys } = await applyPull(prepared);
       // The merge wrote tables and prefs; nothing on screen has re-read them.
+      // That holds when a key missed the keyring too — the rows are committed,
+      // so this is a finished restore with a warning, not a failed one to retry.
       await refreshAfterConfigImport();
       if (target && restorePassword && remember) {
         await rememberSlotPassword(getServerUrl(), target.slot.id, restorePassword);
       }
-      set({ phase: "done" });
+      set({ phase: "done", error: keyFailureMessage(failedKeys) });
     } catch (e) {
       set({ phase: "preview", error: message(e) });
     }

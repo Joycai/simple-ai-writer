@@ -1160,14 +1160,41 @@ export async function listModels(
   return attachFees(rows.map(rowToModel), await listFeeGroups(db));
 }
 
-export function modelUpsert(m: Model): SqlStatement {
+/**
+ * 这一行的价从哪里来，决定 `fee_migrated` 写什么：
+ * - `local`：本机新代码手里的模型（抽屉、探测回写、渠道合并）。绑了组就盖章；
+ *   **没绑组时沿用这一行原来的标记**——启动时的迁移万一没跑完（它失败只 warn），
+ *   库里还有没搬的行，这时一次保存不能替它盖章，否则旧价再也归不了组、从此按
+ *   0 计。新行没有原来的标记，读作 NULL：新建模型的旧价列全是 0，迁移只盖章。
+ * - `restored`：v3 备份包里的模型。绑没绑组都是源机器上决定过的，盖章——
+ *   新机器上没有这一行，「沿用」会读成 NULL，一个在源机器上主动不绑的模型
+ *   就会被迁移按旧价绑回去。
+ * - `legacy`：只有旧的 `price_*` 列可信（v2 及更早的备份包），强制 NULL，
+ *   让迁移按旧价归组——和老机器升上来是同一条路。
+ */
+type ModelPricing = "local" | "restored" | "legacy";
+
+/**
+ * `INSERT OR REPLACE` 是先删旧行再插新行，列清单里没有的列一律回到默认值。
+ * `fee_migrated` 没有默认值，所以它**必须在列清单里**：漏掉它，每写一次模型
+ * 行（抽屉保存、渠道合并、配置还原）标记就被清回 NULL，下次启动迁移把这行
+ * 当成老版本留下的，按从不清零的旧价列重新归组——改过价的组长出重复组，
+ * 主动解绑的模型被绑回去。
+ *
+ * `pricing` 是必填的：`.map(modelUpsert)` 会把下标塞进第二个参数，必填加
+ * 字面量联合让编译器当场点名，每个调用方都得想清楚这一行算哪一种。
+ */
+export function modelUpsert(m: Model, pricing: ModelPricing): SqlStatement {
+  // 沿用原来的标记要在 SQL 里读：REPLACE 删旧行之前，VALUES 里的子查询已经
+  // 求值（sqlite3 实测），而调用方手里的 `Model` 不带这个库内标记。
+  const keep = pricing === "local" && !m.feeGroupId;
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, fee_migrated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
   };
 }
 
@@ -1175,7 +1202,8 @@ export async function saveModel(
   db: Awaited<ReturnType<typeof Database.load>>,
   m: Model
 ): Promise<void> {
-  const { sql, values } = modelUpsert(m);
+  // 抽屉、探测回写、新增：本机新代码手里的 `Model`。
+  const { sql, values } = modelUpsert(m, "local");
   await db.execute(sql, values);
 }
 

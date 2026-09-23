@@ -134,6 +134,11 @@ export function ConfigRestoreModal() {
                   {t("sync.cfgRestoreKeysNote", { count: prepared.bundle.keyCount })}
                 </div>
               )}
+              {prepared.bundle.feeGroups.length > 0 && (
+                <div className={s.footNote} style={{ marginTop: 10 }}>
+                  {t("sync.cfgRestoreFeeGroupsNote", { count: prepared.bundle.feeGroups.length })}
+                </div>
+              )}
               {prepared.bundle.docFormats.length > 0 && (
                 <div className={s.footNote} style={{ marginTop: 10 }}>
                   {t("sync.cfgRestoreFormatsNote", { count: prepared.bundle.docFormats.length })}
@@ -180,6 +185,11 @@ export function ConfigRestoreModal() {
               <div className={s.footNote} style={{ marginTop: 10 }}>
                 {t("sync.cfgRestoreDoneNote")}
               </div>
+              {errorText && (
+                <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--sync-risk-text)" }}>
+                  {errorText}
+                </div>
+              )}
             </div>
             <div className={s.foot}>
               <span className={s.footNote} />

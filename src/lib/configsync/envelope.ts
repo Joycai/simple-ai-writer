@@ -15,7 +15,7 @@
  *   "kind": "ai-writer-config-envelope", "version": 1,
  *   "createdAt": "…", "appVersion": "1.23.1", "device": "REINE-DESKTOP",
  *   "encrypted": true, "hasKeys": true,
- *   "counts": { "providers": 6, "models": 23, "prompts": 4, "prefs": 31 },
+ *   "counts": { "providers": 6, "models": 23, "prompts": 4, "prefs": 31, "docFormats": 2, "feeGroups": 5 },
  *   "kdf":    { "name": "PBKDF2", "hash": "SHA-256", "iterations": 310000, "salt": "<b64>" },
  *   "cipher": { "name": "AES-GCM", "iv": "<b64>" },
  *   "payload": "<b64 ciphertext>"      // encrypted:false → the bundle object itself
@@ -73,6 +73,8 @@ interface EnvelopeCounts {
   prefs: number;
   /** Absent in headers written before Word export shipped. */
   docFormats?: number;
+  /** 计费组。计费组之前写的 header 没有这一项——缺失，不是 0。 */
+  feeGroups?: number;
 }
 
 export interface EnvelopeHeader {
@@ -229,6 +231,7 @@ function countsOf(bundle: ConfigBackup): EnvelopeCounts {
     prompts: bundle.prompts.length,
     prefs: bundle.prefs?.length ?? 0,
     docFormats: bundle.docFormats?.length ?? 0,
+    feeGroups: bundle.feeGroups?.length ?? 0,
   };
 }
 
@@ -312,6 +315,8 @@ function validateHeader(raw: unknown): EnvelopeHeader {
   }
   const counts = (r.counts ?? {}) as Record<string, unknown>;
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  // 后来才加的计数：老 header 没有就是没有，读成 0 会说成「带了 0 个」。
+  const opt = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
   const s = (v: unknown) => (typeof v === "string" ? v : "");
   return {
     kind: ENVELOPE_KIND,
@@ -326,6 +331,8 @@ function validateHeader(raw: unknown): EnvelopeHeader {
       models: n(counts.models),
       prompts: n(counts.prompts),
       prefs: n(counts.prefs),
+      docFormats: opt(counts.docFormats),
+      feeGroups: opt(counts.feeGroups),
     },
     kdf: r.kdf as EnvelopeHeader["kdf"],
     cipher: r.cipher as EnvelopeHeader["cipher"],

@@ -40,7 +40,7 @@ import {
   type Provider,
 } from "./configDb";
 import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
-import { feeGroupUpsert, listFeeGroups, rowToFeeGroup } from "./feeGroupDb";
+import { feeGroupUpsert, listFeeGroups, migrateModelPricesToFeeGroups, rowToFeeGroup } from "./feeGroupDb";
 import type { FeeGroup } from "./feeGroup";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseServerTools } from "./serverTools";
@@ -67,8 +67,9 @@ export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
  * 渠道带一个 `defaultFeeGroupId`（docs/feature/billing/01-fee-groups.md）。
  *
  * v2 的包读得进来：它的模型行还带着 `priceIn` / `pricePerImage` 这些旧列，
- * 落库之后 `ensureAiSchema` 的那一步迁移（`fee_migrated` 为 NULL 的行）会
- * 把它们归并成组——和一台机器从老版本升上来走的是同一条路，不是第二条。
+ * 以 `fee_migrated` 为 NULL 落库，`applyConfigImport` 在事务之后当场跑的
+ * 那一步迁移（和 `ensureAiSchema` 里的是同一个函数）把它们归并成组——和一台
+ * 机器从老版本升上来走的是同一条路，不是第二条。
  * 只认 v2 的构建会**整体拒绝**一个 v3 的包，而不是导到一半：版本检查一直
  * 就是为这件事准备的。
  *
@@ -188,6 +189,13 @@ export interface ParsedConfigBundle {
   docFormats: DocFormatPreset[];
   /** How many imported providers carry an embedded API key. */
   keyCount: number;
+  /**
+   * 包早于计费组（版本 < 3）：模型行上只有旧的 `price_*` 列可信，落库时留着
+   * `fee_migrated` 为 NULL，交给迁移按旧价归组。v3 的模型不管绑没绑组都是
+   * 源机器上决定过的，盖章——否则一个在源机器上主动不绑的模型，会被迁移按
+   * 旧价绑回去。
+   */
+  legacyPrices: boolean;
 }
 
 export interface StagedConfigImport extends ParsedConfigBundle {
@@ -234,6 +242,7 @@ export function parseConfigBundle(
   if (!root || root.kind !== CONFIG_BACKUP_KIND || num(root.version, 0) > CONFIG_BACKUP_VERSION) {
     throw new Error("invalid-backup");
   }
+  const legacyPrices = num(root.version, 0) < 3;
 
   const providers: ProviderBackup[] = [];
   for (const item of Array.isArray(root.providers) ? root.providers : []) {
@@ -327,9 +336,9 @@ export function parseConfigBundle(
       translateFormat: parseTranslateFormat(r.translateFormat),
       // Same degradation for a transcription format this build doesn't know.
       asrFormat: parseAsrFormat(r.asrFormat),
-      // 绑定的计费组。v2 及更早的包没有它，落库之后 `ensureAiSchema` 的
-      // 那一步迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
-      // 走的是同一条路。
+      // 绑定的计费组。v2 及更早的包没有它，落库之后 `applyConfigImport`
+      // 当场跑的迁移会按旧价格列给这一行补上——和一台机器从老版本升上来
+      // 走的是同一个函数。
       feeGroupId: str(r.feeGroupId) || undefined,
       pricePerSecond: typeof r.pricePerSecond === "number" ? r.pricePerSecond : undefined,
       // Unknown value → auto, which sends what an undeclared model always sent.
@@ -433,6 +442,7 @@ export function parseConfigBundle(
     prefs,
     docFormats,
     keyCount: providers.filter((p) => p.apiKey).length,
+    legacyPrices,
   };
 }
 
@@ -468,6 +478,14 @@ export async function stageConfigImport(
  * is reported as exactly what it is: the configuration landed, the keys did
  * not.
  *
+ * That report is a **return value, not a throw.** A throw here meant "the
+ * import failed" to both callers, so they skipped `refreshAfterConfigImport`
+ * over rows that had in fact been committed — the stores kept showing the
+ * pre-restore config, and saving from a stale drawer could overwrite what the
+ * restore had just written. A throw from this function now means the rows did
+ * not land; anything after the commit comes back in `ConfigImportResult`, and
+ * `keyFailureMessage` words it.
+ *
  * That transaction runs through `sqlTransaction`, **not** as `db.execute`d
  * BEGIN/COMMIT around the usual per-row helpers. The SQL plugin hands out a
  * connection pool, so those three calls were three different connections: the
@@ -479,10 +497,10 @@ export async function stageConfigImport(
  * Providers are written before the models that reference them: sqlx connects
  * with `foreign_keys = ON`, and `models.provider_id` is a real foreign key.
  */
-export async function applyConfigImport(staged: ParsedConfigBundle): Promise<void> {
+export async function applyConfigImport(staged: ParsedConfigBundle): Promise<ConfigImportResult> {
   // Not for the writes below — this is what guarantees the tables and their
   // added columns exist before the transaction's own connection touches them.
-  await configDb();
+  const db = await configDb();
 
   await sqlTransaction(await getGlobalDbPath(), [
     // 组先于引用它的两张表：`models.fee_group_id` 与 `providers
@@ -490,9 +508,24 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
     // 但让写入顺序自己成立比依赖「反正没约束」清楚。
     ...staged.feeGroups.map(feeGroupUpsert),
     ...staged.providers.map(({ apiKey: _apiKey, ...provider }) => providerUpsert(provider)),
-    ...staged.models.map(modelUpsert),
+    ...staged.models.map((m) => modelUpsert(m, staged.legacyPrices ? "legacy" : "restored")),
     ...staged.prompts.map(promptUpsert),
   ]);
+
+  // 上面那次 `configDb()` 跑迁移时，这批行还没落库。旧版备份（`legacyPrices`）
+  // 的模型带着 NULL 标记进来，不在这里补跑就要等下次启动——`aiStore` 的
+  // schema 检查一个进程只跑一次，还原之后的刷新读到的全是「未绑定」，这期间
+  // 发出的请求一分钱都记不下来。总是跑而不是只在旧包时跑：幂等，没有待迁移
+  // 的行时就是一条 SELECT。
+  //
+  // 放在事务外：迁移不是还原的一部分，是落库之后的一步派生计算；失败了配置
+  // 已经在库里，不该把一次成功的还原报成失败——下次启动的 `ensureAiSchema`
+  // 会再试，和它自己对迁移失败的处理一样。
+  try {
+    await migrateModelPricesToFeeGroups(db);
+  } catch (e) {
+    console.warn("[config] 还原后的计费组迁移未完成，下次启动再试：", e);
+  }
 
   // Preferences are not part of the transaction and deliberately land after
   // it: they are the cosmetic half of the restore, and a failure here must not
@@ -519,9 +552,17 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
       failed.push(name);
     }
   }
-  if (failed.length) {
-    throw new Error(
-      `Imported the configuration, but could not store the API key for: ${failed.join(", ")}. Enter those keys by hand.`,
-    );
-  }
+  return { failedKeys: failed };
+}
+
+/** What a restore that committed its rows still has to tell the author. */
+export interface ConfigImportResult {
+  /** Names of the providers whose embedded API key did not reach the keyring. */
+  failedKeys: string[];
+}
+
+/** The author-facing sentence for `failedKeys`; null when every key landed. */
+export function keyFailureMessage(failedKeys: string[]): string | null {
+  if (!failedKeys.length) return null;
+  return `Imported the configuration, but could not store the API key for: ${failedKeys.join(", ")}. Enter those keys by hand.`;
 }

@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
   invoke: vi.fn(async (_cmd: string, _args?: Record<string, unknown>) => undefined as unknown),
   execute: vi.fn(async (_sql: string, _values?: unknown[]) => {}),
   select: vi.fn(async () => [] as { name: string }[]),
-  saveApiKey: vi.fn(async () => {}),
+  saveApiKey: vi.fn(async (_id: string, _key: string) => {}),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
@@ -39,7 +39,7 @@ vi.mock("../../fs/transfer", () => ({
   saveTextFileDialog: async () => null,
 }));
 
-const { applyConfigImport } = await import("../configTransfer");
+const { applyConfigImport, keyFailureMessage } = await import("../configTransfer");
 import type { StagedConfigImport } from "../configTransfer";
 
 const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => ({
@@ -58,6 +58,7 @@ const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => (
   prefs: [],
   docFormats: [],
   keyCount: 0,
+  legacyPrices: false,
   ...over,
 });
 
@@ -74,7 +75,7 @@ beforeEach(() => {
   h.invoke.mockReset().mockResolvedValue(undefined);
   h.execute.mockClear();
   h.select.mockClear().mockResolvedValue([]);
-  h.saveApiKey.mockClear();
+  h.saveApiKey.mockReset().mockResolvedValue(undefined);
 });
 
 describe("applyConfigImport", () => {
@@ -125,9 +126,133 @@ describe("applyConfigImport", () => {
     expect(h.saveApiKey).not.toHaveBeenCalled();
   });
 
+  it("reports a keyring failure as a result, not a throw — the rows are already committed", async () => {
+    // A throw read as 导入失败 to both callers, so they skipped
+    // refreshAfterConfigImport over rows that had landed: the stores kept the
+    // pre-restore config until a restart.
+    h.saveApiKey.mockImplementation(async (id: string) => {
+      if (id === "p2") throw new Error("keyring locked");
+    });
+    const key = (id: string, name: string) => ({
+      id, name, baseUrl: "https://x/v1", apiStandard: "openai_compat" as const, createdAt: 1, apiKey: `sk-${id}`,
+    });
+
+    const result = await applyConfigImport(staged({ providers: [key("p1", "Relay"), key("p2", "Backup")] }));
+
+    expect(result.failedKeys).toEqual(["Backup"]);
+    expect(txArgs().statements.length).toBeGreaterThan(0);
+    // Every key is attempted; one miss does not stop the rest.
+    expect(h.saveApiKey).toHaveBeenCalledTimes(2);
+    expect(keyFailureMessage(result.failedKeys)).toBe(
+      "Imported the configuration, but could not store the API key for: Backup. Enter those keys by hand.",
+    );
+  });
+
+  it("returns no failed keys on a clean import", async () => {
+    const result = await applyConfigImport(staged());
+
+    expect(result.failedKeys).toEqual([]);
+    expect(keyFailureMessage(result.failedKeys)).toBeNull();
+  });
+
   it("skips the round trip entirely for a backup that carries only preferences", async () => {
     await applyConfigImport(staged({ providers: [], models: [], prompts: [], prefs: [["app:theme", "dark"]] }));
 
     expect(h.invoke.mock.calls.filter((c) => c[0] === "sqlite_transaction")).toHaveLength(0);
+  });
+});
+
+describe("applyConfigImport · fee_migrated", () => {
+  /** 事务里那条模型语句，列名和值拉成一行。 */
+  function modelRow(): Record<string, unknown> {
+    const stmt = batch().find((x) => /INTO models/.test(x.sql))!;
+    const cols = /\(([^)]*)\)\s*VALUES/.exec(stmt.sql)![1].split(",").map((c) => c.trim());
+    return Object.fromEntries(cols.map((c, i) => [c, stmt.values[i]]));
+  }
+
+  it("v3 的包：模型盖章，不管绑没绑组", async () => {
+    await applyConfigImport(staged());
+    expect(modelRow()).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+
+    h.invoke.mockClear();
+    const [m] = staged().models;
+    await applyConfigImport(staged({ models: [{ ...m, feeGroupId: "g1" }] }));
+    expect(modelRow()).toMatchObject({ fee_group_id: "g1", fee_migrated: 1 });
+  });
+
+  it("v2 及更早的包：留 NULL，交给迁移按旧价归组", async () => {
+    await applyConfigImport(staged({ legacyPrices: true }));
+    expect(modelRow()).toMatchObject({ price_in: 1, price_out: 2, fee_migrated: null });
+  });
+});
+
+/**
+ * 还原之后当场迁移。迁移在事务**之后**跑才看得见刚落库的行——事务之前那次
+ * （`configDb()` 里的 `ensureAiSchema`）只扫得到还原之前就在库里的行。
+ */
+describe("applyConfigImport · 事务之后的迁移", () => {
+  const isMigrationScan = (sql: string) => /FROM models WHERE fee_migrated IS NULL/.test(sql);
+
+  it("事务提交之后再扫一遍待迁移的行", async () => {
+    const order: string[] = [];
+    h.invoke.mockImplementation(async (cmd: string) => { order.push(cmd); return undefined; });
+    h.select.mockImplementation((async (sql: string) => {
+      if (isMigrationScan(sql)) order.push("migrate");
+      return [];
+    }) as never);
+
+    await applyConfigImport(staged({ legacyPrices: true }));
+
+    // 第一次扫描是事务前 ensureAiSchema 的，最后一次必须在事务之后。先确认
+    // 事务真的发出了，否则 indexOf 是 -1，下面那条恒真。
+    expect(order).toContain("sqlite_transaction");
+    expect(order.lastIndexOf("migrate")).toBeGreaterThan(order.indexOf("sqlite_transaction"));
+  });
+
+  it("迁移失败不把一次已经落库的还原报成失败", async () => {
+    let scans = 0;
+    h.select.mockImplementation((async (sql: string) => {
+      // 事务前那次放过（ensureAiSchema 自己会吞），事务后那次抛。
+      if (isMigrationScan(sql) && ++scans > 1) throw new Error("database is locked");
+      return [];
+    }) as never);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // 和正常的还原长得一样：没有失败的 Key，调用方照常刷新、照常报成功。
+      await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toEqual({ failedKeys: [] });
+      expect(scans).toBe(2);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("效果而不只是时机：v2 的模型在 applyConfigImport 返回之前已经绑上了组", async () => {
+    // 事务把模型行「写进库」之后，迁移那次扫描才看得见它——事务前那次看不见。
+    // 这里只模拟这一件事：事务发出之后，待迁移的扫描答出这一行。
+    let committed = false;
+    h.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "sqlite_transaction") committed = true;
+      return undefined;
+    });
+    h.select.mockImplementation((async (sql: string) => {
+      if (isMigrationScan(sql) && committed) {
+        return [{
+          id: "m1", name: "GPT-X", fee_group_id: null,
+          price_in: 1, price_cached_in: 0, price_out: 2, price_per_image: null, price_per_second: null,
+        }];
+      }
+      return [];
+    }) as never);
+
+    await applyConfigImport(staged({ legacyPrices: true }));
+
+    // 迁移走的是池化句柄（和 aiStore 刷新时读的是同一个库），不是事务那条连接。
+    const pooled = h.execute.mock.calls as unknown as [string, unknown[]?][];
+    const inserted = pooled.find(([sql]) => /INSERT INTO fee_groups/.test(sql));
+    expect(inserted, "迁移应当按旧价建一个组").toBeDefined();
+    const groupId = inserted![1]![0];
+    const bound = pooled.find(([sql, v]) => /UPDATE models SET fee_group_id/.test(sql) && v?.[1] === "m1");
+    expect(bound?.[1]?.[0]).toBe(groupId);
   });
 });
