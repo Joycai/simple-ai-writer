@@ -45,6 +45,12 @@ export interface FontPackData {
   weights: { weight: number; sheet: FileSpec; chunks: FileSpec[] }[];
 }
 
+/** Where each pack's license is published — linked from the settings page. */
+export const FONT_PACK_LICENSE: Record<FontPackId, string> = {
+  harmonyos: "https://developer.huawei.com/consumer/cn/doc/design-guides/font-0000001828772001",
+  misans: "https://hyperos.mi.com/font/",
+};
+
 type SourceUrl = (pkg: string, version: string, path: string) => string;
 const npmmirror: SourceUrl = (pkg, v, path) => `https://registry.npmmirror.com/${pkg}/${v}/files/${path}`;
 const jsdelivr = (host: string): SourceUrl => (pkg, v, path) => `https://${host}/npm/${pkg}@${v}/${path}`;

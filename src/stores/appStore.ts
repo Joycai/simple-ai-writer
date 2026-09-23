@@ -64,7 +64,7 @@ const FONT_SCHEMES: FontScheme[] = ["manuscript", "song", "hei", "kai", ...FONT_
  * `app:fontScheme` says what the author chose (and travels in a config
  * backup); whether the files are here is read off disk at startup.
  */
-interface FontPackState {
+export interface FontPackState {
   status: "absent" | "downloading" | "ready" | "error";
   /** Bytes — `total` is known before the first byte, from the pinned table. */
   done: number;
@@ -73,7 +73,7 @@ interface FontPackState {
 }
 
 /** Where deleting the pack in use leaves the author: the sans stack both packs fall back to. */
-const FONT_PACK_FALLBACK: FontScheme = "hei";
+export const FONT_PACK_FALLBACK: FontScheme = "hei";
 
 const THEME_KEY = "app:theme";
 const THEME_LIGHT_KEY = "app:themeLight";
