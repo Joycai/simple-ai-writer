@@ -125,6 +125,14 @@ interface ImageRequest {
    * no such field and ignore it.
    */
   quality?: string;
+  /**
+   * Keep the (single, PNG) input's transparency — the ark route's
+   * `background: "transparent"` + `output_format: "png"`. The caller decides:
+   * it locks the input's alpha mask, so an edit that needs pixels outside the
+   * shape ("add a sky behind it") must not ask for it (docs/api/landscape.md
+   * §7 第十三个样本). The other routes have no such field and ignore it.
+   */
+  transparentBackground?: boolean;
   /** Extra top-level request fields, mirroring StreamOptions.extraBody. */
   extraBody?: Record<string, unknown>;
   signal?: AbortSignal;
@@ -281,6 +289,7 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
     imageSize: req.imageSize,
     quality: req.quality,
     inputImages: req.images?.length ?? 0,
+    ...(req.transparentBackground ? { transparentBackground: true } : {}),
     extraBody: req.extraBody,
   });
 
@@ -1294,7 +1303,8 @@ function lowercaseDataUrlMime(url: string): string {
  * image unless told otherwise, and bills it the same. It sits before
  * `extraBody` so an author who wants the mark can still ask for it.
  * `sequential_image_generation` is never sent — its default is off, and 5.0
- * pro rejects the field outright.
+ * pro rejects the field outright. `transparentBackground` becomes the two
+ * fields the endpoint insists on together: transparent output must be png.
  */
 function arkImageBody(conn: ImageConn, req: ImageRequest): Record<string, unknown> {
   const refs = (req.images ?? []).map(lowercaseDataUrlMime);
@@ -1306,8 +1316,20 @@ function arkImageBody(conn: ImageConn, req: ImageRequest): Record<string, unknow
     ...(req.size ? { size: req.size } : {}),
     response_format: "b64_json",
     watermark: false,
+    ...(req.transparentBackground ? { background: "transparent", output_format: "png" } : {}),
     ...req.extraBody,
   };
+}
+
+/**
+ * The 400 for a transparent-background request whose PNG has an alpha channel
+ * but no transparent pixel. The app only reads the header, which says "may be
+ * transparent"; the endpoint decodes and says which. It refuses before
+ * drawing, so the answer costs nothing.
+ */
+function isNoTransparentPixelError(err: unknown): boolean {
+  if (!(err instanceof ImageHttpError) || err.status !== 400) return false;
+  return (err.param === undefined || err.param === "image") && /transparent pixel/i.test(err.body);
 }
 
 /**
@@ -1336,6 +1358,17 @@ async function arkImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult
 }
 
 async function arkImageOnce(conn: ImageConn, req: ImageRequest): Promise<GeneratedImage[]> {
+  try {
+    return await arkImageRequest(conn, req);
+  } catch (err) {
+    // Nothing transparent to keep, so the plain edit is the same request as
+    // far as the picture goes — retried once, without the two fields.
+    if (!req.transparentBackground || !isNoTransparentPixelError(err)) throw err;
+    return await arkImageRequest(conn, { ...req, transparentBackground: false });
+  }
+}
+
+async function arkImageRequest(conn: ImageConn, req: ImageRequest): Promise<GeneratedImage[]> {
   const url = openaiUrl(conn.baseUrl, "/images/generations");
   const deadline = withDeadline(req.signal, ARK_TIMEOUT_MS);
   try {

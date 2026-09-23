@@ -149,6 +149,7 @@ export function beginImageApiLog(req: {
   imageSize?: string;
   quality?: string;
   inputImages: number;
+  transparentBackground?: boolean;
   extraBody?: Record<string, unknown>;
 }): ImageCallLogger {
   if (!isApiLogEnabled()) return noopImageLogger;

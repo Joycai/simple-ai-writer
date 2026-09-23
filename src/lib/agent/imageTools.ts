@@ -60,6 +60,7 @@ async function proposeIllustration(
     negative?: string;
     sourcePath?: string;
     refPaths?: string[];
+    keepTransparency?: boolean;
     reason?: string;
   },
 ): Promise<ToolResult> {
@@ -103,6 +104,7 @@ async function proposeIllustration(
     ...(negative && comfyRoute ? { negative } : {}),
     sourcePath: spec.sourcePath,
     ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
+    ...(spec.keepTransparency === false ? { keepTransparency: false as const } : {}),
     reason: spec.reason,
   };
 
@@ -370,7 +372,7 @@ export async function editImageTool(
   args: {
     source?: string; path?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -447,6 +449,7 @@ export async function editImageTool(
     // reference would send the same picture twice and spend one of the model's
     // `maxRefs` slots on it.
     refPaths: refs.paths.filter((p) => p !== sourcePath),
+    keepTransparency: args.keep_transparency,
     dest,
     destination,
     path: destPath,
@@ -467,7 +470,7 @@ export async function redrawLoreImageTool(
   args: {
     entity?: string; file?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; negative?: string;
-    desc?: string; note?: string; reason?: string;
+    desc?: string; note?: string; reason?: string; keep_transparency?: boolean;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -512,6 +515,7 @@ export async function redrawLoreImageTool(
     negative: args.negative,
     reason: args.reason,
     refPaths: refs.paths.filter((p) => p !== image.absPath),
+    keepTransparency: args.keep_transparency,
     dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },
     destination: entity.name,
     path: entity.dirPath,

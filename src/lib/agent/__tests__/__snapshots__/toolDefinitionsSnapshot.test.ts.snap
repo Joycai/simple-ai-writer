@@ -1991,6 +1991,10 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
       ],
       "description": "Quality tier (GPT-Image only); omit for default."
      },
+     "keep_transparency": {
+      "type": "boolean",
+      "description": "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene)."
+     },
      "desc": {
       "type": "string",
       "description": "One line describing the new picture, used as its alt text when it is placed in a document."
@@ -2071,6 +2075,10 @@ exports[`tool definitions on the wire > every definition, widest catalogue 1`] =
        "high"
       ],
       "description": "Quality tier (GPT-Image only); omit for default."
+     },
+     "keep_transparency": {
+      "type": "boolean",
+      "description": "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene)."
      },
      "desc": {
       "type": "string",
@@ -4536,6 +4544,10 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
       ],
       "description": "Quality tier (GPT-Image only); omit for default."
      },
+     "keep_transparency": {
+      "type": "boolean",
+      "description": "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene)."
+     },
      "desc": {
       "type": "string",
       "description": "One line describing the new picture, used as its alt text when it is placed in a document."
@@ -4616,6 +4628,10 @@ exports[`tool definitions on the wire > every definition, with page-reading sear
        "high"
       ],
       "description": "Quality tier (GPT-Image only); omit for default."
+     },
+     "keep_transparency": {
+      "type": "boolean",
+      "description": "Transparent source, on a model that keeps transparency: false when the change needs pixels outside its shape (a background, a wider scene)."
      },
      "desc": {
       "type": "string",

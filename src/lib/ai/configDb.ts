@@ -94,6 +94,13 @@ export interface ImageCaps {
   /** How many reference images one edit request may carry. */
   maxRefs?: number;
   /**
+   * Accepts "keep this picture's transparency" on an edit — Seedream 5.0
+   * pro / flash's `background: "transparent"` (docs/api/landscape.md §7
+   * 第十三个样本). Declared rather than read off the dialect: 5.0 lite shares
+   * the family and the size tables' shape but not this field.
+   */
+  transparent?: boolean;
+  /**
    * Which endpoint serves this model's images. Unset ⇒ derived from the
    * provider's API standard, which is right for first-party endpoints and
    * wrong for relays hosting a Gemini image model behind an OpenAI protocol.
@@ -1372,6 +1379,7 @@ export function parseImageCaps(raw: unknown): ImageCaps | undefined {
   if (typeof r.maxRefs === "number" && Number.isInteger(r.maxRefs) && r.maxRefs > 0) {
     caps.maxRefs = r.maxRefs;
   }
+  if (typeof r.transparent === "boolean") caps.transparent = r.transparent;
   if (listed(IMAGE_ROUTES, r.route)) caps.route = r.route as ImageRoute;
   if (typeof r.asyncTask === "boolean") caps.asyncTask = r.asyncTask;
   const comfy = r.comfy as Record<string, unknown> | null | undefined;

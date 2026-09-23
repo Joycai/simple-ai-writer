@@ -320,6 +320,24 @@ describe("input-image cap", () => {
   });
 });
 
+describe("keep_transparency", () => {
+  it("carries only an explicit false onto the proposal — keeping is the default", async () => {
+    const off = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "add a sky behind it", keep_transparency: false }, off.ctx);
+    expect(off.seen[0].keepTransparency).toBe(false);
+
+    const on = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "make it blue", keep_transparency: true }, on.ctx);
+    expect(on.seen[0]).not.toHaveProperty("keepTransparency");
+  });
+
+  it("rides redraw_lore_image too", async () => {
+    const { ctx, seen } = ctxWith();
+    await redrawLoreImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "x", keep_transparency: false }, ctx);
+    expect(seen[0].keepTransparency).toBe(false);
+  });
+});
+
 describe("redraw_lore_image", () => {
   it("carries the source picture and files the result as a new gallery entry", async () => {
     const { ctx, seen } = ctxWith();

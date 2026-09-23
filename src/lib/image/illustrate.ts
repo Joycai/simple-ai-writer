@@ -17,7 +17,7 @@ import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
-import { imageRequestParams, inputImageSize, recordImageUsage } from "./index";
+import { imageRequestParams, inputImageSize, mayBeTransparentPng, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
 import { providerFor } from "../ai/routes";
 import type { AiSettingsSnapshot } from "../agent/subagentModel";
@@ -151,7 +151,19 @@ export async function runIllustration(
     // Always passed: a dialect handed no size may have to omit it, and on
     // qwen-image an omitted size bills the 2K tier.
     const editParams = imageRequestParams(model.caps, sel, { edit: true, inputSize: inputImageSize(images[0]) });
-    const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress };
+    // Keep a transparent source transparent, unless the agent said the change
+    // needs pixels outside its shape: the mode locks the input's alpha mask,
+    // so "add a sky behind it" would paint the sky inside the silhouette and
+    // still bill (docs/api/landscape.md §7 第十三个样本, 2026-09-23). Only a
+    // lone input — the endpoint refuses the mode with references alongside.
+    const keepTransparent = proposal.keepTransparency !== false
+      && model.caps?.transparent === true
+      && images.length === 1
+      && mayBeTransparentPng(images[0]);
+    const editReq = {
+      prompt: proposal.prompt, n: 1, ...negative, ...editParams, signal, ...progress,
+      ...(keepTransparent ? { transparentBackground: true } : {}),
+    };
     try {
       result = await generateImage(conn, { ...editReq, images });
     } catch (err) {

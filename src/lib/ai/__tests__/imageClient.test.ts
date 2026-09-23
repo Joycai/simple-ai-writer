@@ -1083,6 +1083,60 @@ describe("generateImage · ark route (火山方舟 Seedream)", () => {
     expect(res.images[0].mime).toBe("image/png");
   });
 
+  it("asks for transparency as the pair the endpoint insists on, only when told to", async () => {
+    const plain = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="] });
+    expect(plain[0].body).not.toHaveProperty("background");
+    expect(plain[0].body).not.toHaveProperty("output_format");
+
+    vi.unstubAllGlobals();
+    const kept = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="], transparentBackground: true });
+    // Transparent output with jpeg is a 400, so both or neither.
+    expect(kept[0].body.background).toBe("transparent");
+    expect(kept[0].body.output_format).toBe("png");
+  });
+
+  it("ignores transparentBackground on a route with no such field", async () => {
+    const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
+    await generateImage({ ...ARK, route: undefined }, { prompt: "a cat", transparentBackground: true });
+    expect(calls[0].body).not.toHaveProperty("background");
+  });
+
+  /** A fetch that answers each call from the list in turn, recording the bodies. */
+  function mockSequence(answers: { status: number; payload: unknown }[]) {
+    const calls: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      calls.push(JSON.parse(String(init.body)));
+      const a = answers[Math.min(calls.length - 1, answers.length - 1)];
+      return new Response(JSON.stringify(a.payload), { status: a.status, headers: { "content-type": "application/json" } });
+    }));
+    return calls;
+  }
+
+  it("retries once without the pair when the PNG has an alpha channel but nothing transparent in it", async () => {
+    // Measured wording (2026-09-23). The header said "may be transparent";
+    // the endpoint decoded it and said no — before drawing, so for free.
+    const calls = mockSequence([
+      { status: 400, payload: { error: { code: "InvalidParameter", param: "image", message: "The parameter `image` specified in the request are not valid: transparent background requires a PNG input with at least one transparent pixel." } } },
+      { status: 200, payload: { data: [{ b64_json: PNG_B64 }] } },
+    ]);
+    const res = await generateImage(ARK, { prompt: "edit", images: ["data:image/png;base64,aGk="], transparentBackground: true });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].background).toBe("transparent");
+    expect(calls[1]).not.toHaveProperty("background");
+    expect(calls[1]).not.toHaveProperty("output_format");
+    expect(res.images).toHaveLength(1);
+  });
+
+  it("does not retry any other 400 of a transparent request", async () => {
+    const calls = mockSequence([
+      { status: 400, payload: { error: { code: "InvalidParameter", param: "background", message: "The parameter `background` specified in the request are not valid: transparent background requires exactly one input image." } } },
+    ]);
+    await expect(generateImage(ARK, { prompt: "edit", images: ["a", "b"], transparentBackground: true })).rejects.toBeInstanceOf(ImageHttpError);
+    expect(calls).toHaveLength(1);
+  });
+
   it("lets extraBody turn the watermark back on", async () => {
     const calls = mockJson({ data: [{ b64_json: PNG_B64 }] });
     await generateImage(ARK, { prompt: "a cat", extraBody: { watermark: true } });

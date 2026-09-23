@@ -150,7 +150,11 @@ const doubao = (modelId: string, name: string, maxOutput: number): StarterModel 
 // if the author moved it first.
 const seedream = (modelId: string, name: string, dialect: "seedream-5-lite" | "seedream-5-pro"): StarterModel => ({
   modelId, name, type: "image", activeRoute: "openai",
-  caps: { route: "ark", dialect, edit: true, maxRefs: dialect === "seedream-5-pro" ? 10 : 14 },
+  caps: {
+    route: "ark", dialect, edit: true, maxRefs: dialect === "seedream-5-pro" ? 10 : 14,
+    // 5.0 pro / flash take `background: "transparent"`; 5.0 lite does not.
+    ...(dialect === "seedream-5-pro" ? { transparent: true } : {}),
+  },
 });
 const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
   doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite", 131_072),
