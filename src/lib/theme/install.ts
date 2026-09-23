@@ -21,9 +21,10 @@
  * sandboxed frames of their own (`sample.ts`).
  *
  * `<style>` elements rather than `document.adoptedStyleSheets`: constructed
- * sheets arrived in WebKit 16.4, above the floor the build targets. The
- * layer makes the ui injection point irrelevant; the markdown sheet must
- * simply come after the generator's, which appending guarantees.
+ * sheets arrived in WebKit 16.4, above the floor the build targets. The ui
+ * sheet declares the whole layer order itself (`LAYER_ORDER`), which is what
+ * makes its injection point irrelevant; the markdown sheet must simply come
+ * after the generator's, which appending guarantees.
  */
 import { TOKEN_CONTRACT } from "./contractData";
 import {
@@ -97,14 +98,30 @@ function rebuildRegistry(selected: SelectedThemes): Registry {
   current = buildRegistry(userFiles, projectFiles, selected, { user: userDir, project: projectDir });
   setStyle(
     UI_STYLE_ID,
-    wrapLayer(installableEntries(current.ui).map((e) => uiThemeCss(e.id, e.tokens as Record<string, string>)).join("\n\n")),
+    userLayerCss(installableEntries(current.ui).map((e) => uiThemeCss(e.id, e.tokens as Record<string, string>)).join("\n\n")),
   );
   void installMarkdownSheet();
   for (const fn of listeners) fn();
   return current;
 }
 
-const wrapLayer = (css: string) => (css ? `@layer tokens.user {\n${css}\n}` : "");
+/**
+ * The five layers in contract order — the same statement `tokens.css` opens
+ * with, word for word (`themeInstall.test.ts` pins it).
+ *
+ * A layer's rank is fixed where its name **first appears** in the document,
+ * and at boot this sheet appears first: `preloadSelectedThemes` runs before
+ * `import("./App")`, which is what brings `tokens.css` in. Without its own
+ * statement, `@layer tokens.user` would be declared first and so rank
+ * *lowest* — every token the file sets lost to the built-in core, and the
+ * author's theme applied only when picked in Settings (the sheet is created
+ * after the app's CSS then) and never again after a restart. Declaring the
+ * whole order here makes the injection point genuinely irrelevant.
+ */
+export const LAYER_ORDER = "@layer tokens.scale, tokens.derive, tokens.scheme, tokens.theme, tokens.user;";
+
+/** The appearance sheet's text: the layer order, then the themes inside `tokens.user`. Empty in, empty out. */
+export const userLayerCss = (css: string) => (css ? `${LAYER_ORDER}\n@layer tokens.user {\n${css}\n}` : "");
 
 function setStyle(id: string, css: string): void {
   // Several store tests stand in a bare `{ documentElement }` for `document`.

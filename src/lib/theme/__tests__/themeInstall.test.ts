@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { fileBackedIds } from "../install";
+import { fileBackedIds, LAYER_ORDER, userLayerCss } from "../install";
 
 /**
  * 回归：两套 id 名字空间是分开的，判据也必须分开。
@@ -27,5 +29,28 @@ describe("fileBackedIds", () => {
 
   it("de-duplicates one file selected for both polarities", () => {
     expect(fileBackedIds({ light: "灰", dark: "灰", markdown: "manuscript" })).toEqual(["灰"]);
+  });
+});
+
+/**
+ * 回归：外观主题那张 `<style>` 必须自带五层顺序。
+ *
+ * 层的优先级在层名**第一次出现**的地方定死。启动时 `preloadSelectedThemes` 先于
+ * `import("./App")` 跑，这张 sheet 比 `tokens.css` 早进文档；它要是只写
+ * `@layer tokens.user {…}`，`tokens.user` 就成了第一个声明的层 = 最低优先级，文件
+ * 里的每个令牌都输给内置核心——设置页里当场挑是好的，重启就失效。node 里没有级联，
+ * 这里能钉住的是「自带、且与 tokens.css 一字不差」。
+ */
+describe("userLayerCss", () => {
+  const tokensCss = readFileSync(resolve(__dirname, "../../../styles/tokens.css"), "utf8");
+
+  it("opens with the exact layer-order statement tokens.css declares", () => {
+    const statement = tokensCss.match(/^@layer [^{;]+;/m)?.[0];
+    expect(statement).toBe(LAYER_ORDER);
+    expect(userLayerCss('[data-theme="x"] {}').startsWith(`${LAYER_ORDER}\n@layer tokens.user {`)).toBe(true);
+  });
+
+  it("emits nothing when no appearance theme is installable", () => {
+    expect(userLayerCss("")).toBe("");
   });
 });
