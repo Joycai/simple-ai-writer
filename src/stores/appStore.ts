@@ -267,6 +267,7 @@ export type AiDrawerMode = "generate" | "chat" | "consistency" | "roleplay";
  *  them, so this union and SettingsPage's nav must stay in step. */
 export type SettingsTab =
   | "general"
+  | "appearance"
   | "workspace"
   | "docx-format"
   | "providers-models"

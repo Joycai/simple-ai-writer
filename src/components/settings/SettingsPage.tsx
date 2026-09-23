@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Tags, Users,
-  RefreshCw, FileType, FlaskConical, Scroll,
+  RefreshCw, FileType, FlaskConical, Scroll, Palette,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
 import { panelFade, overlayFadeTransition, useMotionPreset } from "../../lib/motion";
 import { GeneralPane } from "./panes/GeneralPane";
+import { AppearancePane } from "./panes/AppearancePane";
 import { WorkspacePane } from "./panes/WorkspacePane";
 import { SyncPane } from "./panes/SyncPane";
 import { UsagePane } from "./panes/UsagePane";
@@ -21,6 +22,7 @@ import { DocFormatPane } from "./panes/DocFormatPane";
 import { LabPane } from "./panes/LabPane";
 import { ContextMemoryPane } from "./panes/ContextMemoryPane";
 import { isDocxExportEnabled } from "../../lib/docx/flag";
+import { readPref, writePref } from "../../lib/prefs";
 import styles from "./SettingsPage.module.css";
 
 interface Props {
@@ -62,6 +64,16 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   }, []);
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
 
+  // 外观 moved out of 通用 (设计稿 05m). Until the author opens it once, the
+  // nav item carries a 「新」 and 通用 says where it went; the first visit
+  // retires both, for good — a pointer that stays is noise.
+  const [appearanceSeen, setAppearanceSeen] = useState(() => readPref("app:appearanceSeen") === "1");
+  useEffect(() => {
+    if (activeTab !== "appearance" || appearanceSeen) return;
+    writePref("app:appearanceSeen", "1");
+    setAppearanceSeen(true);
+  }, [activeTab, appearanceSeen]);
+
   // A pane with its own dismissable layer (the provider/model drawer) claims
   // Escape while it is up, so one press peels off one layer.
   const escIntercept = useRef<(() => void) | null>(null);
@@ -87,8 +99,9 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
     icon: React.ReactNode,
     labelKey: string,
     extra = "",
-    // 行尾的成色小标。今天只有排版格式挂着它（设计稿 05e 屏 1a / 05f 屏 1n）——
-    // 那一项本身就是一个开关开出来的，导航里不说，作者只能在页内标题上才看见。
+    // 行尾的成色小标。排版格式挂着 BETA（设计稿 05e 屏 1a / 05f 屏 1n）——
+    // 那一项本身就是一个开关开出来的，导航里不说，作者只能在页内标题上才看见；
+    // 外观挂着「新」，到作者第一次打开它为止（05m）。
     badge?: string,
   ) => (
     <button
@@ -123,6 +136,10 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
       <div className={styles.body}>
         <nav className={styles.nav}>
           {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
+          {/* Palette（设计稿 05m）：颜色与样子，和「通用」的滑杆分得开。紧跟通用——
+              作者照老习惯点通用找主题时，它就在下一格。 */}
+          {navBtn("appearance", <Palette size={15} />, "systemSettings.tabs.appearance", "",
+            appearanceSeen ? undefined : t("systemSettings.appearance.newBadge"))}
           {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
           {/* Always mounted so it can animate in and out; `inert` keeps the
               collapsed button out of the tab order. */}
@@ -157,7 +174,14 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             nav and the close button alive so the author can get out. */}
         <ModalErrorBoundary onClose={onClose}>
           <div className={styles.paneHost}>
-            {activeTab === "general" && <GeneralPane onEscapeInterceptChange={setEscIntercept} />}
+            {activeTab === "general" && (
+              <GeneralPane
+                onEscapeInterceptChange={setEscIntercept}
+                showMovedHint={!appearanceSeen}
+                onOpenAppearance={() => setActiveTab("appearance")}
+              />
+            )}
+            {activeTab === "appearance" && <AppearancePane />}
             {activeTab === "workspace" && <WorkspacePane />}
             {activeTab === "docx-format" && docxOn && <DocFormatPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}

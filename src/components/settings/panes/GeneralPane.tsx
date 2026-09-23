@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
+import { useAppStore, type Language } from "../../../stores/appStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import {
@@ -10,37 +10,25 @@ import {
 } from "../../../lib/notify";
 import { ResetAppDialog } from "../ResetAppDialog";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
-import { AppearanceThemeGrid, MarkdownThemeGrid } from "./AppearanceThemes";
 import ui from "../settingsUi.module.css";
-
-const THEMES: { value: ThemeMode; labelKey: string }[] = [
-  { value: "dark", labelKey: "settings.dark" },
-  { value: "light", labelKey: "settings.light" },
-  { value: "system", labelKey: "settings.system" },
-];
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "zh-CN", label: "中文" },
   { value: "en", label: "English" },
 ];
 
-// Preview stack per scheme mirrors the --font-serif override in tokens.css,
-// so each option renders in the body font it selects.
-const FONT_SCHEMES: { value: FontScheme; labelKey: string; sample: string; previewFont: string }[] = [
-  { value: "manuscript", labelKey: "systemSettings.general.fontManuscript", sample: "文字 Aa", previewFont: '"Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif' },
-  { value: "song", labelKey: "systemSettings.general.fontSong", sample: "文字 Aa", previewFont: 'Georgia, Cambria, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, SimSun, serif' },
-  { value: "hei", labelKey: "systemSettings.general.fontHei", sample: "文字 Aa", previewFont: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif' },
-  { value: "kai", labelKey: "systemSettings.general.fontKai", sample: "文字 Aa", previewFont: '"Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif' },
-];
-
 interface Props {
   /** Lets this pane claim Escape while the reset dialog is up — see below. */
   onEscapeInterceptChange: (handler: (() => void) | null) => void;
+  /** 外观 moved out of this page (设计稿 05m). Until the author has opened
+   *  外观 once, the top of this page says where it went. */
+  showMovedHint: boolean;
+  onOpenAppearance: () => void;
 }
 
-export function GeneralPane({ onEscapeInterceptChange }: Props) {
+export function GeneralPane({ onEscapeInterceptChange, showMovedHint, onOpenAppearance }: Props) {
   const { t } = useTranslation();
-  const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
+  const { language, setLanguage } = useAppStore();
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
 
   const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
@@ -143,39 +131,16 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
     <Pane>
       <PaneHeader title={t("systemSettings.tabs.general")} sub={t("systemSettings.general.paneSub")} />
 
-      <Section label={t("systemSettings.general.appearance")}>
-        <Row title={t("systemSettings.general.themeLabel")}>
-          <ChipRow>
-            {THEMES.map((th) => (
-              <Chip key={th.value} label={t(th.labelKey)} active={theme === th.value} onClick={() => setTheme(th.value)} />
-            ))}
-          </ChipRow>
-        </Row>
-
-        {/* 外观主题：模式解出明暗、明暗选出一张主题文件（设计稿 05i）。 */}
-        <AppearanceThemeGrid />
-
-        <div className={ui.rowStacked}>
-          <div className={ui.rowTitle}>{t("systemSettings.general.fontLabel")}</div>
-          <div className={ui.rowDesc}>{t("systemSettings.general.fontHint")}</div>
-          <div className={`${ui.cardGrid} ${ui.cardGridFont}`}>
-            {FONT_SCHEMES.map((f) => (
-              <button
-                key={f.value}
-                className={`${ui.card} ${ui.fontCard} ${fontScheme === f.value ? ui.cardActive : ""}`}
-                onClick={() => setFontScheme(f.value)}
-              >
-                <span className={ui.fontSample} style={{ fontFamily: f.previewFont }}>{f.sample}</span>
-                <span className={ui.cardName}>{t(f.labelKey)}</span>
-              </button>
-            ))}
-          </div>
+      {/* 路标只活到作者第一次打开外观页：老习惯来这里找主题的人一眼看见去向，
+          之后它就是噪音。 */}
+      {showMovedHint && (
+        <div className={ui.signpost}>
+          {t("systemSettings.appearance.movedHint")}{" "}
+          <button type="button" className={ui.signpostLink} onClick={onOpenAppearance}>
+            {t("systemSettings.tabs.appearance")} →
+          </button>
         </div>
-
-        {/* 排版主题：内置 + 装机级 + 本项目的文件，样张是各自的沙箱小窗；作者
-            三动作长在整节的网格底下（两种主题文件住同一个文件夹）。 */}
-        <MarkdownThemeGrid />
-      </Section>
+      )}
 
       <Section label={t("systemSettings.general.languageSection")}>
         <Row title={t("systemSettings.general.languageLabel")} last>

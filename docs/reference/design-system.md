@@ -41,7 +41,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 
 ### 字体方案 (Font schemes — `data-font`)
 
-User-switchable CJK × Western pairings, selected in Settings → 通用 → 外观. Chosen like themes: `<html data-font="…">` + override blocks in `tokens.css` that follow `:root` (equal specificity → later block wins). State + persistence live in `appStore` (`fontScheme` / `setFontScheme`, `localStorage["app:fontScheme"]`, re-applied on load). **System fonts only — nothing is bundled**, so every scheme ships a full Win/Mac/Linux fallback stack.
+User-switchable CJK × Western pairings, selected in Settings → 外观. Chosen like themes: `<html data-font="…">` + override blocks in `tokens.css` that follow `:root` (equal specificity → later block wins). State + persistence live in `appStore` (`fontScheme` / `setFontScheme`, `localStorage["app:fontScheme"]`, re-applied on load). **System fonts only — nothing is bundled**, so every scheme ships a full Win/Mac/Linux fallback stack.
 
 | `data-font` | 名称 | 西文 | 中文正文 | 观感 |
 |-------------|------|------|----------|------|
@@ -50,11 +50,11 @@ User-switchable CJK × Western pairings, selected in Settings → 通用 → 外
 | `hei` | 黑体清晰 | 系统无衬线 | 苹方 → 微软雅黑 → 思源黑 | All-sans, modern screen |
 | `kai` | 楷体临帖 | Iowan / Georgia | 楷体 → STKaiti | Handwritten manuscript |
 
-Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/GeneralPane.tsx`, and add `systemSettings.general.font*` labels to both locales.
+Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/AppearancePane.tsx`, and add `systemSettings.appearance.font*` labels to both locales.
 
 ### Markdown 排版主题 (Markdown themes — `data-md-theme`)
 
-Every rendered-markdown surface — the editor preview pane, lore entry/facet previews, exported HTML and print/PDF — shares one look, picked in Settings → 通用 → 外观. Implementation: `src/lib/theme/markdownThemes.ts`.
+Every rendered-markdown surface — the editor preview pane, lore entry/facet previews, exported HTML and print/PDF — shares one look, picked in Settings → 外观. Implementation: `src/lib/theme/markdownThemes.ts`.
 
 Why CSS-in-TS instead of a `.module.css`: exported HTML is self-contained, so the same rules must be serialised into a `<style>` tag with no build step and no `tokens.css` around them (the palette is generated into the file by `lib/theme/export.ts`). One generator means the printed file matches what the author read; a stylesheet plus a hand-kept export copy would drift on the first tweak. This is the **only** sanctioned CSS-in-TS in the app.
 

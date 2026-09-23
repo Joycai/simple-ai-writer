@@ -51,7 +51,7 @@ obligations:
 
 - **For their own use** → write it where they say; otherwise the installation
   folder (macOS: `~/Library/Application Support/com.simple-ai-writer.app/themes/`;
-  in-app: 设置 → 通用 → 外观 → 打开主题文件夹). A typography theme meant for
+  in-app: 设置 → 外观 → 打开主题文件夹). A typography theme meant for
   one project goes in that project's `.ai-writer/themes/`. Appearance themes
   are refused there on purpose (a cloned repo must not repaint the shell).
 - **To ship with the repo** ("加到 themes/", "做成样例") → `themes/<id>.css`, and

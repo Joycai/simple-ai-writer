@@ -120,6 +120,14 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 - SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`.
 - Panes are built from the shared row/section/card/chip vocabulary in `settingsUi.module.css` + `panes/bits.tsx`; `settingsCommon.module.css` holds the form controls used inside the edit drawers.
 - 渠道与模型 is a single merged pane (grouped list + right-hand drawer), and Prompt has a drawer of its own.
+- 外观（`AppearancePane`，设计稿 05m）紧跟「通用」：原先是通用里的一节，长到占了那一页
+  大半，把语言 / 通知 / 调试 / 维护 / 重置挤到第二屏以下。每根轴一节——外观主题（明暗
+  分段控件是它的第一行，因为明暗决定长出一条带还是两条）· 字体方案 · Markdown 排版
+  主题 · 主题文件——页顶的「此刻」是唯一能看见三根轴**叠在一起**的地方（`NowSpecimen`：
+  外壳两栏同外观卡样张，自带 `data-theme`/`data-scheme`；中间一页是排版样张 iframe，
+  `sampleDocument` 的 `sizing` 放大到阅读字号）。卡、带、坏主题三态全在
+  `AppearanceThemes.tsx`（05i）。通用页顶的路标和导航上的「新」只活到第一次打开外观
+  （`app:appearanceSeen`，机器本地）。
 - 计费组（`FeeGroupsPane` + `FeeGroupDrawer`，设计稿 05l）紧跟「渠道与模型」——它是
   那一页的价格那一半；中间隔着子代理，作者会以为它属于「用量」。编辑抽屉的表单是
   一个完整的 `FeeGroup`（三种方式的字段全在），分段控件只改 `billingMode`：**切方式
@@ -591,7 +599,7 @@ the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **onl
   - `registry.ts` merges built-ins with the folder (missing / unusable / reserved-id cards)
   - `install.ts` keeps the runtime registry, installs every usable file into one `<style>` in `tokens.user` and resolves which id actually applies
   - `export.ts` generates the exported document's palette from it (light on `:root`, dark under `prefers-color-scheme`)
-  - `exportFile.ts` writes 「把当前主题导出为文件」.
+  - `exportFile.ts` writes 「把当前外观主题导出为文件」 (设置 → 外观 → 主题文件).
 
 #### 排版主题文件（Typography theme files）
 - **Typography theme files** (`--theme-kind: markdown`, in the same folder or a project's `.ai-writer/themes/`, project overriding by id) go through the same validator with a different fence — every selector starts at `.md-body`, `@font-face` / `@keyframes` allowed, `url()` relative or `data:` only — and are installed as a second `<style>` after the generator's with `data-md-theme` naming the built-in they extend
@@ -600,10 +608,10 @@ the theme system (`docs/feature/theme-system-plan.md`). `scheme.ts` is the **onl
 
 #### 启动加载与设置面板
 - Boot reads only the selected files (`main.tsx`)
-- Settings → 通用 → 外观 (`components/settings/panes/AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does).
+- Settings → 外观 (`components/settings/panes/AppearancePane.tsx` composes it, 设计稿 05m; the cards and bands are `AppearanceThemes.tsx`, 设计稿 05i) scans the folders, and `stores/themeStore.ts` follows the open project and **watches both folders while Settings is open** (`tauri-plugin-fs`'s `watch` feature — the one place the app watches the disk — reloading on a change and leaving the same trace the button does).
 
 #### 拒绝理由与内置排版主题
-- A refused rule carries a `ThemeReasonCode` + params, never a sentence: the locale files hold the sentences (`systemSettings.general.reason.*`), so add a code there in both languages when you add a rule.
+- A refused rule carries a `ThemeReasonCode` + params, never a sentence: the locale files hold the sentences (`systemSettings.appearance.reason.*`), so add a code there in both languages when you add a rule.
 - Built-in markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF.
 
 #### 示例文件

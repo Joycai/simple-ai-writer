@@ -31,7 +31,7 @@ interface ThemeMeta {
 
 /**
  * Why a rule, a declaration or a whole file was refused. A *code*, not a
- * sentence: the card translates it (`systemSettings.general.reason.<code>`
+ * sentence: the card translates it (`systemSettings.appearance.reason.<code>`
  * in the locale files) with `params` filled in, so an English interface
  * never shows a Chinese reason and the tests pin codes rather than prose.
  */

@@ -380,6 +380,30 @@
 
 /* ─── Status line under an action row ────────────────────────────────────── */
 
+/* 一行浅底路标：一块东西搬走之后，旧位置说一声它去了哪（设计稿 05m 1c）。
+   链接的写法同实验室的「接着去 →」：带细线的字，不是按钮。 */
+.signpost {
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--stg-hint);
+  border-left: 2px solid var(--color-accent);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+.signpostLink {
+  font: inherit;
+  color: var(--color-accent);
+  font-weight: 500;
+  padding-bottom: 1px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.signpostLink:hover {
+  color: var(--color-sienna-hover);
+  border-bottom-color: currentColor;
+}
+
 .statusOk {
   margin-top: var(--space-2);
   font-size: var(--font-size-sm);

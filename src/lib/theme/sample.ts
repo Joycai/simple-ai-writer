@@ -27,9 +27,30 @@ import type { ThemeEntry } from "./registry";
 import type { ColorScheme } from "./scheme";
 
 const SAMPLE_TEXT = {
-  zh: { h: "第三章 · 渡口", p: "船到渡口时天还没亮，河面浮着一层白气。", q: "那年的水位比现在高三尺。" },
-  en: { h: "Chapter Three", p: "The boat reached the ferry before dawn; a white mist lay on the river.", q: "The water stood three feet higher that year." },
+  zh: {
+    h: "第三章 · 渡口", p: "船到渡口时天还没亮，河面浮着一层白气。", q: "那年的水位比现在高三尺。",
+    p2: "对岸的灯还亮着，像有人守了一夜。他把缆绳绕上木桩，回头看了一眼来路。",
+  },
+  en: {
+    h: "Chapter Three", p: "The boat reached the ferry before dawn; a white mist lay on the river.",
+    q: "The water stood three feet higher that year.",
+    p2: "A lamp still burned on the far bank, as if someone had kept watch all night.",
+  },
 } as const;
+
+/**
+ * How big a sample is drawn. A card is a thumbnail — 10px text, three pieces;
+ * the 外观 page's 「此刻」 window (设计稿 05m) is a page — reading size, and a
+ * second paragraph, so the body's grey and its indent actually show.
+ */
+export interface SampleSize {
+  /** `--md-size` in px. */
+  size: number;
+  padding: string;
+  /** Add the second paragraph. */
+  long: boolean;
+}
+const CARD_SAMPLE: SampleSize = { size: 10, padding: "9px 11px", long: false };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -44,6 +65,7 @@ export function sampleDocument(
   scheme: ColorScheme,
   isZh: boolean,
   fontScheme?: string,
+  sizing: SampleSize = CARD_SAMPLE,
 ): string {
   const baseId = (entry.source === "builtin" ? entry.id : entry.extends) as MarkdownThemeId;
   const md = markdownThemeCss(baseId, "body");
@@ -53,13 +75,13 @@ export function sampleDocument(
 ${palette}
 html, body { margin: 0; }
 body {
-  --md-size: 10px;
-  padding: 9px 11px;
+  --md-size: ${sizing.size}px;
+  padding: ${sizing.padding};
   background: var(--color-bg-base);
   color: var(--color-text-primary);
   overflow: hidden;
 }
 ${md}
 ${userCss}
-</style></head><body class="md-body"><h2>${esc(t.h)}</h2><p>${esc(t.p)}</p><blockquote>${esc(t.q)}</blockquote></body></html>`;
+</style></head><body class="md-body"><h2>${esc(t.h)}</h2><p>${esc(t.p)}</p>${sizing.long ? `<p>${esc(t.p2)}</p>` : ""}<blockquote>${esc(t.q)}</blockquote></body></html>`;
 }

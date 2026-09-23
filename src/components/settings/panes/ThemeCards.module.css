@@ -255,22 +255,8 @@
   color: var(--stg-text-faint);
 }
 
-/* ── 动作行：三档 —— 中性边 · 赭石描边 · （没有实心） ─────────────────── */
+/* ── 导出按钮：三档 —— 中性边 · 赭石描边 · （没有实心）（05i C1） ─────── */
 
-.actions {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-.actionsSpacer { flex: 1; }
-.exportWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
-  max-width: 60%;
-}
 .btnAccent {
   flex: none;
   white-space: nowrap;
@@ -284,12 +270,102 @@
 .btnAccent:hover:not(:disabled) { background: var(--color-accent-tint); }
 .btnAccent:active:not(:disabled) { transform: scale(0.97); }
 .btnAccent:disabled { opacity: 0.45; cursor: not-allowed; }
-.exportHint {
+
+/* 网格底下那行说明（「只有颜色——……」）。 */
+.afterGrid { margin-top: var(--space-3); }
+
+/* ── 此刻：三根轴叠在一扇窗里（设计稿 05m 1a） ─────────────────────────
+   外壳两栏同 .swatch 的规矩：元素自己带 data-theme / data-scheme，只读核心令牌；
+   中间那一页是排版样张的 iframe，颜色由它自己的样式表决定。 */
+
+/* 它自己是容器：窄档按这扇窗有多宽，不按窗口多宽。 */
+.now { margin: var(--space-5) 0 0; container-type: inline-size; }
+.nowWin {
+  height: 196px;
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+  pointer-events: none;
+  user-select: none;
+}
+.nowSide {
+  width: 17%;
+  flex: none;
+  background: var(--color-bg-elevated);
+  border-right: 1px solid var(--color-border);
+  padding: 12px;
+}
+.nowSideHead { display: flex; align-items: center; gap: 6px; }
+.nowSideTitle {
+  display: block;
+  flex: 1;
+  height: 4px;
+  max-width: 60%;
+  background: var(--color-text-primary);
+  opacity: 0.5;
+}
+.nowSide .swatchBar { width: 80%; margin-top: 9px; }
+.nowSide .swatchBar:nth-child(3) { width: 64%; }
+.nowSide .swatchBar:nth-child(4) { width: 72%; }
+.nowSide .swatchBar:nth-child(5) { width: 50%; }
+.nowPage {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  display: block;
+  pointer-events: none;
+}
+.nowRail {
+  width: 21%;
+  flex: none;
+  background: var(--color-bg-elevated);
+  border-left: 1px solid var(--color-border);
+  padding: 12px;
+}
+.nowRail > .nowSideTitle { max-width: 40%; }
+.nowBubble {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+}
+.nowBubble .swatchBar:first-child { margin-top: 0; width: 90%; }
+
+.nowCaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-5);
+  margin-top: var(--space-2);
   font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.6;
-  text-align: right;
-  color: var(--stg-text-faint);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+.nowPart {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.nowPartLabel { color: var(--stg-text-faint); }
+.nowPartName {
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--stg-line-section);
+  padding-bottom: 1px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.nowPart:hover .nowPartName { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+.nowPart:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 2px; }
+.nowMode { margin-left: auto; color: var(--stg-text-faint); }
+
+/* 窄栏：AI 栏先让位，那一页不能被挤成一条缝。 */
+@container (max-width: 560px) {
+  .nowRail { display: none; }
+  .nowSide { width: 22%; }
 }
 
 /* ── 痕迹：赭石细线 + 一行 mono（借 02c 提示词库） ────────────────────── */
