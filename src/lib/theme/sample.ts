@@ -18,7 +18,10 @@
  * opaque origin cannot load the app's bundled faces (`font-src 'self'` does
  * not apply to it), so the 手稿 scheme's Spectral falls to its Georgia /
  * Songti fallbacks here, while 宋 / 黑 / 楷 name system faces and show as
- * they are.
+ * they are. A downloaded pack (鸿蒙黑体 / MiSans) is different: its faces are
+ * served by the `ai-writer-font:` scheme, which the CSP names explicitly and
+ * which answers with `Access-Control-Allow-Origin: *`, so the caller hands its
+ * `@font-face` rules in as `faces` and the frame draws the real glyphs.
  */
 import { TOKEN_CONTRACT } from "./contractData";
 import { exportPaletteCss } from "./export";
@@ -66,12 +69,15 @@ export function sampleDocument(
   isZh: boolean,
   fontScheme?: string,
   sizing: SampleSize = CARD_SAMPLE,
+  /** The `@font-face` rules of the font pack `fontScheme` names, if it is one (appStore `fontFaces[scheme]`). */
+  faces = "",
 ): string {
   const baseId = (entry.source === "builtin" ? entry.id : entry.extends) as MarkdownThemeId;
   const md = markdownThemeCss(baseId, "body");
   const palette = exportPaletteCss(appearance, appearance, `${md}\n${userCss}`, TOKEN_CONTRACT, scheme, fontScheme);
   const t = isZh ? SAMPLE_TEXT.zh : SAMPLE_TEXT.en;
   return `<!DOCTYPE html><html data-md-theme="${baseId}"><head><meta charset="utf-8"><style>
+${faces}
 ${palette}
 html, body { margin: 0; }
 body {

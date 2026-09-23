@@ -93,8 +93,17 @@ describe("exportPaletteCss", () => {
     expect(exportFontCss(TOKEN_CONTRACT, "song")).toContain("--font-mono:");
     expect(exportFontCss(TOKEN_CONTRACT, "manuscript")).toBe(exportFontCss(TOKEN_CONTRACT));
     expect(exportFontCss(TOKEN_CONTRACT, "nope")).toBe(exportFontCss(TOKEN_CONTRACT));
-    expect(Object.keys(TOKEN_CONTRACT.fontSchemes).sort()).toEqual(["hei", "kai", "manuscript", "song"]);
+    expect(Object.keys(TOKEN_CONTRACT.fontSchemes).sort()).toEqual(["harmonyos", "hei", "kai", "manuscript", "misans", "song"]);
     expect(exportPaletteCss(paper, night, md, TOKEN_CONTRACT, "light", "kai")).toContain(TOKEN_CONTRACT.fontSchemes.kai["--font-serif"]);
+  });
+
+  it("names a downloadable pack's family first and falls back to 黑's stack", () => {
+    const hei = TOKEN_CONTRACT.fontSchemes.hei["--font-sans"];
+    for (const [id, family] of [["misans", '"MiSans"'], ["harmonyos", '"HarmonyOS Sans SC"']]) {
+      expect(TOKEN_CONTRACT.fontSchemes[id]["--font-sans"]).toBe(`${family}, ${hei}`);
+      expect(TOKEN_CONTRACT.fontSchemes[id]["--font-serif"]).toBe(`${family}, ${hei}`);
+      expect(exportFontCss(TOKEN_CONTRACT, id)).toContain(`--font-sans: ${family}, `);
+    }
   });
 
   it("has retired the hand-copied palette for good", () => {
@@ -172,6 +181,14 @@ describe("sampleDocument — the typography card's frame", () => {
     expect(page.match(/<p>/g)).toHaveLength(2);
     // The second paragraph sits between the first and the quote, as a page reads.
     expect(page.indexOf("对岸的灯")).toBeLessThan(page.indexOf("<blockquote>"));
+  });
+
+  it("carries the downloaded packs' @font-face rules ahead of the palette when handed them", () => {
+    const faces = '@font-face{font-family:"MiSans";src:url("ai-writer-font://localhost/f/a.woff2")}';
+    const doc = sampleDocument(manuscript, "", paper, "light", true, "misans", undefined, faces);
+    expect(doc).toContain(faces);
+    expect(doc.indexOf(faces)).toBeLessThan(doc.indexOf(":root"));
+    expect(sampleDocument(manuscript, "", paper, "light", true, "misans")).not.toContain("@font-face");
   });
 
   it("escapes the sample text", () => {

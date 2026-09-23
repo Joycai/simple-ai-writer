@@ -123,6 +123,27 @@ export const LAYER_ORDER = "@layer tokens.scale, tokens.derive, tokens.scheme, t
 /** The appearance sheet's text: the layer order, then the themes inside `tokens.user`. Empty in, empty out. */
 export const userLayerCss = (css: string) => (css ? `${LAYER_ORDER}\n@layer tokens.user {\n${css}\n}` : "");
 
+/**
+ * One downloaded font pack's `@font-face` rules (lib/theme/fontPacks), in a
+ * sheet of its own per pack. Not a layer: `@font-face` is not a cascaded
+ * declaration, so where it sits in the document doesn't matter. Empty removes it.
+ */
+export function applyFontFaces(packId: string, css: string): void {
+  setStyle(FONT_FACES_PREFIX + packId, css);
+}
+
+/**
+ * The rules {@link applyFontFaces} installed for the font scheme `scheme` —
+ * empty for a system scheme. Read off the DOM, the way the export reads
+ * `data-font`, so the PDF carries exactly the one font it draws.
+ */
+export function currentFontFaces(scheme: string | null | undefined): string {
+  if (!scheme || typeof document === "undefined" || typeof document.getElementById !== "function") return "";
+  return document.getElementById(FONT_FACES_PREFIX + scheme)?.textContent ?? "";
+}
+
+const FONT_FACES_PREFIX = "font-pack-faces-";
+
 function setStyle(id: string, css: string): void {
   // Several store tests stand in a bare `{ documentElement }` for `document`.
   if (typeof document === "undefined" || typeof document.getElementById !== "function") return;

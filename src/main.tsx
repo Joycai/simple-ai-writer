@@ -2,7 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/fonts";
 import { hydratePrefs, readPref } from "./lib/prefs";
-import { preloadSelectedThemes } from "./lib/theme/install";
+import { applyFontFaces, preloadSelectedThemes } from "./lib/theme/install";
+import { isFontPackId, packFacesCss, readInstalled } from "./lib/theme/fontPacks";
 import { installMarkdownThemeStyles } from "./lib/theme/markdownThemes";
 
 // Markdown typography themes are generated (the same generator feeds exported
@@ -54,6 +55,17 @@ async function boot() {
     });
   } catch (e) {
     console.warn("[boot] theme files unavailable; using the built-in themes:", e);
+  }
+
+  // The chosen font pack's faces, likewise: without them the first frame is
+  // drawn in the fallback stack and the whole window re-flows a moment later
+  // when `appStore`'s disk read lands. Only the chosen pack, only when it's a
+  // pack; the rest of the state (sizes, the other pack) follows after paint.
+  try {
+    const scheme = readPref("app:fontScheme")?.trim() ?? "";
+    if (isFontPackId(scheme) && (await readInstalled(scheme))) applyFontFaces(scheme, await packFacesCss([scheme]));
+  } catch (e) {
+    console.warn("[boot] font pack unavailable; using the fallback fonts:", e);
   }
 
   await import("./i18n");

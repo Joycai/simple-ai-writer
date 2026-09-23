@@ -40,3 +40,149 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── 字体方案：两条带（设计稿 05n）─────────────────────────────────────── */
+
+/* 带头沿用外观主题带（ThemeCards 的 .bandHead）；两条之间留一档。 */
+.fontBands + .fontBands { margin-top: var(--space-5); }
+
+/* 许可说明占第二条带里空出来的两格；窄窗时自成一行。 */
+.packLicense {
+  grid-column: span 2;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--stg-line-row);
+  background: var(--stg-hint);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+.packCredit {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--stg-text-faint);
+}
+.packLinks { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin-top: var(--space-1); }
+.packLink {
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--stg-line-row);
+  background: none;
+  font: inherit;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.packLink:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 2px; }
+
+/* ── 下载卡 ─────────────────────────────────────────────────────────────── */
+
+/* 外层是 div：选择区一个按钮，状态行里另有按钮。卡的边、底、选中态照系统字体卡。
+   虚线只给「没下载、也没选中」——选中后是实线赭石边（下载中 / 失败都算选中）。 */
+/* min-width: 0 — a grid item's automatic minimum is its content's width, so
+   without it the status line's unwrapped text widens the whole column (and
+   the pane scrolls sideways) instead of ending in an ellipsis. */
+.packCard { position: relative; display: flex; flex-direction: column; min-width: 0; cursor: default; }
+/* The system card shrinks on press (`.card:active:not(:disabled)`); this one
+   holds other buttons, so pressing 删除 / 重试 must not squeeze the whole card. */
+.packCard.packCard:active:not(:disabled) { transform: none; }
+.packAbsent { border-style: dashed; }
+
+.packSelect {
+  display: flex;
+  flex-direction: column;
+  /* Stretch, not center: a centred flex child is as wide as its text, so the
+     one-line sample would run past the card instead of ending in an ellipsis. */
+  align-items: stretch;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.packSelect:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 4px; }
+
+/* 字形还不在本机：回退字形淡显，不假装是它。 */
+.packFaded { opacity: 0.42; }
+
+.packStatus {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--stg-line-row);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
+  color: var(--stg-text-faint);
+  text-align: left;
+}
+.packStatusText { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.packStatusBusy { color: var(--color-accent); }
+.packStatusError { color: var(--color-error); }
+.packHint { margin-left: auto; white-space: nowrap; }
+
+.packAction {
+  margin-left: auto;
+  flex: none;
+  padding: 0 0 1px;
+  border: none;
+  border-bottom: 1px solid var(--stg-line-row);
+  background: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.packAction:hover { color: var(--color-accent); }
+.packAction:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 2px; }
+.packActionAccent { color: var(--color-accent); }
+
+/* 删除正在用的那一款：卡内确认，说清楚会顺带改掉选择。 */
+.packConfirm {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--stg-line-row);
+  text-align: left;
+}
+.packConfirmText { font-size: var(--font-size-sm); line-height: 1.5; color: var(--color-text-secondary); }
+.packConfirmActions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.packButton {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.packButton:focus-visible { outline: 2px solid var(--color-accent-ring); outline-offset: 1px; }
+.packButtonDanger { border-color: var(--color-error); color: var(--color-error); }
+
+/* 底边 2px 进度：轨道是分隔线色，走过的是强调色。 */
+.packProgress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--stg-line-row);
+}
+.packProgress > i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width var(--transition-fast);
+}
+
+@media (max-width: 900px) {
+  .packLicense { grid-column: 1 / -1; }
+}
+
+/* 第二条带：两张下载卡加许可说明；卡高由状态行定，不必和许可说明对齐。 */
+.packGrid { align-items: start; }

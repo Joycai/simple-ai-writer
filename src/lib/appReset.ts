@@ -16,6 +16,11 @@
  * 意味着两者。同理，`appDataDir/backups` 里那些**拉取前的知识库压缩包**也留着：
  * 它们是安全网，装的正是重置本身无法再生成的东西。
  *
+ * **下载过的字体包**（`appDataDir/fonts`，鸿蒙黑体 / MiSans）会清：它们是
+ * 本机缓存，刚装好的应用本来就没有，要用时选中即可重新下载。重置时若还有下载
+ * 在跑，它可能在删除之后又写回一两个分片——没有完成标记，不算装好，调用方
+ * 紧接着重载窗口也就停了；残片只占磁盘，不碍正确性。
+ *
  * ## 顺序：先钥匙串，后数据库
  *
  * `providers` 那几行是「钥匙串里有哪些账户」的**唯一记录**。先删行再删密钥，
@@ -41,6 +46,8 @@ import { clearAllSecrets } from "./keyStore";
 import { clearAllPrefs, prefEntries } from "./prefs";
 import { getGlobalDb, getGlobalDbPath } from "./project";
 import { sqlTransaction } from "./sqlTx";
+import { fileExists, removeDir } from "./fs/fileio";
+import { fontsRoot } from "./theme/fontPacks";
 import { getServerUrl, syncTokenAccount } from "./sync/config";
 
 /** 将要被清掉的东西，按作者看得见的单位数出来。 */
@@ -148,7 +155,16 @@ export async function resetApp(): Promise<ResetSummary> {
     /* 早就没有了 */
   }
 
-  // 4. 偏好最后，并且是 await 的——调用方紧接着就要重载窗口。
+  // 4. 下载过的字体包。它只是本机缓存，不是作者的东西，但「回到第一次打开
+  //    的样子」本来就没有它；删不掉也不挡重置，下次选中时照样能再下载。
+  try {
+    const fonts = await fontsRoot();
+    if (await fileExists(fonts)) await removeDir(fonts);
+  } catch {
+    /* 留着也无害 */
+  }
+
+  // 5. 偏好最后，并且是 await 的——调用方紧接着就要重载窗口。
   await clearAllPrefs();
 
   return { inventory, secretsRemoved: wipe.removed };

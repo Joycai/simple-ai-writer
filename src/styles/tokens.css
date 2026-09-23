@@ -117,8 +117,10 @@
 
   /* ───────── Font schemes (CJK × Western pairings) ─────────
      Selected via `<html data-font="…">`. Each overrides the serif
-     (body/editor) and sans (UI) stacks. System fonts only — nothing
-     is bundled, so every stack degrades gracefully across OSes. These
+     (body/editor) and sans (UI) stacks. Nothing is bundled: 1–4 name
+     system faces; 5–6 name a font the author downloads on first pick
+     (lib/theme/fontPacks.ts injects its @font-face), and until it is here
+     the stack falls through to 3's — so every stack degrades gracefully. These
      blocks follow :root in the same layer, so equal-specificity rules win
      by source order. */
 
@@ -144,6 +146,18 @@
   [data-font="kai"] {
     --font-serif: "Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif;
     --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+
+  /* 5 · 鸿蒙黑体 — HarmonyOS Sans SC throughout, downloaded; falls back to 3 */
+  [data-font="harmonyos"] {
+    --font-serif: "HarmonyOS Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+    --font-sans: "HarmonyOS Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  }
+
+  /* 6 · MiSans — throughout, downloaded; falls back to 3 */
+  [data-font="misans"] {
+    --font-serif: "MiSans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+    --font-sans: "MiSans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
   }
 }
 

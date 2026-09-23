@@ -1,0 +1,132 @@
+/**
+ * Pin the downloadable font packs into `src/lib/theme/fontPackData.ts`.
+ *
+ *   node scripts/gen-font-packs.ts            # pin from jsDelivr's index
+ *   node scripts/gen-font-packs.ts --verify   # …and download every chunk to check it (~21 MB)
+ *
+ * The app never trusts a download source for *what* a pack is — only for
+ * delivering bytes. What it is (which files, how big, which sha256) is fixed
+ * here, at dev time, from jsDelivr's package index, and every file the app
+ * downloads at runtime must match it (lib/theme/fontPacks.ts). Upgrading a
+ * pack = bump its version below and re-run; nothing else changes.
+ *
+ * What is checked: each sheet is downloaded and must hash to what the index
+ * says; the chunks' hashes are taken from the index as they are, unless
+ * `--verify` downloads them too. Run with `--verify` when bumping a version —
+ * an index that lied would otherwise only show up as every install failing
+ * its integrity check.
+ *
+ * Per weight: the package's own `@font-face` sheet (its `unicode-range` split
+ * is what makes loading lazy) and exactly the woff2 chunks that sheet names —
+ * a chunk the sheet doesn't reference is not pinned, so it can never be
+ * fetched.
+ */
+import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+interface PackSource {
+  id: string;
+  pkg: string;
+  version: string;
+  /** The family name every face is declared under, whatever the sheet says. */
+  family: string;
+  /** Sheet path in the package, per weight. */
+  sheets: Record<number, string>;
+}
+
+const PACKS: PackSource[] = [
+  {
+    id: "harmonyos",
+    pkg: "harmonyos-sans-sc-webfont-splitted",
+    version: "1.1.0",
+    family: "HarmonyOS Sans SC",
+    sheets: { 400: "dist/Regular.css", 500: "dist/Medium.css", 700: "dist/Bold.css" },
+  },
+  {
+    id: "misans",
+    pkg: "misans",
+    version: "5.0.0",
+    family: "MiSans",
+    sheets: {
+      400: "lib/Normal/MiSans-Regular.min.css",
+      500: "lib/Normal/MiSans-Medium.min.css",
+      700: "lib/Normal/MiSans-Bold.min.css",
+    },
+  },
+];
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const hex = (b64: string): string => Buffer.from(b64, "base64").toString("hex");
+
+async function index(pkg: string, version: string): Promise<Map<string, { size: number; sha256: string }>> {
+  const res = await fetch(`https://data.jsdelivr.com/v1/packages/npm/${pkg}@${version}?structure=flat`);
+  if (!res.ok) throw new Error(`${pkg}@${version}: index ${res.status}`);
+  const data = (await res.json()) as { files: { name: string; hash: string; size: number }[] };
+  return new Map(data.files.map((f) => [f.name.replace(/^\//, ""), { size: f.size, sha256: hex(f.hash) }]));
+}
+
+/** The `url(...)` targets a sheet names, as written (relative to the sheet). */
+function sheetUrls(css: string): string[] {
+  return [...css.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g)].map((m) => m[2].replace(/^\.\//, ""));
+}
+
+const verify = process.argv.includes("--verify");
+
+async function verifyChunk(pkg: string, version: string, path: string, sha256: string): Promise<void> {
+  const res = await fetch(`https://cdn.jsdelivr.net/npm/${pkg}@${version}/${path}`);
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  const got = createHash("sha256").update(new Uint8Array(await res.arrayBuffer())).digest("hex");
+  if (got !== sha256) throw new Error(`${path}: CDN bytes disagree with the index`);
+}
+
+const out: unknown[] = [];
+for (const p of PACKS) {
+  const files = await index(p.pkg, p.version);
+  const weights = [];
+  for (const [weight, sheet] of Object.entries(p.sheets)) {
+    const res = await fetch(`https://cdn.jsdelivr.net/npm/${p.pkg}@${p.version}/${sheet}`);
+    if (!res.ok) throw new Error(`${sheet}: ${res.status}`);
+    const css = await res.text();
+    const sha256 = createHash("sha256").update(css, "utf8").digest("hex");
+    const pinned = files.get(sheet);
+    if (!pinned || pinned.sha256 !== sha256) throw new Error(`${sheet}: CDN bytes disagree with the index`);
+    const dir = sheet.slice(0, sheet.lastIndexOf("/") + 1);
+    const chunks = [...new Set(sheetUrls(css))].sort().map((name) => {
+      if (!/^[\w.-]+\.woff2$/.test(name)) throw new Error(`${sheet}: unexpected url ${name}`);
+      const f = files.get(dir + name);
+      if (!f) throw new Error(`${sheet}: ${name} is not in the package`);
+      return [name, f.size, f.sha256] as [string, number, string];
+    });
+    if (verify) {
+      for (let i = 0; i < chunks.length; i += 8) {
+        await Promise.all(chunks.slice(i, i + 8).map(([name, , sha]) => verifyChunk(p.pkg, p.version, dir + name, sha)));
+      }
+    }
+    weights.push({ weight: Number(weight), sheet: [sheet, pinned.size, sha256], chunks });
+  }
+  out.push({ id: p.id, pkg: p.pkg, version: p.version, family: p.family, weights });
+}
+
+const body = out
+  .map((p) => JSON.stringify(p))
+  .join(",\n  ")
+  // One chunk per line keeps a version bump's diff readable.
+  .replace(/\],\[/g, "],\n    [");
+writeFileSync(
+  join(root, "src/lib/theme/fontPackData.ts"),
+  `/* GENERATED by scripts/gen-font-packs.ts from jsDelivr's package index — do not edit by hand.
+   Every file a font pack downloads must match its size and sha256 here (lib/theme/fontPacks.ts). */
+import type { FontPackData } from "./fontPacks";
+
+export const FONT_PACK_DATA: FontPackData[] = [
+  ${body},
+];
+`,
+);
+for (const p of out as { id: string; weights: { chunks: [string, number][]; sheet: [string, number] }[] }[]) {
+  const bytes = p.weights.reduce((n, w) => n + w.sheet[1] + w.chunks.reduce((m, c) => m + c[1], 0), 0);
+  const count = p.weights.reduce((n, w) => n + 1 + w.chunks.length, 0);
+  console.log(`${p.id}: ${count} files · ${(bytes / 1e6).toFixed(1)} MB`);
+}

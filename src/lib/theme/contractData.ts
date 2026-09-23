@@ -1078,6 +1078,14 @@ export const TOKEN_CONTRACT: TokenContract = {
     "kai": {
       "--font-serif": "\"Iowan Old Style\", Georgia, \"Kaiti SC\", STKaiti, KaiTi, \"Noto Serif CJK SC\", serif",
       "--font-sans": "\"Inter Tight\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", sans-serif"
+    },
+    "harmonyos": {
+      "--font-serif": "\"HarmonyOS Sans SC\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif",
+      "--font-sans": "\"HarmonyOS Sans SC\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif"
+    },
+    "misans": {
+      "--font-serif": "\"MiSans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif",
+      "--font-sans": "\"MiSans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", \"Source Han Sans SC\", \"Noto Sans CJK SC\", sans-serif"
     }
   }
 };

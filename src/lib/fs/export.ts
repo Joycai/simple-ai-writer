@@ -21,7 +21,7 @@ import { IS_MAC } from "../platform";
 import { currentMarkdownThemeId, markdownThemeCss } from "../theme/markdownThemes";
 import { exportPaletteCss } from "../theme/export";
 import { TOKEN_CONTRACT } from "../theme/contractData";
-import { inlinedMarkdownCss, resolvedMarkdownTheme, resolvedTheme } from "../theme/install";
+import { currentFontFaces, inlinedMarkdownCss, resolvedMarkdownTheme, resolvedTheme } from "../theme/install";
 import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
@@ -130,7 +130,7 @@ export async function exportMarkdown(source: string): Promise<void> {
  * built-in base it extends, assets inlined — the exported `<body>` carries
  * the `md-body` class so the file's `.md-body …` rules land on it unchanged.
  */
-async function documentCss(): Promise<string> {
+async function documentCss(opts: { faces?: boolean } = {}): Promise<string> {
   const md = markdownThemeCss(currentMarkdownThemeId(), "body");
   const user = await inlinedMarkdownCss(resolvedMarkdownTheme());
   // The font scheme is the `data-font` axis on <html>; the stacks the file
@@ -139,7 +139,12 @@ async function documentCss(): Promise<string> {
   const palette = exportPaletteCss(
     resolvedTheme("light"), resolvedTheme("dark"), `${md}\n${user}`, TOKEN_CONTRACT, undefined, fontScheme,
   );
-  return `${palette}
+  // A downloaded font pack's faces point at the `ai-writer-font:` scheme —
+  // loadable by the print window, meaningless in a file opened elsewhere, so
+  // only the PDF path asks for them; the .html export names the family and
+  // lets the stack fall back (docs/feature/downloadable-fonts-plan.md).
+  const faces = opts.faces ? currentFontFaces(fontScheme) : "";
+  return `${faces ? `${faces}\n` : ""}${palette}
 body {
   background: var(--color-bg-base);
   color: var(--color-text-primary);
@@ -182,6 +187,24 @@ ${body}
 
 // ─── PDF (system print) ───────────────────────────────────────────────────────
 
+/**
+ * Tells the macOS print window the page's fonts are in. A downloaded font pack
+ * is split by `unicode-range` and each chunk is fetched only when layout meets
+ * a character in it, so on a long document some can still be in flight when
+ * the page has "loaded"; `print.rs` holds the dialog until this request
+ * arrives (stamped there with the print's generation), or three seconds pass.
+ * Reading `offsetHeight` forces the first layout, which is what starts those
+ * fetches. macOS only: elsewhere the page prints from an iframe in the main
+ * window, whose CSP refuses inline scripts — `printPage` waits there itself.
+ */
+/** The same cap `print.rs` puts on the macOS wait. */
+const FONTS_READY_TIMEOUT_MS = 3000;
+
+const FONTS_READY_SCRIPT = `<script>
+void document.body.offsetHeight;
+document.fonts.ready.then(() => fetch("/__fonts-ready")).catch(() => {});
+</script>`;
+
 export async function exportPdf(source: string, title: string, baseDir?: string): Promise<void> {
   const body = await inlineImages(renderMarkdown(source), baseDir);
   // macOS shows the preview window, and its print dialog has no virtual PDF
@@ -197,7 +220,7 @@ export async function exportPdf(source: string, title: string, baseDir?: string)
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-${await documentCss()}
+${await documentCss({ faces: true })}
 /* Print sheet: white paper, no page margin of our own — the paper margins
    come from the print system (NSPrintInfo on macOS, the dialog elsewhere),
    so the body's screen padding is zeroed too rather than stacking on top. */
@@ -223,7 +246,7 @@ body { background: #fff; }
 }
 </style>
 </head>
-<body>${body}${macHint}</body>
+<body>${body}${macHint}${IS_MAC ? FONTS_READY_SCRIPT : ""}</body>
 </html>`;
 
   await printPage(html, title);
@@ -278,7 +301,15 @@ async function printPage(html: string, title: string): Promise<void> {
   iframe.contentDocument!.write(html);
   iframe.contentDocument!.close();
   iframe.contentWindow!.focus();
-  setTimeout(() => {
+  setTimeout(async () => {
+    // The page's fonts first — a downloaded pack's chunks load as layout meets
+    // them (see FONTS_READY_SCRIPT for the macOS half), capped so a stuck font
+    // can't hold the print back.
+    const doc = iframe.contentDocument;
+    if (doc) {
+      void doc.body?.offsetHeight;
+      await Promise.race([doc.fonts.ready, new Promise((r) => setTimeout(r, FONTS_READY_TIMEOUT_MS))]);
+    }
     iframe.contentWindow!.print();
     setTimeout(() => document.body.removeChild(iframe), 2000);
   }, 300);

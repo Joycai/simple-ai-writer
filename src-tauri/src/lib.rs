@@ -2,6 +2,7 @@ mod blocking;
 mod cmd;
 mod commands;
 mod docx;
+mod fontproto;
 mod instance;
 mod lorehash;
 mod pptx;
@@ -151,6 +152,7 @@ pub fn run() {
 
     let builder = protocol::register_asset_protocol(builder);
     let builder = preview::register_preview_protocol(builder);
+    let builder = fontproto::register_font_protocol(builder);
     print::register_print_protocol(builder)
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
