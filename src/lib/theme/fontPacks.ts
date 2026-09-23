@@ -23,7 +23,7 @@
  * Lib layer: no store imports. appStore drives this and holds the state.
  */
 import { fetch } from "../http";
-import { fileExists, readDir, readFile, removeDir, statPath, writeBinaryFile, writeFile } from "../fs/fileio";
+import { fileExists, readDir, readFile, removeDir, renamePath, statPath, writeBinaryFile, writeFile } from "../fs/fileio";
 import { joinPath, toPosixPath } from "../paths";
 import { IS_WINDOWS } from "../platform";
 
@@ -122,14 +122,16 @@ export function fontUrl(absPath: string, windows = IS_WINDOWS): string {
 // ─── The face rules ───────────────────────────────────────────────────────────
 
 /**
- * Turn one package sheet into the rules the app injects: every `url()` points
- * at the local copy, the family is the pack's own name and the weight the one
+ * Turn one package sheet into the rules the app injects: every `url()` goes
+ * through `urlFor`, the family is the pack's own name and the weight the one
  * pinned for this sheet (the HarmonyOS sheets already agree; normalising means
  * a future package that names its weights differently can't split the family).
- * `local()` sources stay — an author who has the font installed uses theirs.
- * Comments and everything outside `@font-face` blocks are dropped.
+ * Comments and everything outside `@font-face` blocks are dropped, and so are
+ * `local()` sources: the bytes are on this machine anyway, and the HarmonyOS
+ * sheets' family-only `local("HarmonyOS Sans SC")` on the 500 / 700 faces would
+ * resolve to an installed Regular and draw bold text in the regular cut.
  */
-export function rewriteFaces(css: string, family: string, weight: number, dir: string, windows = IS_WINDOWS): string {
+export function rewriteFaces(css: string, family: string, weight: number, urlFor: (name: string) => string): string {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const faces = clean.match(/@font-face\s*\{[^}]*\}/g) ?? [];
   return faces
@@ -138,10 +140,20 @@ export function rewriteFaces(css: string, family: string, weight: number, dir: s
         .replace(/\s+/g, " ")
         .replace(/font-family\s*:[^;}]*/, `font-family:"${family}"`)
         .replace(/font-weight\s*:[^;}]*/, `font-weight:${weight}`)
-        .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_m, _q, name: string) =>
-          `url("${fontUrl(joinPath(dir, name.replace(/^\.\//, "")), windows)}")`),
+        .replace(/local\([^)]*\)\s*,\s*/g, "")
+        .replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (_m, _q, name: string) => `url("${urlFor(name.replace(/^\.\//, ""))}")`),
     )
     .join("\n");
+}
+
+/**
+ * `faces.css` stores bare chunk names, not paths: the app-data folder can
+ * move (a roaming profile, an account migration), and URLs baked in at install
+ * time would then point at nothing — the scheme refuses them and the font
+ * silently falls back. The URL is made here, from where the pack is *now*.
+ */
+function resolveFaces(stored: string, dir: string): string {
+  return stored.replace(/url\("([^"/\\]+)"\)/g, (_m, name: string) => `url("${fontUrl(joinPath(dir, name))}")`);
 }
 
 // ─── Install state ────────────────────────────────────────────────────────────
@@ -170,7 +182,8 @@ export async function packFacesCss(ids: FontPackId[]): Promise<string> {
     let css = facesCache.get(id);
     if (css === undefined) {
       const pack = await fontPackData(id);
-      css = await readFile(joinPath(await packRoot(id), pack.version, FACES));
+      const dir = joinPath(await packRoot(id), pack.version);
+      css = resolveFaces(await readFile(joinPath(dir, FACES)), dir);
       facesCache.set(id, css);
     }
     parts.push(css);
@@ -189,20 +202,30 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** A source that accepts the connection and then stalls must not hold a download forever. */
+const CONNECT_TIMEOUT_MS = 10_000;
+/** Per file. The largest chunk is ~110 KB — a minute is generous even on a throttled line. */
+const FILE_TIMEOUT_MS = 60_000;
+
 /**
- * One pinned file, from the first source whose bytes match. A source that
- * errors or answers non-2xx counts as unreachable; one that answers with other
- * bytes counts as a mismatch. Only when *every* source served wrong bytes is
- * it an integrity failure — one unreachable source among them makes the
- * likelier story a network one.
+ * One pinned file, from the first source whose bytes match, trying sources
+ * from `order.start` (the last one that worked this install — a source that
+ * is black-holed shouldn't cost its connect timeout on every one of ~250
+ * files). A source that errors, times out or answers non-2xx counts as
+ * unreachable; one that answers with other bytes counts as a mismatch. Only
+ * when *every* source served wrong bytes is it an integrity failure — one
+ * unreachable source among them makes the likelier story a network one.
  */
-async function fetchPinned(pack: FontPackData, path: string, spec: FileSpec): Promise<Uint8Array> {
+async function fetchPinned(pack: FontPackData, path: string, spec: FileSpec, order: { start: number }): Promise<Uint8Array> {
+  const sources = FONT_PACK_SOURCES[pack.id];
   let unreachable = 0;
   let mismatched = 0;
-  for (const source of FONT_PACK_SOURCES[pack.id]) {
+  for (let k = 0; k < sources.length; k++) {
+    const i = (order.start + k) % sources.length;
     let bytes: Uint8Array;
     try {
-      const res = await fetch(source(pack.pkg, pack.version, path));
+      const init = { signal: AbortSignal.timeout(FILE_TIMEOUT_MS), connectTimeout: CONNECT_TIMEOUT_MS };
+      const res = await fetch(sources[i](pack.pkg, pack.version, path), init as RequestInit);
       if (!res.ok) {
         unreachable++;
         continue;
@@ -212,7 +235,10 @@ async function fetchPinned(pack: FontPackData, path: string, spec: FileSpec): Pr
       unreachable++;
       continue;
     }
-    if (bytes.length === spec[1] && (await sha256Hex(bytes)) === spec[2]) return bytes;
+    if (bytes.length === spec[1] && (await sha256Hex(bytes)) === spec[2]) {
+      order.start = i;
+      return bytes;
+    }
     mismatched++;
   }
   if (mismatched > 0 && unreachable === 0) {
@@ -253,18 +279,19 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
     opts.onProgress?.(done, total);
   };
   opts.onProgress?.(0, total);
+  const order = { start: 0 };
 
   // Sheets first: they're small, and a sheet naming a chunk the table doesn't
   // pin means the table and the package disagree — stop before any chunk.
   const faces: string[] = [];
   for (const w of pack.weights) {
     const [path] = w.sheet;
-    const css = new TextDecoder().decode(await fetchPinned(pack, path, w.sheet));
+    const css = new TextDecoder().decode(await fetchPinned(pack, path, w.sheet, order));
     const pinned = new Set(w.chunks.map((c) => c[0]));
     const named = [...css.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g)].map((m) => m[2].replace(/^\.\//, ""));
     const stray = named.find((n) => !pinned.has(n));
     if (stray) throw new FontPackError("integrity", `${path} names an unpinned file: ${stray}`);
-    faces.push(rewriteFaces(css, pack.family, w.weight, dir));
+    faces.push(rewriteFaces(css, pack.family, w.weight, (name) => name));
     advance(w.sheet[1]);
   }
 
@@ -286,8 +313,15 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
           advance(spec[1]);
           continue;
         }
-        const bytes = await fetchPinned(pack, remote, spec);
-        await onDisk(local, () => writeBinaryFile(local, bytes));
+        const bytes = await fetchPinned(pack, remote, spec, order);
+        // Written aside and renamed into place, so a chunk at its pinned size
+        // is a whole chunk — a torn write (power cut, a second window
+        // installing the same pack) never passes the resume check above.
+        const part = `${local}.part`;
+        await onDisk(local, async () => {
+          await writeBinaryFile(part, bytes);
+          await renamePath(part, local);
+        });
         advance(spec[1]);
       } catch (e) {
         failure ??= e;

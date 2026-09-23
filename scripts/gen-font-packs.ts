@@ -1,13 +1,20 @@
 /**
  * Pin the downloadable font packs into `src/lib/theme/fontPackData.ts`.
  *
- *   node scripts/gen-font-packs.ts
+ *   node scripts/gen-font-packs.ts            # pin from jsDelivr's index
+ *   node scripts/gen-font-packs.ts --verify   # …and download every chunk to check it (~21 MB)
  *
  * The app never trusts a download source for *what* a pack is — only for
  * delivering bytes. What it is (which files, how big, which sha256) is fixed
  * here, at dev time, from jsDelivr's package index, and every file the app
  * downloads at runtime must match it (lib/theme/fontPacks.ts). Upgrading a
  * pack = bump its version below and re-run; nothing else changes.
+ *
+ * What is checked: each sheet is downloaded and must hash to what the index
+ * says; the chunks' hashes are taken from the index as they are, unless
+ * `--verify` downloads them too. Run with `--verify` when bumping a version —
+ * an index that lied would otherwise only show up as every install failing
+ * its integrity check.
  *
  * Per weight: the package's own `@font-face` sheet (its `unicode-range` split
  * is what makes loading lazy) and exactly the woff2 chunks that sheet names —
@@ -65,6 +72,15 @@ function sheetUrls(css: string): string[] {
   return [...css.matchAll(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g)].map((m) => m[2].replace(/^\.\//, ""));
 }
 
+const verify = process.argv.includes("--verify");
+
+async function verifyChunk(pkg: string, version: string, path: string, sha256: string): Promise<void> {
+  const res = await fetch(`https://cdn.jsdelivr.net/npm/${pkg}@${version}/${path}`);
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  const got = createHash("sha256").update(new Uint8Array(await res.arrayBuffer())).digest("hex");
+  if (got !== sha256) throw new Error(`${path}: CDN bytes disagree with the index`);
+}
+
 const out: unknown[] = [];
 for (const p of PACKS) {
   const files = await index(p.pkg, p.version);
@@ -81,8 +97,13 @@ for (const p of PACKS) {
       if (!/^[\w.-]+\.woff2$/.test(name)) throw new Error(`${sheet}: unexpected url ${name}`);
       const f = files.get(dir + name);
       if (!f) throw new Error(`${sheet}: ${name} is not in the package`);
-      return [name, f.size, f.sha256];
+      return [name, f.size, f.sha256] as [string, number, string];
     });
+    if (verify) {
+      for (let i = 0; i < chunks.length; i += 8) {
+        await Promise.all(chunks.slice(i, i + 8).map(([name, , sha]) => verifyChunk(p.pkg, p.version, dir + name, sha)));
+      }
+    }
     weights.push({ weight: Number(weight), sheet: [sheet, pinned.size, sha256], chunks });
   }
   out.push({ id: p.id, pkg: p.pkg, version: p.version, family: p.family, weights });

@@ -63,12 +63,19 @@ vi.mock("../../fs/fileio", () => ({
     for (const k of h.files.keys()) if (k.startsWith(p + "/")) names.add(k.slice(p.length + 1).split("/")[0]);
     return [...names].map((name) => ({ name, path: `${p}/${name}`, isDirectory: ![...h.files.keys()].includes(`${p}/${name}`) }));
   }),
+  renamePath: vi.fn(async (from: string, to: string) => {
+    const v = h.files.get(from);
+    if (v === undefined) throw new Error(`no ${from}`);
+    h.files.delete(from);
+    h.files.set(to, v);
+  }),
   removeDir: vi.fn(async (p: string) => {
     for (const k of [...h.files.keys()]) if (k === p || k.startsWith(p + "/")) h.files.delete(k);
   }),
 }));
 
 import { fetch } from "../../http";
+import { joinPath } from "../../paths";
 import {
   FONT_PACK_SOURCES,
   FontPackError,
@@ -84,13 +91,15 @@ const fetchMock = vi.mocked(fetch);
 const DIR = "/data/fonts/misans/5.0.0";
 
 /** A source table: `(path) → body | status`. The first matching `serve` wins per URL host. */
-function serve(byHost: Record<string, (path: string) => string | number>) {
+function serve(byHost: Record<string, (path: string) => string | number>, delay: (path: string) => number = () => 0) {
   fetchMock.mockImplementation(async (input) => {
     const url = String(input);
     const host = new URL(url).host;
     const rule = byHost[host];
     if (!rule) throw new TypeError("network down");
     const path = url.replace(/^https:\/\/[^/]+\/(npm\/misans@5\.0\.0|misans\/5\.0\.0\/files|misans@5\.0\.0)\//, "");
+    const wait = delay(path);
+    if (wait) await new Promise((r) => setTimeout(r, wait));
     const out = rule(path);
     if (typeof out === "number") return new Response("", { status: out });
     return new Response(out, { status: 200 });
@@ -116,6 +125,17 @@ describe("installFontPack", () => {
     expect(h.writes[h.writes.length - 1]).toBe("/data/fonts/misans/installed.json");
     expect(h.writes[h.writes.length - 2]).toBe(`${DIR}/faces.css`);
     expect(JSON.parse(h.files.get("/data/fonts/misans/installed.json") as string)).toEqual({ version: "5.0.0", files: 3 });
+    // Chunks land through a `.part` + rename, so nothing half-written is ever left at a chunk's name.
+    expect(h.writes).toContain(`${DIR}/a.0.woff2.part`);
+    expect([...h.files.keys()].some((k) => k.endsWith(".part"))).toBe(false);
+    // faces.css keeps bare names — the URL is made when it's read, from where the folder is then.
+    expect(h.files.get(`${DIR}/faces.css`)).toContain('url("a.0.woff2")');
+    expect(h.files.get(`${DIR}/faces.css`)).not.toContain("/data/");
+    // Every request is bounded: a connect timeout and an abort signal.
+    for (const [, init] of fetchMock.mock.calls) {
+      expect((init as { connectTimeout?: number }).connectTimeout).toBeGreaterThan(0);
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+    }
 
     const total = Object.values(h.bytes).reduce((n, s) => n + s.length, 0);
     expect(seen[0]).toEqual([0, total]);
@@ -134,11 +154,13 @@ describe("installFontPack", () => {
     expect(fetchMock.mock.calls.some(([u]) => String(u).startsWith("https://cdn.jsdelivr.net/npm/misans@5.0.0/lib/N/a.0.woff2"))).toBe(true);
   });
 
-  it("falls through unreachable sources in order", async () => {
+  it("falls through unreachable sources in order, then starts later files at the one that worked", async () => {
     serve({ "gcore.jsdelivr.net": honest });
     await installFontPack("misans");
     const hosts = fetchMock.mock.calls.map(([u]) => new URL(String(u)).host);
     expect(hosts.slice(0, 4)).toEqual(["registry.npmmirror.com", "cdn.jsdelivr.net", "fastly.jsdelivr.net", "gcore.jsdelivr.net"]);
+    // Five files, one dead-source walk: everything after the first goes straight to gcore.
+    expect(hosts.slice(4)).toEqual(["gcore.jsdelivr.net", "gcore.jsdelivr.net", "gcore.jsdelivr.net", "gcore.jsdelivr.net"]);
     expect(await readInstalled("misans")).toBe(true);
   });
 
@@ -149,8 +171,13 @@ describe("installFontPack", () => {
   });
 
   it("stops the queue on the first failure and rejects only once every worker is back", async () => {
-    // Sheets and the first chunk come through; every other chunk is unreachable.
-    serve({ "registry.npmmirror.com": (p) => (p.endsWith(".css") || p.endsWith("a.0.woff2") ? honest(p) : 503) });
+    // Sheets and the first chunk come through — the chunk slowly; every other
+    // chunk is unreachable at once. Rejecting before the slow worker is back
+    // would let its write land after the caller already saw the error.
+    serve(
+      { "registry.npmmirror.com": (p) => (p.endsWith(".css") || p.endsWith("a.0.woff2") ? honest(p) : 503) },
+      (p) => (p.endsWith("a.0.woff2") ? 15 : 0),
+    );
     await expect(installFontPack("misans")).rejects.toMatchObject({ code: "network" });
     const settled = fetchMock.mock.calls.length;
     const written = h.writes.length;
@@ -231,17 +258,22 @@ describe("readInstalled / packFacesCss / removeFontPack", () => {
 });
 
 describe("rewriteFaces", () => {
-  it("points every url at the local copy, pins family and weight, keeps local(), drops the rest", () => {
-    const out = rewriteFaces(h.bytes["lib/N/b.css"], "MiSans", 700, "/data/fonts/misans/5.0.0", false);
-    expect(out).toBe(
-      `@font-face{font-family:"MiSans";font-weight:700;src:url("ai-writer-font://localhost/data/fonts/misans/5.0.0/c.2.woff2") format('woff2')}`,
-    );
-    const two = rewriteFaces(h.bytes["lib/N/r.css"], "MiSans", 400, "/f", false).split("\n");
+  it("routes every url through urlFor, pins family and weight, drops local() and everything else", () => {
+    const out = rewriteFaces(h.bytes["lib/N/b.css"], "MiSans", 700, (n) => `u:${n}`);
+    expect(out).toBe(`@font-face{font-family:"MiSans";font-weight:700;src:url("u:c.2.woff2") format('woff2')}`);
+    const two = rewriteFaces(h.bytes["lib/N/r.css"], "MiSans", 400, (n) => n).split("\n");
     expect(two).toHaveLength(2);
-    expect(two[0]).toContain('local("MiSans")');
+    // A family-only local() would pick an installed Regular for the bold faces — gone.
+    expect(two[0]).not.toContain("local(");
+    expect(two[0]).toContain(`src:url("a.0.woff2")`);
     expect(two[0]).toContain("unicode-range:U+4e00-4e10");
-    expect(two[1]).toContain('url("ai-writer-font://localhost/f/b.1.woff2")');
+    expect(two[1]).toContain('url("b.1.woff2")');
     expect(two.join("")).not.toContain("generated");
+  });
+
+  it("makes Windows URLs the Rust parser reads when given them", () => {
+    const out = rewriteFaces(h.bytes["lib/N/b.css"], "MiSans", 700, (n) => fontUrl(joinPath("C:/Users/a b/fonts", n), true));
+    expect(out).toContain('url("http://ai-writer-font.localhost/C:/Users/a%20b/fonts/c.2.woff2")');
   });
 });
 
