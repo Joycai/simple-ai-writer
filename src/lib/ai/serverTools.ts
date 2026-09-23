@@ -101,6 +101,7 @@
 import { familyOf } from "./types";
 import { providerWire, type ServerToolWire } from "./platforms";
 import { hasCapability } from "./capabilities";
+import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
 
@@ -186,8 +187,10 @@ export function effectiveServerTools(
   wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
+  relayUpstream?: RelayUpstreamChoice,
 ): ServerToolId[] | undefined {
-  return normalizeServerTools((ids ?? []).filter((id) => hasCapability(id, wire, { modelId })));
+  const model = capabilityModelOf({ modelId, relayUpstream });
+  return normalizeServerTools((ids ?? []).filter((id) => hasCapability(id, wire, model)));
 }
 
 /**
@@ -242,9 +245,11 @@ export function anthropicServerTools(
   wire: ServerToolWire,
   ids: readonly ServerToolId[] | undefined,
   modelId?: string,
+  relayUpstream?: RelayUpstreamChoice,
 ): { type: string; name: string; max_uses?: number }[] {
   if (familyOf(wire.standard) !== "anthropic") return [];
-  return (ids ?? []).filter((id) => hasCapability(id, wire, { modelId })).flatMap((id) => {
+  const model = capabilityModelOf({ modelId, relayUpstream });
+  return (ids ?? []).filter((id) => hasCapability(id, wire, model)).flatMap((id) => {
     const type = ANTHROPIC_WIRE_TYPE[id];
     if (!type) return [];
     return [{
@@ -275,9 +280,10 @@ export function openaiServerToolsBody(
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { functionTools: boolean },
+  relayUpstream?: RelayUpstreamChoice,
 ): Record<string, unknown> {
   if (familyOf(wire.standard) !== "openai") return {};
-  const granted = effectiveServerTools(wire, ids, modelId);
+  const granted = effectiveServerTools(wire, ids, modelId, relayUpstream);
   if (!granted) return {};
   const out: Record<string, unknown> = {};
   if (granted.includes("web_search")) {
@@ -327,9 +333,10 @@ export function responsesServerTools(
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   request: { thinkingOff: boolean },
+  relayUpstream?: RelayUpstreamChoice,
 ): { type: ServerToolId }[] {
   if (familyOf(wire.standard) !== "responses") return [];
-  return (effectiveServerTools(wire, ids, modelId) ?? [])
+  return (effectiveServerTools(wire, ids, modelId, relayUpstream) ?? [])
     // The interpreter needs the model thinking on this wire: with
     // `reasoning.effort: "none"` DashScope fails the whole response
     // (`Normal mode does not support Code interpreter`, measured 2026-09-17).

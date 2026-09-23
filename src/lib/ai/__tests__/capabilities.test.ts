@@ -13,9 +13,11 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, capabilityVerdict, familyVerdict, hasCapability,
+  CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, UPSTREAM_CAPABILITIES,
+  capabilityVerdict, familyVerdict, hasCapability,
   type CapabilityId, type CapabilityWire,
 } from "../capabilities";
+import { RELAY_UPSTREAMS, capabilityModelOf } from "../relayUpstream";
 import { PLATFORM_IDS, platformEndpoints } from "../platforms";
 import { SERVER_TOOL_IDS } from "../serverTools";
 import type { ProtocolFamily } from "../types";
@@ -36,21 +38,52 @@ const NO_SUCH_MODEL = "no-such-model";
 function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family: ProtocolFamily): string {
   if (!platformEndpoints(platform).some((e) => e.family === family)) return "";
   const v = familyVerdict(id, platform, family);
-  if (v.status === "no") return "·";
+  const perUpstream = !!PLATFORM_CAPABILITIES[platform].relay && upstreamCell(id, family).some((c) => c !== undefined);
+  if (v.status === "no") return perUpstream ? "· 按上游" : "·";
   const families = PLATFORM_CAPABILITIES[platform].families;
   const matcher = typeof (families?.[family]?.[id] ?? families?.all?.[id]) === "object";
   const perModel = matcher || familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).reason === "model-unlisted";
-  return (v.status === "yes" ? "✓" : "?") + (perModel ? " 按模型" : "") + ` ${v.reason}`;
+  return (v.status === "yes" ? "✓" : "?") + (perModel ? " 按模型" : "") + (perUpstream ? " 按上游" : "") + ` ${v.reason}`;
+}
+
+/** Each upstream's own cell for this capability and family, in `RELAY_UPSTREAMS` order. */
+function upstreamCell(id: CapabilityId, family: ProtocolFamily): (boolean | undefined)[] {
+  return RELAY_UPSTREAMS.map((u) => {
+    const f = UPSTREAM_CAPABILITIES[u].families;
+    return f[family]?.[id] ?? f.all?.[id];
+  });
+}
+
+function renderUpstreams(): string[] {
+  const out = [
+    "## 中转站上游画像",
+    "",
+    "中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。",
+    "上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
+    "",
+    `| 能力 | 族 | ${RELAY_UPSTREAMS.join(" | ")} |`,
+    `| --- | --- | ${RELAY_UPSTREAMS.map(() => "---").join(" | ")} |`,
+  ];
+  for (const id of CAPABILITY_IDS) {
+    for (const f of FAMILIES) {
+      const cells = upstreamCell(id, f);
+      if (cells.every((c) => c === undefined)) continue;
+      out.push(`| ${id} | ${FAMILY_LABEL[f]} | ${cells.map((c) => (c === undefined ? "" : c ? "✓" : "·")).join(" | ")} |`);
+    }
+  }
+  out.push("");
+  return out;
 }
 
 function renderMatrix(): string {
   const out = [
     "# 能力矩阵（生成物，勿手改）",
     "",
-    "> **状态：`living`——由 `src/lib/ai/capabilities.ts` 的两张表渲染，`capabilities.test.ts` 保证与代码一致。**",
-    "> 改的是那两张表；改完用测试文件头注里的命令重新生成。设计与理由：[`capability-gating-plan.md`](capability-gating-plan.md)。",
+    "> **状态：`living`——由 `src/lib/ai/capabilities.ts` 的三张表渲染，`capabilities.test.ts` 保证与代码一致。**",
+    "> 改的是那三张表；改完用测试文件头注里的命令重新生成。设计与理由：[`capability-gating-plan.md`](capability-gating-plan.md)。",
     ">",
-    "> `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴。",
+    "> `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴；",
+    "> 「按上游」= 中转站上还要看模型背后的上游（本文末节）。表里是没有上游时的答案。",
     "> 空格 = 这个平台没有这一族的线路。模型类型（看图的能力只对多模态 / 视觉模型成立）不在此表内——那是模型行上的事，不是线路上的。",
     "",
   ];
@@ -61,6 +94,7 @@ function renderMatrix(): string {
     for (const p of PLATFORM_IDS) out.push(`| ${p} | ${FAMILIES.map((f) => cell(id, p, f)).join(" | ")} |`);
     out.push("");
   }
+  out.push(...renderUpstreams());
   return out.join("\n");
 }
 
@@ -191,40 +225,86 @@ describe("capabilityVerdict", () => {
   });
 });
 
-// A relay's Kiro-served Claude, measured 2026-09-23 on both routes of one New
-// API relay (landscape.md §7 第十五个样本). The matcher only singles ids out:
-// every other model on the relay keeps the rule's answer.
-describe("a relay's Kiro-served Claude", () => {
-  const KIRO = ["[特价kiro量]claude-opus-5", "特价kiro | claude-opus-4-6", "[kiro2]kiro-claude-sonnet-5"];
+// Relay upstreams (landscape.md §7 第十五、十六个样本, 2026-09-23;
+// capability-gating-plan §8.11). The Kiro cells replaced a model-id matcher
+// (`KIRO_CLAUDE`, PR #685); asked the way the adapters ask — through
+// `capabilityModelOf`, which infers Kiro from the id — each keeps the status
+// it had, now for the reason `upstream`.
+describe("relay upstreams", () => {
   const RELAYS = ["newapi", "custom"] as const;
-  const chat = (platform: (typeof RELAYS)[number]) => ({ platform, standard: "openai_compat" as const });
-  const anth = (platform: (typeof RELAYS)[number]) => ({ platform, standard: "anthropic_compat" as const });
+  const chat = (platform: (typeof RELAYS)[number] | (typeof PLATFORM_IDS)[number]) => ({ platform, standard: "openai_compat" as const });
+  const anth = (platform: (typeof RELAYS)[number] | (typeof PLATFORM_IDS)[number]) => ({ platform, standard: "anthropic_compat" as const });
+  const inferred = (modelId?: string) => capabilityModelOf({ modelId });
 
-  it("is not sent what the relay drops or ignores", () => {
-    for (const platform of RELAYS) for (const modelId of KIRO) {
-      for (const id of ["pdfInput", "forcedToolChoice", "structuredOutput"] as const) {
-        expect(capabilityVerdict(id, chat(platform), { modelId }), `${platform} ${id} ${modelId}`).toEqual({ status: "no", reason: "model" });
+  describe("Kiro, inferred from the id: what the old matcher refused", () => {
+    const KIRO = ["[特价kiro量]claude-opus-5", "特价kiro | claude-opus-4-6", "[kiro2]kiro-claude-sonnet-5"];
+    // The five cells KIRO_CLAUDE held, and the status each gave these ids.
+    const WAS_NO = [
+      [chat, "pdfInput"], [chat, "forcedToolChoice"], [chat, "structuredOutput"],
+      [anth, "forcedToolChoice"], [anth, "web_search"],
+    ] as const;
+
+    it("is still not sent", () => {
+      for (const platform of RELAYS) for (const modelId of KIRO) {
+        for (const [wire, id] of WAS_NO) {
+          expect(capabilityVerdict(id, wire(platform), inferred(modelId)), `${platform} ${id} ${modelId}`)
+            .toEqual({ status: "no", reason: "upstream" });
+        }
+        expect(capabilityVerdict("jsonSchema", chat(platform), inferred(modelId))).toEqual({ status: "no", reason: "requires" });
       }
-      expect(capabilityVerdict("jsonSchema", chat(platform), { modelId })).toEqual({ status: "no", reason: "requires" });
-      for (const id of ["forcedToolChoice", "web_search"] as const) {
-        expect(capabilityVerdict(id, anth(platform), { modelId }), `${platform} ${id} ${modelId}`).toEqual({ status: "no", reason: "model" });
+    });
+
+    it("keeps what works", () => {
+      for (const modelId of KIRO) {
+        expect(hasCapability("temperature", chat("newapi"), inferred(modelId))).toBe(true);
+        expect(hasCapability("temperature", anth("newapi"), { ...inferred(modelId), thinkingCategory: "off" })).toBe(true);
       }
+    });
+
+    it("leaves every other model on the relay, and a blank id, to the rule", () => {
+      for (const modelId of [undefined, "", "claude-opus-5", "[anti]claude-opus-4-6", "kiro-deepseek-v4"]) {
+        expect(capabilityVerdict("pdfInput", chat("newapi"), inferred(modelId))).toEqual({ status: "yes", reason: "protocol" });
+        expect(capabilityVerdict("forcedToolChoice", anth("custom"), inferred(modelId))).toEqual({ status: "yes", reason: "protocol" });
+        expect(capabilityVerdict("web_search", anth("newapi"), inferred(modelId))).toEqual({ status: "unknown", reason: "unmeasured" });
+      }
+    });
+  });
+
+  it("answers each upstream's measured cells, both ways", () => {
+    const opus = (upstream: (typeof RELAY_UPSTREAMS)[number]) => ({ modelId: "[x]claude-opus-4-6", upstream });
+    expect(capabilityVerdict("web_search", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "upstream" });
+    expect(capabilityVerdict("pdfInput", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "upstream" });
+    expect(capabilityVerdict("forcedToolChoice", anth("newapi"), opus("cc"))).toEqual({ status: "yes", reason: "protocol" });
+    expect(capabilityVerdict("forcedToolChoice", chat("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });
+    expect(capabilityVerdict("pdfInput", chat("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });
+    expect(capabilityVerdict("web_search", anth("custom"), opus("anti"))).toEqual({ status: "no", reason: "upstream" });
+    expect(capabilityVerdict("web_search", anth("newapi"), opus("bedrock"))).toEqual({ status: "no", reason: "upstream" });
+    expect(capabilityVerdict("pdfInput", anth("newapi"), opus("bedrock"))).toEqual({ status: "yes", reason: "upstream" });
+    // Only Kiro carries the Chat JSON-mode cell (the relay conversion's, kept where the old rule put it).
+    expect(capabilityVerdict("structuredOutput", chat("newapi"), opus("bedrock"))).toEqual({ status: "yes", reason: "protocol" });
+    // Unmeasured: no cell, no change.
+    for (const id of CAPABILITY_IDS) for (const f of FAMILIES) {
+      expect(familyVerdict(id, "newapi", f, opus("official")), `${id} ${f}`).toEqual(familyVerdict(id, "newapi", f, { modelId: "[x]claude-opus-4-6" }));
     }
   });
 
-  it("keeps what works", () => {
-    for (const modelId of KIRO) {
-      expect(hasCapability("temperature", chat("newapi"), { modelId })).toBe(true);
-      expect(hasCapability("temperature", anth("newapi"), { modelId, thinkingCategory: "off" })).toBe(true);
-    }
+  it("applies only to the models it was measured on, and only on a relay", () => {
+    expect(capabilityVerdict("web_search", anth("newapi"), { modelId: "[anti量]gemini-3-pro", upstream: "anti" }))
+      .toEqual({ status: "unknown", reason: "unmeasured" });
+    expect(capabilityVerdict("web_search", anth("newapi"), { upstream: "anti" }))
+      .toEqual({ status: "unknown", reason: "unmeasured" });
+    // A platform that is not a relay has no upstream to consult.
+    expect(capabilityVerdict("web_search", { platform: "anthropic", standard: "anthropic" }, { modelId: "claude-opus-4-6", upstream: "bedrock" }))
+      .toEqual({ status: "yes", reason: "measured" });
+    expect(capabilityVerdict("pdfInput", anth("deepseek"), { modelId: "claude-opus-4-6", upstream: "cc" }))
+      .toEqual({ status: "no", reason: "family" });
   });
 
-  it("leaves every other model on the relay, and a blank id, to the rule", () => {
-    for (const modelId of [undefined, "", "claude-opus-5", "[anti]claude-opus-4-6", "kiro-deepseek-v4"]) {
-      expect(capabilityVerdict("pdfInput", chat("newapi"), { modelId })).toEqual({ status: "yes", reason: "protocol" });
-      expect(capabilityVerdict("forcedToolChoice", anth("custom"), { modelId })).toEqual({ status: "yes", reason: "protocol" });
-      expect(capabilityVerdict("web_search", anth("newapi"), { modelId })).toEqual({ status: "unknown", reason: "unmeasured" });
-    }
+  it("says no upstream when resolved to none, even where the id names one", () => {
+    expect(capabilityVerdict("web_search", anth("newapi"), capabilityModelOf({ modelId: "[kiro]claude-opus-5", relayUpstream: "none" })))
+      .toEqual({ status: "unknown", reason: "unmeasured" });
+    expect(capabilityVerdict("web_search", anth("newapi"), capabilityModelOf({ modelId: "[kiro]claude-opus-5", relayUpstream: "cc" })))
+      .toEqual({ status: "yes", reason: "upstream" });
   });
 });
 

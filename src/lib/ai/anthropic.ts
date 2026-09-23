@@ -30,6 +30,7 @@ import {
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { wireOf } from "./platforms";
 import { hasCapability } from "./capabilities";
+import { capabilityModelOf } from "./relayUpstream";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -395,7 +396,7 @@ function toolChoiceBody(
   if (!tc || tc === "auto") return { type: "auto" };
   if (tc === "none") return { type: "none" };
   if (forcesToolChoiceAuto(category, opts.reasoningEffort)) return { type: "auto" };
-  if (!hasCapability("forcedToolChoice", wireOf(opts), { modelId: opts.modelId })) return { type: "auto" };
+  if (!hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts))) return { type: "auto" };
   if (tc === "required") return { type: "any" };
   return { type: "tool", name: tc.function.name };
 }
@@ -572,7 +573,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
   // a standing permission on the model, not something a task opts into.
-  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools, opts.modelId);
+  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools, opts.modelId, opts.relayUpstream);
   if (opts.tools?.length || serverTools.length) {
     const tools: Record<string, unknown>[] = [
       ...serverTools,

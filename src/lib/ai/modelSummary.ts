@@ -25,6 +25,7 @@ import { effectiveServerTools, openaiServerToolsBody } from "./serverTools";
 import { wireOf, type PlatformId } from "./platforms";
 import { hasAnyServerTool, hasCapability } from "./capabilities";
 import { familyOf, type ApiStandard } from "./types";
+import type { RelayUpstreamChoice } from "./relayUpstream";
 
 export interface WireItem {
   /** Dotted path of the field, e.g. `thinking.type`, `response_format`. */
@@ -71,7 +72,14 @@ const NOISE = new Set(["thinking.display", "generationConfig.thinkingConfig.incl
  * config alone would say. `platform` decides which server tools can be spelled
  * (`lib/ai/platforms.ts`); absent = inferred from `baseUrl`, as the adapters do.
  */
-export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: string, platform?: PlatformId): WireItem[] {
+export function wireSummary(
+  m: WireInput,
+  standard: ApiStandard,
+  baseUrl?: string,
+  platform?: PlatformId,
+  /** The resolved relay upstream (`resolveRelayUpstream`); absent = a product name in the id. */
+  relayUpstream?: RelayUpstreamChoice,
+): WireItem[] {
   const out: WireItem[] = [];
   const family = familyOf(standard);
   const wire = wireOf({ platform, baseUrl: baseUrl ?? "", standard });
@@ -111,14 +119,16 @@ export function wireSummary(m: WireInput, standard: ApiStandard, baseUrl?: strin
     // Summarised as a request without function tools: the condition that
     // drops `enable_code_interpreter` and the `agent_max` strategy is the
     // request's, not the model's.
-    if (family === "openai") out.push(...flatten(openaiServerToolsBody(wire, m.serverTools, m.modelId, { functionTools: false })));
+    if (family === "openai") out.push(...flatten(openaiServerToolsBody(wire, m.serverTools, m.modelId, { functionTools: false }, relayUpstream)));
     else {
-      const ids = effectiveServerTools(wire, m.serverTools, m.modelId);
+      const ids = effectiveServerTools(wire, m.serverTools, m.modelId, relayUpstream);
       if (ids) out.push({ key: "tools", value: ids.join(",") });
     }
   }
 
-  const so = effectiveStructuredOutput({ standard, baseUrl, platform: wire.platform, modelId: m.modelId, structuredOutput: m.structuredOutput });
+  const so = effectiveStructuredOutput({
+    standard, baseUrl, platform: wire.platform, modelId: m.modelId, structuredOutput: m.structuredOutput, relayUpstream,
+  });
   if (so !== "off") {
     // 三条线三个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
     // 否则只是 responseMimeType）、Responses 的 text.format、其余的 response_format。

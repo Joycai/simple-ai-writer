@@ -1,9 +1,10 @@
 # 能力矩阵（生成物，勿手改）
 
-> **状态：`living`——由 `src/lib/ai/capabilities.ts` 的两张表渲染，`capabilities.test.ts` 保证与代码一致。**
-> 改的是那两张表；改完用测试文件头注里的命令重新生成。设计与理由：[`capability-gating-plan.md`](capability-gating-plan.md)。
+> **状态：`living`——由 `src/lib/ai/capabilities.ts` 的三张表渲染，`capabilities.test.ts` 保证与代码一致。**
+> 改的是那三张表；改完用测试文件头注里的命令重新生成。设计与理由：[`capability-gating-plan.md`](capability-gating-plan.md)。
 >
-> `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴。
+> `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴；
+> 「按上游」= 中转站上还要看模型背后的上游（本文末节）。表里是没有上游时的答案。
 > 空格 = 这个平台没有这一族的线路。模型类型（看图的能力只对多模态 / 视觉模型成立）不在此表内——那是模型行上的事，不是线路上的。
 
 ## pdfInput
@@ -24,10 +25,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ measured |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | · | · |
-| newapi | ✓ 按模型 protocol | ✓ protocol | · | · |
+| newapi | ✓ 按上游 protocol | ✓ protocol | · | · 按上游 |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按模型 protocol | ✓ protocol | · | · |
+| custom | ✓ 按上游 protocol | ✓ protocol | · | · 按上游 |
 
 ## vlHighResolution
 
@@ -116,10 +117,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | zhipu | · |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
-| newapi | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | ✓ 按模型 protocol |
+| newapi | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | ✓ 按上游 protocol |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | ✓ 按模型 protocol |
+| custom | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | ✓ 按上游 protocol |
 
 ## temperature
 
@@ -208,10 +209,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | · |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
-| newapi | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按模型 protocol | ✓ protocol | ✓ protocol | · |
+| custom | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | · |
 
 ## jsonSchema
 
@@ -254,10 +255,10 @@
 | volcengine-plan | · | ✓ measured |  | ✓ measured |
 | zhipu | · |  |  |  |
 | orcarouter | · | ? unmeasured | · | ? unmeasured |
-| newapi | · | ? unmeasured | · | ? 按模型 unmeasured |
+| newapi | · | ? unmeasured | · | ? 按上游 unmeasured |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
-| custom | · | ? unmeasured | · | ? 按模型 unmeasured |
+| custom | · | ? unmeasured | · | ? 按上游 unmeasured |
 
 ## web_extractor
 
@@ -350,3 +351,17 @@
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
 | custom | · | · | · | · |
+
+## 中转站上游画像
+
+中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。
+上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。
+
+| 能力 | 族 | kiro | cc | anti | bedrock | official |
+| --- | --- | --- | --- | --- | --- | --- |
+| pdfInput | Chat | · | ✓ | · | ✓ |  |
+| pdfInput | Anth |  | ✓ |  | ✓ |  |
+| forcedToolChoice | Chat | · | ✓ | · | ✓ |  |
+| forcedToolChoice | Anth | · |  | · | ✓ |  |
+| structuredOutput | Chat | · |  |  |  |  |
+| web_search | Anth | · | ✓ | · | · |  |

@@ -222,7 +222,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const include = /non-reasoning/i.test(opts.modelId) ? [] : platformResponsesInclude(wire.platform);
   const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
     thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
-  });
+  }, opts.relayUpstream);
   // `text` has two writers — this model's verbosity and a structured task's
   // `text.format` (jsonMode, arriving through extraBody) — merged below so
   // neither erases the other.

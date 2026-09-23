@@ -5,15 +5,15 @@
  * `claude-adaptive`, Chat Completions with `openai-generic`; it has no
  * Responses or Gemini route — 500 `convert_request_failed`), so what is
  * verified is the app's own request bodies: `imagePart`, the `file` part on
- * each route, thinking + effort, the tool round, and what the capability
- * table's `KIRO_CLAUDE` cells keep off the wire (a forced `tool_choice`,
- * `web_search`, JSON mode).
+ * each route, thinking + effort, the tool round, and what the Kiro upstream's
+ * cells keep off the wire (a forced `tool_choice`, `web_search`, JSON mode) —
+ * the upstream inferred from `kiro` in the id, as for any hand-built request.
  *
  * Several cases pin a **failure** the relay hides behind a 200 (the PDF is
  * dropped, `max_tokens` is ignored, Chat's `reasoning_effort: "max"` turns
  * thinking off). If one starts failing, the relay changed — re-probe and
  * update docs/api/landscape.md §7 第十五个样本 (2026-09-23), which these facts
- * pin, and the `KIRO_CLAUDE` matcher in capabilities.ts.
+ * pin, and the `kiro` entry of `UPSTREAM_CAPABILITIES` in capabilities.ts.
  */
 import { describe, expect, it } from "vitest";
 import { streamCompletion } from "../index";

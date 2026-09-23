@@ -26,6 +26,7 @@ import type { GeminiSafetySettings } from "./safety";
 import { resolvePlatform, type PlatformId } from "./platforms";
 import { activeFamily, channelEndpoints, ROUTE_LONG, routeProvider } from "./routes";
 import type { ServerToolId } from "./serverTools";
+import type { RelayUpstreamChoice } from "./relayUpstream";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
 import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
@@ -103,6 +104,13 @@ export interface ConnOptions {
   textVerbosity?: TextVerbosity;
   /** DashScope `vl_high_resolution_images` on the Chat Completions wire; absent sends nothing. */
   vlHighResolution?: boolean;
+  /**
+   * The relay upstream behind this model, resolved from the channel's prefix
+   * table and the model's own choice (`lib/ai/relayUpstream.ts`); `"none"`
+   * when nothing applies. Absent in a hand-built bag, where the adapters fall
+   * back to a product name in the id (`capabilityModelOf`).
+   */
+  relayUpstream?: RelayUpstreamChoice;
 }
 
 /**
@@ -169,6 +177,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     structuredOutput: o.structuredOutput,
     textVerbosity: o.textVerbosity,
     vlHighResolution: o.vlHighResolution,
+    relayUpstream: o.relayUpstream,
   };
 }
 

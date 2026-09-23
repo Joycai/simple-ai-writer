@@ -13,6 +13,7 @@
  */
 import { useTranslation } from "react-i18next";
 import { capabilityVerdict, type CapabilityId } from "../../../lib/ai/capabilities";
+import { capabilityModelOf } from "../../../lib/ai/relayUpstream";
 import { ROUTE_SHORT } from "../../../lib/ai/routes";
 import type { ServerToolWire } from "../../../lib/ai/platforms";
 import type { ModelType } from "../../../lib/ai/configDb";
@@ -40,7 +41,7 @@ export function CapabilityMatrix({
 }) {
   const { t } = useTranslation();
   if (ids.length === 0) return null;
-  const model = { modelId: modelId.trim() || undefined, type };
+  const model = { ...capabilityModelOf({ modelId: modelId.trim() || undefined }), type };
   return (
     <>
       <table className={r.matrix} aria-label={label}>
@@ -62,6 +63,7 @@ export function CapabilityMatrix({
                 const why = t(`aiConfig.capReason.${v.reason}`, {
                   platform: w ? t(`aiConfig.platforms.${w.platform}`) : "",
                   model: model.modelId ?? "",
+                  upstream: model.upstream ? t(`aiConfig.upstream.name.${model.upstream}`) : "",
                 });
                 return (
                   <td key={f} className={`${CELL[v.status]} ${f === current ? r.matrixCur : ""}`}

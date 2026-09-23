@@ -96,7 +96,7 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
-      "modelId", "platform", "prefix", "reasoningEffort", "safetySettings", "serverTools",
+      "modelId", "platform", "prefix", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
       "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "vlHighResolution",
     ]);
   });

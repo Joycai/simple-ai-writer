@@ -19,6 +19,7 @@ import {
 import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
 import { hasCapability } from "./capabilities";
+import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import {
   legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
   standardOf, writtenBaseOf,
@@ -506,19 +507,19 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * Chat Completions 的 `file` 片段与 Responses 的 `input_file`（openai.ts / responses.ts）。
  * Anthropic 族的 `document` 块多数兼容端会换成占位符静默吞掉，只有平台画像实测过的
  * （能力表 `capabilities.ts` 的 `pdfInput` 格，如火山方舟 Plan）才算数——所以这里按渠道的平台 × 线路问能力表，
- * 连同模型 id（中转站 Kiro 渠道的 Claude 在 Chat 线路上也会丢 `file` 片段，第十五个样本）。
+ * 连同模型背后的中转站上游（Kiro、anti 上游的 Claude 在 Chat 线路上会丢 `file` 片段，第十五、十六个样本）。
  * 模型能在渠道的几条线路之间切换以后，声明就不能再在保存时按「当前线路」清掉——
  * 切到 ④ 族再切回来，作者不该重填一遍（channel-model-route-plan.md §3）。所以声明
  * 留着，能不能用在这里按线路回答；PDF 子代理的资格、委派时的拦截都问这一句。
  * 不给渠道（手里没有渠道列表的界面）时只看声明。
  */
 export function readsPdf(
-  m: Pick<Model, "pdfInput"> & { modelId?: string },
+  m: Pick<Model, "pdfInput"> & { modelId?: string; relayUpstream?: RelayUpstreamChoice },
   provider?: Pick<Provider, "apiStandard" | "baseUrl" | "platform">,
 ): boolean {
   if (!m.pdfInput) return false;
   if (!provider) return true;
-  return hasCapability("pdfInput", providerWire(provider), { modelId: m.modelId });
+  return hasCapability("pdfInput", providerWire(provider), capabilityModelOf(m));
 }
 
 /**

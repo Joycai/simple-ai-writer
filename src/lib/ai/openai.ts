@@ -11,6 +11,7 @@ import {
 import { openaiServerToolsBody } from "./serverTools";
 import { wireOf } from "./platforms";
 import { hasCapability } from "./capabilities";
+import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { mergeConcatenatedArgs } from "./toolArgs";
@@ -105,13 +106,13 @@ function deltaText(content: unknown): string {
  * A platform can also declare `auto` its only value (the `forcedToolChoice`
  * cell in capabilities.ts) — 智谱, whose models ignore forcing or refuse it with an error
  * that never names the parameter, so the learned downgrade cannot catch it —
- * or single out model ids that ignore it (a relay's Kiro-served Claude).
+ * or single out a relay upstream that ignores it (Kiro, anti — relayUpstream.ts).
  */
 function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";
   const forced = tc === "required" || typeof tc === "object";
   if (!forced) return tc;
-  return forcesToolChoiceAuto(category, opts.reasoningEffort) || !hasCapability("forcedToolChoice", wireOf(opts), { modelId: opts.modelId }) ? "auto" : tc;
+  return forcesToolChoiceAuto(category, opts.reasoningEffort) || !hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts)) ? "auto" : tc;
 }
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
@@ -142,7 +143,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // this wire wants it (enable_search / enable_code_interpreter — see
     // lib/ai/serverTools.ts). Empty object for every model without the
     // declaration, so their requests are byte-identical to before this existed.
-    ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }),
+    ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }, opts.relayUpstream),
     // Absent unless the author set an effort on this model — an unset model
     // must keep sending exactly what it sent before this existed, because a
     // volunteered field is a field some relay can reject. The category carries

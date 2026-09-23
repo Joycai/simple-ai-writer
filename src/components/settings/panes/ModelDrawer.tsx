@@ -45,6 +45,7 @@ import {
 } from "../../../lib/ai/serverTools";
 import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
 import { capabilityVerdict, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
+import { capabilityModelOf } from "../../../lib/ai/relayUpstream";
 import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
@@ -478,7 +479,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // `openai_compat`, and only one of them has `enable_search`.
   const toolWire = curWire;
   const offersServerTool = (id: ServerToolId) =>
-    !!toolWire && hasCapability(id, toolWire, { modelId: form.modelId.trim() });
+    !!toolWire && hasCapability(id, toolWire, capabilityModelOf({ modelId: form.modelId.trim() }));
   // What is *stored*: the author's grant, whole — kept even where this wire
   // can't say an id (the switch stays on and says 不发送), because the grant is
   // the author's and a provider can move platform under it (plan §7 invariant
@@ -496,7 +497,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // was never tried with it (capability-gating-plan §8.7). Either way it is sent.
   const unmeasuredToolHint = (id: ServerToolId) => {
     const modelId = form.modelId.trim();
-    const v = toolWire ? capabilityVerdict(id, toolWire, { modelId }) : undefined;
+    const v = toolWire ? capabilityVerdict(id, toolWire, capabilityModelOf({ modelId })) : undefined;
     if (v?.status !== "unknown") return "";
     return v.reason === "model-unlisted"
       ? t("aiConfig.models.serverToolModelUnmeasured", { platform: platformName, model: modelId })

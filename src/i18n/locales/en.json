@@ -2921,7 +2921,17 @@
       "model-unlisted": "{{platform}} has it, but {{model}} was never measured: sent anyway, and may not work",
       "model-type": "This model's type can't use it (a text model reads no pictures)",
       "requires": "Something it depends on is unavailable on this route",
-      "thinking": "This route refuses it while thinking is on"
+      "thinking": "This route refuses it while thinking is on",
+      "upstream": "Measured on the relay's upstream \"{{upstream}}\""
+    },
+    "upstream": {
+      "name": {
+        "kiro": "Kiro (reverse)",
+        "cc": "CC-style (reverse)",
+        "anti": "anti-style (reverse)",
+        "bedrock": "Bedrock (forward)",
+        "official": "Official (forward)"
+      }
     },
     "fees": {
       "paneSub": "One set of prices, shared by any number of models. Change it once and every model bound to it follows; usage already recorded does not move.",

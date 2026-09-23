@@ -2913,7 +2913,17 @@
       "model-unlisted": "{{platform}} 有这一项，但 {{model}} 没实测过：照发，可能不起作用",
       "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
       "requires": "它依赖的另一项在这条线路上不可用",
-      "thinking": "思考开着时这条线路不收它"
+      "thinking": "思考开着时这条线路不收它",
+      "upstream": "中转站上游「{{upstream}}」实测如此"
+    },
+    "upstream": {
+      "name": {
+        "kiro": "Kiro 反代",
+        "cc": "CC 类反代",
+        "anti": "anti 类反代",
+        "bedrock": "Bedrock 正向",
+        "official": "官方正向"
+      }
     },
     "fees": {
       "paneSub": "一组价格，被任意多个模型共用。改一次价，所有绑着它的模型一起改；已经记下的用量一分不动。",
