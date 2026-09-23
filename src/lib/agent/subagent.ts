@@ -13,11 +13,12 @@
  */
 
 import i18n from "../../i18n";
-import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import { familyOf, type ContentPart, type MessageContent, type StreamMessage } from "../ai/types";
+import { ROUTE_LONG } from "../ai/routes";
 import { serverToolsSent } from "../ai/serverTools";
 import { upstreamDropping } from "../ai/relayUpstream";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
-import { canSeeImages, readsPdf, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, pdfRouteFor, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
 import { recordUsage } from "../ai/usageRow";
 import { withCurrentTime } from "../context/clock";
@@ -159,14 +160,27 @@ export async function executeDelegate(
     );
   }
   if (kind === "pdf" && !readsPdf(conn.model, conn.provider)) {
-    const upstream = conn.model.pdfInput ? upstreamDropping("pdfInput", conn.model, conn.provider) : undefined;
+    if (!conn.model.pdfInput) {
+      return fail(
+        `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
+          `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
+      );
+    }
+    const upstream = upstreamDropping("pdfInput", conn.model, conn.provider);
+    const route = `${ROUTE_LONG[familyOf(conn.provider.apiStandard)]} on "${conn.provider.name}"`;
+    const moveTo = pdfRouteFor(conn.model, conn.provider);
     return fail(
-      upstream
-        ? `the pdf subagent's model "${conn.model.name}" accepts PDF input, but the relay upstream behind it ("${upstream}") ` +
-            `was measured dropping the file. Tell the author to bind a model behind another upstream (Settings → Subagents), ` +
-            `or read the document another way.`
-        : `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
-            `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
+      (upstream
+        ? `the pdf subagent's model "${conn.model.name}" accepts PDF input, but on its route (${route}) the relay upstream ` +
+          `behind it ("${upstream}") was measured dropping the file. `
+        : `the pdf subagent's model "${conn.model.name}" has PDF input switched on, but its route (${route}) ` +
+          `cannot carry a PDF, so nothing is sent. `) +
+        (moveTo
+          ? `Tell the author to move the model to its ${ROUTE_LONG[moveTo]} route, or bind another model (Settings → Subagents), `
+          : upstream
+          ? `Tell the author to bind a model behind another upstream (Settings → Subagents), `
+          : `No other route on that channel carries one either: tell the author to bind another model (Settings → Subagents), `) +
+        `or read the document another way.`,
     );
   }
 
