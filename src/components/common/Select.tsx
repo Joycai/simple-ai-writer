@@ -99,7 +99,11 @@ export function Select({
     setOpenUp(up);
     setMenuStyle({
       left: rect.left,
-      width: rect.width,
+      // At least the trigger's width, wider when an option needs it — a
+      // trigger sized to its current value (「未绑定」) must not squeeze
+      // every other option to an ellipsis. Capped at the viewport's edge.
+      minWidth: rect.width,
+      maxWidth: Math.max(window.innerWidth - rect.left - VIEWPORT_MARGIN, rect.width),
       maxHeight: Math.max(Math.min(wanted, up ? above : below), ROW_HEIGHT * 3),
       ...(up ? { bottom: window.innerHeight - rect.top + GAP } : { top: rect.bottom + GAP }),
     });
