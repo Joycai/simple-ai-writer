@@ -736,7 +736,19 @@ export interface NativeReasoning {
   /** The wire field it arrived under (`reasoning_content`, `reasoning`, …). */
   field: string;
   text: string;
+  /**
+   * The original reasoning as an opaque payload, when the endpoint hands out
+   * only a summary in `text` (火山方舟's thinking summary, on by default from
+   * Doubao Seed 2.1: `delta.encrypted_content`). Echoed beside `text` it lets
+   * the model reason on its own thoughts across a tool round; without it the
+   * next round still 200s but reasons on the summary. Bound to the model that
+   * produced it, like `ThinkingBlockCarry` — another model cannot decrypt it.
+   */
+  encrypted?: { modelId: string; value: string };
 }
+
+/** The wire field an opaque reasoning payload rides under on a Chat Completions delta. */
+export const ENCRYPTED_REASONING_FIELD = "encrypted_content";
 
 /**
  * Field names carrying reasoning text on an OpenAI-compatible delta, in
@@ -863,4 +875,14 @@ export function readReasoningDelta(delta: Record<string, unknown>): NativeReason
     if (typeof v === "string" && v.length > 0) return { field, text: v };
   }
   return null;
+}
+
+/**
+ * The opaque reasoning fragment on one streamed delta, or null. Measured as
+ * one whole string on a single delta (landscape.md §7 第十二个样本, 2026-09-23);
+ * the caller concatenates anyway, so a split payload survives too.
+ */
+export function readEncryptedReasoning(delta: Record<string, unknown>): string | null {
+  const v = delta[ENCRYPTED_REASONING_FIELD];
+  return typeof v === "string" && v.length > 0 ? v : null;
 }

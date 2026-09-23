@@ -6,6 +6,7 @@ import { fetch } from "../http";
 import {
   createThinkTagSplitter, forcesToolChoiceAuto, readReasoningDelta, reasoningBody,
   resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
+  ENCRYPTED_REASONING_FIELD, readEncryptedReasoning,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { wireOf } from "./platforms";
@@ -29,9 +30,11 @@ import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types"
  *      turn back verbatim (see `StreamMessage`).
  *
  * Endpoints that never send reasoning produce messages with no `_reasoning`,
- * so this is a no-op for them and their requests are unchanged.
+ * so this is a no-op for them and their requests are unchanged. The opaque
+ * payload beside it goes back only to the model that produced it: another
+ * model cannot decrypt it, and 火山方舟 says a payload it cannot restore fails.
  */
-function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
+function toWireMessages(messages: StreamMessage[], modelId: string): Record<string, unknown>[] {
   return messages.map((m) => {
     const bag = m as Record<string, unknown>;
     // Drop by prefix rather than by name: every protocol that needs carry-back
@@ -41,7 +44,14 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
       Object.entries(bag).filter(([k]) => !k.startsWith("_")),
     );
     const reasoning = bag._reasoning as NativeReasoning | undefined;
-    return reasoning ? { ...wire, [reasoning.field]: reasoning.text } : wire;
+    if (!reasoning) return wire;
+    const encrypted = reasoning.encrypted?.modelId === modelId ? reasoning.encrypted.value : undefined;
+    return {
+      ...wire,
+      // A round can carry the payload with no summary text at all.
+      ...(reasoning.text ? { [reasoning.field]: reasoning.text } : {}),
+      ...(encrypted ? { [ENCRYPTED_REASONING_FIELD]: encrypted } : {}),
+    };
   });
 }
 
@@ -108,7 +118,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
   const body: Record<string, unknown> = {
     model: opts.modelId,
-    messages: toWireMessages(opts.messages),
+    messages: toWireMessages(opts.messages, opts.modelId),
     stream: true,
     stream_options: { include_usage: true },
     // Absent unless the author set one on this model, for the same reason as
@@ -269,8 +279,17 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // an endpoint that sends none leaves both untouched.
     const think = delta ? readReasoningDelta(delta as Record<string, unknown>) : null;
     if (think) {
-      reasoning = { field: think.field, text: (reasoning?.text ?? "") + think.text };
+      reasoning = { ...reasoning, field: think.field, text: (reasoning?.text ?? "") + think.text };
       opts.onChunk({ reasoning: think.text });
+    }
+    // Not displayed — it is ciphertext — only carried for the echo.
+    const sealed = delta ? readEncryptedReasoning(delta as Record<string, unknown>) : null;
+    if (sealed) {
+      reasoning = {
+        field: reasoning?.field ?? "reasoning_content",
+        text: reasoning?.text ?? "",
+        encrypted: { modelId: opts.modelId, value: (reasoning?.encrypted?.value ?? "") + sealed },
+      };
     }
     // Accumulate tool_calls across partial SSE chunks
     if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {

@@ -195,6 +195,30 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
       expect(r2.text).toMatch(/雨|17/);
     }, 240_000);
 
+    // 2.1 ships a thinking summary in `reasoning_content` and the original
+    // sealed in `encrypted_content`; both go back on the tool round, or the
+    // model reasons on the summary alone (the round still 200s either way).
+    it.skipIf(standard !== "openai_compat")("echoes the sealed reasoning on a 2.1 tool round", async () => {
+      const opts = { tools: [WEATHER], reasoningEffort: "low" as const, maxOutput: 4096, modelId: "doubao-seed-2.1-turbo" };
+      const first = user("北京现在天气怎样？必须先调用 get_weather 工具。");
+      const r1 = await ask(wire, first, opts);
+      const call = r1.toolCalls!.toolCalls[0];
+      expect(r1.toolCalls?._reasoning?.encrypted?.value.length).toBeGreaterThan(0);
+      let sent: Record<string, unknown> | undefined;
+      const r2 = await ask(wire, [
+        ...first,
+        {
+          role: "assistant", content: null,
+          tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }],
+          _reasoning: r1.toolCalls!._reasoning,
+        },
+        { role: "tool", tool_call_id: call.id, content: "{\"city\":\"北京\",\"weather\":\"小雨\",\"temp_c\":17}" },
+      ], { ...opts, _onRequestBody: (b: unknown) => { sent = b as Record<string, unknown>; } });
+      const echoed = (sent!.messages as Record<string, unknown>[])[1];
+      expect(echoed.encrypted_content).toBe(r1.toolCalls!._reasoning!.encrypted!.value);
+      expect(r2.text).toMatch(/雨|17/);
+    }, 240_000);
+
     // Chat Completions has no spelling (the vendor's page names only
     // Responses and Messages); the other two run the endpoint's own search.
     it.skipIf(standard === "openai_compat")("runs web_search on the route's own spelling", async () => {

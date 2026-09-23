@@ -1317,6 +1317,87 @@ describe("streamCompletion — reasoning content", () => {
     expect(wire[0]).not.toHaveProperty("reasoning_content");
   });
 
+  // 火山方舟's thinking summary: `reasoning_content` is a summary, the original
+  // arrives sealed on one delta (measured 2026-09-23, doubao-seed-2.1-turbo).
+  // Echoing only the summary still 200s but the model reasons on less.
+  it("carries an opaque encrypted_content beside the summary, bound to the model", async () => {
+    const { received } = await collect({
+      modelId: "doubao-seed-2.1-turbo",
+      chunks: [
+        'data: {"choices":[{"delta":{"reasoning_content":"\\n","encrypted_content":"djEN","role":"assistant"}}]}\n',
+        'data: {"choices":[{"delta":{"encrypted_content":"xyz"}}]}\n',
+        'data: {"choices":[{"delta":{"reasoning_content":"查天气"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_weather","arguments":"{}"}}]}}]}\n',
+        finish,
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: unknown };
+    expect(tools._reasoning).toEqual({
+      field: "reasoning_content",
+      text: "\n查天气",
+      encrypted: { modelId: "doubao-seed-2.1-turbo", value: "djENxyz" },
+    });
+    // Ciphertext is never shown as thinking.
+    const shown = received.filter((c): c is { reasoning: string } => "reasoning" in c).map((c) => c.reasoning).join("");
+    expect(shown).toBe("\n查天气");
+  });
+
+  it("echoes encrypted_content to the same model only", async () => {
+    const turn = (modelId: string) => {
+      const calls = mockFetch([finish]);
+      return streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "k",
+        standard: "openai_compat",
+        modelId,
+        messages: [
+          {
+            role: "assistant",
+            content: null,
+            tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+            _reasoning: {
+              field: "reasoning_content", text: "summary",
+              encrypted: { modelId: "seed", value: "sealed" },
+            },
+          },
+        ],
+        onChunk: () => {},
+      }).then(() => calls[0].body.messages as Record<string, unknown>[]);
+    };
+    const same = await turn("seed");
+    expect(same[0]).toMatchObject({ reasoning_content: "summary", encrypted_content: "sealed" });
+    // Another model cannot decrypt it; the summary still goes, as before.
+    const other = await turn("deepseek-v4");
+    expect(other[0].reasoning_content).toBe("summary");
+    expect(other[0]).not.toHaveProperty("encrypted_content");
+  });
+
+  it("echoes a sealed payload that arrived with no summary text", async () => {
+    const { received } = await collect({
+      modelId: "seed",
+      chunks: [
+        'data: {"choices":[{"delta":{"encrypted_content":"sealed"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}\n',
+        finish,
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: { text: string } };
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "seed",
+      messages: [{
+        role: "assistant", content: null,
+        tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+        _reasoning: tools._reasoning as never,
+      }],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[0].encrypted_content).toBe("sealed");
+    // No empty summary field invented beside it.
+    expect(wire[0]).not.toHaveProperty("reasoning_content");
+  });
+
   it("strips internal fields from messages that carry no reasoning", async () => {
     // _geminiModelParts belongs to the other protocol; it used to ride along
     // into OpenAI request bodies untouched.
