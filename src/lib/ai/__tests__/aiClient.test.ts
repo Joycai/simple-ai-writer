@@ -1396,6 +1396,21 @@ describe("streamCompletion — reasoning content", () => {
     expect(wire[0].encrypted_content).toBe("sealed");
     // No empty summary field invented beside it.
     expect(wire[0]).not.toHaveProperty("reasoning_content");
+
+    // After a model switch nothing of that round's reasoning is left to send.
+    const other = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1", apiKey: "k", standard: "openai_compat", modelId: "other",
+      messages: [{
+        role: "assistant", content: null,
+        tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+        _reasoning: tools._reasoning as never,
+      }],
+      onChunk: () => {},
+    });
+    const switched = (other[0].body.messages as Record<string, unknown>[])[0];
+    expect(switched).not.toHaveProperty("reasoning_content");
+    expect(switched).not.toHaveProperty("encrypted_content");
   });
 
   it("strips internal fields from messages that carry no reasoning", async () => {
