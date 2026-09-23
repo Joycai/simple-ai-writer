@@ -24,6 +24,8 @@
 .bandCurrent { color: var(--color-text-secondary); }
 
 .grid {
+  /* 尺寸容器：文件末尾 .cardWide 的 @container 查的就是它 —— 没有祖先声明容器，那条查询永远不命中。 */
+  container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
   gap: var(--space-3);
@@ -61,9 +63,8 @@
 /* 读不出：文件在，只是读不懂 —— 实线边，不可选，无悬停态。 */
 .cardUnreadable { cursor: default; }
 .cardUnreadable .name { color: var(--color-text-muted); }
-/* 「详情」展开时临时占两列，网格其余卡往下顺移。 */
+/* 「详情」展开时临时占两列，网格其余卡往下顺移；网格窄时退回一列宽（见文件末尾）。 */
 .cardWide { grid-column: span 2; }
-@container (max-width: 520px) { .cardWide { grid-column: auto; } }
 
 .cardBody { display: flex; gap: var(--space-4); align-items: flex-start; }
 .cardMain { flex: 1; min-width: 0; }
@@ -318,3 +319,9 @@
   text-underline-offset: 2px;
 }
 .traceError { border-top-color: var(--color-error); color: var(--color-error); }
+
+/* ── 容器查询：一律放在文件末尾 ───────────────────────────────────────────
+   容器查询不抬特异性，和前面同特异性的基础规则打平时由源码顺序定胜负。
+   查询的容器是 .grid：≤520px 时展开的卡不再占两列。外观卡的网格 488px 以下只剩一列，
+   这时再要两列会撑出一条隐式列，把同网格的其余卡挤成一宽一窄。 */
+@container (max-width: 520px) { .cardWide { grid-column: auto; } }
