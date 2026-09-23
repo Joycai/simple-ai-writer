@@ -798,6 +798,7 @@
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
       "warnSearchUpstream": "该模型背后的中转站上游「{{upstream}}」实测不支持联网搜索，请求里不会发送——子代理无法联网。换一个走别的上游的模型。",
       "warnPdfUpstream": "该模型背后的中转站上游「{{upstream}}」实测会丢掉 PDF，子代理读不到文件。换一个走别的上游的模型。",
+      "warnPdfNotSent": "该模型勾了 PDF 文件输入，但它当前的线路（{{route}}）传不了 PDF，请求里不会发送——子代理读不到文件。把模型换到能传 PDF 的线路，或换一个模型。",
       "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
       "enable": "启用",
       "imagegen": "图片生成",

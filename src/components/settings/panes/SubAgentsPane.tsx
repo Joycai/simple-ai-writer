@@ -36,7 +36,8 @@ import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import css from "./SubAgents.module.css";
-import { providerFor } from "../../../lib/ai/routes";
+import { providerFor, ROUTE_SHORT } from "../../../lib/ai/routes";
+import { familyOf } from "../../../lib/ai/types";
 
 /**
  * Binds each specialist subagent to a model and turns it on.
@@ -136,6 +137,10 @@ export function SubAgentsPane() {
       const channel = providerFor(model, providers);
       const upstream = channel && model.pdfInput ? upstreamDropping("pdfInput", model, channel) : undefined;
       if (upstream) return t("systemSettings.subagents.warnPdfUpstream", { upstream: t(`aiConfig.upstream.name.${upstream}`) });
+      // Declared, but the route it speaks can't carry the file (platform or protocol).
+      if (channel && model.pdfInput) {
+        return t("systemSettings.subagents.warnPdfNotSent", { route: ROUTE_SHORT[familyOf(channel.apiStandard)] });
+      }
       return t("systemSettings.subagents.warnNoPdf");
     }
     if (kind === "imagegen" && model.type !== "image") {

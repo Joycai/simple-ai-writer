@@ -444,6 +444,24 @@ describe("subagent", () => {
       expect(res.content).toContain("not declared to accept PDF files");
     });
 
+    // Declared, but the route can't carry the file: not "not declared".
+    it("names the route when the pdf subagent's model declares PDF input its route can't send", async () => {
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({
+          provider: { ...dummyProvider, baseUrl: "https://generativelanguage.googleapis.com", apiStandard: "gemini" as const },
+          model: { ...dummyTextModel, pdfInput: true },
+          apiKey: "k",
+        })),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "pdf", task: "读这份文件", refs: ["docs/spec.pdf"] }),
+      };
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain("has PDF input switched on, but its route (Gemini");
+      expect(res.content).not.toContain("not declared");
+    });
+
     it("fails a pdf delegation that carries no .pdf refs", async () => {
       const pdfModel: Model = { ...dummyTextModel, id: "m-pdf", name: "Qwen3.8-Max", pdfInput: true };
       const ctx = makeCtx({

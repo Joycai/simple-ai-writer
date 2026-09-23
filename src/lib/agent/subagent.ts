@@ -13,7 +13,8 @@
  */
 
 import i18n from "../../i18n";
-import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
+import { familyOf, type ContentPart, type MessageContent, type StreamMessage } from "../ai/types";
+import { ROUTE_SHORT } from "../ai/routes";
 import { serverToolsSent } from "../ai/serverTools";
 import { upstreamDropping } from "../ai/relayUpstream";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
@@ -164,6 +165,11 @@ export async function executeDelegate(
       upstream
         ? `the pdf subagent's model "${conn.model.name}" accepts PDF input, but the relay upstream behind it ("${upstream}") ` +
             `was measured dropping the file. Tell the author to bind a model behind another upstream (Settings → Subagents), ` +
+            `or read the document another way.`
+        : conn.model.pdfInput
+        ? `the pdf subagent's model "${conn.model.name}" has PDF input switched on, but its route ` +
+            `(${ROUTE_SHORT[familyOf(conn.provider.apiStandard)]} on "${conn.provider.name}") cannot carry a PDF, so nothing is sent. ` +
+            `Tell the author to move the model to a route that carries PDFs, or bind another model (Settings → Subagents), ` +
             `or read the document another way.`
         : `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
             `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
