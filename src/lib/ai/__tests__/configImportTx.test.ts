@@ -218,7 +218,8 @@ describe("applyConfigImport · 事务之后的迁移", () => {
     }) as never);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toBeUndefined();
+      // 和正常的还原长得一样：没有失败的 Key，调用方照常刷新、照常报成功。
+      await expect(applyConfigImport(staged({ legacyPrices: true }))).resolves.toEqual({ failedKeys: [] });
       expect(scans).toBe(2);
       expect(warn).toHaveBeenCalled();
     } finally {
