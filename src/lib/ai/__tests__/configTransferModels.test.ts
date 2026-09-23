@@ -89,3 +89,22 @@ describe("parseConfigBundle · models", () => {
     expect(out.models[0].structuredOutput).toBeUndefined();
   });
 });
+
+/**
+ * 落库时模型算「新代码决定的绑定」还是「只有旧价」，全看包的版本：v3 起价在
+ * 计费组上，更早的包价还在模型行上。
+ */
+describe("parseConfigBundle · legacyPrices", () => {
+  it.each([
+    [1, true],
+    [2, true],
+    [3, false],
+  ])("version %s → %s", (version, legacy) => {
+    expect(parseConfigBundle({ ...bundle([base]), version }, []).legacyPrices).toBe(legacy);
+  });
+
+  it("没写版本号的包按最老的读", () => {
+    const { version: _v, ...noVersion } = bundle([base]);
+    expect(parseConfigBundle(noVersion, []).legacyPrices).toBe(true);
+  });
+});

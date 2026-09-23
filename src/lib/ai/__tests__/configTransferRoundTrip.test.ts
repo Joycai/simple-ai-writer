@@ -182,14 +182,14 @@ const prompt: Required<Prompt> = {
 describe("config backup · every field round-trips", () => {
   it("through the config database and back out", async () => {
     expect(await throughDb(providerUpsert(provider), listProviders)).toEqual(provider);
-    expect(await throughDb(modelUpsert(model), (db) => listModels(db))).toEqual(model);
+    expect(await throughDb(modelUpsert(model, "restored"), (db) => listModels(db))).toEqual(model);
     expect(await throughDb(promptUpsert(prompt), listPrompts)).toEqual(prompt);
   });
 
   it("through a backup bundle and its parser", async () => {
     const fromDb = {
       provider: await throughDb(providerUpsert(provider), listProviders),
-      model: await throughDb(modelUpsert(model), (db) => listModels(db)),
+      model: await throughDb(modelUpsert(model, "restored"), (db) => listModels(db)),
       prompt: await throughDb(promptUpsert(prompt), listPrompts),
     };
     // Serialized, because that is what the file and the envelope both carry:
@@ -223,8 +223,48 @@ describe("config backup · every field round-trips", () => {
       feeGroups: [feeGroup],
     })), []);
     expect(providerUpsert(parsed.providers[0])).toEqual(providerUpsert(provider));
-    expect(modelUpsert(parsed.models[0])).toEqual(modelUpsert(model));
+    expect(modelUpsert(parsed.models[0], "restored")).toEqual(modelUpsert(model, "restored"));
     expect(promptUpsert(parsed.prompts[0])).toEqual(promptUpsert(prompt));
     expect(feeGroupUpsert(parsed.feeGroups[0])).toEqual(feeGroupUpsert(feeGroup));
+  });
+});
+
+/**
+ * `fee_migrated` 不在 `Model` 上，上面的往返测试看不见它——而它正是会被悄悄
+ * 写丢的那一列：`INSERT OR REPLACE` 删了旧行再插，列清单里没有的列回到默认值
+ * （这一列没有默认值，就是 NULL），下次启动迁移就按旧价重新归组。
+ */
+describe("modelUpsert · fee_migrated", () => {
+  const valuesOf = (sql: string) => sql.slice(sql.indexOf("VALUES"));
+
+  it.each(["local", "restored", "legacy"] as const)("%s：列清单、占位符、values 三者等长", (pricing) => {
+    for (const m of [model, { ...model, feeGroupId: undefined }]) {
+      const { sql, values } = modelUpsert(m, pricing);
+      expect(valuesOf(sql).match(/\?/g)).toHaveLength(values.length);
+      expect(Object.keys(rowOf({ sql, values }))).toHaveLength(values.length);
+    }
+  });
+
+  it("v3 还原的盖章，v2 还原的强制留 NULL", () => {
+    expect(rowOf(modelUpsert(model, "restored")).fee_migrated).toBe(1);
+    expect(rowOf(modelUpsert(model, "legacy")).fee_migrated).toBeNull();
+    expect(valuesOf(modelUpsert(model, "legacy").sql)).not.toMatch(/SELECT/);
+  });
+
+  it("v3 还原里主动不绑组的模型也盖章——否则迁移会按旧价把它绑回去", () => {
+    const stmt = modelUpsert({ ...model, feeGroupId: undefined }, "restored");
+    expect(rowOf(stmt)).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+    expect(valuesOf(stmt.sql)).not.toMatch(/SELECT/);
+  });
+
+  it("本机保存一个绑了组的模型：盖章", () => {
+    expect(rowOf(modelUpsert(model, "local")).fee_migrated).toBe(1);
+  });
+
+  it("本机保存一个没绑组的模型：沿用这一行原来的标记，不替没跑完的迁移盖章", () => {
+    const stmt = modelUpsert({ ...model, feeGroupId: undefined }, "local");
+    // 最后一个值是子查询要的 id，不是一个标记。
+    expect(valuesOf(stmt.sql)).toMatch(/\(SELECT fee_migrated FROM models WHERE id = \?\)\)\s*$/);
+    expect(stmt.values[stmt.values.length - 1]).toBe(model.id);
   });
 });

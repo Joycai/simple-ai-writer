@@ -99,6 +99,9 @@ export function ConfigBackupSection({ connected }: { connected: boolean }) {
       if (staged.keyCount > 0) {
         confirmMsg += `\n${t("systemSettings.backup.importKeysNote", { count: staged.keyCount })}`;
       }
+      if (staged.feeGroups.length > 0) {
+        confirmMsg += `\n${t("systemSettings.backup.importFeeGroupsNote", { count: staged.feeGroups.length })}`;
+      }
       if (staged.prefs.length > 0) {
         confirmMsg += `\n${t("systemSettings.backup.importPrefsNote", { count: staged.prefs.length })}`;
       }

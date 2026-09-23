@@ -244,6 +244,34 @@ describe("the header the server stores", () => {
     expect(JSON.stringify(decoded)).not.toContain("sk-super-secret-value");
   });
 
+  it("counts the fee groups and the layout presets too", async () => {
+    const b = bundle(false);
+    b.feeGroups = [
+      {
+        id: "g1", name: "Sonnet", billingMode: "token", inputPrice: 3, cacheInputPrice: null,
+        outputPrice: 15, requestPrice: 0, outputUnit: "image", outputRates: [],
+        inputUnitPrice: 0, inputFreeUnits: 0, createdAt: 1,
+      },
+    ];
+    const sealed = await seal(b, "pw");
+    // Through the reader the app itself uses, not just the raw JSON: a count it
+    // writes but never reads back is one the list can never show.
+    expect(decodeMeta(sealed.meta)?.counts).toMatchObject({ feeGroups: 1, docFormats: 0 });
+  });
+
+  it("reads a header written before those counts existed as not saying, not as zero", () => {
+    const old = {
+      kind: ENVELOPE_KIND, version: 1, createdAt: "", appVersion: "1.23.1", device: "",
+      encrypted: false, hasKeys: false,
+      counts: { providers: 1, models: 2, prompts: 0, prefs: 0 },
+    };
+    const meta = btoa(JSON.stringify(old)).replace(/\+/g, "-").replace(/\//g, "_");
+    const counts = decodeMeta(meta)?.counts;
+    expect(counts).toMatchObject({ providers: 1, models: 2 });
+    expect(counts?.feeGroups).toBeUndefined();
+    expect(counts?.docFormats).toBeUndefined();
+  });
+
   it("is base64url, because it travels in an HTTP header", async () => {
     // The server validates exactly this alphabet and refuses anything else.
     const sealed = await sealBundle(bundle(false), {

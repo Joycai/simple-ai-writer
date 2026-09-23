@@ -79,4 +79,22 @@ describe("planMerge", () => {
     expect(stmts.slice(1, 1 + plan.upserts.length).every((x) => /INTO models/.test(x.sql))).toBe(true);
     expect(stmts[stmts.length - 1]).toEqual({ sql: "DELETE FROM providers WHERE id = ?", values: ["mmc"] });
   });
+
+  it("换渠道的模型不动迁移标记：绑了组的盖章，没绑的沿用原来那一行的", () => {
+    // 夹具里的模型都没绑组；绑上第一个，两条分支都要真的走到。
+    const bound = { ...plan, upserts: plan.upserts.map((m, i) => (i === 0 ? { ...m, feeGroupId: "g1" } : m)) };
+    expect(bound.upserts.some((m) => m.feeGroupId)).toBe(true);
+    expect(bound.upserts.some((m) => !m.feeGroupId)).toBe(true);
+    const models = mergeStatements(bound, "mmc").filter((x) => /INTO models/.test(x.sql));
+    expect(models.length).toBe(bound.upserts.length);
+    for (const x of models) {
+      const m = bound.upserts.find((u) => u.id === x.values[0])!;
+      const last = x.values[x.values.length - 1];
+      if (m.feeGroupId) expect(last).toBe(1);
+      else {
+        expect(x.sql).toMatch(/\(SELECT fee_migrated FROM models WHERE id = \?\)\)\s*$/);
+        expect(last).toBe(m.id);
+      }
+    }
+  });
 });

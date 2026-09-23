@@ -140,7 +140,8 @@ export function planMerge(keep: Provider, absorb: Provider, models: readonly Mod
 export function mergeStatements(plan: MergePlan, absorbId: string): SqlStatement[] {
   return [
     providerUpsert(plan.channel),
-    ...plan.upserts.map(modelUpsert),
+    // 从库里读出来的模型换个渠道，和抽屉保存是同一种写。
+    ...plan.upserts.map((m) => modelUpsert(m, "local")),
     ...plan.deletes.map((id) => ({ sql: "DELETE FROM models WHERE id = ?", values: [id] })),
     { sql: "DELETE FROM models WHERE provider_id = ?", values: [absorbId] },
     { sql: "DELETE FROM providers WHERE id = ?", values: [absorbId] },
