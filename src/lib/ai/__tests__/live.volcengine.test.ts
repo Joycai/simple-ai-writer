@@ -228,11 +228,19 @@ describe.skipIf(!KEY)("LIVE 火山方舟 Plan", () => {
       const prompt = "1+1 等于几？answer 写真实结果，再加一个字段 reason 解释。";
       const shaping = jsonModeShaping({ standard, baseUrl: base, modelId }, prompt, {
         name: "sum",
-        parameters: { type: "object", properties: { answer: { type: "integer", enum: [7] } }, required: ["answer"] },
+        // `note` is optional, so strictify sends it as `type: ["string","null"]`
+        // and required — the union has to pass Ark's strict validator too.
+        parameters: {
+          type: "object",
+          properties: { answer: { type: "integer", enum: [7] }, note: { type: "string" } },
+          required: ["answer"],
+        },
       });
       expect(shaping.mode).toBe("json_schema");
       const c = await ask(wire, user(prompt), { modelId, extraBody: shaping.extraBody });
-      expect(JSON.parse(c.text)).toEqual({ answer: 7 });
+      const out = JSON.parse(c.text) as Record<string, unknown>;
+      expect(out.answer).toBe(7);
+      expect(Object.keys(out).sort()).toEqual(["answer", "note"]);
     }, 120_000);
 
     // Chat Completions has no spelling (the vendor's page names only
