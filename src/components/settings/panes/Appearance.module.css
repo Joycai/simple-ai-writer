@@ -79,14 +79,22 @@
 
 /* 外层是 div：选择区一个按钮，状态行里另有按钮。卡的边、底、选中态照系统字体卡。
    虚线只给「没下载、也没选中」——选中后是实线赭石边（下载中 / 失败都算选中）。 */
-.packCard { position: relative; display: flex; flex-direction: column; cursor: default; }
-.packCard:active { transform: none; }
+/* min-width: 0 — a grid item's automatic minimum is its content's width, so
+   without it the status line's unwrapped text widens the whole column (and
+   the pane scrolls sideways) instead of ending in an ellipsis. */
+.packCard { position: relative; display: flex; flex-direction: column; min-width: 0; cursor: default; }
+/* The system card shrinks on press (`.card:active:not(:disabled)`); this one
+   holds other buttons, so pressing 删除 / 重试 must not squeeze the whole card. */
+.packCard.packCard:active:not(:disabled) { transform: none; }
 .packAbsent { border-style: dashed; }
 
 .packSelect {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Stretch, not center: a centred flex child is as wide as its text, so the
+     one-line sample would run past the card instead of ending in an ellipsis. */
+  align-items: stretch;
+  min-width: 0;
   width: 100%;
   padding: 0;
   border: none;

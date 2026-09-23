@@ -32,18 +32,47 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
   const pack: FontPackState = useAppStore((st) => st.fontPacks[id]);
   const active = useAppStore((st) => st.fontScheme === id);
   const setFontScheme = useAppStore((st) => st.setFontScheme);
+  const downloadFontPack = useAppStore((st) => st.downloadFontPack);
   const removeFontPack = useAppStore((st) => st.removeFontPack);
   const [confirming, setConfirming] = useState(false);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const selectRef = useRef<HTMLButtonElement>(null);
 
   const here = pack.status === "ready";
   const downloading = pack.status === "downloading";
   const pct = pack.total > 0 ? Math.min(100, Math.floor((pack.done / pack.total) * 100)) : 0;
 
   // The confirmation only exists for the pack in use and only while it is here.
+  // Once either stops being true it is gone for good — not waiting to pop back
+  // up (and grab the focus) the next time this pack is picked.
   const showConfirm = confirming && here && active;
   useEffect(() => {
+    if (confirming && !(here && active)) setConfirming(false);
+  }, [confirming, here, active]);
+  useEffect(() => {
     if (showConfirm) cancelRef.current?.focus();
+  }, [showConfirm]);
+
+  const cancel = () => {
+    setConfirming(false);
+    // Back to where the author came from, not to the page body.
+    requestAnimationFrame(() => deleteRef.current?.focus());
+  };
+
+  // Escape backs out of the confirmation wherever the focus is. The settings
+  // page closes itself on an Escape that reaches `window`; a capture listener
+  // there runs first and keeps it from getting that far.
+  useEffect(() => {
+    if (!showConfirm) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Immediate: the settings page's own listener sits on `window` too.
+      e.stopImmediatePropagation();
+      cancel();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [showConfirm]);
 
   const onDelete = () => {
@@ -58,10 +87,19 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
       <div className={a.packConfirm}>
         <div className={a.packConfirmText}>{t("systemSettings.appearance.fontPackConfirm", { fallback: t(fallbackLabelKey) })}</div>
         <div className={a.packConfirmActions}>
-          <button type="button" className={`${a.packButton} ${a.packButtonDanger}`} onClick={() => { setConfirming(false); void removeFontPack(id); }}>
+          <button
+            type="button"
+            className={`${a.packButton} ${a.packButtonDanger}`}
+            onClick={() => {
+              setConfirming(false);
+              void removeFontPack(id);
+              // The status line is about to change under the focus; the card's own button stays.
+              requestAnimationFrame(() => selectRef.current?.focus());
+            }}
+          >
             {t("systemSettings.appearance.fontPackDelete")}
           </button>
-          <button type="button" ref={cancelRef} className={a.packButton} onClick={() => setConfirming(false)}>
+          <button type="button" ref={cancelRef} className={a.packButton} onClick={cancel}>
             {t("systemSettings.appearance.fontPackCancel")}
           </button>
         </div>
@@ -76,12 +114,18 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
       left = t("systemSettings.appearance.fontPackDownloading", { pct, done: mb(pack.done), total: mb(pack.total) });
     } else if (here) {
       left = t("systemSettings.appearance.fontPackReady", { size: mb(pack.total) });
-      right = <button type="button" className={a.packAction} onClick={onDelete}>{t("systemSettings.appearance.fontPackDelete")}</button>;
+      right = (
+        <button type="button" ref={deleteRef} className={a.packAction} onClick={onDelete}>
+          {t("systemSettings.appearance.fontPackDelete")}
+        </button>
+      );
     } else if (pack.status === "error") {
       tone = a.packStatusError;
       left = t(`systemSettings.appearance.fontPackErr${pack.error === "integrity" ? "Integrity" : pack.error === "disk" ? "Disk" : "Network"}`);
       right = (
-        <button type="button" className={`${a.packAction} ${a.packActionAccent}`} onClick={() => setFontScheme(id)}>
+        // Retries the download only — a failed pack the author has since moved
+        // away from must not take the font choice back with it.
+        <button type="button" className={`${a.packAction} ${a.packActionAccent}`} onClick={() => void downloadFontPack(id)}>
           {t("systemSettings.appearance.fontPackRetry")}
         </button>
       );
@@ -92,7 +136,8 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
     }
     status = (
       <div className={`${a.packStatus} ${tone}`}>
-        <span className={a.packStatusText}>{left}</span>
+        {/* The line ellipsizes in a narrow card; the whole sentence stays reachable. */}
+        <span className={a.packStatusText} title={typeof left === "string" ? left : undefined}>{left}</span>
         {right}
       </div>
     );
@@ -102,10 +147,10 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
     <div
       className={`${ui.card} ${ui.fontCard} ${a.packCard} ${active ? ui.cardActive : ""} ${here || active ? "" : a.packAbsent}`}
       aria-busy={downloading || undefined}
-      onKeyDown={(e) => { if (e.key === "Escape" && showConfirm) { e.stopPropagation(); setConfirming(false); } }}
     >
       <button
         type="button"
+        ref={selectRef}
         className={a.packSelect}
         aria-pressed={active}
         title={here ? undefined : t("systemSettings.appearance.fontPackFallbackTitle")}

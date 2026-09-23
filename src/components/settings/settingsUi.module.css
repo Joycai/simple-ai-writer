@@ -211,6 +211,10 @@
   margin-top: var(--space-3);
 }
 .cardGridFont { grid-template-columns: repeat(4, 1fr); }
+/* A grid item's automatic minimum is its content's width: a card's one-line
+   sample (`nowrap` + ellipsis) would otherwise widen its column — and in
+   English push the settings pane into a sideways scroll — instead of truncating. */
+.cardGridFont > * { min-width: 0; }
 .cardGridProfile { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 
 .card {
