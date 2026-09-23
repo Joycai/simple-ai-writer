@@ -1544,7 +1544,7 @@ function slotPanel(slot) {
       metaText(vmeta && vmeta.device),
       counts ? `${Number(counts.providers) || 0} 供应商 · ${Number(counts.models) || 0} 模型` : null,
       // 计费组之前的客户端不写这一项：没有就不说，而不是说成「0 计费组」。
-      counts && typeof counts.feeGroups === 'number' ? `${counts.feeGroups} 计费组` : null,
+      counts && Number.isInteger(counts.feeGroups) && counts.feeGroups >= 0 ? `${counts.feeGroups} 计费组` : null,
       vmeta && vmeta.hasKeys ? '含 API Key' : null,
     ].filter(Boolean).join(' · ');
 
