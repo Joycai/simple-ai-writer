@@ -9,7 +9,8 @@
  * those turns. The lease is the earlier, turn-shaped bound on top of them: a
  * picture keeps its pixels for the turn it arrived in and the next
  * {@link IMAGE_LEASE_TURNS}, then leaves — its text stays, and the 【附图】 list
- * in that text carries the path `read_image` can bring it back from.
+ * in that text carries the path it can be read back from (`read_image`, or the
+ * vision subagent when one stands by — see {@link EXPIRED_IMAGE}).
  *
  * It runs only when a new turn opens, never inside one: the round in progress
  * is what the model is looking at (M1, window-edge-plan.md), and rewriting the
@@ -26,7 +27,7 @@ import { contentWithoutImages, hasImageParts } from "./imageHistory";
  *
  * One, because the follow-up about a picture ("and the second one?", "what
  * does the top-left line say?") is nearly always the very next message; a
- * question further back costs one `read_image`, while every extra turn of
+ * question further back costs one read-back, while every extra turn of
  * lease is paid by every conversation on every tool round.
  */
 export const IMAGE_LEASE_TURNS = 1;

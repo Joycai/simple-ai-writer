@@ -66,7 +66,7 @@ import {
   deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
 } from "../lib/agent/chatSession";
 import { applyRewindCut, planRewind } from "../lib/agent/rewind";
-import { removeChatStash, newStashId } from "../lib/agent/chatStash";
+import { isPasting, removeChatStash, newStashId } from "../lib/agent/chatStash";
 import { deleteChatSession as deleteChatSessionRow, listChatSessions, loadChatSession, normalizeSessionTitle, setChatSessionPinned, setChatSessionTitle, upsertChatSession } from "../lib/agent/sessionDb";
 import { ownerBusy } from "../lib/agent/scheduler";
 import { sessionLabel } from "../lib/agent/sessionDb";
@@ -223,11 +223,12 @@ function fileLabel(path: string): string {
 
 /**
  * Pasted pictures waiting on this conversation's composer — files in its
- * scratch directory that only the chips point at so far. A tab holding some
+ * scratch directory that only the chips point at so far — or a paste still
+ * on its way there. A tab holding some
  * is not handed to another conversation (chat-image-paste-plan §9).
  */
 function hasPastedChips(key: string): boolean {
-  return chatComposerOf(useComposerStore.getState(), key).refs
+  return isPasting(key) || chatComposerOf(useComposerStore.getState(), key).refs
     .some((r) => r.kind === "image" && isChatStashPath(r.file.path));
 }
 

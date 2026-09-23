@@ -18,7 +18,7 @@ vi.mock("../../fs/fileio", () => ({
 }));
 
 import {
-  chatStashDir, pastedImagePath, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
+  chatStashDir, isPasting, markPasting, pastedImagePath, removeChatStash, resetChatStashSweepForTests, STASH_GRACE_MS,
   stashSweepPlan, sweepChatStash, writePastedImage,
 } from "../chatStash";
 import { writeBinaryFile } from "../../fs/fileio";
@@ -88,6 +88,17 @@ describe("sweepChatStash", () => {
     fs.dirs = [{ ...dir("..", STASH_GRACE_MS * 3) }];
     await sweepChatStash("/p", new Set(), NOW);
     expect(fs.removed).toEqual([]);
+  });
+});
+
+describe("markPasting", () => {
+  it("counts overlapping pastes, so the first to finish does not free the tab", () => {
+    markPasting("c0", true);
+    markPasting("c0", true);
+    markPasting("c0", false);
+    expect(isPasting("c0")).toBe(true);
+    markPasting("c0", false);
+    expect(isPasting("c0")).toBe(false);
   });
 });
 

@@ -18,7 +18,7 @@
 import { useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MAX_MESSAGE_IMAGES } from "../../lib/agent/chatRefs";
-import { pastedImagePath, writePastedImage } from "../../lib/agent/chatStash";
+import { markPasting, pastedImagePath, writePastedImage } from "../../lib/agent/chatStash";
 import { classifyPaste, PASTE_IMAGE_EXT, pasteNumber } from "../../lib/agent/pasteImages";
 import { attachedKey, attachProjectFile, type AttachedItem } from "../../lib/lore/aiTask";
 import { useAgentStore } from "../../stores/agentStore";
@@ -72,11 +72,12 @@ export function usePasteImages(
     // as it was. Until then no pasted chip can exist, so no duplicate either.
     const stashNow = () => useAgentStore.getState().chats[chatKey]?.stashId ?? null;
     let stashId = stashNow();
-    // The tab can be handed to another conversation while a file is being
-    // read (opening a saved one reuses an empty tab). Past that point these
-    // pictures would be chips of a conversation that does not claim their
-    // directory — stop instead.
-    const moved = () => stashId !== null && stashNow() !== stashId;
+    // The store does not hand a pasting tab to another conversation
+    // (`markPasting` below); this is the backstop for anything that still
+    // swaps its scratch id underneath — stop, and leave the error line to
+    // whatever conversation the tab now shows.
+    let aborted = false;
+    const moved = () => (aborted ||= stashId !== null && stashNow() !== stashId);
     // Read live, not from the render that registered the handler: a previous
     // paste in the queue may just have added chips.
     const current = chatComposerOf(useComposerStore.getState(), chatKey).refs;
@@ -146,7 +147,7 @@ export function usePasteImages(
         : []),
       ...failures,
     ];
-    setError(lines.length ? lines.join("；") : null);
+    if (!aborted) setError(lines.length ? lines.join("；") : null);
   }, [chatKey, setRefs, setError, t]);
 
   return useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -181,7 +182,13 @@ export function usePasteImages(
       return;
     }
     e.preventDefault();
-    queue.current = queue.current.then(() => take(files)).catch(() => {});
-  }, [take, setError, t]);
+    // Marked from the event on, not from when the queue reaches it: the tab
+    // is spoken for as soon as the author pressed ⌘V.
+    markPasting(chatKey, true);
+    queue.current = queue.current
+      .then(() => take(files))
+      .catch(() => {})
+      .finally(() => markPasting(chatKey, false));
+  }, [take, setError, t, chatKey]);
 }
 

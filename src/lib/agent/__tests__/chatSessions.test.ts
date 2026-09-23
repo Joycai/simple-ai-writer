@@ -25,11 +25,13 @@ const db = vi.hoisted(() => ({
 const stash = vi.hoisted(() => ({
   remove: vi.fn(async () => {}),
   sweep: vi.fn(async () => {}),
+  pasting: new Set<string>(),
 }));
 vi.mock("../chatStash", () => ({
   removeChatStash: stash.remove,
   sweepChatStash: stash.sweep,
   newStashId: () => "stash-new",
+  isPasting: (key: string) => stash.pasting.has(key),
 }));
 vi.mock("../sessionDb", () => ({
   loadChatSession: db.load,
@@ -416,6 +418,16 @@ describe("pasted pictures' scratch directory (chat-image-paste-plan §3.3, §4)"
   });
   beforeEach(() => {
     useComposerStore.getState().clearChatComposer("c0");
+    stash.pasting.clear();
+  });
+
+  it("keeps a tab whose paste is still on its way when a saved conversation is opened", async () => {
+    // No chip yet, but the files are being written into this tab's directory.
+    seed([emptyChat("c0")]);
+    stash.pasting.add("c0");
+    await state().switchChatSession(7);
+    expect(state().chatOrder).toHaveLength(2);
+    expect(chat("c0").sessionId).toBeNull();
   });
 
   it("is made on first use and then kept", () => {

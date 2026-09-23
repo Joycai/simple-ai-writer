@@ -112,6 +112,24 @@ export async function removeChatStash(projectPath: string, stashId: string | nul
   }
 }
 
+/**
+ * Tabs with a paste in flight — its files are being read and written, and its
+ * chips not yet on the composer. The store must not hand such a tab to another
+ * conversation meanwhile (agentStore's `newChat` / `switchChatSession`): the
+ * chips would land in a conversation that does not claim their directory.
+ */
+const pasting = new Map<string, number>();
+
+export function markPasting(chatKey: string, on: boolean): void {
+  const n = (pasting.get(chatKey) ?? 0) + (on ? 1 : -1);
+  if (n > 0) pasting.set(chatKey, n);
+  else pasting.delete(chatKey);
+}
+
+export function isPasting(chatKey: string): boolean {
+  return pasting.has(chatKey);
+}
+
 /** Projects swept this launch. Module state on purpose: one sweep per launch is the contract. */
 const swept = new Set<string>();
 
