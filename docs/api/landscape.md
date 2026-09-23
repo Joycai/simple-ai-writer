@@ -1626,11 +1626,15 @@ Responses adapter：
 > | --- | --- |
 > | 基础对话、`system`、`stop`、流式（`stream_options.include_usage` 末块有 usage） | ✅ |
 > | `max_tokens` / `max_completion_tokens` | ❌ 都无视 |
-> | `reasoning_effort` | `low` / `medium` / `high` → 思考开，从 `reasoning_content` 流出（`completion_tokens_details.reasoning_tokens` 恒为 0，思考算在 `completion_tokens` 里）；**`max`、`none`、乱写的值 → 不想**。`openai-generic` 菜单的「最高」发的正是 `max`，在这里等于关 |
+> | `reasoning_effort` | `low` / `medium` / `high` → 思考开，从 `reasoning_content` 流出（`completion_tokens_details.reasoning_tokens` 恒为 0，思考算在 `completion_tokens` 里）；**`max`、`none`、乱写的值 → 不想**。`openai-generic` 菜单的「最高」发的正是 `max`，在这里等于关。**（2026-09-23 更正：不是 Kiro 特有——同一台上 CC / anti / AWSb 渠道的 Claude 发 `max` 也都不想，是这台 New API 的 ①→④ 转换，见第十六个样本）** |
 > | 顶层 `thinking`（`enabled + budget_tokens` / `adaptive`） | 静默忽略，不想 |
 > | 函数工具、`tool_choice: none` | ✅ |
 > | `tool_choice: required` / 具名 | 和 ④ 一样：**非流式生效**（拿「讲个笑话」也调用了 `get_weather`），**流式无视**（4 次 0 次调用；具名那条模型甚至复述「你要我调用 get_weather」，但没调用）。流式的 `prompt_tokens` 301，非流式 102，说明两条路径的转换不是同一套 |
-> | `response_format`：`json_object` / `json_schema`（strict） | ❌ 都被忽略：答 ```` ```json ```` 代码块，键名自拟（`result` 而不是被 enum 锁死的 `answer: 7`） |
+>
+> **强制 `tool_choice` 的复测（2026-09-23 晚些时候，同一模型 `[特价kiro量]claude-opus-5`，第十六个样本那一轮）**：带思考仍然 0 次调用
+> （④ 非流式 4 次、流式 5 次）；**不带思考、流式**这次 5 次里 3 次调用（④），而上面第一轮是 16 次里 1 次——这一格随时间变，不能当成
+> 稳定的「行」或「不行」。① 流式 `required` 5 次 0 次，但具名 2 次 2 次（上表第一轮具名是 0 次）。本项目的 `claude-adaptive` 总是带 `thinking`，落在稳定失败的那一格，所以「改发 `auto`」的判断不变。
+> | `response_format`：`json_object` / `json_schema`（strict） | ❌ 都被忽略：答 ```` ```json ```` 代码块，键名自拟（`result` 而不是被 enum 锁死的 `answer: 7`）。**（2026-09-23 更正：四个渠道全一样，连 ④ 面真会执行 schema 的 AWSb 在 ① 面也被丢——是 New API 的转换，不是 Kiro，见第十六个样本）** |
 > | `image_url`：data URL / http URL | data URL ✅；http URL 静默丢弃 |
 > | `file` 片段（PDF） | ❌ 静默丢弃，33 s |
 > | `web_search_options` | 转成 ④ 的 `web_search` 后**同样被劫持**：返回「Here are the search results for "…"」，模型没跑 |
@@ -1654,6 +1658,83 @@ Responses adapter：
 >   （发 `max` = 不想），低 / 中 / 高都在想。
 > - `anthropic_compat` 本来就不发 `cache_control`（`cachesPrompt` 只对官方标准开），在这里恰好是对的：这台只写不读，
 >   打了断点也换不来缓存命中。它报的 `cache_read` 是估算拼出来的，用量页上这部分的缓存价不可信。
+
+### 第十六个样本：同一台 New API 上 Claude 的五个渠道——Kiro / CC / anti 反代与 AWSb 正向、官 key（① ④ 两族，2026-09-23 实测）
+
+> **怎么测的**：同一把 key、同一台中转站（第十五个样本那台），同一套 curl 用例（`python3` 并发脚本，约 350 次请求），逐渠道打
+> `/v1/messages` 与 `/v1/chat/completions`。随机性大的几项（强制工具、`effort`、结构化输出、难题上的思考）补跑 2–3 次。
+> 渠道只体现在模型 id 的前缀里：
+>
+> | 前缀 | 测的模型 | 背后是什么 |
+> | --- | --- | --- |
+> | `[特价kiro量]` | `claude-opus-5`（对照组，第十五个样本） | Kiro（AWS 的 IDE）反代 |
+> | `[CC量]` | `claude-opus-4-6`、`claude-opus-5` | 反代；前缀推测是 Claude Code 通道（未证实） |
+> | `[anti量]` | `claude-opus-4-6` | 反代；前缀推测是 Antigravity（未证实） |
+> | `[正向AWSb量]` / `[正向AWSb量1]` | `claude-opus-4-6` | 正向 AWS Bedrock——消息 id 以 `msg_bdrk_` 开头 |
+> | `[官key量]` | `claude-opus-5` | 官方 key 正向。**本次没测到**：这一档 opus-5 / opus-4-6 / sonnet-5 两个端点全部 502 `Upstream request failed`，相隔十分钟四次都一样 |
+>
+> `[正向AWSb量1]claude-opus-5` 对这把 key 回 404「No available channel for this model on the current token」（同一档的 `opus-4-6` 通）；
+> `[正向AWSb量]` 目录里没有 `opus-5`（503 `model_not_found`）。
+>
+> **④ Anthropic Messages 面**：
+>
+> | 特性 | Kiro | CC | anti | AWSb |
+> | --- | --- | --- | --- | --- |
+> | `max_tokens: 8` | ❌ 无视（`end_turn`，53 token） | ✅ `stop_reason: max_tokens` | ✅ | ✅ |
+> | `thinking`（adaptive / enabled+budget） | ✅ | ✅；**opus-5 的 thinking 块文本恒为空**（带 `display:"summarized"`、难题上 765 输出 token 也空），opus-4-6 有文本 | ❌ **不想**：没有 thinking 块；`[anti量]claude-opus-4-6-thinking` 变体也一样 | ✅ |
+> | `display: "omitted"` | 无视，照给全文 | ✅ 块在、文本空 | —（本来就不想） | ✅ 块在、文本空 |
+> | `output_config.effort` 分档（同一道难题 low / max 输出 token，各 2–3 次） | 只有 low 有效果（第十五个样本） | 分不开（745–1,804 对 768–1,929） | 分不开（不想） | ✅ **真分档**：low 6 / 207，max 1,037–1,156 |
+> | 参数校验：乱写 `effort`、思考时 `temperature: 0.3` | 都 200 | 都 200 | 都 200 | 都 400，报错与官方同文（`Input should be 'low', 'medium', 'high' or 'max'`；`temperature may only be set to 1 when thinking is enabled`） |
+> | `budget_tokens ≥ max_tokens` | 200 | 200 | 200 | 200 |
+> | 工具轮回传篡改过的 `signature` | 200（不校验） | 200（不校验） | —（第一轮没调用工具） | ✅ 400 `Invalid signature in thinking block` |
+> | 强制 `tool_choice`，不带思考（非流式 / 流式，每格 4–8 次） | 全调用 / 5 次 3 次（见第十五个样本复测） | 全调用 / 全调用 | **全不调用** / 全不调用 | 全调用 / 全调用 |
+> | 强制 `tool_choice`，带 adaptive 思考 | 0 次（非流式 4、流式 5） | 非流式 3/8、流式 4/8——**时好时坏** | 0 次 | ✅ 全调用（与本项目「adaptive 支持强制」的假设一致） |
+> | `output_config.format`（json_schema，schema 与 prompt 相冲） | ❌ 无视 | **opus-4-6 无视（散文）、opus-5 执行**（各 2/2） | ❌ 无视 | ✅ 执行 |
+> | 图片 base64 / URL | ✅ / 丢 | ✅ / 丢 | ✅ / 500 `failed to decode base64 data` | ✅ / 400 `URL sources are not supported` |
+> | PDF `document` base64 | ❌ 丢（33 s） | ✅ | ❌ 丢 | ✅（30 s） |
+> | 纯文本 `document` + `citations` | 读到，无 citations | 读到，无 citations | ❌ **没读到** | ✅ 有 citations |
+> | `web_search_20250305` 单挂 | ❌ 劫持（第十五个样本） | ✅ 真搜：要求搜就搜（`server_tool_use` + 结果块，`usage.server_tool_use.web_search_requests: 1`）；改写句子的请求不触发搜索、不劫持 | 丢：模型凭记忆答（「As of my latest information (July 2025)…」） | ❌ 400 `Input tag 'web_search_20250305' … does not match` |
+> | `web_search` 与函数工具同发（流式） | ✅ 真搜 | ✅ 真搜 | 丢 | ❌ 400 |
+> | `web_fetch_20250910` | 丢，模型假装抓了 | ✅ 有 `server_tool_use` 块 | 丢 | ❌ 400 |
+> | `code_execution_20250825` | 丢，模型假装跑了 | 丢，没有块 | 丢 | ❌ 400 |
+> | `cache_control`（7–17k 前缀连发两次） | 只写不读（假的） | ✅ 第二次 `cache_read` = 前缀 | ❌ 没有缓存字段，两次都按全价输入 | ✅ 第二次命中 |
+> | 「Say OK.」的输入 token（不带 system） | 7 + 拼出来的缓存段 | 9–10 | **39**——约 30 token 的注入 | 10 |
+> | `/v1/messages/count_tokens` | 404（这台中转站没有这条路由，五个渠道都一样） | ← | ← | ← |
+>
+> **① Chat Completions 面**（New API 先转成 ④ 再发，所以 ④ 的渠道差异在这里重演，外加转换本身的两条）：
+>
+> | 特性 | Kiro | CC | anti | AWSb |
+> | --- | --- | --- | --- | --- |
+> | `max_tokens: 8` | ❌ 无视 | ✅ `finish_reason: length` | ❌ 无视（209 token）——④ 面上它是生效的 | ✅ |
+> | `reasoning_effort` low / high（难题） | ✅ 有 `reasoning_content` | opus-4-6 ✅；**opus-5 无**（同 ④ 面的空文本） | ❌ | ✅ |
+> | `reasoning_effort` `max` / `none` | **四个渠道全部不想** | ← | ← | ← |
+> | 顶层 `thinking` | 四个渠道全部忽略 | ← | ← | ← |
+> | `response_format`（`json_object` / strict `json_schema`） | **四个渠道全部无视**：代码块 + 自拟键名。AWSb 在 ④ 面会执行 schema，这里也被丢 | ← | ← | ← |
+> | 强制 `tool_choice`（`required` / 具名；非流式 / 流式） | ✅ / `required` 0/5、具名 2/2 | ✅ / ✅ | ❌ / ❌（非流式 5 次 1 次、流式 5 次 0 次） | ✅ / ✅ |
+> | `image_url` data / http | ✅ / 丢 | ✅ / 丢 | ✅ / 丢 | ✅ / 400 |
+> | `file`（PDF） | ❌ 丢 | ✅ | ❌ 丢 | ✅ |
+> | `web_search_options` | ❌ 劫持 | ✅ 答案引了搜索结果 | 无效（答 NOWEB） | ❌ 400 |
+>
+> **结论**：
+>
+> 1. **支持什么，由渠道决定，不由模型或协议决定。**同一个 `claude-opus-4-6`，CC 与 AWSb 上 PDF、缓存、强制工具都真的生效，
+>    anti 与 Kiro 上都被丢。每个渠道是一种「阉割法」：
+>    - **CC 反代**最接近官方 Claude：服务端工具（搜索、网页抓取）、PDF、缓存都是真的；但不做任何参数校验、签名不校验，
+>      opus-5 的思考文本拿不到，强制工具带思考时时好时坏。
+>    - **AWSb 正向（Bedrock）**校验与报错和官方一样严，`effort` 真分档，结构化输出与 citations 生效；**但没有任何服务端工具**
+>      （Bedrock 本身不提供），URL 图片 400，PDF 慢。
+>    - **Kiro 反代**：思考可用，其余大多被丢，`web_search` 单挂会被劫持（第十五个样本）。
+>    - **anti 反代**：**不会思考**（`-thinking` 变体也不），强制工具无效，PDF 与文本文档都被丢，无缓存，还注入约 30 token 提示。
+> 2. **有两条是这台 New API 的 ①→④ 转换，与渠道无关**：① 面 `response_format` 被丢、`reasoning_effort: "max"` / `"none"` = 不想。
+>    所以同一台中转站上，**所有 Claude 走 ① 面都拿不到原生 JSON 模式**——第十五个样本把这两条记成 Kiro 特有，是只测了一个渠道的误判。
+> 3. **「反代」与「正向」的分界是可观测的**：正向渠道带官方的参数校验与报错原文、签名校验、消息 id 前缀（`msg_bdrk_`）；反代渠道
+>    对乱写的参数一律 200。想知道一个没见过的渠道是哪一类，发一个 `output_config.effort: "bogus"` 最便宜。
+> 4. 两款模型（opus-4-6 / opus-5）在同一渠道上多数项一致，但**不是全部**：CC 上结构化输出只有 opus-5 执行、思考文本只有 opus-4-6 有。
+>    按渠道点名时仍要留意模型差异。
+>
+> **对本项目**：本样本只记事实，应用侧还没改。PR #685 的 `KIRO_CLAUDE` 名单只点了 Kiro；按这里的数据，① 面的 `structuredOutput`
+> 应当扩到这台中转站上的所有 Claude，anti / AWSb / CC 也各有要点名的格子。怎么改、为什么还没改，见
+> [`issues/relay-claude-channel-gating.md`](../issues/relay-claude-channel-gating.md)。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

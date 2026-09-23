@@ -410,3 +410,6 @@ C1 之后它已经没有调用方了：四族都有思考参数的拼法，它�
 - **Sonnet 按推断收进 `refuses`（作者决定，2026-09-23）**。这是 §8.7「`refuses` 只收实测」的例外，理由是：
   这些缺口都在中转站的翻译层，不在模型；两款 Opus 在每一项上表现都一样。所以正则按渠道 × 家族写，
   规则是同时带 `kiro` 和 `claude`，不按具体型号。别的渠道（`[anti]` 等）没测，不在里面。
+- **后续（2026-09-23）**：同一台中转站又测了 CC / anti / AWSb 三个渠道（landscape.md §7 第十六个样本）。① 面「`response_format` 被丢」
+  其实是这台 New API 的转换，所有渠道都一样，不是 Kiro 特有；anti / AWSb 也各有该点名的格子。这些还没进表，原因和做法见
+  [`issues/relay-claude-channel-gating.md`](../issues/relay-claude-channel-gating.md)。
