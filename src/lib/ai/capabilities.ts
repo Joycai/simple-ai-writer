@@ -17,6 +17,9 @@
  *     keyed platform × family × capability, with an optional model-id matcher
  *     as the third axis. Endpoint-run tools live here too: which tool a wire
  *     runs is a fact about the platform and the model id, like any other.
+ *   - {@link UPSTREAM_CAPABILITIES}: on a relay, what each upstream behind it
+ *     was measured to do — the same cells, consulted before the relay's own
+ *     when the model's upstream is known (`relayUpstream.ts` resolves it).
  *
  * Every asker — the adapters, the 将发送 summary, the drawers, the chat
  * surface — calls {@link capabilityVerdict} or {@link hasCapability} here
@@ -30,6 +33,7 @@ import type { ModelType } from "./configDb";
 import type { PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
 import type { ThinkingCategoryId } from "./reasoning";
+import type { RelayUpstreamId } from "./relayUpstream";
 
 /** What can be asked about. A server tool's id is a capability id. */
 export type CapabilityId =
@@ -77,10 +81,12 @@ type CapabilityStatus = "yes" | "unknown" | "no";
  *   - `model-type`: the model's type rules it out (a text model reads no frames).
  *   - `requires`: a capability it depends on is unavailable.
  *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
+ *   - `upstream`: the relay's upstream behind this model was measured this way — either way,
+ *     working or not (UPSTREAM_CAPABILITIES).
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
-  "family", "model", "model-unlisted", "model-type", "requires", "thinking",
+  "family", "model", "model-unlisted", "model-type", "requires", "thinking", "upstream",
 ] as const;
 type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 
@@ -219,10 +225,11 @@ export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as Server
  *
  * Without `runs` the matcher only singles ids out: an id `refuses` names is
  * `no / model`, and every other id — or a blank one — gets whatever the rule
- * gives this platform, as if the cell were absent. That is the shape for a
- * relay, where one upstream behind it was measured and the rest were not: the
- * measured ids must not drag every other model on the relay down to
- * `model-unlisted`.
+ * gives this platform, as if the cell were absent — for a platform where one
+ * family of ids was measured and the rest were not, which must not drag every
+ * other model down to `model-unlisted` (§8.10). The relay's Kiro cells were
+ * its first use; they moved to {@link UPSTREAM_CAPABILITIES} (§8.11), and no
+ * cell uses the shape today. Kept for the next per-id finding on a platform.
  */
 interface ModelMatcher {
   runs?: readonly RegExp[];
@@ -334,43 +341,127 @@ const DASHSCOPE: PlatformCapabilities = {
 };
 
 /**
- * Claude served by a relay's Kiro channel (AWS's IDE backend, translated to
- * the Messages and Chat Completions shapes by the relay). The channel shows in
- * the id the author copies from the relay's catalogue — `[特价kiro量]claude-opus-5`,
- * `特价kiro | claude-opus-4-6`, `[kiro2]kiro-claude-sonnet-5` — so the id is
- * the one handle there is (landscape.md §7 第十五个样本, 2026-09-23).
- *
- * Measured on opus-4-6 and opus-5 only. Sonnet is included by inference: every
- * gap below is the relay's translation layer, not the model, and both Opus
- * behaved identically on every probe.
- *
- *   - Chat `file` part: dropped, the model answers that it sees no document.
- *   - A forced `tool_choice`, both wires: honoured on the relay's non-streamed
- *     path only. Streamed — the only way this app calls — the model answers
- *     in prose (Anth 1 call in 32, Chat 0 in 4, thinking on or off).
- *   - Chat `response_format` (`json_object` and `json_schema`): ignored,
- *     prose with a fenced JSON block. `off` sends the cue alone, which is all
- *     that reached the model anyway.
- *   - Anthropic `web_search_*`: the relay answers it itself. As the request's
- *     only tool it hijacks the request — the first user message is searched
- *     verbatim and a canned result list comes back, no model run. Beside a
- *     function tool on a stream it runs a real search. This app sends the
- *     tool on every request of the model, tool-less ones included, so a
- *     writing request would come back as a page of search results.
+ * What an upstream behind a relay applies to, and what it was measured doing.
+ * A relay has no host of its own and fronts several upstreams at once; the
+ * same model id — `claude-opus-4-6` — behaves differently behind each, and the
+ * upstream shows only in a prefix the relay's owner made up (`[CC量]`). So the
+ * upstream is resolved from the author's data (`relayUpstream.ts`), and these
+ * are the built-in facts about each one (capability-gating-plan §8.11).
  */
-const KIRO_CLAUDE: ModelMatcher = { refuses: [/^(?=.*kiro)(?=.*claude)/] };
+interface UpstreamCapabilities {
+  /** The models the measurements cover. Any other id is treated as having no upstream. */
+  models: RegExp;
+  /**
+   * Plain `true` / `false` only: the upstream already narrows the models, and
+   * a per-id matcher inside it would be a third axis nothing has measured.
+   */
+  families: Partial<Record<ProtocolFamily | "all", Partial<Record<CapabilityId, boolean>>>>;
+}
+
+/** Every measurement below is Claude's; nothing else was probed behind these upstreams. */
+const CLAUDE = /claude/;
+
+/**
+ * Each upstream's cells, measured on one New API relay (landscape.md §7
+ * 第十五 and 第十六个样本, 2026-09-23). Only Chat Completions and Messages:
+ * the relay serves Claude on no other route (500 `convert_request_failed`).
+ * An absent cell falls to the relay's own cell and the rule, as it would
+ * with no upstream — write only what a sample saw.
+ */
+export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities> = {
+  /**
+   * Kiro (AWS's IDE backend, translated by the relay). Named by the upstream's
+   * product, so relays spell it alike — `[特价kiro量]claude-opus-5`,
+   * `特价kiro | claude-opus-4-6` — and an id containing it is inferred to be
+   * Kiro. Measured on opus-4-6 and opus-5; Sonnet by inference, the gaps being
+   * the translation layer's.
+   *
+   *   - Chat `file` part: dropped, the model answers that it sees no document.
+   *   - A forced `tool_choice`, both wires: honoured on the relay's non-streamed
+   *     path only. Streamed — the only way this app calls — the model answers
+   *     in prose (Anth 1 call in 32, Chat 0 in 4; with thinking, 0 in 9 on the
+   *     retest).
+   *   - Chat `response_format`: ignored, prose with a fenced JSON block. Not
+   *     Kiro's own: every upstream on that relay loses it in the relay's
+   *     Chat→Messages conversion (第十六个样本). Kept here because it is what
+   *     the Kiro rule decided before upstreams existed; it moves to the relay
+   *     once a second New API sample says the conversion is the platform's.
+   *   - Anthropic `web_search_*`: the relay answers it itself. As the request's
+   *     only tool it hijacks the request — the first user message is searched
+   *     verbatim and a canned result list comes back, no model run. This app
+   *     sends the tool on tool-less requests too, so it stays off.
+   */
+  kiro: {
+    models: CLAUDE,
+    families: {
+      openai: { pdfInput: false, forcedToolChoice: false, structuredOutput: false },
+      anthropic: { forcedToolChoice: false, web_search: false },
+    },
+  },
+  /**
+   * A reverse proxy the closest to the official API (the relay's `[CC…]`;
+   * presumably Claude Code's channel, unconfirmed). PDF on both wires, a real
+   * web search (`server_tool_use` with a result block) that a writing request
+   * does not trigger, a forced tool honoured without thinking. With adaptive
+   * thinking a forced tool is called about half the time (3 in 8, 4 in 8) —
+   * left to the rule on both wires, not `false`: the structured task's
+   * fallback covers a missed call, and `false` would lose the calls that do
+   * happen. Chat was probed without thinking only, so it says no more than
+   * Messages does.
+   */
+  cc: {
+    models: CLAUDE,
+    families: {
+      openai: { pdfInput: true },
+      anthropic: { pdfInput: true, web_search: true },
+    },
+  },
+  /**
+   * A reverse proxy that drops most of the request (the relay's `[anti…]`;
+   * presumably Antigravity, unconfirmed). A forced tool is never called on
+   * either wire, streamed or not (1 in 21); the PDF and even a plain-text
+   * `document` are dropped; a lone web search is dropped and the model answers
+   * from memory. It also never thinks — no parameter turns it on — which is a
+   * thinking-category fact, not a cell.
+   */
+  anti: {
+    models: CLAUDE,
+    families: {
+      openai: { pdfInput: false, forcedToolChoice: false },
+      anthropic: { forcedToolChoice: false, web_search: false },
+    },
+  },
+  /**
+   * AWS Bedrock, forwarded (message ids `msg_bdrk_…`). Validates like the
+   * official API; PDF read on both wires, forced tools honoured with thinking
+   * too. Bedrock has no Anthropic server tools at all: `web_search_*` is a 400
+   * that fails the whole request, not just the tool.
+   */
+  bedrock: {
+    models: CLAUDE,
+    families: {
+      openai: { pdfInput: true, forcedToolChoice: true },
+      anthropic: { pdfInput: true, forcedToolChoice: true, web_search: false },
+    },
+  },
+  /**
+   * The official API behind a relay. Unmeasured — the relay's tier answered
+   * 502 on every request the day the others were probed — so no cell: picking
+   * it records that the prefix is classified and changes no verdict.
+   */
+  official: { models: CLAUDE, families: {} },
+};
 
 /**
  * `newapi` and `custom` alike: a New API relay lands on `custom` unless the
- * author picks New API, and the channel is in the model id either way.
+ * author picks New API. What differs is the upstream behind each model, which
+ * {@link UPSTREAM_CAPABILITIES} answers. A cell here would hold for every
+ * upstream; the relay's Chat→Messages conversion has two such gaps
+ * (`response_format` dropped, `reasoning_effort: "max"` = no thinking), but one
+ * New API was sampled, so they wait for a second
+ * (docs/issues/relay-claude-channel-gating.md).
  */
-const RELAY: PlatformCapabilities = {
-  relay: true,
-  families: {
-    openai: { pdfInput: KIRO_CLAUDE, forcedToolChoice: KIRO_CLAUDE, structuredOutput: KIRO_CLAUDE },
-    anthropic: { forcedToolChoice: KIRO_CLAUDE, web_search: KIRO_CLAUDE },
-  },
-};
+const RELAY: PlatformCapabilities = { relay: true };
 
 /** A local server: the protocol's own tools are known absent, not unmeasured. */
 const LOCAL: PlatformCapabilities = {
@@ -445,6 +536,13 @@ interface CapabilityModel {
    * `thinkingOff` rule, where absent reads as the family default — thinking.
    */
   thinkingCategory?: ThinkingCategoryId;
+  /**
+   * The relay upstream behind the model, already resolved
+   * (`relayUpstream.ts` → `capabilityModelOf` / `resolveRelayUpstream`).
+   * Consulted only on a relay platform, and only for the models its
+   * measurements cover. Absent = no upstream.
+   */
+  upstream?: RelayUpstreamId;
 }
 
 const verdict = (status: CapabilityStatus, reason: CapabilityReason): CapabilityVerdict => ({ status, reason });
@@ -454,9 +552,25 @@ function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId)
   return families?.[family]?.[id] ?? families?.all?.[id];
 }
 
+/** Whether an upstream's measurements cover this model id. A blank id is covered by none. */
+export function upstreamApplies(upstream: RelayUpstreamId, modelId: string | undefined): boolean {
+  const mid = modelId?.trim().toLowerCase();
+  return !!mid && UPSTREAM_CAPABILITIES[upstream].models.test(mid);
+}
+
+function upstreamCellFor(
+  platform: PlatformId, family: ProtocolFamily, id: CapabilityId, model: CapabilityModel,
+): boolean | undefined {
+  if (!model.upstream || !PLATFORM_CAPABILITIES[platform]?.relay) return undefined;
+  if (!upstreamApplies(model.upstream, model.modelId)) return undefined;
+  const families = UPSTREAM_CAPABILITIES[model.upstream].families;
+  return families[family]?.[id] ?? families.all?.[id];
+}
+
 /**
  * The one answer. Order is fixed: model type → what it requires → thinking →
- * the platform's cell (a measurement wins) → the rule's families → its default.
+ * the relay upstream's cell → the platform's cell (a measurement wins) → the
+ * rule's families → its default.
  */
 export function capabilityVerdict(id: CapabilityId, wire: CapabilityWire, model: CapabilityModel = {}): CapabilityVerdict {
   return familyVerdict(id, wire.platform, familyOf(wire.standard), model);
@@ -472,6 +586,12 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== "off") {
     return verdict("no", "thinking");
   }
+
+  // Behind a relay the upstream is the more specific measurement: the relay's
+  // own cells hold for whatever upstream a model has, these for one.
+  const up = upstreamCellFor(platform, family, id, model);
+  if (up === false) return verdict("no", "upstream");
+  if (up === true) return verdict("yes", "upstream");
 
   const cell = cellFor(platform, family, id);
   if (cell === false) return verdict("no", "platform-absent");

@@ -26,6 +26,7 @@
  */
 
 import { capabilityVerdict } from "./capabilities";
+import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { strictify } from "./jsonSchemaStrict";
 import { normalizeModelId } from "./modelLimits";
 import { resolvePlatform, type PlatformId } from "./platforms";
@@ -103,6 +104,8 @@ interface JsonModeTarget {
   structuredOutput?: StructuredOutputMode;
   /** Which server this is (`ConnOptions.platform`); absent = inferred from the address. */
   platform?: PlatformId;
+  /** The relay upstream (`ConnOptions.relayUpstream`); absent = a product name in the id. */
+  relayUpstream?: RelayUpstreamChoice;
 }
 
 /**
@@ -121,8 +124,8 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   };
   // A wire measured to ignore JSON mode for this model gets the cue alone —
   // what Anthropic gets. The declaration stays on the row, not sent (a relay's
-  // Kiro-served Claude answers `response_format` with fenced prose).
-  const model = { modelId: target.modelId };
+  // Kiro upstream answers `response_format` with fenced prose).
+  const model = capabilityModelOf(target);
   if (capabilityVerdict("structuredOutput", wire, model).status === "no") return "off";
   // Whether this *wire* takes the strict tier is the capability table's
   // `jsonSchema` cell — a fact about the platform, not the model id: 智谱

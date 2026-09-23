@@ -14,6 +14,7 @@ import {
 } from "../../../lib/agent/subagentModel";
 import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
+import { upstreamDropping } from "../../../lib/ai/relayUpstream";
 import {
   isAsrDiarizationDefault,
   isAsrTimestampsEnabled,
@@ -119,7 +120,11 @@ export function SubAgentsPane() {
   const warningFor = (kind: SubAgentKind, model: Model | undefined): string | undefined => {
     if (!model) return subAgents[kind].enabled ? t("systemSettings.subagents.warnNoModel") : undefined;
     if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) {
-      // Declared but not sent: the platform has no server-side search.
+      // Declared but not sent: the relay's upstream drops it, or the platform
+      // has no server-side search.
+      const channel = providerFor(model, providers);
+      const upstream = channel && model.serverTools?.includes("web_search") ? upstreamDropping("web_search", model, channel) : undefined;
+      if (upstream) return t("systemSettings.subagents.warnSearchUpstream", { upstream: t(`aiConfig.upstream.name.${upstream}`) });
       return t(model.serverTools?.includes("web_search")
         ? "systemSettings.subagents.warnSearchNotSent"
         : "systemSettings.subagents.warnNoSearch");
@@ -128,6 +133,9 @@ export function SubAgentsPane() {
       return t("systemSettings.subagents.warnNotMultimodal");
     }
     if (kind === "pdf" && !readsPdf(model, providerFor(model, providers))) {
+      const channel = providerFor(model, providers);
+      const upstream = channel && model.pdfInput ? upstreamDropping("pdfInput", model, channel) : undefined;
+      if (upstream) return t("systemSettings.subagents.warnPdfUpstream", { upstream: t(`aiConfig.upstream.name.${upstream}`) });
       return t("systemSettings.subagents.warnNoPdf");
     }
     if (kind === "imagegen" && model.type !== "image") {

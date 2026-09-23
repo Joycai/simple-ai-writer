@@ -15,6 +15,7 @@
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { serverToolsSent } from "../ai/serverTools";
+import { upstreamDropping } from "../ai/relayUpstream";
 import { imagePart, imagesWithinBudget } from "../ai/imagePart";
 import { canSeeImages, readsPdf, type Model, type Provider } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
@@ -137,8 +138,13 @@ export async function executeDelegate(
   // whole round trip before reporting it, and report it as a failure rather
   // than as a configuration problem the author can fix.
   if (kind === "search" && !serverToolsSent(conn.model, [conn.provider])?.includes("web_search")) {
+    const upstream = upstreamDropping("web_search", conn.model, conn.provider);
     return fail(
-      conn.model.serverTools?.includes("web_search")
+      upstream
+        ? `the search subagent's model "${conn.model.name}" has web_search switched on, but the relay upstream behind it ("${upstream}") ` +
+            `was measured dropping it, so nothing is sent. Tell the author to bind a model behind another upstream ` +
+            `(Settings → Subagents), or answer without searching.`
+        : conn.model.serverTools?.includes("web_search")
         ? `the search subagent's model "${conn.model.name}" has web_search switched on, but its provider "${conn.provider.name}" ` +
             `is on a platform with no server-side search, so nothing is sent. Tell the author to bind a model on a platform that searches ` +
             `(Settings → Subagents), or answer without searching.`
@@ -153,9 +159,14 @@ export async function executeDelegate(
     );
   }
   if (kind === "pdf" && !readsPdf(conn.model, conn.provider)) {
+    const upstream = conn.model.pdfInput ? upstreamDropping("pdfInput", conn.model, conn.provider) : undefined;
     return fail(
-      `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
-        `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
+      upstream
+        ? `the pdf subagent's model "${conn.model.name}" accepts PDF input, but the relay upstream behind it ("${upstream}") ` +
+            `was measured dropping the file. Tell the author to bind a model behind another upstream (Settings → Subagents), ` +
+            `or read the document another way.`
+        : `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
+            `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
     );
   }
 

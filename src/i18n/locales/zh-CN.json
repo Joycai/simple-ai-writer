@@ -796,6 +796,8 @@
       "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
       "warnSearchNotSent": "该模型开了联网搜索，但它所在平台没有服务端搜索，请求里不会发送——子代理无法联网。换一个支持搜索的平台上的模型。",
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
+      "warnSearchUpstream": "该模型背后的中转站上游「{{upstream}}」实测不支持联网搜索，请求里不会发送——子代理无法联网。换一个走别的上游的模型。",
+      "warnPdfUpstream": "该模型背后的中转站上游「{{upstream}}」实测会丢掉 PDF，子代理读不到文件。换一个走别的上游的模型。",
       "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
       "enable": "启用",
       "imagegen": "图片生成",
@@ -2913,7 +2915,59 @@
       "model-unlisted": "{{platform}} 有这一项，但 {{model}} 没实测过：照发，可能不起作用",
       "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
       "requires": "它依赖的另一项在这条线路上不可用",
-      "thinking": "思考开着时这条线路不收它"
+      "thinking": "思考开着时这条线路不收它",
+      "upstream": "中转站上游「{{upstream}}」实测如此"
+    },
+    "upstream": {
+      "label": "上游",
+      "prefixCol": "模型 id 前缀",
+      "upstreamCol": "上游",
+      "prefixPlaceholder": "[前缀]",
+      "pick": "选上游",
+      "remove": "删除这一行",
+      "addPrefix": "加一条前缀",
+      "found": "这个渠道的模型里还有：",
+      "upstreamHint": "同一个模型挂在不同上游下，能力并不一样（PDF、强制工具、联网搜索）。按前缀把模型归到上游，可用性矩阵和实际请求都会照上游的实测来。没配的模型只按 id 里的产品名推断（kiro、bedrock），其余当作未知。",
+      "modelHint": "中转站背后走哪个上游，决定这个模型实际能用哪些能力。默认跟随渠道里的前缀表。",
+      "followNow": "跟随渠道 · 现在：{{upstream}}",
+      "none": "不按上游",
+      "noneSub": "按协议默认",
+      "kindReverse": "反代",
+      "kindForward": "正向",
+      "kindOther": "其他",
+      "unmeasured": "未实测",
+      "src": {
+        "prefix": "{{upstream}} · 前缀 {{prefix}}",
+        "inferred": "{{upstream}} · 按 id 里的「{{word}}」推断",
+        "model": "手选",
+        "modelNone": "手选：不按上游",
+        "unsetBracket": "未指定——在渠道里给 {{prefix}} 配一个上游",
+        "unset": "未指定"
+      },
+      "sumUnset": "未指定 · 按协议默认",
+      "sumNone": "不按上游 · 按协议默认",
+      "notSent": "不发送：中转站上游「{{upstream}}」实测不收这一项。",
+      "notClaude": "这个上游只实测过 Claude，对这个模型不生效——可用性按协议默认。",
+      "matrixTag": "上游",
+      "err": {
+        "dup": "这条前缀重复了，保存时只留第一条",
+        "empty": "前缀不能为空",
+        "noUpstream": "选一个上游，否则这一行不会保存"
+      },
+      "note": {
+        "kiro": "实测：思考可用，只有「低」档真的变浅；不看输出上限；PDF、强制工具、JSON 模式被丢；单独挂联网搜索会被中转站劫持。",
+        "cc": "实测：联网搜索、网页抓取、PDF、缓存都是真的；不做参数校验。opus-5 不返回思考内容。",
+        "anti": "实测：不会思考（思考参数全部无效）；强制工具、PDF、文本文档被丢；没有缓存，每次多约 30 token。",
+        "bedrock": "实测：校验与官方一样严，思考档位真的分档；没有联网搜索（发了会 400）；URL 图片会被拒。",
+        "official": "未实测：这一档测试当天不可用，按协议默认处理。"
+      },
+      "name": {
+        "kiro": "Kiro 反代",
+        "cc": "CC 类反代",
+        "anti": "anti 类反代",
+        "bedrock": "Bedrock 正向",
+        "official": "官方正向"
+      }
     },
     "fees": {
       "paneSub": "一组价格，被任意多个模型共用。改一次价，所有绑着它的模型一起改；已经记下的用量一分不动。",

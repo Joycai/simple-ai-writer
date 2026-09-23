@@ -33,14 +33,29 @@ import { streamResponses } from "../responses";
 import { resolveThinkingCategory } from "../reasoning";
 import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } from "../types";
 import type { ServerToolId } from "../serverTools";
+import { capabilityModelOf, type RelayUpstreamChoice } from "../relayUpstream";
 
 const BASE_URL = "https://capability-consistency.invalid/v1";
 /**
  * One id that runs DashScope's code interpreter on both wires, one on Responses
- * only, one nobody names, and a relay's Kiro-served Claude (singled out on the
- * relay platforms).
+ * only, one nobody names, and a relay's Kiro-served Claude — its upstream
+ * inferred from the id, as every hand-built request does.
  */
 const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5"];
+/**
+ * A relay's Claude under an id that names no upstream, with the upstream as
+ * `connOptions()` resolves it from the channel's table — so an asker that drops
+ * `relayUpstream` on the way to the table disagrees here — and a Kiro id
+ * resolved to none, which must not be inferred back.
+ */
+const UPSTREAM_CASES: readonly { modelId: string; relayUpstream: RelayUpstreamChoice }[] = [
+  ...(["kiro", "cc", "anti", "bedrock", "official"] as const).map((relayUpstream) => ({ modelId: "[x]claude-opus-4-6", relayUpstream })),
+  { modelId: "[特价kiro量]claude-opus-5", relayUpstream: "none" },
+];
+const CASES: readonly { modelId: string; relayUpstream?: RelayUpstreamChoice }[] = [
+  ...MODEL_IDS.map((modelId) => ({ modelId })),
+  ...UPSTREAM_CASES,
+];
 const TYPE = "multimodal" as const;
 
 const ADAPTERS: Record<ProtocolFamily, (o: StreamOptions) => Promise<void>> = {
@@ -51,6 +66,7 @@ interface Ctx {
   platform: PlatformId;
   standard: ApiStandard;
   modelId: string;
+  relayUpstream?: RelayUpstreamChoice;
 }
 
 /** The body the adapter would POST — captured at `fetch`, which then fails the request. */
@@ -62,6 +78,7 @@ async function bodyOf(ctx: Ctx, extra: Partial<StreamOptions>): Promise<string> 
   }));
   await ADAPTERS[familyOf(ctx.standard)]({
     baseUrl: BASE_URL, apiKey: "k", standard: ctx.standard, platform: ctx.platform, modelId: ctx.modelId,
+    relayUpstream: ctx.relayUpstream,
     messages: [{ role: "user", content: "hi" }], onChunk: () => {}, ...extra,
   }).catch(() => {});
   return body;
@@ -73,7 +90,7 @@ async function adapterSends(ctx: Ctx, without: Partial<StreamOptions>, withIt: P
 
 function summarySends(ctx: Ctx, without: Partial<WireInput>, withIt: Partial<WireInput>): boolean {
   const row = (m: Partial<WireInput>) =>
-    JSON.stringify(wireSummary({ type: TYPE, modelId: ctx.modelId, ...m }, ctx.standard, BASE_URL, ctx.platform));
+    JSON.stringify(wireSummary({ type: TYPE, modelId: ctx.modelId, ...m }, ctx.standard, BASE_URL, ctx.platform, ctx.relayUpstream));
   return row(without) !== row(withIt);
 }
 
@@ -94,7 +111,9 @@ const FUNCTION_TOOL = { type: "function" as const, function: { name: "pick", des
 
 const PROBES: Record<CapabilityId, Probe> = {
   // The PDF subagent's eligibility and the delegation gate both ask readsPdf.
-  pdfInput: async (ctx) => ({ readsPdf: readsPdf({ pdfInput: true, modelId: ctx.modelId }, provider(ctx)) }),
+  pdfInput: async (ctx) => ({
+    readsPdf: readsPdf({ pdfInput: true, modelId: ctx.modelId, relayUpstream: ctx.relayUpstream }, provider(ctx)),
+  }),
   vlHighResolution: async (ctx) => ({
     adapter: await adapterSends(ctx, {}, { vlHighResolution: true }),
     summary: summarySends(ctx, {}, { vlHighResolution: true }),
@@ -150,13 +169,15 @@ describe("every asker agrees with the capability table", () => {
     const disagreements: string[] = [];
     for (const platform of PLATFORM_IDS) for (const endpoint of platformEndpoints(platform)) {
       const standard = standardOf({ family: endpoint.family, official: !!endpoint.official });
-      for (const modelId of MODEL_IDS) {
-        const ctx = { platform, standard, modelId };
+      for (const { modelId, relayUpstream } of CASES) {
+        const ctx = { platform, standard, modelId, relayUpstream };
         // The model as the probes build it: no category declared, so the family default.
         const thinkingCategory = resolveThinkingCategory({}, standard).id;
-        const expected = hasCapability(id, { platform, standard }, { modelId, type: TYPE, thinkingCategory });
+        const model = { ...capabilityModelOf({ modelId, relayUpstream }), type: TYPE, thinkingCategory };
+        const expected = hasCapability(id, { platform, standard }, model);
+        const label = `${platform}/${standard}/${modelId}${relayUpstream ? `@${relayUpstream}` : ""}`;
         for (const [asker, sent] of Object.entries(await PROBES[id](ctx))) {
-          if (sent !== expected) disagreements.push(`${platform}/${standard}/${modelId} ${asker}: sends ${sent}, table ${expected}`);
+          if (sent !== expected) disagreements.push(`${label} ${asker}: sends ${sent}, table ${expected}`);
         }
       }
     }

@@ -83,6 +83,7 @@ const provider: Required<Provider> = {
     },
     { family: "anthropic", official: false, authMode: "both" },
   ],
+  upstreamPrefixes: [{ prefix: "[CC量]", upstream: "cc" }, { prefix: "[正向AWSb量]", upstream: "bedrock" }],
   createdAt: 1_700_000_000_000,
 };
 
@@ -137,6 +138,7 @@ const model: Required<Omit<Model, "fee">> = {
   asrFormat: "dashscope-sync",
   pricePerSecond: 0.00022,
   pricePerImage: 0.04,
+  relayUpstream: "anti",
   caps,
   activeRoute: "gemini",
   routes: {

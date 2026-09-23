@@ -298,6 +298,15 @@ button.badge:focus-visible {
 .cellNo {
   color: var(--color-text-ghost);
 }
+/* A cell decided by the relay's upstream (UPSTREAM_CAPABILITIES), not the platform. */
+.upstreamTag {
+  margin-left: 4px;
+  padding: 0 3px;
+  border: 1px solid currentColor;
+  font-size: 9.5px;
+  line-height: 1.3;
+  opacity: 0.75;
+}
 
 /* ── Merge (屏 07) ──────────────────────────────────────────────────────── */
 .mergeNote {

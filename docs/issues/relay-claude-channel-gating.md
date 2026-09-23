@@ -1,6 +1,9 @@
-# 中转站上 Claude 的能力裁决只点了 Kiro 一个渠道
+# 中转站上 Claude 的能力裁决：渠道部分已解决，转换层部分未决
 
-> **状态：`open`**（2026-09-23）。事实已实测并记在 [`api/landscape.md`](../api/landscape.md) §7 第十五、十六个样本；应用侧只落了 Kiro 一个渠道（PR #685 的 `KIRO_CLAUDE`），其余还没改。
+> **状态：`open`**（2026-09-23）。事实已实测并记在 [`api/landscape.md`](../api/landscape.md) §7 第十五、十六个样本。
+> **渠道（上游）部分已解决**：改成作者声明的上游 + 内置画像，见 [`api/capability-gating-plan.md`](../api/capability-gating-plan.md) §8.11
+> （`KIRO_CLAUDE` 已迁成按 id 推断出的 Kiro 上游）。**仍未决的是下面「做的时候」第 1 条的 New API 转换层与第 3 条的官 key 补测**。
+> 本文写于「上游」一词确定之前，文中的「渠道」指中转站背后的后端，即现在的「上游」（[`reference/terminology.md`](../reference/terminology.md)）。
 
 ## 是什么
 
@@ -23,7 +26,7 @@ CC、anti、AWSb 三个渠道，结果有两类没有进表：
    另有两条不是能力格能表达的：anti 的 Claude **根本不会思考**（思考参数、`-thinking` 变体都无效）；CC 的 opus-5 思考文本恒为空。
    它们属于思考类目 / 模型行，不属于能力表。
 
-## 为什么还没改
+## 为什么还没改（2026-09-23 写下时）
 
 - **名单按渠道前缀写，前缀是这一台中转站自定的**（`[CC量]`、`[anti量]`、`[正向AWSb量1]`……）。Kiro 的名字来自上游产品，
   换一台中转站大概率还叫 kiro；`CC` / `anti` / `AWSb` 是站主起的缩写，写进正则就是在为一台中转站硬编码。
@@ -32,6 +35,8 @@ CC、anti、AWSb 三个渠道，结果有两类没有进表：
 - `[官key量]` 这一档当天整体 502，没测到正向官 key 的对照组。
 
 ## 做的时候
+
+> 第 2 条已按另一种方式做完：站主缩写不进代码，改成渠道上的「前缀 → 上游」表由作者填（§8.11）。第 1、3 条仍待做。
 
 1. 先补一个样本：另一台 New API（或同一台升级后）的 Claude 走 ① 面，看 `response_format` 与 `reasoning_effort: "max"` 是否同样被丢。
    同样被丢 → 在 `newapi`（不含 `custom`）的 ① 面给 `structuredOutput` 加 `{ refuses: [/claude/] }`，并考虑让 `openai-generic`

@@ -46,6 +46,9 @@ import {
 import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
 import { capabilityVerdict, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
 import {
+  capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
+} from "../../../lib/ai/relayUpstream";
+import {
   activeFamily, channelEndpoints, ROUTE_LONG, ROUTE_SHORT, routeProfileOf, routeProvider,
   type RouteProfile,
 } from "../../../lib/ai/routes";
@@ -70,6 +73,7 @@ import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
 import r from "./Routes.module.css";
 import { CapabilityMatrix } from "./CapabilityMatrix";
+import { UpstreamSection } from "./UpstreamFields";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
 const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
@@ -79,8 +83,8 @@ const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
   "not-api-format": "aiConfig.models.comfyErrNotApi",
 };
 
-type SectionKey = "price" | "limits" | "think" | "caps" | "samp" | "image" | "asr";
-const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "caps", "samp", "image", "asr"];
+type SectionKey = "price" | "limits" | "think" | "upstream" | "caps" | "samp" | "image" | "asr";
+const SECTION_KEYS: SectionKey[] = ["price", "limits", "think", "upstream", "caps", "samp", "image", "asr"];
 
 /** Every field with a 「为什么」, for the 全部说明 toggle. */
 const WHY_KEYS = [
@@ -136,13 +140,16 @@ const shortDate = (ms: number): string => {
  * Which sections a stored row opens with. Computed from the *row*, once, and
  * never from the live form — see rule 1 in the file header.
  */
-function initialOpen(existing: Model | undefined, add: boolean): Record<SectionKey, boolean> {
+function initialOpen(existing: Model | undefined, add: boolean, hasUpstream: boolean): Record<SectionKey, boolean> {
   const m = existing;
   const caps = m?.caps;
   return {
     price: add || !!m?.feeGroupId,
     limits: !!(m?.contextSize || m?.maxOutput),
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
+    // Open when the model has an upstream — its own choice, the channel's
+    // table or a product name in the id — since it decides the caps below.
+    upstream: hasUpstream,
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
@@ -219,11 +226,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // 智谱. `family` below only picks spellings and wording.
   const curWire = provider ? providerWire(provider) : undefined;
   const can = (id: CapabilityId, m?: Parameters<typeof hasCapability>[2]) => !!curWire && hasCapability(id, curWire, m);
-  // The wires with a whole-file content part the adapters map
-  // (openai.ts `file`, responses.ts `input_file` — live on grok-4.5 / 4.6,
-  // docs/api/landscape.md 第十一个样本), plus an Anthropic `document` block on
-  // a platform that measured it reaching the model (火山方舟 Plan, 第十二个样本).
-  const pdfWire = can("pdfInput");
   // The thinking-parameter categories offered for this family (each a
   // per-vendor preset with its own legal effort menu); the drawer prepends the
   // fixed 自动 · 关闭 pair itself. Null when there is no provider yet.
@@ -304,6 +306,27 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // Same reason — a list is not a string. Endpoint-run tools the author grants
   // this model (lib/ai/serverTools).
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
+  // The relay upstream (lib/ai/relayUpstream): the model's own choice, absent
+  // = follow the channel's prefix table. Only offered on a relay platform.
+  const [relayUpstream, setRelayUpstream] = useState<RelayUpstreamChoice | undefined>(existing?.relayUpstream);
+  const onRelay = isRelayPlatform(curWire?.platform);
+  const followedUpstream = resolveRelayUpstream(curWire?.platform, form.modelId, undefined, channel?.upstreamPrefixes);
+  const resolvedUpstream = resolveRelayUpstream(curWire?.platform, form.modelId, relayUpstream, channel?.upstreamPrefixes);
+  // What every capability question below carries, and 「将发送」 with it.
+  const upstreamChoice: RelayUpstreamChoice = resolvedUpstream.upstream ?? "none";
+  const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
+  // The wires with a whole-file content part the adapters map
+  // (openai.ts `file`, responses.ts `input_file`), plus an Anthropic
+  // `document` block where a platform or the relay's upstream measured it
+  // reaching the model. Asked with the upstream: a relay upstream that drops
+  // the part gets no switch, one that reads it gets one on Anthropic too.
+  const pdfWire = can("pdfInput", capModel);
+  // A declaration not sent because the relay's upstream drops it: says so,
+  // rather than blaming the route or the model id. Undefined otherwise.
+  const upstreamRefuses = (w: typeof curWire, id: CapabilityId): string | undefined =>
+    w && resolvedUpstream.upstream && capabilityVerdict(id, w, capModel).reason === "upstream"
+      ? t("aiConfig.upstream.notSent", { upstream: t(`aiConfig.upstream.name.${resolvedUpstream.upstream}`) })
+      : undefined;
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
@@ -318,7 +341,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // ── Fold state (rule 1) and the 「为什么」 blocks (rule 3) ──────────────────
-  const [open, setOpen] = useState<Record<SectionKey, boolean>>(() => initialOpen(existing, !existing));
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>(() => initialOpen(existing, !existing, !!resolvedUpstream.upstream));
   const toggleSection = (k: SectionKey) => setOpen((o) => ({ ...o, [k]: !o[k] }));
   const expandAll = () => setOpen(Object.fromEntries(SECTION_KEYS.map((k) => [k, true])) as Record<SectionKey, boolean>);
   const [why, setWhy] = useState<Partial<Record<WhyKey, boolean>>>({});
@@ -454,7 +477,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The Sakura translation declaration: a text model on Chat Completions.
   const translateWire = can("translateFormat", { type: form.type });
   // Whether this wire has a JSON mode at all; with no channel yet every option is offered.
-  const soWire = !curWire || hasCapability("structuredOutput", curWire);
+  const soWire = !curWire || hasCapability("structuredOutput", curWire, capModel);
   const vlHiResWire = can("vlHighResolution", { type: form.type });
   const videoWire = can("videoInput", { type: form.type });
   const videoFpsWire = can("videoFps", { type: form.type });
@@ -478,7 +501,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // `openai_compat`, and only one of them has `enable_search`.
   const toolWire = curWire;
   const offersServerTool = (id: ServerToolId) =>
-    !!toolWire && hasCapability(id, toolWire, { modelId: form.modelId.trim() });
+    !!toolWire && hasCapability(id, toolWire, capModel);
   // What is *stored*: the author's grant, whole — kept even where this wire
   // can't say an id (the switch stays on and says 不发送), because the grant is
   // the author's and a provider can move platform under it (plan §7 invariant
@@ -486,7 +509,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const declaredServerTools = form.type !== "asr" ? normalizeServerTools(serverTools) : undefined;
   // What is *sent*: the grant cut to this wire, in canonical form (extraction
   // only beside search). The summary line and 将发送 read this one.
-  const grantedServerTools = toolWire ? effectiveServerTools(toolWire, declaredServerTools, form.modelId.trim()) : undefined;
+  const grantedServerTools = toolWire ? effectiveServerTools(toolWire, declaredServerTools, form.modelId.trim(), upstreamChoice) : undefined;
   // Shown: every id the wire offers, plus any the author switched on that it
   // doesn't — so a grant that isn't sent is visible and can be turned off.
   const shownServerTools = SERVER_TOOL_IDS.filter((id) => offersServerTool(id) || serverTools.includes(id));
@@ -496,7 +519,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // was never tried with it (capability-gating-plan §8.7). Either way it is sent.
   const unmeasuredToolHint = (id: ServerToolId) => {
     const modelId = form.modelId.trim();
-    const v = toolWire ? capabilityVerdict(id, toolWire, { modelId }) : undefined;
+    const v = toolWire ? capabilityVerdict(id, toolWire, capModel) : undefined;
     if (v?.status !== "unknown") return "";
     return v.reason === "model-unlisted"
       ? t("aiConfig.models.serverToolModelUnmeasured", { platform: platformName, model: modelId })
@@ -509,13 +532,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The structured-output options this wire can honour (lib/ai/jsonMode.ts).
   // 严格档看能力表的 `jsonSchema` 格：实测会静默无视它的平台（智谱）不给这个
   // 选项——发出去只会降一档，选了等于没选。已经存了的声明照样显示，免得选中项消失。
-  const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire);
+  const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire, capModel);
   const soChoices: StructuredOutputMode[] = !soWire
     ? ["off"]
     : STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema" || !soStrictNo || form.structuredOutput === m);
   // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
   // 且 id 在名单上才抬升。
-  const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire).status === "yes"
+  const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire, capModel).status === "yes"
     && knownJsonSchemaModel(form.modelId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
@@ -723,6 +746,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         // the channel's primary route while it still takes it.
         activeRoute: !existing?.activeRoute && route === channelRoutes[0] ? undefined : route,
         routes: routesToSave(),
+        // Kept off a relay too: the choice is the author's, and a platform
+        // moved back to a relay should find it (it is only read there).
+        relayUpstream,
       };
       if (existing) {
         await updateModel({ ...existing, ...shared });
@@ -875,7 +901,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
               ...(sizes.length ? { sizes } : {}),
             }
           : undefined,
-      }, provider.apiStandard, provider.baseUrl, provider.platform)
+      }, provider.apiStandard, provider.baseUrl, provider.platform, upstreamChoice)
     : [];
 
   // ── Measured badges (实测 vs 手填) ─────────────────────────────────────────
@@ -936,7 +962,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // compare; the switches' own hints speak for the one route.
   const matrixRows = (ids: readonly CapabilityId[], declared: Partial<Record<CapabilityId, boolean>>) => multiRoute
     ? ids.filter((id) => declared[id]
-      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w, { type: form.type }); }))
+      || channelRoutes.some((f) => { const w = routeWire(f); return !!w && hasCapability(id, w, { ...capModel, type: form.type }); }))
     : [];
   const matrixInput = matrixRows(["pdfInput", "vlHighResolution", "videoInput", "videoFps"], {
     pdfInput, vlHighResolution, videoInput, videoFps: videoInput && videoFpsText.trim() !== "",
@@ -946,14 +972,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     textVerbosity: form.textVerbosity !== "auto",
   });
   const matrixProps = (current: ProtocolFamily) => ({
-    routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type,
+    routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type, relayUpstream: upstreamChoice,
   });
   /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
   const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {
     const cat = p?.thinkingCategory;
     const effort = p?.reasoningEffort && p.reasoningEffort !== "default" ? effortLabel(p.reasoningEffort) : null;
     const w = routeWire(f);
-    const tools = w ? effectiveServerTools(w, declaredServerTools, form.modelId.trim()) : undefined;
+    const tools = w ? effectiveServerTools(w, declaredServerTools, form.modelId.trim(), upstreamChoice) : undefined;
     return [
       {
         key: t("aiConfig.models.secThinking"),
@@ -1397,6 +1423,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             </Fold>
           </Section>
 
+          {onRelay && (
+            <UpstreamSection
+              open={open.upstream}
+              onToggle={() => toggleSection("upstream")}
+              choice={relayUpstream}
+              onChoice={setRelayUpstream}
+              resolved={resolvedUpstream}
+              followed={followedUpstream}
+              modelId={form.modelId}
+            />
+          )}
+
           <Section
             label={t("aiConfig.models.secCaps")}
             open={open.caps}
@@ -1429,10 +1467,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
                   hint={!offersServerTool(id)
-                    // Two reasons, said apart: the platform has no spelling,
-                    // or it has one this model id doesn't run (the code
-                    // interpreter's per-model gate).
-                    ? t(toolWire && hasCapability(id, toolWire)
+                    // Three reasons, said apart: the relay's upstream drops
+                    // it, the platform has no spelling, or it has one this
+                    // model id doesn't run (the code interpreter's per-model gate).
+                    ? upstreamRefuses(toolWire, id) ?? t(toolWire && hasCapability(id, toolWire)
                       ? "aiConfig.models.serverToolNotForModel"
                       : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
                     : unmeasuredToolHint(id)}
@@ -1485,7 +1523,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={pdfWire || pdfInput}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
-                hint={pdfWire ? t("aiConfig.models.briefPdf") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                hint={pdfWire
+                  ? t("aiConfig.models.briefPdf")
+                  : upstreamRefuses(curWire, "pdfInput") ?? t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}

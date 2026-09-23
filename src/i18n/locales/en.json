@@ -799,6 +799,8 @@
       "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
       "warnSearchNotSent": "This model has web search switched on, but its platform has no server-side search, so nothing is sent — the subagent cannot browse. Bind a model on a platform that searches.",
       "warnNotMultimodal": "This model is text-only and cannot read images.",
+      "warnSearchUpstream": "The relay upstream behind this model (\"{{upstream}}\") was measured dropping web search, so it isn't sent — the subagent can't search. Bind a model behind another upstream.",
+      "warnPdfUpstream": "The relay upstream behind this model (\"{{upstream}}\") was measured dropping PDFs, so the subagent can't read the file. Bind a model behind another upstream.",
       "warnNoPdf": "This model is not declared to accept PDF file input (check it in the model's settings), so the subagent cannot read PDFs.",
       "enable": "Enable",
       "imagegen": "Image generation",
@@ -2921,7 +2923,59 @@
       "model-unlisted": "{{platform}} has it, but {{model}} was never measured: sent anyway, and may not work",
       "model-type": "This model's type can't use it (a text model reads no pictures)",
       "requires": "Something it depends on is unavailable on this route",
-      "thinking": "This route refuses it while thinking is on"
+      "thinking": "This route refuses it while thinking is on",
+      "upstream": "Measured on the relay's upstream \"{{upstream}}\""
+    },
+    "upstream": {
+      "label": "Upstream",
+      "prefixCol": "Model id prefix",
+      "upstreamCol": "Upstream",
+      "prefixPlaceholder": "[prefix]",
+      "pick": "Pick an upstream",
+      "remove": "Remove this row",
+      "addPrefix": "Add a prefix",
+      "found": "Also in this channel's models:",
+      "upstreamHint": "The same model behaves differently behind different upstreams (PDF, forced tools, web search). Map prefixes to upstreams and both the availability matrix and the requests follow what was measured there. Unmapped models are inferred only from a product name in the id (kiro, bedrock); anything else stays unknown.",
+      "modelHint": "Which upstream the relay sends this model to decides what it can actually do. By default it follows the channel's prefix table.",
+      "followNow": "Follow channel · now: {{upstream}}",
+      "none": "No upstream",
+      "noneSub": "protocol defaults",
+      "kindReverse": "Reverse proxy",
+      "kindForward": "Forwarded",
+      "kindOther": "Other",
+      "unmeasured": "unmeasured",
+      "src": {
+        "prefix": "{{upstream}} · prefix {{prefix}}",
+        "inferred": "{{upstream}} · inferred from \"{{word}}\" in the id",
+        "model": "Chosen here",
+        "modelNone": "Chosen here: no upstream",
+        "unsetBracket": "Not set — map {{prefix}} to an upstream in the channel",
+        "unset": "Not set"
+      },
+      "sumUnset": "Not set · protocol defaults",
+      "sumNone": "No upstream · protocol defaults",
+      "notSent": "Not sent: measured not to work on the relay's upstream \"{{upstream}}\".",
+      "notClaude": "This upstream was only measured with Claude; it does not apply to this model, which gets the protocol defaults.",
+      "matrixTag": "upstream",
+      "err": {
+        "dup": "Duplicate prefix — only the first is saved",
+        "empty": "The prefix can't be empty",
+        "noUpstream": "Pick an upstream, or this row won't be saved"
+      },
+      "note": {
+        "kiro": "Measured: thinks, but only \"low\" is actually shallower; ignores the output cap; PDF, forced tools and JSON mode are dropped; web search on its own is hijacked by the relay.",
+        "cc": "Measured: web search, web fetch, PDF and caching are real; no parameter validation. opus-5 returns no thinking text.",
+        "anti": "Measured: never thinks (every thinking parameter is ignored); forced tools, PDFs and text documents are dropped; no caching, about 30 extra tokens per request.",
+        "bedrock": "Measured: validates like the official API and effort levels are real; no web search (a 400 if sent); URL images are refused.",
+        "official": "Unmeasured: unavailable on the day it was tested; protocol defaults apply."
+      },
+      "name": {
+        "kiro": "Kiro (reverse)",
+        "cc": "CC-style (reverse)",
+        "anti": "anti-style (reverse)",
+        "bedrock": "Bedrock (forward)",
+        "official": "Official (forward)"
+      }
     },
     "fees": {
       "paneSub": "One set of prices, shared by any number of models. Change it once and every model bound to it follows; usage already recorded does not move.",

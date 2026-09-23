@@ -220,15 +220,10 @@ export function ImageGenModal({ target, onClose }: Props) {
         // have to do it in a language they did not choose.
         promptLanguage: i18n.language.startsWith("zh") ? "zh" : "en",
         language: i18n.language,
-        baseUrl: resolved.provider.baseUrl,
-        apiKey,
-        standard: resolved.provider.apiStandard,
-        authMode: resolved.provider.authMode,
-        safetySettings: resolved.provider.safetySettings,
-        modelId: resolved.model.modelId,
-        prefix: resolved.model.prefix,
-        contextSize: resolved.model.contextSize,
-        maxOutput: resolved.model.maxOutput,
+        // The model's whole configuration, as every other request here takes
+        // it — the platform and the relay upstream included, which decide
+        // whether the structured task may force its tool at all.
+        ...connOptions({ provider: resolved.provider, model: resolved.model, apiKey }),
         signal: ctrl.signal,
       });
       setPrompt(spec.prompt);

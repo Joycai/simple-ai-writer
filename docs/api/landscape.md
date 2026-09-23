@@ -1735,6 +1735,9 @@ Responses adapter：
 > **对本项目**：本样本只记事实，应用侧还没改。PR #685 的 `KIRO_CLAUDE` 名单只点了 Kiro；按这里的数据，① 面的 `structuredOutput`
 > 应当扩到这台中转站上的所有 Claude，anti / AWSb / CC 也各有要点名的格子。怎么改、为什么还没改，见
 > [`issues/relay-claude-channel-gating.md`](../issues/relay-claude-channel-gating.md)。
+>
+> **后续（2026-09-23 同日）**：应用侧已按上游落地——作者在中转站渠道上配「前缀 → 上游」，内置 kiro / cc / anti / bedrock / official
+> 五种画像，每格取自本样本与第十五个样本（[`capability-gating-plan.md`](capability-gating-plan.md) §8.11）。转换层那两条仍未进表。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

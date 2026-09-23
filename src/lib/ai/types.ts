@@ -34,6 +34,7 @@ export interface ResponseItemCarry {
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolEvent, ServerToolId } from "./serverTools";
 import type { PlatformId } from "./platforms";
+import type { RelayUpstreamChoice } from "./relayUpstream";
 import i18n from "../../i18n";
 
 /**
@@ -549,6 +550,12 @@ export interface StreamOptions {
   textVerbosity?: TextVerbosity;
   /** Chat Completions (DashScope): `vl_high_resolution_images: true`. */
   vlHighResolution?: boolean;
+  /**
+   * The relay upstream behind the model (`ConnOptions.relayUpstream`). Read
+   * through `capabilityModelOf`, which falls back to a product name in the id
+   * when a hand-built bag leaves it out.
+   */
+  relayUpstream?: RelayUpstreamChoice;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

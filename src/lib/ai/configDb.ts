@@ -20,6 +20,10 @@ import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
 import { hasCapability } from "./capabilities";
 import {
+  capabilityModelOf, parseRelayUpstreamChoice, parseUpstreamPrefixes, relayUpstreamFor,
+  type RelayUpstreamChoice, type UpstreamPrefix,
+} from "./relayUpstream";
+import {
   legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily, parseRouteProfiles,
   standardOf, writtenBaseOf,
   type Endpoint, type RouteProfile,
@@ -210,6 +214,14 @@ export interface Provider {
    * `feeGroupId` 一旦写上就是它自己的，改渠道默认不会追着改。
    */
   defaultFeeGroupId?: string;
+  /**
+   * On a relay: which upstream a model id prefix stands for (`[CC量]` → CC),
+   * the author's own table (`lib/ai/relayUpstream.ts`). The prefixes are the
+   * relay owner's names, so they live here and never in code
+   * (capability-gating-plan §8.11). Kept when the platform changes; read only
+   * while it is a relay.
+   */
+  upstreamPrefixes?: UpstreamPrefix[];
   createdAt: number;
 }
 
@@ -459,6 +471,13 @@ export interface Model {
    * sends nothing (invariant 3).
    */
   routes?: Partial<Record<ProtocolFamily, RouteProfile>>;
+  /**
+   * On a relay: this model's own upstream, over the channel's prefix table;
+   * `"none"` = no upstream on purpose. Absent = follow the channel
+   * (`lib/ai/relayUpstream.ts`). A model field, not a route one: every route
+   * of a channel goes through the same relay.
+   */
+  relayUpstream?: RelayUpstreamChoice;
 }
 
 /**
@@ -506,19 +525,21 @@ export function canSeeImages(m: Pick<Model, "type">): boolean {
  * Chat Completions 的 `file` 片段与 Responses 的 `input_file`（openai.ts / responses.ts）。
  * Anthropic 族的 `document` 块多数兼容端会换成占位符静默吞掉，只有平台画像实测过的
  * （能力表 `capabilities.ts` 的 `pdfInput` 格，如火山方舟 Plan）才算数——所以这里按渠道的平台 × 线路问能力表，
- * 连同模型 id（中转站 Kiro 渠道的 Claude 在 Chat 线路上也会丢 `file` 片段，第十五个样本）。
+ * 连同模型背后的中转站上游（Kiro、anti 上游的 Claude 在 Chat 线路上会丢 `file` 片段，第十五、十六个样本）。
  * 模型能在渠道的几条线路之间切换以后，声明就不能再在保存时按「当前线路」清掉——
  * 切到 ④ 族再切回来，作者不该重填一遍（channel-model-route-plan.md §3）。所以声明
  * 留着，能不能用在这里按线路回答；PDF 子代理的资格、委派时的拦截都问这一句。
  * 不给渠道（手里没有渠道列表的界面）时只看声明。
  */
 export function readsPdf(
-  m: Pick<Model, "pdfInput"> & { modelId?: string },
-  provider?: Pick<Provider, "apiStandard" | "baseUrl" | "platform">,
+  m: Pick<Model, "pdfInput" | "relayUpstream"> & { modelId?: string },
+  provider?: Pick<Provider, "apiStandard" | "baseUrl" | "platform" | "upstreamPrefixes">,
 ): boolean {
   if (!m.pdfInput) return false;
   if (!provider) return true;
-  return hasCapability("pdfInput", providerWire(provider), { modelId: m.modelId });
+  const wire = providerWire(provider);
+  const relayUpstream = relayUpstreamFor(wire.platform, m, provider);
+  return hasCapability("pdfInput", wire, capabilityModelOf({ modelId: m.modelId, relayUpstream }));
 }
 
 /**
@@ -803,6 +824,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, providerCols, "providers", "endpoints", "TEXT");
   // 计费组：这个渠道下新模型预填的组（feeGroup.ts）。
   await addColumn(db, providerCols, "providers", "default_fee_group_id", "TEXT");
+  // 中转站上游前缀表（relayUpstream.ts），JSON 数组。NULL = 没配。
+  await addColumn(db, providerCols, "providers", "upstream_prefixes", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -852,6 +875,8 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "fee_group_id", "TEXT");
   // 「这一行的旧价格搬进组了」。NULL = 还没搬（包括老版本新加的行）。
   await addColumn(db, modelCols, "models", "fee_migrated", "INTEGER");
+  // 这个模型自己选的中转站上游；NULL = 跟随渠道的前缀表。
+  await addColumn(db, modelCols, "models", "relay_upstream", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -949,7 +974,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   // Explicitly ordered rows first, in their order; never-moved rows (NULL)
   // after them, oldest first — see Provider.sortOrder.
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, upstream_prefixes, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
   );
   return rows.map(rowToProvider);
 }
@@ -977,6 +1002,7 @@ function rowToProvider(r: Record<string, unknown>): Provider {
     endpoints: parseEndpoints(r.endpoints),
     sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
     defaultFeeGroupId: typeof r.default_fee_group_id === "string" && r.default_fee_group_id ? r.default_fee_group_id : undefined,
+    upstreamPrefixes: parseUpstreamPrefixes(r.upstream_prefixes),
     createdAt: r.created_at as number,
   }, writtenBaseOf(r.endpoints));
 }
@@ -1075,8 +1101,8 @@ export function providerUpsert(p: Provider): SqlStatement {
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   return {
-    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, platform, host, endpoints, default_fee_group_id, upstream_prefixes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
@@ -1087,7 +1113,8 @@ export function providerUpsert(p: Provider): SqlStatement {
        platform = excluded.platform,
        host = excluded.host,
        endpoints = excluded.endpoints,
-       default_fee_group_id = excluded.default_fee_group_id`,
+       default_fee_group_id = excluded.default_fee_group_id,
+       upstream_prefixes = excluded.upstream_prefixes`,
     values: [
       c.id,
       c.name,
@@ -1108,6 +1135,7 @@ export function providerUpsert(p: Provider): SqlStatement {
       // `writtenBaseOf`.
       JSON.stringify(c.endpoints!.map((e, i) => (i === 0 ? { ...e, writtenBase: c.baseUrl } : e))),
       c.defaultFeeGroupId ?? null,
+      c.upstreamPrefixes?.length ? JSON.stringify(c.upstreamPrefixes) : null,
       c.createdAt,
     ],
   };
@@ -1191,11 +1219,11 @@ export function modelUpsert(m: Model, pricing: ModelPricing): SqlStatement {
   const keep = pricing === "local" && !m.feeGroupId;
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, fee_migrated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, relay_upstream, fee_migrated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, m.relayUpstream ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
   };
 }
 
@@ -1296,6 +1324,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     feeGroupId: typeof r.fee_group_id === "string" && r.fee_group_id ? r.fee_group_id : undefined,
     activeRoute: parseRouteFamily(r.active_route),
     routes: parseRouteProfiles(r.routes),
+    relayUpstream: parseRelayUpstreamChoice(r.relay_upstream),
   });
 }
 

@@ -40,6 +40,7 @@ import {
   type Provider,
 } from "./configDb";
 import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
+import { parseRelayUpstreamChoice, parseUpstreamPrefixes } from "./relayUpstream";
 import { feeGroupUpsert, listFeeGroups, migrateModelPricesToFeeGroups, rowToFeeGroup } from "./feeGroupDb";
 import type { FeeGroup } from "./feeGroup";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
@@ -282,6 +283,8 @@ export function parseConfigBundle(
       // describe, exactly as for a pre-routes DB row.
       host: typeof r.host === "string" ? r.host : undefined,
       endpoints: parseEndpoints(r.endpoints),
+      // 中转站上游前缀表。老的包没有它；坏行丢掉，不影响别的字段。
+      upstreamPrefixes: parseUpstreamPrefixes(r.upstreamPrefixes),
       createdAt: num(r.createdAt, Date.now()),
     });
     providers.push({ ...channel, ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}) });
@@ -349,6 +352,8 @@ export function parseConfigBundle(
       caps: parseImageCaps(r.caps),
       activeRoute: parseRouteFamily(r.activeRoute),
       routes: parseRouteProfiles(r.routes),
+      // 模型自己选的中转站上游；不认识的值读成「跟随渠道」。
+      relayUpstream: parseRelayUpstreamChoice(r.relayUpstream),
     }));
   }
 

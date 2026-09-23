@@ -1,0 +1,123 @@
+/*
+ * 中转站上游 (UpstreamFields.tsx): the channel drawer's prefix table and the
+ * model drawer's upstream select. Same rules as 05c (ModelDrawer.module.css):
+ * dashed = nothing sent / nothing set yet, solid = a value the author chose.
+ * Colours are roles and `--stg-*` only — themeTokenParity.test.ts reads this.
+ */
+
+/* ── Prefix table ───────────────────────────────────────────────────────── */
+.table {
+  border: 1px solid var(--color-border);
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 176px 28px;
+  align-items: center;
+  border-top: 1px solid var(--color-border-soft);
+}
+.table > .item:first-child > .row,
+.table > .row:first-child {
+  border-top: none;
+}
+.head {
+  background: var(--stg-card-head);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.head > span {
+  padding: 6px 10px;
+}
+.prefix {
+  min-width: 0;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--color-text-primary);
+  outline: none;
+}
+.prefix:focus {
+  border-bottom-color: var(--color-accent);
+}
+.rowErr .prefix {
+  border-bottom-color: var(--color-accent);
+}
+/* The themed Select's trigger, sized to its cell (doubled: see Select.tsx). */
+.pick.pick {
+  width: 100%;
+  border: none;
+  border-left: 1px solid var(--color-border-soft);
+  background: transparent;
+  font-size: 12.5px;
+}
+.del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  border-left: 1px solid var(--color-border-soft);
+  color: var(--color-text-faint);
+}
+.del:hover {
+  color: var(--color-text-primary);
+}
+.err {
+  padding: 0 10px 6px;
+  font-size: 11px;
+  color: var(--color-accent);
+}
+/* Rule 2: a row that doesn't exist yet wears the dashed edge. */
+.add {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+  border-top: 1px dashed var(--stg-border-menu);
+}
+.table > .add:first-child {
+  border-top: none;
+}
+.add:hover {
+  color: var(--color-text-primary);
+}
+
+/* ── Prefixes the channel's models use that no row maps yet ─────────────── */
+.found {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-2);
+  font-size: 11.5px;
+  color: var(--color-text-muted);
+}
+.foundChip {
+  padding: 3px 7px;
+  border: 1px dashed var(--stg-border-menu);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+}
+.foundChip::before {
+  content: "+ ";
+  color: var(--color-text-faint);
+}
+.foundChip:hover {
+  border-style: solid;
+  color: var(--color-text-primary);
+}
+
+/* ── Model drawer: 「跟随渠道」 is no choice of the author's — dashed ─────── */
+.follow.follow {
+  border-style: dashed;
+}
+
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) 140px 28px;
+  }
+}
