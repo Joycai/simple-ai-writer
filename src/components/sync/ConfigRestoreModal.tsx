@@ -180,6 +180,11 @@ export function ConfigRestoreModal() {
               <div className={s.footNote} style={{ marginTop: 10 }}>
                 {t("sync.cfgRestoreDoneNote")}
               </div>
+              {errorText && (
+                <div style={{ marginTop: 12, fontSize: 12.5, color: "var(--sync-risk-text)" }}>
+                  {errorText}
+                </div>
+              )}
             </div>
             <div className={s.foot}>
               <span className={s.footNote} />

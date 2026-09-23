@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
   invoke: vi.fn(async (_cmd: string, _args?: Record<string, unknown>) => undefined as unknown),
   execute: vi.fn(async (_sql: string, _values?: unknown[]) => {}),
   select: vi.fn(async () => [] as { name: string }[]),
-  saveApiKey: vi.fn(async () => {}),
+  saveApiKey: vi.fn(async (_id: string, _key: string) => {}),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: h.invoke }));
@@ -39,7 +39,7 @@ vi.mock("../../fs/transfer", () => ({
   saveTextFileDialog: async () => null,
 }));
 
-const { applyConfigImport } = await import("../configTransfer");
+const { applyConfigImport, keyFailureMessage } = await import("../configTransfer");
 import type { StagedConfigImport } from "../configTransfer";
 
 const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => ({
@@ -74,7 +74,7 @@ beforeEach(() => {
   h.invoke.mockReset().mockResolvedValue(undefined);
   h.execute.mockClear();
   h.select.mockClear().mockResolvedValue([]);
-  h.saveApiKey.mockClear();
+  h.saveApiKey.mockReset().mockResolvedValue(undefined);
 });
 
 describe("applyConfigImport", () => {
@@ -123,6 +123,35 @@ describe("applyConfigImport", () => {
     await expect(applyConfigImport(staged())).rejects.toThrow(/database is locked/);
     // Nothing after the transaction runs — no keys, no preferences.
     expect(h.saveApiKey).not.toHaveBeenCalled();
+  });
+
+  it("reports a keyring failure as a result, not a throw — the rows are already committed", async () => {
+    // A throw read as 导入失败 to both callers, so they skipped
+    // refreshAfterConfigImport over rows that had landed: the stores kept the
+    // pre-restore config until a restart.
+    h.saveApiKey.mockImplementation(async (id: string) => {
+      if (id === "p2") throw new Error("keyring locked");
+    });
+    const key = (id: string, name: string) => ({
+      id, name, baseUrl: "https://x/v1", apiStandard: "openai_compat" as const, createdAt: 1, apiKey: `sk-${id}`,
+    });
+
+    const result = await applyConfigImport(staged({ providers: [key("p1", "Relay"), key("p2", "Backup")] }));
+
+    expect(result.failedKeys).toEqual(["Backup"]);
+    expect(txArgs().statements.length).toBeGreaterThan(0);
+    // Every key is attempted; one miss does not stop the rest.
+    expect(h.saveApiKey).toHaveBeenCalledTimes(2);
+    expect(keyFailureMessage(result.failedKeys)).toBe(
+      "Imported the configuration, but could not store the API key for: Backup. Enter those keys by hand.",
+    );
+  });
+
+  it("returns no failed keys on a clean import", async () => {
+    const result = await applyConfigImport(staged());
+
+    expect(result.failedKeys).toEqual([]);
+    expect(keyFailureMessage(result.failedKeys)).toBeNull();
   });
 
   it("skips the round trip entirely for a backup that carries only preferences", async () => {
