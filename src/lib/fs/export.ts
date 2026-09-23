@@ -188,15 +188,18 @@ ${body}
 // ─── PDF (system print) ───────────────────────────────────────────────────────
 
 /**
- * Tells the print window the page's fonts are in. A downloaded font pack is
- * split by `unicode-range` and each chunk is fetched only when layout meets a
- * character in it, so on a long document some can still be in flight when the
- * page has "loaded"; the print side (src-tauri/src/print.rs) holds the dialog
- * until this request arrives, or three seconds pass. Reading `offsetHeight`
- * forces the first layout, which is what starts those fetches. The path is
- * `print.rs`'s `FONTS_READY_PATH`, relative so it resolves on the page's own
- * origin on every platform.
+ * Tells the macOS print window the page's fonts are in. A downloaded font pack
+ * is split by `unicode-range` and each chunk is fetched only when layout meets
+ * a character in it, so on a long document some can still be in flight when
+ * the page has "loaded"; `print.rs` holds the dialog until this request
+ * arrives (stamped there with the print's generation), or three seconds pass.
+ * Reading `offsetHeight` forces the first layout, which is what starts those
+ * fetches. macOS only: elsewhere the page prints from an iframe in the main
+ * window, whose CSP refuses inline scripts — `printPage` waits there itself.
  */
+/** The same cap `print.rs` puts on the macOS wait. */
+const FONTS_READY_TIMEOUT_MS = 3000;
+
 const FONTS_READY_SCRIPT = `<script>
 void document.body.offsetHeight;
 document.fonts.ready.then(() => fetch("/__fonts-ready")).catch(() => {});
@@ -243,7 +246,7 @@ body { background: #fff; }
 }
 </style>
 </head>
-<body>${body}${macHint}${FONTS_READY_SCRIPT}</body>
+<body>${body}${macHint}${IS_MAC ? FONTS_READY_SCRIPT : ""}</body>
 </html>`;
 
   await printPage(html, title);
@@ -298,7 +301,15 @@ async function printPage(html: string, title: string): Promise<void> {
   iframe.contentDocument!.write(html);
   iframe.contentDocument!.close();
   iframe.contentWindow!.focus();
-  setTimeout(() => {
+  setTimeout(async () => {
+    // The page's fonts first — a downloaded pack's chunks load as layout meets
+    // them (see FONTS_READY_SCRIPT for the macOS half), capped so a stuck font
+    // can't hold the print back.
+    const doc = iframe.contentDocument;
+    if (doc) {
+      void doc.body?.offsetHeight;
+      await Promise.race([doc.fonts.ready, new Promise((r) => setTimeout(r, FONTS_READY_TIMEOUT_MS))]);
+    }
     iframe.contentWindow!.print();
     setTimeout(() => document.body.removeChild(iframe), 2000);
   }, 300);

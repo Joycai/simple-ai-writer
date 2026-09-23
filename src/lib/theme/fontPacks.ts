@@ -23,7 +23,9 @@
  * Lib layer: no store imports. appStore drives this and holds the state.
  */
 import { fetch } from "../http";
-import { fileExists, readDir, readFile, removeDir, renamePath, statPath, writeBinaryFile, writeFile } from "../fs/fileio";
+import {
+  fileExists, readDir, readFile, removeDir, removeFile, renamePath, statPath, writeBinaryFile, writeFile,
+} from "../fs/fileio";
 import { joinPath, toPosixPath } from "../paths";
 import { IS_WINDOWS } from "../platform";
 
@@ -330,6 +332,13 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
   if (failure !== null) throw failure;
 
+  // Every chunk still where it was put, at its size, before the marker says so.
+  // Another window may have deleted the pack while this download ran; its
+  // writes then recreate the folder around a hole, and a marker over a hole
+  // would draw those characters in the fallback face for good.
+  const missing = await firstMissing(jobs.map((j) => ({ path: j.local, size: j.spec[1] })));
+  if (missing) throw new FontPackError("disk", `${missing}: gone before the install finished`);
+
   const facesPath = joinPath(dir, FACES);
   await onDisk(FACES, () => writeAside(facesPath, (tmp) => writeFile(tmp, faces.join("\n") + "\n")));
   forgetFaces(id);
@@ -354,6 +363,17 @@ async function writeAside(path: string, write: (tmp: string) => Promise<void>): 
   await renamePath(tmp, path);
 }
 
+async function firstMissing(files: { path: string; size: number }[]): Promise<string | null> {
+  for (const f of files) {
+    const st = await statPath(f.path).catch(() => null);
+    if (!st || st.isDir || st.size !== f.size) return f.path;
+  }
+  return null;
+}
+
+/** A temporary write this old belongs to no live install — the largest chunk takes seconds. */
+const STALE_PART_MS = 10 * 60_000;
+
 /**
  * Remove a pack's folders for versions other than the pinned one. A version
  * bump leaves the previous one behind — swept after an install, and at startup
@@ -367,6 +387,17 @@ export async function pruneOtherVersions(id: FontPackId): Promise<void> {
     if (!(await fileExists(root))) return;
     for (const entry of await readDir(root)) {
       if (entry.isDirectory && entry.name !== version) await removeDir(entry.path);
+    }
+    // And the temporary files an interrupted write left in the current one
+    // (the app closed mid-download, a full disk) — their names are random, so
+    // nothing would ever overwrite them. Only stale ones: a fresh `.part` may
+    // be another window's install in flight.
+    const dir = joinPath(root, version);
+    if (!(await fileExists(dir))) return;
+    for (const entry of await readDir(dir)) {
+      if (entry.isDirectory || !entry.name.endsWith(".part")) continue;
+      const st = await statPath(entry.path).catch(() => null);
+      if (st?.modifiedMs != null && Date.now() - st.modifiedMs > STALE_PART_MS) await removeFile(entry.path);
     }
   } catch {
     /* keep going */

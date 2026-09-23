@@ -60,7 +60,8 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 
 - **分片、`faces.css`、完成标记都经临时名写入再改名**（`<name>.<随机>.part`）。这样「大小对」就等于「写完整了」，断点续传只比大小就够。临时名每次写入各不相同，两个窗口同时写同一个分片时，各自改名的都是一份完整的同样字节，谁也不会把对方写到一半的文件改过去。
 - **`faces.css`**：只存分片名，读的时候按当前的 appData 路径拼 URL。appData 目录搬家（漫游配置、账户迁移）之后照样能用。
-- **`installed.json` 最后写**。没有它就算没装，不管盘上已经有多少分片；重试时只补还缺的。
+- **`installed.json` 最后写**。没有它就算没装，不管盘上已经有多少分片；重试时只补还缺的。写之前再逐个核对每个分片还在、大小对：另一个窗口可能在这次下载途中删了这个包，这边后续的写入会把目录重新建出来，中间缺一块；标记要是盖在这样一个缺口上，那些字就永远用回退字形。
+- **陈旧的临时文件**：临时名是随机的，没人会覆盖它们。启动时清掉当前版本目录里超过 10 分钟的 `.part`（新的可能是另一个窗口正在写）。
 - **首个失败即停队列**，而且要等所有 worker 回来才 reject。否则失败之后后台还在写盘，会和紧接着的重试赛跑。
 - **`rewriteFaces` 去掉全部 `local()`**：字节已经在本机，而鸿蒙 500 / 700 字重里只写族名的 `local("HarmonyOS Sans SC")`，会让粗体落到本机装的 Regular 上。
 
@@ -87,7 +88,7 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 |---|---|---|
 | 主窗口（界面、编辑器、预览） | `tokens.css` | 注入的 `<style>` |
 | 外观页样张（沙箱 iframe） | `sampleDocument` 从 contract 取 | 由 `MdSample` 传入 |
-| 打印 / PDF | `documentCss` 从 contract 取 | `currentFontFaces(scheme)`，从 DOM 读；**打印等字体**：页面在 `document.fonts.ready` 之后请求自己源上的 `/__fonts-ready`，`print.rs` 收到后才弹打印框，最多等 3 s。按需加载的分片在长文里可能晚到，固定延时会把它们印成回退字形。作者自己的 .html 不带这段脚本，不等。 |
+| 打印 / PDF | `documentCss` 从 contract 取 | `currentFontFaces(scheme)`，从 DOM 读。**打印等字体**：按需加载的分片在长文里可能晚到，固定延时会把它们印成回退字形。**macOS**：页面在 `document.fonts.ready` 之后请求自己源上的 `/__fonts-ready?g=<次>`，`print.rs` 收到**这一次**打印的信号才弹打印框，最多等 3 s；上一个预览窗晚到的信号带着旧的次数，被忽略。**Windows / Linux**：页面在主窗口的隐藏 iframe 里打印，主窗口的 CSP 不许内联脚本，所以不放这段脚本，由 `printPage` 自己等 iframe 的 `fonts.ready`，同样最多 3 s。作者自己的 .html 在 macOS 上不带脚本，不等。 |
 | 导出 .html | 从 contract 取 | **不带**：协议 URL 在别的机器上打不开；读者装了这款字体就用，没装就落到黑体，和 宋 / 黑 / 楷 一样依赖读者的机器。把几 MB 字体塞进导出文件，另开任务。 |
 
 ## 7. 许可
@@ -112,4 +113,5 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
   - **`fetch()` 直接取字体会失败**（`Load failed`）。推测是 `connect-src` 没列这个 scheme，没有深究：应用里没有任何代码用 fetch 取字体，字体只走 `font-src`，而那一路已经加载成功。
   - **要肉眼看的**：外观页样张 iframe（沙箱，不透明源）的字形，以及长文加粗体导出 PDF。PDF 已经改成等 `document.fonts.ready` 再打印（上表），但「确实不混排」还要在打包产物里看一眼。实测结果补在这里。
 - **已知限制**：下载失败后，已经落盘的分片留在 `fonts/<id>/<version>/` 里（最多一个包的体积），卡片上只有「重试」、没有「删除」；重试会用上它们，重置应用会清掉。
+- **已知限制**：启动时清旧版本目录，默认只有一个版本的应用在跑。将来升级字体版本后，如果新旧两个版本的应用同时开着，新版本启动时可能删掉旧版本进程正在用的目录；旧进程里那款字体会退到黑体，直到它重启（旧版本会把自己那版重新下回来）。
 - **未验证**：Windows（`http://ai-writer-font.localhost` 形式只有解析层单测）、Linux（webkitgtk 对自定义 scheme 的跨源字体请求）。

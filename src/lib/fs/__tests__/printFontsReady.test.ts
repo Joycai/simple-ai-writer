@@ -18,7 +18,9 @@ describe("the PDF page's fonts-ready signal", () => {
     expect(rust).toBe("/__fonts-ready");
     const ts = read("src/lib/fs/export.ts");
     expect(ts).toContain(`fetch("${rust}")`);
-    // …and only the PDF page carries it: an author's own .html is printed on the old delay.
-    expect(ts.match(/\$\{FONTS_READY_SCRIPT\}/g)).toHaveLength(1);
+    // …only the PDF page carries it, and only on macOS (elsewhere the main
+    // window's CSP refuses inline scripts and printPage waits for fonts itself).
+    expect(ts.match(/\$\{IS_MAC \? FONTS_READY_SCRIPT : ""\}/g)).toHaveLength(1);
+    expect(ts).toContain("doc.fonts.ready");
   });
 });

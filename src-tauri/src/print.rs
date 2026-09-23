@@ -39,7 +39,10 @@ const PRINT_WINDOW: &str = "print";
 #[derive(Default)]
 pub struct PendingPrint {
     doc: Mutex<Option<String>>,
-    fonts_ready: Mutex<bool>,
+    /// `(generation, ready)`: which print the wait is for, and whether that
+    /// print's page has signalled. A late signal from a previous preview
+    /// carries an older generation and is ignored.
+    fonts_ready: Mutex<(u64, bool)>,
     signal: Condvar,
 }
 
@@ -56,36 +59,64 @@ pub const FONTS_READY_PATH: &str = "/__fonts-ready";
 const FONTS_READY_TIMEOUT: Duration = Duration::from_secs(3);
 
 impl PendingPrint {
-    fn stage(&self, html: String) -> Result<(), String> {
-        *self
+    /// Stage `html` for the print window. When the page carries the
+    /// fonts-ready request (the script's quoted path, last occurrence — the
+    /// script sits at the end of `<body>`), it is stamped with this print's
+    /// generation; the return value says whether the print should wait.
+    fn stage(&self, html: String) -> Result<bool, String> {
+        let mut ready = self
             .fonts_ready
             .lock()
-            .map_err(|_| "print state lock poisoned")? = false;
+            .map_err(|_| "print state lock poisoned".to_string())?;
+        let generation = ready.0 + 1;
+        *ready = (generation, false);
+        drop(ready);
+        let quoted = format!("\"{FONTS_READY_PATH}\"");
+        let (html, waits) = match html.rfind(&quoted) {
+            Some(at) => {
+                let stamped = format!("\"{FONTS_READY_PATH}?g={generation}\"");
+                (
+                    format!("{}{}{}", &html[..at], stamped, &html[at + quoted.len()..]),
+                    true,
+                )
+            }
+            None => (html, false),
+        };
         self.doc
             .lock()
             .map_err(|_| "print state lock poisoned".to_string())?
             .replace(html);
-        Ok(())
+        Ok(waits)
     }
 
-    fn mark_fonts_ready(&self) {
+    /// The page of print `generation` says its fonts are in.
+    fn mark_fonts_ready(&self, generation: u64) {
         if let Ok(mut ready) = self.fonts_ready.lock() {
-            *ready = true;
-            self.signal.notify_all();
+            if ready.0 == generation {
+                ready.1 = true;
+                self.signal.notify_all();
+            }
         }
     }
 
-    /// Block until the page has said its fonts are in, or `timeout` passes.
-    /// True when the signal came.
+    /// Block until the current print's page has said its fonts are in, or
+    /// `timeout` passes. True when the signal came.
     fn wait_fonts_ready(&self, timeout: Duration) -> bool {
         let Ok(ready) = self.fonts_ready.lock() else {
             return false;
         };
-        match self.signal.wait_timeout_while(ready, timeout, |r| !*r) {
-            Ok((ready, _)) => *ready,
+        match self.signal.wait_timeout_while(ready, timeout, |r| !r.1) {
+            Ok((ready, _)) => ready.1,
             Err(_) => false,
         }
     }
+}
+
+/// `g=<n>` out of the signal's query.
+fn generation_of(query: Option<&str>) -> Option<u64> {
+    query?
+        .split('&')
+        .find_map(|kv| kv.strip_prefix("g=")?.parse().ok())
 }
 
 pub fn register_print_protocol<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
@@ -98,8 +129,8 @@ fn handle_print_request<R: Runtime>(
 ) -> Response<Vec<u8>> {
     let state = ctx.app_handle().try_state::<PendingPrint>();
     if request.uri().path() == FONTS_READY_PATH {
-        if let Some(state) = state {
-            state.mark_fonts_ready();
+        if let (Some(state), Some(generation)) = (state, generation_of(request.uri().query())) {
+            state.mark_fonts_ready(generation);
         }
         return Response::builder().status(204).body(Vec::new()).unwrap();
     }
@@ -137,8 +168,7 @@ pub async fn print_document<R: Runtime>(
 
     // Staged before the window exists, because the protocol handler runs as
     // soon as the webview starts loading.
-    let waits_for_fonts = html.contains(FONTS_READY_PATH);
-    app.state::<PendingPrint>().stage(html)?;
+    let waits_for_fonts = app.state::<PendingPrint>().stage(html)?;
 
     let url = "ai-writer-print://localhost/"
         .parse()
@@ -241,14 +271,45 @@ mod tests {
     use std::sync::Arc;
     use std::time::Instant;
 
+    const PAGE: &str = "<p>x</p><script>fetch(\"/__fonts-ready\")</script>";
+
+    fn generation(state: &PendingPrint) -> u64 {
+        state.fonts_ready.lock().unwrap().0
+    }
+
+    #[test]
+    fn a_page_with_the_script_is_stamped_and_waited_for() {
+        let state = PendingPrint::default();
+        assert!(state.stage(PAGE.into()).unwrap());
+        let g = generation(&state);
+        let staged = state.doc.lock().unwrap().clone().unwrap();
+        assert!(staged.contains(&format!("\"/__fonts-ready?g={g}\"")));
+        // A page without it (an author's own .html) prints on the old delay.
+        assert!(!state.stage("<p>plain</p>".into()).unwrap());
+    }
+
+    #[test]
+    fn only_the_last_occurrence_is_stamped() {
+        let state = PendingPrint::default();
+        let page = format!("<p>\"/__fonts-ready\" in the text</p>{PAGE}");
+        state.stage(page).unwrap();
+        let staged = state.doc.lock().unwrap().clone().unwrap();
+        assert!(staged.starts_with("<p>\"/__fonts-ready\" in the text</p>"));
+        assert!(staged.ends_with(&format!(
+            "fetch(\"/__fonts-ready?g={}\")</script>",
+            generation(&state)
+        )));
+    }
+
     #[test]
     fn the_fonts_signal_releases_a_waiting_print_at_once() {
         let state = Arc::new(PendingPrint::default());
-        state.stage("<p>x</p>".into()).unwrap();
+        state.stage(PAGE.into()).unwrap();
+        let g = generation(&state);
         let signaller = Arc::clone(&state);
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(30));
-            signaller.mark_fonts_ready();
+            signaller.mark_fonts_ready(g);
         });
         let t = Instant::now();
         assert!(state.wait_fonts_ready(Duration::from_secs(5)));
@@ -258,17 +319,29 @@ mod tests {
     #[test]
     fn a_page_that_never_signals_is_printed_after_the_timeout() {
         let state = PendingPrint::default();
-        state.stage("<p>x</p>".into()).unwrap();
+        state.stage(PAGE.into()).unwrap();
         let t = Instant::now();
         assert!(!state.wait_fonts_ready(Duration::from_millis(50)));
         assert!(t.elapsed() >= Duration::from_millis(50));
     }
 
     #[test]
-    fn staging_a_new_document_clears_the_previous_signal() {
+    fn a_late_signal_from_the_previous_preview_is_ignored() {
         let state = PendingPrint::default();
-        state.mark_fonts_ready();
-        state.stage("<p>next</p>".into()).unwrap();
+        state.stage(PAGE.into()).unwrap();
+        let old = generation(&state);
+        state.stage(PAGE.into()).unwrap();
+        state.mark_fonts_ready(old);
         assert!(!state.wait_fonts_ready(Duration::from_millis(10)));
+        state.mark_fonts_ready(generation(&state));
+        assert!(state.wait_fonts_ready(Duration::from_millis(10)));
+    }
+
+    #[test]
+    fn the_generation_is_read_off_the_query() {
+        assert_eq!(generation_of(Some("g=7")), Some(7));
+        assert_eq!(generation_of(Some("x=1&g=12")), Some(12));
+        assert_eq!(generation_of(Some("g=x")), None);
+        assert_eq!(generation_of(None), None);
     }
 }

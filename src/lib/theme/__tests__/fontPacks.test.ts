@@ -31,7 +31,7 @@ const h = vi.hoisted(() => {
       { weight: 700, sheet: spec("lib/N/b.css"), chunks: [spec("lib/N/c.2.woff2", "c.2.woff2")] },
     ],
   };
-  return { bytes, pack, files: new Map<string, Uint8Array | string>(), writes: [] as string[] };
+  return { bytes, pack, files: new Map<string, Uint8Array | string>(), writes: [] as string[], mtime: new Map<string, number>() };
 });
 
 vi.mock("../fontPackData", () => ({ FONT_PACK_DATA: [h.pack] }));
@@ -56,8 +56,9 @@ vi.mock("../../fs/fileio", () => ({
   statPath: vi.fn(async (p: string) => {
     const v = h.files.get(p);
     if (v === undefined) return null;
-    return { isDir: false, size: typeof v === "string" ? v.length : v.length, modifiedMs: null };
+    return { isDir: false, size: typeof v === "string" ? v.length : v.length, modifiedMs: h.mtime.get(p) ?? null };
   }),
+  removeFile: vi.fn(async (p: string) => void h.files.delete(p)),
   readDir: vi.fn(async (p: string) => {
     const names = new Set<string>();
     for (const k of h.files.keys()) if (k.startsWith(p + "/")) names.add(k.slice(p.length + 1).split("/")[0]);
@@ -80,6 +81,7 @@ import { joinPath } from "../../paths";
 import {
   FONT_PACK_SOURCES,
   FontPackError,
+  pruneOtherVersions,
   fontUrl,
   installFontPack,
   packFacesCss,
@@ -110,6 +112,7 @@ const honest = (path: string) => h.bytes[path] ?? 404;
 
 beforeEach(() => {
   h.files.clear();
+  h.mtime.clear();
   h.writes.length = 0;
   fetchMock.mockReset();
 });
@@ -233,6 +236,36 @@ describe("installFontPack", () => {
     await installFontPack("misans");
     expect(h.files.has("/data/fonts/misans/4.0.0/old.woff2")).toBe(false);
     expect(h.files.has(`${DIR}/a.0.woff2`)).toBe(true);
+  });
+});
+
+describe("the folder under another window's hands", () => {
+  it("won't mark a pack installed over a chunk that vanished mid-install", async () => {
+    serve({ "registry.npmmirror.com": honest });
+    // Another window deletes the pack's folder the moment the last chunk lands.
+    const fileio = await import("../../fs/fileio");
+    const rename = vi.mocked(fileio.renamePath);
+    const real = rename.getMockImplementation()!;
+    rename.mockImplementation(async (from, to) => {
+      await real(from, to);
+      if (to.endsWith("c.2.woff2")) h.files.delete(`${DIR}/a.0.woff2`);
+    });
+    try {
+      await expect(installFontPack("misans")).rejects.toMatchObject({ code: "disk" });
+      expect(await readInstalled("misans")).toBe(false);
+    } finally {
+      rename.mockImplementation(real);
+    }
+  });
+
+  it("sweeps stale temporary files, and leaves a fresh one (another window's write) alone", async () => {
+    h.files.set(`${DIR}/a.0.woff2.deadbeef.part`, "x");
+    h.mtime.set(`${DIR}/a.0.woff2.deadbeef.part`, Date.now() - 60 * 60_000);
+    h.files.set(`${DIR}/b.1.woff2.cafebabe.part`, "y");
+    h.mtime.set(`${DIR}/b.1.woff2.cafebabe.part`, Date.now());
+    await pruneOtherVersions("misans");
+    expect(h.files.has(`${DIR}/a.0.woff2.deadbeef.part`)).toBe(false);
+    expect(h.files.has(`${DIR}/b.1.woff2.cafebabe.part`)).toBe(true);
   });
 });
 
