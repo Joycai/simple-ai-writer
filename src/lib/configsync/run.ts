@@ -19,8 +19,10 @@ import { getVersion } from "@tauri-apps/api/app";
 import {
   applyConfigImport,
   buildConfigBundle,
+  keyFailureMessage,
   parseConfigBundle,
   type ConfigBackup,
+  type ConfigImportResult,
   type ParsedConfigBundle,
 } from "../ai/configTransfer";
 import { deviceLabel } from "../sync/local";
@@ -108,12 +110,12 @@ export async function preparePull(
 }
 
 /** Merge a prepared bundle. Same call the file-import path makes. */
-export async function applyPull(prepared: PreparedPull): Promise<void> {
-  await applyConfigImport(prepared.bundle);
+export async function applyPull(prepared: PreparedPull): Promise<ConfigImportResult> {
+  return applyConfigImport(prepared.bundle);
 }
 
 /** Re-exported so the store and the UI read a header without importing two modules. */
-export { readEnvelopeHeader, bundleHasKeys };
+export { readEnvelopeHeader, bundleHasKeys, keyFailureMessage };
 
 /** Whether pushing with these options would need a password. */
 export async function pushNeedsPassword(includeKeys: boolean): Promise<boolean> {
