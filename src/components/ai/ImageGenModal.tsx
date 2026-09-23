@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, Image as ImageIcon, Wand2, UserRound } from "lucide-react";
 import { ModalShell } from "../common/ModalShell";
+import { Combobox } from "../common/Combobox";
 import { canSeeImages, imageCostFor } from "../../lib/ai/configDb";
 import { resolveImageRoute } from "../../lib/ai/image";
 import { imageDialect } from "../../lib/ai/imageDialects";
@@ -614,20 +615,17 @@ export function ImageGenModal({ target, onClose }: Props) {
                 {!dialectSpec && (
                   <div className={gen.field}>
                     <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>
-                    <input
-                      className={gen.input}
-                      list="image-size-options"
-                      placeholder={t("lore.imageGen.sizePlaceholder")}
-                      value={size}
-                      onChange={(e) => setSize(e.target.value)}
-                      disabled={busy}
-                    />
-                    {/* A datalist, not a select: the accepted sizes differ per
+                    {/* A combobox, not a select: the accepted sizes differ per
                         model and per relay, so the common ones are suggestions
                         rather than the only options. */}
-                    <datalist id="image-size-options">
-                      {(imageModel?.caps?.sizes ?? COMMON_SIZES).map((s) => <option key={s} value={s} />)}
-                    </datalist>
+                    <Combobox
+                      className={gen.input}
+                      suggestions={imageModel?.caps?.sizes ?? COMMON_SIZES}
+                      placeholder={t("lore.imageGen.sizePlaceholder")}
+                      value={size}
+                      onChange={setSize}
+                      disabled={busy}
+                    />
                   </div>
                 )}
                 {estimatedCost > 0 && (

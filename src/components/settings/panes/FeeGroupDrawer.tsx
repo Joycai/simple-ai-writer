@@ -13,6 +13,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import { Combobox } from "../../common/Combobox";
 
 import {
   BILLING_MODES, OUTPUT_UNITS,
@@ -202,16 +203,13 @@ export function FeeGroupDrawer({
           {/* 自由文本 + 已有值补全，不是下拉：厂商不绑渠道也不绑平台，一份价
               常被好几个渠道共用，而枚举挡住中转站、自建端点和作者自己想出来
               的整理维度。补全只负责让写法一致。 */}
-          <input
+          <Combobox
             className={s.input}
             value={d.vendor}
-            list="fee-group-vendors"
+            suggestions={vendors}
             placeholder={t("aiConfig.fees.vendorPlaceholder")}
-            onChange={(e) => patch({ vendor: e.target.value })}
+            onChange={(vendor) => patch({ vendor })}
           />
-          <datalist id="fee-group-vendors">
-            {vendors.map((v) => <option key={v} value={v} />)}
-          </datalist>
           <div className={s.hint}>{t("aiConfig.fees.vendorHint")}</div>
         </div>
 
