@@ -21,7 +21,7 @@ import { IS_MAC } from "../platform";
 import { currentMarkdownThemeId, markdownThemeCss } from "../theme/markdownThemes";
 import { exportPaletteCss } from "../theme/export";
 import { TOKEN_CONTRACT } from "../theme/contractData";
-import { inlinedMarkdownCss, resolvedMarkdownTheme, resolvedTheme } from "../theme/install";
+import { currentFontFaces, inlinedMarkdownCss, resolvedMarkdownTheme, resolvedTheme } from "../theme/install";
 import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
@@ -130,7 +130,7 @@ export async function exportMarkdown(source: string): Promise<void> {
  * built-in base it extends, assets inlined — the exported `<body>` carries
  * the `md-body` class so the file's `.md-body …` rules land on it unchanged.
  */
-async function documentCss(): Promise<string> {
+async function documentCss(opts: { faces?: boolean } = {}): Promise<string> {
   const md = markdownThemeCss(currentMarkdownThemeId(), "body");
   const user = await inlinedMarkdownCss(resolvedMarkdownTheme());
   // The font scheme is the `data-font` axis on <html>; the stacks the file
@@ -139,7 +139,12 @@ async function documentCss(): Promise<string> {
   const palette = exportPaletteCss(
     resolvedTheme("light"), resolvedTheme("dark"), `${md}\n${user}`, TOKEN_CONTRACT, undefined, fontScheme,
   );
-  return `${palette}
+  // A downloaded font pack's faces point at the `ai-writer-font:` scheme —
+  // loadable by the print window, meaningless in a file opened elsewhere, so
+  // only the PDF path asks for them; the .html export names the family and
+  // lets the stack fall back (docs/feature/downloadable-fonts-plan.md).
+  const faces = opts.faces ? currentFontFaces() : "";
+  return `${faces ? `${faces}\n` : ""}${palette}
 body {
   background: var(--color-bg-base);
   color: var(--color-text-primary);
@@ -197,7 +202,7 @@ export async function exportPdf(source: string, title: string, baseDir?: string)
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-${await documentCss()}
+${await documentCss({ faces: true })}
 /* Print sheet: white paper, no page margin of our own — the paper margins
    come from the print system (NSPrintInfo on macOS, the dialog elsewhere),
    so the body's screen padding is zeroed too rather than stacking on top. */

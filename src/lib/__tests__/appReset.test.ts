@@ -47,6 +47,7 @@ vi.mock("../prefs", () => ({
   clearAllPrefs: h.clearAllPrefs,
   prefEntries: () => [["app:theme", "dark"] as [string, string]],
 }));
+vi.mock("../theme/fontPacks", () => ({ fontsRoot: async () => "/app-data/fonts" }));
 vi.mock("../sync/config", () => ({
   getServerUrl: () => h.serverUrl,
   syncTokenAccount: (url: string) => `kbsync:${url}`,
@@ -64,7 +65,10 @@ function txTables(): string[] {
 
 beforeEach(() => {
   h.timeline.length = 0;
-  h.invoke.mockClear();
+  h.invoke.mockClear().mockImplementation(async (cmd: string) => {
+    h.timeline.push(`invoke:${cmd}`);
+    return undefined as unknown;
+  });
   h.execute.mockClear();
   h.clearAllSecrets.mockClear().mockImplementation(async (accounts: string[]) => {
     h.timeline.push(`secrets:${accounts.join(",")}`);
@@ -124,6 +128,27 @@ describe("resetApp", () => {
   it("survives a doc_format table that was never created", async () => {
     h.execute.mockRejectedValueOnce(new Error("no such table: doc_format"));
 
+    await expect(resetApp()).resolves.toMatchObject({ secretsRemoved: 2 });
+    expect(h.clearAllPrefs).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes the downloaded font packs, before the preferences", async () => {
+    h.invoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
+      h.timeline.push(`invoke:${cmd}${args?.path ? `:${String(args.path)}` : ""}`);
+      return (cmd === "fs_exists") as unknown;
+    });
+    await resetApp();
+    const removed = h.timeline.indexOf("invoke:fs_remove_dir:/app-data/fonts");
+    expect(removed).toBeGreaterThanOrEqual(0);
+    expect(h.timeline.indexOf("prefs:cleared")).toBeGreaterThan(removed);
+  });
+
+  it("still resets when the fonts folder can't be removed", async () => {
+    h.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "fs_exists") return true;
+      if (cmd === "fs_remove_dir") throw new Error("busy");
+      return undefined;
+    });
     await expect(resetApp()).resolves.toMatchObject({ secretsRemoved: 2 });
     expect(h.clearAllPrefs).toHaveBeenCalledTimes(1);
   });

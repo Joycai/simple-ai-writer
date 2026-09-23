@@ -27,8 +27,12 @@ import { fileExists, readDir, readFile, removeDir, statPath, writeBinaryFile, wr
 import { joinPath, toPosixPath } from "../paths";
 import { IS_WINDOWS } from "../platform";
 
-type FontPackId = "harmonyos" | "misans";
+export type FontPackId = "harmonyos" | "misans";
 export const FONT_PACK_IDS: readonly FontPackId[] = ["harmonyos", "misans"];
+
+export function isFontPackId(value: string): value is FontPackId {
+  return (FONT_PACK_IDS as readonly string[]).includes(value);
+}
 
 /** `[path, size, sha256 hex]` — the sheet's path is package-relative, a chunk's is relative to its sheet. */
 type FileSpec = [path: string, size: number, sha256: string];
@@ -57,7 +61,7 @@ export const FONT_PACK_SOURCES: Record<FontPackId, SourceUrl[]> = {
   misans: [npmmirror, ...JSDELIVR, unpkg],
 };
 
-type FontPackErrorCode = "network" | "integrity" | "disk";
+export type FontPackErrorCode = "network" | "integrity" | "disk";
 
 export class FontPackError extends Error {
   constructor(readonly code: FontPackErrorCode, message: string) {
@@ -83,7 +87,7 @@ export function packBytes(pack: FontPackData): number {
 
 let cachedRoot: string | null = null;
 
-async function fontsRoot(): Promise<string> {
+export async function fontsRoot(): Promise<string> {
   if (cachedRoot) return cachedRoot;
   const { appDataDir } = await import("@tauri-apps/api/path");
   cachedRoot = joinPath(await appDataDir(), "fonts");

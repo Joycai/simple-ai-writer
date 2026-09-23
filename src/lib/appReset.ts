@@ -41,6 +41,8 @@ import { clearAllSecrets } from "./keyStore";
 import { clearAllPrefs, prefEntries } from "./prefs";
 import { getGlobalDb, getGlobalDbPath } from "./project";
 import { sqlTransaction } from "./sqlTx";
+import { fileExists, removeDir } from "./fs/fileio";
+import { fontsRoot } from "./theme/fontPacks";
 import { getServerUrl, syncTokenAccount } from "./sync/config";
 
 /** 将要被清掉的东西，按作者看得见的单位数出来。 */
@@ -148,7 +150,16 @@ export async function resetApp(): Promise<ResetSummary> {
     /* 早就没有了 */
   }
 
-  // 4. 偏好最后，并且是 await 的——调用方紧接着就要重载窗口。
+  // 4. 下载过的字体包。它只是本机缓存，不是作者的东西，但「回到第一次打开
+  //    的样子」本来就没有它；删不掉也不挡重置，下次选中时照样能再下载。
+  try {
+    const fonts = await fontsRoot();
+    if (await fileExists(fonts)) await removeDir(fonts);
+  } catch {
+    /* 留着也无害 */
+  }
+
+  // 5. 偏好最后，并且是 await 的——调用方紧接着就要重载窗口。
   await clearAllPrefs();
 
   return { inventory, secretsRemoved: wipe.removed };

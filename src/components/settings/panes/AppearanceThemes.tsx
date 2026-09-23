@@ -445,6 +445,8 @@ function MdSample({
   className?: string;
 }) {
   const [userCss, setUserCss] = useState<string>("");
+  // The frame can't see the page's `@font-face` rules — hand the packs' in.
+  const faces = useAppStore((st) => st.fontFaces);
   useEffect(() => {
     let cancelled = false;
     if (entry.source === "builtin" || !entry.css) { setUserCss(""); return; }
@@ -452,8 +454,8 @@ function MdSample({
     return () => { cancelled = true; };
   }, [entry]);
   const doc = useMemo(
-    () => sampleDocument(entry, userCss, appearance, scheme, isZh, fontScheme, sizing),
-    [entry, userCss, appearance, scheme, isZh, fontScheme, sizing],
+    () => sampleDocument(entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces),
+    [entry, userCss, appearance, scheme, isZh, fontScheme, sizing, faces],
   );
   return (
     <iframe
