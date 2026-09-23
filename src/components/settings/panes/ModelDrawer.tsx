@@ -149,7 +149,7 @@ function initialOpen(existing: Model | undefined, add: boolean, hasUpstream: boo
     think: !!(m?.thinkingCategory || (m?.reasoningEffort && m.reasoningEffort !== "default") || m?.thinkingBudget),
     // Open when the model has an upstream — its own choice, the channel's
     // table or a product name in the id — since it decides the caps below.
-    upstream: !!m?.relayUpstream || hasUpstream,
+    upstream: hasUpstream,
     caps: !!(m?.serverTools?.length || m?.pdfInput || m?.vlHighResolution || m?.videoInput || m?.translateFormat || m?.asrFormat || m?.structuredOutput),
     samp: !!(m && (m.temperature !== undefined || m.prefix?.trim() || m.textVerbosity)),
     image: !!(caps && (caps.route || caps.dialect || caps.edit || caps.sizes?.length || caps.asyncTask || caps.comfy)),
@@ -325,6 +325,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // reaching the model. Asked with the upstream: a relay upstream that drops
   // the part gets no switch, one that reads it gets one on Anthropic too.
   const pdfWire = can("pdfInput", capModel);
+  // A declaration not sent because the relay's upstream drops it: says so,
+  // rather than blaming the route or the model id. Undefined otherwise.
+  const upstreamRefuses = (w: typeof curWire, id: CapabilityId): string | undefined =>
+    w && resolvedUpstream.upstream && capabilityVerdict(id, w, capModel).reason === "upstream"
+      ? t("aiConfig.upstream.notSent", { upstream: t(`aiConfig.upstream.name.${resolvedUpstream.upstream}`) })
+      : undefined;
   // Whether this model takes whole PDFs as message content (lib/ai/configDb).
   const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   // DashScope high-resolution image reading (Model.vlHighResolution).
@@ -475,7 +481,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The Sakura translation declaration: a text model on Chat Completions.
   const translateWire = can("translateFormat", { type: form.type });
   // Whether this wire has a JSON mode at all; with no channel yet every option is offered.
-  const soWire = !curWire || hasCapability("structuredOutput", curWire);
+  const soWire = !curWire || hasCapability("structuredOutput", curWire, capModel);
   const vlHiResWire = can("vlHighResolution", { type: form.type });
   const videoWire = can("videoInput", { type: form.type });
   const videoFpsWire = can("videoFps", { type: form.type });
@@ -530,13 +536,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // The structured-output options this wire can honour (lib/ai/jsonMode.ts).
   // 严格档看能力表的 `jsonSchema` 格：实测会静默无视它的平台（智谱）不给这个
   // 选项——发出去只会降一档，选了等于没选。已经存了的声明照样显示，免得选中项消失。
-  const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire);
+  const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire, capModel);
   const soChoices: StructuredOutputMode[] = !soWire
     ? ["off"]
     : STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema" || !soStrictNo || form.structuredOutput === m);
   // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
   // 且 id 在名单上才抬升。
-  const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire).status === "yes"
+  const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire, capModel).status === "yes"
     && knownJsonSchemaModel(form.modelId);
 
   const sizes = form.capsSizes.split(",").map((x) => x.trim()).filter(Boolean);
@@ -1465,10 +1471,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                   key={id}
                   title={t("aiConfig.models.serverToolsToggle", { tool: t(`aiConfig.models.serverTool_${id}`) })}
                   hint={!offersServerTool(id)
-                    // Two reasons, said apart: the platform has no spelling,
-                    // or it has one this model id doesn't run (the code
-                    // interpreter's per-model gate).
-                    ? t(toolWire && hasCapability(id, toolWire)
+                    // Three reasons, said apart: the relay's upstream drops
+                    // it, the platform has no spelling, or it has one this
+                    // model id doesn't run (the code interpreter's per-model gate).
+                    ? upstreamRefuses(toolWire, id) ?? t(toolWire && hasCapability(id, toolWire)
                       ? "aiConfig.models.serverToolNotForModel"
                       : "aiConfig.models.serverToolNotSent", { platform: platformName, model: form.modelId.trim() })
                     : unmeasuredToolHint(id)}
@@ -1521,7 +1527,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             <Fold open={pdfWire || pdfInput}>
               <ToggleField
                 title={t("aiConfig.models.pdfInputLabel")}
-                hint={pdfWire ? t("aiConfig.models.briefPdf") : t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
+                hint={pdfWire
+                  ? t("aiConfig.models.briefPdf")
+                  : upstreamRefuses(curWire, "pdfInput") ?? t("aiConfig.models.declNotOnRoute", { route: route ? ROUTE_LONG[route] : "" })}
                 on={pdfInput}
                 onChange={setPdfInput}
                 {...whyProps("pdf", t("aiConfig.models.pdfInputHint"))}

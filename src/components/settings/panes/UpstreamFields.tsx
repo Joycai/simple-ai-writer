@@ -46,18 +46,20 @@ type RowError = "dup" | "empty" | "noUpstream";
 
 /**
  * What is wrong with each row, if anything. A row left entirely blank is not
- * an error — it is the one just added. Saving drops every flagged row
- * (`parseUpstreamPrefixes`), so these say what will not be kept.
+ * an error — it is the one just added. Saving drops every flagged row, in the
+ * order `parseUpstreamPrefixes` does: only a complete row claims its prefix,
+ * so a half-typed row above never makes the complete one below a duplicate.
  */
-function rowErrors(rows: readonly PrefixRow[]): (RowError | undefined)[] {
+export function rowErrors(rows: readonly PrefixRow[]): (RowError | undefined)[] {
   const seen = new Set<string>();
   return rows.map((r) => {
     const p = r.prefix.trim().toLowerCase();
     if (!p && !r.upstream) return undefined;
     if (!p) return "empty";
+    if (!r.upstream) return "noUpstream";
     if (seen.has(p)) return "dup";
     seen.add(p);
-    return r.upstream ? undefined : "noUpstream";
+    return undefined;
   });
 }
 
@@ -78,16 +80,18 @@ export function UpstreamPrefixTable({
   return (
     <div className={styles.fieldGroup}>
       <label className={styles.label}>{t("aiConfig.upstream.label")}</label>
-      <div className={u.table} role="table" aria-label={t("aiConfig.upstream.label")}>
+      {/* A group, not an ARIA table: every control carries its own label, and
+          the add button and error lines would not fit a table's cells. */}
+      <div className={u.table} role="group" aria-label={t("aiConfig.upstream.label")}>
         {rows.length > 0 && (
-          <div className={`${u.row} ${u.head}`} role="row">
-            <span role="columnheader">{t("aiConfig.upstream.prefixCol")}</span>
-            <span role="columnheader">{t("aiConfig.upstream.upstreamCol")}</span>
+          <div className={`${u.row} ${u.head}`} aria-hidden>
+            <span>{t("aiConfig.upstream.prefixCol")}</span>
+            <span>{t("aiConfig.upstream.upstreamCol")}</span>
             <span />
           </div>
         )}
         {rows.map((row, i) => (
-          <div key={i} role="row">
+          <div key={i} className={u.item}>
             <div className={`${u.row} ${errors[i] ? u.rowErr : ""}`}>
               <input
                 className={u.prefix}
@@ -176,7 +180,7 @@ export function UpstreamSection({
         hint={up ? t(`aiConfig.upstream.note.${up}`) : t("aiConfig.upstream.modelHint")}
         note={sourceLine(t, resolved, modelId)}
         noteTone={resolved.source === "inferred" || !up ? "faint" : "ok"}
-        warn={up && !applies ? t("aiConfig.upstream.notClaude") : undefined}
+        warn={up && modelId.trim() && !applies ? t("aiConfig.upstream.notClaude") : undefined}
       >
         <Select
           className={choice === undefined ? u.follow : undefined}

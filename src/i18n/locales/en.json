@@ -2952,6 +2952,7 @@
       },
       "sumUnset": "Not set · protocol defaults",
       "sumNone": "No upstream · protocol defaults",
+      "notSent": "Not sent: measured not to work on the relay's upstream \"{{upstream}}\".",
       "notClaude": "This upstream was only measured with Claude; it does not apply to this model, which gets the protocol defaults.",
       "matrixTag": "upstream",
       "err": {
