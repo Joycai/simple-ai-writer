@@ -111,7 +111,8 @@ export function FontPackCard({ id, labelKey, previewFont, fallbackLabelKey }: {
     let tone = "";
     if (downloading) {
       tone = a.packStatusBusy;
-      left = t("systemSettings.appearance.fontPackDownloading", { pct, done: mb(pack.done), total: mb(pack.total) });
+      // "2.6 / 6.1 MB" — one unit for the pair (03-ui-spec).
+      left = t("systemSettings.appearance.fontPackDownloading", { pct, done: (pack.done / 1e6).toFixed(1), total: mb(pack.total) });
     } else if (here) {
       left = t("systemSettings.appearance.fontPackReady", { size: mb(pack.total) });
       right = (

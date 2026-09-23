@@ -69,7 +69,7 @@ export function sampleDocument(
   isZh: boolean,
   fontScheme?: string,
   sizing: SampleSize = CARD_SAMPLE,
-  /** The installed font packs' `@font-face` rules (appStore `fontFaces`). */
+  /** The `@font-face` rules of the font pack `fontScheme` names, if it is one (appStore `fontFaces[scheme]`). */
   faces = "",
 ): string {
   const baseId = (entry.source === "builtin" ? entry.id : entry.extends) as MarkdownThemeId;

@@ -64,6 +64,7 @@ vi.mock("../../fs/fileio", () => ({
     return [...names].map((name) => ({ name, path: `${p}/${name}`, isDirectory: ![...h.files.keys()].includes(`${p}/${name}`) }));
   }),
   renamePath: vi.fn(async (from: string, to: string) => {
+    h.writes.push(to);
     const v = h.files.get(from);
     if (v === undefined) throw new Error(`no ${from}`);
     h.files.delete(from);
@@ -123,10 +124,11 @@ describe("installFontPack", () => {
     expect(h.files.has(`${DIR}/b.1.woff2`)).toBe(true);
     expect(h.files.has(`${DIR}/c.2.woff2`)).toBe(true);
     expect(h.writes[h.writes.length - 1]).toBe("/data/fonts/misans/installed.json");
-    expect(h.writes[h.writes.length - 2]).toBe(`${DIR}/faces.css`);
+    expect(h.writes[h.writes.length - 3]).toBe(`${DIR}/faces.css`);
     expect(JSON.parse(h.files.get("/data/fonts/misans/installed.json") as string)).toEqual({ version: "5.0.0", files: 3 });
     // Chunks land through a `.part` + rename, so nothing half-written is ever left at a chunk's name.
-    expect(h.writes).toContain(`${DIR}/a.0.woff2.part`);
+    // …through a name of this write's own, so two windows never rename each other's half-written file.
+    expect(h.writes.some((w) => /\/a\.0\.woff2\.[0-9a-f]{8}\.part$/.test(w))).toBe(true);
     expect([...h.files.keys()].some((k) => k.endsWith(".part"))).toBe(false);
     // faces.css keeps bare names — the URL is made when it's read, from where the folder is then.
     expect(h.files.get(`${DIR}/faces.css`)).toContain('url("a.0.woff2")');

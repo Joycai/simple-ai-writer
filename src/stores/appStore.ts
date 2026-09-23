@@ -47,7 +47,8 @@ import {
   applyFontFaces, applyResolvedMarkdownTheme, applyResolvedTheme, ensureSelectedLoaded, type SelectedThemes,
 } from "../lib/theme/install";
 import {
-  FONT_PACK_IDS, FontPackError, fontPackData, installFontPack, isFontPackId, packBytes, packFacesCss, readInstalled,
+  FONT_PACK_IDS, FontPackError, fontPackData, installFontPack, isFontPackId, packBytes, packFacesCss, pruneOtherVersions,
+  readInstalled,
   removeFontPack as deleteFontPackFiles, type FontPackErrorCode, type FontPackId,
 } from "../lib/theme/fontPacks";
 import { IS_TAURI } from "../lib/platform";
@@ -675,6 +676,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     for (const id of FONT_PACK_IDS) {
       const total = packBytes(await fontPackData(id));
       if (busy(id)) continue;
+      if (download) void pruneOtherVersions(id); // once a launch, not on every refresh
       const here = await readInstalled(id);
       // Judged on the state *now*, not a snapshot from before the awaits: a
       // download that started or ended meanwhile keeps what it wrote.

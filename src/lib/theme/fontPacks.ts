@@ -320,14 +320,7 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
           continue;
         }
         const bytes = await fetchPinned(pack, remote, spec, order);
-        // Written aside and renamed into place, so a chunk at its pinned size
-        // is a whole chunk — a torn write (power cut, a second window
-        // installing the same pack) never passes the resume check above.
-        const part = `${local}.part`;
-        await onDisk(local, async () => {
-          await writeBinaryFile(part, bytes);
-          await renamePath(part, local);
-        });
+        await onDisk(local, () => writeAside(local, (tmp) => writeBinaryFile(tmp, bytes)));
         advance(spec[1]);
       } catch (e) {
         failure ??= e;
@@ -337,17 +330,43 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker));
   if (failure !== null) throw failure;
 
-  await onDisk(FACES, () => writeFile(joinPath(dir, FACES), faces.join("\n") + "\n"));
+  const facesPath = joinPath(dir, FACES);
+  await onDisk(FACES, () => writeAside(facesPath, (tmp) => writeFile(tmp, faces.join("\n") + "\n")));
   forgetFaces(id);
   // The marker last: from here on the pack counts as installed.
-  await onDisk(MARKER, () =>
-    writeFile(joinPath(root, MARKER), JSON.stringify({ version: pack.version, files: jobs.length }) + "\n"),
-  );
-  // A version bump leaves the previous version's folder behind — sweep it.
-  // Best effort: a leftover folder costs disk, not correctness.
+  const marker = joinPath(root, MARKER);
+  const record = JSON.stringify({ version: pack.version, files: jobs.length }) + "\n";
+  await onDisk(MARKER, () => writeAside(marker, (tmp) => writeFile(tmp, record)));
+  await pruneOtherVersions(id);
+}
+
+/**
+ * Write through a temporary name and rename into place, so a file at its
+ * final name is always a whole file — a torn write (a power cut, or a second
+ * window installing the same pack at the same moment) never passes the
+ * resume check or leaves half a `faces.css` behind. The temporary name is
+ * this write's own: two windows writing the same chunk each rename a complete
+ * copy of the same bytes, rather than one renaming the other's half-written one.
+ */
+async function writeAside(path: string, write: (tmp: string) => Promise<void>): Promise<void> {
+  const tmp = `${path}.${crypto.randomUUID().slice(0, 8)}.part`;
+  await write(tmp);
+  await renamePath(tmp, path);
+}
+
+/**
+ * Remove a pack's folders for versions other than the pinned one. A version
+ * bump leaves the previous one behind — swept after an install, and at startup
+ * for a pack nobody picks again. Best effort: a leftover folder costs disk,
+ * not correctness.
+ */
+export async function pruneOtherVersions(id: FontPackId): Promise<void> {
   try {
+    const { version } = await fontPackData(id);
+    const root = await packRoot(id);
+    if (!(await fileExists(root))) return;
     for (const entry of await readDir(root)) {
-      if (entry.isDirectory && entry.name !== pack.version) await removeDir(entry.path);
+      if (entry.isDirectory && entry.name !== version) await removeDir(entry.path);
     }
   } catch {
     /* keep going */

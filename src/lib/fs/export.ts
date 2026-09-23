@@ -187,6 +187,21 @@ ${body}
 
 // ─── PDF (system print) ───────────────────────────────────────────────────────
 
+/**
+ * Tells the print window the page's fonts are in. A downloaded font pack is
+ * split by `unicode-range` and each chunk is fetched only when layout meets a
+ * character in it, so on a long document some can still be in flight when the
+ * page has "loaded"; the print side (src-tauri/src/print.rs) holds the dialog
+ * until this request arrives, or three seconds pass. Reading `offsetHeight`
+ * forces the first layout, which is what starts those fetches. The path is
+ * `print.rs`'s `FONTS_READY_PATH`, relative so it resolves on the page's own
+ * origin on every platform.
+ */
+const FONTS_READY_SCRIPT = `<script>
+void document.body.offsetHeight;
+document.fonts.ready.then(() => fetch("/__fonts-ready")).catch(() => {});
+</script>`;
+
 export async function exportPdf(source: string, title: string, baseDir?: string): Promise<void> {
   const body = await inlineImages(renderMarkdown(source), baseDir);
   // macOS shows the preview window, and its print dialog has no virtual PDF
@@ -228,7 +243,7 @@ body { background: #fff; }
 }
 </style>
 </head>
-<body>${body}${macHint}</body>
+<body>${body}${macHint}${FONTS_READY_SCRIPT}</body>
 </html>`;
 
   await printPage(html, title);

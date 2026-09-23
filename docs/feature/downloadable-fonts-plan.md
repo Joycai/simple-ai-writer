@@ -54,11 +54,11 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 
 一次安装里会记住上一个成功的源，后面的文件从它开始试。每个请求带连接超时 10 s，并在 60 s 后中止，所以一个连上之后停住的源不会让下载永远挂着。
 
-**升级字体版本**：改 `gen-font-packs.ts` 里的版本号，跑 `node scripts/gen-font-packs.ts --verify`。新版本装进新目录；装好之后，旧版本的目录会被清掉。
+**升级字体版本**：改 `gen-font-packs.ts` 里的版本号，跑 `node scripts/gen-font-packs.ts --verify`。新版本装进新目录。旧版本的目录在装好之后会被清掉；没人再选的包，由启动时的 `pruneOtherVersions` 清掉。
 
 ## 4. 落盘与完成
 
-- **分片**：先写 `<name>.part`，再改名。这样「大小对」就等于「写完整了」，断点续传只比大小就够。
+- **分片、`faces.css`、完成标记都经临时名写入再改名**（`<name>.<随机>.part`）。这样「大小对」就等于「写完整了」，断点续传只比大小就够。临时名每次写入各不相同，两个窗口同时写同一个分片时，各自改名的都是一份完整的同样字节，谁也不会把对方写到一半的文件改过去。
 - **`faces.css`**：只存分片名，读的时候按当前的 appData 路径拼 URL。appData 目录搬家（漫游配置、账户迁移）之后照样能用。
 - **`installed.json` 最后写**。没有它就算没装，不管盘上已经有多少分片；重试时只补还缺的。
 - **首个失败即停队列**，而且要等所有 worker 回来才 reject。否则失败之后后台还在写盘，会和紧接着的重试赛跑。
@@ -87,7 +87,7 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
 |---|---|---|
 | 主窗口（界面、编辑器、预览） | `tokens.css` | 注入的 `<style>` |
 | 外观页样张（沙箱 iframe） | `sampleDocument` 从 contract 取 | 由 `MdSample` 传入 |
-| 打印 / PDF | `documentCss` 从 contract 取 | `currentFontFaces(scheme)`，从 DOM 读 |
+| 打印 / PDF | `documentCss` 从 contract 取 | `currentFontFaces(scheme)`，从 DOM 读；**打印等字体**：页面在 `document.fonts.ready` 之后请求自己源上的 `/__fonts-ready`，`print.rs` 收到后才弹打印框，最多等 3 s。按需加载的分片在长文里可能晚到，固定延时会把它们印成回退字形。作者自己的 .html 不带这段脚本，不等。 |
 | 导出 .html | 从 contract 取 | **不带**：协议 URL 在别的机器上打不开；读者装了这款字体就用，没装就落到黑体，和 宋 / 黑 / 楷 一样依赖读者的机器。把几 MB 字体塞进导出文件，另开任务。 |
 
 ## 7. 许可
@@ -110,5 +110,6 @@ CSP 的 `font-src` 加上这个 scheme，以及 Windows 形式 `http://ai-writer
   - **真实下载**：按源顺序装成功——MiSans 19.4 s 装完 6.1 MB，鸿蒙 51.7 s 装完 14.9 MB，两个完成标记都写上了。探针没记录每个文件实际取自哪个源。
   - **字体加载**：经 `ai-writer-font:` 加载，400 / 500 / 700 三档都成功（MiSans 18 条 face、鸿蒙 12 条都是 loaded，0 条 error）。同一串字的宽度与回退字体不同，说明画的是真字形。
   - **`fetch()` 直接取字体会失败**（`Load failed`）。推测是 `connect-src` 没列这个 scheme，没有深究：应用里没有任何代码用 fetch 取字体，字体只走 `font-src`，而那一路已经加载成功。
-  - **要肉眼看的**：外观页样张 iframe（沙箱，不透明源）的字形，以及长文加粗体导出 PDF 时有没有混排（打印窗口在页面加载完 200 ms 后就打印，不等字体）。结果见 PR 描述。
+  - **要肉眼看的**：外观页样张 iframe（沙箱，不透明源）的字形，以及长文加粗体导出 PDF。PDF 已经改成等 `document.fonts.ready` 再打印（上表），但「确实不混排」还要在打包产物里看一眼。实测结果补在这里。
+- **已知限制**：下载失败后，已经落盘的分片留在 `fonts/<id>/<version>/` 里（最多一个包的体积），卡片上只有「重试」、没有「删除」；重试会用上它们，重置应用会清掉。
 - **未验证**：Windows（`http://ai-writer-font.localhost` 形式只有解析层单测）、Linux（webkitgtk 对自定义 scheme 的跨源字体请求）。

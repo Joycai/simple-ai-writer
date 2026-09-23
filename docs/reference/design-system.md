@@ -55,7 +55,7 @@ User-switchable CJK × Western pairings, selected in Settings → 外观. Chosen
 | `harmonyos` | 鸿蒙黑体 | HarmonyOS Sans SC（下载） | 同左，回退到 `hei` | All-sans, HarmonyOS |
 | `misans` | MiSans | MiSans（下载） | 同左，回退到 `hei` | All-sans, MiUI |
 
-Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/AppearancePane.tsx`, and add `systemSettings.appearance.font*` labels to both locales. A **downloaded** scheme additionally needs its package pinned in `scripts/gen-font-packs.ts` (run it with `--verify`), its id in `FONT_PACK_IDS` + `FONT_PACK_SOURCES` + `FONT_PACK_LICENSE` (`lib/theme/fontPacks.ts`), and a `PACK_FONTS` entry rather than a system card.
+Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `SYSTEM_FONTS` in `settings/panes/AppearancePane.tsx`, and add `systemSettings.appearance.font*` labels to both locales. A **downloaded** scheme additionally needs its package pinned in `scripts/gen-font-packs.ts` (run it with `--verify`), its id in `FONT_PACK_IDS` + `FONT_PACK_SOURCES` + `FONT_PACK_LICENSE` (`lib/theme/fontPacks.ts`), and a `PACK_FONTS` entry rather than a system card.
 
 ### Markdown 排版主题 (Markdown themes — `data-md-theme`)
 
