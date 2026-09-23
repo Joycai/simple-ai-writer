@@ -17,11 +17,12 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
-import { MAX_MESSAGE_IMAGES } from "../../lib/agent/chatRefs";
+import { MAX_MESSAGE_IMAGES, refsAhead } from "../../lib/agent/chatRefs";
 import {
   isPasting, markPasting, pastedImagePath, subscribePasting, writePastedImage,
 } from "../../lib/agent/chatStash";
-import { classifyPaste, PASTE_IMAGE_EXT, pasteNumber } from "../../lib/agent/pasteImages";
+import { classifyPaste, isChatStashPath, PASTE_IMAGE_EXT, pasteNumber } from "../../lib/agent/pasteImages";
+import { baseName } from "../../lib/paths";
 import { attachedKey, attachProjectFile, type AttachedItem } from "../../lib/lore/aiTask";
 import { useAgentStore } from "../../stores/agentStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
@@ -60,15 +61,37 @@ function numbersFor(stashId: string): Map<string, number> {
  * chips before either added its own, walk past the cap together and draw the
  * same number. Module state for the same reason as `assignedNumbers` — a
  * per-instance queue would be a fresh, empty one after switching away and
- * back mid-paste.
+ * back mid-paste. A rewind's pictures coming back take the same queue.
  */
 const queues = new Map<string, Promise<void>>();
+
+/**
+ * Run `job` after whatever this tab is already turning into chips. Marked
+ * from the call on, not from when the queue reaches it: the tab is spoken for
+ * as soon as the author acted — the send button waits, and the store does not
+ * hand the tab to another conversation.
+ */
+function enqueue(chatKey: string, job: () => Promise<void>): void {
+  markPasting(chatKey, true);
+  const next = (queues.get(chatKey) ?? Promise.resolve())
+    .then(job)
+    .catch(() => {})
+    .finally(() => {
+      markPasting(chatKey, false);
+      if (queues.get(chatKey) === next) queues.delete(chatKey);
+    });
+  queues.set(chatKey, next);
+}
 
 export function usePasteImages(
   chatKey: string,
   setRefs: (update: (prev: AttachedItem[]) => AttachedItem[]) => void,
   setError: (message: string | null) => void,
-): { onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void; pasting: boolean } {
+): {
+  onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  restore: (paths: readonly string[], known: readonly string[]) => void;
+  pasting: boolean;
+} {
   const { t } = useTranslation();
   const pasting = useSyncExternalStore(subscribePasting, () => isPasting(chatKey));
 
@@ -191,19 +214,55 @@ export function usePasteImages(
       return;
     }
     e.preventDefault();
-    // Marked from the event on, not from when the queue reaches it: the tab
-    // is spoken for as soon as the author pressed ⌘V.
-    markPasting(chatKey, true);
-    const next = (queues.get(chatKey) ?? Promise.resolve())
-      .then(() => take(files))
-      .catch(() => {})
-      .finally(() => {
-        markPasting(chatKey, false);
-        if (queues.get(chatKey) === next) queues.delete(chatKey);
-      });
-    queues.set(chatKey, next);
+    enqueue(chatKey, () => take(files));
   }, [take, setError, t, chatKey]);
 
-  return { onPaste, pasting };
+  /**
+   * 回到这里重说 hands a question's pictures back as chips (plan §10). They
+   * are files already — a pasted one still in the session's scratch area,
+   * an `@` one where it was — so this only rebuilds the attachment.
+   *
+   * `known` is the pictures of the turns *before* the rewind cut them: a
+   * pasted picture comes back under the number the author saw it by, which
+   * after a restart is only recoverable from where it sat among the rest.
+   * No cap: it is the message the author already sent, handed back whole.
+   */
+  const restore = useCallback((paths: readonly string[], known: readonly string[]) => {
+    if (paths.length === 0) return;
+    enqueue(chatKey, async () => {
+      const chat = useAgentStore.getState().chats[chatKey];
+      if (!chat) return;
+      const stashId = chat.stashId;
+      const keys = new Set(chatComposerOf(useComposerStore.getState(), chatKey).refs.map(attachedKey));
+      const items: AttachedItem[] = [];
+      const failures: string[] = [];
+      for (const path of new Set(paths)) {
+        if (keys.has(`file:${path}`)) continue;
+        let name = baseName(path);
+        if (stashId && isChatStashPath(path)) {
+          const assigned = numbersFor(stashId);
+          const n = pasteNumber(path, assigned, known);
+          assigned.set(path, n);
+          name = t("ai.chat.pastedImageName", { defaultValue: "粘贴的图片 {{n}}", n });
+        }
+        const outcome = await attachProjectFile({ name, path, kind: "image" });
+        if (outcome.ok) items.push(outcome.item);
+        else failures.push(outcome.reason === "too-large"
+          ? t("ai.chat.imageTooLarge", {
+              defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+              name, size: outcome.sizeMb, max: outcome.maxMb,
+            })
+          // Most often an `@` picture moved or deleted since it was sent.
+          : t("ai.chat.refUnreadable", { defaultValue: "读不到 {{name}}", name }));
+      }
+      // The tab went to another conversation meanwhile (the store refuses
+      // that while this runs; this is the backstop): its chips are not ours.
+      if (useAgentStore.getState().chats[chatKey]?.stashId !== stashId) return;
+      if (items.length) setRefs((prev) => refsAhead(items, prev));
+      setError(failures.length ? failures.join("；") : null);
+    });
+  }, [chatKey, setRefs, setError, t]);
+
+  return { onPaste, restore, pasting };
 }
 

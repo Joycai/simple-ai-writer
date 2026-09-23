@@ -251,6 +251,19 @@ describe("closing", () => {
   });
 });
 
+describe("回到这里重说", () => {
+  it("hands back the question's pictures with its words", async () => {
+    // The turn keeps paths, not pixels: the composer rebuilds the chips.
+    const pic = "/p/.ai-writer/tmp/chat/s1/abc.png";
+    seed([{
+      ...emptyChat("c0"),
+      turns: [{ ...turn("c0-u1"), text: "", images: [pic] }, turn("c0-a1", "assistant")],
+    }]);
+    expect(await state().rewindChat("c0-u1")).toEqual({ text: "", images: [pic] });
+    expect(chat("c0").turns).toEqual([]);
+  });
+});
+
 describe("queue", () => {
   const job = (key: string, n: number) =>
     ({ key, message: `q${n}`, refs: [], userTurnId: `${key}-u${n}`, assistantTurnId: `${key}-a${n}` }) as never;

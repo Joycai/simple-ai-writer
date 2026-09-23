@@ -500,10 +500,11 @@ export interface AgentState {
   toggleChatSessionPin: (id: number) => Promise<void>;
   /**
    * 回到这里重说: undo one of the author's questions and everything after it.
-   * Resolves with the question's text for the composer, or null when the turn
-   * cannot be rewound to (see lib/agent/rewind for which ones can).
+   * Resolves with the question's words and picture paths for the composer, or
+   * null when the turn cannot be rewound to (see lib/agent/rewind for which
+   * ones can).
    */
-  rewindChat: (turnId: string, key?: string) => Promise<string | null>;
+  rewindChat: (turnId: string, key?: string) => Promise<{ text: string; images: string[] } | null>;
   /**
    * Project open/close hook (projectStore calls this): stop every run, drop the
    * previous project's conversations from view, then restore the new project's

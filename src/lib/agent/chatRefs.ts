@@ -24,8 +24,10 @@ import { estimateVideoTokens, videoPart } from "../ai/videoInput";
 import { readEntityFile } from "../lore/entity";
 import { projectRelative } from "../paths";
 import { isChatStashPath } from "./pasteImages";
-import type {
-  AttachedImage, AttachedItem, AttachedLore, AttachedMedia, AttachedText, AttachedVideo,
+import {
+  attachedKey,
+  type AttachedImage, type AttachedItem, type AttachedLore, type AttachedMedia, type AttachedText,
+  type AttachedVideo,
 } from "../lore/aiTask";
 
 /**
@@ -38,6 +40,16 @@ import type {
  */
 export function hasMessage(text: string, refs: readonly AttachedItem[]): boolean {
   return !!text.trim() || refs.some((r) => r.kind === "image");
+}
+
+/**
+ * Chips handed back to the composer (取消排队, 回到这里重说) go ahead of
+ * whatever was attached meanwhile — they were the message first — and a chip
+ * already there is not doubled.
+ */
+export function refsAhead(back: readonly AttachedItem[], prev: readonly AttachedItem[]): AttachedItem[] {
+  const had = new Set(back.map(attachedKey));
+  return [...back, ...prev.filter((r) => !had.has(attachedKey(r)))];
 }
 
 /**

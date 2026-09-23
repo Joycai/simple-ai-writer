@@ -33,7 +33,7 @@ import { imageToThumbnailDataUrl } from "../../lib/fs/images";
 import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote } from "../../lib/image/normalize";
 import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
-import { hasMessage } from "../../lib/agent/chatRefs";
+import { hasMessage, refsAhead } from "../../lib/agent/chatRefs";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagentModel";
 import { isAsrEnabled } from "../../lib/asr/flag";
 import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/videoInput";
@@ -266,7 +266,7 @@ export function AgentChat() {
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
-  const { onPaste: handlePaste, pasting } = usePasteImages(activeKey, setRefs, setRefError);
+  const { onPaste: handlePaste, restore: restoreImages, pasting } = usePasteImages(activeKey, setRefs, setRefError);
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -418,9 +418,13 @@ export function AgentChat() {
     const id = rewindTo;
     if (id === null) return;
     setRewindTo(null);
-    void rewindChat(id).then((text) => {
-      if (text === null) return;
-      setDraft(text);
+    // Read before the cut: a pasted picture comes back under the number it
+    // had, which is its place among *all* the session's pictures.
+    const known = turns.flatMap((tn) => tn.images ?? []);
+    void rewindChat(id).then((back) => {
+      if (back === null) return;
+      setDraft(back.text);
+      restoreImages(back.images, known);
       inputRef.current?.focus();
     });
   };
@@ -862,13 +866,7 @@ export function AgentChat() {
                 const back = dequeueChat(activeKey);
                 if (!back) return;
                 if (back.text) setDraft(back.text);
-                if (back.refs.length) {
-                  // Ahead of whatever was attached meanwhile, without doubles.
-                  setRefs((prev) => {
-                    const had = new Set(back.refs.map(attachedKey));
-                    return [...back.refs, ...prev.filter((r) => !had.has(attachedKey(r)))];
-                  });
-                }
+                if (back.refs.length) setRefs((prev) => refsAhead(back.refs, prev));
               }}
             >
               {t("ai.chat.queueCancel", { defaultValue: "取消排队" })}
