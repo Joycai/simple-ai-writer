@@ -44,7 +44,9 @@ describe("elideExpiredTurnImages", () => {
     expect(hasImageParts(three.starts[0])).toBe(false);
     const text = JSON.stringify(three.starts[0].content);
     expect(text).toContain(".ai-writer/tmp/chat/s/0.png");
-    expect(text).toContain("read_image");
+    // No tool named: which one reads it back depends on the run.
+    expect(text).toContain("read it again");
+    expect(text).not.toContain("read_image it");
   });
 
   it("expires a turn's pictures together, tool reads included", () => {
@@ -53,6 +55,15 @@ describe("elideExpiredTurnImages", () => {
     history.splice(2, 0, pic("Visual reference for read_image: assets/x.png"));
     expect(elideExpiredTurnImages(history, meta)).toBe(2);
     expect(history.filter(hasImageParts)).toEqual([starts[2]]);
+  });
+
+  it("does not count a question that got no answer", () => {
+    // Turn 2 failed before any reply; the author asks again as turn 3. The
+    // picture is still leased: nothing has been answered since it arrived.
+    const { history, meta, starts } = chat([true, false, false]);
+    history.splice(history.indexOf(starts[1]) + 1, 1); // turn 2's answer never came
+    expect(elideExpiredTurnImages(history, meta)).toBe(0);
+    expect(hasImageParts(starts[0])).toBe(true);
   });
 
   it("leaves a history with no recorded turns alone", () => {

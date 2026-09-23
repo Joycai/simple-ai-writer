@@ -31,17 +31,28 @@ import { contentWithoutImages, hasImageParts } from "./imageHistory";
  */
 export const IMAGE_LEASE_TURNS = 1;
 
-/** What an expired picture leaves behind; the model reads this. */
+/**
+ * What an expired picture leaves behind; the model reads this. Names no tool:
+ * which one brings a picture back depends on the run (`read_image` is routed
+ * away when a vision subagent stands by, and a gallery picture comes back
+ * through `read_lore_image`), and naming one the run lacks is the
+ * tool-presence mistake (docs/reference/tool-presence.md).
+ */
 const EXPIRED_IMAGE =
-  "[picture from an earlier turn dropped to save context — its path is given with it; read_image it again if it still matters]";
+  "[picture from an earlier turn dropped to save context — what it was and where it came from are given with it; read it again if it still matters]";
 
 /**
- * Strip the pictures of every turn older than the current one and the
- * {@link IMAGE_LEASE_TURNS} before it — all of a turn's pictures together,
- * the author's attachments and the tool loop's reads alike. Call right after
- * the new turn's question is in `history` and recorded in `meta`. The
- * prelude (system, seed, summary) carries no pictures and is not touched.
+ * Strip the pictures of every turn followed by {@link IMAGE_LEASE_TURNS}
+ * *answered* turns before the current one — all of a turn's pictures
+ * together, the author's attachments and the tool loop's reads alike. Call
+ * right after the new turn's question is in `history` and recorded in `meta`.
+ * The prelude (system, seed, summary) carries no pictures and is not touched.
  * Returns how many messages it changed.
+ *
+ * Answered means the turn holds an assistant message. A question that failed
+ * or was stopped before any answer is still in history, and counting it would
+ * let the author's retry of the follow-up arrive after the picture it asks
+ * about had already gone.
  */
 export function elideExpiredTurnImages(
   history: StreamMessage[],
@@ -50,12 +61,19 @@ export function elideExpiredTurnImages(
 ): number {
   const { turns } = segmentHistory(history, meta);
   let dropped = 0;
-  for (const turn of turns.slice(0, Math.max(0, turns.length - (lease + 1)))) {
-    for (const m of turn.messages) {
-      if (!hasImageParts(m)) continue;
-      m.content = contentWithoutImages(m, EXPIRED_IMAGE);
-      dropped++;
+  // Walk back from the turn before the current one, counting answered turns
+  // seen so far; a turn expires once `lease` of them lie after it.
+  let answeredAfter = 0;
+  for (let i = turns.length - 2; i >= 0; i--) {
+    const turn = turns[i];
+    if (answeredAfter >= lease) {
+      for (const m of turn.messages) {
+        if (!hasImageParts(m)) continue;
+        m.content = contentWithoutImages(m, EXPIRED_IMAGE);
+        dropped++;
+      }
     }
+    if (turn.messages.some((m) => m.role === "assistant")) answeredAfter++;
   }
   return dropped;
 }
