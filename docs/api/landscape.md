@@ -1568,6 +1568,69 @@ Responses adapter：
 来源（2026-09-19）：`docs.bigmodel.cn` 的「对话补全」（OpenAPI）「工具调用」「结构化输出」「流式消息」「思考模式」「深度思考」
 「核心参数」「模型概览」「错误码」「GLM-5.3-Flash」「GLM Coding Plan 快速开始 / 接入工具 / 使用须知」「网络搜索」「网页阅读」各页的 `.md` 原文，与上面的实测。
 
+### 第十五个样本：New API 中转站上 Kiro 渠道的 ④ 族（`[特价kiro量]claude-opus-4-6` / `-opus-5`，2026-09-23 实测）
+
+> **实测结论**（先 curl 约 150 次探形状，再用 `live.relay-kiro.test.ts` 驱动本项目真实 adapter——`anthropic_compat`、
+> `claude-adaptive`、平台 `newapi`——14 条**全过**；`CHENMO_KEY`）。主机是第十个样本那台 `42.240.165.241:3000`，
+> 这次走 `/v1/messages`。目录里 Kiro 渠道挂着 `[kiro]` `[kiro1]`…`[kiro3]` `[kiro-200k]` `[特价kiro量]` 等多档，
+> `supported_endpoint_types` 一律 `null`。Kiro 是 AWS 的 IDE 产品，它的后端不是 Anthropic API——中转站在
+> 两者之间翻译，**下面凡是「官方有、这里没有」的，都是翻译层没做，且几乎全部 200、不报错**。
+>
+> 两款模型在每一条上表现一致（同一请求的 usage 逐字相同、同一套模板文案），**从请求侧分不出背后是不是两个模型**。
+>
+> | 特性（官方写法） | 结果 |
+> | --- | --- |
+> | 基础对话、流式 | ✅ 2–10 s。流式事件序列完全标准（`message_start` → `ping` → block 三件套 → `message_delta` → `message_stop`），`thinking_delta` / `signature_delta` / `input_json_delta` 都有 |
+> | 鉴权 | `x-api-key` 与 `Authorization: Bearer` 都收；**不带 `anthropic-version` 也 200** |
+> | `system` | ✅ 生效。不像第八 / 十个样本那样注入大段系统提示（不带 system 的请求输入只报 70 token 上下） |
+> | `max_tokens` | ❌ **无视**：发 8 / 16，照样写完 1–60，`stop_reason: end_turn`，永远不会出现 `max_tokens` |
+> | `temperature` / `top_k` / `stop_sequences` | 都 200；`stop_sequences` 生效（`stop_reason: stop_sequence`），采样两项效果未比 |
+> | `thinking: adaptive` / `enabled + budget_tokens` / `disabled` | ✅ 三种都照办。thinking 块带 `signature`（300–380 字符） |
+> | `display: "summarized"` / `"omitted"` | 都无效果：**永远返回完整原文**，`omitted` 也不清空 |
+> | `budget_tokens ≥ max_tokens` | 200（官方 400） |
+> | `output_config.effort` | **只有 `low` 有效果**：同一道难题每档 3 次，输出 token 均值 low ≈ 750，medium / high / max 都 ≈ 1,050、分不出；简单题上 `low` 直接不想。**乱写的值（`bogus`）也 200**。不带 `thinking` 只发 effort = 不想（与官方 4.6 一致） |
+> | 工具轮回传 thinking 块 | ✅；**签名不校验**：原样、篡改末尾、删掉 `signature` 三种都 200 且答对 |
+> | 函数工具、`tool_choice: auto / none` | ✅ |
+> | 强制 `tool_choice`（`any` / `{type:"tool"}`） | ❌ **流式下被无视**：每模型 × 思考开关 × 两种写法各 4 次，流式 32 次里 1 次调用（另一轮 adapter 实测关思考 6 次里 2 次，都像模型自己想调）；**非流式关思考 16/16 生效**，非流式开思考 `tool` 0/8、`any` 6/8。即翻译层只在非流式路径上实现了它。不报错，只是模型回了一段散文 |
+> | `strict: true` 工具 | 200，照常调用（约束是否生效未验） |
+> | 结构化输出 `output_config.format`（GA）与 `output_format` + beta 头 | ❌ 都 200、**都被静默忽略**：schema 把 `answer` 限死为 `7`，模型照答 `2` 并给 markdown |
+> | 图片 base64 | ✅ 64² 纯色答出 Teal |
+> | 图片 `source.type:"url"` | ❌ 静默丢弃（答 NOIMAGE） |
+> | PDF `document` base64 / url | ❌ **静默丢弃**：模型答「没看到文档」；base64 那条要 33 s（别的请求 3 s） |
+> | 纯文本 `document` + `citations.enabled` | 内容读到了，但**没有 `citations` 字段**，出处只是模型在正文里自己引 |
+> | 服务端工具 `web_search_20250305` / `_20260209` | 见下一段——**中转站自己做**，行为取决于同发的工具和流式与否 |
+> | `web_fetch_20250910` / `code_execution_20250825` / 造的 `type` | 全部静默丢弃，模型**假装**抓了页面、跑了代码（给出 `<h1>Example Domain</h1>`、一段没执行过的 Python） |
+> | prompt caching（`cache_control`） | ❌ 同一 7.4k 前缀连发两次，**两次都报 `cache_creation_input_tokens: 7360`、`cache_read` 永远只有几十**——只写不读。若中转站按写缓存价计费，打断点比不打更贵 |
+> | usage | **由中转站估算**：输入随内容增长（7.7k 前缀报 7,762），但缓存那两项是拼出来的——不带 `cache_control` 的请求也固定报几十 token 的 `cache_read`，流式的 `message_delta` 还报 `cache_creation: {ephemeral_5m_input_tokens: 265}` |
+> | `/v1/messages/count_tokens` | 404 `Invalid URL` |
+> | Files API `/v1/files` | 401 `Invalid token`（这把 key 没有这条路由） |
+> | `/v1/models` | ① 族形状（`data[].id`），200 |
+> | 不存在的模型 | 503 `model_not_found`「No available channel for model … under group default」（New API 的报法，不是 404） |
+> | 模型回显 | 去掉档位前缀（`claude-opus-5`），与第十个样本一致 |
+>
+> **`web_search`：三种情形，三种结果**（都是中转站接管——Kiro 自己有联网搜索，由翻译层接上）：
+>
+> 1. **只挂 `web_search`、没有别的工具**（流式与否一样）：**整条请求被劫持**。中转站把**第一条** user 消息原文当搜索词
+>    （多轮对话里搜的是开头的「Hi」），0.8–2 s 返回一段模板「I'll search for "…"」+ `server_tool_use` +
+>    `web_search_tool_result`（`encrypted_content` 其实是明文摘要，`page_age` 为 null）+「Here are the search results for "…"」
+>    列表。**模型根本没跑**：两款模型逐字相同，`output_tokens` 固定 644 / 568 / 478。请求里的写作指令得不到任何回答。
+> 2. **与函数工具同发、流式**：✅ **真的在搜**。模型自己拟搜索词（「latest stable Rust version 2024」），结果带 `title` / `url` /
+>    `page_age`，搜完接着思考、作答。本项目的 adapter 永远流式，agent 场景落在这一种。
+> 3. **与函数工具同发、非流式**：`web_search` 被丢，模型说「我没有联网搜索工具，只有 get_weather」。
+>
+> **对本项目**：adapter 一处没改。这台中转站自建、没有可识别的主机，行为又按上游渠道（`[kiro…]` 前缀）而非平台变，
+> 放进平台画像只会误伤同一台上的别的渠道；所以只记在这里，给作者的建议是：
+>
+> - **别在这类模型上打开联网搜索**。`anthropicServerTools` 把服务端工具当作模型的常设权限，**连不带工具的请求也发**
+>   （`tools` 档为 `none` 的任务、普通续写），而那类请求正好落进情形 1——作者的续写会被换成一页搜索结果。agent 场景
+>   （带函数工具）能搜，但同一个模型开关管不了「只在 agent 里开」。
+> - **别给它声明 PDF 输入**：`document` 块会被丢，模型答「没看到文件」。图片可以（本项目发 base64）。
+> - 结构化任务（一致性检查、条目拆分…）会比官方多花一轮：强制工具在流式下不生效，`agent/structured.ts` 看到「没有调用」
+>   后退回 JSON 模式重跑。思考类目选「关闭」也救不回来（关思考流式下同样不生效）。
+> - 思考类目选 `claude-adaptive` 可用；力度只有「关闭」（发 `low`）会真的变浅，其余几档等价。
+> - `anthropic_compat` 本来就不发 `cache_control`（`cachesPrompt` 只对官方标准开），在这里恰好是对的：这台只写不读，
+>   打了断点也换不来缓存命中。它报的 `cache_read` 是估算拼出来的，用量页上这部分的缓存价不可信。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
