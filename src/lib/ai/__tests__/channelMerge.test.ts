@@ -81,10 +81,14 @@ describe("planMerge", () => {
   });
 
   it("换渠道的模型不动迁移标记：绑了组的盖章，没绑的沿用原来那一行的", () => {
-    const models = mergeStatements(plan, "mmc").filter((x) => /INTO models/.test(x.sql));
-    expect(models.length).toBeGreaterThan(0);
+    // 夹具里的模型都没绑组；绑上第一个，两条分支都要真的走到。
+    const bound = { ...plan, upserts: plan.upserts.map((m, i) => (i === 0 ? { ...m, feeGroupId: "g1" } : m)) };
+    expect(bound.upserts.some((m) => m.feeGroupId)).toBe(true);
+    expect(bound.upserts.some((m) => !m.feeGroupId)).toBe(true);
+    const models = mergeStatements(bound, "mmc").filter((x) => /INTO models/.test(x.sql));
+    expect(models.length).toBe(bound.upserts.length);
     for (const x of models) {
-      const m = plan.upserts.find((u) => u.id === x.values[0])!;
+      const m = bound.upserts.find((u) => u.id === x.values[0])!;
       const last = x.values[x.values.length - 1];
       if (m.feeGroupId) expect(last).toBe(1);
       else {

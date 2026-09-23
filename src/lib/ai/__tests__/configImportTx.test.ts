@@ -144,6 +144,11 @@ describe("applyConfigImport · fee_migrated", () => {
   it("v3 的包：模型盖章，不管绑没绑组", async () => {
     await applyConfigImport(staged());
     expect(modelRow()).toMatchObject({ fee_group_id: null, fee_migrated: 1 });
+
+    h.invoke.mockClear();
+    const [m] = staged().models;
+    await applyConfigImport(staged({ models: [{ ...m, feeGroupId: "g1" }] }));
+    expect(modelRow()).toMatchObject({ fee_group_id: "g1", fee_migrated: 1 });
   });
 
   it("v2 及更早的包：留 NULL，交给迁移按旧价归组", async () => {
