@@ -8,9 +8,9 @@
    that never strand at a page break when printed.
 
    怎么用 / How to use
-     1. 把这个文件放进主题文件夹：设置 → 通用 → 外观 → 「打开主题文件夹」；
+     1. 把这个文件放进主题文件夹：设置 → 外观 → 「打开主题文件夹」；
         或放进某个项目的 .ai-writer/themes/（只对那个项目生效，随仓库走）。
-        Drop the file in the themes folder (Settings → General → Appearance →
+        Drop the file in the themes folder (Settings → Appearance →
         "Open themes folder"), or in a project's .ai-writer/themes/ (that
         project only; it travels with the repository).
      2. 设置页开着时文件夹是被监听的，卡片自己出现；否则点「重新载入」。

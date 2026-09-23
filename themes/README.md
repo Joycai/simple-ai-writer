@@ -45,8 +45,8 @@ The pairing is not a binding: neither typography theme writes a literal colour �
    Download the `.css` (and the folder of the same name, if there is one).
 2. 放进主题文件夹：
    Put it in a themes folder:
-   - **装机级**：设置 → 通用 → 外观 → **打开主题文件夹**。对这台机器上的所有项目生效。**外观主题只能放这里。**
-     **Installation-level**: Settings → General → Appearance → **Open themes folder**. Applies to every project on this machine. **Appearance themes go here only.**
+   - **装机级**：设置 → 外观 → **打开主题文件夹**。对这台机器上的所有项目生效。**外观主题只能放这里。**
+     **Installation-level**: Settings → Appearance → **Open themes folder**. Applies to every project on this machine. **Appearance themes go here only.**
    - **项目级**：项目根目录下的 `.ai-writer/themes/`，**只收排版主题**。只对这个项目生效，随仓库走；同 id 的项目级主题整份覆盖装机级的。
      **Project-level**: `.ai-writer/themes/` under the project root, **typography themes only**. That project only; travels with the repository; a project theme overrides an installation theme of the same id.
 
@@ -167,8 +167,8 @@ The `--font-*` stacks follow the font scheme in Settings. To bring your own: `@f
 名字里的 `sienna`（赭石）和 `amber`（琥珀）是内置「纸」主题留下的词，读作「唯一强调色」和「第二色」——它们不必是褐色和琥珀色。
 The names `sienna` and `amber` are the built-in Paper theme's words; read them as "the one accent" and "the companion" — they need not be brown and amber.
 
-**别从这张表开始。** 设置 → 通用 → 外观 → **把当前主题导出为文件**，得到的就是一份每个令牌带角色注释的完整 CSS：改几行、改个名、放回文件夹。
-**Don't start from this table.** Settings → General → Appearance → **Export current theme as file** writes a complete CSS with every token annotated with its role: change a few lines, change the name, put it back in the folder.
+**别从这张表开始。** 设置 → 外观 → 主题文件 → **导出**（把当前外观主题导出为文件），得到的就是一份每个令牌带角色注释的完整 CSS：改几行、改个名、放回文件夹。
+**Don't start from this table.** Settings → Appearance → Theme files → **Export** (export the current appearance theme as a file) writes a complete CSS with every token annotated with its role: change a few lines, change the name, put it back in the folder.
 
 **一个数字要自己盯：** `--color-sienna` 同时当 1px 细线、填色按钮和焦点环用，在 `--color-bg-base` 上低于 4.5:1 就有一样东西看不清。这个目录里的样例都过了这条线，`themeExamples.test.ts` 也在盯着。
 **One number to watch:** `--color-sienna` doubles as a hairline, a filled button and the focus ring — under 4.5:1 on `--color-bg-base`, one of the three stops reading. Every sample here clears it, and `themeExamples.test.ts` keeps them there.

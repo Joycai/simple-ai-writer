@@ -83,6 +83,9 @@ export const PREF_KEYS = [
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",
+  // 外观从「通用」搬出来之后，通用页顶的路标与导航上的「新」小框只到作者第一次
+  // 打开外观页为止（设计稿 05m 1n）。首次提示类，跟 pinHintDone 一样只属于这台机器。
+  "app:appearanceSeen",
   // The set of engine built-ins the author was already told this webview
   // lacks (lib/webviewCaps). Machine-local: the engine is the machine's.
   "app:webviewCapsNoticed",
@@ -163,6 +166,7 @@ export const MACHINE_LOCAL_PREF_KEYS: readonly string[] = [
   "app:pinnedProjects",
   "app:projectOpenedAt",
   "app:pinHintDone",
+  "app:appearanceSeen",
   "app:webviewCapsNoticed",
   "manuscript:onboarding-done",
   // Trust in a program on *this* computer — the same name may be a different

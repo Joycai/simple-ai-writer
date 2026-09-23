@@ -161,6 +161,19 @@ describe("sampleDocument — the typography card's frame", () => {
     expect(doc).toContain("<h2>Chapter Three</h2>");
   });
 
+  it("draws a card thumbnail by default and a reading-size page when asked (设置 → 外观 的「此刻」)", () => {
+    const card = sampleDocument(manuscript, "", paper, "light", true);
+    expect(card).toContain("--md-size: 10px;");
+    expect(card.match(/<p>/g)).toHaveLength(1);
+
+    const page = sampleDocument(manuscript, "", paper, "light", true, "song", { size: 13, padding: "20px 34px", long: true });
+    expect(page).toContain("--md-size: 13px;");
+    expect(page).toContain("padding: 20px 34px;");
+    expect(page.match(/<p>/g)).toHaveLength(2);
+    // The second paragraph sits between the first and the quote, as a page reads.
+    expect(page.indexOf("对岸的灯")).toBeLessThan(page.indexOf("<blockquote>"));
+  });
+
   it("escapes the sample text", () => {
     expect(sampleDocument(manuscript, "", paper, "light", true)).not.toMatch(/<script/i);
   });
