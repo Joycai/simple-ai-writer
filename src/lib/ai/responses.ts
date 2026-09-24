@@ -59,6 +59,8 @@ import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
 import { platformResponsesInclude, wireOf } from "./platforms";
+import { hasCapability } from "./capabilities";
+import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -211,11 +213,15 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
   const { instructions, input } = toResponsesInput(opts.messages, opts.modelId);
-  const reasoning = reasoningBody(
-    resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard),
-    opts.reasoningEffort,
-  );
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const reasoning = reasoningBody(category, opts.reasoningEffort);
   const wire = wireOf(opts);
+  // Asked with the relay upstream: behind some, a temperature is rewritten to 1
+  // or fails the request (capabilities.ts UPSTREAM_CAPABILITIES).
+  const capModel = capabilityModelOf(opts);
+  const sendsTemperature = opts.temperature !== undefined
+    && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
+  const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;
   // Not for a model that has no reasoning to encrypt: OpenAI answers that
   // combination with a 400, and xAI's non-reasoning ids were never measured
   // with it — the include buys nothing there and risks the whole route.
@@ -227,8 +233,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   // `text.format` (jsonMode, arriving through extraBody) — merged below so
   // neither erases the other.
   const extraText = (opts.extraBody as { text?: Record<string, unknown> } | undefined)?.text;
-  const text = opts.textVerbosity || extraText
-    ? { ...extraText, ...(opts.textVerbosity ? { verbosity: opts.textVerbosity } : {}) }
+  const text = verbosity || extraText
+    ? { ...extraText, ...(verbosity ? { verbosity } : {}) }
     : undefined;
   const body: Record<string, unknown> = {
     model: opts.modelId,
@@ -238,7 +244,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     store: false,
     // Same `!== undefined` rule as the Chat Completions adapter: 0 is a real
     // value for all three, and an unset one must send nothing.
-    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    ...(sendsTemperature ? { temperature: opts.temperature } : {}),
     ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
     // Function tools first, then the endpoint's built-in ones (web_search /
