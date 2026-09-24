@@ -362,6 +362,12 @@ interface UpstreamCapabilities {
   /** The models the measurements cover. Any other id is treated as having no upstream. */
   models: RegExp;
   /**
+   * Those models' family name as the drawer says it to the author ("only
+   * measured with …"). A product name, the same in every language; held to
+   * `models` by a test so the two cannot drift.
+   */
+  modelsLabel: string;
+  /**
    * Plain `true` / `false` only: the upstream already narrows the models, and
    * a per-id matcher inside it would be a third axis nothing has measured.
    */
@@ -411,7 +417,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    *     sends the tool on tool-less requests too, so it stays off.
    */
   kiro: {
-    models: CLAUDE,
+    models: CLAUDE, modelsLabel: "Claude",
     families: {
       openai: { pdfInput: false, forcedToolChoice: false, structuredOutput: false },
       anthropic: { forcedToolChoice: false, web_search: false },
@@ -429,7 +435,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * Messages does.
    */
   cc: {
-    models: CLAUDE,
+    models: CLAUDE, modelsLabel: "Claude",
     families: {
       openai: { pdfInput: true },
       anthropic: { pdfInput: true, web_search: true },
@@ -444,7 +450,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * thinking-category fact, not a cell.
    */
   anti: {
-    models: CLAUDE,
+    models: CLAUDE, modelsLabel: "Claude",
     families: {
       openai: { pdfInput: false, forcedToolChoice: false },
       anthropic: { forcedToolChoice: false, web_search: false },
@@ -457,7 +463,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * that fails the whole request, not just the tool.
    */
   bedrock: {
-    models: CLAUDE,
+    models: CLAUDE, modelsLabel: "Claude",
     families: {
       openai: { pdfInput: true, forcedToolChoice: true },
       anthropic: { pdfInput: true, forcedToolChoice: true, web_search: false },
@@ -468,7 +474,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * 502 on every request the day the others were probed — so no cell: picking
    * it records that the prefix is classified and changes no verdict.
    */
-  official: { models: CLAUDE, families: {} },
+  official: { models: CLAUDE, modelsLabel: "Claude", families: {} },
   /**
    * ChatGPT accounts behind a relay — the Codex backend (the relay's `[Plus]`,
    * `[Pro]`, `[特价Pro]` tiers on the 第十七个样本 relay; 第八、十个样本 are the
@@ -485,7 +491,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * code interpreter.
    */
   codex: {
-    models: GPT,
+    models: GPT, modelsLabel: "GPT",
     families: {
       openai: { pdfInput: true, forcedToolChoice: true },
       responses: {
@@ -504,7 +510,7 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * there is no guard, so the system prompt goes as a `developer` message.
    */
   azure: {
-    models: GPT,
+    models: GPT, modelsLabel: "GPT",
     families: {
       openai: { pdfInput: true, forcedToolChoice: false, structuredOutput: true, jsonSchema: true },
       responses: {

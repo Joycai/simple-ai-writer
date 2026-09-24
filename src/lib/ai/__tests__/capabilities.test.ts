@@ -368,6 +368,13 @@ describe("relay upstreams", () => {
       }
     });
 
+    it("names its models as its measurements scope them", () => {
+      for (const up of RELAY_UPSTREAMS) {
+        const { models, modelsLabel } = UPSTREAM_CAPABILITIES[up];
+        expect(models.test(modelsLabel.toLowerCase()), up).toBe(true);
+      }
+    });
+
     it("is never inferred from the id", () => {
       for (const modelId of ["[Azure]gpt-5.6-sol", "codex/gpt-5.6-sol", "gpt-5.3-codex"]) {
         expect(capabilityModelOf({ modelId })).toEqual({ modelId });
