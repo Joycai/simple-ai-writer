@@ -2397,8 +2397,8 @@
         "bearer": "Authorization: Bearer",
         "both": "Send both"
       },
-      "apiKeyOptional": "optional for local servers",
-      "apiKeyLocalPlaceholder": "Leave empty for a local server",
+      "apiKeyOptional": "optional for servers on this machine or your network",
+      "apiKeyLocalPlaceholder": "Leave empty for a server on this machine or your network",
       "presetsLabel": "Quick Select",
       "presetStarterModels": "Saving also adds {{count}} models: {{models}}",
       "testConnection": "Test Connection",

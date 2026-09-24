@@ -47,6 +47,39 @@ export function isLocalUrl(url: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url.trim());
 }
 
+/**
+ * True for a server on this machine **or the local network** — loopback, the
+ * RFC 1918 ranges, link-local, CGNAT (Tailscale hands out 100.64/10), IPv6
+ * ULA / link-local, and mDNS `.local` names. The question it answers is "may a
+ * channel here go without an API key" (`keyOptional` in ai/routes.ts): an
+ * Ollama or LM Studio on the desk next to you binds a LAN address and asks for
+ * no key. Deliberately *not* folded into `isLocalUrl`: the Origin rewrite
+ * above is for OLLAMA_ORIGINS on loopback, and widening it would change
+ * requests to LAN hosts that never asked for it.
+ */
+export function isPrivateNetworkUrl(url: string): boolean {
+  if (isLocalUrl(url)) return true;
+  let host: string;
+  try {
+    host = new URL(url.trim()).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host.endsWith(".local")) return true;
+  if (host.startsWith("[")) {
+    const v6 = host.slice(1, -1);
+    return /^f[cd][0-9a-f]{0,2}:/.test(v6) || /^fe[89ab][0-9a-f]?:/.test(v6);
+  }
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 169 && b === 254)
+    || (a === 100 && b >= 64 && b <= 127);
+}
+
 function urlOf(input: RequestInfo | URL): string {
   if (typeof input === "string") return input;
   if (input instanceof URL) return input.href;

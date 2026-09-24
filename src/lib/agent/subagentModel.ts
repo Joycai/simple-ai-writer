@@ -16,7 +16,7 @@ import i18n from "../../i18n";
 import { serverToolsSent } from "../ai/serverTools";
 import { canSeeImages, isAsrOnly, isTranslateOnly, readsPdf, type Model, type Provider } from "../ai/configDb";
 import type { AiConn } from "../ai/conn";
-import { providerFor } from "../ai/routes";
+import { keyOptional, providerFor } from "../ai/routes";
 import type { TaskPreset } from "./presets";
 
 export type SubAgentKind =
@@ -280,10 +280,11 @@ export async function resolveSubAgentConn(
   if (!provider) {
     return { error: `Provider for ${kind} subagent not found.` };
   }
-  const apiKey = await loadKey(provider.id);
-  // Not defaulted to "": an empty key produces a 401 the parent model reads as
-  // "the subagent is broken", when the actual fix is to paste a key. Say which.
-  if (!apiKey) {
+  const apiKey = (await loadKey(provider.id)) ?? "";
+  // Not defaulted to "" on a keyed channel: an empty key produces a 401 the
+  // parent model reads as "the subagent is broken", when the actual fix is to
+  // paste a key. Say which. A local server (`keyOptional`) never had one.
+  if (!apiKey && !keyOptional(provider)) {
     return {
       error: `No API key stored for the provider serving the ${kind} subagent ("${provider.name}"). Tell the author to add it in Settings → Providers.`,
     };
@@ -323,9 +324,10 @@ export async function resolveVisionConn(
   }
   const provider = providerFor(activeModel, providers);
   if (!provider) return { error: i18n.t("ai.errors.providerNotFound") };
-  const apiKey = await loadKey(provider.id);
-  // Never "": a keyless request comes back 401 and reads as a broken feature
-  // rather than as an unset credential. Same rule as resolveSubAgentConn.
-  if (!apiKey) return { error: i18n.t("ai.errors.noApiKey", { provider: provider.name }) };
+  const apiKey = (await loadKey(provider.id)) ?? "";
+  // Never "" on a keyed channel: a keyless request comes back 401 and reads as
+  // a broken feature rather than as an unset credential. Same rule as
+  // resolveSubAgentConn, local servers excepted the same way.
+  if (!apiKey && !keyOptional(provider)) return { error: i18n.t("ai.errors.noApiKey", { provider: provider.name }) };
   return { provider, model: activeModel, apiKey };
 }

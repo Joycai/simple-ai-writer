@@ -274,6 +274,19 @@ describe("subagent", () => {
       );
       expect("error" in ok).toBe(false);
     });
+
+    it("lets a local server go without a key", async () => {
+      // Ollama / LM Studio on this machine or the LAN have no key to paste, so
+      // "add a key" would be advice the author cannot follow.
+      for (const local of [
+        { ...dummyProvider, baseUrl: "http://192.168.2.206:1234/v1", platform: "custom" as const },
+        { ...dummyProvider, baseUrl: "http://gpu-box.example:11434/v1", platform: "ollama" as const },
+      ]) {
+        const res = await resolveSubAgentConn("search", [dummySearchModel], [local], defaultSubs, async () => null);
+        expect("error" in res).toBe(false);
+        expect((res as { apiKey: string }).apiKey).toBe("");
+      }
+    });
   });
 
   describe("resolveVisionConn", () => {
@@ -324,6 +337,12 @@ describe("subagent", () => {
         ALL_MODELS, [dummyProvider], "m-vision", NO_SUBS, vi.fn(async () => null),
       );
       expect("error" in res).toBe(true);
+    });
+
+    it("lets a local server go without a key", async () => {
+      const local = { ...dummyProvider, baseUrl: "http://localhost:11434/v1", platform: "ollama" as const };
+      const res = await resolveVisionConn(ALL_MODELS, [local], "m-vision", NO_SUBS, vi.fn(async () => null));
+      expect("error" in res).toBe(false);
     });
   });
 

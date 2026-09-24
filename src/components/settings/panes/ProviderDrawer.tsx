@@ -22,7 +22,7 @@ import {
 } from "../../../lib/ai/platforms";
 import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
 import {
-  activeFamily, channelEndpoints, channelHost, endpointBaseUrl, newChannelEndpoints, normalizeChannel,
+  activeFamily, channelEndpoints, channelHost, endpointBaseUrl, keyOptional, newChannelEndpoints, normalizeChannel,
   ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
 } from "../../../lib/ai/routes";
 import { SERVER_TOOL_IDS } from "../../../lib/ai/serverTools";
@@ -202,11 +202,6 @@ const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
 const isOfficialPlatform = (p: PlatformId): boolean =>
   platformEndpoints(p).every((e) => e.official);
 
-/** A server on the local machine (Ollama, LM Studio) — these need no API key. */
-function isLocalEndpoint(url: string): boolean {
-  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url.trim());
-}
-
 /** The request one route's chat call actually goes to — the adapters' own URL functions (§5.1.1). */
 function requestUrl(ep: Endpoint, base: string): string {
   const b = base || defaultBaseFor(standardOf(ep));
@@ -350,7 +345,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
     upstreamPrefixes: parseUpstreamPrefixes(form.upstreamPrefixes),
     createdAt: existing?.createdAt ?? 0,
   });
-  const keyRequired = !comfyMode && !isLocalEndpoint(draft.host ?? "");
+  const keyRequired = !comfyMode && !keyOptional(draft);
   const offered: ProtocolFamily[] = ROUTE_FAMILIES.filter((f) =>
     platformEndpoints(form.platform).some((e) => e.family === f) || form.endpoints.some((e) => e.family === f));
   /** Models on this channel that take `family` as their route — a route in use can't be switched off. */

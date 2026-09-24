@@ -2389,8 +2389,8 @@
         "both": "两个都发"
       },
       "authModeHint": "Anthropic 有两套约定：文档让你设 ANTHROPIC_AUTH_TOKEN 的网关要 Bearer，设 ANTHROPIC_API_KEY 的要 x-api-key。遇到 401 就换另一个试试。",
-      "apiKeyOptional": "本地服务可留空",
-      "apiKeyLocalPlaceholder": "本地服务留空即可",
+      "apiKeyOptional": "本机或局域网服务可留空",
+      "apiKeyLocalPlaceholder": "本机或局域网服务留空即可",
       "presetsLabel": "快速选择",
       "presetStarterModels": "保存后会顺带添加 {{count}} 个模型：{{models}}",
       "testConnection": "测试连接",

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import type { Model, Provider } from "../configDb";
 import { readChannel } from "../configDb";
 import {
-  activeFamily, channelEndpoints, dropModelRoute, endpointBaseUrl, legacyEndpoint, modelRouteFamilies,
+  activeFamily, channelEndpoints, dropModelRoute, endpointBaseUrl, keyOptional, legacyEndpoint, modelRouteFamilies,
   newChannelEndpoints, normalizeChannel, parseEndpoints, parseRouteProfiles, providerFor, routeProfileOf,
   routeProvider, splitBaseUrl, standardOf, switchModelRoute,
 } from "../routes";
@@ -241,5 +241,28 @@ describe("invariant 6: a carry does not cross families", () => {
       "_responseItems" in m ? { ...m, _responseItems: undefined } : m), "same");
     expect(JSON.stringify(input)).not.toContain("signature");
     expect(input.some((i) => i.type === "function_call")).toBe(true);
+  });
+});
+
+describe("keyOptional: which channels may go without an API key", () => {
+  it("an Ollama channel, whatever its host", () => {
+    expect(keyOptional(legacy("http://192.168.2.206:11434/v1", "openai_compat", { platform: "ollama" }))).toBe(true);
+    expect(keyOptional(legacy("https://ollama.example.com/v1", "openai_compat", { platform: "ollama" }))).toBe(true);
+  });
+
+  it("any platform whose every route is on this machine or the LAN (LM Studio as custom)", () => {
+    expect(keyOptional(legacy("http://192.168.2.206:1234/v1", "openai_compat", { platform: "custom" }))).toBe(true);
+    expect(keyOptional(legacy("http://localhost:1234/v1", "openai_compat", { platform: "custom" }))).toBe(true);
+  });
+
+  it("not a public host, nor an official vendor route", () => {
+    expect(keyOptional(legacy("https://relay.example/v1", "openai_compat", { platform: "newapi" }))).toBe(false);
+    expect(keyOptional(legacy("", "openai"))).toBe(false);
+  });
+
+  it("not when one route leaves the LAN by an absolute override", () => {
+    const ch = normalizeChannel(legacy("http://192.168.2.206:1234/v1", "openai_compat", { platform: "custom" }));
+    ch.endpoints = [...channelEndpoints(ch), { family: "anthropic", official: false, path: "https://api.example.com" }];
+    expect(keyOptional(ch)).toBe(false);
   });
 });
