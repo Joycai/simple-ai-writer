@@ -1307,7 +1307,7 @@ export function FileTree() {
 
   /**
    * 交给系统默认程序（`open_with_default_app`，围栏在 Rust 侧）。同样先 flush——外部
-   * 程序读的是磁盘；失败要看得见，不学 `reveal` 的静默：右键点了却什么都没发生，
+   * 程序读的是磁盘；失败要看得见（`reveal` 同理）：右键点了却什么都没发生，
    * 作者分不清是没关联程序还是应用没反应。
    */
   const handleOpenExternal = async (node: FileNode) => {
@@ -1561,8 +1561,15 @@ export function FileTree() {
     void useAgentStore.getState().sendChat(t("fileTree.folderNotePrompt", { name: node.name, path: node.path }));
   };
 
+  /**
+   * 在系统文件浏览器里显示。失败和「用默认应用打开」同一个横幅：路径刚被外面删掉、
+   * 文件管理器起不来——右键点了却什么都没发生，作者分不清是哪一种。
+   */
   const reveal = (path: string) => {
-    revealItemInDir(path).catch(() => { /* best-effort */ });
+    revealItemInDir(path).catch((err) => {
+      console.error("[fileTree] reveal failed:", err);
+      setTransferError(`${t("fileTree.revealFailed", { name: baseName(path) })} ${err instanceof Error ? err.message : String(err)}`);
+    });
   };
 
   const copyPath = (path: string) => {

@@ -3748,6 +3748,7 @@
     "previewHtml": "Open in preview window",
     "previewFailed": "Could not open a preview window for \"{{name}}\":",
     "openExternalFailed": "Could not open \"{{name}}\" with the default app:",
+    "revealFailed": "Could not reveal \"{{name}}\" in the file explorer:",
     "exportPptx": "Export as PPTX",
     "exportingPptx": "Exporting \"{{name}}\" as slides…",
     "exportedPptx": "Exported \"{{name}}\" — {{count}} slides",

@@ -3739,6 +3739,7 @@
     "previewHtml": "在预览窗口打开",
     "previewFailed": "打开「{{name}}」的预览窗口失败：",
     "openExternalFailed": "用默认应用打开「{{name}}」失败：",
+    "revealFailed": "在文件浏览器中显示「{{name}}」失败：",
     "exportPptx": "导出为 PPTX",
     "exportingPptx": "正在把「{{name}}」导出为幻灯…",
     "exportedPptx": "已导出「{{name}}」，共 {{count}} 页",
