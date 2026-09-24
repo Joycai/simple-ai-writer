@@ -72,7 +72,7 @@ describe("formatToolArgsDetail", () => {
 
 describe("formatToolResult", () => {
   it("collapses a multi-line result onto one clipped line", () => {
-    const raw = "# 番外篇：战败魔法少女\n\n耳边传来水声，随后是冰冷的触感。渚悠悠醒来。";
+    const raw = "# 番外篇：码头雨夜重逢\n\n耳边传来水声，随后是冰冷的触感。沈舟悠悠醒来。";
     const out = formatToolResult(raw);
     expect(out).not.toContain("\n");
     expect(out.startsWith("番外篇")).toBe(true);

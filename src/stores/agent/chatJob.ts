@@ -618,7 +618,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
         const loreIdx = useLoreStore.getState().index;
         const { loreBudgetTokens } = useAppStore.getState();
         // Same expansion as the seed, per turn: the question changes every
-        // turn, and 「那根杖呢」 is exactly the sort of turn whose words reach
+        // turn, and 「那只罗盘呢」 is exactly the sort of turn whose words reach
         // nothing on their own.
         const turnTerms = await expandForRetrieval(matchText, controller.signal);
         const inj = await assembleTurnInjection({

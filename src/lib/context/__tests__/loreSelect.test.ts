@@ -559,7 +559,7 @@ describe("rankAutoMatches — 上限砍谁", () => {
   const m = (dirPath: string, ...terms: string[]) => ({ dirPath, terms });
 
   it("长命中词排在短命中词前面", () => {
-    const out = rankAutoMatches([m("/a", "渚"), m("/b", "星辉之杖")]);
+    const out = rankAutoMatches([m("/a", "沈舟"), m("/b", "青铜罗盘")]);
     expect(out.map((x) => x.dirPath)).toEqual(["/b", "/a"]);
   });
 
@@ -626,8 +626,8 @@ describe("selectLore — 自动匹配上限", () => {
 
 describe("collectCiteTargets", () => {
   it("收集全部 [[lore:…]] 目标，去重、保序、剥掉显示文字", () => {
-    expect(collectCiteTargets("她握着 [[lore:星辉之杖|那根杖]]，又想起 [[lore:魔法结社]]。再提一次 [[lore:星辉之杖]]。"))
-      .toEqual(["星辉之杖", "魔法结社"]);
+    expect(collectCiteTargets("她握着 [[lore:青铜罗盘|那只罗盘]]，又想起 [[lore:听潮阁]]。再提一次 [[lore:青铜罗盘]]。"))
+      .toEqual(["青铜罗盘", "听潮阁"]);
   });
 
   it("与渲染器一致：body 里的单个 ] 合法，第一个 ]] 收口", () => {
@@ -648,66 +648,66 @@ describe("collectCiteTargets", () => {
 });
 
 describe("selectLore — 引用扩展", () => {
-  const STAFF = "/proj/.ai-writer/lore/items/staff";
+  const COMPASS = "/proj/.ai-writer/lore/items/compass";
   const GUILD = "/proj/.ai-writer/lore/items/guild";
 
-  /** Aria 引用星辉之杖；星辉之杖再引用魔法结社（用来验证只走一跳）。 */
+  /** Aria 引用青铜罗盘；青铜罗盘再引用听潮阁（用来验证只走一跳）。 */
   function refIndex(): LoreIndex {
     const index = makeIndex();
     index.items = [
-      entity({ dirPath: STAFF, category: "items", name: "星辉之杖", summary: "变身时召唤的法杖" }),
-      entity({ dirPath: GUILD, category: "items", name: "魔法结社", summary: "掌管法杖的组织" }),
+      entity({ dirPath: COMPASS, category: "items", name: "青铜罗盘", summary: "潜入时辨认暗道的罗盘" }),
+      entity({ dirPath: GUILD, category: "items", name: "听潮阁", summary: "铸造罗盘的门派" }),
     ];
-    index.characters[0].refs = ["星辉之杖"];
-    index.items[0].refs = ["魔法结社"];
-    files.set(STAFF + "/index.md", "杖身刻着星图。");
-    files.set(GUILD + "/index.md", "结社在旧城的地下。");
+    index.characters[0].refs = ["青铜罗盘"];
+    index.items[0].refs = ["听潮阁"];
+    files.set(COMPASS + "/index.md", "盘面刻着星图。");
+    files.set(GUILD + "/index.md", "听潮阁在旧城的地下。");
     return index;
   }
 
   it("命中的条目所引用的条目跟着进来，但只给摘要", async () => {
     const { text, report } = await selectLore("Aria walked in.", refIndex(), []);
-    expect(text).toContain("## 星辉之杖");
-    expect(text).toContain("变身时召唤的法杖");
+    expect(text).toContain("## 青铜罗盘");
+    expect(text).toContain("潜入时辨认暗道的罗盘");
     // 正文不给——这是「提醒它存在」，不是「把它讲一遍」。
-    expect(text).not.toContain("杖身刻着星图。");
-    const staff = report.entities.find((e) => e.name === "星辉之杖")!;
-    expect(staff.reason).toBe("ref");
-    expect(staff.refFrom).toBe("Aria");
-    expect(staff.layers.map((l) => l.kind)).toEqual(["summary"]);
+    expect(text).not.toContain("盘面刻着星图。");
+    const compass = report.entities.find((e) => e.name === "青铜罗盘")!;
+    expect(compass.reason).toBe("ref");
+    expect(compass.refFrom).toBe("Aria");
+    expect(compass.layers.map((l) => l.kind)).toEqual(["summary"]);
   });
 
   it("只走一跳：被引用条目自己的引用不再展开", async () => {
     const { text, report } = await selectLore("Aria walked in.", refIndex(), []);
-    expect(text).not.toContain("魔法结社");
-    expect(report.entities.some((e) => e.name === "魔法结社")).toBe(false);
+    expect(text).not.toContain("听潮阁");
+    expect(report.entities.some((e) => e.name === "听潮阁")).toBe(false);
   });
 
   it("引用带入的条目不激活任何特征，连 always 的也不", async () => {
     const index = refIndex();
-    index.items[0].facets = [facet({ file: "voice.md", title: "杖语", mode: "always" })];
-    files.set(STAFF + "/voice.md", "---\nfacet: 杖语\n---\n杖会低声说话。");
+    index.items[0].facets = [facet({ file: "voice.md", title: "器灵", mode: "always" })];
+    files.set(COMPASS + "/voice.md", "---\nfacet: 器灵\n---\n罗盘会低声说话。");
     const { text } = await selectLore("Aria walked in.", index, []);
-    expect(text).not.toContain("杖会低声说话。");
+    expect(text).not.toContain("罗盘会低声说话。");
   });
 
   it("引用排在直接命中之后：预算不够时先牺牲引用", async () => {
     const index = refIndex();
-    // 只装得下 Aria 的头/摘要/正文，装不下杖。
+    // 只装得下 Aria 的头/摘要/正文，装不下罗盘。
     const budget = "## Aria".length + 1 + "> 北境骑士团副团长".length + 1
       + "Aria is a bard.".length + 1 + "Speaks tersely.".length + 12;
     const { text, report } = await selectLore("Aria walked in.", index, [], budget);
     expect(text).toContain("Aria is a bard.");
-    expect(text).not.toContain("变身时召唤的法杖");
+    expect(text).not.toContain("潜入时辨认暗道的罗盘");
     // 仍然被选中、仍然出现在报告里——只是没贡献正文。
-    expect(report.entities.find((e) => e.name === "星辉之杖")?.layers).toEqual([]);
+    expect(report.entities.find((e) => e.name === "青铜罗盘")?.layers).toEqual([]);
   });
 
   it("已经直接命中的条目不会被重复算成引用", async () => {
-    const { report } = await selectLore("Aria and 星辉之杖", refIndex(), []);
-    const staff = report.entities.filter((e) => e.name === "星辉之杖");
-    expect(staff).toHaveLength(1);
-    expect(staff[0].reason).toBe("auto");
+    const { report } = await selectLore("Aria and 青铜罗盘", refIndex(), []);
+    const compass = report.entities.filter((e) => e.name === "青铜罗盘");
+    expect(compass).toHaveLength(1);
+    expect(compass[0].reason).toBe("auto");
   });
 
   it("取材范围挡得住引用，但挡不住置顶", async () => {
@@ -715,19 +715,19 @@ describe("selectLore — 引用扩展", () => {
     index.characters[0].collections = ["卷一"];
     index.items[0].collections = ["卷二"];
     const fenced = await selectLore("Aria walked in.", index, [], undefined, { scope: ["卷一"] });
-    expect(fenced.text).not.toContain("变身时召唤的法杖");
+    expect(fenced.text).not.toContain("潜入时辨认暗道的罗盘");
     expect(fenced.report.refOutOfScope).toBe(1);
     // 围栏挡的是自动发现；作者亲手置顶的照进不误。
-    const pinned = await selectLore("Aria walked in.", index, [STAFF], undefined, { scope: ["卷一"] });
-    expect(pinned.text).toContain("变身时召唤的法杖");
-    expect(pinned.report.entities.find((e) => e.name === "星辉之杖")?.reason).toBe("pinned");
+    const pinned = await selectLore("Aria walked in.", index, [COMPASS], undefined, { scope: ["卷一"] });
+    expect(pinned.text).toContain("潜入时辨认暗道的罗盘");
+    expect(pinned.report.entities.find((e) => e.name === "青铜罗盘")?.reason).toBe("pinned");
   });
 
   it("已在上下文里的条目不重复带入，也不记成丢弃", async () => {
     const { report } = await selectLore("Aria walked in.", refIndex(), [], undefined, {
-      excludeDirs: new Set([STAFF]),
+      excludeDirs: new Set([COMPASS]),
     });
-    expect(report.entities.some((e) => e.name === "星辉之杖")).toBe(false);
+    expect(report.entities.some((e) => e.name === "青铜罗盘")).toBe(false);
     expect(report.refCapped).toBeUndefined();
     expect(report.refOutOfScope).toBeUndefined();
   });
@@ -750,9 +750,9 @@ describe("selectLore — 引用扩展", () => {
 
   it("解析不出来的引用目标静默跳过，不占名额", async () => {
     const index = refIndex();
-    index.characters[0].refs = ["打错的名字", "星辉之杖"];
+    index.characters[0].refs = ["打错的名字", "青铜罗盘"];
     const { report } = await selectLore("Aria walked in.", index, []);
-    expect(report.entities.some((e) => e.name === "星辉之杖")).toBe(true);
+    expect(report.entities.some((e) => e.name === "青铜罗盘")).toBe(true);
     expect(report.refCapped).toBeUndefined();
   });
 
