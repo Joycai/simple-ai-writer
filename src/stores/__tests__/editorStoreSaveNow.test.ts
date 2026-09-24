@@ -1,11 +1,16 @@
 /**
- * editorStore.saveNow — must cancel the real pending timer, not just the
- * `saveTimer` state field that mirrors it (Phase 4 fix). projectStore's
- * moveEntry calls editor.saveNow() directly to flush before a rename,
- * without clearing the timer first; without this fix the still-armed
- * setTimeout fires later regardless, writing stale content to wherever
- * `filePath` has drifted to by then — e.g. recreating a just-moved file at
- * its old location.
+ * editorStore.saveNow.
+ *
+ * 1. It must cancel the real pending timer, not just the `saveTimer` state
+ *    field that mirrors it (Phase 4 fix). projectStore's moveEntry calls
+ *    editor.saveNow() directly to flush before a rename, without clearing the
+ *    timer first; without this fix the still-armed setTimeout fires later
+ *    regardless, writing stale content to wherever `filePath` has drifted to
+ *    by then — e.g. recreating a just-moved file at its old location.
+ * 2. Settling after the async write describes the state *after* it: a
+ *    keystroke mid-write stays dirty with its timer tracked, a reload or
+ *    another file's edits made meanwhile are left alone, and a buffer that
+ *    ends up equal to what was written is clean with no live timer.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +29,7 @@ vi.mock("../../lib/fs/fileio", () => ({
 
 import { useEditorStore } from "../editorStore";
 
-describe("editorStore.saveNow — cancels the real timer", () => {
+describe("editorStore.saveNow", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useEditorStore.setState({
@@ -104,6 +109,21 @@ describe("editorStore.saveNow — cancels the real timer", () => {
     finish();
     await saving;
     expect(useEditorStore.getState().isDirty).toBe(true);
+  });
+
+  it("a keystroke and its undo during the write settle clean, with that timer cancelled", async () => {
+    let finish!: () => void;
+    h.writeFile.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    useEditorStore.getState().setContent("C");
+    const saving = useEditorStore.getState().saveNow();
+    useEditorStore.getState().setContent("Cx");
+    useEditorStore.getState().setContent("C"); // back to what is being written
+    finish();
+    await saving;
+    expect(useEditorStore.getState().isDirty).toBe(false);
+    expect(useEditorStore.getState().saveTimer).toBeNull();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(h.writeFile).toHaveBeenCalledTimes(1); // no late rewrite
   });
 
   it("an unchanged buffer settles clean", async () => {

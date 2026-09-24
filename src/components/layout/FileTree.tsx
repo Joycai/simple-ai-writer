@@ -14,7 +14,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
 import { FOLDER_NOTE_FILE, folderNoteTemplate, isFolderNoteFile } from "../../lib/fs/folderNote";
 import { fileExists, openWithDefaultApp, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
-import { beginConvert, endConvert } from "./convertJobs";
+import { beginConvert, convertBlocker, endConvert, getConvertJobs } from "./convertJobs";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -1172,9 +1172,13 @@ export function FileTree() {
   const handleConvert = async (node: FileNode) => {
     if (busy) return;
     // 与顶栏的「转换文档」共用一份占位（convertJobs）：同一文件夹里两次并发的转换
-    // 会挑中同一个目标名，互相覆盖。被占着时说一句，不静默。
-    if (!beginConvert(node.path)) {
-      setTransferError(t("fileTree.convertBusy", { name: node.name }));
+    // 会挑中同一个目标名，互相覆盖。被占着时说一句，不静默——占着的可能正是它自己
+    // （顶栏上刚点过），那就不说「另一份」。
+    const blocker = convertBlocker(getConvertJobs(), node.path);
+    if (blocker || !beginConvert(node.path)) {
+      setTransferError(blocker && !isSamePath(blocker, node.path)
+        ? t("fileTree.convertBusy", { name: baseName(blocker) })
+        : t("fileTree.convertAlready", { name: node.name }));
       return;
     }
     setBusy({ path: node.path, text: t("fileTree.converting", { name: node.name }) });

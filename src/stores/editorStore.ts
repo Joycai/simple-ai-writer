@@ -153,7 +153,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       await writeFile(filePath, content);
       const cur = get();
       const wroteWhatIsThere = cur.filePath === filePath && cur.content === content;
-      set({ isDirty: cur.isDirty && !wroteWhatIsThere, saveTimer: settle() });
+      // What's on disk is exactly the buffer, so a timer armed mid-write (a
+      // keystroke and its undo) could only write the same text again — later,
+      // possibly over something that rewrote the file in between (relinkAssets
+      // flushes only a *dirty* buffer). Clean means no live timer.
+      if (wroteWhatIsThere && cur.saveTimer && cur.saveTimer !== saveTimer) clearTimeout(cur.saveTimer);
+      set({
+        isDirty: cur.isDirty && !wroteWhatIsThere,
+        saveTimer: wroteWhatIsThere ? null : settle(),
+      });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next
       // edit/flush retries the write — clearing it would silently drop the draft.
