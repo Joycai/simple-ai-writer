@@ -148,7 +148,9 @@ export function HtmlPreview({ source, filePath }: Props) {
   // button's own label turns into the short word for FEEDBACK_MS — the same
   // receipt the title bar's buttons give — so a click that went nowhere (no
   // associated app, file gone, outside the scope fence) is never silent.
-  const [openError, setOpenError] = useState<{ via: "window" | "browser"; text: string } | null>(null);
+  // Recorded with its path: this pane stays mounted when the editor moves to
+  // another .html, and one file's failure must not show on the next one's.
+  const [openError, setOpenError] = useState<{ via: "window" | "browser"; path: string; text: string } | null>(null);
   const openErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (openErrorTimer.current) clearTimeout(openErrorTimer.current); }, []);
 
@@ -159,21 +161,29 @@ export function HtmlPreview({ source, filePath }: Props) {
   const openVia = async (via: "window" | "browser") => {
     if (!filePath) return;
     setOpenError(null);
+    const name = baseName(filePath);
+    // Which step failed decides the sentence: a failed save is not a failed
+    // open, and "no app for .html" would send the author looking in the
+    // wrong place when the disk refused the write.
+    let saved = false;
     try {
       await flushIfDirty(filePath);
+      saved = true;
       await (via === "window" ? previewHtmlWindow : openWithDefaultApp)(filePath);
     } catch (e) {
       console.error("[HtmlPreview] open failed:", e);
-      const name = baseName(filePath);
-      const lead = via === "window"
-        ? t("fileTree.previewFailed", { name })
-        : t("fileTree.openExternalFailed", { name });
-      setOpenError({ via, text: `${lead} ${e instanceof Error ? e.message : String(e)}` });
+      const lead = !saved
+        ? t("editor.htmlPreview.saveFailed", { name })
+        : via === "window"
+          ? t("fileTree.previewFailed", { name })
+          : t("fileTree.openExternalFailed", { name });
+      setOpenError({ via, path: filePath, text: `${lead} ${e instanceof Error ? e.message : String(e)}` });
       if (openErrorTimer.current) clearTimeout(openErrorTimer.current);
       openErrorTimer.current = setTimeout(() => setOpenError(null), FEEDBACK_MS);
     }
   };
-  const failedVia = (via: "window" | "browser") => (openError?.via === via ? openError.text : null);
+  const failedVia = (via: "window" | "browser") =>
+    openError?.via === via && isSamePath(openError.path, filePath) ? openError.text : null;
 
   /**
    * Export the page as a deck. The file is read off disk by the converter, so

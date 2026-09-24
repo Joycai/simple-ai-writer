@@ -397,6 +397,8 @@
   text-underline-offset: 2px;
 }
 .traceError { border-top-color: var(--color-error); color: var(--color-error); }
+/* 「已写入」那条痕迹上追加的失败：只有这一句变色，痕迹本身仍是成功的那一条。 */
+.traceErrorText { color: var(--color-error); }
 
 /* ── 容器查询：一律放在文件末尾 ───────────────────────────────────────────
    容器查询不抬特异性，和前面同特异性的基础规则打平时由源码顺序定胜负。

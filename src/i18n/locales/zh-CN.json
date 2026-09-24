@@ -398,6 +398,7 @@
       "apiLogLabel": "API 调用日志",
       "apiLogHint": "开启后，每次 AI 请求的内容、响应和错误都会记录到本地日志文件（不含 API Key），方便排查问题。",
       "openApiLogs": "打开日志目录",
+      "openApiLogsFailed": "打开日志目录失败：{{error}}",
       "paneSub": "语言、通知与本地数据",
       "apiLogLocation": "日志保存在本地目录"
     },
@@ -490,7 +491,7 @@
       "exported": "已写入 {{file}}",
       "openFolder": "打开文件夹",
       "exportFailed": "导出失败：{{error}}",
-      "revealFailed": "已写入 {{file}}，但打开所在文件夹失败：{{error}}",
+      "revealFailed": "打开所在文件夹失败：{{error}}",
       "fontManuscript": "手稿",
       "fontSong": "宋体书卷",
       "fontHei": "黑体清晰",
@@ -952,7 +953,8 @@
       "pptxBusy": "导出中…",
       "pptxDone": "{{n}} 页 → {{name}}",
       "pptxFailed": "导出失败",
-      "openFailed": "打开失败"
+      "openFailed": "打开失败",
+      "saveFailed": "先保存「{{name}}」失败，没有打开："
     },
     "noHeadings": "暂无标题",
     "imageLoadError": "无法加载此图片",

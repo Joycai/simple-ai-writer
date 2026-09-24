@@ -54,4 +54,35 @@ describe("editorStore.saveNow — cancels the real timer", () => {
     await vi.advanceTimersByTimeAsync(2500);
     expect(h.writeFile).toHaveBeenCalledTimes(1);
   });
+
+  it("a keystroke during the write keeps the buffer dirty and its new timer tracked", async () => {
+    // Hold the write open so the author can type while it is in flight.
+    let finish!: () => void;
+    h.writeFile.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+
+    useEditorStore.getState().setContent("A");
+    const saving = useEditorStore.getState().saveNow(); // writes "A"
+    useEditorStore.getState().setContent("AB");         // typed mid-write
+    const newTimer = useEditorStore.getState().saveTimer;
+    expect(newTimer).not.toBeNull();
+
+    finish();
+    await saving;
+
+    // "AB" never reached disk: still dirty, and the timer that will write it
+    // is still the one on record (not orphaned as null).
+    expect(useEditorStore.getState().isDirty).toBe(true);
+    expect(useEditorStore.getState().saveTimer).toBe(newTimer);
+
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(h.writeFile).toHaveBeenLastCalledWith("/proj/writing/a.md", "AB");
+    expect(useEditorStore.getState().isDirty).toBe(false);
+    expect(useEditorStore.getState().saveTimer).toBeNull();
+  });
+
+  it("an unchanged buffer settles clean", async () => {
+    useEditorStore.getState().setContent("same");
+    await useEditorStore.getState().saveNow();
+    expect(useEditorStore.getState().isDirty).toBe(false);
+  });
 });

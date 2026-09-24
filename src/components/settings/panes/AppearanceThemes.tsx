@@ -539,8 +539,14 @@ function ReloadLink() {
 
 type Trace =
   | { kind: "reloaded"; text: string }
-  | { kind: "exported"; fileName: string; dir: string; path: string }
-  | { kind: "error"; text: string };
+  /** `revealError`: the file was written, only 「打开文件夹」 failed — said on the same trace. */
+  | { kind: "exported"; fileName: string; dir: string; path: string; revealError?: string }
+  /**
+   * `source` decides what a watcher reload may replace: a failed *reload* is
+   * answered by a successful one (the error would now be false), a failed
+   * folder-open or export is not — the reload says nothing about those.
+   */
+  | { kind: "error"; source: "reload" | "action"; text: string };
 
 export function ThemeFiles() {
   const { t, i18n } = useTranslation();
@@ -593,14 +599,16 @@ export function ThemeFiles() {
 
   // The watcher's reloads leave the same trace the button does — unless a
   // sticky trace is up: the export's 「打开文件夹」 must not vanish under the
-  // very reload that export just caused, and an error must not be wiped by a
-  // reload the author didn't ask for (they'd never learn what failed).
+  // very reload that export just caused, and a failed folder-open or export
+  // must not be wiped by a reload the author didn't ask for (they'd never
+  // learn what failed). A failed *reload* is the exception: a successful one
+  // makes that error untrue, so it gives way.
   const lastAuto = useRef(0);
   useEffect(() => {
     if (!autoReload || autoReload.seq === lastAuto.current) return;
     lastAuto.current = autoReload.seq;
     setTrace((cur) => {
-      if (cur?.kind === "exported" || cur?.kind === "error") return cur;
+      if (cur?.kind === "exported" || (cur?.kind === "error" && cur.source === "action")) return cur;
       clearTimers();
       setLeaving(false);
       timers.current.push(
@@ -616,7 +624,7 @@ export function ThemeFiles() {
     try {
       await revealItemInDir(await ensureDir());
     } catch (e) {
-      showSticky({ kind: "error", text: String(e) });
+      showSticky({ kind: "error", source: "action", text: String(e) });
     }
   };
 
@@ -625,7 +633,7 @@ export function ThemeFiles() {
       const diff = await reload(isZh);
       showFading({ kind: "reloaded", text: diffLine(diff, false) });
     } catch (e) {
-      showSticky({ kind: "error", text: String(e) });
+      showSticky({ kind: "error", source: "reload", text: String(e) });
     }
   };
 
@@ -637,19 +645,21 @@ export function ThemeFiles() {
       const { fileName, path } = await exportThemeToFolder(current, dir, TOKEN_CONTRACT, isZh);
       showSticky({ kind: "exported", fileName, dir, path });
     } catch (e) {
-      showSticky({ kind: "error", text: t("systemSettings.appearance.exportFailed", { error: String(e) }) });
+      showSticky({ kind: "error", source: "action", text: t("systemSettings.appearance.exportFailed", { error: String(e) }) });
     }
   };
 
-  // The exported trace's 「打开文件夹」. A failure replaces the trace with an
-  // error that still says the file was written — the export succeeded, only
-  // the reveal didn't, and the author must not read it as a failed export.
-  const revealExported = async (fileName: string, path: string) => {
+  // The exported trace's 「打开文件夹」. A failure is added *to* that trace
+  // rather than replacing it: the export succeeded, and the author keeps the
+  // folder's path and the link to try again.
+  const revealExported = async (path: string) => {
+    setTrace((cur) => (cur?.kind === "exported" && cur.revealError ? { ...cur, revealError: undefined } : cur));
     try {
       await revealItemInDir(path);
     } catch (e) {
       console.error("[AppearanceThemes] reveal exported theme failed:", e);
-      showSticky({ kind: "error", text: t("systemSettings.appearance.revealFailed", { file: fileName, error: String(e) }) });
+      const revealError = t("systemSettings.appearance.revealFailed", { error: e instanceof Error ? e.message : String(e) });
+      setTrace((cur) => (cur?.kind === "exported" && cur.path === path ? { ...cur, revealError } : cur));
     }
   };
 
@@ -691,10 +701,11 @@ export function ThemeFiles() {
               <button
                 type="button"
                 className={s.traceLink}
-                onClick={() => void revealExported(trace.fileName, trace.path)}
+                onClick={() => void revealExported(trace.path)}
               >
                 {t("systemSettings.appearance.openFolder")}
               </button>
+              {trace.revealError && <span className={s.traceErrorText} role="alert">{trace.revealError}</span>}
             </>
           )}
         </div>

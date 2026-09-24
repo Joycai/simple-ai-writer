@@ -36,6 +36,8 @@ export function GeneralPane({ onEscapeInterceptChange, showMovedHint, onOpenAppe
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
   const [notifyError, setNotifyErrorOn] = useState(isNotifyKindEnabled("error"));
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  // 「打开日志目录」失败的那一句，和上面通知测试的失败同一个写法（statusError）。
+  const [apiLogError, setApiLogError] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -122,9 +124,14 @@ export function GeneralPane({ onEscapeInterceptChange, showMovedHint, onOpenAppe
   };
 
   const openApiLogs = async () => {
+    setApiLogError(null);
     try {
       await revealItemInDir(await getApiLogRevealTarget());
-    } catch { /* best-effort */ }
+    } catch (e) {
+      // Either step can fail — making the folder, or the file manager itself.
+      console.error("[GeneralPane] open api logs failed:", e);
+      setApiLogError(t("systemSettings.general.openApiLogsFailed", { error: e instanceof Error ? e.message : String(e) }));
+    }
   };
 
   return (
@@ -221,6 +228,9 @@ export function GeneralPane({ onEscapeInterceptChange, showMovedHint, onOpenAppe
               {t("systemSettings.general.openApiLogs")}
             </button>
           </Row>
+        )}
+        {apiLogOn && apiLogError && (
+          <div className={ui.statusError} role="alert">{apiLogError}</div>
         )}
       </Section>
 

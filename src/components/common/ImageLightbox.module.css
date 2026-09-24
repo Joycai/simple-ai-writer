@@ -90,6 +90,7 @@
   line-height: 1.5;
   color: #f2b8a8;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 

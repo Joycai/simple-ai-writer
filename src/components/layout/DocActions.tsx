@@ -102,7 +102,9 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
         </>
       )}
       {kind === "convertible" && <ConvertButton path={path} />}
-      {!editable && <OpenExternalButton path={path} />}
+      {/* key：换文件就换一枚按钮——上一个文件两秒内的「打开失败」和它的 tooltip
+          不能挂到下一个文件上。 */}
+      {!editable && <OpenExternalButton key={path} path={path} />}
 
       {isTextKind(kind) && (
         <>

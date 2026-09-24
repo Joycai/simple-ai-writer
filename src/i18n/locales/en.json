@@ -398,6 +398,7 @@
       "apiLogLabel": "API Call Logging",
       "apiLogHint": "When enabled, every AI request, response and error is written to a local log file (API keys excluded) to help troubleshoot issues.",
       "openApiLogs": "Open Log Folder",
+      "openApiLogsFailed": "Could not open the log folder: {{error}}",
       "paneSub": "Language, notifications and local data",
       "apiLogLocation": "Logs are written to a local folder"
     },
@@ -492,7 +493,7 @@
       "exported": "Wrote {{file}}",
       "openFolder": "Open folder",
       "exportFailed": "Export failed: {{error}}",
-      "revealFailed": "Wrote {{file}}, but couldn't open its folder: {{error}}",
+      "revealFailed": "Couldn't open its folder: {{error}}",
       "fontManuscript": "Manuscript",
       "fontSong": "Song / Book",
       "fontHei": "Sans / Modern",
@@ -955,7 +956,8 @@
       "pptxBusy": "Exporting…",
       "pptxDone": "{{n}} slides → {{name}}",
       "pptxFailed": "Export failed",
-      "openFailed": "Couldn't open"
+      "openFailed": "Couldn't open",
+      "saveFailed": "Couldn't save \"{{name}}\" first, so it wasn't opened:"
     },
     "noHeadings": "No headings yet",
     "imageLoadError": "Couldn't load this image",
