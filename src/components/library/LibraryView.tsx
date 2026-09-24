@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, ChevronLeft, ChevronRight,
   Loader2, X, FolderPlus, Trash2, Check, PenLine, Pencil, FileText, File as FileIcon,
+  ListPlus, FolderMinus, FileMinus,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useDocModel, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -16,9 +17,8 @@ import { useDigestStore } from "../../stores/digestStore";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import {
   groupVolumes,
-  applySpine,
+  libraryVolumes,
   spineFromVolumes,
-  renameVolumeInSpine,
   loadSpine,
   saveSpine,
   parentDir,
@@ -28,6 +28,10 @@ import {
   type Chapter,
   type ResourceFile,
 } from "../../lib/context/outline";
+import {
+  addDoc, emptyMembers, pruneMembers, removeDoc, setFolder, type LibraryMembers,
+} from "../../lib/context/library";
+import { LibraryPicker } from "./LibraryPicker";
 import {
   loadMemory, memoryStatus, moveMemory, memoryFilePath, projectRelativePath, type MemoryStatus,
 } from "../../lib/context/memory";
@@ -287,7 +291,14 @@ export function LibraryView() {
   const memoryModelId = useAiStore((s) => s.memoryModelId);
   const setMemoryModel = useAiStore((s) => s.setMemoryModel);
 
+  const spineRev = useProjectStore((s) => s.spineRev);
   const [spine, setSpine] = useState<BookSpine | null>(null);
+  // Which project the spine in state belongs to — until it matches, the
+  // library isn't known yet (empty-state would flash for a populated one).
+  const [spineFor, setSpineFor] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Bumped on every local write: a reload that started before it is stale.
+  const writeSeq = useRef(0);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOver, setDragOver] = useState<DropTarget | null>(null);
   const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
@@ -307,19 +318,31 @@ export function LibraryView() {
   const [menu, setMenu] = useState<{ x: number; y: number; chapter: Chapter } | null>(null);
   const chapterGen = useMemoryStore((s) => s.chapterGen);
 
-  // Load the persisted order whenever the project changes.
+  // Load the spine (order + library members) when the project changes, and
+  // again whenever something outside this view rewrote it (spineRev: a move
+  // in the sidebar or by the agent, the AI panel's 加入文库).
   useEffect(() => {
     let cancelled = false;
-    if (!projectPath) { setSpine(null); return; }
-    loadSpine(projectPath).then((s) => { if (!cancelled) setSpine(s); });
+    if (!projectPath) { setSpine(null); setSpineFor(null); return; }
+    const seq = writeSeq.current;
+    loadSpine(projectPath).then((s) => {
+      if (cancelled || seq !== writeSeq.current) return;
+      setSpine(s);
+      setSpineFor(projectPath);
+    });
     return () => { cancelled = true; };
-  }, [projectPath]);
+  }, [projectPath, spineRev]);
+  const spineLoaded = spineFor !== null && spineFor === projectPath;
 
-  const volumesRaw = useMemo(
+  // Every folder of the workspace (the picker's tree, the empty state's
+  // counts, pruning) vs. the library itself: only what the author put in.
+  const volumesAll = useMemo(
     () => (projectPath ? groupVolumes(fileTree, projectPath) : []),
     [fileTree, projectPath],
   );
-  const volumes = useMemo(() => applySpine(volumesRaw, spine), [volumesRaw, spine]);
+  const volumes = useMemo(() => libraryVolumes(volumesAll, spine), [volumesAll, spine]);
+  const allByRel = useMemo(() => new Map(volumesAll.map((v) => [v.relPath, v])), [volumesAll]);
+  const members = spine?.members ?? emptyMembers();
 
   // Drop selections that no longer point at an existing chapter (after moves/deletes).
   useEffect(() => {
@@ -421,8 +444,35 @@ export function LibraryView() {
   );
 
   const persistSpine = (next: BookSpine) => {
+    writeSeq.current += 1;
     setSpine(next);
     if (projectPath) void saveSpine(projectPath, next);
+  };
+
+  /**
+   * Re-read the spine after a move: `moveEntry` already rewrote it on disk
+   * (paths, 在写, membership — lib/context/outline moveInSpine), and the copy
+   * in state predates the move.
+   */
+  const reloadSpine = async (): Promise<BookSpine | null> => {
+    if (!projectPath) return null;
+    const fresh = await loadSpine(projectPath);
+    writeSeq.current += 1;
+    setSpine(fresh);
+    return fresh;
+  };
+
+  /**
+   * Change the members and persist. The order is re-captured from the library
+   * the new members produce, so a folder leaving the library takes its order
+   * with it (01f 1z ③); 在写 marks stay.
+   */
+  const changeMembers = (change: (m: LibraryMembers) => LibraryMembers, prune = false) => {
+    if (!projectPath) return;
+    let next = change(members);
+    if (prune) next = pruneMembers(next, volumesAll);
+    const base: BookSpine = { ...(spine ?? { version: 1, order: {} }), members: next };
+    persistSpine(spineFromVolumes(libraryVolumes(volumesAll, base), base));
   };
 
   const reorder = (vol: Volume, from: number, to: number) => {
@@ -447,6 +497,9 @@ export function LibraryView() {
     if (!name || !projectPath) return;
     try {
       const path = await createEntry(vol.path, name, "file");
+      // A column of picked docs only shows what is picked — the new one too.
+      const rel = projectRelativePath(projectPath, path);
+      if (vol.partial && rel) changeMembers((m) => addDoc(m, rel));
       openChapter(path);
     } catch (e) {
       window.alert(String(e));
@@ -469,19 +522,12 @@ export function LibraryView() {
     if (finalName === ch.name) return;
     const newPath = `${parentDir(ch.path)}/${finalName}`;
     try {
-      await moveEntry(ch.path, newPath); // editor flush + assets + active path
+      // editor flush + assets + active path + the spine's paths (order, 在写, membership)
+      await moveEntry(ch.path, newPath);
       const newRel = projectRelativePath(projectPath, newPath);
       if (!newRel) return;
       await moveMemory(projectPath, ch.relPath, newRel);
-      const next = spineFromVolumes(volumes, spine);
-      for (const key of Object.keys(next.order)) {
-        next.order[key] = next.order[key].map((r) => (r === ch.relPath ? newRel : r));
-      }
-      if (next.status?.[ch.relPath]) {
-        next.status[newRel] = next.status[ch.relPath];
-        delete next.status[ch.relPath];
-      }
-      persistSpine(next);
+      await reloadSpine();
     } catch (e) {
       window.alert(String(e));
     }
@@ -537,7 +583,7 @@ export function LibraryView() {
         console.error("[library] moving mirrored folder failed:", e);
       }
     }
-    persistSpine(renameVolumeInSpine(spineFromVolumes(volumes, spine), vol.relPath, newRel));
+    await reloadSpine(); // moveEntry rewrote the spine's keys, nested ones included
   };
 
   /**
@@ -557,20 +603,19 @@ export function LibraryView() {
     setBusy(true);
     try {
       const newPath = `${targetVol.path}/${d.name}`;
-      await moveEntry(d.path, newPath);
+      await moveEntry(d.path, newPath); // also carries 在写 and library membership
       const newRel = projectRelativePath(projectPath, newPath);
       if (newRel) {
         await moveMemory(projectPath, d.rel, newRel);
-        const next = spineFromVolumes(volumes, spine);
-        next.order[d.volRel] = (next.order[d.volRel] ?? []).filter((r) => r !== d.rel);
-        const target = [...(next.order[targetVol.relPath] ?? [])];
+        // On top of the rewritten spine, only the drop position is ours: the
+        // two columns as they were on screen, the doc out of one and in the other.
+        const fresh = (await loadSpine(projectPath)) ?? { version: 1 as const, order: {} };
+        const sourceVol = volumes.find((v) => v.relPath === d.volRel);
+        const target = targetVol.chapters.map((c) => c.relPath);
         target.splice(Math.min(index, target.length), 0, newRel);
-        next.order[targetVol.relPath] = target;
-        if (next.status?.[d.rel]) {
-          next.status[newRel] = next.status[d.rel];
-          delete next.status[d.rel];
-        }
-        persistSpine(next);
+        const order = { ...fresh.order, [targetVol.relPath]: target };
+        if (sourceVol) order[d.volRel] = sourceVol.chapters.map((c) => c.relPath).filter((r) => r !== d.rel);
+        persistSpine({ ...fresh, order });
       }
     } catch (e) {
       window.alert(String(e));
@@ -628,6 +673,14 @@ export function LibraryView() {
       },
       {
         kind: "item",
+        icon: <FileMinus size={13} />,
+        label: t("library.removeDoc"),
+        hint: t("library.removeDocHint"),
+        action: () => changeMembers((m) => removeDoc(m, ch.relPath)),
+      },
+      { kind: "divider" },
+      {
+        kind: "item",
         icon: <Trash2 size={13} />,
         label: t("library.deleteChapter", { doc: terms.doc }),
         danger: true,
@@ -648,6 +701,8 @@ export function LibraryView() {
     if (name === ASSETS_DIR || name.startsWith(".")) { setCreatingVol(false); setNewVolName(""); return; }
     try {
       await makeDir(`${projectPath}/${name}`);
+      // Created from the library, so it is in the library.
+      changeMembers((m) => setFolder(m, name, true));
       await refreshFileTree();
     } catch (e) {
       console.error("[outline] create volume failed:", e);
@@ -656,14 +711,22 @@ export function LibraryView() {
     setNewVolName("");
   };
 
+  /** The folder as it is on disk — a library column may show only part of it. */
+  const isEmptyFolder = (vol: Volume) => {
+    const full = allByRel.get(vol.relPath);
+    return !!full && full.chapters.length === 0 && full.resources.length === 0;
+  };
+
   const deleteVolume = async (vol: Volume) => {
     // relPath "" is the project root itself — removeDir there would delete the
     // whole workspace, not a volume. Resources count too: a folder holding
-    // only images is not "empty", and removeDir would take them with it.
-    if (vol.chapters.length > 0 || vol.resources.length > 0 || vol.relPath === "") return;
+    // only images is not "empty", and removeDir would take them with it —
+    // and so do docs excluded from the library, hence the on-disk check.
+    if (!isEmptyFolder(vol) || vol.relPath === "") return;
     if (!window.confirm(t("library.deleteVolumeConfirm", { group: terms.group }))) return;
     try {
       await removeDir(vol.path);
+      changeMembers((m) => setFolder(m, vol.relPath, false));
       await refreshFileTree();
     } catch (e) {
       console.error("[outline] delete volume failed:", e);
@@ -691,30 +754,23 @@ export function LibraryView() {
         }
       }
       setSelected(new Set());
+      await reloadSpine();
     } finally {
       setBusy(false);
     }
   };
 
-  if (volumes.length === 0) {
-    return (
-      <div className={styles.view}>
-        <div className={styles.header}>
-          <div className={styles.headRow}>
-            <div className={styles.title}>{t("sidebar.library")}</div>
-            <div className={styles.subtitle}>{t("titleBar.noProject")}</div>
-          </div>
-        </div>
-        <div className={styles.empty}>
-          {t("library.empty", {
-            defaultValue: "未发现{{group}}/{{doc}}结构 — 在项目文件夹下创建子文件夹来组织{{group}}",
-            group: terms.group,
-            doc: terms.doc,
-          })}
-        </div>
-      </div>
-    );
-  }
+  const workspaceGroups = volumesAll.filter((v) => v.relPath !== "").length;
+  const workspaceDocs = volumesAll.reduce((n, v) => n + v.chapters.length, 0);
+  const libraryEmpty = spineLoaded && volumes.length === 0;
+  const picker = pickerOpen && (
+    <LibraryPicker
+      volumes={volumesAll}
+      members={members}
+      onApply={(next) => changeMembers(() => next, true)}
+      onClose={() => setPickerOpen(false)}
+    />
+  );
 
   return (
     <div className={styles.view}>
@@ -729,9 +785,11 @@ export function LibraryView() {
               words: wordCount.toLocaleString(),
             })}
           </div>
-          <div className={styles.reorderHint}>
-            {t("library.reorderHint", { doc: terms.doc, group: terms.group })}
-          </div>
+          {!libraryEmpty && (
+            <div className={styles.reorderHint}>
+              {t("library.reorderHint", { doc: terms.doc, group: terms.group })}
+            </div>
+          )}
           <span className={styles.spacer} />
 
           {showMemo && (
@@ -749,6 +807,11 @@ export function LibraryView() {
               />
             </label>
           )}
+
+          <button className={styles.headBtn} onClick={() => setPickerOpen(true)}>
+            <ListPlus size={12} strokeWidth={1.8} />
+            {t("library.addToLibrary")}
+          </button>
 
           {creatingVol ? (
             <input
@@ -774,7 +837,7 @@ export function LibraryView() {
 
         </div>
 
-        {selected.size > 0 ? (
+        {libraryEmpty || !spineLoaded ? null : selected.size > 0 ? (
           <div className={styles.selectionBar}>
             <span className={styles.selectionInfo}>
               <Check size={12} strokeWidth={2} />
@@ -824,10 +887,35 @@ export function LibraryView() {
         )}
       </div>
 
+      {libraryEmpty ? (
+        <div className={styles.emptyWrap}>
+          <div className={styles.emptyCard}>
+            <div className={styles.emptyEyebrow}>Library · empty</div>
+            <div className={styles.emptyTitle}>{t("library.emptyTitle")}</div>
+            <div className={styles.emptyBody}>{t("library.emptyBody", { group: terms.group, groups: terms.groups, docs: terms.docs, doc: terms.doc })}</div>
+            <div className={styles.emptyMeta}>
+              {workspaceDocs > 0
+                ? t("library.emptyMeta", {
+                    groups: workspaceGroups, docs: workspaceDocs,
+                    groupWord: terms.group, groupsWord: terms.groups, docWord: terms.docs,
+                  })
+                : t("library.emptyMetaNone", { docs: terms.docs })}
+            </div>
+            <div className={styles.emptyCta}>
+              <button className={styles.emptyPrimary} onClick={() => setPickerOpen(true)}>
+                <ListPlus size={13} strokeWidth={1.8} />
+                {t("library.emptyPick", { group: terms.group, groups: terms.groups, docs: terms.docs })}
+              </button>
+              <span className={styles.emptyAlt}>{t("library.emptyAlt", { group: terms.group })}</span>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={styles.columns}>
         {volumes.map((vol, vi) => {
           const isCurrent = vi === activeVolumeIdx;
-          const canDelete = vol.chapters.length === 0 && vol.resources.length === 0 && vol.relPath !== "";
+          const canDelete = isEmptyFolder(vol) && vol.relPath !== "";
+          const hiddenResources = vol.partial ? (allByRel.get(vol.relPath)?.resources.length ?? 0) : 0;
           return (
             <div key={vol.path} className={`${styles.column} ${isCurrent ? styles.columnCurrent : ""}`}>
               <div className={styles.colHead}>
@@ -853,6 +941,11 @@ export function LibraryView() {
                     <div className={isCurrent ? styles.colTitle : styles.colTitleMuted}>
                       {vol.name}
                     </div>
+                  )}
+                  {vol.partial && (
+                    <span className={styles.partialTag} title={t("library.partialHint", { docs: terms.docs })}>
+                      {t("library.partialTag", { count: vol.chapters.length })}
+                    </span>
                   )}
                 </div>
                 <span className={styles.colHeadRight}>
@@ -895,6 +988,14 @@ export function LibraryView() {
                       <Trash2 size={12} />
                     </button>
                   )}
+                  <button
+                    className={styles.volBtn}
+                    title={t("library.removeGroup", { group: terms.group })}
+                    aria-label={t("library.removeGroup", { group: terms.group })}
+                    onClick={() => changeMembers((m) => setFolder(m, vol.relPath, false))}
+                  >
+                    <FolderMinus size={12} />
+                  </button>
                 </span>
               </div>
 
@@ -1048,6 +1149,11 @@ export function LibraryView() {
                 )}
               </div>
 
+              {hiddenResources > 0 && (
+                <div className={styles.resourcesHidden}>
+                  {t("library.partialResources", { count: vol.chapters.length, n: hiddenResources, group: terms.group })}
+                </div>
+              )}
               {vol.resources.length > 0 && (
                 <div className={styles.resources}>
                   <div className={styles.resourcesLabel}>
@@ -1066,6 +1172,9 @@ export function LibraryView() {
           );
         })}
       </div>
+      )}
+
+      {picker}
 
       {menu && (
         <ContextMenu

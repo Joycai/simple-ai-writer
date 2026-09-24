@@ -136,6 +136,30 @@
   font: 400 11px/1.6 var(--font-sans);
   color: var(--color-text-label);
 }
+/* 01f 1g — the active chapter is outside the library, so 续写 carries no
+   前情. A note, not a warning: nothing is broken, the author just hasn't
+   put this document in the book. */
+.libraryNote {
+  display: flex;
+  gap: 9px;
+  padding: 10px 11px;
+  border-left: 2px solid var(--color-border-accent);
+  background: var(--color-bg-surface);
+  font: 400 12px/1.6 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.libraryNoteIcon { color: var(--color-accent); flex-shrink: 0; margin-top: 3px; }
+.libraryNoteAction {
+  display: block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.libraryNoteAction:hover { text-decoration: underline; }
 .warnLine {
   font: 400 11px/1.6 var(--font-sans);
   color: var(--color-accent-text);

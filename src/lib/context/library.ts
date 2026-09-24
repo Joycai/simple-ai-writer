@@ -179,7 +179,7 @@ export function membersEqual(a: LibraryMembers, b: LibraryMembers): boolean {
 
 // ─── Picker tree ─────────────────────────────────────────────────────────────
 
-interface PickerNode {
+export interface PickerNode {
   vol: Volume;
   /** Direct chapter files, natural-sorted. */
   docs: Chapter[];

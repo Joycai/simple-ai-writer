@@ -272,10 +272,12 @@ interface ProjectState {
   moveEntry: (from: string, to: string) => Promise<void>;
   /**
    * Bumped whenever something other than the library view rewrote
-   * `.ai-writer/outline.json` (today: `moveEntry`). The library view reloads
-   * its spine on change.
+   * `.ai-writer/outline.json` (`moveEntry`, the AI panel's 加入文库). The
+   * library view and the AI panel reload the spine on change.
    */
   spineRev: number;
+  /** Something rewrote `outline.json` outside the library view — reload it. */
+  spineChanged: () => void;
   relinkAssets: (groupPath: string, docPath: string) => Promise<void>;
   /**
    * Copy a file/folder into `destDir` and return the new path. Unlike a move,
@@ -408,6 +410,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   activeFilePath: null,
   fileTree: [],
   spineRev: 0,
+  spineChanged: () => set((s) => ({ spineRev: s.spineRev + 1 })),
   expandedDirs: {},
   revealRequest: null,
   clipboard: null,
@@ -749,7 +752,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     await get().refreshFileTree();
     // After the refresh, so a view reloading on it sees the moved tree too.
-    if (spineMoved) set((s) => ({ spineRev: s.spineRev + 1 }));
+    if (spineMoved) get().spineChanged();
   },
 
   /**

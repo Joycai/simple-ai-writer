@@ -390,6 +390,18 @@ export async function moveInSpineOnDisk(
 }
 
 /**
+ * Change the library members on disk, creating the spine if there is none —
+ * for surfaces other than the library view (the AI panel's 加入文库), which
+ * holds no spine of its own. Callers bump `projectStore.spineRev` after.
+ */
+export async function updateMembersOnDisk(
+  projectPath: string, change: (members: LibraryMembers) => LibraryMembers,
+): Promise<void> {
+  const spine = (await loadSpine(projectPath)) ?? { version: 1, order: {} };
+  await saveSpine(projectPath, { ...spine, members: change(spine.members ?? emptyMembers()) });
+}
+
+/**
  * The library as 续写 and the AI panel see it: group, keep the members, apply
  * the persisted order. No spine means nothing was ever put in the library.
  */
