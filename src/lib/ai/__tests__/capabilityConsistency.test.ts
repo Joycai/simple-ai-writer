@@ -141,6 +141,13 @@ const PROBES: Record<CapabilityId, Probe> = {
     adapter: await adapterSends(ctx, {}, { textVerbosity: "low" }),
     summary: summarySends(ctx, {}, { textVerbosity: "low" }),
   }),
+  // Not a declaration: the adapter decides where a system prompt goes, so the
+  // probe asks whether the body carries the field at all.
+  instructionsField: async (ctx) => ({
+    adapter: "instructions" in (JSON.parse((await bodyOf(ctx, {
+      messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "hi" }],
+    })) || "{}") as Record<string, unknown>),
+  }),
   // The one capability no request reads: the declaration takes the model out
   // of every picker and hands it to lib/translate, and the drawer is what
   // keeps it off a wire without the capability (cleared on save). Nothing

@@ -24,7 +24,7 @@ import { providerWire, type PlatformId } from "./platforms";
 import type { ApiStandard } from "./types";
 
 /** The built-in upstreams, in the order the drawers list them. */
-export const RELAY_UPSTREAMS = ["kiro", "cc", "anti", "bedrock", "official"] as const;
+export const RELAY_UPSTREAMS = ["kiro", "cc", "anti", "bedrock", "official", "codex", "azure"] as const;
 export type RelayUpstreamId = (typeof RELAY_UPSTREAMS)[number];
 
 /** A model's choice: an upstream, or `"none"` — resolved to no upstream on purpose. */

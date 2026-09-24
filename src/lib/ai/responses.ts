@@ -29,7 +29,11 @@
  *   - `instructions` is **always** sent, even when empty. A relay that finds
  *     it absent injects its own system prompt — the New API relay measured in
  *     docs/api/landscape.md §7 第八个样本 adds 4.4K–7.5K tokens of Codex
- *     instructions per request that way.
+ *     instructions per request that way. The one exception is a wire the
+ *     capability table says does not take the field (`instructionsField`): a
+ *     relay upstream that appends a guard refusing fiction to whatever is in
+ *     it (第十七个样本). There the system text is a leading `developer` message
+ *     and the key is absent.
  *
  * Tools (slice E), three decisions worth knowing before touching them:
  *
@@ -122,7 +126,9 @@ function toInputPart(part: ContentPart): Record<string, unknown> {
  * The app's messages as `instructions` + `input` items.
  *
  * System messages leave the list and become `instructions` (joined, in order —
- * `applyPrefix` has already folded the model prefix into the first one).
+ * `applyPrefix` has already folded the model prefix into the first one), or,
+ * with `systemAs: "developer"`, one `developer` message at the head of the
+ * input carrying the same text, and no `instructions` at all.
  *
  * An assistant turn that called tools is echoed as the endpoint's own output
  * items when it has them and they came from the model being asked now
@@ -136,7 +142,8 @@ function toInputPart(part: ContentPart): Record<string, unknown> {
 export function toResponsesInput(
   messages: StreamMessage[],
   modelId?: string,
-): { instructions: string; input: Record<string, unknown>[] } {
+  systemAs: "instructions" | "developer" = "instructions",
+): { instructions?: string; input: Record<string, unknown>[] } {
   const instructions: string[] = [];
   const input: Record<string, unknown>[] = [];
   for (const m of messages) {
@@ -171,7 +178,11 @@ export function toResponsesInput(
     }
     input.push({ role: m.role, content: textOf(m.content) });
   }
-  return { instructions: instructions.join("\n\n"), input };
+  const system = instructions.join("\n\n");
+  if (systemAs === "developer") {
+    return { input: system ? [{ role: "developer", content: system }, ...input] : input };
+  }
+  return { instructions: system, input };
 }
 
 /** Tool definitions in this wire's flat spelling, explicitly non-strict. */
@@ -212,13 +223,16 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
-  const { instructions, input } = toResponsesInput(opts.messages, opts.modelId);
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  const reasoning = reasoningBody(category, opts.reasoningEffort);
   const wire = wireOf(opts);
   // Asked with the relay upstream: behind some, a temperature is rewritten to 1
-  // or fails the request (capabilities.ts UPSTREAM_CAPABILITIES).
+  // or fails the request, and one appends a guard to `instructions`
+  // (capabilities.ts UPSTREAM_CAPABILITIES).
   const capModel = capabilityModelOf(opts);
+  const { instructions, input } = toResponsesInput(
+    opts.messages, opts.modelId, hasCapability("instructionsField", wire, capModel) ? "instructions" : "developer",
+  );
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const reasoning = reasoningBody(category, opts.reasoningEffort);
   const sendsTemperature = opts.temperature !== undefined
     && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
   const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;
@@ -238,7 +252,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     : undefined;
   const body: Record<string, unknown> = {
     model: opts.modelId,
-    instructions,
+    ...(instructions !== undefined ? { instructions } : {}),
     input,
     stream: true,
     store: false,

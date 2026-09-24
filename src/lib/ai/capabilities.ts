@@ -44,6 +44,7 @@ export type CapabilityId =
   | "forcedToolChoice"
   | "temperature"
   | "textVerbosity"
+  | "instructionsField"
   | "translateFormat"
   | "structuredOutput"
   | "jsonSchema"
@@ -164,6 +165,15 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   temperature: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", thinkingOff: ["anthropic"] },
   // `text.verbosity` exists on the Responses family only.
   textVerbosity: { families: ["responses"], origin: "native" },
+  // The system prompt as the top-level `instructions` field. Where the wire
+  // does not take it, the adapter sends the same text as a leading `developer`
+  // message instead. Not a declaration: no model row turns it on or off. A
+  // relay upstream that appends its own text to `instructions` — the guarded
+  // gateway behind one relay's `[Azure]` tier, which then refuses fiction
+  // (landscape.md §7 第十七个样本) — is where this is `false`. The opposite
+  // failure is why it defaults to `yes`: a Codex upstream that finds no
+  // `instructions` injects 4.4K tokens of its own (第八个样本).
+  instructionsField: { families: ["responses"], origin: "native" },
   // The Sakura translation engine (lib/translate) runs a Chat Completions
   // request with a fixed prompt; a text model only — a seeing model declared
   // translate-only would silently leave the vision subagent's candidates.
@@ -201,7 +211,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
   "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
-  "temperature", "textVerbosity", "translateFormat", "structuredOutput", "jsonSchema",
+  "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
 
@@ -358,13 +368,22 @@ interface UpstreamCapabilities {
   families: Partial<Record<ProtocolFamily | "all", Partial<Record<CapabilityId, boolean>>>>;
 }
 
-/** Every measurement below is Claude's; nothing else was probed behind these upstreams. */
+/** The Kiro / CC / anti / Bedrock / official measurements are Claude's (第十五、十六个样本). */
 const CLAUDE = /claude/;
+/**
+ * The Codex and gateway measurements are GPT-5.6's (第十七个样本) — widened to
+ * every GPT on the same reasoning as Sonnet under Kiro: the gaps are between
+ * the relay and the upstream, and the earlier samples on 5.4 / 5.5
+ * (第八、十个样本) agree with them.
+ */
+const GPT = /gpt/;
 
 /**
  * Each upstream's cells, measured on one New API relay (landscape.md §7
- * 第十五 and 第十六个样本, 2026-09-23). Only Chat Completions and Messages:
- * the relay serves Claude on no other route (500 `convert_request_failed`).
+ * 第十五 and 第十六个样本, 2026-09-23, for Claude; 第十七个样本, 2026-09-24, for
+ * GPT). Claude's are Chat Completions and Messages only — the relay serves it
+ * on no other route (500 `convert_request_failed`); GPT's are Chat Completions
+ * and Responses.
  * An absent cell falls to the relay's own cell and the rule, as it would
  * with no upstream — write only what a sample saw.
  */
@@ -450,6 +469,50 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * it records that the prefix is classified and changes no verdict.
    */
   official: { models: CLAUDE, families: {} },
+  /**
+   * ChatGPT accounts behind a relay — the Codex backend (the relay's `[Plus]`,
+   * `[Pro]`, `[特价Pro]` tiers on the 第十七个样本 relay; 第八、十个样本 are the
+   * same kind). A real `web_search` (one search, a `url_citation`, 6–10 s),
+   * verbosity honoured, PDF read, forced tools honoured on both wires. On
+   * Responses a temperature is accepted and echoed back as 1 — ignored, so
+   * `false`; Chat Completions shows no echo, so no cell there.
+   *
+   * No JSON-mode cell: the `[Pro]` tier dropped `text.format` and
+   * `response_format` every time while `[Plus]` and `[特价Pro]` executed the
+   * schema — one kind of upstream, two results, so the rule decides and the
+   * drawer's note says it. Not measured as cells but told in the note: the
+   * output cap is ignored, effort `none` still thinks, no image generation or
+   * code interpreter.
+   */
+  codex: {
+    models: GPT,
+    families: {
+      openai: { pdfInput: true, forcedToolChoice: true },
+      responses: {
+        pdfInput: true, forcedToolChoice: true, textVerbosity: true, web_search: true, temperature: false,
+      },
+    },
+  },
+  /**
+   * A gateway the relay calls `[Azure]` (第十七个样本, measured on
+   * gpt-5.6-terra: the tier had no line for sol). Parameters the closest to
+   * the official API — the output cap holds, JSON schema executed on both
+   * wires — but no web search (dropped silently), a temperature other than 1 a
+   * 500 on Responses, a named `tool_choice` a 500 on Chat Completions (`required`
+   * works). And it appends a guard to `instructions` telling the model to
+   * refuse anything not about OpenAI, fiction included; without the field
+   * there is no guard, so the system prompt goes as a `developer` message.
+   */
+  azure: {
+    models: GPT,
+    families: {
+      openai: { pdfInput: true, forcedToolChoice: false, structuredOutput: true, jsonSchema: true },
+      responses: {
+        pdfInput: true, forcedToolChoice: true, textVerbosity: true, structuredOutput: true, jsonSchema: true,
+        web_search: false, temperature: false, instructionsField: false,
+      },
+    },
+  },
 };
 
 /**

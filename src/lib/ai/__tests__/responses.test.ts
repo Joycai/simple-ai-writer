@@ -317,6 +317,49 @@ describe("Responses adapter — request shape", () => {
   });
 });
 
+describe("Responses adapter — relay upstreams (第十七个样本)", () => {
+  async function relayBody(relayUpstream: "codex" | "azure" | "none", extra: { temperature?: number; system?: string } = {}) {
+    const calls = mockFetch([COMPLETED]);
+    await streamCompletion({
+      baseUrl: "https://relay.example.com/v1", apiKey: "k", standard: "openai_responses_compat", platform: "newapi",
+      modelId: "[x]gpt-5.6-sol", relayUpstream,
+      messages: [
+        ...(extra.system === undefined ? [] : [{ role: "system" as const, content: extra.system }]),
+        { role: "user", content: "hi" },
+      ],
+      temperature: extra.temperature, onChunk: () => {},
+    });
+    return calls[0].body;
+  }
+
+  it("azure: the system prompt is a leading developer message and there is no instructions key", async () => {
+    // The gateway appends a guard that refuses fiction to whatever `instructions` holds, even "".
+    const body = await relayBody("azure", { system: "You co-write a novel." });
+    expect(body).not.toHaveProperty("instructions");
+    expect(body.input).toEqual([
+      { role: "developer", content: "You co-write a novel." },
+      { role: "user", content: "hi" },
+    ]);
+    const bare = await relayBody("azure");
+    expect(bare).not.toHaveProperty("instructions");
+    expect(bare.input).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("codex and no upstream keep instructions, empty or not", async () => {
+    // Without it a Codex upstream injects 4.4K tokens of its own prompt.
+    for (const up of ["codex", "none"] as const) {
+      expect(await relayBody(up, { system: "Be brief." })).toMatchObject({ instructions: "Be brief.", input: [{ role: "user", content: "hi" }] });
+      expect(await relayBody(up)).toHaveProperty("instructions", "");
+    }
+  });
+
+  it("sends no temperature behind codex (rewritten to 1) or azure (a 500), and keeps it elsewhere", async () => {
+    expect(await relayBody("codex", { temperature: 0.4 })).not.toHaveProperty("temperature");
+    expect(await relayBody("azure", { temperature: 0.4 })).not.toHaveProperty("temperature");
+    expect(await relayBody("none", { temperature: 0.4 })).toHaveProperty("temperature", 0.4);
+  });
+});
+
 describe("Responses adapter — stream", () => {
   it("turns output_text deltas into text and reads usage off response.completed", async () => {
     const { received } = await collect({

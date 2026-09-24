@@ -25,10 +25,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ measured |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | · | · |
-| newapi | ✓ 按上游 protocol | ✓ protocol | · | · 按上游 |
+| newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | · | · 按上游 |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按上游 protocol | ✓ protocol | · | · 按上游 |
+| custom | ✓ 按上游 protocol | ✓ 按上游 protocol | · | · 按上游 |
 
 ## vlHighResolution
 
@@ -117,10 +117,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | zhipu | · |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
-| newapi | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | ✓ 按上游 protocol |
+| newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | ✓ 按上游 protocol |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | ✓ 按上游 protocol |
+| custom | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | ✓ 按上游 protocol |
 
 ## temperature
 
@@ -140,10 +140,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | · |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
-| newapi | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ protocol | ✓ 按上游 protocol | ✓ protocol | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ protocol | ✓ protocol | ✓ protocol | · |
+| custom | ✓ protocol | ✓ 按上游 protocol | ✓ protocol | · |
 
 ## textVerbosity
 
@@ -163,10 +163,33 @@
 | volcengine-plan | · | ✓ protocol |  | · |
 | zhipu | · |  |  |  |
 | orcarouter | · | ✓ protocol | · | · |
-| newapi | · | ✓ protocol | · | · |
+| newapi | · | ✓ 按上游 protocol | · | · |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
-| custom | · | ✓ protocol | · | · |
+| custom | · | ✓ 按上游 protocol | · | · |
+
+## instructionsField
+
+`native` · 规则缺省适用的协议族：Resp
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | · | ✓ protocol |  |  |
+| anthropic |  |  |  | · |
+| google |  |  | · |  |
+| deepseek | · | ✓ protocol |  | · |
+| dashscope | · | ✓ protocol |  | · |
+| dashscope-intl | · | ✓ protocol |  |  |
+| xai | · | ✓ protocol |  |  |
+| minimax | · |  |  | · |
+| volcengine | · | ✓ protocol |  |  |
+| volcengine-plan | · | ✓ protocol |  | · |
+| zhipu | · |  |  |  |
+| orcarouter | · | ✓ protocol | · | · |
+| newapi | · | ✓ 按上游 protocol | · | · |
+| ollama | · |  |  |  |
+| comfyui | · |  |  |  |
+| custom | · | ✓ 按上游 protocol | · | · |
 
 ## translateFormat
 
@@ -209,10 +232,10 @@
 | volcengine-plan | ✓ protocol | ✓ protocol |  | · |
 | zhipu | ✓ protocol |  |  |  |
 | orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
-| newapi | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | · |
+| newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | · |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按上游 protocol | ✓ protocol | ✓ protocol | · |
+| custom | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | · |
 
 ## jsonSchema
 
@@ -232,10 +255,10 @@
 | volcengine-plan | ✓ measured | ✓ measured |  | · |
 | zhipu | · |  |  |  |
 | orcarouter | ? unmeasured | ? unmeasured | ? unmeasured | · |
-| newapi | ? unmeasured | ? unmeasured | ? unmeasured | · |
+| newapi | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | · |
 | ollama | ? unmeasured |  |  |  |
 | comfyui | ? unmeasured |  |  |  |
-| custom | ? unmeasured | ? unmeasured | ? unmeasured | · |
+| custom | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | · |
 
 ## web_search
 
@@ -255,10 +278,10 @@
 | volcengine-plan | · | ✓ measured |  | ✓ measured |
 | zhipu | · |  |  |  |
 | orcarouter | · | ? unmeasured | · | ? unmeasured |
-| newapi | · | ? unmeasured | · | ? 按上游 unmeasured |
+| newapi | · | ? 按上游 unmeasured | · | ? 按上游 unmeasured |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
-| custom | · | ? unmeasured | · | ? 按上游 unmeasured |
+| custom | · | ? 按上游 unmeasured | · | ? 按上游 unmeasured |
 
 ## web_extractor
 
@@ -357,11 +380,20 @@
 中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。
 上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。
 
-| 能力 | 族 | kiro | cc | anti | bedrock | official |
-| --- | --- | --- | --- | --- | --- | --- |
-| pdfInput | Chat | · | ✓ | · | ✓ |  |
-| pdfInput | Anth |  | ✓ |  | ✓ |  |
-| forcedToolChoice | Chat | · |  | · | ✓ |  |
-| forcedToolChoice | Anth | · |  | · | ✓ |  |
-| structuredOutput | Chat | · |  |  |  |  |
-| web_search | Anth | · | ✓ | · | · |  |
+| 能力 | 族 | kiro | cc | anti | bedrock | official | codex | azure |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pdfInput | Chat | · | ✓ | · | ✓ |  | ✓ | ✓ |
+| pdfInput | Resp |  |  |  |  |  | ✓ | ✓ |
+| pdfInput | Anth |  | ✓ |  | ✓ |  |  |  |
+| forcedToolChoice | Chat | · |  | · | ✓ |  | ✓ | · |
+| forcedToolChoice | Resp |  |  |  |  |  | ✓ | ✓ |
+| forcedToolChoice | Anth | · |  | · | ✓ |  |  |  |
+| temperature | Resp |  |  |  |  |  | · | · |
+| textVerbosity | Resp |  |  |  |  |  | ✓ | ✓ |
+| instructionsField | Resp |  |  |  |  |  |  | · |
+| structuredOutput | Chat | · |  |  |  |  |  | ✓ |
+| structuredOutput | Resp |  |  |  |  |  |  | ✓ |
+| jsonSchema | Chat |  |  |  |  |  |  | ✓ |
+| jsonSchema | Resp |  |  |  |  |  |  | ✓ |
+| web_search | Resp |  |  |  |  |  | ✓ | · |
+| web_search | Anth | · | ✓ | · | · |  |  |  |
