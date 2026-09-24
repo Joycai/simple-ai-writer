@@ -1839,14 +1839,15 @@ Responses adapter：
 >    `input_tokens_details.cache_write_tokens`。**`attribution.request_fields.instructions.input_tokens` 是判断「被注入了多少」最直接的读数**
 >    （作者发 10 token、回报 4,380 就是被注入了）；`[Azure]` 没有这个字段，它的护栏只能从回显的 `instructions` 看出来。
 >
-> **对本项目**：本样本只记事实，应用侧没改。和现有实现的关系：
+> **对本项目**（2026-09-24 同日落地，[`capability-gating-plan.md`](capability-gating-plan.md) §8.12）：上游画像加了 `codex`（ChatGPT 账号池，
+> 对应三个账号档）与 `azure`（网关）两种，作用域 `/gpt/`，作者在渠道的前缀表里把 `[Plus]` / `[Pro]` / `[特价Pro]` 配成 codex、
+> `[Azure]` 配成 azure 即可：
 >
-> - `responses.ts` **总是发 `instructions`**（为了挡住 Codex 注入，第八个样本），在 `[Azure]` 这一档上正好总会触发护栏。
->   选这一档写作时，偶发「我只能帮 OpenAI 相关工作」式的拒答是这个原因，不是模型问题。
-> - `[Pro]` 上 `jsonModeShaping` 发的 `text.format` / `response_format` 被丢，结构化任务会退回纯文本解析；`live.openai-responses.test.ts`
->   在这一档的 json_schema 用例因此失败。
-> - §8.11 的上游画像只覆盖 Claude（`/claude/`）；这里测到的 GPT 各档差异（`[Pro]` 结构化输出、`[Azure]` 联网 / 温度 / 具名工具）
->   **还没有进画像**，要进的话按那一节的做法加上游、每格只写这里测过的。
+> - `[Azure]` 的护栏：新能力 `instructionsField` 在 azure 上判不收，`responses.ts` 把系统提示改成开头的 `developer` 消息、不发
+>   `instructions`。其余上游照旧总发 `instructions`（挡 Codex 注入）。
+> - Responses 上的温度在两种上游下都不发（一个改成 1，一个 500）；azure 的联网搜索不发、① 面强制工具改发 `auto`。
+> - `[Pro]` 丢结构化输出**没进格子**（与另两档不一致），只写在模型抽屉的上游说明里；这一档的 json_schema 仍会发出去被丢，
+>   结构化任务退回提示语。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 
