@@ -86,5 +86,17 @@ describe("automatic chat-model pick", () => {
     const active = useAiStore.getState().models.find((m) => m.id === useAiStore.getState().activeModelId);
     expect(active?.modelId).toBe("doubao-seed-2.0-lite");
   });
+
+  it("drops the chat and summary pick when that model is retyped as image", async () => {
+    await useAiStore.getState().addModel(row("nano-banana", "text"));
+    await useAiStore.getState().addModel(row("gemini-flash", "text"));
+    const [banana, flash] = useAiStore.getState().models;
+    expect(useAiStore.getState().activeModelId).toBe(banana.id);
+    useAiStore.getState().setMemoryModel(banana.id);
+
+    await useAiStore.getState().updateModel({ ...banana, type: "image" });
+    expect(useAiStore.getState().activeModelId).toBe(flash.id);
+    expect(useAiStore.getState().memoryModelId).toBeNull();
+  });
 });
 

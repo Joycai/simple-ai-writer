@@ -596,16 +596,27 @@ export function conversationalModels(models: readonly Model[]): Model[] {
 }
 
 /**
+ * 能当**对话模型**的模型 —— 对话类选择器（助手头部、角色扮演、各知识库模态、
+ * 摘要模型、子代理的对话档位）列的就是它。比 `conversationalModels` 多排除出图 / 视频行：它们
+ * 走的是生成接口，拿来对话第一轮就报错。
+ *
+ * 两者分开是因为 `conversationalModels` 还有别的读者要出图模型留在里面：
+ * 子代理设置页从它里面分出 `imagegen` 档位的候选，出图面板的选择器也只列出图
+ * 模型。那两处要的是「不是翻译 / 转写」，这里要的是「能对话」。
+ */
+export function chatModels(models: readonly Model[]): Model[] {
+  return conversationalModels(models).filter((m) => m.type !== "image" && m.type !== "video");
+}
+
+/**
  * Whether a model may be picked *automatically* as the chat model — the first
- * model ever added, or the fallback when the stored selection went stale.
- * Stricter than `conversationalModels`: an image or video generation row
- * answers `/chat/completions` with an error, and a new channel's starter list
- * can open with one (火山方舟 pay-as-you-go brings only Seedream), which used
- * to leave a fresh install chatting with an image model. The author can still
- * pick anything by hand; this only governs what the app picks for them.
+ * model ever added, or the fallback when the stored selection went stale. A
+ * new channel's starter list can open with an image model (火山方舟
+ * pay-as-you-go brings only Seedream), which used to leave a fresh install
+ * chatting with it. Same answer as `chatModels`, which the pickers use.
  */
 export function canAutoSelectAsChat(m: Model): boolean {
-  return m.type !== "image" && m.type !== "video" && conversationalModels([m]).length > 0;
+  return chatModels([m]).length > 0;
 }
 
 /**

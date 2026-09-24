@@ -253,6 +253,14 @@ export const useAiStore = create<AiState>((set, get) => ({
       const promptIds = new Set(prompts.map((p) => p.id));
       const s = get();
       const liveModel = (id: string | null) => (id && modelIds.has(id) ? id : null);
+      // The chat and summary bindings must also still be chat models: an
+      // image / video row picked before the pickers stopped listing them would
+      // otherwise keep running every turn (and failing) behind a trigger that
+      // can no longer show it.
+      const liveChatModel = (id: string | null) => {
+        const m = id ? models.find((x) => x.id === id) : undefined;
+        return m && canAutoSelectAsChat(m) ? m.id : null;
+      };
       const liveSubAgents = { ...s.subAgents };
       for (const k of SUBAGENT_KINDS) {
         const modelId = liveModel(liveSubAgents[k].modelId);
@@ -265,8 +273,8 @@ export const useAiStore = create<AiState>((set, get) => ({
         }
       }
       set({
-        activeModelId: liveModel(s.activeModelId) ?? models.find(canAutoSelectAsChat)?.id ?? null,
-        memoryModelId: liveModel(s.memoryModelId),
+        activeModelId: liveChatModel(s.activeModelId) ?? models.find(canAutoSelectAsChat)?.id ?? null,
+        memoryModelId: liveChatModel(s.memoryModelId),
         imageModelId: liveModel(s.imageModelId),
         subAgents: liveSubAgents,
         activePromptId: s.activePromptId && promptIds.has(s.activePromptId) ? s.activePromptId : null,
@@ -459,6 +467,15 @@ export const useAiStore = create<AiState>((set, get) => ({
       await saveModel(d, m);
     }
     set((s) => ({ models: s.models.map((x) => (x.id === m.id ? m : x)) }));
+    // Retyping a row as image / video (or declaring it a translator) can take
+    // it out of the chat pickers while it is the chat or summary model — the
+    // same stale pick `loadConfig` sweeps, so sweep it here too rather than
+    // leave it running behind an empty trigger until the next launch.
+    if (!canAutoSelectAsChat(m)) {
+      const s = get();
+      if (s.activeModelId === m.id) set({ activeModelId: s.models.find(canAutoSelectAsChat)?.id ?? null });
+      if (s.memoryModelId === m.id) set({ memoryModelId: null });
+    }
   },
 
   removeModel: async (id) => {
