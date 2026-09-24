@@ -35,6 +35,7 @@ import {
 import { platformDefaultPath, platformEndpoints, resolvePlatform, type PlatformId } from "./platforms";
 import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
 import { parseStructuredOutputMode } from "./jsonMode";
+import { isPrivateNetworkUrl } from "../http";
 
 /** Every family, in the order route strips and tables list them. */
 export const ROUTE_FAMILIES: readonly ProtocolFamily[] = ["openai", "responses", "gemini", "anthropic"];
@@ -184,6 +185,22 @@ export function legacyEndpoint(p: Pick<Provider, "baseUrl" | "apiStandard" | "au
 /** A channel's routes, primary first. A hand-built provider without any has its legacy one. */
 export function channelEndpoints(p: Provider): Endpoint[] {
   return p.endpoints?.length ? p.endpoints : [legacyEndpoint(p).endpoint];
+}
+
+/**
+ * Whether a channel may be saved and called without an API key: a model server
+ * the author runs themselves. Two ways to be one — the Ollama platform (which
+ * has no key on any host), or every route pointing at this machine or the local
+ * network (`isPrivateNetworkUrl`), which is where an LM Studio on another box
+ * lands as `custom`. A public host still needs one: there a missing key is a
+ * typo, and saying so at save time beats a 401 mid-run.
+ */
+export function keyOptional(
+  p: Pick<Provider, "host" | "baseUrl" | "platform" | "apiStandard" | "endpoints" | "authMode" | "safetySettings">,
+): boolean {
+  if (channelPlatform(p) === "ollama") return true;
+  const eps = p.endpoints?.length ? p.endpoints : [legacyEndpoint(p).endpoint];
+  return eps.every((ep) => isPrivateNetworkUrl(endpointBaseUrl(p, ep)));
 }
 
 /**
