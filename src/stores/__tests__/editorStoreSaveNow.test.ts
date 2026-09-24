@@ -11,6 +11,8 @@
  *    keystroke mid-write stays dirty with its timer tracked, a reload or
  *    another file's edits made meanwhile are left alone, and a buffer that
  *    ends up equal to what was written is clean with no live timer.
+ * 3. Two saves of the same file in flight at once (the timer's and a manual
+ *    flush) land in the order they started, however the writes would finish.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -129,6 +131,79 @@ describe("editorStore.saveNow", () => {
   it("an unchanged buffer settles clean", async () => {
     useEditorStore.getState().setContent("same");
     await useEditorStore.getState().saveNow();
+    expect(useEditorStore.getState().isDirty).toBe(false);
+  });
+});
+
+describe("editorStore.saveNow — overlapping writes of one file", () => {
+  /** A disk whose writes finish only when the test says, in any order. */
+  let disk: string | null;
+  let pending: { content: string; land: () => void; fail: (e: Error) => void }[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    disk = null;
+    pending = [];
+    h.writeFile.mockReset();
+    h.writeFile.mockImplementation((_path: string, content: string) => new Promise<void>((resolve, reject) => {
+      pending.push({
+        content,
+        land: () => { disk = content; resolve(); },
+        fail: (e) => reject(e),
+      });
+    }));
+    useEditorStore.setState({
+      content: "", filePath: "/proj/writing/a.md", headings: [], isDirty: false,
+      saveTimer: null, loadError: null,
+    });
+  });
+
+  afterEach(() => {
+    const { saveTimer } = useEditorStore.getState();
+    if (saveTimer) clearTimeout(saveTimer);
+    h.writeFile.mockReset();
+    h.writeFile.mockImplementation(async () => {});
+    vi.useRealTimers();
+  });
+
+  /** Land whatever write is in flight, newest first, until none is left. */
+  async function landNewestFirst(): Promise<void> {
+    for (;;) {
+      await vi.advanceTimersByTimeAsync(0);
+      const w = pending.pop();
+      if (!w) return;
+      w.land();
+    }
+  }
+
+  it("the later-started save lands last even when its write would finish first", async () => {
+    useEditorStore.getState().setContent("A");
+    const timerSave = useEditorStore.getState().saveNow(); // e.g. the 2s timer
+    useEditorStore.getState().setContent("AB");
+    const manualSave = useEditorStore.getState().saveNow(); // e.g. ⌘S
+
+    await landNewestFirst();
+    await Promise.all([timerSave, manualSave]);
+
+    expect(disk).toBe("AB");
+    expect(useEditorStore.getState().isDirty).toBe(false);
+    expect(useEditorStore.getState().saveTimer).toBeNull();
+  });
+
+  it("a failed earlier write doesn't hold up the one queued behind it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    useEditorStore.getState().setContent("A");
+    const first = useEditorStore.getState().saveNow();
+    useEditorStore.getState().setContent("AB");
+    const second = useEditorStore.getState().saveNow();
+
+    await vi.advanceTimersByTimeAsync(0);
+    pending.shift()!.fail(new Error("transient"));
+    await expect(first).rejects.toThrow("transient");
+    await landNewestFirst();
+    await second;
+
+    expect(disk).toBe("AB");
     expect(useEditorStore.getState().isDirty).toBe(false);
   });
 });
