@@ -472,3 +472,39 @@ describe("moveInSpine", () => {
     expect(moveInSpine(base, "卷一", "卷一", false)).toBe(base);
   });
 });
+
+describe("rewritePathInSpine — leftovers at the destination", () => {
+  it("a deleted folder's stale entries are not inherited by the folder renamed onto its name", () => {
+    const spine: BookSpine = {
+      version: 1,
+      order: { 草稿: ["草稿/p.md", "草稿/q.md"], 卷二: ["卷二/old.md"] },
+      volumes: ["卷二", "草稿"],
+      status: { "卷二/old.md": "writing" },
+      members: { folders: ["卷二"], docs: ["草稿/p.md"], exclude: ["卷二/x.md"] },
+    };
+    const got = moveInSpine(spine, "草稿", "卷二", false);
+    expect(got.order).toEqual({ 卷二: ["卷二/p.md", "卷二/q.md"] });
+    expect(got.volumes).toEqual(["卷二"]);
+    expect(got.status).toEqual({});
+    expect(got.members).toEqual({ folders: [], docs: ["卷二/p.md"], exclude: [] });
+  });
+
+  it("a stale order key never overwrites the renamed volume's order, whatever the key order", () => {
+    const spine: BookSpine = { version: 1, order: { A: ["A/2.md", "A/1.md"], B: ["B/z.md"] } };
+    expect(rewritePathInSpine(spine, "A", "B").order).toEqual({ B: ["B/2.md", "B/1.md"] });
+  });
+});
+
+describe("moveInSpine — only chapters carry membership", () => {
+  const base: BookSpine = { version: 1, order: {}, members: { folders: ["卷一"], docs: [], exclude: [] } };
+  it("a resource moved out of a whole member is not picked", () => {
+    expect(moveInSpine(base, "卷一/cover.png", "图/cover.png", false).members?.docs).toEqual([]);
+  });
+  it("a subfolder moved out of a whole member is not picked", () => {
+    expect(moveInSpine(base, "卷一/sub", "图/sub", false).members?.docs).toEqual([]);
+  });
+  it("an excluded chapter moved into another whole member stays excluded", () => {
+    const spine: BookSpine = { version: 1, order: {}, members: { folders: ["卷一", "卷二"], docs: [], exclude: ["卷一/b.md"] } };
+    expect(moveInSpine(spine, "卷一/b.md", "卷二/b.md", true).members?.exclude).toEqual(["卷二/b.md"]);
+  });
+});

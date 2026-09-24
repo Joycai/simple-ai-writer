@@ -261,22 +261,31 @@ function cloneMembers(m: LibraryMembers): LibraryMembers {
  * status map and the library members, so a rename keeps a document's place,
  * its 在写 mark and its membership. Renaming the root ("") is meaningless and
  * returns the spine untouched.
+ *
+ * Whatever the spine still says about the destination is a leftover: a move
+ * never lands on an occupied path, so an entry at or under `newRel` names a
+ * file or folder deleted outside the library (deletes are not hooked). Those
+ * go first — otherwise a stale 在写 mark, order list or whole-folder membership
+ * would be inherited by whatever now takes the name.
  */
 export function rewritePathInSpine(spine: BookSpine, oldRel: string, newRel: string): BookSpine {
   if (!oldRel || oldRel === newRel) return spine;
-  const rewrite = (rel: string): string =>
-    rel === oldRel ? newRel : rel.startsWith(oldRel + "/") ? newRel + rel.slice(oldRel.length) : rel;
-  const rewriteAll = (list: string[]) => [...new Set(list.map(rewrite))];
+  const under = (rel: string, root: string) => rel === root || rel.startsWith(root + "/");
+  const stale = (rel: string) => under(rel, newRel) && !under(rel, oldRel);
+  const rewrite = (rel: string): string => (under(rel, oldRel) ? newRel + rel.slice(oldRel.length) : rel);
+  const rewriteAll = (list: string[]) => [...new Set(list.filter((r) => !stale(r)).map(rewrite))];
 
   const order: Record<string, string[]> = {};
   for (const [volRel, chapters] of Object.entries(spine.order)) {
-    order[rewrite(volRel)] = rewriteAll(chapters);
+    if (!stale(volRel)) order[rewrite(volRel)] = rewriteAll(chapters);
   }
   const next: BookSpine = { version: 1, order };
   if (spine.volumes) next.volumes = rewriteAll(spine.volumes);
   if (spine.status && Object.keys(spine.status).length > 0) {
     const status: Record<string, ChapterStatus> = {};
-    for (const [rel, st] of Object.entries(spine.status)) status[rewrite(rel)] = st;
+    for (const [rel, st] of Object.entries(spine.status)) {
+      if (!stale(rel)) status[rewrite(rel)] = st;
+    }
     next.status = status;
   }
   if (spine.members) {
@@ -291,17 +300,19 @@ export function rewritePathInSpine(spine: BookSpine, oldRel: string, newRel: str
 
 /**
  * A file or folder moved from `oldRel` to `newRel`: rewrite its paths, and keep
- * a document that was in the library in it wherever it lands — moving a
- * chapter from a whole-member folder into a folder that isn't one would
- * otherwise drop it (its membership came from the folder, not its own entry).
- * Entries the move made contradictory (a picked doc now inside a whole member,
- * an exclusion now outside one) are dropped.
+ * a chapter that was in the library in it wherever it lands — moving it from a
+ * whole-member folder into a folder that isn't one would otherwise drop it
+ * (its membership came from the folder, not its own entry). Only chapters:
+ * a resource or a subfolder has no per-item membership to carry. An excluded
+ * chapter stays excluded wherever it goes ("was out, stays out"). Entries the
+ * move made contradictory (a picked doc now inside a whole member, an
+ * exclusion now outside one) are dropped.
  */
-export function moveInSpine(spine: BookSpine, oldRel: string, newRel: string, isFile: boolean): BookSpine {
+export function moveInSpine(spine: BookSpine, oldRel: string, newRel: string, isChapter: boolean): BookSpine {
   const next = rewritePathInSpine(spine, oldRel, newRel);
   if (!next.members || next === spine) return next;
   let members = next.members;
-  if (isFile && spine.members && isDocMember(spine.members, oldRel) && !isDocMember(members, newRel)) {
+  if (isChapter && spine.members && isDocMember(spine.members, oldRel) && !isDocMember(members, newRel)) {
     members = addDoc(members, newRel);
   }
   const whole = new Set(members.folders);
@@ -366,12 +377,14 @@ export async function saveSpine(projectPath: string, spine: BookSpine): Promise<
  * Returns whether the file was rewritten.
  */
 export async function moveInSpineOnDisk(
-  projectPath: string, oldRel: string, newRel: string, isFile: boolean,
+  projectPath: string, oldRel: string, newRel: string, isChapter: boolean,
 ): Promise<boolean> {
   const spine = await loadSpine(projectPath);
   if (!spine) return false;
-  const next = moveInSpine(spine, oldRel, newRel, isFile);
-  if (next === spine) return false;
+  const next = moveInSpine(spine, oldRel, newRel, isChapter);
+  // Most moves touch nothing the spine records (an image, a stray note) —
+  // those neither write the file nor make the library reload.
+  if (JSON.stringify(next) === JSON.stringify(spine)) return false;
   await saveSpine(projectPath, next);
   return true;
 }

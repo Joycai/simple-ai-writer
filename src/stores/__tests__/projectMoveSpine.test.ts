@@ -81,12 +81,28 @@ describe("projectStore.moveEntry → book spine", () => {
     expect(useProjectStore.getState().spineRev).toBe(0);
   });
 
+  it("a chapter moved out of a whole member stays in the library", async () => {
+    h.files.set(SPINE, JSON.stringify({ version: 1, order: {}, members: { folders: ["卷一"], docs: [], exclude: [] } }));
+    await useProjectStore.getState().moveEntry(`${PROJ}/卷一/a.md`, `${PROJ}/杂/a.md`);
+    expect(spineOnDisk().members.docs).toEqual(["杂/a.md"]);
+  });
+
+  it("a subfolder moved out of a whole member is not picked as a doc", async () => {
+    h.dirs.add(`${PROJ}/卷一/sub.md`); // a folder whose name looks like a chapter
+    h.files.set(SPINE, JSON.stringify({ version: 1, order: {}, members: { folders: ["卷一"], docs: [], exclude: [] } }));
+    await useProjectStore.getState().moveEntry(`${PROJ}/卷一/sub.md`, `${PROJ}/杂/sub.md`);
+    expect(spineOnDisk().members.docs).toEqual([]);
+  });
+
   it("a spine that fails to write does not fail the move", async () => {
-    h.files.set(SPINE, JSON.stringify({ version: 1, order: {} }));
+    h.files.set(SPINE, JSON.stringify({ version: 1, order: { "": ["a.md"] }, members: { folders: [""], docs: [], exclude: [] } }));
+    useProjectStore.setState({ activeFilePath: `${PROJ}/a.md` });
     const { writeFile } = await import("../../lib/fs/fileio");
     vi.mocked(writeFile).mockRejectedValueOnce(new Error("disk full"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(useProjectStore.getState().moveEntry(`${PROJ}/a.md`, `${PROJ}/b.md`)).resolves.toBeUndefined();
+    expect(useProjectStore.getState().spineRev).toBe(0);
+    expect(useProjectStore.getState().activeFilePath).toBe(`${PROJ}/b.md`);
     err.mockRestore();
   });
 });

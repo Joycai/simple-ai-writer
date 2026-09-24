@@ -31,7 +31,7 @@ import {
   type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
-import { moveInSpineOnDisk, normalizeChapterFileName } from "../lib/context/outline";
+import { isChapterFile, moveInSpineOnDisk, normalizeChapterFileName } from "../lib/context/outline";
 import type { LoreOrganizer } from "../lib/agent/registry";
 import {
   fileEntities,
@@ -136,6 +136,15 @@ async function claimWorkspace(target: string): Promise<"claimed" | "focused-exis
 function resetDocuments(): void {
   useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
   useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
+}
+
+/** `path` as the file tree spells it (case can differ on a case-insensitive disk). */
+function treeSpelling(nodes: FileNode[], path: string): string {
+  for (const n of nodes) {
+    if (isSamePath(n.path, path)) return n.path;
+    if (n.children && isStrictDescendant(n.path, path)) return treeSpelling(n.children, path);
+  }
+  return path;
 }
 
 /** The workspace with no project open: the novel pack, alone. */
@@ -717,15 +726,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // The spine keys by relPath; without this a rename in the sidebar silently
     // loses the document's place, its 在写 mark and its library membership.
     // Never fails the move — the file is already where the author put it.
-    const { projectPath } = get();
-    const fromRel = projectPath ? projectRelative(projectPath, from) : null;
+    // `from` is taken in the tree's spelling: an agent path may differ in case
+    // from the file on a case-insensitive disk, and the spine holds the tree's.
+    const { projectPath, fileTree } = get();
+    const fromRel = projectPath ? projectRelative(projectPath, treeSpelling(fileTree, from)) : null;
     const toRel = projectPath ? projectRelative(projectPath, to) : null;
+    let spineMoved = false;
     if (projectPath && fromRel && toRel) {
       try {
-        const isFile = !(await statPath(to))?.isDir;
-        if (await moveInSpineOnDisk(projectPath, fromRel, toRel, isFile)) {
-          set((s) => ({ spineRev: s.spineRev + 1 }));
-        }
+        const isChapter = !(await statPath(to))?.isDir && isChapterFile(baseName(to));
+        spineMoved = await moveInSpineOnDisk(projectPath, fromRel, toRel, isChapter);
       } catch (e) {
         console.error("[project] rewriting the book spine after a move failed:", e);
       }
@@ -738,6 +748,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ activeFilePath: to + activeFilePath.slice(from.length) });
     }
     await get().refreshFileTree();
+    // After the refresh, so a view reloading on it sees the moved tree too.
+    if (spineMoved) set((s) => ({ spineRev: s.spineRev + 1 }));
   },
 
   /**
