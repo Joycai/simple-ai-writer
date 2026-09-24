@@ -71,6 +71,28 @@ interface EditorState {
   setDocCounts: (words: number, chars: number) => void;
 }
 
+/**
+ * One write chain per path. A timer-fired `saveNow` and a manual flush (⌘S,
+ * `flushIfOpen`, closeDocument, moveEntry…) can both be in flight for the same
+ * file, and `fs_write_file` runs on a Rust thread pool — unchained, the older
+ * text's write could land last, leaving stale text on disk while `settle()`
+ * (which only sees the newer write finish) calls the buffer clean. Chained,
+ * the last write started is the last to land. A failed link doesn't break the
+ * chain: the next write is the retry.
+ */
+const writeChains = new Map<string, Promise<void>>();
+
+function writeInOrder(path: string, content: string): Promise<void> {
+  const prev = writeChains.get(path);
+  // Nothing queued: start now, not a microtask later — the write is under way
+  // by the time saveNow's caller gets control back, as it was before chaining.
+  const next = prev ? prev.catch(() => {}).then(() => writeFile(path, content)) : writeFile(path, content);
+  writeChains.set(path, next);
+  const forget = () => { if (writeChains.get(path) === next) writeChains.delete(path); };
+  next.then(forget, forget);
+  return next;
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   content: "",
   filePath: null,
@@ -88,23 +110,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   charCount: 0,
 
   loadFile: async (path) => {
-    // Flush any pending autosave for the previously open file before switching.
-    // Otherwise edits made within the debounce window are lost: the stale timer
-    // would later fire and write the *new* file's content. Mirrors loreStore.selectFile.
-    const { saveTimer, isDirty, filePath: prev } = get();
-    if (saveTimer) clearTimeout(saveTimer);
-    if (isDirty && prev && prev !== path) await get().saveNow();
-
+    // Read first, flush second, switch in the same tick as the last check.
+    //
+    // The old document stays on screen, and editable, for as long as this
+    // takes: a keystroke typed into it during any await here goes through
+    // `setContent` into the *old* buffer. So the old buffer is flushed after
+    // the read, not before it, and flushed again for as long as a flush
+    // finishes with the buffer dirty again (the author typed during that
+    // write) — the loop only exits synchronously after a check that found it
+    // clean, and the `set()` below runs in that same tick, so no keystroke can
+    // land between "nothing left to write" and "the buffer is the new file".
+    // Flushing once up front (the old way) lost whatever was typed during the
+    // read: `set()` replaced the buffer and nulled the new timer's handle.
+    //
+    // A reload of the same path doesn't flush: its callers (relinkAssets,
+    // rewind) mean "the buffer becomes the file as it now stands", and the old
+    // buffer is precisely what they are discarding. A failed flush throws out
+    // of here with nothing switched — the buffer is that text's only copy.
+    let read: { content: string } | { error: unknown };
     try {
-      const content = await readFile(path);
+      read = { content: await readFile(path) };
+    } catch (e) {
+      read = { error: e };
+    }
+    for (;;) {
+      const { isDirty, filePath: prev } = get();
+      if (!isDirty || !prev || prev === path) break;
+      await get().saveNow();
+    }
+
+    // Whatever is still armed belongs to the buffer being replaced.
+    const { saveTimer } = get();
+    if (saveTimer) clearTimeout(saveTimer);
+    if ("content" in read) {
+      const { content } = read;
       const headings = extractHeadings(content);
       set({ content, filePath: path, headings, isDirty: false, saveTimer: null, loadError: null });
       get().setDocCounts(countWords(content), content.length);
-    } catch (e) {
+    } else {
       // filePath stays null (not `path`) — see loadError's doc comment above.
       set({
         content: "", filePath: null, headings: [], isDirty: false, saveTimer: null,
-        loadError: { path, message: String(e) },
+        loadError: { path, message: String(read.error) },
       });
     }
   },
@@ -150,7 +197,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return cur.saveTimer === saveTimer ? null : cur.saveTimer;
     };
     try {
-      await writeFile(filePath, content);
+      await writeInOrder(filePath, content);
       const cur = get();
       const wroteWhatIsThere = cur.filePath === filePath && cur.content === content;
       // What's on disk is exactly the buffer, so a timer armed mid-write (a

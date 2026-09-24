@@ -712,7 +712,7 @@ Zustand stores。一个 store 一个关注点，**存的是「现在是什么」
 
 - **`appStore`** — 主题、语言（i18n）、侧栏 / 面板折叠、活动标签页。持久化的字段经 `lib/prefs` 的 `prefBackedState()` 拿初值；配置导入之后由 `reloadFromPrefs()` 重新派生，因为那些字段只在启动时读过一次偏好。
 - **`projectStore`** — 当前项目路径、文件树、活动文件，以及解析好的 `workspace`（启用了哪些能力包）。**组件订阅的是这里的 `workspace`**，不是 `lib/profile/active` 那个单例——单例不是响应式的。
-- **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度、字数 / 字符数（从内容算出，所以跟内容住一起）。**不 import `projectStore`**——要同时看两边的东西放在 `openDocument.ts`。
+- **`editorStore`** — 编辑器内容、脏标记、视图模式（editor / split / preview）、保存调度、字数 / 字符数（从内容算出，所以跟内容住一起）。**不 import `projectStore`**——要同时看两边的东西放在 `openDocument.ts`。写盘与切换的时序规矩（`saveNow` 只「清」自己写出去的那份、同一路径的写盘排成一条链、`loadFile` 先读后 flush 再同一拍切换）写在 `docs/feature/html-artifact-plan.md` D5。
 - **`loreStore`** — 已索引的知识库条目、别名映射、条目摘要；项目打开时自动扫 `.ai-writer/lore/`（`scanLore`）。另带 `categoryNotes`：墙筛到某分类时读一次的分类说明摘要（`loadCategoryNote`，`null` 也缓存），换项目随索引清空、同项目重扫保留，`describe` 写盘经 `ToolAppState.categoryNoteWritten` 逐出一条——它**不在** `LoreIndex` 上，重扫读不到它（`docs/feature/lore/folder-note-plan.md` §5.2）。
 - **`aiStore`** — 供应商、模型、提示词。**API 密钥不在这里**：它们经 Rust 的 `secret_*` 命令住在 OS 钥匙串里（`src/lib/keyStore.ts`），这个 store 只存「有哪些 provider」，而那几行也是「钥匙串里有哪些账户」的唯一记录（见 `appReset` 的顺序规矩）。
 - **`aiTaskStore`** — 正在跑的 AI 任务：流式输出、token 用量、中断信号。任务按声明的 `tools` / `target` / `continuation` 分支，**从不按 id 分支**。
