@@ -394,7 +394,14 @@ export const useLoreStore = create<LoreState>((set, get) => ({
         cur.selectedEntity?.dirPath === selectedEntity.dirPath &&
         cur.selectedFile === selectedFile &&
         cur.fileContent === fileContent;
-      set({ isDirty: cur.isDirty && !wroteWhatIsThere, saveTimer: settle() });
+      // What's on disk is exactly the buffer, so a timer armed mid-write (a
+      // keystroke and its undo) could only write the same text again, later.
+      // Clean means no live timer — as in editorStore.saveNow.
+      if (wroteWhatIsThere && cur.saveTimer && cur.saveTimer !== saveTimer) clearTimeout(cur.saveTimer);
+      set({
+        isDirty: cur.isDirty && !wroteWhatIsThere,
+        saveTimer: wroteWhatIsThere ? null : settle(),
+      });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next
       // edit/flush retries the write — clearing it would silently drop the draft.

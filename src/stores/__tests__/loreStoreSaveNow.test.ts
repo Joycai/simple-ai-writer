@@ -3,7 +3,8 @@
  * *after* it, the same rule editorStore.saveNow follows
  * (docs/feature/html-artifact-plan.md D5): a keystroke mid-write stays dirty
  * and its newly armed timer stays tracked; the write only ever cleans what it
- * wrote, never a reload of the same file or another file's edits.
+ * wrote, never a reload of the same file or another file's edits; and a buffer
+ * that ends up equal to what was written is clean with no live timer.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,6 +103,20 @@ describe("loreStore.saveNow — settles against what it wrote", () => {
     finish();
     await saving;
     expect(useLoreStore.getState().isDirty).toBe(true);
+  });
+
+  it("a keystroke and its undo during the write settle clean, with that timer cancelled", async () => {
+    const finish = holdNextWrite();
+    useLoreStore.getState().setFileContent("C");
+    const saving = useLoreStore.getState().saveNow();
+    useLoreStore.getState().setFileContent("Cx");
+    useLoreStore.getState().setFileContent("C"); // back to what is being written
+    finish();
+    await saving;
+    expect(useLoreStore.getState().isDirty).toBe(false);
+    expect(useLoreStore.getState().saveTimer).toBeNull();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(h.writeEntityFile).toHaveBeenCalledTimes(1); // no late rewrite
   });
 
   it("an unchanged buffer settles clean", async () => {
