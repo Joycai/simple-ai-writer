@@ -12,7 +12,7 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagentModel";
-import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, pdfRouteFor, readsPdf, type Model } from "../../../lib/ai/configDb";
+import { canSeeImages, chatModels, conversationalModels, isAsrOnly, isTranslateOnly, pdfRouteFor, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { upstreamDropping } from "../../../lib/ai/relayUpstream";
 import {
@@ -77,19 +77,18 @@ export function SubAgentsPane() {
   // every list here — and binding it to, say, longread produces no error at
   // all, just a subagent that hands back a Chinese paraphrase of its own
   // instructions (see lib/ai/configDb, and 01-execution-plan.md §1 不变量 2).
-  const conversational = conversationalModels(models);
-  const textCandidates = conversational.filter((m) => m.enabled && m.type !== "image");
-  const imageCandidates = conversational.filter((m) => m.enabled && m.type === "image");
+  const textCandidates = chatModels(models).filter((m) => m.enabled);
+  const imageCandidates = conversationalModels(models).filter((m) => m.enabled && m.type === "image");
   const translateCandidates = models.filter((m) => m.enabled && isTranslateOnly(m));
   // Fifth case, translate's twin: only a row declared a transcription model
   // (its endpoint takes an audio URL, not messages).
   const asrCandidates = models.filter((m) => m.enabled && isAsrOnly(m));
   // The writer is the fourth case, and the only one defined by exclusion: any
   // text model can write, so there is no capability to require — the list is
-  // narrowed by what provably *cannot*. `video` matters here and nowhere else
-  // above: it survives `textCandidates` (which only drops `image`), and a
-  // writer bound to one is refused at run time, which would read as the switch
-  // doing nothing at all.
+  // narrowed by what provably *cannot*. `video` is already out of
+  // `textCandidates` (`chatModels` drops it with `image`); the writer filter
+  // below still names it so it states the run-time check (subAgentModel) in
+  // full rather than leaning on the list it happens to start from.
   // `vision` is refused too: a picture specialist is a poor prose writer, and
   // the run-time check (subAgentModel) says the same.
   const proseCandidates = textCandidates.filter(

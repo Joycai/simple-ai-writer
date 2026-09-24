@@ -17,7 +17,7 @@ import { useTranslation } from "react-i18next";
 import { X, Sparkles, Image as ImageIcon, Wand2, UserRound } from "lucide-react";
 import { ModalShell } from "../common/ModalShell";
 import { Combobox } from "../common/Combobox";
-import { canSeeImages, imageCostFor } from "../../lib/ai/configDb";
+import { canSeeImages, chatModels, imageCostFor } from "../../lib/ai/configDb";
 import { resolveImageRoute } from "../../lib/ai/image";
 import { imageDialect } from "../../lib/ai/imageDialects";
 import { imageToDataUrl } from "../../lib/fs/images";
@@ -103,7 +103,7 @@ export function ImageGenModal({ target, onClose }: Props) {
   // app-wide active model: the author may want a strong writer here without
   // changing what the rest of the app uses, so this stays local to the run.
   const textModels = useMemo(
-    () => models.filter((m) => m.type === "text" || canSeeImages(m)),
+    () => chatModels(models).filter((m) => m.type === "text" || canSeeImages(m)),
     [models],
   );
   const [promptModelId, setPromptModelId] = useState(
@@ -790,6 +790,7 @@ export function ImageGenModal({ target, onClose }: Props) {
             <ModelPicker
               label={t("lore.imageGen.modelLabel")}
               models={imageModels}
+              purpose="image"
               providers={providers}
               value={effectiveImageModelId}
               onChange={(v) => setImageModel(v)}

@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, Search, ShieldAlert } from "lucide-react";
-import { conversationalModels, type Model, type Provider } from "../../lib/ai/configDb";
+import { chatModels, conversationalModels, type Model, type Provider } from "../../lib/ai/configDb";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { blockedModelIds, noteModelUsed, recentModelIds } from "../../lib/ai/modelHealth";
@@ -63,6 +63,12 @@ interface ModelSelectorProps {
   onChange?: (id: string) => void;
   /** Restrict the list (e.g. multimodal-only, image models). Default: all. */
   models?: Model[];
+  /**
+   * What the picked model is for. `chat` (the default) keeps image / video
+   * generation rows out — they can't hold a conversation. `image` is the
+   * 出图 panel's picker, whose whole list is image models.
+   */
+  purpose?: "chat" | "image";
   disabled?: boolean;
   /** Open the popover above the trigger — for pickers sitting in a footer. */
   openUp?: boolean;
@@ -90,6 +96,7 @@ export function ModelSelector({
   value,
   onChange,
   models: modelsOverride,
+  purpose = "chat",
   disabled,
   openUp,
   paper,
@@ -105,17 +112,18 @@ export function ModelSelector({
   // ⌘M, the "open the picker" nonce, 管理渠道 — stay with the header instance).
   const controlled = onChange !== undefined;
   /**
-   * 翻译模型在**每一个** picker 里都被排除，包括调用方自己传进来的列表。
+   * 翻译 / 转写模型在**每一个** picker 里都被排除，包括调用方自己传进来的列表；
+   * 对话用途的 picker 再排除出图 / 视频模型。
    *
-   * 过滤放在这里而不是八个调用点，是因为这个组件就是"挑一个模型来对话"这件
-   * 事本身 —— 而一个专用翻译模型不能对话（见 lib/ai/configDb 的
-   * `conversationalModels`）。放到调用点去，这条不变量就变成一份每次新增
-   * picker 都要记得抄的清单。
+   * 过滤放在这里而不是八个调用点，是因为这个组件就是"挑一个模型来干活"这件
+   * 事本身（见 lib/ai/configDb 的 `conversationalModels` / `chatModels`）。放到
+   * 调用点去，这条不变量就变成一份每次新增 picker 都要记得抄的清单 —— 有几个知识库
+   * 模态传进来的就是未经过滤的全部模型，出图模型就是这样混进对话列表的。
    */
-  const models = useMemo(
-    () => conversationalModels(modelsOverride ?? allModels),
-    [modelsOverride, allModels],
-  );
+  const models = useMemo(() => {
+    const list = modelsOverride ?? allModels;
+    return purpose === "image" ? conversationalModels(list) : chatModels(list);
+  }, [modelsOverride, allModels, purpose]);
   /**
    * 没绑模型、但这个 picker 会回落到全局 —— 那就照实显示全局的那一个。
    * 空态（「选择模型」+ 灰点）在这里是**假话**：跑起来用的正是全局模型。

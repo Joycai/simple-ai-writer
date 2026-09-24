@@ -14,7 +14,7 @@ import type { Model, Provider } from "../../../lib/ai/configDb";
 import { ModelSelector } from "../../ai/ModelSelector";
 import styles from "./ModelPicker.module.css";
 
-export function ModelPicker({ models, value, onChange, disabled, label }: {
+export function ModelPicker({ models, value, onChange, disabled, label, purpose }: {
   models: Model[];
   /** Kept for call-site compatibility — the selector reads providers itself. */
   providers?: Provider[];
@@ -23,6 +23,8 @@ export function ModelPicker({ models, value, onChange, disabled, label }: {
   disabled?: boolean;
   /** Overrides the default 模型 label (e.g. 出图模型). */
   label?: string;
+  /** Passed through to `ModelSelector` — `image` for the 出图 panel. */
+  purpose?: "chat" | "image";
 }) {
   const { t } = useTranslation();
   return (
@@ -37,6 +39,7 @@ export function ModelPicker({ models, value, onChange, disabled, label }: {
         value={value}
         onChange={onChange}
         models={models}
+        purpose={purpose}
         disabled={disabled}
         openUp
         paper
