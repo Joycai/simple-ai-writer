@@ -30,6 +30,9 @@ export function ProjectRow() {
   const projectPath = useProjectStore((s) => s.projectPath);
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  // 「在访达中显示项目」失败的那一句。这一行在标签页之上，文件树的横幅只在树那一页
+  // 才在，所以它自己挂一条同样的横幅（同一个危险色、同一个「知道了」）。
+  const [revealError, setRevealError] = useState<string | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
   // 这两条挂在侧栏自己身上而不是全局派发表里：它们作用于「打开着的项目」，而这一行
@@ -54,7 +57,13 @@ export function ProjectRow() {
 
   const items = (): ContextMenuEntry[] => [
     { kind: "item", icon: <FolderOpen size={13} />, label: t("project.revealProject"),
-      action: () => { revealItemInDir(projectPath).catch(() => { /* best-effort */ }); } },
+      action: () => {
+        setRevealError(null);
+        revealItemInDir(projectPath).catch((e) => {
+          console.error("[ProjectRow] reveal failed:", e);
+          setRevealError(`${t("fileTree.revealFailed", { name })} ${e instanceof Error ? e.message : String(e)}`);
+        });
+      } },
     { kind: "item", icon: <Copy size={13} />, label: t("project.copyPath"),
       action: () => { void navigator.clipboard?.writeText(projectPath).catch(() => { /* best-effort */ }); } },
     { kind: "divider" },
@@ -93,6 +102,14 @@ export function ProjectRow() {
         </button>
         <span className={styles.searchKey}>{comboLabel({ mod: true, key: "k" })}</span>
       </div>
+      {revealError && (
+        <div className={styles.projectError} role="alert">
+          <span className={styles.projectErrorText}>{revealError}</span>
+          <button className={styles.projectErrorAction} onClick={() => setRevealError(null)}>
+            {t("common.gotIt")}
+          </button>
+        </div>
+      )}
       {menuAt && (
         <ContextMenu x={menuAt.x} y={menuAt.y} items={items()} onClose={() => setMenuAt(null)} />
       )}

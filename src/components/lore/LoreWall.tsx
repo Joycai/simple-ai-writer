@@ -521,8 +521,12 @@ export function LoreWall() {
     setTransferBusy(true);
     try {
       const saved = await exportLoreBundle(projectPath);
-      // Show the bundle where it landed instead of an alert.
-      if (saved) revealItemInDir(saved).catch(() => { /* best-effort */ });
+      // Show the bundle where it landed instead of an alert — and when that
+      // fails, the alert after all, saying the export itself went through.
+      if (saved) revealItemInDir(saved).catch((e) => {
+        console.error("[LoreWall] reveal exported bundle failed:", e);
+        window.alert(`${t("lore.transfer.exportedTo", { path: saved })}\n${t("fileTree.revealFailed", { name: baseName(saved) })} ${e instanceof Error ? e.message : String(e)}`);
+      });
     } catch (err) {
       window.alert(`${t("lore.transfer.exportFailed", { kb: terms.kb })}\n${err}`);
     } finally {
@@ -658,7 +662,12 @@ export function LoreWall() {
         : []),
       { kind: "divider" },
       { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
-        action: () => { revealItemInDir(e.dirPath).catch(() => { /* best-effort */ }); } },
+        action: () => {
+          revealItemInDir(e.dirPath).catch((err) => {
+            console.error("[LoreWall] reveal failed:", err);
+            window.alert(`${t("fileTree.revealFailed", { name: e.name })} ${err instanceof Error ? err.message : String(err)}`);
+          });
+        } },
       { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
         action: () => void handleDeleteEntity(e) },
     ];

@@ -3170,6 +3170,7 @@
       "export": "导出",
       "import": "导入",
       "exportFailed": "导出{{kb}}失败：",
+      "exportedTo": "已导出到 {{path}}",
       "importFailed": "导入{{kb}}失败：",
       "emptyBundle": "所选文件不是有效的{{kb}}包（没有找到任何条目）。",
       "stagedSummary": "包内共 {{count}} 个条目",

@@ -793,12 +793,17 @@
 
 .exportPathRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: 5px;
 }
 
 .exportPath {
+  /* basis 0: the row wraps now (for the reveal error), and a long path at its
+     natural width would push the button onto a line of its own. */
+  flex: 1 1 0;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--color-text-secondary);
@@ -819,6 +824,14 @@
   cursor: pointer;
 }
 .exportReveal:hover { text-decoration: underline; }
+/* reveal 失败的那一句：占满路径行下面的整行（行是 flex，靠 basis 100% 折下去）。 */
+.exportRevealError {
+  flex-basis: 100%;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--color-danger-text);
+  word-break: break-word;
+}
 
 .exportFormat {
   margin-top: 6px;

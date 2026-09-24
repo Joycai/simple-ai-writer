@@ -51,7 +51,7 @@ blob iframe 没有文档基址，解析不了项目相对路径。两头解决�
 
 HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（opener 插件 `openPath` + capability scope）做了修正：插件权限的 scope 是**静态** capability 配置，而项目根由 `FsScope` **运行时**注册，静态 scope 表达不了。改为 Rust 命令 `open_with_default_app`——`FsScope::check` 后调 opener 插件的 Rust API，围栏和打开在同一处，与其他 `fs_*` 命令同一纪律，capability 零改动。
 
-**失败要看得见，以及只 flush 脏缓冲区（2026-09-24）。** `open_with_default_app` 会失败——路径在围栏外、文件已被删、macOS 上没有关联程序——而这三种对作者是同一个现象：点了，什么都没发生，分不清是哪一种，也分不清是不是应用卡了。文件树右键的入口（PR #691）一开始就把失败打在横幅上；另外六个入口原先只 `console.error` 或干脆 `.catch(() => {})`，现在各用**自己那一面本来就有的回执**，不另起 toast：
+**失败要看得见，以及只 flush 脏缓冲区（2026-09-24）。** `open_with_default_app` 会失败——路径在围栏外、文件已被删、macOS 上没有关联程序——而这三种对作者是同一个现象：点了，什么都没发生，分不清是哪一种，也分不清是不是应用卡了。文件树右键的入口（PR #691）一开始就把失败打在横幅上；另外十一个入口原先只 `console.error`、`.catch(() => {})`，灯箱那处连 catch 都没有，现在各用**自己那一面本来就有的回执**，不另起 toast：
 
 | 入口 | 回执 | 为什么是这一种 |
 |---|---|---|
@@ -61,11 +61,14 @@ HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（
 | 读不出来的说明页（`EditorArea`） | 按钮下多一行提示，留到下一次点 | 这一页本身就是一张错误说明，第二个失败是它的又一行，不是一闪而过的新表面；作者是来这页**做事**的 |
 | HTML 预览「新窗口预览」「在浏览器打开」（`HtmlPreview`） | 失败的那个按钮字变成两秒「打开失败」，整句在 tooltip | 同一条工具栏上的「导出 PPTX」本来就用按钮字报结果 |
 | 设置 → 外观主题详情「在编辑器里打开」（`AppearanceThemes`） | 详情表脚里一行错误色的整句，不褪，收起卡片即清 | 这一页的错误痕迹（`ThemeFiles` 的 `showSticky`）本来就是错误色、不褪；它在页面底部，离展开的那张卡太远，所以同一口径写在表脚 |
+| 侧栏项目行菜单「在访达中显示项目」（`ProjectRow`） | 项目行下一条与文件树同款的危险色横幅 +「知道了」 | 这一行在标签页之上，大纲页时树的横幅不在屏幕上，只好自己挂一条，但不另起一种样子 |
+| 最近项目右键「在文件浏览器中显示」（`RecentProjects`） | 撤销条那个位置的一条危险色条 +「知道了」，不计时 | 这一面唯一的消息位就是撤销条；列表里的文件夹是最可能已被挪走的，原因要读得完 |
+| 知识库墙右键 / 条目详情 ⋯ 菜单「在文件浏览器中显示」，以及导出包后的自动定位（`LoreWall` · `LoreDetail`） | `window.alert` | 这两面的其他失败（导出、导入、删除特征）一律是 `window.alert`；导出后那一处先说「已导出到 …」，免得读成导出失败 |
+| 对话里 Word 导出回执卡的「在文件浏览器中显示」（`AgentChat`） | 卡内路径行下面一行危险色整句，不褪 | 卡是聊天记录里的存根，文件多半后来被挪过——最常失败的一处，所以写在它说的那个路径旁边 |
+| 图片灯箱工具条的「在文件夹中显示」（`ImageLightbox`） | 文件名下面第二行说明 | 灯箱没有别的文字位；永远是暗底，所以用写死的浅色而不是主题令牌 |
 | 设置 → 外观主题导出后痕迹里的「打开文件夹」（`AppearanceThemes`，`revealItemInDir`） | 痕迹就地换成错误色的「已写入 x，但打开所在文件夹失败：原因」，不褪 | 痕迹本身就是这一行的回执；句子保住「已写入」，否则作者会把它读成导出失败 |
 
-整句一律复用 `fileTree.openExternalFailed` / `fileTree.previewFailed`（哪个文件 + 后端给的原因），四个入口说的是同一句话；按钮上的短词是各自的 `titleBar.openExternalFailed` / `editor.htmlPreview.openFailed`。
-
-应用里其余的 `revealItemInDir` 仍是 best-effort 静默（`ProjectRow` · `RecentProjects` · `LoreWall` · `LoreDetail` · `AgentChat` 的文件卡，`ImageLightbox` 连 catch 都没有）——这次只收了文件树与外观主题两处。
+整句一律复用 `fileTree.openExternalFailed` / `fileTree.previewFailed` / `fileTree.revealFailed`（哪个文件 + 后端给的原因），同一种失败在哪都说同一句话——项目行的菜单项叫「在访达中显示项目」，失败句仍说「在文件浏览器中显示」，平台中立的那一句胜过每处一个变体；按钮上的短词是各自的 `titleBar.openExternalFailed` / `editor.htmlPreview.openFailed`。
 
 这一页的错误痕迹顺带**不再被监听器触发的自动重载冲掉**：原先只有「已导出」那条痕迹受保护，一条错误会被作者没按过的一次重载静默换成「已重新载入」，作者永远不知道刚才哪里失败了。错误照旧留到作者的下一个动作。
 

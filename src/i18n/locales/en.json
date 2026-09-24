@@ -3179,6 +3179,7 @@
       "export": "Export",
       "import": "Import",
       "exportFailed": "Failed to export the {{kb}} bundle:",
+      "exportedTo": "Exported to {{path}}",
       "importFailed": "Failed to import the {{kb}} bundle:",
       "emptyBundle": "The selected file is not a valid {{kb}} bundle (no entries found).",
       "stagedSummary": "{{count}} entries in this bundle",

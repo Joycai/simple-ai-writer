@@ -44,6 +44,9 @@ function LightboxContent({ path }: { path: string }) {
   const close = useModalClose();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  // The toolbar's reveal failing (file moved since the lightbox opened, file
+  // manager unavailable) — shown under the name until the next attempt.
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   // Full resolution on purpose: the point of this view is to inspect the
   // pixels, so unlike the transcript thumbnail it reads the file at size.
@@ -204,6 +207,7 @@ function LightboxContent({ path }: { path: string }) {
       </div>
 
       {url && !error && <div className={styles.name}>{name}</div>}
+      {url && !error && revealError && <div className={styles.revealError} role="alert">{revealError}</div>}
 
       <button className={styles.closeBtn} onClick={() => close?.()} title={t("common.lightbox.close")}>
         <X size={17} strokeWidth={2} />
@@ -233,7 +237,13 @@ function LightboxContent({ path }: { path: string }) {
           <span className={styles.sep} />
           <button
             className={styles.toolBtn}
-            onClick={() => void revealItemInDir(path)}
+            onClick={() => {
+              setRevealError(null);
+              revealItemInDir(path).catch((e) => {
+                console.error("[ImageLightbox] reveal failed:", e);
+                setRevealError(`${t("fileTree.revealFailed", { name })} ${e instanceof Error ? e.message : String(e)}`);
+              });
+            }}
             title={t("ai.chat.revealImage")}
           >
             <FolderOpen size={16} strokeWidth={2} />

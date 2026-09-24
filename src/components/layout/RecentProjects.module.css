@@ -259,6 +259,13 @@
   cursor: pointer;
 }
 .undo:hover { color: var(--color-sienna-hover); }
+/* 同一个位置的失败：换成危险色，文件树横幅的那一套。 */
+.confirmError {
+  background: var(--color-danger-bg);
+  box-shadow: inset 2px 0 0 var(--color-danger-text);
+}
+.confirmError .confirmText,
+.confirmError .undo { color: var(--color-danger-text); }
 
 /* ── 「可以固定」的一行提示 ───────────────────────────────────────────── */
 

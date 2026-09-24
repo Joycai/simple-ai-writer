@@ -54,6 +54,9 @@ export function RecentProjects() {
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [pending, setPending] = useState<PendingClear | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  // 「在文件浏览器中显示」失败的那一句——最近列表里的文件夹最可能已经被挪走或删掉。
+  // 住在撤销条那个位置、用它的样子，但不计时：作者得读完原因，按「知道了」才走。
+  const [revealError, setRevealError] = useState<string | null>(null);
   const undoTimer = useRef<number | undefined>(undefined);
   const reduced = useReducedMotion();
 
@@ -170,7 +173,13 @@ export function RecentProjects() {
         kind: "item",
         icon: <Folder size={13} />,
         label: t("project.showInBrowser"),
-        action: () => { revealItemInDir(path).catch(() => { /* best-effort */ }); },
+        action: () => {
+          setRevealError(null);
+          revealItemInDir(path).catch((e) => {
+            console.error("[RecentProjects] reveal failed:", e);
+            setRevealError(`${t("fileTree.revealFailed", { name: baseName(path) || path })} ${e instanceof Error ? e.message : String(e)}`);
+          });
+        },
       },
       {
         kind: "item",
@@ -315,6 +324,24 @@ export function RecentProjects() {
               </div>
               <button className={styles.undo} onClick={undoClear}>
                 {t("project.undoClear")}
+              </button>
+            </div>
+          </motion.div>
+        )}
+        {revealError && (
+          <motion.div
+            key="reveal-error"
+            className={`${styles.confirm} ${styles.confirmError}`}
+            role="alert"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0, transition: { duration: reduced ? 0 : 0.16, ease: EASE_OUT } }}
+            transition={{ duration: reduced ? 0 : 0.24, ease: EASE_OUT }}
+          >
+            <div className={styles.confirmInner}>
+              <div className={styles.confirmText}>{revealError}</div>
+              <button className={styles.undo} onClick={() => setRevealError(null)}>
+                {t("common.gotIt")}
               </button>
             </div>
           </motion.div>

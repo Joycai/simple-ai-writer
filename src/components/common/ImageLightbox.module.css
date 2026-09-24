@@ -79,6 +79,20 @@
   pointer-events: none;
 }
 
+/* 工具条上「在文件浏览器中显示」失败的那一句，挂在文件名下面。灯箱永远是暗底，所以
+   和 .name 一样用写死的浅色而不是主题令牌——令牌在亮色主题下是深色字。 */
+.revealError {
+  position: absolute;
+  top: 38px;
+  left: 18px;
+  max-width: 60vw;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: #f2b8a8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
 /* Dismiss, top-right — mirrors the toolbar chrome. */
 .closeBtn {
   position: absolute;
