@@ -8,6 +8,7 @@ import {
   spineFromVolumes,
   renameVolumeInSpine,
   rewritePathInSpine,
+  moveInSpine,
   libraryVolumes,
   findChapterContext,
   chapterTitle,
@@ -432,5 +433,42 @@ describe("spineFromVolumes members", () => {
     const next = spineFromVolumes([], prev);
     expect(next.members).toEqual(prev.members);
     expect(next.members).not.toBe(prev.members);
+  });
+});
+
+describe("moveInSpine", () => {
+  const base: BookSpine = {
+    version: 1,
+    order: { 卷一: ["卷一/a.md", "卷一/b.md"] },
+    members: { folders: ["卷一"], docs: ["杂/p.md"], exclude: ["卷一/b.md"] },
+  };
+
+  it("a doc that was in via its folder stays in when moved out of it", () => {
+    const got = moveInSpine(base, "卷一/a.md", "杂/a.md", true);
+    expect(got.members).toEqual({ folders: ["卷一"], docs: ["杂/p.md", "杂/a.md"], exclude: ["卷一/b.md"] });
+  });
+
+  it("a picked doc moved into a whole member drops its own entry", () => {
+    const got = moveInSpine(base, "杂/p.md", "卷一/p.md", true);
+    expect(got.members?.docs).toEqual([]);
+    expect(got.members?.exclude).toEqual(["卷一/b.md"]);
+  });
+
+  it("an excluded doc moved out of the folder stays out", () => {
+    const got = moveInSpine(base, "卷一/b.md", "杂/b.md", true);
+    expect(got.members).toEqual({ folders: ["卷一"], docs: ["杂/p.md"], exclude: [] });
+  });
+
+  it("a non-member doc stays a non-member", () => {
+    const got = moveInSpine(base, "外/q.md", "杂/q.md", true);
+    expect(got.members?.docs).toEqual(["杂/p.md"]);
+  });
+
+  it("a folder move rewrites the folder member", () => {
+    expect(moveInSpine(base, "卷一", "第一卷", false).members?.folders).toEqual(["第一卷"]);
+  });
+
+  it("a no-op move returns the same spine", () => {
+    expect(moveInSpine(base, "卷一", "卷一", false)).toBe(base);
   });
 });

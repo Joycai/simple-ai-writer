@@ -31,7 +31,7 @@ import {
   type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
-import { normalizeChapterFileName } from "../lib/context/outline";
+import { moveInSpineOnDisk, normalizeChapterFileName } from "../lib/context/outline";
 import type { LoreOrganizer } from "../lib/agent/registry";
 import {
   fileEntities,
@@ -48,12 +48,12 @@ import {
   type LoreEntity,
   type LoreEntityAddress,
 } from "../lib/lore";
-import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
+import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, statPath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { collapseAllMap, expandAllMap } from "../lib/fs/selection";
 import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets, relinkAssetGroup } from "../lib/image/assets";
-import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
+import { baseName, isSamePath, isStrictDescendant, projectRelative } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
@@ -256,8 +256,17 @@ interface ProjectState {
     type: "file" | "folder",
     content?: string,
   ) => Promise<string>;
-  /** Move or rename a file/folder, keeping the open document pointed at it. */
+  /**
+   * Move or rename a file/folder, keeping the open document pointed at it and
+   * the book spine (order, 在写, library members) pointed at its new path.
+   */
   moveEntry: (from: string, to: string) => Promise<void>;
+  /**
+   * Bumped whenever something other than the library view rewrote
+   * `.ai-writer/outline.json` (today: `moveEntry`). The library view reloads
+   * its spine on change.
+   */
+  spineRev: number;
   relinkAssets: (groupPath: string, docPath: string) => Promise<void>;
   /**
    * Copy a file/folder into `destDir` and return the new path. Unlike a move,
@@ -389,6 +398,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   collections: [],
   activeFilePath: null,
   fileTree: [],
+  spineRev: 0,
   expandedDirs: {},
   revealRequest: null,
   clipboard: null,
@@ -703,6 +713,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // that is what makes the editor reload the file, and it should reload the
     // rewritten text rather than the version pointing at the old folder.
     await moveDocumentAssets(from, to);
+
+    // The spine keys by relPath; without this a rename in the sidebar silently
+    // loses the document's place, its 在写 mark and its library membership.
+    // Never fails the move — the file is already where the author put it.
+    const { projectPath } = get();
+    const fromRel = projectPath ? projectRelative(projectPath, from) : null;
+    const toRel = projectPath ? projectRelative(projectPath, to) : null;
+    if (projectPath && fromRel && toRel) {
+      try {
+        const isFile = !(await statPath(to))?.isDir;
+        if (await moveInSpineOnDisk(projectPath, fromRel, toRel, isFile)) {
+          set((s) => ({ spineRev: s.spineRev + 1 }));
+        }
+      } catch (e) {
+        console.error("[project] rewriting the book spine after a move failed:", e);
+      }
+    }
 
     const { activeFilePath } = get();
     if (isSamePath(activeFilePath, from)) {

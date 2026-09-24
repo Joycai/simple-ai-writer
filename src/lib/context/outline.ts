@@ -24,7 +24,10 @@ import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
 import { isFolderNoteFile } from "../fs/folderNote";
 import { ASSETS_DIR } from "../image/assets";
 import { projectRelativePath } from "./memory";
-import { applyMembers, emptyMembers, inferLegacyMembers, parseMembers, type LibraryMembers } from "./library";
+import {
+  addDoc, applyMembers, emptyMembers, inferLegacyMembers, isDocMember, parseMembers, parentRel,
+  type LibraryMembers,
+} from "./library";
 import { baseName, dirName, toPosixPath } from "../paths";
 import type { FileNode } from "../project";
 
@@ -287,6 +290,30 @@ export function rewritePathInSpine(spine: BookSpine, oldRel: string, newRel: str
 }
 
 /**
+ * A file or folder moved from `oldRel` to `newRel`: rewrite its paths, and keep
+ * a document that was in the library in it wherever it lands — moving a
+ * chapter from a whole-member folder into a folder that isn't one would
+ * otherwise drop it (its membership came from the folder, not its own entry).
+ * Entries the move made contradictory (a picked doc now inside a whole member,
+ * an exclusion now outside one) are dropped.
+ */
+export function moveInSpine(spine: BookSpine, oldRel: string, newRel: string, isFile: boolean): BookSpine {
+  const next = rewritePathInSpine(spine, oldRel, newRel);
+  if (!next.members || next === spine) return next;
+  let members = next.members;
+  if (isFile && spine.members && isDocMember(spine.members, oldRel) && !isDocMember(members, newRel)) {
+    members = addDoc(members, newRel);
+  }
+  const whole = new Set(members.folders);
+  next.members = {
+    folders: members.folders,
+    docs: members.docs.filter((r) => !whole.has(parentRel(r))),
+    exclude: members.exclude.filter((r) => whole.has(parentRel(r))),
+  };
+  return next;
+}
+
+/**
  * Rewrite a spine after a volume folder rename: the volume's own key, every
  * nested volume's key (a parent rename shifts its children's relPaths too),
  * all chapter relPaths under them, the status map, the volume order and the
@@ -329,6 +356,24 @@ export async function saveSpine(projectPath: string, spine: BookSpine): Promise<
   const p = spinePath(projectPath);
   await makeDir(dirName(p));
   await writeFile(p, JSON.stringify(spine, null, 2) + "\n");
+}
+
+/**
+ * Apply a move to the persisted spine (see moveInSpine). Called by
+ * `projectStore.moveEntry` — the one path the file tree, the library and the
+ * agent all move through — so a rename anywhere keeps order, 在写 and library
+ * membership. No spine on disk → nothing to rewrite, and none is created.
+ * Returns whether the file was rewritten.
+ */
+export async function moveInSpineOnDisk(
+  projectPath: string, oldRel: string, newRel: string, isFile: boolean,
+): Promise<boolean> {
+  const spine = await loadSpine(projectPath);
+  if (!spine) return false;
+  const next = moveInSpine(spine, oldRel, newRel, isFile);
+  if (next === spine) return false;
+  await saveSpine(projectPath, next);
+  return true;
 }
 
 /**
