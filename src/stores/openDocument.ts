@@ -89,6 +89,34 @@ export async function saveDocument(): Promise<void> {
   }
 }
 
+/**
+ * 把 `path` 读进编辑器——EditorArea 跟着 `activeFilePath` 走的那一步。
+ *
+ * `loadFile` 切走之前先 flush 被换下的那份缓冲区，写盘失败时**整个不切**并抛出
+ * （缓冲区是那几行字唯一的副本）。没人接的话，作者点了另一篇、编辑器却停在原处，
+ * 只剩一个没人接的 rejection——和 ⌘S 同一种「点了却什么都没发生」，所以落在同一
+ * 道「保存失败 · 名字」上，名字是没写下去的那一篇，不是要打开的那一篇。
+ */
+export async function loadIntoEditor(path: string): Promise<void> {
+  const leaving = useEditorStore.getState().filePath;
+  try {
+    await useEditorStore.getState().loadFile(path);
+  } catch {
+    if (leaving) flashCrumbTrace({ name: traceName(leaving), kind: "saveFailed" });
+  }
+}
+
+/**
+ * 从**磁盘**读 `path` 之前（预览窗口、默认应用、导出 PPTX）把编辑器里的它写下去——
+ * 只在缓冲区正是这个文件、且脏时（html-artifact-plan.md D5）。无条件写盘会把一份
+ * 干净的缓冲区盖回磁盘，而那恰恰是 `.html` 在外部编辑器里改过之后回来的样子。
+ * 写盘失败照旧抛出：调用方要的是「读到的就是作者看见的」，写不下去就不该去读。
+ */
+export async function flushIfOpen(path: string): Promise<void> {
+  const editor = useEditorStore.getState();
+  if (isSamePath(editor.filePath, path) && editor.isDirty) await editor.saveNow();
+}
+
 /** 面包屑里的文档名：和面包屑本身一样，`.md` 不显示。 */
 function traceName(path: string): string {
   return (baseName(path) || path).replace(/\.md$/i, "");

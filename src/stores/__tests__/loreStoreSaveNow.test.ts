@@ -231,3 +231,48 @@ describe("loreStore.saveNow — overlapping writes of one entry file", () => {
     expect(disk.get(`${BEN.dirPath}/index.md`)).toBe("B");
   });
 });
+
+describe("loreStore.selectEntity / selectFile — flush on isDirty, not on a live timer", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    h.writeEntityFile.mockReset();
+    h.writeEntityFile.mockImplementation(async () => {});
+    useLoreStore.setState({
+      selectedEntity: AVA, selectedFile: "index.md", fileContent: "", isDirty: false, saveTimer: null,
+    });
+  });
+  afterEach(() => {
+    const { saveTimer } = useLoreStore.getState();
+    if (saveTimer) clearTimeout(saveTimer);
+    vi.useRealTimers();
+  });
+
+  it("an edit whose autosave failed is retried before switching, not dropped", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    h.writeEntityFile.mockRejectedValueOnce(new Error("locked"));
+    useLoreStore.getState().setFileContent("A");
+    await vi.advanceTimersByTimeAsync(2500); // the autosave fires and fails
+
+    // Failed: still dirty, but no timer left to say so.
+    expect(useLoreStore.getState().isDirty).toBe(true);
+    expect(useLoreStore.getState().saveTimer).toBeNull();
+
+    await useLoreStore.getState().selectEntity(BEN);
+
+    // The failed autosave, then the retry — not just the one that failed.
+    expect(h.writeEntityFile).toHaveBeenCalledTimes(2);
+    expect(h.writeEntityFile).toHaveBeenLastCalledWith(AVA.dirPath, "index.md", "A");
+  });
+
+  it("selectFile retries the same way", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    h.writeEntityFile.mockRejectedValueOnce(new Error("locked"));
+    useLoreStore.getState().setFileContent("A");
+    await vi.advanceTimersByTimeAsync(2500);
+
+    await useLoreStore.getState().selectFile("look.md");
+
+    expect(h.writeEntityFile).toHaveBeenCalledTimes(2);
+    expect(h.writeEntityFile).toHaveBeenLastCalledWith(AVA.dirPath, "index.md", "A");
+  });
+});

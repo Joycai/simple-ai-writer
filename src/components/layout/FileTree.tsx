@@ -45,7 +45,7 @@ import { useAppStore } from "../../stores/appStore";
 import { chatComposerOf, useComposerStore } from "../../stores/composerStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useEditorStore } from "../../stores/editorStore";
-import { closeDocument, whenFocusSettles } from "../../stores/openDocument";
+import { closeDocument, flushIfOpen, whenFocusSettles } from "../../stores/openDocument";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { loreEntityCount } from "../../lib/lore";
@@ -1175,12 +1175,13 @@ export function FileTree() {
     // 会挑中同一个目标名，互相覆盖。被占着时说一句，不静默——占着的可能正是它自己
     // （顶栏上刚点过），那就不说「另一份」。
     const blocker = convertBlocker(getConvertJobs(), node.path);
-    if (blocker || !beginConvert(node.path)) {
-      setTransferError(blocker && !isSamePath(blocker, node.path)
-        ? t("fileTree.convertBusy", { name: baseName(blocker) })
-        : t("fileTree.convertAlready", { name: node.name }));
+    if (blocker) {
+      setTransferError(isSamePath(blocker, node.path)
+        ? t("fileTree.convertAlready", { name: node.name })
+        : t("fileTree.convertBusy", { name: baseName(blocker) }));
       return;
     }
+    beginConvert(node.path);
     setBusy({ path: node.path, text: t("fileTree.converting", { name: node.name }) });
     setTransferError(null);
     try {
@@ -1302,13 +1303,8 @@ export function FileTree() {
    * 预览或导出。
    *
    * 两者都先 flush 编辑器：它们都从**磁盘**读那份文件，而作者刚敲的字可能还在缓冲区
-   * 里，导出上一次自动保存的版本是一句悄悄话式的谎。
+   * 里，导出上一次自动保存的版本是一句悄悄话式的谎（`flushIfOpen`，和预览工具条同一份）。
    */
-  const flushIfOpen = async (path: string) => {
-    const editor = useEditorStore.getState();
-    if (isSamePath(editor.filePath, path) && editor.isDirty) await editor.saveNow();
-  };
-
   const handlePreviewHtml = async (node: FileNode) => {
     try {
       await flushIfOpen(node.path);

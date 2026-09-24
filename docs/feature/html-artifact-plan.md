@@ -88,6 +88,12 @@ flush 的口径同时收齐到 `flushIfOpen` 那一条：**只有缓冲区是这
 
 **知识库条目的写盘同样按开始顺序落地（2026-09-24）。** 结算说真话的前提是「写完的那一份就是磁盘上的那一份」，而 `loreStore.saveNow` 直接 `writeEntityFile`：定时器触发的 `saveNow` 与手动 flush（切条目、切文件，以及关闭 / 切换项目、备份前的 `flushDirtyDocuments`）可能同时在途，写盘跑在 Rust 线程池上，谁先落地没有保证——旧那份后落地，磁盘上是旧字，结算只看到新那份写完、照样把缓冲区标成干净。现在照编辑器缓冲区那条链（`editorStore.writeInOrder`）的做法，`saveNow` 的写盘排成一条链：后开始的一定后落地；前一次失败不断链，下一次就是重试；链空时立即开写，不多等一个微任务，调用方拿回控制权时写盘已经在途，与排链之前一样。链的键仍是**条目目录 + 文件名**，理由同上：只按文件名，B 条目的 `index.md` 会排在 A 的后面白等，而同一个条目的两个文件本来就互不相干（`loreStoreSaveNow.test.ts`，写盘按「新的先落地」放行时旧实现留下的是旧字）。没把这条链抽成两个 store 共用的一份：两边的写盘函数与键的形状不同，共用只省下十行，却要多一个两边都得 import 的模块。
 
+**review 补上的三处（2026-09-24）。**
+
+- **切文件时换下那篇写盘失败，要看得见。** `loadFile` 在这种情况下照设计整个不切并抛出，可 EditorArea 的调用没人接：作者点了另一篇，编辑器停在原处，只剩一个 unhandled rejection，而 effect 的依赖都没变、不会再试。现在经 `openDocument.loadIntoEditor()`，失败落在和 ⌘S 同一道「保存失败 · 名字」上——名字是没写下去的那一篇，不是要打开的那一篇（`openDocumentSave.test.ts`）。
+- **「同一路径」按 `isSamePath` 算。** `loadFile` 的 flush 循环原先用 `===` 判断「重新载入不 flush」，而它的调用方（EditorArea、`relinkAssets`、回溯）都用 `isSamePath` 判断是不是同一篇。先读后 flush 的顺序下，一个拼法不同的同一文件会先被读进来、再被旧缓冲区盖回去——磁盘与缓冲区从此对不上，缓冲区还被标成干净（`editorStoreLoadFile.test.ts`）。
+- **只 flush 脏缓冲区的那一条只有一份。** 预览工具条和文件树各有一份一字不差的私有 flush；现在是 `openDocument.flushIfOpen()` 一处，⌘S 那次悄悄走偏正是这条规矩散在几处的结果。知识库那边的切条目 / 切文件原先按「有没有定时器」决定 flush，一次写盘失败后定时器已结算成空、`isDirty` 却还是真，切走就把唯一的副本丢了；改按 `isDirty`，与 `flushDirtyDocuments` 同一个口径（`loreStoreSaveNow.test.ts`）。这条路径眼下没有组件会往里敲字，是潜伏的，但它和这一节要 `isDirty` 说真话的前提相抵。
+
 ### D6 `.html` 是一等文本文件，不是章节
 
 - 编辑：CodeMirror 打开、2s autosave——现状已通，不动。
