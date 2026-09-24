@@ -28,7 +28,7 @@ describe("formatToolArgs", () => {
   });
 
   it("appends one qualifying detail after the identity", () => {
-    expect(formatToolArgs('{"name":"苍蓝宝石","facet":"变身形态"}')).toBe("苍蓝宝石 · 变身形态");
+    expect(formatToolArgs('{"name":"青铜罗盘","facet":"器灵"}')).toBe("青铜罗盘 · 器灵");
   });
 
   it("falls back to the first renderable value when nothing is recognised", () => {
@@ -54,8 +54,8 @@ describe("formatToolArgs", () => {
 
 describe("formatToolArgsDetail", () => {
   it("indents the arguments the expanded row shows", () => {
-    expect(formatToolArgsDetail('{"name":"苍蓝宝石","facet":"变身形态"}')).toBe(
-      '{\n  "name": "苍蓝宝石",\n  "facet": "变身形态"\n}',
+    expect(formatToolArgsDetail('{"name":"青铜罗盘","facet":"器灵"}')).toBe(
+      '{\n  "name": "青铜罗盘",\n  "facet": "器灵"\n}',
     );
   });
 
@@ -72,7 +72,7 @@ describe("formatToolArgsDetail", () => {
 
 describe("formatToolResult", () => {
   it("collapses a multi-line result onto one clipped line", () => {
-    const raw = "# 番外篇：战败魔法少女\n\n耳边传来水声，随后是冰冷的触感。渚悠悠醒来。";
+    const raw = "# 番外篇：码头雨夜重逢\n\n耳边传来水声，随后是冰冷的触感。沈舟悠悠醒来。";
     const out = formatToolResult(raw);
     expect(out).not.toContain("\n");
     expect(out.startsWith("番外篇")).toBe(true);

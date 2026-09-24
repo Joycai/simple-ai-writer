@@ -258,7 +258,7 @@ describe("renderTurnsForSummary", () => {
             { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
           ],
         },
-        a("她是一位魔法少女。"),
+        a("她是一位船长。"),
       ]],
     });
     const out = renderTurnsForSummary(segmentHistory(history, meta).turns);
@@ -269,7 +269,7 @@ describe("renderTurnsForSummary", () => {
     expect(lines[2]).toContain("[tool result]");
     expect(lines[2]).toContain("…");
     expect(lines[3]).toBe("[user] (image attached) [image]");
-    expect(lines[4]).toBe("[assistant] 她是一位魔法少女。");
+    expect(lines[4]).toBe("[assistant] 她是一位船长。");
     // No base64 leaks into the summarizer input.
     expect(out).not.toContain("base64");
   });

@@ -71,7 +71,7 @@ export const GALLERY_BUDGET_SHARE = 0.2;
  * the whole selection may.
  *
  * Both caps exist for the same reason `MAX_AUTO_LORE_ENTITIES` does, and the
- * per-source one matters more: a well-linked hub entry ("魔法体系") can cite
+ * per-source one matters more: a well-linked hub entry ("堪舆术") can cite
  * thirty things, and without a per-source limit one such entry decides the
  * whole expansion. Overflow is reported, never silent.
  */
@@ -198,7 +198,7 @@ export interface LoreEntityReport {
    * `ref` is the demoted third channel: nothing in the text named it, but an
    * entry that *was* named cites it with `[[lore:…]]`. It rides along with its
    * summary and gallery line only — never its body, never its facets — so
-   * "the staff exists and here is what it is" costs one line instead of a
+   * "the compass exists and here is what it is" costs one line instead of a
    * chapter (docs/feature/lore/lore-retrieval-plan.md §4.2 ①).
    */
   reason: "auto" | "pinned" | "ref";
@@ -251,7 +251,7 @@ export interface LoreActivationReport {
    * Counted rather than injected, and counted rather than hidden: the fence
    * narrows *automatic discovery*, and following a citation is discovery. The
    * author who set the fence still deserves to know it bit — otherwise
-   * "why didn't the staff come in" has two indistinguishable answers.
+   * "why didn't the compass come in" has two indistinguishable answers.
    */
   refOutOfScope?: number;
 }
@@ -270,7 +270,7 @@ export interface LoreActivationReport {
  *
  * The key is deliberately crude, because it has to stay explainable next to
  * `matchedTerms`:
- *   1. longest matched term — 「星辉之杖」 is stronger evidence than 「渚」,
+ *   1. longest matched term — 「青铜罗盘」 is stronger evidence than 「沈舟」,
  *      which is also the only lever against a one-character alias hitting half
  *      the manuscript (there is no word boundary to appeal to in CJK);
  *   2. how many distinct terms fired;
@@ -551,13 +551,13 @@ export async function selectLore(
   const selected: Selected[] = [...pinnedDirs, ...autoDirs].map((dir) =>
     make(byDir.get(dir)!, pinnedFacetsByDir.has(dir) ? "pinned" : "auto"));
 
-  // ── Citation expansion. The author writing `[[lore:星辉之杖]]` inside a
+  // ── Citation expansion. The author writing `[[lore:青铜罗盘]]` inside a
   // character is an explicit statement that the two belong together, and it
-  // reaches the one case substring matching structurally cannot: the staff has
+  // reaches the one case substring matching structurally cannot: the compass has
   // not been written into the passage yet, because writing it is the job.
   //
   // Four rules, and each one is load-bearing:
-  //   • **one hop.** The staff cites 魔法结社, which cites 魔法体系, which cites
+  //   • **one hop.** The compass cites 听潮阁, which cites 堪舆术, which cites
   //     世界观 — two hops is "everything is related", which is the same as no
   //     retrieval at all. Only entries selected by pin or by match expand.
   //   • **demoted.** Appended *after* every matched entry, so the budget fill

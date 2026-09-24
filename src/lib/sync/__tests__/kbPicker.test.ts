@@ -15,12 +15,12 @@ const kb = (name: string, over: Partial<RemoteKb> = {}): RemoteKb => ({
 });
 
 describe("filterKbs", () => {
-  const list = [kb("Amethyst"), kb("魔法少女アリーシャ"), kb("怪盗魔法少女")];
+  const list = [kb("Amethyst"), kb("港町物语アリーシャ"), kb("怪盗物语")];
 
   it("matches a substring of the name, ignoring case and surrounding blanks", () => {
     expect(filterKbs(list, "  meth ").map((k) => k.name)).toEqual(["Amethyst"]);
     expect(filterKbs(list, "AMETHYST")).toHaveLength(1);
-    expect(filterKbs(list, "魔法").map((k) => k.name)).toEqual(["魔法少女アリーシャ", "怪盗魔法少女"]);
+    expect(filterKbs(list, "物语").map((k) => k.name)).toEqual(["港町物语アリーシャ", "怪盗物语"]);
   });
 
   it("keeps everything for a blank query and nothing for a miss", () => {

@@ -128,7 +128,7 @@ describe("splitDictBody", () => {
 
   it("classifies each line exactly as parseDictBody would — one判定，两份用途", () => {
     // 宽容规则的代表行：全角＝分隔符、列表前缀。逐行判定必须与整体解析一致。
-    const body = "- 文香＝芙美香\nsrc->src";
+    const body = "- 陽菜＝阳菜\nsrc->src";
     const { entries } = splitDictBody(body);
     expect(entries).toEqual(parseDictBody(body));
     // src->src 被 parseDictBody 拒收（src === dst），于是归入 rest。

@@ -133,7 +133,7 @@ footer{padding:2.4rem 0 4rem;color:var(--ink-3);font-family:"JetBrains Mono",mon
     <p class="eyebrow">docs / feature / translate · 可行性分析 · 已实机验证 · 方案已定 · 未实现</p>
     <h1>把 Sakura 接进来，值不值，怎么接</h1>
     <p class="deck">Sakura 是<strong>日→中单向的翻译函数</strong>，不是一个能对话的小模型。这份报告先把它接到你的 LM Studio 上跑了十二组测试，再回答"落在这套代码的哪个接缝上"——你原方案里的四条，有三条要改落点。</p>
-    <p class="srcline"><span>模型：sakura-14b-qwen2.5-v1.0</span><span>端点：LM Studio @ 192.168.2.206:11234 · ctx 33536</span><span>素材：魔法愛姫フミカ 01 · 148 行</span><span>2026-08-22</span></p>
+    <p class="srcline"><span>模型：sakura-14b-qwen2.5-v1.0</span><span>端点：LM Studio @ 192.168.2.206:11234 · ctx 33536</span><span>素材：日文轻小说第一话 · 148 行</span><span>2026-08-22</span></p>
   </div>
 </header>
 
@@ -173,7 +173,7 @@ footer{padding:2.4rem 0 4rem;color:var(--ink-3);font-family:"JetBrains Mono",mon
   <span class="secnum">01</span>
   <h2>实测记录：十二组，跑在你的机器上</h2>
   <div class="prose">
-    <p>全部用官方 v1.0 模板、<code>temperature 0.1 / top_p 0.3</code>，素材是你给的《魔法愛姫フミカ》第一话（148 个非空行）。下面每一行都是真实返回，不是推断。</p>
+    <p>全部用官方 v1.0 模板、<code>temperature 0.1 / top_p 0.3</code>，素材是你给的一部日文轻小说第一话（148 个非空行）。下面每一行都是真实返回，不是推断。</p>
     <h3>格式与对齐</h3>
   </div>
   <div class="tblwrap">
@@ -207,12 +207,13 @@ footer{padding:2.4rem 0 4rem;color:var(--ink-3);font-family:"JetBrains Mono",mon
   <div class="prose">
     <p>100 行 / freq=0 那次的退化被抓了个正着，尾部长这样：</p>
   </div>
-<pre><code>「以少女之爱为衣、充满魅力的公主！俏佳人公主・文香！可爱到要小心注意哦！」
-随着她报上名号的同时，心型光芒也迸裂开来。
-「斯凯尔顿伦！斯凯尔顿伦！斯凯尔顿伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦
-伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦伦…
+<pre><code>「（角色报上名号的一句台词）」
+（紧接着的一句叙述）
+「嘟噜噜！嘟噜噜！嘟噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜
+噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜噜…
 
-<span class="c">← 一路复读到撞满 4096 token。触发点是片假名拟声/名号。
+<span class="c">← 原文台词已换成示意，复读的形态与实测一致。
+   一路复读到撞满 4096 token。触发点是片假名拟声/名号。
    同一块加上 freq=0.2 后，100 行全部完整译出。</span></code></pre>
   <div class="note">
     <b>退化检测器必须是 tok/行，不是"重复行"。</b>我先试了"输出里有没有重复的整行"——退化那两次的重复行计数都是 <b>0</b>，因为复读发生在<i>一行之内</i>。可靠的信号只有三个：<code>finish_reason === "length"</code>、输出行数 ≠ 输入行数、以及 <b>tok/行超过约 35</b>（正常 19–22，退化 65–120，中间有巨大的安全裕度）。
@@ -233,12 +234,12 @@ footer{padding:2.4rem 0 4rem;color:var(--ink-3);font-family:"JetBrains Mono",mon
   </div>
   <div class="prose">
     <h3>术语表：是提示，不是替换</h3>
-    <p>用真实命中原文的词对测（<code>文香-&gt;芙美香</code>、<code>ふみちん-&gt;小芙</code>、<code>白山学園-&gt;白山学院</code>），15 行里：</p>
+    <p>用真实命中原文的三组词对测（主角人名、她的昵称、学校名各一组），15 行里：</p>
     <ul>
-      <li><code>白山学院</code> <span class="tag ok">生效</span>、<code>小芙</code> <span class="tag ok">生效（2 处）</span></li>
-      <li><code>芙美香</code> <span class="tag mod">只生效 1 处</span>——最后一行仍然译成了「文香」</li>
+      <li>学校名 <span class="tag ok">生效</span>、昵称 <span class="tag ok">生效（2 处）</span></li>
+      <li>主角人名 <span class="tag mod">只生效 1 处</span>——最后一行仍然保留了原文写法</li>
     </ul>
-    <p><strong>结论：术语表是软提示，不保证替换。</strong>译名一致性不能交给它，必须在我们这边做一次后处理强制替换（而且要按最长词优先，避免 <code>文香</code> 把 <code>文香さん</code> 切坏）。</p>
+    <p><strong>结论：术语表是软提示，不保证替换。</strong>译名一致性不能交给它，必须在我们这边做一次后处理强制替换（而且要按最长词优先，避免 <code>陽菜</code> 把 <code>陽菜さん</code> 切坏）。</p>
     <h3>吞吐参考</h3>
     <p>60 行 / 21 秒。整篇 148 行按 60 行一块切成 3 块，约 60–70 秒译完。<b>这个速度意味着"翻一章"是个要显示进度条、要能中断的操作</b>，不是一次请求就回来的调用。</p>
   </div>
@@ -389,7 +390,7 @@ footer{padding:2.4rem 0 4rem;color:var(--ink-3);font-family:"JetBrains Mono",mon
     </ul>
     <p>重试阶梯：<code>frequency_penalty</code> 0.1 → 0.2 → 把这块对半切。实测 0.2 把 100 行那次从"63 行 + 复读"救成"100 行完整"，<b>而且耗时从 70 秒降到 34 秒</b>。三次全败就把这块标出来交给作者，<b>不要把坏译文默默写进文件</b>。</p>
     <h3>术语表</h3>
-    <p><code>loreStore</code> 已经有实体和别名映射，转成 <code>src-&gt;dst #备注</code> 就是 Sakura 的术语表格式。但实测它<b>只是软提示</b>（15 行里 <code>芙美香</code> 只替换了 1/2 处），所以译名一致性要靠<b>我们这边的后处理强制替换</b>兜底，按最长词优先。</p>
+    <p><code>loreStore</code> 已经有实体和别名映射，转成 <code>src-&gt;dst #备注</code> 就是 Sakura 的术语表格式。但实测它<b>只是软提示</b>（15 行里主角人名只替换了 1/2 处），所以译名一致性要靠<b>我们这边的后处理强制替换</b>兜底，按最长词优先。</p>
     <div class="note">
       <b>不要把整个知识库倒进术语表。</b>这跟应用里 RAG 的直觉相反，但 Sakura 的推荐上下文只有前 3–5 句；几百条术语塞进去既挤掉正文，又会让它开始照着术语表造句。<b>命中即注入，没命中就不给。</b>
     </div>

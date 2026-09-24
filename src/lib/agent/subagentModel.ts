@@ -54,10 +54,10 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * `retrieval` is excluded on the writer's grounds rather than the other two's:
  * it is not called, and by the time any model is looking at the conversation it
  * has already run. It expands the author's own words into knowledge-base terms
- * *before* the request is assembled, so that retrieval can match on 「星辉之杖」
- * on a turn where the author only wrote 「变身场景」. Its output is a word list
+ * *before* the request is assembled, so that retrieval can match on 「青铜罗盘」
+ * on a turn where the author only wrote 「潜入场景」. Its output is a word list
  * fed back through the ordinary substring matcher — deliberately, because that
- * keeps the injection report saying 「由「星辉之杖」命中」 instead of a score the
+ * keeps the injection report saying 「由「青铜罗盘」命中」 instead of a score the
  * author cannot act on. See docs/feature/lore/lore-retrieval-plan.md §5.
  *
  * `asr` is excluded on imagegen's grounds: a transcription model's endpoint

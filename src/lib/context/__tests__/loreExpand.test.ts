@@ -27,39 +27,39 @@ function index(): LoreIndex {
   return {
     characters: [
       entity({
-        name: "渚",
-        aliases: ["Nagisa"],
+        name: "沈舟",
+        aliases: ["Shen Zhou"],
         facets: [
-          { file: "a.md", title: "魔法少女战斗服", slot: null, keys: ["变身", "战斗服"], group: "outfit", priority: 0, mode: "auto", charCount: 0 },
+          { file: "a.md", title: "夜行装束", slot: null, keys: ["潜入", "夜行衣"], group: "outfit", priority: 0, mode: "auto", charCount: 0 },
         ],
       }),
     ],
-    items: [entity({ name: "星辉之杖", category: "items", aliases: ["魔法杖"] })],
+    items: [entity({ name: "青铜罗盘", category: "items", aliases: ["罗盘"] })],
   };
 }
 
 describe("expansionRoster", () => {
   it("收实体名、别名、特征标题和 keys", () => {
     expect(expansionRoster(index())).toEqual([
-      "渚", "Nagisa", "星辉之杖", "魔法杖", "魔法少女战斗服", "变身", "战斗服",
+      "沈舟", "Shen Zhou", "青铜罗盘", "罗盘", "夜行装束", "潜入", "夜行衣",
     ]);
   });
 
   it("实体词排在特征词之前，所以截断先砍特征词", () => {
     // 名单被砍时，少一个特征关键词只是少激活一层；少一个条目名是整条取不到。
     const roster = expansionRoster(index());
-    expect(roster.indexOf("星辉之杖")).toBeLessThan(roster.indexOf("变身"));
+    expect(roster.indexOf("青铜罗盘")).toBeLessThan(roster.indexOf("潜入"));
   });
 
-  it("特征词非收不可——名单里没有「变身」，模型就答不出「变身」", () => {
-    expect(expansionRoster(index())).toContain("变身");
+  it("特征词非收不可——名单里没有「潜入」，模型就答不出「潜入」", () => {
+    expect(expansionRoster(index())).toContain("潜入");
   });
 
   it("按取材范围收窄：扩展也是自动发现", () => {
     const idx = index();
     idx.characters[0].collections = ["卷一"];
     idx.items[0].collections = ["卷二"];
-    expect(expansionRoster(idx, ["卷一"])).not.toContain("星辉之杖");
+    expect(expansionRoster(idx, ["卷一"])).not.toContain("青铜罗盘");
   });
 
   it("去重且大小写不敏感", () => {
@@ -83,16 +83,16 @@ describe("expansionRoster", () => {
 });
 
 describe("acceptExpansion", () => {
-  const roster = ["渚", "星辉之杖", "变身"];
+  const roster = ["沈舟", "青铜罗盘", "潜入"];
 
   it("留下名单里的词", () => {
-    expect(acceptExpansion({ terms: ["渚", "星辉之杖"] }, roster)).toEqual(["渚", "星辉之杖"]);
+    expect(acceptExpansion({ terms: ["沈舟", "青铜罗盘"] }, roster)).toEqual(["沈舟", "青铜罗盘"]);
   });
 
   it("丢掉模型自己造的词", () => {
     // 造出来的词在 matchTarget 里什么也命中不了，却会混进注入报告的命中来源，
     // 让作者去找一个他知识库里根本没有的条目。
-    expect(acceptExpansion({ terms: ["咏唱", "魔力回路", "变身"] }, roster)).toEqual(["变身"]);
+    expect(acceptExpansion({ terms: ["轻功", "暗号", "潜入"] }, roster)).toEqual(["潜入"]);
   });
 
   it("大小写不敏感，但回填名单里的原始拼写", () => {
@@ -100,7 +100,7 @@ describe("acceptExpansion", () => {
   });
 
   it("去重", () => {
-    expect(acceptExpansion({ terms: ["渚", "渚"] }, roster)).toEqual(["渚"]);
+    expect(acceptExpansion({ terms: ["沈舟", "沈舟"] }, roster)).toEqual(["沈舟"]);
   });
 
   it("有条数上限——防的是把整份名单抄回来", () => {
@@ -109,7 +109,7 @@ describe("acceptExpansion", () => {
   });
 
   it("任何不成形的回答都收成空数组，不抛", () => {
-    for (const bad of [null, undefined, {}, { terms: "渚" }, { terms: [1, 2] }, []]) {
+    for (const bad of [null, undefined, {}, { terms: "沈舟" }, { terms: [1, 2] }, []]) {
       expect(acceptExpansion(bad, roster)).toEqual([]);
     }
   });

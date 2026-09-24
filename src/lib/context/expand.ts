@@ -1,27 +1,27 @@
 /**
  * 查询扩展 —— 把作者的一句话扩成知识库自己的词，再喂回原来的子串匹配器。
  *
- * 起因是取材的一个结构性盲区：子串只能取到**已经写下的字**。「写渚的变身场景」
- * 里没有「星辉之杖」四个字，而那根杖恰恰是这场戏要用的——它还没被写进正文，
+ * 起因是取材的一个结构性盲区：子串只能取到**已经写下的字**。「写沈舟的潜入场景」
+ * 里没有「青铜罗盘」四个字，而那只罗盘恰恰是这场戏要用的——它还没被写进正文，
  * 因为写它就是这次的活儿。引用图（lib/context/loreSelect 的 L3）接住了作者
  * 已经连起来的那一半；这里接的是另一半：作者没连、也不该连进正文的那种关联
- * （「变身场面通常要召唤法杖」是叙事常识，不是设定）。
+ * （「潜入戏通常要靠罗盘找暗道」是叙事常识，不是设定）。
  *
  * 三条设计取舍，每条都在承重：
  *
  * **① 输出是词，不是分数。** 扩展词直接并进 matchTarget，走今天这套 substring
- * 匹配，于是注入报告仍然能说「由「星辉之杖」命中」——只是标一下这个词是扩展来的。
+ * 匹配，于是注入报告仍然能说「由「青铜罗盘」命中」——只是标一下这个词是扩展来的。
  * 换成向量相似度就得在旁边另起一套评分，而「余弦 0.72」是作者无法动手改的东西
  * （方案 §2 不变量 2）。
  *
- * **② 给它名单，不让它自由联想。** 自由联想会产出「咏唱」「魔力回路」这类知识库
+ * **② 给它名单，不让它自由联想。** 自由联想会产出「轻功」「暗号」这类知识库
  * 里根本不存在的词——命中不了任何东西，纯浪费一次调用。所以请求里带一份候选
  * 词表，任务是「从这份名单里挑」；{@link acceptExpansion} 在**回来的路上**再把
  * 名单外的词滤掉一次，因为「请只从名单里选」是提示，不是保证。
  *
- * **③ 名单必须含特征标题和 keys。** 名单里没有「变身」这个词，它就答不出「变身」，
+ * **③ 名单必须含特征标题和 keys。** 名单里没有「潜入」这个词，它就答不出「潜入」，
  * 而特征的激活正是靠 keys 命中的——只给实体名等于让扩展只能唤起条目、永远唤不起
- * 那条战斗服。
+ * 那条夜行装束。
  *
  * 设计与取舍：docs/feature/lore/lore-retrieval-plan.md §5
  */
@@ -133,7 +133,7 @@ const SYSTEM = [
   "You help a writing app decide which knowledge-base entries to load before the author writes a scene.",
   "You are given the author's request and a list of terms that exist in their knowledge base.",
   "Pick the terms whose entries the writer will actually need — including things the request implies but does not name",
-  "(a transformation scene needs the weapon that is summoned during it, even if the request never says so).",
+  "(a break-in scene needs the tool the character finds the way in with, even if the request never says so).",
   "Copy terms verbatim from the list. Never invent a term that is not in it; a term you make up matches nothing.",
   "Pick nothing rather than padding: an irrelevant entry costs the author context they needed for something else.",
 ].join(" ");

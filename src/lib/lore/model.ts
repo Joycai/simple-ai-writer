@@ -135,9 +135,9 @@ export interface LoreEntity {
    * The `[[lore:…]]` targets this entry's own prose cites — index.md and every
    * facet body, deduplicated, **unresolved** (see `collectCiteTargets`).
    *
-   * The author writing `[[lore:星辉之杖]]` inside a character is an explicit
+   * The author writing `[[lore:青铜罗盘]]` inside a character is an explicit
    * declaration that the two belong together, and it is worth more than any
-   * similarity score: it survives the staff never being named in the passage
+   * similarity score: it survives the compass never being named in the passage
    * being written, which is exactly the case substring matching cannot reach
    * (docs/feature/lore/lore-retrieval-plan.md §4).
    *

@@ -56,48 +56,48 @@ beforeEach(() => {
 
 describe("scanLore — refs", () => {
   it("收集 index.md 正文里的引用", async () => {
-    entityWith("nagisa", {
-      "index.md": "---\nname: 渚\n---\n她握着 [[lore:星辉之杖]]。",
+    entityWith("shenzhou", {
+      "index.md": "---\nname: 沈舟\n---\n她握着 [[lore:青铜罗盘]]。",
     });
     const index = await scanLore(ROOT);
-    expect(index.characters[0].refs).toEqual(["星辉之杖"]);
+    expect(index.characters[0].refs).toEqual(["青铜罗盘"]);
   });
 
   it("特征正文里的引用同样算数，并与 index.md 的合并去重", async () => {
-    entityWith("nagisa", {
-      "index.md": "---\nname: 渚\n---\n见 [[lore:星辉之杖]]。",
-      "outfit.md": "---\nfacet: 战斗服\n---\n配 [[lore:星辉之杖]] 与 [[lore:变身器]]。",
+    entityWith("shenzhou", {
+      "index.md": "---\nname: 沈舟\n---\n见 [[lore:青铜罗盘]]。",
+      "outfit.md": "---\nfacet: 夜行衣\n---\n配 [[lore:青铜罗盘]] 与 [[lore:飞爪]]。",
     });
     const index = await scanLore(ROOT);
-    expect(index.characters[0].refs).toEqual(["星辉之杖", "变身器"]);
+    expect(index.characters[0].refs).toEqual(["青铜罗盘", "飞爪"]);
   });
 
   it("frontmatter 不参与采集", async () => {
     // 正文才是作者写引用的地方；把 frontmatter 也扫进来，一个恰好含
     // "[[lore:" 的 summary 就会凭空长出一条边。
-    entityWith("nagisa", {
-      "index.md": "---\nname: 渚\nsummary: 见 [[lore:不该被收的]]\n---\n正文没有引用。",
+    entityWith("shenzhou", {
+      "index.md": "---\nname: 沈舟\nsummary: 见 [[lore:不该被收的]]\n---\n正文没有引用。",
     });
     const index = await scanLore(ROOT);
     expect(index.characters[0].refs).toEqual([]);
   });
 
   it("没有引用的条目得到空数组，不是 undefined", async () => {
-    entityWith("nagisa", { "index.md": "---\nname: 渚\n---\n平平无奇。" });
+    entityWith("shenzhou", { "index.md": "---\nname: 沈舟\n---\n平平无奇。" });
     const index = await scanLore(ROOT);
     expect(index.characters[0].refs).toEqual([]);
   });
 
   it("读不动的特征文件不影响其余引用", async () => {
-    entityWith("nagisa", {
-      "index.md": "---\nname: 渚\n---\n见 [[lore:星辉之杖]]。",
+    entityWith("shenzhou", {
+      "index.md": "---\nname: 沈舟\n---\n见 [[lore:青铜罗盘]]。",
     });
     // 目录里报了这个文件，但内容不存在——扫描要当它是惰性附件跳过。
-    dirs.set(LORE + "/characters/nagisa", [
+    dirs.set(LORE + "/characters/shenzhou", [
       { name: "index.md", isDirectory: false },
       { name: "gone.md", isDirectory: false },
     ]);
     const index = await scanLore(ROOT);
-    expect(index.characters[0].refs).toEqual(["星辉之杖"]);
+    expect(index.characters[0].refs).toEqual(["青铜罗盘"]);
   });
 });
