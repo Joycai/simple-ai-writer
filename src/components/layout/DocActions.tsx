@@ -24,7 +24,8 @@ import { isTextKind, type DocKind } from "../../lib/fs/docKind";
 import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { printHtmlDocument } from "../../lib/fs/export";
 import { convertProjectFile } from "../../lib/import";
-import { baseName, dirName } from "../../lib/paths";
+import { baseName, dirName, isSamePath } from "../../lib/paths";
+import { beginConvert, clearConvertFailure, endConvert, useConvertJobs } from "./convertJobs";
 import styles from "./TitleBar.module.css";
 
 const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
@@ -206,44 +207,50 @@ function OpenExternalButton({ path }: { path: string }) {
  * `docx / xlsx / pdf / pptx` 这一类里唯一有产出的动作，所以它是这条上唯一一件
  * 赭石字的文档动作（表 B）。文件树右键里的「转换文档」还在——顶栏是第二个入口，
  * 不是搬家；两边走的是同一个 `convertProjectFile`。
+ *
+ * 进行中与失败按路径记在 `convertJobs` 里，不在这枚按钮上：作者可以在转换途中走开
+ * （按钮随之卸载），回来时它得还知道这个文件在转、或刚才转失败了。失败的两秒从作者
+ * **看见**时才开始算——在别的文件上时发生的失败，等回到这个文件再亮。
  */
 function ConvertButton({ path }: { path: string }) {
   const { t } = useTranslation();
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const jobs = useConvertJobs();
+  const busy = jobs.busy.some((p) => isSamePath(p, path));
+  const failed = jobs.failed && isSamePath(jobs.failed.path, path) ? jobs.failed : null;
+
+  useEffect(() => {
+    if (!failed) return;
+    const id = setTimeout(() => clearConvertFailure(failed.seq), FEEDBACK_MS);
+    return () => clearTimeout(id);
+  }, [failed]);
 
   const run = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
+    if (!beginConvert(path)) return;
+    let failure: string | undefined;
     try {
       const target = await convertProjectFile(path);
       await refreshFileTree();
       // 成功不留痕迹：转出来的那一篇立刻成为当前文档，面包屑自己就把话说了。
       setActiveFilePath(target);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setError(null), FEEDBACK_MS);
+      failure = e instanceof Error ? e.message : String(e);
     } finally {
-      setBusy(false);
+      endConvert(path, failure);
     }
   };
 
   return (
     <button
-      className={`${styles.ctrl} ${error ? "" : styles.ctrlAccent}`}
+      className={`${styles.ctrl} ${failed ? "" : styles.ctrlAccent}`}
       onClick={() => void run()}
       disabled={busy}
       // 失败时短标签在按钮上、整句在 tooltip 里：48px 的一条横杠放不下一句话，
       // 而作者需要知道的是「哪一步失败了」，不是「失败了」。
-      title={error ?? t("fileTree.convertDoc")}
+      title={failed?.message ?? t("fileTree.convertDoc")}
     >
-      {error
+      {failed
         ? t("titleBar.convertFailed")
         : busy
           ? t("titleBar.converting")
