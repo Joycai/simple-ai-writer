@@ -492,6 +492,7 @@
       "exported": "Wrote {{file}}",
       "openFolder": "Open folder",
       "exportFailed": "Export failed: {{error}}",
+      "revealFailed": "Wrote {{file}}, but couldn't open its folder: {{error}}",
       "fontManuscript": "Manuscript",
       "fontSong": "Song / Book",
       "fontHei": "Sans / Modern",

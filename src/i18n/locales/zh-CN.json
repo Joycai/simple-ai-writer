@@ -490,6 +490,7 @@
       "exported": "已写入 {{file}}",
       "openFolder": "打开文件夹",
       "exportFailed": "导出失败：{{error}}",
+      "revealFailed": "已写入 {{file}}，但打开所在文件夹失败：{{error}}",
       "fontManuscript": "手稿",
       "fontSong": "宋体书卷",
       "fontHei": "黑体清晰",

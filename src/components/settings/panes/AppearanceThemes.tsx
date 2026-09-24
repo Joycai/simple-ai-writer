@@ -591,15 +591,16 @@ export function ThemeFiles() {
       : t("systemSettings.appearance.reloadedNoChange", vars);
   };
 
-  // The watcher's reloads leave the same trace the button does — unless the
-  // export's sticky trace is up: its 「打开文件夹」 must not vanish under the
-  // very reload that export just caused.
+  // The watcher's reloads leave the same trace the button does — unless a
+  // sticky trace is up: the export's 「打开文件夹」 must not vanish under the
+  // very reload that export just caused, and an error must not be wiped by a
+  // reload the author didn't ask for (they'd never learn what failed).
   const lastAuto = useRef(0);
   useEffect(() => {
     if (!autoReload || autoReload.seq === lastAuto.current) return;
     lastAuto.current = autoReload.seq;
     setTrace((cur) => {
-      if (cur?.kind === "exported") return cur;
+      if (cur?.kind === "exported" || cur?.kind === "error") return cur;
       clearTimers();
       setLeaving(false);
       timers.current.push(
@@ -637,6 +638,18 @@ export function ThemeFiles() {
       showSticky({ kind: "exported", fileName, dir, path });
     } catch (e) {
       showSticky({ kind: "error", text: t("systemSettings.appearance.exportFailed", { error: String(e) }) });
+    }
+  };
+
+  // The exported trace's 「打开文件夹」. A failure replaces the trace with an
+  // error that still says the file was written — the export succeeded, only
+  // the reveal didn't, and the author must not read it as a failed export.
+  const revealExported = async (fileName: string, path: string) => {
+    try {
+      await revealItemInDir(path);
+    } catch (e) {
+      console.error("[AppearanceThemes] reveal exported theme failed:", e);
+      showSticky({ kind: "error", text: t("systemSettings.appearance.revealFailed", { file: fileName, error: String(e) }) });
     }
   };
 
@@ -678,7 +691,7 @@ export function ThemeFiles() {
               <button
                 type="button"
                 className={s.traceLink}
-                onClick={() => void revealItemInDir(trace.path).catch(() => {})}
+                onClick={() => void revealExported(trace.fileName, trace.path)}
               >
                 {t("systemSettings.appearance.openFolder")}
               </button>
