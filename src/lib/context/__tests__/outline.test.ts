@@ -7,6 +7,8 @@ import {
   applySpine,
   spineFromVolumes,
   renameVolumeInSpine,
+  rewritePathInSpine,
+  libraryVolumes,
   findChapterContext,
   chapterTitle,
   parentDir,
@@ -341,5 +343,94 @@ describe("chapterTitle", () => {
   it("strips the chapter extension", () => {
     expect(chapterTitle({ name: "第1章.md", path: "", relPath: "" })).toBe("第1章");
     expect(chapterTitle({ name: "a.txt", path: "", relPath: "" })).toBe("a");
+  });
+});
+
+describe("rewritePathInSpine", () => {
+  const base: BookSpine = {
+    version: 1,
+    order: { 卷一: ["卷一/a.md", "卷一/b.md"], 卷一续: ["卷一续/c.md"], "卷一/番外": ["卷一/番外/x.md"] },
+    volumes: ["卷一", "卷一/番外", "卷一续"],
+    status: { "卷一/a.md": "writing", "卷一续/c.md": "writing" },
+    members: { folders: ["卷一", "卷一续"], docs: ["卷一/番外/x.md"], exclude: ["卷一/b.md"] },
+  };
+
+  it("renames a file everywhere it appears", () => {
+    const got = rewritePathInSpine(base, "卷一/a.md", "卷一/甲.md");
+    expect(got.order["卷一"]).toEqual(["卷一/甲.md", "卷一/b.md"]);
+    expect(got.status).toEqual({ "卷一/甲.md": "writing", "卷一续/c.md": "writing" });
+  });
+
+  it("moves a folder with its nested volumes and members, sparing same-prefix siblings", () => {
+    const got = rewritePathInSpine(base, "卷一", "第一卷");
+    expect(Object.keys(got.order).sort()).toEqual(["卷一续", "第一卷", "第一卷/番外"].sort());
+    expect(got.volumes).toEqual(["第一卷", "第一卷/番外", "卷一续"]);
+    expect(got.members).toEqual({
+      folders: ["第一卷", "卷一续"],
+      docs: ["第一卷/番外/x.md"],
+      exclude: ["第一卷/b.md"],
+    });
+    expect(got.status?.["卷一续/c.md"]).toBe("writing");
+  });
+
+  it("a picked doc moved elsewhere keeps its pick", () => {
+    const got = rewritePathInSpine(base, "卷一/番外/x.md", "资料/x.md");
+    expect(got.members?.docs).toEqual(["资料/x.md"]);
+  });
+
+  it("leaves a spine without members without members", () => {
+    const { members: _drop, ...legacy } = base;
+    void _drop;
+    expect(rewritePathInSpine(legacy, "卷一", "甲").members).toBeUndefined();
+  });
+
+  it("renameVolumeInSpine carries the members", () => {
+    expect(renameVolumeInSpine(base, "卷一续", "乙").members?.folders).toEqual(["卷一", "乙"]);
+  });
+});
+
+describe("libraryVolumes", () => {
+  const t: FileNode[] = [
+    { name: "r.md", path: `${PROJ}/r.md`, is_dir: false },
+    {
+      name: "卷一",
+      path: `${PROJ}/卷一`,
+      is_dir: true,
+      children: [
+        { name: "b.md", path: `${PROJ}/卷一/b.md`, is_dir: false },
+        { name: "a.md", path: `${PROJ}/卷一/a.md`, is_dir: false },
+      ],
+    },
+    { name: "杂", path: `${PROJ}/杂`, is_dir: true, children: [] },
+  ];
+
+  it("no spine means an empty library", () => {
+    expect(libraryVolumes(groupVolumes(t, PROJ), null)).toEqual([]);
+  });
+
+  it("filters to members, then applies the order", () => {
+    const spine: BookSpine = {
+      version: 1,
+      order: { 卷一: ["卷一/b.md", "卷一/a.md"] },
+      members: { folders: ["卷一"], docs: [], exclude: [] },
+    };
+    const got = libraryVolumes(groupVolumes(t, PROJ), spine);
+    expect(got.map((v) => v.relPath)).toEqual(["卷一"]);
+    expect(got[0].chapters.map((c) => c.name)).toEqual(["b.md", "a.md"]);
+  });
+
+  it("findChapterContext misses a doc outside the library", () => {
+    const spine: BookSpine = { version: 1, order: {}, members: { folders: ["卷一"], docs: [], exclude: [] } };
+    expect(findChapterContext(libraryVolumes(groupVolumes(t, PROJ), spine), "r.md")).toBeNull();
+  });
+});
+
+describe("spineFromVolumes members", () => {
+  it("starts empty with no previous spine and carries previous members", () => {
+    expect(spineFromVolumes([], null).members).toEqual({ folders: [], docs: [], exclude: [] });
+    const prev: BookSpine = { version: 1, order: {}, members: { folders: ["a"], docs: [], exclude: [] } };
+    const next = spineFromVolumes([], prev);
+    expect(next.members).toEqual(prev.members);
+    expect(next.members).not.toBe(prev.members);
   });
 });
