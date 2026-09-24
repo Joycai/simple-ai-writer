@@ -161,7 +161,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [asr/02-ui-brief.md](feature/asr/02-ui-brief.md) | `shipped` (设计稿 `02f`) | 任务书原文 + 设计稿的答复（五个张力、货币开放问题）+ 实现出入：确认条就地长在行下而不是浮卡、busy 走面板级条、审批卡批准后不在卡内变进度 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
-| [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |
+| [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources；第四期（2026-09-24）改为作者挑选——成员表进 `outline.json`，续写只在文库里找 |
 | [file-panel-pin-ui-brief.md](feature/file-panel-pin-ui-brief.md) | `shipped` | 「最近打开」加固定：**固定＝换节住**（两个小节，不是行上的标记）· 「清空最近」长在它清的那一节的标题行里（于是「全部都被固定」的禁用态根本不存在）· 一行只留一个有状态的图标。含与设计稿 01a 的七处出入，以及「撤销把 per-project 偏好的回收推迟到窗口关闭」那条时序 |
 | [file-panel-redesign-brief.md](feature/file-panel-redesign-brief.md) | `shipped` | 「文件」面板重做 —— 给 Claude Design 的任务书（请求新开 `17 文件面板 Files Panel`）：顶部四层吃掉 216px · 工具栏 7 个图标在最窄档只有 116px 可用 · 悬停/多选/当前打开三态同底 · 一行 28px 里五样东西互相打架（章数一 hover 就消失）· 拖拽与剪贴板九种记号各自为政 · 「全部折叠」落在哪。含**数据边界**清单（节点只有 `{名字,路径,是否目录,子节点}`），防止设计出画不出来的东西。**文末是实现记录**：设计稿的主干决定（选中＝左槽 3px 赭石，赭石淡底只给「当前打开」）、落点表、与设计稿的十处出入，以及「容器查询不改变特异性，密度档必须写在文件末尾」那条实测 |
 | [global-search-ui-brief.md](feature/global-search-ui-brief.md) | `shipped` | ⌘K 升级成全局搜索（文档 / 条目 / 当前文档正文，↵ 直达并让文件树自动定位；条目改去知识库墙而不是在编辑器里开 index.md；假前缀要么真做要么删）+ 文件树工具栏常驻「定位当前文档」按钮（动作已有三个入口，缺的是常驻按钮）。含需求梳理、数据边界（跨文档全文搜索本期不做）与给 Claude Design 的任务书（请求新开 `21 全局搜索`） |
