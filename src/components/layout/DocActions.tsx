@@ -25,7 +25,7 @@ import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { printHtmlDocument } from "../../lib/fs/export";
 import { convertProjectFile } from "../../lib/import";
 import { baseName, dirName, isSamePath } from "../../lib/paths";
-import { beginConvert, clearConvertFailure, endConvert, useConvertJobs } from "./convertJobs";
+import { beginConvert, clearConvertFailure, convertBlocker, endConvert, useConvertJobs } from "./convertJobs";
 import styles from "./TitleBar.module.css";
 
 const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
@@ -217,7 +217,10 @@ function ConvertButton({ path }: { path: string }) {
   const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
   const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
   const jobs = useConvertJobs();
-  const busy = jobs.busy.some((p) => isSamePath(p, path));
+  // 同一文件夹里正在转的那一份（可能就是自己）——在就等（见 convertJobs 文首）。
+  const blocker = convertBlocker(jobs, path);
+  const busy = blocker !== null;
+  const waitingOn = blocker !== null && !isSamePath(blocker, path) ? blocker : null;
   const failed = jobs.failed && isSamePath(jobs.failed.path, path) ? jobs.failed : null;
 
   useEffect(() => {
@@ -228,9 +231,12 @@ function ConvertButton({ path }: { path: string }) {
 
   const run = async () => {
     if (!beginConvert(path)) return;
+    const project = useProjectStore.getState().projectPath;
     let failure: string | undefined;
     try {
       const target = await convertProjectFile(path);
+      // 转换途中换了项目：新项目的树不用刷，转出来的那一篇也不属于它，不跳过去。
+      if (useProjectStore.getState().projectPath !== project) return;
       await refreshFileTree();
       // 成功不留痕迹：转出来的那一篇立刻成为当前文档，面包屑自己就把话说了。
       setActiveFilePath(target);
@@ -248,7 +254,7 @@ function ConvertButton({ path }: { path: string }) {
       disabled={busy}
       // 失败时短标签在按钮上、整句在 tooltip 里：48px 的一条横杠放不下一句话，
       // 而作者需要知道的是「哪一步失败了」，不是「失败了」。
-      title={failed?.message ?? t("fileTree.convertDoc")}
+      title={failed?.message ?? (waitingOn ? t("titleBar.convertWaiting", { name: baseName(waitingOn) }) : t("fileTree.convertDoc"))}
     >
       {failed
         ? t("titleBar.convertFailed")

@@ -80,6 +80,32 @@ describe("editorStore.saveNow — cancels the real timer", () => {
     expect(useEditorStore.getState().saveTimer).toBeNull();
   });
 
+  it("a reload of the same path during the write stays clean (the late settle doesn't re-dirty it)", async () => {
+    let finish!: () => void;
+    h.writeFile.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    useEditorStore.getState().setContent("A");
+    const saving = useEditorStore.getState().saveNow();
+    // What loadFile(samePath) leaves behind: disk text, clean, no timer.
+    const { saveTimer } = useEditorStore.getState();
+    if (saveTimer) clearTimeout(saveTimer);
+    useEditorStore.setState({ content: "reloaded", isDirty: false, saveTimer: null });
+    finish();
+    await saving;
+    expect(useEditorStore.getState().isDirty).toBe(false);
+  });
+
+  it("another file's edits made during the write stay dirty", async () => {
+    let finish!: () => void;
+    h.writeFile.mockImplementationOnce(() => new Promise<void>((r) => { finish = r; }));
+    useEditorStore.getState().setContent("A");
+    const saving = useEditorStore.getState().saveNow();
+    // loadFile(b.md) landed, and the author typed in it.
+    useEditorStore.setState({ filePath: "/proj/writing/b.md", content: "b", isDirty: true });
+    finish();
+    await saving;
+    expect(useEditorStore.getState().isDirty).toBe(true);
+  });
+
   it("an unchanged buffer settles clean", async () => {
     useEditorStore.getState().setContent("same");
     await useEditorStore.getState().saveNow();

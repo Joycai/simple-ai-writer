@@ -1,5 +1,5 @@
 /**
- * 顶栏「转换文档」的进行中与失败，按路径记。
+ * 「转换文档」的进行中与失败，按路径记——顶栏和文件树两个入口共用这一份。
  *
  * 不放在 `ConvertButton` 自己的 state 里：按钮只在「可转换」的文件上渲染，作者在
  * 转换途中点开一篇 `.md`，它就整个卸载了——还在跑的那次转换失败时没人接，又回到
@@ -8,10 +8,15 @@
  *
  * 和 `components/ai/snippetTrace.ts` 同一个做法：模块级的一小份状态 +
  * `useSyncExternalStore`，不进 zustand——它是顶栏上的一个回执，不是应用状态。
+ *
+ * **同一个文件夹里一次只转一份。** `convertProjectFile` 先用 `uniqueImportPath` 挑
+ * 一个空着的名字、再写，两次并发的转换在挑名字时都看见它空着：`a.docx` 与 `a.pdf`
+ * 一起挑中 `a.md` 和 `assets/a/`，互相覆盖；`a.docx`（`a.md` 已在，挑 `a-2.md`）与
+ * `a-2.docx` 也一样。转换只往源文件自己的文件夹里写，所以不同文件夹之间照样并行。
  */
 
 import { useSyncExternalStore } from "react";
-import { isSamePath } from "../../lib/paths";
+import { dirName, isSamePath } from "../../lib/paths";
 
 interface ConvertFailure {
   path: string;
@@ -49,13 +54,18 @@ export function getConvertJobs(): ConvertJobs {
   return current;
 }
 
+/** The conversion `path` would have to wait for — any running in its folder (itself included) — or null. */
+export function convertBlocker(jobs: ConvertJobs, path: string): string | null {
+  return jobs.busy.find((p) => isSamePath(dirName(p), dirName(path))) ?? null;
+}
+
 /**
- * Claim `path` for a conversion. `false` when one is already running for it —
- * the caller does nothing, and the button is showing 「转换中…」 anyway. A new
- * attempt also retires that file's previous failure.
+ * Claim `path`'s folder for a conversion. `false` when one is already running
+ * there — the caller says so (the top bar's button is already showing it). A
+ * new attempt also retires that file's previous failure, whichever entry made it.
  */
 export function beginConvert(path: string): boolean {
-  if (current.busy.some((p) => isSamePath(p, path))) return false;
+  if (convertBlocker(current, path)) return false;
   update({
     busy: [...current.busy, path],
     failed: current.failed && isSamePath(current.failed.path, path) ? null : current.failed,

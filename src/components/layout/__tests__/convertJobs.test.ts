@@ -1,11 +1,12 @@
 /**
- * convertJobs — the top bar's 「转换文档」 state, kept by path outside the button
- * so an author who walks away mid-conversion still hears how it ended, and
- * can't start a second conversion of the same file on the way back.
+ * convertJobs — 「转换文档」's state, shared by the top bar and the file tree and
+ * kept by path outside any button: an author who walks away mid-conversion
+ * still hears how it ended, and no two conversions run in one folder (they
+ * would pick the same target name).
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import {
-  beginConvert, clearConvertFailure, endConvert, getConvertJobs, resetConvertJobs,
+  beginConvert, clearConvertFailure, convertBlocker, endConvert, getConvertJobs, resetConvertJobs,
 } from "../convertJobs";
 
 describe("convertJobs", () => {
@@ -17,11 +18,19 @@ describe("convertJobs", () => {
     expect(getConvertJobs().busy).toEqual(["/p/a.docx"]);
   });
 
-  it("lets a different file convert alongside", () => {
+  it("one conversion per folder: a sibling waits (they'd race for the same target name)", () => {
     expect(beginConvert("/p/a.docx")).toBe(true);
-    expect(beginConvert("/p/b.pdf")).toBe(true);
+    expect(beginConvert("/p/a.pdf")).toBe(false);
+    expect(convertBlocker(getConvertJobs(), "/p/a.pdf")).toBe("/p/a.docx");
     endConvert("/p/a.docx");
-    expect(getConvertJobs().busy).toEqual(["/p/b.pdf"]);
+    expect(beginConvert("/p/a.pdf")).toBe(true);
+  });
+
+  it("different folders convert alongside", () => {
+    expect(beginConvert("/p/a.docx")).toBe(true);
+    expect(beginConvert("/p/sub/b.pdf")).toBe(true);
+    endConvert("/p/a.docx");
+    expect(getConvertJobs().busy).toEqual(["/p/sub/b.pdf"]);
   });
 
   it("records a failure against the file it was about, and releases it", () => {
@@ -36,6 +45,7 @@ describe("convertJobs", () => {
     beginConvert("/p/a.docx");
     endConvert("/p/a.docx", "corrupt zip");
     beginConvert("/p/b.pdf");
+    endConvert("/p/b.pdf");
     expect(getConvertJobs().failed?.path).toBe("/p/a.docx");
     beginConvert("/p/a.docx");
     expect(getConvertJobs().failed).toBeNull();
@@ -45,8 +55,8 @@ describe("convertJobs", () => {
     beginConvert("/p/a.docx");
     endConvert("/p/a.docx", "first");
     const older = getConvertJobs().failed!.seq;
-    beginConvert("/p/b.pdf");
-    endConvert("/p/b.pdf", "second");
+    beginConvert("/p/sub/b.pdf");
+    endConvert("/p/sub/b.pdf", "second");
     clearConvertFailure(older);
     expect(getConvertJobs().failed?.message).toBe("second");
     clearConvertFailure(getConvertJobs().failed!.seq);

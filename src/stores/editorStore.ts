@@ -140,6 +140,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // dirty-only flush, e.g. HtmlPreview's before "open in browser", would
     // then skip it), and nulling saveTimer would orphan the new, still-armed
     // timer so nothing could cancel it.
+    //
+    // And it may only ever *clean*, and only what it wrote: something else can
+    // settle the buffer while the write is in flight (a `loadFile` of this or
+    // another path sets isDirty itself), and this write speaks for neither a
+    // reloaded text nor another file's edits.
     const settle = () => {
       const cur = get();
       return cur.saveTimer === saveTimer ? null : cur.saveTimer;
@@ -147,7 +152,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       await writeFile(filePath, content);
       const cur = get();
-      set({ isDirty: cur.filePath === filePath && cur.content !== content, saveTimer: settle() });
+      const wroteWhatIsThere = cur.filePath === filePath && cur.content === content;
+      set({ isDirty: cur.isDirty && !wroteWhatIsThere, saveTimer: settle() });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next
       // edit/flush retries the write — clearing it would silently drop the draft.
