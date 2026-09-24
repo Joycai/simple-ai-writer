@@ -39,6 +39,32 @@
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border-soft);
 }
+/* 项目菜单里一次失败的动作。与文件树的 .transferError 同一个写法——这一行在标签页
+   之上，树的那条横幅不一定在屏幕上，所以它自己挂一条，而不是另起一种样子。 */
+.projectError {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 12px;
+  flex-shrink: 0;
+  background: var(--color-danger-bg);
+  box-shadow: inset 2px 0 0 var(--color-danger-text);
+  font: 400 10.5px/1.45 var(--font-sans);
+  color: var(--color-danger-text);
+  word-break: break-word;
+}
+.projectErrorText { flex: 1; }
+.projectErrorAction {
+  flex-shrink: 0;
+  font: 400 10.5px/1 var(--font-sans);
+  color: var(--color-danger-text);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 /* 整块可点，且**看得出来可点**：项目级动作（切换 / 新窗口 / 关闭）从工具栏的三枚
    常驻图标搬进了这个菜单，位置是对的（它们作用于项目，不是对树的操作），但第一版
    只有 11px 的 ▾ 提示它是个菜单——实测有人因此以为这两个功能被删掉了。所以整行给

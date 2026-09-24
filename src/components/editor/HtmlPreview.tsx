@@ -7,7 +7,7 @@ import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./HtmlPreview.module.css";
-import { baseName, dirName } from "../../lib/paths";
+import { baseName, dirName, isSamePath } from "../../lib/paths";
 
 /**
  * Rebuilding the frame on every keystroke would restart any script in the
@@ -15,6 +15,22 @@ import { baseName, dirName } from "../../lib/paths";
  * render is inert DOM. Slightly above typing cadence, well below "laggy".
  */
 const REBUILD_DEBOUNCE_MS = 400;
+
+/** How long a failed open's short word stays on its button (the title bar's). */
+const FEEDBACK_MS = 2000;
+
+/**
+ * Flush the editor before something reads this file off disk — but only a
+ * dirty buffer. An unconditional save rewrites a clean buffer over the disk,
+ * and "open in browser" is exactly how an .html gets opened in an external
+ * editor (whatever the OS associates it with): edit there, come back, click
+ * again, and the stale buffer would clobber those edits. Same rule as the file
+ * tree's `flushIfOpen` (docs/feature/html-artifact-plan.md D5).
+ */
+async function flushIfDirty(path: string): Promise<void> {
+  const editor = useEditorStore.getState();
+  if (isSamePath(editor.filePath, path) && editor.isDirty) await editor.saveNow();
+}
 
 interface FrameProps {
   /** The HTML document text to render. */
@@ -128,18 +144,46 @@ export function HtmlPreview({ source, filePath }: Props) {
 
   const baseDir = filePath ? dirName(filePath) : null;
 
+  // Which open button last failed, and the full sentence for its tooltip. The
+  // button's own label turns into the short word for FEEDBACK_MS — the same
+  // receipt the title bar's buttons give — so a click that went nowhere (no
+  // associated app, file gone, outside the scope fence) is never silent.
+  // Recorded with its path: this pane stays mounted when the editor moves to
+  // another .html, and one file's failure must not show on the next one's.
+  const [openError, setOpenError] = useState<{ via: "window" | "browser"; path: string; text: string } | null>(null);
+  const openErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (openErrorTimer.current) clearTimeout(openErrorTimer.current); }, []);
+
   // Both destinations read the file off disk — flush the editor's dirty
   // buffer first so they show what the author is looking at, not the last
-  // autosave.
-  const openVia = async (open: (path: string) => Promise<void>) => {
+  // autosave. A failed flush aborts the open: showing the stale disk copy
+  // would be the quiet lie the flush exists to prevent.
+  const openVia = async (via: "window" | "browser") => {
     if (!filePath) return;
+    setOpenError(null);
+    const name = baseName(filePath);
+    // Which step failed decides the sentence: a failed save is not a failed
+    // open, and "no app for .html" would send the author looking in the
+    // wrong place when the disk refused the write.
+    let saved = false;
     try {
-      await useEditorStore.getState().saveNow();
-      await open(filePath);
+      await flushIfDirty(filePath);
+      saved = true;
+      await (via === "window" ? previewHtmlWindow : openWithDefaultApp)(filePath);
     } catch (e) {
       console.error("[HtmlPreview] open failed:", e);
+      const lead = !saved
+        ? t("editor.htmlPreview.saveFailed", { name })
+        : via === "window"
+          ? t("fileTree.previewFailed", { name })
+          : t("fileTree.openExternalFailed", { name });
+      setOpenError({ via, path: filePath, text: `${lead} ${e instanceof Error ? e.message : String(e)}` });
+      if (openErrorTimer.current) clearTimeout(openErrorTimer.current);
+      openErrorTimer.current = setTimeout(() => setOpenError(null), FEEDBACK_MS);
     }
   };
+  const failedVia = (via: "window" | "browser") =>
+    openError?.via === via && isSamePath(openError.path, filePath) ? openError.text : null;
 
   /**
    * Export the page as a deck. The file is read off disk by the converter, so
@@ -151,7 +195,7 @@ export function HtmlPreview({ source, filePath }: Props) {
     setExporting(true);
     setExportNote(null);
     try {
-      await useEditorStore.getState().saveNow();
+      await flushIfDirty(filePath);
       const { exportHtmlToPptx } = await import("../../lib/pptx");
       const result = await exportHtmlToPptx(filePath);
       await useProjectStore.getState().refreshFileTree();
@@ -182,21 +226,21 @@ export function HtmlPreview({ source, filePath }: Props) {
         </button>
         <button
           className={styles.btn}
-          onClick={() => void openVia(previewHtmlWindow)}
+          onClick={() => void openVia("window")}
           disabled={!filePath}
-          title={t("editor.htmlPreview.openWindow")}
+          title={failedVia("window") ?? t("editor.htmlPreview.openWindow")}
         >
           <Monitor size={11} />
-          {t("editor.htmlPreview.openWindow")}
+          {failedVia("window") ? t("editor.htmlPreview.openFailed") : t("editor.htmlPreview.openWindow")}
         </button>
         <button
           className={styles.btn}
-          onClick={() => void openVia(openWithDefaultApp)}
+          onClick={() => void openVia("browser")}
           disabled={!filePath}
-          title={t("editor.htmlPreview.openInBrowser")}
+          title={failedVia("browser") ?? t("editor.htmlPreview.openInBrowser")}
         >
           <ExternalLink size={11} />
-          {t("editor.htmlPreview.openInBrowser")}
+          {failedVia("browser") ? t("editor.htmlPreview.openFailed") : t("editor.htmlPreview.openInBrowser")}
         </button>
         {pptxOn && (
           <button

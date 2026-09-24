@@ -359,7 +359,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   };
   const openInEditor = () => openFileInEditor("index.md");
   const reveal = async () => {
-    try { await revealItemInDir(entity.dirPath); } catch { /* best-effort */ }
+    try {
+      await revealItemInDir(entity.dirPath);
+    } catch (e) {
+      // 与这一面其余的失败同一个出口（window.alert）。
+      console.error("[LoreDetail] reveal failed:", e);
+      window.alert(`${t("fileTree.revealFailed", { name: entity.name })} ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   const handleDelete = async () => {

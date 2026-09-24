@@ -35,6 +35,7 @@ import { sampleDocument, type SampleSize } from "../../../lib/theme/sample";
 import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
 import type { ThemeProblem } from "../../../lib/theme/manifest";
 import { openWithDefaultApp } from "../../../lib/fs/fileio";
+import { baseName } from "../../../lib/paths";
 import { Row } from "./bits";
 import ui from "../settingsUi.module.css";
 import s from "./ThemeCards.module.css";
@@ -474,6 +475,19 @@ function MdSample({
 
 function ProblemTable({ entry }: { entry: ThemeEntry }) {
   const { t } = useTranslation();
+  // 「在编辑器里打开」交给系统默认程序，会失败（没关联程序、文件刚被删、在围栏外）。
+  // 失败留在原地、不自己消失——和这一页 `ThemeFiles` 的错误痕迹同一口径（showSticky）；
+  // 那条痕迹在页面底部，离这张卡太远，所以写在表脚里。收起卡片即清掉。
+  const [openError, setOpenError] = useState<string | null>(null);
+  const openInEditor = async (path: string) => {
+    setOpenError(null);
+    try {
+      await openWithDefaultApp(path);
+    } catch (e) {
+      console.error("[AppearanceThemes] open with default app failed:", e);
+      setOpenError(`${t("fileTree.openExternalFailed", { name: baseName(path) })} ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   return (
     <div className={s.details}>
       <table className={s.detailsTable}>
@@ -500,11 +514,12 @@ function ProblemTable({ entry }: { entry: ThemeEntry }) {
           <button
             type="button"
             className={s.noteLink}
-            onClick={(e) => { e.stopPropagation(); void openWithDefaultApp(entry.path as string).catch(() => {}); }}
+            onClick={(e) => { e.stopPropagation(); void openInEditor(entry.path as string); }}
           >
             {t("systemSettings.appearance.openInEditor")}
           </button>
         )}
+        {openError && <div className={s.detailsError} role="alert">{openError}</div>}
       </div>
     </div>
   );
@@ -524,8 +539,14 @@ function ReloadLink() {
 
 type Trace =
   | { kind: "reloaded"; text: string }
-  | { kind: "exported"; fileName: string; dir: string; path: string }
-  | { kind: "error"; text: string };
+  /** `revealError`: the file was written, only 「打开文件夹」 failed — said on the same trace. */
+  | { kind: "exported"; fileName: string; dir: string; path: string; revealError?: string }
+  /**
+   * `source` decides what a watcher reload may replace: a failed *reload* is
+   * answered by a successful one (the error would now be false), a failed
+   * folder-open or export is not — the reload says nothing about those.
+   */
+  | { kind: "error"; source: "reload" | "action"; text: string };
 
 export function ThemeFiles() {
   const { t, i18n } = useTranslation();
@@ -576,15 +597,18 @@ export function ThemeFiles() {
       : t("systemSettings.appearance.reloadedNoChange", vars);
   };
 
-  // The watcher's reloads leave the same trace the button does — unless the
-  // export's sticky trace is up: its 「打开文件夹」 must not vanish under the
-  // very reload that export just caused.
+  // The watcher's reloads leave the same trace the button does — unless a
+  // sticky trace is up: the export's 「打开文件夹」 must not vanish under the
+  // very reload that export just caused, and a failed folder-open or export
+  // must not be wiped by a reload the author didn't ask for (they'd never
+  // learn what failed). A failed *reload* is the exception: a successful one
+  // makes that error untrue, so it gives way.
   const lastAuto = useRef(0);
   useEffect(() => {
     if (!autoReload || autoReload.seq === lastAuto.current) return;
     lastAuto.current = autoReload.seq;
     setTrace((cur) => {
-      if (cur?.kind === "exported") return cur;
+      if (cur?.kind === "exported" || (cur?.kind === "error" && cur.source === "action")) return cur;
       clearTimers();
       setLeaving(false);
       timers.current.push(
@@ -600,7 +624,7 @@ export function ThemeFiles() {
     try {
       await revealItemInDir(await ensureDir());
     } catch (e) {
-      showSticky({ kind: "error", text: String(e) });
+      showSticky({ kind: "error", source: "action", text: String(e) });
     }
   };
 
@@ -609,7 +633,7 @@ export function ThemeFiles() {
       const diff = await reload(isZh);
       showFading({ kind: "reloaded", text: diffLine(diff, false) });
     } catch (e) {
-      showSticky({ kind: "error", text: String(e) });
+      showSticky({ kind: "error", source: "reload", text: String(e) });
     }
   };
 
@@ -621,7 +645,21 @@ export function ThemeFiles() {
       const { fileName, path } = await exportThemeToFolder(current, dir, TOKEN_CONTRACT, isZh);
       showSticky({ kind: "exported", fileName, dir, path });
     } catch (e) {
-      showSticky({ kind: "error", text: t("systemSettings.appearance.exportFailed", { error: String(e) }) });
+      showSticky({ kind: "error", source: "action", text: t("systemSettings.appearance.exportFailed", { error: String(e) }) });
+    }
+  };
+
+  // The exported trace's 「打开文件夹」. A failure is added *to* that trace
+  // rather than replacing it: the export succeeded, and the author keeps the
+  // folder's path and the link to try again.
+  const revealExported = async (path: string) => {
+    setTrace((cur) => (cur?.kind === "exported" && cur.revealError ? { ...cur, revealError: undefined } : cur));
+    try {
+      await revealItemInDir(path);
+    } catch (e) {
+      console.error("[AppearanceThemes] reveal exported theme failed:", e);
+      const revealError = t("systemSettings.appearance.revealFailed", { error: e instanceof Error ? e.message : String(e) });
+      setTrace((cur) => (cur?.kind === "exported" && cur.path === path ? { ...cur, revealError } : cur));
     }
   };
 
@@ -663,10 +701,11 @@ export function ThemeFiles() {
               <button
                 type="button"
                 className={s.traceLink}
-                onClick={() => void revealItemInDir(trace.path).catch(() => {})}
+                onClick={() => void revealExported(trace.path)}
               >
                 {t("systemSettings.appearance.openFolder")}
               </button>
+              {trace.revealError && <span className={s.traceErrorText} role="alert">{trace.revealError}</span>}
             </>
           )}
         </div>

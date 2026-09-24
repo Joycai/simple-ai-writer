@@ -14,6 +14,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
 import { FOLDER_NOTE_FILE, folderNoteTemplate, isFolderNoteFile } from "../../lib/fs/folderNote";
 import { fileExists, openWithDefaultApp, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
+import { beginConvert, convertBlocker, endConvert, getConvertJobs } from "./convertJobs";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -1170,6 +1171,16 @@ export function FileTree() {
    */
   const handleConvert = async (node: FileNode) => {
     if (busy) return;
+    // 与顶栏的「转换文档」共用一份占位（convertJobs）：同一文件夹里两次并发的转换
+    // 会挑中同一个目标名，互相覆盖。被占着时说一句，不静默——占着的可能正是它自己
+    // （顶栏上刚点过），那就不说「另一份」。
+    const blocker = convertBlocker(getConvertJobs(), node.path);
+    if (blocker || !beginConvert(node.path)) {
+      setTransferError(blocker && !isSamePath(blocker, node.path)
+        ? t("fileTree.convertBusy", { name: baseName(blocker) })
+        : t("fileTree.convertAlready", { name: node.name }));
+      return;
+    }
     setBusy({ path: node.path, text: t("fileTree.converting", { name: node.name }) });
     setTransferError(null);
     try {
@@ -1181,6 +1192,9 @@ export function FileTree() {
       const message = err instanceof Error ? err.message : String(err);
       setTransferError(`${t("fileTree.convertFailed", { name: node.name })} ${message}`);
     } finally {
+      // 失败只在树的横幅上说，不记进 convertJobs 的失败位——否则作者打开那份文件
+      // 时顶栏会把同一件事再说一遍。
+      endConvert(node.path);
       setBusy(null);
     }
   };
@@ -1307,7 +1321,7 @@ export function FileTree() {
 
   /**
    * 交给系统默认程序（`open_with_default_app`，围栏在 Rust 侧）。同样先 flush——外部
-   * 程序读的是磁盘；失败要看得见，不学 `reveal` 的静默：右键点了却什么都没发生，
+   * 程序读的是磁盘；失败要看得见（`reveal` 同理）：右键点了却什么都没发生，
    * 作者分不清是没关联程序还是应用没反应。
    */
   const handleOpenExternal = async (node: FileNode) => {
@@ -1561,8 +1575,15 @@ export function FileTree() {
     void useAgentStore.getState().sendChat(t("fileTree.folderNotePrompt", { name: node.name, path: node.path }));
   };
 
+  /**
+   * 在系统文件浏览器里显示。失败和「用默认应用打开」同一个横幅：路径刚被外面删掉、
+   * 文件管理器起不来——右键点了却什么都没发生，作者分不清是哪一种。
+   */
   const reveal = (path: string) => {
-    revealItemInDir(path).catch(() => { /* best-effort */ });
+    revealItemInDir(path).catch((err) => {
+      console.error("[fileTree] reveal failed:", err);
+      setTransferError(`${t("fileTree.revealFailed", { name: baseName(path) })} ${err instanceof Error ? err.message : String(err)}`);
+    });
   };
 
   const copyPath = (path: string) => {

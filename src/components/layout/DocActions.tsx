@@ -24,7 +24,8 @@ import { isTextKind, type DocKind } from "../../lib/fs/docKind";
 import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { printHtmlDocument } from "../../lib/fs/export";
 import { convertProjectFile } from "../../lib/import";
-import { baseName, dirName } from "../../lib/paths";
+import { baseName, dirName, isSamePath } from "../../lib/paths";
+import { beginConvert, clearConvertFailure, convertBlocker, endConvert, useConvertJobs } from "./convertJobs";
 import styles from "./TitleBar.module.css";
 
 const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
@@ -102,21 +103,9 @@ export function DocActions({ kind, path }: { kind: DocKind; path: string }) {
         </>
       )}
       {kind === "convertible" && <ConvertButton path={path} />}
-      {!editable && (
-        <button
-          className={styles.ctrl}
-          onClick={() => {
-            openWithDefaultApp(path).catch((e) =>
-              console.error("[TitleBar] open with default app failed:", e),
-            );
-          }}
-          title={t("titleBar.openExternal")}
-        >
-          {/* 窄档也不收成图标（表 A 的「永不动」一行）：这两件只出现在没有视图切换
-              的那几类文件上，那一档右侧本来就空着。 */}
-          {t("titleBar.openExternal")}
-        </button>
-      )}
+      {/* key：换文件就换一枚按钮——上一个文件两秒内的「打开失败」和它的 tooltip
+          不能挂到下一个文件上。 */}
+      {!editable && <OpenExternalButton key={path} path={path} />}
 
       {isTextKind(kind) && (
         <>
@@ -179,47 +168,95 @@ function PrintHtmlButton({ path }: { path: string }) {
 }
 
 /**
- * `docx / xlsx / pdf / pptx` 这一类里唯一有产出的动作，所以它是这条上唯一一件
- * 赭石字的文档动作（表 B）。文件树右键里的「转换文档」还在——顶栏是第二个入口，
- * 不是搬家；两边走的是同一个 `convertProjectFile`。
+ * 交给系统默认程序。只出现在不可编辑的那几类上，所以**不 flush**：编辑器缓冲区
+ * 此时装的是上一篇文档（`isTextKind` 的注释），和这个文件无关。
+ *
+ * 失败和「转换文档」同一种回执：按钮上两秒的短标签，整句（哪个文件 + 为什么）在
+ * tooltip 里。没关联程序、文件已被删、路径在围栏外——点了却什么都没发生，作者
+ * 分不清是哪一种，也分不清是不是应用卡了。
  */
-function ConvertButton({ path }: { path: string }) {
+function OpenExternalButton({ path }: { path: string }) {
   const { t } = useTranslation();
-  const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
-  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   const run = async () => {
-    if (busy) return;
-    setBusy(true);
     setError(null);
     try {
+      await openWithDefaultApp(path);
+    } catch (e) {
+      console.error("[TitleBar] open with default app failed:", e);
+      const message = e instanceof Error ? e.message : String(e);
+      setError(`${t("fileTree.openExternalFailed", { name: baseName(path) })} ${message}`);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setError(null), FEEDBACK_MS);
+    }
+  };
+
+  return (
+    <button className={styles.ctrl} onClick={() => void run()} title={error ?? t("titleBar.openExternal")}>
+      {/* 窄档也不收成图标（表 A 的「永不动」一行）：这两件只出现在没有视图切换
+          的那几类文件上，那一档右侧本来就空着。 */}
+      {error ? t("titleBar.openExternalFailed") : t("titleBar.openExternal")}
+    </button>
+  );
+}
+
+/**
+ * `docx / xlsx / pdf / pptx` 这一类里唯一有产出的动作，所以它是这条上唯一一件
+ * 赭石字的文档动作（表 B）。文件树右键里的「转换文档」还在——顶栏是第二个入口，
+ * 不是搬家；两边走的是同一个 `convertProjectFile`。
+ *
+ * 进行中与失败按路径记在 `convertJobs` 里，不在这枚按钮上：作者可以在转换途中走开
+ * （按钮随之卸载），回来时它得还知道这个文件在转、或刚才转失败了。失败的两秒从作者
+ * **看见**时才开始算——在别的文件上时发生的失败，等回到这个文件再亮。
+ */
+function ConvertButton({ path }: { path: string }) {
+  const { t } = useTranslation();
+  const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
+  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  const jobs = useConvertJobs();
+  // 同一文件夹里正在转的那一份（可能就是自己）——在就等（见 convertJobs 文首）。
+  const blocker = convertBlocker(jobs, path);
+  const busy = blocker !== null;
+  const waitingOn = blocker !== null && !isSamePath(blocker, path) ? blocker : null;
+  const failed = jobs.failed && isSamePath(jobs.failed.path, path) ? jobs.failed : null;
+
+  useEffect(() => {
+    if (!failed) return;
+    const id = setTimeout(() => clearConvertFailure(failed.seq), FEEDBACK_MS);
+    return () => clearTimeout(id);
+  }, [failed]);
+
+  const run = async () => {
+    if (!beginConvert(path)) return;
+    const project = useProjectStore.getState().projectPath;
+    let failure: string | undefined;
+    try {
       const target = await convertProjectFile(path);
+      // 转换途中换了项目：新项目的树不用刷，转出来的那一篇也不属于它，不跳过去。
+      if (useProjectStore.getState().projectPath !== project) return;
       await refreshFileTree();
       // 成功不留痕迹：转出来的那一篇立刻成为当前文档，面包屑自己就把话说了。
       setActiveFilePath(target);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setError(null), FEEDBACK_MS);
+      failure = e instanceof Error ? e.message : String(e);
     } finally {
-      setBusy(false);
+      endConvert(path, failure);
     }
   };
 
   return (
     <button
-      className={`${styles.ctrl} ${error ? "" : styles.ctrlAccent}`}
+      className={`${styles.ctrl} ${failed ? "" : styles.ctrlAccent}`}
       onClick={() => void run()}
       disabled={busy}
       // 失败时短标签在按钮上、整句在 tooltip 里：48px 的一条横杠放不下一句话，
       // 而作者需要知道的是「哪一步失败了」，不是「失败了」。
-      title={error ?? t("fileTree.convertDoc")}
+      title={failed?.message ?? (waitingOn ? t("titleBar.convertWaiting", { name: baseName(waitingOn) }) : t("fileTree.convertDoc"))}
     >
-      {error
+      {failed
         ? t("titleBar.convertFailed")
         : busy
           ? t("titleBar.converting")

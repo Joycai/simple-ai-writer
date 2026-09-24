@@ -64,7 +64,7 @@ import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import type { TurnExport } from "../../lib/agent/chatSession";
-import { middleEllipsis, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
+import { baseName, middleEllipsis, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { rewindableTurnIds } from "../../lib/agent/rewind";
 import { splitMentions } from "../../lib/agent/mentionText";
@@ -1223,6 +1223,35 @@ function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end
 }
 
 /**
+ * 「在文件浏览器中显示」和它的失败。卡片是聊天记录里的一张存根，文件多半在那之后
+ * 被挪走或删掉过——这正是 reveal 最常失败的情形，所以失败写成卡里紧挨路径的一行，
+ * 不褪，直到下一次点。
+ *
+ * 它是这张卡上唯一用危险色的东西，和下面「没有红色」那条不冲突：那条说的是卡对
+ * **文件**的陈述（降级不是错误）；这一行说的是作者刚点的那个动作失败了。
+ */
+function ExportReveal({ path }: { path: string }) {
+  const { t } = useTranslation();
+  const [error, setError] = useState<string | null>(null);
+  const reveal = () => {
+    setError(null);
+    revealItemInDir(path).catch((e) => {
+      console.error("[AgentChat] reveal export failed:", e);
+      setError(`${t("fileTree.revealFailed", { name: baseName(path) })} ${e instanceof Error ? e.message : String(e)}`);
+    });
+  };
+  return (
+    <>
+      <button className={styles.exportReveal} onClick={reveal}>
+        <FolderOpen size={11} />
+        {t("ai.chat.export.reveal")}
+      </button>
+      {error && <div className={styles.exportRevealError} role="alert">{error}</div>}
+    </>
+  );
+}
+
+/**
  * 一次导出的回执（设计稿 05f 屏 1k）。
  *
  * 它答的是四件事：落盘了、落在哪、按哪套格式排的、有没有东西没能原样带过去。
@@ -1251,13 +1280,7 @@ function TurnExports({ items }: { items?: TurnExport[] }) {
             <span className={styles.exportPath}>
               {(projectPath ? projectRel(projectPath, x.path) : null) ?? toPosixPath(x.path)}
             </span>
-            <button
-              className={styles.exportReveal}
-              onClick={() => { void revealItemInDir(x.path).catch(() => { /* best-effort */ }); }}
-            >
-              <FolderOpen size={11} />
-              {t("ai.chat.export.reveal")}
-            </button>
+            <ExportReveal path={x.path} />
           </div>
           <div className={styles.exportFormat}>
             {t("ai.chat.export.format", { line: x.formatLine })}

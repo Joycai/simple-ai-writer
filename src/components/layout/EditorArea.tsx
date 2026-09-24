@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -16,7 +16,7 @@ import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import { editorScrollMap, previewScrollMap } from "../../lib/editor/scrollAnchors";
 import styles from "./EditorArea.module.css";
-import { dirName, isSamePath } from "../../lib/paths";
+import { baseName, dirName, isSamePath } from "../../lib/paths";
 
 export function EditorArea() {
   const { t } = useTranslation();
@@ -31,6 +31,10 @@ export function EditorArea() {
   const isHtml = !!activeFilePath && isHtmlPath(activeFilePath);
 
   const previewPaneRef = useRef<HTMLDivElement>(null);
+  // The load-error page's "open with default app" can fail too (no associated
+  // app, file gone, outside the scope fence). Keyed by path so a failure on one
+  // file never shows up on the next file's error page.
+  const [openError, setOpenError] = useState<{ path: string; message: string } | null>(null);
 
   // Split view: keep editor and preview showing the same part of the document,
   // aligned by source line (data-line anchors on the preview side, CodeMirror
@@ -148,14 +152,26 @@ export function EditorArea() {
               <button
                 className={styles.emptyCtaBtn}
                 onClick={() => {
-                  openWithDefaultApp(activeFilePath).catch((e) =>
-                    console.error("[EditorArea] open with default app failed:", e),
-                  );
+                  setOpenError(null);
+                  openWithDefaultApp(activeFilePath).catch((e) => {
+                    console.error("[EditorArea] open with default app failed:", e);
+                    setOpenError({
+                      path: activeFilePath,
+                      message: `${t("fileTree.openExternalFailed", { name: baseName(activeFilePath) })} ${e instanceof Error ? e.message : String(e)}`,
+                    });
+                  });
                 }}
               >
                 {t("editor.loadErrorOpenExternal")}
               </button>
             </div>
+            {/* Same register as the page's own hint above: this page already
+                *is* the error notice, so the second failure is one more line
+                of it, not a new surface. Stays until the next attempt — the
+                author came here to act, not to watch a two-second flash. */}
+            {openError && isSamePath(openError.path, activeFilePath) && (
+              <p className={`${styles.emptyHint} ${styles.emptyCtaNote}`} role="alert">{openError.message}</p>
+            )}
           </div>
         </div>
         <EditorBottomStrip />

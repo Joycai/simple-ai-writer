@@ -133,14 +133,40 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // at its old location).
     if (saveTimer) clearTimeout(saveTimer);
     if (!filePath) { set({ saveTimer: null }); return; }
+    // The write is async and the author keeps typing through it: a keystroke
+    // mid-write changes `content` and arms a *new* timer. Settling must
+    // describe the state after the write, not before it — clearing isDirty
+    // there would call a buffer clean that was never written (and every
+    // dirty-only flush, e.g. HtmlPreview's before "open in browser", would
+    // then skip it), and nulling saveTimer would orphan the new, still-armed
+    // timer so nothing could cancel it.
+    //
+    // And it may only ever *clean*, and only what it wrote: something else can
+    // settle the buffer while the write is in flight (a `loadFile` of this or
+    // another path sets isDirty itself), and this write speaks for neither a
+    // reloaded text nor another file's edits.
+    const settle = () => {
+      const cur = get();
+      return cur.saveTimer === saveTimer ? null : cur.saveTimer;
+    };
     try {
       await writeFile(filePath, content);
-      set({ isDirty: false, saveTimer: null });
+      const cur = get();
+      const wroteWhatIsThere = cur.filePath === filePath && cur.content === content;
+      // What's on disk is exactly the buffer, so a timer armed mid-write (a
+      // keystroke and its undo) could only write the same text again — later,
+      // possibly over something that rewrote the file in between (relinkAssets
+      // flushes only a *dirty* buffer). Clean means no live timer.
+      if (wroteWhatIsThere && cur.saveTimer && cur.saveTimer !== saveTimer) clearTimeout(cur.saveTimer);
+      set({
+        isDirty: cur.isDirty && !wroteWhatIsThere,
+        saveTimer: wroteWhatIsThere ? null : settle(),
+      });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next
       // edit/flush retries the write — clearing it would silently drop the draft.
       console.error("[editorStore] save failed:", filePath, e);
-      set({ saveTimer: null });
+      set({ saveTimer: settle() });
       throw e;
     }
   },
