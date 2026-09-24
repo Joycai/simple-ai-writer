@@ -6,6 +6,7 @@ import {
   emptyMembers,
   filterPickerTree,
   folderState,
+  folderRelFromInput,
   folderSubtree,
   inferLegacyMembers,
   isDocMember,
@@ -237,5 +238,18 @@ describe("picker tree", () => {
     const v1 = tree.find((n) => n.vol.relPath === "卷一")!;
     expect(subtreeHasMembers(m(["卷一/番外"]), v1)).toBe(true);
     expect(subtreeHasMembers(m(["资料"]), v1)).toBe(false);
+  });
+});
+
+describe("folderRelFromInput", () => {
+  it("trims separators and whitespace, keeps nesting", () => {
+    expect(folderRelFromInput(" 卷三/ ", "assets")).toBe("卷三");
+    expect(folderRelFromInput("/卷三", "assets")).toBe("卷三");
+    expect(folderRelFromInput("正文//卷三\\", "assets")).toBe("正文/卷三");
+  });
+  it("refuses empty, reserved and hidden names", () => {
+    expect(folderRelFromInput(" / ", "assets")).toBeNull();
+    expect(folderRelFromInput("assets", "assets")).toBeNull();
+    expect(folderRelFromInput("正文/.draft", "assets")).toBeNull();
   });
 });

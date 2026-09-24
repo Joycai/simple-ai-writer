@@ -50,6 +50,20 @@ function strings(raw: unknown): string[] {
   return [...new Set(raw.filter((x): x is string => typeof x === "string"))];
 }
 
+/**
+ * The folder relPath a typed group name creates: separators collapsed and
+ * trimmed ("卷三/" and "/卷三" are "卷三"; "正文/卷三" nests). Null when no
+ * segment is left or one can never show as a group — `assets` holds
+ * illustrations and dot-names are hidden from the tree — so the library
+ * never records a member that cannot match the folder it made.
+ */
+export function folderRelFromInput(input: string, reserved: string): string | null {
+  const segments = input.split(/[\\/]+/).map((s) => s.trim()).filter(Boolean);
+  if (segments.length === 0) return null;
+  if (segments.some((s) => s === reserved || s.startsWith("."))) return null;
+  return segments.join("/");
+}
+
 /** Read a persisted members object; null when it isn't one. */
 export function parseMembers(raw: unknown): LibraryMembers | null {
   if (!raw || typeof raw !== "object") return null;

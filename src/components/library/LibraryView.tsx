@@ -29,7 +29,8 @@ import {
   type ResourceFile,
 } from "../../lib/context/outline";
 import {
-  addDoc, emptyMembers, pruneMembers, removeDoc, setFolder, type LibraryMembers,
+  addDoc, emptyMembers, folderRelFromInput, isDocMember, pruneMembers, removeDoc, setFolder,
+  type LibraryMembers,
 } from "../../lib/context/library";
 import { LibraryPicker } from "./LibraryPicker";
 import {
@@ -535,9 +536,11 @@ export function LibraryView() {
     if (!name || !projectPath) return;
     try {
       const path = await createEntry(vol.path, name, "file");
-      // A column of picked docs only shows what is picked — the new one too.
+      // Created in the library, so it is in the library: a column of picked
+      // docs only shows what is picked, and a leftover exclusion for this path
+      // (a doc taken out, then deleted in the sidebar) would hide it too.
       const rel = projectRelativePath(projectPath, path);
-      if (vol.partial && rel) changeMembers((m) => addDoc(m, rel));
+      if (rel && !isDocMember(members, rel)) changeMembers((m) => addDoc(m, rel));
       openChapter(path);
     } catch (e) {
       window.alert(String(e));
@@ -742,15 +745,15 @@ export function LibraryView() {
   const renChIme = useImeGuard();
   const renVolIme = useImeGuard();
   const createVolume = async () => {
-    const name = newVolName.trim();
-    if (!name || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
     // "assets" is reserved for illustrations and dot-names are invisible in
-    // the tree — a volume by either name would silently never appear.
-    if (name === ASSETS_DIR || name.startsWith(".")) { setCreatingVol(false); setNewVolName(""); return; }
+    // the tree — a volume by either name would silently never appear. The
+    // member is recorded under the path actually made ("卷三/" → "卷三").
+    const rel = folderRelFromInput(newVolName, ASSETS_DIR);
+    if (!rel || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
     try {
-      await makeDir(`${projectPath}/${name}`);
+      await makeDir(`${projectPath}/${rel}`);
       // Created from the library, so it is in the library.
-      changeMembers((m) => setFolder(m, name, true));
+      changeMembers((m) => setFolder(m, rel, true));
       await refreshFileTree();
     } catch (e) {
       console.error("[outline] create volume failed:", e);
