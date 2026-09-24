@@ -336,7 +336,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   newapi: {
     endpoints: GENERIC_ENDPOINTS,
     hosts: [],
-    source: "landscape.md §7 New API 样本 — relay; protocol-native tools depend on the upstream; Claude's capabilities follow the relay upstream behind each model (relayUpstream.ts, 第十五、十六个样本)",
+    source: "landscape.md §7 New API 样本 — relay; protocol-native tools depend on the upstream; Claude's and GPT's capabilities follow the relay upstream behind each model (relayUpstream.ts, 第十五、十六、十七个样本)",
   },
   ollama: {
     origin: "http://localhost:11434",
@@ -355,7 +355,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
   custom: {
     endpoints: GENERIC_ENDPOINTS,
     hosts: [],
-    source: "protocol vocabulary only; Claude's capabilities follow the relay upstream, as on newapi (relayUpstream.ts, 第十五、十六个样本)",
+    source: "protocol vocabulary only; Claude's and GPT's capabilities follow the relay upstream, as on newapi (relayUpstream.ts, 第十五、十六、十七个样本)",
   },
 };
 

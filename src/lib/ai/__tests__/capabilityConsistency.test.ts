@@ -33,7 +33,7 @@ import { streamResponses } from "../responses";
 import { resolveThinkingCategory } from "../reasoning";
 import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } from "../types";
 import type { ServerToolId } from "../serverTools";
-import { capabilityModelOf, type RelayUpstreamChoice } from "../relayUpstream";
+import { RELAY_UPSTREAMS, capabilityModelOf, type RelayUpstreamChoice } from "../relayUpstream";
 
 const BASE_URL = "https://capability-consistency.invalid/v1";
 /**
@@ -42,6 +42,8 @@ const BASE_URL = "https://capability-consistency.invalid/v1";
  * inferred from the id, as every hand-built request does.
  */
 const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5"];
+/** One id per model family some upstream's measurements cover, under a prefix that names no upstream. */
+const UPSTREAM_MODEL_IDS = ["[x]claude-opus-4-6", "[x]gpt-5.6-sol"];
 /**
  * A relay's Claude under an id that names no upstream, with the upstream as
  * `connOptions()` resolves it from the channel's table — so an asker that drops
@@ -49,7 +51,9 @@ const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kir
  * resolved to none, which must not be inferred back.
  */
 const UPSTREAM_CASES: readonly { modelId: string; relayUpstream: RelayUpstreamChoice }[] = [
-  ...(["kiro", "cc", "anti", "bedrock", "official"] as const).map((relayUpstream) => ({ modelId: "[x]claude-opus-4-6", relayUpstream })),
+  // Every upstream, with a model its measurements cover and one they do not —
+  // derived from the list, so a new upstream is checked the day it is added.
+  ...RELAY_UPSTREAMS.flatMap((relayUpstream) => UPSTREAM_MODEL_IDS.map((modelId) => ({ modelId, relayUpstream }))),
   { modelId: "[特价kiro量]claude-opus-5", relayUpstream: "none" },
 ];
 const CASES: readonly { modelId: string; relayUpstream?: RelayUpstreamChoice }[] = [
@@ -136,6 +140,13 @@ const PROBES: Record<CapabilityId, Probe> = {
   textVerbosity: async (ctx) => ({
     adapter: await adapterSends(ctx, {}, { textVerbosity: "low" }),
     summary: summarySends(ctx, {}, { textVerbosity: "low" }),
+  }),
+  // Not a declaration: the adapter decides where a system prompt goes, so the
+  // probe asks whether the body carries the field at all.
+  instructionsField: async (ctx) => ({
+    adapter: "instructions" in (JSON.parse((await bodyOf(ctx, {
+      messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "hi" }],
+    })) || "{}") as Record<string, unknown>),
   }),
   // The one capability no request reads: the declaration takes the model out
   // of every picker and hands it to lib/translate, and the drawer is what

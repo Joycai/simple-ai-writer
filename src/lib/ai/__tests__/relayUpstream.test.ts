@@ -5,9 +5,13 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  bracketPrefixes, capabilityModelOf, inferRelayUpstream, isRelayPlatform, matchUpstreamPrefix,
+  RELAY_UPSTREAMS, bracketPrefixes, capabilityModelOf, inferRelayUpstream, isRelayPlatform, matchUpstreamPrefix,
   parseRelayUpstreamChoice, parseUpstreamPrefixes, resolveRelayUpstream, type UpstreamPrefix,
 } from "../relayUpstream";
+
+declare const require: (m: string) => { readFileSync(p: string, enc: string): string };
+declare const process: { cwd(): string };
+const fs = require("node:fs");
 
 const TABLE: UpstreamPrefix[] = [
   { prefix: "[CC量]", upstream: "cc" },
@@ -119,5 +123,20 @@ describe("parsing what was stored", () => {
     expect(parseRelayUpstreamChoice("bedrock")).toBe("bedrock");
     expect(parseRelayUpstreamChoice("none")).toBe("none");
     for (const v of ["", "Bedrock", "follow", null, undefined, 3]) expect(parseRelayUpstreamChoice(v)).toBeUndefined();
+  });
+});
+
+// The drawers build these keys from the id (`aiConfig.upstream.name.${id}`), so
+// no source scan sees them: an upstream added without its words would show
+// the raw key in the picker and the model drawer.
+describe("every upstream has its words", () => {
+  it.each(["en", "zh-CN"])("in %s", (lang) => {
+    const locale = JSON.parse(fs.readFileSync(`${process.cwd()}/src/i18n/locales/${lang}.json`, "utf8")) as {
+      aiConfig: { upstream: { name: Record<string, string>; note: Record<string, string> } };
+    };
+    for (const kind of ["name", "note"] as const) {
+      expect(Object.keys(locale.aiConfig.upstream[kind]).sort(), kind).toEqual([...RELAY_UPSTREAMS].sort());
+      for (const id of RELAY_UPSTREAMS) expect(locale.aiConfig.upstream[kind][id], `${kind}.${id}`).toMatch(/\S/);
+    }
   });
 });

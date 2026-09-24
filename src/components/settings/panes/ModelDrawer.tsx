@@ -286,7 +286,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
         provider.apiStandard,
       )
     : undefined;
-  const temperatureReaches = !curWire || hasCapability("temperature", curWire, { thinkingCategory: formCategory?.id });
   // What the probe wrote, and when — kept out of `form` because it is
   // provenance, not something the author edits. The values stay when the
   // author overwrites the field, so the badge can say what was measured.
@@ -315,6 +314,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // What every capability question below carries, and 「将发送」 with it.
   const upstreamChoice: RelayUpstreamChoice = resolvedUpstream.upstream ?? "none";
   const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
+  // With the upstream, as the adapters ask: behind some relay upstreams a
+  // temperature is rewritten or refused, and the field would edit nothing.
+  const temperatureReaches = !curWire || hasCapability("temperature", curWire, { ...capModel, thinkingCategory: formCategory?.id });
   // The wires with a whole-file content part the adapters map
   // (openai.ts `file`, responses.ts `input_file`), plus an Anthropic
   // `document` block where a platform or the relay's upstream measured it
@@ -473,7 +475,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // requires the clip part itself (capabilities.ts `requires`). A `video_url`
   // part is Chat Completions only (lib/ai/videoInput).
   // `text.verbosity` — the Responses family's field.
-  const verbosityWire = can("textVerbosity");
+  const verbosityWire = can("textVerbosity", capModel);
   // The Sakura translation declaration: a text model on Chat Completions.
   const translateWire = can("translateFormat", { type: form.type });
   // Whether this wire has a JSON mode at all; with no channel yet every option is offered.
@@ -803,9 +805,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   ].filter(Boolean) as string[];
 
   const verbositySet = verbosityWire && form.textVerbosity !== "auto";
-  const sampHas = form.temperature.trim() !== "" || form.prefix.trim() !== "" || verbositySet;
+  // Like verbosity: a temperature the wire does not take is kept, not summarised as if sent.
+  const temperatureSet = temperatureReaches && form.temperature.trim() !== "";
+  const sampHas = temperatureSet || form.prefix.trim() !== "" || verbositySet;
   const sampSum = [
-    form.temperature.trim() !== "" && `T ${form.temperature.trim()}`,
+    temperatureSet && `T ${form.temperature.trim()}`,
     verbositySet && t(`aiConfig.models.verbosity_${form.textVerbosity}`),
     form.prefix.trim() !== "" && t("aiConfig.models.prefixLabelShort"),
   ].filter(Boolean).join(" · ");

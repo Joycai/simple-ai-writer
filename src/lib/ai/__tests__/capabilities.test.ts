@@ -59,9 +59,9 @@ function renderUpstreams(): string[] {
     "## 中转站上游画像",
     "",
     "中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。",
-    "上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
+    "上游的格子先于平台格生效，只作用于画像覆盖的模型（见表头各上游的作用域）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
     "",
-    `| 能力 | 族 | ${RELAY_UPSTREAMS.join(" | ")} |`,
+    `| 能力 | 族 | ${RELAY_UPSTREAMS.map((u) => `${u}（${UPSTREAM_CAPABILITIES[u].modelsLabel}）`).join(" | ")} |`,
     `| --- | --- | ${RELAY_UPSTREAMS.map(() => "---").join(" | ")} |`,
   ];
   for (const id of CAPABILITY_IDS) {
@@ -311,6 +311,75 @@ describe("relay upstreams", () => {
       .toEqual({ status: "yes", reason: "measured" });
     expect(capabilityVerdict("pdfInput", anth("deepseek"), { modelId: "claude-opus-4-6", upstream: "cc" }))
       .toEqual({ status: "no", reason: "family" });
+  });
+
+  describe("GPT upstreams (第十七个样本)", () => {
+    const resp = (platform: (typeof RELAYS)[number]) => ({ platform, standard: "openai_responses_compat" as const });
+    const sol = (upstream: "codex" | "azure") => ({ modelId: "[x]gpt-5.6-sol", upstream });
+    const up = (status: "yes" | "no") => ({ status, reason: "upstream" });
+
+    it("codex: search, verbosity, PDF and forced tools measured; temperature ignored on Responses", () => {
+      for (const platform of RELAYS) {
+        for (const id of ["web_search", "textVerbosity", "pdfInput", "forcedToolChoice"] as const) {
+          expect(capabilityVerdict(id, resp(platform), sol("codex")), id).toEqual(up("yes"));
+        }
+        expect(capabilityVerdict("temperature", resp(platform), sol("codex"))).toEqual(up("no"));
+        expect(capabilityVerdict("pdfInput", chat(platform), sol("codex"))).toEqual(up("yes"));
+        expect(capabilityVerdict("forcedToolChoice", chat(platform), sol("codex"))).toEqual(up("yes"));
+        // No echo on Chat Completions: nothing measured, the rule's answer.
+        expect(capabilityVerdict("temperature", chat(platform), sol("codex"))).toEqual({ status: "yes", reason: "protocol" });
+        // The system prompt stays in `instructions` — without it a Codex upstream injects its own.
+        expect(capabilityVerdict("instructionsField", resp(platform), sol("codex"))).toEqual(up("yes"));
+      }
+    });
+
+    it("codex: no JSON-mode cell — one tier dropped it, two executed it", () => {
+      expect(capabilityVerdict("structuredOutput", resp("newapi"), sol("codex"))).toEqual({ status: "yes", reason: "protocol" });
+      expect(capabilityVerdict("jsonSchema", resp("newapi"), sol("codex"))).toEqual({ status: "unknown", reason: "unmeasured" });
+      expect(capabilityVerdict("structuredOutput", chat("custom"), sol("codex"))).toEqual({ status: "yes", reason: "protocol" });
+    });
+
+    it("azure: no web search, temperature fails, a named Chat tool fails, and no instructions field", () => {
+      for (const platform of RELAYS) {
+        for (const id of ["web_search", "temperature", "instructionsField"] as const) {
+          expect(capabilityVerdict(id, resp(platform), sol("azure")), id).toEqual(up("no"));
+        }
+        expect(capabilityVerdict("forcedToolChoice", chat(platform), sol("azure"))).toEqual(up("no"));
+        for (const id of ["forcedToolChoice", "textVerbosity", "pdfInput", "structuredOutput", "jsonSchema"] as const) {
+          expect(capabilityVerdict(id, resp(platform), sol("azure")), id).toEqual(up("yes"));
+        }
+        for (const id of ["pdfInput", "structuredOutput", "jsonSchema"] as const) {
+          expect(capabilityVerdict(id, chat(platform), sol("azure")), id).toEqual(up("yes"));
+        }
+      }
+    });
+
+    it("stays on its own models, and Claude's upstreams stay on theirs", () => {
+      for (const id of CAPABILITY_IDS) for (const f of FAMILIES) {
+        const bare = (modelId: string) => familyVerdict(id, "newapi", f, { modelId });
+        for (const upstream of ["codex", "azure"] as const) {
+          expect(familyVerdict(id, "newapi", f, { modelId: "[x]claude-opus-4-6", upstream }), `${upstream} ${id} ${f}`)
+            .toEqual(bare("[x]claude-opus-4-6"));
+        }
+        for (const upstream of ["kiro", "cc", "anti", "bedrock", "official"] as const) {
+          expect(familyVerdict(id, "newapi", f, { modelId: "[x]gpt-5.6-sol", upstream }), `${upstream} ${id} ${f}`)
+            .toEqual(bare("[x]gpt-5.6-sol"));
+        }
+      }
+    });
+
+    it("names its models as its measurements scope them", () => {
+      for (const up of RELAY_UPSTREAMS) {
+        const { models, modelsLabel } = UPSTREAM_CAPABILITIES[up];
+        expect(models.test(modelsLabel.toLowerCase()), up).toBe(true);
+      }
+    });
+
+    it("is never inferred from the id", () => {
+      for (const modelId of ["[Azure]gpt-5.6-sol", "codex/gpt-5.6-sol", "gpt-5.3-codex"]) {
+        expect(capabilityModelOf({ modelId })).toEqual({ modelId });
+      }
+    });
   });
 
   it("says no upstream when resolved to none, even where the id names one", () => {

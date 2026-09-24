@@ -2958,7 +2958,7 @@
       "sumUnset": "Not set · protocol defaults",
       "sumNone": "No upstream · protocol defaults",
       "notSent": "Not sent: measured not to work on the relay's upstream \"{{upstream}}\".",
-      "notClaude": "This upstream was only measured with Claude; it does not apply to this model, which gets the protocol defaults.",
+      "notCovered": "This upstream was only measured with {{models}}; it does not apply to this model, which gets the protocol defaults.",
       "matrixTag": "upstream",
       "err": {
         "dup": "Duplicate prefix — only the first is saved",
@@ -2970,14 +2970,18 @@
         "cc": "Measured: web search, web fetch, PDF and caching are real; no parameter validation. opus-5 returns no thinking text.",
         "anti": "Measured: never thinks (every thinking parameter is ignored); forced tools, PDFs and text documents are dropped; no caching, about 30 extra tokens per request.",
         "bedrock": "Measured: validates like the official API and effort levels are real; no web search (a 400 if sent); URL images are refused.",
-        "official": "Unmeasured: unavailable on the day it was tested; protocol defaults apply."
+        "official": "Unmeasured: unavailable on the day it was tested; protocol defaults apply.",
+        "codex": "Measured: web search is real; effort levels are real, but \"off\" does not stop thinking; ignores the output cap; on the Responses route temperature is rewritten to 1 (so it is not sent); no image generation or code interpreter. On the Chat route some tiers inject about 4.4K tokens of prompt per request (billed); some tiers (the sample's [Pro]) drop JSON mode, falling back to the prompt cue.",
+        "azure": "Measured: the gateway appends a guard after the system prompt that makes the model refuse fiction — this app sends the system prompt as a developer message on this upstream to avoid it. No web search; on the Responses route temperature can only be 1 (so it is not sent); a named tool on the Chat route errors (auto is sent instead)."
       },
       "name": {
         "kiro": "Kiro (reverse)",
         "cc": "CC-style (reverse)",
         "anti": "anti-style (reverse)",
         "bedrock": "Bedrock (forward)",
-        "official": "Official (forward)"
+        "official": "Official (forward)",
+        "codex": "ChatGPT accounts (reverse)",
+        "azure": "Azure gateway (forward)"
       }
     },
     "fees": {

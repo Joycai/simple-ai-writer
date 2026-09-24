@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { Select } from "../../common/Select";
 import { Field, Section } from "./ModelDrawerBits";
-import { upstreamApplies } from "../../../lib/ai/capabilities";
+import { UPSTREAM_CAPABILITIES, upstreamApplies } from "../../../lib/ai/capabilities";
 import {
   RELAY_UPSTREAMS, bracketPrefixes,
   type RelayUpstreamChoice, type RelayUpstreamId, type ResolvedUpstream,
@@ -24,7 +24,7 @@ import styles from "../settingsCommon.module.css";
 import u from "./Upstream.module.css";
 
 /** Which upstreams forward the official API, and which translate it — the two groups of every menu. */
-const FORWARD: ReadonlySet<RelayUpstreamId> = new Set(["bedrock", "official"]);
+const FORWARD: ReadonlySet<RelayUpstreamId> = new Set(["bedrock", "official", "azure"]);
 
 function upstreamOptions(t: (k: string) => string): { value: string; label: string; group: string }[] {
   return RELAY_UPSTREAMS.map((id) => ({
@@ -180,7 +180,9 @@ export function UpstreamSection({
         hint={up ? t(`aiConfig.upstream.note.${up}`) : t("aiConfig.upstream.modelHint")}
         note={sourceLine(t, resolved, modelId)}
         noteTone={resolved.source === "inferred" || !up ? "faint" : "ok"}
-        warn={up && modelId.trim() && !applies ? t("aiConfig.upstream.notClaude") : undefined}
+        warn={up && modelId.trim() && !applies
+          ? t("aiConfig.upstream.notCovered", { models: UPSTREAM_CAPABILITIES[up].modelsLabel })
+          : undefined}
       >
         <Select
           className={choice === undefined ? u.follow : undefined}

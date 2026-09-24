@@ -25,7 +25,7 @@ import { effectiveServerTools, openaiServerToolsBody } from "./serverTools";
 import { wireOf, type PlatformId } from "./platforms";
 import { hasAnyServerTool, hasCapability } from "./capabilities";
 import { familyOf, type ApiStandard } from "./types";
-import type { RelayUpstreamChoice } from "./relayUpstream";
+import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 
 export interface WireItem {
   /** Dotted path of the field, e.g. `thinking.type`, `response_format`. */
@@ -112,7 +112,9 @@ export function wireSummary(
   if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
 
   if (family === "anthropic" && m.maxOutput) out.push({ key: "max_tokens", value: String(m.maxOutput) });
-  if (m.temperature !== undefined && hasCapability("temperature", wire, { thinkingCategory: category.id })) {
+  // With the upstream, as the adapters ask: behind a relay it can decide either way.
+  const capModel = capabilityModelOf({ modelId: m.modelId, relayUpstream });
+  if (m.temperature !== undefined && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id })) {
     out.push({ key: "temperature", value: String(m.temperature) });
   }
   if (m.serverTools?.length && hasAnyServerTool(wire)) {
@@ -141,7 +143,7 @@ export function wireSummary(
         : { key: "response_format", value: so, scope: "structured" });
   }
   // Sent on every request, beside (not instead of) a structured task's text.format.
-  if (m.textVerbosity && hasCapability("textVerbosity", wire)) out.push({ key: "text.verbosity", value: m.textVerbosity });
+  if (m.textVerbosity && hasCapability("textVerbosity", wire, capModel)) out.push({ key: "text.verbosity", value: m.textVerbosity });
   if (m.vlHighResolution && hasCapability("vlHighResolution", wire)) out.push({ key: "vl_high_resolution_images", value: "true" });
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).

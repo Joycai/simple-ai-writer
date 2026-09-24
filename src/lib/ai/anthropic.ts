@@ -564,7 +564,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // request refuses everything but 1 — the `temperature` rule in
   // capabilities.ts, which the model editor asks too so it never renders a
   // control this would drop. 0 is a real value, hence the `!== undefined` test.
-  if (opts.temperature !== undefined && hasCapability("temperature", wireOf(opts), { thinkingCategory: category.id })) {
+  if (opts.temperature !== undefined && hasCapability("temperature", wireOf(opts), { ...capabilityModelOf(opts), thinkingCategory: category.id })) {
     baseBody.temperature = Math.max(0, Math.min(1, opts.temperature));
   }
   // Absent unless the author set an effort on this model. Governs the whole

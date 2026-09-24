@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11）。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -431,7 +431,8 @@ C1 之后它已经没有调用方了：四族都有思考参数的拼法，它�
   只在中转站平台（`newapi` / `custom`）上有意义。`connOptions()` 解析成某个上游或 `"none"`，恒有值——适配器不会再按 id
   推断盖过作者的表；手搭请求（live 探测、端点探测）缺省时才按 id 推断，行为与 §8.10 相同。
 - **画像**（`capabilities.ts` 的 `UPSTREAM_CAPABILITIES`）：kiro / cc / anti / bedrock / official 五种，每格只写
-  `true` / `false`、只写样本里测过的；作用域只有 Claude（`/claude/`，别的模型没测过）。`familyVerdict` 在 thinking 之后、
+  `true` / `false`、只写样本里测过的；作用域只有 Claude（`/claude/`，别的模型没测过）。**后续**：GPT 的 codex / azure 两种
+  （作用域 `/gpt/`）见 §8.12。`familyVerdict` 在 thinking 之后、
   平台格之前查它，原因码 `upstream`。official 没有格子（当天 502 没测到），选它只表示「这个前缀分过类」。
 - **`KIRO_CLAUDE` 迁移**成「按 id 推断出 Kiro」：五格逐格保持原状态（测试锁住），原因码从 `model` 变成 `upstream`。
   推断 `bedrock` 是唯一的新行为（作者决定）：id 同时含 `bedrock` 与 `claude` 的模型 ④ 面不再发 `web_search`（Bedrock 没有
@@ -465,3 +466,47 @@ C1 之后它已经没有调用方了：四族都有思考参数的拼法，它�
   - **其余模型跟随并表**，不冻结成「不按上游」。**只从 id 认出来的上游**（kiro、bedrock）算在「其余」里：它不是谁的设置，
     和没有上游的模型一样跟随并表（并表里有前缀命中它时改按前缀），不钉成手选。若算作「有上游」，它会盖过被吸收行专为这个 id
     做的手选（`kiro-claude-opus-4-6` 被吸收行手选 CC，合并后退回 Kiro，④ 面 PDF 由发变不发），钉成手选还会让抽屉把一个推断显示成「手选」。
+
+### 8.12 GPT 的两种上游，与「这条线收不收 `instructions`」（2026-09-24）
+
+**问题。** 第十七个样本在同一台中转站上测了 gpt-5.6-sol 的四个档位：`[Plus]` / `[Pro]` / `[特价Pro]` 是 ChatGPT 账号池
+（Codex 后端），`[Azure]` 是一个网关（sol 当时没有线路，用同档 terra 测）。两类后端在 ② 面差别很大：账号池联网搜索是真的、
+Responses 上温度被改成 1；网关没有联网搜索，温度非 1 整条 500，① 面具名 `tool_choice` 整条 500，而且**只要请求里有
+`instructions` 键就在后面追加一段护栏，让模型拒写小说**（创作题 6 次拒 2 次）。§8.11 的画像只覆盖 Claude，这些都没进表。
+
+**决定。**
+
+- **两种新上游**：`codex`（ChatGPT 账号池，反代）与 `azure`（Azure 网关，正向），作用域 `/gpt/`，每格只写样本 17 测到的
+  （格子与依据在 `capabilities.ts` 的注释里）。与 Claude 的五种互不越界：Claude 模型选了 codex 等于没有上游，反之亦然
+  （测试锁住）。上游带 `modelsLabel`（Claude / GPT），模型抽屉在作用域外提示「这个上游只实测过 {{models}}」。
+- **作用域写 `/gpt/` 而不只是 5.6**（作者决定）：差距在中转站与上游之间，不在型号；第八、十个样本（另一台、5.4 / 5.5）一致。
+  与 Kiro 按推断收 Sonnet 同一条理由。
+- **不按 id 推断**：GPT 的 id 里没有上游的产品名；「azure」这个词也不能推断——样本 17 的 `[Azure]` 行为是一个带护栏的网关，
+  不是 Azure OpenAI 本身。
+- **`[Pro]` 丢结构化输出不进格子，只进说明**（作者决定）。三档同是账号池，`[Pro]` 两种写法的 `text.format` 与
+  `response_format` 都丢，`[Plus]` / `[特价Pro]` 都执行——同一种上游测出两种结果。写 `false` 会让另两档白丢已实测可用的
+  JSON 模式；拆出 `codex-pro` 则是给一台中转站的档位起名（第八个样本里另一台的 `[Pro]` 只在显式 `strict` 时丢）。
+  `[Pro]` 上丢了 format，提示语仍要求 JSON，实测照样回 JSON，只是不受 schema 约束。
+- **新能力 `instructionsField`**（② 族，协议自带，缺省 yes）。azure 判 `false` 时，`responses.ts` 把系统提示作为输入开头的
+  `developer` 消息，不发 `instructions` 键（作者决定：改发送，而不是只在说明里告知）。实测这样护栏不出现，创作题照写；
+  codex 反过来**必须**发 `instructions`——`[Plus]` 找不到它就注入 4.4K token 的 Codex 提示（第八个样本起的老规则），所以这不是
+  一个可以全局翻转的开关，只能按上游裁决。
+- **查表缺口一并补上**：`responses.ts` 的温度、verbosity 与 `modelSummary.ts` 的温度、verbosity 以前不带上游查表（Responses
+  的温度根本不查），表里一旦写 `temperature: false`，矩阵说不发、请求照发。现在都经 `capabilityModelOf`，一致性测试的上游夹具
+  由 `RELAY_UPSTREAMS` 生成、同时带 Claude 与 GPT 的 id，新上游当天就被覆盖。
+
+**为什么不是别的做法。**
+
+| 做法 | 为什么没选 |
+| --- | --- |
+| 按档位拆成 `chatgpt-plus` / `-pro` / `-special` | 档位名是站主起的；另一台的 `[Pro]` 行为不同，画像会绑死一台中转站 |
+| codex 整体 `structuredOutput: false` | Plus / 特价Pro 实测可用的 JSON 模式被关掉，换来的只是 Pro 上少一次无效的 `text.format` |
+| Azure 护栏只写进说明 | 对写作应用它是唯一会直接拒答的一条，而避开的办法已实测、代价为零 |
+| 护栏做成上游上的特判字段（`systemAs: "developer"`） | 绕过能力表，矩阵与一致性测试都看不见它；「这条线收不收 `instructions`」以后也可能出现在别的平台 |
+
+**有意留下的。**
+
+- ① 面的温度不写格子：账号池与网关在 Chat Completions 上发 `0.5` 都 200，看不到回显，是否生效分不出。
+- 画像表达不了的实测只进说明，不改发送：账号池不看输出上限、`effort: none` 关不掉思考、不能出图也不能跑代码；网关能出图
+  （本应用 Responses 路径不发 `image_generation`）。
+- Responses 回显比对（`text.format` 回显成 `text` 时报告 `[Pro]` 这类丢弃）属于 [`gpt56-plan.md`](gpt56-plan.md) P2 的延伸，另开。
