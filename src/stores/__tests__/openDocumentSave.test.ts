@@ -22,7 +22,7 @@ vi.mock("../../lib/fs/fileio", () => ({
 }));
 
 import { useEditorStore } from "../editorStore";
-import { saveDocument } from "../openDocument";
+import { loadIntoEditor, saveDocument } from "../openDocument";
 import { useProjectStore } from "../projectStore";
 
 const DOC = "/proj/writing/第十二章.md";
@@ -86,5 +86,42 @@ describe("saveDocument", () => {
 
     expect(useEditorStore.getState().crumbTrace).toEqual({ name: "第十二章", kind: "saveFailed" });
     spy.mockRestore();
+  });
+});
+
+describe("loadIntoEditor", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    h.writeFile.mockClear();
+    h.writeFile.mockImplementation(async () => {});
+    useEditorStore.setState({
+      content: "正文", filePath: DOC, headings: [], isDirty: true,
+      saveTimer: null, loadError: null, crumbTrace: null,
+    });
+  });
+
+  afterEach(() => {
+    const { saveTimer } = useEditorStore.getState();
+    if (saveTimer) clearTimeout(saveTimer);
+    vi.useRealTimers();
+  });
+
+  it("换下的那篇写盘失败：不抛、不切，痕迹说的是没写下去的那一篇", async () => {
+    h.writeFile.mockImplementation(async () => { throw new Error("ENOSPC"); });
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(loadIntoEditor("/proj/writing/第十三章.md")).resolves.toBeUndefined();
+
+    expect(useEditorStore.getState().filePath).toBe(DOC);
+    expect(useEditorStore.getState().isDirty).toBe(true);
+    expect(useEditorStore.getState().crumbTrace).toEqual({ name: "第十二章", kind: "saveFailed" });
+    spy.mockRestore();
+  });
+
+  it("切换成功不留痕迹", async () => {
+    await loadIntoEditor("/proj/writing/第十三章.md");
+
+    expect(useEditorStore.getState().filePath).toBe("/proj/writing/第十三章.md");
+    expect(useEditorStore.getState().crumbTrace).toBeNull();
   });
 });

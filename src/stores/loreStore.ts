@@ -346,11 +346,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     // Flush any pending edit on the previously selected file before
     // switching away — otherwise it's silently discarded, the way
     // selectFile and editorStore.loadFile both already guard against.
-    const { saveTimer } = get();
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      await get().saveNow();
-    }
+    // Gated on isDirty, not saveTimer: a failed write settles the timer to
+    // null but leaves isDirty true, and that buffer is the text's only copy.
+    const { saveTimer, isDirty } = get();
+    if (saveTimer) clearTimeout(saveTimer);
+    if (isDirty) await get().saveNow();
     set({ selectedEntity: entity, selectedFile: null, fileContent: "", isDirty: false });
     // Auto-open index.md if it exists
     if (entity.mdFiles.includes("index.md")) {
@@ -359,12 +359,10 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   selectFile: async (filename) => {
-    const { selectedEntity, saveTimer } = get();
+    const { selectedEntity, saveTimer, isDirty } = get();
     if (!selectedEntity) return;
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      await get().saveNow();
-    }
+    if (saveTimer) clearTimeout(saveTimer);
+    if (isDirty) await get().saveNow(); // isDirty, not saveTimer — see selectEntity
     try {
       const content = await readEntityFile(selectedEntity.dirPath, filename);
       set({ selectedFile: filename, fileContent: content, isDirty: false });

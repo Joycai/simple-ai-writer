@@ -4,7 +4,7 @@ import { ExternalLink, Monitor, Presentation, RefreshCw } from "lucide-react";
 import { inlineHtmlImages } from "../../lib/fs/htmlDoc";
 import { openWithDefaultApp, previewHtmlWindow } from "../../lib/fs/fileio";
 import { isPptxExportEnabled } from "../../lib/pptx/flag";
-import { useEditorStore } from "../../stores/editorStore";
+import { flushIfOpen } from "../../stores/openDocument";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./HtmlPreview.module.css";
 import { baseName, dirName, isSamePath } from "../../lib/paths";
@@ -18,19 +18,6 @@ const REBUILD_DEBOUNCE_MS = 400;
 
 /** How long a failed open's short word stays on its button (the title bar's). */
 const FEEDBACK_MS = 2000;
-
-/**
- * Flush the editor before something reads this file off disk — but only a
- * dirty buffer. An unconditional save rewrites a clean buffer over the disk,
- * and "open in browser" is exactly how an .html gets opened in an external
- * editor (whatever the OS associates it with): edit there, come back, click
- * again, and the stale buffer would clobber those edits. Same rule as the file
- * tree's `flushIfOpen` (docs/feature/html-artifact-plan.md D5).
- */
-async function flushIfDirty(path: string): Promise<void> {
-  const editor = useEditorStore.getState();
-  if (isSamePath(editor.filePath, path) && editor.isDirty) await editor.saveNow();
-}
 
 interface FrameProps {
   /** The HTML document text to render. */
@@ -167,7 +154,7 @@ export function HtmlPreview({ source, filePath }: Props) {
     // wrong place when the disk refused the write.
     let saved = false;
     try {
-      await flushIfDirty(filePath);
+      await flushIfOpen(filePath);
       saved = true;
       await (via === "window" ? previewHtmlWindow : openWithDefaultApp)(filePath);
     } catch (e) {
@@ -195,7 +182,7 @@ export function HtmlPreview({ source, filePath }: Props) {
     setExporting(true);
     setExportNote(null);
     try {
-      await flushIfDirty(filePath);
+      await flushIfOpen(filePath);
       const { exportHtmlToPptx } = await import("../../lib/pptx");
       const result = await exportHtmlToPptx(filePath);
       await useProjectStore.getState().refreshFileTree();

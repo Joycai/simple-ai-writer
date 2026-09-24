@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
+import { loadIntoEditor } from "../../stores/openDocument";
 import { CodeEditor } from "../editor/CodeEditor";
 import { EditorScrollNav } from "../editor/EditorScrollNav";
 import { Preview } from "../editor/Preview";
@@ -21,7 +22,7 @@ import { baseName, dirName, isSamePath } from "../../lib/paths";
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, loadError, viewMode, editorView, loadFile, setContent } = useEditorStore();
+  const { content, filePath, loadError, viewMode, editorView, setContent } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const terms = useTerms();
 
@@ -68,9 +69,9 @@ export function EditorArea() {
   // garbage and risk overwriting the image on autosave.
   useEffect(() => {
     if (activeFilePath && !isImage && !isSamePath(activeFilePath, filePath)) {
-      loadFile(activeFilePath);
+      void loadIntoEditor(activeFilePath);
     }
-  }, [activeFilePath, isImage, filePath, loadFile]);
+  }, [activeFilePath, isImage, filePath]);
 
   if (!projectPath || !activeFilePath) {
     return (
@@ -141,7 +142,7 @@ export function EditorArea() {
             <h1 className={styles.emptyTitle}>{t("editor.loadErrorTitle")}</h1>
             <p className={styles.emptyHint}>{t("editor.loadErrorHint", { message: loadError.message })}</p>
             <div className={styles.emptyCta}>
-              <button className={styles.emptyCtaBtn} onClick={() => loadFile(activeFilePath)}>
+              <button className={styles.emptyCtaBtn} onClick={() => void loadIntoEditor(activeFilePath)}>
                 {t("editor.loadErrorRetry")}
               </button>
               {/* The main audience is files this editor will never open (a

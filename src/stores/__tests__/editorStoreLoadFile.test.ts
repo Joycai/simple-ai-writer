@@ -169,4 +169,17 @@ describe("editorStore.loadFile — typing during a switch", () => {
     await vi.advanceTimersByTimeAsync(2500);
     expect(h.writeFile).not.toHaveBeenCalled();
   });
+
+  it("the same file spelled differently is a reload too — not read, then flushed over", async () => {
+    h.readFile.mockResolvedValueOnce("as it stands on disk");
+    useEditorStore.getState().setContent("typed");
+
+    // What relinkAssets passes is whatever `isSamePath` matched, not
+    // necessarily the buffer's exact string.
+    await useEditorStore.getState().loadFile("/proj/writing/./a.md");
+
+    expect(h.writeFile).not.toHaveBeenCalled();
+    expect(useEditorStore.getState().content).toBe("as it stands on disk");
+    expect(useEditorStore.getState().isDirty).toBe(false);
+  });
 });

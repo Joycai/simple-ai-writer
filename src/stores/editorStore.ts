@@ -3,6 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { extractHeadings, countWords, type HeadingNode } from "../lib/fs/markdown";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
+import { isSamePath } from "../lib/paths";
 
 export type ViewMode = "split" | "editor" | "preview";
 /** Which of the breadcrumb's traces is showing — see `EditorState.crumbTrace`. */
@@ -130,7 +131,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     //
     // A reload of the same path doesn't flush: its callers (relinkAssets,
     // rewind) mean "the buffer becomes the file as it now stands", and the old
-    // buffer is precisely what they are discarding. A failed flush throws out
+    // buffer is precisely what they are discarding. "Same" is `isSamePath`, as
+    // those callers decide it: a strict `===` would read a differently-spelled
+    // same file and *then* flush the old buffer over it. A failed flush throws out
     // of here with nothing switched — the buffer is that text's only copy.
     let read: { content: string } | { error: unknown };
     try {
@@ -140,7 +143,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
     for (;;) {
       const { isDirty, filePath: prev } = get();
-      if (!isDirty || !prev || prev === path) break;
+      if (!isDirty || !prev || isSamePath(prev, path)) break;
       await get().saveNow();
     }
 
