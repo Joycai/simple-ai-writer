@@ -48,7 +48,7 @@
 
 1. **新建章节**：空集合的占位卡即创建入口（`projectStore.createEntry`，拒绝覆盖同名文件），建完直接在编辑器打开。
 2. **章节重命名/删除**（右键菜单）：重命名裸名保留原扩展名（.txt 不会悄悄变 .md），并把 spine 位置、在写状态、前情提要一起迁到新 relPath；删除走 `deleteEntry({backup: true})`（与文件树相同，先快照进 `.ai-writer/backups/`），并清掉 status 残留。
-3. **卷排序与重命名**：`BookSpine.volumes`（可选字段，overlay 语义，旧文件缺省即遍历序）持久化列顺序，列头 ◀▶ 调整；重命名走 `moveEntry` 文件夹后，`.ai-writer/memory/` 与 `.ai-writer/collections/` 的镜像子树随之搬迁，spine 用 `renameVolumeInSpine` 做**路径段感知**的前缀改写（嵌套子卷键一并处理）。根集合不可重命名/删除。
+3. **卷排序与重命名**：`BookSpine.volumes`（可选字段，overlay 语义，旧文件缺省即遍历序）持久化列顺序，列头 ◀▶ 调整；重命名走 `moveEntry` 文件夹后，`.ai-writer/memory/` 与 `.ai-writer/collections/` 的镜像子树随之搬迁，spine 做**路径段感知**的前缀改写（嵌套子卷键一并处理；第四期起这一步在 `moveEntry` 里由 `moveInSpineOnDisk` 完成，文库之后从盘上重读，原来的 `renameVolumeInSpine` 已删除）。根集合不可重命名/删除。
 4. **跨卷拖拽**：拖到任意章节卡即插入该位置（同卷=排序，跨卷=文件移动 + 记忆 + spine 位置 + 在写状态），拖到列空白处追加到末尾；拖拽状态在 dragstart 捕获（路径/relPath），不依赖拖动中可能刷新的 volumes 索引。
 5. 顺带把多选移动从裸 `renamePath` 换成 `moveEntry` —— 从此批量移动也会带走文档的 `assets/` 配图并正确处理打开中的文件。
 
