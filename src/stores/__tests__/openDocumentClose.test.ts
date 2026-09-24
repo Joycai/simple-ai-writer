@@ -32,7 +32,7 @@ const PIC = "/proj/assets/封面.png";
 function openBuffer(path: string | null, dirty: boolean) {
   useEditorStore.setState({
     content: "正文", filePath: path, headings: [], isDirty: dirty,
-    saveTimer: null, loadError: null, closeNotice: null,
+    saveTimer: null, loadError: null, crumbTrace: null,
   });
 }
 
@@ -61,7 +61,7 @@ describe("closeDocument", () => {
     expect(useEditorStore.getState().content).toBe("");
     // 计数归零而不是留着上一篇的——空稿页上没有「3,124 字」这回事。
     expect(useEditorStore.getState().wordCount).toBe(0);
-    expect(useEditorStore.getState().closeNotice).toBeNull();
+    expect(useEditorStore.getState().crumbTrace).toBeNull();
   });
 
   it("关掉脏文档：先落盘再关，痕迹两秒后自己收走", async () => {
@@ -71,10 +71,10 @@ describe("closeDocument", () => {
 
     expect(h.writeFile).toHaveBeenCalledWith(DOC, "正文");
     expect(useProjectStore.getState().activeFilePath).toBeNull();
-    expect(useEditorStore.getState().closeNotice).toEqual({ name: "第十二章", failed: false });
+    expect(useEditorStore.getState().crumbTrace).toEqual({ name: "第十二章", kind: "closed" });
 
     await vi.advanceTimersByTimeAsync(2100);
-    expect(useEditorStore.getState().closeNotice).toBeNull();
+    expect(useEditorStore.getState().crumbTrace).toBeNull();
   });
 
   it("写盘失败就不关：缓冲区是那几行字唯一的副本", async () => {
@@ -88,7 +88,7 @@ describe("closeDocument", () => {
     expect(useProjectStore.getState().activeFilePath).toBe(DOC);
     expect(useEditorStore.getState().filePath).toBe(DOC);
     expect(useEditorStore.getState().isDirty).toBe(true);
-    expect(useEditorStore.getState().closeNotice).toEqual({ name: "第十二章", failed: true });
+    expect(useEditorStore.getState().crumbTrace).toEqual({ name: "第十二章", kind: "closeFailed" });
   });
 
   it("关掉一张图片，不碰缓冲区里那篇还没保存的文档", async () => {
@@ -103,7 +103,7 @@ describe("closeDocument", () => {
     expect(useProjectStore.getState().activeFilePath).toBeNull();
     expect(useEditorStore.getState().filePath).toBe(DOC);
     expect(useEditorStore.getState().isDirty).toBe(true);
-    expect(useEditorStore.getState().closeNotice).toBeNull();
+    expect(useEditorStore.getState().crumbTrace).toBeNull();
     expect(h.writeFile).not.toHaveBeenCalled();
 
     // 那次自动保存仍然会到点落盘。

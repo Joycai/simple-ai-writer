@@ -18,7 +18,7 @@ import {
 import { navBack, navForward } from "./stores/navStore";
 import { screenNeedsProject, useAppStore } from "./stores/appStore";
 import { useEditorStore } from "./stores/editorStore";
-import { closeDocument } from "./stores/openDocument";
+import { closeDocument, saveDocument } from "./stores/openDocument";
 import { useProjectStore } from "./stores/projectStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
 import { findTask } from "./lib/profile";
@@ -94,7 +94,10 @@ export function useGlobalShortcuts() {
       }
       if (matchesCombo(e, { mod: true, key: "s" })) {
         e.preventDefault();
-        useEditorStore.getState().saveNow();
+        // Not saveNow() bare: a failed write would be an unhandled rejection
+        // and the author's only signal an unchanged amber dot. saveDocument
+        // leaves the breadcrumb trace a failed close already uses.
+        void saveDocument();
         return;
       }
       // 关闭当前文档——「关闭」三层里的第一层（⌘W 文档 / ⇧⌘W 项目 / ⌥⌘W 窗口，

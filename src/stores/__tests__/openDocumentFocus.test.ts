@@ -25,7 +25,7 @@ const OLD = "/proj/卷一/第3章.md";
 function buffer(path: string | null) {
   useEditorStore.setState({
     content: "正文", filePath: path, headings: [], isDirty: false,
-    saveTimer: null, loadError: null, closeNotice: null,
+    saveTimer: null, loadError: null, crumbTrace: null,
   });
 }
 
