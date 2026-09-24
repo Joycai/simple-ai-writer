@@ -324,16 +324,6 @@ export function moveInSpine(spine: BookSpine, oldRel: string, newRel: string, is
   return next;
 }
 
-/**
- * Rewrite a spine after a volume folder rename: the volume's own key, every
- * nested volume's key (a parent rename shifts its children's relPaths too),
- * all chapter relPaths under them, the status map, the volume order and the
- * library members — `rewritePathInSpine` applied to a folder.
- */
-export function renameVolumeInSpine(spine: BookSpine, oldRel: string, newRel: string): BookSpine {
-  return rewritePathInSpine(spine, oldRel, newRel);
-}
-
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
 function spinePath(projectPath: string): string {
@@ -370,6 +360,21 @@ export async function saveSpine(projectPath: string, spine: BookSpine): Promise<
 }
 
 /**
+ * Whether two spines say the same thing. Not a raw JSON.stringify: loadSpine
+ * and rewritePathInSpine build their objects in different key orders, and an
+ * empty status map means the same as none.
+ */
+export function sameSpine(a: BookSpine, b: BookSpine): boolean {
+  const canon = (x: BookSpine) => {
+    const status = x.status && Object.keys(x.status).length > 0 ? x.status : undefined;
+    const sortKeys = <T,>(o: Record<string, T> | undefined) =>
+      o && Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
+    return JSON.stringify([sortKeys(x.order), x.volumes ?? null, sortKeys(status) ?? null, x.members ?? null]);
+  };
+  return canon(a) === canon(b);
+}
+
+/**
  * Apply a move to the persisted spine (see moveInSpine). Called by
  * `projectStore.moveEntry` — the one path the file tree, the library and the
  * agent all move through — so a rename anywhere keeps order, 在写 and library
@@ -384,7 +389,7 @@ export async function moveInSpineOnDisk(
   const next = moveInSpine(spine, oldRel, newRel, isChapter);
   // Most moves touch nothing the spine records (an image, a stray note) —
   // those neither write the file nor make the library reload.
-  if (JSON.stringify(next) === JSON.stringify(spine)) return false;
+  if (sameSpine(next, spine)) return false;
   await saveSpine(projectPath, next);
   return true;
 }

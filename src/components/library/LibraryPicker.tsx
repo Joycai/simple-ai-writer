@@ -94,6 +94,12 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
 
   const tree = useMemo(() => buildPickerTree(volumes), [volumes]);
   const shown = useMemo(() => filterPickerTree(tree, query), [tree, query]);
+  const fullNodes = useMemo(() => {
+    const map = new Map<string, PickerNode>();
+    const walk = (list: PickerNode[]) => { for (const n of list) { map.set(n.vol.relPath, n); walk(n.children); } };
+    walk(tree);
+    return map;
+  }, [tree]);
   const filtering = query.trim().length > 0;
 
   // Open where the library already is, plus the root row; everything else
@@ -140,7 +146,9 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
     const expandable = node.docs.length > 0 || node.children.length > 0;
     const open = expandable && isOpen(vol.relPath);
     const state = folderState(draft, vol);
-    const subtree = node.children.length > 0 ? folderSubtree(node) : null;
+    // From the unfiltered tree: a filter hides subfolders, 连同子分组 must not skip them.
+    const full = fullNodes.get(vol.relPath) ?? node;
+    const subtree = full.children.length > 0 ? folderSubtree(full) : null;
     const subtreeOn = subtree?.every((rel) => draft.folders.includes(rel)) ?? false;
     return (
       <div key={`d:${vol.relPath}`}>

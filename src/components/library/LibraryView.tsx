@@ -310,6 +310,8 @@ export function LibraryView() {
   const [pickerOpen, setPickerOpen] = useState(false);
   // Bumped on every local write: a reload that started before it is stale.
   const writeSeq = useRef(0);
+  // Local writes land in order; reads of the file wait for them (see persistSpine).
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOver, setDragOver] = useState<DropTarget | null>(null);
   const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
@@ -341,7 +343,9 @@ export function LibraryView() {
     let cancelled = false;
     if (!projectPath) return;
     const seq = writeSeq.current;
-    loadSpine(projectPath).then((s) => {
+    // Behind this view's own pending saves — a reload triggered by one save
+    // must not read the file before the next one lands.
+    saveChain.current.then(() => loadSpine(projectPath)).then((s) => {
       if (cancelled || seq !== writeSeq.current) return;
       setSpine(s);
       setSpineFor(projectPath);
@@ -462,7 +466,6 @@ export function LibraryView() {
   // Local writes land in order, and anything that reads the file back
   // (reloadSpine, a drop) waits for them — otherwise it reads the version
   // before the write and writes that back over it.
-  const saveChain = useRef<Promise<void>>(Promise.resolve());
   const persistSpine = (next: BookSpine) => {
     writeSeq.current += 1;
     setSpine(next);
@@ -575,13 +578,22 @@ export function LibraryView() {
     try {
       await deleteEntry(ch.path, false, { backup: true });
       // The order overlay self-heals (missing files are dropped), but a status
-      // entry would linger in the file forever.
-      if (spine?.status?.[ch.relPath]) {
+      // entry would linger in the file forever — and a picked/excluded entry
+      // would quietly apply to whatever is created at this path next.
+      const inMembers = members.docs.includes(ch.relPath) || members.exclude.includes(ch.relPath);
+      if (spine?.status?.[ch.relPath] || inMembers) {
         const next = spineFromVolumes(
           volumes.map((v) => ({ ...v, chapters: v.chapters.filter((c) => c.path !== ch.path) })),
           spine,
         );
         delete next.status?.[ch.relPath];
+        if (next.members) {
+          next.members = {
+            ...next.members,
+            docs: next.members.docs.filter((r) => r !== ch.relPath),
+            exclude: next.members.exclude.filter((r) => r !== ch.relPath),
+          };
+        }
         persistSpine(next);
       }
     } catch (e) {
@@ -592,7 +604,7 @@ export function LibraryView() {
   /**
    * Rename a volume folder. The memory and digest trees mirror the document
    * tree, so their subfolders travel along; the spine is prefix-rewritten
-   * (nested volume keys included) via renameVolumeInSpine.
+   * (nested volume keys included) by moveEntry itself (moveInSpineOnDisk).
    */
   const submitRenameVolume = async () => {
     const vol = renamingVol;
@@ -805,7 +817,8 @@ export function LibraryView() {
   const workspaceDocs = volumesAll.reduce((n, v) => n + v.chapters.length, 0);
   // With members but no columns yet the file tree hasn't arrived — not empty.
   const noMembers = members.folders.length === 0 && members.docs.length === 0;
-  const libraryEmpty = spineLoaded && volumes.length === 0 && (noMembers || fileTree.length > 0);
+  const treeListed = useProjectStore((s) => s.treeFor) === projectPath || fileTree.length > 0;
+  const libraryEmpty = spineLoaded && volumes.length === 0 && (noMembers || treeListed);
   const picker = pickerOpen && (
     <LibraryPicker
       volumes={volumesAll}

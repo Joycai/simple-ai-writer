@@ -186,6 +186,12 @@ interface ProjectState {
   activeFilePath: string | null;
   fileTree: FileNode[];
   /**
+   * The project the current `fileTree` was listed for — null until the first
+   * listing lands. An empty tree is then a real empty workspace, not "not
+   * listed yet" (the library's empty state needs the difference).
+   */
+  treeFor: string | null;
+  /**
    * Which sidebar folders the author has explicitly opened or closed, keyed by
    * path. Lives here rather than in FileTree's nodes because the sidebar's tab
    * transition remounts the tree — local state would collapse every folder on
@@ -271,12 +277,12 @@ interface ProjectState {
    */
   moveEntry: (from: string, to: string) => Promise<void>;
   /**
-   * Bumped whenever something other than the library view rewrote
-   * `.ai-writer/outline.json` (`moveEntry`, the AI panel's 加入文库). The
-   * library view and the AI panel reload the spine on change.
+   * Bumped whenever `.ai-writer/outline.json` was rewritten — by `moveEntry`,
+   * the AI panel's 加入文库, or a library-view save. The library view and the
+   * AI panel reload the spine on change (the library skips its own stale reads).
    */
   spineRev: number;
-  /** Something rewrote `outline.json` outside the library view — reload it. */
+  /** `outline.json` was rewritten — whoever shows the library, reload it. */
   spineChanged: () => void;
   relinkAssets: (groupPath: string, docPath: string) => Promise<void>;
   /**
@@ -409,6 +415,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   collections: [],
   activeFilePath: null,
   fileTree: [],
+  treeFor: null,
   spineRev: 0,
   spineChanged: () => set((s) => ({ spineRev: s.spineRev + 1 })),
   expandedDirs: {},
@@ -468,7 +475,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
       useEditorStore.getState().setDocCounts(0, 0);
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
@@ -508,7 +515,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
     useEditorStore.getState().setDocCounts(0, 0);
     if (closing) void releaseProjectLock(closing);
   },
@@ -677,9 +684,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!projectPath) return;
     try {
       const tree = await readDirRecursive(projectPath);
-      set({ fileTree: tree });
+      set({ fileTree: tree, treeFor: projectPath });
     } catch {
-      set({ fileTree: [] });
+      set({ fileTree: [], treeFor: projectPath });
     }
   },
 

@@ -13,8 +13,9 @@
  *   column then shows only the picked docs and no resources (`partial`).
  *
  * Membership is an overlay like the order: the filesystem stays the truth for
- * existence, entries pointing at nothing are ignored on read and pruned on
- * write. See docs/feature/library-plan.md → 第四期.
+ * existence, entries pointing at nothing are ignored on read, pruned when the
+ * picker is applied (and a doc deleted from the library takes its entry with
+ * it). See docs/feature/library-plan.md → 第四期.
  */
 
 import type { Chapter, Volume } from "./outline";
