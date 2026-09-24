@@ -109,6 +109,7 @@
     "words": "字",
     "converting": "转换中…",
     "convertFailed": "转换失败",
+    "openExternalFailed": "打开失败",
     "minimize": "最小化",
     "maximize": "最大化",
     "restore": "还原",
@@ -949,7 +950,8 @@
       "exportPptxHint": "渲染这个页面，在旁边写出一份 PowerPoint 文件",
       "pptxBusy": "导出中…",
       "pptxDone": "{{n}} 页 → {{name}}",
-      "pptxFailed": "导出失败"
+      "pptxFailed": "导出失败",
+      "openFailed": "打开失败"
     },
     "noHeadings": "暂无标题",
     "imageLoadError": "无法加载此图片",

@@ -109,6 +109,7 @@
     "words": "words",
     "converting": "Converting…",
     "convertFailed": "Couldn't convert",
+    "openExternalFailed": "Couldn't open",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
@@ -952,7 +953,8 @@
       "exportPptxHint": "Render this page and write it as a PowerPoint file beside it",
       "pptxBusy": "Exporting…",
       "pptxDone": "{{n}} slides → {{name}}",
-      "pptxFailed": "Export failed"
+      "pptxFailed": "Export failed",
+      "openFailed": "Couldn't open"
     },
     "noHeadings": "No headings yet",
     "imageLoadError": "Couldn't load this image",

@@ -68,6 +68,14 @@
   font: italic 400 12px/1.4 var(--font-serif);
   color: var(--color-text-muted);
 }
+/* A failed action's reason, under the buttons that caused it — the hint's
+   voice, centred and unindented because it answers the row above it rather
+   than continuing the paragraph. */
+.emptyCtaNote {
+  margin: 16px 0 0;
+  text-indent: 0;
+  text-align: center;
+}
 .emptyCtaBtn {
   padding: 9px 16px;
   background: var(--color-bg-surface);

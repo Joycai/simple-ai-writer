@@ -51,6 +51,21 @@ blob iframe 没有文档基址，解析不了项目相对路径。两头解决�
 
 HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（opener 插件 `openPath` + capability scope）做了修正：插件权限的 scope 是**静态** capability 配置，而项目根由 `FsScope` **运行时**注册，静态 scope 表达不了。改为 Rust 命令 `open_with_default_app`——`FsScope::check` 后调 opener 插件的 Rust API，围栏和打开在同一处，与其他 `fs_*` 命令同一纪律，capability 零改动。
 
+**失败要看得见，以及只 flush 脏缓冲区（2026-09-24）。** `open_with_default_app` 会失败——路径在围栏外、文件已被删、macOS 上没有关联程序——而这三种对作者是同一个现象：点了，什么都没发生，分不清是哪一种，也分不清是不是应用卡了。文件树右键的入口（PR #691）一开始就把失败打在横幅上；另外三个入口原先只 `console.error`，现在各用**自己那一面本来就有的回执**，不另起 toast：
+
+| 入口 | 回执 | 为什么是这一种 |
+|---|---|---|
+| 文件树右键「用默认应用打开」 | 树顶的 `transferError` 横幅 | 树的一切失败都在那里 |
+| 顶栏「用默认应用打开」（`DocActions`） | 按钮字变成两秒「打开失败」，整句在 tooltip | 与同一条上的「转换失败」「导出失败」是同一种回执、同一个时长（`FEEDBACK_MS`） |
+| 读不出来的说明页（`EditorArea`） | 按钮下多一行提示，留到下一次点 | 这一页本身就是一张错误说明，第二个失败是它的又一行，不是一闪而过的新表面；作者是来这页**做事**的 |
+| HTML 预览「新窗口预览」「在浏览器打开」（`HtmlPreview`） | 失败的那个按钮字变成两秒「打开失败」，整句在 tooltip | 同一条工具栏上的「导出 PPTX」本来就用按钮字报结果 |
+
+整句一律复用 `fileTree.openExternalFailed` / `fileTree.previewFailed`（哪个文件 + 后端给的原因），四个入口说的是同一句话；按钮上的短词是各自的 `titleBar.openExternalFailed` / `editor.htmlPreview.openFailed`。
+
+flush 的口径同时收齐到 `flushIfOpen` 那一条：**只有缓冲区是这个文件、且脏时才写盘**。预览工具栏原先无条件 `saveNow()`——一份干净的缓冲区也会被写回磁盘。而「在浏览器打开」恰恰是 `.html` 进外部编辑器的那条路（系统把 `.html` 关联给谁就是谁）：在外面改完、回来再点一次，陈旧的缓冲区就把外面的改动盖掉了。flush 失败则不打开——拿磁盘上的旧版本去预览，正是 flush 要防的那句悄悄话式的谎；失败原因走同一个回执。顶栏与说明页的入口**不 flush**：它们只出现在不可编辑的文件上，缓冲区里装的不是这个文件。
+
+设置页「外观主题」详情里的「在编辑器里打开」（`AppearanceThemes.tsx`）仍是 `.catch(() => {})`，不在这次范围内。
+
 ### D6 `.html` 是一等文本文件，不是章节
 
 - 编辑：CodeMirror 打开、2s autosave——现状已通，不动。
