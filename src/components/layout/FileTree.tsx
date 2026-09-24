@@ -8,12 +8,12 @@ import { AudioLines,
   FilePlus, FolderPlus, FileInput, RotateCw, Pencil, Trash2, AlertTriangle,
   Scissors, Copy, ClipboardPaste, TextCursorInput, Sparkles, Images,
   ChevronsDownUp, ChevronsUpDown, MoreHorizontal, Crosshair, Link2, FileOutput,
-  Monitor, Presentation, X, NotebookPen, NotebookText,
+  Monitor, Presentation, X, NotebookPen, NotebookText, ExternalLink,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { classifyProjectFile, isImagePath, type ProjectFile } from "../../lib/fs/images";
 import { FOLDER_NOTE_FILE, folderNoteTemplate, isFolderNoteFile } from "../../lib/fs/folderNote";
-import { fileExists, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
+import { fileExists, openWithDefaultApp, previewHtmlWindow, readFileHead, readFileRange } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
   allRows, flattenVisible, hasOpenDir, isDirOpen, openDirCount,
@@ -1305,6 +1305,21 @@ export function FileTree() {
     }
   };
 
+  /**
+   * 交给系统默认程序（`open_with_default_app`，围栏在 Rust 侧）。同样先 flush——外部
+   * 程序读的是磁盘；失败要看得见，不学 `reveal` 的静默：右键点了却什么都没发生，
+   * 作者分不清是没关联程序还是应用没反应。
+   */
+  const handleOpenExternal = async (node: FileNode) => {
+    try {
+      await flushIfOpen(node.path);
+      await openWithDefaultApp(node.path);
+    } catch (err) {
+      console.error("[fileTree] open with default app failed:", err);
+      setTransferError(`${t("fileTree.openExternalFailed", { name: node.name })} ${err}`);
+    }
+  };
+
   const handleExportPptx = async (node: FileNode) => {
     if (busy) return;
     setBusy({ path: node.path, text: t("fileTree.exportingPptx", { name: node.name }) });
@@ -1693,6 +1708,13 @@ export function FileTree() {
           action: () => void handlePreviewHtml(node),
         });
       }
+      // 「打开」的另一种方式，所以归在「用它」这一格而不是「查它在哪」那一段；每种
+      // 文件都有——作者也会想拿别的编辑器看一眼 .md。目录和多选上不长：目录交给系统
+      // 就是「在文件浏览器中显示」，多选一次拉起 N 个程序是意外。
+      items.push({
+        kind: "item", icon: <ExternalLink size={13} />, label: t("titleBar.openExternal"),
+        action: () => void handleOpenExternal(node),
+      });
       // 这一格从上到下是三问：用它 / 拿它造一个新文件 / 把它交到别处去。中间这段
       // 的两项互斥 —— 能转换的四种格式恰好是 `classifyProjectFile` 认不出的那些
       // （模型收不下 zip 包），而导出成幻灯只发生在 `.html` 上。

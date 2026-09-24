@@ -958,7 +958,7 @@
     "loadErrorTitle": "本章未能加载",
     "loadErrorHint": "读取失败：{{message}}。磁盘上的文件未被改动 — 可重试，或在应用外检查该文件。",
     "loadErrorRetry": "重试",
-    "loadErrorOpenExternal": "用系统默认方式打开",
+    "loadErrorOpenExternal": "用默认应用打开",
     "search": {
       "find": "查找",
       "replace": "替换为",
@@ -3735,6 +3735,7 @@
     "convertFailed": "转换「{{name}}」失败：",
     "previewHtml": "在预览窗口打开",
     "previewFailed": "打开「{{name}}」的预览窗口失败：",
+    "openExternalFailed": "用默认应用打开「{{name}}」失败：",
     "exportPptx": "导出为 PPTX",
     "exportingPptx": "正在把「{{name}}」导出为幻灯…",
     "exportedPptx": "已导出「{{name}}」，共 {{count}} 页",
