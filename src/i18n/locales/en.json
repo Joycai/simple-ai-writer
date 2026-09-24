@@ -3744,6 +3744,7 @@
     "convertFailed": "Could not convert \"{{name}}\":",
     "previewHtml": "Open in preview window",
     "previewFailed": "Could not open a preview window for \"{{name}}\":",
+    "openExternalFailed": "Could not open \"{{name}}\" with the default app:",
     "exportPptx": "Export as PPTX",
     "exportingPptx": "Exporting \"{{name}}\" as slides…",
     "exportedPptx": "Exported \"{{name}}\" — {{count}} slides",
