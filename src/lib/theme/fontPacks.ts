@@ -336,16 +336,30 @@ export async function installFontPack(id: FontPackId, opts: InstallOptions = {})
   // Another window may have deleted the pack while this download ran; its
   // writes then recreate the folder around a hole, and a marker over a hole
   // would draw those characters in the fallback face for good.
-  const missing = await firstMissing(jobs.map((j) => ({ path: j.local, size: j.spec[1] })));
+  const chunks = jobs.map((j) => ({ path: j.local, size: j.spec[1] }));
+  const missing = await firstMissing(chunks);
   if (missing) throw new FontPackError("disk", `${missing}: gone before the install finished`);
 
   const facesPath = joinPath(dir, FACES);
-  await onDisk(FACES, () => writeAside(facesPath, (tmp) => writeFile(tmp, faces.join("\n") + "\n")));
+  const facesText = faces.join("\n") + "\n";
+  await onDisk(FACES, () => writeAside(facesPath, (tmp) => writeFile(tmp, facesText)));
   forgetFaces(id);
   // The marker last: from here on the pack counts as installed.
   const marker = joinPath(root, MARKER);
   const record = JSON.stringify({ version: pack.version, files: jobs.length }) + "\n";
   await onDisk(MARKER, () => writeAside(marker, (tmp) => writeFile(tmp, record)));
+
+  // And once more after it. The check above is a few IPC round trips ahead of
+  // the marker's rename, and every write here recreates the folder it lands
+  // in: a delete from another window inside that gap leaves the marker in a
+  // fresh folder over no chunks and no faces.css — "installed" for good, and
+  // drawn in the fallback face. A delete that lands after this check takes
+  // the marker with it, so the end state agrees with the disk either way.
+  const gone = await firstMissing([...chunks, { path: facesPath, size: new TextEncoder().encode(facesText).length }]);
+  if (gone) {
+    await removeFile(marker).catch(() => {});
+    throw new FontPackError("disk", `${gone}: gone before the install finished`);
+  }
   await pruneOtherVersions(id);
 }
 
