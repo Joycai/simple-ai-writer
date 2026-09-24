@@ -35,6 +35,7 @@ import { sampleDocument, type SampleSize } from "../../../lib/theme/sample";
 import { PROJECT_THEMES_DIR } from "../../../lib/theme/scan";
 import type { ThemeProblem } from "../../../lib/theme/manifest";
 import { openWithDefaultApp } from "../../../lib/fs/fileio";
+import { baseName } from "../../../lib/paths";
 import { Row } from "./bits";
 import ui from "../settingsUi.module.css";
 import s from "./ThemeCards.module.css";
@@ -474,6 +475,19 @@ function MdSample({
 
 function ProblemTable({ entry }: { entry: ThemeEntry }) {
   const { t } = useTranslation();
+  // 「在编辑器里打开」交给系统默认程序，会失败（没关联程序、文件刚被删、在围栏外）。
+  // 失败留在原地、不自己消失——和这一页 `ThemeFiles` 的错误痕迹同一口径（showSticky）；
+  // 那条痕迹在页面底部，离这张卡太远，所以写在表脚里。收起卡片即清掉。
+  const [openError, setOpenError] = useState<string | null>(null);
+  const openInEditor = async (path: string) => {
+    setOpenError(null);
+    try {
+      await openWithDefaultApp(path);
+    } catch (e) {
+      console.error("[AppearanceThemes] open with default app failed:", e);
+      setOpenError(`${t("fileTree.openExternalFailed", { name: baseName(path) })} ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   return (
     <div className={s.details}>
       <table className={s.detailsTable}>
@@ -500,11 +514,12 @@ function ProblemTable({ entry }: { entry: ThemeEntry }) {
           <button
             type="button"
             className={s.noteLink}
-            onClick={(e) => { e.stopPropagation(); void openWithDefaultApp(entry.path as string).catch(() => {}); }}
+            onClick={(e) => { e.stopPropagation(); void openInEditor(entry.path as string); }}
           >
             {t("systemSettings.appearance.openInEditor")}
           </button>
         )}
+        {openError && <div className={s.detailsError} role="alert">{openError}</div>}
       </div>
     </div>
   );
