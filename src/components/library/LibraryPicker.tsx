@@ -8,7 +8,7 @@
  * See docs/feature/library-plan.md → 第四期 and lib/context/library.ts.
  */
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Check as CheckIcon, ChevronRight, FileText, Folder, FolderOpen, Search } from "lucide-react";
 import { ModalShell } from "../common/ModalShell";
@@ -21,6 +21,7 @@ import {
   folderSubtree,
   isDocMember,
   membersEqual,
+  pruneMembers,
   setFolders,
   subtreeHasMembers,
   toggleDoc,
@@ -77,7 +78,18 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
   const { t } = useTranslation();
   const terms = useTerms();
   const closeRef = useRef<(() => void) | null>(null);
+  // `initial` is what the draft started from. If the spine changes on disk
+  // while the picker is open (a move by the agent) and the author hasn't
+  // touched anything, follow it — applying a stale draft would undo the move.
+  const [initial, setInitial] = useState<LibraryMembers>(members);
   const [draft, setDraft] = useState<LibraryMembers>(members);
+  useEffect(() => {
+    if (membersEqual(draft, initial) && !membersEqual(members, initial)) {
+      setInitial(members);
+      setDraft(members);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members]);
   const [query, setQuery] = useState("");
 
   const tree = useMemo(() => buildPickerTree(volumes), [volumes]);
@@ -107,7 +119,9 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
       return next;
     });
 
-  const dirty = !membersEqual(draft, members);
+  const dirty = !membersEqual(draft, initial);
+  // Counted over what exists: leftovers of deleted folders are pruned on apply.
+  const live = useMemo(() => pruneMembers(draft, volumes), [draft, volumes]);
   const apply = () => {
     if (dirty) onApply(draft);
     closeRef.current?.();
@@ -133,11 +147,18 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
         <div
           className={styles.row}
           style={{ paddingLeft: 16 + depth * 18 }}
-          onClick={() => expandable && toggleOpen(vol.relPath)}
+          onClick={() => expandable && !filtering && toggleOpen(vol.relPath)}
         >
-          <span className={`${styles.caret} ${open ? styles.caretOpen : ""} ${expandable ? "" : styles.caretNone}`}>
+          <button
+            type="button"
+            className={`${styles.caret} ${open ? styles.caretOpen : ""} ${expandable ? "" : styles.caretNone}`}
+            aria-expanded={expandable ? open : undefined}
+            aria-label={vol.name}
+            tabIndex={expandable && !filtering ? 0 : -1}
+            onClick={(e) => { e.stopPropagation(); if (expandable && !filtering) toggleOpen(vol.relPath); }}
+          >
             <ChevronRight size={12} strokeWidth={1.8} />
-          </span>
+          </button>
           <Check state={state} label={vol.name} onChange={() => setDraft((d) => toggleFolder(d, vol))} />
           {open
             ? <FolderOpen size={13} strokeWidth={1.6} className={styles.icon} />
@@ -223,8 +244,8 @@ export function LibraryPicker({ volumes, members, onApply, onClose }: Props) {
         <div className={styles.foot}>
           <span className={styles.summary}>
             {t("library.picker.summary", {
-              folders: draft.folders.length,
-              docs: draft.docs.length,
+              folders: live.folders.length,
+              docs: live.docs.length,
               group: terms.group,
               groups: terms.groups,
               docWord: terms.docs,

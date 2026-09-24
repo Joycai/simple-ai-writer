@@ -371,7 +371,6 @@
 }
 
 .chapter {
-  position: relative;
   padding: 9px 11px;
   background: var(--color-card);
   border-left: 2px solid var(--color-success);
@@ -463,27 +462,21 @@
 .memoCancel:hover { color: var(--color-danger-text); }
 
 /* Reorder controls — faint until the row is hovered. */
-/* An overlay on the card's right edge, shown on hover / keyboard focus: at
-   the 260px column floor (01f 1e) four always-on buttons left the title one
-   or two characters. The backdrop is the hover background, the only state it
-   is ever seen in. */
+/* Collapsed to zero width until the card is hovered or a button in it has
+   keyboard focus: at the 260px column floor (01f 1e) four always-on buttons
+   left the title one or two characters. In the flow, not an overlay — an
+   overlay covered the summary button and the 在写 badge beside it. Zero
+   width (not display:none) keeps the buttons reachable by Tab. */
 .moveControls {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 1px;
-  padding-left: 10px;
-  background: var(--color-bg-elevated);
-  box-shadow: -10px 0 8px -4px var(--color-bg-elevated);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-fast);
+  max-width: 0;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 .chapter:hover .moveControls,
-.moveControls:focus-within { opacity: 1; pointer-events: auto; }
+.moveControls:focus-within { max-width: 96px; }
 .moveBtn {
   display: flex;
   align-items: center;

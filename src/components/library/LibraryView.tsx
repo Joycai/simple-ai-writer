@@ -48,7 +48,17 @@ import { imageToThumbnailDataUrl, isImagePath } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { Select } from "../common/Select";
 import styles from "./LibraryView.module.css";
-import { isSamePath } from "../../lib/paths";
+import { isSamePath, isStrictDescendant } from "../../lib/paths";
+import type { FileNode } from "../../lib/project";
+
+/** The tree node at `path`, if the loaded tree has it. */
+function findTreeNode(nodes: FileNode[], path: string): FileNode | undefined {
+  for (const n of nodes) {
+    if (isSamePath(n.path, path)) return n;
+    if (n.is_dir && n.children && isStrictDescendant(n.path, path)) return findTreeNode(n.children, path);
+  }
+  return undefined;
+}
 
 /** Move an array item from one index to another (immutably). */
 function move<T>(arr: T[], from: number, to: number): T[] {
@@ -275,6 +285,7 @@ export function LibraryView() {
   const createEntry = useProjectStore((s) => s.createEntry);
   const moveEntry = useProjectStore((s) => s.moveEntry);
   const deleteEntry = useProjectStore((s) => s.deleteEntry);
+  const spineChanged = useProjectStore((s) => s.spineChanged);
   const setMainView = useAppStore((s) => s.setMainView);
   const terms = useTerms();
   const docs = useDocModel();
@@ -321,9 +332,14 @@ export function LibraryView() {
   // Load the spine (order + library members) when the project changes, and
   // again whenever something outside this view rewrote it (spineRev: a move
   // in the sidebar or by the agent, the AI panel's 加入文库).
+  const projectRef = useRef(projectPath);
+  projectRef.current = projectPath;
+  // A new project starts unknown — never the previous project's spine over
+  // the new project's tree.
+  useEffect(() => { setSpine(null); setSpineFor(null); }, [projectPath]);
   useEffect(() => {
     let cancelled = false;
-    if (!projectPath) { setSpine(null); setSpineFor(null); return; }
+    if (!projectPath) return;
     const seq = writeSeq.current;
     loadSpine(projectPath).then((s) => {
       if (cancelled || seq !== writeSeq.current) return;
@@ -443,10 +459,30 @@ export function LibraryView() {
     [volumes, spine],
   );
 
+  // Local writes land in order, and anything that reads the file back
+  // (reloadSpine, a drop) waits for them — otherwise it reads the version
+  // before the write and writes that back over it.
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
   const persistSpine = (next: BookSpine) => {
     writeSeq.current += 1;
     setSpine(next);
-    if (projectPath) void saveSpine(projectPath, next);
+    if (!projectPath) return;
+    const path = projectPath;
+    saveChain.current = saveChain.current
+      .then(() => saveSpine(path, next))
+      // The AI panel (outside this view, never unmounted) reads the library
+      // too — its 不在文库 note and bridge candidates must follow.
+      .then(() => spineChanged())
+      .catch((e) => console.error("[library] saving the spine failed:", e));
+  };
+
+  /** The spine on disk once this view's pending writes landed; undefined if the project changed meanwhile. */
+  const diskSpine = async (): Promise<BookSpine | null | undefined> => {
+    const path = projectPath;
+    if (!path) return undefined;
+    await saveChain.current;
+    const fresh = await loadSpine(path);
+    return projectRef.current === path ? fresh : undefined;
   };
 
   /**
@@ -454,12 +490,11 @@ export function LibraryView() {
    * (paths, 在写, membership — lib/context/outline moveInSpine), and the copy
    * in state predates the move.
    */
-  const reloadSpine = async (): Promise<BookSpine | null> => {
-    if (!projectPath) return null;
-    const fresh = await loadSpine(projectPath);
+  const reloadSpine = async (): Promise<void> => {
+    const fresh = await diskSpine();
+    if (fresh === undefined) return;
     writeSeq.current += 1;
     setSpine(fresh);
-    return fresh;
   };
 
   /**
@@ -609,7 +644,9 @@ export function LibraryView() {
         await moveMemory(projectPath, d.rel, newRel);
         // On top of the rewritten spine, only the drop position is ours: the
         // two columns as they were on screen, the doc out of one and in the other.
-        const fresh = (await loadSpine(projectPath)) ?? { version: 1 as const, order: {} };
+        const loaded = await diskSpine();
+        if (loaded === undefined) return;
+        const fresh = loaded ?? { version: 1 as const, order: {} };
         const sourceVol = volumes.find((v) => v.relPath === d.volRel);
         const target = targetVol.chapters.map((c) => c.relPath);
         target.splice(Math.min(index, target.length), 0, newRel);
@@ -632,8 +669,7 @@ export function LibraryView() {
     if (writing) status[ch.relPath] = "writing";
     else delete status[ch.relPath];
     next.status = status;
-    setSpine(next);
-    void saveSpine(projectPath, next);
+    persistSpine(next);
   };
 
   const toggleSelect = (path: string) => {
@@ -711,10 +747,15 @@ export function LibraryView() {
     setNewVolName("");
   };
 
-  /** The folder as it is on disk — a library column may show only part of it. */
+  /**
+   * Nothing at all in the folder on disk — no subfolder, no assets/, no doc
+   * excluded from the library. removeDir is recursive and keeps no backup,
+   * so "no chapters or resources of its own" is not enough: a parent added
+   * with 连同子分组 shows as an empty column while holding whole volumes.
+   */
   const isEmptyFolder = (vol: Volume) => {
-    const full = allByRel.get(vol.relPath);
-    return !!full && full.chapters.length === 0 && full.resources.length === 0;
+    const node = findTreeNode(fileTree, vol.path);
+    return !!node && node.is_dir && (node.children ?? []).length === 0;
   };
 
   const deleteVolume = async (vol: Volume) => {
@@ -762,7 +803,9 @@ export function LibraryView() {
 
   const workspaceGroups = volumesAll.filter((v) => v.relPath !== "").length;
   const workspaceDocs = volumesAll.reduce((n, v) => n + v.chapters.length, 0);
-  const libraryEmpty = spineLoaded && volumes.length === 0;
+  // With members but no columns yet the file tree hasn't arrived — not empty.
+  const noMembers = members.folders.length === 0 && members.docs.length === 0;
+  const libraryEmpty = spineLoaded && volumes.length === 0 && (noMembers || fileTree.length > 0);
   const picker = pickerOpen && (
     <LibraryPicker
       volumes={volumesAll}

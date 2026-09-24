@@ -90,8 +90,8 @@ import {
 import {
   planForecast, type ContextForecast, type ForecastSegmentKey,
 } from "../../lib/context/forecast";
-import { chapterTitle, isChapterFile, loadSpine, resolveVolumes, updateMembersOnDisk } from "../../lib/context/outline";
-import { emptyMembers, isDocMember, parentRel, setFolder } from "../../lib/context/library";
+import { chapterTitle, groupVolumes, loadSpine, resolveVolumes, updateMembersOnDisk } from "../../lib/context/outline";
+import { addDoc, emptyMembers, isDocMember, parentRel, setFolder } from "../../lib/context/library";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
@@ -921,27 +921,39 @@ export function AiPanel() {
   // 续写 finds the previous document and the 前情 only inside the library
   // (docs/feature/library-plan.md → 第四期). A chapter outside it gets neither,
   // silently — so say so where the continuation is set up, with the one-click
-  // way back in. Null = not a chapter / not applicable, nothing to say.
+  // way back in. Only for a file the library could hold at all (a chapter of
+  // some workspace folder — not a lore facet or an assets/ note). "excluded"
+  // = its folder is in the library but this doc was taken out of it.
   const activeRel = projectPath && activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
-  const [outsideLibrary, setOutsideLibrary] = useState(false);
+  const workspaceChapters = useMemo(
+    () => new Set(projectPath ? groupVolumes(fileTree, projectPath).flatMap((v) => v.chapters.map((c) => c.relPath)) : []),
+    [fileTree, projectPath],
+  );
+  const [outsideLibrary, setOutsideLibrary] = useState<null | "outside" | "excluded">(null);
   useEffect(() => {
     const applicable = !!task.continuation && docs.priorContext && !!projectPath && !!activeRel
-      && isChapterFile(activeRel.split("/").pop() ?? "");
-    if (!applicable) { setOutsideLibrary(false); return; }
+      && workspaceChapters.has(activeRel);
+    if (!applicable) { setOutsideLibrary(null); return; }
     let cancelled = false;
     void loadSpine(projectPath).then((spine) => {
-      if (!cancelled) setOutsideLibrary(!isDocMember(spine?.members ?? emptyMembers(), activeRel));
+      if (cancelled) return;
+      const members = spine?.members ?? emptyMembers();
+      if (isDocMember(members, activeRel)) setOutsideLibrary(null);
+      else setOutsideLibrary(members.folders.includes(parentRel(activeRel)) ? "excluded" : "outside");
     });
     return () => { cancelled = true; };
-  }, [task.continuation, docs.priorContext, projectPath, activeRel, spineRev]);
+  }, [task.continuation, docs.priorContext, projectPath, activeRel, workspaceChapters, spineRev]);
   const addActiveToLibrary = async () => {
     if (!projectPath || !activeRel) return;
     try {
-      // The folder whole — the doc's neighbours are what 续写 needs to see.
-      await updateMembersOnDisk(projectPath, (m) => setFolder(m, parentRel(activeRel), true));
+      // Excluded from a folder that is in → just this doc back (the author's
+      // other exclusions stand). Otherwise the folder whole — the doc's
+      // neighbours are what 续写 needs to see.
+      await updateMembersOnDisk(projectPath, (m) =>
+        outsideLibrary === "excluded" ? addDoc(m, activeRel) : setFolder(m, parentRel(activeRel), true));
       spineChanged();
     } catch (e) {
-      console.error("[ai-panel] adding the document's folder to the library failed:", e);
+      console.error("[ai-panel] adding the document to the library failed:", e);
     }
   };
 
@@ -1650,7 +1662,9 @@ export function AiPanel() {
                                 doc: terms.doc,
                               })}
                               <button type="button" className={styles.libraryNoteAction} onClick={() => void addActiveToLibrary()}>
-                                {t("ai.panel.addToLibrary")}
+                                {outsideLibrary === "excluded"
+                                  ? t("ai.panel.addBackToLibrary")
+                                  : t("ai.panel.addToLibrary", { group: terms.group })}
                               </button>
                             </div>
                           </div>

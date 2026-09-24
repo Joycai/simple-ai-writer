@@ -63,12 +63,19 @@
 
 .caret {
   width: 14px;
+  height: 14px;
+  padding: 0;
+  background: none;
+  border: none;
   display: inline-flex;
+  align-items: center;
   justify-content: center;
   color: var(--color-text-faint);
+  cursor: pointer;
   flex-shrink: 0;
   transition: transform var(--transition-fast);
 }
+.caret:focus-visible { outline: 1px solid var(--color-accent); outline-offset: 1px; }
 .caretOpen { transform: rotate(90deg); }
 .caretNone { visibility: hidden; }
 
