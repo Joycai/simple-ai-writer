@@ -12,7 +12,7 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagentModel";
-import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, readsPdf, type Model } from "../../../lib/ai/configDb";
+import { canSeeImages, conversationalModels, isAsrOnly, isTranslateOnly, pdfRouteFor, readsPdf, type Model } from "../../../lib/ai/configDb";
 import { serverToolsSent } from "../../../lib/ai/serverTools";
 import { upstreamDropping } from "../../../lib/ai/relayUpstream";
 import {
@@ -36,7 +36,8 @@ import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import css from "./SubAgents.module.css";
-import { providerFor } from "../../../lib/ai/routes";
+import { providerFor, ROUTE_LONG } from "../../../lib/ai/routes";
+import { familyOf } from "../../../lib/ai/types";
 
 /**
  * Binds each specialist subagent to a model and turns it on.
@@ -134,9 +135,24 @@ export function SubAgentsPane() {
     }
     if (kind === "pdf" && !readsPdf(model, providerFor(model, providers))) {
       const channel = providerFor(model, providers);
-      const upstream = channel && model.pdfInput ? upstreamDropping("pdfInput", model, channel) : undefined;
-      if (upstream) return t("systemSettings.subagents.warnPdfUpstream", { upstream: t(`aiConfig.upstream.name.${upstream}`) });
-      return t("systemSettings.subagents.warnNoPdf");
+      if (!channel || !model.pdfInput) return t("systemSettings.subagents.warnNoPdf");
+      // Declared, but not sent: say why (the relay's upstream, or the route
+      // itself), and name another route on this channel that would send it —
+      // whichever the reason, so the advice doesn't depend on the route the
+      // author happens to be on.
+      const upstream = upstreamDropping("pdfInput", model, channel);
+      const route = ROUTE_LONG[familyOf(channel.apiStandard)];
+      const moveTo = pdfRouteFor(model, channel);
+      const target = moveTo ? ROUTE_LONG[moveTo] : undefined;
+      if (upstream) {
+        const name = t(`aiConfig.upstream.name.${upstream}`);
+        return target
+          ? t("systemSettings.subagents.warnPdfUpstreamOtherRoute", { upstream: name, route, target })
+          : t("systemSettings.subagents.warnPdfUpstream", { upstream: name });
+      }
+      return target
+        ? t("systemSettings.subagents.warnPdfOtherRoute", { route, target })
+        : t("systemSettings.subagents.warnPdfNotSent", { route });
     }
     if (kind === "imagegen" && model.type !== "image") {
       return t("systemSettings.subagents.warnNotImage");
