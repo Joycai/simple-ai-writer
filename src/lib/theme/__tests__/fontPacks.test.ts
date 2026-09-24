@@ -244,16 +244,23 @@ describe("the folder under another window's hands", () => {
   it("won't mark a pack installed over a chunk that vanished mid-install", async () => {
     serve({ "registry.npmmirror.com": honest });
     // Another window deletes the pack's folder the moment the last chunk lands.
+    // "Last" is counted, not named: the workers finish in no fixed order (the
+    // hash is real async work), so a fixed name can land before the others and
+    // the deletion would miss the chunks still in flight.
     const fileio = await import("../../fs/fileio");
     const rename = vi.mocked(fileio.renamePath);
     const real = rename.getMockImplementation()!;
+    const chunks = h.pack.weights.reduce((n, w) => n + w.chunks.length, 0);
+    let landed = 0;
     rename.mockImplementation(async (from, to) => {
       await real(from, to);
-      if (to.endsWith("c.2.woff2")) h.files.delete(`${DIR}/a.0.woff2`);
+      if (to.endsWith(".woff2") && ++landed === chunks) await fileio.removeDir("/data/fonts/misans");
     });
     try {
       await expect(installFontPack("misans")).rejects.toMatchObject({ code: "disk" });
+      expect(landed).toBe(chunks);
       expect(await readInstalled("misans")).toBe(false);
+      expect(h.writes).not.toContain("/data/fonts/misans/installed.json");
     } finally {
       rename.mockImplementation(real);
     }
