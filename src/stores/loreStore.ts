@@ -187,6 +187,33 @@ async function walkProject(projectPath: string): Promise<void> {
   }
 }
 
+/**
+ * One write chain per entry file — editorStore's `writeInOrder`, keyed by the
+ * entity's dirPath + filename (ids repeat across categories, and every entity
+ * has an `index.md`, so the filename alone would chain unrelated entries). A
+ * timer-fired `saveNow` and a manual flush (selectEntity / selectFile,
+ * `flushDirtyDocuments`) can both be in flight for the same file, and the
+ * write runs on a Rust thread pool — unchained, the older text could land
+ * last, leaving stale text on disk while `saveNow`'s settle (which only sees
+ * the newer write finish) calls the buffer clean. Chained, the last write started is the last to land. A failed link
+ * doesn't break the chain: the next write is the retry.
+ */
+const writeChains = new Map<string, Promise<void>>();
+
+function writeInOrder(dirPath: string, filename: string, content: string): Promise<void> {
+  const key = `${dirPath}/${filename}`;
+  const prev = writeChains.get(key);
+  // Nothing queued: start now, not a microtask later — the write is under way
+  // by the time saveNow's caller gets control back, as it was before chaining.
+  const next = prev
+    ? prev.catch(() => {}).then(() => writeEntityFile(dirPath, filename, content))
+    : writeEntityFile(dirPath, filename, content);
+  writeChains.set(key, next);
+  const forget = () => { if (writeChains.get(key) === next) writeChains.delete(key); };
+  next.then(forget, forget);
+  return next;
+}
+
 export const useLoreStore = create<LoreState>((set, get) => ({
   index: {},
   selectedEntity: null,
@@ -381,7 +408,7 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       return cur.saveTimer === saveTimer ? null : cur.saveTimer;
     };
     try {
-      await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
+      await writeInOrder(selectedEntity.dirPath, selectedFile, fileContent);
       // TODO: refresh `index` for this entity. Editing index.md here changes
       // name/aliases/summary on disk but not in the index. A blanket
       // scanProject() is the wrong shape — this runs on a 2s autosave debounce

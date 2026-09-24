@@ -4,7 +4,8 @@
  * (docs/feature/html-artifact-plan.md D5): a keystroke mid-write stays dirty
  * and its newly armed timer stays tracked; the write only ever cleans what it
  * wrote, never a reload of the same file or another file's edits; and a buffer
- * that ends up equal to what was written is clean with no live timer.
+ * that ends up equal to what was written is clean with no live timer. Two
+ * saves of one entry file in flight land in the order they started.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -139,5 +140,94 @@ describe("loreStore.saveNow — settles against what it wrote", () => {
     expect(useLoreStore.getState().isDirty).toBe(true);
     expect(useLoreStore.getState().saveTimer).toBe(newTimer);
     spy.mockRestore();
+  });
+});
+
+describe("loreStore.saveNow — overlapping writes of one entry file", () => {
+  /** A disk whose writes finish only when the test says, in any order. */
+  let disk: Map<string, string>;
+  let pending: { path: string; content: string; land: () => void; fail: (e: Error) => void }[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    disk = new Map();
+    pending = [];
+    h.writeEntityFile.mockReset();
+    h.writeEntityFile.mockImplementation((dir: string, name: string, content: string) => new Promise<void>((resolve, reject) => {
+      const path = `${dir}/${name}`;
+      pending.push({
+        path,
+        content,
+        land: () => { disk.set(path, content); resolve(); },
+        fail: (e) => reject(e),
+      });
+    }));
+    useLoreStore.setState({
+      selectedEntity: AVA, selectedFile: "index.md", fileContent: "", isDirty: false, saveTimer: null,
+    });
+  });
+
+  afterEach(() => {
+    const { saveTimer } = useLoreStore.getState();
+    if (saveTimer) clearTimeout(saveTimer);
+    h.writeEntityFile.mockReset();
+    h.writeEntityFile.mockImplementation(async () => {});
+    vi.useRealTimers();
+  });
+
+  /** Land whatever write is in flight, newest first, until none is left. */
+  async function landNewestFirst(): Promise<void> {
+    for (;;) {
+      await vi.advanceTimersByTimeAsync(0);
+      const w = pending.pop();
+      if (!w) return;
+      w.land();
+    }
+  }
+
+  it("the later-started save lands last even when its write would finish first", async () => {
+    useLoreStore.getState().setFileContent("A");
+    const timerSave = useLoreStore.getState().saveNow(); // e.g. the 2s timer
+    useLoreStore.getState().setFileContent("AB");
+    const manualSave = useLoreStore.getState().saveNow(); // e.g. selectFile's flush
+
+    await landNewestFirst();
+    await Promise.all([timerSave, manualSave]);
+
+    expect(disk.get(`${AVA.dirPath}/index.md`)).toBe("AB");
+    expect(useLoreStore.getState().isDirty).toBe(false);
+    expect(useLoreStore.getState().saveTimer).toBeNull();
+  });
+
+  it("a failed earlier write doesn't hold up the one queued behind it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    useLoreStore.getState().setFileContent("A");
+    const first = useLoreStore.getState().saveNow();
+    useLoreStore.getState().setFileContent("AB");
+    const second = useLoreStore.getState().saveNow();
+
+    await vi.advanceTimersByTimeAsync(0);
+    pending.shift()!.fail(new Error("transient"));
+    await expect(first).rejects.toThrow("transient");
+    await landNewestFirst();
+    await second;
+
+    expect(disk.get(`${AVA.dirPath}/index.md`)).toBe("AB");
+    expect(useLoreStore.getState().isDirty).toBe(false);
+  });
+
+  it("another entry's index.md is its own chain — it doesn't wait behind this one", async () => {
+    useLoreStore.getState().setFileContent("A");
+    const avaSave = useLoreStore.getState().saveNow();
+    useLoreStore.setState({ selectedEntity: BEN });
+    useLoreStore.getState().setFileContent("B");
+    const benSave = useLoreStore.getState().saveNow();
+
+    // Both writes are under way at once: same filename, different entries.
+    expect(pending.map((w) => w.path)).toEqual([`${AVA.dirPath}/index.md`, `${BEN.dirPath}/index.md`]);
+    await landNewestFirst();
+    await Promise.all([avaSave, benSave]);
+    expect(disk.get(`${AVA.dirPath}/index.md`)).toBe("A");
+    expect(disk.get(`${BEN.dirPath}/index.md`)).toBe("B");
   });
 });
