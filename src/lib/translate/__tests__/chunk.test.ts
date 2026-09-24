@@ -10,14 +10,14 @@ import {
 } from "../chunk";
 
 const DOC = [
-  "# 第一章　オトメのヒミツ",
+  "# 第一章　放課後のヒミツ",
   "",
   "![挿絵](assets/01.png)",
   "",
   "彼女は扉を開けた。",
-  "https://www.pixiv.net/novel/show.php?id=9256002",
+  "https://example.com/novel/show.php?id=1",
   "---",
-  "「わたしは魔法愛姫です」",
+  "「わたしは図書委員です」",
   "",
 ].join("\n");
 
@@ -66,7 +66,7 @@ describe("splitDocument", () => {
   it("送出去的文本是逐行拼接，不带空行", () => {
     const { chunks } = splitDocument(DOC);
     expect(chunkSource(chunks[0])).toBe(
-      "# 第一章　オトメのヒミツ\n![挿絵](assets/01.png)\n彼女は扉を開けた。\n「わたしは魔法愛姫です」",
+      "# 第一章　放課後のヒミツ\n![挿絵](assets/01.png)\n彼女は扉を開けた。\n「わたしは図書委員です」",
     );
   });
 });
@@ -76,17 +76,17 @@ describe("重组", () => {
     const { allLines, chunks } = splitDocument(DOC);
     const out = applyTranslations(
       allLines,
-      pairTranslation(chunks[0], ["# 第一章　少女的秘密", "![插图](assets/01.png)", "她打开了门。", "「我是魔法爱姬」"]),
+      pairTranslation(chunks[0], ["# 第一章　放学后的秘密", "![插图](assets/01.png)", "她打开了门。", "「我是图书委员」"]),
     );
     expect(out.split("\n")).toEqual([
-      "# 第一章　少女的秘密",
+      "# 第一章　放学后的秘密",
       "",
       "![插图](assets/01.png)",
       "",
       "她打开了门。",
-      "https://www.pixiv.net/novel/show.php?id=9256002",
+      "https://example.com/novel/show.php?id=1",
       "---",
-      "「我是魔法爱姬」",
+      "「我是图书委员」",
       "",
     ]);
   });

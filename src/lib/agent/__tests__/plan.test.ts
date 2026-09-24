@@ -81,17 +81,17 @@ describe("checkPlan", () => {
   // tool call at all.
   it("lets an update_lore_file call for a new facet satisfy a 'create' plan step", () => {
     const gate = gateWith([
-      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
+      { action: "create", entity: "佐藤陽菜", file: "outfit_battle.md", detail: "new facet" },
     ]);
-    const check = checkPlan(gate, emptyIndex, "update", "早乙女文香", "outfit_battle.md");
+    const check = checkPlan(gate, emptyIndex, "update", "佐藤陽菜", "outfit_battle.md");
     expect(check.ok).toBe(true);
   });
 
   it("does not let a 'create' step satisfy an update call for a different file", () => {
     const gate = gateWith([
-      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
+      { action: "create", entity: "佐藤陽菜", file: "outfit_battle.md", detail: "new facet" },
     ]);
-    const check = checkPlan(gate, emptyIndex, "update", "早乙女文香", "outfit_casual.md");
+    const check = checkPlan(gate, emptyIndex, "update", "佐藤陽菜", "outfit_casual.md");
     expect(check.ok).toBe(false);
   });
 
@@ -130,9 +130,9 @@ describe("checkPlan — update_facet_meta and delete_lore_file's own gate() call
   // classify it.
   it("lets update_facet_meta's gate() call satisfy a 'create' plan step", () => {
     const gate = gateWith([
-      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
+      { action: "create", entity: "佐藤陽菜", file: "outfit_battle.md", detail: "new facet" },
     ]);
-    const check = checkPlan(gate, emptyIndex, "update", "早乙女文香", "outfit_battle.md");
+    const check = checkPlan(gate, emptyIndex, "update", "佐藤陽菜", "outfit_battle.md");
     expect(check.ok).toBe(true);
   });
 
@@ -142,18 +142,18 @@ describe("checkPlan — update_facet_meta and delete_lore_file's own gate() call
   // approved creating/updating this file still must not authorise deleting it.
   it("does NOT let delete_lore_file's gate() call ride the create/update fallback", () => {
     const gate = gateWith([
-      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
-      { action: "update", entity: "早乙女文香", file: "outfit_battle.md", detail: "later edit" },
+      { action: "create", entity: "佐藤陽菜", file: "outfit_battle.md", detail: "new facet" },
+      { action: "update", entity: "佐藤陽菜", file: "outfit_battle.md", detail: "later edit" },
     ]);
-    const check = checkPlan(gate, emptyIndex, "delete", "早乙女文香", "outfit_battle.md");
+    const check = checkPlan(gate, emptyIndex, "delete", "佐藤陽菜", "outfit_battle.md");
     expect(check.ok).toBe(false);
   });
 
   it("still passes delete_lore_file's gate() call against a matching 'delete' step", () => {
     const gate = gateWith([
-      { action: "delete", entity: "早乙女文香", file: "outfit_old.md", detail: "superseded" },
+      { action: "delete", entity: "佐藤陽菜", file: "outfit_old.md", detail: "superseded" },
     ]);
-    const check = checkPlan(gate, emptyIndex, "delete", "早乙女文香", "outfit_old.md");
+    const check = checkPlan(gate, emptyIndex, "delete", "佐藤陽菜", "outfit_old.md");
     expect(check.ok).toBe(true);
   });
 });
