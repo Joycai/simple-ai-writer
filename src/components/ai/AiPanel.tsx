@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown, ChevronRight, Copy, Crosshair, FileSearch, Layers, ListChecks, Pin, Play,
+  ChevronDown, ChevronRight, Copy, Crosshair, FileSearch, Layers, Library, ListChecks, Pin, Play,
   Repeat, RotateCw, Square, X,
 } from "lucide-react";
 import { PromptViewer } from "./PromptViewer";
@@ -77,6 +77,7 @@ import {
 import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
+  projectRelativePath,
 } from "../../lib/context/memory";
 import {
   categoryLabel, defaultTask, findTask, profileLabel, taskDesc, taskLabel,
@@ -89,7 +90,8 @@ import {
 import {
   planForecast, type ContextForecast, type ForecastSegmentKey,
 } from "../../lib/context/forecast";
-import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
+import { chapterTitle, groupVolumes, loadSpine, resolveVolumes, updateMembersOnDisk } from "../../lib/context/outline";
+import { addDoc, emptyMembers, isDocMember, parentRel, setFolder } from "../../lib/context/library";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
@@ -816,6 +818,8 @@ export function AiPanel() {
   const [scopeMenu, setScopeMenu] = useState<ScopeMenuAnchor | null>(null);
   const projectPath = useProjectStore((s) => s.projectPath);
   const fileTree = useProjectStore((s) => s.fileTree);
+  const spineRev = useProjectStore((s) => s.spineRev);
+  const spineChanged = useProjectStore((s) => s.spineChanged);
   const memory = useMemoryStore((s) => s.memory);
   const docs = useDocModel();
   const terms = useTerms();
@@ -912,7 +916,46 @@ export function AiPanel() {
       })));
     })();
     return () => { cancelled = true; };
-  }, [wantsOpeningChoice, projectPath, fileTree]);
+  }, [wantsOpeningChoice, projectPath, fileTree, spineRev]);
+
+  // 续写 finds the previous document and the 前情 only inside the library
+  // (docs/feature/library-plan.md → 第四期). A chapter outside it gets neither,
+  // silently — so say so where the continuation is set up, with the one-click
+  // way back in. Only for a file the library could hold at all (a chapter of
+  // some workspace folder — not a lore facet or an assets/ note). "excluded"
+  // = its folder is in the library but this doc was taken out of it.
+  const activeRel = projectPath && activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
+  const workspaceChapters = useMemo(
+    () => new Set(projectPath ? groupVolumes(fileTree, projectPath).flatMap((v) => v.chapters.map((c) => c.relPath)) : []),
+    [fileTree, projectPath],
+  );
+  const [outsideLibrary, setOutsideLibrary] = useState<null | "outside" | "excluded">(null);
+  useEffect(() => {
+    const applicable = !!task.continuation && docs.priorContext && !!projectPath && !!activeRel
+      && workspaceChapters.has(activeRel);
+    if (!applicable) { setOutsideLibrary(null); return; }
+    let cancelled = false;
+    void loadSpine(projectPath).then((spine) => {
+      if (cancelled) return;
+      const members = spine?.members ?? emptyMembers();
+      if (isDocMember(members, activeRel)) setOutsideLibrary(null);
+      else setOutsideLibrary(members.folders.includes(parentRel(activeRel)) ? "excluded" : "outside");
+    });
+    return () => { cancelled = true; };
+  }, [task.continuation, docs.priorContext, projectPath, activeRel, workspaceChapters, spineRev]);
+  const addActiveToLibrary = async () => {
+    if (!projectPath || !activeRel) return;
+    try {
+      // Excluded from a folder that is in → just this doc back (the author's
+      // other exclusions stand). Otherwise the folder whole — the doc's
+      // neighbours are what 续写 needs to see.
+      await updateMembersOnDisk(projectPath, (m) =>
+        outsideLibrary === "excluded" ? addDoc(m, activeRel) : setFolder(m, parentRel(activeRel), true));
+      spineChanged();
+    } catch (e) {
+      console.error("[ai-panel] adding the document to the library failed:", e);
+    }
+  };
 
   // Everything before this chapter in book order — bridging forward would be
   // narratively backwards, so the picker only offers what precedes it. Spans
@@ -1609,6 +1652,23 @@ export function AiPanel() {
                             ))}
                           </div>
                         </div>
+
+                        {outsideLibrary && (
+                          <div className={styles.libraryNote}>
+                            <Library size={13} strokeWidth={1.8} className={styles.libraryNoteIcon} />
+                            <div>
+                              {t("ai.panel.outsideLibrary", {
+                                name: (activeRel?.split("/").pop() ?? "").replace(/\.(md|markdown|txt)$/i, ""),
+                                doc: terms.doc,
+                              })}
+                              <button type="button" className={styles.libraryNoteAction} onClick={() => void addActiveToLibrary()}>
+                                {outsideLibrary === "excluded"
+                                  ? t("ai.panel.addBackToLibrary")
+                                  : t("ai.panel.addToLibrary", { group: terms.group })}
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
                         {/* How this chapter opens — only a question while it is
                             still (nearly) empty, and only when something precedes

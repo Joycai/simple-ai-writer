@@ -31,7 +31,7 @@ import {
   type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
-import { normalizeChapterFileName } from "../lib/context/outline";
+import { isChapterFile, moveInSpineOnDisk, normalizeChapterFileName } from "../lib/context/outline";
 import type { LoreOrganizer } from "../lib/agent/registry";
 import {
   fileEntities,
@@ -48,12 +48,12 @@ import {
   type LoreEntity,
   type LoreEntityAddress,
 } from "../lib/lore";
-import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
+import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, statPath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { collapseAllMap, expandAllMap } from "../lib/fs/selection";
 import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets, relinkAssetGroup } from "../lib/image/assets";
-import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
+import { baseName, isSamePath, isStrictDescendant, projectRelative } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
@@ -138,6 +138,15 @@ function resetDocuments(): void {
   useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
 }
 
+/** `path` as the file tree spells it (case can differ on a case-insensitive disk). */
+function treeSpelling(nodes: FileNode[], path: string): string {
+  for (const n of nodes) {
+    if (isSamePath(n.path, path)) return n.path;
+    if (n.children && isStrictDescendant(n.path, path)) return treeSpelling(n.children, path);
+  }
+  return path;
+}
+
 /** The workspace with no project open: the novel pack, alone. */
 const DEFAULT_WORKSPACE = resolveWorkspace([NOVEL_PROFILE]);
 
@@ -176,6 +185,12 @@ interface ProjectState {
   collections: string[];
   activeFilePath: string | null;
   fileTree: FileNode[];
+  /**
+   * The project the current `fileTree` was listed for — null until the first
+   * listing lands. An empty tree is then a real empty workspace, not "not
+   * listed yet" (the library's empty state needs the difference).
+   */
+  treeFor: string | null;
   /**
    * Which sidebar folders the author has explicitly opened or closed, keyed by
    * path. Lives here rather than in FileTree's nodes because the sidebar's tab
@@ -256,8 +271,19 @@ interface ProjectState {
     type: "file" | "folder",
     content?: string,
   ) => Promise<string>;
-  /** Move or rename a file/folder, keeping the open document pointed at it. */
+  /**
+   * Move or rename a file/folder, keeping the open document pointed at it and
+   * the book spine (order, 在写, library members) pointed at its new path.
+   */
   moveEntry: (from: string, to: string) => Promise<void>;
+  /**
+   * Bumped whenever `.ai-writer/outline.json` was rewritten — by `moveEntry`,
+   * the AI panel's 加入文库, or a library-view save. The library view and the
+   * AI panel reload the spine on change (the library skips its own stale reads).
+   */
+  spineRev: number;
+  /** `outline.json` was rewritten — whoever shows the library, reload it. */
+  spineChanged: () => void;
   relinkAssets: (groupPath: string, docPath: string) => Promise<void>;
   /**
    * Copy a file/folder into `destDir` and return the new path. Unlike a move,
@@ -389,6 +415,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   collections: [],
   activeFilePath: null,
   fileTree: [],
+  treeFor: null,
+  spineRev: 0,
+  spineChanged: () => set((s) => ({ spineRev: s.spineRev + 1 })),
   expandedDirs: {},
   revealRequest: null,
   clipboard: null,
@@ -446,7 +475,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
       useEditorStore.getState().setDocCounts(0, 0);
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
@@ -486,7 +515,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], treeFor: null, expandedDirs: {}, clipboard: null });
     useEditorStore.getState().setDocCounts(0, 0);
     if (closing) void releaseProjectLock(closing);
   },
@@ -655,9 +684,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!projectPath) return;
     try {
       const tree = await readDirRecursive(projectPath);
-      set({ fileTree: tree });
+      set({ fileTree: tree, treeFor: projectPath });
     } catch {
-      set({ fileTree: [] });
+      set({ fileTree: [], treeFor: projectPath });
     }
   },
 
@@ -704,6 +733,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // rewritten text rather than the version pointing at the old folder.
     await moveDocumentAssets(from, to);
 
+    // The spine keys by relPath; without this a rename in the sidebar silently
+    // loses the document's place, its 在写 mark and its library membership.
+    // Never fails the move — the file is already where the author put it.
+    // `from` is taken in the tree's spelling: an agent path may differ in case
+    // from the file on a case-insensitive disk, and the spine holds the tree's.
+    const { projectPath, fileTree } = get();
+    const fromRel = projectPath ? projectRelative(projectPath, treeSpelling(fileTree, from)) : null;
+    const toRel = projectPath ? projectRelative(projectPath, to) : null;
+    let spineMoved = false;
+    if (projectPath && fromRel && toRel) {
+      try {
+        const isChapter = !(await statPath(to))?.isDir && isChapterFile(baseName(to));
+        spineMoved = await moveInSpineOnDisk(projectPath, fromRel, toRel, isChapter);
+      } catch (e) {
+        console.error("[project] rewriting the book spine after a move failed:", e);
+      }
+    }
+
     const { activeFilePath } = get();
     if (isSamePath(activeFilePath, from)) {
       set({ activeFilePath: to });
@@ -711,6 +758,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ activeFilePath: to + activeFilePath.slice(from.length) });
     }
     await get().refreshFileTree();
+    // After the refresh, so a view reloading on it sees the moved tree too.
+    if (spineMoved) get().spineChanged();
   },
 
   /**

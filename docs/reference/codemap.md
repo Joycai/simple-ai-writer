@@ -171,7 +171,7 @@ shared primitives, including `Slider` (设计稿 02e: the app's one slider — s
 
 ### `src/components/command/`, `onboarding/`, `library/`
 
-CommandPalette, onboarding flow, library view (文库: book-spine ordering + per-collection resources; see `docs/feature/library-plan.md`)
+CommandPalette, onboarding flow, library view (文库: only what the author picked — `LibraryPicker` edits the members table, whole folders or single docs; book-spine ordering + per-collection resources; after its own moves it re-reads the spine from disk because `moveEntry` already rewrote it, and reloads on `spineRev`; see `docs/feature/library-plan.md` → 第四期)
 
 ### `src/components/roleplay/`
 
@@ -532,7 +532,7 @@ capability packs: what kinds of writing a project enables (`model.ts` pack types
 
 ### `src/lib/context/`
 
-RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, not a tool; appended to a single-shot run's system prompt but stamped on the chat's *current turn*, because a clock in `history[0]` would invalidate the whole conversation's cache prefix every send; roleplay, summarizers and the consistency reviewer deliberately carry none — the source guard in `currentTime.test.ts` makes every new `role: "system"` builder decide. See `docs/reference/architecture.md` → 当前时间), the chat's current-document policy (`docFocus.ts` — describe the open file by default, inject its window only when the turn points at it), story memory (`memory.ts`), book spine (`outline.ts` — `isChapterFile` keeps the folder note `index.md` off the spine, and deliberately reads no `status`: the spine and 续写 are the author's explicit acts, not automatic discovery, see `folder-note-plan.md` §3), book-level continuation context (`bookContext.ts`), per-volume collection digests for the library view (`collectionDigest.ts` + `stores/digestStore.ts`; display-only, never task context)
+RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, not a tool; appended to a single-shot run's system prompt but stamped on the chat's *current turn*, because a clock in `history[0]` would invalidate the whole conversation's cache prefix every send; roleplay, summarizers and the consistency reviewer deliberately carry none — the source guard in `currentTime.test.ts` makes every new `role: "system"` builder decide. See `docs/reference/architecture.md` → 当前时间), the chat's current-document policy (`docFocus.ts` — describe the open file by default, inject its window only when the turn points at it), story memory (`memory.ts`), book spine (`outline.ts` — the library members live in the spine and `resolveVolumes` filters by them, so 续写 sees only the library (`library.ts` holds the members table's pure rules); `isChapterFile` keeps the folder note `index.md` off the spine, and deliberately reads no `status`: the spine and 续写 are the author's explicit acts, not automatic discovery, see `folder-note-plan.md` §3), book-level continuation context (`bookContext.ts`), per-volume collection digests for the library view (`collectionDigest.ts` + `stores/digestStore.ts`; display-only, never task context)
 
 ### `src/lib/search/`
 

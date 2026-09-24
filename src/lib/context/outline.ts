@@ -14,12 +14,20 @@
  * default volume (relPath `""`), and each folder — at any depth — is its own
  * volume holding its direct chapter files. Continuation memory is resolved
  * strictly within the active chapter's volume (see ./bookContext).
+ *
+ * Only the volumes and chapters the author put in the library count: the
+ * spine carries the 文库成员表 (`members`, see ./library), and
+ * `resolveVolumes` — what 续写 and the AI panel read — filters by it.
  */
 
 import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
 import { isFolderNoteFile } from "../fs/folderNote";
 import { ASSETS_DIR } from "../image/assets";
 import { projectRelativePath } from "./memory";
+import {
+  addDoc, applyMembers, emptyMembers, inferLegacyMembers, isDocMember, parseMembers, parentRel,
+  type LibraryMembers,
+} from "./library";
 import { baseName, dirName, toPosixPath } from "../paths";
 import type { FileNode } from "../project";
 
@@ -55,6 +63,11 @@ export interface Volume {
   chapters: Chapter[];
   /** Direct non-chapter files of this folder, natural-sorted. */
   resources: ResourceFile[];
+  /**
+   * Set by `applyMembers`: true when the folder is in the library only through
+   * individually picked docs (its column shows those alone, no resources).
+   */
+  partial?: boolean;
 }
 
 /** Author-set chapter status (only "writing" for now; absence means done). */
@@ -73,6 +86,12 @@ export interface BookSpine {
    * order, which is what they always had).
    */
   volumes?: string[];
+  /**
+   * The 文库成员表 — which folders / docs are in the library at all. Always
+   * present on a spine returned by `loadSpine` (inferred for files written
+   * before it existed); a missing spine means an empty library.
+   */
+  members?: LibraryMembers;
 }
 
 const CHAPTER_EXTS = ["md", "markdown", "txt"];
@@ -227,31 +246,81 @@ export function spineFromVolumes(volumes: Volume[], prev?: BookSpine | null): Bo
   for (const vol of volumes) order[vol.relPath] = vol.chapters.map((c) => c.relPath);
   const spine: BookSpine = { version: 1, order, volumes: volumes.map((v) => v.relPath) };
   if (prev?.status && Object.keys(prev.status).length > 0) spine.status = { ...prev.status };
+  spine.members = prev?.members ? cloneMembers(prev.members) : emptyMembers();
   return spine;
 }
 
+function cloneMembers(m: LibraryMembers): LibraryMembers {
+  return { folders: [...m.folders], docs: [...m.docs], exclude: [...m.exclude] };
+}
+
 /**
- * Rewrite a spine after a volume folder rename: the volume's own key, every
- * nested volume's key (a parent rename shifts its children's relPaths too),
- * all chapter relPaths under them, the status map, and the volume order.
- * Renaming the root ("") is meaningless here and returns the spine untouched.
+ * Rewrite every path in a spine after `oldRel` moved to `newRel` — a file or
+ * a folder, anywhere. Path-segment aware: `卷一` rewrites `卷一/a.md` but not
+ * `卷一续/a.md`. Covers the order (keys and values), the volume order, the
+ * status map and the library members, so a rename keeps a document's place,
+ * its 在写 mark and its membership. Renaming the root ("") is meaningless and
+ * returns the spine untouched.
+ *
+ * Whatever the spine still says about the destination is a leftover: a move
+ * never lands on an occupied path, so an entry at or under `newRel` names a
+ * file or folder deleted outside the library (deletes are not hooked). Those
+ * go first — otherwise a stale 在写 mark, order list or whole-folder membership
+ * would be inherited by whatever now takes the name.
  */
-export function renameVolumeInSpine(spine: BookSpine, oldRel: string, newRel: string): BookSpine {
+export function rewritePathInSpine(spine: BookSpine, oldRel: string, newRel: string): BookSpine {
   if (!oldRel || oldRel === newRel) return spine;
-  const rewrite = (rel: string): string =>
-    rel === oldRel ? newRel : rel.startsWith(oldRel + "/") ? newRel + rel.slice(oldRel.length) : rel;
+  const under = (rel: string, root: string) => rel === root || rel.startsWith(root + "/");
+  const stale = (rel: string) => under(rel, newRel) && !under(rel, oldRel);
+  const rewrite = (rel: string): string => (under(rel, oldRel) ? newRel + rel.slice(oldRel.length) : rel);
+  const rewriteAll = (list: string[]) => [...new Set(list.filter((r) => !stale(r)).map(rewrite))];
 
   const order: Record<string, string[]> = {};
   for (const [volRel, chapters] of Object.entries(spine.order)) {
-    order[rewrite(volRel)] = chapters.map(rewrite);
+    if (!stale(volRel)) order[rewrite(volRel)] = rewriteAll(chapters);
   }
   const next: BookSpine = { version: 1, order };
-  if (spine.volumes) next.volumes = spine.volumes.map(rewrite);
+  if (spine.volumes) next.volumes = rewriteAll(spine.volumes);
   if (spine.status && Object.keys(spine.status).length > 0) {
     const status: Record<string, ChapterStatus> = {};
-    for (const [rel, st] of Object.entries(spine.status)) status[rewrite(rel)] = st;
+    for (const [rel, st] of Object.entries(spine.status)) {
+      if (!stale(rel)) status[rewrite(rel)] = st;
+    }
     next.status = status;
   }
+  if (spine.members) {
+    next.members = {
+      folders: rewriteAll(spine.members.folders),
+      docs: rewriteAll(spine.members.docs),
+      exclude: rewriteAll(spine.members.exclude),
+    };
+  }
+  return next;
+}
+
+/**
+ * A file or folder moved from `oldRel` to `newRel`: rewrite its paths, and keep
+ * a chapter that was in the library in it wherever it lands — moving it from a
+ * whole-member folder into a folder that isn't one would otherwise drop it
+ * (its membership came from the folder, not its own entry). Only chapters:
+ * a resource or a subfolder has no per-item membership to carry. An excluded
+ * chapter stays excluded wherever it goes ("was out, stays out"). Entries the
+ * move made contradictory (a picked doc now inside a whole member, an
+ * exclusion now outside one) are dropped.
+ */
+export function moveInSpine(spine: BookSpine, oldRel: string, newRel: string, isChapter: boolean): BookSpine {
+  const next = rewritePathInSpine(spine, oldRel, newRel);
+  if (!next.members || next === spine) return next;
+  let members = next.members;
+  if (isChapter && spine.members && isDocMember(spine.members, oldRel) && !isDocMember(members, newRel)) {
+    members = addDoc(members, newRel);
+  }
+  const whole = new Set(members.folders);
+  next.members = {
+    folders: members.folders,
+    docs: members.docs.filter((r) => !whole.has(parentRel(r))),
+    exclude: members.exclude.filter((r) => whole.has(parentRel(r))),
+  };
   return next;
 }
 
@@ -275,6 +344,9 @@ export async function loadSpine(projectPath: string): Promise<BookSpine | null> 
     if (Array.isArray(parsed.volumes)) {
       spine.volumes = (parsed.volumes as unknown[]).map(String);
     }
+    // Written before the library was curated → the volumes the author was
+    // arranging join; from the next save on, the members are explicit.
+    spine.members = parseMembers(parsed.members) ?? inferLegacyMembers(spine.order);
     return spine;
   } catch {
     return null;
@@ -287,11 +359,65 @@ export async function saveSpine(projectPath: string, spine: BookSpine): Promise<
   await writeFile(p, JSON.stringify(spine, null, 2) + "\n");
 }
 
-/** Group + apply the persisted spine in one step. */
-export async function resolveVolumes(projectPath: string, fileTree: FileNode[]): Promise<Volume[]> {
-  const volumes = groupVolumes(fileTree, projectPath);
+/**
+ * Whether two spines say the same thing. Not a raw JSON.stringify: loadSpine
+ * and rewritePathInSpine build their objects in different key orders, and an
+ * empty status map means the same as none.
+ */
+export function sameSpine(a: BookSpine, b: BookSpine): boolean {
+  const canon = (x: BookSpine) => {
+    const status = x.status && Object.keys(x.status).length > 0 ? x.status : undefined;
+    const sortKeys = <T,>(o: Record<string, T> | undefined) =>
+      o && Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
+    return JSON.stringify([sortKeys(x.order), x.volumes ?? null, sortKeys(status) ?? null, x.members ?? null]);
+  };
+  return canon(a) === canon(b);
+}
+
+/**
+ * Apply a move to the persisted spine (see moveInSpine). Called by
+ * `projectStore.moveEntry` — the one path the file tree, the library and the
+ * agent all move through — so a rename anywhere keeps order, 在写 and library
+ * membership. No spine on disk → nothing to rewrite, and none is created.
+ * Returns whether the file was rewritten.
+ */
+export async function moveInSpineOnDisk(
+  projectPath: string, oldRel: string, newRel: string, isChapter: boolean,
+): Promise<boolean> {
   const spine = await loadSpine(projectPath);
-  return applySpine(volumes, spine);
+  if (!spine) return false;
+  const next = moveInSpine(spine, oldRel, newRel, isChapter);
+  // Most moves touch nothing the spine records (an image, a stray note) —
+  // those neither write the file nor make the library reload.
+  if (sameSpine(next, spine)) return false;
+  await saveSpine(projectPath, next);
+  return true;
+}
+
+/**
+ * Change the library members on disk, creating the spine if there is none —
+ * for surfaces other than the library view (the AI panel's 加入文库), which
+ * holds no spine of its own. Callers bump `projectStore.spineRev` after.
+ */
+export async function updateMembersOnDisk(
+  projectPath: string, change: (members: LibraryMembers) => LibraryMembers,
+): Promise<void> {
+  const spine = (await loadSpine(projectPath)) ?? { version: 1, order: {} };
+  await saveSpine(projectPath, { ...spine, members: change(spine.members ?? emptyMembers()) });
+}
+
+/**
+ * The library as 续写 and the AI panel see it: group, keep the members, apply
+ * the persisted order. No spine means nothing was ever put in the library.
+ */
+export async function resolveVolumes(projectPath: string, fileTree: FileNode[]): Promise<Volume[]> {
+  const spine = await loadSpine(projectPath);
+  return libraryVolumes(groupVolumes(fileTree, projectPath), spine);
+}
+
+/** The members of grouped volumes, in spine order (see resolveVolumes). */
+export function libraryVolumes(grouped: Volume[], spine: BookSpine | null): Volume[] {
+  return applySpine(applyMembers(grouped, spine?.members ?? emptyMembers()), spine);
 }
 
 // ─── Chapter neighbourhood ───────────────────────────────────────────────────
