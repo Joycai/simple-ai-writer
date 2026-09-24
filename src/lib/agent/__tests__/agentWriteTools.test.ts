@@ -933,20 +933,20 @@ describe("create_lore_facet", () => {
 
   it("promotes an existing attachment, keeping its text byte-for-byte", async () => {
     const ctx = makeRescanCtx();
-    fs.set(`${DIR}/变身形态.md`, "变身后是18岁体型。\n");
+    fs.set(`${DIR}/出征装束.md`, "出征时换上银色轻甲。\n");
 
     const res = await run("create_lore_facet", {
-      entity: "Ava", title: "变身形态", file: "变身形态.md", keys: ["变身", "棱镜天使"],
+      entity: "Ava", title: "出征装束", file: "出征装束.md", keys: ["出征", "银甲"],
     }, ctx);
 
     expect(res.content).toContain("Promoted the attachment");
     expect(res.content).toContain("carried through unchanged");
-    const written = fs.get(`${DIR}/变身形态.md`)!;
-    expect(written).toContain('facet: "变身形态"');
-    expect(written).toContain("变身后是18岁体型。");
-    expect(fs.get(backupsOf()[0])).toBe("变身后是18岁体型。\n");
+    const written = fs.get(`${DIR}/出征装束.md`)!;
+    expect(written).toContain('facet: "出征装束"');
+    expect(written).toContain("出征时换上银色轻甲。");
+    expect(fs.get(backupsOf()[0])).toBe("出征时换上银色轻甲。\n");
     const scanned = await scanLore(PROJECT);
-    expect(scanned.characters[0].facets.map((f) => f.file)).toContain("变身形态.md");
+    expect(scanned.characters[0].facets.map((f) => f.file)).toContain("出征装束.md");
   });
 
   it("warns when the new facet can never fire", async () => {

@@ -1003,7 +1003,7 @@ function resolveFacetSlotArg(
  * inert attachment that never reaches the injector. Every other write tool
  * either refuses a new file or writes exactly the bytes the model sent, so
  * "split this entry into facets" ran through update_lore_file, arrived without
- * that frontmatter, came back as `Wrote 变身形态.md`, and injected nothing —
+ * that frontmatter, came back as `Wrote 出征装束.md`, and injected nothing —
  * a failure the author meets on the entry page weeks later, not in the run.
  * Generating the frontmatter here is what makes the outcome match the request.
  *
