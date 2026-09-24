@@ -153,8 +153,8 @@
   font-size: var(--font-size-xs);
   animation: fadeIn var(--transition-base);
 }
-/* 落盘失败那一格（设计稿没画，见 editorStore.closeNotice）：文档没关，所以这句
-   不是回执而是解释——琥珀，与保存点脏态同一个色。 */
+/* 落盘失败那一格（设计稿没画，见 editorStore.crumbTrace）：文档没关、没存上，
+   所以这句不是回执而是解释——琥珀，与保存点脏态同一个色。 */
 .crumbTraceFail {
   color: var(--color-warning);
 }

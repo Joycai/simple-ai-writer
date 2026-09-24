@@ -367,6 +367,19 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     // saveNow for why a caller that flushes without pre-clearing it matters.
     if (saveTimer) clearTimeout(saveTimer);
     if (!selectedEntity || !selectedFile) { set({ saveTimer: null }); return; }
+    // Settle against what was written, not against the state before the write
+    // — the same rule as editorStore.saveNow (docs/feature/html-artifact-plan.md
+    // D5). A keystroke mid-write changes `fileContent` and arms a new timer:
+    // clearing isDirty would call unwritten text clean, and nulling saveTimer
+    // would orphan the armed timer. And the write only ever cleans what it
+    // wrote: a re-read of this file or another entry / file opened meanwhile
+    // set isDirty themselves, and this write speaks for neither. A file is
+    // named by its entity's dirPath + filename — ids repeat across categories,
+    // and every entity has an `index.md`.
+    const settle = () => {
+      const cur = get();
+      return cur.saveTimer === saveTimer ? null : cur.saveTimer;
+    };
     try {
       await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
       // TODO: refresh `index` for this entity. Editing index.md here changes
@@ -376,12 +389,24 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       // couple of seconds. The right fix is a targeted `rescanEntity(dirPath)`
       // in lib/lore/entity.ts (readEntity is module-private today) spliced into
       // `index`. Not urgent: no component reads this editor path today.
-      set({ isDirty: false, saveTimer: null });
+      const cur = get();
+      const wroteWhatIsThere =
+        cur.selectedEntity?.dirPath === selectedEntity.dirPath &&
+        cur.selectedFile === selectedFile &&
+        cur.fileContent === fileContent;
+      // What's on disk is exactly the buffer, so a timer armed mid-write (a
+      // keystroke and its undo) could only write the same text again, later.
+      // Clean means no live timer — as in editorStore.saveNow.
+      if (wroteWhatIsThere && cur.saveTimer && cur.saveTimer !== saveTimer) clearTimeout(cur.saveTimer);
+      set({
+        isDirty: cur.isDirty && !wroteWhatIsThere,
+        saveTimer: wroteWhatIsThere ? null : settle(),
+      });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next
       // edit/flush retries the write — clearing it would silently drop the draft.
       console.error("[loreStore] save failed:", selectedEntity.dirPath, selectedFile, e);
-      set({ saveTimer: null });
+      set({ saveTimer: settle() });
       throw e;
     }
   },

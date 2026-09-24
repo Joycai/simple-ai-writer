@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { AlertTriangle, Check, MoreHorizontal, Sparkles } from "lucide-react";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useEditorStore } from "../../stores/editorStore";
+import { useEditorStore, type CrumbTraceKind } from "../../stores/editorStore";
 import { closeDocument } from "../../stores/openDocument";
 import { IS_TAURI, MOD_K } from "../../lib/platform";
 import { CLOSE_DOC_COMBOS, combosLabel } from "../../lib/shortcuts";
@@ -18,6 +18,12 @@ const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
 /** 与 useGlobalShortcuts 派发的是同一份绑定；mac 上是两条（见 CLOSE_DOC_COMBOS）。 */
 const CLOSE_KEY = combosLabel(CLOSE_DOC_COMBOS);
+
+const CRUMB_TRACE_KEY: Record<CrumbTraceKind, string> = {
+  closed: "titleBar.closedTrace",
+  closeFailed: "titleBar.closeFailed",
+  saveFailed: "titleBar.saveFailed",
+};
 
 function basename(p: string | null): string | null {
   return p ? baseName(p) || null : null;
@@ -51,7 +57,7 @@ export function TitleBar() {
   const projectPath = useProjectStore((s) => s.projectPath);
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const isDirty = useEditorStore((s) => s.isDirty);
-  const closeNotice = useEditorStore((s) => s.closeNotice);
+  const crumbTrace = useEditorStore((s) => s.crumbTrace);
   const chrome = useWindowControls();
   const [moreAt, setMoreAt] = useState<{ x: number; y: number } | null>(null);
 
@@ -139,13 +145,12 @@ export function TitleBar() {
             </>
           )}
           {/* 关掉一篇脏文档后原地留两秒（屏 1e-3）——和导出按钮变成「✓ 已复制」
-              是同一种回执、同一个时长。干净文档关掉不留痕迹。 */}
-          {closeNotice && (
-            <span className={`${styles.crumbTrace} ${closeNotice.failed ? styles.crumbTraceFail : ""}`}>
-              {closeNotice.failed ? <AlertTriangle size={11} /> : <Check size={11} />}
-              {t(closeNotice.failed ? "titleBar.closeFailed" : "titleBar.closedTrace", {
-                name: closeNotice.name,
-              })}
+              是同一种回执、同一个时长。干净文档关掉不留痕迹。关闭或 ⌘S 写盘失败
+              也落在这里（editorStore.crumbTrace）。 */}
+          {crumbTrace && (
+            <span className={`${styles.crumbTrace} ${crumbTrace.kind !== "closed" ? styles.crumbTraceFail : ""}`}>
+              {crumbTrace.kind !== "closed" ? <AlertTriangle size={11} /> : <Check size={11} />}
+              {t(CRUMB_TRACE_KEY[crumbTrace.kind], { name: crumbTrace.name })}
             </span>
           )}
         </div>
