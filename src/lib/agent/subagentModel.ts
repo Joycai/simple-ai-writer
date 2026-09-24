@@ -14,7 +14,7 @@
 
 import i18n from "../../i18n";
 import { serverToolsSent } from "../ai/serverTools";
-import { canSeeImages, isAsrOnly, isTranslateOnly, readsPdf, type Model, type Provider } from "../ai/configDb";
+import { canSeeImages, chatModels, isAsrOnly, isTranslateOnly, readsPdf, type Model, type Provider } from "../ai/configDb";
 import type { AiConn } from "../ai/conn";
 import { keyOptional, providerFor } from "../ai/routes";
 import type { TaskPreset } from "./presets";
@@ -174,6 +174,10 @@ export function subAgentModel(
   if (kind === "search" && !serverToolsSent(model, providers)?.includes("web_search")) return null;
   if (kind === "pdf" && !readsPdf(model, providers ? providerFor(model, providers) : undefined)) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
+  // Every kind that holds a conversation (all but the three specialists)
+  // needs a chat model — the same `chatModels` the settings page lists from,
+  // so a binding the page shows as unbound is not quietly used at run time.
+  if (kind !== "imagegen" && kind !== "translate" && kind !== "asr" && chatModels([model]).length === 0) return null;
   // The mirror of the image check: that one refuses a model that cannot draw,
   // this one refuses a model that has not been *declared* a translation model —
   // and here the failure is silent rather than loud, which is why it is checked

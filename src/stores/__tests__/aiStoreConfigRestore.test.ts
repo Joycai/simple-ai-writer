@@ -19,7 +19,7 @@ vi.stubGlobal("localStorage", {
 // `loadConfig` is a no-op outside Tauri; the store decides that at import.
 vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
 
-const models = [{ id: "old" }, { id: "restored" }, { id: "other" }];
+const models = [{ id: "old" }, { id: "restored" }, { id: "other" }, { id: "seedream", type: "image" }];
 vi.mock("../../lib/project", () => ({
   // 计费组和 providers / models 同一个库：`loadConfig` 现在也读 `fee_groups`。
   getGlobalDb: async () => ({ select: async () => [] }),
@@ -87,5 +87,16 @@ describe("after a config restore", () => {
 
     expect(useAiStore.getState().subAgents.writer.modelId).toBeNull();
     expect(store.has("ai:subagent:writer:modelId")).toBe(false);
+  });
+
+  it("drops a chat or summary pick that is an image model", async () => {
+    store.set("ai:activeModelId", "seedream");
+    store.set("ai:memoryModelId", "seedream");
+    useAiStore.getState().reloadSelections();
+    await useAiStore.getState().loadConfig();
+
+    const s = useAiStore.getState();
+    expect(s.activeModelId).toBe("old");
+    expect(s.memoryModelId).toBeNull();
   });
 });

@@ -171,17 +171,15 @@ describe("subagent", () => {
 
     it("does not leak into the other kinds' resolution", () => {
       // A Sakura model is `type: "text"`, so nothing about its type stops it
-      // being bound to longread — only the declaration does, and only via
-      // conversationalModels in the UI. Here we assert the runtime half: the
-      // kinds keep their own preconditions and translate's does not travel.
+      // being bound to longread — only the declaration does. This used to be
+      // a deliberate gap (the pickers kept it out, the runtime did not); every
+      // conversational kind now requires a `chatModels` row at run time too,
+      // so a binding the settings page shows as unbound is refused here.
       const subs: Record<SubAgentKind, SubAgentConfig> = {
         ...defaultSubs,
         longread: { kind: "longread", modelId: "m-sakura", enabled: true },
       };
-      // longread has no capability gate, so this DOES resolve — which is
-      // exactly why the pickers must never offer it (01-execution-plan.md §1
-      // 不变量 2). Documented here so the gap is deliberate, not forgotten.
-      expect(subAgentModel("longread", [sakura], subs)).toBe(sakura);
+      expect(subAgentModel("longread", [sakura], subs)).toBeNull();
     });
   });
 

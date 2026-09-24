@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  canSeeImages, conversationalModels, isAsrOnly, MODEL_TYPES, normalizeAsrIdentity, parseModelType,
+  canAutoSelectAsChat, canSeeImages, chatModels, conversationalModels, isAsrOnly, MODEL_TYPES, normalizeAsrIdentity, parseModelType,
   type Model,
 } from "../configDb";
 import { chainCanSeeImages, subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "../../agent/subagentModel";
@@ -62,6 +62,32 @@ describe("vision", () => {
     // …and on a platform whose ① wire reads it — 智谱 ignores it.
     expect(wireSummary(m, "openai_compat", "https://open.bigmodel.cn/api/paas/v4").map((i) => i.key))
       .not.toContain("vl_high_resolution_images");
+  });
+});
+
+describe("image and video rows are not chat models", () => {
+  const text = model({ id: "text" });
+  const image = model({ id: "image", type: "image" });
+  const video = model({ id: "video", type: "video" });
+  const translate = model({ id: "sakura", translateFormat: "sakura" });
+
+  it("chatModels drops them, conversationalModels keeps them for the 出图 picker", () => {
+    expect(chatModels([text, image, video, translate]).map((m) => m.id)).toEqual(["text"]);
+    expect(conversationalModels([text, image, video, translate]).map((m) => m.id)).toEqual(["text", "image", "video"]);
+  });
+
+  it("no conversational subagent kind runs on one", () => {
+    for (const kind of ["search", "vision", "longread", "pdf", "retrieval", "writer"] as const) {
+      expect(subAgentModel(kind, [image, video], subs(kind, "image"))).toBeNull();
+      expect(subAgentModel(kind, [image, video], subs(kind, "video"))).toBeNull();
+    }
+    expect(subAgentModel("imagegen", [image], subs("imagegen", "image"))?.id).toBe("image");
+  });
+
+  it("auto-selection agrees with the picker", () => {
+    for (const m of [text, image, video, translate]) {
+      expect(canAutoSelectAsChat(m)).toBe(chatModels([m]).length > 0);
+    }
   });
 });
 
