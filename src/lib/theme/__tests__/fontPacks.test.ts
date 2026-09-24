@@ -259,6 +259,31 @@ describe("the folder under another window's hands", () => {
     }
   });
 
+  it("takes the marker back when the pack is deleted between the chunk check and the marker", async () => {
+    serve({ "registry.npmmirror.com": honest });
+    // Another window removes the pack the moment faces.css lands — after
+    // every chunk passed the check, before the marker. The marker's own write
+    // recreates the folder, so without a second look it would land over nothing.
+    const fileio = await import("../../fs/fileio");
+    const rename = vi.mocked(fileio.renamePath);
+    const real = rename.getMockImplementation()!;
+    let deleted = 0;
+    rename.mockImplementation(async (from, to) => {
+      await real(from, to);
+      if (to === `${DIR}/faces.css` && deleted++ === 0) await removeFontPack("misans");
+    });
+    try {
+      await expect(installFontPack("misans")).rejects.toMatchObject({ code: "disk" });
+      expect(deleted).toBe(1);
+      // The marker did land — and was taken back.
+      expect(h.writes).toContain("/data/fonts/misans/installed.json");
+      expect(h.files.has("/data/fonts/misans/installed.json")).toBe(false);
+      expect(await readInstalled("misans")).toBe(false);
+    } finally {
+      rename.mockImplementation(real);
+    }
+  });
+
   it("sweeps stale temporary files, and leaves a fresh one (another window's write) alone", async () => {
     h.files.set(`${DIR}/a.0.woff2.deadbeef.part`, "x");
     h.mtime.set(`${DIR}/a.0.woff2.deadbeef.part`, Date.now() - 60 * 60_000);
