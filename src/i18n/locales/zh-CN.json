@@ -104,6 +104,7 @@
     "closeDoc": "关闭文档",
     "closedTrace": "已保存并关闭 · {{name}}",
     "closeFailed": "保存失败，未关闭 · {{name}}",
+    "saveFailed": "保存失败 · {{name}}",
     "openExternal": "用默认应用打开",
     "chars": "字符",
     "words": "字",

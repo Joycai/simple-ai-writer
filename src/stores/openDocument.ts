@@ -11,14 +11,14 @@
 
 import { isImagePath } from "../lib/fs/images";
 import { baseName, isSamePath } from "../lib/paths";
-import { useEditorStore } from "./editorStore";
+import { useEditorStore, type CrumbTraceKind } from "./editorStore";
 import { useProjectStore } from "./projectStore";
 
-// ─── Closing the open document ────────────────────────────────────────────────
+// ─── Saving and closing the open document ─────────────────────────────────────
 
-/** How long the breadcrumb keeps the trace of a closed dirty document. */
-const CLOSE_NOTICE_MS = 2000;
-let closeNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long the breadcrumb keeps a trace (a closed dirty document, a failed write). */
+const CRUMB_TRACE_MS = 2000;
+let crumbTraceTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * 关掉当前文档：先落盘，再置空，回到空稿页（设计稿 01e 屏 1e）。
@@ -38,7 +38,7 @@ export async function closeDocument(): Promise<void> {
   const { isDirty, filePath, saveTimer } = useEditorStore.getState();
   const holdsIt = isSamePath(filePath, closing);
   const flushed = holdsIt && isDirty && !!filePath;
-  const name = (baseName(closing) || closing).replace(/\.md$/i, "");
+  const name = traceName(closing);
 
   if (holdsIt) {
     if (saveTimer) clearTimeout(saveTimer);
@@ -49,7 +49,7 @@ export async function closeDocument(): Promise<void> {
         // 写盘失败（磁盘满、文件被占用、权限）：**不关**。缓冲区是这几行字唯一
         // 的副本，关掉等于替作者丢稿；saveNow 已经把 isDirty 留成 true，下一次
         // 编辑或 ⌘S 还会重试。
-        flashCloseNotice({ name, failed: true });
+        flashCrumbTrace({ name, kind: "closeFailed" });
         return;
       }
     }
@@ -61,17 +61,43 @@ export async function closeDocument(): Promise<void> {
   }
   useProjectStore.getState().setActiveFilePath(null);
 
-  flashCloseNotice(flushed ? { name, failed: false } : null);
+  flashCrumbTrace(flushed ? { name, kind: "closed" } : null);
+}
+
+/**
+ * ⌘S：立刻把缓冲区写盘。失败时在面包屑尾巴留一道「保存失败 · 名字」——
+ * 和关闭时写盘失败同一个位置、同一种琥珀、同一个时长。这个应用没有 toast
+ * （`docs/feature/topbar-doc-actions-brief.md`），而没有这一道，作者按下 ⌘S
+ * 之后看见的只是保存点照旧琥珀，分不清是没按上还是磁盘拒写。成功不留痕迹：
+ * 保存点变回去就是回执，自动保存每两秒都在做同一件事。
+ *
+ * 名字取**缓冲区**里那一篇，不是 `activeFilePath`：作者看着一张图片按 ⌘S 时，
+ * 写的是缓冲区里停着的上一篇（见 {@link WritingFocus}），失败说的也该是它。
+ * 原因在 `saveNow` 的 console.error 里；isDirty 由它留成 true，下一次编辑或
+ * 再按一次 ⌘S 都会重试。
+ */
+export async function saveDocument(): Promise<void> {
+  const { filePath } = useEditorStore.getState();
+  try {
+    await useEditorStore.getState().saveNow();
+  } catch {
+    if (filePath) flashCrumbTrace({ name: traceName(filePath), kind: "saveFailed" });
+  }
+}
+
+/** 面包屑里的文档名：和面包屑本身一样，`.md` 不显示。 */
+function traceName(path: string): string {
+  return (baseName(path) || path).replace(/\.md$/i, "");
 }
 
 /** 面包屑尾巴上那一道痕迹：写上去，两秒后自己收走。 */
-function flashCloseNotice(notice: { name: string; failed: boolean } | null): void {
-  if (closeNoticeTimer) clearTimeout(closeNoticeTimer);
-  useEditorStore.setState({ closeNotice: notice });
-  if (!notice) return;
-  closeNoticeTimer = setTimeout(
-    () => useEditorStore.setState({ closeNotice: null }),
-    CLOSE_NOTICE_MS,
+function flashCrumbTrace(trace: { name: string; kind: CrumbTraceKind } | null): void {
+  if (crumbTraceTimer) clearTimeout(crumbTraceTimer);
+  useEditorStore.setState({ crumbTrace: trace });
+  if (!trace) return;
+  crumbTraceTimer = setTimeout(
+    () => useEditorStore.setState({ crumbTrace: null }),
+    CRUMB_TRACE_MS,
   );
 }
 

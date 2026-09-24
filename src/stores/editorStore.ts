@@ -5,6 +5,8 @@ import { readFile, writeFile } from "../lib/fs/fileio";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
 
 export type ViewMode = "split" | "editor" | "preview";
+/** Which of the breadcrumb's traces is showing — see `EditorState.crumbTrace`. */
+export type CrumbTraceKind = "closed" | "closeFailed" | "saveFailed";
 
 interface EditorState {
   content: string;
@@ -42,14 +44,17 @@ interface EditorState {
    */
   aiTarget: AiTargetRange | null;
   /**
-   * 关闭一篇**脏**文档后，面包屑尾巴上那两秒的痕迹（设计稿 01e 屏 1e-3）。干净
-   * 文档关掉不留痕迹——本来就没什么可说的。由 `closeDocument()` 写入并自行清掉，
-   * 所以三个入口（×、⌘W、文件树右键）留下的是同一道痕迹。
+   * 面包屑尾巴上那两秒的痕迹（设计稿 01e 屏 1e-3），只由 `openDocument.ts` 写入
+   * 并自行清掉。三种：
    *
-   * `failed` 是设计稿没画的那一格：落盘失败时**文档不关**（缓冲区是那几行字唯一
-   * 的副本），于是作者按下 × 却什么都没发生——这道痕迹是它唯一的解释。
+   * - `closed`——关闭一篇**脏**文档后的回执。干净文档关掉不留痕迹，本来就没什么
+   *   可说的。三个入口（×、⌘W、文件树右键）留下的是同一道痕迹。
+   * - `closeFailed`——设计稿没画的那一格：落盘失败时**文档不关**（缓冲区是那几行
+   *   字唯一的副本），于是作者按下 × 却什么都没发生——这道痕迹是它唯一的解释。
+   * - `saveFailed`——⌘S 的写盘失败（`saveDocument()`）。同一个道理：按了却只剩
+   *   一颗琥珀点不变，作者分不清是没按上还是磁盘拒写。
    */
-  closeNotice: { name: string; failed: boolean } | null;
+  crumbTrace: { name: string; kind: CrumbTraceKind } | null;
   /** Word and character count of the open document — the status bar's figures. */
   wordCount: number;
   charCount: number;
@@ -83,7 +88,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   editorView: null,
   aiTarget: null,
   loadError: null,
-  closeNotice: null,
+  crumbTrace: null,
   wordCount: 0,
   charCount: 0,
 

@@ -104,6 +104,7 @@
     "closeDoc": "Close document",
     "closedTrace": "Saved and closed · {{name}}",
     "closeFailed": "Couldn't save — still open · {{name}}",
+    "saveFailed": "Couldn't save · {{name}}",
     "openExternal": "Open with default app",
     "chars": "chars",
     "words": "words",
