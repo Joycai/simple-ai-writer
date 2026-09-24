@@ -1,9 +1,10 @@
 /**
  * saveDocument() —— ⌘S 的那一个动作。
  *
- * 钉三条：写盘失败**不抛**（⌘S 的监听器没人接这个 rejection），而是在面包屑尾巴
- * 留一道「保存失败 · 名字」两秒，isDirty 照旧是 true · 成功不留痕迹 · 失败说的
- * 是**缓冲区**里那一篇，不是作者此刻看着的那张图片。
+ * 钉四条：干净的缓冲区**不写**（外面改过的文件不被陈旧缓冲区盖掉）· 写盘失败
+ * **不抛**（⌘S 的监听器没人接这个 rejection），而是在面包屑尾巴留一道「保存
+ * 失败 · 名字」两秒，isDirty 照旧是 true · 成功不留痕迹 · 失败说的是**缓冲区**
+ * 里那一篇，不是作者此刻看着的那张图片。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,6 +51,15 @@ describe("saveDocument", () => {
 
     expect(h.writeFile).toHaveBeenCalledWith(DOC, "正文");
     expect(useEditorStore.getState().isDirty).toBe(false);
+    expect(useEditorStore.getState().crumbTrace).toBeNull();
+  });
+
+  it("干净的缓冲区不写盘：在外面改过的文件不被陈旧的缓冲区盖掉", async () => {
+    useEditorStore.setState({ isDirty: false });
+
+    await saveDocument();
+
+    expect(h.writeFile).not.toHaveBeenCalled();
     expect(useEditorStore.getState().crumbTrace).toBeNull();
   });
 

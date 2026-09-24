@@ -65,7 +65,7 @@ export async function closeDocument(): Promise<void> {
 }
 
 /**
- * ⌘S：立刻把缓冲区写盘。失败时在面包屑尾巴留一道「保存失败 · 名字」——
+ * ⌘S：立刻把**脏**缓冲区写盘，干净的不碰。失败时在面包屑尾巴留一道「保存失败 · 名字」——
  * 和关闭时写盘失败同一个位置、同一种琥珀、同一个时长。这个应用没有 toast
  * （`docs/feature/topbar-doc-actions-brief.md`），而没有这一道，作者按下 ⌘S
  * 之后看见的只是保存点照旧琥珀，分不清是没按上还是磁盘拒写。成功不留痕迹：
@@ -77,7 +77,11 @@ export async function closeDocument(): Promise<void> {
  * 再按一次 ⌘S 都会重试。
  */
 export async function saveDocument(): Promise<void> {
-  const { filePath } = useEditorStore.getState();
+  const { filePath, isDirty } = useEditorStore.getState();
+  // 干净的缓冲区不写——与 `flushIfOpen` 同一条口径（html-artifact-plan.md D5）。
+  // 缓冲区干净时它和磁盘一样，除非磁盘在外面被改过：作者在别的编辑器里改完
+  // `.html`、回来顺手按一下 ⌘S，写回去的就是那份陈旧的缓冲区，外面的改动没了。
+  if (!isDirty) return;
   try {
     await useEditorStore.getState().saveNow();
   } catch {
