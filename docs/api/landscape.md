@@ -1846,8 +1846,8 @@ Responses adapter：
 > - `[Azure]` 的护栏：新能力 `instructionsField` 在 azure 上判不收，`responses.ts` 把系统提示改成开头的 `developer` 消息、不发
 >   `instructions`。其余上游照旧总发 `instructions`（挡 Codex 注入）。
 > - Responses 上的温度在两种上游下都不发（一个改成 1，一个 500）；azure 的联网搜索不发、① 面强制工具改发 `auto`。
-> - `[Pro]` 丢结构化输出**没进格子**（与另两档不一致），只写在模型抽屉的上游说明里；这一档的 json_schema 仍会发出去被丢，
->   结构化任务退回提示语。
+> - `[Pro]` 丢结构化输出**没进格子**（与另两档不一致），只写在模型抽屉的上游说明里；这一档发出去的 JSON 模式
+>   （自动档在中转站上是 `json_object`，作者手选 json_schema 时是 json_schema）会被丢，结构化任务退回提示语。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

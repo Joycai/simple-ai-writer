@@ -805,9 +805,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   ].filter(Boolean) as string[];
 
   const verbositySet = verbosityWire && form.textVerbosity !== "auto";
-  const sampHas = form.temperature.trim() !== "" || form.prefix.trim() !== "" || verbositySet;
+  // Like verbosity: a temperature the wire does not take is kept, not summarised as if sent.
+  const temperatureSet = temperatureReaches && form.temperature.trim() !== "";
+  const sampHas = temperatureSet || form.prefix.trim() !== "" || verbositySet;
   const sampSum = [
-    form.temperature.trim() !== "" && `T ${form.temperature.trim()}`,
+    temperatureSet && `T ${form.temperature.trim()}`,
     verbositySet && t(`aiConfig.models.verbosity_${form.textVerbosity}`),
     form.prefix.trim() !== "" && t("aiConfig.models.prefixLabelShort"),
   ].filter(Boolean).join(" · ");
