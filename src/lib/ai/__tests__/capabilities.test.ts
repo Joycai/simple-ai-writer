@@ -59,9 +59,9 @@ function renderUpstreams(): string[] {
     "## 中转站上游画像",
     "",
     "中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。",
-    "上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
+    "上游的格子先于平台格生效，只作用于画像覆盖的模型（见表头各上游的作用域）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
     "",
-    `| 能力 | 族 | ${RELAY_UPSTREAMS.join(" | ")} |`,
+    `| 能力 | 族 | ${RELAY_UPSTREAMS.map((u) => `${u}（${UPSTREAM_CAPABILITIES[u].modelsLabel}）`).join(" | ")} |`,
     `| --- | --- | ${RELAY_UPSTREAMS.map(() => "---").join(" | ")} |`,
   ];
   for (const id of CAPABILITY_IDS) {
@@ -329,7 +329,7 @@ describe("relay upstreams", () => {
         // No echo on Chat Completions: nothing measured, the rule's answer.
         expect(capabilityVerdict("temperature", chat(platform), sol("codex"))).toEqual({ status: "yes", reason: "protocol" });
         // The system prompt stays in `instructions` — without it a Codex upstream injects its own.
-        expect(capabilityVerdict("instructionsField", resp(platform), sol("codex"))).toEqual({ status: "yes", reason: "protocol" });
+        expect(capabilityVerdict("instructionsField", resp(platform), sol("codex"))).toEqual(up("yes"));
       }
     });
 

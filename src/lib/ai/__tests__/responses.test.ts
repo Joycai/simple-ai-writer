@@ -345,6 +345,24 @@ describe("Responses adapter — relay upstreams (第十七个样本)", () => {
     expect(bare.input).toEqual([{ role: "user", content: "hi" }]);
   });
 
+  it("the developer message joins every system message in order, and leaves tool rounds as they were", () => {
+    const messages: StreamMessage[] = [
+      { role: "system", content: "Model prefix." },
+      { role: "system", content: "You co-write a novel." },
+      { role: "user", content: "hi" },
+      { role: "assistant", content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "read", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "c1", content: "chapter one" },
+    ];
+    const asInstructions = toResponsesInput(messages, "gpt-5.6-sol");
+    const asDeveloper = toResponsesInput(messages, "gpt-5.6-sol", "developer");
+    expect(asDeveloper).not.toHaveProperty("instructions");
+    expect(asDeveloper.input).toEqual([
+      { role: "developer", content: "Model prefix.\n\nYou co-write a novel." },
+      ...asInstructions.input,
+    ]);
+    expect(asInstructions.instructions).toBe("Model prefix.\n\nYou co-write a novel.");
+  });
+
   it("codex and no upstream keep instructions, empty or not", async () => {
     // Without it a Codex upstream injects 4.4K tokens of its own prompt.
     for (const up of ["codex", "none"] as const) {

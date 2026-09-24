@@ -496,6 +496,9 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
       openai: { pdfInput: true, forcedToolChoice: true },
       responses: {
         pdfInput: true, forcedToolChoice: true, textVerbosity: true, web_search: true, temperature: false,
+        // Measured both ways: with it, only the author's text; without it, 4.4K
+        // tokens of Codex prompt injected (第八、十七个样本).
+        instructionsField: true,
       },
     },
   },
@@ -505,7 +508,8 @@ export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities
    * the official API — the output cap holds, JSON schema executed on both
    * wires — but no web search (dropped silently), a temperature other than 1 a
    * 500 on Responses, a named `tool_choice` a 500 on Chat Completions (`required`
-   * works). And it appends a guard to `instructions` telling the model to
+   * works, but the cell cannot split the two: the handoff forces a named tool,
+   * so `false`, and a `required` request goes out as `auto` too). And it appends a guard to `instructions` telling the model to
    * refuse anything not about OpenAI, fiction included; without the field
    * there is no guard, so the system prompt goes as a `developer` message.
    */

@@ -378,9 +378,9 @@
 ## 中转站上游画像
 
 中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。
-上游的格子先于平台格生效，只作用于画像覆盖的模型（全部是 `claude`）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。
+上游的格子先于平台格生效，只作用于画像覆盖的模型（见表头各上游的作用域）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。
 
-| 能力 | 族 | kiro | cc | anti | bedrock | official | codex | azure |
+| 能力 | 族 | kiro（Claude） | cc（Claude） | anti（Claude） | bedrock（Claude） | official（Claude） | codex（GPT） | azure（GPT） |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | pdfInput | Chat | · | ✓ | · | ✓ |  | ✓ | ✓ |
 | pdfInput | Resp |  |  |  |  |  | ✓ | ✓ |
@@ -390,7 +390,7 @@
 | forcedToolChoice | Anth | · |  | · | ✓ |  |  |  |
 | temperature | Resp |  |  |  |  |  | · | · |
 | textVerbosity | Resp |  |  |  |  |  | ✓ | ✓ |
-| instructionsField | Resp |  |  |  |  |  |  | · |
+| instructionsField | Resp |  |  |  |  |  | ✓ | · |
 | structuredOutput | Chat | · |  |  |  |  |  | ✓ |
 | structuredOutput | Resp |  |  |  |  |  |  | ✓ |
 | jsonSchema | Chat |  |  |  |  |  |  | ✓ |
