@@ -613,6 +613,28 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(JSON.parse(toolChunk.toolCalls[0].arguments)).toEqual({ dir: "writing" });
   });
 
+  // Vertex refuses a bare `{text:""}` on the echo (400 "required oneof field
+  // 'data'"), and the stream closes on exactly that part after a tool call;
+  // an empty text carrying a signature is accepted and must survive
+  // (landscape.md §7 第十八个样本).
+  it("keeps every model part for the echo except a bare empty text", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"a","args":{},"id":"call_1"},"thoughtSignature":"S1"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"a","args":{},"id":"call_2"}}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":"","thoughtSignature":"S2"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}\n`,
+      ],
+    });
+    const toolChunk = received.find((c) => "toolCalls" in c) as { _geminiModelParts: unknown[] };
+    expect(toolChunk._geminiModelParts).toEqual([
+      { functionCall: { name: "a", args: {}, id: "call_1" }, thoughtSignature: "S1" },
+      { functionCall: { name: "a", args: {}, id: "call_2" } },
+      { text: "", thoughtSignature: "S2" },
+    ]);
+  });
+
   it("throws a descriptive error when the prompt is safety-blocked", async () => {
     mockFetch([`data: {"promptFeedback":{"blockReason":"SAFETY"}}\n`]);
     await expect(
