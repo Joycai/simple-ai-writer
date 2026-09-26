@@ -204,38 +204,35 @@ describe("afterAccept", () => {
 
 describe("trackClaims", () => {
   it("follows a claimed mention while it is open and keeps its last place past a close", () => {
-    const pending = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", key: "" }]]);
-    trackClaims(pending, { open: true, id: 1, query: "潮汐", active: 0, scope: "all", start: 2 }, "");
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐", key: "" });
+    const pending = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮" }]]);
+    trackClaims(pending, { open: true, id: 1, query: "潮汐", active: 0, scope: "all", start: 2 });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐" });
     // A 「，」 typed while the picture was still decoding: unchanged, so the
     // splice still lands at 2 and not at CLOSED's 0.
-    trackClaims(pending, { open: false, id: 1, query: "", active: 0, scope: "all", start: 0 }, "");
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐", key: "" });
+    trackClaims(pending, { open: false, id: 1, query: "", active: 0, scope: "all", start: 0 });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐" });
     // Another mention, not claimed: nothing to track.
-    trackClaims(pending, { open: true, id: 2, query: "夜", active: 0, scope: "all", start: 7 }, "");
+    trackClaims(pending, { open: true, id: 2, query: "夜", active: 0, scope: "all", start: 7 });
     expect(pending.size).toBe(1);
     // The same `@` reopened under a new id (Esc, then more letters): followed.
-    trackClaims(pending, { open: true, id: 3, query: "潮汐门", active: 0, scope: "all", start: 2 }, "");
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门", key: "" });
-    // The same offset in another draft is a different `@`: not followed.
-    trackClaims(pending, { open: true, id: 4, query: "夜", active: 0, scope: "all", start: 2 }, "B");
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门", key: "" });
+    trackClaims(pending, { open: true, id: 3, query: "潮汐门", active: 0, scope: "all", start: 2 });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门" });
   });
 });
 
 describe("claimOf", () => {
-  it("registers the open mention under its draft and hands back the same entry; nothing when closed", () => {
+  it("registers the open mention and hands back the same entry; nothing when closed", () => {
     const pending = new Map<number, MentionClaim>();
-    expect(claimOf(pending, { open: false, id: 3, query: "", active: 0, scope: "all", start: 0 }, "A")).toBeNull();
+    expect(claimOf(pending, { open: false, id: 3, query: "", active: 0, scope: "all", start: 0 })).toBeNull();
     expect(pending.size).toBe(0);
-    const c = claimOf(pending, { open: true, id: 3, query: "潮", active: 0, scope: "all", start: 2 }, "A");
-    expect(c).toEqual({ id: 3, start: 2, query: "潮", key: "A" });
+    const c = claimOf(pending, { open: true, id: 3, query: "潮", active: 0, scope: "all", start: 2 });
+    expect(c).toEqual({ id: 3, start: 2, query: "潮" });
     expect(pending.get(3)).toEqual(c);
   });
 });
 
 describe("acceptPick", () => {
-  const claim = { id: 1, start: 2, query: "潮", key: "" };
+  const claim = { id: 1, start: 2, query: "潮" };
   const nameHas = (label: string) => (q: string) => label.includes(q);
   const table = (...claims: MentionClaim[]) => new Map(claims.map((c) => [c.id, c]));
 
@@ -275,7 +272,7 @@ describe("acceptPick", () => {
 
   it("records and shifts nothing when nothing landed — the `@` the author is looking at is still theirs", () => {
     const spent = new Set<number>();
-    const later = { id: 2, start: 7, query: "夜", key: "" };
+    const later = { id: 2, start: 7, query: "夜" };
     const pending = table(claim, later);
     // The mention was retyped as `@夜` during the read: `@潮` is gone.
     const r = acceptPick(spent, pending, claim, "看看@夜", "潮汐.png", nameHas("潮汐.png"));
@@ -285,15 +282,13 @@ describe("acceptPick", () => {
     expect(pending.has(1)).toBe(false);
   });
 
-  it("moves the claims after it in the same draft by what the splice added", () => {
-    const later = { id: 2, start: 7, query: "夜", key: "" };
-    const earlier = { id: 3, start: 0, query: "", key: "" };
-    const otherDraft = { id: 4, start: 9, query: "星", key: "B" };
-    const pending = table(claim, later, earlier, otherDraft);
+  it("moves the claims after it by what the splice added", () => {
+    const later = { id: 2, start: 7, query: "夜" };
+    const earlier = { id: 3, start: 0, query: "" };
+    const pending = table(claim, later, earlier);
     acceptPick(new Set(), pending, claim, "看看@潮，和@夜", "潮汐.png", nameHas("潮汐.png"));
-    expect(pending.get(2)).toEqual({ id: 2, start: 14, query: "夜", key: "" });
+    expect(pending.get(2)).toEqual({ id: 2, start: 14, query: "夜" });
     expect(pending.get(3)).toEqual(earlier);
-    expect(pending.get(4)).toEqual(otherDraft);
   });
 });
 
@@ -305,25 +300,19 @@ describe("a pick across a file read", () => {
     ({ type: "file", file: { name: rel.split("/").pop()!, path: `/p/${rel}`, kind: "image" } }) as MentionItem;
   const label = (item: MentionItem) => (item.type === "file" ? item.file.name : "");
 
-  /**
-   * A host in miniature: the state, the tables, and the calls it makes —
-   * including the chat composer's switch between conversations, which
-   * closes the mention and changes the draft key.
-   */
+  /** A host in miniature: the state, the tables, and the four calls it makes. */
   function host() {
     let core = closed;
-    let key = "A";
     const pending = new Map<number, MentionClaim>();
     const spent = new Set<number>();
-    const type = (text: string, caret = text.length) => { core = syncMention(core, text, caret); trackClaims(pending, core, key); };
-    const claim = () => claimOf(pending, core, key)!;
+    const type = (text: string, caret = text.length) => { core = syncMention(core, text, caret); trackClaims(pending, core); };
+    const claim = () => claimOf(pending, core)!;
     const accept = (value: string, item: MentionItem, c: MentionClaim) => {
       const r = acceptPick(spent, pending, c, value, label(item), (q) => matchesMention(item, q, "/p"));
-      if (r.landed && c.key === key) { core = afterAccept(core, r.landed, r.landed.delta); trackClaims(pending, core, key); }
+      if (r.landed) { core = afterAccept(core, r.landed, r.landed.delta); trackClaims(pending, core); }
       return r.text;
     };
-    const switchTo = (k: string) => { key = k; core = syncMention(core, "", 0); };
-    return { type, claim, accept, switchTo, state: () => core };
+    return { type, claim, accept, state: () => core };
   }
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
@@ -374,35 +363,20 @@ describe("a pick across a file read", () => {
     expect(h.state().open).toBe(false);
   });
 
-  it("a landing in another conversation's draft never moves this one's claims", () => {
-    const h = host();
-    h.type("帮我看看这张图@潮");
-    const a = h.claim();
-    // Conversation B, same hook: `@夜` picked at index 0, landing ahead of
-    // A's `@` — in B's text, which A's claim knows nothing about.
-    h.switchTo("B");
-    h.type("@夜");
-    const b = h.claim();
-    expect(h.accept("@夜", pic("夜航.png"), b)).toBe("@[夜航.png]");
-    // Back in A, typing on: the same `@`, reopened under a new id, is followed.
-    h.switchTo("A");
-    h.type("帮我看看这张图@潮汐");
-    expect(h.accept("帮我看看这张图@潮汐", pic("插图/潮汐.png"), a)).toBe("帮我看看这张图@[潮汐.png]");
-  });
-
-  it("two claims waiting in one conversation both land after a landing in another", () => {
-    const h = host();
-    h.type("看看@潮");
-    const a = h.claim();
-    for (const t of ["看看@潮，", "看看@潮，和@", "看看@潮，和@夜"]) h.type(t);
-    const b = h.claim();
-    h.switchTo("B");
-    h.type("@星");
-    expect(h.accept("@星", pic("星图.png"), h.claim())).toBe("@[星图.png]");
-    h.switchTo("A");
-    const afterA = h.accept("看看@潮，和@夜", pic("插图/潮汐.png"), a);
-    expect(afterA).toBe("看看@[潮汐.png]，和@夜");
-    expect(h.accept(afterA, pic("插图/夜航.png"), b)).toBe("看看@[潮汐.png]，和@[夜航.png]");
+  it("an instance unmounted by a conversation switch lands into the draft as it is now, losing nothing", () => {
+    // The chat composer remounts per conversation: the old instance keeps
+    // its table but sees no more typing. The host hands `accept` the store's
+    // current draft — what the author typed after coming back stays.
+    const old = host();
+    old.type("帮我看看这张图@潮");
+    const a = old.claim();
+    const typedSince = "帮我看看这张图@潮汐，再和上一版对比";
+    expect(old.accept(typedSince, pic("插图/潮汐.png"), a)).toBe("帮我看看这张图@[潮汐.png]汐，再和上一版对比");
+    // Text inserted ahead of the `@` in the meantime: only the chip, no splice.
+    const moved = host();
+    moved.type("看看@潮");
+    const m = moved.claim();
+    expect(moved.accept("先看看@潮", pic("插图/潮汐.png"), m)).toBe("先看看@潮");
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {

@@ -201,10 +201,6 @@ export function AgentChat() {
   // large file takes long enough for the author to have kept typing.
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  // Which conversation is on screen *now* — a file pick reads the file before
-  // it splices, and the author may have switched meanwhile.
-  const activeKeyRef = useRef(activeKey);
-  activeKeyRef.current = activeKey;
   // The selection is attached by default when one exists — that is nearly always
   // why the author opened the assistant with text highlighted. Detaching is one
   // click; re-selecting in the editor re-attaches.
@@ -232,10 +228,10 @@ export function AgentChat() {
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
   const clearComposer = useCallback(() => clearChatComposer(activeKey), [clearChatComposer, activeKey]);
-  // One draft per conversation under this one composer: a pick's claim is
-  // filed under its conversation, so a reference landed in another never
-  // moves it.
-  const mention = useMentionState(activeKey);
+  // This instance is one conversation's: AiDrawer remounts the chat per
+  // conversation (`key={activeChatKey}`), so the mention state, like the
+  // draft, never spans two.
+  const mention = useMentionState();
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();
   /* After an insert the caret belongs at the very end and the box scrolled to
@@ -316,11 +312,9 @@ export function AgentChat() {
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
-    // Taken before any await: the mention this pick came from, and the
-    // conversation it was made in.
+    // Taken before any await: the mention this pick came from.
     const claim = mention.claim();
     if (!claim) return;
-    const key = activeKey;
     setRefError(null);
     // Appended to whatever the list is *then*, and only once: a second pick
     // of the same file while the first is still reading is one attachment.
@@ -360,14 +354,16 @@ export function AgentChat() {
       }
       attach(outcome.item);
     }
-    // Switched conversation while the file read: the chip went to the right
-    // one (`setRefs` is bound to it), but the draft on screen is another
-    // session's — nothing to splice into.
-    if (activeKeyRef.current !== key) return;
-    // Not inside a state updater: `accept` calls setState itself, and React
-    // runs an updater twice under StrictMode. The ref supplies the live value
-    // the updater was being used for.
-    setDraft(mention.accept(draftRef.current, item, claim, projectPath));
+    // The draft as the store holds it *now*, not this instance's `draftRef`:
+    // switching conversation (or closing the drawer) unmounts this instance
+    // while the read goes on, and if the author comes back and keeps typing
+    // in the new instance, the ref here is frozen at the moment of leaving —
+    // splicing into it would write that stale draft over what they typed.
+    // `setDraft` is bound to this conversation's key, so read and write are
+    // the same draft either way. Not inside a state updater: `accept` calls
+    // setState itself, and React runs an updater twice under StrictMode.
+    const now = chatComposerOf(useComposerStore.getState(), activeKey).draft;
+    setDraft(mention.accept(now, item, claim, projectPath));
     inputRef.current?.focus();
   };
 
@@ -407,8 +403,6 @@ export function AgentChat() {
   // A turn starting, or a switch to another session, withdraws the question:
   // the id it names may not even exist any more.
   useEffect(() => { setRewindTo(null); }, [chatRunning, chatSessionId]);
-  // The draft is per conversation; a mention open in one has no `@` in the next.
-  useEffect(() => { mention.close(); }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstQuestionAt = turns.findIndex((tn) => tn.role === "user");
   const rewindIndex = rewindTo === null ? -1 : turns.findIndex((tn) => tn.id === rewindTo);
   const rewindExchanges = rewindIndex < 0

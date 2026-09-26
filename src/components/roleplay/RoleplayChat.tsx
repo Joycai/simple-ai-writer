@@ -401,9 +401,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       instruction,
     });
   }, [projectPath, agent, updateAgent]);
+  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
+  // 一样只属于这一位。
   const mention = useMentionState();
-  // 草稿按角色分开；这一位开着的提名在下一位那里没有对应的 @。
-  useEffect(() => { mention.close(); }, [agent.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
