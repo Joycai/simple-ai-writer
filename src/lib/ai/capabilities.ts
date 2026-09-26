@@ -32,7 +32,7 @@ import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 import type { ModelType } from "./configDb";
 import type { PlatformId } from "./platforms";
 import type { ServerToolId } from "./serverTools";
-import type { ThinkingCategoryId } from "./reasoning";
+import type { ReasoningEffort, ThinkingCategoryId } from "./reasoning";
 import type { RelayUpstreamId } from "./relayUpstream";
 
 /** What can be asked about. A server tool's id is a capability id. */
@@ -42,6 +42,8 @@ export type CapabilityId =
   | "videoInput"
   | "videoFps"
   | "forcedToolChoice"
+  | "effortWithTools"
+  | "reasoningOff"
   | "temperature"
   | "textVerbosity"
   | "instructionsField"
@@ -155,6 +157,23 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   videoFps: { families: ["openai"], origin: "private", relay: "unknown", modelTypes: SEES_IMAGES, requires: ["videoInput"] },
   // `tool_choice: required | {function}` being honoured.
   forcedToolChoice: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
+  // A thinking effort beside function tools. The protocol has both, but
+  // OpenAI's own Chat Completions refuses the pair from GPT-5.4 on unless the
+  // effort is `none` — and the model's default is not `none`, so a request
+  // that sends no effort at all is refused too (landscape.md §7 第十八个样本
+  // 「GPT 全家补测」, the error in OpenAI's words). Where this is `no` the Chat
+  // adapter sends `reasoning_effort: "none"` on every request that carries
+  // tools (`effortOnWire`). Responses takes the pair everywhere.
+  effortWithTools: { families: ["openai", "responses"], origin: "native" },
+  // The effort ladder's `none` — what the 关闭 chip sends on the two OpenAI
+  // wires. A model that refuses it has no off: the chip is not offered
+  // (`effortMenuOnWire`), and an `off` already stored on the row, or forced by
+  // the agent's thinking fallback, goes out as the lowest level instead.
+  // Not left to the endpoint's 400 the way other out-of-range levels are
+  // (reasoning.ts `responses-effort`): that rule rests on the 400 naming the
+  // legal values, and the one gateway where this was measured swallows the
+  // reason (第十八个样本「GPT 全家补测」).
+  reasoningOff: { families: ["openai", "responses"], origin: "native" },
   // Sampling temperature: every family spells it, but the Messages API accepts
   // `temperature: 1` and nothing else while extended thinking is on, and an
   // Anthropic model thinks unless the author declares otherwise. Clamping the
@@ -215,7 +234,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  * `capabilities.test.ts` holds it complete.
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
-  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice",
+  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice", "effortWithTools", "reasoningOff",
   "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
@@ -556,10 +575,12 @@ const LOCAL: PlatformCapabilities = {
  */
 export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // Chat Completions: no server tool (official rejects unknown top-level fields).
+  // `effortWithTools`: from GPT-5.4 on (OpenAI's own words, reached through
+  // OrcaRouter's verbatim route — 第十八个样本「GPT 全家补测」; responses.md §7).
   openai: {
     families: {
       all: { jsonSchema: true },
-      openai: { web_search: false },
+      openai: { web_search: false, effortWithTools: { refuses: [/^gpt-5\.[4-9](?:[.-]|$)/] } },
       responses: { web_search: true },
     },
   },
@@ -604,11 +625,17 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // PDF: a one-page file's passphrase read back on all four; ①② need no cell.
   // Not the official `google` cell: ③ here is Vertex AI, not AI Studio.
   // ③'s three built-in tools, beside function tools, forced calls and a
-  // response schema alike (再补测).
+  // response schema alike (再补测). The GPT ids (GPT 全家补测): gpt-5.6-sol is
+  // served by OpenAI's own Chat Completions and refuses tools beside any effort
+  // (gpt-5.6-luna is rerouted and was not); gpt-6-astra refuses `none` on both.
   orcarouter: {
     families: {
-      openai: { jsonSchema: true },
-      responses: { jsonSchema: true, web_search: true },
+      openai: {
+        jsonSchema: true,
+        effortWithTools: { refuses: [/^openai\/gpt-5\.6-sol$/] },
+        reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] },
+      },
+      responses: { jsonSchema: true, web_search: true, reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] } },
       gemini: { jsonSchema: true, pdfInput: true, web_search: true, web_extractor: true, code_interpreter: true },
       anthropic: { web_search: true, jsonSchema: true, pdfInput: true },
     },
@@ -717,6 +744,49 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
 /** Whether the wire has it — `unknown` counts: it is offered and sent. */
 export function hasCapability(id: CapabilityId, wire: CapabilityWire, model?: CapabilityModel): boolean {
   return capabilityVerdict(id, wire, model).status !== "no";
+}
+
+/** The two OpenAI wires — the only ones whose effort ladder the two effort cells speak about. */
+function effortLadderWire(wire: CapabilityWire): boolean {
+  const family = familyOf(wire.standard);
+  return family === "openai" || family === "responses";
+}
+
+/**
+ * The effort a request actually carries on this wire, from the one the model
+ * row holds. Two cells can change it, and only on the OpenAI wires:
+ *
+ *   - `effortWithTools` is `no` and the request carries function tools → `off`,
+ *     whatever the row says. OpenAI's Chat Completions refuses any other
+ *     effort beside tools, the model's own default included, so an agent run
+ *     would fail on its first round; thinking is what gives way.
+ *   - `reasoningOff` is `no` and the row says `off` → `low`, the least thinking
+ *     the model takes (the gateway rewrites `minimal` to `low` anyway).
+ */
+export function effortOnWire(
+  effort: ReasoningEffort | undefined,
+  wire: CapabilityWire,
+  model: CapabilityModel,
+  withTools: boolean,
+): ReasoningEffort | undefined {
+  if (!effortLadderWire(wire)) return effort;
+  if (withTools && !hasCapability("effortWithTools", wire, model)) return "off";
+  if (effort === "off" && !hasCapability("reasoningOff", wire, model)) return "low";
+  return effort;
+}
+
+/**
+ * A category's effort menu as this wire takes it — the category's own list,
+ * less `off` where the model has none (`reasoningOff`). Every dial that lists
+ * levels reads this, so the drawer and the panel cannot disagree.
+ */
+export function effortMenuOnWire(
+  menu: readonly ReasoningEffort[],
+  wire: CapabilityWire | undefined,
+  model: CapabilityModel,
+): ReasoningEffort[] {
+  if (!wire || !effortLadderWire(wire) || hasCapability("reasoningOff", wire, model)) return [...menu];
+  return menu.filter((e) => e !== "off");
 }
 
 /**

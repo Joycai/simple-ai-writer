@@ -338,11 +338,13 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
         else expect(c.done?.reportedCost).toBeGreaterThan(0);
       }, 120_000);
 
-      // gpt-6-astra refuses `none` on both surfaces; the gateway hides why.
+      // gpt-6-astra refuses `none` on both surfaces and the gateway hides why,
+      // so its off goes out as `low` (capabilities.ts `reasoningOff`).
       it("answers with reasoning off", async () => {
-        const run = ask(route, user("17 × 23 = ? Answer with the number only."), { reasoningEffort: "off" }, modelId);
-        if (modelId === "openai/gpt-6-astra") await expect(run).rejects.toThrow(REJECTED);
-        else expect((await run).text).toMatch(/391/);
+        const c = await ask(route, user("17 × 23 = ? Answer with the number only."), { reasoningEffort: "off" }, modelId);
+        expect(c.text).toMatch(/391/);
+        const sent = route === CHAT ? c.body!.reasoning_effort : (c.body!.reasoning as { effort: string }).effort;
+        expect(sent).toBe(modelId === "openai/gpt-6-astra" ? "low" : "none");
       }, 120_000);
 
       // gpt-5.6-sol's raw Chat refuses `max` (reason hidden); on Responses it
@@ -376,22 +378,19 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
         expect(["red", "green", "blue"]).toContain((JSON.parse(c.text) as { color: string }).color);
       }, 120_000);
 
-      // No effort chosen: the author's untouched model, as an agent run sends it.
-      // OpenAI's own Chat refuses function tools beside any effort but `none` —
-      // and gpt-5.6-sol's default is not `none`, so the untouched model is
-      // refused in OpenAI's words; turning thinking off is the way through.
-      it("finishes a tool round", async () => {
+      // The author's untouched model, as an agent run sends it — and one set to
+      // think hard. OpenAI's own Chat refuses function tools beside any effort
+      // but `none`, gpt-5.6-sol's default included (`Function tools with
+      // reasoning_effort are not supported for gpt-5.6-sol in
+      // /v1/chat/completions`), so there the adapter sends `none`
+      // (capabilities.ts `effortWithTools`).
+      it.each([undefined, "high" as const])("finishes a tool round (effort %s)", async (reasoningEffort) => {
         const first = user("What is the weather in Paris right now? Call get_weather.");
-        if (route === CHAT && modelId === "openai/gpt-5.6-sol") {
-          await expect(ask(route, first, { tools: [WEATHER] }, modelId))
-            .rejects.toThrow(/Function tools with reasoning_effort are not supported for gpt-5\.6-sol/);
-        }
-        const opts = route === CHAT && modelId === "openai/gpt-5.6-sol"
-          ? { tools: [WEATHER], reasoningEffort: "off" as const }
-          : { tools: [WEATHER] };
+        const opts = { tools: [WEATHER], reasoningEffort };
         const r1 = await ask(route, first, opts, modelId);
         const calls = r1.toolCalls!.toolCalls;
         expect(calls.length).toBeGreaterThanOrEqual(1);
+        if (route === CHAT && modelId === "openai/gpt-5.6-sol") expect(r1.body!.reasoning_effort).toBe("none");
         const r2 = await ask(route, [
           ...first,
           {

@@ -190,7 +190,7 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 | --- | --- | --- |
 | 思考控制 | `reasoning_effort`（`xhigh` 被接受） | `reasoning.effort` |
 | 思维链取回 | **`delta.reasoning_content` 有内容**（5.4 / 5.5；5.6-sol 那次为空）——这是中转站把 ② 的摘要翻译过来的，官方 ① 族没有这个字段 | `reasoning_summary_text.delta` |
-| 思考 + 工具 | **可用**（effort `medium` 下拿到 `tool_calls`）——官方文档说 5.4 起不支持，**在中转站上验不了这条**：它很可能把 ① 翻译成 ② 再打后端。**OpenAI 原样回包上已验（2026-09-27，OrcaRouter 的 gpt-5.6-sol）**：400 `Function tools with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.`，**不发 `reasoning_effort` 也 400**（默认档不是 `none`），发 `none` 才过（[`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」） | 可用 |
+| 思考 + 工具 | **可用**（effort `medium` 下拿到 `tool_calls`）——官方文档说 5.4 起不支持，**在中转站上验不了这条**：它很可能把 ① 翻译成 ② 再打后端。**OpenAI 原样回包上已验（2026-09-27，OrcaRouter 的 gpt-5.6-sol）**：400 `Function tools with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.`，**不发 `reasoning_effort` 也 400**（默认档不是 `none`），发 `none` 才过（[`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」）。本项目据此在这类线路上带工具时发 `none`（能力格 `effortWithTools`，[`capability-gating-plan.md`](capability-gating-plan.md) §8.13） | 可用 |
 | 结构化输出 | `response_format: json_schema` strict **正常** | `text.format` 见 §2.2 的 strict 陷阱 |
 | 图片 | `image_url` data URL ✅ | `input_image` data URL ✅（前两次 504 是超时，非拒绝） |
 | usage | `prompt_tokens` / `completion_tokens` + `completion_tokens_details.reasoning_tokens` | `input_tokens` / `output_tokens` + `output_tokens_details.reasoning_tokens` |

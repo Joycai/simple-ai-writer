@@ -64,7 +64,7 @@ import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
 import { platformResponsesInclude, wireOf, type PlatformId } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { hasCapability } from "./capabilities";
+import { effortOnWire, hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
@@ -235,7 +235,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     opts.messages, opts.modelId, hasCapability("instructionsField", wire, capModel) ? "instructions" : "developer",
   );
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  const reasoning = reasoningBody(category, opts.reasoningEffort);
+  // The lowest level for a model with no off (capabilities.ts `reasoningOff`).
+  const reasoning = reasoningBody(category, effortOnWire(opts.reasoningEffort, wire, capModel, !!opts.tools?.length));
   const sendsTemperature = opts.temperature !== undefined
     && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
   const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;

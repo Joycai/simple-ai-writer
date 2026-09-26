@@ -20,7 +20,7 @@
  * until it says who acts on it.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_IDS, hasCapability, type CapabilityId } from "../capabilities";
+import { CAPABILITY_IDS, effortMenuOnWire, hasCapability, type CapabilityId } from "../capabilities";
 import { PLATFORM_IDS, platformEndpoints, type PlatformId } from "../platforms";
 import { readsPdf } from "../configDb";
 import { wireSummary, type WireInput } from "../modelSummary";
@@ -39,9 +39,13 @@ const BASE_URL = "https://capability-consistency.invalid/v1";
 /**
  * One id that runs DashScope's code interpreter on both wires, one on Responses
  * only, one nobody names, and a relay's Kiro-served Claude — its upstream
- * inferred from the id, as every hand-built request does.
+ * inferred from the id, as every hand-built request does. Then the GPT ids the
+ * effort cells single out: OpenAI's own GPT-5.6 and OrcaRouter's two.
  */
-const MODEL_IDS = ["qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5"];
+const MODEL_IDS = [
+  "qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5",
+  "gpt-5.6-sol", "openai/gpt-5.6-sol", "openai/gpt-6-astra",
+];
 /** One id per model family some upstream's measurements cover, under a prefix that names no upstream. */
 const UPSTREAM_MODEL_IDS = ["[x]claude-opus-4-6", "[x]gpt-5.6-sol"];
 /**
@@ -111,6 +115,10 @@ const serverTool = (id: ServerToolId): Probe => async (ctx) => {
   };
 };
 
+const effortLadder = (ctx: Ctx) => ["openai", "responses"].includes(familyOf(ctx.standard));
+/** A probe on a wire where nothing acts on the capability. */
+const NO_ASKER: Record<string, boolean> = {};
+
 const FUNCTION_TOOL = { type: "function" as const, function: { name: "pick", description: "", parameters: { type: "object", properties: {} } } };
 
 const PROBES: Record<CapabilityId, Probe> = {
@@ -131,6 +139,16 @@ const PROBES: Record<CapabilityId, Probe> = {
   forcedToolChoice: async (ctx) => ({
     adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], toolChoice: "auto" }, { tools: [FUNCTION_TOOL], toolChoice: "required" }),
   }),
+  // The effort the row holds reaches a request that carries function tools.
+  // Only the two OpenAI wires have the cell; elsewhere nothing asks it.
+  effortWithTools: async (ctx) => (effortLadder(ctx) ? {
+    adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], reasoningEffort: "low" }, { tools: [FUNCTION_TOOL], reasoningEffort: "high" }),
+  } : NO_ASKER),
+  // `off` goes out as off — the adapter's body, and the chip every dial lists.
+  reasoningOff: async (ctx) => (effortLadder(ctx) ? {
+    adapter: await adapterSends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "off" }),
+    menu: effortMenuOnWire(["off", "low"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("off"),
+  } : NO_ASKER),
   // The adapter and the summary both run with the row's (unset) category, so
   // an Anthropic model thinks and the table says no — see `expected` below.
   temperature: async (ctx) => ({

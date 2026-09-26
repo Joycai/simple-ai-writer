@@ -897,4 +897,20 @@ describe("Responses adapter — reasoning effort", () => {
   it("the off category sends nothing at all", async () => {
     expect(await bodyFor({ reasoningEffort: "high", thinkingCategory: "off" })).not.toHaveProperty("reasoning");
   });
+
+  // gpt-6-astra behind OrcaRouter refuses `none` and the gateway hides why
+  // (landscape.md §7 第十八个样本「GPT 全家补测」): an `off` already on the row
+  // goes out as the lowest level instead of a 400.
+  it("sends the lowest level for off where the model has no off", async () => {
+    async function orca(modelId: string) {
+      const calls = mockFetch([COMPLETED]);
+      await streamCompletion({
+        baseUrl: "https://api.orcarouter.ai/v1", apiKey: "k", standard: "openai_responses_compat", platform: "orcarouter",
+        modelId, messages: [{ role: "user", content: "hi" }], reasoningEffort: "off", onChunk: () => {},
+      });
+      return calls[0].body.reasoning;
+    }
+    expect(await orca("openai/gpt-6-astra")).toEqual({ effort: "low", summary: "auto" });
+    expect(await orca("openai/gpt-6-sol")).toEqual({ effort: "none" });
+  });
 });

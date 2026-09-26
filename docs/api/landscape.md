@@ -2117,11 +2117,11 @@ astra 「关闭」两面各 400、astra 摘要没流出（那次）、5.6-luna /
 **对本项目**（同日）：
 
 - `gpt-5.6-luna` / `-sol` 进 orcarouter 的标定表（目录数值、多模态、PDF）。
-- **没改、待定**的三处，都是「越界由端点说话」规则下作者会撞上的：
-  1. **`gpt-5.6-sol` 走 ① 的助手 / Agent 跑不起来**：带工具的请求只要没选「关闭」就 400。官方 ① 上 5.4 起都是这条
-     规则（[`responses.md`](responses.md) §9 原列为未验，这次拿到了原文），所以不只是这台网关的事。
-  2. **`gpt-6-astra` 选「关闭」是 400，而且网关把原因吞了**，作者只看到「上游拒绝了请求」。
-  3. **作者给 `gpt-5.6-sol` 设了温度，走 ② 就 400**（① 上不报错）。
+- **两格新能力**（[`capability-gating-plan.md`](capability-gating-plan.md) §8.13），落地后 live 文件 139 条全过：
+  1. `effortWithTools`：gpt-5.6-sol 在 ① 上带工具时一律发 `reasoning_effort: "none"`。这是官方 ① 上 5.4 起的规则
+     （[`responses.md`](responses.md) §9 原列为未验，这次拿到了原文），所以官方 `openai` 平台 ① 上 5.4 起的 id 同样处理。
+  2. `reasoningOff`：gpt-6-astra 的思考档不再提供「关闭」，行上已存的 `off` 发成 `low`。
+- **没改**：作者给 `gpt-5.6-sol` 设了温度、走 ② 仍是 400（① 上不报错）——那条错误会点名参数。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

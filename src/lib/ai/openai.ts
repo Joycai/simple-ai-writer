@@ -11,7 +11,7 @@ import {
 import { openaiServerToolsBody } from "./serverTools";
 import { wireOf } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { hasCapability } from "./capabilities";
+import { effortOnWire, hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
@@ -109,16 +109,21 @@ function deltaText(content: unknown): string {
  * that never names the parameter, so the learned downgrade cannot catch it —
  * or single out a relay upstream that ignores it (Kiro, anti — relayUpstream.ts).
  */
-function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory): StreamOptions["toolChoice"] {
+function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory, effort: StreamOptions["reasoningEffort"]): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";
   const forced = tc === "required" || typeof tc === "object";
   if (!forced) return tc;
-  return forcesToolChoiceAuto(category, opts.reasoningEffort) || !hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts)) ? "auto" : tc;
+  return forcesToolChoiceAuto(category, effort) || !hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts)) ? "auto" : tc;
 }
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  // The row's effort as this wire takes it: `off` beside function tools where
+  // the wire refuses any other effort there, the lowest level where the model
+  // has no off (capabilities.ts `effortWithTools` / `reasoningOff`). Unchanged
+  // everywhere else, so an unset model still sends nothing.
+  const effort = effortOnWire(opts.reasoningEffort, wireOf(opts), capabilityModelOf(opts), !!opts.tools?.length);
   const body: Record<string, unknown> = {
     model: opts.modelId,
     messages: toWireMessages(opts.messages, opts.modelId),
@@ -139,7 +144,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // A task's per-request cap (StreamOptions.maxTokens), never the model's
     // maxOutput — see the field for why the two are kept apart.
     ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-    ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category) } : {}),
+    ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category, effort) } : {}),
     // A standing permission the author granted this model, spelled the way
     // this wire wants it (enable_search / enable_code_interpreter — see
     // lib/ai/serverTools.ts). Empty object for every model without the
@@ -150,7 +155,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // volunteered field is a field some relay can reject. The category carries
     // the vendor spelling (reasoning_effort / enable_thinking / disable
     // switch); the budget is read only by Qwen's budget category.
-    ...reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget),
+    ...reasoningBody(category, effort, opts.thinkingBudget),
     // DashScope's high-resolution image reading, declared per model (see
     // Model.vlHighResolution). Absent unless declared, same rule as above —
     // and unless the platform reads it (智谱 takes it and ignores it).

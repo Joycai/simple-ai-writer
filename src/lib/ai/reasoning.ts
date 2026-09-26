@@ -300,6 +300,9 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // and are deliberately *not* trimmed per model id: an out-of-range level
     // is a 400 that names the legal values, which is the endpoint's own
     // declaration and the same rule the Chat Completions categories follow.
+    // The one exception is a model with no `none` behind a gateway that hides
+    // the 400's reason — the capability table's `reasoningOff`, which the
+    // dials read through `effortMenuOnWire`.
     menu: ["off", "low", "medium", "high", "xhigh", "max"],
   },
   gemini3: {

@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）；思考档位的两格 `effortWithTools` / `reasoningOff` 见 §8.13。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -510,3 +510,42 @@ Responses 上温度被改成 1；网关没有联网搜索，温度非 1 整条 5
 - 画像表达不了的实测只进说明，不改发送：账号池不看输出上限、`effort: none` 关不掉思考、不能出图也不能跑代码；网关能出图
   （本应用 Responses 路径不发 `image_generation`）。
 - Responses 回显比对（`text.format` 回显成 `text` 时报告 `[Pro]` 这类丢弃）属于 [`gpt56-plan.md`](gpt56-plan.md) P2 的延伸，另开。
+
+### 8.13 思考档位也进表：`effortWithTools` 与 `reasoningOff`（2026-09-27）
+
+**问题。** 第十八个样本「GPT 全家补测」在 OrcaRouter 上测了六个 GPT id，有两处作者会直接撞上 400：
+
+- **gpt-5.6-sol 走 ① Chat Completions，带函数工具就 400**，原文是 OpenAI 的：`Function tools with reasoning_effort are not
+  supported for gpt-5.6-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.`
+  不发 `reasoning_effort` 也 400（默认档不是 `none`），所以一个没碰过思考设置的模型，在 ① 上跑助手或 Agent，第一轮就失败。
+  官方文档说的是「5.4 起」，[`responses.md`](responses.md) §9 一直列为未验，这次拿到了原文。
+- **gpt-6-astra 不收 `none`**（① ② 两面都是），而网关把上游原因吞了，作者只看到「上游拒绝了请求」。作者点「关闭」就是这个 400。
+
+**决定。**
+
+- **两格新能力**，协议自带、缺省 yes，只作用于 ① ② 两族（Gemini / Anthropic 的「关闭」各有拼法，与这两格无关）：
+  - `effortWithTools`：这条线能不能在带函数工具时带一个非 `none` 的 effort。**为 `no` 时，带工具的 Chat 请求一律发
+    `reasoning_effort: "none"`**，不管模型行上写的是什么档（作者决定：让思考让位，而不是让请求失败）。
+    格子：官方 `openai` ① 上 `gpt-5.4` 起（`/^gpt-5\.[4-9](?:[.-]|$)/`），OrcaRouter ① 上只点名 `openai/gpt-5.6-sol`。
+  - `reasoningOff`：这条线收不收 effort 的 `none`。**为 `no` 时「关闭」不出现在任何思考档 UI 里**（模型抽屉、面板、
+    对话框脚注共用 `effortMenuOnWire`），模型行上已经存的 `off`、以及 Agent 思考兜底强制的 `off`，发出去是 `low`。
+    格子：OrcaRouter ① ② 上的 `openai/gpt-6-astra`。
+- **一处实现**：`capabilities.ts` 的 `effortOnWire` 决定一个请求实际发出的档位，两个适配器都经它；UI 的档位列表都经
+  `effortMenuOnWire`。一致性测试给两格各加了探针（请求体 + 档位列表），与表不一致即失败。
+
+**为什么不是别的做法。**
+
+| 做法 | 为什么没选 |
+| --- | --- |
+| 照「越界由端点说话」不处理（`responses-effort` 注释里的规矩） | 那条规矩的前提是 400 会点名合法值。astra 那条被网关吞了原因；5.6-sol 那条倒是点名了，但一个默认配置的模型在 ① 上跑 Agent 必然失败，不是作者选错了档 |
+| 带工具时把 5.6-sol 改走 Responses | 线路是作者选的（模型的当前线路），适配器不该替作者换协议；换协议还连带换掉结构化输出、服务端工具等一串行为 |
+| gpt-5.6-luna 也点名 | 实测它带工具 + effort 是 200（网关把这类请求分流到 OpenRouter 形态层）。点名只会白白关掉它在工具轮上的思考 |
+| 给 astra 新建一个没有「关闭」的思考类目 | 类目是作者在抽屉里挑的、带文案的东西；「这个模型没有关闭」是线路 × 模型 id 上的事实，跟温度、PDF 一样属于能力表 |
+| astra 的「关闭」映射到 `minimal` | 网关把 `minimal` 改写成 `low`（实测回显），发 `low` 是它实际会得到的档 |
+
+**有意留下的。**
+
+- 作者给 gpt-5.6-sol 设了温度、走 ② 仍然 400（`Unsupported parameter: 'temperature' is not supported with this model.`）。
+  这条会点名参数，作者看得懂；① 上同一温度 200，而 GPT 的温度格按上游裁决的方式（§8.12）是另一件事，没一并改。
+- gpt-5.6-sol 在 ① 上 `reasoning_effort: "max"` / `"minimal"` 是 400（原因被吞）。只看到了这一个 id，② 上同档 200；没进表。
+- 官方 `openai` 的那格来自经网关的 OpenAI 原文，不是直连实测；`gpt-6` 在官方 ① 上是否同样拒收，没有样本，不写。
