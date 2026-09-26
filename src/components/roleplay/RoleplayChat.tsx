@@ -650,7 +650,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const mentionSearch = useMentionSearch(candidates, mention, projectPath);
 
   /**
-   * `+ 条目` 这类按钮只是替作者敲了一个 `@`。
+   * 「+ 引用」按钮只是替作者敲了一个 `@`。
    *
    * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
    * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。

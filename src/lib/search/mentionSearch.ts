@@ -27,10 +27,11 @@
  *   word of* the title is not asked for the title's first characters; the
  *   two halves' scores are averaged, then ×0.5. The full-relative-path tier
  *   (`searchFiles`'s 0.5) is kept for a `/` at either end of the word
- *   (`/第五`, `潮汐门篇/`), which the split cannot read. A name hit outranks
- *   an alias hit outranks a group-path hit outranks either path tier: ×1 /
- *   ×0.9 / ×0.6 / ×0.5, the alias weight from `searchLore`, the other two
- *   from `searchFiles`. The group path and the
+ *   (`/第五`, `潮汐门篇/`), which the split cannot read. The fields weigh
+ *   ×1 name / ×0.9 alias / ×0.6 group path / ×0.5 either path tier (the
+ *   alias weight from `searchLore`, the other two from `searchFiles`), and
+ *   each word takes its best field — so a whole-word alias can beat a
+ *   scattered name. The group path and the
  *   full path are matched by substring and word start only — never by
  *   subsequence: a directory subsequence is noise, and here a hit has teeth
  *   (Enter replaces the author's text and attaches the file), so `@小李` must

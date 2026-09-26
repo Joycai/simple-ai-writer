@@ -545,8 +545,8 @@ export interface MentionSearch {
   hits: ReadonlyMap<number, MentionHit>;
   /**
    * Hits per kind for this query, ignoring the scope — what the *other* chips
-   * would show. Only the empty line and the Enter rule read it, so it is
-   * computed only for an empty list.
+   * would show. Only an empty list reads it — the empty line, the Enter
+   * rule, and Tab skipping empty chips — so it is computed only then.
    */
   counts: Record<ScopedKind, number> | undefined;
 }
