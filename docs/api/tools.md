@@ -133,9 +133,9 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
 - 工具轮必须带上该轮的 thinking block 及其 `signature`，同 ③ 的
   `thoughtSignature`。
   实测（Sonnet 5 adaptive，第十八个样本）：原样回灌 200、**签名被改 400**
-  `Invalid \`signature\` in \`thinking\` block`；但**整个丢掉 thinking block 也是
-  200**——这是经网关的结果（网关请求侧不透传），不能据此改写官方规则：带上仍是
-  正路，连续性也靠它。
+  `Invalid \`signature\` in \`thinking\` block`；**整个丢掉 thinking block 是 200**——
+  与官方规则一致：缺失不报错、只是这轮思考被静默关掉，改动才 400（[`reasoning.md`](reasoning.md)
+  §3.3）。所以带上仍是正路，而且丢了不会有任何报错提醒你。
 - 响应里的 `tool_use` 多了 **`caller: {"type": "direct"}`**（程序化工具调用的来源
   标记）；回灌时去掉它也 200。
 - **`tools` 里可以混入服务端工具**（`{type:"web_search_20250305", name:"web_search"}`
