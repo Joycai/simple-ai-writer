@@ -1901,7 +1901,7 @@ Responses adapter：
 - **`output_config.effort`** `low` / `medium` / `high` / `xhigh` / `max` 都收；adaptive 下低档常常直接不想（`low` 0 思考 token），
   单次采样噪声很大，思考量不单调，不能拿一次结果推档位。`thinking: {type: "enabled", budget_tokens}` 在 Sonnet 5 上 200、照样思考。
 - **thinking + 并行工具**：一轮里两个 `tool_use`，每个带新字段 **`caller: {"type": "direct"}`**（程序化工具调用的来源标记）。
-  回灌时：原样回灌 ✓；**丢掉 thinking block 也 200**（官方规则是 400；这是「会不会 400」一类，只对网关成立）；去掉 `caller` 200；**改 `signature` → 400**
+  回灌时：原样回灌 ✓；**丢掉 thinking block 也 200**——与官方规则一致（缺失 → 静默关掉这轮思考、不报错；改动才 400，[`reasoning.md`](reasoning.md) §3.3）；去掉 `caller` 200；**改 `signature` → 400**
   `Invalid \`signature\` in \`thinking\` block`；改 thinking 文本但留原签名 200（摘要文本本来就不是被签的那份）。
 - **流式**：thinking 以 `thinking_delta` 连续出，末尾一条 `signature_delta`；`content_block_start` 的 thinking block 带空的
   `signature: ""`。工具参数的第一条 `input_json_delta` 是空串。

@@ -20,7 +20,7 @@
 
 | 条目 | 结论 |
 | --- | --- |
-| 1.1 | ✅ Sonnet 5 + `adaptive` + `display:"summarized"` 回 `thinking` block；**不发 `thinking` 也思考**，但 `display` 默认 `omitted`（文本空、只有签名）。第二轮原样回灌 thinking + `tool_use` 200，改签名 400；丢掉 thinking block 经网关也 200（官方规则是 400，这一格只对网关成立）。本项目 live 用例「两个调用的工具轮」过 |
+| 1.1 | ✅ Sonnet 5 + `adaptive` + `display:"summarized"` 回 `thinking` block；**不发 `thinking` 也思考**，但 `display` 默认 `omitted`（文本空、只有签名）。第二轮原样回灌 thinking + `tool_use` 200，改签名 400；丢掉 thinking block 也 200——与官方「缺失 → 静默降级、改动 → 400」一致（[`reasoning.md`](../api/reasoning.md) §3.3）。本项目 live 用例「两个调用的工具轮」过 |
 | 1.2 | ✅ 3.8 Flash：思考是 `{text, thought: true}`，一段整给；`thoughtSignature` 挂在正文 text part 与第一个 `functionCall` part 上，流式时落在最后一块的 `{text:"", thoughtSignature}`。**回灌时光秃秃的 `{text:""}` 经网关被 400**（可能是网关重新序列化所致）——已修，`gemini.ts` 不再回传它 |
 | 1.3 | 部分：Claude 经 ① 在 `reasoning_content`；GPT 经 ①（OpenRouter 形态）只有 `reasoning` / `reasoning_details`；Gemini 经 ① 不给 |
 | 2.1 | 摘要文本与 `thinking_tokens` 同量级（97 字符 ↔ 74 token）；摘要不是计费的那份 |
