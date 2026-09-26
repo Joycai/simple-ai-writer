@@ -7,6 +7,8 @@ import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
+import { wireOf } from "./platforms";
+import { geminiServerTools } from "./serverTools";
 import { geminiUrl } from "./urls";
 import type {
   AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
@@ -255,6 +257,13 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
         },
       };
     }
+  }
+  // The endpoint's own tools, each its own `tools[]` entry beside the function
+  // declarations — and sent without them too: a standing permission, not a
+  // per-task input (lib/ai/serverTools.ts).
+  const builtIn = geminiServerTools(wireOf(opts), opts.serverTools, opts.modelId, opts.relayUpstream);
+  if (builtIn.length) {
+    body.tools = [...((body.tools as unknown[] | undefined) ?? []), ...builtIn];
   }
   const safetySettings = toSafetySettingsArray(opts.safetySettings);
   if (safetySettings.length) {

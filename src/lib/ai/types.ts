@@ -443,8 +443,7 @@ export interface StreamOptions {
    * Server-side tools the endpoint should be allowed to run on its own (web
    * search, page extraction). Spelled per wire — Anthropic-family `tools[]`
    * entries, OpenAI-compat `enable_search` (+ `search_options`), Responses-compat
-   * built-in `tools[]` entries (see `lib/ai/serverTools.ts`); the Gemini adapter
-   * ignores it.
+   * and Gemini built-in `tools[]` entries (see `lib/ai/serverTools.ts`).
    * Sent on every request the model handles, `tools` or no `tools` — it is a
    * standing permission the author granted the model, not a per-task input.
    */

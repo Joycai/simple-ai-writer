@@ -3374,3 +3374,53 @@ describe("streamCompletion — upstream-reported cost", () => {
     expect(done && "reportedCost" in done).toBe(false);
   });
 });
+
+describe("streamCompletion — server tools on the Gemini wire", () => {
+  const done = [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}\n`];
+  const ORCA = "https://api.orcarouter.ai/v1beta";
+  const FN: ToolDefinition = {
+    type: "function",
+    function: { name: "save_note", description: "Save a note.", parameters: { type: "object", properties: {} } },
+  };
+  const ALL: ServerToolId[] = ["web_search", "web_extractor", "code_interpreter"];
+
+  it("lists googleSearch / urlContext / codeExecution beside the function declarations", async () => {
+    // All three beside a function tool: 200 on OrcaRouter's Vertex route
+    // (landscape.md §7 第十八个样本「再补测」).
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ALL, tools: [FN] });
+    const tools = calls[0].body.tools as Record<string, unknown>[];
+    expect(tools[0]).toHaveProperty("functionDeclarations");
+    expect(tools.slice(1)).toEqual([{ googleSearch: {} }, { urlContext: {} }, { codeExecution: {} }]);
+  });
+
+  it("keeps them when a function is forced", async () => {
+    // mode ANY beside googleSearch measured 200 — nothing to drop per request.
+    const { calls } = await collect({
+      chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_search"], tools: [FN],
+      toolChoice: { type: "function", function: { name: "save_note" } },
+    });
+    expect(calls[0].body.tools).toContainEqual({ googleSearch: {} });
+    expect(calls[0].body.toolConfig).toEqual({ functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["save_note"] } });
+  });
+
+  it("sends them on a request without function tools", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"] });
+    expect(calls[0].body.tools).toEqual([{ codeExecution: {} }]);
+    expect(calls[0].body).not.toHaveProperty("toolConfig");
+  });
+
+  it("drops a lone extractor — it is an upgrade of search, as on every wire", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_extractor"] });
+    expect(calls[0].body).not.toHaveProperty("tools");
+  });
+
+  it("sends only googleSearch to the official endpoint — the other two are unmeasured there", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini", serverTools: ALL });
+    expect(calls[0].body.tools).toEqual([{ googleSearch: {} }]);
+  });
+
+  it("sends nothing without the declaration", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, tools: [FN] });
+    expect(calls[0].body.tools).toHaveLength(1);
+  });
+});

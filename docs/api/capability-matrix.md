@@ -262,13 +262,13 @@
 
 ## web_search
 
-`native` · 规则缺省适用的协议族：Resp / Anth
+`native` · 规则缺省适用的协议族：Resp / Anth / Gemini
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
 | openai | · | ✓ measured |  |  |
 | anthropic |  |  |  | ✓ measured |
-| google |  |  | · |  |
+| google |  |  | ? unmeasured |  |
 | deepseek | · | ? unmeasured |  | ? unmeasured |
 | dashscope | ✓ measured | ✓ measured |  | ? unmeasured |
 | dashscope-intl | ✓ measured | ✓ measured |  |  |
@@ -277,15 +277,15 @@
 | volcengine | · | ? unmeasured |  |  |
 | volcengine-plan | · | ✓ measured |  | ✓ measured |
 | zhipu | · |  |  |  |
-| orcarouter | · | ✓ measured | · | ✓ measured |
-| newapi | · | ? 按上游 unmeasured | · | ? 按上游 unmeasured |
+| orcarouter | · | ✓ measured | ✓ measured | ✓ measured |
+| newapi | · | ? 按上游 unmeasured | ? unmeasured | ? 按上游 unmeasured |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
-| custom | · | ? 按上游 unmeasured | · | ? 按上游 unmeasured |
+| custom | · | ? 按上游 unmeasured | ? unmeasured | ? 按上游 unmeasured |
 
 ## web_extractor
 
-`private` · 规则缺省适用的协议族：Chat / Resp
+`private` · 规则缺省适用的协议族：Chat / Resp / Gemini
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
@@ -300,7 +300,7 @@
 | volcengine | · | · |  |  |
 | volcengine-plan | · | · |  | · |
 | zhipu | · |  |  |  |
-| orcarouter | · | · | · | · |
+| orcarouter | · | · | ✓ measured | · |
 | newapi | · | · | · | · |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |
@@ -354,7 +354,7 @@
 
 ## code_interpreter
 
-`private` · 规则缺省适用的协议族：Chat / Resp
+`private` · 规则缺省适用的协议族：Chat / Resp / Gemini
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
@@ -369,7 +369,7 @@
 | volcengine | · | · |  |  |
 | volcengine-plan | · | · |  | · |
 | zhipu | · |  |  |  |
-| orcarouter | · | · | · | · |
+| orcarouter | · | · | ✓ measured | · |
 | newapi | · | · | · | · |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |

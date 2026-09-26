@@ -96,6 +96,18 @@
  *     follows model families that an id pattern can name — see
  *     the `code_interpreter` cells in `capabilities.ts`. The official OpenAI endpoint's
  *     `code_interpreter` wants a `container` and is not this tool.
+ *
+ * The Gemini wire joined last (2026-09-26, OrcaRouter's verbatim Vertex route —
+ * `docs/api/landscape.md` §7 第十八个样本「再补测」), speaking three of the ids
+ * as bare `tools[]` entries beside `functionDeclarations` (`geminiServerTools`):
+ * `web_search` → `googleSearch`, `web_extractor` → `urlContext`,
+ * `code_interpreter` → `codeExecution`. Every combination with function tools
+ * answered 200 — forcing a function (`mode: ANY`) and a response schema too —
+ * so, unlike the DashScope wires, nothing is dropped per request. `urlContext`
+ * works alone there, but it stays an upgrade of search here like everywhere
+ * else (`normalizeServerTools`): one meaning per id. Search bills per query
+ * (about $0.014 each) and the wire has no `max_uses` to send; the model chose
+ * six queries for one question once.
  */
 
 import { familyOf } from "./types";
@@ -345,6 +357,32 @@ export function responsesServerTools(
     // The author turned thinking off on purpose; the interpreter yields.
     .filter((id) => id !== "code_interpreter" || !request.thinkingOff)
     .map((type) => ({ type }));
+}
+
+/** The `tools[]` entry each id becomes on the Gemini wire. */
+const GEMINI_WIRE_TOOL: Partial<Record<ServerToolId, string>> = {
+  web_search: "googleSearch",
+  web_extractor: "urlContext",
+  code_interpreter: "codeExecution",
+};
+
+/**
+ * The built-in `tools[]` entries these ids become on the Gemini wire — each a
+ * one-key object with an empty config (`{googleSearch: {}}`), listed beside the
+ * `functionDeclarations` entry, never inside it. Gated and normalised like the
+ * other wires: only what the platform's cell grants reaches the request.
+ */
+export function geminiServerTools(
+  wire: ServerToolWire,
+  ids: readonly ServerToolId[] | undefined,
+  modelId: string,
+  relayUpstream?: RelayUpstreamChoice,
+): Record<string, Record<string, never>>[] {
+  if (familyOf(wire.standard) !== "gemini") return [];
+  return (effectiveServerTools(wire, ids, modelId, relayUpstream) ?? []).flatMap((id) => {
+    const key = GEMINI_WIRE_TOOL[id];
+    return key ? [{ [key]: {} }] : [];
+  });
 }
 
 // ─── What comes back ─────────────────────────────────────────────────────────
