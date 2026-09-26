@@ -31,12 +31,12 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
-import { matchText } from "../../lib/search/globalSearch";
 import {
   availableScopes,
   countByScope,
   cycleScope,
   hasHits,
+  matchesMention,
   mentionSub,
   searchMentions,
   type MentionHit,
@@ -61,7 +61,7 @@ export function mentionKey(item: MentionItem): string {
   return item.type === "lore" ? `lore:${item.entity.id}` : `file:${item.file.path}`;
 }
 
-export function mentionLabel(item: MentionItem): string {
+function mentionLabel(item: MentionItem): string {
   return item.type === "lore" ? item.entity.name : item.file.name;
 }
 
@@ -78,6 +78,8 @@ const MAX_QUERY_LEN = 24;
 
 /** What ends a mention besides ASCII whitespace: full-width space and CJK punctuation. */
 const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
+/** An `@[` still open at the end of the text before an `@`: see findMention. */
+const INSIDE_LANDED = new RegExp(`@\\[[^\\]\\n${CJK_TERMINATORS.source.slice(1, -1)}]*$`);
 
 /**
  * Where an `@` mention begins, given the text and the caret.
@@ -91,8 +93,10 @@ const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
  * there eating ↑↓, Tab and the first Esc. So `@[` never opens, an `@` inside
  * an unclosed `@[…` (a name that itself holds one, `封面@2x.png`) never opens,
  * and a name that starts with `[` is reached by a word inside it — the same
- * as a name starting with `【`, which was always a terminator. An author-typed
- * `@[` is the price; it is a deliberate one.
+ * as a name starting with `【`, which was always a terminator. The unclosed
+ * `@[…` ends at a newline or a CJK terminator, not at a space (names have
+ * spaces), so an author-typed `@[` costs the `@`s up to the next 「，」 on that
+ * line — a deliberate price.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);
@@ -104,7 +108,7 @@ export function findMention(text: string, caret: number): { start: number; query
   // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
   // Inside a landed reference: `@[图标@2x.png]的` — the last `@` is the name's.
-  if (/@\[[^\]\n]*$/.test(before.slice(0, at))) return null;
+  if (INSIDE_LANDED.test(before.slice(0, at))) return null;
   const query = before.slice(at + 1);
   if (query.startsWith("[")) return null;
   // The author moved on and is writing prose again.
@@ -128,12 +132,13 @@ export interface MentionState {
    */
   claim: () => MentionClaim | null;
   /**
-   * Replace the claimed mention with `@[label]`, returning the new text.
+   * Replace the claimed mention with `@[名字]`, returning the new text.
    * A second accept on the same claim's mention is a no-op on the text (a
-   * double-click, or Enter twice on a slow file), and a mention opened
-   * since is left alone.
+   * double-click, or Enter twice on a slow file); a mention opened since is
+   * shifted by the splice and otherwise left alone. `projectPath` is for
+   * judging whether letters typed during the read still point at `item`.
    */
-  accept: (value: string, label: string, claim: MentionClaim) => string;
+  accept: (value: string, item: MentionItem, claim: MentionClaim, projectPath: string | null) => string;
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
@@ -226,33 +231,46 @@ export function spliceMention(value: string, start: number, query: string, label
 }
 
 /**
- * What accepting `claim` does to the open state: closes the claimed mention
- * and no other. A mention opened since (the author moved on to `@夜` while
- * the file read) is theirs to keep; one already closed stays as it is.
+ * What landing `claim`'s text does to the open state, pure:
+ * - the claimed mention closes;
+ * - a mention reopened on the same `@` (Esc during the read, then more
+ *   letters) closes too — that `@` now belongs to the landed reference;
+ * - a mention opened *after* it in the text (the author moved on to `@夜`
+ *   while the file read) is theirs to keep, shifted by `delta`, the length
+ *   the splice added — hosts land text programmatically, so no `sync` will
+ *   re-read its position, and a stale `start` would make its own pick land
+ *   nothing.
  */
-export function closeClaimed(core: MentionCore, claim: MentionClaim): MentionCore {
-  return core.open && core.id === claim.id ? shut(core) : core;
+export function afterAccept(core: MentionCore, claim: MentionClaim, delta: number): MentionCore {
+  if (!core.open) return core;
+  if (core.id === claim.id || core.start === claim.start) return shut(core);
+  if (core.start > claim.start) return { ...core, start: core.start + delta };
+  return core;
 }
 
 /**
  * The text a pick lands, pure. `spent` holds the mentions a pick has already
- * landed on: a second Enter on a slow file, or a double-click, is one splice
- * (`spend` false, text unchanged). `live` is the mention as it is *now*: when
- * the claimed one is still open and the author has kept narrowing it while
- * the file read (`@潮` → `@潮汐`, and `潮汐` still matches the picked name), the
- * whole current query is replaced, not the snapshot's — otherwise the extra
- * letters would be left as a tail after `@[潮汐.png]`. Prose typed after it
- * that does not match (`@潮的图`) is prose, and stays.
+ * landed on (and is written here, so the once-only rule is one place): a
+ * second Enter on a slow file, or a double-click, is one splice — `spend`
+ * false, text unchanged. `live` is the mention as it is *now*: when it is
+ * the same `@` (open, or closed since) and the author has kept narrowing it
+ * while the file read (`@潮` → `@潮汐`, `@插图/潮` → `@插图/潮汐`), and the
+ * grown query still finds the picked item by the picker's own rule
+ * (`stillMatches`), the whole current query is replaced, not the snapshot's —
+ * otherwise the extra letters would be left as a tail after `@[潮汐.png]`.
+ * Prose typed after it that does not match (`@潮的图`) is prose, and stays.
  */
 export function acceptMention(
-  spent: ReadonlySet<number>,
+  spent: Set<number>,
   claim: MentionClaim,
   live: MentionClaim,
   value: string,
   label: string,
+  stillMatches: (query: string) => boolean,
 ): { text: string; spend: boolean } {
   if (spent.has(claim.id)) return { text: value, spend: false };
-  const grown = live.id === claim.id && live.query !== claim.query && matchText(label, live.query) !== null;
+  spent.add(claim.id);
+  const grown = live.start === claim.start && live.query !== claim.query && stillMatches(live.query);
   const query = grown ? live.query : claim.query;
   return { text: spliceMention(value, claim.start, query, label), spend: true };
 }
@@ -278,11 +296,14 @@ export function useMentionState(): MentionState {
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
     claim: () => (state.open ? { ...live.current } : null),
-    accept: (value, label, claim) => {
-      const { text, spend } = acceptMention(spent.current, claim, live.current, value, label);
+    accept: (value, item, claim, projectPath) => {
+      const { text, spend } = acceptMention(
+        spent.current, claim, live.current, value, mentionLabel(item),
+        (q) => matchesMention(item, q, projectPath),
+      );
       if (spend) {
-        spent.current.add(claim.id);
-        setState((s) => closeClaimed(s, claim));
+        const delta = text.length - value.length;
+        setState((s) => afterAccept(s, claim, delta));
       }
       return text;
     },

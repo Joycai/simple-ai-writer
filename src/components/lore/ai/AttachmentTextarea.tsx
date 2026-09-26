@@ -16,7 +16,6 @@ import {
   MentionPicker,
   mentionKey,
   mentionKeyDown,
-  mentionLabel,
   useMentionSearch,
   useMentionState,
   type MentionItem,
@@ -112,7 +111,7 @@ export function AttachmentTextarea({
         return; // skip unreadable
       }
     }
-    onInstructionChange(mention.accept(latest.current.instruction, mentionLabel(item), claim));
+    onInstructionChange(mention.accept(latest.current.instruction, item, claim, projectPath));
     textareaRef.current?.focus();
   };
 

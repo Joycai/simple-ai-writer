@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptMention, closeClaimed, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptMention, afterAccept, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -99,8 +99,12 @@ describe("findMention", () => {
     expect(findMention("看看@[沈@砚]", 8)).toBeNull();
     // A closed reference followed by a new `@` opens as usual.
     expect(findMention("看看@[沈砚]@潮", 9)).toEqual({ start: 7, query: "潮" });
-    // The deliberate price: an author-typed `@[` does not open either.
+    // The deliberate price: an author-typed `@[` does not open either, nor
+    // an `@` after it on the line — until a CJK terminator ends the would-be
+    // name (a space does not: names have spaces).
     expect(findMention("看@[草", 4)).toBeNull();
+    expect(findMention("@[草稿 然后 @沈", 11)).toBeNull();
+    expect(findMention("@[草稿，再看看@潮", 10)).toEqual({ start: 8, query: "潮" });
   });
 
   it("still opens on an @ that runs straight out of Chinese prose", () => {
@@ -143,47 +147,68 @@ describe("syncMention", () => {
   });
 });
 
-describe("closeClaimed", () => {
+describe("afterAccept", () => {
   const claim = { id: 1, start: 2, query: "潮" };
   const first: MentionCore = { open: true, id: 1, query: "潮", active: 0, scope: "lore", start: 2 };
+  // `@潮` → `@[潮汐.png]`: the text grew by this much.
+  const delta = "@[潮汐.png]".length - "@潮".length;
 
   it("closes the claimed mention and keeps its serial", () => {
-    expect(closeClaimed(first, claim)).toEqual({ open: false, id: 1, query: "", active: 0, scope: "all", start: 0 });
+    expect(afterAccept(first, claim, delta)).toEqual({ open: false, id: 1, query: "", active: 0, scope: "all", start: 0 });
   });
 
-  it("leaves a mention opened since alone — the author moved on to `@夜` while the file read", () => {
+  it("shifts a mention opened after it in the text — `@夜` typed while the file read — so its own pick still lands", () => {
     const later: MentionCore = { ...first, id: 2, query: "夜", start: 7 };
-    expect(closeClaimed(later, claim)).toBe(later);
+    expect(afterAccept(later, claim, delta)).toEqual({ ...later, start: 7 + delta });
   });
 
-  it("is a no-op on an already closed state, same object", () => {
+  it("closes a mention reopened on the same `@` (Esc during the read, then more letters): that `@` is the landed one now", () => {
+    const reopened: MentionCore = { ...first, id: 2, query: "潮汐" };
+    expect(afterAccept(reopened, claim, delta).open).toBe(false);
+  });
+
+  it("leaves a mention before it, and a closed state, as they are", () => {
+    const earlier: MentionCore = { ...first, id: 2, query: "夜", start: 0 };
+    expect(afterAccept(earlier, claim, delta)).toBe(earlier);
     const shut: MentionCore = { ...first, open: false };
-    expect(closeClaimed(shut, claim)).toBe(shut);
+    expect(afterAccept(shut, claim, delta)).toBe(shut);
   });
 });
 
 describe("acceptMention", () => {
   const claim = { id: 1, start: 2, query: "潮" };
+  const nameHas = (label: string) => (q: string) => label.includes(q);
 
-  it("lands once: a second accept on the same mention leaves the text alone", () => {
-    const first = acceptMention(new Set(), claim, claim, "看看@潮", "潮汐.png");
+  it("lands once and records it: a second accept on the same mention leaves the text alone", () => {
+    const spent = new Set<number>();
+    const first = acceptMention(spent, claim, claim, "看看@潮", "潮汐.png", nameHas("潮汐.png"));
     expect(first).toEqual({ text: "看看@[潮汐.png]", spend: true });
+    expect(spent.has(1)).toBe(true);
     // The `@` of the landed `@[潮汐.png]` is at the same start with an empty
     // query — only the spent set stands between it and `@[B][A]`.
-    const again = acceptMention(new Set([1]), { ...claim, query: "" }, { id: 1, start: 2, query: "" }, first.text, "B.png");
+    const again = acceptMention(spent, { ...claim, query: "" }, { id: 1, start: 2, query: "" }, first.text, "B.png", () => true);
     expect(again).toEqual({ text: "看看@[潮汐.png]", spend: false });
   });
 
-  it("replaces the whole current query when the author kept narrowing the same mention while the file read", () => {
+  it("replaces the whole current query when the author kept narrowing the same `@` while the file read", () => {
     const live = { id: 1, start: 2, query: "潮汐" };
-    expect(acceptMention(new Set(), claim, live, "看看@潮汐", "潮汐.png").text).toBe("看看@[潮汐.png]");
+    expect(acceptMention(new Set(), claim, live, "看看@潮汐", "潮汐.png", nameHas("潮汐.png")).text).toBe("看看@[潮汐.png]");
+    // Narrowed by the group, as the picker allows: the picker's own rule
+    // decides, not the name alone.
+    const byGroup = { id: 1, start: 2, query: "插图/潮汐" };
+    const stillListed = (q: string) => q === "插图/潮汐";
+    expect(acceptMention(new Set(), { ...claim, query: "插图/潮" }, byGroup, "看看@插图/潮汐", "潮汐.png", stillListed).text)
+      .toBe("看看@[潮汐.png]");
+    // Reopened on the same `@` after an Esc: still the same `@`, same rule.
+    expect(acceptMention(new Set(), claim, { id: 2, start: 2, query: "潮汐" }, "看看@潮汐", "潮汐.png", nameHas("潮汐.png")).text)
+      .toBe("看看@[潮汐.png]");
   });
 
   it("keeps prose typed after the mention when it is not a narrowing", () => {
-    expect(acceptMention(new Set(), claim, { id: 1, start: 2, query: "潮的图" }, "看看@潮的图", "潮汐.png").text)
+    expect(acceptMention(new Set(), claim, { id: 1, start: 2, query: "潮的图" }, "看看@潮的图", "潮汐.png", nameHas("潮汐.png")).text)
       .toBe("看看@[潮汐.png]的图");
     // A later mention is not this pick's: the snapshot decides.
-    expect(acceptMention(new Set(), claim, { id: 2, start: 7, query: "夜" }, "看看@潮，然后@夜", "潮汐.png").text)
+    expect(acceptMention(new Set(), claim, { id: 2, start: 7, query: "夜" }, "看看@潮，然后@夜", "潮汐.png", nameHas("潮汐.png")).text)
       .toBe("看看@[潮汐.png]，然后@夜");
   });
 });

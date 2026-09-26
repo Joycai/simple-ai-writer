@@ -59,7 +59,7 @@ import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
-  MentionPicker, mentionKey, mentionKeyDown, mentionLabel,
+  MentionPicker, mentionKey, mentionKeyDown,
   useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
@@ -721,7 +721,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     if (!claim) return;
     setRefError(null);
     // 先落字再读图：这里 setDraft 是 zustand 的同步更新，updater 只跑一次。
-    setDraft((prev) => mention.accept(prev, mentionLabel(item), claim));
+    setDraft((prev) => mention.accept(prev, item, claim, projectPath));
     mention.close();
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);

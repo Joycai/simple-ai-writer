@@ -244,6 +244,17 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
 }
 
 /**
+ * Whether `item` would still be in the list for `query` — the picker's own
+ * rule (name, alias, group path, the path tiers), for the host deciding
+ * whether letters typed while a file read were the author narrowing toward
+ * this very item.
+ */
+export function matchesMention(item: MentionLike, query: string, projectPath: string | null): boolean {
+  const tokens = tokenize(query);
+  return tokens.length > 0 && scoreOne(item, tokens, projectPath) !== null;
+}
+
+/**
  * Round-robin over the kinds in `MENTION_SCOPES` order until `limit` is
  * reached: entry, document, image, entry, … A kind that runs out is skipped
  * and the others keep going, so the total is still `limit` when there are

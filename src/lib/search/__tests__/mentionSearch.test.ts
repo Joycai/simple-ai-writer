@@ -12,6 +12,7 @@ import {
   countByScope,
   cycleScope,
   hasHits,
+  matchesMention,
   mentionSub,
   scopeOf,
   searchMentions,
@@ -196,6 +197,16 @@ describe("searchMentions — empty query", () => {
     const items = [file("b.md"), lore("乙"), file("a.md"), lore("甲")];
     expect(names(searchMentions(items, "  ", "all", ROOT))).toEqual(["乙", "b.md", "甲", "a.md"]);
     expect(names(searchMentions(items, "", "text", ROOT))).toEqual(["b.md", "a.md"]);
+  });
+});
+
+describe("matchesMention", () => {
+  it("is the picker's own rule — group path included — and never true for an empty query", () => {
+    const doc = file("插图/潮汐.png", "image");
+    expect(matchesMention(doc, "潮汐", ROOT)).toBe(true);
+    expect(matchesMention(doc, "插图/潮汐", ROOT)).toBe(true);
+    expect(matchesMention(doc, "潮的图", ROOT)).toBe(false);
+    expect(matchesMention(doc, "", ROOT)).toBe(false);
   });
 });
 

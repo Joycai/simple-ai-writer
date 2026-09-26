@@ -23,7 +23,6 @@ import {
   MentionPicker,
   mentionKey,
   mentionKeyDown,
-  mentionLabel,
   useMentionSearch,
   useMentionState,
   type MentionItem,
@@ -365,7 +364,7 @@ export function AgentChat() {
     // Not inside a state updater: `accept` calls setState itself, and React
     // runs an updater twice under StrictMode. The ref supplies the live value
     // the updater was being used for.
-    setDraft(mention.accept(draftRef.current, mentionLabel(item), claim));
+    setDraft(mention.accept(draftRef.current, item, claim, projectPath));
     inputRef.current?.focus();
   };
 
