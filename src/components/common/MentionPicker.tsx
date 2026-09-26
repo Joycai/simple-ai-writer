@@ -32,6 +32,16 @@ import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
 import { endsInsideToken, mentionToken } from "../../lib/agent/mentionText";
+import { diffIndices } from "../../lib/diff/myers";
+import {
+  failMentionRead,
+  isMentionReading,
+  mentionReadFailure,
+  subscribeMentionReads,
+  takeMentionReadFailure,
+  trackMentionRead,
+  type MentionReadFailure,
+} from "../../lib/agent/mentionReads";
 import {
   availableScopes,
   countByScope,
@@ -137,6 +147,13 @@ export interface MentionState {
    * mention and the waiting picks by the edit. See editRange.
    */
   external: (before: string, after: string) => void;
+  /**
+   * For an edit of this instance's own that was not a landing: move the picks
+   * waiting on a file read by it (see moveClaims; `caret` where the host's is
+   * after the write, when it knows). The open mention is the host's `sync` to
+   * move. `useOwnDraft` calls it.
+   */
+  edited: (before: string, after: string, caret?: number) => void;
   /**
    * A pick's handle on the mention it came from — take it *before* any
    * await, with the text as it is then, and hand it to `accept` after. Null
@@ -327,10 +344,44 @@ export function shiftCore(core: MentionCore, before: string, after: string): Men
   return core;
 }
 
+/** Past these a span is not worth aligning; a claim in it stays put, as before. */
+const CLAIM_SPAN_MAX = 4000;
+const CLAIM_SPAN_DISTANCE = 400;
+
 /**
- * The waiting picks after the same edit: moved when they lie after it. One
- * the edit ran over is left where it is — at landing, the text there no
- * longer reads as its mention, and nothing is spliced — and loses `glued`:
+ * Where the `@` of a claim lying *inside* an edit's replaced span went, or
+ * null. One span is what `editRange` can say, and a claim in it is either
+ * run over or carried along by edits on both sides of it — a roleplay line
+ * kind wraps the whole line (`我看着@潮，` → `*我看着@潮，*`), and an instance
+ * catching up after a switch sees the new instance's edits ahead of and after
+ * the claim as one. The span alone is aligned character by character
+ * (lib/diff's Myers) and the claim's `@` followed through it; it counts as
+ * carried only if the new text there still reads as its mention — a landing
+ * on that `@` (now `@[`) or a rewrite of its letters stays run over. For
+ * another instance's edit a glued claim is not carried (see shiftClaims). Where the span repeats the claim's
+ * `@query` and its own was taken out, the alignment may pick the other one —
+ * the one case this can carry a claim somewhere it was not.
+ */
+function claimThrough(c: MentionClaim, before: string, after: string, edit: { start: number; end: number; delta: number }): number | null {
+  const was = before.slice(edit.start, edit.end);
+  const now = after.slice(edit.start, edit.end + edit.delta);
+  if (was.length + now.length > CLAIM_SPAN_MAX) return null;
+  const script = diffIndices(was.length, now.length, (i, j) => was.charCodeAt(i) === now.charCodeAt(j), CLAIM_SPAN_DISTANCE);
+  const at = c.start - edit.start;
+  const kept = script?.find((step) => step.type === "equal" && step.a === at);
+  if (!kept) return null;
+  const start = edit.start + kept.b;
+  if (!after.startsWith(`@${c.query}`, start)) return null;
+  // An empty query followed by `[` now is a reference landed on it.
+  if (c.query === "" && after.charAt(start + 1) === "[") return null;
+  return start;
+}
+
+/**
+ * The waiting picks after the same edit: moved when they lie after it, or
+ * carried when it went around them (claimThrough). One the edit ran over is
+ * left where it is — at landing, the text there no longer reads as its
+ * mention, and nothing is spliced — and loses `glued`:
  * whatever `[` now follows its `@` is the reference just landed there, not
  * the prose it was glued to (the same reset `acceptPick` makes for a
  * landing by this instance).
@@ -339,9 +390,62 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
   const edit = editRange(before, after);
   if (edit.delta === 0 && edit.start === edit.end) return;
   for (const [id, c] of pending) {
-    if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); }
+    if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
+    // Glued, the `[` after its `@` was prose, and a reference another
+    // instance landed on that `@` reads the same (`@[`) — so it is told apart
+    // by the old rule only. Our own writes land through `landing`, never here.
+    const carried = c.start >= edit.start && !c.glued ? claimThrough(c, before, after, edit) : null;
+    if (carried !== null) pending.set(id, { ...c, start: carried });
     else if (c.glued && inEdit(c.start, c.query, edit)) pending.set(id, { ...c, glued: false });
   }
+}
+
+/**
+ * The waiting picks after an edit of this instance's own that was not a
+ * landing — typing, `+ 引用`'s `@`, a line kind, a snippet: moved when they
+ * lie after it, carried when it went around them (claimThrough), left alone
+ * otherwise. Only the claim of the *open* mention is followed by
+ * `trackClaims`; one whose mention was closed during the read (a 「，」 typed
+ * after it) kept its old place, and anything written ahead of it left it
+ * pointing into the wrong text, so the landing found no `@潮` there. Unlike
+ * `shiftClaims`, `glued` is kept: typing on through a query is not a
+ * reference landed on it.
+ *
+ * `caret`, where the host's caret is after the write (the selection's end:
+ * text restored by undo or dropped in may be left selected), says where a pure
+ * insertion or deletion was made when `editRange` cannot: inserted or
+ * deleted text repeating its neighbours reads as made anywhere along the
+ * repeat (`@` put in right ahead of `@潮`, or right after an empty `@`, or
+ * taken out again), and reading it on the wrong side of a claim's `@` hands
+ * the claim to the neighbour `@` — where the mention `sync` opens takes it
+ * over (trackClaims matches on `start`). Used only when it is a reading of
+ * the edit; without it, the greedy one.
+ */
+export function moveClaims(pending: Map<number, MentionClaim>, before: string, after: string, caret?: number): void {
+  if (pending.size === 0) return;
+  let edit = editRange(before, after);
+  if (edit.start === edit.end && edit.delta === 0) return;
+  const at = caret === undefined ? null : pureEditAt(before, after, edit.delta, caret);
+  if (at !== null) edit = { ...edit, start: at, end: at + Math.max(0, -edit.delta) };
+  for (const [id, c] of pending) {
+    if (c.start >= edit.end) { pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
+    const carried = c.start >= edit.start ? claimThrough(c, before, after, edit) : null;
+    if (carried !== null) pending.set(id, { ...c, start: carried });
+  }
+}
+
+/**
+ * Where a pure insertion (`delta > 0`) or deletion (`delta < 0`) that left
+ * the caret at `caret` began — if that is a reading of `before` → `after`,
+ * else null (the write was not a pure one at the caret).
+ */
+function pureEditAt(before: string, after: string, delta: number, caret: number): number | null {
+  if (delta === 0) return null;
+  const at = delta > 0 ? caret - delta : caret;
+  if (at < 0 || at > Math.min(before.length, after.length)) return null;
+  const head = before.slice(0, at) === after.slice(0, at);
+  const tail = delta > 0 ? before.slice(at) === after.slice(at + delta) : after.slice(at) === before.slice(at - delta);
+  return head && tail ? at : null;
 }
 
 /**
@@ -579,49 +683,6 @@ export function useKeptSelection(
 }
 
 /**
- * Drafts with a pick's file still being read, by slot (one per draft: the
- * chat key, the roleplay character, a lore modal's own id). Such a draft must
- * not be sent: the message would leave as `@潮` without the attachment, and
- * the read, finishing, would put the attachment into the emptied composer to
- * ride along with the next one. Module state, as chatStash's `pasting`, for
- * the same reason: the instance that started the read may be gone — the chat
- * composer remounts per conversation — and the one on screen now must still
- * see the draft is not ready.
- */
-const reads = new Map<string, number>();
-const readListeners = new Set<() => void>();
-
-function markMentionRead(slot: string, on: boolean): void {
-  const n = (reads.get(slot) ?? 0) + (on ? 1 : -1);
-  if (n > 0) reads.set(slot, n);
-  else reads.delete(slot);
-  for (const l of readListeners) l();
-}
-
-export function isMentionReading(slot: string): boolean {
-  return reads.has(slot);
-}
-
-function subscribeReads(listener: () => void): () => void {
-  readListeners.add(listener);
-  return () => { readListeners.delete(listener); };
-}
-
-/**
- * Count `pick` against `slot` until it settles, resolved or rejected; its
- * outcome passes through. `pick` is the whole pick — the read *and* the
- * landing — not the read alone (see useMentionReads).
- */
-export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>): Promise<T> {
-  markMentionRead(slot, true);
-  try {
-    return await pick();
-  } finally {
-    markMentionRead(slot, false);
-  }
-}
-
-/**
  * `reading`: a file picked into this draft is still being read — hosts gray
  * out sending, as they do for a paste still becoming chips. `track(pick)`
  * counts a pick until it settles, either way, and `pick` must include the
@@ -631,11 +692,25 @@ export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>):
  * and that render, draft still unlanded, runs effects: the chat composer's
  * queued send would go out with it. Counted to the end of the landing, the
  * render that lets sending through already has both.
+ *
+ * `failure`: a read of this draft failed, here or in an instance since
+ * unmounted; the host shows it, drops anything queued, and `take`s it.
+ * `fail(message)` records one — inside `pick`, for the reason above: the
+ * render that sees the count drop must already see the failure.
  */
-export function useMentionReads(slot: string): { reading: boolean; track: <T>(pick: () => Promise<T>) => Promise<T> } {
-  const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
+export function useMentionReads(slot: string): {
+  reading: boolean;
+  failure: MentionReadFailure | null;
+  track: <T>(pick: () => Promise<T>) => Promise<T>;
+  fail: (message: string) => void;
+  take: (failure: MentionReadFailure) => void;
+} {
+  const reading = useSyncExternalStore(subscribeMentionReads, () => isMentionReading(slot));
+  const failure = useSyncExternalStore(subscribeMentionReads, () => mentionReadFailure(slot));
   const track = useCallback(<T,>(pick: () => Promise<T>) => trackMentionRead(slot, pick), [slot]);
-  return { reading, track };
+  const fail = useCallback((message: string) => failMentionRead(slot, message), [slot]);
+  const take = useCallback((f: MentionReadFailure) => takeMentionReadFailure(slot, f), [slot]);
+  return { reading, failure, track, fail, take };
 }
 
 /**
@@ -672,6 +747,7 @@ export function useMentionState(): MentionState {
       shiftClaims(pending.current, before, after);
       setState((s) => shiftCore(s, before, after));
     },
+    edited: (before, after, caret) => moveClaims(pending.current, before, after, caret),
     claim: (text) => claimOf(pending.current, state, text),
     accept: (value, item, claim, projectPath, sel) => {
       const { text, landed } = acceptPick(
@@ -691,6 +767,64 @@ export function useMentionState(): MentionState {
       setState((s) => ({ ...s, scope: cycleScope(scopes, s.scope, dir, counts), active: 0 })),
     close,
   };
+}
+
+/**
+ * Tells this instance's writes to its draft from anyone else's, and moves the
+ * open mention and the picks waiting on a file read by the others' (see
+ * `MentionState.external`). The draft lives in a store and a host remounts
+ * per draft owner (a conversation, a roleplay character), so an instance
+ * unmounted by a switch can still land a `@` reference into this draft once
+ * its file read finishes; the picker would otherwise sit open over the landed
+ * reference, and a pick claimed on a `@` after it would miss its mention.
+ *
+ * Returns `own(write)`: every write this instance makes to the draft goes
+ * through it. Before the write, a store value that is not the one we last
+ * wrote is someone else's edit not rendered yet — two reads finishing in the
+ * same tick — and is moved by first, or our own landing would splice with an
+ * unshifted claim and then record the other's edit as ours. After it, the
+ * value is recorded; otherwise the render's effect finds the difference. A
+ * value, not a flag: a write that leaves the draft as it was (a pick that
+ * landed nothing, a clear of an empty draft) never renders, and a flag set for
+ * it would swallow the next write that was not ours. The instance that lands
+ * after a switch is the unmounted one, and it catches up the same way: the
+ * author's edits in the new instance move its waiting claim too.
+ *
+ * Our own writes move the *open* mention themselves: they carry their own
+ * `sync` (typing, `+ 引用`) or land text the picker's outside click has
+ * already closed on (a snippet insert, 回到这里重说). The picks still waiting
+ * on a read are moved here, after the write (`MentionState.edited`) — a
+ * mention closed during the read no longer follows the typing. Except for a
+ * landing (`{ landing: true }`): `accept` has moved the picks after it by
+ * then, and moving them again would put them past their `@`. `caret`: where
+ * the host's caret is after the write, when it knows (see moveClaims).
+ */
+export function useOwnDraft(
+  draft: string,
+  read: () => string,
+  mention: MentionState,
+): (write: () => void, opts?: { landing?: boolean; caret?: number }) => void {
+  const own = useRef(draft);
+  // Through refs, so `own` is stable and a host's `setDraft` built on it is too.
+  const readNow = useRef(read);
+  readNow.current = read;
+  const m = useRef(mention);
+  m.current = mention;
+  const catchUp = useCallback((now: string) => {
+    const before = own.current;
+    if (now === before) return;
+    own.current = now;
+    m.current.external(before, now);
+  }, []);
+  useEffect(() => { catchUp(draft); }, [draft, catchUp]);
+  return useCallback((write: () => void, opts?: { landing?: boolean; caret?: number }) => {
+    catchUp(readNow.current());
+    const before = own.current;
+    write();
+    const after = readNow.current();
+    own.current = after;
+    if (!opts?.landing && after !== before) m.current.edited(before, after, opts?.caret);
+  }, [catchUp]);
 }
 
 // ── Thumbnails ───────────────────────────────────────────────────────────────

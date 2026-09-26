@@ -16,6 +16,7 @@
 
 import { create } from "zustand";
 import type { AttachedItem } from "../lib/lore/aiTask";
+import { clearMentionReadFailures } from "../lib/agent/mentionReads";
 
 /** Same shape as a `useState` setter, so call sites read unchanged. */
 type Update<T> = T | ((prev: T) => T);
@@ -119,9 +120,15 @@ export const useComposerStore = create<ComposerState>((set) => ({
     return { roleplay: rest };
   }),
 
-  resetAll: () => set({
-    chat: {},
-    panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
-    roleplay: {},
-  }),
+  resetAll: () => {
+    // A read that failed is kept to explain the `@潮` left in its draft;
+    // every draft going, so does that — or a roleplay character (its slot
+    // outlives a project reopen) would show it beside an emptied composer.
+    clearMentionReadFailures();
+    set({
+      chat: {},
+      panelOutline: "", panelKnowledge: "", panelRequirement: "", panelInstruction: "",
+      roleplay: {},
+    });
+  },
 }));

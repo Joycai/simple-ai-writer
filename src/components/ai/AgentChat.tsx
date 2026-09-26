@@ -14,6 +14,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useIsPresent } from "motion/react";
 import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, Film, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
@@ -26,6 +27,7 @@ import {
   selectionOf,
   useKeptSelection,
   useMentionReads,
+  useOwnDraft,
   useMentionSearch,
   useMentionState,
   type MentionItem,
@@ -196,22 +198,26 @@ export function AgentChat() {
   // tab must not appear under the next.
   const draft = useComposerStore((s) => chatComposerOf(s, activeKey).draft);
   const setChatDraft = useComposerStore((s) => s.setChatDraft);
-  // The draft as this instance last wrote it. An instance unmounted by a
-  // conversation switch can still land a `@` reference into this draft once
-  // its file read finishes (handlePickMention); that write is not ours, and
-  // the effect below moves the open mention to where it is now — the picker
-  // would otherwise sit open over the landed reference, and a later `@` in
-  // the draft would keep a stale start. A value, not a flag: a write that
-  // leaves the draft as it was (a pick that landed nothing, a clear of an
-  // empty draft) never renders, and a flag set for it would swallow the next
-  // write that was not ours.
-  const ownDraft = useRef(draft);
+  // This instance is one conversation's: AiDrawer remounts the chat per
+  // conversation (`key={activeChatKey}`), so the mention state, like the
+  // draft, never spans two.
+  const mention = useMentionState();
+  // An instance unmounted by a conversation switch can still land a `@`
+  // reference into this draft once its file read finishes (handlePickMention);
+  // every write of ours goes through `ownDraft`, so that one is told apart and the open
+  // mention moved by it.
+  const ownDraft = useOwnDraft(draft, () => chatComposerOf(useComposerStore.getState(), activeKey).draft, mention);
+  // `caret`: where the caret is after this write, when the caller knows —
+  // it places an insertion that repeats its neighbours (see moveClaims).
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => {
-      setChatDraft(activeKey, update);
-      ownDraft.current = chatComposerOf(useComposerStore.getState(), activeKey).draft;
-    },
-    [setChatDraft, activeKey],
+    (update: string | ((prev: string) => string), caret?: number) =>
+      ownDraft(() => setChatDraft(activeKey, update), { caret }),
+    [setChatDraft, activeKey, ownDraft],
+  );
+  // A pick landing its reference: `accept` moves the other waiting picks itself.
+  const landDraft = useCallback(
+    (update: (prev: string) => string) => ownDraft(() => setChatDraft(activeKey, update), { landing: true }),
+    [setChatDraft, activeKey, ownDraft],
   );
   // Mirrors `draft` for the synchronous handlers that read it in the same
   // tick they wrote it (openMentionFor) or from a keydown (the queue check):
@@ -246,13 +252,9 @@ export function AgentChat() {
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
   const clearComposer = useCallback(
-    () => { clearChatComposer(activeKey); ownDraft.current = ""; },
-    [clearChatComposer, activeKey],
+    () => ownDraft(() => clearChatComposer(activeKey)),
+    [clearChatComposer, activeKey, ownDraft],
   );
-  // This instance is one conversation's: AiDrawer remounts the chat per
-  // conversation (`key={activeChatKey}`), so the mention state, like the
-  // draft, never spans two.
-  const mention = useMentionState();
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();
   /* After an insert the caret belongs at the very end and the box scrolled to
@@ -275,8 +277,13 @@ export function AgentChat() {
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
   const { onPaste: handlePaste, restore: restoreImages, pasting } = usePasteImages(activeKey, setRefs, setRefError);
   // An `@` pick's file still reading into this draft — possibly started by the
-  // instance before a switch away and back.
-  const { reading, track: trackRead } = useMentionReads(`chat:${activeKey}`);
+  // instance before a switch away and back — and a read of it that failed,
+  // likewise (handled with the queue, below).
+  const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
+    useMentionReads(`chat:${activeKey}`);
+  // False while the drawer's exit animation still has this mounted: a failure
+  // taken then would be shown to no one — left for the next instance instead.
+  const isPresent = useIsPresent();
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -320,7 +327,7 @@ export function AgentChat() {
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draftRef.current.slice(caret)}`;
-    setDraft(next);
+    setDraft(next, at + 1);
     draftRef.current = next;
     mention.sync(next, at + 1);
     // After the value lands, or the browser puts the caret back at the end.
@@ -331,7 +338,9 @@ export function AgentChat() {
   };
 
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDraft(e.target.value);
+    // The selection's end places the edit (text restored by undo may be left
+    // selected); its start is where the author is typing.
+    setDraft(e.target.value, e.target.selectionEnd ?? e.target.value.length);
     mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
   };
 
@@ -361,12 +370,10 @@ export function AgentChat() {
         // a path, as it always was.
         const outcome = await attachProjectFile(item.file, { video: canVideo });
         if (!outcome.ok) {
-          // A send queued while this read ran was written around the
-          // attachment: sent now it would go as a bare `@潮`, and `handleSend`
-          // would clear the refusal below before the author saw it. Held
-          // back, in the same render that lets sending through again.
-          setQueued(false);
-          setRefError(outcome.reason === "too-large"
+          // Recorded against the draft, not shown here: this instance may be
+          // gone, and whichever one shows the draft drops its queue and shows
+          // the refusal (the queue effect below).
+          failRead(outcome.reason === "too-large"
             ? t("ai.chat.imageTooLarge", {
                 defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
                 name: item.file.name,
@@ -400,7 +407,7 @@ export function AgentChat() {
       // after the render (useKeptSelection) — null if this instance is gone;
       // then the new instance keeps its own by reading the edit.
       const sel = selectionOf(inputRef.current);
-      setDraft((now) => {
+      landDraft((now) => {
         // Only a selection read off the text being landed into means anything
         // in it: a landing made since and not yet rendered shifted it, and
         // then the render's own reading of the DOM (useKeptSelection) is right.
@@ -412,18 +419,6 @@ export function AgentChat() {
     });
   };
 
-  // A change to the draft that was not ours (see `ownDraft`): move the open
-  // mention and any pick still waiting on a file read by the edit — they may
-  // have been landed on, or shifted by a reference landed ahead of them. Our
-  // own writes either carry their own `sync` (typing, `+ 引用`) or land text
-  // the picker's outside click has already closed on (a snippet insert,
-  // 回到这里重说).
-  useEffect(() => {
-    const before = ownDraft.current;
-    if (draft === before) return;
-    ownDraft.current = draft;
-    mention.external(before, draft);
-  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
 
@@ -565,17 +560,37 @@ export function AgentChat() {
   // still becoming chips holds it too, as does an `@` pick still reading —
   // sending now would leave the picture behind (and `canSend` would refuse,
   // dropping the queue for nothing).
+  // A read of this draft that failed — started here, or by the instance before
+  // a switch away and back — drops the queue instead: the message was written
+  // around the attachment, sent now it would go as a bare `@潮`, and
+  // `handleSend` would clear the refusal before the author saw it. Checked in
+  // this effect, first: the render that lets the queue through is the one that
+  // brings the failure, and a separate effect's `setQueued(false)` would not
+  // reach the `queued` this one closed over. The ref for the same reason one
+  // render later: the count dropping re-renders at once, and whether that
+  // render already carries the `setQueued(false)` made here depends on how
+  // React batches an effect's update with a store's — the ref is written now.
   const [queued, setQueued] = useState(false);
+  const queuedRef = useRef(false);
+  const queue = (on: boolean) => { queuedRef.current = on; setQueued(on); };
   useEffect(() => {
-    if (chatRunning || pasting || reading || !queued) return;
-    setQueued(false);
+    if (readFailure) {
+      // On the way out: not taken, and nothing sent — the queue dies with us.
+      if (!isPresent) return;
+      takeReadFailure(readFailure);
+      queue(false);
+      setRefError(readFailure.message);
+      return;
+    }
+    if (chatRunning || pasting || reading || !queued || !queuedRef.current) return;
+    queue(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, pasting, reading, queued]);
+  }, [chatRunning, pasting, reading, queued, readFailure, isPresent]);
 
   const handleStop = () => {
-    setQueued(false);
+    queue(false);
     stopChat();
   };
 
@@ -684,7 +699,7 @@ export function AgentChat() {
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       if (chatRunning) {
-        if (hasMessage(draftRef.current, refs) && activeModelId) setQueued(true);
+        if (hasMessage(draftRef.current, refs) && activeModelId) queue(true);
         return;
       }
       handleSend();

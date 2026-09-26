@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useIsPresent } from "motion/react";
 import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore";
@@ -60,7 +61,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, type MentionItem,
+  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, useOwnDraft, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -300,10 +301,29 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const refs = useComposerStore((s) => roleplayComposerOf(s, agent.id).refs);
   const setRoleplayDraft = useComposerStore((s) => s.setRoleplayDraft);
   const setRoleplayRefs = useComposerStore((s) => s.setRoleplayRefs);
-  const clearComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  const clearRoleplayComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
+  // 一样只属于这一位。
+  const mention = useMentionState();
+  // 读文件期间切走角色再切回，旧实例读完照样把 `@[名字]` 落进这份草稿——那不是
+  // 这个实例写的。自己的每次写入都经 `ownDraft`，别人的就认得出来，开着的提名和等着读完
+  // 的 claim 跟着改动段平移（对话助手同一个 hook）。
+  const ownDraft = useOwnDraft(draft, () => roleplayComposerOf(useComposerStore.getState(), agent.id).draft, mention);
+  // `caret`：写完之后光标在哪（调用方知道时给）——插入的字与邻字重复时，靠它
+  // 判断插在等着的 claim 前面还是后面（见 moveClaims）。
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => setRoleplayDraft(agent.id, update),
-    [agent.id, setRoleplayDraft],
+    (update: string | ((prev: string) => string), caret?: number) =>
+      ownDraft(() => setRoleplayDraft(agent.id, update), { caret }),
+    [agent.id, setRoleplayDraft, ownDraft],
+  );
+  // 选中之后落字这一次：`accept` 已经自己平移了其余等着的 claim，不再平移一遍。
+  const landDraft = useCallback(
+    (update: (prev: string) => string) => ownDraft(() => setRoleplayDraft(agent.id, update), { landing: true }),
+    [agent.id, setRoleplayDraft, ownDraft],
+  );
+  const clearComposer = useCallback(
+    () => ownDraft(() => clearRoleplayComposer(agent.id)),
+    [agent.id, clearRoleplayComposer, ownDraft],
   );
   const setRefs = useCallback(
     (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) => setRoleplayRefs(agent.id, update),
@@ -402,11 +422,18 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       instruction,
     });
   }, [projectPath, agent, updateAgent]);
-  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
-  // 一样只属于这一位。
-  const mention = useMentionState();
   // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
-  const { reading, track: trackRead } = useMentionReads(`roleplay:${agent.id}`);
+  // 读失败了也按角色记：发起读取的实例可能已经不在，拒绝提示由屏上这一个（或
+  // 下一个挂上这位角色的）显示，显示过就取走。抽屉收起的退场动画期间这个实例
+  // 还挂着、但没人看得见，那时不取，留给下一个。
+  const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
+    useMentionReads(`roleplay:${agent.id}`);
+  const isPresent = useIsPresent();
+  useEffect(() => {
+    if (!readFailure || !isPresent) return;
+    takeReadFailure(readFailure);
+    setRefError(readFailure.message);
+  }, [readFailure, takeReadFailure, isPresent]);
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
@@ -641,7 +668,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const doSend = () => {
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
-    clearComposer(agent.id);
+    clearComposer();
     // 放行发送的 Enter（哪个档都没命中的 @）不会自己关掉提名；空列表的选择器
     // 现在会留在屏上，不关它就一直挂在空输入框上方吃 Tab 和方向键。
     mention.close();
@@ -670,7 +697,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draft.slice(caret)}`;
-    setDraft(next);
+    setDraft(next, at + 1);
     mention.sync(next, at + 1);
     requestAnimationFrame(() => {
       el?.focus();
@@ -688,7 +715,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const applyKind = (kind: ScriptSegmentKind) => {
     const el = taRef.current;
     const { text, caret } = applyLineKind(draft, el?.selectionStart ?? draft.length, kind);
-    setDraft(text);
+    setDraft(text, caret);
     mention.sync(text, caret);
     requestAnimationFrame(() => {
       el?.focus();
@@ -752,7 +779,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
           // 一条悄悄少了张图的消息从记录上根本看不出来。
           if (bytes.length > MAX_IMAGE_BYTES) {
-            setRefError(t("roleplay.composer.imageTooLarge", {
+            failRead(t("roleplay.composer.imageTooLarge", {
               name: item.file.name,
               size: (bytes.length / 1024 / 1024).toFixed(1),
               max: MAX_IMAGE_BYTES / 1024 / 1024,
@@ -762,7 +789,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           }
           attach({ kind: "image", file: item.file, dataUrl, downscaled });
         } catch {
-          setRefError(t("roleplay.composer.refUnreadable", {
+          failRead(t("roleplay.composer.refUnreadable", {
             name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;
@@ -772,7 +799,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           const content = await readFile(item.file.path);
           attach({ kind: "text", file: item.file, content });
         } catch {
-          setRefError(t("roleplay.composer.refUnreadable", {
+          failRead(t("roleplay.composer.refUnreadable", {
             name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;
@@ -783,7 +810,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
       // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
       const sel = selectionOf(taRef.current);
-      setDraft((now) => {
+      landDraft((now) => {
         // 框里显示的正是 `now` 时，读到的选区才在这段文本的坐标里；之前另一处落字
         // 已写进 store 还没渲染，就交给渲染时读 DOM 那一份（useKeptSelection）。
         const landed = mention.accept(now, item, claim, projectPath, taRef.current?.value === now ? sel : null);
@@ -1341,7 +1368,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                   : t("roleplay.composer.placeholder", { defaultValue: "说一句台词，或写一个动作…" })
               }
               onChange={(e) => {
-                setDraft(e.target.value);
+                // 选区终点定位这次改动（撤销恢复的字可能保持选中），起点是作者在打的位置。
+                setDraft(e.target.value, e.target.selectionEnd);
                 mention.sync(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={onKeyDown}

@@ -39,8 +39,9 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, isMentionReading, landSelection, mentionKeyDown, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, trackMentionRead, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, landSelection, mentionKeyDown, moveClaims, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
+const { applyLineKind } = await import("../../roleplay/markup");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -404,68 +405,115 @@ describe("a selection through an edit someone else made", () => {
   });
 });
 
-describe("a draft with a pick's file still reading", () => {
-  /** A read the test settles by hand. */
-  function deferred<T>() {
-    let resolve!: (v: T) => void, reject!: (e: unknown) => void;
-    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
-    return { promise, resolve, reject };
-  }
+// ── The whole protocol, driven the way a host drives it ──────────────────────
 
-  it("counts from the read's start until it settles, and passes its result through", async () => {
-    const read = deferred<string>();
-    const tracked = trackMentionRead("chat:c1", () => read.promise);
-    expect(isMentionReading("chat:c1")).toBe(true);
-    read.resolve("潮汐.png");
-    await expect(tracked).resolves.toBe("潮汐.png");
-    expect(isMentionReading("chat:c1")).toBe(false);
+describe("moveClaims", () => {
+  const claims = () => new Map<number, MentionClaim>([
+    [1, { id: 1, start: 2, query: "潮", glued: true }],
+    [2, { id: 2, start: 7, query: "夜", glued: false }],
+  ]);
+
+  it("moves the picks after an edit by its length, and leaves those before it", () => {
+    const p = claims();
+    moveClaims(p, "看看@潮，再看@夜", "看看@潮，我们再看@夜");
+    expect(p.get(1)!.start).toBe(2);
+    expect(p.get(2)!.start).toBe(9);
   });
 
-  it("stops counting a read that fails, and passes the failure through", async () => {
-    const read = deferred<string>();
-    const tracked = trackMentionRead("roleplay:沈砚", () => read.promise);
-    read.reject(new Error("读不到"));
-    await expect(tracked).rejects.toThrow("读不到");
-    expect(isMentionReading("roleplay:沈砚")).toBe(false);
+  it("moves a pick an insertion was made right ahead of", () => {
+    const p = claims();
+    moveClaims(p, "看看@潮，再看@夜", "看看你@潮，再看@夜");
+    expect(p.get(1)!.start).toBe(3);
+    expect(p.get(2)!.start).toBe(8);
   });
 
-  it("keeps drafts apart, and holds one until every read in it is done", async () => {
-    const a = deferred<void>(), b = deferred<void>(), other = deferred<void>();
-    const ta = trackMentionRead("chat:c2", () => a.promise);
-    const tb = trackMentionRead("chat:c2", () => b.promise);
-    const to = trackMentionRead("chat:c3", () => other.promise);
-    a.resolve();
-    await ta;
-    expect(isMentionReading("chat:c2")).toBe(true);
-    other.resolve();
-    await to;
-    expect(isMentionReading("chat:c3")).toBe(false);
-    expect(isMentionReading("chat:c2")).toBe(true);
-    b.resolve();
-    await tb;
-    expect(isMentionReading("chat:c2")).toBe(false);
+  it("leaves a pick whose query is typed on, glued or not — that is not a landing", () => {
+    const p = claims();
+    moveClaims(p, "看看@潮，再看@夜", "看看@潮汐，再看@夜");
+    expect(p.get(1)).toEqual({ id: 1, start: 2, query: "潮", glued: true });
+    expect(p.get(2)!.start).toBe(8);
   });
 
-  it("holds the draft until the pick has landed, not just until the file is read", async () => {
-    // Dropping the count re-renders at once — a render that let a queued
-    // send through before the landing would send the draft without it.
-    const read = deferred<string>();
-    let draft = "看看@潮";
-    const seen: boolean[] = [];
-    const tracked = trackMentionRead("lore:r1", async () => {
-      const name = await read.promise;
-      seen.push(isMentionReading("lore:r1"));
-      draft = `看看@[${name}]`;
-    });
-    read.resolve("潮汐.png");
-    await tracked;
-    expect(seen).toEqual([true]);
-    expect(isMentionReading("lore:r1")).toBe(false);
-    expect(draft).toBe("看看@[潮汐.png]");
+  it("does nothing for an edit that keeps the length", () => {
+    const p = claims();
+    moveClaims(p, "看看@潮，再看@夜", "看看@潮。再看@夜");
+    expect(p.get(2)!.start).toBe(7);
+  });
+
+  it("carries a pick through a line kind, which rewrites both ends of its line", () => {
+    const one = (start: number) => new Map<number, MentionClaim>([[1, { id: 1, start, query: "潮", glued: false }]]);
+    const line = "我看着@潮，";
+    const action = applyLineKind(line, line.length, "action").text;
+    expect(action).toBe("*我看着@潮，*");
+    const p = one(3);
+    moveClaims(p, line, action);
+    expect(p.get(1)!.start).toBe(4);
+    // One kind for another: both marks replaced.
+    const speech = applyLineKind(action, 4, "speech").text;
+    expect(speech).toBe("「我看着@潮，」");
+    moveClaims(p, action, speech);
+    expect(p.get(1)!.start).toBe(4);
+    expect(speech.startsWith("@潮", p.get(1)!.start)).toBe(true);
+  });
+
+  it("leaves a pick whose own letters were rewritten inside the span", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 3, query: "潮", glued: false }]]);
+    moveClaims(p, "我看着@潮，", "*我看着@夜，*");
+    expect(p.get(1)!.start).toBe(3);
+  });
+
+  it("places an insertion that repeats its neighbours by the caret", () => {
+    // `@` put in right ahead of the pick's `@` (caret now after it, at 3).
+    const ahead = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
+    moveClaims(ahead, "看看@潮，", "看看@@潮，", 3);
+    expect(ahead.get(1)!.start).toBe(3);
+    // ` @` put in right after an empty `@` (`+ 引用` pads it): the pick stays.
+    const behind = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "", glued: false }]]);
+    moveClaims(behind, "看看@夜", "看看@ @夜", 5);
+    expect(behind.get(1)!.start).toBe(2);
+    // And taken out again with Backspace: the pick goes back with the text.
+    moveClaims(ahead, "看看@@潮，", "看看@潮，", 2);
+    expect(ahead.get(1)!.start).toBe(2);
+  });
+
+  it("carries a glued pick through its own line kind — only another instance's landing reads as `@[`", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 3, query: "潮", glued: true }]]);
+    const line = "我看着@潮[注]";
+    moveClaims(p, line, applyLineKind(line, line.length, "action").text);
+    expect(p.get(1)).toEqual({ id: 1, start: 4, query: "潮", glued: true });
+  });
+
+  it("ignores a caret that is not where the edit could have been made", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
+    moveClaims(p, "看看@潮，", "看看@潮，好", 1);
+    expect(p.get(1)!.start).toBe(2);
   });
 });
 
-// ── The whole protocol, driven the way a host drives it ──────────────────────
+describe("shiftClaims through a span that covers a pick", () => {
+  it("carries a pick another instance's edits went around — ahead of it and after it at once", () => {
+    // The instance that lands after a switch catches up in one diff: 「你」 at
+    // the head and 「，」 at the tail are one span with the claim inside.
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
+    shiftClaims(p, "我看@潮", "你我看@潮，");
+    expect(p.get(1)).toEqual({ id: 1, start: 3, query: "潮", glued: false });
+  });
+
+  it("never carries a glued pick, nor an empty one a reference now follows — both read as landed on", () => {
+    const glued = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: true }]]);
+    shiftClaims(glued, "我@[草稿]", "你我@[潮汐.png][草稿]，");
+    expect(glued.get(1)).toEqual({ id: 1, start: 1, query: "", glued: false });
+    const empty = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: false }]]);
+    moveClaims(empty, "我@夜", "你我@[潮汐.png]夜，");
+    expect(empty.get(1)!.start).toBe(1);
+  });
+
+  it("still leaves a pick a reference was landed on, and drops its glue", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "", glued: true }]]);
+    shiftClaims(p, "看看@[草稿]", "看看@[潮汐.png][草稿]");
+    expect(p.get(1)).toEqual({ id: 1, start: 2, query: "", glued: false });
+  });
+});
 
 describe("a pick across a file read", () => {
   const closed: MentionCore = { open: false, id: 0, query: "", active: 0, scope: "all", start: 0 };
@@ -479,8 +527,9 @@ describe("a pick across a file read", () => {
     const pending = new Map<number, MentionClaim>();
     const spent = new Set<number>();
     let text = "";
-    const type = (next: string, caret = next.length) => { text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
-    /** Another instance wrote the draft: what AgentChat's `ownDraft` effect does. */
+    /** Typing, or any other write of the host's own but a landing: `useOwnDraft` moves the waiting picks, then `sync`. */
+    const type = (next: string, caret = next.length) => { moveClaims(pending, text, next, caret); text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
+    /** Another instance wrote the draft: what `useOwnDraft` does for both chat hosts. */
     const external = (next: string) => { shiftClaims(pending, text, next); core = shiftCore(core, text, next); text = next; trackClaims(pending, core); };
     const claim = () => claimOf(pending, core, text)!;
     /** Tab in the picker: the host's `cycleScope`, reduced to what this test needs. */
@@ -492,6 +541,56 @@ describe("a pick across a file read", () => {
     };
     return { type, external, claim, narrow, accept, state: () => core };
   }
+
+  it("closed during the read, then written ahead of: the pick still lands", () => {
+    // 「，」 closes the mention, so `trackClaims` no longer follows its claim;
+    // what is written ahead of it after that moves it only through moveClaims.
+    const h = host();
+    h.type("我看着@潮");
+    const a = h.claim();
+    h.type("我看着@潮，");
+    h.type("你我看着@潮，", 1); // typed at the head
+    h.type("*你我看着@潮，", 1); // a line kind's marker, put in by the host
+    expect(h.accept("*你我看着@潮，", pic("插图/潮汐.png"), a)).toBe("*你我看着@[潮汐.png]，");
+  });
+
+  it("closed during the read, then `+ 引用` puts an `@` ahead of it: both land", () => {
+    const h = host();
+    h.type("看看@潮");
+    const a = h.claim();
+    h.type("看看@潮，");
+    h.type("@看看@潮，", 1); // `+ 引用` at the head: a new mention there
+    const b = h.claim();
+    const afterA = h.accept("@看看@潮，", pic("插图/潮汐.png"), a);
+    expect(afterA).toBe("@看看@[潮汐.png]，");
+    expect(h.accept(afterA, pic("插图/夜航.png"), b)).toBe("@[夜航.png]看看@[潮汐.png]，");
+  });
+
+  it("closed during the read, then `+ 引用` right ahead of its `@`: the new mention does not take the pick over", () => {
+    const h = host();
+    h.type("看看@潮");
+    const a = h.claim();
+    h.type("看看@潮，");
+    h.type("看看@@潮，", 3); // `+ 引用` with the caret on the `@`: the caret ends after the new one
+    for (const t of ["看看@雾@潮，"]) h.type(t, 4);
+    const b = h.claim();
+    const afterA = h.accept("看看@雾@潮，", pic("插图/潮汐.png"), a);
+    expect(afterA).toBe("看看@雾@[潮汐.png]，");
+    expect(h.accept(afterA, pic("插图/雾港.png"), b)).toBe("看看@[雾港.png]@[潮汐.png]，");
+  });
+
+  it("an empty `@` still reading, then `+ 引用` right after it: each pick lands on its own `@`", () => {
+    const h = host();
+    h.type("看看@");
+    const a = h.claim();
+    h.type("看看@夜", 3); // typed on, then moved back to right after the `@`
+    h.type("看看@ @夜", 5); // `+ 引用` pads the `@` and puts the caret after its own
+    const b = h.claim();
+    const afterA = h.accept("看看@ @夜", pic("插图/潮汐.png"), a);
+    expect(afterA).toBe("看看@[潮汐.png] @夜");
+    // The second `@` was picked empty, the caret right after it: `夜` stays prose.
+    expect(h.accept(afterA, pic("插图/夜航.png"), b)).toBe("看看@[潮汐.png] @[夜航.png]夜");
+  });
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
     const h = host();
