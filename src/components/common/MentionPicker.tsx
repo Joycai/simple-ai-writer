@@ -147,6 +147,12 @@ export interface MentionState {
    */
   external: (before: string, after: string) => void;
   /**
+   * For an edit of this instance's own that was not a landing: move the picks
+   * waiting on a file read by it (see moveClaims). The open mention is the
+   * host's `sync` to move. `useOwnDraft` calls it.
+   */
+  edited: (before: string, after: string) => void;
+  /**
    * A pick's handle on the mention it came from — take it *before* any
    * await, with the text as it is then, and hand it to `accept` after. Null
    * when no mention is open.
@@ -350,6 +356,24 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
   for (const [id, c] of pending) {
     if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); }
     else if (c.glued && inEdit(c.start, c.query, edit)) pending.set(id, { ...c, glued: false });
+  }
+}
+
+/**
+ * The waiting picks after an edit of this instance's own that was not a
+ * landing — typing, `+ 引用`'s `@`, a line kind, a snippet: moved when they
+ * lie after it, left alone otherwise. Only the claim of the *open* mention is
+ * followed by `trackClaims`; one whose mention was closed during the read (a
+ * 「，」 typed after it) kept its old place, and anything written ahead of it
+ * left it pointing into the wrong text, so the landing found no `@潮` there.
+ * Unlike `shiftClaims`, `glued` is kept: typing on through a query is not a
+ * reference landed on it.
+ */
+export function moveClaims(pending: Map<number, MentionClaim>, before: string, after: string): void {
+  const edit = editRange(before, after);
+  if (edit.delta === 0) return;
+  for (const [id, c] of pending) {
+    if (c.start >= edit.end) pending.set(id, { ...c, start: c.start + edit.delta });
   }
 }
 
@@ -652,6 +676,7 @@ export function useMentionState(): MentionState {
       shiftClaims(pending.current, before, after);
       setState((s) => shiftCore(s, before, after));
     },
+    edited: (before, after) => moveClaims(pending.current, before, after),
     claim: (text) => claimOf(pending.current, state, text),
     accept: (value, item, claim, projectPath, sel) => {
       const { text, landed } = acceptPick(
@@ -696,28 +721,37 @@ export function useMentionState(): MentionState {
  *
  * Our own writes move the *open* mention themselves: they carry their own
  * `sync` (typing, `+ 引用`) or land text the picker's outside click has
- * already closed on (a snippet insert, 回到这里重说). A claim still waiting
- * on a read whose mention was closed is not moved by an own rewrite ahead of
- * it (`+ 引用`, roleplay's line kinds) — see the brief's 未做、可做.
+ * already closed on (a snippet insert, 回到这里重说). The picks still waiting
+ * on a read are moved here, after the write (`MentionState.edited`) — a
+ * mention closed during the read no longer follows the typing. Except for a
+ * landing (`{ landing: true }`): `accept` has moved the picks after it by
+ * then, and moving them again would put them past their `@`.
  */
-export function useOwnDraft(draft: string, read: () => string, mention: MentionState): (write: () => void) => void {
+export function useOwnDraft(
+  draft: string,
+  read: () => string,
+  mention: MentionState,
+): (write: () => void, opts?: { landing?: boolean }) => void {
   const own = useRef(draft);
   // Through refs, so `own` is stable and a host's `setDraft` built on it is too.
   const readNow = useRef(read);
   readNow.current = read;
-  const external = useRef(mention.external);
-  external.current = mention.external;
+  const m = useRef(mention);
+  m.current = mention;
   const catchUp = useCallback((now: string) => {
     const before = own.current;
     if (now === before) return;
     own.current = now;
-    external.current(before, now);
+    m.current.external(before, now);
   }, []);
   useEffect(() => { catchUp(draft); }, [draft, catchUp]);
-  return useCallback((write: () => void) => {
+  return useCallback((write: () => void, opts?: { landing?: boolean }) => {
     catchUp(readNow.current());
+    const before = own.current;
     write();
-    own.current = readNow.current();
+    const after = readNow.current();
+    own.current = after;
+    if (!opts?.landing && after !== before) m.current.edited(before, after);
   }, [catchUp]);
 }
 

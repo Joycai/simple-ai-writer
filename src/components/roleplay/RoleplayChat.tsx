@@ -313,6 +313,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     (update: string | ((prev: string) => string)) => ownDraft(() => setRoleplayDraft(agent.id, update)),
     [agent.id, setRoleplayDraft, ownDraft],
   );
+  // 选中之后落字这一次：`accept` 已经自己平移了其余等着的 claim，不再平移一遍。
+  const landDraft = useCallback(
+    (update: (prev: string) => string) => ownDraft(() => setRoleplayDraft(agent.id, update), { landing: true }),
+    [agent.id, setRoleplayDraft, ownDraft],
+  );
   const clearComposer = useCallback(
     () => ownDraft(() => clearRoleplayComposer(agent.id)),
     [agent.id, clearRoleplayComposer, ownDraft],
@@ -802,7 +807,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
       // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
       const sel = selectionOf(taRef.current);
-      setDraft((now) => {
+      landDraft((now) => {
         // 框里显示的正是 `now` 时，读到的选区才在这段文本的坐标里；之前另一处落字
         // 已写进 store 还没渲染，就交给渲染时读 DOM 那一份（useKeptSelection）。
         const landed = mention.accept(now, item, claim, projectPath, taRef.current?.value === now ? sel : null);

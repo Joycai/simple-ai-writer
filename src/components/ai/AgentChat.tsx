@@ -211,6 +211,11 @@ export function AgentChat() {
     (update: string | ((prev: string) => string)) => ownDraft(() => setChatDraft(activeKey, update)),
     [setChatDraft, activeKey, ownDraft],
   );
+  // A pick landing its reference: `accept` moves the other waiting picks itself.
+  const landDraft = useCallback(
+    (update: (prev: string) => string) => ownDraft(() => setChatDraft(activeKey, update), { landing: true }),
+    [setChatDraft, activeKey, ownDraft],
+  );
   // Mirrors `draft` for the synchronous handlers that read it in the same
   // tick they wrote it (openMentionFor) or from a keydown (the queue check):
   // the render that made them may hold an older value. Not for anything
@@ -397,7 +402,7 @@ export function AgentChat() {
       // after the render (useKeptSelection) — null if this instance is gone;
       // then the new instance keeps its own by reading the edit.
       const sel = selectionOf(inputRef.current);
-      setDraft((now) => {
+      landDraft((now) => {
         // Only a selection read off the text being landed into means anything
         // in it: a landing made since and not yet rendered shifted it, and
         // then the render's own reading of the DOM (useKeptSelection) is right.

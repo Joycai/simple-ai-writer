@@ -102,6 +102,10 @@ export function AttachmentTextarea({
   const attachedKeys = new Set(attached.map(attachedKey));
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // Picks still reading move with what is typed ahead of them — the open
+    // mention is `sync`'s, a closed one only moves here (see moveClaims).
+    // Typing is this field's only write besides a landing, so no `useOwnDraft`.
+    mention.edited(latest.current.instruction, e.target.value);
     onInstructionChange(e.target.value);
     mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
   };
