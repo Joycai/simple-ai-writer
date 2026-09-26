@@ -167,7 +167,9 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 ### `src/components/common/`
 
-shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it)
+shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it) and `Highlighted` (the one `MatchRange[]` painter for every list ranked by `lib/search`'s `matchText` — ⌘K and the `@` picker draw the same hit the same way; it only paints, merging stays with the search)
+
+`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器：`useMentionState` 管 @ 检测与落字（`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`），组件只画。列表顶上一行作用域 chip（设计稿 02i）：「全部」恒在，有条目才有「条目」、有文件就有「文档」、有图才有「图片」（`availableScopes`）；状态是一个对象，`sync` 是纯函数 `syncMention(prev, value, caret)`——新开（含提名开着时另起一个 `@`）把档位重置为「全部」、高亮回第 0 行，同一个 `@` 上继续则保留档位；每个提名有序号，选中那一刻 `claim()` 登记到按 id 记的待落表（`trackClaims` 每次渲染让表项跟着打字、关了保留、同一 `@` 上重开的也跟；一张表就是一份草稿——三个宿主都按草稿重挂，对话助手是 `AiDrawer` 的 `key={activeChatKey}`），读完文件再 `accept(value, item, claim, projectPath)` 落字（`acceptPick`：只落一次、按表里的当前位置、打长了且 `matchesMention` 仍找得到就整段替换否则退回快照 query、没落上不记账不关提名、落上了平移后面的 claim；`afterAccept`：关掉被 claim 的与同一 `@` 上重开的，后起的 `@夜` 平移 `start`——宿主程序化落字不再 `sync`），落字是纯函数 `spliceMention`，原位已不是 `@query` 就不动正文；对话助手读文件期间切了会话：旧实例照样落进原会话，正文经 store 的 updater 落进该会话此刻的草稿（不用冻结在切走那一刻的 `draftRef`，否则切回来接着打的字会被整段覆盖）；新实例拿 `ownDraft` 认出这次写不是自己的，按 `editRange` 夹出的改动段平移开着的提名与等着的 claim（`shiftCore` / `shiftClaims`），不按光标找、不重开。匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主经同文件的 `useMentionSearch(candidates, mention, projectPath)` 跑它（选择器不在屏上时什么都不算——候选每次条目写入、文件树刷新都在变），键盘协议只有 `mentionKeyDown` 这一份（Esc 关、组字期间交还输入法、Tab 切档、↑↓、Enter 选中或在空档吞掉），三个宿主各调一次、只在「选中之后做什么」上不同——第一版三处手抄，一个 PR 里就漂了一次（弹窗漏了 IME 守卫，扮演拿裸 `composing` 当门）。门是 `search.open` = `mention.open && candidates.length > 0`：空档仍渲染（chip 行 + 一行事实），但一个候选都没有时没什么可分档，选择器照旧不出来、键照旧放过。命中高亮用 `common/Highlighted`，与 ⌘K 同一个组件。理由：`docs/feature/agent/mention-scope-ui-brief.md`
 
 ### `src/components/command/`, `onboarding/`, `library/`
 
@@ -537,6 +539,8 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 ### `src/lib/search/`
 
 `globalSearch.ts`：⌘K 全局搜索的纯逻辑层——搜什么、怎么排、高亮哪一段。面板只做接线（把 `projectStore.fileTree` / `loreStore.index` / `editorStore.content` / `navStore.past` 递进来，把命中递给渲染），所以这一层能在 node 下测，面板换样子（设计稿 01d）时一个字都不用动。三条决定：**子串 > 词首 > 子序列**，且子序列**只在文档名和条目名上允许**（`ch3 ren` 命中 `第三章/人物小传.md` 是 ⌘P 的肌肉记忆），正文行上不允许——一行几十个字里几乎任何两个字都能按顺序找到，子序列在那里只是噪音；**空格分词、每个词各自命中**，一个词可以落在文档名上、另一个落在分组路径上，全中才算中；**回传的是区间而不是布尔**——高亮由区间画，旧面板在渲染时再 `indexOf` 一次查询串，只能亮第一个子串，子序列和多词一个都亮不出来。`currentTextDocument` 那条小闸也在这里：文本缓冲只在它属于 `projectStore` 说的当前文件时才可搜（文件加载是异步的，而图片刻意把上一份文本缓冲留在原地，两个条件各自都不够）。设计：`docs/feature/global-search-ui-brief.md`
+
+`mentionSearch.ts`：`@` 选择器的纯逻辑层（设计稿 02i）——作用域是先于一切的硬过滤（`scopeOf`：条目 / 文档 / 图片，录音与视频归文档档），`availableScopes` 是三个宿主 chip 行的**唯一**来源（有任何文件就保留「文档」档，行的形状不随项目有没有图而变），`searchMentions` 复用 `matchText`、每个词取名字 / 别名 / 分组路径 / 整条相对路径里最优的字段（×1 / ×0.9 / ×0.6 / ×0.5，后两档是 `searchFiles` 的；分组与路径只认子串和词首——这里的命中有牙，Enter 会替换作者的字并附上文件）；库层逐词与 ⌘K 一致，但宿主永远只送一个词（空格结束提名），作者能打出的「分组 + 名字」是一个词跨 `/`（两者都按最后一个 `/` 拆开，左半严格对分组、右半对名字、两半均分 ×0.5；整条路径档只剩 `/` 在词首或词尾的词），空查询不打分而是按类交错——只有十行，作者刚打 `@` 就该看见两类都在；`countByScope` 只数不切，给空档那一行「别处有几条」。用结构化的 `MentionLike` 而不是组件的 `MentionItem`：`lib` 不 import `components`。旧的 `filterMentions`（只 `includes`、不排序、只看名字、条目独占前十）就是这里替掉的。理由：`docs/feature/agent/mention-scope-ui-brief.md`
 
 ### `src/lib/configsync/`
 

@@ -9,14 +9,14 @@
  * components/common/MentionPicker.
  */
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Image, X } from "lucide-react";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import {
   MentionPicker,
-  filterMentions,
   mentionKey,
-  mentionLabel,
+  mentionKeyDown,
+  useMentionSearch,
   useMentionState,
   type MentionItem,
 } from "../../common/MentionPicker";
@@ -24,6 +24,8 @@ import { readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
 import { imageForModel } from "../../../lib/image/normalize";
 import { attachedKey, type AttachedItem } from "../../../lib/lore/aiTask";
 import type { LoreEntity } from "../../../lib/lore";
+import { useImeGuard } from "../../../lib/ime";
+import { useProjectStore } from "../../../stores/projectStore";
 import styles from "./AttachmentTextarea.module.css";
 
 interface AttachmentTextareaProps {
@@ -57,6 +59,8 @@ export function AttachmentTextarea({
   textareaClassName,
 }: AttachmentTextareaProps) {
   const mention = useMentionState();
+  // A pinyin Enter commits the word being typed; it must not also pick a row.
+  const ime = useImeGuard();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // `attached` and `instruction` are props captured at render. Reading a large
@@ -65,13 +69,17 @@ export function AttachmentTextarea({
   const latest = useRef({ attached, instruction });
   latest.current = { attached, instruction };
 
-  const candidates: MentionItem[] = [
+  // For a document's group-path line and its share of the match.
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const candidates: MentionItem[] = useMemo(() => [
     ...entities.map((entity): MentionItem => ({ type: "lore", entity })),
     // No recordings on a lore surface: nothing here can read or transcribe
     // one, and the fallback branch below would try to read it as text.
     ...projectFiles.filter((f) => f.kind !== "media").map((file): MentionItem => ({ type: "file", file })),
-  ];
-  const items = filterMentions(candidates, mention.query);
+  ], [entities, projectFiles]);
+  // Scoped, ranked and cut (设计稿 02i) by the same hook as the chat
+  // composers; `search.open` is the picker's one gate.
+  const search = useMentionSearch(candidates, mention, projectPath);
   const attachedKeys = new Set(attached.map(attachedKey));
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -81,6 +89,9 @@ export function AttachmentTextarea({
 
   const handlePick = async (item: MentionItem) => {
     if (attachedKeys.has(mentionKey(item))) { mention.close(); return; }
+    // Before the await: the mention this pick came from.
+    const claim = mention.claim(latest.current.instruction);
+    if (!claim) return;
     if (item.type === "lore") {
       onAttachedChange([...latest.current.attached, { kind: "lore", entity: item.entity }]);
     } else {
@@ -91,16 +102,16 @@ export function AttachmentTextarea({
         const attachment: AttachedItem = item.file.kind === "image"
           ? { kind: "image", file: item.file, dataUrl: (await imageForModel(item.file.path)).dataUrl }
           : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
-        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) {
-          mention.close();
-          return; // picked twice while the read was running
-        }
+        // Picked twice while the read was running: the first pick's accept
+        // already closed the claimed mention, and a mention opened since is
+        // not this pick's to close.
+        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) return;
         onAttachedChange([...latest.current.attached, attachment]);
       } catch {
         return; // skip unreadable
       }
     }
-    onInstructionChange(mention.accept(latest.current.instruction, mentionLabel(item)));
+    onInstructionChange(mention.accept(latest.current.instruction, item, claim, projectPath));
     textareaRef.current?.focus();
   };
 
@@ -118,22 +129,13 @@ export function AttachmentTextarea({
           placeholder={placeholder}
           value={instruction}
           onChange={handleChange}
-          onKeyDown={(e) => {
-            // Only while the picker is actually on screen — it renders nothing
-            // when nothing matches, and keys must fall through to the textarea.
-            if (!mention.open || items.length === 0) return;
-            // Consume Escape here so it closes the picker without also
-            // dismissing the surrounding modal (ModalShell).
-            if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-            if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return; }
-            if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return; }
-            if (e.key === "Enter" || e.key === "Tab") {
-              e.preventDefault();
-              void handlePick(items[mention.active] ?? items[0]);
-            }
-          }}
+          // The picker's keys while it is on screen; everything else falls
+          // through to the textarea. Escape is consumed there so it closes the
+          // picker without also dismissing the surrounding modal (ModalShell).
+          onKeyDown={(e) => { mentionKeyDown(e, mention, search, ime.isComposing(e), (item) => void handlePick(item)); }}
           disabled={disabled}
           autoFocus={autoFocus}
+          {...ime.imeProps}
         />
       </div>
 
@@ -155,14 +157,14 @@ export function AttachmentTextarea({
         </div>
       )}
 
-      {mention.open && (
+      {search.open && (
         <MentionPicker
           anchorRef={wrapRef}
-          items={items}
+          mention={mention}
+          search={search}
+          projectPath={projectPath}
           usedKeys={attachedKeys}
-          activeIndex={mention.active}
           onPick={(item) => void handlePick(item)}
-          onDismiss={mention.close}
         />
       )}
     </div>

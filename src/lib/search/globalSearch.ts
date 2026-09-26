@@ -120,7 +120,7 @@ function matchToken(lower: string, tok: string, subsequence: boolean): TextMatch
   return { score: 40 + runs * 6 + boundaries * 8 - Math.min(gaps, 30), ranges };
 }
 
-function mergeRanges(ranges: MatchRange[]): MatchRange[] {
+export function mergeRanges(ranges: MatchRange[]): MatchRange[] {
   const sorted = [...ranges].sort((a, b) => a.start - b.start || a.end - b.end);
   const out: MatchRange[] = [];
   for (const r of sorted) {

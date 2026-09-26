@@ -1997,7 +1997,17 @@
     "mention": {
       "badgeImage": "image",
       "badgeMedia": "Audio",
-      "badgeVideo": "Video"
+      "badgeVideo": "Video",
+      "scopeAll": "All",
+      "scopeImage": "Images",
+      "tabHint": "switches",
+      "switchOver": "to switch",
+      "emptyIn": "No “{{q}}” in {{scope}}",
+      "emptyScope": "Nothing in {{scope}} yet",
+      "emptyAll": "No match for “{{q}}”",
+      "countLore": "{{n}} in {{scope}}",
+      "countText": "{{n}} in {{scope}}",
+      "countImage": "{{n}} in {{scope}}"
     },
     "chat": {
       "tab": "Assistant",

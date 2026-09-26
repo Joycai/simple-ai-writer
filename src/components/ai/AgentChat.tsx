@@ -21,9 +21,9 @@ import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
 import {
   MentionPicker,
-  filterMentions,
   mentionKey,
-  mentionLabel,
+  mentionKeyDown,
+  useMentionSearch,
   useMentionState,
   type MentionItem,
 } from "../common/MentionPicker";
@@ -99,18 +99,6 @@ function formatTime(at: number): string {
 }
 
 /** Compact token count: 200000 → "200k", 3244 → "3.2k". */
-
-/**
- * What a `+ …` chip pre-filters the picker to.
- *
- * Finer than `MentionItem["type"]`, because a document and a picture are both
- * `file` items yet the author asking for one never means the other.
- */
-type PickKind = "lore" | "text" | "image";
-
-function matchesKind(item: MentionItem, kind: PickKind): boolean {
-  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
-}
 
 export function AgentChat() {
   const { t } = useTranslation();
@@ -205,12 +193,27 @@ export function AgentChat() {
   // tab must not appear under the next.
   const draft = useComposerStore((s) => chatComposerOf(s, activeKey).draft);
   const setChatDraft = useComposerStore((s) => s.setChatDraft);
+  // The draft as this instance last wrote it. An instance unmounted by a
+  // conversation switch can still land a `@` reference into this draft once
+  // its file read finishes (handlePickMention); that write is not ours, and
+  // the effect below moves the open mention to where it is now — the picker
+  // would otherwise sit open over the landed reference, and a later `@` in
+  // the draft would keep a stale start. A value, not a flag: a write that
+  // leaves the draft as it was (a pick that landed nothing, a clear of an
+  // empty draft) never renders, and a flag set for it would swallow the next
+  // write that was not ours.
+  const ownDraft = useRef(draft);
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => setChatDraft(activeKey, update),
+    (update: string | ((prev: string) => string)) => {
+      setChatDraft(activeKey, update);
+      ownDraft.current = chatComposerOf(useComposerStore.getState(), activeKey).draft;
+    },
     [setChatDraft, activeKey],
   );
-  // Mirrors `draft` for the handlers that read it after an await — reading a
-  // large file takes long enough for the author to have kept typing.
+  // Mirrors `draft` for the synchronous handlers that read it in the same
+  // tick they wrote it (openMentionFor) or from a keydown (the queue check):
+  // the render that made them may hold an older value. Not for anything
+  // after an await — see handlePickMention.
   const draftRef = useRef(draft);
   draftRef.current = draft;
   // The selection is attached by default when one exists — that is nearly always
@@ -239,7 +242,13 @@ export function AgentChat() {
     [setChatRefs, activeKey],
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
-  const clearComposer = useCallback(() => clearChatComposer(activeKey), [clearChatComposer, activeKey]);
+  const clearComposer = useCallback(
+    () => { clearChatComposer(activeKey); ownDraft.current = ""; },
+    [clearChatComposer, activeKey],
+  );
+  // This instance is one conversation's: AiDrawer remounts the chat per
+  // conversation (`key={activeChatKey}`), so the mention state, like the
+  // draft, never spans two.
   const mention = useMentionState();
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();
@@ -257,12 +266,6 @@ export function AgentChat() {
     });
   };
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Set only when the picker was opened from a `+ 设定` / `+ 章节` chip: the
-  // author has already said which kind they want, so the list shouldn't make
-  // them re-narrow it by typing. Cleared the moment the mention closes, so a
-  // hand-typed `@` always searches everything.
-  const [pickKind, setPickKind] = useState<PickKind | null>(null);
-  useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
@@ -287,10 +290,9 @@ export function AgentChat() {
       .map((file): MentionItem => ({ type: "file", file })),
   ], [loreIndex, projectFiles, canSeeImages, canTranscribe, canVideo]);
 
-  const mentionItems = filterMentions(
-    pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
-    mention.query,
-  );
+  // Scoped, ranked and cut (设计稿 02i) — the shared hook, so this host holds
+  // no copy of the rule; `search.open` is the picker's one gate.
+  const search = useMentionSearch(candidates, mention, projectPath);
   const refKeys = new Set(refs.map(attachedKey));
 
   /**
@@ -301,7 +303,7 @@ export function AgentChat() {
    * typed mention would, instead of becoming a second kind of attachment the
    * message has to carry separately.
    */
-  const openMentionFor = (kind: PickKind | null) => {
+  const openMentionFor = () => {
     const el = inputRef.current;
     const caret = el?.selectionStart ?? draftRef.current.length;
     const before = draftRef.current.slice(0, caret);
@@ -311,7 +313,6 @@ export function AgentChat() {
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draftRef.current.slice(caret)}`;
-    setPickKind(kind);
     setDraft(next);
     draftRef.current = next;
     mention.sync(next, at + 1);
@@ -329,9 +330,16 @@ export function AgentChat() {
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    // Taken before any await: the mention this pick came from.
+    const claim = mention.claim(draftRef.current);
+    if (!claim) return;
     setRefError(null);
+    // Appended to whatever the list is *then*, and only once: a second pick
+    // of the same file while the first is still reading is one attachment.
+    const attach = (ref: AttachedItem) =>
+      setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
     if (item.type === "lore") {
-      setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
+      attach({ kind: "lore", entity: item.entity });
     } else {
       // Shared with the file tree's 发送到助手 — one construction path, so a
       // file attached from either side is the same attachment. An oversized
@@ -362,15 +370,32 @@ export function AgentChat() {
             }));
         return;
       }
-      setRefs((prev) => [...prev, outcome.item]);
+      attach(outcome.item);
     }
-    // Not inside a state updater: `accept` calls setState itself, and React
-    // runs an updater twice under StrictMode. The ref supplies the live value
-    // the updater was being used for.
-    setDraft(mention.accept(draftRef.current, mentionLabel(item)));
+    // Spliced into the draft as the store holds it *now* — the updater's
+    // argument, which zustand supplies once — not into this instance's
+    // `draftRef`: switching conversation (or closing the drawer) unmounts this
+    // instance while the read goes on, and if the author comes back and keeps
+    // typing in the new instance, the ref here is frozen at the moment of
+    // leaving; splicing into it would write that stale draft over what they
+    // typed. `setDraft` is bound to this conversation's key, so the write
+    // lands in the same draft whichever instance is on screen.
+    setDraft((now) => mention.accept(now, item, claim, projectPath));
     inputRef.current?.focus();
   };
 
+  // A change to the draft that was not ours (see `ownDraft`): move the open
+  // mention and any pick still waiting on a file read by the edit — they may
+  // have been landed on, or shifted by a reference landed ahead of them. Our
+  // own writes either carry their own `sync` (typing, `+ 引用`) or land text
+  // the picker's outside click has already closed on (a snippet insert,
+  // 回到这里重说).
+  useEffect(() => {
+    const before = ownDraft.current;
+    if (draft === before) return;
+    ownDraft.current = draft;
+    mention.external(before, draft);
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
 
@@ -490,6 +515,10 @@ export function AgentChat() {
     // rarely about the same files, and the material stays in the conversation
     // history anyway.
     clearComposer();
+    // A send Enter let through (an `@` nothing matched) leaves the mention
+    // open otherwise — and the picker now stays on screen for an empty list,
+    // so it would sit over an empty composer eating Tab and the arrows.
+    mention.close();
     // Asking a question is an intent to watch the answer: re-arm the follow even
     // if the author had scrolled back into history to write it.
     stick.toBottom();
@@ -606,22 +635,13 @@ export function AgentChat() {
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Only while the picker is actually on screen. It renders nothing with no
-    // matches, and Chinese prose has no space to end a mention — so an `@`
-    // typed mid-sentence used to leave this branch swallowing Enter for the
-    // rest of the message: no send, no newline, no feedback.
-    if (mention.open && mentionItems.length > 0) {
-      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !ime.isComposing(e)) {
-        e.preventDefault();
-        void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
-        return;
-      }
-    }
+    // The picker's keys first, while it is on screen (empty scope included —
+    // the chip row stays, so the author can Tab out of it or Esc the whole
+    // thing). Esc there closes the picker rather than stopping the run; Enter
+    // with nothing matching anywhere falls through to send. See mentionKeyDown.
+    if (mentionKeyDown(e, mention, search, ime.isComposing(e), (item) => void handlePickMention(item))) return;
     // 2d: Esc 同效 — while a run is live, Esc anywhere in the composer stops
-    // it (the mention branch above already claimed Esc for closing the picker).
+    // it (the picker, when open, has already claimed Esc above).
     if (e.key === "Escape" && chatRunning) {
       e.preventDefault();
       handleStop();
@@ -1037,7 +1057,7 @@ export function AgentChat() {
               three slots' worth of row for a filter the picker already has. */}
           <button
             className={styles.attachChipGhost}
-            onClick={() => openMentionFor(null)}
+            onClick={() => openMentionFor()}
             disabled={candidates.length === 0}
             title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
           >
@@ -1110,18 +1130,18 @@ export function AgentChat() {
             placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
             disabled={!activeModelId}
           />
-          {mention.open && (
+          {search.open && (
             // Anchored to the textarea itself rather than a wrapper: the
             // composer is a flex column, and an extra box in it would change
             // how the input sizes.
             <MentionPicker
               anchorRef={inputRef}
-              items={mentionItems}
+              mention={mention}
+              search={search}
+              projectPath={projectPath}
               usedKeys={refKeys}
-              activeIndex={mention.active}
               preferAbove
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={mention.close}
             />
           )}
           <div className={styles.inputFooter}>

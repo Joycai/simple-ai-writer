@@ -59,9 +59,10 @@ import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
-  MentionPicker, filterMentions, mentionKey, mentionLabel,
-  useMentionState, type MentionItem,
+  MentionPicker, mentionKey, mentionKeyDown,
+  useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
+import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
@@ -73,13 +74,6 @@ import styles from "./RoleplayChat.module.css";
 
 /** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
 const EMPTY_SUBS: SubAgentKind[] = [];
-
-/** `+ …` 三个按钮各自把选择器限制到哪一类候选。 */
-type PickKind = "lore" | "text" | "image";
-
-function matchesKind(item: MentionItem, kind: PickKind): boolean {
-  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
-}
 
 /**
  * 图例的四项。收起的一行和展开的卡片读**同一份**——它们是同一组按钮的两种
@@ -324,8 +318,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [openTrace, setOpenTrace] = useState<number | null>(null);
   /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
   const [refError, setRefError] = useState<string | null>(null);
-  /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
-  const [pickKind, setPickKind] = useState<PickKind | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
   // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
@@ -409,7 +401,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       instruction,
     });
   }, [projectPath, agent, updateAgent]);
+  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
+  // 一样只属于这一位。
   const mention = useMentionState();
+  // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
+  // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
+  // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
+  const ime = useImeGuard();
 
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
@@ -638,19 +636,18 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
     clearComposer(agent.id);
+    // 放行发送的 Enter（哪个档都没命中的 @）不会自己关掉提名；空列表的选择器
+    // 现在会留在屏上，不关它就一直挂在空输入框上方吃 Tab 和方向键。
+    mention.close();
     setRefError(null);
     // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
     // 只做过一次的决定。想再带上，在编辑器里重新划一次。
     setDetached(true);
   };
 
-  const mentionItems = useMemo(
-    () => filterMentions(
-      pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
-      mention.query,
-    ),
-    [candidates, mention.query, pickKind],
-  );
+  // 作用域、打分、截断（设计稿 02i）都在共用的 hook 里，宿主不另写一份规则；
+  // `mentionSearch.open` 是选择器唯一的门。
+  const mentionSearch = useMentionSearch(candidates, mention, projectPath);
 
   /**
    * `+ 条目` 这类按钮只是替作者敲了一个 `@`。
@@ -658,7 +655,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
    * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
    */
-  const openMentionFor = (kind: PickKind | null) => {
+  const openMentionFor = () => {
     const el = taRef.current;
     const caret = el?.selectionStart ?? draft.length;
     const before = draft.slice(0, caret);
@@ -667,7 +664,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draft.slice(caret)}`;
-    setPickKind(kind);
     setDraft(next);
     mention.sync(next, at + 1);
     requestAnimationFrame(() => {
@@ -710,28 +706,23 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mention.open && mentionItems.length) {
-      if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        void handlePickMention(mentionItems[mention.active]);
-        return;
-      }
-      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-    }
-    if (e.key === "Enter" && !e.shiftKey && !composing) {
+    // 选择器在屏上就先走它的键（空档也在——chip 行留着，作者才能 Tab 出去或
+    // Esc 关掉）；哪儿都没命中的 Enter 落到下面照常发送。见 mentionKeyDown。
+    if (mentionKeyDown(e, mention, mentionSearch, ime.isComposing(e), (item) => void handlePickMention(item))) return;
+    if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       doSend();
     }
   };
 
   const handlePickMention = async (item: MentionItem) => {
-    if (refKeys.has(mentionKey(item))) { mention.close(); setPickKind(null); return; }
+    if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    const claim = mention.claim(draft);
+    if (!claim) return;
     setRefError(null);
-    setDraft((prev) => mention.accept(prev, mentionLabel(item)));
+    // 先落字再读图：这里 setDraft 是 zustand 的同步更新，updater 只跑一次。
+    setDraft((prev) => mention.accept(prev, item, claim, projectPath));
     mention.close();
-    setPickKind(null);
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
     } else if (item.file.kind === "image") {
@@ -1278,7 +1269,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           <button
             type="button"
             className={styles.attachGhost}
-            onClick={() => openMentionFor(null)}
+            onClick={() => openMentionFor()}
             disabled={candidates.length === 0}
           >
             + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
@@ -1320,26 +1311,26 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               }}
               onKeyDown={onKeyDown}
               onContextMenu={snippetSave.onTextareaContextMenu}
-              onCompositionStart={() => setComposing(true)}
-              onCompositionEnd={() => setComposing(false)}
+              onCompositionStart={() => { setComposing(true); ime.imeProps.onCompositionStart(); }}
+              onCompositionEnd={() => { setComposing(false); ime.imeProps.onCompositionEnd(); }}
               onScroll={() => {
                 syncMirror();
               }}
             />
           </div>
 
-          {mention.open && (
+          {mentionSearch.open && (
             <MentionPicker
               anchorRef={taRef}
-              items={mentionItems}
+              mention={mention}
+              search={mentionSearch}
+              projectPath={projectPath}
               usedKeys={refKeys}
-              activeIndex={mention.active}
               preferAbove
               noteFor={(item) => (item.type === "lore" && resident.has(item.entity.dirPath)
                 ? t("roleplay.composer.refResident", { defaultValue: "已常驻" })
                 : null)}
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={() => { mention.close(); setPickKind(null); }}
             />
           )}
 
