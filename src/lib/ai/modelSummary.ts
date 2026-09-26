@@ -132,9 +132,12 @@ export function wireSummary(
     standard, baseUrl, platform: wire.platform, modelId: m.modelId, structuredOutput: m.structuredOutput, relayUpstream,
   });
   if (so !== "off") {
-    // 三条线三个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
-    // 否则只是 responseMimeType）、Responses 的 text.format、其余的 response_format。
-    out.push(family === "gemini"
+    // 四条线四个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
+    // 否则只是 responseMimeType）、Responses 的 text.format、Anthropic 的
+    // output_config.format（只有严格档）、其余的 response_format。
+    out.push(family === "anthropic"
+      ? { key: "output_config.format", value: so, scope: "structured" }
+      : family === "gemini"
       ? so === "json_schema"
         ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
         : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }

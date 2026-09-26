@@ -599,10 +599,16 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     // endpoint makes internally.
     if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(opts, category);
   }
-  // `opts.extraBody` is deliberately NOT spread in. It carries OpenAI-shaped
-  // fields (`response_format`) that the Messages API rejects outright with a
-  // 400 — see jsonModeExtraBody in ./jsonMode, which is why nothing sends one
-  // down this path any more.
+  // `opts.extraBody` is deliberately NOT spread in: an OpenAI-shaped field
+  // (`response_format`) is a 400 on the Messages API. The one thing taken from
+  // it is the JSON-outputs schema jsonMode.ts shapes for this family, merged
+  // *into* `output_config` rather than over it — the effort dial writes
+  // `output_config.effort` into the same object, and a plain spread would drop
+  // whichever came first.
+  const format = (opts.extraBody?.output_config as { format?: unknown } | undefined)?.format;
+  if (format) {
+    baseBody.output_config = { ...(baseBody.output_config as Record<string, unknown> | undefined), format };
+  }
 
   // ── Turn-level state, spanning every request this turn takes ───────────────
   //

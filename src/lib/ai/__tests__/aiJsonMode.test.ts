@@ -128,11 +128,67 @@ describe("resolveStructuredOutput", () => {
     expect(resolveStructuredOutput({ standard: "openai_responses", modelId: "gpt-5.5", structuredOutput: "off" })).toBe("off");
   });
 
-  it("resolves the Anthropic family to off whatever the row says", () => {
-    // No JSON parameter exists there; a declaration that survived a provider
-    // change to this family must not reach the wire.
-    expect(resolveStructuredOutput({ standard: "anthropic", modelId: "gpt-5", structuredOutput: "json_schema" })).toBe("off");
+  // `output_config.format` is the family's only tier (第十八个样本，补测):
+  // strict or off, never json_object.
+  it("resolves the Anthropic family to the schema tier or off, never json_object", () => {
+    // Auto lifts on a measured wire with a listed id, in either spelling.
+    expect(resolveStructuredOutput({ standard: "anthropic", modelId: "claude-sonnet-5" })).toBe("json_schema");
+    expect(resolveStructuredOutput({ standard: "anthropic_compat", platform: "orcarouter", modelId: "anthropic/claude-opus-4.5" })).toBe("json_schema");
+    // …and not on an older id, an unmeasured relay, or without an id.
+    expect(resolveStructuredOutput({ standard: "anthropic", modelId: "claude-3-7-sonnet" })).toBe("off");
+    expect(resolveStructuredOutput({ standard: "anthropic_compat", platform: "newapi", modelId: "claude-sonnet-5" })).toBe("off");
     expect(resolveStructuredOutput({ standard: "anthropic_compat" })).toBe("off");
+    // A declaration: strict is sent where the wire is not measured to ignore it;
+    // a json_object that survived a family change reads as off.
+    expect(resolveStructuredOutput({ standard: "anthropic_compat", platform: "newapi", modelId: "x", structuredOutput: "json_schema" })).toBe("json_schema");
+    expect(resolveStructuredOutput({ standard: "anthropic", modelId: "claude-sonnet-5", structuredOutput: "json_object" })).toBe("off");
+  });
+
+  it("shapes Anthropic's schema into output_config.format, cut to the keywords it takes", () => {
+    const shaping = jsonModeShaping({ standard: "anthropic", modelId: "claude-sonnet-5" }, "x", {
+      name: "pick",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 9 },
+          pattern: { type: "string", pattern: "^[A-Z]+$" },
+          tags: { type: "array", items: { type: "integer", minimum: 0 }, minItems: 2, maxItems: 5 },
+          one: { type: "array", items: { type: "string" }, minItems: 1 },
+          either: { oneOf: [{ type: "string" }, { type: "integer" }] },
+        },
+        required: ["name", "pattern", "tags", "one"],
+      },
+    });
+    expect(shaping.mode).toBe("json_schema");
+    expect(shaping.cue).toBeUndefined();
+    expect(shaping.extraBody).toEqual({
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              // A property *named* pattern survives; its keyword does not.
+              pattern: { type: "string" },
+              tags: { type: "array", items: { type: "integer" } },
+              one: { type: "array", items: { type: "string" }, minItems: 1 },
+              // Optional → wrapped nullable by strictify, then oneOf spelled anyOf.
+              either: { anyOf: [{ anyOf: [{ type: "string" }, { type: "integer" }] }, { type: "null" }] },
+            },
+            required: ["name", "pattern", "tags", "one", "either"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+  });
+
+  it("gives Anthropic the cue alone once the schema tier is refused", () => {
+    const target = { standard: "anthropic" as const, baseUrl: "https://api.anthropic.com", modelId: "claude-sonnet-5" };
+    noteJsonModeRefused(target, "json_schema");
+    const shaping = jsonModeShaping(target, "x", { name: "pick", parameters: { type: "object", properties: {} } });
+    expect(shaping).toEqual({ mode: "off", cue: JSON_ONLY_CUE });
   });
 });
 
@@ -334,6 +390,10 @@ describe("json-mode refusal memo", () => {
     // The Responses family's name for the same parameter (docs/api/responses.md §2.2).
     expect(isJsonModeRejection(new Error(
       "400 Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.",
+    ))).toBe(true);
+    // Anthropic names the field path (as its other 400s do, `messages.1.content.0: …`).
+    expect(isJsonModeRejection(new Error(
+      "Anthropic API error 400: output_config.format: Extra inputs are not permitted",
     ))).toBe(true);
     // Gemini names the generationConfig field it did not recognise.
     expect(isJsonModeRejection(new Error(

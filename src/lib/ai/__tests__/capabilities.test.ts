@@ -219,7 +219,11 @@ describe("capabilityVerdict", () => {
   it("keeps the output capabilities to the families that spell them", () => {
     expect(hasCapability("textVerbosity", { platform: "xai", standard: "openai_responses_compat" })).toBe(true);
     expect(capabilityVerdict("textVerbosity", chat("dashscope")).reason).toBe("family");
-    expect(capabilityVerdict("structuredOutput", { platform: "minimax", standard: "anthropic_compat" }).reason).toBe("family");
+    expect(capabilityVerdict("textVerbosity", { platform: "minimax", standard: "anthropic_compat" }).reason).toBe("family");
+    // Anthropic's schema tier: yes where measured, unknown on an unmeasured relay (第十八个样本，补测).
+    expect(capabilityVerdict("jsonSchema", { platform: "anthropic", standard: "anthropic" }).status).toBe("yes");
+    expect(capabilityVerdict("jsonSchema", { platform: "orcarouter", standard: "anthropic_compat" }).status).toBe("yes");
+    expect(capabilityVerdict("jsonSchema", { platform: "minimax", standard: "anthropic_compat" }).status).toBe("unknown");
     expect(hasCapability("translateFormat", chat("custom"), { type: "text" })).toBe(true);
     expect(capabilityVerdict("translateFormat", chat("custom"), { type: "vision" }).reason).toBe("model-type");
   });

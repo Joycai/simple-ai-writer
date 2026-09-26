@@ -2736,7 +2736,7 @@
       "briefTranslate": "Sakura is a dedicated JA→ZH model with its own prompt format.",
       "briefSoOpenai": "Auto = family default; known models are upgraded to JSON Schema.",
       "briefSoGemini": "Auto = family default; Gemini 2.5 / 3 are upgraded to JSON Schema (responseJsonSchema).",
-      "briefSoAnthropic": "This protocol family has no JSON-mode parameter; Auto = nothing sent, the app constrains format via prompt.",
+      "briefSoAnthropic": "This family has JSON Schema only (output_config.format), no JSON mode; Auto = sent for Claude 4.5+ on a measured endpoint, otherwise nothing is sent and the app constrains format via prompt.",
       "briefTemp": "Empty = not sent, endpoint default; 0 is a real value meaning deterministic output.",
       "verbosityLabel": "Answer length",
       "briefVerbosity": "Auto = not sent, endpoint default; only the OpenAI Responses protocol has this field.",

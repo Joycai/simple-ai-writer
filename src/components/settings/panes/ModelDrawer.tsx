@@ -53,7 +53,7 @@ import {
   type RouteProfile,
 } from "../../../lib/ai/routes";
 import {
-  jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, type StructuredOutputMode,
+  jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, structuredOutputModesFor, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
 import {
@@ -537,7 +537,9 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const soStrictNo = !!curWire && !hasCapability("jsonSchema", curWire, capModel);
   const soChoices: StructuredOutputMode[] = !soWire
     ? ["off"]
-    : STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_schema" || !soStrictNo || form.structuredOutput === m);
+    // Anthropic has no JSON-object tier (jsonMode.ts), so its row is 关闭 · Schema.
+    : (curWire ? structuredOutputModesFor(curWire.standard) : STRUCTURED_OUTPUT_MODES)
+      .filter((m) => m !== "json_schema" || !soStrictNo || form.structuredOutput === m);
   // 与 jsonMode.ts 的自动档同一条规则：线路**实测**收严格档（格子是 yes，不是 unknown）
   // 且 id 在名单上才抬升。
   const soAutoLifted = !!curWire && capabilityVerdict("jsonSchema", curWire, capModel).status === "yes"

@@ -156,8 +156,12 @@ const PROBES: Record<CapabilityId, Probe> = {
   translateFormat: async () => ({}),
   // Strength is jsonMode.ts's (whitelisted body shaping); whether there is a
   // JSON mode at all must match the table on the one surface that shows it.
+  // Probed with the family's weakest real tier: Anthropic has no json_object,
+  // so its "is there a JSON mode" is the schema tier (jsonMode.ts).
   structuredOutput: async (ctx) => ({
-    summary: summarySends(ctx, { structuredOutput: "off" }, { structuredOutput: "json_object" }),
+    summary: summarySends(ctx, { structuredOutput: "off" }, {
+      structuredOutput: familyOf(ctx.standard) === "anthropic" ? "json_schema" : "json_object",
+    }),
   }),
   // A declared strict tier reaches the request exactly where the table allows
   // it — a platform measured to ignore it is sent json_object instead.

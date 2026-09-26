@@ -2094,6 +2094,25 @@ describe("streamCompletion — Anthropic SSE", () => {
     expect(calls[0].body.output_config).toEqual({ effort: "medium" });
   });
 
+  // The JSON-outputs schema shares `output_config` with the effort dial; the
+  // rest of `extraBody` (OpenAI-shaped fields) still never reaches this wire.
+  it("merges the JSON-outputs format into output_config beside the effort", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    const format = { type: "json_schema", schema: { type: "object", properties: {}, additionalProperties: false } };
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      reasoningEffort: "high",
+      extraBody: { output_config: { format }, response_format: { type: "json_object" } },
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.output_config).toEqual({ effort: "high", format });
+    expect(calls[0].body).not.toHaveProperty("response_format");
+  });
+
   it('maps "off" to the lowest effort rather than disabling thinking', async () => {
     // Disabling is rejected outright by several models in the supported range,
     // and the vendor's own advice for spending less is to lower effort.

@@ -2728,7 +2728,7 @@
       "briefTranslate": "Sakura 是专用日中翻译模型，走它自己的提示格式。",
       "briefSoOpenai": "自动 ＝ 按协议族默认，已知支持的模型自动升到 JSON Schema。",
       "briefSoGemini": "自动 ＝ 按协议族默认；Gemini 2.5 / 3 系自动升到 JSON Schema（responseJsonSchema）。",
-      "briefSoAnthropic": "该协议族没有 JSON 模式参数；「自动」＝ 不发，由应用用提示词约束格式。",
+      "briefSoAnthropic": "该协议族只有 JSON Schema 一档（output_config.format），没有 JSON 模式；「自动」＝ Claude 4.5 起在实测过的线路上发它，否则不发、由应用用提示词约束格式。",
       "briefTemp": "空 ＝ 不发，用端点默认；0 是真实值，表示确定性输出。",
       "verbosityLabel": "回答详略",
       "briefVerbosity": "自动 ＝ 不发，用端点默认；只有 OpenAI Responses 协议有这个字段。",

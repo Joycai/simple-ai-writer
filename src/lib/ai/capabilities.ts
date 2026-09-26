@@ -179,9 +179,10 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // translate-only would silently leave the vision subagent's candidates.
   translateFormat: { families: ["openai"], origin: "native", modelTypes: ["text"] },
   // A JSON mode at all (`response_format` / `text.format` /
-  // `generationConfig.response*`). How strong is jsonMode.ts's business; the
-  // Messages API has no JSON mode, so an Anthropic model's only option is off.
-  structuredOutput: { families: ["openai", "responses", "gemini"], origin: "native" },
+  // `generationConfig.response*` / `output_config.format`). How strong is
+  // jsonMode.ts's business; the Messages API has the schema tier and nothing
+  // weaker, so an Anthropic model resolves to strict or off, never json_object.
+  structuredOutput: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native" },
   // The strict tier of it (`response_format.json_schema` / `text.format`
   // json_schema / `responseJsonSchema`). The protocol defines it, but a
   // platform may take it with a 200 and ignore it — 智谱 answers with prose in a
@@ -189,7 +190,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // `unknown`: an author's declaration is sent, the auto tier never lifts to
   // it (jsonMode.ts). A capability of the wire, not the model id: DashScope
   // serves GLM with json_schema working, 智谱 serves the same GLM ignoring it.
-  jsonSchema: { families: ["openai", "responses", "gemini"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
+  jsonSchema: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
   // Anthropic's versioned `web_search_*` tool and the Responses built-in
   // `{type:"web_search"}` are the protocol's own; whether a relay passes them
   // on is unmeasured until a platform cell says so. Chat Completions has no
@@ -558,7 +559,9 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
       responses: { web_search: true },
     },
   },
-  anthropic: { families: { anthropic: { web_search: true } } },
+  // `output_config.format`: GA per Anthropic; held a contradicted enum on five
+  // Claude models behind OrcaRouter's verbatim Anthropic route (第十八个样本，补测).
+  anthropic: { families: { anthropic: { web_search: true, jsonSchema: true } } },
   // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
   google: { families: { gemini: { jsonSchema: true } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
@@ -588,14 +591,14 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // json_schema: a 200 that ignores it — prose in a code fence, Chinese keys.
   zhipu: { families: { all: { forcedToolChoice: false, jsonSchema: false } } },
   // Every cell measured on paid models (landscape.md §7 第十八个样本): a strict
-  // schema held against a prompt that contradicted its enum on ①②③, and the
+  // schema held against a prompt that contradicted its enum on ①②③④, and the
   // Responses built-in and Anthropic's versioned `web_search` both searched.
   orcarouter: {
     families: {
       openai: { jsonSchema: true },
       responses: { jsonSchema: true, web_search: true },
       gemini: { jsonSchema: true },
-      anthropic: { web_search: true },
+      anthropic: { web_search: true, jsonSchema: true },
     },
   },
   newapi: RELAY,

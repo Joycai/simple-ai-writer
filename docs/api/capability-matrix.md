@@ -216,49 +216,49 @@
 
 ## structuredOutput
 
-`native` · 规则缺省适用的协议族：Chat / Resp / Gemini
+`native` · 规则缺省适用的协议族：Chat / Resp / Gemini / Anth
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
 | openai | ✓ protocol | ✓ protocol |  |  |
-| anthropic |  |  |  | · |
+| anthropic |  |  |  | ✓ protocol |
 | google |  |  | ✓ protocol |  |
-| deepseek | ✓ protocol | ✓ protocol |  | · |
-| dashscope | ✓ protocol | ✓ protocol |  | · |
+| deepseek | ✓ protocol | ✓ protocol |  | ✓ protocol |
+| dashscope | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | dashscope-intl | ✓ protocol | ✓ protocol |  |  |
 | xai | ✓ protocol | ✓ protocol |  |  |
-| minimax | ✓ protocol |  |  | · |
+| minimax | ✓ protocol |  |  | ✓ protocol |
 | volcengine | ✓ protocol | ✓ protocol |  |  |
-| volcengine-plan | ✓ protocol | ✓ protocol |  | · |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ protocol |
 | zhipu | ✓ protocol |  |  |  |
-| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | · |
-| newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | · |
+| orcarouter | ✓ protocol | ✓ protocol | ✓ protocol | ✓ protocol |
+| newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | ✓ protocol |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
-| custom | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | · |
+| custom | ✓ 按上游 protocol | ✓ 按上游 protocol | ✓ protocol | ✓ protocol |
 
 ## jsonSchema
 
-`native` · 规则缺省适用的协议族：Chat / Resp / Gemini
+`native` · 规则缺省适用的协议族：Chat / Resp / Gemini / Anth
 
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
 | openai | ✓ measured | ✓ measured |  |  |
-| anthropic |  |  |  | · |
+| anthropic |  |  |  | ✓ measured |
 | google |  |  | ✓ measured |  |
-| deepseek | ? unmeasured | ? unmeasured |  | · |
-| dashscope | ✓ measured | ? unmeasured |  | · |
+| deepseek | ? unmeasured | ? unmeasured |  | ? unmeasured |
+| dashscope | ✓ measured | ? unmeasured |  | ? unmeasured |
 | dashscope-intl | ✓ measured | ? unmeasured |  |  |
 | xai | ? unmeasured | ✓ measured |  |  |
-| minimax | ? unmeasured |  |  | · |
+| minimax | ? unmeasured |  |  | ? unmeasured |
 | volcengine | ? unmeasured | ? unmeasured |  |  |
-| volcengine-plan | ✓ measured | ✓ measured |  | · |
+| volcengine-plan | ✓ measured | ✓ measured |  | ? unmeasured |
 | zhipu | · |  |  |  |
-| orcarouter | ✓ measured | ✓ measured | ✓ measured | · |
-| newapi | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | · |
+| orcarouter | ✓ measured | ✓ measured | ✓ measured | ✓ measured |
+| newapi | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | ? unmeasured |
 | ollama | ? unmeasured |  |  |  |
 | comfyui | ? unmeasured |  |  |  |
-| custom | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | · |
+| custom | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | ? unmeasured |
 
 ## web_search
 

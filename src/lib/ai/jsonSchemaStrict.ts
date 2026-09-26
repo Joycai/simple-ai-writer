@@ -111,3 +111,46 @@ export function stripNulls<T>(value: T): T {
   }
   return value;
 }
+
+/**
+ * Validation keywords the Messages API's `output_config.format` does not take
+ * (docs/api/structured.md §1; Anthropic's structured-outputs page): numeric
+ * bounds, string length and pattern, and array bounds other than `minItems`
+ * 0 / 1. The official SDKs strip them before sending and fold the constraint
+ * into the description; this does the stripping, and leaves the description
+ * alone — the prose instruction beside the schema already says what the
+ * fields are for.
+ */
+const ANTHROPIC_UNSUPPORTED = new Set([
+  "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf",
+  "minLength", "maxLength", "pattern", "maxItems", "minProperties", "maxProperties",
+]);
+
+/**
+ * A strictified schema made acceptable to Anthropic's JSON outputs: the
+ * unsupported keywords above removed at every level, `minItems` kept only as 0
+ * or 1, and `oneOf` spelled `anyOf` (only `anyOf` / `allOf` are listed as
+ * supported; for the value shapes this app sends the two accept the same
+ * replies). Walks schema positions only, so a *property* named `pattern` stays.
+ */
+export function forAnthropic(schema: JsonSchema): JsonSchema {
+  const out: JsonSchema = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (ANTHROPIC_UNSUPPORTED.has(key)) continue;
+    if (key === "minItems" && !(value === 0 || value === 1)) continue;
+    if (key === "properties" && value && typeof value === "object") {
+      out.properties = Object.fromEntries(
+        Object.entries(value as Record<string, JsonSchema>).map(([k, v]) => [k, forAnthropic(v)]),
+      );
+    } else if (key === "items" && value && typeof value === "object") {
+      out.items = Array.isArray(value) ? (value as JsonSchema[]).map(forAnthropic) : forAnthropic(value as JsonSchema);
+    } else if ((key === "anyOf" || key === "allOf" || key === "oneOf") && Array.isArray(value)) {
+      const merged = [...((out.anyOf as JsonSchema[] | undefined) ?? []), ...(value as JsonSchema[]).map(forAnthropic)];
+      if (key === "allOf") out.allOf = (value as JsonSchema[]).map(forAnthropic);
+      else out.anyOf = merged;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
