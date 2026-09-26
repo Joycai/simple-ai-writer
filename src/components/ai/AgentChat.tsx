@@ -232,7 +232,10 @@ export function AgentChat() {
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
   const clearComposer = useCallback(() => clearChatComposer(activeKey), [clearChatComposer, activeKey]);
-  const mention = useMentionState();
+  // One draft per conversation under this one composer: a pick's claim is
+  // filed under its conversation, so a reference landed in another never
+  // moves it.
+  const mention = useMentionState(activeKey);
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();
   /* After an insert the caret belongs at the very end and the box scrolled to
