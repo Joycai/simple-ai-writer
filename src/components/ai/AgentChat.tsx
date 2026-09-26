@@ -384,15 +384,17 @@ export function AgentChat() {
     inputRef.current?.focus();
   };
 
-  // A change to the draft that was not ours (see `ownDraft`): if a mention
-  // is open, move it to where it is now — it may have been landed on, or
-  // shifted by a reference landed ahead of it. Our own writes either carry
-  // their own `sync` (typing, `+ 引用`) or land text the picker's outside
-  // click has already closed on (a snippet insert, 回到这里重说).
+  // A change to the draft that was not ours (see `ownDraft`): move the open
+  // mention and any pick still waiting on a file read by the edit — they may
+  // have been landed on, or shifted by a reference landed ahead of them. Our
+  // own writes either carry their own `sync` (typing, `+ 引用`) or land text
+  // the picker's outside click has already closed on (a snippet insert,
+  // 回到这里重说).
   useEffect(() => {
-    if (draft === ownDraft.current) return;
+    const before = ownDraft.current;
+    if (draft === before) return;
     ownDraft.current = draft;
-    if (mention.open) mention.relocate(draft, inputRef.current?.selectionStart ?? draft.length);
+    mention.external(before, draft);
   }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);

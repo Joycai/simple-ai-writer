@@ -130,10 +130,10 @@ export interface MentionState {
   sync: (value: string, caret: number) => void;
   /**
    * For a change to the text that was not the author's typing (another
-   * instance landing a reference into the same draft): keep the open
-   * mention, moved to where it is now. See relocateMention.
+   * instance landing a reference into the same draft): move the open
+   * mention and the waiting picks by the edit. See editRange.
    */
-  relocate: (value: string, caret: number) => void;
+  external: (before: string, after: string) => void;
   /**
    * A pick's handle on the mention it came from — take it *before* any
    * await, with the text as it is then, and hand it to `accept` after. Null
@@ -250,19 +250,56 @@ export function spliceMention(value: string, start: number, query: string, label
 }
 
 /**
- * The open mention after the text changed under it *without* the author
- * typing — another instance of the chat composer landing a reference into
- * the same draft. The same query at a new place is the same mention, moved:
- * it keeps its id (so the claims table keeps following it), its scope and
- * its highlight. Anything else — the mention landed on, or gone — is what
- * `syncMention` says it is. (`syncMention` itself reads a moved `start` as a
- * fresh `@`, which is right for typing: `@潮@`, or a click to another `@`.)
+ * Where `before` was edited to give `after`, as one replaced span: the
+ * longest common prefix and suffix (never overlapping) bound it. This is
+ * how a change that was not the author's typing — another instance of the
+ * chat composer landing a reference into the same draft — is read: the
+ * text after the span moved by `delta`, the text before it did not, and
+ * whatever the span covered is gone. A single landed reference is one span,
+ * so the bounds are exact; reading the *caret* instead was tried and went
+ * wrong three ways (a closed mention was never moved, a mid-sentence one
+ * was reopened with the wrong query, a repeated query was moved to the
+ * wrong `@`).
  */
-export function relocateMention(prev: MentionCore, value: string, caret: number): MentionCore {
-  if (!prev.open) return prev;
-  const hit = findMention(value, caret);
-  if (hit && hit.query === prev.query) return hit.start === prev.start ? prev : { ...prev, start: hit.start };
-  return syncMention(prev, value, caret);
+export function editRange(before: string, after: string): { start: number; end: number; delta: number } {
+  const max = Math.min(before.length, after.length);
+  let p = 0;
+  while (p < max && before.charCodeAt(p) === after.charCodeAt(p)) p++;
+  let s = 0;
+  while (s < max - p && before.charCodeAt(before.length - 1 - s) === after.charCodeAt(after.length - 1 - s)) s++;
+  return { start: p, end: before.length - s, delta: after.length - before.length };
+}
+
+/** Whether a mention at `start` with `query` overlaps the replaced span. */
+function inEdit(start: number, query: string, edit: { start: number; end: number }): boolean {
+  return start < edit.end && start + 1 + query.length > edit.start;
+}
+
+/**
+ * The open mention after an edit that was not typing (see editRange): moved
+ * by the edit when it lies after it — keeping id, scope and highlight, it
+ * is the same mention — closed when the edit ran over it (a reference was
+ * landed on that very `@`), untouched when it lies before it.
+ */
+export function shiftCore(core: MentionCore, before: string, after: string): MentionCore {
+  if (!core.open) return core;
+  const edit = editRange(before, after);
+  if (core.start >= edit.end) return edit.delta === 0 ? core : { ...core, start: core.start + edit.delta };
+  if (inEdit(core.start, core.query, edit)) return shut(core);
+  return core;
+}
+
+/**
+ * The waiting picks after the same edit: moved when they lie after it. One
+ * the edit ran over is left where it is — at landing, the text there no
+ * longer reads as its mention, and nothing is spliced.
+ */
+export function shiftClaims(pending: Map<number, MentionClaim>, before: string, after: string): void {
+  const edit = editRange(before, after);
+  if (edit.delta === 0) return;
+  for (const [id, c] of pending) {
+    if (c.start >= edit.end) pending.set(id, { ...c, start: c.start + edit.delta });
+  }
 }
 
 /**
@@ -364,7 +401,13 @@ export function acceptPick(
   if (text === value) return { text, landed: null };
   spent.add(claim.id);
   const delta = text.length - value.length;
-  for (const [id, c] of pending) if (c.start > at) pending.set(id, { ...c, start: c.start + delta });
+  for (const [id, c] of pending) {
+    if (c.start > at) pending.set(id, { ...c, start: c.start + delta });
+    // Another pick still waiting on this very `@` (Esc, reopen, pick again):
+    // the `[` after it is now the reference just landed, not the prose the
+    // claim was glued to — the guard applies to it from here on.
+    else if (c.start === at && c.glued) pending.set(id, { ...c, glued: false });
+  }
   return { text, landed: { id: claim.id, start: at, delta } };
 }
 
@@ -396,7 +439,12 @@ export function useMentionState(): MentionState {
     active: state.active,
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
-    relocate: (value, caret) => setState((s) => relocateMention(s, value, caret)),
+    external: (before, after) => {
+      // The table first and outside the updater: React may run an updater
+      // twice under StrictMode, and a shift must be applied once.
+      shiftClaims(pending.current, before, after);
+      setState((s) => shiftCore(s, before, after));
+    },
     claim: (text) => claimOf(pending.current, state, text),
     accept: (value, item, claim, projectPath) => {
       const { text, landed } = acceptPick(

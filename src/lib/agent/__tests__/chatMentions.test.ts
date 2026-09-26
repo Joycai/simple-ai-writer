@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, claimOf, findMention, mentionKeyDown, relocateMention, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, claimOf, editRange, findMention, mentionKeyDown, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -322,7 +322,7 @@ describe("a pick across a file read", () => {
     let text = "";
     const type = (next: string, caret = next.length) => { text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
     /** Another instance wrote the draft: what AgentChat's `ownDraft` effect does. */
-    const relocate = (next: string, caret = next.length) => { text = next; core = relocateMention(core, next, caret); trackClaims(pending, core); };
+    const external = (next: string) => { shiftClaims(pending, text, next); core = shiftCore(core, text, next); text = next; trackClaims(pending, core); };
     const claim = () => claimOf(pending, core, text)!;
     /** Tab in the picker: the host's `cycleScope`, reduced to what this test needs. */
     const narrow = (scope: MentionCore["scope"]) => { core = { ...core, scope }; };
@@ -331,7 +331,7 @@ describe("a pick across a file read", () => {
       if (r.landed) { core = afterAccept(core, r.landed, r.landed.delta); trackClaims(pending, core); }
       return r.text;
     };
-    return { type, relocate, claim, narrow, accept, state: () => core };
+    return { type, external, claim, narrow, accept, state: () => core };
   }
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
@@ -419,15 +419,39 @@ describe("a pick across a file read", () => {
     for (const t of ["看看@潮，和@", "看看@潮，和@夜"]) a2.type(t);
     a2.narrow("image");
     const b = a2.claim();
-    a2.relocate("看看@[潮汐.png]，和@夜");
+    a2.external("看看@[潮汐.png]，和@夜");
     expect(a2.state()).toMatchObject({ open: true, id: 1, query: "夜", scope: "image", start: 13 });
     expect(a2.accept("看看@[潮汐.png]，和@夜", pic("插图/夜航.png"), b)).toBe("看看@[潮汐.png]，和@[夜航.png]");
     expect(a2.state().open).toBe(false);
     // Landed on the mention itself (`@潮` → `@[潮汐.png]汐`): the picker closes.
     const same = host();
     same.type("看看@潮汐");
-    same.relocate("看看@[潮汐.png]汐");
+    same.external("看看@[潮汐.png]汐");
     expect(same.state().open).toBe(false);
+  });
+
+  it("the edit moves a waiting pick whether its mention is closed, mid-sentence, or one of two alike", () => {
+    // (a) closed by typing on: the claim at 6 must still move.
+    const closed = host();
+    for (const t of ["看看@潮，和@", "看看@潮，和@夜"]) closed.type(t);
+    const a = closed.claim();
+    closed.type("看看@潮，和@夜，");
+    expect(closed.state().open).toBe(false);
+    closed.external("看看@[潮汐.png]，和@夜，");
+    expect(closed.accept("看看@[潮汐.png]，和@夜，", pic("插图/夜航.png"), a)).toBe("看看@[潮汐.png]，和@[夜航.png]，");
+    // (b) open mid-sentence, caret after 夜: moved, same id and query.
+    const mid = host();
+    mid.type("看看@潮，和@夜再说", 8);
+    const m = mid.claim();
+    mid.external("看看@[潮汐.png]，和@夜再说");
+    expect(mid.state()).toMatchObject({ open: true, id: 1, query: "夜", start: 13 });
+    expect(mid.accept("看看@[潮汐.png]，和@夜再说", pic("插图/夜航.png"), m)).toBe("看看@[潮汐.png]，和@[夜航.png]再说");
+    // (c) the same query twice, the pick on the first: it lands there, not on the second.
+    const twice = host();
+    twice.type("看看@潮，和@夜，还有@夜", 8);
+    const w = twice.claim();
+    twice.external("看看@[潮汐.png]，和@夜，还有@夜");
+    expect(twice.accept("看看@[潮汐.png]，和@夜，还有@夜", pic("插图/夜航.png"), w)).toBe("看看@[潮汐.png]，和@[夜航.png]，还有@夜");
   });
 
   it("an `@` put in front of `[草稿]` lands its pick; a reference landed there since does not", () => {
@@ -436,6 +460,25 @@ describe("a pick across a file read", () => {
     const g = h.claim();
     expect(g.glued).toBe(true);
     expect(h.accept("@[草稿]第一章", pic("沈砚.png"), g)).toBe("@[沈砚.png][草稿]第一章");
+    // The same `@`, a slow pick waiting, then Esc, reopen, and a sync pick
+    // that lands first: the `[` after the `@` is now that reference, and the
+    // slow pick must not stack a third one in front of it.
+    const twice = host();
+    twice.type("@[草稿]第一章", 1);
+    const slow = twice.claim();
+    twice.type("，[草稿]第一章", 1);
+    for (const t of [["@[草稿]第一章", 1], ["@沈[草稿]第一章", 2]] as const) twice.type(t[0], t[1]);
+    const quick = twice.claim();
+    const landed = twice.accept("@沈[草稿]第一章", pic("沈砚.png"), quick);
+    expect(landed).toBe("@[沈砚.png][草稿]第一章");
+    expect(twice.accept(landed, pic("插图/潮汐.png"), slow)).toBe("@[沈砚.png][草稿]第一章");
+  });
+
+  it("editRange bounds one replaced span, never overlapping prefix and suffix", () => {
+    expect(editRange("看看@潮，和@夜", "看看@[潮汐.png]，和@夜")).toEqual({ start: 3, end: 4, delta: 7 });
+    expect(editRange("abc", "abc")).toEqual({ start: 3, end: 3, delta: 0 });
+    expect(editRange("aa", "aaa")).toEqual({ start: 2, end: 2, delta: 1 });
+    expect(editRange("看看@潮汐", "看看@[潮汐.png]汐")).toEqual({ start: 3, end: 4, delta: 7 });
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {
