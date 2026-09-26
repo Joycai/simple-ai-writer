@@ -6,6 +6,7 @@ import {
   serverToolsSent,
   summarizeServerToolResult,
   createGeminiServerToolReader,
+  geminiServerTools,
 } from "../serverTools";
 import { wireOf } from "../platforms";
 import { hasCapability, type CapabilityWire } from "../capabilities";
@@ -190,5 +191,27 @@ describe("createGeminiServerToolReader", () => {
     expect(read({ content: { parts: [{ text: "hi" }] } })).toEqual([]);
     expect(read(undefined)).toEqual([]);
     expect(read({ groundingMetadata: { webSearchQueries: "not a list" } })).toEqual([]);
+  });
+});
+
+describe("geminiServerTools", () => {
+  const ORCA_GEM = { platform: "orcarouter", standard: "gemini_compat" } as const;
+  it("spells the three ids as bare entries, in canonical order", () => {
+    expect(geminiServerTools(ORCA_GEM, ["code_interpreter", "web_extractor", "web_search"], "google/gemini-3.8-flash"))
+      .toEqual([{ googleSearch: {} }, { urlContext: {} }, { codeExecution: {} }]);
+  });
+  it("has nothing for the ids Gemini has no tool for, or a lone extractor", () => {
+    expect(geminiServerTools(ORCA_GEM, ["web_search_image", "image_search"], "m")).toEqual([]);
+    expect(geminiServerTools(ORCA_GEM, ["web_extractor"], "m")).toEqual([]);
+  });
+  it("is empty on every other family, even on the same platform", () => {
+    for (const standard of ["openai_compat", "openai_responses_compat", "anthropic_compat"] as const) {
+      expect(geminiServerTools({ platform: "orcarouter", standard }, ["web_search", "code_interpreter"], "m")).toEqual([]);
+    }
+  });
+  it("sends search where it is the protocol's own but unmeasured; the private two only where measured", () => {
+    const ids = ["web_search", "web_extractor", "code_interpreter"] as const;
+    expect(geminiServerTools({ platform: "google", standard: "gemini" }, [...ids], "gemini-3.5-pro")).toEqual([{ googleSearch: {} }]);
+    expect(geminiServerTools({ platform: "newapi", standard: "gemini_compat" }, [...ids], "m")).toEqual([{ googleSearch: {} }]);
   });
 });

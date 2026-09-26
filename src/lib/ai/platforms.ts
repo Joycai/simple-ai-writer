@@ -229,7 +229,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     origin: "https://generativelanguage.googleapis.com",
     endpoints: [{ family: "gemini", path: "", official: true }],
     hosts: ["generativelanguage.googleapis.com"],
-    source: "no server tool spelled on the Gemini wire (the only family this platform serves)",
+    source: "Gemini's built-in tools unmeasured on AI Studio: googleSearch offered as unmeasured (the protocol's own), urlContext / codeExecution not offered — measured on OrcaRouter's Vertex route (landscape.md §7 第十八个样本「再补测」)",
   },
   deepseek: {
     origin: "https://api.deepseek.com",
