@@ -528,7 +528,7 @@ describe("a pick across a file read", () => {
     const spent = new Set<number>();
     let text = "";
     const type = (next: string, caret = next.length) => { text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
-    /** Another instance wrote the draft: what AgentChat's `ownDraft` effect does. */
+    /** Another instance wrote the draft: what `useOwnDraft` does for both chat hosts. */
     const external = (next: string) => { shiftClaims(pending, text, next); core = shiftCore(core, text, next); text = next; trackClaims(pending, core); };
     const claim = () => claimOf(pending, core, text)!;
     /** Tab in the picker: the host's `cycleScope`, reduced to what this test needs. */
