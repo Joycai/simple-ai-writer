@@ -23,7 +23,7 @@
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -145,26 +145,26 @@ export interface MentionState {
   claim: (text: string) => MentionClaim | null;
   /**
    * Replace the claimed mention with `@[名字]`, returning the new text and
-   * caret (below) — at the place the mention is *now*, after whatever was
+   * selection (below) — at the place the mention is *now*, after whatever was
    * typed or landed during the read (see acceptPick). A second accept on the same mention
    * is a no-op (a double-click, or Enter twice on a slow file); a mention
    * opened since on a later `@` is shifted by the splice; one reopened on
    * the claimed `@` closes with it. `projectPath` is for judging whether
    * letters typed during the read still point at `item`.
    *
-   * `caret` is the input's caret as the host reads it now; the returned one
-   * is that caret carried through the splice (`caretThrough`) — null when
-   * nothing landed or no caret was given. The host puts it back after the
-   * render (`usePendingCaret`): replacing a controlled value moves the
-   * caret to the end.
+   * `sel` is the input's selection as the host reads it now (`selectionOf`);
+   * the returned one is that selection carried through the splice, both
+   * ends (`landSelection`) — null when nothing landed or none was given. The
+   * host puts it back after the render (`useKeptSelection`): replacing a
+   * controlled value moves the caret to the end.
    */
   accept: (
     value: string,
     item: MentionItem,
     claim: MentionClaim,
     projectPath: string | null,
-    caret: number | null,
-  ) => { text: string; caret: number | null };
+    sel: TextSelection | null,
+  ) => { text: string; sel: TextSelection | null };
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
@@ -421,6 +421,59 @@ export function caretThrough(caret: number, landed: Landed): number {
 }
 
 /**
+ * A textarea's selection, whole: a landing that kept only `selectionStart`
+ * turned a selected phrase into a caret. A collapsed one is the caret.
+ */
+export interface TextSelection {
+  start: number;
+  end: number;
+  dir: "forward" | "backward" | "none";
+}
+
+/** The input's selection now; null without an input. */
+export function selectionOf(el: HTMLTextAreaElement | null): TextSelection | null {
+  if (!el) return null;
+  return { start: el.selectionStart, end: el.selectionEnd, dir: el.selectionDirection ?? "none" };
+}
+
+/**
+ * A selection carried through a landing: each end by `caretThrough`, the
+ * direction as it was. The mapping never reorders two positions, so the
+ * ends stay in order — one before the `@` and one inside `@query` becomes a
+ * selection that covers the new reference.
+ */
+export function landSelection(sel: TextSelection, landed: Landed): TextSelection {
+  return { start: caretThrough(sel.start, landed), end: caretThrough(sel.end, landed), dir: sel.dir };
+}
+
+/**
+ * A selection carried through an edit this instance did not make and knows
+ * nothing about but the texts on both sides — another instance landing a
+ * reference into the same draft, a send clearing it. Read as one replaced
+ * span (`editRange`), each end:
+ * - strictly before the span: where it was;
+ * - from its first character to its last, or at a pure insertion's place
+ *   (typing inserts in front of the caret, and so does this): just after the
+ *   new text. A caret at the span's very start counts as inside: the common
+ *   prefix swallows the `@` a reference lands on, so `@|潮` → `@[潮汐.png]`
+ *   puts the span's start right at that caret, and leaving it there would
+ *   split the token at the next key — `caretThrough` sends it after the `]`
+ *   too;
+ * - after it: moved with the text by `delta`.
+ * Empty → text, and a replacement with nothing in common at the head, put
+ * the caret at the end. Where a pure insertion repeats its neighbours the
+ * span is read at its rightmost place (`editRange`'s greedy prefix), so a
+ * caret in that repeat stays put — off by the repeat's length at worst, and
+ * only the caret. A rewind is not an edit to map: its hosts place the caret
+ * at the end themselves.
+ */
+export function selectionThrough(sel: TextSelection, before: string, after: string): TextSelection {
+  const e = editRange(before, after);
+  const at = (pos: number) => (pos < e.start ? pos : pos <= e.end ? e.end + e.delta : pos + e.delta);
+  return { start: at(sel.start), end: at(sel.end), dir: sel.dir };
+}
+
+/**
  * Land a pick's text, pure. In order:
  * - `spent` holds the mentions a pick has already landed on: a second Enter
  *   on a slow file, or a double-click, is one splice — text unchanged.
@@ -473,36 +526,116 @@ export function acceptPick(
 }
 
 /**
- * Put the caret back after a landing, once the landed text is on screen.
+ * Keep the author's selection through a replacement of the input's value
+ * that was not their typing. Replacing a controlled value puts the caret at
+ * the end, and a pick lands after a file read, outside any event handler —
+ * or in another instance altogether: the chat composer remounts per
+ * conversation, the roleplay one per character, and a pick made before a
+ * switch lands into the draft the new instance is showing.
  *
- * A pick lands after a file read, outside any event handler, and replacing a
- * controlled value puts the caret at the end. `place(caret, text)` records
- * where it should go in `text`; the layout effect that follows the render
- * writing `value` into the input moves it there. A layout effect rather than
- * the `requestAnimationFrame` that `+ 引用` uses: that one runs inside a
- * click, where React commits before the frame; after an await nothing orders
- * the two. It is applied only to a focused input — one the author left
- * during the read is not theirs to have moved — and only if it shows
- * exactly `text`: a key
- * pressed between the landing and the render puts other text there, and a
- * caret computed for one text means nothing in another — and the record is
- * cleared on every run, so a placement never waits for some later edit.
+ * Two sources, the exact one first:
+ * - `place(sel, text)`: this instance's own landing, which knows the span it
+ *   replaced (`landSelection`).
+ * - Otherwise, what the input showed before the commit. The render reads
+ *   the DOM when it still shows something other than `value` — the text
+ *   and the selection the author had before this replacement — and the
+ *   layout effect carries that through the edit (`selectionThrough`). A
+ *   read during render, because after the commit the browser has already
+ *   moved the caret to the end and a layout effect is too late. It only
+ *   reads, and a discarded render's reading is overwritten by the next
+ *   render's (cleared when the input already shows `value`: typing — the
+ *   DOM is ahead of the state — must never be carried through anything).
+ *
+ * A layout effect rather than the `requestAnimationFrame` that `+ 引用`
+ * uses: that one runs inside a click, where React commits before the frame;
+ * after an await nothing orders the two (and `+ 引用`'s frame, coming
+ * later, still has the last word for its own insertion). It is applied only
+ * to a focused input — one the author left is not theirs to have moved —
+ * and only if it shows exactly `value`; `place`'s record is used only for
+ * exactly the text it was computed for, and both records are cleared on
+ * every run, so a placement never waits for some later edit.
  */
-export function usePendingCaret(
+export function useKeptSelection(
   ref: RefObject<HTMLTextAreaElement | null>,
   value: string,
-): (caret: number | null, text: string) => void {
-  const want = useRef<{ caret: number; text: string } | null>(null);
+): (sel: TextSelection | null, text: string) => void {
+  const want = useRef<{ sel: TextSelection; text: string } | null>(null);
+  const shown = useRef<{ sel: TextSelection; text: string } | null>(null);
+  const live = ref.current;
+  shown.current = live && live.value !== value ? { sel: selectionOf(live)!, text: live.value } : null;
   useLayoutEffect(() => {
     const w = want.current;
+    const s = shown.current;
     want.current = null;
+    shown.current = null;
     const el = ref.current;
-    if (!w || !el || el !== document.activeElement || el.value !== w.text) return;
-    el.setSelectionRange(w.caret, w.caret);
+    if (!el || el !== document.activeElement || el.value !== value) return;
+    const sel = w && w.text === value ? w.sel : s && selectionThrough(s.sel, s.text, value);
+    if (sel) el.setSelectionRange(sel.start, sel.end, sel.dir);
   }, [ref, value]);
-  return useCallback((caret: number | null, text: string) => {
-    want.current = caret === null ? null : { caret, text };
+  return useCallback((sel: TextSelection | null, text: string) => {
+    want.current = sel === null ? null : { sel, text };
   }, []);
+}
+
+/**
+ * Drafts with a pick's file still being read, by slot (one per draft: the
+ * chat key, the roleplay character, a lore modal's own id). Such a draft must
+ * not be sent: the message would leave as `@潮` without the attachment, and
+ * the read, finishing, would put the attachment into the emptied composer to
+ * ride along with the next one. Module state, as chatStash's `pasting`, for
+ * the same reason: the instance that started the read may be gone — the chat
+ * composer remounts per conversation — and the one on screen now must still
+ * see the draft is not ready.
+ */
+const reads = new Map<string, number>();
+const readListeners = new Set<() => void>();
+
+function markMentionRead(slot: string, on: boolean): void {
+  const n = (reads.get(slot) ?? 0) + (on ? 1 : -1);
+  if (n > 0) reads.set(slot, n);
+  else reads.delete(slot);
+  for (const l of readListeners) l();
+}
+
+export function isMentionReading(slot: string): boolean {
+  return reads.has(slot);
+}
+
+function subscribeReads(listener: () => void): () => void {
+  readListeners.add(listener);
+  return () => { readListeners.delete(listener); };
+}
+
+/**
+ * Count `pick` against `slot` until it settles, resolved or rejected; its
+ * outcome passes through. `pick` is the whole pick — the read *and* the
+ * landing — not the read alone (see useMentionReads).
+ */
+export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>): Promise<T> {
+  markMentionRead(slot, true);
+  try {
+    return await pick();
+  } finally {
+    markMentionRead(slot, false);
+  }
+}
+
+/**
+ * `reading`: a file picked into this draft is still being read — hosts gray
+ * out sending, as they do for a paste still becoming chips. `track(pick)`
+ * counts a pick until it settles, either way, and `pick` must include the
+ * landing (the attachment and the `@[名字]` written into the draft), not
+ * only the read. Dropping the count notifies React, which re-renders in a
+ * microtask of its own — ahead of whatever follows an `await` of the read —
+ * and that render, draft still unlanded, runs effects: the chat composer's
+ * queued send would go out with it. Counted to the end of the landing, the
+ * render that lets sending through already has both.
+ */
+export function useMentionReads(slot: string): { reading: boolean; track: <T>(pick: () => Promise<T>) => Promise<T> } {
+  const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
+  const track = useCallback(<T,>(pick: () => Promise<T>) => trackMentionRead(slot, pick), [slot]);
+  return { reading, track };
 }
 
 /**
@@ -540,14 +673,14 @@ export function useMentionState(): MentionState {
       setState((s) => shiftCore(s, before, after));
     },
     claim: (text) => claimOf(pending.current, state, text),
-    accept: (value, item, claim, projectPath, caret) => {
+    accept: (value, item, claim, projectPath, sel) => {
       const { text, landed } = acceptPick(
         spent.current, pending.current, claim, value, mentionLabel(item),
         (q) => matchesMention(item, q, projectPath),
       );
-      if (!landed) return { text, caret: null };
+      if (!landed) return { text, sel: null };
       setState((s) => afterAccept(s, landed, landed.delta));
-      return { text, caret: caret === null ? null : caretThrough(caret, landed) };
+      return { text, sel: sel && landSelection(sel, landed) };
     },
     move: (delta, count) => {
       if (count <= 0) return;

@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, mentionKeyDown, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, isMentionReading, landSelection, mentionKeyDown, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, trackMentionRead, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -47,6 +47,7 @@ type MentionCore = import("../../../components/common/MentionPicker").MentionCor
 type MentionClaim = NonNullable<ReturnType<MentionState["claim"]>>;
 type MentionState = import("../../../components/common/MentionPicker").MentionState;
 type MentionSearch = import("../../../components/common/MentionPicker").MentionSearch;
+type TextSelection = import("../../../components/common/MentionPicker").TextSelection;
 const { createElement } = await import("react");
 const { renderToString } = await import("react-dom/server");
 const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP, refsAhead } = await import("../chatRefs");
@@ -342,6 +343,125 @@ describe("where the caret goes after a landing", () => {
     // Typed on past it while the file read: the caret stays on the same letter.
     expect(caretThrough(6, landed)).toBe(13);
     expect(r.text.slice(13)).toBe(text.slice(6));
+  });
+
+  it("carries a selection through by both ends, keeping its direction", () => {
+    const r = acceptPick(new Set(), new Map([[1, claim]]), claim, "看看@潮，后文", "潮汐.png", nameHas("潮汐.png"));
+    const landed = r.landed!;
+    // Wholly before the `@`, wholly after the mention: moved as the text is.
+    expect(landSelection({ start: 0, end: 2, dir: "backward" }, landed)).toEqual({ start: 0, end: 2, dir: "backward" });
+    expect(landSelection({ start: 5, end: 7, dir: "forward" }, landed)).toEqual({ start: 12, end: 14, dir: "forward" });
+    expect(r.text.slice(12, 14)).toBe("后文");
+    // From before the `@` into `@潮`: still a selection, now covering the reference.
+    const across = landSelection({ start: 0, end: 4, dir: "forward" }, landed);
+    expect(r.text.slice(across.start, across.end)).toBe("看看@[潮汐.png]");
+  });
+});
+
+describe("a selection through an edit someone else made", () => {
+  const sel = (start: number, end = start, dir: TextSelection["dir"] = "none"): TextSelection => ({ start, end, dir });
+  const before = "看看@潮，后文";
+  const after = "看看@[潮汐.png]，后文";
+
+  it("leaves one before the edit, moves one after it with the text", () => {
+    expect(selectionThrough(sel(0, 2), before, after)).toEqual(sel(0, 2));
+    const moved = selectionThrough(sel(5, 7, "backward"), before, after);
+    expect(moved).toEqual(sel(12, 14, "backward"));
+    expect(after.slice(moved.start, moved.end)).toBe("后文");
+  });
+
+  it("puts a caret the author was typing `@潮` with just after the landed `]`", () => {
+    expect(selectionThrough(sel(4), before, after)).toEqual(sel(11));
+    expect(after.slice(0, 11)).toBe("看看@[潮汐.png]");
+    // Right after the `@`: the common prefix keeps the `@`, so the span starts
+    // at this very caret — it still goes after the `]`, as `caretThrough`
+    // sends it; left there, the next key would split `@x[潮汐.png]`.
+    expect(selectionThrough(sel(3), before, after)).toEqual(sel(11));
+    expect(selectionThrough(sel(2), before, after)).toEqual(sel(2));
+  });
+
+  it("maps each end on its own: one across the edit covers the new text", () => {
+    const across = selectionThrough(sel(1, 6, "forward"), before, after);
+    expect(after.slice(across.start, across.end)).toBe("看@[潮汐.png]，后");
+    expect(across.dir).toBe("forward");
+  });
+
+  it("puts a caret at a pure insertion's place after the inserted text, as typing would", () => {
+    expect(selectionThrough(sel(2), "沈砚夜航", "沈砚与潮汐门夜航")).toEqual(sel(6));
+    expect(selectionThrough(sel(1), "沈砚夜航", "沈砚与潮汐门夜航")).toEqual(sel(1));
+  });
+
+  it("goes to the end when the text replaced an empty draft or the whole of it", () => {
+    expect(selectionThrough(sel(0), "", "回到这里重说")).toEqual(sel(6));
+    expect(selectionThrough(sel(1, 3), "沈砚看书", "潮汐门夜航")).toEqual(sel(5));
+    expect(selectionThrough(sel(0), "沈砚看书", "潮汐门夜航")).toEqual(sel(5));
+    // A send clearing the draft.
+    expect(selectionThrough(sel(2, 4), "沈砚看书", "")).toEqual(sel(0));
+  });
+
+  it("leaves a selection alone when nothing changed", () => {
+    expect(selectionThrough(sel(1, 3, "backward"), before, before)).toEqual(sel(1, 3, "backward"));
+  });
+});
+
+describe("a draft with a pick's file still reading", () => {
+  /** A read the test settles by hand. */
+  function deferred<T>() {
+    let resolve!: (v: T) => void, reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  }
+
+  it("counts from the read's start until it settles, and passes its result through", async () => {
+    const read = deferred<string>();
+    const tracked = trackMentionRead("chat:c1", () => read.promise);
+    expect(isMentionReading("chat:c1")).toBe(true);
+    read.resolve("潮汐.png");
+    await expect(tracked).resolves.toBe("潮汐.png");
+    expect(isMentionReading("chat:c1")).toBe(false);
+  });
+
+  it("stops counting a read that fails, and passes the failure through", async () => {
+    const read = deferred<string>();
+    const tracked = trackMentionRead("roleplay:沈砚", () => read.promise);
+    read.reject(new Error("读不到"));
+    await expect(tracked).rejects.toThrow("读不到");
+    expect(isMentionReading("roleplay:沈砚")).toBe(false);
+  });
+
+  it("keeps drafts apart, and holds one until every read in it is done", async () => {
+    const a = deferred<void>(), b = deferred<void>(), other = deferred<void>();
+    const ta = trackMentionRead("chat:c2", () => a.promise);
+    const tb = trackMentionRead("chat:c2", () => b.promise);
+    const to = trackMentionRead("chat:c3", () => other.promise);
+    a.resolve();
+    await ta;
+    expect(isMentionReading("chat:c2")).toBe(true);
+    other.resolve();
+    await to;
+    expect(isMentionReading("chat:c3")).toBe(false);
+    expect(isMentionReading("chat:c2")).toBe(true);
+    b.resolve();
+    await tb;
+    expect(isMentionReading("chat:c2")).toBe(false);
+  });
+
+  it("holds the draft until the pick has landed, not just until the file is read", async () => {
+    // Dropping the count re-renders at once — a render that let a queued
+    // send through before the landing would send the draft without it.
+    const read = deferred<string>();
+    let draft = "看看@潮";
+    const seen: boolean[] = [];
+    const tracked = trackMentionRead("lore:r1", async () => {
+      const name = await read.promise;
+      seen.push(isMentionReading("lore:r1"));
+      draft = `看看@[${name}]`;
+    });
+    read.resolve("潮汐.png");
+    await tracked;
+    expect(seen).toEqual([true]);
+    expect(isMentionReading("lore:r1")).toBe(false);
+    expect(draft).toBe("看看@[潮汐.png]");
   });
 });
 

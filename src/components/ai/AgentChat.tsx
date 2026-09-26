@@ -23,9 +23,11 @@ import {
   MentionPicker,
   mentionKey,
   mentionKeyDown,
+  selectionOf,
+  useKeptSelection,
+  useMentionReads,
   useMentionSearch,
   useMentionState,
-  usePendingCaret,
   type MentionItem,
 } from "../common/MentionPicker";
 import { useStickToBottom } from "../common/useStickToBottom";
@@ -267,11 +269,14 @@ export function AgentChat() {
     });
   };
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const placeCaret = usePendingCaret(inputRef, draft);
+  const placeSelection = useKeptSelection(inputRef, draft);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
   const { onPaste: handlePaste, restore: restoreImages, pasting } = usePasteImages(activeKey, setRefs, setRefError);
+  // An `@` pick's file still reading into this draft — possibly started by the
+  // instance before a switch away and back.
+  const { reading, track: trackRead } = useMentionReads(`chat:${activeKey}`);
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -335,62 +340,76 @@ export function AgentChat() {
     // Taken before any await: the mention this pick came from.
     const claim = mention.claim(draftRef.current);
     if (!claim) return;
-    setRefError(null);
-    // Appended to whatever the list is *then*, and only once: a second pick
-    // of the same file while the first is still reading is one attachment.
-    const attach = (ref: AttachedItem) =>
-      setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
-    if (item.type === "lore") {
-      attach({ kind: "lore", entity: item.entity });
-    } else {
-      // Shared with the file tree's 发送到助手 — one construction path, so a
-      // file attached from either side is the same attachment. An oversized
-      // picture is refused here rather than at send time: the author is
-      // choosing it *now*, and a message that quietly loses an attachment
-      // minutes later is unexplainable from the transcript.
-      // A video is read only for a model that can take it; otherwise it stays
-      // a path, as it always was.
-      const outcome = await attachProjectFile(item.file, { video: canVideo });
-      if (!outcome.ok) {
-        setRefError(outcome.reason === "too-large"
-          ? t("ai.chat.imageTooLarge", {
-              defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
-              name: item.file.name,
-              size: outcome.sizeMb,
-              max: outcome.maxMb,
-            })
-          : outcome.reason === "too-short"
-          ? t("ai.chat.videoTooShort", {
-              defaultValue: "{{name}} 太短（{{seconds}} 秒）——读视频的端点要求至少 {{min}} 秒",
-              name: item.file.name,
-              seconds: outcome.seconds,
-              min: outcome.minSeconds,
-            })
-          : t("ai.chat.refUnreadable", {
-              defaultValue: "读不到 {{name}}",
-              name: item.file.name,
-            }));
-        return;
+    // Counted as a read until it has *landed*: dropping the count re-renders
+    // at once (a microtask ahead of whatever follows an await), and a queued
+    // send let through by that render would leave with the old draft.
+    await trackRead(async () => {
+      setRefError(null);
+      // Appended to whatever the list is *then*, and only once: a second pick
+      // of the same file while the first is still reading is one attachment.
+      const attach = (ref: AttachedItem) =>
+        setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
+      if (item.type === "lore") {
+        attach({ kind: "lore", entity: item.entity });
+      } else {
+        // Shared with the file tree's 发送到助手 — one construction path, so a
+        // file attached from either side is the same attachment. An oversized
+        // picture is refused here rather than at send time: the author is
+        // choosing it *now*, and a message that quietly loses an attachment
+        // minutes later is unexplainable from the transcript.
+        // A video is read only for a model that can take it; otherwise it stays
+        // a path, as it always was.
+        const outcome = await attachProjectFile(item.file, { video: canVideo });
+        if (!outcome.ok) {
+          // A send queued while this read ran was written around the
+          // attachment: sent now it would go as a bare `@潮`, and `handleSend`
+          // would clear the refusal below before the author saw it. Held
+          // back, in the same render that lets sending through again.
+          setQueued(false);
+          setRefError(outcome.reason === "too-large"
+            ? t("ai.chat.imageTooLarge", {
+                defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+                name: item.file.name,
+                size: outcome.sizeMb,
+                max: outcome.maxMb,
+              })
+            : outcome.reason === "too-short"
+            ? t("ai.chat.videoTooShort", {
+                defaultValue: "{{name}} 太短（{{seconds}} 秒）——读视频的端点要求至少 {{min}} 秒",
+                name: item.file.name,
+                seconds: outcome.seconds,
+                min: outcome.minSeconds,
+              })
+            : t("ai.chat.refUnreadable", {
+                defaultValue: "读不到 {{name}}",
+                name: item.file.name,
+              }));
+          return;
+        }
+        attach(outcome.item);
       }
-      attach(outcome.item);
-    }
-    // Spliced into the draft as the store holds it *now* — the updater's
-    // argument, which zustand supplies once — not into this instance's
-    // `draftRef`: switching conversation (or closing the drawer) unmounts this
-    // instance while the read goes on, and if the author comes back and keeps
-    // typing in the new instance, the ref here is frozen at the moment of
-    // leaving; splicing into it would write that stale draft over what they
-    // typed. `setDraft` is bound to this conversation's key, so the write
-    // lands in the same draft whichever instance is on screen.
-    // The caret as it is now, carried through the splice and put back after
-    // the render (usePendingCaret) — null if this instance is gone.
-    const caret = inputRef.current?.selectionStart ?? null;
-    setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, caret);
-      placeCaret(landed.caret, landed.text);
-      return landed.text;
+      // Spliced into the draft as the store holds it *now* — the updater's
+      // argument, which zustand supplies once — not into this instance's
+      // `draftRef`: switching conversation (or closing the drawer) unmounts this
+      // instance while the read goes on, and if the author comes back and keeps
+      // typing in the new instance, the ref here is frozen at the moment of
+      // leaving; splicing into it would write that stale draft over what they
+      // typed. `setDraft` is bound to this conversation's key, so the write
+      // lands in the same draft whichever instance is on screen.
+      // The selection as it is now, carried through the splice and put back
+      // after the render (useKeptSelection) — null if this instance is gone;
+      // then the new instance keeps its own by reading the edit.
+      const sel = selectionOf(inputRef.current);
+      setDraft((now) => {
+        // Only a selection read off the text being landed into means anything
+        // in it: a landing made since and not yet rendered shifted it, and
+        // then the render's own reading of the DOM (useKeptSelection) is right.
+        const landed = mention.accept(now, item, claim, projectPath, inputRef.current?.value === now ? sel : null);
+        placeSelection(landed.sel, landed.text);
+        return landed.text;
+      });
+      inputRef.current?.focus();
     });
-    inputRef.current?.focus();
   };
 
   // A change to the draft that was not ours (see `ownDraft`): move the open
@@ -457,6 +476,9 @@ export function AgentChat() {
     const known = turns.flatMap((tn) => tn.images ?? []);
     void rewindChat(id).then((back) => {
       if (back === null) return;
+      // The question comes back whole, not edited: the caret goes to its end,
+      // not wherever it sat in the draft it replaced (useKeptSelection).
+      placeSelection({ start: back.text.length, end: back.text.length, dir: "none" }, back.text);
       setDraft(back.text);
       restoreImages(back.images, known);
       inputRef.current?.focus();
@@ -510,10 +532,12 @@ export function AgentChat() {
   const attachedQuote = !detached && selection ? selection : undefined;
   // chatCompacting too: a manual compaction is swapping the history a send
   // would append onto, so the composer waits it out (agentStore guards as well).
-  // Not while a paste is still becoming chips: the message would leave without
-  // the picture the author pasted a moment before pressing Enter.
+  // Not while a paste is still becoming chips, nor while an `@` pick's file is
+  // still reading: the message would leave without the picture the author
+  // pasted or picked a moment before, and the chip would land in the emptied
+  // composer.
   // hasMessage: words, or a picture on its own (chat-image-paste-plan §10).
-  const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
+  const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !reading && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -538,16 +562,17 @@ export function AgentChat() {
   // instead of sending — it goes on the wire the moment the run settles. A
   // manual stop (Esc or the ■ button) clears the queue: stopping is an
   // intervention, and auto-firing the held message would undo it. A paste
-  // still becoming chips holds it too — sending now would leave the picture
-  // behind (and `canSend` would refuse, dropping the queue for nothing).
+  // still becoming chips holds it too, as does an `@` pick still reading —
+  // sending now would leave the picture behind (and `canSend` would refuse,
+  // dropping the queue for nothing).
   const [queued, setQueued] = useState(false);
   useEffect(() => {
-    if (chatRunning || pasting || !queued) return;
+    if (chatRunning || pasting || reading || !queued) return;
     setQueued(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, pasting, queued]);
+  }, [chatRunning, pasting, reading, queued]);
 
   const handleStop = () => {
     setQueued(false);

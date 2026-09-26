@@ -53,6 +53,8 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState(initialDescription ?? "");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
+  // An `@` pick still reading into the attachments: generating now would leave it out.
+  const [reading, setReading] = useState(false);
   // 分类范围 (设计稿 03a 屏 08): which categories the extraction may file into.
   // All enabled by default; at least one must stay on.
   const [selCats, setSelCats] = useState<CategoryId[]>(() => loreCategories().map((c) => c.id));
@@ -284,6 +286,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
                 onInstructionChange={setDescription}
                 attached={attached}
                 onAttachedChange={setAttached}
+                onReadingChange={setReading}
                 entities={allEntities}
                 projectFiles={projectFiles}
                 disabled={phase === "generating"}
@@ -409,7 +412,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
             <>
               <button className={styles.btnGhost} onClick={requestClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
-                disabled={!modelId || !description.trim()}>
+                disabled={!modelId || !description.trim() || reading}>
                 <Sparkles size={13} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
               </button>
             </>
@@ -424,7 +427,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
             <>
               <button className={styles.btnGhost} onClick={requestClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
-                disabled={!modelId || !description.trim()}>
+                disabled={!modelId || !description.trim() || reading}>
                 <RotateCw size={13} /> {t("lore.generator.regenerateBtn")}
               </button>
               <button className={styles.btnPrimary} onClick={handleSave}

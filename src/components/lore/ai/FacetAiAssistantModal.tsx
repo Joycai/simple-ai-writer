@@ -105,6 +105,8 @@ export function FacetAiAssistantModal({
   const [kind, setKind] = useState<TaskKind>("append");
   const [instruction, setInstruction] = useState("");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
+  // An `@` pick still reading into the attachments: generating now would leave it out.
+  const [reading, setReading] = useState(false);
   const projectFiles = useProjectFiles();
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
@@ -259,6 +261,7 @@ export function FacetAiAssistantModal({
               onInstructionChange={setInstruction}
               attached={attached}
               onAttachedChange={setAttached}
+              onReadingChange={setReading}
               entities={otherEntities}
               projectFiles={projectFiles}
               disabled={phase === "generating"}
@@ -340,7 +343,7 @@ export function FacetAiAssistantModal({
           </div>
           <div className={styles.footerRight}>
             {phase === "input" && (
-              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId}>
+              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId || reading}>
                 <Sparkles size={13} /> {t("lore.facet.ai.generate", { defaultValue: "生成" })}
               </button>
             )}
@@ -352,7 +355,7 @@ export function FacetAiAssistantModal({
             )}
             {phase === "result" && (
               <>
-                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId}>
+                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId || reading}>
                   <RotateCw size={12} /> {t("lore.improve.regenerate", { defaultValue: "重新生成" })}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleApply} disabled={!output.trim()}>

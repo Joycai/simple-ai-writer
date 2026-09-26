@@ -60,7 +60,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  useMentionSearch, useMentionState, usePendingCaret, type MentionItem,
+  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -340,7 +340,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const placeCaret = usePendingCaret(taRef, draft);
+  const placeSelection = useKeptSelection(taRef, draft);
   // 右键 → 存为片段：输入框和每条气泡共用。
   const snippetSave = useSnippetSave();
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -405,6 +405,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
   // 一样只属于这一位。
   const mention = useMentionState();
+  // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
+  const { reading, track: trackRead } = useMentionReads(`roleplay:${agent.id}`);
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
@@ -612,6 +614,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           setRewindTo(null);
           void rewind(agent.id, at).then((text) => {
             if (text === null) return;
+            // 回退是整段换回那一问，不是作者在改：光标放到末尾，不按旧草稿里的位置搬。
+            placeSelection({ start: text.length, end: text.length, dir: "none" }, text);
             setDraft(text);
             taRef.current?.focus();
           });
@@ -630,8 +634,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       .getElementById(`rp-turn-${turn}`)
       ?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
   };
-  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。
-  const canSend = draft.trim().length > 0 && !compacting;
+  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。`@` 选中的文件还在读也不发：
+  // 发出去的是不带附件的 `@潮`，读完的附件落进清空的输入框。
+  const canSend = draft.trim().length > 0 && !compacting && !reading;
 
   const doSend = () => {
     if (!canSend) return;
@@ -721,61 +726,70 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    *
    * 从前是先落字再读：读图那段时间里草稿已经写着 `@[名字]`，附件还没挂上，选择器
    * 也已经关了，这时一下 Enter 就把「提了却没图」的消息发了出去。先读后落，读的
-   * 期间选择器一直开着，Enter 归它——至多重复选中同一项，落字只落一次（`accept`
-   * 记账）、附件按 key 去重——发不出去；读不到或太大就只报错、不落字，草稿里不会
-   * 留一个没带附件的引用。代价是大图要读完才看见 `@[名字]`，另两处一直如此。
+   * 期间选择器一直开着，Enter 归它（至多重复选中同一项，落字只落一次——`accept`
+   * 记账——附件按 key 去重）；但鼠标点「发送」、或打「，」关掉提名后按 Enter 都
+   * 绕得过选择器，所以真正拦住发送的是 `canSend` 里的 `!reading`：从选中到落完字
+   * 都算在读（`trackRead`）。读不到或太大就只报错、不落字，草稿里不会留一个没带
+   * 附件的引用。代价是大图要读完才看见 `@[名字]`，另两处一直如此。
    */
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
     const claim = mention.claim(draft);
     if (!claim) return;
-    setRefError(null);
-    // 挂到那一刻的列表上，且只挂一次：读的期间又选了一次同一项，是同一份附件。
-    const attach = (ref: AttachedItem) =>
-      setRefs((r) => (r.some((a) => attachedKey(a) === mentionKey(item)) ? r : [...r, ref]));
-    if (item.type === "lore") {
-      attach({ kind: "lore", entity: item.entity });
-    } else if (item.file.kind === "image") {
-      try {
-        // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
-        const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
-        // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
-        // 一条悄悄少了张图的消息从记录上根本看不出来。
-        if (bytes.length > MAX_IMAGE_BYTES) {
-          setRefError(t("roleplay.composer.imageTooLarge", {
-            name: item.file.name,
-            size: (bytes.length / 1024 / 1024).toFixed(1),
-            max: MAX_IMAGE_BYTES / 1024 / 1024,
-            defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+    // 读到落完字为止都算「在读」：计数一落就重渲染（比 await 之后的代码早一个
+    // 微任务），那一刻草稿里还没有附件和 `@[名字]`。
+    await trackRead(async () => {
+      setRefError(null);
+      // 挂到那一刻的列表上，且只挂一次：读的期间又选了一次同一项，是同一份附件。
+      const attach = (ref: AttachedItem) =>
+        setRefs((r) => (r.some((a) => attachedKey(a) === mentionKey(item)) ? r : [...r, ref]));
+      if (item.type === "lore") {
+        attach({ kind: "lore", entity: item.entity });
+      } else if (item.file.kind === "image") {
+        try {
+          // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
+          const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
+          // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
+          // 一条悄悄少了张图的消息从记录上根本看不出来。
+          if (bytes.length > MAX_IMAGE_BYTES) {
+            setRefError(t("roleplay.composer.imageTooLarge", {
+              name: item.file.name,
+              size: (bytes.length / 1024 / 1024).toFixed(1),
+              max: MAX_IMAGE_BYTES / 1024 / 1024,
+              defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+            }));
+            return;
+          }
+          attach({ kind: "image", file: item.file, dataUrl, downscaled });
+        } catch {
+          setRefError(t("roleplay.composer.refUnreadable", {
+            name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;
         }
-        attach({ kind: "image", file: item.file, dataUrl, downscaled });
-      } catch {
-        setRefError(t("roleplay.composer.refUnreadable", {
-          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
-        }));
-        return;
+      } else if (projectPath) {
+        try {
+          const content = await readFile(item.file.path);
+          attach({ kind: "text", file: item.file, content });
+        } catch {
+          setRefError(t("roleplay.composer.refUnreadable", {
+            name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+          }));
+          return;
+        }
       }
-    } else if (projectPath) {
-      try {
-        const content = await readFile(item.file.path);
-        attach({ kind: "text", file: item.file, content });
-      } catch {
-        setRefError(t("roleplay.composer.refUnreadable", {
-          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
-        }));
-        return;
-      }
-    }
-    // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
-    // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
-    // 光标取此刻的，经这次替换平移，渲染之后放回去（usePendingCaret）。
-    const caret = taRef.current?.selectionStart ?? null;
-    setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, caret);
-      placeCaret(landed.caret, landed.text);
-      return landed.text;
+      // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
+      // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
+      // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
+      // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
+      const sel = selectionOf(taRef.current);
+      setDraft((now) => {
+        // 框里显示的正是 `now` 时，读到的选区才在这段文本的坐标里；之前另一处落字
+        // 已写进 store 还没渲染，就交给渲染时读 DOM 那一份（useKeptSelection）。
+        const landed = mention.accept(now, item, claim, projectPath, taRef.current?.value === now ? sel : null);
+        placeSelection(landed.sel, landed.text);
+        return landed.text;
+      });
     });
   };
 
