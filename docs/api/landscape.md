@@ -2050,6 +2050,79 @@ D. **Gemini 内置工具，按适配器会发的形态**（gemini-3.8-flash，�
   执行日志照其他线路显示；`toolUsePromptTokenCount` 计进输入 token（[`tools.md`](tools.md)）。
 - 不调计数端点、不按错误信封的 `type` 判类——写在 `platforms.ts` orcarouter 条目旁。
 
+**GPT 全家补测（2026-09-27，六个 id × ① ② 两面；curl 约 230 次 + live 用例 90 条，合计约 $0.35）。** 前面只把
+`gpt-6-luna` 测透，另三个 GPT 只各跑过一条冒烟用例，`gpt-5.6-luna` / `-sol` 没测过。这次六个都在两面上跑同一套
+curl（effort 全档与乱写值、`mode:"pro"`、`summary`、温度、输出上限、`verbosity`、与 prompt 矛盾的 strict schema、
+`json_object`、`web_search`、并行工具、强制工具、`store: true`），再用 `live.orcarouter.test.ts` 的「GPT」一组驱动
+真实的 ① ② 适配器，每个 id 每面 7 条、另加一条 ② 思考摘要：**首跑 90 条过 83 条**，7 条失败都是下面表里的事实，
+已改写成「钉住拒绝 / 钉住没有」，整份文件 127 条全过。
+
+目录（`GET /v1/models`）：六个都是 1,050,000 / 128,000，输入 `text` `image` `file`。`supported_endpoint_types`
+上 `gpt-6-luna` / `-sol` 只写 `openai`、其余四个写 `openai` `openai-response`，**但六个在两面上都 200**——声明仍只是建议。
+单价带**两档**（`pricing.tiers`）：单次输入超过 272K 时整单换高档，输入与缓存读 ×2、输出 ×1.5
+（与 [`issues/tiered-pricing.md`](../issues/tiered-pricing.md) 记的千问是同一类账）。
+
+| 模型 id | 入 / 出 / 缓存读（$/M，≤272K） | 背后是什么 |
+| --- | --- | --- |
+| `openai/gpt-6-luna` | 0.10 / 0.50 / 0.01 | OpenRouter 形态层 → OpenAI（① `provider: "OpenAI"`，推理 `format: "openai-responses-v1"`） |
+| `openai/gpt-6-sol` | 2 / 10 / 0.2 | 同上 |
+| `openai/gpt-6-astra` | 10 / 50 / 1 | OpenRouter 形态层 → **Azure**（`provider: "Azure"`，`azure-openai-responses-v1`） |
+| `openai/gpt-5.6-terra` | 2 / 12 / 0.2 | 同上，Azure |
+| `openai/gpt-5.6-luna` | 0.2 / 1.2 / 0.02 | **OpenAI 原样**（`chatcmpl-…` / `resp_…` id、没有 `provider`、回显 `verbosity` 与 `temperature: 1.0`、错误是 OpenAI 原文）；少数请求改走 OpenRouter 形态层，见下 |
+| `openai/gpt-5.6-sol` | 4 / 20 / 0.4 | **OpenAI 原样**，而且只有这一条线路 |
+
+`x-orca-route` 一律 `fallback=0`，所以线路选择不是「失败后回退」。`gpt-5.6-luna` 的分流**由请求字段决定、可复现**：
+默认请求 5/5 原样；① 带函数工具、① `reasoning_effort` 为 `max` / `minimal`、② 带 `temperature` 这几种 3/3 走 OpenRouter
+形态层（`gen-…` id、`usage.cost`）。这几种恰好是 `gpt-5.6-sol`（没有第二条线路）在原样线路上吃 400 的请求——网关像是
+预先知道原样线路不收什么，把它们送去另一条。
+
+**② Responses：**
+
+| 项 | 结果 |
+| --- | --- |
+| 默认 effort | 六个都回显 `medium` |
+| `none` | 五个 200、0 推理 token；**`gpt-6-astra` 400**（① 面同样） |
+| `minimal` | OpenRouter 形态层改写成 `low`（回显 `low`）；原样线路（5.6-luna / -sol）回显 `none` |
+| `low` … `xhigh` / `max` | 六个都 200 且原样回显 |
+| 乱写 `bogus` | 六个都 400 `upstream_rejected_request`——网关自己的信封，上游原因被吞 |
+| `mode: "pro"` | 六个都回显 `standard` |
+| `temperature: 0.5` | OpenRouter 形态层 200 且回显 0.5；**`gpt-5.6-sol` 400 `Unsupported parameter: 'temperature' is not supported with this model.`**（OpenAI 原文）；5.6-luna 被分流到 OpenRouter 形态层，200 |
+| `max_output_tokens: 16` | `incomplete` + `max_output_tokens`；**`gpt-6-astra` 400，17 起就收**（① 的 `max_completion_tokens: 16` 同样 400、32 收） |
+| `text.verbosity: "low"` | 六个都回显 `low` |
+| strict `json_schema`（prompt 要 yellow、enum 只有 red/green/blue） | 六个都答 enum 内的值——**强制是真的** |
+| `web_search` | 六个都有 `web_search_call` + 引文；一次搜索输入 8.3K–8.7K token。报价（OpenRouter 形态层）：6-luna $0.011、6-sol $0.030、terra $0.030、**astra $0.110**；原样线路不报 |
+| 并行函数调用 | 六个都一轮两个 `function_call` |
+| 思考摘要 | **不是每次都有**：`summary: "auto"` 的非流请求只有 6-luna 带文本；流式里 astra 五次只有一次出 `reasoning_summary_text`，6-luna 在旧用例的短题上也有过一次没有。有推理 token 不等于有摘要 |
+
+**① Chat Completions：**
+
+| 项 | 结果 |
+| --- | --- |
+| `none` | 五个 200；`gpt-6-astra` 400 |
+| `minimal` / `max` | 五个 200；**`gpt-5.6-sol` 两个都 400**（原因被网关吞掉；同一 id 在 ② 上 `max` 是 200）。5.6-luna 这两种被分流到 OpenRouter 形态层，200 |
+| 函数工具 + 推理 | **`gpt-5.6-sol` 400，原文是 OpenAI 的**：`Function tools with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.`——**不发 `reasoning_effort` 也 400**（默认档不是 `none`），发 `none` 才 200。其余五个 200（6-*、terra 背后本来走 Responses；5.6-luna 被分流） |
+| `temperature: 0.5` | 六个都 200，**含 5.6-sol 的原样线路**（与 ② 上的 400 相反；生没生效没比） |
+| `max_tokens`（旧字段） | 5.6-sol 原样线路 200 |
+| strict `json_schema` / `json_object` | 六个都生效 |
+| 思维链 | OpenRouter 形态层在高档时给 `message.reasoning` 摘要 + `reasoning_details`；原样线路只有 `reasoning_tokens`，没有可显示的文本 |
+
+**花费**：OpenRouter 形态层两面都有 `usage.cost`。原样线路上，① 流式末块**只在带 `X-OrcaRouter-Include-Cost: true` 时**有
+`usage.cost_usd`（本项目 `reportedCost.ts` 的 `cost_usd ?? cost` 正好接住）；**② 带了头也没有任何花费字段**——5.6-luna / -sol
+走 Responses 的用量行按计费组定价，这是「没报 = 空」的设计本意，不是缺陷。
+
+**adapter 实测（每个 id 每面同一套）**：文本流 + usage、花费、「关闭」、`max`、图片 + PDF 同一条消息（全部读出 teal 与
+PELICAN-73）、strict schema、不设力度的工具往返；② 另有一条思考摘要（三次里有一次即可）。失败的 7 条就是上表的：
+astra 「关闭」两面各 400、astra 摘要没流出（那次）、5.6-luna / -sol 的 ② 无花费、5.6-sol ① 的 `max` 与工具轮。
+
+**对本项目**（同日）：
+
+- `gpt-5.6-luna` / `-sol` 进 orcarouter 的标定表（目录数值、多模态、PDF）。
+- **没改、待定**的三处，都是「越界由端点说话」规则下作者会撞上的：
+  1. **`gpt-5.6-sol` 走 ① 的助手 / Agent 跑不起来**：带工具的请求只要没选「关闭」就 400。官方 ① 上 5.4 起都是这条
+     规则（[`responses.md`](responses.md) §9 原列为未验，这次拿到了原文），所以不只是这台网关的事。
+  2. **`gpt-6-astra` 选「关闭」是 400，而且网关把原因吞了**，作者只看到「上游拒绝了请求」。
+  3. **作者给 `gpt-5.6-sol` 设了温度，走 ② 就 400**（① 上不报错）。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
