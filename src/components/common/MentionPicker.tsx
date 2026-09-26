@@ -261,25 +261,37 @@ export function spliceMention(value: string, start: number, query: string, label
  * was reopened with the wrong query, a repeated query was moved to the
  * wrong `@`).
  */
-export function editRange(before: string, after: string): { start: number; end: number; delta: number } {
+export function editRange(before: string, after: string): { start: number; end: number; delta: number; lo: number } {
   const max = Math.min(before.length, after.length);
   let p = 0;
   while (p < max && before.charCodeAt(p) === after.charCodeAt(p)) p++;
   let s = 0;
   while (s < max - p && before.charCodeAt(before.length - 1 - s) === after.charCodeAt(after.length - 1 - s)) s++;
-  return { start: p, end: before.length - s, delta: after.length - before.length };
+  const end = before.length - s;
+  const delta = after.length - before.length;
+  // A pure insertion whose text repeats what stood before it can be read as
+  // made anywhere along that repeat (`@[草稿]` + `[潮汐.png]` at the `[`: the
+  // greedy prefix keeps the old `[` and puts the span one further right).
+  // `lo` is the leftmost place it could have been made — what a mention
+  // ending there must be compared against.
+  let lo = p;
+  if (end === p && delta > 0) {
+    while (lo > 0 && after.charCodeAt(lo - 1) === after.charCodeAt(lo - 1 + delta)) lo--;
+  }
+  return { start: p, end, delta, lo };
 }
 
 /**
  * Whether a mention at `start` with `query` was run over by the replaced
- * span — overlapping it, or ending exactly where it begins: a reference
- * landed on this very `@` keeps the `@` in the common prefix, so the span
- * starts one character after it, and an empty-query mention ends there.
- * Left open, that mention would then be claimed with `glued` set (the `[`
- * is in the text by now) and land a second reference in front of the first.
+ * span — overlapping it, or ending where it begins (at its leftmost reading,
+ * `lo`): a reference landed on this very `@` keeps the `@` in the common
+ * prefix, so the span begins after it, and an empty-query mention ends
+ * there. Left open, that mention would then be claimed with `glued` set
+ * (the `[` is in the text by now) and land a second reference in front of
+ * the first.
  */
-function inEdit(start: number, query: string, edit: { start: number; end: number }): boolean {
-  return start < edit.end && start + 1 + query.length >= edit.start;
+function inEdit(start: number, query: string, edit: { end: number; lo: number }): boolean {
+  return start < edit.end && start + 1 + query.length >= edit.lo;
 }
 
 /**
@@ -299,13 +311,17 @@ export function shiftCore(core: MentionCore, before: string, after: string): Men
 /**
  * The waiting picks after the same edit: moved when they lie after it. One
  * the edit ran over is left where it is — at landing, the text there no
- * longer reads as its mention, and nothing is spliced.
+ * longer reads as its mention, and nothing is spliced — and loses `glued`:
+ * whatever `[` now follows its `@` is the reference just landed there, not
+ * the prose it was glued to (the same reset `acceptPick` makes for a
+ * landing by this instance).
  */
 export function shiftClaims(pending: Map<number, MentionClaim>, before: string, after: string): void {
   const edit = editRange(before, after);
-  if (edit.delta === 0) return;
+  if (edit.delta === 0 && edit.start === edit.end) return;
   for (const [id, c] of pending) {
-    if (c.start >= edit.end) pending.set(id, { ...c, start: c.start + edit.delta });
+    if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); }
+    else if (c.glued && inEdit(c.start, c.query, edit)) pending.set(id, { ...c, glued: false });
   }
 }
 

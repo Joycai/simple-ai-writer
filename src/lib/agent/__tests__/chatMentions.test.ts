@@ -441,6 +441,22 @@ describe("a pick across a file read", () => {
     other.type("看@潮@", 3);
     other.external("看@潮@[夜航.png]");
     expect(other.state()).toMatchObject({ open: true, query: "潮", start: 1 });
+    // The `@` glued to prose `[草稿]`: the landed `[潮汐.png]` shares its `[`
+    // with the old text, so the greedy span sits one further right — the
+    // mention on that `@` still closes.
+    const glued = host();
+    for (const t of [["看[草稿]第一章", 1], ["看@[草稿]第一章", 2]] as const) glued.type(t[0], t[1]);
+    glued.external("看@[潮汐.png][草稿]第一章");
+    expect(glued.state().open).toBe(false);
+    // …and a glued pick still waiting on that `@` loses its `glued`: the `[`
+    // after it is now the landed reference, and the guard applies.
+    const waiting = host();
+    waiting.type("看@[草稿]第一章", 2);
+    const w = waiting.claim();
+    expect(w.glued).toBe(true);
+    waiting.type("看@[草稿]第一章，", 2);
+    waiting.external("看@[潮汐.png][草稿]第一章，");
+    expect(waiting.accept("看@[潮汐.png][草稿]第一章，", pic("沈砚.png"), w)).toBe("看@[潮汐.png][草稿]第一章，");
   });
 
   it("the edit moves a waiting pick whether its mention is closed, mid-sentence, or one of two alike", () => {
@@ -488,10 +504,12 @@ describe("a pick across a file read", () => {
   });
 
   it("editRange bounds one replaced span, never overlapping prefix and suffix", () => {
-    expect(editRange("看看@潮，和@夜", "看看@[潮汐.png]，和@夜")).toEqual({ start: 3, end: 4, delta: 7 });
-    expect(editRange("abc", "abc")).toEqual({ start: 3, end: 3, delta: 0 });
-    expect(editRange("aa", "aaa")).toEqual({ start: 2, end: 2, delta: 1 });
-    expect(editRange("看看@潮汐", "看看@[潮汐.png]汐")).toEqual({ start: 3, end: 4, delta: 7 });
+    expect(editRange("看看@潮，和@夜", "看看@[潮汐.png]，和@夜")).toEqual({ start: 3, end: 4, delta: 7, lo: 3 });
+    expect(editRange("abc", "abc")).toEqual({ start: 3, end: 3, delta: 0, lo: 3 });
+    // A pure insertion of a repeat can be read anywhere along the repeat.
+    expect(editRange("aa", "aaa")).toEqual({ start: 2, end: 2, delta: 1, lo: 0 });
+    expect(editRange("看看@潮汐", "看看@[潮汐.png]汐")).toEqual({ start: 3, end: 4, delta: 7, lo: 3 });
+    expect(editRange("看@[草稿]", "看@[潮汐.png][草稿]")).toEqual({ start: 3, end: 3, delta: 8, lo: 2 });
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {
