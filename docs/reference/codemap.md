@@ -169,6 +169,8 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it)
 
+`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器：`useMentionState` 管 @ 检测与落字（`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`），组件只画。列表顶上一行作用域 chip（设计稿 02i）：全部 / 条目 / 文档，候选有图才有「图片」；`sync` 用 `openRef` 分辨「新开」与「继续」，只有新开才把档位重置为「全部」。匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主把结果递进来；空档仍渲染（chip 行 + 一行事实），所以宿主的键盘分支以 `mention.open` 为门而不是 `items.length`。理由：`docs/feature/agent/mention-scope-ui-brief.md`
+
 ### `src/components/command/`, `onboarding/`, `library/`
 
 CommandPalette, onboarding flow, library view (文库: only what the author picked — `LibraryPicker` edits the members table, whole folders or single docs; book-spine ordering + per-collection resources; after its own moves it re-reads the spine from disk because `moveEntry` already rewrote it, and reloads on `spineRev`; see `docs/feature/library-plan.md` → 第四期)
@@ -537,6 +539,8 @@ RAG assembly (`rag.ts`), the current time as one line (`clock.ts` — a line, no
 ### `src/lib/search/`
 
 `globalSearch.ts`：⌘K 全局搜索的纯逻辑层——搜什么、怎么排、高亮哪一段。面板只做接线（把 `projectStore.fileTree` / `loreStore.index` / `editorStore.content` / `navStore.past` 递进来，把命中递给渲染），所以这一层能在 node 下测，面板换样子（设计稿 01d）时一个字都不用动。三条决定：**子串 > 词首 > 子序列**，且子序列**只在文档名和条目名上允许**（`ch3 ren` 命中 `第三章/人物小传.md` 是 ⌘P 的肌肉记忆），正文行上不允许——一行几十个字里几乎任何两个字都能按顺序找到，子序列在那里只是噪音；**空格分词、每个词各自命中**，一个词可以落在文档名上、另一个落在分组路径上，全中才算中；**回传的是区间而不是布尔**——高亮由区间画，旧面板在渲染时再 `indexOf` 一次查询串，只能亮第一个子串，子序列和多词一个都亮不出来。`currentTextDocument` 那条小闸也在这里：文本缓冲只在它属于 `projectStore` 说的当前文件时才可搜（文件加载是异步的，而图片刻意把上一份文本缓冲留在原地，两个条件各自都不够）。设计：`docs/feature/global-search-ui-brief.md`
+
+`mentionSearch.ts`：`@` 选择器的纯逻辑层（设计稿 02i）——作用域是先于一切的硬过滤（`scopeOf`：条目 / 文档 / 图片，录音与视频归文档档），`availableScopes` 是三个宿主 chip 行的**唯一**来源（有任何文件就保留「文档」档，行的形状不随项目有没有图而变），`searchMentions` 逐词复用 `matchText`、每个词取名字 / 别名 / 分组路径里最优的字段（×1 / ×0.9 / ×0.6，后者是 `searchFiles` 的目录档），空查询不打分而是按类交错——只有十行，作者刚打 `@` 就该看见两类都在；`countByScope` 只数不切，给空档那一行「别处有几条」。用结构化的 `MentionLike` 而不是组件的 `MentionItem`：`lib` 不 import `components`。旧的 `filterMentions`（只 `includes`、不排序、只看名字、条目独占前十）就是这里替掉的。理由：`docs/feature/agent/mention-scope-ui-brief.md`
 
 ### `src/lib/configsync/`
 
