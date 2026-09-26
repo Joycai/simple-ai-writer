@@ -228,11 +228,6 @@
   color: var(--color-sienna);
 }
 
-.hl {
-  background: var(--color-mention-bg);
-  color: var(--color-sienna);
-}
-
 /* AI 行：图标 14，标签 12.5 sans。 */
 .aiIcon { flex-shrink: 0; display: flex; color: var(--color-sienna); }
 .aiIcon.muted { color: var(--color-text-muted); }

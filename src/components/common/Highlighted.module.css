@@ -1,0 +1,6 @@
+/* A matched fragment: the mention wash under sienna text, in the palette and
+   the `@` picker alike (design-system.md → 全局搜索). */
+.hl {
+  background: var(--color-mention-bg);
+  color: var(--color-sienna);
+}

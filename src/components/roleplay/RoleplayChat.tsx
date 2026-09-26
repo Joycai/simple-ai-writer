@@ -59,9 +59,10 @@ import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
-  MentionPicker, mentionKey, mentionLabel,
-  useMentionState, type MentionItem,
+  MentionPicker, mentionKey, mentionKeyDown, mentionLabel,
+  useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
+import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
@@ -69,7 +70,6 @@ import type { AttachedItem } from "../../lib/lore/aiTask";
 import type {
   AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
 } from "../../lib/roleplay/model";
-import { availableScopes, countByScope, hasHits, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./RoleplayChat.module.css";
 
 /** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
@@ -404,6 +404,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const mention = useMentionState();
   // 草稿按角色分开；这一位开着的提名在下一位那里没有对应的 @。
   useEffect(() => { mention.close(); }, [agent.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
+  // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
+  // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
+  const ime = useImeGuard();
 
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
@@ -641,19 +645,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     setDetached(true);
   };
 
-  // 作用域、打分、截断都在 lib/search/mentionSearch（设计稿 02i）；chip 行只认
-  // `availableScopes`，宿主不另写一份规则。
-  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
-  const mentionSearch = useMemo(
-    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
-    [candidates, mention.query, mention.scope, projectPath],
-  );
-  const mentionItems = mentionSearch.items;
-  // 只有空档那一行读计数，所以只在列表为空时才算。
-  const mentionCounts = useMemo(
-    () => (mentionItems.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
-    [candidates, mention.query, projectPath, mentionItems.length],
-  );
+  // 作用域、打分、截断（设计稿 02i）都在共用的 hook 里，宿主不另写一份规则；
+  // `mentionSearch.open` 是选择器唯一的门。
+  const mentionSearch = useMentionSearch(candidates, mention, projectPath);
 
   /**
    * `+ 条目` 这类按钮只是替作者敲了一个 `@`。
@@ -712,28 +706,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // 选择器开着就接管——空档也开着（chip 行留着），作者才能 Tab 出去或 Esc 关掉。
-    if (mention.open) {
-      // Esc 关选择器，组字期间也是——从前就这样。
-      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      if (!composing) {
-        // Tab 切档，与 ⌘K 一致；只有 Enter 选中（设计稿 02i 1z §1）。
-        if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
-        if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-        if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-        if (e.key === "Enter" && !e.shiftKey) {
-          if (mentionItems.length) {
-            e.preventDefault();
-            void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
-            return;
-          }
-          // 别的档有命中时空档吞掉 Enter——此刻发送等于发出半截提名；哪儿都没有
-          // 命中时这个 @ 多半只是个 @，Enter 照常发送。
-          if (mentionCounts && hasHits(mentionCounts)) { e.preventDefault(); return; }
-        }
-      }
-    }
-    if (e.key === "Enter" && !e.shiftKey && !composing) {
+    // 选择器在屏上就先走它的键（空档也在——chip 行留着，作者才能 Tab 出去或
+    // Esc 关掉）；哪儿都没命中的 Enter 落到下面照常发送。见 mentionKeyDown。
+    if (mentionKeyDown(e, mention, mentionSearch, ime.isComposing(e), (item) => void handlePickMention(item))) return;
+    if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       doSend();
     }
@@ -1332,33 +1308,26 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               }}
               onKeyDown={onKeyDown}
               onContextMenu={snippetSave.onTextareaContextMenu}
-              onCompositionStart={() => setComposing(true)}
-              onCompositionEnd={() => setComposing(false)}
+              onCompositionStart={() => { setComposing(true); ime.imeProps.onCompositionStart(); }}
+              onCompositionEnd={() => { setComposing(false); ime.imeProps.onCompositionEnd(); }}
               onScroll={() => {
                 syncMirror();
               }}
             />
           </div>
 
-          {mention.open && (
+          {mentionSearch.open && (
             <MentionPicker
               anchorRef={taRef}
-              items={mentionItems}
-              hits={mentionSearch.hits}
+              mention={mention}
+              search={mentionSearch}
               projectPath={projectPath}
-              scopes={scopes}
-              scope={mention.scope}
-              onScopeChange={mention.setScope}
-              query={mention.query}
-              counts={mentionCounts}
               usedKeys={refKeys}
-              activeIndex={mention.active}
               preferAbove
               noteFor={(item) => (item.type === "lore" && resident.has(item.entity.dirPath)
                 ? t("roleplay.composer.refResident", { defaultValue: "已常驻" })
                 : null)}
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={mention.close}
             />
           )}
 

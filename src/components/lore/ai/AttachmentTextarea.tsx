@@ -15,7 +15,9 @@ import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import {
   MentionPicker,
   mentionKey,
+  mentionKeyDown,
   mentionLabel,
+  useMentionSearch,
   useMentionState,
   type MentionItem,
 } from "../../common/MentionPicker";
@@ -24,7 +26,6 @@ import { imageForModel } from "../../../lib/image/normalize";
 import { attachedKey, type AttachedItem } from "../../../lib/lore/aiTask";
 import type { LoreEntity } from "../../../lib/lore";
 import { useImeGuard } from "../../../lib/ime";
-import { availableScopes, countByScope, hasHits, searchMentions } from "../../../lib/search/mentionSearch";
 import { useProjectStore } from "../../../stores/projectStore";
 import styles from "./AttachmentTextarea.module.css";
 
@@ -77,18 +78,9 @@ export function AttachmentTextarea({
     // one, and the fallback branch below would try to read it as text.
     ...projectFiles.filter((f) => f.kind !== "media").map((file): MentionItem => ({ type: "file", file })),
   ], [entities, projectFiles]);
-  // Scoped, ranked and cut in lib/search/mentionSearch (设计稿 02i), same as
-  // the chat composers; the chip row is `availableScopes` and nothing else.
-  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
-  const search = useMemo(
-    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
-    [candidates, mention.query, mention.scope, projectPath],
-  );
-  const items = search.items;
-  const counts = useMemo(
-    () => (items.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
-    [candidates, mention.query, projectPath, items.length],
-  );
+  // Scoped, ranked and cut (设计稿 02i) by the same hook as the chat
+  // composers; `search.open` is the picker's one gate.
+  const search = useMentionSearch(candidates, mention, projectPath);
   const attachedKeys = new Set(attached.map(attachedKey));
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -135,26 +127,10 @@ export function AttachmentTextarea({
           placeholder={placeholder}
           value={instruction}
           onChange={handleChange}
-          onKeyDown={(e) => {
-            // Only while the picker is on screen — which, empty scope
-            // included, is whenever the mention is open. Other keys fall
-            // through to the textarea.
-            if (!mention.open) return;
-            // Consume Escape here so it closes the picker without also
-            // dismissing the surrounding modal (ModalShell).
-            if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-            if (ime.isComposing(e)) return;
-            // Tab cycles the scope, as in ⌘K; Enter alone picks (设计稿 02i).
-            if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
-            if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return; }
-            if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return; }
-            if (e.key === "Enter" && !e.shiftKey) {
-              if (items.length > 0) { e.preventDefault(); void handlePick(items[mention.active] ?? items[0]); return; }
-              // Swallowed only while another scope has the hit; with nothing
-              // anywhere the newline goes through as it always did.
-              if (counts && hasHits(counts)) e.preventDefault();
-            }
-          }}
+          // The picker's keys while it is on screen; everything else falls
+          // through to the textarea. Escape is consumed there so it closes the
+          // picker without also dismissing the surrounding modal (ModalShell).
+          onKeyDown={(e) => { mentionKeyDown(e, mention, search, ime.isComposing(e), (item) => void handlePick(item)); }}
           disabled={disabled}
           autoFocus={autoFocus}
           {...ime.imeProps}
@@ -179,21 +155,14 @@ export function AttachmentTextarea({
         </div>
       )}
 
-      {mention.open && (
+      {search.open && (
         <MentionPicker
           anchorRef={wrapRef}
-          items={items}
-          hits={search.hits}
+          mention={mention}
+          search={search}
           projectPath={projectPath}
-          scopes={scopes}
-          scope={mention.scope}
-          onScopeChange={mention.setScope}
-          query={mention.query}
-          counts={counts}
           usedKeys={attachedKeys}
-          activeIndex={mention.active}
           onPick={(item) => void handlePick(item)}
-          onDismiss={mention.close}
         />
       )}
     </div>

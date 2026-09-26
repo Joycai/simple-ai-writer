@@ -48,6 +48,7 @@ import {
   type RecentLocation,
   type SearchScope,
 } from "../../lib/search/globalSearch";
+import { Highlighted } from "../common/Highlighted";
 import { categoryColor } from "../lore/catColor";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import styles from "./CommandPalette.module.css";
@@ -82,19 +83,6 @@ const SNIPPET_PAD = 14;
 
 /** 面板记住上次的档（只在本会话）：连按三次 ⌘K 都是找条目，第四次不该退回「全部」。 */
 let lastScope: SearchScope = "all";
-
-function Highlighted({ text, ranges }: { text: string; ranges: MatchRange[] }) {
-  if (ranges.length === 0) return <>{text}</>;
-  const parts: React.ReactNode[] = [];
-  let cursor = 0;
-  ranges.forEach((r, i) => {
-    if (r.start > cursor) parts.push(text.slice(cursor, r.start));
-    parts.push(<span key={i} className={styles.hl}>{text.slice(r.start, r.end)}</span>);
-    cursor = r.end;
-  });
-  if (cursor < text.length) parts.push(text.slice(cursor));
-  return <>{parts}</>;
-}
 
 /** 「… · Tab 切到…」里的 Tab 用赭石标出来：它告诉作者用哪个键，而不是让他离开键盘去点。 */
 function WithTabKey({ text }: { text: string }) {

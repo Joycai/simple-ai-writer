@@ -167,9 +167,9 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 ### `src/components/common/`
 
-shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it)
+shared primitives, including `Slider` (设计稿 02e: the app's one slider — square 14×14 thumb, 2px track, optional log₂ scale, tick snapping within 4px, full keyboard; the value is the truth and a typed readout beside it mirrors it) and `Highlighted` (the one `MatchRange[]` painter for every list ranked by `lib/search`'s `matchText` — ⌘K and the `@` picker draw the same hit the same way; it only paints, merging stays with the search)
 
-`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器：`useMentionState` 管 @ 检测与落字（`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`），组件只画。列表顶上一行作用域 chip（设计稿 02i）：全部 / 条目 / 文档，候选有图才有「图片」；`sync` 用 `openRef` 分辨「新开」与「继续」，只有新开才把档位重置为「全部」。匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主把结果递进来；空档仍渲染（chip 行 + 一行事实），所以宿主的键盘分支以 `mention.open` 为门而不是 `items.length`。理由：`docs/feature/agent/mention-scope-ui-brief.md`
+`MentionPicker.tsx` 是三个 `@` 宿主（对话助手、扮演、知识库三个 AI 弹窗）共用的选择器：`useMentionState` 管 @ 检测与落字（`findMention` 是纯函数，node 测试直接 import，所以这个文件**不能** import store——词表走 `appTerms` 而不是 `useTerms`），组件只画。列表顶上一行作用域 chip（设计稿 02i）：全部 / 条目 / 文档，候选有图才有「图片」；`sync` 用 `openRef` 分辨「新开」与「继续」，只有新开才把档位重置为「全部」。匹配、排序、可用档全在 `lib/search/mentionSearch`，宿主经同文件的 `useMentionSearch(candidates, mention, projectPath)` 跑它（选择器不在屏上时什么都不算——候选每次条目写入、文件树刷新都在变），键盘协议只有 `mentionKeyDown` 这一份（Esc 关、组字期间交还输入法、Tab 切档、↑↓、Enter 选中或在空档吞掉），三个宿主各调一次、只在「选中之后做什么」上不同——第一版三处手抄，一个 PR 里就漂了一次（弹窗漏了 IME 守卫，扮演拿裸 `composing` 当门）。门是 `search.open` = `mention.open && candidates.length > 0`：空档仍渲染（chip 行 + 一行事实），但一个候选都没有时没什么可分档，选择器照旧不出来、键照旧放过。命中高亮用 `common/Highlighted`，与 ⌘K 同一个组件。理由：`docs/feature/agent/mention-scope-ui-brief.md`
 
 ### `src/components/command/`, `onboarding/`, `library/`
 

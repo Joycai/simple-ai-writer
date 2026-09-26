@@ -22,7 +22,9 @@ import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
 import {
   MentionPicker,
   mentionKey,
+  mentionKeyDown,
   mentionLabel,
+  useMentionSearch,
   useMentionState,
   type MentionItem,
 } from "../common/MentionPicker";
@@ -88,7 +90,6 @@ import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
 import type { AttachedItem } from "../../lib/lore/aiTask";
-import { availableScopes, countByScope, hasHits, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./AgentChat.module.css";
 import { providerFor } from "../../lib/ai/routes";
 
@@ -269,19 +270,9 @@ export function AgentChat() {
       .map((file): MentionItem => ({ type: "file", file })),
   ], [loreIndex, projectFiles, canSeeImages, canTranscribe, canVideo]);
 
-  // Scoped, ranked and cut in lib/search/mentionSearch (设计稿 02i); the chip
-  // row is `availableScopes` and nothing else — no per-host copy of the rule.
-  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
-  const search = useMemo(
-    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
-    [candidates, mention.query, mention.scope, projectPath],
-  );
-  const mentionItems = search.items;
-  // Only the empty line reads the counts, so only an empty list pays for them.
-  const mentionCounts = useMemo(
-    () => (mentionItems.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
-    [candidates, mention.query, projectPath, mentionItems.length],
-  );
+  // Scoped, ranked and cut (设计稿 02i) — the shared hook, so this host holds
+  // no copy of the rule; `search.open` is the picker's one gate.
+  const search = useMentionSearch(candidates, mention, projectPath);
   const refKeys = new Set(refs.map(attachedKey));
 
   /**
@@ -602,36 +593,13 @@ export function AgentChat() {
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // While the picker is on screen — and it now always is while the mention
-    // is open, empty scope included (the chip row stays), so the author can
-    // Tab out of an empty scope or Esc the whole thing. An `@` mid-sentence
-    // no longer keeps a mention open past a terminator (findMention), which
-    // is what used to leave this branch swallowing Enter with nothing shown.
-    if (mention.open) {
-      // Esc closes the picker even mid-composition — it always did, and with
-      // a run live the alternative is that Esc stops the run instead.
-      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      if (!ime.isComposing(e)) {
-        // Tab cycles the scope, as in ⌘K — Enter alone picks (设计稿 02i 1z §1).
-        if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
-        if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-        if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-        if (e.key === "Enter" && !e.shiftKey) {
-          if (mentionItems.length > 0) {
-            e.preventDefault();
-            void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
-            return;
-          }
-          // An empty scope swallows Enter while another scope has the hit —
-          // sending now would send a half-formed mention. When nothing
-          // matches anywhere, the `@` is probably just an `@`: let Enter
-          // send, as it did before the picker learned to stay open.
-          if (mentionCounts && hasHits(mentionCounts)) { e.preventDefault(); return; }
-        }
-      }
-    }
+    // The picker's keys first, while it is on screen (empty scope included —
+    // the chip row stays, so the author can Tab out of it or Esc the whole
+    // thing). Esc there closes the picker rather than stopping the run; Enter
+    // with nothing matching anywhere falls through to send. See mentionKeyDown.
+    if (mentionKeyDown(e, mention, search, ime.isComposing(e), (item) => void handlePickMention(item))) return;
     // 2d: Esc 同效 — while a run is live, Esc anywhere in the composer stops
-    // it (the mention branch above already claimed Esc for closing the picker).
+    // it (the picker, when open, has already claimed Esc above).
     if (e.key === "Escape" && chatRunning) {
       e.preventDefault();
       handleStop();
@@ -1120,25 +1088,18 @@ export function AgentChat() {
             placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
             disabled={!activeModelId}
           />
-          {mention.open && (
+          {search.open && (
             // Anchored to the textarea itself rather than a wrapper: the
             // composer is a flex column, and an extra box in it would change
             // how the input sizes.
             <MentionPicker
               anchorRef={inputRef}
-              items={mentionItems}
-              hits={search.hits}
+              mention={mention}
+              search={search}
               projectPath={projectPath}
-              scopes={scopes}
-              scope={mention.scope}
-              onScopeChange={mention.setScope}
-              query={mention.query}
-              counts={mentionCounts}
               usedKeys={refKeys}
-              activeIndex={mention.active}
               preferAbove
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={mention.close}
             />
           )}
           <div className={styles.inputFooter}>

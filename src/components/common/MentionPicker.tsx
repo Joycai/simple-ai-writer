@@ -10,17 +10,20 @@
  *
  * The list is scoped (设计稿 02i): a chip row on top — 全部 / 条目 / 文档 /
  * 图片 — narrows the candidates to one kind, Tab cycles it, and every fresh
- * `@` starts at 全部. Matching and ranking live in `lib/search/mentionSearch`
- * (the hosts call it and hand the result in); this component only draws.
- * An empty scope still renders the chip row plus one line saying where the
- * hits are — a list that vanished on zero matches left the author unable to
- * see which scope they were in, let alone leave it.
+ * `@` starts at 全部. Matching and ranking live in `lib/search/mentionSearch`;
+ * `useMentionSearch` runs it for a host and `mentionKeyDown` is the one copy
+ * of the keyboard protocol, so the three composers differ only in what they
+ * do with a pick. This component only draws. An empty scope still renders the
+ * chip row plus one line saying where the hits are — a list that vanished on
+ * zero matches left the author unable to see which scope they were in, let
+ * alone leave it. No candidates at all is different: then there is nothing to
+ * scope, and the picker stays off screen as it always did.
  *
  * Rendered through a portal so the list escapes the modal's overflow context —
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -28,16 +31,20 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
-import type { MatchRange } from "../../lib/search/globalSearch";
 import {
+  availableScopes,
+  countByScope,
   cycleScope,
+  hasHits,
   mentionSub,
+  searchMentions,
   type MentionHit,
   type MentionScope,
   type ScopedKind,
 } from "../../lib/search/mentionSearch";
+import { Highlighted } from "./Highlighted";
 // The pure vocabulary function, not stores/projectStore's useTerms hook: this
-// module's helpers (findMention, useMentionState) are imported by node-side
+// module's helpers (findMention, mentionKeyDown, useMentionSearch) are imported by node-side
 // tests, and a store import would drag appStore's module-scope theme work —
 // which touches `document` — into that chain. Same words either way: useTerms
 // is appTerms keyed on the app language, which i18n already knows.
@@ -94,7 +101,7 @@ export function findMention(text: string, caret: number): { start: number; query
   return { start: at, query };
 }
 
-interface MentionState {
+export interface MentionState {
   open: boolean;
   query: string;
   /** Highlighted row — hosts drive it with ↑/↓ and confirm with Enter. */
@@ -211,18 +218,103 @@ function EntityThumb({ avatarPath }: { avatarPath: string | null }) {
   return <img src={url} className={styles.pickerThumb} alt="" />;
 }
 
-/** Text with its matched fragments marked — ranges come from the search, merged and sorted. */
-function Highlighted({ text, ranges }: { text: string; ranges: readonly MatchRange[] | undefined }) {
-  if (!ranges || ranges.length === 0) return <>{text}</>;
-  const parts: React.ReactNode[] = [];
-  let at = 0;
-  for (const r of ranges) {
-    if (r.start > at) parts.push(text.slice(at, r.start));
-    parts.push(<span key={r.start} className={styles.hl}>{text.slice(r.start, r.end)}</span>);
-    at = r.end;
+// ── Search and keys, shared by the hosts ─────────────────────────────────────
+
+/** What `useMentionSearch` hands a host: the picker's whole input for one keystroke. */
+export interface MentionSearch {
+  /**
+   * The picker is on screen: a mention is open *and* the host has something
+   * to offer. With no candidates at all there is nothing to scope — the
+   * picker stays off and the keys fall through, as before it learned to
+   * stay open on an empty scope.
+   */
+  open: boolean;
+  /** Chips on offer — `availableScopes(candidates)`; empty while off screen. */
+  scopes: readonly MentionScope[];
+  /** Already scoped, ranked and cut. */
+  items: MentionItem[];
+  /** Where each shown row matched, by index; empty for an empty query. */
+  hits: ReadonlyMap<number, MentionHit>;
+  /**
+   * Hits per kind for this query, ignoring the scope — what the *other* chips
+   * would show. Only the empty line and the Enter rule read it, so it is
+   * computed only for an empty list.
+   */
+  counts: Record<ScopedKind, number> | undefined;
+}
+
+const NO_ITEMS: MentionItem[] = [];
+const NO_HITS: ReadonlyMap<number, MentionHit> = new Map();
+
+/**
+ * Run the search for a host's candidates. One place, so the three composers
+ * cannot drift on *what* the list holds; nothing is computed while the picker
+ * is off screen — the candidates change on every lore write and file-tree
+ * refresh, and re-scoring them for a list nobody sees is pure waste.
+ */
+export function useMentionSearch(
+  candidates: readonly MentionItem[],
+  mention: MentionState,
+  projectPath: string | null,
+): MentionSearch {
+  const open = mention.open && candidates.length > 0;
+  const { query, scope } = mention;
+  const scopes = useMemo(() => (open ? availableScopes(candidates) : []), [open, candidates]);
+  const result = useMemo(
+    () => (open ? searchMentions(candidates, query, scope, projectPath) : null),
+    [open, candidates, query, scope, projectPath],
+  );
+  const items = result?.items ?? NO_ITEMS;
+  const counts = useMemo(
+    () => (open && items.length === 0 ? countByScope(candidates, query, projectPath) : undefined),
+    [open, candidates, query, projectPath, items.length],
+  );
+  return { open, scopes, items, hits: result?.hits ?? NO_HITS, counts };
+}
+
+/** The fields of a keyboard event this reads — a React event, or a test's literal. */
+interface KeyEventLike {
+  key: string;
+  shiftKey: boolean;
+  preventDefault: () => void;
+}
+
+/**
+ * The picker's share of a host's keydown — the one copy of the protocol.
+ * Returns true when the key was the picker's and the host should stop; false
+ * when it falls through to the host's own handling, Enter-to-send included.
+ *
+ * - Off screen → nothing claimed.
+ * - Esc closes, mid-composition or not: it always did, and a chat host would
+ *   otherwise read the same Esc as 「stop the run」.
+ * - While an IME owns the keys (`composing` — pass `useImeGuard().isComposing(e)`,
+ *   not a bare composition flag; lib/ime says why), the rest is left alone: a
+ *   pinyin Enter commits letters, not a row.
+ * - Tab / Shift+Tab cycle the scope, as ⌘K does; ↑ / ↓ move; Enter alone picks
+ *   (设计稿 02i 1z §1).
+ * - Enter on an empty list is swallowed only while another scope has the hit —
+ *   sending now would send a half-formed mention. With nothing anywhere the
+ *   `@` is probably just an `@`, and Enter goes through to the host.
+ */
+export function mentionKeyDown(
+  e: KeyEventLike,
+  mention: Pick<MentionState, "active" | "close" | "move" | "cycleScope">,
+  search: MentionSearch,
+  composing: boolean,
+  onPick: (item: MentionItem) => void,
+): boolean {
+  if (!search.open) return false;
+  if (e.key === "Escape") { e.preventDefault(); mention.close(); return true; }
+  if (composing) return false;
+  const { items, scopes, counts } = search;
+  if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return true; }
+  if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return true; }
+  if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return true; }
+  if (e.key === "Enter" && !e.shiftKey) {
+    if (items.length > 0) { e.preventDefault(); onPick(items[mention.active] ?? items[0]); return true; }
+    if (counts && hasHits(counts)) { e.preventDefault(); return true; }
   }
-  if (at < text.length) parts.push(text.slice(at));
-  return <>{parts}</>;
+  return false;
 }
 
 // ── The list ─────────────────────────────────────────────────────────────────
@@ -230,28 +322,14 @@ function Highlighted({ text, ranges }: { text: string; ranges: readonly MatchRan
 interface MentionPickerProps {
   /** Element the list anchors to — usually the textarea's wrapper. */
   anchorRef: React.RefObject<HTMLElement | null>;
-  /** Already scoped, ranked and cut — `searchMentions(...).items`. */
-  items: MentionItem[];
-  /** `searchMentions(...).hits`: where each shown row matched. Empty for an empty query. */
-  hits?: ReadonlyMap<number, MentionHit>;
+  /** The host's `useMentionState()`: query, scope, the highlighted row, and the chip / dismiss actions. */
+  mention: MentionState;
+  /** The host's `useMentionSearch(...)`: what the list holds. Render only while `search.open`. */
+  search: MentionSearch;
   /** The project root, for a document's group-path line. */
   projectPath: string | null;
-  /** Chips on offer — `availableScopes(candidates)`. */
-  scopes: readonly MentionScope[];
-  scope: MentionScope;
-  onScopeChange: (scope: MentionScope) => void;
-  /** What has been typed after the `@`; the empty line quotes it. */
-  query: string;
-  /**
-   * Hits per kind for this query, ignoring the scope — what the *other*
-   * chips would show. Only read when `items` is empty, so a host may skip
-   * computing it otherwise.
-   */
-  counts?: Record<ScopedKind, number>;
   /** Keys already attached; shown dimmed and inert. */
   usedKeys: Set<string>;
-  /** Row the host's ↑/↓ has highlighted, and what Enter will pick. */
-  activeIndex?: number;
   /**
    * Anchor the list above the input instead of below. The chat composer sits at
    * the panel's bottom edge, so above is where the room is — and where the 2b
@@ -271,13 +349,13 @@ interface MentionPickerProps {
    */
   noteFor?: (item: MentionItem) => string | null;
   onPick: (item: MentionItem) => void;
-  onDismiss: () => void;
 }
 
 export function MentionPicker({
-  anchorRef, items, hits, projectPath, scopes, scope, onScopeChange, query, counts,
-  usedKeys, activeIndex = 0, preferAbove = false, noteFor, onPick, onDismiss,
+  anchorRef, mention, search, projectPath, usedKeys, preferAbove = false, noteFor, onPick,
 }: MentionPickerProps) {
+  const { items, hits, scopes, counts } = search;
+  const { scope, query, active: activeIndex, setScope, close: onDismiss } = mention;
   const { t, i18n } = useTranslation();
   const terms = appTerms(i18n.language.startsWith("zh"));
   const [style, setStyle] = useState<React.CSSProperties>({});
@@ -348,11 +426,11 @@ export function MentionPicker({
         ? t("ai.mention.emptyAll", { q, defaultValue: "没有匹配「{{q}}」" })
         : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
     }
-    const head = scope === "all"
-      ? null
-      : q
-        ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
-        : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
+    // Past this point the scope is a narrow one: 全部 with an empty list means
+    // nothing matched anywhere, which the branch above has already answered.
+    const head = q
+      ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
+      : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
     // The count is the one thing on this line worth the eye: interpolate a
     // sentinel for {{n}} and put the number back in a <b>.
     const SENT = "\u0000";
@@ -367,7 +445,7 @@ export function MentionPicker({
     });
     return (
       <>
-        {head && <>{head}{" · "}</>}
+        {head}{" · "}
         {parts.map((p, i) => <span key={i}>{i > 0 && " · "}{p}</span>)}
         {" · "}<i>Tab</i> {t("ai.mention.switchOver", { defaultValue: "切过去" })}
       </>
@@ -384,7 +462,7 @@ export function MentionPicker({
             className={`${styles.scope} ${s === scope ? styles.scopeOn : ""}`}
             // mousedown, not click, and prevented: the textarea keeps focus and
             // its caret, the same reason the rows do it.
-            onMouseDown={(e) => { e.preventDefault(); onScopeChange(s); }}
+            onMouseDown={(e) => { e.preventDefault(); setScope(s); }}
           >
             {scopeLabel(s)}
           </button>
@@ -397,7 +475,7 @@ export function MentionPicker({
         const key = mentionKey(item);
         const used = usedKeys.has(key);
         const isActive = i === activeIndex;
-        const hit = hits?.get(i);
+        const hit = hits.get(i);
         // Second line: a document's group, or — for an entry found by one of
         // its aliases — that alias, else a name with no visible match would
         // look like a wrong answer.

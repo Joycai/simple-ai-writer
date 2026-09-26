@@ -26,7 +26,12 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { findMention } = await import("../../../components/common/MentionPicker");
+const { findMention, mentionKeyDown, useMentionSearch } = await import("../../../components/common/MentionPicker");
+type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
+type MentionState = import("../../../components/common/MentionPicker").MentionState;
+type MentionSearch = import("../../../components/common/MentionPicker").MentionSearch;
+const { createElement } = await import("react");
+const { renderToString } = await import("react-dom/server");
 const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP, refsAhead } = await import("../chatRefs");
 
 describe("findMention", () => {
@@ -72,6 +77,130 @@ describe("findMention", () => {
   it("still opens on an @ that runs straight out of Chinese prose", () => {
     // The everyday case: nobody types a space before `@` in Chinese.
     expect(findMention("参考@第三", 5)).toEqual({ start: 2, query: "第三" });
+  });
+});
+
+// ── The keyboard protocol, once for all three hosts ──────────────────────────
+
+const doc = (name: string): MentionItem =>
+  ({ type: "file", file: { name, path: `/p/${name}`, kind: "text" } }) as MentionItem;
+const entry = (name: string): MentionItem =>
+  ({ type: "lore", entity: { name, aliases: [] } }) as unknown as MentionItem;
+
+function fakeMention(active = 0) {
+  return { active, close: vi.fn(), move: vi.fn(), cycleScope: vi.fn() };
+}
+function fakeSearch(over: Partial<MentionSearch> = {}): MentionSearch {
+  return { open: true, scopes: ["all", "lore", "text"], items: [doc("a.md"), doc("b.md")], hits: new Map(), counts: undefined, ...over };
+}
+function key(k: string, shiftKey = false) {
+  return { key: k, shiftKey, preventDefault: vi.fn() };
+}
+
+describe("mentionKeyDown", () => {
+  it("claims nothing while the picker is off screen", () => {
+    const m = fakeMention();
+    const e = key("Enter");
+    expect(mentionKeyDown(e, m, fakeSearch({ open: false }), false, vi.fn())).toBe(false);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    expect(m.close).not.toHaveBeenCalled();
+  });
+
+  it("Escape closes the picker, mid-composition included", () => {
+    const m = fakeMention();
+    const e = key("Escape");
+    expect(mentionKeyDown(e, m, fakeSearch(), true, vi.fn())).toBe(true);
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(m.close).toHaveBeenCalled();
+  });
+
+  it("leaves every other key to the IME while composing", () => {
+    const m = fakeMention();
+    const pick = vi.fn();
+    for (const k of ["Enter", "Tab", "ArrowDown"]) {
+      const e = key(k);
+      expect(mentionKeyDown(e, m, fakeSearch(), true, pick)).toBe(false);
+      expect(e.preventDefault).not.toHaveBeenCalled();
+    }
+    expect(pick).not.toHaveBeenCalled();
+    expect(m.cycleScope).not.toHaveBeenCalled();
+  });
+
+  it("Tab and Shift+Tab cycle the scope; Enter alone picks the highlighted row", () => {
+    const m = fakeMention(1);
+    const pick = vi.fn();
+    const s = fakeSearch();
+    expect(mentionKeyDown(key("Tab"), m, s, false, pick)).toBe(true);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, 1);
+    expect(mentionKeyDown(key("Tab", true), m, s, false, pick)).toBe(true);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, -1);
+    expect(pick).not.toHaveBeenCalled();
+    expect(mentionKeyDown(key("Enter"), m, s, false, pick)).toBe(true);
+    expect(pick).toHaveBeenCalledWith(s.items[1]);
+    // Shift+Enter is the host's newline, not a pick.
+    expect(mentionKeyDown(key("Enter", true), m, s, false, pick)).toBe(false);
+  });
+
+  it("↑ / ↓ move within the shown rows", () => {
+    const m = fakeMention();
+    expect(mentionKeyDown(key("ArrowDown"), m, fakeSearch(), false, vi.fn())).toBe(true);
+    expect(m.move).toHaveBeenLastCalledWith(1, 2);
+    expect(mentionKeyDown(key("ArrowUp"), m, fakeSearch(), false, vi.fn())).toBe(true);
+    expect(m.move).toHaveBeenLastCalledWith(-1, 2);
+  });
+
+  it("swallows Enter on an empty scope only while another scope has the hit", () => {
+    const m = fakeMention();
+    const pick = vi.fn();
+    // 条目 scope, nothing here, but the document chip holds the match: a send
+    // now would carry a half-formed mention.
+    const elsewhere = key("Enter");
+    expect(mentionKeyDown(elsewhere, m, fakeSearch({ items: [], counts: { lore: 0, text: 1, image: 0 } }), false, pick)).toBe(true);
+    expect(elsewhere.preventDefault).toHaveBeenCalled();
+    // Nothing anywhere: the `@` is just an `@`, and Enter goes to the host.
+    const nowhere = key("Enter");
+    expect(mentionKeyDown(nowhere, m, fakeSearch({ items: [], counts: { lore: 0, text: 0, image: 0 } }), false, pick)).toBe(false);
+    expect(nowhere.preventDefault).not.toHaveBeenCalled();
+    expect(pick).not.toHaveBeenCalled();
+  });
+});
+
+describe("useMentionSearch", () => {
+  // Rendered to a string: the hook is memo and arithmetic, no effects, so a
+  // server render is enough to read what it hands the host.
+  function run(candidates: MentionItem[], over: Partial<MentionState>) {
+    const mention = { open: true, query: "", scope: "all", active: 0, ...over } as MentionState;
+    let out: MentionSearch | null = null;
+    function Probe() { out = useMentionSearch(candidates, mention, "/p"); return null; }
+    renderToString(createElement(Probe));
+    return out!;
+  }
+
+  it("stays off screen with no candidates at all — nothing to scope", () => {
+    const r = run([], { open: true });
+    expect(r.open).toBe(false);
+    expect(r.scopes).toEqual([]);
+    expect(r.items).toEqual([]);
+    expect(r.counts).toBeUndefined();
+  });
+
+  it("computes nothing while the mention is closed", () => {
+    const r = run([doc("a.md")], { open: false });
+    expect(r.open).toBe(false);
+    expect(r.items).toEqual([]);
+    expect(r.scopes).toEqual([]);
+  });
+
+  it("offers the present kinds, the scoped list, and counts only for an empty list", () => {
+    const items = [entry("沈砚"), doc("第三章 潮汐门.md")];
+    const all = run(items, { query: "" });
+    expect(all.open).toBe(true);
+    expect(all.scopes).toEqual(["all", "lore", "text"]);
+    expect(all.items).toHaveLength(2);
+    expect(all.counts).toBeUndefined();
+    const empty = run(items, { query: "潮", scope: "lore" });
+    expect(empty.items).toEqual([]);
+    expect(empty.counts).toEqual({ lore: 0, text: 1, image: 0 });
   });
 });
 

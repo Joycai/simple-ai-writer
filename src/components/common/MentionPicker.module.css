@@ -132,12 +132,6 @@
   white-space: nowrap;
 }
 
-/* A matched fragment, same as the palette's. */
-.hl {
-  background: var(--color-mention-bg);
-  color: var(--color-accent-text);
-}
-
 .pickerBadge {
   font-size: 10px;
   color: var(--color-text-muted);
