@@ -60,7 +60,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, type MentionItem,
+  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, useOwnDraft, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -300,11 +300,25 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const refs = useComposerStore((s) => roleplayComposerOf(s, agent.id).refs);
   const setRoleplayDraft = useComposerStore((s) => s.setRoleplayDraft);
   const setRoleplayRefs = useComposerStore((s) => s.setRoleplayRefs);
-  const clearComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  const clearRoleplayComposer = useComposerStore((s) => s.clearRoleplayComposer);
+  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
+  // 一样只属于这一位。
+  const mention = useMentionState();
+  // 读文件期间切走角色再切回，旧实例读完照样把 `@[名字]` 落进这份草稿——那不是
+  // 这个实例写的。自己的每次写入都报一声，别人的就认得出来，开着的提名和等着读完
+  // 的 claim 跟着改动段平移（对话助手同一个 hook）。
+  const ownedDraft = useOwnDraft(draft, () => roleplayComposerOf(useComposerStore.getState(), agent.id).draft, mention);
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => setRoleplayDraft(agent.id, update),
-    [agent.id, setRoleplayDraft],
+    (update: string | ((prev: string) => string)) => {
+      setRoleplayDraft(agent.id, update);
+      ownedDraft();
+    },
+    [agent.id, setRoleplayDraft, ownedDraft],
   );
+  const clearComposer = useCallback(() => {
+    clearRoleplayComposer(agent.id);
+    ownedDraft();
+  }, [agent.id, clearRoleplayComposer, ownedDraft]);
   const setRefs = useCallback(
     (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) => setRoleplayRefs(agent.id, update),
     [agent.id, setRoleplayRefs],
@@ -402,9 +416,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       instruction,
     });
   }, [projectPath, agent, updateAgent]);
-  // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
-  // 一样只属于这一位。
-  const mention = useMentionState();
   // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
   // 读失败了也按角色记：发起读取的实例可能已经不在，拒绝提示由屏上这一个（或
   // 下一个挂上这位角色的）显示，显示过就取走。
@@ -649,7 +660,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const doSend = () => {
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
-    clearComposer(agent.id);
+    clearComposer();
     // 放行发送的 Enter（哪个档都没命中的 @）不会自己关掉提名；空列表的选择器
     // 现在会留在屏上，不关它就一直挂在空输入框上方吃 Tab 和方向键。
     mention.close();

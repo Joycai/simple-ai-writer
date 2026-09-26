@@ -738,6 +738,37 @@ export function useMentionState(): MentionState {
   };
 }
 
+/**
+ * Tells this instance's writes to its draft from anyone else's, and moves the
+ * open mention and the picks waiting on a file read by the others' (see
+ * `MentionState.external`). The draft lives in a store and a host remounts
+ * per draft owner (a conversation, a roleplay character), so an instance
+ * unmounted by a switch can still land a `@` reference into this draft once
+ * its file read finishes; the picker would otherwise sit open over the landed
+ * reference, and a pick claimed on a `@` after it would miss its mention.
+ *
+ * Returns `owned`: call it right after every write this instance makes — it
+ * records the draft as `read()` gives it then. A value, not a flag: a write
+ * that leaves the draft as it was (a pick that landed nothing, a clear of an
+ * empty draft) never renders, and a flag set for it would swallow the next
+ * write that was not ours. Our own writes either carry their own `sync`
+ * (typing, `+ 引用`) or land text the picker's outside click has already
+ * closed on (a snippet insert, 回到这里重说).
+ */
+export function useOwnDraft(draft: string, read: () => string, mention: MentionState): () => void {
+  const own = useRef(draft);
+  // Through a ref, so `owned` is stable and a host's `setDraft` built on it is too.
+  const readNow = useRef(read);
+  readNow.current = read;
+  useEffect(() => {
+    const before = own.current;
+    if (draft === before) return;
+    own.current = draft;
+    mention.external(before, draft);
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useCallback(() => { own.current = readNow.current(); }, []);
+}
+
 // ── Thumbnails ───────────────────────────────────────────────────────────────
 
 function FileThumb({ file }: { file: ProjectFile }) {
