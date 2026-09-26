@@ -510,6 +510,21 @@ describe("a pick across a file read", () => {
     expect(editRange("aa", "aaa")).toEqual({ start: 2, end: 2, delta: 1, lo: 0 });
     expect(editRange("看看@潮汐", "看看@[潮汐.png]汐")).toEqual({ start: 3, end: 4, delta: 7, lo: 3 });
     expect(editRange("看@[草稿]", "看@[潮汐.png][草稿]")).toEqual({ start: 3, end: 3, delta: 8, lo: 2 });
+    // Every landing another instance can make: `lo` sits right after the
+    // `@` that got the reference, so the mention on it closes and no other.
+    const texts = ["看看@", "看看@潮", "看@[草稿]第一章", "@潮@潮", "看看@，和@夜", "@[沈砚]@", "a@b @c"];
+    const labels = ["潮汐.png", "[草稿]第一章.md", "沈砚", "@2x.png"];
+    for (const text of texts) {
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] !== "@") continue;
+        for (const label of labels) {
+          const after = `${text.slice(0, i)}@[${label}]${text.slice(i + 1)}`;
+          expect(editRange(text, after).lo, `${text} @${i} ${label}`).toBe(i + 1);
+          const on = shiftCore({ open: true, id: 1, query: "", active: 0, scope: "all", start: i }, text, after);
+          expect(on.open, `${text} @${i} ${label}`).toBe(false);
+        }
+      }
+    }
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {

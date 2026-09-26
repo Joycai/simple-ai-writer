@@ -255,9 +255,10 @@ export function spliceMention(value: string, start: number, query: string, label
  * how a change that was not the author's typing — another instance of the
  * chat composer landing a reference into the same draft — is read: the
  * text after the span moved by `delta`, the text before it did not, and
- * whatever the span covered is gone. A single landed reference is one span,
- * so the bounds are exact; reading the *caret* instead was tried and went
- * wrong three ways (a closed mention was never moved, a mid-sentence one
+ * whatever the span covered is gone. A single landed reference is one span:
+ * what was replaced is exact, but *where* a pure insertion was made is
+ * ambiguous wherever the inserted text repeats its neighbours (see `lo`);
+ * reading the *caret* instead was tried and went wrong three ways (a closed mention was never moved, a mid-sentence one
  * was reopened with the wrong query, a repeated query was moved to the
  * wrong `@`).
  */
