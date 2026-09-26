@@ -35,7 +35,10 @@ describe("scopeOf / availableScopes", () => {
   it("offers only the kinds that are present, all first", () => {
     expect(availableScopes([lore("甲"), file("a.md")])).toEqual(["all", "lore", "text"]);
     expect(availableScopes([lore("甲"), file("a.md"), file("b.png", "image")])).toEqual(["all", "lore", "text", "image"]);
-    expect(availableScopes([file("b.png", "image")])).toEqual(["all", "image"]);
+    // A file of any kind keeps the document chip: the row's shape must not
+    // depend on whether this project happens to have pictures.
+    expect(availableScopes([file("b.png", "image")])).toEqual(["all", "text", "image"]);
+    expect(availableScopes([lore("甲")])).toEqual(["all", "lore"]);
   });
 });
 
@@ -70,6 +73,20 @@ describe("searchMentions — typed query", () => {
     expect(r.hits.get(1)?.label).toEqual([{ start: 4, end: 5 }]);
     expect(r.hits.get(2)?.label).toEqual([]);
     expect(r.hits.get(2)?.sub).toEqual([{ start: 3, end: 4 }]);
+  });
+
+  it("lets each word hit a different field, as ⌘K does", () => {
+    expect(names(searchMentions(items, "潮汐门篇 归途", "all", ROOT))).toEqual(["第五章 归途.md"]);
+    const r = searchMentions(items, "潮汐门篇 归途", "all", ROOT);
+    expect(r.hits.get(0)?.label).toEqual([{ start: 4, end: 6 }]);
+    expect(r.hits.get(0)?.sub).toEqual([{ start: 3, end: 7 }]);
+    expect(countByScope(items, "潮汐门篇 归途", ROOT)).toEqual({ lore: 0, text: 1, image: 0 });
+  });
+
+  it("takes the best field per word, so a whole-word alias beats a scattered name", () => {
+    const pair = [lore("潮网汐路门"), lore("门前潮", ["潮汐门"])];
+    expect(names(searchMentions(pair, "潮汐门", "all", ROOT))).toEqual(["门前潮", "潮网汐路门"]);
+    expect(searchMentions(pair, "潮汐门", "all", ROOT).hits.get(0)?.alias).toBe("潮汐门");
   });
 
   it("reports which alias matched so the row can say so", () => {

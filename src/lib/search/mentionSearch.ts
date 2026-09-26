@@ -13,9 +13,14 @@
  * Three rules, each the same as ⌘K's (`globalSearch`) so an author learns one
  * search:
  *
- * - **Scoring is `matchText`** — substring > word start > subsequence, every
- *   space-separated token must hit. A name hit outranks an alias hit outranks
- *   a group-path hit (×1 / ×0.9 / ×0.5, `searchLore` / `searchFiles` weights).
+ * - **Scoring is ⌘K's** — substring > word start > subsequence per token,
+ *   every space-separated token must hit, and each token may hit a different
+ *   field (`潮汐门篇 归途` finds `正文/潮汐门篇/第五章 归途.md`, one word in
+ *   the group, one in the name — exactly as `searchFiles` does). A name hit
+ *   outranks an alias hit outranks a group-path hit: ×1 / ×0.9 / ×0.6, the
+ *   alias weight from `searchLore` and the *directory* weight from
+ *   `searchFiles` (its 0.5 is for a word that straddles the `/`, a tier this
+ *   list has no use for).
  * - **An empty query interleaves by kind** — entry, document, image, entry …
  *   — instead of scoring. Ten rows are for recognising, and the author who
  *   just typed `@` should see that both kinds are there; the scope chips are
@@ -31,7 +36,7 @@
  * all this module reads.
  */
 import { dirName, projectRelative } from "../paths";
-import { matchText, type MatchRange } from "./globalSearch";
+import { matchText, mergeRanges, tokenize, type MatchRange } from "./globalSearch";
 
 // The scope vocabulary and the result shapes become exports when the picker
 // (the next slice) consumes them — exportReach.test.ts holds them local until then.
@@ -59,15 +64,17 @@ export function scopeOf(item: MentionLike): ScopedKind {
 }
 
 /**
- * The scopes worth offering for these candidates: `"all"` plus every kind that
- * is actually present. A chip for a kind with nothing behind it is a switch
- * that does nothing — the subagent chips' rule (what cannot be used is not
- * drawn) applies here too. The one exception is `"text"`, kept whenever any
- * file is offered at all, so the chip row does not change shape between a
- * project with pictures and one without.
+ * The scopes worth offering for these candidates — the one source for every
+ * host's chip row: `"all"`, then every kind that is actually present. A chip
+ * for a kind with nothing behind it is a switch that does nothing — the
+ * subagent chips' rule (what cannot be used is not drawn) applies here too.
+ * The one exception is `"text"`, kept whenever any file is offered at all, so
+ * the chip row does not change shape between a project with pictures and one
+ * without.
  */
 export function availableScopes(items: readonly MentionLike[]): MentionScope[] {
   const present = new Set(items.map(scopeOf));
+  if (items.some((i) => i.type === "file")) present.add("text");
   return MENTION_SCOPES.filter((s) => s === "all" || present.has(s as ScopedKind));
 }
 
@@ -99,7 +106,7 @@ interface MentionSearchResult<T> {
 }
 
 const ALIAS_WEIGHT = 0.9;
-const DIR_WEIGHT = 0.5;
+const DIR_WEIGHT = 0.6;
 
 interface Scored<T> {
   item: T;
@@ -108,25 +115,42 @@ interface Scored<T> {
   hit: MentionHit;
 }
 
-function scoreOne<T extends MentionLike>(item: T, term: string, projectPath: string | null): Omit<Scored<T>, "order"> | null {
+/**
+ * Score one candidate against the tokenized query. Each token takes the best
+ * of the fields it hits — name, alias (entries) or group path (files) — and
+ * the candidate scores only when every token hits somewhere. Taking the best
+ * rather than the first is the one place this departs from `searchLore`,
+ * whose name-first short-circuit lets a weak subsequence on the name beat a
+ * whole-word alias; here an alias is as good as the name it stands for.
+ */
+function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], projectPath: string | null): Omit<Scored<T>, "order"> | null {
   const label = item.type === "lore" ? item.entity.name : item.file.name;
-  const byName = matchText(label, term);
-  if (byName) return { item, score: byName.score, hit: { label: byName.ranges, sub: [], alias: null } };
-  if (item.type === "lore") {
-    let best: Omit<Scored<T>, "order"> | null = null;
-    for (const a of item.entity.aliases) {
-      const m = matchText(a, term);
-      if (m && (!best || m.score * ALIAS_WEIGHT > best.score)) {
-        best = { item, score: m.score * ALIAS_WEIGHT, hit: { label: [], sub: [], alias: a } };
+  const sub = item.type === "file" ? mentionSub(item, projectPath) : null;
+  let score = 0;
+  const labelRanges: MatchRange[] = [];
+  const subRanges: MatchRange[] = [];
+  let alias: string | null = null;
+  for (const tok of tokens) {
+    let best = 0;
+    let where: { field: "label" | "alias" | "sub"; ranges: MatchRange[]; alias?: string } | null = null;
+    const byName = matchText(label, tok);
+    if (byName) { best = byName.score; where = { field: "label", ranges: byName.ranges }; }
+    if (item.type === "lore") {
+      for (const a of item.entity.aliases) {
+        const m = matchText(a, tok);
+        if (m && m.score * ALIAS_WEIGHT > best) { best = m.score * ALIAS_WEIGHT; where = { field: "alias", ranges: [], alias: a }; }
       }
+    } else if (sub) {
+      const m = matchText(sub, tok);
+      if (m && m.score * DIR_WEIGHT > best) { best = m.score * DIR_WEIGHT; where = { field: "sub", ranges: m.ranges }; }
     }
-    return best;
+    if (!where) return null;
+    score += best;
+    if (where.field === "label") labelRanges.push(...where.ranges);
+    else if (where.field === "sub") subRanges.push(...where.ranges);
+    else alias ??= where.alias ?? null;
   }
-  const sub = mentionSub(item, projectPath);
-  if (!sub) return null;
-  const byDir = matchText(sub, term);
-  if (!byDir) return null;
-  return { item, score: byDir.score * DIR_WEIGHT, hit: { label: [], sub: byDir.ranges, alias: null } };
+  return { item, score, hit: { label: mergeRanges(labelRanges), sub: mergeRanges(subRanges), alias } };
 }
 
 /**
@@ -177,11 +201,11 @@ export function searchMentions<T extends MentionLike>(
   limit = 10,
 ): MentionSearchResult<T> {
   const scoped = scope === "all" ? items : items.filter((i) => scopeOf(i) === scope);
-  const term = query.trim();
-  if (!term) return { items: interleave(scoped, limit), hits: new Map() };
+  const tokens = tokenize(query);
+  if (tokens.length === 0) return { items: interleave(scoped, limit), hits: new Map() };
   const scored: Scored<T>[] = [];
   scoped.forEach((item, order) => {
-    const s = scoreOne(item, term, projectPath);
+    const s = scoreOne(item, tokens, projectPath);
     if (s) scored.push({ ...s, order });
   });
   // Stable on the candidates' own order: two equal scores keep the order the
@@ -205,9 +229,9 @@ export function countByScope(
   projectPath: string | null,
 ): Record<ScopedKind, number> {
   const counts: Record<ScopedKind, number> = { lore: 0, text: 0, image: 0 };
-  const term = query.trim();
+  const tokens = tokenize(query);
   for (const item of items) {
-    if (term && !scoreOne(item, term, projectPath)) continue;
+    if (tokens.length && !scoreOne(item, tokens, projectPath)) continue;
     counts[scopeOf(item)]++;
   }
   return counts;
