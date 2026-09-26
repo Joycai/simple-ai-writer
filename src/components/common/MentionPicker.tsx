@@ -33,6 +33,15 @@ import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
 import { endsInsideToken, mentionToken } from "../../lib/agent/mentionText";
 import {
+  failMentionRead,
+  isMentionReading,
+  mentionReadFailure,
+  subscribeMentionReads,
+  takeMentionReadFailure,
+  trackMentionRead,
+  type MentionReadFailure,
+} from "../../lib/agent/mentionReads";
+import {
   availableScopes,
   countByScope,
   cycleScope,
@@ -579,80 +588,6 @@ export function useKeptSelection(
 }
 
 /**
- * Drafts with a pick's file still being read, by slot (one per draft: the
- * chat key, the roleplay character, a lore modal's own id). Such a draft must
- * not be sent: the message would leave as `@潮` without the attachment, and
- * the read, finishing, would put the attachment into the emptied composer to
- * ride along with the next one. Module state, as chatStash's `pasting`, for
- * the same reason: the instance that started the read may be gone — the chat
- * composer remounts per conversation — and the one on screen now must still
- * see the draft is not ready.
- */
-const reads = new Map<string, number>();
-const readListeners = new Set<() => void>();
-
-function markMentionRead(slot: string, on: boolean): void {
-  const n = (reads.get(slot) ?? 0) + (on ? 1 : -1);
-  if (n > 0) reads.set(slot, n);
-  else reads.delete(slot);
-  for (const l of readListeners) l();
-}
-
-export function isMentionReading(slot: string): boolean {
-  return reads.has(slot);
-}
-
-function subscribeReads(listener: () => void): () => void {
-  readListeners.add(listener);
-  return () => { readListeners.delete(listener); };
-}
-
-/**
- * Count `pick` against `slot` until it settles, resolved or rejected; its
- * outcome passes through. `pick` is the whole pick — the read *and* the
- * landing — not the read alone (see useMentionReads).
- */
-export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>): Promise<T> {
-  markMentionRead(slot, true);
-  try {
-    return await pick();
-  } finally {
-    markMentionRead(slot, false);
-  }
-}
-
-/** A pick's read that failed — the refusal to show, in the author's words. */
-interface MentionReadFailure {
-  readonly message: string;
-}
-
-/**
- * The last failed read of each draft, until an instance showing that draft
- * takes it. Beside the count, for the same reason: the instance that started
- * the read may be gone, and the one on screen now — or the next one mounted
- * on this draft — must still drop a send queued around the attachment and
- * say why no chip came. Kept until taken: a failure while no instance shows
- * the draft is shown once when one does, next to the `@潮` still in it.
- */
-const failures = new Map<string, MentionReadFailure>();
-
-export function failMentionRead(slot: string, message: string): void {
-  failures.set(slot, { message });
-  for (const l of readListeners) l();
-}
-
-export function mentionReadFailure(slot: string): MentionReadFailure | null {
-  return failures.get(slot) ?? null;
-}
-
-/** Take `failure` off `slot` — only if it is still the one there, so taking an older one never drops a newer. */
-export function takeMentionReadFailure(slot: string, failure: MentionReadFailure): void {
-  if (failures.get(slot) !== failure) return;
-  failures.delete(slot);
-  for (const l of readListeners) l();
-}
-
-/**
  * `reading`: a file picked into this draft is still being read — hosts gray
  * out sending, as they do for a paste still becoming chips. `track(pick)`
  * counts a pick until it settles, either way, and `pick` must include the
@@ -675,8 +610,8 @@ export function useMentionReads(slot: string): {
   fail: (message: string) => void;
   take: (failure: MentionReadFailure) => void;
 } {
-  const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
-  const failure = useSyncExternalStore(subscribeReads, () => mentionReadFailure(slot));
+  const reading = useSyncExternalStore(subscribeMentionReads, () => isMentionReading(slot));
+  const failure = useSyncExternalStore(subscribeMentionReads, () => mentionReadFailure(slot));
   const track = useCallback(<T,>(pick: () => Promise<T>) => trackMentionRead(slot, pick), [slot]);
   const fail = useCallback((message: string) => failMentionRead(slot, message), [slot]);
   const take = useCallback((f: MentionReadFailure) => takeMentionReadFailure(slot, f), [slot]);

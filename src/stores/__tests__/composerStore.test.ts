@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { chatComposerOf, useComposerStore } from "../composerStore";
+import { failMentionRead, mentionReadFailure } from "../../lib/agent/mentionReads";
 import type { AttachedLore } from "../../lib/lore/aiTask";
 import type { LoreEntity } from "../../lib/lore/model";
 
@@ -101,5 +102,12 @@ describe("composerStore", () => {
     expect(s().panelRequirement).toBe("");
     expect(s().panelInstruction).toBe("");
     expect(s().roleplay).toEqual({});
+  });
+
+  it("drops a failed @ read with the drafts, so a reopened project shows no refusal for an emptied one", () => {
+    // A roleplay character's slot is its id, which a reopened project keeps.
+    failMentionRead("roleplay:lin", "读不到 潮汐.png");
+    s().resetAll();
+    expect(mentionReadFailure("roleplay:lin")).toBeNull();
   });
 });
