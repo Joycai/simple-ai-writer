@@ -88,7 +88,7 @@ describe("tool packs", () => {
   const happyRun = () => {
     mockRunAgent.mockImplementation(async (opts: { onOutputText: (t: string) => void }) => {
       opts.onOutputText("Done: rewrote intro.md sections 1–2.");
-      return { rounds: 3, inputTokens: 500, outputTokens: 200, cachedTokens: 0, outcome: "completed" };
+      return { rounds: 3, inputTokens: 500, outputTokens: 200, cachedTokens: 0, reportedCost: 0.0042, outcome: "completed" };
     });
     mockWriteTaskNote.mockResolvedValue({
       slug: "pack-file_write-x",
@@ -300,6 +300,7 @@ describe("tool packs", () => {
         promptTokens: 500,
         cachedTokens: 0,
         completionTokens: 200,
+        reportedCost: 0.0042,
       });
     });
 

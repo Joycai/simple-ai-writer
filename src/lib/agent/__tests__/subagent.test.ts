@@ -400,7 +400,7 @@ describe("subagent", () => {
     it("runs child subagent, records note and returns summary with path", async () => {
       mockRunAgent.mockImplementation(async (opts) => {
         opts.onOutputText("Here is the detailed research report on topic X.");
-        return { rounds: 1, inputTokens: 50, outputTokens: 100, cachedTokens: 0, outcome: "success" };
+        return { rounds: 1, inputTokens: 50, outputTokens: 100, cachedTokens: 0, reportedCost: null, outcome: "success" };
       });
       mockWriteTaskNote.mockResolvedValueOnce({
         slug: "search-find-facts",
@@ -425,6 +425,7 @@ describe("subagent", () => {
         promptTokens: 50,
         cachedTokens: 0,
         completionTokens: 100,
+        reportedCost: null,
       });
       expect(mockWriteTaskNote).toHaveBeenCalledTimes(1);
       expect(res.content).toContain(".ai-writer/tasks/task-123/notes/search-find-facts.md");
