@@ -1,6 +1,6 @@
 # 思考功能的验证清单
 
-> **状态：MiniMax-M3 已验掉一部分（§2.6），其余全部未验证。**（§2.8 提示缓存不是
+> **状态：MiniMax-M3 已验掉一部分（§2.6）；2026-09-26 经 OrcaRouter 付费实测又验掉一批（见下方「OrcaRouter 实测」），其余未验证。**（§2.8 提示缓存不是
 > 思考功能，但它与本文其余各条是同一类问题——发出去了不等于对面照做——所以放在这里。） 三族的思考支持
 > （强度 / 思维链 / 回传）都已实现并通过单元测试，但单元测试验的是"我们发出了
 > 什么"，这份清单验的是"对面怎么理解"。
@@ -12,6 +12,26 @@
 > 分散在 [`reasoning-plan.md`](../api/reasoning-plan.md)、[`anthropic-plan.md`](../api/anthropic-plan.md)、
 > [`gemini-plan.md`](../api/gemini-plan.md) 三份文档里的实测项汇总在此，因为它们只在
 > 同一次动手时才会被真正执行。**验完请回原文档更新对应结论**，本文只是索引。
+
+## OrcaRouter 实测（2026-09-26，[`landscape.md`](../api/landscape.md) §7 第十八个样本）
+
+那台网关的 ③④ **回包是上游原样**（④ Anthropic、③ Vertex AI），但**请求会被重新序列化**——未知字段、非法枚举常被静默
+丢掉。所以下表只把「回来的是什么」记成结论；「发错了会不会 400」一类只对那台网关成立。
+
+| 条目 | 结论 |
+| --- | --- |
+| 1.1 | ✅ Sonnet 5 + `adaptive` + `display:"summarized"` 回 `thinking` block；**不发 `thinking` 也思考**，但 `display` 默认 `omitted`（文本空、只有签名）。第二轮原样回灌 thinking + `tool_use` 200；丢掉 thinking block 也 200（旧规则是 400），改签名 400。本项目 live 用例「两个调用的工具轮」过 |
+| 1.2 | ✅ 3.8 Flash：思考是 `{text, thought: true}`，一段整给；`thoughtSignature` 挂在正文 text part 与第一个 `functionCall` part 上，流式时落在最后一块的 `{text:"", thoughtSignature}`。**回灌时光秃秃的 `{text:""}` 被 Vertex 400**——已修（`gemini.ts` 跳过它） |
+| 1.3 | 部分：Claude 经 ① 在 `reasoning_content`；GPT 经 ①（OpenRouter 形态）只有 `reasoning` / `reasoning_details`；Gemini 经 ① 不给 |
+| 2.1 | 摘要文本与 `thinking_tokens` 同量级（97 字符 ↔ 74 token）；摘要不是计费的那份 |
+| 2.3 | OrcaRouter 透传 `output_config`（`format` 生效）；`effort` 各档 adaptive 下噪声大，看不出单调 |
+| 2.7.1 / 2.7.3 | ✅ 不带 beta 头；`usage.server_tool_use: {web_search_requests, web_fetch_requests}`。2.7.2 `pause_turn` 没触发到 |
+| 2.8.1 | 手发的块级与顶层 `cache_control` 都命中（写 1.25×、读 0.1×）；本项目在第三方 ④ 端点不打断点，所以没验到本项目自己的断点 |
+| 2.8.5 | OrcaRouter 对未知字段静默忽略、`cache_control` 照转 |
+| 3.1 | 3.8 Flash **拒绝 `MINIMAL`**（400）——「关闭」已改映射到 `LOW`（`reasoning.ts` `GEMINI_LEVEL`）。3.x Pro 仍未验 |
+| 3.2 | ✅ `LOW` / `MEDIUM` / `HIGH` 同题 193 / 641 / 1,348 思考 token；`thinkingBudget: 0` 关不掉思考 |
+| 3.3 | ✅ camelCase `inlineData` 被看见（snake_case 也收） |
+| 3.4 | ✅ Bearer 下聊天、工具轮、图片都通 |
 
 ## 怎么验
 

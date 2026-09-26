@@ -357,6 +357,11 @@ strictify(schema):
 5. Gemini 的 `responseJsonSchema`：strictify 出来的类型联合与 `additionalProperties:false`
    是否被接受；一个不认这个字段的 gemini_compat 中继回的 400 报文是否含
    `responseJsonSchema` 字样（`isJsonModeRejection` 靠它降级）。
+   **前半已验（2026-09-26，[`landscape.md`](landscape.md) §7 第十八个样本）**：本项目真实
+   适配器在 OrcaRouter（Vertex 后端）上对 gemini-3.8-flash 发 strictify 过的 schema
+   （含 `additionalProperties:false`），200 且守住了与 prompt 矛盾的 enum；
+   live 用例 `Gem: resolves json_schema and gets parseable JSON` 过。后半（不认该字段的中继的
+   400 报文）仍欠着。
 
 在这五条之前，本文所有关于 DashScope 实际行为的陈述都只是文档转述，状态 `unverified`。
 

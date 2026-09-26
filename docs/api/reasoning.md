@@ -63,6 +63,7 @@
 | Gemini 3.1 Pro | `low/medium/high` —— **没有 `minimal`** | `high` |
 | Gemini 3 Flash / 3.6 Flash | `minimal/low/medium/high` | `high` / `medium` |
 | Gemini 3.1 Flash-Lite | `minimal/low/medium/high` | `minimal` |
+| Gemini 3.8 Flash（实测，Vertex，2026-09-26） | `low/medium/high` —— **`MINIMAL` 回 400** `Thinking level MINIMAL is not supported for this model.` | 未定（不发时 685 思考 token，介于 `medium` 641 与 `high` 1,348 之间，单次） |
 
 两条要点：
 
@@ -70,7 +71,11 @@
   两派」是同一类陷阱：省略字段得到的行为，取决于对面是哪个模型。
 - **`minimal` 不等于关闭。** 文档原话：*"`minimal` does not guarantee that
   thinking is off"*。③ 族**没有关闭思考的手段**，这比 ④ 族更彻底（④ 至少部分
-  模型接受 `disabled`）。
+  模型接受 `disabled`）。实测补一句：3.8 Flash 上旧的 `thinkingBudget` 仍被接受，
+  但 **`thinkingBudget: 0` 照样思考**（312 token）——在 3 代上它关不掉，也不能拿来
+  代替缺席的 `minimal`（[`landscape.md`](landscape.md) §7 第十八个样本）。
+- **`minimal` 不是每个型号都有**，而且缺的时候是 400 而不是降级。一个「尽量少
+  想」的选项要映射到**所有型号都收的最低档** `low`，不是 `minimal`。
 
 ### 1.5 ③ 族在经典 surface 上的完整配置（API 参考原文）
 
@@ -179,6 +184,10 @@
 - 回传时，往 omitted block 的空 `thinking` 字段里塞文本会被**忽略**（不是报错）
   —— 这是"修改 thinking block 一律 400"的唯一例外。
 - `signature` 在两种 display 下完全相同，且中途切换 display 是允许的。
+
+实测（Sonnet 5 / Opus 5.5，2026-09-26，第十八个样本）：不发 `thinking` 时两者都在
+思考，回来的 thinking block 文本为空、只有签名——与上面一致；显式 `summarized`
+之后才有文本。
 
 另外，**没有任何 display 设置能拿到原始思维链**。`summarized` 给的是由另一个
 模型生成的摘要，且计费按原始思考 token 而非摘要 token —— 账单上的输出 token

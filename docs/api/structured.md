@@ -18,11 +18,15 @@
 | | ① Chat Completions | ② Responses | ③ Google GenAI | ④ Anthropic |
 | --- | --- | --- | --- | --- |
 | **JSON 模式** | `response_format:{type:"json_object"}` | `text.format` | `generationConfig.responseMimeType:"application/json"` | **无此参数**，发了是 400 |
-| **Schema 严格模式** | `response_format:{type:"json_schema", json_schema:{name,schema,strict:true}}` | `text.format.type:"json_schema"` | `generationConfig.responseJsonSchema`（Gemini 2.5+，接标准 JSON Schema）；旧字段 `responseSchema` 是 OpenAPI 方言，两者互斥 | 无 |
+| **Schema 严格模式** | `response_format:{type:"json_schema", json_schema:{name,schema,strict:true}}` | `text.format.type:"json_schema"` | `generationConfig.responseJsonSchema`（Gemini 2.5+，接标准 JSON Schema）；旧字段 `responseSchema` 是 OpenAPI 方言，两者互斥。实测 3.8 Flash 两个都生效，prompt 与 enum 矛盾时守 enum | `output_config.format:{type:"json_schema", schema}`（实测 Sonnet 5 生效，见下） |
 | **强制工具调用** | `tool_choice:{type:"function",function:{name}}` | 同形 | `functionCallingConfig.mode:"ANY"` | `tool_choice:{type:"tool",name}` |
 
-**Anthropic 没有 JSON 模式**，只有工具调用一条路。给它发 `response_format`
-会因为"未知顶层字段"直接 400 —— 这是跨族移植时最常见的一次踩坑。
+**Anthropic 没有 `response_format`**。给它发 `response_format` 会因为"未知顶层字段"
+直接 400 —— 这是跨族移植时最常见的一次踩坑。它的结构化输出挂在
+`output_config.format` 上（与 `output_config.effort` 同一个对象）：2026-09-26 经
+OrcaRouter 实测 Sonnet 5 发 `{type:"json_schema", schema}` 回的就是合 schema 的纯 JSON
+（[`landscape.md`](landscape.md) §7 第十八个样本）。哪些型号支持、与思考 / 强制工具
+能否同用，尚未测；在测到之前，工具调用仍是四族通用的那条路。
 
 ## 2. `json_object` 的隐藏前置条件
 
