@@ -55,6 +55,14 @@ export interface RecordUsageInput {
   requests?: number;
 }
 
+/**
+ * 写入口收的那份：`reportedCost` **必须写出来**，没有就写 `null`。
+ *
+ * 漏传不报错——那一行只是按计费组算，没绑组的 OrcaRouter 模型就静默记成 $0。
+ * 让类型检查逼每个调用点表态，比扫源码可靠（参数对象可以先在别处组好）。
+ */
+export type RecordedUsage = RecordUsageInput & { reportedCost: number | null | undefined };
+
 /** 写进库之前的一整行。导出是为了测试能不碰库就钉住它。 */
 export interface UsageRowValues {
   modelId: string;
@@ -148,7 +156,7 @@ function insertSql(scope: "project" | "global"): string {
  */
 export async function recordUsage(
   projectPath: string | null,
-  input: RecordUsageInput,
+  input: RecordedUsage,
 ): Promise<void> {
   const row = buildUsageRow(input);
   const values = insertValues(row);

@@ -165,6 +165,8 @@ async function recordUsage(
     task: "subagent:translate",
     promptTokens: usage.inputTokens,
     completionTokens: usage.outputTokens,
+    // Sakura 本地模型，几段带重试的聚合；不经会报价的平台，照计费组算。
+    reportedCost: null,
   });
 }
 

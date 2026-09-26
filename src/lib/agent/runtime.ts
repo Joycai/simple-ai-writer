@@ -18,6 +18,7 @@ import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
 import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePart";
 import { nonWebServerTools } from "../ai/serverTools";
+import { addReportedCost } from "../ai/reportedCost";
 import { ImagePayloadError } from "../ai/types";
 import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
 import type {
@@ -559,6 +560,13 @@ export interface AgentRunResult {
   /** Subset of inputTokens served from the provider's prompt cache. */
   cachedTokens: number;
   /**
+   * What the platform reported the run cost, in USD — summed over its rounds
+   * only when every round reported; `null` otherwise, so the usage row prices
+   * the whole run from the fee group rather than billing the unreported
+   * rounds as free (`addReportedCost`).
+   */
+  reportedCost: number | null;
+  /**
    * How the run ended.
    * - "completed": the model produced prose (normal finish).
    * - "paused": the author chose 存盘暂停 at the round cap.
@@ -732,6 +740,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalCachedTokens = 0;
+  /** `undefined` until a round ends; see {@link AgentRunResult.reportedCost}. */
+  let totalReportedCost: number | null | undefined;
   /** Text from rounds that ended in prose — the run's output as it stands. */
   let committedText = "";
 
@@ -881,6 +891,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           cachedTokens: totalCachedTokens,
+          reportedCost: totalReportedCost ?? null,
           outcome: "paused",
         };
       }
@@ -1206,6 +1217,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
             totalCachedTokens += chunk.cachedTokens ?? 0;
+            totalReportedCost = addReportedCost(totalReportedCost, chunk.reportedCost);
             // The measurement half of the pair `round-start` opened, emitted
             // here because this is the one place that holds both the request we
             // composed and the count the endpoint returned for it. What makes
@@ -1427,6 +1439,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           cachedTokens: totalCachedTokens,
+          reportedCost: totalReportedCost ?? null,
           outcome: "completed",
         };
       }
@@ -1499,6 +1512,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         cachedTokens: totalCachedTokens,
+        reportedCost: totalReportedCost ?? null,
         outcome: roundTruncated ? "truncated" : "completed",
       };
     }
@@ -1743,6 +1757,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           inputTokens: totalInputTokens,
           outputTokens: totalOutputTokens,
           cachedTokens: totalCachedTokens,
+          reportedCost: totalReportedCost ?? null,
           outcome: "truncated",
         };
       }
@@ -1776,6 +1791,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     cachedTokens: totalCachedTokens,
+    reportedCost: totalReportedCost ?? null,
     outcome: "completed",
   };
 }

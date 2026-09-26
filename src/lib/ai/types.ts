@@ -313,6 +313,13 @@ export type StreamChunk =
        */
       cachedTokens?: number;
       /**
+       * What the platform says this call cost, in USD — only from a platform
+       * trusted to report it (`reportedCost.ts`). Absent = not reported, which
+       * is not the same as `0` (reported free). A call the adapter split into
+       * several requests carries it only when every request reported.
+       */
+      reportedCost?: number;
+      /**
        * Fields the endpoint echoed back with another value than the one sent.
        * Only the Responses family echoes its request, so only it fills this;
        * the round still succeeded — see `WireRewrite`.
@@ -436,8 +443,7 @@ export interface StreamOptions {
    * Server-side tools the endpoint should be allowed to run on its own (web
    * search, page extraction). Spelled per wire — Anthropic-family `tools[]`
    * entries, OpenAI-compat `enable_search` (+ `search_options`), Responses-compat
-   * built-in `tools[]` entries (see `lib/ai/serverTools.ts`); the Gemini adapter
-   * ignores it.
+   * and Gemini built-in `tools[]` entries (see `lib/ai/serverTools.ts`).
    * Sent on every request the model handles, `tools` or no `tools` — it is a
    * standing permission the author granted the model, not a per-task input.
    */

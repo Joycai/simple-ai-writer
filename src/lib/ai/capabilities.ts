@@ -191,17 +191,21 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // it (jsonMode.ts). A capability of the wire, not the model id: DashScope
   // serves GLM with json_schema working, 智谱 serves the same GLM ignoring it.
   jsonSchema: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
-  // Anthropic's versioned `web_search_*` tool and the Responses built-in
-  // `{type:"web_search"}` are the protocol's own; whether a relay passes them
-  // on is unmeasured until a platform cell says so. Chat Completions has no
-  // native server tool — every one there is a platform's private body field.
-  web_search: { families: ["responses", "anthropic"], origin: "native", assumed: "unknown" },
-  // DashScope's names. Refused outright elsewhere (xAI, 第十一个样本), and a
-  // relay that fronts DashScope is set to that platform explicitly.
-  web_extractor: { families: ["openai", "responses"], origin: "private" },
+  // Anthropic's versioned `web_search_*` tool, the Responses built-in
+  // `{type:"web_search"}` and Gemini's `googleSearch` are the protocol's own;
+  // whether a relay passes them on is unmeasured until a platform cell says so.
+  // Chat Completions has no native server tool — every one there is a
+  // platform's private body field.
+  web_search: { families: ["responses", "anthropic", "gemini"], origin: "native", assumed: "unknown" },
+  // DashScope's names on the OpenAI wires — refused outright elsewhere (xAI,
+  // 第十一个样本), and a relay that fronts DashScope is set to that platform
+  // explicitly. On Gemini they are `urlContext` / `codeExecution`, the
+  // protocol's own tools; kept private there too, so they reach only a
+  // platform whose cell a sample wrote (OrcaRouter, 第十八个样本「再补测」).
+  web_extractor: { families: ["openai", "responses", "gemini"], origin: "private" },
   web_search_image: { families: ["responses"], origin: "private" },
   image_search: { families: ["responses"], origin: "private" },
-  code_interpreter: { families: ["openai", "responses"], origin: "private" },
+  code_interpreter: { families: ["openai", "responses", "gemini"], origin: "private" },
 };
 
 /**
@@ -561,7 +565,10 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   },
   // `output_config.format`: GA per Anthropic; held a contradicted enum on five
   // Claude models behind OrcaRouter's verbatim Anthropic route (第十八个样本，补测).
-  anthropic: { families: { anthropic: { web_search: true, jsonSchema: true } } },
+  // `document` block: read end to end on sonnet-5 and opus-5.5 behind that same
+  // verbatim route (第十八个样本「再补测」) — the reading is the model's, and the
+  // vendor documents the block.
+  anthropic: { families: { anthropic: { web_search: true, jsonSchema: true, pdfInput: true } } },
   // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
   google: { families: { gemini: { jsonSchema: true } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
@@ -573,8 +580,9 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   xai: { families: { responses: { web_search: true, jsonSchema: true } } },
   minimax: { families: { anthropic: { web_search: true } } },
   volcengine: {},
-  // The one platform whose Anthropic `document` block was seen reaching the
-  // model (landscape.md §7 第十二个样本).
+  // The first platform whose Anthropic `document` block was seen reaching the
+  // model (landscape.md §7 第十二个样本); Anthropic's own and OrcaRouter's
+  // verbatim route followed (第十八个样本「再补测」).
   // json_schema: an enum the prompt contradicts held on 2.1-turbo — ① with
   // `strict:true`, ② on this app's `text.format` without it. The wire takes
   // it; 2.0-lite does not (both routes answered past the schema), which is
@@ -593,12 +601,16 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // Every cell measured on paid models (landscape.md §7 第十八个样本): a strict
   // schema held against a prompt that contradicted its enum on ①②③④, and the
   // Responses built-in and Anthropic's versioned `web_search` both searched.
+  // PDF: a one-page file's passphrase read back on all four; ①② need no cell.
+  // Not the official `google` cell: ③ here is Vertex AI, not AI Studio.
+  // ③'s three built-in tools, beside function tools, forced calls and a
+  // response schema alike (再补测).
   orcarouter: {
     families: {
       openai: { jsonSchema: true },
       responses: { jsonSchema: true, web_search: true },
-      gemini: { jsonSchema: true },
-      anthropic: { web_search: true, jsonSchema: true },
+      gemini: { jsonSchema: true, pdfInput: true, web_search: true, web_extractor: true, code_interpreter: true },
+      anthropic: { web_search: true, jsonSchema: true, pdfInput: true },
     },
   },
   newapi: RELAY,

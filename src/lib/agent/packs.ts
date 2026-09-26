@@ -403,6 +403,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
     promptTokens: result.inputTokens,
     cachedTokens: result.cachedTokens,
     completionTokens: result.outputTokens,
+    reportedCost: result.reportedCost,
   });
 
   if (!output.trim()) {

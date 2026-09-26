@@ -13,7 +13,8 @@
 | **缓存命中** | `prompt_tokens_details.cached_tokens` | `input_tokens_details.cached_tokens` | `usageMetadata.cachedContentTokenCount` | `usage.cache_read_input_tokens` |
 | **缓存写入** | — | — | — | `usage.cache_creation_input_tokens` |
 | **思考 token** | `completion_tokens_details.reasoning_tokens` | `output_tokens_details.reasoning_tokens` | `usageMetadata.thoughtsTokenCount` | `output_tokens_details.thinking_tokens` |
-| **服务端工具** | — | `tool_usage`（原样线路可见） | `usageMetadata.toolUsePromptTokenCount`（工具结果回灌的 token） | `usage.server_tool_use.{web_search_requests, web_fetch_requests}` |
+| **服务端工具** | — | `tool_usage`（原样线路可见） | `usageMetadata.toolUsePromptTokenCount`（工具结果回灌的 token，**在 `promptTokenCount` 之外**） | `usage.server_tool_use.{web_search_requests, web_fetch_requests}` |
+| **花费（非协议字段，中转加的）** | OrcaRouter：`usage.cost`（流式末块；非流式另有 `cost_usd`） | OrcaRouter 默认线路：`usage.cost` | OrcaRouter：`usageMetadata.costUsd`（要带头） | OrcaRouter：`usage.cost_usd`，在 `message_delta`（要带头） |
 
 实测补充（[`landscape.md`](landscape.md) §7 第十八个样本，2026-09-26）：
 
@@ -21,7 +22,12 @@
 - ④ 的 `thinking_tokens` 是 `output_tokens` 的子集（Sonnet 5：22 = 21 + 1），不另加。
 - ④ 没发 `cache_control` 也可能出现 `cache_creation_input_tokens`：`web_search` 的结果被服务端自动写缓存（2,834）。
 - ③ Vertex 的 `usageMetadata` 另有 `trafficType`（`ON_DEMAND`）；流式时只有最后一块带计数。
-- ③ `googleSearch` 的检索费远高于 token 费（一次 $0.028 对 token 部分的零头）；按 token 估成本会大幅低估。
+- ③ `googleSearch` 按查询条数计费（约 $0.014 一条，一次回答搜几条由模型定），远高于 token 费；按 token 估成本会大幅低估。
+- ③ `toolUsePromptTokenCount` 不在 `promptTokenCount` 里：prompt 20 + candidates 65 + toolUse 77 = total 162（「再补测」D）。
+  本项目把它计进输入 token，和 `thoughtsTokenCount` 计进输出同理。
+- 花费一行：OrcaRouter 的 ④③ 要带 `X-OrcaRouter-Include-Cost: true` 请求头才报；① ② 不管带不带都报；② 原样线路
+  （`store: true`）不报。与网关账单 `GET /v1/generation` 的 `total_cost` 相等（① ② 差不到一个 1/500,000 美元的计价单位）。
+  哪些平台的报价被信任、怎么进账，见 [`01-fee-groups.md`](../feature/billing/01-fee-groups.md)「上游报价」。
 
 ## 2. 两个口径陷阱
 

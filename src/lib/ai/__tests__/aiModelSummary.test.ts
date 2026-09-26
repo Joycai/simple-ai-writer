@@ -111,6 +111,15 @@ describe("wireSummary", () => {
     ]));
   });
 
+  it("spells Gemini's built-in tools by their own names", () => {
+    const g: WireInput = { ...base, serverTools: ["web_search", "web_extractor", "code_interpreter"] };
+    expect(wireSummary(g, "gemini_compat", "https://api.orcarouter.ai/v1beta")).toEqual(expect.arrayContaining([
+      { key: "tools", value: "googleSearch,urlContext,codeExecution" },
+    ]));
+    // Official endpoint: search only (unmeasured, sent); the other two are OrcaRouter's cells.
+    expect(wireSummary(g, "gemini")).toEqual(expect.arrayContaining([{ key: "tools", value: "googleSearch" }]));
+  });
+
   it("spells the code interpreter per wire, only for a model id that runs it", () => {
     const ci: WireInput = { ...base, modelId: "qwen3.5-plus", serverTools: ["code_interpreter"] };
     expect(wireSummary(ci, "openai_compat", undefined, "dashscope")).toEqual(expect.arrayContaining([

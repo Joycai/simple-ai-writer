@@ -5,6 +5,8 @@ import {
   effectiveServerTools,
   serverToolsSent,
   summarizeServerToolResult,
+  createGeminiServerToolReader,
+  geminiServerTools,
 } from "../serverTools";
 import { wireOf } from "../platforms";
 import { hasCapability, type CapabilityWire } from "../capabilities";
@@ -98,5 +100,135 @@ describe("summarizeServerToolResult", () => {
       phase: "result", id: "s", name: "web_search",
       results: [{ title: "Rust", url: "https://www.rust-lang.org/" }],
     })).toBe("Rust");
+  });
+});
+
+// Shapes from OrcaRouter's Vertex route (landscape.md §7 第十八个样本「再补测」).
+describe("createGeminiServerToolReader", () => {
+  it("reports a code run as a call and its printed result", () => {
+    const read = createGeminiServerToolReader("r");
+    const events = read({
+      content: {
+        parts: [
+          { executableCode: { language: "PYTHON", code: "print(2**10)", id: "c1" }, thoughtSignature: "sig" },
+          { codeExecutionResult: { outcome: "OUTCOME_OK", output: "1024\n", id: "c1" } },
+        ],
+      },
+    });
+    expect(events).toEqual([
+      { phase: "call", id: "r_c1", name: "code_interpreter", input: { language: "PYTHON", code: "print(2**10)" } },
+      { phase: "result", id: "r_c1", name: "code_interpreter", results: [], output: "1024" },
+    ]);
+  });
+
+  it("marks a failed run with its outcome, and pairs an id-less result with the latest code", () => {
+    const read = createGeminiServerToolReader("r");
+    const call = read({ content: { parts: [{ executableCode: { language: "PYTHON", code: "1/0" } }] } });
+    const result = read({ content: { parts: [{ codeExecutionResult: { outcome: "OUTCOME_FAILED", output: "ZeroDivisionError" } }] } });
+    expect(call[0]).toMatchObject({ phase: "call", id: "r_code_1" });
+    expect(result).toEqual([{
+      phase: "result", id: "r_code_1", name: "code_interpreter", results: [], output: "ZeroDivisionError", error: "OUTCOME_FAILED",
+    }]);
+  });
+
+  it("reports each page read through urlContext, failures included", () => {
+    const events = createGeminiServerToolReader("r")({
+      urlContextMetadata: {
+        urlMetadata: [
+          { retrievedUrl: "https://example.com/a", urlRetrievalStatus: "URL_RETRIEVAL_STATUS_SUCCESS" },
+          { retrievedUrl: "https://example.com/b", urlRetrievalStatus: "URL_RETRIEVAL_STATUS_ERROR" },
+        ],
+      },
+    });
+    expect(events).toEqual([
+      { phase: "call", id: "r_url:https://example.com/a", name: "web_extractor", input: { urls: ["https://example.com/a"] } },
+      { phase: "result", id: "r_url:https://example.com/a", name: "web_extractor", results: [{ title: "https://example.com/a", url: "https://example.com/a" }] },
+      { phase: "call", id: "r_url:https://example.com/b", name: "web_extractor", input: { urls: ["https://example.com/b"] } },
+      {
+        phase: "result", id: "r_url:https://example.com/b", name: "web_extractor",
+        results: [{ title: "https://example.com/b", url: "https://example.com/b" }], error: "URL_RETRIEVAL_STATUS_ERROR",
+      },
+    ]);
+  });
+
+  it("reports a search from its queries, with the grounding chunks as hits", () => {
+    const events = createGeminiServerToolReader("r")({
+      finishReason: "STOP",
+      groundingMetadata: {
+        webSearchQueries: ["harbour town ferry timetable", "harbour town ferry winter"],
+        groundingChunks: [
+          { web: { uri: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc", title: "ferries.example", domain: "ferries.example" } },
+          { retrievedContext: { uri: "gs://x" } },
+        ],
+        searchEntryPoint: { renderedContent: "<div/>" },
+      },
+    });
+    expect(events).toEqual([
+      { phase: "call", id: "r_search", name: "web_search", input: { queries: ["harbour town ferry timetable", "harbour town ferry winter"] } },
+      {
+        phase: "result", id: "r_search", name: "web_search",
+        results: [{ title: "ferries.example", url: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc" }],
+      },
+    ]);
+  });
+
+  it("does not call a URL-context answer's grounding chunks a search", () => {
+    const events = createGeminiServerToolReader("r")({
+      groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.com/a", title: "A page" } }] },
+    });
+    expect(events).toEqual([]);
+  });
+
+  it("reports each row once, however many blocks repeat it", () => {
+    const read = createGeminiServerToolReader("r");
+    const block = { urlContextMetadata: { urlMetadata: [{ retrievedUrl: "https://example.com/a", urlRetrievalStatus: "URL_RETRIEVAL_STATUS_SUCCESS" }] } };
+    expect(read(block)).toHaveLength(2);
+    expect(read(block)).toEqual([]);
+  });
+
+  it("gives every request its own ids, so two reads of one URL stay two rows", () => {
+    const block = { urlContextMetadata: { urlMetadata: [{ retrievedUrl: "https://example.com/a", urlRetrievalStatus: "URL_RETRIEVAL_STATUS_SUCCESS" }] } };
+    const [a] = createGeminiServerToolReader()(block);
+    const [b] = createGeminiServerToolReader()(block);
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it("updates the one search row when its hits grow over later blocks", () => {
+    const read = createGeminiServerToolReader("r");
+    const q = { webSearchQueries: ["ferry timetable"] };
+    const first = read({ groundingMetadata: q });
+    expect(first.map((e) => e.phase)).toEqual(["call", "result"]);
+    const later = read({ groundingMetadata: { ...q, groundingChunks: [{ web: { uri: "https://r.example/1", title: "ferries.example" } }] } });
+    expect(later).toEqual([{ phase: "result", id: "r_search", name: "web_search", results: [{ title: "ferries.example", url: "https://r.example/1" }] }]);
+    expect(read({ groundingMetadata: { ...q, groundingChunks: [{ web: { uri: "https://r.example/1", title: "ferries.example" } }] } })).toEqual([]);
+  });
+
+  it("reads nothing out of a plain block or junk", () => {
+    const read = createGeminiServerToolReader("r");
+    expect(read({ content: { parts: [{ text: "hi" }] } })).toEqual([]);
+    expect(read(undefined)).toEqual([]);
+    expect(read({ groundingMetadata: { webSearchQueries: "not a list" } })).toEqual([]);
+  });
+});
+
+describe("geminiServerTools", () => {
+  const ORCA_GEM = { platform: "orcarouter", standard: "gemini_compat" } as const;
+  it("spells the three ids as bare entries, in canonical order", () => {
+    expect(geminiServerTools(ORCA_GEM, ["code_interpreter", "web_extractor", "web_search"], "google/gemini-3.8-flash"))
+      .toEqual([{ googleSearch: {} }, { urlContext: {} }, { codeExecution: {} }]);
+  });
+  it("has nothing for the ids Gemini has no tool for, or a lone extractor", () => {
+    expect(geminiServerTools(ORCA_GEM, ["web_search_image", "image_search"], "m")).toEqual([]);
+    expect(geminiServerTools(ORCA_GEM, ["web_extractor"], "m")).toEqual([]);
+  });
+  it("is empty on every other family, even on the same platform", () => {
+    for (const standard of ["openai_compat", "openai_responses_compat", "anthropic_compat"] as const) {
+      expect(geminiServerTools({ platform: "orcarouter", standard }, ["web_search", "code_interpreter"], "m")).toEqual([]);
+    }
+  });
+  it("sends search where it is the protocol's own but unmeasured; the private two only where measured", () => {
+    const ids = ["web_search", "web_extractor", "code_interpreter"] as const;
+    expect(geminiServerTools({ platform: "google", standard: "gemini" }, [...ids], "gemini-3.5-pro")).toEqual([{ googleSearch: {} }]);
+    expect(geminiServerTools({ platform: "newapi", standard: "gemini_compat" }, [...ids], "m")).toEqual([{ googleSearch: {} }]);
   });
 });

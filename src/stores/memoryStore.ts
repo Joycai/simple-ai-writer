@@ -18,6 +18,7 @@ import {
 import { readFile } from "../lib/fs/fileio";
 import { type Model, type Provider } from "../lib/ai/configDb";
 import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
+import { addReportedCost } from "../lib/ai/reportedCost";
 import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
@@ -32,8 +33,11 @@ const PREV_TAIL_CHARS = 400;
 /** Progress reported while summarizing segments. */
 type Progress = { done: number; total: number };
 
+/** `cost`: the platform's reported cost for every segment, or null — see `addReportedCost`. */
+type MemoryUsage = { in: number; out: number; cached: number; cost: number | null };
+
 type GenOutcome =
-  | { memory: DocMemory; usage: { in: number; out: number; cached: number } }
+  | { memory: DocMemory; usage: MemoryUsage }
   | { skipped: "short" | "upToDate" };
 
 /**
@@ -78,6 +82,8 @@ async function runMemoryGeneration(opts: {
   let totalIn = 0;
   let totalOut = 0;
   let totalCached = 0;
+  /** One request per segment; one row for all of them (`addReportedCost`). */
+  let totalCost: number | null | undefined;
   const fresh: MemorySegment[] = [];
   for (let i = 0; i < ranges.length; i++) {
     const { from, to } = ranges[i];
@@ -114,6 +120,7 @@ async function runMemoryGeneration(opts: {
           totalIn += chunk.inputTokens;
           totalOut += chunk.outputTokens;
           totalCached += chunk.cachedTokens ?? 0;
+          totalCost = addReportedCost(totalCost, chunk.reportedCost);
         } else if ("text" in chunk) {
           summary += chunk.text;
         }
@@ -131,7 +138,7 @@ async function runMemoryGeneration(opts: {
     segments: [...keep, ...fresh],
   };
   await saveMemory(projectPath, memory);
-  return { memory, usage: { in: totalIn, out: totalOut, cached: totalCached } };
+  return { memory, usage: { in: totalIn, out: totalOut, cached: totalCached, cost: totalCost ?? null } };
 }
 
 /**
@@ -364,7 +371,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 }));
 
 /** Persist summarization token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
+function recordUsage(projectPath: string, model: Model, usage: MemoryUsage): void {
   if (usage.in <= 0 && usage.out <= 0) return;
   void recordUsageRow(projectPath, {
     model,
@@ -372,6 +379,7 @@ function recordUsage(projectPath: string, model: Model, usage: { in: number; out
     promptTokens: usage.in,
     cachedTokens: usage.cached,
     completionTokens: usage.out,
+    reportedCost: usage.cost,
   });
 }
 

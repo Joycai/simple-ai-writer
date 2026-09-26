@@ -10,7 +10,7 @@ import type { Model, Provider } from "../configDb";
 import { readChannel } from "../configDb";
 import {
   activeFamily, channelEndpoints, dropModelRoute, endpointBaseUrl, keyOptional, legacyEndpoint, modelRouteFamilies,
-  newChannelEndpoints, normalizeChannel, parseEndpoints, parseRouteProfiles, providerFor, routeProfileOf,
+  newChannelEndpoints, normalizeChannel, parseEndpoints, parseRouteProfiles, pinnableRoute, providerFor, routeProfileOf,
   routeProvider, splitBaseUrl, standardOf, switchModelRoute,
 } from "../routes";
 import { convertToAnthropicMessages } from "../anthropic";
@@ -264,5 +264,19 @@ describe("keyOptional: which channels may go without an API key", () => {
     const ch = normalizeChannel(legacy("http://192.168.2.206:1234/v1", "openai_compat", { platform: "custom" }));
     ch.endpoints = [...channelEndpoints(ch), { family: "anthropic", official: false, path: "https://api.example.com" }];
     expect(keyOptional(ch)).toBe(false);
+  });
+});
+
+describe("pinnableRoute: a starter row's pin on the channel being saved", () => {
+  const orca = newChannelEndpoints("orcarouter");
+  it("keeps a pin the channel serves", () => {
+    expect(pinnableRoute("gemini", orca)).toBe("gemini");
+    expect(pinnableRoute("anthropic", orca)).toBe("anthropic");
+  });
+  it("drops a pin to a route the author removed, so the row follows the primary", () => {
+    expect(pinnableRoute("gemini", orca.filter((e) => e.family !== "gemini"))).toBeUndefined();
+  });
+  it("leaves an unpinned row unpinned", () => {
+    expect(pinnableRoute(undefined, orca)).toBeUndefined();
   });
 });

@@ -839,7 +839,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         void persistRoster();
       }
 
-      const cost = costFor(model, result.inputTokens, result.outputTokens, result.cachedTokens);
+      const cost = costFor(model, result.inputTokens, result.outputTokens, result.cachedTokens, result.reportedCost);
       patchSession(job.agentId, (s) => ({
         ...s,
         usage: {
@@ -855,6 +855,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         promptTokens: result.inputTokens,
         cachedTokens: result.cachedTokens,
         completionTokens: result.outputTokens,
+        reportedCost: result.reportedCost,
       });
       if (get().activeAgentId !== job.agentId) {
         set((st) => ({ unread: { ...st.unread, [job.agentId]: true } }));

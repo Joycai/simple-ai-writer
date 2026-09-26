@@ -23,7 +23,7 @@ import {
 import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, channelHost, endpointBaseUrl, keyOptional, newChannelEndpoints, normalizeChannel,
-  ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
+  pinnableRoute, ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
 } from "../../../lib/ai/routes";
 import { SERVER_TOOL_IDS } from "../../../lib/ai/serverTools";
 import { isRelayPlatform, parseUpstreamPrefixes } from "../../../lib/ai/relayUpstream";
@@ -70,11 +70,31 @@ type StarterModel = Pick<Model, "modelId" | "name"> &
  * the `deepseek` category's dialect, so the author gets the on/off switch;
  * the other two stay on the family default (`reasoning_effort`, which the
  * relay translates per model).
+ *
+ * Then three of the eight paid models the sample measured (2026-09-26), one per
+ * vendor, each pinned to the route it was measured best on — the free tier
+ * stays first as the zero-cost way in. Values come from the platform's
+ * calibration table (`ORCAROUTER_MODELS` in lib/ai/platforms.ts), so these rows
+ * and a hand-added one never disagree:
+ * - GPT-6 Luna on Responses: the one route that streams a readable reasoning
+ *   summary (Chat carries only the encrypted form).
+ * - Claude Sonnet 5 on Messages: the response is Anthropic's own, and thinking,
+ *   caching and structured output were all measured there.
+ * - Gemini 3.8 Flash on Gemini: the response is Vertex AI's own.
+ * The pinned route may be one the author removed before saving; `handleSave`
+ * then drops the pin (`pinnableRoute`) and the row follows the primary route
+ * (OrcaRouter serves every model on Chat).
  */
-const ORCAROUTER_FREE_MODELS: StarterModel[] = [
+const orcaStarter = (modelId: string, name: string, activeRoute: ProtocolFamily): StarterModel => ({
+  modelId, name, activeRoute, ...platformModelCalibration("orcarouter", modelId),
+});
+const ORCAROUTER_MODELS: StarterModel[] = [
   { modelId: "deepseek/deepseek-v4-flash-free", name: "DeepSeek V4 Flash (Free)", contextSize: 1_000_000, maxOutput: 384_000, thinkingCategory: "deepseek" },
   { modelId: "qwen/qwen3.8-27b-free", name: "Qwen3.8 27B (Free)", contextSize: 65_536 },
   { modelId: "tencent/hy3-free", name: "Hunyuan Hy3 (Free)", contextSize: 262_144 },
+  orcaStarter("openai/gpt-6-luna", "GPT-6 Luna", "responses"),
+  orcaStarter("anthropic/claude-sonnet-5", "Claude Sonnet 5", "anthropic"),
+  orcaStarter("google/gemini-3.8-flash", "Gemini 3.8 Flash", "gemini"),
 ];
 
 /**
@@ -195,7 +215,7 @@ const STARTER_MODELS: Partial<Record<PlatformId, StarterModel[]>> = {
   volcengine: VOLCENGINE_MODELS,
   "volcengine-plan": VOLCENGINE_PLAN_MODELS,
   zhipu: ZHIPU_MODELS,
-  orcarouter: ORCAROUTER_FREE_MODELS,
+  orcarouter: ORCAROUTER_MODELS,
 };
 
 /** Platforms whose routes are the vendor's own constants — no host, no path to type. */
@@ -453,7 +473,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             pdfInput: m.pdfInput,
             routes: m.routes,
             caps: m.caps,
-            activeRoute: m.activeRoute,
+            activeRoute: pinnableRoute(m.activeRoute, channel.endpoints!),
           });
         }
         if (comfyMode && onComfyCreated) {

@@ -93,7 +93,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0, outcome: "completed" });
+    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0, reportedCost: null, outcome: "completed" });
     expect(last(opts.output)).toBe("hello world");
     // Streamed, not delivered in one lump.
     expect(opts.output).toEqual(["hello ", "hello world"]);
@@ -206,7 +206,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0, outcome: "completed" });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0, reportedCost: null, outcome: "completed" });
 
     // Event order: round 1 + its measurement, tool running, tool done, round 2
     // + its measurement. Each round's count arrives before its tool steps run:
@@ -248,7 +248,34 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20, outcome: "completed" });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20, reportedCost: null, outcome: "completed" });
+  });
+
+  it("sums the reported cost when every round reported it", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 8, outputTokens: 2, reportedCost: 0.25 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 20, outputTokens: 7, reportedCost: 0.5 }]);
+
+    const result = await runAgent(makeOptions());
+
+    expect(result.reportedCost).toBe(0.75);
+  });
+
+  it("reports no cost for the run when any round went unreported", async () => {
+    // A reported cost overrides the whole fee group: summing only the rounds
+    // that reported would bill the other round as free. Null sends the whole
+    // run to the fee group instead.
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 8, outputTokens: 2 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 20, outputTokens: 7, reportedCost: 0.5 }]);
+
+    const result = await runAgent(makeOptions());
+
+    expect(result.reportedCost).toBeNull();
   });
 
   it("says so in the log when the endpoint cut the output short", async () => {

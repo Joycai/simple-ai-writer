@@ -1,6 +1,6 @@
 # OrcaRouter 付费实测：三家官方协议的结构与特性（方案）
 
-> **状态**：shipped（2026-09-26 起草、同日测完并落地三处修复）。§7 是逐条的「测了什么 → 落在哪」。
+> **状态**：shipped（2026-09-26 起草、同日测完并落地三处修复）。§7 是逐条的「测了什么 → 落在哪」，§8 是再补测后把它当内置渠道调好的决定。
 >
 > 这份文件写**这一轮要测什么、怎么测、结果落到哪**。测出来的协议事实不写在
 > 这里——它们进 `landscape.md` 第十八个样本与各主题文件；这里只留方案与取舍。
@@ -169,3 +169,34 @@ live 测试。每条后面是它要关掉的那个未决项。
 **同日补测并打开**：④ 的 `output_config.format` 在五个 Claude 型号上补测（与思考、工具、强制
 工具、流式同用都行），本项目 ④ 族的结构化输出随之打开——决定与理由见
 [`structured-output-plan.md`](structured-output-plan.md) §13，事实见第十八个样本「补测」段。
+
+## 8. 再补测落地：把 OrcaRouter 当内置渠道调好（2026-09-26）
+
+第十八个样本「再补测」A–D 的结论落进代码时做的决定，以及为什么这样而不是别样：
+
+1. **上游报价记账，信任边界放在平台上。** 报价一旦记上用量行就压过整张计费组表，所以收不收它是信任问题：
+   `platforms.ts` 的 `reportsCost` 只写测过「报的数 = 实扣」的平台（目前只有 OrcaRouter），`reportedCost.ts`
+   的 `costReportingPlatform` 还要求**地址也指向它**——平台标签作者能给任何主机贴，而一个贴成 OrcaRouter 的
+   OpenRouter 形中转在 ① 上本来就回 `usage.cost`。
+   - 不选「任何回包带 `usage.cost` 都收」：没测过的中转报的数是不是它实际扣的，没人知道。
+   - 不选计费组上的「信任上游报价」开关：要 UI、要迁移，且 OrcaRouter 用户多半根本没建组。
+   - 不选事后查 `GET /v1/generation`：多一次请求、多一个时序，带头的流式已经给了同一个数。
+   细则（多轮合计、没报 ≠ 0）在 [`01-fee-groups.md`](../feature/billing/01-fee-groups.md)。
+2. **标定表 + 起步模型。** 八个付费 id 进标定表（目录数值、多模态、PDF），起步列表保留三个免费档，再加
+   GPT-6 Luna（钉 ②：唯一流出可读推理摘要的线路）、Claude Sonnet 5（钉 ④）、Gemini 3.8 Flash（钉 ③）。
+   起步是推荐不是目录，其余五个手动加时由标定表预填。作者保存前删掉了被钉的线路，起步行就不钉、跟主线路走。
+   PDF 标到全部八个：实测覆盖 luna（①②）、sonnet-5 与 opus-5.5（④）、gemini-3.8-flash（③），其余四个只靠目录的
+   `input_modalities: file` 加同族实测；Claude / Gemini 经 ① 送 PDF（手动加的行默认在 ①）没有单独测过——网关在 ①
+   上替上游翻译请求，读不读得到由它决定。
+3. **PDF 格。** orcarouter ④③ 与 anthropic 官方 ④ 打开：④ 回包是 Anthropic 原样，读到 `document` 是模型侧的事实。
+   官方 google 不动：③ 背后是 Vertex，不是 AI Studio。
+4. **Gemini 内置工具**（用户追加）。沿用应用的三个 id，不新造：`web_search` → `googleSearch`、`web_extractor` →
+   `urlContext`、`code_interpreter` → `codeExecution`。和函数工具、强制调用、响应 schema 同发都实测 200，所以不按
+   请求丢（与 DashScope 的 ① 不同）。`urlContext` 在 Gemini 上能单独用，但应用里抓取仍依附搜索——一个 id 在各线路
+   只有一种意思。`web_search` 是协议自带，官方 google / 中转的 Gemini 列按规则是「未实测、照发」；用户决定先不管
+   Gemini 2.x 在 AI Studio 上与函数工具同发的问题（review 提过）。
+5. **不做什么，写在代码旁**：不调计数端点（③ 当生成执行并计费、④ 不路由），不按错误信封的 `type` 判类（全被
+   改写成 OpenAI 形，④ 是 `<nil>`）。全仓库今天没有一处这样做，所以只写注释，不加运行时分支。
+
+live：`live.orcarouter.test.ts` 加四面报价、④③ PDF、Gemini 三个内置工具（代码执行含带函数工具的两轮回灌），
+共 40 条全过（两条旧用例首跑遇上游偶发错误，重跑通过）。

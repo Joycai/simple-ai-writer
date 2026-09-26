@@ -266,6 +266,16 @@ export function activeFamily(m: Pick<Model, "activeRoute">, p: Provider): Protoc
 }
 
 /**
+ * A route pin a new row may keep on this channel: the pin when the channel has
+ * that route, else none — the row then follows the primary route. Used for a
+ * new channel's starter rows, pinned to a route the author may have removed
+ * before saving; kept, such a pin is a row `resolveConn` refuses on every call.
+ */
+export function pinnableRoute(route: ProtocolFamily | undefined, endpoints: readonly Pick<Endpoint, "family">[]): ProtocolFamily | undefined {
+  return route && endpoints.some((e) => e.family === route) ? route : undefined;
+}
+
+/**
  * The provider a model is served by, seen through the model's route. **Use this
  * rather than `providers.find(p => p.id === m.providerId)`** anywhere the
  * answer feeds a protocol question (family, platform, server tools, the wire):

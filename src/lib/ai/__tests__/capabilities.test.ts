@@ -410,7 +410,15 @@ describe("server tools, per wire", () => {
     expect(status({ platform: "newapi", standard: "openai_responses_compat" }, "web_extractor")).toBe("no");
     expect(status({ platform: "newapi", standard: "openai_compat" }, "web_search")).toBe("no");
     expect(status({ platform: "openai", standard: "openai" }, "web_search")).toBe("no");
-    expect(status({ platform: "google", standard: "gemini" }, "web_search")).toBe("no");
+    // `googleSearch` is the protocol's own; AI Studio unmeasured — offered, noted.
+    expect(status({ platform: "google", standard: "gemini" }, "web_search")).toBe("unknown");
+    expect(status({ platform: "google", standard: "gemini" }, "web_extractor")).toBe("no");
+    expect(status({ platform: "google", standard: "gemini" }, "code_interpreter")).toBe("no");
+    expect(status({ platform: "newapi", standard: "gemini_compat" }, "code_interpreter")).toBe("no");
+    // OrcaRouter's Vertex route ran all three (第十八个样本「再补测」).
+    for (const id of ["web_search", "web_extractor", "code_interpreter"] as const) {
+      expect(status({ platform: "orcarouter", standard: "gemini_compat" }, id), id).toBe("yes");
+    }
     // A local server runs no tools: explicit, not "unknown".
     expect(status({ platform: "ollama", standard: "anthropic_compat" }, "web_search")).toBe("no");
     expect(status({ platform: "deepseek", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
@@ -504,6 +512,15 @@ describe("pdfInput", () => {
     expect(hasCapability("pdfInput", { platform: "volcengine-plan", standard: "anthropic_compat" })).toBe(true);
     expect(hasCapability("pdfInput", { platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
     expect(hasCapability("pdfInput", { platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
+  });
+
+  it("reads PDFs on OrcaRouter's Messages and Gemini routes and on Anthropic's own (第十八个样本「再补测」)", () => {
+    expect(capabilityVerdict("pdfInput", { platform: "orcarouter", standard: "anthropic_compat" })).toEqual({ status: "yes", reason: "measured" });
+    expect(capabilityVerdict("pdfInput", { platform: "orcarouter", standard: "gemini_compat" })).toEqual({ status: "yes", reason: "measured" });
+    expect(capabilityVerdict("pdfInput", { platform: "anthropic", standard: "anthropic" })).toEqual({ status: "yes", reason: "measured" });
+    // ③ behind OrcaRouter is Vertex AI, not AI Studio: the official cell stays.
+    expect(hasCapability("pdfInput", { platform: "google", standard: "gemini" })).toBe(false);
+    expect(hasCapability("pdfInput", { platform: "newapi", standard: "gemini_compat" })).toBe(false);
   });
 });
 

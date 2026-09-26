@@ -141,6 +141,15 @@ interface PlatformProfile {
    * attach it unasked were measured with (responses.md §2.4).
    */
   responsesInclude?: readonly string[];
+  /**
+   * The platform reports each request's cost in its response, and the number
+   * is what it actually charged — only where a sample compared it against the
+   * platform's own ledger. That is the trust boundary for billing: a reported
+   * cost overrides the model's whole fee group (`reportedCost.ts`), so a relay
+   * that merely returns a field of the same name is not taken at its word.
+   * `header`: what the request must carry for the platform to report at all.
+   */
+  reportsCost?: { header?: readonly [name: string, value: string] };
   /** Where the entries above were measured. */
   source: string;
 }
@@ -182,6 +191,27 @@ const DEEPSEEK_MODELS: Record<string, ModelCalibration> = {
   "deepseek-v4-pro": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 },
 };
 
+/**
+ * OrcaRouter's eight paid models measured 2026-09-26 (landscape.md §7 第十八个样本
+ * and its 再补测). Context and output caps are the catalog's own
+ * `context_length` / `max_completion_tokens` (`GET /v1/models`). Every one lists
+ * `file` among its input modalities; PDF was read end to end on luna (① ②),
+ * sonnet-5 and opus-5.5 (④) and gemini-3.8-flash (③). No thinking category:
+ * each route's family default is the one the sample measured with.
+ */
+const ORCA_OPENAI = { contextSize: 1_050_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
+const ORCA_CLAUDE = { contextSize: 1_000_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
+const ORCAROUTER_MODELS: Record<string, ModelCalibration> = {
+  "openai/gpt-6-luna": ORCA_OPENAI,
+  "openai/gpt-6-sol": ORCA_OPENAI,
+  "openai/gpt-6-astra": ORCA_OPENAI,
+  "openai/gpt-5.6-terra": ORCA_OPENAI,
+  "anthropic/claude-sonnet-5": ORCA_CLAUDE,
+  "anthropic/claude-opus-5.5": ORCA_CLAUDE,
+  "anthropic/claude-fable-5.1": ORCA_CLAUDE,
+  "google/gemini-3.8-flash": { contextSize: 1_048_576, maxOutput: 65_536, type: "multimodal", pdfInput: true },
+};
+
 const PROFILES: Record<PlatformId, PlatformProfile> = {
   openai: {
     origin: "https://api.openai.com",
@@ -199,7 +229,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     origin: "https://generativelanguage.googleapis.com",
     endpoints: [{ family: "gemini", path: "", official: true }],
     hosts: ["generativelanguage.googleapis.com"],
-    source: "no server tool spelled on the Gemini wire (the only family this platform serves)",
+    source: "Gemini's built-in tools unmeasured on AI Studio: googleSearch offered as unmeasured (the protocol's own), urlContext / codeExecution not offered — measured on OrcaRouter's Vertex route (landscape.md §7 第十八个样本「再补测」)",
   },
   deepseek: {
     origin: "https://api.deepseek.com",
@@ -331,6 +361,21 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "gemini", path: "/v1beta", authMode: "bearer" },
     ],
     hosts: ["api.orcarouter.ai"],
+    // Every route's stream carries the cost, equal to `GET /v1/generation`'s
+    // `total_cost` (① ② to within one 1/500,000-dollar billing unit). ④ and ③
+    // report it only when asked with this header; ① ② report it either way.
+    // ②'s verbatim route (`store: true`, or an `include` of
+    // `web_search_call.action.sources` — this app sends neither) reports none.
+    reportsCost: { header: ["X-OrcaRouter-Include-Cost", "true"] },
+    // Two things this app must not start doing here (第十八个样本):
+    // - Call a token-count endpoint. ③'s `:countTokens` runs — and bills — a
+    //   full generateContent; ④'s `/v1/messages/count_tokens` is not routed
+    //   (a 301 to a web page).
+    // - Classify an error by its envelope's `type`. Every error the sample saw
+    //   was rewritten into the OpenAI shape, ④'s with `type: "<nil>"` and ③'s
+    //   with `invalid_argument` whatever went wrong; the HTTP status and the
+    //   message are the signal.
+    models: ORCAROUTER_MODELS,
     source: "landscape.md §7 第七个样本 (probe, free tier) + 第十八个样本 (paid models, 2026-09-26) — relay; Responses and Anthropic web_search measured",
   },
   newapi: {
@@ -516,6 +561,11 @@ export function platformSource(id: PlatformId): string {
 /** `include` entries a platform's Responses route must send — see {@link PlatformProfile.responsesInclude}. */
 export function platformResponsesInclude(id: PlatformId): readonly string[] {
   return PROFILES[id]?.responsesInclude ?? [];
+}
+
+/** Whether (and how) a platform reports each request's cost — see {@link PlatformProfile.reportsCost}. */
+export function platformCostReport(id: PlatformId): PlatformProfile["reportsCost"] {
+  return PROFILES[id]?.reportsCost;
 }
 
 /** The routes a platform serves, primary first. */

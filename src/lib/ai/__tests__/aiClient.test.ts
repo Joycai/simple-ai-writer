@@ -3232,3 +3232,248 @@ describe("streamCompletion — 工具参数的流式进度", () => {
     }
   });
 });
+
+describe("streamCompletion — upstream-reported cost", () => {
+  /** Serve one response per request in order; capture each request's headers. */
+  function mockFetchSeq(responses: string[][]) {
+    const headers: Headers[] = [];
+    let i = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        headers.push(new Headers(init.headers));
+        return sseResponse(responses[Math.min(i++, responses.length - 1)]);
+      }),
+    );
+    return headers;
+  }
+
+  async function run(standard: ApiStandard, baseUrl: string, responses: string[][], platform?: PlatformId) {
+    const headers = mockFetchSeq(responses);
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl,
+      apiKey: "k",
+      standard,
+      modelId: "m",
+      platform,
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: (c) => received.push(c),
+    });
+    const done = received.find((c): c is Extract<StreamChunk, { done: true }> => "done" in c);
+    return { headers, done };
+  }
+
+  // The shapes OrcaRouter streams (landscape.md §7 第十八个样本「再补测」).
+  const CHAT = [
+    `data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n`,
+    `data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"cost":9.9e-6}}\n`,
+    `data: [DONE]\n`,
+  ];
+  const RESPONSES = [
+    `data: {"type":"response.output_text.delta","delta":"ok"}\n\n`,
+    `data: {"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2,"cost":4.4e-6}}}\n\n`,
+  ];
+  const GEMINI = [
+    `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5}}\n`,
+    `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":2,"costUsd":1.4e-5}}\n`,
+  ];
+  const anthropic = (cost?: number, stop = "end_turn") => [
+    `data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1}}}\n\n`,
+    `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}\n\n`,
+    `data: {"type":"content_block_stop","index":0}\n\n`,
+    `data: {"type":"message_delta","delta":{"stop_reason":"${stop}"},"usage":{"output_tokens":2${cost === undefined ? "" : `,"cost_usd":${cost}`}}}\n\n`,
+    `data: {"type":"message_stop"}\n\n`,
+  ];
+
+  const cases: [ApiStandard, string, string[], number][] = [
+    ["openai_compat", "https://api.orcarouter.ai/v1", CHAT, 9.9e-6],
+    ["openai_responses_compat", "https://api.orcarouter.ai/v1", RESPONSES, 4.4e-6],
+    ["gemini_compat", "https://api.orcarouter.ai/v1beta", GEMINI, 1.4e-5],
+    ["anthropic_compat", "https://api.orcarouter.ai", anthropic(7.4e-5), 7.4e-5],
+  ];
+
+  it.each(cases)("%s on OrcaRouter: asks for the cost and carries it to done", async (standard, baseUrl, chunks, cost) => {
+    const { headers, done } = await run(standard, baseUrl, [chunks]);
+    expect(headers[0].get("X-OrcaRouter-Include-Cost")).toBe("true");
+    expect(done?.reportedCost).toBe(cost);
+  });
+
+  it.each(cases)("%s elsewhere: the same field is not taken, no header is sent", async (standard, _baseUrl, chunks) => {
+    const { headers, done } = await run(standard, "https://relay.example.com/v1", [chunks]);
+    expect(headers[0].has("X-OrcaRouter-Include-Cost")).toBe(false);
+    expect(done).toBeDefined();
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
+  it("a relay merely labelled OrcaRouter gets no header and its cost is not taken", async () => {
+    const { headers, done } = await run("openai_compat", "https://relay.example.com/v1", [CHAT], "orcarouter");
+    expect(headers[0].has("X-OrcaRouter-Include-Cost")).toBe(false);
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
+  it("Chat: a stream that ends without [DONE] still carries the cost", async () => {
+    const { done } = await run("openai_compat", "https://api.orcarouter.ai/v1", [CHAT.slice(0, 2)]);
+    expect(done?.reportedCost).toBe(9.9e-6);
+  });
+
+  it("Chat: `cost_usd` is read when that is the spelling", async () => {
+    const chunks = [CHAT[0], `data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"cost_usd":3e-6}}\n`, CHAT[2]];
+    const { done } = await run("openai_compat", "https://api.orcarouter.ai/v1", [chunks]);
+    expect(done?.reportedCost).toBe(3e-6);
+  });
+
+  it("Gemini: the last block's cost wins", async () => {
+    const chunks = [
+      `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5,"costUsd":1e-6}}\n`,
+      GEMINI[1],
+    ];
+    const { done } = await run("gemini_compat", "https://api.orcarouter.ai/v1beta", [chunks]);
+    expect(done?.reportedCost).toBe(1.4e-5);
+  });
+
+  it("Responses: a response cut short on max_output_tokens still carries the cost", async () => {
+    const chunks = [
+      RESPONSES[0],
+      `data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":5,"output_tokens":2,"cost":2e-6}}}\n\n`,
+    ];
+    const { done } = await run("openai_responses_compat", "https://api.orcarouter.ai/v1", [chunks]);
+    expect(done?.truncated).toBe(true);
+    expect(done?.reportedCost).toBe(2e-6);
+  });
+
+  it("Anthropic: a cost in the opening snapshot alone is not the response's cost", async () => {
+    const chunks = anthropic(undefined);
+    chunks[0] = `data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1,"cost_usd":1e-6}}}\n\n`;
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [chunks]);
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
+  it("a reported 0 stays 0 — free, not missing", async () => {
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [anthropic(0)]);
+    expect(done?.reportedCost).toBe(0);
+  });
+
+  it("a paused Anthropic turn sums the cost of every leg", async () => {
+    const { headers, done } = await run("anthropic_compat", "https://api.orcarouter.ai", [
+      anthropic(0.25, "pause_turn"),
+      anthropic(0.5),
+    ]);
+    expect(headers).toHaveLength(2);
+    expect(headers.every((h) => h.get("X-OrcaRouter-Include-Cost") === "true")).toBe(true);
+    expect(done?.reportedCost).toBe(0.75);
+  });
+
+  it("a paused Anthropic turn with one unreported leg reports nothing — the fee group prices it whole", async () => {
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [
+      anthropic(0.25, "pause_turn"),
+      anthropic(undefined),
+    ]);
+    expect(done).toBeDefined();
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+});
+
+describe("streamCompletion — server tools on the Gemini wire", () => {
+  const done = [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}]}\n`];
+  const ORCA = "https://api.orcarouter.ai/v1beta";
+  const FN: ToolDefinition = {
+    type: "function",
+    function: { name: "save_note", description: "Save a note.", parameters: { type: "object", properties: {} } },
+  };
+  const ALL: ServerToolId[] = ["web_search", "web_extractor", "code_interpreter"];
+
+  it("lists googleSearch / urlContext / codeExecution beside the function declarations", async () => {
+    // All three beside a function tool: 200 on OrcaRouter's Vertex route
+    // (landscape.md §7 第十八个样本「再补测」).
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ALL, tools: [FN] });
+    const tools = calls[0].body.tools as Record<string, unknown>[];
+    expect(tools[0]).toHaveProperty("functionDeclarations");
+    expect(tools.slice(1)).toEqual([{ googleSearch: {} }, { urlContext: {} }, { codeExecution: {} }]);
+  });
+
+  it("keeps them when a function is forced", async () => {
+    // mode ANY beside googleSearch measured 200 — nothing to drop per request.
+    const { calls } = await collect({
+      chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_search"], tools: [FN],
+      toolChoice: { type: "function", function: { name: "save_note" } },
+    });
+    expect(calls[0].body.tools).toContainEqual({ googleSearch: {} });
+    expect(calls[0].body.toolConfig).toEqual({ functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["save_note"] } });
+  });
+
+  it("sends them on a request without function tools", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"] });
+    expect(calls[0].body.tools).toEqual([{ codeExecution: {} }]);
+    expect(calls[0].body).not.toHaveProperty("toolConfig");
+  });
+
+  it("drops a lone extractor — it is an upgrade of search, as on every wire", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_extractor"] });
+    expect(calls[0].body).not.toHaveProperty("tools");
+  });
+
+  it("sends only googleSearch to the official endpoint — the other two are unmeasured there", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini", serverTools: ALL });
+    expect(calls[0].body.tools).toEqual([{ googleSearch: {} }]);
+  });
+
+  it("sends nothing without the declaration", async () => {
+    const { calls } = await collect({ chunks: done, standard: "gemini_compat", baseUrl: ORCA, tools: [FN] });
+    expect(calls[0].body.tools).toHaveLength(1);
+  });
+});
+
+describe("streamCompletion — Gemini built-in tools in the stream", () => {
+  const ORCA = "https://api.orcarouter.ai/v1beta";
+
+  it("logs a code run, keeps its code out of the text, and echoes its parts on a tool round", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"],
+      chunks: [
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"executableCode":{"language":"PYTHON","code":"print(6*7)","id":"x1"},"thoughtSignature":"sig"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"codeExecutionResult":{"outcome":"OUTCOME_OK","output":"42\\n","id":"x1"}}]}}]}\n`,
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"It is 42."},{"functionCall":{"name":"save_note","args":{"text":"42"}}}]},"finishReason":"STOP"}]}\n`,
+      ],
+    });
+    const events = received.flatMap((c) => ("serverTool" in c ? [c.serverTool] : []));
+    expect(events).toEqual([
+      { phase: "call", id: expect.stringMatching(/_x1$/), name: "code_interpreter", input: { code: "print(6*7)", language: "PYTHON" } },
+      { phase: "result", id: expect.stringMatching(/_x1$/), name: "code_interpreter", results: [], output: "42" },
+    ]);
+    expect(events[0].id).toBe(events[1].id);
+    expect(text(received)).toBe("It is 42.");
+    const round = received.find((c): c is Extract<StreamChunk, { toolCalls: unknown }> => "toolCalls" in c);
+    // Echoed verbatim — measured 200 with the answer using the earlier run.
+    expect(round?._geminiModelParts).toEqual([
+      { executableCode: { language: "PYTHON", code: "print(6*7)", id: "x1" }, thoughtSignature: "sig" },
+      { codeExecutionResult: { outcome: "OUTCOME_OK", output: "42\n", id: "x1" } },
+      { text: "It is 42." },
+      { functionCall: { name: "save_note", args: { text: "42" } } },
+    ]);
+  });
+
+  it("counts the tools' own input tokens, which Gemini reports beside the prompt", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"],
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":65,"toolUsePromptTokenCount":77,"totalTokenCount":162}}\n`],
+    });
+    const done = received.find((c): c is Extract<StreamChunk, { done: true }> => "done" in c);
+    expect(done?.inputTokens).toBe(97);
+    expect(done?.outputTokens).toBe(65);
+  });
+
+  it("logs a search once, from the block that carries the grounding", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_search"],
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"Ferries run hourly."}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP","groundingMetadata":{"webSearchQueries":["ferry timetable"],"groundingChunks":[{"web":{"uri":"https://r.example/1","title":"ferries.example"}}]}}]}\n`,
+      ],
+    });
+    const events = received.flatMap((c) => ("serverTool" in c ? [c.serverTool] : []));
+    expect(events.map((e) => [e.phase, e.name])).toEqual([["call", "web_search"], ["result", "web_search"]]);
+    expect(text(received)).toBe("Ferries run hourly.");
+  });
+});

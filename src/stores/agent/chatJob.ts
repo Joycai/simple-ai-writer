@@ -728,7 +728,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // 静态 import 会在模块求值期炸掉。
     const { loreOrganizer } = await import("../projectStore");
 
-    const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
+    const { inputTokens, outputTokens, cachedTokens, reportedCost, outcome } = await runAgent({
       ...connOptions({ provider, model, apiKey }),
       // Never undefined: without a ceiling the tool loop's history trimming
       // is a no-op, and a chat that reads pictures accumulates base64 in a
@@ -875,7 +875,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
       }
     }
 
-    const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
+    const cost = costFor(model, inputTokens, outputTokens, cachedTokens, reportedCost);
     patchChat(set, key, (c) => ({
       usage: {
         inputTokens: (c.usage?.inputTokens ?? 0) + inputTokens,
@@ -892,7 +892,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // the next turn.
     bumpContext();
     recordRunOutcome(model.id, null);
-    void recordUsage(projectPath, { model, task: "chat", promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
+    void recordUsage(projectPath, { model, task: "chat", promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
   } catch (e) {
     // Whatever streamed before the failure is still the author's to read.
     stream.flush();

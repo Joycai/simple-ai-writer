@@ -104,6 +104,30 @@ const MATRIX_ROW_KEY: Partial<Record<CapabilityId, string>> = {
   textVerbosity: "aiConfig.models.verbosityLabel",
 };
 
+/**
+ * A server tool's hint where the wire changes what it says — the spelling, the
+ * conditions, the billing. Per family, looked up rather than branched on: the
+ * tool is the same permission on every route, only its sentence differs.
+ */
+const SEARCH_HINT_KEY: Record<ProtocolFamily, string> = {
+  openai: "aiConfig.models.serverToolsHintOpenai",
+  responses: "aiConfig.models.serverToolsHintResponses",
+  gemini: "aiConfig.models.serverToolsHintGemini",
+  anthropic: "aiConfig.models.serverToolsHint",
+};
+const EXTRACT_HINT_KEY: Record<ProtocolFamily, string> = {
+  openai: "aiConfig.models.serverToolsHintExtractor",
+  responses: "aiConfig.models.serverToolsHintExtractor",
+  gemini: "aiConfig.models.serverToolsHintExtractorGemini",
+  anthropic: "aiConfig.models.serverToolsHintExtractor",
+};
+const CODE_HINT_KEY: Record<ProtocolFamily, string> = {
+  openai: "aiConfig.models.serverToolsHintCodeInterpreter",
+  responses: "aiConfig.models.serverToolsHintCodeInterpreterResponses",
+  gemini: "aiConfig.models.serverToolsHintCodeInterpreterGemini",
+  anthropic: "aiConfig.models.serverToolsHintCodeInterpreter",
+};
+
 const SO_LABEL_KEY: Record<StructuredOutputMode, string> = {
   off: "aiConfig.models.soOff",
   json_object: "aiConfig.models.soJsonObject",
@@ -1494,20 +1518,14 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                     })
                   }
                   {...(id === "web_extractor"
-                    ? whyProps("extract", t("aiConfig.models.serverToolsHintExtractor"))
+                    ? whyProps("extract", t(EXTRACT_HINT_KEY[family ?? "anthropic"]))
                     : id === "web_search_image"
                       ? whyProps("imgText", t("aiConfig.models.serverToolsHintWebSearchImage"))
                       : id === "image_search"
                         ? whyProps("imgImage", t("aiConfig.models.serverToolsHintImageSearch"))
                         : id === "code_interpreter"
-                          ? whyProps("code", t(family === "responses"
-                            ? "aiConfig.models.serverToolsHintCodeInterpreterResponses"
-                            : "aiConfig.models.serverToolsHintCodeInterpreter"))
-                          : whyProps("tools", family === "openai"
-                          ? t("aiConfig.models.serverToolsHintOpenai")
-                          : family === "responses"
-                            ? t("aiConfig.models.serverToolsHintResponses")
-                            : t("aiConfig.models.serverToolsHint")))}
+                          ? whyProps("code", t(CODE_HINT_KEY[family ?? "anthropic"]))
+                          : whyProps("tools", t(SEARCH_HINT_KEY[family ?? "anthropic"])))}
                 />
               ))}
               {/* 可用性矩阵 (屏 05): the switches above are the author's grant,

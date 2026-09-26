@@ -6,6 +6,9 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
+import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
+import { wireOf } from "./platforms";
+import { createGeminiServerToolReader, geminiServerTools } from "./serverTools";
 import { geminiUrl } from "./urls";
 import type {
   AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
@@ -255,6 +258,13 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       };
     }
   }
+  // The endpoint's own tools, each its own `tools[]` entry beside the function
+  // declarations — and sent without them too: a standing permission, not a
+  // per-task input (lib/ai/serverTools.ts).
+  const builtIn = geminiServerTools(wireOf(opts), opts.serverTools, opts.modelId, opts.relayUpstream);
+  if (builtIn.length) {
+    body.tools = [...((body.tools as unknown[] | undefined) ?? []), ...builtIn];
+  }
   const safetySettings = toSafetySettingsArray(opts.safetySettings);
   if (safetySettings.length) {
     body.safetySettings = safetySettings;
@@ -287,9 +297,10 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // alone cannot show what was sent.
   opts._onRequestBody?.(body);
 
+  const platform = costReportingPlatform(opts);
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode) },
+    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },
     body: JSON.stringify(body),
     signal: opts.signal,
   });
@@ -304,6 +315,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedTokens = 0;
+  /** Only on the last block's `usageMetadata`, and only from a trusted platform (`reportedCost.ts`). */
+  let reportedCost: number | undefined;
   let truncated = false;
   // The candidate's finishReason, for the log — see the Chat Completions adapter.
   let stopReason: string | undefined;
@@ -311,6 +324,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
   const geminiAllModelParts: unknown[] = [];
+  // Searches, pages read and code run by the endpoint itself, for the log.
+  const readServerTools = createGeminiServerToolReader();
 
   // Carry an incomplete trailing line across reads: a single SSE line can be split
   // across network chunks, and parsing the halves would silently drop content.
@@ -369,20 +384,28 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
         });
       }
     }
+    // After the parts: a code run's call and result are parts of this same
+    // block, and the answer's text that follows them streamed above.
+    for (const serverTool of readServerTools(candidate)) opts.onChunk({ serverTool });
     const usage = json.usageMetadata as {
       promptTokenCount?: number;
       candidatesTokenCount?: number;
       thoughtsTokenCount?: number;
+      toolUsePromptTokenCount?: number;
       cachedContentTokenCount?: number;
     } | undefined;
     if (usage) {
-      inputTokens = usage.promptTokenCount ?? 0;
+      // What the built-in tools fed back in (a page read, a code run's output)
+      // is input billed beside the prompt, not inside `promptTokenCount` —
+      // measured: prompt + candidates + thoughts + toolUse = total (第十八个样本「再补测」).
+      inputTokens = (usage.promptTokenCount ?? 0) + (usage.toolUsePromptTokenCount ?? 0);
       // Thinking models bill reasoning tokens as output, but candidatesTokenCount
       // excludes them — without this, a run that thinks for 5k tokens and
       // answers in 500 would record only 500 output tokens.
       outputTokens = (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
       // A subset of promptTokenCount, not additional to it.
       cachedTokens = usage.cachedContentTokenCount ?? 0;
+      reportedCost = reportedCostOf(platform, "gemini", usage) ?? reportedCost;
     }
     // Response-level block/filter — distinct from promptFeedback.blockReason
     // above, which only covers the request being refused before generation
@@ -421,5 +444,6 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
+    ...(reportedCost !== undefined ? { reportedCost } : {}),
   });
 }

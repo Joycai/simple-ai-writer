@@ -17,6 +17,7 @@ vi.mock("../../project", () => ({
 import { buildUsageRow, recordUsage } from "../usageRow";
 import type { RecordUsageInput, UsageRowValues } from "../usageRow";
 import { ZERO_FEE, type FeeConfig } from "../feeGroup";
+import { costFor } from "../configDb";
 
 const fee = (over: Partial<FeeConfig> = {}): FeeConfig => ({ ...ZERO_FEE, ...over });
 const model = (f?: FeeConfig) => ({ id: "m1", fee: f });
@@ -153,6 +154,26 @@ describe("buildUsageRow · 上游报价", () => {
   });
 });
 
+describe("costFor · 草稿上显示的数与账上同一口径", () => {
+  const tokens = fee({ inputPrice: 1, outputPrice: 2 });
+
+  it("有上游报价就显示报价，和 buildUsageRow 记的一样", () => {
+    const shown = costFor(model(tokens), 1_000_000, 1_000_000, 0, 0.003);
+    const row = buildUsageRow({ model: model(tokens), task: "chat", promptTokens: 1_000_000, completionTokens: 1_000_000, reportedCost: 0.003 });
+    expect(shown).toBeCloseTo(0.003, 12);
+    expect(row.costUsd).toBeCloseTo(shown, 12);
+  });
+
+  it("没报（null / undefined）照计费组算", () => {
+    expect(costFor(model(tokens), 1_000_000, 1_000_000, 0, null)).toBeCloseTo(3, 12);
+    expect(costFor(model(tokens), 1_000_000, 1_000_000, 0, undefined)).toBeCloseTo(3, 12);
+  });
+
+  it("没有计费组的模型，报价照样算得出钱", () => {
+    expect(costFor(model(), 10, 10, 0, 0.001)).toBeCloseTo(0.001, 12);
+  });
+});
+
 describe("buildUsageRow · 分项的钱", () => {
   // 分项是 `costOf()` 同一次结果的分流，不是重算。一行上六段加起来对不上
   // 这一行的总额，用量页的条就会比行尾那个金额短一截或长一截——而那种
@@ -236,6 +257,7 @@ describe("buildUsageRow · 分项的钱", () => {
 
   it("六段跟着 INSERT 一起写下去，列名对得上", async () => {
     await recordUsage("/proj", {
+      reportedCost: null,
       model: model(fee({ inputPrice: 3, outputPrice: 15 })),
       task: "chat", promptTokens: 1000, completionTokens: 200,
     });
@@ -255,6 +277,7 @@ describe("buildUsageRow · 分项的钱", () => {
 describe("recordUsage", () => {
   it("一次请求记两处：项目库和总账，总账那一行多带项目路径", async () => {
     await recordUsage("/proj", {
+      reportedCost: null,
       model: model(fee({ inputPrice: 3, outputPrice: 15 })),
       task: "chat", promptTokens: 100, completionTokens: 50,
     });
@@ -269,7 +292,7 @@ describe("recordUsage", () => {
   });
 
   it("没开项目时总账照记——它正是比项目活得久的那一本", async () => {
-    await recordUsage(null, { model: model(fee({ inputPrice: 1 })), task: "chat", promptTokens: 10 });
+    await recordUsage(null, { model: model(fee({ inputPrice: 1 })), task: "chat", promptTokens: 10, reportedCost: null });
     expect(projectExecute).not.toHaveBeenCalled();
     expect(globalExecute).toHaveBeenCalledTimes(1);
   });
@@ -277,13 +300,14 @@ describe("recordUsage", () => {
   it("一处写失败不影响另一处，而且永不抛错", async () => {
     projectExecute.mockRejectedValueOnce(new Error("disk full"));
     await expect(
-      recordUsage("/proj", { model: model(), task: "chat", promptTokens: 1 }),
+      recordUsage("/proj", { model: model(), task: "chat", promptTokens: 1, reportedCost: null }),
     ).resolves.toBeUndefined();
     expect(globalExecute).toHaveBeenCalledTimes(1);
   });
 
   it("行上写下了快照那几列——少一列不会报错，只会让那一行日后算不出钱", async () => {
     await recordUsage("/proj", {
+      reportedCost: null,
       model: model(fee({
         billingMode: "spec", outputUnit: "image",
         outputRates: [{ size: "1K", price: 0.04 }], inputUnitPrice: 0.01,

@@ -21,7 +21,7 @@ import { effectiveStructuredOutput } from "./jsonMode";
 import {
   reasoningBody, resolveThinkingCategory, thinkingBody,
 } from "./reasoning";
-import { effectiveServerTools, openaiServerToolsBody } from "./serverTools";
+import { effectiveServerTools, geminiServerTools, openaiServerToolsBody } from "./serverTools";
 import { wireOf, type PlatformId } from "./platforms";
 import { hasAnyServerTool, hasCapability } from "./capabilities";
 import { familyOf, type ApiStandard } from "./types";
@@ -123,8 +123,11 @@ export function wireSummary(
     // request's, not the model's.
     if (family === "openai") out.push(...flatten(openaiServerToolsBody(wire, m.serverTools, m.modelId, { functionTools: false }, relayUpstream)));
     else {
-      const ids = effectiveServerTools(wire, m.serverTools, m.modelId, relayUpstream);
-      if (ids) out.push({ key: "tools", value: ids.join(",") });
+      // Gemini's entries are spelled apart from the ids (`googleSearch`, …);
+      // on any other wire this is empty and the ids are the spelling.
+      const gemini = geminiServerTools(wire, m.serverTools, m.modelId, relayUpstream).flatMap((t) => Object.keys(t));
+      const ids = gemini.length ? gemini : effectiveServerTools(wire, m.serverTools, m.modelId, relayUpstream);
+      if (ids?.length) out.push({ key: "tools", value: ids.join(",") });
     }
   }
 

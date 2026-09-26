@@ -3,6 +3,7 @@ import {
   inferPlatform,
   parsePlatform,
   PLATFORM_IDS,
+  platformCostReport,
   platformEndpoints,
   platformForAddress,
   platformHasHosts,
@@ -205,3 +206,42 @@ describe("zhipu model calibration", () => {
   });
 });
 
+
+describe("reported cost: the trust boundary", () => {
+  // A reported cost overrides the model's whole fee group, so the set of
+  // platforms taken at their word is pinned: adding one means a sample compared
+  // its number against what it actually charged (reportedCost.ts).
+  it("only OrcaRouter is trusted to report what a request cost", () => {
+    expect(PLATFORM_IDS.filter((id) => platformCostReport(id))).toEqual(["orcarouter"]);
+    expect(platformCostReport("orcarouter")?.header).toEqual(["X-OrcaRouter-Include-Cost", "true"]);
+  });
+});
+
+// The paid models the 第十八个样本 measured: catalog numbers, PDF on every one,
+// and never at odds with the app-wide output-cap table where it knows the id.
+describe("orcarouter model calibration", () => {
+  const IDS = [
+    "openai/gpt-6-luna", "openai/gpt-6-sol", "openai/gpt-6-astra", "openai/gpt-5.6-terra",
+    "anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5", "anthropic/claude-fable-5.1",
+    "google/gemini-3.8-flash",
+  ];
+  it("covers the eight measured ids, all reading pictures and PDFs", () => {
+    for (const id of IDS) {
+      const cal = platformModelCalibration("orcarouter", id);
+      expect(cal, id).toMatchObject({ type: "multimodal", pdfInput: true });
+      expect(cal!.thinkingCategory, id).toBeUndefined();
+      const known = knownMaxOutput(id);
+      if (known) expect(cal!.maxOutput, id).toBe(known);
+    }
+    expect(platformModelCalibration("orcarouter", "anthropic/claude-sonnet-5")).toMatchObject({ contextSize: 1_000_000, maxOutput: 128_000 });
+    expect(platformModelCalibration("orcarouter", "google/gemini-3.8-flash")).toMatchObject({ contextSize: 1_048_576, maxOutput: 65_536 });
+    expect(platformModelCalibration("orcarouter", "openai/gpt-6-luna")).toMatchObject({ contextSize: 1_050_000, maxOutput: 128_000 });
+  });
+  it("matches the id however the author cased or padded it", () => {
+    expect(platformModelCalibration("orcarouter", "  Anthropic/Claude-Sonnet-5 ")).toBe(platformModelCalibration("orcarouter", "anthropic/claude-sonnet-5"));
+  });
+  it("knows nothing about the free tier or another platform's ids", () => {
+    expect(platformModelCalibration("orcarouter", "tencent/hy3-free")).toBeUndefined();
+    expect(platformModelCalibration("newapi", "anthropic/claude-sonnet-5")).toBeUndefined();
+  });
+});

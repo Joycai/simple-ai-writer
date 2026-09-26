@@ -27,6 +27,7 @@ import type {
   ApiStandard, AuthMode, ContentPart, StreamChunk, StreamMessage, StreamOptions, ToolDefinition,
 } from "../types";
 import type { ThinkingCategoryId } from "../reasoning";
+import type { ServerToolEvent } from "../serverTools";
 
 const KEY = process.env.ORCA_KEY ?? "";
 const ORIGIN = "https://api.orcarouter.ai";
@@ -50,17 +51,41 @@ const ROUTES = [CHAT, RESP, ANTH, GEM];
 /** A 64×64 teal PNG (0,128,128), inlined so the probe needs no fixture file. */
 const TEAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAATElEQVR42u3PMQkAAAwDsEqv9EnoPQjEQJL2NwEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQGB5QDPEgDxM5Bd8gAAAABJRU5ErkJggg==";
 
+/**
+ * A one-page PDF whose only text is a passphrase, built here so the probe needs
+ * no fixture file: Helvetica, one content stream, a hand-counted xref.
+ */
+const PASSPHRASE_PDF = (() => {
+  const content = "BT /F1 24 Tf 72 700 Td (The secret word is PELICAN-73.) Tj ET";
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objs.forEach((o, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return `data:application/pdf;base64,${btoa(out)}`;
+})();
+
 interface Collected {
   text: string;
   reasoning: string;
   searches: number;
+  /** Every server-tool report, in arrival order. */
+  events: ServerToolEvent[];
   body?: Record<string, unknown>;
   toolCalls?: Extract<StreamChunk, { toolCalls: unknown }>;
   done?: Extract<StreamChunk, { done: true }>;
 }
 
 async function ask(route: Route, messages: StreamMessage[], opts: Partial<StreamOptions> = {}, modelId = route.model): Promise<Collected> {
-  const c: Collected = { text: "", reasoning: "", searches: 0 };
+  const c: Collected = { text: "", reasoning: "", searches: 0, events: [] };
   await streamCompletion({
     standard: route.standard, baseUrl: route.baseUrl, authMode: route.authMode, apiKey: KEY, modelId,
     platform: "orcarouter", thinkingCategory: route.category, maxOutput: 4096,
@@ -68,7 +93,7 @@ async function ask(route: Route, messages: StreamMessage[], opts: Partial<Stream
     onChunk: (chunk: StreamChunk) => {
       if ("text" in chunk) c.text += chunk.text;
       if ("reasoning" in chunk) c.reasoning += chunk.reasoning;
-      if ("serverTool" in chunk) c.searches++;
+      if ("serverTool" in chunk) { c.searches++; c.events.push(chunk.serverTool); }
       if ("toolCalls" in chunk) c.toolCalls = chunk;
       if ("done" in chunk) c.done = chunk;
     },
@@ -186,6 +211,74 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
       expect(["red", "green", "blue"]).toContain(parsed.color);
       expect(parsed.cents).toBe(5);
     }, 180_000);
+  });
+
+  // Re-measured 2026-09-26 on the streams this app actually reads: ④ and ③
+  // report the cost only when asked (`X-OrcaRouter-Include-Cost`), ① and ②
+  // either way (landscape.md §7 第十八个样本「再补测」).
+  describe("reported cost", () => {
+    it.each(ROUTES)("$name: done carries what the request cost", async (route) => {
+      const c = await ask(route, user("Reply with the single word PONG."), { reasoningEffort: "low" });
+      expect(c.done?.reportedCost).toBeGreaterThan(0);
+      expect(c.done!.reportedCost!).toBeLessThan(0.05);
+    }, 120_000);
+  });
+
+  // A one-page PDF with a passphrase only its text holds. ①② have the file part
+  // in the protocol; ④ (`document`) and ③ (`inlineData application/pdf`) are
+  // the cells this sample opened.
+  describe("PDF input", () => {
+    it.each([ANTH, GEM])("$name: reads the passphrase", async (route) => {
+      const c = await ask(route, user([
+        text("What is the secret word in this PDF? Answer with the word only."),
+        { type: "file", file: { filename: "note.pdf", file_data: PASSPHRASE_PDF } },
+      ]), { reasoningEffort: "low" });
+      expect(c.text).toMatch(/PELICAN-73/);
+    }, 120_000);
+  });
+
+  // ③'s built-in tools, through the adapter's own spelling and reporting.
+  describe("Gem: built-in tools", () => {
+    it("googleSearch runs and is reported with its sources", async () => {
+      const c = await ask(GEM, user("Search the web: who won the 2025 FIFA Club World Cup final? One sentence."), {
+        serverTools: ["web_search"], tools: [WEATHER], reasoningEffort: "low",
+      });
+      expect((c.body!.tools as unknown[])).toContainEqual({ googleSearch: {} });
+      const search = c.events.find((e) => e.name === "web_search" && e.phase === "result");
+      expect(search && "results" in search ? search.results.length : 0).toBeGreaterThan(0);
+      expect(c.text).toMatch(/Chelsea/i);
+    }, 180_000);
+
+    it("urlContext reads a page and reports the URL", async () => {
+      const c = await ask(GEM, user("Read https://example.com and tell me the page's heading, nothing else."), {
+        serverTools: ["web_search", "web_extractor"], reasoningEffort: "low",
+      });
+      const read = c.events.find((e) => e.name === "web_extractor" && e.phase === "result");
+      expect(read && "results" in read ? read.results[0]?.url : "").toMatch(/example\.com/);
+      expect(read && "error" in read ? read.error : undefined).toBeUndefined();
+      expect(c.text).toMatch(/Example Domain/i);
+    }, 180_000);
+
+    it("codeExecution runs, is reported, and its parts echo back on a tool round", async () => {
+      const opts = { serverTools: ["code_interpreter" as const], tools: [WEATHER], reasoningEffort: "low" as const };
+      const first = user("Use code execution to compute the 20th Fibonacci number (F1 = F2 = 1). Then call get_weather for the city named Fibonacci-town.");
+      const r1 = await ask(GEM, first, opts);
+      const run = r1.events.find((e) => e.name === "code_interpreter" && e.phase === "result");
+      expect(run && "output" in run ? run.output : "").toMatch(/6765/);
+      const calls = r1.toolCalls!.toolCalls;
+      expect(r1.toolCalls!._geminiModelParts!.some((p) => !!(p as Record<string, unknown>).executableCode)).toBe(true);
+      const r2 = await ask(GEM, [
+        ...first,
+        {
+          role: "assistant", content: null,
+          tool_calls: calls.map((k) => ({ id: k.id, type: "function" as const, function: { name: k.name, arguments: k.arguments } })),
+          _geminiModelParts: r1.toolCalls!._geminiModelParts,
+        },
+        ...calls.map((k) => ({ role: "tool" as const, tool_call_id: k.id, content: "{\"weather\":\"sunny\"}" })),
+      ], opts);
+      // Written as 6,765 as often as 6765.
+      expect(r2.text).toMatch(/6,?765/);
+    }, 240_000);
   });
 
   describe("server tools", () => {

@@ -29,6 +29,7 @@ import {
 } from "./serverTools";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { wireOf } from "./platforms";
+import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { anthropicUrl } from "./urls";
@@ -625,6 +626,14 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
    * it re-sends the whole paused turn including its search results.
    */
   let total: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  /**
+   * The turn's reported cost: `undefined` before the first request ends,
+   * `null` once any request went unreported — the whole turn then falls back
+   * to the fee group rather than billing the unreported legs as free
+   * (`addReportedCost`).
+   */
+  let turnCost: number | null | undefined;
+  const platform = costReportingPlatform(opts);
   let truncated = false;
   /** The endpoint's own `stop_reason`, carried to the API log verbatim. */
   let stopReason: string | undefined;
@@ -685,6 +694,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
       ...(stopReason ? { stopReason } : {}),
       ...(truncated ? { truncated } : {}),
       ...(total.cachedTokens ? { cachedTokens: total.cachedTokens } : {}),
+      ...(typeof turnCost === "number" ? { reportedCost: turnCost } : {}),
     });
   };
 
@@ -699,7 +709,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     opts._onRequestBody?.(requestBody);
     const res = await fetch(url, {
       method: "POST",
-      headers: authHeaders(opts.apiKey, opts.authMode),
+      headers: { ...authHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },
       body: JSON.stringify(requestBody),
       signal: opts.signal,
     });
@@ -721,6 +731,8 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
      * from these when the request ends.
      */
     let usage: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+    /** This request's reported cost — the last `message_delta` carries it (`reportedCost.ts`). */
+    let legCost: number | undefined;
     /**
      * Every content block of *this* response, verbatim and in arrival order.
      *
@@ -906,6 +918,9 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         }
         case "message_delta": {
           usage = readUsage(json.usage, usage);
+          // The cost of the whole response rides here only — never the opening
+          // snapshot, whose numbers are partial (landscape.md §7 第十八个样本「再补测」).
+          legCost = reportedCostOf(platform, "anthropic", json.usage);
           const stop = (json.delta as { stop_reason?: string } | undefined)?.stop_reason;
           if (stop) stopReason = stop;
           if (stop && ANTHROPIC_REFUSAL_STOP_REASONS.has(stop)) {
@@ -961,6 +976,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
       outputTokens: total.outputTokens + usage.outputTokens,
       cachedTokens: total.cachedTokens + usage.cachedTokens,
     };
+    turnCost = addReportedCost(turnCost, legCost);
 
     /**
      * Two ways for a turn to be unfinished, only one of them announced — and

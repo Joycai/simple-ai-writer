@@ -20,7 +20,7 @@
  *   - **Read-only reporting.** All this app does with one is show what the model
  *     searched and what came back, in the execution log.
  *
- * Today the list has exactly one entry — `web_search` — spoken by two wires:
+ * The list began with one entry — `web_search` — spoken by two wires:
  *
  *   - **Anthropic family**: MiniMax-M3's `/anthropic/v1/messages` serves it in
  *     beta (`docs/api/landscape.md` §7 第四个样本), as Anthropic's own
@@ -52,8 +52,9 @@
  *     (`normalizeServerTools`). On Responses it is one more `tools[]` entry; on
  *     Chat Completions it is the `agent_max` search strategy, which some models
  *     refuse with a 400 (qwen3.8-flash does, qwen3-max / qwen3.5-plus take it).
- *     Only the two OpenAI-compat wires have a spelling for it here — the
- *     Anthropic surface's `web_fetch_*` version stamp is unmeasured.
+ *     Only the two OpenAI-compat wires had a spelling for it then (Gemini's
+ *     `urlContext` joined later, below) — the Anthropic surface's
+ *     `web_fetch_*` version stamp is unmeasured.
  *
  * And two image searches, **Responses compat only** (measured the same day):
  *
@@ -79,7 +80,8 @@
  * `docs/api/landscape.md` §7 第六个样本「代码解释器」):
  *
  *   - **`code_interpreter`** (代码解释器): the endpoint writes Python, runs it in
- *     its own sandbox, and answers from the output. Two wires spell it —
+ *     its own sandbox, and answers from the output. Two wires spelled it at
+ *     first (Gemini's `codeExecution` joined later, below) —
  *     Chat Completions compat as the top-level `enable_code_interpreter: true`,
  *     Responses compat as `{type:"code_interpreter"}` — and each attaches a
  *     condition the other doesn't: Chat Completions refuses it beside function
@@ -96,6 +98,18 @@
  *     follows model families that an id pattern can name — see
  *     the `code_interpreter` cells in `capabilities.ts`. The official OpenAI endpoint's
  *     `code_interpreter` wants a `container` and is not this tool.
+ *
+ * The Gemini wire joined last (2026-09-26, OrcaRouter's verbatim Vertex route —
+ * `docs/api/landscape.md` §7 第十八个样本「再补测」), speaking three of the ids
+ * as bare `tools[]` entries beside `functionDeclarations` (`geminiServerTools`):
+ * `web_search` → `googleSearch`, `web_extractor` → `urlContext`,
+ * `code_interpreter` → `codeExecution`. Every combination with function tools
+ * answered 200 — forcing a function (`mode: ANY`) and a response schema too —
+ * so, unlike the DashScope wires, nothing is dropped per request. `urlContext`
+ * works alone there, but it stays an upgrade of search here like everywhere
+ * else (`normalizeServerTools`): one meaning per id. Search bills per query
+ * (about $0.014 each) and the wire has no `max_uses` to send; the model chose
+ * six queries for one question once.
  */
 
 import { familyOf } from "./types";
@@ -347,6 +361,32 @@ export function responsesServerTools(
     .map((type) => ({ type }));
 }
 
+/** The `tools[]` entry each id becomes on the Gemini wire. */
+const GEMINI_WIRE_TOOL: Partial<Record<ServerToolId, string>> = {
+  web_search: "googleSearch",
+  web_extractor: "urlContext",
+  code_interpreter: "codeExecution",
+};
+
+/**
+ * The built-in `tools[]` entries these ids become on the Gemini wire — each a
+ * one-key object with an empty config (`{googleSearch: {}}`), listed beside the
+ * `functionDeclarations` entry, never inside it. Gated and normalised like the
+ * other wires: only what the platform's cell grants reaches the request.
+ */
+export function geminiServerTools(
+  wire: ServerToolWire,
+  ids: readonly ServerToolId[] | undefined,
+  modelId: string,
+  relayUpstream?: RelayUpstreamChoice,
+): Record<string, Record<string, never>>[] {
+  if (familyOf(wire.standard) !== "gemini") return [];
+  return (effectiveServerTools(wire, ids, modelId, relayUpstream) ?? []).flatMap((id) => {
+    const key = GEMINI_WIRE_TOOL[id];
+    return key ? [{ [key]: {} }] : [];
+  });
+}
+
 // ─── What comes back ─────────────────────────────────────────────────────────
 
 /** One hit from a server-run web search. */
@@ -574,6 +614,122 @@ export function responsesServerToolEvent(
     title: url, url, ...(i === 0 && output ? { content: output } : {}),
   }));
   return { phase, id, name, results, ...(error ? { error } : {}) };
+}
+
+/**
+ * Gemini's built-in tools as reports, read one streamed candidate at a time.
+ *
+ * Measured shapes (OrcaRouter's Vertex route, 2026-09-26 — landscape.md §7
+ * 第十八个样本「再补测」):
+ *
+ *   - **Code execution** — parts of their own: `executableCode{language, code,
+ *     id}`, then `codeExecutionResult{outcome, output, id}`, then the text that
+ *     uses it. `outcome` other than `OUTCOME_OK` is the run failing; its name
+ *     is the error. The two halves share `id`; without one, a result pairs
+ *     with the latest code.
+ *   - **URL context** — `urlContextMetadata.urlMetadata[{retrievedUrl,
+ *     urlRetrievalStatus}]` on the candidate, already on the *first* block:
+ *     the pages are fetched before the answer starts. Each URL is one call and
+ *     its result at once; a status other than `…SUCCESS` is the error.
+ *   - **Search** — `groundingMetadata` on the last block: `webSearchQueries[]`
+ *     is the call, `groundingChunks[].web{uri, title}` the hits (`uri` a
+ *     redirect link, `title` the site's domain). Only `webSearchQueries` makes
+ *     it a search: a URL-context answer carries `groundingChunks` too, and no
+ *     search ran.
+ *
+ * Stateful, one reader per request: a candidate may repeat what an earlier
+ * block said (only the last carries grounding, but that is not assumed), and
+ * each row must reach the log once per phase — or, for the search, again
+ * whenever what it says has grown (the log replaces a row by id, so a re-sent
+ * row updates in place).
+ *
+ * Every id carries `prefix`, unique per request: the ids are built from
+ * content (a URL, "the search"), and one log holds many requests — an agent's
+ * rounds, a task's parallel drafts — while it replaces rows by id alone. Two
+ * reads of one URL in two rounds are two billed calls and two rows.
+ */
+export function createGeminiServerToolReader(
+  prefix = `gst${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+): (candidate: unknown) => ServerToolEvent[] {
+  const seen = new Set<string>();
+  let codeSeq = 0;
+  let lastCodeId: string | undefined;
+  const searchId = `${prefix}_search`;
+  let searchCall = "";
+  let searchResult = "";
+  return (candidate) => {
+    const out: ServerToolEvent[] = [];
+    const emit = (e: ServerToolEvent) => {
+      const key = `${e.phase}:${e.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(e);
+    };
+    if (!candidate || typeof candidate !== "object") return out;
+    const c = candidate as Record<string, unknown>;
+    const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+    const record = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : undefined);
+    const list = (v: unknown) => (Array.isArray(v) ? v : []);
+
+    for (const raw of list(record(c.content)?.parts)) {
+      const part = record(raw);
+      const code = record(part?.executableCode);
+      if (code) {
+        const id = `${prefix}_${text(code.id) ?? `code_${++codeSeq}`}`;
+        lastCodeId = id;
+        const lang = text(code.language);
+        // `code` first: the log's collapsed row shows the first value it can.
+        emit({
+          phase: "call", id, name: "code_interpreter",
+          input: { ...(typeof code.code === "string" ? { code: code.code } : {}), ...(lang ? { language: lang } : {}) },
+        });
+      }
+      const result = record(part?.codeExecutionResult);
+      if (result) {
+        const own = text(result.id);
+        const id = own ? `${prefix}_${own}` : lastCodeId ?? `${prefix}_code_${++codeSeq}`;
+        const output = typeof result.output === "string" ? result.output.trim() : "";
+        const outcome = text(result.outcome);
+        emit({
+          phase: "result", id, name: "code_interpreter", results: [],
+          ...(output ? { output } : {}),
+          ...(outcome && outcome !== "OUTCOME_OK" ? { error: outcome } : {}),
+        });
+      }
+    }
+
+    for (const raw of list(record(c.urlContextMetadata)?.urlMetadata)) {
+      const meta = record(raw);
+      const url = text(meta?.retrievedUrl);
+      if (!url) continue;
+      const id = `${prefix}_url:${url}`;
+      const status = text(meta?.urlRetrievalStatus);
+      emit({ phase: "call", id, name: "web_extractor", input: { urls: [url] } });
+      emit({
+        phase: "result", id, name: "web_extractor", results: [{ title: url, url }],
+        ...(status && !status.endsWith("SUCCESS") ? { error: status } : {}),
+      });
+    }
+
+    const grounding = record(c.groundingMetadata);
+    const queries = list(grounding?.webSearchQueries).filter((q): q is string => typeof q === "string" && !!q.trim());
+    if (queries.length) {
+      // One search row per request, re-sent whenever its queries or hits grew.
+      const results: WebSearchResult[] = [];
+      for (const raw of list(grounding?.groundingChunks)) {
+        const web = record(record(raw)?.web);
+        const url = text(web?.uri);
+        if (url) results.push({ title: text(web?.title) ?? url, url });
+      }
+      const call = JSON.stringify(queries);
+      const result = JSON.stringify([queries, results.map((r) => r.url)]);
+      if (call !== searchCall) out.push({ phase: "call", id: searchId, name: "web_search", input: { queries } });
+      if (call !== searchCall || result !== searchResult) out.push({ phase: "result", id: searchId, name: "web_search", results });
+      searchCall = call;
+      searchResult = result;
+    }
+    return out;
+  };
 }
 
 /**

@@ -112,6 +112,35 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   - 以上「会不会 400」的结论（缺签名、空 part）都是经网关得到的；网关的请求侧
     不是透传（见第十八个样本开头）。
 
+### 5.1 内置工具：`googleSearch` / `urlContext` / `codeExecution`
+
+```jsonc
+"tools": [
+  { "functionDeclarations": [ /* … */ ] },
+  { "googleSearch": {} }, { "urlContext": {} }, { "codeExecution": {} }
+]
+```
+
+- 每个内置工具是 `tools[]` 里**独立的一项**，与 `functionDeclarations` 并列，不塞进它里面；没有函数工具时也照样发。
+- 实测（同一个 Vertex 线路，第十八个样本「再补测」D）：三个都能和函数工具同发，再加
+  `functionCallingConfig.mode: "ANY"` 或 `responseJsonSchema` 也都 200。
+- 回报的位置各不相同：
+  - 代码执行是 part：`executableCode{language, code, id}` → `codeExecutionResult{outcome, output, id}`，之后才是文本；
+    这两种 part 随工具轮原样回传也 200，下一轮能用上上一轮算出的数；回传时请求里已经没有 `codeExecution`
+    （甚至没有任何工具）也 200。
+  - 读网页在 candidate 上：`urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]`，**首块**就到。
+  - 搜索在 candidate 上：`groundingMetadata.webSearchQueries[]` + `groundingChunks[].web{uri, title}`，末块才到；
+    `uri` 是 vertexaisearch 跳转链接，`title` 是网站域名。读网页的回答也带 `groundingChunks`，但没有 `webSearchQueries`。
+- 计费：搜索按查询条数（约 $0.014 一条），**没有**像 ④ `max_uses` 那样的上限字段；工具回填的内容记在
+  `toolUsePromptTokenCount`，它在 `promptTokenCount` 之外。
+
+本项目（`lib/ai/serverTools.ts`）：`web_search` / `web_extractor` / `code_interpreter` 分别拼成这三项；抓取仍依附搜索，
+与其他线路同一个语义。能力格上只有 OrcaRouter 的 ③ 三项都开；`web_search` 是协议自带，官方 google 与中转的 ③ 列按
+规则「未实测、照发」。执行日志的一行 id 加请求级前缀——id 由内容拼成（网址、「这次搜索」），而一份日志装着好几个请求。
+
+已知限制：代码执行的 part（以及它可能带回的 `inlineData` 图表）随 `_geminiModelParts` 在之后每一轮回传——和思考签名同一套
+机制，上下文估算不计它们、`trimHistory` 也不裁；图表本身不显示。一次大输出或一张图会让估算偏低。
+
 ## 6. ④ Anthropic Messages
 
 ```jsonc
