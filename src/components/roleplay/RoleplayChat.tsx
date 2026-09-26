@@ -726,9 +726,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    *
    * 从前是先落字再读：读图那段时间里草稿已经写着 `@[名字]`，附件还没挂上，选择器
    * 也已经关了，这时一下 Enter 就把「提了却没图」的消息发了出去。先读后落，读的
-   * 期间选择器一直开着，Enter 归它——至多重复选中同一项，落字只落一次（`accept`
-   * 记账）、附件按 key 去重——发不出去；读不到或太大就只报错、不落字，草稿里不会
-   * 留一个没带附件的引用。代价是大图要读完才看见 `@[名字]`，另两处一直如此。
+   * 期间选择器一直开着，Enter 归它（至多重复选中同一项，落字只落一次——`accept`
+   * 记账——附件按 key 去重）；但鼠标点「发送」、或打「，」关掉提名后按 Enter 都
+   * 绕得过选择器，所以真正拦住发送的是 `canSend` 里的 `!reading`：从选中到落完字
+   * 都算在读（`trackRead`）。读不到或太大就只报错、不落字，草稿里不会留一个没带
+   * 附件的引用。代价是大图要读完才看见 `@[名字]`，另两处一直如此。
    */
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }

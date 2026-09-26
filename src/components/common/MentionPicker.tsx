@@ -145,7 +145,7 @@ export interface MentionState {
   claim: (text: string) => MentionClaim | null;
   /**
    * Replace the claimed mention with `@[名字]`, returning the new text and
-   * caret (below) — at the place the mention is *now*, after whatever was
+   * selection (below) — at the place the mention is *now*, after whatever was
    * typed or landed during the read (see acceptPick). A second accept on the same mention
    * is a no-op (a double-click, or Enter twice on a slow file); a mention
    * opened since on a later `@` is shifted by the splice; one reopened on

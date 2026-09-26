@@ -361,6 +361,11 @@ export function AgentChat() {
         // a path, as it always was.
         const outcome = await attachProjectFile(item.file, { video: canVideo });
         if (!outcome.ok) {
+          // A send queued while this read ran was written around the
+          // attachment: sent now it would go as a bare `@潮`, and `handleSend`
+          // would clear the refusal below before the author saw it. Held
+          // back, in the same render that lets sending through again.
+          setQueued(false);
           setRefError(outcome.reason === "too-large"
             ? t("ai.chat.imageTooLarge", {
                 defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
