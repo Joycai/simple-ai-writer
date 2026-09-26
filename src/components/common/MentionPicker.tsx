@@ -270,9 +270,16 @@ export function editRange(before: string, after: string): { start: number; end: 
   return { start: p, end: before.length - s, delta: after.length - before.length };
 }
 
-/** Whether a mention at `start` with `query` overlaps the replaced span. */
+/**
+ * Whether a mention at `start` with `query` was run over by the replaced
+ * span — overlapping it, or ending exactly where it begins: a reference
+ * landed on this very `@` keeps the `@` in the common prefix, so the span
+ * starts one character after it, and an empty-query mention ends there.
+ * Left open, that mention would then be claimed with `glued` set (the `[`
+ * is in the text by now) and land a second reference in front of the first.
+ */
 function inEdit(start: number, query: string, edit: { start: number; end: number }): boolean {
-  return start < edit.end && start + 1 + query.length > edit.start;
+  return start < edit.end && start + 1 + query.length >= edit.start;
 }
 
 /**

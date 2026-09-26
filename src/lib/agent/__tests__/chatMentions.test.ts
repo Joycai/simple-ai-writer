@@ -428,6 +428,19 @@ describe("a pick across a file read", () => {
     same.type("看看@潮汐");
     same.external("看看@[潮汐.png]汐");
     expect(same.state().open).toBe(false);
+    // An empty query on that `@` (the author deleted back to a bare `@`): the
+    // span starts right after the `@`, and the mention still closes — left
+    // open, its next pick would be glued to the reference just landed.
+    const bare = host();
+    for (const t of ["看看@潮", "看看@"]) bare.type(t);
+    bare.external("看看@[潮汐.png]");
+    expect(bare.state().open).toBe(false);
+    expect(shiftCore({ open: true, id: 1, query: "", active: 0, scope: "all", start: 2 }, "看看@", "看看@[x]").open).toBe(false);
+    // A landing on a *later* `@` leaves this one where it is.
+    const other = host();
+    other.type("看@潮@", 3);
+    other.external("看@潮@[夜航.png]");
+    expect(other.state()).toMatchObject({ open: true, query: "潮", start: 1 });
   });
 
   it("the edit moves a waiting pick whether its mention is closed, mid-sentence, or one of two alike", () => {
