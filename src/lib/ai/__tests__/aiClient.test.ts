@@ -3439,9 +3439,10 @@ describe("streamCompletion — Gemini built-in tools in the stream", () => {
     });
     const events = received.flatMap((c) => ("serverTool" in c ? [c.serverTool] : []));
     expect(events).toEqual([
-      { phase: "call", id: "x1", name: "code_interpreter", input: { language: "PYTHON", code: "print(6*7)" } },
-      { phase: "result", id: "x1", name: "code_interpreter", results: [], output: "42" },
+      { phase: "call", id: expect.stringMatching(/_x1$/), name: "code_interpreter", input: { code: "print(6*7)", language: "PYTHON" } },
+      { phase: "result", id: expect.stringMatching(/_x1$/), name: "code_interpreter", results: [], output: "42" },
     ]);
+    expect(events[0].id).toBe(events[1].id);
     expect(text(received)).toBe("It is 42.");
     const round = received.find((c): c is Extract<StreamChunk, { toolCalls: unknown }> => "toolCalls" in c);
     // Echoed verbatim — measured 200 with the answer using the earlier run.
@@ -3451,6 +3452,16 @@ describe("streamCompletion — Gemini built-in tools in the stream", () => {
       { text: "It is 42." },
       { functionCall: { name: "save_note", args: { text: "42" } } },
     ]);
+  });
+
+  it("counts the tools' own input tokens, which Gemini reports beside the prompt", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"],
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":20,"candidatesTokenCount":65,"toolUsePromptTokenCount":77,"totalTokenCount":162}}\n`],
+    });
+    const done = received.find((c): c is Extract<StreamChunk, { done: true }> => "done" in c);
+    expect(done?.inputTokens).toBe(97);
+    expect(done?.outputTokens).toBe(65);
   });
 
   it("logs a search once, from the block that carries the grounding", async () => {

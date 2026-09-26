@@ -637,12 +637,24 @@ export function responsesServerToolEvent(
  *
  * Stateful, one reader per request: a candidate may repeat what an earlier
  * block said (only the last carries grounding, but that is not assumed), and
- * each row must reach the log once per phase.
+ * each row must reach the log once per phase — or, for the search, again
+ * whenever what it says has grown (the log replaces a row by id, so a re-sent
+ * row updates in place).
+ *
+ * Every id carries `prefix`, unique per request: the ids are built from
+ * content (a URL, "the search"), and one log holds many requests — an agent's
+ * rounds, a task's parallel drafts — while it replaces rows by id alone. Two
+ * reads of one URL in two rounds are two billed calls and two rows.
  */
-export function createGeminiServerToolReader(): (candidate: unknown) => ServerToolEvent[] {
+export function createGeminiServerToolReader(
+  prefix = `gst${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+): (candidate: unknown) => ServerToolEvent[] {
   const seen = new Set<string>();
   let codeSeq = 0;
   let lastCodeId: string | undefined;
+  const searchId = `${prefix}_search`;
+  let searchCall = "";
+  let searchResult = "";
   return (candidate) => {
     const out: ServerToolEvent[] = [];
     const emit = (e: ServerToolEvent) => {
@@ -661,17 +673,19 @@ export function createGeminiServerToolReader(): (candidate: unknown) => ServerTo
       const part = record(raw);
       const code = record(part?.executableCode);
       if (code) {
-        const id = text(code.id) ?? `gemini_code_${++codeSeq}`;
+        const id = `${prefix}_${text(code.id) ?? `code_${++codeSeq}`}`;
         lastCodeId = id;
         const lang = text(code.language);
+        // `code` first: the log's collapsed row shows the first value it can.
         emit({
           phase: "call", id, name: "code_interpreter",
-          input: { ...(lang ? { language: lang } : {}), ...(typeof code.code === "string" ? { code: code.code } : {}) },
+          input: { ...(typeof code.code === "string" ? { code: code.code } : {}), ...(lang ? { language: lang } : {}) },
         });
       }
       const result = record(part?.codeExecutionResult);
       if (result) {
-        const id = text(result.id) ?? lastCodeId ?? `gemini_code_${++codeSeq}`;
+        const own = text(result.id);
+        const id = own ? `${prefix}_${own}` : lastCodeId ?? `${prefix}_code_${++codeSeq}`;
         const output = typeof result.output === "string" ? result.output.trim() : "";
         const outcome = text(result.outcome);
         emit({
@@ -686,7 +700,7 @@ export function createGeminiServerToolReader(): (candidate: unknown) => ServerTo
       const meta = record(raw);
       const url = text(meta?.retrievedUrl);
       if (!url) continue;
-      const id = `gemini_url:${url}`;
+      const id = `${prefix}_url:${url}`;
       const status = text(meta?.urlRetrievalStatus);
       emit({ phase: "call", id, name: "web_extractor", input: { urls: [url] } });
       emit({
@@ -698,15 +712,19 @@ export function createGeminiServerToolReader(): (candidate: unknown) => ServerTo
     const grounding = record(c.groundingMetadata);
     const queries = list(grounding?.webSearchQueries).filter((q): q is string => typeof q === "string" && !!q.trim());
     if (queries.length) {
-      const id = `gemini_search:${queries.join("\n")}`;
-      emit({ phase: "call", id, name: "web_search", input: { queries } });
+      // One search row per request, re-sent whenever its queries or hits grew.
       const results: WebSearchResult[] = [];
       for (const raw of list(grounding?.groundingChunks)) {
         const web = record(record(raw)?.web);
         const url = text(web?.uri);
         if (url) results.push({ title: text(web?.title) ?? url, url });
       }
-      emit({ phase: "result", id, name: "web_search", results });
+      const call = JSON.stringify(queries);
+      const result = JSON.stringify([queries, results.map((r) => r.url)]);
+      if (call !== searchCall) out.push({ phase: "call", id: searchId, name: "web_search", input: { queries } });
+      if (call !== searchCall || result !== searchResult) out.push({ phase: "result", id: searchId, name: "web_search", results });
+      searchCall = call;
+      searchResult = result;
     }
     return out;
   };

@@ -391,10 +391,14 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       promptTokenCount?: number;
       candidatesTokenCount?: number;
       thoughtsTokenCount?: number;
+      toolUsePromptTokenCount?: number;
       cachedContentTokenCount?: number;
     } | undefined;
     if (usage) {
-      inputTokens = usage.promptTokenCount ?? 0;
+      // What the built-in tools fed back in (a page read, a code run's output)
+      // is input billed beside the prompt, not inside `promptTokenCount` —
+      // measured: prompt + candidates + thoughts + toolUse = total (第十八个样本「再补测」).
+      inputTokens = (usage.promptTokenCount ?? 0) + (usage.toolUsePromptTokenCount ?? 0);
       // Thinking models bill reasoning tokens as output, but candidatesTokenCount
       // excludes them — without this, a run that thinks for 5k tokens and
       // answers in 500 would record only 500 output tokens.
