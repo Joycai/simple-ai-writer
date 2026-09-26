@@ -9,12 +9,11 @@
  * components/common/MentionPicker.
  */
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Image, X } from "lucide-react";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import {
   MentionPicker,
-  filterMentions,
   mentionKey,
   mentionLabel,
   useMentionState,
@@ -24,6 +23,8 @@ import { readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
 import { imageForModel } from "../../../lib/image/normalize";
 import { attachedKey, type AttachedItem } from "../../../lib/lore/aiTask";
 import type { LoreEntity } from "../../../lib/lore";
+import { availableScopes, countByScope, searchMentions } from "../../../lib/search/mentionSearch";
+import { useProjectStore } from "../../../stores/projectStore";
 import styles from "./AttachmentTextarea.module.css";
 
 interface AttachmentTextareaProps {
@@ -65,13 +66,26 @@ export function AttachmentTextarea({
   const latest = useRef({ attached, instruction });
   latest.current = { attached, instruction };
 
-  const candidates: MentionItem[] = [
+  // For a document's group-path line and its share of the match.
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const candidates: MentionItem[] = useMemo(() => [
     ...entities.map((entity): MentionItem => ({ type: "lore", entity })),
     // No recordings on a lore surface: nothing here can read or transcribe
     // one, and the fallback branch below would try to read it as text.
     ...projectFiles.filter((f) => f.kind !== "media").map((file): MentionItem => ({ type: "file", file })),
-  ];
-  const items = filterMentions(candidates, mention.query);
+  ], [entities, projectFiles]);
+  // Scoped, ranked and cut in lib/search/mentionSearch (设计稿 02i), same as
+  // the chat composers; the chip row is `availableScopes` and nothing else.
+  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
+  const search = useMemo(
+    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
+    [candidates, mention.query, mention.scope, projectPath],
+  );
+  const items = search.items;
+  const counts = useMemo(
+    () => (items.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
+    [candidates, mention.query, projectPath, items.length],
+  );
   const attachedKeys = new Set(attached.map(attachedKey));
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -119,17 +133,20 @@ export function AttachmentTextarea({
           value={instruction}
           onChange={handleChange}
           onKeyDown={(e) => {
-            // Only while the picker is actually on screen — it renders nothing
-            // when nothing matches, and keys must fall through to the textarea.
-            if (!mention.open || items.length === 0) return;
+            // Only while the picker is on screen — which, empty scope
+            // included, is whenever the mention is open. Other keys fall
+            // through to the textarea.
+            if (!mention.open) return;
             // Consume Escape here so it closes the picker without also
             // dismissing the surrounding modal (ModalShell).
             if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+            // Tab cycles the scope, as in ⌘K; Enter alone picks (设计稿 02i).
+            if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
             if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return; }
             if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return; }
-            if (e.key === "Enter" || e.key === "Tab") {
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void handlePick(items[mention.active] ?? items[0]);
+              if (items.length > 0) void handlePick(items[mention.active] ?? items[0]);
             }
           }}
           disabled={disabled}
@@ -159,6 +176,13 @@ export function AttachmentTextarea({
         <MentionPicker
           anchorRef={wrapRef}
           items={items}
+          hits={search.hits}
+          projectPath={projectPath}
+          scopes={scopes}
+          scope={mention.scope}
+          onScopeChange={mention.setScope}
+          query={mention.query}
+          counts={counts}
           usedKeys={attachedKeys}
           activeIndex={mention.active}
           onPick={(item) => void handlePick(item)}

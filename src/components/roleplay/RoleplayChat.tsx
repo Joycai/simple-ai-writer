@@ -59,7 +59,7 @@ import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
-  MentionPicker, filterMentions, mentionKey, mentionLabel,
+  MentionPicker, mentionKey, mentionLabel,
   useMentionState, type MentionItem,
 } from "../common/MentionPicker";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -69,17 +69,11 @@ import type { AttachedItem } from "../../lib/lore/aiTask";
 import type {
   AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
 } from "../../lib/roleplay/model";
+import { availableScopes, countByScope, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./RoleplayChat.module.css";
 
 /** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
 const EMPTY_SUBS: SubAgentKind[] = [];
-
-/** `+ …` 三个按钮各自把选择器限制到哪一类候选。 */
-type PickKind = "lore" | "text" | "image";
-
-function matchesKind(item: MentionItem, kind: PickKind): boolean {
-  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
-}
 
 /**
  * 图例的四项。收起的一行和展开的卡片读**同一份**——它们是同一组按钮的两种
@@ -324,8 +318,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [openTrace, setOpenTrace] = useState<number | null>(null);
   /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
   const [refError, setRefError] = useState<string | null>(null);
-  /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
-  const [pickKind, setPickKind] = useState<PickKind | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
   // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
@@ -644,12 +636,18 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     setDetached(true);
   };
 
-  const mentionItems = useMemo(
-    () => filterMentions(
-      pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
-      mention.query,
-    ),
-    [candidates, mention.query, pickKind],
+  // 作用域、打分、截断都在 lib/search/mentionSearch（设计稿 02i）；chip 行只认
+  // `availableScopes`，宿主不另写一份规则。
+  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
+  const mentionSearch = useMemo(
+    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
+    [candidates, mention.query, mention.scope, projectPath],
+  );
+  const mentionItems = mentionSearch.items;
+  // 只有空档那一行读计数，所以只在列表为空时才算。
+  const mentionCounts = useMemo(
+    () => (mentionItems.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
+    [candidates, mention.query, projectPath, mentionItems.length],
   );
 
   /**
@@ -658,7 +656,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
    * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
    */
-  const openMentionFor = (kind: PickKind | null) => {
+  const openMentionFor = () => {
     const el = taRef.current;
     const caret = el?.selectionStart ?? draft.length;
     const before = draft.slice(0, caret);
@@ -667,7 +665,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draft.slice(caret)}`;
-    setPickKind(kind);
     setDraft(next);
     mention.sync(next, at + 1);
     requestAnimationFrame(() => {
@@ -710,15 +707,19 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mention.open && mentionItems.length) {
+    // 选择器开着就接管——空档也开着（chip 行留着），作者才能 Tab 出去或 Esc 关掉。
+    if (mention.open && !composing) {
+      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+      // Tab 切档，与 ⌘K 一致；只有 Enter 选中（设计稿 02i 1z §1）。
+      if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
       if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if (e.key === "Enter" || e.key === "Tab") {
+      if (e.key === "Enter" && !e.shiftKey) {
+        // 空档吞掉 Enter：既不选中也不发送。
         e.preventDefault();
-        void handlePickMention(mentionItems[mention.active]);
+        if (mentionItems.length) void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
         return;
       }
-      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
     }
     if (e.key === "Enter" && !e.shiftKey && !composing) {
       e.preventDefault();
@@ -727,11 +728,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const handlePickMention = async (item: MentionItem) => {
-    if (refKeys.has(mentionKey(item))) { mention.close(); setPickKind(null); return; }
+    if (refKeys.has(mentionKey(item))) { mention.close(); return; }
     setRefError(null);
     setDraft((prev) => mention.accept(prev, mentionLabel(item)));
     mention.close();
-    setPickKind(null);
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
     } else if (item.file.kind === "image") {
@@ -1278,7 +1278,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           <button
             type="button"
             className={styles.attachGhost}
-            onClick={() => openMentionFor(null)}
+            onClick={() => openMentionFor()}
             disabled={candidates.length === 0}
           >
             + {t("roleplay.composer.addRef", { defaultValue: "引用" })}
@@ -1332,6 +1332,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             <MentionPicker
               anchorRef={taRef}
               items={mentionItems}
+              hits={mentionSearch.hits}
+              projectPath={projectPath}
+              scopes={scopes}
+              scope={mention.scope}
+              onScopeChange={mention.setScope}
+              query={mention.query}
+              counts={mentionCounts}
               usedKeys={refKeys}
               activeIndex={mention.active}
               preferAbove
@@ -1339,7 +1346,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 ? t("roleplay.composer.refResident", { defaultValue: "已常驻" })
                 : null)}
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={() => { mention.close(); setPickKind(null); }}
+              onDismiss={mention.close}
             />
           )}
 

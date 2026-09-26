@@ -21,7 +21,6 @@ import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
 import {
   MentionPicker,
-  filterMentions,
   mentionKey,
   mentionLabel,
   useMentionState,
@@ -89,6 +88,7 @@ import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
 import type { AttachedItem } from "../../lib/lore/aiTask";
+import { availableScopes, countByScope, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./AgentChat.module.css";
 import { providerFor } from "../../lib/ai/routes";
 
@@ -99,18 +99,6 @@ function formatTime(at: number): string {
 }
 
 /** Compact token count: 200000 → "200k", 3244 → "3.2k". */
-
-/**
- * What a `+ …` chip pre-filters the picker to.
- *
- * Finer than `MentionItem["type"]`, because a document and a picture are both
- * `file` items yet the author asking for one never means the other.
- */
-type PickKind = "lore" | "text" | "image";
-
-function matchesKind(item: MentionItem, kind: PickKind): boolean {
-  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
-}
 
 export function AgentChat() {
   const { t } = useTranslation();
@@ -257,12 +245,6 @@ export function AgentChat() {
     });
   };
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Set only when the picker was opened from a `+ 设定` / `+ 章节` chip: the
-  // author has already said which kind they want, so the list shouldn't make
-  // them re-narrow it by typing. Cleared the moment the mention closes, so a
-  // hand-typed `@` always searches everything.
-  const [pickKind, setPickKind] = useState<PickKind | null>(null);
-  useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
@@ -287,9 +269,18 @@ export function AgentChat() {
       .map((file): MentionItem => ({ type: "file", file })),
   ], [loreIndex, projectFiles, canSeeImages, canTranscribe, canVideo]);
 
-  const mentionItems = filterMentions(
-    pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
-    mention.query,
+  // Scoped, ranked and cut in lib/search/mentionSearch (设计稿 02i); the chip
+  // row is `availableScopes` and nothing else — no per-host copy of the rule.
+  const scopes = useMemo(() => availableScopes(candidates), [candidates]);
+  const search = useMemo(
+    () => searchMentions(candidates, mention.query, mention.scope, projectPath),
+    [candidates, mention.query, mention.scope, projectPath],
+  );
+  const mentionItems = search.items;
+  // Only the empty line reads the counts, so only an empty list pays for them.
+  const mentionCounts = useMemo(
+    () => (mentionItems.length === 0 ? countByScope(candidates, mention.query, projectPath) : undefined),
+    [candidates, mention.query, projectPath, mentionItems.length],
   );
   const refKeys = new Set(refs.map(attachedKey));
 
@@ -301,7 +292,7 @@ export function AgentChat() {
    * typed mention would, instead of becoming a second kind of attachment the
    * message has to carry separately.
    */
-  const openMentionFor = (kind: PickKind | null) => {
+  const openMentionFor = () => {
     const el = inputRef.current;
     const caret = el?.selectionStart ?? draftRef.current.length;
     const before = draftRef.current.slice(0, caret);
@@ -311,7 +302,6 @@ export function AgentChat() {
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draftRef.current.slice(caret)}`;
-    setPickKind(kind);
     setDraft(next);
     draftRef.current = next;
     mention.sync(next, at + 1);
@@ -606,17 +596,21 @@ export function AgentChat() {
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Only while the picker is actually on screen. It renders nothing with no
-    // matches, and Chinese prose has no space to end a mention — so an `@`
-    // typed mid-sentence used to leave this branch swallowing Enter for the
-    // rest of the message: no send, no newline, no feedback.
-    if (mention.open && mentionItems.length > 0) {
+    // While the picker is on screen — and it now always is while the mention
+    // is open, empty scope included (the chip row stays), so the author can
+    // Tab out of an empty scope or Esc the whole thing. An `@` mid-sentence
+    // no longer keeps a mention open past a terminator (findMention), which
+    // is what used to leave this branch swallowing Enter with nothing shown.
+    if (mention.open && !ime.isComposing(e)) {
       if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+      // Tab cycles the scope, as in ⌘K — Enter alone picks (设计稿 02i 1z §1).
+      if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
       if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
       if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !ime.isComposing(e)) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        // An empty scope swallows Enter: neither a pick nor a send.
         e.preventDefault();
-        void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
+        if (mentionItems.length > 0) void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
         return;
       }
     }
@@ -1037,7 +1031,7 @@ export function AgentChat() {
               three slots' worth of row for a filter the picker already has. */}
           <button
             className={styles.attachChipGhost}
-            onClick={() => openMentionFor(null)}
+            onClick={() => openMentionFor()}
             disabled={candidates.length === 0}
             title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
           >
@@ -1117,6 +1111,13 @@ export function AgentChat() {
             <MentionPicker
               anchorRef={inputRef}
               items={mentionItems}
+              hits={search.hits}
+              projectPath={projectPath}
+              scopes={scopes}
+              scope={mention.scope}
+              onScopeChange={mention.setScope}
+              query={mention.query}
+              counts={mentionCounts}
               usedKeys={refKeys}
               activeIndex={mention.active}
               preferAbove

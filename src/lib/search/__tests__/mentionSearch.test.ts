@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   availableScopes,
   countByScope,
+  cycleScope,
   mentionSub,
   scopeOf,
   searchMentions,
@@ -39,6 +40,17 @@ describe("scopeOf / availableScopes", () => {
     // depend on whether this project happens to have pictures.
     expect(availableScopes([file("b.png", "image")])).toEqual(["all", "text", "image"]);
     expect(availableScopes([lore("甲")])).toEqual(["all", "lore"]);
+  });
+});
+
+describe("cycleScope", () => {
+  it("steps through the offered scopes and wraps", () => {
+    const scopes = ["all", "lore", "text"] as const;
+    expect(cycleScope(scopes, "all", 1)).toBe("lore");
+    expect(cycleScope(scopes, "text", 1)).toBe("all");
+    expect(cycleScope(scopes, "all", -1)).toBe("text");
+    // The image scope vanished with the last picture: start over.
+    expect(cycleScope(scopes, "image", 1)).toBe("all");
   });
 });
 

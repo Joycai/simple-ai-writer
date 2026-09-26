@@ -26,7 +26,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { findMention, filterMentions } = await import("../../../components/common/MentionPicker");
+const { findMention } = await import("../../../components/common/MentionPicker");
 const { buildChatMessage, hasMessage, MAX_MESSAGE_IMAGES, REF_CHAR_CAP, refsAhead } = await import("../chatRefs");
 
 describe("findMention", () => {
@@ -72,25 +72,6 @@ describe("findMention", () => {
   it("still opens on an @ that runs straight out of Chinese prose", () => {
     // The everyday case: nobody types a space before `@` in Chinese.
     expect(findMention("参考@第三", 5)).toEqual({ start: 2, query: "第三" });
-  });
-});
-
-describe("filterMentions", () => {
-  const items = [
-    { type: "file" as const, file: { name: "第三章 审判.md", path: "/p/a.md", kind: "text" as const } },
-    { type: "file" as const, file: { name: "第四章.md", path: "/p/b.md", kind: "text" as const } },
-  ];
-
-  it("matches anywhere in the name, not just the start", () => {
-    // A chapter is recalled by a word from its title far more often than by
-    // its numbering.
-    expect(filterMentions(items, "审判")).toHaveLength(1);
-  });
-
-  it("is case-insensitive and returns everything for an empty query", () => {
-    expect(filterMentions(items, "")).toHaveLength(2);
-    expect(filterMentions([{ type: "file", file: { name: "Chapter.md", path: "/p/c.md", kind: "text" } }], "chap"))
-      .toHaveLength(1);
   });
 });
 

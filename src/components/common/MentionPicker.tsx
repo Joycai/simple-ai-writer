@@ -8,6 +8,14 @@
  * wrapped. Sharing the *logic* rather than the whole control is what lets both
  * keep their input behaviour.
  *
+ * The list is scoped (设计稿 02i): a chip row on top — 全部 / 条目 / 文档 /
+ * 图片 — narrows the candidates to one kind, Tab cycles it, and every fresh
+ * `@` starts at 全部. Matching and ranking live in `lib/search/mentionSearch`
+ * (the hosts call it and hand the result in); this component only draws.
+ * An empty scope still renders the chip row plus one line saying where the
+ * hits are — a list that vanished on zero matches left the author unable to
+ * see which scope they were in, let alone leave it.
+ *
  * Rendered through a portal so the list escapes the modal's overflow context —
  * inside it, the picker is clipped by the panel it is anchored to.
  */
@@ -20,8 +28,16 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
+import type { MatchRange } from "../../lib/search/globalSearch";
+import {
+  cycleScope,
+  mentionSub,
+  type MentionHit,
+  type MentionScope,
+  type ScopedKind,
+} from "../../lib/search/mentionSearch";
 // The pure vocabulary function, not stores/projectStore's useTerms hook: this
-// module's helpers (findMention, filterMentions) are imported by node-side
+// module's helpers (findMention, useMentionState) are imported by node-side
 // tests, and a store import would drag appStore's module-scope theme work —
 // which touches `document` — into that chain. Same words either way: useTerms
 // is appTerms keyed on the app language, which i18n already knows.
@@ -39,21 +55,6 @@ export function mentionKey(item: MentionItem): string {
 
 export function mentionLabel(item: MentionItem): string {
   return item.type === "lore" ? item.entity.name : item.file.name;
-}
-
-/** Longest list shown at once — a picker is for recognising, not browsing. */
-const MAX_ITEMS = 10;
-
-/**
- * Filter the candidates against what has been typed after the `@`.
- *
- * Matches anywhere in the name rather than only the start: a chapter is far
- * more likely to be recalled by a word from its title than by its numbering.
- */
-export function filterMentions(items: MentionItem[], query: string): MentionItem[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return items.slice(0, MAX_ITEMS);
-  return items.filter((i) => mentionLabel(i).toLowerCase().includes(q)).slice(0, MAX_ITEMS);
 }
 
 /**
@@ -98,12 +99,18 @@ interface MentionState {
   query: string;
   /** Highlighted row — hosts drive it with ↑/↓ and confirm with Enter. */
   active: number;
+  /** Which kind the list is narrowed to. 全部 on every fresh `@`. */
+  scope: MentionScope;
   /** Call from the textarea's onChange, after the value is committed. */
   sync: (value: string, caret: number) => void;
   /** Replace the in-progress mention with `@[label]`, returning the new text. */
   accept: (value: string, label: string) => string;
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
+  /** Pick a scope chip; the highlight goes back to the top of the new list. */
+  setScope: (scope: MentionScope) => void;
+  /** Tab / Shift+Tab: the next chip among those on offer. */
+  cycleScope: (scopes: readonly MentionScope[], dir: 1 | -1) => void;
   close: () => void;
 }
 
@@ -112,18 +119,25 @@ export function useMentionState(): MentionState {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [scope, setScopeState] = useState<MentionScope>("all");
   const startRef = useRef(0);
   // Mirrors `query` so the splice length and the "did it change" test read the
   // committed value rather than the one this render closed over.
   const queryRef = useRef("");
+  // Mirrors `open` for the same reason: `sync` must know whether this
+  // keystroke *opens* the mention (scope resets) or continues one (it keeps).
+  const openRef = useRef(false);
+
+  const setScope = (s: MentionScope) => { setScopeState(s); setActive(0); };
 
   return {
     open,
     query,
     active,
+    scope,
     sync: (value, caret) => {
       const hit = findMention(value, caret);
-      if (!hit) { setOpen(false); return; }
+      if (!hit) { setOpen(false); openRef.current = false; return; }
       startRef.current = hit.start;
       // A changed query is a different list, so the old highlight index means
       // nothing — start from the top rather than pointing at whatever happens
@@ -132,6 +146,12 @@ export function useMentionState(): MentionState {
         queryRef.current = hit.query;
         setActive(0);
       }
+      // A fresh `@` searches everything. The scope is not remembered across
+      // mentions: one message can open the picker a dozen times, and a
+      // narrow scope left over from the last one is a silent trap — the
+      // author types `@` for a picture and concludes the picture is gone.
+      if (!openRef.current) setScopeState("all");
+      openRef.current = true;
       setQuery(hit.query);
       setOpen(true);
     },
@@ -139,6 +159,7 @@ export function useMentionState(): MentionState {
       const start = startRef.current;
       const after = value.slice(start + 1 + queryRef.current.length);
       queryRef.current = "";
+      openRef.current = false;
       setOpen(false);
       setActive(0);
       return `${value.slice(0, start)}@[${label}]${after}`;
@@ -147,7 +168,9 @@ export function useMentionState(): MentionState {
       if (count <= 0) return;
       setActive((i) => (((i + delta) % count) + count) % count);
     },
-    close: () => { setOpen(false); setActive(0); },
+    setScope,
+    cycleScope: (scopes, dir) => setScope(cycleScope(scopes, scope, dir)),
+    close: () => { openRef.current = false; setOpen(false); setActive(0); },
   };
 }
 
@@ -188,12 +211,43 @@ function EntityThumb({ avatarPath }: { avatarPath: string | null }) {
   return <img src={url} className={styles.pickerThumb} alt="" />;
 }
 
+/** Text with its matched fragments marked — ranges come from the search, merged and sorted. */
+function Highlighted({ text, ranges }: { text: string; ranges: readonly MatchRange[] | undefined }) {
+  if (!ranges || ranges.length === 0) return <>{text}</>;
+  const parts: React.ReactNode[] = [];
+  let at = 0;
+  for (const r of ranges) {
+    if (r.start > at) parts.push(text.slice(at, r.start));
+    parts.push(<span key={r.start} className={styles.hl}>{text.slice(r.start, r.end)}</span>);
+    at = r.end;
+  }
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
+}
+
 // ── The list ─────────────────────────────────────────────────────────────────
 
 interface MentionPickerProps {
   /** Element the list anchors to — usually the textarea's wrapper. */
   anchorRef: React.RefObject<HTMLElement | null>;
+  /** Already scoped, ranked and cut — `searchMentions(...).items`. */
   items: MentionItem[];
+  /** `searchMentions(...).hits`: where each shown row matched. Absent for an empty query. */
+  hits?: ReadonlyMap<number, MentionHit>;
+  /** The project root, for a document's group-path line. */
+  projectPath: string | null;
+  /** Chips on offer — `availableScopes(candidates)`. */
+  scopes: readonly MentionScope[];
+  scope: MentionScope;
+  onScopeChange: (scope: MentionScope) => void;
+  /** What has been typed after the `@`; the empty line quotes it. */
+  query: string;
+  /**
+   * Hits per kind for this query, ignoring the scope — what the *other*
+   * chips would show. Only read when `items` is empty, so a host may skip
+   * computing it otherwise.
+   */
+  counts?: Record<ScopedKind, number>;
   /** Keys already attached; shown dimmed and inert. */
   usedKeys: Set<string>;
   /** Row the host's ↑/↓ has highlighted, and what Enter will pick. */
@@ -221,13 +275,22 @@ interface MentionPickerProps {
 }
 
 export function MentionPicker({
-  anchorRef, items, usedKeys, activeIndex = 0, preferAbove = false, noteFor, onPick, onDismiss,
+  anchorRef, items, hits, projectPath, scopes, scope, onScopeChange, query, counts,
+  usedKeys, activeIndex = 0, preferAbove = false, noteFor, onPick, onDismiss,
 }: MentionPickerProps) {
   const { t, i18n } = useTranslation();
   const terms = appTerms(i18n.language.startsWith("zh"));
   const [style, setStyle] = useState<React.CSSProperties>({});
   const listRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
+
+  // The chips keep the author's own words — 条目 / 文档 are whatever the
+  // workspace calls them; only 全部 and 图片 are the picker's.
+  const scopeLabel = (s: MentionScope): string =>
+    s === "all" ? t("ai.mention.scopeAll", { defaultValue: "全部" })
+      : s === "lore" ? terms.entry
+        : s === "text" ? terms.doc
+          : t("ai.mention.scopeImage", { defaultValue: "图片" });
 
   // Keep the keyboard highlight in view — the list scrolls at 10 items.
   useEffect(() => {
@@ -263,14 +326,63 @@ export function MentionPicker({
     return () => document.removeEventListener("mousedown", handler, true);
   }, [anchorRef, onDismiss]);
 
-  if (items.length === 0) return null;
+  /**
+   * The empty scope's one line: what is missing here, what the other chips
+   * hold, and the key that gets there. Three cases — nothing anywhere,
+   * nothing here for this query, nothing here at all (a scope emptied by a
+   * model change) — each a plain fact, never an instruction to click.
+   */
+  const emptyLine = () => {
+    const here = scopeLabel(scope);
+    const q = query.trim();
+    const others = (["lore", "text", "image"] as const)
+      .filter((k) => k !== scope && scopes.includes(k) && (counts?.[k] ?? 0) > 0);
+    if (others.length === 0) {
+      return q
+        ? t("ai.mention.emptyAll", { q, defaultValue: "没有匹配「{{q}}」" })
+        : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
+    }
+    const head = scope === "all"
+      ? null
+      : q
+        ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
+        : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
+    const parts = others.map((k) => t(
+      k === "lore" ? "ai.mention.countLore" : k === "text" ? "ai.mention.countText" : "ai.mention.countImage",
+      { scope: scopeLabel(k), n: counts?.[k] ?? 0, defaultValue: "{{scope}}里有 {{n}} 条" },
+    ));
+    return (
+      <>
+        {[head, ...parts].filter(Boolean).join(" · ")}
+        {" · "}<i>Tab</i> {t("ai.mention.switchOver", { defaultValue: "切过去" })}
+      </>
+    );
+  };
 
   return createPortal(
     <div ref={listRef} className={styles.picker} style={{ position: "fixed", zIndex: 500, ...style }}>
+      <div className={styles.scopes}>
+        {scopes.map((s) => (
+          <button
+            key={s}
+            type="button"
+            className={`${styles.scope} ${s === scope ? styles.scopeOn : ""}`}
+            // mousedown, not click, and prevented: the textarea keeps focus and
+            // its caret, the same reason the rows do it.
+            onMouseDown={(e) => { e.preventDefault(); onScopeChange(s); }}
+          >
+            {scopeLabel(s)}
+          </button>
+        ))}
+        <span className={styles.scopeHint}><b>Tab</b> {t("ai.mention.tabHint", { defaultValue: "切档" })}</span>
+      </div>
+      {items.length === 0 && <div className={styles.empty}>{emptyLine()}</div>}
       {items.map((item, i) => {
         const key = mentionKey(item);
         const used = usedKeys.has(key);
         const isActive = i === activeIndex;
+        const hit = hits?.get(i);
+        const sub = mentionSub(item, projectPath);
         return (
           <button
             key={key}
@@ -283,7 +395,12 @@ export function MentionPicker({
             {item.type === "lore"
               ? <EntityThumb avatarPath={item.entity.avatarPath} />
               : <FileThumb file={item.file} />}
-            <span className={styles.pickerName}>{mentionLabel(item)}</span>
+            <span className={styles.pickerText}>
+              <span className={styles.pickerName}><Highlighted text={mentionLabel(item)} ranges={hit?.label} /></span>
+              {/* A document's group: two chapters with one name are told apart
+                  here, and a hit on the group path is shown where it landed. */}
+              {sub && <span className={styles.pickerSub}><Highlighted text={sub} ranges={hit?.sub} /></span>}
+            </span>
             {noteFor?.(item) && <span className={styles.pickerNote}>{noteFor(item)}</span>}
             {/* Lore keeps its category verbatim — that is the author's own
                 vocabulary. File kinds are ours and get the workspace's words:

@@ -38,9 +38,7 @@
 import { dirName, projectRelative } from "../paths";
 import { matchText, mergeRanges, tokenize, type MatchRange } from "./globalSearch";
 
-// The scope vocabulary and the result shapes become exports when the picker
-// (the next slice) consumes them — exportReach.test.ts holds them local until then.
-type MentionScope = "all" | "lore" | "text" | "image";
+export type MentionScope = "all" | "lore" | "text" | "image";
 
 /** The scopes an author can pick, in chip order. `"all"` first, always. */
 const MENTION_SCOPES: readonly MentionScope[] = ["all", "lore", "text", "image"];
@@ -55,7 +53,7 @@ interface FileMentionLike {
 }
 export type MentionLike = LoreMentionLike | FileMentionLike;
 
-type ScopedKind = Exclude<MentionScope, "all">;
+export type ScopedKind = Exclude<MentionScope, "all">;
 
 /** Which single scope a candidate belongs to. */
 export function scopeOf(item: MentionLike): ScopedKind {
@@ -79,6 +77,18 @@ export function availableScopes(items: readonly MentionLike[]): MentionScope[] {
 }
 
 /**
+ * The chip Tab lands on next: one step through `scopes` in either direction,
+ * wrapping at both ends. A scope that is not offered (the current one after
+ * candidates changed) starts over from `"all"`.
+ */
+export function cycleScope(scopes: readonly MentionScope[], current: MentionScope, dir: 1 | -1): MentionScope {
+  if (scopes.length === 0) return "all";
+  const i = scopes.indexOf(current);
+  if (i < 0) return scopes[0];
+  return scopes[(i + dir + scopes.length) % scopes.length];
+}
+
+/**
  * The picker row's second line: a document's group path relative to the
  * project, so two chapters with one name can be told apart. Nothing for an
  * entry (aliases are matched, not shown) and nothing for a file at the root.
@@ -90,7 +100,7 @@ export function mentionSub(item: MentionLike, projectPath: string | null): strin
   return dir && dir !== "/" ? dir : null;
 }
 
-interface MentionHit {
+export interface MentionHit {
   /** Highlight ranges over the label (name). */
   label: MatchRange[];
   /** Highlight ranges over the second line (group path), when the hit is there. */

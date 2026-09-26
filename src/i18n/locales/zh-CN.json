@@ -1993,7 +1993,17 @@
     "mention": {
       "badgeImage": "图片",
       "badgeMedia": "音频",
-      "badgeVideo": "视频"
+      "badgeVideo": "视频",
+      "scopeAll": "全部",
+      "scopeImage": "图片",
+      "tabHint": "切档",
+      "switchOver": "切过去",
+      "emptyIn": "{{scope}}里没有「{{q}}」",
+      "emptyScope": "{{scope}}里还没有内容",
+      "emptyAll": "没有匹配「{{q}}」",
+      "countLore": "{{scope}}里有 {{n}} 条",
+      "countText": "{{scope}}里有 {{n}} 篇",
+      "countImage": "{{scope}}里有 {{n}} 张"
     },
     "chat": {
       "tab": "助手",
