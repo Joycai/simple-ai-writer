@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, closeClaimed, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -89,6 +89,13 @@ describe("findMention", () => {
     expect(findMention("参考@第三章。", 7)).toBeNull();
   });
 
+  it("does not reopen on a landed reference with prose typed after it", () => {
+    // `@[沈砚]的性格`: the `@[` is a pick's own output; the picker must not come
+    // back over an unmatchable query and eat the arrow keys for 24 characters.
+    expect(findMention("看看@[潮汐.png]的", 11)).toBeNull();
+    expect(findMention("看看@[潮汐.png]", 10)).toBeNull();
+  });
+
   it("still opens on an @ that runs straight out of Chinese prose", () => {
     // The everyday case: nobody types a space before `@` in Chinese.
     expect(findMention("参考@第三", 5)).toEqual({ start: 2, query: "第三" });
@@ -129,6 +136,25 @@ describe("syncMention", () => {
   });
 });
 
+describe("closeClaimed", () => {
+  const claim = { id: 1, start: 2, query: "潮" };
+  const first: MentionCore = { open: true, id: 1, query: "潮", active: 0, scope: "lore", start: 2 };
+
+  it("closes the claimed mention and keeps its serial", () => {
+    expect(closeClaimed(first, claim)).toEqual({ open: false, id: 1, query: "", active: 0, scope: "all", start: 0 });
+  });
+
+  it("leaves a mention opened since alone — the author moved on to `@夜` while the file read", () => {
+    const later: MentionCore = { ...first, id: 2, query: "夜", start: 7 };
+    expect(closeClaimed(later, claim)).toBe(later);
+  });
+
+  it("is a no-op on an already closed state, same object", () => {
+    const shut: MentionCore = { ...first, open: false };
+    expect(closeClaimed(shut, claim)).toBe(shut);
+  });
+});
+
 describe("nextLive", () => {
   it("follows an open mention and keeps the last one past a close — the file read outlives the mention", () => {
     const none = { id: 0, start: 0, query: "" };
@@ -153,13 +179,14 @@ describe("spliceMention", () => {
     expect(spliceMention("再看看@潮，", 2, "潮", "潮汐.png")).toBe("再看看@潮，");
     // Deleted outright.
     expect(spliceMention("看看", 2, "潮", "潮汐.png")).toBe("看看");
-    // Grown under it without a `sync` (a snippet insert): `@潮` is there but
-    // runs on into `汐` — replacing only `@潮` would strand the `汐`.
-    expect(spliceMention("看看@潮汐，", 2, "潮", "潮汐.png")).toBe("看看@潮汐，");
-    // A terminator or the end after it is fine.
-    expect(spliceMention("看看@潮 ", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png] ");
-    // Just landed: `@[A]` at the same `@`, an empty query — the `[` says so.
-    expect(spliceMention("看看@[A.png]", 2, "", "B.png")).toBe("看看@[A.png]");
+  });
+
+  it("leaves what follows the mention alone — a mention typed mid-sentence has prose after it", () => {
+    // `findMention` reads up to the caret: the query is `沈`, the `更生动` was always there.
+    expect(spliceMention("我想让@沈更生动", 3, "沈", "沈砚")).toBe("我想让@[沈砚]更生动");
+    // `+ 引用` with the caret mid-line: an empty query in front of text.
+    expect(spliceMention("看看@这个", 2, "", "潮汐.png")).toBe("看看@[潮汐.png]这个");
+    expect(spliceMention("(@)", 1, "", "沈砚")).toBe("(@[沈砚])");
   });
 });
 

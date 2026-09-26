@@ -83,7 +83,11 @@ const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
  *
  * Returns null unless the caret sits in a live mention — one whose `@` is at a
  * word boundary and which has no terminator since. `foo@bar` is an email, not
- * a mention; `@第三` mid-word is one.
+ * a mention; `@第三` mid-word is one. A landed reference is not: `@[沈砚]的`
+ * is what a pick leaves behind plus the prose typed straight after it (no
+ * space in Chinese), and `@[` comes from nowhere else — reading it as a query
+ * reopened a picker that could match nothing, and now that an empty picker
+ * stays on screen it would sit there eating ↑↓, Tab and the first Esc.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);
@@ -95,6 +99,7 @@ export function findMention(text: string, caret: number): { start: number; query
   // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
   const query = before.slice(at + 1);
+  if (query.startsWith("[")) return null;
   // The author moved on and is writing prose again.
   if (/\s/.test(query) || CJK_TERMINATORS.test(query)) return null;
   if (query.length > MAX_QUERY_LEN) return null;
@@ -197,18 +202,29 @@ export function nextLive(prev: MentionClaim, core: MentionCore): MentionClaim {
 /**
  * Replace the mention at `start` (its `@` plus `query`) with `@[label]`.
  * Pure, and defensive: a file pick reads the file *before* it splices, and
- * during that read the text may have changed under it — through a snippet
- * insert or anything else that bypasses `sync`. If the text at `start` is no
- * longer `@query`, or `@query` now runs straight into more query characters
- * (the mention grew), the mention as claimed is gone and nothing is spliced;
- * the attachment the host already made stands on its own.
+ * during that read the text may have changed under it. If the text at
+ * `start` is no longer `@query`, the mention as claimed is gone and nothing
+ * is spliced; the attachment the host already made stands on its own.
+ *
+ * Only that — whatever follows `@query` is left alone. `findMention` reads
+ * up to the caret, so a mention typed into the middle of a sentence
+ * (`我想让@沈更生动`, or `+ 引用` with the caret mid-line) is followed by prose
+ * that was always there; a rule that refused a following character once
+ * left every such mention as a bare `@沈` with the chip attached.
  */
 export function spliceMention(value: string, start: number, query: string, label: string): string {
   const end = start + 1 + query.length;
   if (value.slice(start, end) !== `@${query}`) return value;
-  const next = value.charAt(end);
-  if (next !== "" && !/\s/.test(next) && !CJK_TERMINATORS.test(next)) return value;
   return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
+}
+
+/**
+ * What accepting `claim` does to the open state: closes the claimed mention
+ * and no other. A mention opened since (the author moved on to `@夜` while
+ * the file read) is theirs to keep; one already closed stays as it is.
+ */
+export function closeClaimed(core: MentionCore, claim: MentionClaim): MentionCore {
+  return core.open && core.id === claim.id ? shut(core) : core;
 }
 
 /** @-detection and splicing over a controlled text value. */
@@ -235,9 +251,7 @@ export function useMentionState(): MentionState {
     accept: (value, label, claim) => {
       if (spent.current.has(claim.id)) return value;
       spent.current.add(claim.id);
-      // Close only the claimed mention: one opened since (the author moved
-      // on to `@夜` while the file read) is theirs to keep.
-      setState((s) => (s.open && s.id === claim.id ? shut(s) : s));
+      setState((s) => closeClaimed(s, claim));
       return spliceMention(value, claim.start, claim.query, label);
     },
     move: (delta, count) => {

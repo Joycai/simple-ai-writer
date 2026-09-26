@@ -103,10 +103,10 @@ export function AttachmentTextarea({
         const attachment: AttachedItem = item.file.kind === "image"
           ? { kind: "image", file: item.file, dataUrl: (await imageForModel(item.file.path)).dataUrl }
           : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
-        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) {
-          mention.close();
-          return; // picked twice while the read was running
-        }
+        // Picked twice while the read was running: the first pick's accept
+        // already closed the claimed mention, and a mention opened since is
+        // not this pick's to close.
+        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) return;
         onAttachedChange([...latest.current.attached, attachment]);
       } catch {
         return; // skip unreadable
