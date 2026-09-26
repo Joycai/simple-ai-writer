@@ -28,10 +28,10 @@
  *   two halves' scores are averaged, then ×0.5. The full-relative-path tier
  *   (`searchFiles`'s 0.5) is kept for a `/` at either end of the word
  *   (`/第五`, `潮汐门篇/`), which the split cannot read. The fields weigh
- *   ×1 name / ×0.9 alias / ×0.6 group path / ×0.5 either path tier (the
- *   alias weight from `searchLore`, the other two from `searchFiles`), and
- *   each word takes its best field — so a whole-word alias can beat a
- *   scattered name. The group path and the
+ *   ×1 name / ×0.9 alias / ×0.6 group path / ×0.5 either path tier (name
+ *   against alias is `matchLoreName`, which ⌘K's `searchLore` uses too; the
+ *   other two weights are `searchFiles`'s), and each word takes its best
+ *   field — so a whole-word alias can beat a scattered name. The group path and the
  *   full path are matched by substring and word start only — never by
  *   subsequence: a directory subsequence is noise, and here a hit has teeth
  *   (Enter replaces the author's text and attaches the file), so `@小李` must
@@ -53,7 +53,7 @@
  * all this module reads.
  */
 import { dirName, projectRelative } from "../paths";
-import { matchText, mergeRanges, tokenize, type MatchRange } from "./globalSearch";
+import { matchLoreName, matchText, mergeRanges, tokenize, type MatchRange } from "./globalSearch";
 
 export type MentionScope = "all" | "lore" | "text" | "image";
 
@@ -151,7 +151,6 @@ interface MentionSearchResult<T> {
   hits: Map<number, MentionHit>;
 }
 
-const ALIAS_WEIGHT = 0.9;
 const DIR_WEIGHT = 0.6;
 const PATH_WEIGHT = 0.5;
 /** Group path and full path: substring or word start only (see the header). */
@@ -168,10 +167,9 @@ interface Scored<T> {
  * Score one candidate against the tokenized query. Each token takes the best
  * of the fields it hits — name, alias (entries), group path or full relative
  * path (files) — and the candidate scores only when every token hits
- * somewhere. Taking the best rather than the first is the one place this
- * departs from `searchLore`, whose name-first short-circuit lets a weak
- * subsequence on the name beat a whole-word alias; here an alias is as good
- * as the name it stands for.
+ * somewhere. Name against alias is `matchLoreName`, shared with ⌘K's
+ * `searchLore`: the best of them, not the first — a name-first short-circuit
+ * lets a weak subsequence on the name beat a whole-word alias.
  */
 function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], projectPath: string | null): Omit<Scored<T>, "order"> | null {
   const label = item.type === "lore" ? item.entity.name : item.file.name;
@@ -191,14 +189,17 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
       | { field: "label" | "alias" | "sub"; ranges: MatchRange[]; alias?: string }
       | { field: "split"; ranges: MatchRange[]; subRanges: MatchRange[] }
       | null = null;
-    const byName = matchText(label, tok);
-    if (byName) { best = byName.score; where = { field: "label", ranges: byName.ranges }; }
     if (item.type === "lore") {
-      for (const a of item.entity.aliases) {
-        const m = matchText(a, tok);
-        if (m && m.score * ALIAS_WEIGHT > best) { best = m.score * ALIAS_WEIGHT; where = { field: "alias", ranges: m.ranges, alias: a }; }
+      const m = matchLoreName(label, item.entity.aliases, tok);
+      if (m) {
+        best = m.score;
+        where = m.via === "name" ? { field: "label", ranges: m.ranges } : { field: "alias", ranges: m.ranges, alias: m.alias ?? undefined };
       }
-    } else if (sub && rel) {
+    } else {
+      const byName = matchText(label, tok);
+      if (byName) { best = byName.score; where = { field: "label", ranges: byName.ranges }; }
+    }
+    if (sub && rel) {
       const m = matchText(sub, tok, EXACT);
       if (m && m.score * DIR_WEIGHT > best) { best = m.score * DIR_WEIGHT; where = { field: "sub", ranges: m.ranges }; }
       const byPath = matchText(rel, tok, EXACT);

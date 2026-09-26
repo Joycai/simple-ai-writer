@@ -173,6 +173,23 @@ describe("searchLore", () => {
     const { hits } = searchLore([{ name: "x", aliases: ["the king", "king"] }], "king");
     expect(hits[0].alias).toBe("king");
   });
+
+  it("lets a whole-word alias beat a scattered name — no name-first short-circuit", () => {
+    // Both names hold 潮…汐…门 only as a subsequence; 潮汐的门's is tighter.
+    // The other entry's alias is the whole word — and the alias is what ranks.
+    const pair = [
+      { name: "潮汐的门", aliases: [] },
+      { name: "潮网汐路门", aliases: ["潮汐门"] },
+    ];
+    const { hits } = searchLore(pair, "潮汐门");
+    expect(hits.map((h) => h.entity.name)).toEqual(["潮网汐路门", "潮汐的门"]);
+    expect(hits[0]).toMatchObject({ via: "alias", alias: "潮汐门", ranges: [{ start: 0, end: 3 }] });
+  });
+
+  it("scores an entry by its alias when the alias beats its own name", () => {
+    const { hits } = searchLore([{ name: "潮网汐路门", aliases: ["潮汐门"] }], "潮汐门");
+    expect(hits[0]).toMatchObject({ via: "alias", alias: "潮汐门" });
+  });
 });
 
 describe("searchLines", () => {
