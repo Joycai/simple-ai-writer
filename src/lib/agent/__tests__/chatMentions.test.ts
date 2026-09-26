@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, closeClaimed, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptMention, closeClaimed, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -94,6 +94,13 @@ describe("findMention", () => {
     // back over an unmatchable query and eat the arrow keys for 24 characters.
     expect(findMention("看看@[潮汐.png]的", 11)).toBeNull();
     expect(findMention("看看@[潮汐.png]", 10)).toBeNull();
+    // A name that itself holds an `@`: the last `@` is inside the reference.
+    expect(findMention("看看@[图标@2x.png]的", 14)).toBeNull();
+    expect(findMention("看看@[沈@砚]", 8)).toBeNull();
+    // A closed reference followed by a new `@` opens as usual.
+    expect(findMention("看看@[沈砚]@潮", 9)).toEqual({ start: 7, query: "潮" });
+    // The deliberate price: an author-typed `@[` does not open either.
+    expect(findMention("看@[草", 4)).toBeNull();
   });
 
   it("still opens on an @ that runs straight out of Chinese prose", () => {
@@ -152,6 +159,32 @@ describe("closeClaimed", () => {
   it("is a no-op on an already closed state, same object", () => {
     const shut: MentionCore = { ...first, open: false };
     expect(closeClaimed(shut, claim)).toBe(shut);
+  });
+});
+
+describe("acceptMention", () => {
+  const claim = { id: 1, start: 2, query: "潮" };
+
+  it("lands once: a second accept on the same mention leaves the text alone", () => {
+    const first = acceptMention(new Set(), claim, claim, "看看@潮", "潮汐.png");
+    expect(first).toEqual({ text: "看看@[潮汐.png]", spend: true });
+    // The `@` of the landed `@[潮汐.png]` is at the same start with an empty
+    // query — only the spent set stands between it and `@[B][A]`.
+    const again = acceptMention(new Set([1]), { ...claim, query: "" }, { id: 1, start: 2, query: "" }, first.text, "B.png");
+    expect(again).toEqual({ text: "看看@[潮汐.png]", spend: false });
+  });
+
+  it("replaces the whole current query when the author kept narrowing the same mention while the file read", () => {
+    const live = { id: 1, start: 2, query: "潮汐" };
+    expect(acceptMention(new Set(), claim, live, "看看@潮汐", "潮汐.png").text).toBe("看看@[潮汐.png]");
+  });
+
+  it("keeps prose typed after the mention when it is not a narrowing", () => {
+    expect(acceptMention(new Set(), claim, { id: 1, start: 2, query: "潮的图" }, "看看@潮的图", "潮汐.png").text)
+      .toBe("看看@[潮汐.png]的图");
+    // A later mention is not this pick's: the snapshot decides.
+    expect(acceptMention(new Set(), claim, { id: 2, start: 7, query: "夜" }, "看看@潮，然后@夜", "潮汐.png").text)
+      .toBe("看看@[潮汐.png]，然后@夜");
   });
 });
 

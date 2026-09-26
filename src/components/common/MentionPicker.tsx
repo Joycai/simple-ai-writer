@@ -31,6 +31,7 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
+import { matchText } from "../../lib/search/globalSearch";
 import {
   availableScopes,
   countByScope,
@@ -85,9 +86,13 @@ const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
  * word boundary and which has no terminator since. `foo@bar` is an email, not
  * a mention; `@第三` mid-word is one. A landed reference is not: `@[沈砚]的`
  * is what a pick leaves behind plus the prose typed straight after it (no
- * space in Chinese), and `@[` comes from nowhere else — reading it as a query
- * reopened a picker that could match nothing, and now that an empty picker
- * stays on screen it would sit there eating ↑↓, Tab and the first Esc.
+ * space in Chinese) — reading it as a query reopened a picker that could
+ * match nothing, and now that an empty picker stays on screen it would sit
+ * there eating ↑↓, Tab and the first Esc. So `@[` never opens, an `@` inside
+ * an unclosed `@[…` (a name that itself holds one, `封面@2x.png`) never opens,
+ * and a name that starts with `[` is reached by a word inside it — the same
+ * as a name starting with `【`, which was always a terminator. An author-typed
+ * `@[` is the price; it is a deliberate one.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);
@@ -98,6 +103,8 @@ export function findMention(text: string, caret: number): { start: number; query
   // `@` with no space, so treating CJK as a word character here would stop
   // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
+  // Inside a landed reference: `@[图标@2x.png]的` — the last `@` is the name's.
+  if (/@\[[^\]\n]*$/.test(before.slice(0, at))) return null;
   const query = before.slice(at + 1);
   if (query.startsWith("[")) return null;
   // The author moved on and is writing prose again.
@@ -227,6 +234,29 @@ export function closeClaimed(core: MentionCore, claim: MentionClaim): MentionCor
   return core.open && core.id === claim.id ? shut(core) : core;
 }
 
+/**
+ * The text a pick lands, pure. `spent` holds the mentions a pick has already
+ * landed on: a second Enter on a slow file, or a double-click, is one splice
+ * (`spend` false, text unchanged). `live` is the mention as it is *now*: when
+ * the claimed one is still open and the author has kept narrowing it while
+ * the file read (`@潮` → `@潮汐`, and `潮汐` still matches the picked name), the
+ * whole current query is replaced, not the snapshot's — otherwise the extra
+ * letters would be left as a tail after `@[潮汐.png]`. Prose typed after it
+ * that does not match (`@潮的图`) is prose, and stays.
+ */
+export function acceptMention(
+  spent: ReadonlySet<number>,
+  claim: MentionClaim,
+  live: MentionClaim,
+  value: string,
+  label: string,
+): { text: string; spend: boolean } {
+  if (spent.has(claim.id)) return { text: value, spend: false };
+  const grown = live.id === claim.id && live.query !== claim.query && matchText(label, live.query) !== null;
+  const query = grown ? live.query : claim.query;
+  return { text: spliceMention(value, claim.start, query, label), spend: true };
+}
+
 /** @-detection and splicing over a controlled text value. */
 export function useMentionState(): MentionState {
   const [state, setState] = useState<MentionCore>(CLOSED);
@@ -249,10 +279,12 @@ export function useMentionState(): MentionState {
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
     claim: () => (state.open ? { ...live.current } : null),
     accept: (value, label, claim) => {
-      if (spent.current.has(claim.id)) return value;
-      spent.current.add(claim.id);
-      setState((s) => closeClaimed(s, claim));
-      return spliceMention(value, claim.start, claim.query, label);
+      const { text, spend } = acceptMention(spent.current, claim, live.current, value, label);
+      if (spend) {
+        spent.current.add(claim.id);
+        setState((s) => closeClaimed(s, claim));
+      }
+      return text;
     },
     move: (delta, count) => {
       if (count <= 0) return;
