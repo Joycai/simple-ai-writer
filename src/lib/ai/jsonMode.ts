@@ -79,8 +79,9 @@ const KNOWN_JSON_SCHEMA: ReadonlyArray<string> = [
   // ── Qwen (DashScope) — the platform's own list, 2026-09 ──
   "qwen3.7-plus", "qwen3.7-flash", "qwen3.7-max",
   "qwen3.8-max", "qwen3.8-flash",
-  // ── OpenAI ──
-  "gpt-5", "gpt-4.1", "gpt-4o",
+  // ── OpenAI — gpt-6 held an enum the prompt contradicted, on ① and ②
+  // (landscape.md §7 第十八个样本) ──
+  "gpt-6", "gpt-5", "gpt-4.1", "gpt-4o",
   // ── Google — `responseJsonSchema` is documented from Gemini 2.5 on ──
   "gemini-2.5", "gemini-3",
   // ── 火山方舟 Doubao Seed 2.1 — plan alias and dated id both. Not 2.0:

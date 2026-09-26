@@ -453,7 +453,7 @@ describe("streamCompletion — Gemini SSE", () => {
   it("maps the app's levels onto Gemini's upper-case enum", async () => {
     for (const [effort, level] of [
       // No way to disable thinking in this family — "off" is the floor.
-      ["off", "MINIMAL"], ["low", "LOW"], ["medium", "MEDIUM"],
+      ["off", "LOW"], ["low", "LOW"], ["medium", "MEDIUM"],
       // The enum stops at HIGH, so "max" lands there too.
       ["high", "HIGH"], ["max", "HIGH"],
     ] as const) {
@@ -611,6 +611,44 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(toolChunk.toolCalls).toHaveLength(1);
     expect(toolChunk.toolCalls[0].name).toBe("list_files");
     expect(JSON.parse(toolChunk.toolCalls[0].arguments)).toEqual({ dir: "writing" });
+  });
+
+  // A bare `{text:""}` echoed back was refused through OrcaRouter's Vertex route
+  // (400 "required oneof field 'data'"), and the stream closes on exactly that
+  // part after a tool call;
+  // an empty text carrying a signature is accepted and must survive
+  // (landscape.md §7 第十八个样本).
+  it("keeps every model part for the echo except a bare empty text", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"a","args":{},"id":"call_1"},"thoughtSignature":"S1"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"a","args":{},"id":"call_2"}}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":"","thoughtSignature":"S2"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}]}\n`,
+      ],
+    });
+    const toolChunk = received.find((c) => "toolCalls" in c) as { _geminiModelParts: unknown[] };
+    expect(toolChunk._geminiModelParts).toEqual([
+      { functionCall: { name: "a", args: {}, id: "call_1" }, thoughtSignature: "S1" },
+      { functionCall: { name: "a", args: {}, id: "call_2" } },
+      { text: "", thoughtSignature: "S2" },
+    ]);
+  });
+
+  // History saved before the capture-side filter still holds the bare part.
+  it("drops a bare empty text from saved model parts on the way out", async () => {
+    const { convertToGeminiContents } = await import("../gemini");
+    const contents = convertToGeminiContents([
+      { role: "user", content: "hi" },
+      {
+        role: "assistant", content: null,
+        tool_calls: [{ id: "t1", type: "function", function: { name: "a", arguments: "{}" } }],
+        _geminiModelParts: [{ functionCall: { name: "a", args: {} }, thoughtSignature: "S1" }, { text: "" }],
+      },
+      { role: "tool", tool_call_id: "t1", content: "ok" },
+    ]);
+    expect(contents[1].parts).toEqual([{ functionCall: { name: "a", args: {} }, thoughtSignature: "S1" }]);
   });
 
   it("throws a descriptive error when the prompt is safety-blocked", async () => {

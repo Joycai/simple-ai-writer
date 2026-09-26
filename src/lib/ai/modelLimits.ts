@@ -54,6 +54,8 @@ export function defaultMaxOutput(): number {
 /** modelId prefix → documented single-reply output cap, in tokens. */
 const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
   // ── OpenAI ──
+  // GPT-6: 128K, the same as GPT-5 (OrcaRouter's catalog for all three, 2026-09-26).
+  ["gpt-6", 128_000],
   ["gpt-5", 128_000],
   ["gpt-4.1", 32_768],
   ["gpt-4o", 16_384],
@@ -64,6 +66,7 @@ const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
   ["o3", 100_000],
   ["o1", 100_000],
   // ── Google ──
+  ["gemini-3", 65_536],
   ["gemini-2.5", 65_536],
   ["gemini-2.0", 8_192],
   ["gemini-1.5", 8_192],

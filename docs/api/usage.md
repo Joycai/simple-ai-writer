@@ -13,6 +13,15 @@
 | **缓存命中** | `prompt_tokens_details.cached_tokens` | `input_tokens_details.cached_tokens` | `usageMetadata.cachedContentTokenCount` | `usage.cache_read_input_tokens` |
 | **缓存写入** | — | — | — | `usage.cache_creation_input_tokens` |
 | **思考 token** | `completion_tokens_details.reasoning_tokens` | `output_tokens_details.reasoning_tokens` | `usageMetadata.thoughtsTokenCount` | `output_tokens_details.thinking_tokens` |
+| **服务端工具** | — | `tool_usage`（原样线路可见） | `usageMetadata.toolUsePromptTokenCount`（工具结果回灌的 token） | `usage.server_tool_use.{web_search_requests, web_fetch_requests}` |
+
+实测补充（[`landscape.md`](landscape.md) §7 第十八个样本，2026-09-26）：
+
+- ② 官方回包的 `input_tokens_details` 多了 **`cache_write_tokens`**（一次 `web_search` 记 4,388）——② 也开始单列缓存写入。
+- ④ 的 `thinking_tokens` 是 `output_tokens` 的子集（Sonnet 5：22 = 21 + 1），不另加。
+- ④ 没发 `cache_control` 也可能出现 `cache_creation_input_tokens`：`web_search` 的结果被服务端自动写缓存（2,834）。
+- ③ Vertex 的 `usageMetadata` 另有 `trafficType`（`ON_DEMAND`）；流式时只有最后一块带计数。
+- ③ `googleSearch` 的检索费远高于 token 费（一次 $0.028 对 token 部分的零头）；按 token 估成本会大幅低估。
 
 ## 2. 两个口径陷阱
 

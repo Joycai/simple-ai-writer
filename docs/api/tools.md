@@ -99,6 +99,18 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
 - `mode` 取 `ANY` 时可用 `allowed_function_names` 限定到具体函数集。
 - **思考模型返回的 part 带 `thoughtSignature`，后续回合必须原样回传**，否则多轮
   工具调用失效。这意味着适配层不能把 part 归一化成自己的结构后丢弃原始对象。
+- 实测（Gemini 3.8 Flash on Vertex，[`landscape.md`](landscape.md) §7 第十八个样本）：
+  - **`functionCall` 带 `id`**（`call_1626125`）；并行调用时签名只挂第一个。
+    `functionResponse` 带不带 `id` 都被接受，按顺序配对。
+  - 缺签名是 **HTTP 400** `Function call is missing a thought_signature in
+    functionCall parts`，不是 200 + 某个 finishReason。
+  - 流以一个**光秃秃的 `{text: ""}`** 收尾。经 OrcaRouter 原样回传它得到 400
+    `required oneof field 'data' must have one initialized field`；带签名的
+    `{text: "", thoughtSignature}` 则照收。这可能是网关重新序列化时把空串丢了、
+    剩下 `{}`，不一定是 Vertex 本身——但这个 part 什么都不带，回传时排除它在哪
+    都不亏。
+  - 以上「会不会 400」的结论（缺签名、空 part）都是经网关得到的；网关的请求侧
+    不是透传（见第十八个样本开头）。
 
 ## 6. ④ Anthropic Messages
 
@@ -120,6 +132,12 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   不能切换。
 - 工具轮必须带上该轮的 thinking block 及其 `signature`，同 ③ 的
   `thoughtSignature`。
+  实测（Sonnet 5 adaptive，第十八个样本）：原样回灌 200、**签名被改 400**
+  `Invalid \`signature\` in \`thinking\` block`；但**整个丢掉 thinking block 也是
+  200**——这是经网关的结果（网关请求侧不透传），不能据此改写官方规则：带上仍是
+  正路，连续性也靠它。
+- 响应里的 `tool_use` 多了 **`caller: {"type": "direct"}`**（程序化工具调用的来源
+  标记）；回灌时去掉它也 200。
 - **`tools` 里可以混入服务端工具**（`{type:"web_search_20250305", name:"web_search"}`
   一类，无 `input_schema`）。它们由服务端在同一次请求内执行完，响应里是
   `server_tool_use` + `web_search_tool_result` 两个 content block，**不需要

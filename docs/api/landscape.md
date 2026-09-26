@@ -990,7 +990,7 @@ GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`�
 对照本目录已有的样本，它的知识形态如下：
 
 - **body 三族都自称与官方逐字相同**，① 族是翻译层（任何模型都能从这里
-  调，跨族的请求由它翻成上游原生形态），③④ 是"直接透传"。这印证了
+  调，跨族的请求由它翻成上游原生形态），③④ 是"直接透传"（第十八个样本：回包是原样，请求侧不是）。这印证了
   New API 一节的结论——兼容层不配拥有独立协议族——所以本项目**没有新增
   `ApiStandard`**，只在 `PROVIDER_PRESETS` 加了三行（一族一行，与 MiniMax
   相同）。
@@ -1046,7 +1046,8 @@ GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`�
   是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具，目前**没有接**。
 - **错误信封是 OpenAI 形态**（`error.{message,type,code}`），`type` 区分网关
   自身（`orcarouter_api_error`）与上游透传（`upstream_error` / `claude_error` /
-  `gemini_error`）。**流中错误**：① 族是 `data: {"error":…}` 后接 `[DONE]`，
+  `gemini_error`）——文档如此；第十八个样本实测时 ③④ 的上游错误都被改写成 OpenAI 形，
+  ④ 的 `type` 甚至是 `"<nil>"`，没见到 `claude_error` / `gemini_error`。**流中错误**：① 族是 `data: {"error":…}` 后接 `[DONE]`，
   ④ 族是 `event: error`——两种拼法本项目的 adapter 都已处理。403 有五种
   互不相同的原因（周期花费上限 / 余额 / 单 key 额度 / 模型不在白名单 / 免费档
   耗尽），文档建议按 `error.code` 加消息前缀匹配，消息会本地化。
@@ -1082,7 +1083,10 @@ GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`�
   有余额无法确证。
 - **未测**：付费模型的任何生成（含 Claude 原生的 thinking / `output_config`、
   Gemini 原生的 `thinkingConfig`）、工具调用流、`web_search_options`、
-  Gemini image 系列在 chat 上的回包形态。
+  Gemini image 系列在 chat 上的回包形态。**除最后一项外，2026-09-26 由
+  第十八个样本补上**——那里也改了本节三处判断：③④ 回包是上游原样，但请求
+  侧会被重新序列化；① 与 ② 的默认线路背后是一层 OpenRouter 形态的翻译；上游错误信封
+  被改写而非透传（上面两处已就地标注）。
 
 ### 第八个样本：New API 中转站上的 ② 族（`[Pro]` 档 GPT-5.4 / 5.5 / 5.6-sol，2026-09-03 实测）
 
@@ -1848,6 +1852,130 @@ Responses adapter：
 > - Responses 上的温度在两种上游下都不发（一个改成 1，一个 500）；azure 的联网搜索不发、① 面强制工具改发 `auto`。
 > - `[Pro]` 丢结构化输出**没进格子**（与另两档不一致），只写在模型抽屉的上游说明里；这一档发出去的 JSON 模式
 >   （自动档在中转站上是 `json_object`，作者手选 json_schema 时是 json_schema）会被丢，结构化任务退回提示语。
+
+### 第十八个样本：OrcaRouter 付费模型——三家官方协议经一台网关（①②③④ 四面，2026-09-26 实测 GPT-6 / GPT-5.6-terra / Claude Sonnet 5 · Opus 5.5 · Fable 5.1 / Gemini 3.8 Flash）
+
+> **怎么测的**：第七个样本那台 `api.orcarouter.ai`，这次是有余额的 key（`ORCA_KEY`）。先 curl 约 120 次看形状
+> （四面各自的非流 / 流、思考档位、工具往返与回灌变体、缓存、服务端工具、结构化输出、图片、计数端点、错误），
+> 再用 `src/lib/ai/__tests__/live.orcarouter.test.ts` 驱动本项目真实的四个适配器（`openai_compat` /
+> `openai_responses_compat` / `anthropic_compat` / `gemini_compat`，即 `orcarouter` preset 的四行）：修复前
+> **28 条过 23 条**，修复后 **28 条全过**。方案与逐项结论在 [`orcarouter-probe-plan.md`](orcarouter-probe-plan.md)。
+> 全程按 `cost_usd` / `GET /v1/generation` 记账，合计不到 1 美元（估算）。
+>
+> | 模型 id（目录） | 目录声明的面 | 单价（$/M 入 / 出） |
+> | --- | --- | --- |
+> | `openai/gpt-6-luna` | `openai` | 0.10 / 0.50 |
+> | `openai/gpt-6-sol` | `openai` | 2 / 10 |
+> | `openai/gpt-6-astra` | `openai` `openai-response` | 10 / 50 |
+> | `openai/gpt-5.6-terra` | `openai` `openai-response` | 2 / 12 |
+> | `anthropic/claude-sonnet-5` | `anthropic` `openai` `openai-response` | 2 / 10 |
+> | `anthropic/claude-opus-5.5` | `openai` `anthropic` | 4 / 20 |
+> | `anthropic/claude-fable-5.1` | `openai` `anthropic` | 10 / 50 |
+> | `google/gemini-3.8-flash` | `openai` `gemini` | 0.75 / 3.75 |
+>
+> 目录共 203 条。`supported_endpoint_types` 仍是建议而非限制：`gpt-6-luna` / `-sol` 只声明 `openai`，打 `/v1/responses` 照样 200。
+
+**先说背后是什么——这决定哪些观察能当「官方行为」记。**
+
+| 面 | 回包里的证据 | 结论 |
+| --- | --- | --- |
+| ④ `/v1/messages` | `msg_011C…` id、不透明 base64 `signature`、`usage.cache_creation` 分项、`service_tier`、`inference_geo`、`stop_details`、`context_management` | **回包是 Anthropic 原样**（只多一个 `usage.cost_usd`） |
+| ③ `/v1beta/…:generateContent` | `responseId`、`modelVersion`、**`createTime` 与 `usageMetadata.trafficType: "ON_DEMAND"`**、`thoughtSignature` | **回包是 Vertex AI 原样**（Vertex 专有字段；只多一个 `usageMetadata.costUsd`） |
+| ① `/v1/chat/completions`（GPT） | `id: "gen-…"`、`provider: "OpenAI"`、`native_finish_reason`、`usage.cost` / `is_byok` / `cost_details.upstream_inference_cost`、`reasoning_details[]`（`format: "openai-responses-v1"`，密文尾部 base64 解出 `{"endpoint_slug":"openai/gpt-6-luna-20260922\|openai"}`） | **OpenRouter 形态**——网关把 ① 转给了一层 OpenRouter 式的翻译，上游再走 Responses |
+| ② `/v1/responses`，默认 | `id: "gen-…"`、`msg_tmp_…` / `fc_tmp_…` 伪造的 item id、`summary:"auto"` 回显成 `"detailed"`、`store` 恒 `false`、`usage.cost`；terra 的 reasoning `format: "azure-openai-responses-v1"` | 同上的 OpenRouter 形态；terra 的上游是 Azure，luna 是 OpenAI |
+| ② `/v1/responses`，带 `store: true` 或 `include` 含 `web_search_call.action.sources` | `resp_…` id、`billing`、`tool_usage`、`access_programs`、`moderation`、`prompt_cache_retention: "24h"`、`text.verbosity`、默认 `store: true`；**没有**任何 cost 字段 | **OpenAI 原样**。同一端点按请求里的字段分流到两套后端；`tools:[{type:"web_search"}]`、`include:["reasoning.encrypted_content"]`、`text.verbosity` 都**不**触发分流 |
+
+**请求侧不是透传**：网关把 body 解析成它认识的结构再重新序列化。④ 上顶层多一个 `foo: 1`、`thinking.type: "bogus"`、
+`output_config.effort: "bogus"`、`output_config.foo` 全部 200（官方对多余字段 400）；③ 上 `generationConfig.fooBar` 也 200，
+但**枚举值会被上游校验**（`thinkingLevel: "BOGUS"` 回 Vertex 的原文 400）。② 的默认线路上 `reasoning.effort: "bogus"` 回网关自己的
+`upstream_rejected_request`，原文被吞。**所以本样本里凡是「某某会不会 400」的结论都只对这台网关成立**；回包形状、字段、
+事件序列、计费数字可以当官方记。错误信封也被改写过，见文末。
+
+**④ Anthropic（Sonnet 5 为主，Opus 5.5 / Fable 5.1 各一发）：**
+
+- **思考默认开、默认不显示。** 不发 `thinking` 时 Sonnet 5 照样思考（141 个思考 token），回一个 `thinking` block，**`thinking`
+  文本为空、只有 `signature`**——即 adaptive 是默认、`display` 默认是 `omitted`。要看见思维链必须显式 `display: "summarized"`。
+  Opus 5.5 同样（默认思考、文本空）；Fable 5.1 这一题没思考。
+- **新字段 `usage.output_tokens_details.thinking_tokens`**：思考 token 单独报出，是 `output_tokens` 的子集
+  （Sonnet 5：`output_tokens` 22 = 21 思考 + 1 正文）。
+- **`output_config.effort`** `low` / `medium` / `high` / `xhigh` / `max` 都收；adaptive 下低档常常直接不想（`low` 0 思考 token），
+  单次采样噪声很大，思考量不单调，不能拿一次结果推档位。`thinking: {type: "enabled", budget_tokens}` 在 Sonnet 5 上 200、照样思考。
+- **thinking + 并行工具**：一轮里两个 `tool_use`，每个带新字段 **`caller: {"type": "direct"}`**（程序化工具调用的来源标记）。
+  回灌时：原样回灌 ✓；**丢掉 thinking block 也 200**（官方规则是 400；这是「会不会 400」一类，只对网关成立）；去掉 `caller` 200；**改 `signature` → 400**
+  `Invalid \`signature\` in \`thinking\` block`；改 thinking 文本但留原签名 200（摘要文本本来就不是被签的那份）。
+- **流式**：thinking 以 `thinking_delta` 连续出，末尾一条 `signature_delta`；`content_block_start` 的 thinking block 带空的
+  `signature: ""`。工具参数的第一条 `input_json_delta` 是空串。
+- **提示缓存**：块级 `cache_control` 与**顶层** `cache_control`（自动缓存）都生效——9,848 token 的 system 第一次记
+  `cache_creation_input_tokens` 9,848（$0.0247，= 1.25× 输入价），第二次 `cache_read_input_tokens` 9,848（$0.0020）。
+- **`web_search_20250305` 不需要 beta 头**：`server_tool_use` → `web_search_tool_result`（10 条，带 `encrypted_content`）→ 带
+  `citations`（`web_search_result_location`）的 text；`usage.server_tool_use` 是 `{web_search_requests: 1, web_fetch_requests: 0}`。
+  **没发 `cache_control` 也记了 2,834 个 `cache_creation_input_tokens`**（搜索结果被服务端自动缓存）。一次 $0.051。
+- **结构化输出**：`output_config.format: {type: "json_schema", schema}` 在 Sonnet 5 上生效（回 `{"color":"red","n":7}`）。
+- **模型 id 回显**：Sonnet 5 回 `claude-sonnet-5`；Opus 5.5 / Fable 5.1 回连字符形 `claude-opus-5-5` / `claude-fable-5-1`，
+  `inference_geo: "not_available"`，签名以 `CAQS…` 开头（Sonnet 5 是 `Ep…`）——后两者多半是另一条上游线路。
+- `/v1/messages/count_tokens` **不路由**：301 到官网首页。
+
+**③ Gemini 3.8 Flash（Vertex）：**
+
+- **`thinkingLevel: "MINIMAL"` 被拒**：400 `Thinking level MINIMAL is not supported for this model.`。`LOW` / `MEDIUM` / `HIGH`
+  的 `thoughtsTokenCount` 同一题 193 / 641 / 1,348，单调；不发时 685。
+- **`thinkingBudget` 仍收**，但 **`thinkingBudget: 0` 关不掉思考**（仍 312 思考 token）——同理可能是网关把 `0` 丢了。
+- **`includeThoughts: true`**：思考摘要是一个 `{text, thought: true}` part（英文、带小标题，一次整段给出，流式也不逐字）；
+  `thoughtSignature` 挂在**正文 text part** 上。流式时签名单独落在最后一块：`{text: "", thoughtSignature}` + `finishReason`。
+- **函数调用带 `id`**（`call_1626125`，新）：并行两个调用，签名只挂第一个 `functionCall` part；流以一个**光秃秃的
+  `{text: ""}`** 收尾。回灌：`functionResponse` 带不带 `id` 都 200，两边都去掉 id 也 200；**去掉签名 → 400**
+  `Function call is missing a thought_signature in functionCall parts`（HTTP 400，不是 `MISSING_THOUGHT_SIGNATURE` 的
+  finishReason）；**把收尾的 `{text: ""}` 原样回灌 → 400** `required oneof field 'data' must have one initialized field`，
+  而带签名的 `{text: "", thoughtSignature}` 回灌 200。后者的形态提示这可能是网关把空串当空值丢了、只剩 `{}`
+  ——与上面说的请求侧重新序列化一致，未必是 Vertex 本身。
+- **结构化输出**：`responseJsonSchema` 与旧的 `responseSchema`（大写类型）都生效；prompt 要求 `yellow` 而 enum 只有
+  red/green/blue 时，回 `red`——**强制是真的**。
+- **内置工具**：`googleSearch` → `groundingMetadata{webSearchQueries, searchEntryPoint.renderedContent, groundingChunks
+  (vertexaisearch 重定向 URL), groundingSupports}`，一次 **$0.028**（检索费远高于 token 费）；`codeExecution` →
+  `executableCode{language, code, id}` + `codeExecutionResult{outcome, output, id}`，`usageMetadata.toolUsePromptTokenCount`；
+  `urlContext` → `urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]` 加 `groundingMetadata`。
+- **图片**：`inlineData` 与 `inline_data`（蛇形）都收；一张 16×16 的 PNG 记 **1,098** 个 prompt token（默认媒体分辨率）。
+- 不带 `alt=sse` 的 `:streamGenerateContent` 也回 SSE（官方是 JSON 数组）——网关行为。
+- **`:countTokens` 被当成 `generateContent` 执行并计费**（回一段关于「数 token」的作文，$0.0028）——不要在这台网关上调它。
+
+**② Responses（OpenRouter 形态线路为主，原样线路补测）：**
+
+- `reasoning.effort` `none` / `low` / `medium` / `high` / `xhigh` / `max` 在 `gpt-6-luna` 上都 200；**`minimal` 被改写成 `low`**
+  （回显 `effort: "low"`）。`gpt-6-sol` 在 ② 上也能用。
+- 默认线路的流：`reasoning` item 一次 `added` / `done`，只有 `encrypted_content`、`summary: []`，**没有**任何
+  `reasoning_summary_text.delta` 事件（非流时 `summary` 有文本）；两个并行 `function_call` 依次（不交错）。
+- **回灌规则在两条线路上都测不出来**：`store: false` 下只回 id 的 reasoning item、篡改过的 `encrypted_content`、干脆丢掉
+  reasoning item，在默认线路**和原样线路**上都 200——网关在转发前多半改写了 `input`。官方的回灌义务仍以
+  [`responses.md`](responses.md) 为准，这里不改口。
+- `web_search`：默认线路 `web_search_call` 事件齐全（`in_progress` / `searching` / `completed`）+ `url_citation` 注解；原样线路上
+  `action.sources` 在、`usage.input_tokens_details.cache_write_tokens` 是新字段（4,388）。strict `text.format` 在 luna 上顶住了矛盾的 enum。
+
+**① Chat Completions（经 OpenRouter 形态）：**
+
+- GPT：`reasoning_effort` + `tools` 同发 200、两个并行调用正常流出——但这条线路上游走的是 Responses，**不能用来证伪「官方
+  ① 上 5.4+ 不能 effort + tools」**。思维链只以 `reasoning_details` 的密文 / `reasoning` 摘要出现；strict `json_schema`
+  顶住了矛盾的 enum；`web_search_options` 200 但无 `annotations`。
+- 跨族：Claude 经 ① 的思维链在 `reasoning_content`；Gemini 经 ① 不返回思维链、只报 `reasoning_tokens`。
+
+**网关自己的东西：**
+
+- 响应头只有 `x-orca-request-id` / **`x-orca-route: model=…; fallback=0`**（文档里没有）/ `x-orca-version`，不漏任何上游头。
+- 花费：④ 在 `usage.cost_usd`、③ 在 `usageMetadata.costUsd`、① 两个都有、② 默认线路只有 OpenRouter 的 `usage.cost`、② 原样线路
+  **没有**；`X-OrcaRouter-Include-Cost` 头对 ② 无效。`GET /v1/generation?id=` 都查得到（`total_cost`，外加 New API 的
+  `quota` = 美元 × 500,000）。
+- **错误信封全被改写成 OpenAI 形**，且有 New API 的指纹：③ 是 `{"error":{"message", "type":"invalid_argument", "param":"",
+  "code":400}}`（原文保留，但路径与 URL 被打成 `***`）；④ 是 `{"error":{"type":"<nil>", "message":"***.***.content.0: … (request id: …)"},
+  "type":"error"}`——**`type` 是 Go 的 `<nil>`**，字段路径被遮；上游 5xx 变成 `api_error` `The upstream provider is temporarily
+  unavailable`。
+
+**对本项目**（同日落地）：
+
+- `GEMINI_LEVEL` 的「关闭」从 `MINIMAL` 改成 `LOW`——前者在 3.8 Flash 上是 400，而这一档是作者要「尽量少想」，报错是最坏的结果
+  （`reasoning.ts`；[`reasoning.md`](reasoning.md) 的 Gemini 一节）。
+- Gemini 适配器回灌模型 parts 时跳过光秃秃的 `{text: ""}`（带签名的保留），否则经这台网关每个流式工具轮的第二轮都 400
+  （`gemini.ts`）。
+- `orcarouter` 的能力格子填上实测：①②③ `jsonSchema` ✓，② / ④ `web_search` ✓；`gpt-6` 进 strict schema 名单与输出上限表
+  （128K），`gemini-3` 进输出上限表（64K）。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

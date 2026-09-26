@@ -19,6 +19,13 @@ type GeminiPart =
 
 type GeminiContent = { role: "user" | "model"; parts: GeminiPart[] };
 
+/** `{text: ""}` and nothing else — no signature, no thought flag, no call. */
+function isBareEmptyText(part: unknown): boolean {
+  if (!part || typeof part !== "object") return false;
+  const keys = Object.keys(part);
+  return keys.length === 1 && keys[0] === "text" && (part as { text: unknown }).text === "";
+}
+
 function parseJsonArgs(argsStr: string): Record<string, unknown> {
   try { return JSON.parse(argsStr) as Record<string, unknown>; } catch { return {}; }
 }
@@ -57,8 +64,10 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
 
     if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
       if (msg._geminiModelParts?.length) {
-        // Use raw parts verbatim to preserve thoughtSignature required by thinking models
-        contents.push({ role: "model", parts: msg._geminiModelParts as GeminiPart[] });
+        // Use raw parts verbatim to preserve thoughtSignature required by thinking models.
+        // Filtered again here, not only at capture: history saved before the
+        // capture-side filter still holds the bare `{text: ""}`.
+        contents.push({ role: "model", parts: msg._geminiModelParts.filter((p) => !isBareEmptyText(p)) as GeminiPart[] });
       } else {
         contents.push({
           role: "model",
@@ -335,8 +344,14 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     for (const part of parts) {
       // Every part, thinking included, before any branching: the raw array is
       // what gets echoed back next turn, and a dropped thoughtSignature ends
-      // the run with finishReason MISSING_THOUGHT_SIGNATURE.
-      geminiAllModelParts.push(part);
+      // the run with finishReason MISSING_THOUGHT_SIGNATURE. The one part left
+      // out is a bare `{text: ""}` — the stream's closing chunk — which came
+      // back refused through OrcaRouter's Vertex route ("required oneof field
+      // 'data' must have one initialized field"; possibly the gateway dropping
+      // the empty string on re-serialization, leaving `{}`). It carries
+      // nothing, so leaving it out costs nothing anywhere; an empty text that
+      // carries a signature is kept and was accepted (landscape.md §7 第十八个样本).
+      if (!isBareEmptyText(part)) geminiAllModelParts.push(part);
       if (part.thought && part.text) {
         // Reasoning, kept away from `text`: that variant is what reaches the
         // manuscript. Arrives only when the request asked for it —

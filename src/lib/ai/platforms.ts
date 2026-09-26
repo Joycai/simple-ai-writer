@@ -331,7 +331,7 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "gemini", path: "/v1beta", authMode: "bearer" },
     ],
     hosts: ["api.orcarouter.ai"],
-    source: "landscape.md §7 第七个样本 — relay; protocol-native tools unmeasured",
+    source: "landscape.md §7 第七个样本 (probe, free tier) + 第十八个样本 (paid models, 2026-09-26) — relay; Responses and Anthropic web_search measured",
   },
   newapi: {
     endpoints: GENERIC_ENDPOINTS,
