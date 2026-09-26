@@ -20,7 +20,7 @@
  *   - **Read-only reporting.** All this app does with one is show what the model
  *     searched and what came back, in the execution log.
  *
- * Today the list has exactly one entry — `web_search` — spoken by two wires:
+ * The list began with one entry — `web_search` — spoken by two wires:
  *
  *   - **Anthropic family**: MiniMax-M3's `/anthropic/v1/messages` serves it in
  *     beta (`docs/api/landscape.md` §7 第四个样本), as Anthropic's own
@@ -52,8 +52,9 @@
  *     (`normalizeServerTools`). On Responses it is one more `tools[]` entry; on
  *     Chat Completions it is the `agent_max` search strategy, which some models
  *     refuse with a 400 (qwen3.8-flash does, qwen3-max / qwen3.5-plus take it).
- *     Only the two OpenAI-compat wires have a spelling for it here — the
- *     Anthropic surface's `web_fetch_*` version stamp is unmeasured.
+ *     Only the two OpenAI-compat wires had a spelling for it then (Gemini's
+ *     `urlContext` joined later, below) — the Anthropic surface's
+ *     `web_fetch_*` version stamp is unmeasured.
  *
  * And two image searches, **Responses compat only** (measured the same day):
  *
@@ -79,7 +80,8 @@
  * `docs/api/landscape.md` §7 第六个样本「代码解释器」):
  *
  *   - **`code_interpreter`** (代码解释器): the endpoint writes Python, runs it in
- *     its own sandbox, and answers from the output. Two wires spell it —
+ *     its own sandbox, and answers from the output. Two wires spelled it at
+ *     first (Gemini's `codeExecution` joined later, below) —
  *     Chat Completions compat as the top-level `enable_code_interpreter: true`,
  *     Responses compat as `{type:"code_interpreter"}` — and each attaches a
  *     condition the other doesn't: Chat Completions refuses it beside function

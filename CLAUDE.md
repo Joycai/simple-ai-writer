@@ -127,7 +127,7 @@ The UI vocabulary is **app-level and uniform** (`useTerms()`: 文档/分组/知�
 - `src/components/settings/` — full-window settings, one file per pane under `panes/`; 实验室 holds **every** Beta switch; the model drawer; 计费组列表与编辑抽屉
 - `src/components/common/` — shared primitives (`Slider` is the app's one slider)
 - `src/components/command/`, `onboarding/`, `library/`, `roleplay/`, `sync/` — palette + global search, onboarding, 文库, roleplay UI, sync modals
-- `src/lib/ai/` — streaming client for four protocol families, `conn.ts`, JSON-mode / tool-choice shaping learned per endpoint, server-side tools, probing, output caps, drafts, snippets, 计费组 + 用量（`feeGroup` / `feeGroupDb` / `feeGroupLabel` / `feeGroupList` / `usageSchema` / `usageRow` / `usage` / `usageBackfill` / `usageMeter`）
+- `src/lib/ai/` — streaming client for four protocol families, `conn.ts`, JSON-mode / tool-choice shaping learned per endpoint, server-side tools, probing, output caps, drafts, snippets, 计费组 + 用量（`feeGroup` / `feeGroupDb` / `feeGroupLabel` / `feeGroupList` / `usageSchema` / `usageRow` / `usage` / `usageBackfill` / `usageMeter` / `reportedCost`）
 - `src/lib/agent/` — runtime, registry, presets, events, tools, compaction / rewind / structured state, plan gate, write + edit tools, approved-proposal apply, `inspect_html`, subagents, handoff, packs
 - `src/lib/lore/` — model, entity CRUD, collections + the 取材范围 fence (narrows *discovery* only), facets / slots, citations, gallery, generator
 - `src/lib/profile/` — capability packs (model / resolve / file / active / store)

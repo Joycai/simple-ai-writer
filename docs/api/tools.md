@@ -126,7 +126,8 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   `functionCallingConfig.mode: "ANY"` 或 `responseJsonSchema` 也都 200。
 - 回报的位置各不相同：
   - 代码执行是 part：`executableCode{language, code, id}` → `codeExecutionResult{outcome, output, id}`，之后才是文本；
-    这两种 part 随工具轮原样回传也 200，下一轮能用上上一轮算出的数。
+    这两种 part 随工具轮原样回传也 200，下一轮能用上上一轮算出的数；回传时请求里已经没有 `codeExecution`
+    （甚至没有任何工具）也 200。
   - 读网页在 candidate 上：`urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]`，**首块**就到。
   - 搜索在 candidate 上：`groundingMetadata.webSearchQueries[]` + `groundingChunks[].web{uri, title}`，末块才到；
     `uri` 是 vertexaisearch 跳转链接，`title` 是网站域名。读网页的回答也带 `groundingChunks`，但没有 `webSearchQueries`。

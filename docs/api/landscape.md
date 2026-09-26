@@ -2001,7 +2001,7 @@ Responses adapter：
 本项目 Claude 的「关闭」思考档本来就发 `adaptive` + `effort: low` 而不是 `disabled`，所以 Opus 5.5 / Fable 5.1
 拒收 `disabled` 不影响本项目。
 
-**再补测：流式花费、PDF、Gemini 内置工具（同日，按应用真实会发的形态，脚本约 20 次 + live 用例 8 条）。**
+**再补测：流式花费、PDF、Gemini 内置工具（同日，按应用真实会发的形态，脚本约 25 次 + live 用例 9 条）。**
 
 A. **流式请求里的花费**（本项目只发流式，前面的结论来自非流式）：
 
@@ -2032,6 +2032,7 @@ D. **Gemini 内置工具，按适配器会发的形态**（gemini-3.8-flash，�
 | `googleSearch` + `responseMimeType: application/json` + `responseJsonSchema`（再加函数也一样） | 合 schema 的 JSON；加函数的那次搜了 **6 条，$0.084** |
 | `codeExecution` + 函数 | 独立的块：`executableCode{language, code, id}`（带签名）→ `codeExecutionResult{outcome:"OUTCOME_OK", output, id}` → 文本 |
 | 上一条的回灌 | `executableCode` / `codeExecutionResult` part 原样放回 model 轮 → 200，答案用上了上一轮算出的数 |
+| 回灌时撤掉 `codeExecution`（只留函数），或撤掉全部工具 | 都 200——收尾轮不带工具、作者中途关掉开关都不会因为历史里的代码 part 失败 |
 | `urlContext`（单独，或加 `googleSearch`）+ 函数 | **首块**就有 `urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]`，末块 `groundingMetadata.groundingChunks` 给出真实 `uri` 与页面标题——但没有 `webSearchQueries` |
 
 计费：搜索**按查询条数**，一条约 $0.014，一次回答搜几条由模型决定、这个协议没有上限字段可发；代码执行与读网页的

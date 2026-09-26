@@ -302,6 +302,11 @@ CommandPalette, onboarding flow, library view (文库: only what the author pick
   第一档与第二档的分界是 **`costUsd === 0`，不是「六段全 0」**——钱全在
   `costUnsplit` 里的老行费用是**有**的，只是分不出来，误判成「没花钱」会让它
   去画 token 占比。段的顺序只在这里定义一次，条与 tooltip 都读它。
+- `reportedCost.ts` 是上游报价的**唯一换算处**：各族回包里的花费字段翻成
+  `done.reportedCost` 只写在这里。报价压过整张计费组表，所以收不收是信任问题——
+  平台声明 `reportsCost`（`platforms.ts`，测过「报的数 = 实扣」才写）**且**请求地址也
+  指向它才收；多次请求记一行时 `addReportedCost` 全报才加，缺一次整行回落计费组
+  （`docs/feature/billing/01-fee-groups.md`「上游报价」）。
 
 #### 图片与日志
 - the one builder for an image content part (`imagePart.ts` — eight call sites hand a picture to a model, and the `detail` hint the author sets (`app:imageDetail`: unset = send no field, which is what every endpoint reads as `auto`) has to reach all eight or none; only ① and ② have a spelling for it, and they put it in different places — see `docs/api/landscape.md` §1)

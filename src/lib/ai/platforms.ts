@@ -364,7 +364,8 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // Every route's stream carries the cost, equal to `GET /v1/generation`'s
     // `total_cost` (① ② to within one 1/500,000-dollar billing unit). ④ and ③
     // report it only when asked with this header; ① ② report it either way.
-    // ②'s verbatim route (`store: true`, the web-search path) reports none.
+    // ②'s verbatim route (`store: true`, or an `include` of
+    // `web_search_call.action.sources` — this app sends neither) reports none.
     reportsCost: { header: ["X-OrcaRouter-Include-Cost", "true"] },
     // Two things this app must not start doing here (第十八个样本):
     // - Call a token-count endpoint. ③'s `:countTokens` runs — and bills — a

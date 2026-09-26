@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "../reportedCost";
 
@@ -85,5 +88,56 @@ describe("costReportingPlatform — 标签和地址都得是它", () => {
   it("没声明报价的平台一律没有", () => {
     expect(costReportingPlatform({ baseUrl: "https://api.deepseek.com", standard: "openai_compat" })).toBeUndefined();
     expect(costReportingPlatform({ baseUrl: "", standard: "anthropic" })).toBeUndefined();
+  });
+});
+
+/**
+ * 接线护栏：记对话 token 的每一处 `recordUsage` 都得把报价带上。
+ *
+ * 少传一处不会报错——那一行只是按计费组算，没配组的 OrcaRouter 模型就静默记成 $0。
+ * 各调用点在 store 里，逐个写行为测试要 mock 半个应用，所以这里扫源码：一次
+ * `recordUsage(` / `recordUsageRow(` 调用的参数对象里有 `completionTokens`，就必须也有
+ * `reportedCost`。不走四个对话适配器的三处（翻译、出图、转写）列在下面，写明为什么。
+ */
+describe("每一处记对话 token 的 recordUsage 都带上报价", () => {
+  const SRC = fileURLToPath(new URL("../../../", import.meta.url));
+  const EXEMPT: Readonly<Record<string, string>> = {
+    "lib/translate/tool.ts": "Sakura 本地模型，多段带重试的聚合，不经 OrcaRouter",
+    "lib/image/index.ts": "出图不走四个对话适配器",
+    "lib/asr/run.ts": "转写不走四个对话适配器",
+  };
+  const files = (dir: string, out: string[] = []): string[] => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) {
+        if (name !== "__tests__" && name !== "node_modules") files(p, out);
+      } else if (/\.tsx?$/.test(name) && !name.endsWith(".d.ts")) out.push(p);
+    }
+    return out;
+  };
+
+  it("没有漏传的调用点", () => {
+    const missing: string[] = [];
+    let seen = 0;
+    for (const file of files(SRC)) {
+      const rel = relative(SRC, file).split("\\").join("/");
+      const src = readFileSync(file, "utf8");
+      for (const m of src.matchAll(/\brecordUsage(?:Row)?\(/g)) {
+        if (/function\s+$/.test(src.slice(Math.max(0, m.index - 12), m.index))) continue;
+        // The call's own text: up to the paren that closes it.
+        let depth = 0;
+        let end = m.index + m[0].length - 1;
+        for (; end < src.length; end++) {
+          if (src[end] === "(") depth++;
+          else if (src[end] === ")" && --depth === 0) break;
+        }
+        const call = src.slice(m.index, end);
+        if (!call.includes("completionTokens")) continue;
+        seen++;
+        if (!call.includes("reportedCost") && !EXEMPT[rel]) missing.push(`${rel}:${src.slice(0, m.index).split("\n").length}`);
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(10);
+    expect(missing).toEqual([]);
   });
 });
