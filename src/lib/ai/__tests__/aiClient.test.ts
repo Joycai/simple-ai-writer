@@ -789,6 +789,51 @@ describe("streamCompletion — reasoning effort", () => {
   });
 });
 
+// OpenAI's own Chat Completions refuses function tools beside any effort but
+// `none`, the model's default included (GPT-5.4 on); gpt-6-astra behind
+// OrcaRouter has no `none` (landscape.md §7 第十八个样本「GPT 全家补测」).
+describe("streamCompletion — effort on the wire (effortWithTools / reasoningOff)", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const TOOL: ToolDefinition = { type: "function", function: { name: "pick", description: "", parameters: { type: "object", properties: {} } } };
+  const official = (modelId: string, o: { tools?: boolean; reasoningEffort?: ReasoningEffort }) => collect({
+    chunks: done, baseUrl: "https://api.openai.com/v1", platform: "openai", modelId,
+    tools: o.tools ? [TOOL] : undefined, reasoningEffort: o.reasoningEffort,
+  });
+
+  it("turns thinking off beside tools, whatever the row says — and when it says nothing", async () => {
+    for (const effort of [undefined, "high", "max"] as const) {
+      const { calls } = await official("gpt-5.6-sol", { tools: true, reasoningEffort: effort });
+      expect(calls[0].body.reasoning_effort).toBe("none");
+    }
+    expect((await official("gpt-5.4", { tools: true })).calls[0].body.reasoning_effort).toBe("none");
+  });
+
+  it("leaves the row's effort alone without tools, and on models the rule does not cover", async () => {
+    expect((await official("gpt-5.6-sol", { reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
+    expect((await official("gpt-5.6-sol", {})).calls[0].body).not.toHaveProperty("reasoning_effort");
+    expect((await official("gpt-5.3", { tools: true, reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
+    expect((await official("gpt-6-sol", { tools: true, reasoningEffort: "high" })).calls[0].body.reasoning_effort).toBe("high");
+  });
+
+  it("singles out OrcaRouter's gpt-5.6-sol, not the ids it reroutes", async () => {
+    const orca = (modelId: string) => collect({
+      chunks: done, baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_compat", platform: "orcarouter",
+      modelId, tools: [TOOL], reasoningEffort: "high",
+    });
+    expect((await orca("openai/gpt-5.6-sol")).calls[0].body.reasoning_effort).toBe("none");
+    expect((await orca("openai/gpt-5.6-luna")).calls[0].body.reasoning_effort).toBe("high");
+  });
+
+  it("sends the lowest level for off where the model has no off", async () => {
+    const orca = (modelId: string) => collect({
+      chunks: done, baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_compat", platform: "orcarouter",
+      modelId, reasoningEffort: "off",
+    });
+    expect((await orca("openai/gpt-6-astra")).calls[0].body.reasoning_effort).toBe("low");
+    expect((await orca("openai/gpt-6-sol")).calls[0].body.reasoning_effort).toBe("none");
+  });
+});
+
 describe("streamCompletion — image parts", () => {
   const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
   const url = "data:image/png;base64,AAAA";

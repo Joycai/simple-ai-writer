@@ -44,7 +44,7 @@ import {
   effectiveServerTools, normalizeServerTools, SERVER_TOOL_IDS, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import { platformModelCalibration, providerWire } from "../../../lib/ai/platforms";
-import { capabilityVerdict, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
+import { capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, type CapabilityId } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
 } from "../../../lib/ai/relayUpstream";
@@ -1421,7 +1421,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                         />
                       </>
                     ) : (
-                      formCategory.menu.map((e) => (
+                      effortMenuOnWire(formCategory.menu, curWire, capModel).map((e) => (
                         <DashChip
                           key={e}
                           label={effortLabel(e)}

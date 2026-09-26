@@ -14,7 +14,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, UPSTREAM_CAPABILITIES,
-  capabilityVerdict, familyVerdict, hasCapability,
+  capabilityVerdict, effortMenuOnWire, effortOnWire, familyVerdict, hasCapability,
   type CapabilityId, type CapabilityWire,
 } from "../capabilities";
 import { RELAY_UPSTREAMS, capabilityModelOf } from "../relayUpstream";
@@ -525,6 +525,35 @@ describe("pdfInput", () => {
 });
 
 // 智谱 (landscape.md §7 第十四个样本): forcing a tool is sent as auto.
+// landscape.md §7 第十八个样本「GPT 全家补测」.
+describe("effort cells", () => {
+  const orcaChat: CapabilityWire = { platform: "orcarouter", standard: "openai_compat" };
+  const orcaResp: CapabilityWire = { platform: "orcarouter", standard: "openai_responses_compat" };
+  const anthropic: CapabilityWire = { platform: "anthropic", standard: "anthropic" };
+
+  it("effortOnWire: off beside tools where the wire refuses the pair, the lowest level where there is no off", () => {
+    const sol = { modelId: "openai/gpt-5.6-sol" };
+    const astra = { modelId: "openai/gpt-6-astra" };
+    expect(effortOnWire("high", orcaChat, sol, true)).toBe("off");
+    expect(effortOnWire(undefined, orcaChat, sol, true)).toBe("off");
+    expect(effortOnWire("high", orcaChat, sol, false)).toBe("high");
+    expect(effortOnWire("high", orcaResp, sol, true)).toBe("high");
+    expect(effortOnWire("off", orcaChat, astra, false)).toBe("low");
+    expect(effortOnWire("off", orcaResp, astra, true)).toBe("low");
+    expect(effortOnWire(undefined, orcaResp, astra, false)).toBeUndefined();
+    // Only the OpenAI wires' ladder: Anthropic spells off its own way.
+    expect(effortOnWire("off", anthropic, astra, true)).toBe("off");
+  });
+
+  it("effortMenuOnWire drops off for a model with none, and only there", () => {
+    const menu = ["off", "low", "medium", "high", "xhigh", "max"] as const;
+    expect(effortMenuOnWire(menu, orcaResp, { modelId: "openai/gpt-6-astra" })).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(effortMenuOnWire(menu, orcaChat, { modelId: "openai/gpt-6-astra" })).not.toContain("off");
+    expect(effortMenuOnWire(menu, orcaResp, { modelId: "openai/gpt-6-luna" })).toEqual([...menu]);
+    expect(effortMenuOnWire(menu, undefined, { modelId: "openai/gpt-6-astra" })).toEqual([...menu]);
+  });
+});
+
 describe("zhipu", () => {
   it("takes auto only, and spells no server tool yet", () => {
     const wire = { platform: "zhipu" as const, standard: "openai_compat" as const };

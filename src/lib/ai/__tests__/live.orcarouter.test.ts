@@ -102,6 +102,12 @@ async function ask(route: Route, messages: StreamMessage[], opts: Partial<Stream
   } as StreamOptions);
   return c;
 }
+/** Up to three runs, returning the first that streamed any reasoning (else the last). */
+async function firstWithReasoning(run: () => Promise<Collected>): Promise<Collected> {
+  let c = await run();
+  for (let i = 1; i < 3 && !c.reasoning; i++) c = await run();
+  return c;
+}
 const user = (content: ContentPart[] | string): StreamMessage[] => [{ role: "user", content }];
 const text = (t: string): ContentPart => ({ type: "text", text: t });
 
@@ -168,11 +174,13 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
   // path carries ciphertext only (`reasoning_details`) — nothing to display —
   // so it is left out of this list rather than pinned as empty.
   describe.each([RESP, ANTH, GEM])("$name", (route) => {
+    // Responses streams a summary only on some requests (GPT 全家补测: absent
+    // on runs where the model plainly thought), so it gets three tries.
     it("streams reasoning at effort high", async () => {
-      const c = await ask(route, user(PUZZLE), { reasoningEffort: "high" });
+      const c = await firstWithReasoning(() => ask(route, user(PUZZLE), { reasoningEffort: "high" }));
       expect(c.text).toMatch(/0?\.05/);
       expect(c.reasoning.length).toBeGreaterThan(0);
-    }, 180_000);
+    }, 540_000);
   });
 
   describe("structured output", () => {
@@ -295,11 +303,112 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
   // surface and that the app's default body is accepted.
   describe("model sweep", () => {
     it.each([
-      [CHAT, "openai/gpt-6-sol"], [CHAT, "openai/gpt-6-astra"], [RESP, "openai/gpt-5.6-terra"],
       [ANTH, "anthropic/claude-opus-5.5"], [ANTH, "anthropic/claude-fable-5.1"],
     ] as const)("%s %s", async (route, modelId) => {
       const c = await ask(route, user("17 × 23 = ? Answer with the number only."), { reasoningEffort: "low" }, modelId);
       expect(c.text).toMatch(/391/);
     }, 180_000);
+  });
+
+  // The six GPT ids, each on both OpenAI surfaces (2026-09-27, 第十八个样本「GPT
+  // 全家补测」). They sit on three different backends: gpt-6-luna / -sol behind
+  // the OpenRouter-shaped layer with OpenAI upstream, gpt-6-astra and
+  // gpt-5.6-terra behind the same layer with Azure upstream, and gpt-5.6-luna /
+  // -sol answered by OpenAI's own bodies (`chatcmpl-` / `resp_` ids). The cases
+  // that pin a refusal or an absence are the sample's findings, not wishes.
+  const RAW_OPENAI = ["openai/gpt-5.6-luna", "openai/gpt-5.6-sol"];
+  const REJECTED = /400.*upstream_rejected_request/;
+  describe.each([
+    "openai/gpt-6-astra", "openai/gpt-6-sol", "openai/gpt-6-luna",
+    "openai/gpt-5.6-luna", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol",
+  ])("GPT %s", (modelId) => {
+    describe.each([CHAT, RESP])("$name", (route) => {
+      it("streams text and reports usage", async () => {
+        const c = await ask(route, user("Reply with the single word PONG."), {}, modelId);
+        expect(c.text).toMatch(/PONG/);
+        expect(c.done?.inputTokens).toBeGreaterThan(0);
+        expect(c.done?.outputTokens).toBeGreaterThan(0);
+      }, 120_000);
+
+      // The raw Responses body carries no cost even with the header (Chat's
+      // raw body gets `usage.cost_usd`), so the fee group prices those rows.
+      it("reports what the request cost", async () => {
+        const c = await ask(route, user("Reply with the single word PONG."), {}, modelId);
+        if (route === RESP && RAW_OPENAI.includes(modelId)) expect(c.done?.reportedCost).toBeUndefined();
+        else expect(c.done?.reportedCost).toBeGreaterThan(0);
+      }, 120_000);
+
+      // gpt-6-astra refuses `none` on both surfaces and the gateway hides why,
+      // so its off goes out as `low` (capabilities.ts `reasoningOff`).
+      it("answers with reasoning off", async () => {
+        const c = await ask(route, user("17 × 23 = ? Answer with the number only."), { reasoningEffort: "off" }, modelId);
+        expect(c.text).toMatch(/391/);
+        const sent = route === CHAT ? c.body!.reasoning_effort : (c.body!.reasoning as { effort: string }).effort;
+        expect(sent).toBe(modelId === "openai/gpt-6-astra" ? "low" : "none");
+      }, 120_000);
+
+      // gpt-5.6-sol's raw Chat refuses `max` (reason hidden); on Responses it
+      // takes it. gpt-5.6-luna's is served — through the OpenRouter layer.
+      it("answers at effort max", async () => {
+        const run = ask(route, user(PUZZLE), { reasoningEffort: "max" }, modelId);
+        if (route === CHAT && modelId === "openai/gpt-5.6-sol") await expect(run).rejects.toThrow(REJECTED);
+        else expect((await run).text).toMatch(/0?\.05/);
+      }, 180_000);
+
+      it("sees the image and reads the PDF", async () => {
+        const c = await ask(route, user([
+          text("Two questions. 1) One word for the colour of the image. 2) The secret word in the PDF. Answer as: colour; word"),
+          imagePart(TEAL, "auto"),
+          { type: "file", file: { filename: "note.pdf", file_data: PASSPHRASE_PDF } },
+        ]), {}, modelId);
+        expect(c.text).toMatch(/teal|cyan|turquoise|green/i);
+        expect(c.text).toMatch(/PELICAN-73/);
+      }, 120_000);
+
+      it("resolves json_schema and holds the enum", async () => {
+        const q = "Give a colour and a number as JSON. The colour MUST be yellow.";
+        const SCHEMA = {
+          type: "object",
+          properties: { color: { type: "string", enum: ["red", "green", "blue"] }, n: { type: "integer" } },
+          required: ["color", "n"], additionalProperties: false,
+        };
+        const shaping = jsonModeShaping({ standard: route.standard, baseUrl: route.baseUrl, platform: "orcarouter", modelId }, q, { name: "pick", parameters: SCHEMA });
+        expect(shaping.mode).toBe("json_schema");
+        const c = await ask(route, user(q), { extraBody: shaping.extraBody }, modelId);
+        expect(["red", "green", "blue"]).toContain((JSON.parse(c.text) as { color: string }).color);
+      }, 120_000);
+
+      // The author's untouched model, as an agent run sends it — and one set to
+      // think hard. OpenAI's own Chat refuses function tools beside any effort
+      // but `none`, gpt-5.6-sol's default included (`Function tools with
+      // reasoning_effort are not supported for gpt-5.6-sol in
+      // /v1/chat/completions`), so there the adapter sends `none`
+      // (capabilities.ts `effortWithTools`).
+      it.each([undefined, "high" as const])("finishes a tool round (effort %s)", async (reasoningEffort) => {
+        const first = user("What is the weather in Paris right now? Call get_weather.");
+        const opts = { tools: [WEATHER], reasoningEffort };
+        const r1 = await ask(route, first, opts, modelId);
+        const calls = r1.toolCalls!.toolCalls;
+        expect(calls.length).toBeGreaterThanOrEqual(1);
+        if (route === CHAT && modelId === "openai/gpt-5.6-sol") expect(r1.body!.reasoning_effort).toBe("none");
+        const r2 = await ask(route, [
+          ...first,
+          {
+            role: "assistant", content: null,
+            tool_calls: calls.map((k) => ({ id: k.id, type: "function" as const, function: { name: k.name, arguments: k.arguments } })),
+            _reasoning: r1.toolCalls!._reasoning,
+            _responseItems: r1.toolCalls!._responseItems,
+          },
+          ...calls.map((k) => ({ role: "tool" as const, tool_call_id: k.id, content: "{\"weather\":\"rain\",\"temp_c\":14}" })),
+        ], opts, modelId);
+        expect(r2.text).toMatch(/rain|14/i);
+      }, 240_000);
+    });
+
+    it("Resp: streams a reasoning summary at effort high", async () => {
+      const c = await firstWithReasoning(() => ask(RESP, user("Is 1,000,003 prime? Think it through, then answer yes or no."), { reasoningEffort: "high" }, modelId));
+      expect(c.text).toMatch(/yes|no/i);
+      expect(c.reasoning.length).toBeGreaterThan(0);
+    }, 720_000);
   });
 });

@@ -192,12 +192,13 @@ const DEEPSEEK_MODELS: Record<string, ModelCalibration> = {
 };
 
 /**
- * OrcaRouter's eight paid models measured 2026-09-26 (landscape.md §7 第十八个样本
- * and its 再补测). Context and output caps are the catalog's own
- * `context_length` / `max_completion_tokens` (`GET /v1/models`). Every one lists
- * `file` among its input modalities; PDF was read end to end on luna (① ②),
- * sonnet-5 and opus-5.5 (④) and gemini-3.8-flash (③). No thinking category:
- * each route's family default is the one the sample measured with.
+ * OrcaRouter's ten paid models measured 2026-09-26 / -27 (landscape.md §7
+ * 第十八个样本, its 再补测 and GPT 全家补测). Context and output caps are the
+ * catalog's own `context_length` / `max_completion_tokens` (`GET /v1/models`).
+ * Every one lists `file` among its input modalities; PDF was read end to end on
+ * all six GPT ids (① ②), sonnet-5 and opus-5.5 (④) and gemini-3.8-flash (③).
+ * No thinking category: each route's family default is the one the sample
+ * measured with.
  */
 const ORCA_OPENAI = { contextSize: 1_050_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
 const ORCA_CLAUDE = { contextSize: 1_000_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
@@ -205,7 +206,9 @@ const ORCAROUTER_MODELS: Record<string, ModelCalibration> = {
   "openai/gpt-6-luna": ORCA_OPENAI,
   "openai/gpt-6-sol": ORCA_OPENAI,
   "openai/gpt-6-astra": ORCA_OPENAI,
+  "openai/gpt-5.6-luna": ORCA_OPENAI,
   "openai/gpt-5.6-terra": ORCA_OPENAI,
+  "openai/gpt-5.6-sol": ORCA_OPENAI,
   "anthropic/claude-sonnet-5": ORCA_CLAUDE,
   "anthropic/claude-opus-5.5": ORCA_CLAUDE,
   "anthropic/claude-fable-5.1": ORCA_CLAUDE,

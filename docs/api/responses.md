@@ -190,7 +190,7 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 | --- | --- | --- |
 | 思考控制 | `reasoning_effort`（`xhigh` 被接受） | `reasoning.effort` |
 | 思维链取回 | **`delta.reasoning_content` 有内容**（5.4 / 5.5；5.6-sol 那次为空）——这是中转站把 ② 的摘要翻译过来的，官方 ① 族没有这个字段 | `reasoning_summary_text.delta` |
-| 思考 + 工具 | **可用**（effort `medium` 下拿到 `tool_calls`）——官方文档说 5.4 起不支持，**在中转站上验不了这条**：它很可能把 ① 翻译成 ② 再打后端 | 可用 |
+| 思考 + 工具 | **可用**（effort `medium` 下拿到 `tool_calls`）——官方文档说 5.4 起不支持，**在中转站上验不了这条**：它很可能把 ① 翻译成 ② 再打后端。**OpenAI 原样回包上已验（2026-09-27，OrcaRouter 的 gpt-5.6-sol）**：400 `Function tools with reasoning_effort are not supported for gpt-5.6-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.`，**不发 `reasoning_effort` 也 400**（默认档不是 `none`），发 `none` 才过（[`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」）。本项目据此在这类线路上带工具时发 `none`（能力格 `effortWithTools`，[`capability-gating-plan.md`](capability-gating-plan.md) §8.13） | 可用 |
 | 结构化输出 | `response_format: json_schema` strict **正常** | `text.format` 见 §2.2 的 strict 陷阱 |
 | 图片 | `image_url` data URL ✅ | `input_image` data URL ✅（前两次 504 是超时，非拒绝） |
 | usage | `prompt_tokens` / `completion_tokens` + `completion_tokens_details.reasoning_tokens` | `input_tokens` / `output_tokens` + `output_tokens_details.reasoning_tokens` |
@@ -213,14 +213,14 @@ response.output_item.added          { item: {type:"function_call", call_id, name
 - 官方端点 `store:false` 且不发 `include:["reasoning.encrypted_content"]` 时 reasoning 条目
   是否仍带加密内容；回传一个只有 `id` 的 reasoning 条目是否 400（中转站上加密内容总是自带，
   且 2026-09-14 那次工具轮没产生 reasoning 条目，没测到）。
-- 官方 ① 族「5.4 起 `reasoning_effort ≠ none` 不能带工具」；GPT-5 上非 1 的 `temperature`。
+- ~~官方 ① 族「5.4 起 `reasoning_effort ≠ none` 不能带工具」；GPT-5 上非 1 的 `temperature`。~~ 2026-09-27 在 OrcaRouter 转发的 OpenAI 原样回包上验了（gpt-5.6-sol，[`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」）：前一条属实，且不发 effort 也触发（见 §7 表）；`temperature: 0.5` 在 ② 上 400 `Unsupported parameter: 'temperature' is not supported with this model.`，在 ① 上 200。网关会重新序列化请求，所以这两条是「经网关的 OpenAI」，不是直连。
 - `response.reasoning_text.delta` 何时出现（哪些模型放原始推理）。
 - 并行工具调用的事件交错（多个 `function_call` 同时流）。
 - `truncation: "auto"`、`context_management`、`conversation` / `previous_response_id`。
 - `phase` 缺失的真实代价（需要多轮、带工具的长任务对照）。
 - 5.6-sol 的多轮回传（第八个样本两次 502；第十个样本只在 terra 上跑了回传）。
   sol 的 `input_file` 已在中转站补测（6 次 4 过，失败归因于上游，见第十个样本），官方端点仍未验。
-- 5.6-luna（两台中转站的 `[Plus]` 档都没有）。
+- ~~5.6-luna（两台中转站的 `[Plus]` 档都没有）。~~ 2026-09-27 在 OrcaRouter 上测了（第十八个样本「GPT 全家补测」）：多数请求落在 OpenAI 原样线路上。
 
 ## 10. GPT-5.6 与内置工具（2026-09-14 补测，`[Plus]` 档 terra / sol）
 

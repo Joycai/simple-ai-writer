@@ -27,6 +27,9 @@ import {
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
 import { providerFor } from "../../lib/ai/routes";
+import { effortMenuOnWire } from "../../lib/ai/capabilities";
+import { providerWire } from "../../lib/ai/platforms";
+import { capabilityModelOf } from "../../lib/ai/relayUpstream";
 
 function labelKeyFor(e: ReasoningEffort): string {
   return `aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`;
@@ -122,6 +125,9 @@ export function ReasoningControls({ variant }: Props) {
   const onOff = isOnOffCategory(cat);
   const hasBudget = cat.shape === "budget";
   const levels = cat.shape === "levels";
+  // The levels this model takes on this wire — the category's menu, less `off`
+  // for a model that has none (capabilities.ts `reasoningOff`).
+  const menu = effortMenuOnWire(cat.menu, providerWire(provider), capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream }));
 
   const onOffChips = (
     <div className={styles.chipGroup}>
@@ -166,7 +172,7 @@ export function ReasoningControls({ variant }: Props) {
         )}
         {levels && (
           <div className={styles.chipGroup}>
-            {cat.menu.map((e) => (
+            {menu.map((e) => (
               <button
                 key={e}
                 className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
@@ -190,7 +196,7 @@ export function ReasoningControls({ variant }: Props) {
           <CompactDial
             label={label}
             value={t(labelKeyFor(current))}
-            options={cat.menu}
+            options={menu}
             current={current}
             onPick={set}
           />
@@ -206,7 +212,7 @@ export function ReasoningControls({ variant }: Props) {
         {onOff && onOffChips}
         {levels && (
           <div className={styles.chipGroup}>
-            {cat.menu.map((e) => (
+            {menu.map((e) => (
               <button
                 key={e}
                 className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
