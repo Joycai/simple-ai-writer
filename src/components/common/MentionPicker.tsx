@@ -142,9 +142,9 @@ export interface MentionState {
    */
   claim: (text: string) => MentionClaim | null;
   /**
-   * Replace the claimed mention with `@[名字]`, returning the new text — at
-   * the place the mention is *now*, after whatever was typed or landed
-   * during the read (see acceptPick). A second accept on the same mention
+   * Replace the claimed mention with `@[名字]`, returning the new text and
+   * caret (below) — at the place the mention is *now*, after whatever was
+   * typed or landed during the read (see acceptPick). A second accept on the same mention
    * is a no-op (a double-click, or Enter twice on a slow file); a mention
    * opened since on a later `@` is shifted by the splice; one reopened on
    * the claimed `@` closes with it. `projectPath` is for judging whether
@@ -479,7 +479,9 @@ export function acceptPick(
  * writing `value` into the input moves it there. A layout effect rather than
  * the `requestAnimationFrame` that `+ 引用` uses: that one runs inside a
  * click, where React commits before the frame; after an await nothing orders
- * the two. It is applied only if the input shows exactly `text` — a key
+ * the two. It is applied only to a focused input — one the author left
+ * during the read is not theirs to have moved — and only if it shows
+ * exactly `text`: a key
  * pressed between the landing and the render puts other text there, and a
  * caret computed for one text means nothing in another — and the record is
  * cleared on every run, so a placement never waits for some later edit.
@@ -493,7 +495,7 @@ export function usePendingCaret(
     const w = want.current;
     want.current = null;
     const el = ref.current;
-    if (!w || !el || el.value !== w.text) return;
+    if (!w || !el || el !== document.activeElement || el.value !== w.text) return;
     el.setSelectionRange(w.caret, w.caret);
   }, [ref, value]);
   return useCallback((caret: number | null, text: string) => {
