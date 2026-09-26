@@ -23,7 +23,7 @@
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -149,8 +149,20 @@ export interface MentionState {
    * opened since on a later `@` is shifted by the splice; one reopened on
    * the claimed `@` closes with it. `projectPath` is for judging whether
    * letters typed during the read still point at `item`.
+   *
+   * `caret` is the input's caret as the host reads it now; the returned one
+   * is that caret carried through the splice (`caretThrough`) — null when
+   * nothing landed or no caret was given. The host puts it back after the
+   * render (`usePendingCaret`): replacing a controlled value moves the
+   * caret to the end.
    */
-  accept: (value: string, item: MentionItem, claim: MentionClaim, projectPath: string | null) => string;
+  accept: (
+    value: string,
+    item: MentionItem,
+    claim: MentionClaim,
+    projectPath: string | null,
+    caret: number | null,
+  ) => { text: string; caret: number | null };
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
@@ -387,8 +399,23 @@ export function claimOf(pending: Map<number, MentionClaim>, core: MentionCore, t
 interface Landed {
   id: number;
   start: number;
+  /** Where the replaced `@query` ended, before the splice. */
+  end: number;
   /** The length the splice added; later claims and mentions move by it. */
   delta: number;
+}
+
+/**
+ * `caret` carried through a landing. Before the `@`: where it was. Inside
+ * the replaced `@query` — the usual case, the author was typing it — just
+ * after the new `]`. After it (letters typed further on while the file
+ * read): moved with the text by `delta`, so the author keeps writing where
+ * they were rather than being pulled back to the reference.
+ */
+export function caretThrough(caret: number, landed: Landed): number {
+  if (caret <= landed.start) return caret;
+  if (caret <= landed.end) return landed.end + landed.delta;
+  return caret + landed.delta;
 }
 
 /**
@@ -424,8 +451,12 @@ export function acceptPick(
   pending.delete(claim.id);
   const grown = cur.query !== claim.query && stillMatches(cur.query);
   const at = cur.start;
+  let used = cur.query;
   let text = grown ? spliceMention(value, at, cur.query, label, cur.glued) : value;
-  if (text === value) text = spliceMention(value, at, claim.query, label, cur.glued);
+  if (text === value) {
+    used = claim.query;
+    text = spliceMention(value, at, claim.query, label, cur.glued);
+  }
   if (text === value) return { text, landed: null };
   spent.add(claim.id);
   const delta = text.length - value.length;
@@ -436,7 +467,35 @@ export function acceptPick(
     // claim was glued to — the guard applies to it from here on.
     else if (c.start === at && c.glued) pending.set(id, { ...c, glued: false });
   }
-  return { text, landed: { id: claim.id, start: at, delta } };
+  return { text, landed: { id: claim.id, start: at, end: at + 1 + used.length, delta } };
+}
+
+/**
+ * Put the caret back after a landing, once the landed text is on screen.
+ *
+ * A pick lands after a file read, outside any event handler, and replacing a
+ * controlled value puts the caret at the end. `place(caret)` records where it
+ * should go; the layout effect that follows the render writing `value` into
+ * the input moves it there. A layout effect rather than the
+ * `requestAnimationFrame` that `+ 引用` uses: that one runs inside a click,
+ * where React commits before the frame; after an await nothing orders the
+ * two. The record is cleared on every run, so a placement never waits for
+ * some later, unrelated edit.
+ */
+export function usePendingCaret(
+  ref: RefObject<HTMLTextAreaElement | null>,
+  value: string,
+): (caret: number | null) => void {
+  const want = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const at = want.current;
+    want.current = null;
+    const el = ref.current;
+    if (at === null || !el) return;
+    const clamped = Math.min(at, el.value.length);
+    el.setSelectionRange(clamped, clamped);
+  }, [ref, value]);
+  return useCallback((caret: number | null) => { want.current = caret; }, []);
 }
 
 /**
@@ -474,13 +533,14 @@ export function useMentionState(): MentionState {
       setState((s) => shiftCore(s, before, after));
     },
     claim: (text) => claimOf(pending.current, state, text),
-    accept: (value, item, claim, projectPath) => {
+    accept: (value, item, claim, projectPath, caret) => {
       const { text, landed } = acceptPick(
         spent.current, pending.current, claim, value, mentionLabel(item),
         (q) => matchesMention(item, q, projectPath),
       );
-      if (landed) setState((s) => afterAccept(s, landed, landed.delta));
-      return text;
+      if (!landed) return { text, caret: null };
+      setState((s) => afterAccept(s, landed, landed.delta));
+      return { text, caret: caret === null ? null : caretThrough(caret, landed) };
     },
     move: (delta, count) => {
       if (count <= 0) return;

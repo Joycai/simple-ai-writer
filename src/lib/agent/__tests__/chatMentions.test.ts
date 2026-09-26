@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, claimOf, editRange, findMention, mentionKeyDown, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, mentionKeyDown, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -253,7 +253,7 @@ describe("acceptPick", () => {
   it("lands once and records it: a second accept on the same mention leaves the text alone", () => {
     const spent = new Set<number>();
     const first = acceptPick(spent, table(claim), claim, "看看@潮", "潮汐.png", nameHas("潮汐.png"));
-    expect(first).toEqual({ text: "看看@[潮汐.png]", landed: { id: 1, start: 2, delta: 7 } });
+    expect(first).toEqual({ text: "看看@[潮汐.png]", landed: { id: 1, start: 2, end: 4, delta: 7 } });
     expect(spent.has(1)).toBe(true);
     // The `@` of the landed `@[潮汐.png]` is at the same start with an empty
     // query: the spent set stops it here, and `spliceMention`'s own guard
@@ -306,6 +306,33 @@ describe("acceptPick", () => {
     acceptPick(new Set(), pending, claim, "看看@潮，和@夜", "潮汐.png", nameHas("潮汐.png"));
     expect(pending.get(2)).toEqual({ id: 2, start: 14, query: "夜", glued: false });
     expect(pending.get(3)).toEqual(earlier);
+  });
+});
+
+describe("where the caret goes after a landing", () => {
+  const claim = { id: 1, start: 2, query: "潮", glued: false };
+  const nameHas = (label: string) => (q: string) => label.includes(q);
+
+  it("records the end of the `@query` it replaced: the grown one, or the snapshot's", () => {
+    const grown = acceptPick(new Set(), new Map([[1, { ...claim, query: "潮汐" }]]), claim, "看看@潮汐，", "潮汐.png", nameHas("潮汐.png"));
+    expect(grown).toEqual({ text: "看看@[潮汐.png]，", landed: { id: 1, start: 2, end: 5, delta: 6 } });
+    // Prose typed after it that does not find the item: the snapshot's `@潮` is replaced.
+    const prose = acceptPick(new Set(), new Map([[1, { ...claim, query: "潮的" }]]), claim, "看看@潮的，", "潮汐.png", nameHas("潮汐.png"));
+    expect(prose).toEqual({ text: "看看@[潮汐.png]的，", landed: { id: 1, start: 2, end: 4, delta: 7 } });
+  });
+
+  it("leaves a caret before the `@`, puts one inside `@query` after the `]`, and moves one after it with the text", () => {
+    const text = "看看@潮，后文";
+    const r = acceptPick(new Set(), new Map([[1, claim]]), claim, text, "潮汐.png", nameHas("潮汐.png"));
+    const landed = r.landed!;
+    expect(r.text).toBe("看看@[潮汐.png]，后文");
+    expect([0, 2].map((c) => caretThrough(c, landed))).toEqual([0, 2]);
+    // Inside `@潮` or right after it — the author was typing it.
+    expect([3, 4].map((c) => caretThrough(c, landed))).toEqual([11, 11]);
+    expect(r.text.slice(0, 11)).toBe("看看@[潮汐.png]");
+    // Typed on past it while the file read: the caret stays on the same letter.
+    expect(caretThrough(6, landed)).toBe(13);
+    expect(r.text.slice(13)).toBe(text.slice(6));
   });
 });
 
