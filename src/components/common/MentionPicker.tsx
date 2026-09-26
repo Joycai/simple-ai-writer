@@ -248,10 +248,28 @@ export function afterAccept(core: MentionCore, landed: Pick<MentionClaim, "id" |
  * and it keeps its last place once the mention closes (a 「，」 typed, Esc, a
  * click outside — `CLOSED`'s 0 / "" would splice at the head of the draft,
  * which once ate its first character). Keyed by id, so a claim is found
- * again however many mentions were opened after it.
+ * again however many mentions were opened after it — and a mention reopened
+ * on the same `@` (Esc during the read, then more letters, which gives that
+ * `@` a new id) is followed too: it is the claimed `@`, as `afterAccept`
+ * already treats it.
  */
 export function trackClaims(pending: Map<number, MentionClaim>, core: MentionCore): void {
-  if (core.open && pending.has(core.id)) pending.set(core.id, { id: core.id, start: core.start, query: core.query });
+  if (!core.open) return;
+  for (const [id, c] of pending) {
+    if (id === core.id || c.start === core.start) pending.set(id, { id, start: core.start, query: core.query });
+  }
+}
+
+/**
+ * A pick's claim on the open mention, registered in `pending` so
+ * `trackClaims` follows it from here on. Null when no mention is open. The
+ * one place a claim is made, for the hook and the tests alike.
+ */
+export function claimOf(pending: Map<number, MentionClaim>, core: MentionCore): MentionClaim | null {
+  if (!core.open) return null;
+  const c: MentionClaim = { id: core.id, start: core.start, query: core.query };
+  pending.set(c.id, c);
+  return c;
 }
 
 /** Where a pick landed, for `afterAccept` — and which mention it was. */
@@ -274,6 +292,10 @@ interface Landed {
  *   whole current query is replaced — otherwise the extra letters would be
  *   left as a tail after `@[潮汐.png]`. Failing that, the snapshot's query;
  *   prose typed after it that does not match (`@潮的图`) is prose, and stays.
+ * - Failing at the current place, the snapshot's own place is tried last:
+ *   the chat composer keeps one table across conversations, and a landing
+ *   in another conversation's draft may have shifted this claim by a delta
+ *   that never applied to this draft.
  * - Nothing landed (the text at that place is no longer the mention) means
  *   nothing is recorded and nothing closes: the `@` the author is looking at
  *   is still theirs. Only a landing is spent, and only a landing shifts the
@@ -291,13 +313,15 @@ export function acceptPick(
   const cur = pending.get(claim.id) ?? claim;
   pending.delete(claim.id);
   const grown = cur.query !== claim.query && stillMatches(cur.query);
-  let text = grown ? spliceMention(value, cur.start, cur.query, label) : value;
-  if (text === value) text = spliceMention(value, cur.start, claim.query, label);
+  let at = cur.start;
+  let text = grown ? spliceMention(value, at, cur.query, label) : value;
+  if (text === value) text = spliceMention(value, at, claim.query, label);
+  if (text === value && claim.start !== cur.start) { at = claim.start; text = spliceMention(value, at, claim.query, label); }
   if (text === value) return { text, landed: null };
   spent.add(claim.id);
   const delta = text.length - value.length;
-  for (const [id, c] of pending) if (c.start > cur.start) pending.set(id, { ...c, start: c.start + delta });
-  return { text, landed: { id: claim.id, start: cur.start, delta } };
+  for (const [id, c] of pending) if (c.start > at) pending.set(id, { ...c, start: c.start + delta });
+  return { text, landed: { id: claim.id, start: at, delta } };
 }
 
 /** @-detection and splicing over a controlled text value. */
@@ -305,6 +329,8 @@ export function useMentionState(): MentionState {
   const [state, setState] = useState<MentionCore>(CLOSED);
   // Picks waiting on a file read, at their mention's current place (see
   // trackClaims — the render that made a handler may hold an older one).
+  // Every render, so typing during the read is seen: the «narrowed further»
+  // sequence tests in chatMentions.test.ts are what depend on this line.
   const pending = useRef(new Map<number, MentionClaim>());
   trackClaims(pending.current, state);
   // Mentions a pick has already landed on (see acceptPick).
@@ -319,12 +345,7 @@ export function useMentionState(): MentionState {
     active: state.active,
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
-    claim: () => {
-      if (!state.open) return null;
-      const c: MentionClaim = { id: state.id, start: state.start, query: state.query };
-      pending.current.set(c.id, c);
-      return c;
-    },
+    claim: () => claimOf(pending.current, state),
     accept: (value, item, claim, projectPath) => {
       const { text, landed } = acceptPick(
         spent.current, pending.current, claim, value, mentionLabel(item),

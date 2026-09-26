@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, findMention, mentionKeyDown, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, claimOf, findMention, mentionKeyDown, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -214,6 +214,20 @@ describe("trackClaims", () => {
     // Another mention, not claimed: nothing to track.
     trackClaims(pending, { open: true, id: 2, query: "夜", active: 0, scope: "all", start: 7 });
     expect(pending.size).toBe(1);
+    // The same `@` reopened under a new id (Esc, then more letters): followed.
+    trackClaims(pending, { open: true, id: 3, query: "潮汐门", active: 0, scope: "all", start: 2 });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门" });
+  });
+});
+
+describe("claimOf", () => {
+  it("registers the open mention and hands back the same entry; nothing when closed", () => {
+    const pending = new Map<number, MentionClaim>();
+    expect(claimOf(pending, { open: false, id: 3, query: "", active: 0, scope: "all", start: 0 })).toBeNull();
+    expect(pending.size).toBe(0);
+    const c = claimOf(pending, { open: true, id: 3, query: "潮", active: 0, scope: "all", start: 2 });
+    expect(c).toEqual({ id: 3, start: 2, query: "潮" });
+    expect(pending.get(3)).toEqual(c);
   });
 });
 
@@ -246,9 +260,14 @@ describe("acceptPick", () => {
     expect(acceptPick(new Set(), table({ ...claim, query: "潮的图" }), claim, "看看@潮的图", "潮汐.png", nameHas("潮汐.png")).text)
       .toBe("看看@[潮汐.png]的图");
     // The grown query matches the name but is no longer in the text (a
-    // conversation switch put another draft on screen): the snapshot lands.
+    // 「，」 closed the mention, then backspace reopened it and cut it back to
+    // `@潮`): the snapshot lands.
     expect(acceptPick(new Set(), table({ ...claim, query: "潮汐" }), claim, "看看@潮", "潮汐.png", nameHas("潮汐.png")).text)
       .toBe("看看@[潮汐.png]");
+    // Shifted by a landing that never touched this text (the chat composer
+    // keeps one table across conversations): the snapshot's own place, last.
+    expect(acceptPick(new Set(), table({ ...claim, start: 5 }), claim, "看看@潮", "潮汐.png", nameHas("潮汐.png")))
+      .toEqual({ text: "看看@[潮汐.png]", landed: { id: 1, start: 2, delta: 7 } });
   });
 
   it("records and shifts nothing when nothing landed — the `@` the author is looking at is still theirs", () => {
@@ -287,7 +306,7 @@ describe("a pick across a file read", () => {
     const pending = new Map<number, MentionClaim>();
     const spent = new Set<number>();
     const type = (text: string, caret = text.length) => { core = syncMention(core, text, caret); trackClaims(pending, core); };
-    const claim = () => { const c = { id: core.id, start: core.start, query: core.query }; pending.set(c.id, c); return c; };
+    const claim = () => claimOf(pending, core)!;
     const accept = (value: string, item: MentionItem, c: MentionClaim) => {
       const r = acceptPick(spent, pending, c, value, label(item), (q) => matchesMention(item, q, "/p"));
       if (r.landed) { core = afterAccept(core, r.landed, r.landed.delta); trackClaims(pending, core); }
@@ -330,6 +349,31 @@ describe("a pick across a file read", () => {
     expect(h.state()).toMatchObject({ open: true, id: 2, query: "夜" });
     const b = h.claim();
     expect(h.accept("看看@夜", pic("插图/夜航.png"), b)).toBe("看看@[夜航.png]");
+  });
+
+  it("Esc during the read, then the same name typed on: the reopened `@` is the claimed one, no tail", () => {
+    const h = host();
+    h.type("看看@潮");
+    const a = h.claim();
+    // Esc closes; the next letter reopens the same `@` under a new id.
+    h.type("看看@潮，");
+    for (const t of ["看看@潮", "看看@潮汐"]) h.type(t);
+    expect(h.state()).toMatchObject({ open: true, id: 2, query: "潮汐", start: 2 });
+    expect(h.accept("看看@潮汐", pic("插图/潮汐.png"), a)).toBe("看看@[潮汐.png]");
+    expect(h.state().open).toBe(false);
+  });
+
+  it("a landing in another conversation's draft does not lose this one's pick", () => {
+    const h = host();
+    h.type("看看@潮");
+    const a = h.claim();
+    // Conversation B, same hook: `@夜` picked at index 0, landing 5 characters
+    // ahead of A's `@` — in B's text. A's table entry is pushed along.
+    h.type("@夜");
+    const b = h.claim();
+    expect(h.accept("@夜", pic("夜航.png"), b)).toBe("@[夜航.png]");
+    // Back in A with A's own draft: the `@潮` is where it always was.
+    expect(h.accept("看看@潮", pic("插图/潮汐.png"), a)).toBe("看看@[潮汐.png]");
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {
