@@ -330,6 +330,7 @@ export async function executeDelegate(
     promptTokens: result.inputTokens,
     cachedTokens: result.cachedTokens,
     completionTokens: result.outputTokens,
+    reportedCost: result.reportedCost,
   });
 
   if (!output.trim()) {

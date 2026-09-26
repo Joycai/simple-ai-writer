@@ -94,7 +94,7 @@ export const useDigestStore = create<DigestState>((set, get) => ({
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       let summary = "";
-      let usage = { in: 0, out: 0, cached: 0 };
+      let usage: DigestUsage = { in: 0, out: 0, cached: 0, cost: null };
       await streamCompletion({
         ...connOptions({ provider, model, apiKey }),
         // Background summary, same as memoryStore: no server tools (search,
@@ -111,6 +111,7 @@ export const useDigestStore = create<DigestState>((set, get) => ({
               in: chunk.inputTokens,
               out: chunk.outputTokens,
               cached: chunk.cachedTokens ?? 0,
+              cost: chunk.reportedCost ?? null,
             };
           } else if ("text" in chunk) {
             summary += chunk.text;
@@ -146,8 +147,11 @@ export const useDigestStore = create<DigestState>((set, get) => ({
   },
 }));
 
+/** `cost`: the platform's reported cost, or null when it reported none. */
+type DigestUsage = { in: number; out: number; cached: number; cost: number | null };
+
 /** Persist digest token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
+function recordUsage(projectPath: string, model: Model, usage: DigestUsage): void {
   if (usage.in <= 0 && usage.out <= 0) return;
   void recordUsageRow(projectPath, {
     model,
@@ -155,5 +159,6 @@ function recordUsage(projectPath: string, model: Model, usage: { in: number; out
     promptTokens: usage.in,
     cachedTokens: usage.cached,
     completionTokens: usage.out,
+    reportedCost: usage.cost,
   });
 }

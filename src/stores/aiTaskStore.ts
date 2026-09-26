@@ -634,7 +634,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           serverTools: routed.serverTools,
         };
 
-        const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
+        const { inputTokens, outputTokens, cachedTokens, reportedCost, outcome } = await runAgent({
           ...conn,
           // The **message** ceiling: the tool schemas' share is already out of
           // it, and what the runtime trims is messages. 0 on a static plan
@@ -777,12 +777,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             );
           }
         }
-        const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
+        const cost = costFor(model, inputTokens, outputTokens, cachedTokens, reportedCost);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
         if (get().abortController === controller) {
           get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
         }
-        void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
+        void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -839,8 +839,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   // usage/done patch, or the pane briefly shows a finished
                   // draft missing its tail.
                   stream.flush();
-                  const { inputTokens, outputTokens, truncated, cachedTokens } = chunk;
-                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
+                  const { inputTokens, outputTokens, truncated, cachedTokens, reportedCost } = chunk;
+                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens, reportedCost);
                   patchDraft(set, draft.id, {
                     usage: { inputTokens, outputTokens, cost },
                     done: true,
@@ -848,7 +848,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   });
                   // One row per draft: each is a separate billed call, and a
                   // single summed row would misreport the run's shape.
-                  void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens });
+                  void recordUsage(projectPath, { model, task: kind, promptTokens: inputTokens, cachedTokens, completionTokens: outputTokens, reportedCost });
                 } else if ("text" in chunk) {
                   pendingAppends.set(draft.id, (pendingAppends.get(draft.id) ?? "") + chunk.text);
                   stream.schedule();

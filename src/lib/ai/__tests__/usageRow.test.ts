@@ -17,6 +17,7 @@ vi.mock("../../project", () => ({
 import { buildUsageRow, recordUsage } from "../usageRow";
 import type { RecordUsageInput, UsageRowValues } from "../usageRow";
 import { ZERO_FEE, type FeeConfig } from "../feeGroup";
+import { costFor } from "../configDb";
 
 const fee = (over: Partial<FeeConfig> = {}): FeeConfig => ({ ...ZERO_FEE, ...over });
 const model = (f?: FeeConfig) => ({ id: "m1", fee: f });
@@ -150,6 +151,26 @@ describe("buildUsageRow · 上游报价", () => {
       .toBeCloseTo(0.08, 12);
     expect(buildUsageRow({ model: model(spec), task: "t", outputUnits: 2, reportedCost: NaN }).costUsd)
       .toBeCloseTo(0.08, 12);
+  });
+});
+
+describe("costFor · 草稿上显示的数与账上同一口径", () => {
+  const tokens = fee({ inputPrice: 1, outputPrice: 2 });
+
+  it("有上游报价就显示报价，和 buildUsageRow 记的一样", () => {
+    const shown = costFor(model(tokens), 1_000_000, 1_000_000, 0, 0.003);
+    const row = buildUsageRow({ model: model(tokens), task: "chat", promptTokens: 1_000_000, completionTokens: 1_000_000, reportedCost: 0.003 });
+    expect(shown).toBeCloseTo(0.003, 12);
+    expect(row.costUsd).toBeCloseTo(shown, 12);
+  });
+
+  it("没报（null / 省略）照计费组算", () => {
+    expect(costFor(model(tokens), 1_000_000, 1_000_000, 0, null)).toBeCloseTo(3, 12);
+    expect(costFor(model(tokens), 1_000_000, 1_000_000)).toBeCloseTo(3, 12);
+  });
+
+  it("没有计费组的模型，报价照样算得出钱", () => {
+    expect(costFor(model(), 10, 10, 0, 0.001)).toBeCloseTo(0.001, 12);
   });
 });
 

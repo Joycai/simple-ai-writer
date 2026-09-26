@@ -432,13 +432,14 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
     at: Date.now(),
     parentStep: stepId,
   });
-  const cost = costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens);
+  const cost = costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens, result.reportedCost);
   await recordUsage(ctx.projectPath, {
     model: conn.model,
     task: "subagent:writer",
     promptTokens: result.inputTokens,
     cachedTokens: result.cachedTokens,
     completionTokens: result.outputTokens,
+    reportedCost: result.reportedCost,
   });
 
   const usage = {
