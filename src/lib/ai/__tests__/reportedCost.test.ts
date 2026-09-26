@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "../reportedCost";
+import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf, reportsCostFor } from "../reportedCost";
 
 describe("reportedCostOf — 只收声明过的平台", () => {
   it("OrcaRouter 四族各读自己的字段", () => {
@@ -88,3 +88,23 @@ describe("costReportingPlatform — 标签和地址都得是它", () => {
   });
 });
 
+// landscape.md §7 第十八个样本「GPT 全家补测」：5.6-luna / -sol 的 ② 落在 OpenAI 原样线路上，一次都不报。
+describe("reportsCostFor — 模型在这条线路上会不会带报价", () => {
+  const orca = (standard: "openai_compat" | "openai_responses_compat" | "anthropic_compat") =>
+    ({ platform: "orcarouter" as const, baseUrl: "https://api.orcarouter.ai/v1", standard });
+
+  it("OrcaRouter 上默认报，② 上点名的两个 GPT-5.6 不报", () => {
+    expect(reportsCostFor(orca("openai_responses_compat"), "openai/gpt-6-luna")).toBe(true);
+    expect(reportsCostFor(orca("openai_responses_compat"), "openai/gpt-5.6-terra")).toBe(true);
+    expect(reportsCostFor(orca("openai_responses_compat"), "openai/gpt-5.6-sol")).toBe(false);
+    expect(reportsCostFor(orca("openai_responses_compat"), " openai/gpt-5.6-luna ")).toBe(false);
+    // ① 的原样线路带头时报 `cost_usd`。
+    expect(reportsCostFor(orca("openai_compat"), "openai/gpt-5.6-sol")).toBe(true);
+    expect(reportsCostFor(orca("anthropic_compat"), "anthropic/claude-sonnet-5")).toBe(true);
+  });
+
+  it("不报价的平台、贴错标签的地址一律不报", () => {
+    expect(reportsCostFor({ platform: "openai", baseUrl: "https://api.openai.com/v1", standard: "openai_responses" }, "gpt-5.6-sol")).toBe(false);
+    expect(reportsCostFor({ platform: "orcarouter", baseUrl: "https://relay.example.com/v1", standard: "openai_compat" }, "openai/gpt-6-luna")).toBe(false);
+  });
+});

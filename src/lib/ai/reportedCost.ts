@@ -10,7 +10,7 @@
  * 「没报」是 `undefined`，不是 `0`：`0` 是上游说这次免费，会把整行记成 0。
  */
 import { inferPlatform, platformCostReport, wireOf, type PlatformId } from "./platforms";
-import type { ApiStandard, ProtocolFamily } from "./types";
+import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 
 /**
  * 这次请求的报价归哪个平台：标签和地址都得是它，否则 `undefined`（不发头、不收数）。
@@ -22,6 +22,18 @@ import type { ApiStandard, ProtocolFamily } from "./types";
 export function costReportingPlatform(o: { platform?: PlatformId; baseUrl: string; standard: ApiStandard }): PlatformId | undefined {
   const { platform } = wireOf(o);
   return platformCostReport(platform) && inferPlatform(o.baseUrl, o.standard) === platform ? platform : undefined;
+}
+
+/**
+ * 这个模型在这条线路上会不会带报价回来——模型抽屉据此决定计费组一栏怎么说。
+ * 平台得报价（{@link costReportingPlatform}），且这个 id 不在该族的 `unreported` 里。
+ * 请求侧不用它：不报就是回包里没有，`reportedCostOf` 自然读到空。
+ */
+export function reportsCostFor(o: { platform?: PlatformId; baseUrl: string; standard: ApiStandard }, modelId: string): boolean {
+  const platform = costReportingPlatform(o);
+  if (!platform) return false;
+  const unreported = platformCostReport(platform)?.unreported?.[familyOf(o.standard)] ?? [];
+  return !unreported.some((re) => re.test(modelId.trim()));
 }
 
 /** 各族回包里放花费的字段（OrcaRouter 实测，landscape.md §7 第十八个样本「再补测」）。 */

@@ -405,6 +405,15 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
       }, 240_000);
     });
 
+    // gpt-5.6-sol's Responses refuses any temperature (OpenAI's words), so the
+    // adapter leaves the author's out (capabilities.ts `temperature`).
+    it("Resp: sends the row's temperature where the model takes one", async () => {
+      const c = await ask(RESP, user("Reply with the single word PONG."), { temperature: 0.5 }, modelId);
+      expect(c.text).toMatch(/PONG/);
+      if (modelId === "openai/gpt-5.6-sol") expect(c.body).not.toHaveProperty("temperature");
+      else expect(c.body!.temperature).toBe(0.5);
+    }, 120_000);
+
     it("Resp: streams a reasoning summary at effort high", async () => {
       const c = await firstWithReasoning(() => ask(RESP, user("Is 1,000,003 prime? Think it through, then answer yes or no."), { reasoningEffort: "high" }, modelId));
       expect(c.text).toMatch(/yes|no/i);

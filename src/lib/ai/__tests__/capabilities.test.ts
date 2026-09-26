@@ -526,6 +526,21 @@ describe("pdfInput", () => {
 
 // 智谱 (landscape.md §7 第十四个样本): forcing a tool is sent as auto.
 // landscape.md §7 第十八个样本「GPT 全家补测」.
+// gpt-5.6-sol's Responses refuses any temperature; its Chat takes one, and
+// gpt-5.6-luna's is rerouted and echoed (第十八个样本「GPT 全家补测」).
+describe("temperature on GPT-5.6", () => {
+  it("is refused on Responses for gpt-5.6-sol only", () => {
+    const orcaResp: CapabilityWire = { platform: "orcarouter", standard: "openai_responses_compat" };
+    const orcaChat: CapabilityWire = { platform: "orcarouter", standard: "openai_compat" };
+    const official: CapabilityWire = { platform: "openai", standard: "openai_responses" };
+    expect(capabilityVerdict("temperature", orcaResp, { modelId: "openai/gpt-5.6-sol" })).toEqual({ status: "no", reason: "model" });
+    expect(hasCapability("temperature", orcaResp, { modelId: "openai/gpt-5.6-luna" })).toBe(true);
+    expect(hasCapability("temperature", orcaChat, { modelId: "openai/gpt-5.6-sol" })).toBe(true);
+    expect(hasCapability("temperature", official, { modelId: "gpt-5.6-sol" })).toBe(false);
+    expect(hasCapability("temperature", official, { modelId: "gpt-5.6-terra" })).toBe(true);
+  });
+});
+
 describe("effort cells", () => {
   const orcaChat: CapabilityWire = { platform: "orcarouter", standard: "openai_compat" };
   const orcaResp: CapabilityWire = { platform: "orcarouter", standard: "openai_responses_compat" };

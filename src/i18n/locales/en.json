@@ -2812,7 +2812,12 @@
       "matrixLegend": "✓ sent · ? unmeasured · — not sent. The switches above are your grant to this model, shared by every route; whether each route can say it is the platform's.",
       "feeGroupLabel": "Fee group",
       "feeGroupHint": "The price lives in the group, not on this form. One edit re-prices every model in it; this model's recorded usage does not move — each row carries the rate of its day.",
-      "feeGroupHintUnbound": "No group = nothing is charged, though requests and tokens are still counted. Binding one later leaves the earlier rows at the rate of their day — which is zero."
+      "feeGroupHintUnbound": "No group = nothing is charged, though requests and tokens are still counted. Binding one later leaves the earlier rows at the rate of their day — which is zero.",
+      "feeGroupHintReported": "This route is priced by the upstream: the usage carries a cost even without a group. With one bound, the reported cost still wins; the group's rate only fills in when a request reports none.",
+      "feeReportedNote": "Upstream-priced · each request booked at what {{platform}} reports it charged",
+      "feeReportedNoteBound": "Upstream-priced · the group's rate only fills in when a request reports none",
+      "feeUnreportedWarn": "{{platform}} reports no cost for this model on this route. Without a group, its usage is booked at $0.",
+      "feeUnreportedNote": "No reported cost on this route · booked at the group's rate"
     },
     "probe": {
       "title": "Probe real limits",

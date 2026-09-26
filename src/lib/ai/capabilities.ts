@@ -581,7 +581,10 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
     families: {
       all: { jsonSchema: true },
       openai: { web_search: false, effortWithTools: { refuses: [/^gpt-5\.[4-9](?:[.-]|$)/] } },
-      responses: { web_search: true },
+      // `temperature`: gpt-5.6-sol's Responses refuses it outright (`Unsupported
+      // parameter: 'temperature' is not supported with this model.`) — the same
+      // OpenAI body OrcaRouter hands back verbatim (GPT 全家补测).
+      responses: { web_search: true, temperature: { refuses: [/^gpt-5\.6-sol$/] } },
     },
   },
   // `output_config.format`: GA per Anthropic; held a contradicted enum on five
@@ -627,7 +630,9 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // ③'s three built-in tools, beside function tools, forced calls and a
   // response schema alike (再补测). The GPT ids (GPT 全家补测): gpt-5.6-sol is
   // served by OpenAI's own Chat Completions and refuses tools beside any effort
-  // (gpt-5.6-luna is rerouted and was not); gpt-6-astra refuses `none` on both.
+  // (gpt-5.6-luna is rerouted and was not); gpt-6-astra refuses `none` on both;
+  // gpt-5.6-sol's Responses refuses any temperature (its Chat takes one).
+  // gpt-5.6-luna's temperature is rerouted to the translating layer and echoed.
   orcarouter: {
     families: {
       openai: {
@@ -635,7 +640,12 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
         effortWithTools: { refuses: [/^openai\/gpt-5\.6-sol$/] },
         reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] },
       },
-      responses: { jsonSchema: true, web_search: true, reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] } },
+      responses: {
+        jsonSchema: true,
+        web_search: true,
+        reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] },
+        temperature: { refuses: [/^openai\/gpt-5\.6-sol$/] },
+      },
       gemini: { jsonSchema: true, pdfInput: true, web_search: true, web_extractor: true, code_interpreter: true },
       anthropic: { web_search: true, jsonSchema: true, pdfInput: true },
     },
