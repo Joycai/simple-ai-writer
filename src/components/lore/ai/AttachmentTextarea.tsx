@@ -117,7 +117,7 @@ export function AttachmentTextarea({
       latest.current.instruction, item, claim, projectPath,
       textareaRef.current?.selectionStart ?? null,
     );
-    placeCaret(landed.caret);
+    placeCaret(landed.caret, landed.text);
     onInstructionChange(landed.text);
     textareaRef.current?.focus();
   };

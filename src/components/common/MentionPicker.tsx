@@ -474,28 +474,31 @@ export function acceptPick(
  * Put the caret back after a landing, once the landed text is on screen.
  *
  * A pick lands after a file read, outside any event handler, and replacing a
- * controlled value puts the caret at the end. `place(caret)` records where it
- * should go; the layout effect that follows the render writing `value` into
- * the input moves it there. A layout effect rather than the
- * `requestAnimationFrame` that `+ 引用` uses: that one runs inside a click,
- * where React commits before the frame; after an await nothing orders the
- * two. The record is cleared on every run, so a placement never waits for
- * some later, unrelated edit.
+ * controlled value puts the caret at the end. `place(caret, text)` records
+ * where it should go in `text`; the layout effect that follows the render
+ * writing `value` into the input moves it there. A layout effect rather than
+ * the `requestAnimationFrame` that `+ 引用` uses: that one runs inside a
+ * click, where React commits before the frame; after an await nothing orders
+ * the two. It is applied only if the input shows exactly `text` — a key
+ * pressed between the landing and the render puts other text there, and a
+ * caret computed for one text means nothing in another — and the record is
+ * cleared on every run, so a placement never waits for some later edit.
  */
 export function usePendingCaret(
   ref: RefObject<HTMLTextAreaElement | null>,
   value: string,
-): (caret: number | null) => void {
-  const want = useRef<number | null>(null);
+): (caret: number | null, text: string) => void {
+  const want = useRef<{ caret: number; text: string } | null>(null);
   useLayoutEffect(() => {
-    const at = want.current;
+    const w = want.current;
     want.current = null;
     const el = ref.current;
-    if (at === null || !el) return;
-    const clamped = Math.min(at, el.value.length);
-    el.setSelectionRange(clamped, clamped);
+    if (!w || !el || el.value !== w.text) return;
+    el.setSelectionRange(w.caret, w.caret);
   }, [ref, value]);
-  return useCallback((caret: number | null) => { want.current = caret; }, []);
+  return useCallback((caret: number | null, text: string) => {
+    want.current = caret === null ? null : { caret, text };
+  }, []);
 }
 
 /**

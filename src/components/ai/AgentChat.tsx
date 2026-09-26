@@ -387,7 +387,7 @@ export function AgentChat() {
     const caret = inputRef.current?.selectionStart ?? null;
     setDraft((now) => {
       const landed = mention.accept(now, item, claim, projectPath, caret);
-      placeCaret(landed.caret);
+      placeCaret(landed.caret, landed.text);
       return landed.text;
     });
     inputRef.current?.focus();
