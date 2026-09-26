@@ -732,54 +732,58 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
     const claim = mention.claim(draft);
     if (!claim) return;
-    setRefError(null);
-    // 挂到那一刻的列表上，且只挂一次：读的期间又选了一次同一项，是同一份附件。
-    const attach = (ref: AttachedItem) =>
-      setRefs((r) => (r.some((a) => attachedKey(a) === mentionKey(item)) ? r : [...r, ref]));
-    if (item.type === "lore") {
-      attach({ kind: "lore", entity: item.entity });
-    } else if (item.file.kind === "image") {
-      try {
-        // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
-        const { dataUrl, bytes, downscaled } = await trackRead(imageForModel(item.file.path));
-        // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
-        // 一条悄悄少了张图的消息从记录上根本看不出来。
-        if (bytes.length > MAX_IMAGE_BYTES) {
-          setRefError(t("roleplay.composer.imageTooLarge", {
-            name: item.file.name,
-            size: (bytes.length / 1024 / 1024).toFixed(1),
-            max: MAX_IMAGE_BYTES / 1024 / 1024,
-            defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+    // 读到落完字为止都算「在读」：计数一落就重渲染（比 await 之后的代码早一个
+    // 微任务），那一刻草稿里还没有附件和 `@[名字]`。
+    await trackRead(async () => {
+      setRefError(null);
+      // 挂到那一刻的列表上，且只挂一次：读的期间又选了一次同一项，是同一份附件。
+      const attach = (ref: AttachedItem) =>
+        setRefs((r) => (r.some((a) => attachedKey(a) === mentionKey(item)) ? r : [...r, ref]));
+      if (item.type === "lore") {
+        attach({ kind: "lore", entity: item.entity });
+      } else if (item.file.kind === "image") {
+        try {
+          // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
+          const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
+          // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
+          // 一条悄悄少了张图的消息从记录上根本看不出来。
+          if (bytes.length > MAX_IMAGE_BYTES) {
+            setRefError(t("roleplay.composer.imageTooLarge", {
+              name: item.file.name,
+              size: (bytes.length / 1024 / 1024).toFixed(1),
+              max: MAX_IMAGE_BYTES / 1024 / 1024,
+              defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+            }));
+            return;
+          }
+          attach({ kind: "image", file: item.file, dataUrl, downscaled });
+        } catch {
+          setRefError(t("roleplay.composer.refUnreadable", {
+            name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;
         }
-        attach({ kind: "image", file: item.file, dataUrl, downscaled });
-      } catch {
-        setRefError(t("roleplay.composer.refUnreadable", {
-          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
-        }));
-        return;
+      } else if (projectPath) {
+        try {
+          const content = await readFile(item.file.path);
+          attach({ kind: "text", file: item.file, content });
+        } catch {
+          setRefError(t("roleplay.composer.refUnreadable", {
+            name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+          }));
+          return;
+        }
       }
-    } else if (projectPath) {
-      try {
-        const content = await trackRead(readFile(item.file.path));
-        attach({ kind: "text", file: item.file, content });
-      } catch {
-        setRefError(t("roleplay.composer.refUnreadable", {
-          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
-        }));
-        return;
-      }
-    }
-    // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
-    // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
-    // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
-    // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
-    const sel = selectionOf(taRef.current);
-    setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, sel);
-      placeSelection(landed.sel, landed.text);
-      return landed.text;
+      // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
+      // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
+      // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
+      // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
+      const sel = selectionOf(taRef.current);
+      setDraft((now) => {
+        const landed = mention.accept(now, item, claim, projectPath, sel);
+        placeSelection(landed.sel, landed.text);
+        return landed.text;
+      });
     });
   };
 

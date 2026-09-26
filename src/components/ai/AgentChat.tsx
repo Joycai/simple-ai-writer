@@ -340,63 +340,68 @@ export function AgentChat() {
     // Taken before any await: the mention this pick came from.
     const claim = mention.claim(draftRef.current);
     if (!claim) return;
-    setRefError(null);
-    // Appended to whatever the list is *then*, and only once: a second pick
-    // of the same file while the first is still reading is one attachment.
-    const attach = (ref: AttachedItem) =>
-      setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
-    if (item.type === "lore") {
-      attach({ kind: "lore", entity: item.entity });
-    } else {
-      // Shared with the file tree's 发送到助手 — one construction path, so a
-      // file attached from either side is the same attachment. An oversized
-      // picture is refused here rather than at send time: the author is
-      // choosing it *now*, and a message that quietly loses an attachment
-      // minutes later is unexplainable from the transcript.
-      // A video is read only for a model that can take it; otherwise it stays
-      // a path, as it always was.
-      const outcome = await trackRead(attachProjectFile(item.file, { video: canVideo }));
-      if (!outcome.ok) {
-        setRefError(outcome.reason === "too-large"
-          ? t("ai.chat.imageTooLarge", {
-              defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
-              name: item.file.name,
-              size: outcome.sizeMb,
-              max: outcome.maxMb,
-            })
-          : outcome.reason === "too-short"
-          ? t("ai.chat.videoTooShort", {
-              defaultValue: "{{name}} 太短（{{seconds}} 秒）——读视频的端点要求至少 {{min}} 秒",
-              name: item.file.name,
-              seconds: outcome.seconds,
-              min: outcome.minSeconds,
-            })
-          : t("ai.chat.refUnreadable", {
-              defaultValue: "读不到 {{name}}",
-              name: item.file.name,
-            }));
-        return;
+    // Counted as a read until it has *landed*: dropping the count re-renders
+    // at once (a microtask ahead of whatever follows an await), and a queued
+    // send let through by that render would leave with the old draft.
+    await trackRead(async () => {
+      setRefError(null);
+      // Appended to whatever the list is *then*, and only once: a second pick
+      // of the same file while the first is still reading is one attachment.
+      const attach = (ref: AttachedItem) =>
+        setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
+      if (item.type === "lore") {
+        attach({ kind: "lore", entity: item.entity });
+      } else {
+        // Shared with the file tree's 发送到助手 — one construction path, so a
+        // file attached from either side is the same attachment. An oversized
+        // picture is refused here rather than at send time: the author is
+        // choosing it *now*, and a message that quietly loses an attachment
+        // minutes later is unexplainable from the transcript.
+        // A video is read only for a model that can take it; otherwise it stays
+        // a path, as it always was.
+        const outcome = await attachProjectFile(item.file, { video: canVideo });
+        if (!outcome.ok) {
+          setRefError(outcome.reason === "too-large"
+            ? t("ai.chat.imageTooLarge", {
+                defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+                name: item.file.name,
+                size: outcome.sizeMb,
+                max: outcome.maxMb,
+              })
+            : outcome.reason === "too-short"
+            ? t("ai.chat.videoTooShort", {
+                defaultValue: "{{name}} 太短（{{seconds}} 秒）——读视频的端点要求至少 {{min}} 秒",
+                name: item.file.name,
+                seconds: outcome.seconds,
+                min: outcome.minSeconds,
+              })
+            : t("ai.chat.refUnreadable", {
+                defaultValue: "读不到 {{name}}",
+                name: item.file.name,
+              }));
+          return;
+        }
+        attach(outcome.item);
       }
-      attach(outcome.item);
-    }
-    // Spliced into the draft as the store holds it *now* — the updater's
-    // argument, which zustand supplies once — not into this instance's
-    // `draftRef`: switching conversation (or closing the drawer) unmounts this
-    // instance while the read goes on, and if the author comes back and keeps
-    // typing in the new instance, the ref here is frozen at the moment of
-    // leaving; splicing into it would write that stale draft over what they
-    // typed. `setDraft` is bound to this conversation's key, so the write
-    // lands in the same draft whichever instance is on screen.
-    // The selection as it is now, carried through the splice and put back
-    // after the render (useKeptSelection) — null if this instance is gone;
-    // then the new instance keeps its own by reading the edit.
-    const sel = selectionOf(inputRef.current);
-    setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, sel);
-      placeSelection(landed.sel, landed.text);
-      return landed.text;
+      // Spliced into the draft as the store holds it *now* — the updater's
+      // argument, which zustand supplies once — not into this instance's
+      // `draftRef`: switching conversation (or closing the drawer) unmounts this
+      // instance while the read goes on, and if the author comes back and keeps
+      // typing in the new instance, the ref here is frozen at the moment of
+      // leaving; splicing into it would write that stale draft over what they
+      // typed. `setDraft` is bound to this conversation's key, so the write
+      // lands in the same draft whichever instance is on screen.
+      // The selection as it is now, carried through the splice and put back
+      // after the render (useKeptSelection) — null if this instance is gone;
+      // then the new instance keeps its own by reading the edit.
+      const sel = selectionOf(inputRef.current);
+      setDraft((now) => {
+        const landed = mention.accept(now, item, claim, projectPath, sel);
+        placeSelection(landed.sel, landed.text);
+        return landed.text;
+      });
+      inputRef.current?.focus();
     });
-    inputRef.current?.focus();
   };
 
   // A change to the draft that was not ours (see `ownDraft`): move the open

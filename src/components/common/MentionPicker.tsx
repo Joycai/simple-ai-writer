@@ -605,23 +605,34 @@ function subscribeReads(listener: () => void): () => void {
   return () => { readListeners.delete(listener); };
 }
 
-/** Count `read` against `slot` until it settles, resolved or rejected; its outcome passes through. */
-export function trackMentionRead<T>(slot: string, read: Promise<T>): Promise<T> {
+/**
+ * Count `pick` against `slot` until it settles, resolved or rejected; its
+ * outcome passes through. `pick` is the whole pick — the read *and* the
+ * landing — not the read alone (see useMentionReads).
+ */
+export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>): Promise<T> {
   markMentionRead(slot, true);
-  return read.finally(() => markMentionRead(slot, false));
+  try {
+    return await pick();
+  } finally {
+    markMentionRead(slot, false);
+  }
 }
 
 /**
  * `reading`: a file picked into this draft is still being read — hosts gray
- * out sending, as they do for a paste still becoming chips. `track(read)`
- * wraps the read and counts it until it settles, either way. The count drops
- * in `finally`, a microtask ahead of the code after the host's `await`, and
- * no click can run between the two: by the time sending is allowed again the
- * attachment and the landed `@[名字]` are both in the draft.
+ * out sending, as they do for a paste still becoming chips. `track(pick)`
+ * counts a pick until it settles, either way, and `pick` must include the
+ * landing (the attachment and the `@[名字]` written into the draft), not
+ * only the read. Dropping the count notifies React, which re-renders in a
+ * microtask of its own — ahead of whatever follows an `await` of the read —
+ * and that render, draft still unlanded, runs effects: the chat composer's
+ * queued send would go out with it. Counted to the end of the landing, the
+ * render that lets sending through already has both.
  */
-export function useMentionReads(slot: string): { reading: boolean; track: <T>(read: Promise<T>) => Promise<T> } {
+export function useMentionReads(slot: string): { reading: boolean; track: <T>(pick: () => Promise<T>) => Promise<T> } {
   const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
-  const track = useCallback(<T,>(read: Promise<T>) => trackMentionRead(slot, read), [slot]);
+  const track = useCallback(<T,>(pick: () => Promise<T>) => trackMentionRead(slot, pick), [slot]);
   return { reading, track };
 }
 

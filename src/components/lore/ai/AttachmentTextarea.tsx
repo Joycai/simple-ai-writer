@@ -111,32 +111,36 @@ export function AttachmentTextarea({
     // Before the await: the mention this pick came from.
     const claim = mention.claim(latest.current.instruction);
     if (!claim) return;
-    if (item.type === "lore") {
-      onAttachedChange([...latest.current.attached, { kind: "lore", entity: item.entity }]);
-    } else {
-      try {
-        // Resolve first, then append to whatever the list is *now*: appending
-        // to the array this closure captured would drop a chip attached while
-        // the read was in flight.
-        const attachment: AttachedItem = item.file.kind === "image"
-          ? { kind: "image", file: item.file, dataUrl: (await trackRead(imageForModel(item.file.path))).dataUrl }
-          : { kind: "text", file: item.file, content: await trackRead(readTextFileContent(item.file.path)) };
-        // Picked twice while the read was running: the first pick's accept
-        // already closed the claimed mention, and a mention opened since is
-        // not this pick's to close.
-        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) return;
-        onAttachedChange([...latest.current.attached, attachment]);
-      } catch {
-        return; // skip unreadable
+    // Counted as a read until it has landed, not just until the file is
+    // read: dropping the count re-renders at once, ahead of the landing.
+    await trackRead(async () => {
+      if (item.type === "lore") {
+        onAttachedChange([...latest.current.attached, { kind: "lore", entity: item.entity }]);
+      } else {
+        try {
+          // Resolve first, then append to whatever the list is *now*: appending
+          // to the array this closure captured would drop a chip attached while
+          // the read was in flight.
+          const attachment: AttachedItem = item.file.kind === "image"
+            ? { kind: "image", file: item.file, dataUrl: (await imageForModel(item.file.path)).dataUrl }
+            : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
+          // Picked twice while the read was running: the first pick's accept
+          // already closed the claimed mention, and a mention opened since is
+          // not this pick's to close.
+          if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) return;
+          onAttachedChange([...latest.current.attached, attachment]);
+        } catch {
+          return; // skip unreadable
+        }
       }
-    }
-    const landed = mention.accept(
-      latest.current.instruction, item, claim, projectPath,
-      selectionOf(textareaRef.current),
-    );
-    placeSelection(landed.sel, landed.text);
-    onInstructionChange(landed.text);
-    textareaRef.current?.focus();
+      const landed = mention.accept(
+        latest.current.instruction, item, claim, projectPath,
+        selectionOf(textareaRef.current),
+      );
+      placeSelection(landed.sel, landed.text);
+      onInstructionChange(landed.text);
+      textareaRef.current?.focus();
+    });
   };
 
   const removeAttached = (key: string) =>

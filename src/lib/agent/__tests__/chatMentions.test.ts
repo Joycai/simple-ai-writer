@@ -408,7 +408,7 @@ describe("a draft with a pick's file still reading", () => {
 
   it("counts from the read's start until it settles, and passes its result through", async () => {
     const read = deferred<string>();
-    const tracked = trackMentionRead("chat:c1", read.promise);
+    const tracked = trackMentionRead("chat:c1", () => read.promise);
     expect(isMentionReading("chat:c1")).toBe(true);
     read.resolve("潮汐.png");
     await expect(tracked).resolves.toBe("潮汐.png");
@@ -417,7 +417,7 @@ describe("a draft with a pick's file still reading", () => {
 
   it("stops counting a read that fails, and passes the failure through", async () => {
     const read = deferred<string>();
-    const tracked = trackMentionRead("roleplay:沈砚", read.promise);
+    const tracked = trackMentionRead("roleplay:沈砚", () => read.promise);
     read.reject(new Error("读不到"));
     await expect(tracked).rejects.toThrow("读不到");
     expect(isMentionReading("roleplay:沈砚")).toBe(false);
@@ -425,9 +425,9 @@ describe("a draft with a pick's file still reading", () => {
 
   it("keeps drafts apart, and holds one until every read in it is done", async () => {
     const a = deferred<void>(), b = deferred<void>(), other = deferred<void>();
-    const ta = trackMentionRead("chat:c2", a.promise);
-    const tb = trackMentionRead("chat:c2", b.promise);
-    const to = trackMentionRead("chat:c3", other.promise);
+    const ta = trackMentionRead("chat:c2", () => a.promise);
+    const tb = trackMentionRead("chat:c2", () => b.promise);
+    const to = trackMentionRead("chat:c3", () => other.promise);
     a.resolve();
     await ta;
     expect(isMentionReading("chat:c2")).toBe(true);
@@ -440,16 +440,22 @@ describe("a draft with a pick's file still reading", () => {
     expect(isMentionReading("chat:c2")).toBe(false);
   });
 
-  it("is done by the time the code after the host's await runs", async () => {
+  it("holds the draft until the pick has landed, not just until the file is read", async () => {
+    // Dropping the count re-renders at once — a render that let a queued
+    // send through before the landing would send the draft without it.
     const read = deferred<string>();
+    let draft = "看看@潮";
     const seen: boolean[] = [];
-    const pick = (async () => {
-      await trackMentionRead("lore:r1", read.promise);
+    const tracked = trackMentionRead("lore:r1", async () => {
+      const name = await read.promise;
       seen.push(isMentionReading("lore:r1"));
-    })();
-    read.resolve("夜航");
-    await pick;
-    expect(seen).toEqual([false]);
+      draft = `看看@[${name}]`;
+    });
+    read.resolve("潮汐.png");
+    await tracked;
+    expect(seen).toEqual([true]);
+    expect(isMentionReading("lore:r1")).toBe(false);
+    expect(draft).toBe("看看@[潮汐.png]");
   });
 });
 
