@@ -2163,7 +2163,9 @@ astra 「关闭」两面各 400、astra 摘要没流出（那次）、5.6-luna /
   1. `effortWithTools`：gpt-5.6-sol 在 ① 上带工具时一律发 `reasoning_effort: "none"`。这是官方 ① 上 5.4 起的规则
      （[`responses.md`](responses.md) §9 原列为未验，这次拿到了原文），所以官方 `openai` 平台 ① 上 5.4 起的 id 同样处理。
   2. `reasoningOff`：gpt-6-astra 的思考档不再提供「关闭」，行上已存的 `off` 发成 `low`。
-- **没改**：作者给 `gpt-5.6-sol` 设了温度、走 ② 仍是 400（① 上不报错）——那条错误会点名参数。
+- 作者给 `gpt-5.6-sol` 设的温度在 ② 上不再发出（`temperature` 按模型关掉，§8.14）；① 照发。
+- 模型抽屉的计费组一栏按「这个模型在这条线路上报不报价」说话：OrcaRouter 上报价的线路注明「不绑组也有钱数」，
+  5.6-luna / -sol 的 ② 不绑组时给出「用量记 $0」的必读提示（[`01-fee-groups.md`](../feature/billing/01-fee-groups.md)「上游报价」）。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

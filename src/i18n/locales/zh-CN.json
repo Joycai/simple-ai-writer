@@ -2804,7 +2804,12 @@
       "matrixLegend": "✓ 能发 · ? 未实测 · — 不发。上面的开关是你给这个模型的授权，各线路共用；每条线路能不能说出来，看平台。",
       "feeGroupLabel": "计费组",
       "feeGroupHint": "价不在这张表上，在组里。同一组的模型改一次价全改；这个模型的历史用量一分不动——每一行都抄着当时的价。",
-      "feeGroupHintUnbound": "没绑组 ＝ 一分不收，但请求数和 token 照样记下来。补上组之后，之前那些行仍按当时的价（也就是 0）算。"
+      "feeGroupHintUnbound": "没绑组 ＝ 一分不收，但请求数和 token 照样记下来。补上组之后，之前那些行仍按当时的价（也就是 0）算。",
+      "feeGroupHintReported": "这条线路由上游报价：不绑组也有钱数。绑了组，账上仍以报价为准，组价只在某次没报时顶上。",
+      "feeReportedNote": "上游报价 · 每次请求按 {{platform}} 回报的实扣记账",
+      "feeReportedNoteBound": "上游报价 · 组价只在某次没报时顶上",
+      "feeUnreportedWarn": "{{platform}} 在这条线路上不回报这个模型的花费。不绑组，它的用量记 $0。",
+      "feeUnreportedNote": "这条线路不回报价 · 按组价记账"
     },
     "probe": {
       "title": "探测真实上限",

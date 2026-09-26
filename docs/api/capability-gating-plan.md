@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）；思考档位的两格 `effortWithTools` / `reasoningOff` 见 §8.13。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）；思考档位的两格 `effortWithTools` / `reasoningOff` 见 §8.13，gpt-5.6-sol 的温度见 §8.14。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -545,7 +545,20 @@ Responses 上温度被改成 1；网关没有联网搜索，温度非 1 整条 5
 
 **有意留下的。**
 
-- 作者给 gpt-5.6-sol 设了温度、走 ② 仍然 400（`Unsupported parameter: 'temperature' is not supported with this model.`）。
-  这条会点名参数，作者看得懂；① 上同一温度 200，而 GPT 的温度格按上游裁决的方式（§8.12）是另一件事，没一并改。
+- ~~作者给 gpt-5.6-sol 设了温度、走 ② 仍然 400。~~ 后续（2026-09-27，作者决定改）：见 §8.14。
 - gpt-5.6-sol 在 ① 上 `reasoning_effort: "max"` / `"minimal"` 是 400（原因被吞）。只看到了这一个 id，② 上同档 200；没进表。
 - 官方 `openai` 的那格来自经网关的 OpenAI 原文，不是直连实测；`gpt-6` 在官方 ① 上是否同样拒收，没有样本，不写。
+
+### 8.14 按模型关掉温度：gpt-5.6-sol 的 Responses（2026-09-27）
+
+**问题。** §8.13 有意留下的一条：作者给 gpt-5.6-sol 设了温度，走 ② 就 400
+（`Unsupported parameter: 'temperature' is not supported with this model.`，OpenAI 原文）。同一 id 的 ① 收下温度、200；
+gpt-5.6-luna 的 ② 带温度会被网关分流到翻译层，200 且回显。
+
+**决定**（作者决定改）。`temperature` 格按模型点名，只写样本看到拒收的那一格：OrcaRouter ② 上 `openai/gpt-5.6-sol`，
+官方 `openai` ② 上 `gpt-5.6-sol`（网关给的就是 OpenAI 原样回包）。为 `no` 时适配器不发温度，模型抽屉里温度一栏折起
+（抽屉本来就问这一格，不需要新 UI）。
+
+**为什么只点名一个 id。** 5.6-luna 在网关上收温度（分流后），点名只会让它白白丢掉作者的设置；官方直连上 GPT-5 其他型号
+收不收，没有样本。§8.12 的「上游决定温度」是中转站上的事，这里是一个模型在它自己的线路上拒收，按模型格表达更准。
+

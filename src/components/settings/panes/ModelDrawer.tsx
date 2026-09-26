@@ -28,6 +28,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
 import { feeSummary } from "../../../lib/ai/feeGroupLabel";
 import { feeGroupOptions } from "../../../lib/ai/feeGroupList";
+import { costReportingPlatform, reportsCostFor } from "../../../lib/ai/reportedCost";
 import { useFeeLabelWords } from "./feeWords";
 import { familyOf, TEXT_VERBOSITIES, type ImageRoute, type ProtocolFamily, type TextVerbosity } from "../../../lib/ai/types";
 import { isComfyUiEnabled } from "../../../lib/comfy/flag";
@@ -799,6 +800,23 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // 这一节「有值」＝ 绑了组。全 0 的组（本机 Ollama）也算绑了：作者做过
   // 一个决定，只是那个决定是「不收钱」。
   const priceHas = !!form.feeGroupId;
+  // 上游报价（lib/ai/reportedCost）：平台报价时，账上以报价为准，组价只在某次没报时顶上；
+  // 平台报价却不给这个模型报（OrcaRouter 上 5.6-luna / -sol 的 ②），不绑组就记 $0。
+  // 设计稿：本分支 PR 的 1a–1e 五态（照稿实现）。
+  const costPlatform = provider
+    ? costReportingPlatform({ platform: provider.platform, baseUrl: provider.baseUrl, standard: provider.apiStandard })
+    : undefined;
+  const costReported = !!provider && !!costPlatform
+    && reportsCostFor({ platform: provider.platform, baseUrl: provider.baseUrl, standard: provider.apiStandard }, form.modelId);
+  const costPlatformName = costPlatform ? t(`aiConfig.platforms.${costPlatform}`) : "";
+  const feeNote = !costPlatform
+    ? undefined
+    : costReported
+      ? t(boundFeeGroup ? "aiConfig.models.feeReportedNoteBound" : "aiConfig.models.feeReportedNote", { platform: costPlatformName })
+      : boundFeeGroup ? t("aiConfig.models.feeUnreportedNote") : undefined;
+  const feeHint = boundFeeGroup
+    ? t("aiConfig.models.feeGroupHint")
+    : costReported ? t("aiConfig.models.feeGroupHintReported") : t("aiConfig.models.feeGroupHintUnbound");
 
   const limitsHas = parsedCtx > 0 || parsedOut > 0;
   const limitsSum = [
@@ -1246,9 +1264,15 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           summary={feeSummary(boundFeeGroup, feeWords)}
           unset={!boundFeeGroup}
         >
-          <Field label={t("aiConfig.models.feeGroupLabel")} hint={
-            boundFeeGroup ? t("aiConfig.models.feeGroupHint") : t("aiConfig.models.feeGroupHintUnbound")
-          }>
+          <Field
+            label={t("aiConfig.models.feeGroupLabel")}
+            hint={feeHint}
+            note={feeNote}
+            noteTone={costReported ? "ok" : "faint"}
+            warn={costPlatform && !costReported && !boundFeeGroup
+              ? t("aiConfig.models.feeUnreportedWarn", { platform: costPlatformName })
+              : undefined}
+          >
             {/* 应用自己的下拉，不是原生 `<select>`：浏览器的弹出菜单没法主题化，
                 而这个列表要按厂商分段、还要能搜。「未绑定」是一个 value 为空的
                 **真选择**（不是 placeholder），所以它在列表里排第一。 */}

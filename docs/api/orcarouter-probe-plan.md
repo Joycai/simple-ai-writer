@@ -227,6 +227,10 @@ live：`live.orcarouter.test.ts` 加四面报价、④③ PDF、Gemini 三个内
 官方 `openai` ① 上 5.4 起同理）与 `reasoningOff`（astra 不列「关闭」，`off` 发 `low`），决定与理由在
 [`capability-gating-plan.md`](capability-gating-plan.md) §8.13。live 文件修复前 GPT 组 83/90，落地后整份 139/139。
 
-**没做的**：5.6-sol 在 ② 上设温度仍 400（错误点名参数）；5.6-sol ① 拒 `max` / `minimal` 没进表（只见一个 id，② 上同档可用）；
-5.6-luna / -sol 走 ② 不报价，没有替作者自动建计费组——绑组是作者的事，文档里写明了。
+**后续**（同日，作者决定改）：5.6-sol 在 ② 上的温度按模型关掉（[`capability-gating-plan.md`](capability-gating-plan.md) §8.14）；
+模型抽屉的计费组一栏按报不报价分三种说法，5.6-luna / -sol 的 ② 不绑组时给必读提示（[`01-fee-groups.md`](../feature/billing/01-fee-groups.md)
+「上游报价」）。
+
+**没做的**：5.6-sol ① 拒 `max` / `minimal` 没进表（只见一个 id，② 上同档可用）；没有替作者自动建计费组——绑组是作者的事，
+抽屉会提示。
 

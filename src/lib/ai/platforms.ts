@@ -148,8 +148,13 @@ interface PlatformProfile {
    * cost overrides the model's whole fee group (`reportedCost.ts`), so a relay
    * that merely returns a field of the same name is not taken at its word.
    * `header`: what the request must carry for the platform to report at all.
+   * `unreported`: model ids a route answers without any cost, per family —
+   * where the author has to bind a fee group for the row to carry a price.
    */
-  reportsCost?: { header?: readonly [name: string, value: string] };
+  reportsCost?: {
+    header?: readonly [name: string, value: string];
+    unreported?: Partial<Record<ProtocolFamily, readonly RegExp[]>>;
+  };
   /** Where the entries above were measured. */
   source: string;
 }
@@ -368,8 +373,13 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // `total_cost` (① ② to within one 1/500,000-dollar billing unit). ④ and ③
     // report it only when asked with this header; ① ② report it either way.
     // ②'s verbatim route (`store: true`, or an `include` of
-    // `web_search_call.action.sources` — this app sends neither) reports none.
-    reportsCost: { header: ["X-OrcaRouter-Include-Cost", "true"] },
+    // `web_search_call.action.sources` — this app sends neither) reports none,
+    // and it is where gpt-5.6-luna / -sol's Responses requests land by default
+    // (GPT 全家补测: `resp_…` ids, no cost field with or without the header).
+    reportsCost: {
+      header: ["X-OrcaRouter-Include-Cost", "true"],
+      unreported: { responses: [/^openai\/gpt-5\.6-(?:luna|sol)$/] },
+    },
     // Two things this app must not start doing here (第十八个样本):
     // - Call a token-count endpoint. ③'s `:countTokens` runs — and bills — a
     //   full generateContent; ④'s `/v1/messages/count_tokens` is not routed
