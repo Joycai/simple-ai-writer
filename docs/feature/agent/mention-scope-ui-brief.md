@@ -101,5 +101,5 @@
 
 ### 未做、可做
 
-- claim 的位置追踪是在单段 `editRange` 上一层层打的补丁，三轮修复都没收住（复盘见 [`mention-fixes-retro.md`](mention-fixes-retro.md)）。再碰这块，先评估换形状：所有草稿写入收进 store 的一个入口统一平移按槽位共享的 claim 表，或落字时按内容就近找 `@query`。
+- claim 的位置追踪是在单段 `editRange` 上一层层打的补丁，三轮修复都没收住——根因是没在模块层面重构（复盘见 [`mention-fixes-retro.md`](mention-fixes-retro.md)）。再碰这块，先做重构，不再补：所有草稿写入收进 store 的一个入口统一平移按槽位共享的 claim 表，或落字时按内容就近找 `@query`。
 - 空查询时条目不再天然靠前，扮演面板里作者多半 `@` 条目：打一个字或一个 Tab 就到了，先不为扮演单独设默认档。
