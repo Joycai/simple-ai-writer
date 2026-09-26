@@ -453,7 +453,7 @@ describe("streamCompletion — Gemini SSE", () => {
   it("maps the app's levels onto Gemini's upper-case enum", async () => {
     for (const [effort, level] of [
       // No way to disable thinking in this family — "off" is the floor.
-      ["off", "MINIMAL"], ["low", "LOW"], ["medium", "MEDIUM"],
+      ["off", "LOW"], ["low", "LOW"], ["medium", "MEDIUM"],
       // The enum stops at HIGH, so "max" lands there too.
       ["high", "HIGH"], ["max", "HIGH"],
     ] as const) {

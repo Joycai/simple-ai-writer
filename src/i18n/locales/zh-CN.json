@@ -2605,7 +2605,7 @@
       "thinkingCatResponsesEffort": "OpenAI Responses (reasoning.effort)",
       "thinkingCatResponsesEffortHint": "reasoning.effort 档位（none/low/medium/high/xhigh/max）并随开启一起要求思考摘要（summary:auto）。上限按模型：GPT-5.4 到 xhigh，5.5 / 5.6 到 max；越界时端点会以 400 列出合法档位。「关闭」发 effort:none。Grok 4.5 / 4.6 无法关闭思考，选「关闭」会被端点拒绝（400），最低请选「低」；Grok 也不收 max。",
       "thinkingCatGemini3": "Gemini 3",
-      "thinkingCatGemini3Hint": "thinkingLevel 档位（minimal/low/medium/high）并返回思考摘要；「关闭」按 minimal 处理（该族无法真正关闭思考）。",
+      "thinkingCatGemini3Hint": "thinkingLevel 档位（low/medium/high）并返回思考摘要；「关闭」按 low 处理（该族无法真正关闭思考，且部分型号不收 minimal）。",
       "thinkingCatClaudeAdaptive": "Claude 自适应 (4.6+)",
       "thinkingCatClaudeAdaptiveHint": "thinking:adaptive + output_config.effort（力度作用于整段回复，不只是思考）。当代 Claude（含 4.7/4.8/5）的标准写法。",
       "thinkingCatClaudeBudget": "Claude 预算 (4.5-)",

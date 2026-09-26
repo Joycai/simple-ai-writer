@@ -307,7 +307,8 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatGemini3",
     hintKey: "aiConfig.models.thinkingCatGemini3Hint",
     family: "gemini", dialect: "none", shape: "levels",
-    // `off` maps to MINIMAL (this family has no true off) — see GEMINI_LEVEL.
+    // `off` maps to LOW (this family has no true off, and MINIMAL is not
+    // taken everywhere) — see GEMINI_LEVEL.
     menu: ["off", "low", "medium", "high"],
   },
   "claude-adaptive": {
@@ -638,11 +639,16 @@ function effortWire(
  * `thinking_level` seen in the guides belongs to the newer Interactions API, a
  * different surface (see `docs/api/landscape.md` §4.1).
  *
- * Two levels collapse. `off` maps to `MINIMAL` because this family has no way
- * to turn thinking off at all — the docs say plainly that "`minimal` does not
- * guarantee that thinking is off", so the UI's "off" is honestly "as little as
- * this model allows", same as on Anthropic. `max` maps to `HIGH` because the
- * enum stops there.
+ * Three levels collapse. `off` maps to `LOW`, the least thinking every Gemini 3
+ * model takes: the family has no way to turn thinking off at all, and
+ * `MINIMAL` — the docs' "does not guarantee that thinking is off" — is not
+ * taken everywhere: gemini-3.8-flash answered 400 "Thinking level MINIMAL is
+ * not supported for this model" (landscape.md §7 第十八个样本).
+ * An error for the one setting that asks for the least is the worst trade;
+ * a few hundred extra thinking tokens on a model that would have taken
+ * MINIMAL is the cheap one. So the UI's "off" is honestly "as little as any
+ * Gemini 3 allows", and `minimal` follows it. `max` maps to `HIGH` because
+ * the enum stops there.
  *
  * `thinkingBudget` — the older numeric form — is deliberately never sent: it
  * lives in the same object and is distinguished only by which models accept it,
@@ -650,8 +656,8 @@ function effortWire(
  * documented input.
  */
 const GEMINI_LEVEL: Record<Exclude<ReasoningEffort, "default">, string> = {
-  off: "MINIMAL",
-  minimal: "MINIMAL",
+  off: "LOW",
+  minimal: "LOW",
   low: "LOW",
   medium: "MEDIUM",
   high: "HIGH",
