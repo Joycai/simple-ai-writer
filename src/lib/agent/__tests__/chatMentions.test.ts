@@ -476,6 +476,13 @@ describe("moveClaims", () => {
     expect(ahead.get(1)!.start).toBe(2);
   });
 
+  it("carries a glued pick through its own line kind — only another instance's landing reads as `@[`", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 3, query: "潮", glued: true }]]);
+    const line = "我看着@潮[注]";
+    moveClaims(p, line, applyLineKind(line, line.length, "action").text);
+    expect(p.get(1)).toEqual({ id: 1, start: 4, query: "潮", glued: true });
+  });
+
   it("ignores a caret that is not where the edit could have been made", () => {
     const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
     moveClaims(p, "看看@潮，", "看看@潮，好", 1);
@@ -495,7 +502,7 @@ describe("shiftClaims through a span that covers a pick", () => {
   it("never carries a glued pick, nor an empty one a reference now follows — both read as landed on", () => {
     const glued = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: true }]]);
     shiftClaims(glued, "我@[草稿]", "你我@[潮汐.png][草稿]，");
-    expect(glued.get(1)!.start).toBe(1);
+    expect(glued.get(1)).toEqual({ id: 1, start: 1, query: "", glued: false });
     const empty = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: false }]]);
     moveClaims(empty, "我@夜", "你我@[潮汐.png]夜，");
     expect(empty.get(1)!.start).toBe(1);

@@ -1368,7 +1368,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                   : t("roleplay.composer.placeholder", { defaultValue: "说一句台词，或写一个动作…" })
               }
               onChange={(e) => {
-                setDraft(e.target.value, e.target.selectionStart);
+                // 选区终点定位这次改动（撤销恢复的字可能保持选中），起点是作者在打的位置。
+                setDraft(e.target.value, e.target.selectionEnd);
                 mention.sync(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={onKeyDown}

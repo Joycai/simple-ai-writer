@@ -357,15 +357,12 @@ const CLAIM_SPAN_DISTANCE = 400;
  * the claim as one. The span alone is aligned character by character
  * (lib/diff's Myers) and the claim's `@` followed through it; it counts as
  * carried only if the new text there still reads as its mention — a landing
- * on that `@` (now `@[`) or a rewrite of its letters stays run over. A glued
- * claim is never carried (see inside). Where the span repeats the claim's
+ * on that `@` (now `@[`) or a rewrite of its letters stays run over. For
+ * another instance's edit a glued claim is not carried (see shiftClaims). Where the span repeats the claim's
  * `@query` and its own was taken out, the alignment may pick the other one —
  * the one case this can carry a claim somewhere it was not.
  */
 function claimThrough(c: MentionClaim, before: string, after: string, edit: { start: number; end: number; delta: number }): number | null {
-  // Glued, the `[` after its `@` was prose, and a reference landed on that
-  // `@` reads the same (`@[`) — told apart only by the old rule, not here.
-  if (c.glued) return null;
   const was = before.slice(edit.start, edit.end);
   const now = after.slice(edit.start, edit.end + edit.delta);
   if (was.length + now.length > CLAIM_SPAN_MAX) return null;
@@ -394,7 +391,10 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
   if (edit.delta === 0 && edit.start === edit.end) return;
   for (const [id, c] of pending) {
     if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
-    const carried = c.start >= edit.start ? claimThrough(c, before, after, edit) : null;
+    // Glued, the `[` after its `@` was prose, and a reference another
+    // instance landed on that `@` reads the same (`@[`) — so it is told apart
+    // by the old rule only. Our own writes land through `landing`, never here.
+    const carried = c.start >= edit.start && !c.glued ? claimThrough(c, before, after, edit) : null;
     if (carried !== null) pending.set(id, { ...c, start: carried });
     else if (c.glued && inEdit(c.start, c.query, edit)) pending.set(id, { ...c, glued: false });
   }
@@ -411,7 +411,8 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
  * `shiftClaims`, `glued` is kept: typing on through a query is not a
  * reference landed on it.
  *
- * `caret`, where the host's caret is after the write, says where a pure
+ * `caret`, where the host's caret is after the write (the selection's end:
+ * text restored by undo or dropped in may be left selected), says where a pure
  * insertion or deletion was made when `editRange` cannot: inserted or
  * deleted text repeating its neighbours reads as made anywhere along the
  * repeat (`@` put in right ahead of `@潮`, or right after an empty `@`, or

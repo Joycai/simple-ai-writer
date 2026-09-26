@@ -338,9 +338,10 @@ export function AgentChat() {
   };
 
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const caret = e.target.selectionStart ?? e.target.value.length;
-    setDraft(e.target.value, caret);
-    mention.sync(e.target.value, caret);
+    // The selection's end places the edit (text restored by undo may be left
+    // selected); its start is where the author is typing.
+    setDraft(e.target.value, e.target.selectionEnd ?? e.target.value.length);
+    mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
   };
 
   const handlePickMention = async (item: MentionItem) => {
