@@ -1043,7 +1043,8 @@ GoogleCloudPlatform/generative-ai 的 `intro_gemini_3_1_flash_image_gen.ipynb`�
   与 Claude 模型有效（后者翻成 Anthropic 的 `web_search` 服务端工具），Gemini
   靠一个**保留函数名** `googleSearch`（还有 `codeExecution` / `urlContext`）
   ——发一个没有 parameters 的 function 工具，网关换成原生内置工具。这三种都
-  是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具，目前**没有接**。
+  是 `serverTools.ts` 那一类"端点自己跑、本地无事可做"的工具。① 上这条保留函数名的路**没有接**；
+  ③ 线路上用 Gemini 原生的 `tools[]` 写法已接（第十八个样本「再补测」D）。
 - **错误信封是 OpenAI 形态**（`error.{message,type,code}`），`type` 区分网关
   自身（`orcarouter_api_error`）与上游透传（`upstream_error` / `claude_error` /
   `gemini_error`）——文档如此；第十八个样本实测时 ③④ 的上游错误都被改写成 OpenAI 形，
@@ -1879,8 +1880,8 @@ Responses adapter：
 
 | 面 | 回包里的证据 | 结论 |
 | --- | --- | --- |
-| ④ `/v1/messages` | `msg_011C…` id、不透明 base64 `signature`、`usage.cache_creation` 分项、`service_tier`、`inference_geo`、`stop_details`、`context_management` | **回包是 Anthropic 原样**（只多一个 `usage.cost_usd`） |
-| ③ `/v1beta/…:generateContent` | `responseId`、`modelVersion`、**`createTime` 与 `usageMetadata.trafficType: "ON_DEMAND"`**、`thoughtSignature` | **回包是 Vertex AI 原样**（Vertex 专有字段；只多一个 `usageMetadata.costUsd`） |
+| ④ `/v1/messages` | `msg_011C…` id、不透明 base64 `signature`、`usage.cache_creation` 分项、`service_tier`、`inference_geo`、`stop_details`、`context_management` | **回包是 Anthropic 原样**（带 `X-OrcaRouter-Include-Cost: true` 头时多一个 `usage.cost_usd`） |
+| ③ `/v1beta/…:generateContent` | `responseId`、`modelVersion`、**`createTime` 与 `usageMetadata.trafficType: "ON_DEMAND"`**、`thoughtSignature` | **回包是 Vertex AI 原样**（Vertex 专有字段；带同一个头时多一个 `usageMetadata.costUsd`） |
 | ① `/v1/chat/completions`（GPT） | `id: "gen-…"`、`provider: "OpenAI"`、`native_finish_reason`、`usage.cost` / `is_byok` / `cost_details.upstream_inference_cost`、`reasoning_details[]`（`format: "openai-responses-v1"`，密文尾部 base64 解出 `{"endpoint_slug":"openai/gpt-6-luna-20260922\|openai"}`） | **OpenRouter 形态**——网关把 ① 转给了一层 OpenRouter 式的翻译，上游再走 Responses |
 | ② `/v1/responses`，默认 | `id: "gen-…"`、`msg_tmp_…` / `fc_tmp_…` 伪造的 item id、`summary:"auto"` 回显成 `"detailed"`、`store` 恒 `false`、`usage.cost`；terra 的 reasoning `format: "azure-openai-responses-v1"` | 同上的 OpenRouter 形态；terra 的上游是 Azure，luna 是 OpenAI |
 | ② `/v1/responses`，带 `store: true` 或 `include` 含 `web_search_call.action.sources` | `resp_…` id、`billing`、`tool_usage`、`access_programs`、`moderation`、`prompt_cache_retention: "24h"`、`text.verbosity`、默认 `store: true`；**没有**任何 cost 字段 | **OpenAI 原样**。同一端点按请求里的字段分流到两套后端；`tools:[{type:"web_search"}]`、`include:["reasoning.encrypted_content"]`、`text.verbosity` 都**不**触发分流 |
@@ -1931,7 +1932,8 @@ Responses adapter：
 - **结构化输出**：`responseJsonSchema` 与旧的 `responseSchema`（大写类型）都生效；prompt 要求 `yellow` 而 enum 只有
   red/green/blue 时，回 `red`——**强制是真的**。
 - **内置工具**：`googleSearch` → `groundingMetadata{webSearchQueries, searchEntryPoint.renderedContent, groundingChunks
-  (vertexaisearch 重定向 URL), groundingSupports}`，一次 **$0.028**（检索费远高于 token 费）；`codeExecution` →
+  (vertexaisearch 重定向 URL), groundingSupports}`，**按查询条数计费、约 $0.014 一条**（那次搜了两条 = $0.028；
+  检索费远高于 token 费，见「再补测」D）；`codeExecution` →
   `executableCode{language, code, id}` + `codeExecutionResult{outcome, output, id}`，`usageMetadata.toolUsePromptTokenCount`；
   `urlContext` → `urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]` 加 `groundingMetadata`。
 - **图片**：`inlineData` 与 `inline_data`（蛇形）都收；一张 16×16 的 PNG 记 **1,098** 个 prompt token（默认媒体分辨率）。
@@ -1960,8 +1962,9 @@ Responses adapter：
 **网关自己的东西：**
 
 - 响应头只有 `x-orca-request-id` / **`x-orca-route: model=…; fallback=0`**（文档里没有）/ `x-orca-version`，不漏任何上游头。
-- 花费：④ 在 `usage.cost_usd`、③ 在 `usageMetadata.costUsd`、① 两个都有、② 默认线路只有 OpenRouter 的 `usage.cost`、② 原样线路
-  **没有**；`X-OrcaRouter-Include-Cost` 头对 ② 无效。`GET /v1/generation?id=` 都查得到（`total_cost`，外加 New API 的
+- 花费：④ 在 `usage.cost_usd`、③ 在 `usageMetadata.costUsd`——**都要带 `X-OrcaRouter-Include-Cost: true` 头才有**（这里的观察是
+  带着头测的，「再补测」A 补上了不带头的对照）；① 非流式两个都有、流式末块只有 `usage.cost`；② 默认线路只有 OpenRouter 的
+  `usage.cost`、② 原样线路**没有**；这个头对 ①② 无效。`GET /v1/generation?id=` 都查得到（`total_cost`，外加 New API 的
   `quota` = 美元 × 500,000）。
 - **错误信封全被改写成 OpenAI 形**，且有 New API 的指纹：③ 是 `{"error":{"message", "type":"invalid_argument", "param":"",
   "code":400}}`（原文保留，但路径与 URL 被打成 `***`）；④ 是 `{"error":{"type":"<nil>", "message":"***.***.content.0: … (request id: …)"},
@@ -1997,6 +2000,54 @@ Responses adapter：
 据此本项目打开 ④ 族的结构化输出（只有严格档）：[`structured-output-plan.md`](structured-output-plan.md) §13。
 本项目 Claude 的「关闭」思考档本来就发 `adaptive` + `effort: low` 而不是 `disabled`，所以 Opus 5.5 / Fable 5.1
 拒收 `disabled` 不影响本项目。
+
+**再补测：流式花费、PDF、Gemini 内置工具（同日，按应用真实会发的形态，脚本约 20 次 + live 用例 8 条）。**
+
+A. **流式请求里的花费**（本项目只发流式，前面的结论来自非流式）：
+
+| 线路 | 不带头 | 带 `X-OrcaRouter-Include-Cost: true` | 与 `GET /v1/generation` 的 `total_cost` |
+| --- | --- | --- | --- |
+| ④ Messages 流 | **没有** | `message_delta.usage.cost_usd`（`message_start` 里没有） | 相等 |
+| ③ `streamGenerateContent` | **没有** | 末块 `usageMetadata.costUsd` | 相等 |
+| ① Chat 流（`include_usage`） | 末块 `usage.cost`（没有 `cost_usd`） | 同左 | 差不到一个计价单位（网关按 1/500,000 美元取整） |
+| ② Responses 默认线路 | `response.completed.response.usage.cost` | 同左 | 同上 |
+| ② 原样线路（`store: true`） | **没有** | — | 查得到，回包里拿不到 |
+
+B. **PDF 输入**（一份自造单页 PDF，问里面的口令）：① `file` 部件、② `input_file`、④ `document`（sonnet-5、opus-5.5）、
+③ `inlineData application/pdf` **全部答对**。③ 把这页 PDF 按图像计 520 token；④ sonnet-5 那次在请求**没带** `cache_control`
+的情况下记了 1,630 个缓存写入 token（opus 那次没有，原因未明，只记录）。
+
+C. **目录**（`GET /v1/models`，203 条）：gpt-6-astra / luna / sol、gpt-5.6-terra 的 `context_length` / `max_completion_tokens` 是
+1,050,000 / 128,000；claude-fable-5.1 / opus-5.5 / sonnet-5 是 1,000,000 / 128,000；gemini-3.8-flash 是 1,048,576 / 65,536。
+八个的 `architecture.input_modalities` 都含 `file`。
+
+D. **Gemini 内置工具，按适配器会发的形态**（gemini-3.8-flash，流式，思考 LOW，每次都带一个 `functionDeclarations` 函数工具）
+——全部 200：
+
+| 组合 | 流里出现的东西 |
+| --- | --- |
+| `googleSearch` + 函数 | 末块（带 `finishReason`）上 `groundingMetadata{webSearchQueries[], groundingChunks[{web:{uri,title,domain}}], searchEntryPoint}`；`uri` 是 vertexaisearch 跳转链接，`title` 是网站域名 |
+| 同上，模型两样都用 | 同一块里 `functionCall`（带签名）+ `groundingMetadata`——搜索和函数调用可以同一轮 |
+| `googleSearch` + 函数 + `functionCallingConfig.mode: "ANY"` | 先搜两条，再按要求调用函数 |
+| `googleSearch` + `responseMimeType: application/json` + `responseJsonSchema`（再加函数也一样） | 合 schema 的 JSON；加函数的那次搜了 **6 条，$0.084** |
+| `codeExecution` + 函数 | 独立的块：`executableCode{language, code, id}`（带签名）→ `codeExecutionResult{outcome:"OUTCOME_OK", output, id}` → 文本 |
+| 上一条的回灌 | `executableCode` / `codeExecutionResult` part 原样放回 model 轮 → 200，答案用上了上一轮算出的数 |
+| `urlContext`（单独，或加 `googleSearch`）+ 函数 | **首块**就有 `urlContextMetadata.urlMetadata[{retrievedUrl, urlRetrievalStatus}]`，末块 `groundingMetadata.groundingChunks` 给出真实 `uri` 与页面标题——但没有 `webSearchQueries` |
+
+计费：搜索**按查询条数**，一条约 $0.014，一次回答搜几条由模型决定、这个协议没有上限字段可发；代码执行与读网页的
+回填内容记在 `usageMetadata.toolUsePromptTokenCount`，它**在 `promptTokenCount` 之外**（实测 20 + 65 + 77 = 总数 162）。
+花费都进了带头的 `costUsd`。
+
+**对本项目**（同日落地，方案在 [`orcarouter-probe-plan.md`](orcarouter-probe-plan.md) §「再补测落地」）：
+
+- 上游报价接进用量账：`platforms.ts` 的 `reportsCost` 声明信任（只有 OrcaRouter，四个适配器带上那个头），
+  `reportedCost.ts` 是字段名翻译的唯一一处；多次请求合成一行时「全报才加」。规则写在
+  [`01-fee-groups.md`](../feature/billing/01-fee-groups.md)。
+- 八个付费 id 进 orcarouter 的标定表（目录数值 + 多模态 + PDF），新渠道带三个钉好线路的付费起步模型。
+- 能力格：orcarouter ④③ 与 anthropic 官方 ④ 的 `pdfInput` 打开；官方 google 不动（③ 背后是 Vertex，不是 AI Studio）。
+- Gemini 适配器支持 `web_search` / `web_extractor` / `code_interpreter` → `googleSearch` / `urlContext` / `codeExecution`，
+  执行日志照其他线路显示；`toolUsePromptTokenCount` 计进输入 token（[`tools.md`](tools.md)）。
+- 不调计数端点、不按错误信封的 `type` 判类——写在 `platforms.ts` orcarouter 条目旁。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 
