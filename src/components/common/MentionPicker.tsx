@@ -23,7 +23,7 @@
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -31,6 +31,7 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
+import { endsInsideToken, mentionToken } from "../../lib/agent/mentionText";
 import {
   availableScopes,
   countByScope,
@@ -78,8 +79,6 @@ const MAX_QUERY_LEN = 24;
 
 /** What ends a mention besides ASCII whitespace: full-width space and CJK punctuation. */
 const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
-/** An `@[` still open at the end of the text before an `@`: see findMention. */
-const INSIDE_LANDED = new RegExp(`@\\[[^\\]\\n${CJK_TERMINATORS.source.slice(1, -1)}]*$`);
 
 /**
  * Where an `@` mention begins, given the text and the caret.
@@ -93,10 +92,12 @@ const INSIDE_LANDED = new RegExp(`@\\[[^\\]\\n${CJK_TERMINATORS.source.slice(1, 
  * there eating ↑↓, Tab and the first Esc. So `@[` never opens, an `@` inside
  * an unclosed `@[…` (a name that itself holds one, `封面@2x.png`) never opens,
  * and a name that starts with `[` is reached by a word inside it — the same
- * as a name starting with `【`, which was always a terminator. The unclosed
- * `@[…` ends at a newline or a CJK terminator, not at a space (names have
- * spaces), so an author-typed `@[` costs the `@`s up to the next 「，」 on that
- * line — a deliberate price.
+ * as a name starting with `【`, which was always a terminator. Brackets are
+ * counted the way the token's readers count them (mentionText
+ * `endsInsideToken`). The unclosed `@[…` ends at a newline, at the next `@[`
+ * (a name never holds one) or at a CJK terminator, not at a space (names
+ * have spaces), so an author-typed `@[` costs the `@`s up to the next 「，」
+ * or `@[` on that line — a deliberate price.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);
@@ -108,7 +109,9 @@ export function findMention(text: string, caret: number): { start: number; query
   // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
   // Inside a landed reference: `@[图标@2x.png]的` — the last `@` is the name's.
-  if (INSIDE_LANDED.test(before.slice(0, at))) return null;
+  // Brackets counted the way the token's readers count them (mentionText):
+  // `@[手稿[旧]@2x.png]` is still open after its inner `@`.
+  if (endsInsideToken(before.slice(0, at), (c) => CJK_TERMINATORS.test(c))) return null;
   const query = before.slice(at + 1);
   // A landed reference, or the caret after one whose name held an `@` past a
   // 「（」 or 「，」 (where the rule above stops): a query never holds `]`.
@@ -141,15 +144,27 @@ export interface MentionState {
    */
   claim: (text: string) => MentionClaim | null;
   /**
-   * Replace the claimed mention with `@[名字]`, returning the new text — at
-   * the place the mention is *now*, after whatever was typed or landed
-   * during the read (see acceptPick). A second accept on the same mention
+   * Replace the claimed mention with `@[名字]`, returning the new text and
+   * caret (below) — at the place the mention is *now*, after whatever was
+   * typed or landed during the read (see acceptPick). A second accept on the same mention
    * is a no-op (a double-click, or Enter twice on a slow file); a mention
    * opened since on a later `@` is shifted by the splice; one reopened on
    * the claimed `@` closes with it. `projectPath` is for judging whether
    * letters typed during the read still point at `item`.
+   *
+   * `caret` is the input's caret as the host reads it now; the returned one
+   * is that caret carried through the splice (`caretThrough`) — null when
+   * nothing landed or no caret was given. The host puts it back after the
+   * render (`usePendingCaret`): replacing a controlled value moves the
+   * caret to the end.
    */
-  accept: (value: string, item: MentionItem, claim: MentionClaim, projectPath: string | null) => string;
+  accept: (
+    value: string,
+    item: MentionItem,
+    claim: MentionClaim,
+    projectPath: string | null,
+    caret: number | null,
+  ) => { text: string; caret: number | null };
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
@@ -241,12 +256,15 @@ export function syncMention(prev: MentionCore, value: string, caret: number): Me
  * live. The two are told apart by `glued`, recorded when the claim was
  * taken: a `[` that was already there is prose; one that was not is a
  * reference landed since.
+ *
+ * The token itself is `mentionToken`'s, the definition its readers share — a
+ * name holding brackets lands in the shape they can read back.
  */
 export function spliceMention(value: string, start: number, query: string, label: string, glued = false): string {
   const end = start + 1 + query.length;
   if (value.slice(start, end) !== `@${query}`) return value;
   if (!glued && value.charAt(start + 1) === "[") return value;
-  return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
+  return `${value.slice(0, start)}${mentionToken(label)}${value.slice(end)}`;
 }
 
 /**
@@ -383,8 +401,23 @@ export function claimOf(pending: Map<number, MentionClaim>, core: MentionCore, t
 interface Landed {
   id: number;
   start: number;
+  /** Where the replaced `@query` ended, before the splice. */
+  end: number;
   /** The length the splice added; later claims and mentions move by it. */
   delta: number;
+}
+
+/**
+ * `caret` carried through a landing. Before the `@`: where it was. Inside
+ * the replaced `@query` — the usual case, the author was typing it — just
+ * after the new `]`. After it (letters typed further on while the file
+ * read): moved with the text by `delta`, so the author keeps writing where
+ * they were rather than being pulled back to the reference.
+ */
+export function caretThrough(caret: number, landed: Landed): number {
+  if (caret <= landed.start) return caret;
+  if (caret <= landed.end) return landed.end + landed.delta;
+  return caret + landed.delta;
 }
 
 /**
@@ -420,8 +453,12 @@ export function acceptPick(
   pending.delete(claim.id);
   const grown = cur.query !== claim.query && stillMatches(cur.query);
   const at = cur.start;
+  let used = cur.query;
   let text = grown ? spliceMention(value, at, cur.query, label, cur.glued) : value;
-  if (text === value) text = spliceMention(value, at, claim.query, label, cur.glued);
+  if (text === value) {
+    used = claim.query;
+    text = spliceMention(value, at, claim.query, label, cur.glued);
+  }
   if (text === value) return { text, landed: null };
   spent.add(claim.id);
   const delta = text.length - value.length;
@@ -432,7 +469,40 @@ export function acceptPick(
     // claim was glued to — the guard applies to it from here on.
     else if (c.start === at && c.glued) pending.set(id, { ...c, glued: false });
   }
-  return { text, landed: { id: claim.id, start: at, delta } };
+  return { text, landed: { id: claim.id, start: at, end: at + 1 + used.length, delta } };
+}
+
+/**
+ * Put the caret back after a landing, once the landed text is on screen.
+ *
+ * A pick lands after a file read, outside any event handler, and replacing a
+ * controlled value puts the caret at the end. `place(caret, text)` records
+ * where it should go in `text`; the layout effect that follows the render
+ * writing `value` into the input moves it there. A layout effect rather than
+ * the `requestAnimationFrame` that `+ 引用` uses: that one runs inside a
+ * click, where React commits before the frame; after an await nothing orders
+ * the two. It is applied only to a focused input — one the author left
+ * during the read is not theirs to have moved — and only if it shows
+ * exactly `text`: a key
+ * pressed between the landing and the render puts other text there, and a
+ * caret computed for one text means nothing in another — and the record is
+ * cleared on every run, so a placement never waits for some later edit.
+ */
+export function usePendingCaret(
+  ref: RefObject<HTMLTextAreaElement | null>,
+  value: string,
+): (caret: number | null, text: string) => void {
+  const want = useRef<{ caret: number; text: string } | null>(null);
+  useLayoutEffect(() => {
+    const w = want.current;
+    want.current = null;
+    const el = ref.current;
+    if (!w || !el || el !== document.activeElement || el.value !== w.text) return;
+    el.setSelectionRange(w.caret, w.caret);
+  }, [ref, value]);
+  return useCallback((caret: number | null, text: string) => {
+    want.current = caret === null ? null : { caret, text };
+  }, []);
 }
 
 /**
@@ -470,13 +540,14 @@ export function useMentionState(): MentionState {
       setState((s) => shiftCore(s, before, after));
     },
     claim: (text) => claimOf(pending.current, state, text),
-    accept: (value, item, claim, projectPath) => {
+    accept: (value, item, claim, projectPath, caret) => {
       const { text, landed } = acceptPick(
         spent.current, pending.current, claim, value, mentionLabel(item),
         (q) => matchesMention(item, q, projectPath),
       );
-      if (landed) setState((s) => afterAccept(s, landed, landed.delta));
-      return text;
+      if (!landed) return { text, caret: null };
+      setState((s) => afterAccept(s, landed, landed.delta));
+      return { text, caret: caret === null ? null : caretThrough(caret, landed) };
     },
     move: (delta, count) => {
       if (count <= 0) return;

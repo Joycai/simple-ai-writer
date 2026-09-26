@@ -270,20 +270,42 @@ export interface LoreHit<E extends LoreLike> {
 
 const ALIAS_WEIGHT = 0.9;
 
+/** 条目在哪儿命中：名字，或某个别名（附上是哪个）。 */
+interface LoreNameMatch {
+  score: number;
+  via: "name" | "alias";
+  alias: string | null;
+  ranges: MatchRange[];
+}
+
+/**
+ * 条目对 `term` 的命中：名字和每个别名都比一遍，取分最高的——别名按 ×0.9 折算，
+ * **严格高于**才换，所以两边一样好时算名字。
+ *
+ * ⌘K（`searchLore`，整个查询）与 `@` 选择器（`mentionSearch` 的 `scoreOne`，逐词）
+ * 共用这一条。旧写法是名字一命中就不看别名：名字上一段零散的子序列会压过别名上的
+ * 整词，而 `@` 那边早已改成取最优，两边同一个词排得不一样。
+ */
+export function matchLoreName(name: string, aliases: readonly string[], term: string): LoreNameMatch | null {
+  const byName = matchText(name, term);
+  let best: LoreNameMatch | null = byName
+    ? { score: byName.score, via: "name", alias: null, ranges: byName.ranges }
+    : null;
+  for (const a of aliases) {
+    const m = matchText(a, term);
+    if (m && (!best || m.score * ALIAS_WEIGHT > best.score)) {
+      best = { score: m.score * ALIAS_WEIGHT, via: "alias", alias: a, ranges: m.ranges };
+    }
+  }
+  return best;
+}
+
 export function searchLore<E extends LoreLike>(entities: readonly E[], term: string, limit = 8): SearchResult<LoreHit<E>> {
   if (tokenize(term).length === 0) return { hits: [], total: 0 };
   const all: LoreHit<E>[] = [];
   for (const e of entities) {
-    const byName = matchText(e.name, term);
-    if (byName) { all.push({ entity: e, score: byName.score, via: "name", alias: null, ranges: byName.ranges }); continue; }
-    let best: LoreHit<E> | null = null;
-    for (const a of e.aliases) {
-      const m = matchText(a, term);
-      if (m && (!best || m.score * ALIAS_WEIGHT > best.score)) {
-        best = { entity: e, score: m.score * ALIAS_WEIGHT, via: "alias", alias: a, ranges: m.ranges };
-      }
-    }
-    if (best) all.push(best);
+    const m = matchLoreName(e.name, e.aliases, term);
+    if (m) all.push({ entity: e, ...m });
   }
   all.sort((a, b) => b.score - a.score || a.entity.name.length - b.entity.name.length || a.entity.name.localeCompare(b.entity.name));
   return { hits: all.slice(0, limit), total: all.length };

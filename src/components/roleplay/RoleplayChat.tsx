@@ -60,7 +60,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  useMentionSearch, useMentionState, type MentionItem,
+  useMentionSearch, useMentionState, usePendingCaret, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -340,6 +340,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const placeCaret = usePendingCaret(taRef, draft);
   // 右键 → 存为片段：输入框和每条气泡共用。
   const snippetSave = useSnippetSave();
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -715,16 +716,25 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     }
   };
 
+  /**
+   * 选中之后：先把文件读完，再落 `@[名字]`——和对话助手、知识库弹窗同一个顺序。
+   *
+   * 从前是先落字再读：读图那段时间里草稿已经写着 `@[名字]`，附件还没挂上，选择器
+   * 也已经关了，这时一下 Enter 就把「提了却没图」的消息发了出去。先读后落，读的
+   * 期间选择器一直开着，Enter 归它——至多重复选中同一项，落字只落一次（`accept`
+   * 记账）、附件按 key 去重——发不出去；读不到或太大就只报错、不落字，草稿里不会
+   * 留一个没带附件的引用。代价是大图要读完才看见 `@[名字]`，另两处一直如此。
+   */
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
     const claim = mention.claim(draft);
     if (!claim) return;
     setRefError(null);
-    // 先落字再读图：这里 setDraft 是 zustand 的同步更新，updater 只跑一次。
-    setDraft((prev) => mention.accept(prev, item, claim, projectPath));
-    mention.close();
+    // 挂到那一刻的列表上，且只挂一次：读的期间又选了一次同一项，是同一份附件。
+    const attach = (ref: AttachedItem) =>
+      setRefs((r) => (r.some((a) => attachedKey(a) === mentionKey(item)) ? r : [...r, ref]));
     if (item.type === "lore") {
-      setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
+      attach({ kind: "lore", entity: item.entity });
     } else if (item.file.kind === "image") {
       try {
         // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
@@ -740,22 +750,33 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           }));
           return;
         }
-        setRefs((r) => [...r, { kind: "image", file: item.file, dataUrl, downscaled }]);
+        attach({ kind: "image", file: item.file, dataUrl, downscaled });
       } catch {
         setRefError(t("roleplay.composer.refUnreadable", {
           name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
         }));
+        return;
       }
     } else if (projectPath) {
       try {
         const content = await readFile(item.file.path);
-        setRefs((r) => [...r, { kind: "text", file: item.file, content }]);
+        attach({ kind: "text", file: item.file, content });
       } catch {
         setRefError(t("roleplay.composer.refUnreadable", {
           name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
         }));
+        return;
       }
     }
+    // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
+    // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
+    // 光标取此刻的，经这次替换平移，渲染之后放回去（usePendingCaret）。
+    const caret = taRef.current?.selectionStart ?? null;
+    setDraft((now) => {
+      const landed = mention.accept(now, item, claim, projectPath, caret);
+      placeCaret(landed.caret, landed.text);
+      return landed.text;
+    });
   };
 
   const boundEntries = useMemo(() => {

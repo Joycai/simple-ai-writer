@@ -4,7 +4,7 @@
  * picker could have spliced count as mentions.
  */
 import { describe, expect, it } from "vitest";
-import { splitMentions } from "../mentionText";
+import { mentionToken, splitMentions, stripMentions } from "../mentionText";
 
 /** The segments must reassemble into the original — a renderer drops nothing. */
 function joined(text: string): string {
@@ -46,5 +46,64 @@ describe("splitMentions", () => {
 
   it("returns one empty text segment for an empty message", () => {
     expect(splitMentions("")).toEqual([{ kind: "text", text: "" }]);
+  });
+
+  it("reads a name whose brackets pair up as one mention", () => {
+    const text = `对照${mentionToken("潮汐[旧]")}，再看${mentionToken("夜航[上][下]")}`;
+    expect(splitMentions(text).filter((s) => s.kind === "mention").map((s) => s.text)).toEqual([
+      "@[潮汐[旧]]",
+      "@[夜航[上][下]]",
+    ]);
+    expect(joined(text)).toBe(text);
+  });
+
+  it("reads every token mentionToken writes back as exactly that token", () => {
+    for (const name of ["沈砚", "潮汐[旧]", "夜航]", "[夜航", "a]b[c", "[[潮汐]", "封面@2x.png", "][", "封面@[2x]", "手稿[旧]@2x.png"]) {
+      const token = mentionToken(name);
+      expect(splitMentions(`看看${token}的`)).toEqual([
+        { kind: "text", text: "看看" },
+        { kind: "mention", text: token },
+        { kind: "text", text: "的" },
+      ]);
+    }
+  });
+
+  it("does not close a nested bracket at the first ]", () => {
+    // Unbalanced to the end of the line: not a token, and the `]` inside is
+    // not taken as the end of a shorter one.
+    for (const text of ["看看 @[潮汐[旧] 的", "看看 @[潮汐[旧]\n]"]) {
+      expect(splitMentions(text).every((s) => s.kind === "text")).toBe(true);
+    }
+  });
+});
+
+describe("a typed `@[` before a real reference", () => {
+  it("does not swallow the reference: a nested `@[` starts a new token", () => {
+    const text = "按@[旧稿，参考@[潮汐.md]里的写法]重写";
+    expect(splitMentions(text).filter((s) => s.kind === "mention").map((s) => s.text)).toEqual(["@[潮汐.md]"]);
+    expect(stripMentions(text)).toBe("按@[旧稿，参考里的写法]重写");
+  });
+});
+
+describe("mentionToken", () => {
+  it("keeps a name without brackets as it is", () => {
+    expect(mentionToken("潮汐.png")).toBe("@[潮汐.png]");
+  });
+
+  it("keeps paired brackets and turns lone ones full-width", () => {
+    expect(mentionToken("潮汐[旧]")).toBe("@[潮汐[旧]]");
+    expect(mentionToken("夜航]")).toBe("@[夜航］]");
+    expect(mentionToken("[夜航")).toBe("@[［夜航]");
+    expect(mentionToken("a]b[c")).toBe("@[a］b［c]");
+    expect(mentionToken("[[潮汐]")).toBe("@[［[潮汐]]");
+    // `@[` never appears inside a name: readers would take it as a new token.
+    expect(mentionToken("封面@[2x]")).toBe("@[封面@［2x］]");
+  });
+});
+
+describe("stripMentions", () => {
+  it("drops whole tokens, bracketed names included, and nothing else", () => {
+    const text = `照${mentionToken("潮汐[旧]")}和${mentionToken("夜航]")}写一个门，@[没闭合`;
+    expect(stripMentions(text)).toBe("照和写一个门，@[没闭合");
   });
 });
