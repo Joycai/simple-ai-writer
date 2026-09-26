@@ -27,7 +27,7 @@
 
 import { capabilityVerdict } from "./capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
-import { strictify } from "./jsonSchemaStrict";
+import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { normalizeModelId } from "./modelLimits";
 import { resolvePlatform, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
@@ -53,6 +53,17 @@ import { familyOf, type ApiStandard } from "./types";
 export type StructuredOutputMode = "off" | "json_object" | "json_schema";
 
 export const STRUCTURED_OUTPUT_MODES: StructuredOutputMode[] = ["off", "json_object", "json_schema"];
+
+/**
+ * The modes a family can be asked for. The Messages API has a schema mode
+ * (`output_config.format`) and nothing weaker — no "any JSON object" switch —
+ * so an Anthropic row offers off and the strict tier only.
+ */
+export function structuredOutputModesFor(standard: ApiStandard): StructuredOutputMode[] {
+  return familyOf(standard) === "anthropic"
+    ? STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_object")
+    : STRUCTURED_OUTPUT_MODES;
+}
 
 /** Narrow a stored string to the union — the DB column is free text. */
 export function parseStructuredOutputMode(v: unknown): StructuredOutputMode | undefined {
@@ -87,6 +98,15 @@ const KNOWN_JSON_SCHEMA: ReadonlyArray<string> = [
   // ── 火山方舟 Doubao Seed 2.1 — plan alias and dated id both. Not 2.0:
   // 2.0-lite answered past a strict schema on both routes (第十二个样本) ──
   "doubao-seed-2.1", "doubao-seed-2-1",
+  // ── Anthropic `output_config.format` — Claude 4.5 on, per Anthropic's list;
+  // held an enum the prompt contradicted on Sonnet 5 / 4.6, Opus 5.5 / 4.5 and
+  // Fable 5.1 (landscape.md §7 第十八个样本，补测). Both spellings: the
+  // official hyphen and the relays' dot. Haiku 4.5 is on the list, unmeasured. ──
+  "claude-fable-5", "claude-mythos-5", "claude-opus-5", "claude-sonnet-5",
+  "claude-opus-4-5", "claude-opus-4.5", "claude-opus-4-6", "claude-opus-4.6",
+  "claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8",
+  "claude-sonnet-4-5", "claude-sonnet-4.5", "claude-sonnet-4-6", "claude-sonnet-4.6",
+  "claude-haiku-4-5", "claude-haiku-4.5",
 ];
 
 /** Whether this model id is documented to accept strict `json_schema` mode. */
@@ -112,13 +132,13 @@ interface JsonModeTarget {
 /**
  * The mode this request will actually use, as far as the config can tell.
  *
- * The Anthropic family has no JSON parameter, so it resolves to `off` whatever
- * the row says — there is nothing else it *could* send, and a declaration that
- * survived a provider change to a different family must not reach the wire.
+ * The Anthropic family has a schema mode and nothing weaker, so it resolves to
+ * `json_schema` or `off` — never `json_object`, which it has no field for. A
+ * `json_object` declaration that survived a provider change to Anthropic
+ * therefore reads as `off`, not as a field the Messages API would reject.
  */
 export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutputMode {
   const family = familyOf(target.standard);
-  if (family === "anthropic") return "off";
   const wire = {
     platform: resolvePlatform(target.platform, target.baseUrl ?? "", target.standard),
     standard: target.standard,
@@ -132,6 +152,15 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   // `jsonSchema` cell — a fact about the platform, not the model id: 智谱
   // serves GLM and ignores json_schema, DashScope serves GLM and honours it.
   const strict = capabilityVerdict("jsonSchema", wire, model).status;
+  if (family === "anthropic") {
+    // Same rules as below, with `off` where the others would fall to
+    // `json_object`: a declared strict mode is sent unless the wire is
+    // measured to ignore it; auto lifts only on a measured wire + listed id.
+    if (target.structuredOutput) {
+      return target.structuredOutput === "json_schema" && strict !== "no" ? "json_schema" : "off";
+    }
+    return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId) ? "json_schema" : "off";
+  }
   if (target.structuredOutput) {
     // A declaration the platform is measured to ignore is sent one tier down —
     // the 200 it would get is prose, not the schema the author asked for.
@@ -211,13 +240,30 @@ export function jsonModeShaping(
   const mode = effectiveStructuredOutput(t);
 
   if (mode === "off") {
-    // No native enforcement anywhere — the cue is the whole mechanism. On
-    // Anthropic this is the only branch; elsewhere it is the author's escape
-    // hatch for a relay that rejects `response_format`.
+    // No native enforcement anywhere — the cue is the whole mechanism. The
+    // author's escape hatch for a relay that rejects the JSON field, and
+    // Anthropic's answer whenever the strict tier is not in play.
     return { mode, cue: JSON_ONLY_CUE };
   }
 
   switch (familyOf(t.standard)) {
+    case "anthropic":
+      if (mode === "json_schema" && schema) {
+        // `output_config.format` — the same object the effort dial writes
+        // `effort` into; the adapter merges the two. The schema is strictified
+        // (every object `additionalProperties: false`, which the endpoint
+        // requires) and then cut to the keywords it takes. Thinking, tools and
+        // a forced `tool_choice` all combine with it (第十八个样本，补测).
+        return {
+          mode,
+          extraBody: {
+            output_config: { format: { type: "json_schema", schema: forAnthropic(strictify(schema.parameters)) } },
+          },
+        };
+      }
+      // No weaker tier to fall to: a `json_object` ceiling (the strict field
+      // refused) or a schema-less request is the cue alone.
+      return { mode: "off", cue: JSON_ONLY_CUE };
     case "gemini":
       if (mode === "json_schema" && schema) {
         // `responseJsonSchema` (Gemini 2.5+) takes a standard JSON Schema —
@@ -343,7 +389,11 @@ function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode |
  * tool attempt worth making" check all read — so they cannot disagree.
  */
 export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMode {
-  return capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  const mode = capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  // A refused schema tier caps at json_object, which a family without that
+  // tier (Anthropic) sends as the cue alone — say so here too, so the 将发送
+  // line and the drawer read what the wire gets, not a tier it doesn't have.
+  return structuredOutputModesFor(t.standard).includes(mode) ? mode : "off";
 }
 
 /**
@@ -367,11 +417,12 @@ export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMo
 export function isJsonModeRejection(err: unknown): boolean {
   if (err instanceof DOMException && err.name === "AbortError") return false;
   const msg = err instanceof Error ? err.message : String(err ?? "");
-  // Three spellings, because three wires: `response_format` (chat completions),
-  // `text.format` (the Responses API), and the generationConfig field a Gemini
+  // Four spellings, because four wires: `response_format` (chat completions),
+  // `text.format` (the Responses API), the generationConfig field a Gemini
   // endpoint names when it does not recognise it (`Unknown name
-  // "responseJsonSchema"`), in either casing.
-  return /response_format|text\.format|response_?json_?schema/i.test(msg);
+  // "responseJsonSchema"`), in either casing, and Anthropic's
+  // `output_config.format` (or the retired beta `output_format`).
+  return /response_format|text\.format|response_?json_?schema|output_config\.format|output_format/i.test(msg);
 }
 
 /** One endpoint+model; the standard is in the key because one host can serve several families. */

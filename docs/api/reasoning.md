@@ -188,7 +188,9 @@
 
 实测（Sonnet 5 / Opus 5.5，2026-09-26，第十八个样本）：不发 `thinking` 时两者都在
 思考，回来的 thinking block 文本为空、只有签名——与上面一致；显式 `summarized`
-之后才有文本。
+之后才有文本。另外 **Opus 5.5 与 Fable 5.1 拒收 `thinking: {type: "disabled"}`**（400
+`requires adaptive thinking; omit thinking or use thinking.type=adaptive and
+output_config.effort`）——「少想」只能靠低 `effort`，关不掉。
 
 另外，**没有任何 display 设置能拿到原始思维链**。`summarized` 给的是由另一个
 模型生成的摘要，且计费按原始思考 token 而非摘要 token —— 账单上的输出 token

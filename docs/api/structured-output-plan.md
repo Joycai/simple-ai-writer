@@ -21,6 +21,8 @@
 > 上一轮的取舍（为什么当年**不**上 `json_schema`）见
 > [`reasoning-plan.md`](reasoning-plan.md) §8，本文 §3 说明哪一条前提变了。
 > 分层裁决依据 [`provider-layering.md`](provider-layering.md)：这是一个 **L3 模型字段**。
+>
+> **2026-09-26 起 Anthropic 族也有严格档**（`output_config.format`），见 §13——此前它恒为 `off`。
 
 ## 0. 一句话结论
 
@@ -152,7 +154,7 @@ undefined，读取时解析。解析分三层，前两层是配置期可算的�
 ```
 ① openai / openai_compat   → json_object
 ③ gemini / gemini_compat   → json_object（responseMimeType）
-④ anthropic / anthropic_compat → off（本来就无此参数，cue 是全部机制）
+④ anthropic / anthropic_compat → off（没有 json_object 这一档；2026-09-26 起第二层可抬到 json_schema，§13）
 ```
 
 这一层保证**没声明的模型发的字节与今天完全相同**——`reasoning.ts` 头注释那条
@@ -385,3 +387,45 @@ qwen3.8-flash / 3.7-flash 思考开着 + `json_schema` strict 流式，`reasonin
   那是 `endpointProbe` 的地界，以后再说。
 - **改八份 schema 去迎合 strict**：伤主路径的可选语义，且把"strict 的规则"散到
   八个文件里；一处 `strictify` 就够。
+
+## 13. Anthropic 族的严格档（2026-09-26）
+
+**决定**：④ 族也走这套三层解析，但**只有两档**——`json_schema`（`output_config.format`）或
+`off`（cue），没有 `json_object`。自动档在「线路实测收严格档」且「id 在名单上」时抬到
+`json_schema`，否则 `off`；手动声明 `json_schema` 除非线路被测出无视它否则照发；一份
+从别的族带过来的 `json_object` 声明读作 `off`。§5.3 的 400 学习照旧：严格档被拒记为
+`json_object` 封顶，这一族把它当 `off` 发。
+
+**为什么现在打开**：此前 ④ 族恒 `off` 的前提是「Messages API 没有 JSON 参数」。2026-09-26
+付费补测推翻了它（[`landscape.md`](landscape.md) §7 第十八个样本「补测」段）：五个 Claude
+型号（Sonnet 5 / 4.6、Opus 5.5 / 4.5、Fable 5.1）在 prompt 明确要求 enum 之外的值时都守住了
+enum，而同一 prompt 去掉 enum 的对照组照 prompt 答——强制是真的，不是模型碰巧听话。
+与思考（adaptive / `budget_tokens`）、工具轮、强制 `tool_choice`、流式都能同用。
+这正是 `runStructuredTask` 的 JSON 兜底路径与知识库生成缺的东西：此前 Claude 在这两处只有
+一句 cue。
+
+**三处形状上的取舍**：
+
+1. **与 effort 共用 `output_config`**。适配器仍不展开 `extraBody`（那里可能有 OpenAI 形的
+   字段，Messages API 会 400），只取 `output_config.format` 合并进思考档位已写入的
+   `output_config`——平铺展开会让后写的一方盖掉先写的。
+2. **schema 先 strictify 再剪关键字**（`forAnthropic`）。官方要求每个对象
+   `additionalProperties: false`（strictify 本来就做），并列出不支持的约束：数值上下界、
+   字符串长度与 `pattern`、`minItems` 只收 0 / 1。官方 SDK 在发送前剥掉它们，我们也剥；
+   `oneOf` 写成 `anyOf`（文档只列 `anyOf` / `allOf`）。经 OrcaRouter 发这些关键字都是 200，
+   但网关会重新序列化请求，这不能当官方接受的证据，所以按文档剥。
+3. **不带 cue**。与 ① 的严格档一致：schema 本身就是形状说明，系统提示里的 JSON 指令照旧。
+4. **拒绝的判据按字段路径认**（`isJsonModeRejection` 加了 `output_config.format` / 旧的
+   `output_format`）。这是按 Anthropic 其余 400 都以字段路径开头（`messages.1.content.0: …`）
+   推的；经网关构造不出真实的拒绝报文（非法 type、递归、缺 schema 都是 200），样本仍欠着。
+   只有作者手动声明才会走到这条路——自动档只在实测过的线路 + 名单型号上抬升。
+5. **被拒之后显示为「关闭」**。拒绝记成 `json_object` 封顶，而这一族没有那一档：
+   `effectiveStructuredOutput` 对没有该档的族返回 `off`，「将发送」与抽屉的降级提示读的
+   都是它，所以不会显示一个线上根本没发的 `json_object`。
+
+**名单**：官方支持表里 Claude 4.5 起的型号，官方连字符与中转站点号两种拼法都列
+（`claude-opus-4-5` / `claude-opus-4.5`）。平台格：`anthropic`（官方）与 `orcarouter` 的 ④
+标 `jsonSchema` ✓；其余 ④ 族平台（MiniMax、各中转站）仍是 unknown——作者声明才发。
+
+**UI**：模型抽屉的结构化输出行对 Anthropic 行只给「自动 · 关闭 · JSON Schema」（不给
+JSON 模式），沿用原有那一行 chip，没有新控件。

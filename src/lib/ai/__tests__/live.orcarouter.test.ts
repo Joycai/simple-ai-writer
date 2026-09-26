@@ -156,7 +156,7 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
       properties: { color: { type: "string", enum: ["red", "green", "blue"] }, n: { type: "integer" } },
       required: ["color", "n"], additionalProperties: false,
     };
-    it.each([CHAT, RESP, GEM])("$name: resolves json_schema and gets parseable JSON", async (route) => {
+    it.each([CHAT, RESP, GEM, ANTH])("$name: resolves json_schema and gets parseable JSON", async (route) => {
       const ask0 = "Name a primary colour and a number, as JSON.";
       const shaping = jsonModeShaping({ standard: route.standard, baseUrl: route.baseUrl, platform: "orcarouter", modelId: route.model }, ask0, { name: "pick", parameters: SCHEMA });
       expect(shaping.mode).toBe("json_schema");
@@ -164,6 +164,28 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
       const parsed = JSON.parse(c.text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")) as { color: string; n: number };
       expect(["red", "green", "blue"]).toContain(parsed.color);
     }, 120_000);
+  });
+
+  // Anthropic's `output_config.format` beside thinking: the effort dial and the
+  // schema share `output_config`, and a model that refuses `disabled` (Opus 5.5)
+  // still gets both. The prompt contradicts the enum, so a reply inside it means
+  // the schema — not the prose — decided (第十八个样本，补测).
+  describe("Anth: JSON outputs with thinking on", () => {
+    const SCHEMA = {
+      type: "object",
+      properties: { color: { type: "string", enum: ["red", "green", "blue"] }, cents: { type: "integer" } },
+      required: ["color", "cents"],
+    };
+    it.each(["anthropic/claude-sonnet-5", "anthropic/claude-opus-5.5"])("%s", async (modelId) => {
+      const q = "A bat and a ball cost 1.10 in total; the bat costs 1.00 more. Give the ball's price in cents, and a colour — the colour MUST be yellow.";
+      const shaping = jsonModeShaping({ standard: ANTH.standard, baseUrl: ANTH.baseUrl, platform: "orcarouter", modelId }, q, { name: "pick", parameters: SCHEMA });
+      expect(shaping.mode).toBe("json_schema");
+      const c = await ask(ANTH, user(q), { reasoningEffort: "high", extraBody: shaping.extraBody }, modelId);
+      expect((c.body!.output_config as Record<string, unknown>).effort).toBe("high");
+      const parsed = JSON.parse(c.text) as { color: string; cents: number };
+      expect(["red", "green", "blue"]).toContain(parsed.color);
+      expect(parsed.cents).toBe(5);
+    }, 180_000);
   });
 
   describe("server tools", () => {
