@@ -501,6 +501,9 @@ describe("a pick's read that failed", () => {
     const tracked = trackMentionRead("chat:f3", async () => {
       await read;
       failMentionRead("chat:f3", "潮汐.png 太大");
+      // Recorded while the draft still counts as reading — the order a host
+      // keeps by calling `fail` inside the pick it hands to `track`.
+      expect(isMentionReading("chat:f3")).toBe(true);
     });
     expect(mentionReadFailure("chat:f3")).toBeNull();
     finish();

@@ -555,24 +555,29 @@ export function AgentChat() {
   // `handleSend` would clear the refusal before the author saw it. Checked in
   // this effect, first: the render that lets the queue through is the one that
   // brings the failure, and a separate effect's `setQueued(false)` would not
-  // reach the `queued` this one closed over.
+  // reach the `queued` this one closed over. The ref for the same reason one
+  // render later: the count dropping re-renders at once, and whether that
+  // render already carries the `setQueued(false)` made here depends on how
+  // React batches an effect's update with a store's — the ref is written now.
   const [queued, setQueued] = useState(false);
+  const queuedRef = useRef(false);
+  const queue = (on: boolean) => { queuedRef.current = on; setQueued(on); };
   useEffect(() => {
     if (readFailure) {
       takeReadFailure(readFailure);
-      setQueued(false);
+      queue(false);
       setRefError(readFailure.message);
       return;
     }
-    if (chatRunning || pasting || reading || !queued) return;
-    setQueued(false);
+    if (chatRunning || pasting || reading || !queued || !queuedRef.current) return;
+    queue(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
   }, [chatRunning, pasting, reading, queued, readFailure]);
 
   const handleStop = () => {
-    setQueued(false);
+    queue(false);
     stopChat();
   };
 
@@ -681,7 +686,7 @@ export function AgentChat() {
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       if (chatRunning) {
-        if (hasMessage(draftRef.current, refs) && activeModelId) setQueued(true);
+        if (hasMessage(draftRef.current, refs) && activeModelId) queue(true);
         return;
       }
       handleSend();
