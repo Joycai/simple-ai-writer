@@ -3,6 +3,7 @@ import {
   inferPlatform,
   parsePlatform,
   PLATFORM_IDS,
+  platformCostReport,
   platformEndpoints,
   platformForAddress,
   platformHasHosts,
@@ -205,3 +206,13 @@ describe("zhipu model calibration", () => {
   });
 });
 
+
+describe("reported cost: the trust boundary", () => {
+  // A reported cost overrides the model's whole fee group, so the set of
+  // platforms taken at their word is pinned: adding one means a sample compared
+  // its number against what it actually charged (reportedCost.ts).
+  it("only OrcaRouter is trusted to report what a request cost", () => {
+    expect(PLATFORM_IDS.filter((id) => platformCostReport(id))).toEqual(["orcarouter"]);
+    expect(platformCostReport("orcarouter")?.header).toEqual(["X-OrcaRouter-Include-Cost", "true"]);
+  });
+});

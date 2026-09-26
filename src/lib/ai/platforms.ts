@@ -141,6 +141,15 @@ interface PlatformProfile {
    * attach it unasked were measured with (responses.md §2.4).
    */
   responsesInclude?: readonly string[];
+  /**
+   * The platform reports each request's cost in its response, and the number
+   * is what it actually charged — only where a sample compared it against the
+   * platform's own ledger. That is the trust boundary for billing: a reported
+   * cost overrides the model's whole fee group (`reportedCost.ts`), so a relay
+   * that merely returns a field of the same name is not taken at its word.
+   * `header`: what the request must carry for the platform to report at all.
+   */
+  reportsCost?: { header?: readonly [name: string, value: string] };
   /** Where the entries above were measured. */
   source: string;
 }
@@ -331,6 +340,11 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "gemini", path: "/v1beta", authMode: "bearer" },
     ],
     hosts: ["api.orcarouter.ai"],
+    // Every route's stream carries the cost, equal to `GET /v1/generation`'s
+    // `total_cost` (① ② to within one 1/500,000-dollar billing unit). ④ and ③
+    // report it only when asked with this header; ① ② report it either way.
+    // ②'s verbatim route (`store: true`, the web-search path) reports none.
+    reportsCost: { header: ["X-OrcaRouter-Include-Cost", "true"] },
     source: "landscape.md §7 第七个样本 (probe, free tier) + 第十八个样本 (paid models, 2026-09-26) — relay; Responses and Anthropic web_search measured",
   },
   newapi: {
@@ -516,6 +530,11 @@ export function platformSource(id: PlatformId): string {
 /** `include` entries a platform's Responses route must send — see {@link PlatformProfile.responsesInclude}. */
 export function platformResponsesInclude(id: PlatformId): readonly string[] {
   return PROFILES[id]?.responsesInclude ?? [];
+}
+
+/** Whether (and how) a platform reports each request's cost — see {@link PlatformProfile.reportsCost}. */
+export function platformCostReport(id: PlatformId): PlatformProfile["reportsCost"] {
+  return PROFILES[id]?.reportsCost;
 }
 
 /** The routes a platform serves, primary first. */

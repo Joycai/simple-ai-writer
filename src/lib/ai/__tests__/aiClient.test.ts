@@ -3232,3 +3232,102 @@ describe("streamCompletion — 工具参数的流式进度", () => {
     }
   });
 });
+
+describe("streamCompletion — upstream-reported cost", () => {
+  /** Serve one response per request in order; capture each request's headers. */
+  function mockFetchSeq(responses: string[][]) {
+    const headers: Headers[] = [];
+    let i = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        headers.push(new Headers(init.headers));
+        return sseResponse(responses[Math.min(i++, responses.length - 1)]);
+      }),
+    );
+    return headers;
+  }
+
+  async function run(standard: ApiStandard, baseUrl: string, responses: string[][], platform?: PlatformId) {
+    const headers = mockFetchSeq(responses);
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl,
+      apiKey: "k",
+      standard,
+      modelId: "m",
+      platform,
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: (c) => received.push(c),
+    });
+    const done = received.find((c): c is Extract<StreamChunk, { done: true }> => "done" in c);
+    return { headers, done };
+  }
+
+  // The shapes OrcaRouter streams (landscape.md §7 第十八个样本「再补测」).
+  const CHAT = [
+    `data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n`,
+    `data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"cost":9.9e-6}}\n`,
+    `data: [DONE]\n`,
+  ];
+  const RESPONSES = [
+    `data: {"type":"response.output_text.delta","delta":"ok"}\n\n`,
+    `data: {"type":"response.completed","response":{"usage":{"input_tokens":5,"output_tokens":2,"cost":4.4e-6}}}\n\n`,
+  ];
+  const GEMINI = [
+    `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5}}\n`,
+    `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":2,"costUsd":1.4e-5}}\n`,
+  ];
+  const anthropic = (cost?: number, stop = "end_turn") => [
+    `data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1}}}\n\n`,
+    `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+    `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}\n\n`,
+    `data: {"type":"content_block_stop","index":0}\n\n`,
+    `data: {"type":"message_delta","delta":{"stop_reason":"${stop}"},"usage":{"output_tokens":2${cost === undefined ? "" : `,"cost_usd":${cost}`}}}\n\n`,
+    `data: {"type":"message_stop"}\n\n`,
+  ];
+
+  const cases: [ApiStandard, string, string[], number][] = [
+    ["openai_compat", "https://api.orcarouter.ai/v1", CHAT, 9.9e-6],
+    ["openai_responses_compat", "https://api.orcarouter.ai/v1", RESPONSES, 4.4e-6],
+    ["gemini_compat", "https://api.orcarouter.ai/v1beta", GEMINI, 1.4e-5],
+    ["anthropic_compat", "https://api.orcarouter.ai", anthropic(7.4e-5), 7.4e-5],
+  ];
+
+  it.each(cases)("%s on OrcaRouter: asks for the cost and carries it to done", async (standard, baseUrl, chunks, cost) => {
+    const { headers, done } = await run(standard, baseUrl, [chunks]);
+    expect(headers[0].get("X-OrcaRouter-Include-Cost")).toBe("true");
+    expect(done?.reportedCost).toBe(cost);
+  });
+
+  it.each(cases)("%s elsewhere: the same field is not taken, no header is sent", async (standard, _baseUrl, chunks) => {
+    const { headers, done } = await run(standard, "https://relay.example.com/v1", [chunks]);
+    expect(headers[0].has("X-OrcaRouter-Include-Cost")).toBe(false);
+    expect(done).toBeDefined();
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
+  it("a reported 0 stays 0 — free, not missing", async () => {
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [anthropic(0)]);
+    expect(done?.reportedCost).toBe(0);
+  });
+
+  it("a paused Anthropic turn sums the cost of every leg", async () => {
+    const { headers, done } = await run("anthropic_compat", "https://api.orcarouter.ai", [
+      anthropic(0.25, "pause_turn"),
+      anthropic(0.5),
+    ]);
+    expect(headers).toHaveLength(2);
+    expect(headers.every((h) => h.get("X-OrcaRouter-Include-Cost") === "true")).toBe(true);
+    expect(done?.reportedCost).toBe(0.75);
+  });
+
+  it("a paused Anthropic turn with one unreported leg reports nothing — the fee group prices it whole", async () => {
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [
+      anthropic(0.25, "pause_turn"),
+      anthropic(undefined),
+    ]);
+    expect(done).toBeDefined();
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+});

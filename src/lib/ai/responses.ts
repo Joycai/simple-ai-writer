@@ -62,7 +62,8 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
-import { platformResponsesInclude, wireOf } from "./platforms";
+import { platformResponsesInclude, wireOf, type PlatformId } from "./platforms";
+import { costReportHeaders, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
@@ -203,7 +204,7 @@ function toResponsesToolChoice(tc: StreamOptions["toolChoice"]): unknown {
 }
 
 /** Usage from a terminal event's `response` object, in this app's vocabulary. */
-function readUsage(response: unknown): { inputTokens: number; outputTokens: number; cachedTokens: number } {
+function readUsage(response: unknown, platform: PlatformId): { inputTokens: number; outputTokens: number; cachedTokens: number; reportedCost?: number } {
   const usage = (response as { usage?: Record<string, unknown> } | undefined)?.usage;
   const n = (v: unknown) => (typeof v === "number" ? v : 0);
   const details = usage?.input_tokens_details as Record<string, unknown> | undefined;
@@ -212,6 +213,7 @@ function readUsage(response: unknown): { inputTokens: number; outputTokens: numb
     outputTokens: n(usage?.output_tokens),
     // A subset of input_tokens, same as Chat Completions' cached_tokens.
     cachedTokens: n(details?.cached_tokens),
+    reportedCost: reportedCostOf(platform, "responses", usage),
   };
 }
 
@@ -298,6 +300,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     headers: {
       "Content-Type": "application/json",
       ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
+      ...costReportHeaders(wire.platform),
     },
     body: JSON.stringify(body),
     signal: opts.signal,
@@ -313,6 +316,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedTokens = 0;
+  /** Only on the terminal `response.usage`, and only from a trusted platform (`reportedCost.ts`). */
+  let reportedCost: number | undefined;
   let truncated = false;
   let stopReason: string | undefined;
   let buffer = "";
@@ -356,15 +361,17 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
       ...(truncated ? { truncated } : {}),
       ...(stopReason ? { stopReason } : {}),
       ...(cachedTokens ? { cachedTokens } : {}),
+      ...(reportedCost !== undefined ? { reportedCost } : {}),
       ...(wireRewrites.length ? { wireRewrites } : {}),
     });
   };
 
   const readTerminalUsage = (response: unknown) => {
-    const u = readUsage(response);
+    const u = readUsage(response, wire.platform);
     inputTokens = u.inputTokens;
     outputTokens = u.outputTokens;
     cachedTokens = u.cachedTokens;
+    reportedCost = u.reportedCost;
     const echo = response as { reasoning?: { effort?: unknown }; temperature?: unknown } | undefined;
     const echoedEffort = echo?.reasoning?.effort;
     if (typeof sentEffort === "string" && typeof echoedEffort === "string" && echoedEffort !== sentEffort) {

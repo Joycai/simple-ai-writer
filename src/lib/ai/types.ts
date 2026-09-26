@@ -313,6 +313,13 @@ export type StreamChunk =
        */
       cachedTokens?: number;
       /**
+       * What the platform says this call cost, in USD — only from a platform
+       * trusted to report it (`reportedCost.ts`). Absent = not reported, which
+       * is not the same as `0` (reported free). A call the adapter split into
+       * several requests carries it only when every request reported.
+       */
+      reportedCost?: number;
+      /**
        * Fields the endpoint echoed back with another value than the one sent.
        * Only the Responses family echoes its request, so only it fills this;
        * the round still succeeded — see `WireRewrite`.

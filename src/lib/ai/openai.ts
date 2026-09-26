@@ -10,6 +10,7 @@ import {
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { wireOf } from "./platforms";
+import { costReportHeaders, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
@@ -162,6 +163,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   // shows only the caller's messages — without the wire body there is no way
   // to tell whether the field the author chose ever went out.
   opts._onRequestBody?.(body);
+  const { platform } = wireOf(opts);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -169,6 +171,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // Keyless local servers (Ollama, LM Studio) need no auth; omit the header
       // rather than sending an empty bearer token.
       ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
+      ...costReportHeaders(platform),
     },
     body: JSON.stringify(body),
     signal: opts.signal,
@@ -184,6 +187,8 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedTokens = 0;
+  /** From the last chunk's `usage`, and only from a trusted platform (`reportedCost.ts`). */
+  let reportedCost: number | undefined;
   let truncated = false;
   // The endpoint's own finish_reason, last non-empty one seen — reported on the
   // done chunk so the log can say why a turn ended (stop / length / tool_calls
@@ -271,6 +276,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // A subset of prompt_tokens, not additional to it — only the uncached
       // remainder bills at the full input rate.
       cachedTokens = json.usage.prompt_tokens_details?.cached_tokens ?? 0;
+      reportedCost = reportedCostOf(platform, "openai", json.usage) ?? reportedCost;
     }
     const choice = json.choices?.[0];
     const delta = choice?.delta;
@@ -350,6 +356,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
           ...(truncated ? { truncated } : {}),
           ...(stopReason ? { stopReason } : {}),
           ...(cachedTokens ? { cachedTokens } : {}),
+          ...(reportedCost !== undefined ? { reportedCost } : {}),
         });
         return;
       }
@@ -370,5 +377,6 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
+    ...(reportedCost !== undefined ? { reportedCost } : {}),
   });
 }

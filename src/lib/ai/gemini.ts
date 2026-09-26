@@ -6,6 +6,8 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
+import { wireOf } from "./platforms";
+import { costReportHeaders, reportedCostOf } from "./reportedCost";
 import { geminiUrl } from "./urls";
 import type {
   AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
@@ -287,9 +289,10 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // alone cannot show what was sent.
   opts._onRequestBody?.(body);
 
+  const { platform } = wireOf(opts);
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode) },
+    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },
     body: JSON.stringify(body),
     signal: opts.signal,
   });
@@ -304,6 +307,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedTokens = 0;
+  /** Only on the last block's `usageMetadata`, and only from a trusted platform (`reportedCost.ts`). */
+  let reportedCost: number | undefined;
   let truncated = false;
   // The candidate's finishReason, for the log — see the Chat Completions adapter.
   let stopReason: string | undefined;
@@ -383,6 +388,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       outputTokens = (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
       // A subset of promptTokenCount, not additional to it.
       cachedTokens = usage.cachedContentTokenCount ?? 0;
+      reportedCost = reportedCostOf(platform, "gemini", usage) ?? reportedCost;
     }
     // Response-level block/filter — distinct from promptFeedback.blockReason
     // above, which only covers the request being refused before generation
@@ -421,5 +427,6 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     ...(truncated ? { truncated } : {}),
     ...(stopReason ? { stopReason } : {}),
     ...(cachedTokens ? { cachedTokens } : {}),
+    ...(reportedCost !== undefined ? { reportedCost } : {}),
   });
 }
