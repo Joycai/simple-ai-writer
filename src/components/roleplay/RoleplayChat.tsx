@@ -309,8 +309,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 这个实例写的。自己的每次写入都经 `ownDraft`，别人的就认得出来，开着的提名和等着读完
   // 的 claim 跟着改动段平移（对话助手同一个 hook）。
   const ownDraft = useOwnDraft(draft, () => roleplayComposerOf(useComposerStore.getState(), agent.id).draft, mention);
+  // `caret`：写完之后光标在哪（调用方知道时给）——插入的字与邻字重复时，靠它
+  // 判断插在等着的 claim 前面还是后面（见 moveClaims）。
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => ownDraft(() => setRoleplayDraft(agent.id, update)),
+    (update: string | ((prev: string) => string), caret?: number) =>
+      ownDraft(() => setRoleplayDraft(agent.id, update), { caret }),
     [agent.id, setRoleplayDraft, ownDraft],
   );
   // 选中之后落字这一次：`accept` 已经自己平移了其余等着的 claim，不再平移一遍。
@@ -694,7 +697,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draft.slice(caret)}`;
-    setDraft(next);
+    setDraft(next, at + 1);
     mention.sync(next, at + 1);
     requestAnimationFrame(() => {
       el?.focus();
@@ -712,7 +715,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const applyKind = (kind: ScriptSegmentKind) => {
     const el = taRef.current;
     const { text, caret } = applyLineKind(draft, el?.selectionStart ?? draft.length, kind);
-    setDraft(text);
+    setDraft(text, caret);
     mention.sync(text, caret);
     requestAnimationFrame(() => {
       el?.focus();
@@ -1365,7 +1368,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                   : t("roleplay.composer.placeholder", { defaultValue: "说一句台词，或写一个动作…" })
               }
               onChange={(e) => {
-                setDraft(e.target.value);
+                setDraft(e.target.value, e.target.selectionStart);
                 mention.sync(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={onKeyDown}

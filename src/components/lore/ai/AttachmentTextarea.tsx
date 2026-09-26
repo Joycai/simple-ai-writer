@@ -105,9 +105,10 @@ export function AttachmentTextarea({
     // Picks still reading move with what is typed ahead of them — the open
     // mention is `sync`'s, a closed one only moves here (see moveClaims).
     // Typing is this field's only write besides a landing, so no `useOwnDraft`.
-    mention.edited(latest.current.instruction, e.target.value);
+    const caret = e.target.selectionStart ?? e.target.value.length;
+    mention.edited(latest.current.instruction, e.target.value, caret);
     onInstructionChange(e.target.value);
-    mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
+    mention.sync(e.target.value, caret);
   };
 
   const handlePick = async (item: MentionItem) => {

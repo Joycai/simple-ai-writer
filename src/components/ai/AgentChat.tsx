@@ -207,8 +207,11 @@ export function AgentChat() {
   // every write of ours goes through `ownDraft`, so that one is told apart and the open
   // mention moved by it.
   const ownDraft = useOwnDraft(draft, () => chatComposerOf(useComposerStore.getState(), activeKey).draft, mention);
+  // `caret`: where the caret is after this write, when the caller knows —
+  // it places an insertion that repeats its neighbours (see moveClaims).
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => ownDraft(() => setChatDraft(activeKey, update)),
+    (update: string | ((prev: string) => string), caret?: number) =>
+      ownDraft(() => setChatDraft(activeKey, update), { caret }),
     [setChatDraft, activeKey, ownDraft],
   );
   // A pick landing its reference: `accept` moves the other waiting picks itself.
@@ -324,7 +327,7 @@ export function AgentChat() {
     const pad = /[\w@]$/.test(before) ? " " : "";
     const at = caret + pad.length;
     const next = `${before}${pad}@${draftRef.current.slice(caret)}`;
-    setDraft(next);
+    setDraft(next, at + 1);
     draftRef.current = next;
     mention.sync(next, at + 1);
     // After the value lands, or the browser puts the caret back at the end.
@@ -335,8 +338,9 @@ export function AgentChat() {
   };
 
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDraft(e.target.value);
-    mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
+    const caret = e.target.selectionStart ?? e.target.value.length;
+    setDraft(e.target.value, caret);
+    mention.sync(e.target.value, caret);
   };
 
   const handlePickMention = async (item: MentionItem) => {

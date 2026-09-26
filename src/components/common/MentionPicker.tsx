@@ -149,10 +149,11 @@ export interface MentionState {
   external: (before: string, after: string) => void;
   /**
    * For an edit of this instance's own that was not a landing: move the picks
-   * waiting on a file read by it (see moveClaims). The open mention is the
-   * host's `sync` to move. `useOwnDraft` calls it.
+   * waiting on a file read by it (see moveClaims; `caret` where the host's is
+   * after the write, when it knows). The open mention is the host's `sync` to
+   * move. `useOwnDraft` calls it.
    */
-  edited: (before: string, after: string) => void;
+  edited: (before: string, after: string, caret?: number) => void;
   /**
    * A pick's handle on the mention it came from — take it *before* any
    * await, with the text as it is then, and hand it to `accept` after. Null
@@ -356,9 +357,15 @@ const CLAIM_SPAN_DISTANCE = 400;
  * the claim as one. The span alone is aligned character by character
  * (lib/diff's Myers) and the claim's `@` followed through it; it counts as
  * carried only if the new text there still reads as its mention — a landing
- * on that `@` (now `@[`) or a rewrite of its letters stays run over.
+ * on that `@` (now `@[`) or a rewrite of its letters stays run over. A glued
+ * claim is never carried (see inside). Where the span repeats the claim's
+ * `@query` and its own was taken out, the alignment may pick the other one —
+ * the one case this can carry a claim somewhere it was not.
  */
 function claimThrough(c: MentionClaim, before: string, after: string, edit: { start: number; end: number; delta: number }): number | null {
+  // Glued, the `[` after its `@` was prose, and a reference landed on that
+  // `@` reads the same (`@[`) — told apart only by the old rule, not here.
+  if (c.glued) return null;
   const was = before.slice(edit.start, edit.end);
   const now = after.slice(edit.start, edit.end + edit.delta);
   if (was.length + now.length > CLAIM_SPAN_MAX) return null;
@@ -367,7 +374,10 @@ function claimThrough(c: MentionClaim, before: string, after: string, edit: { st
   const kept = script?.find((step) => step.type === "equal" && step.a === at);
   if (!kept) return null;
   const start = edit.start + kept.b;
-  return after.startsWith(`@${c.query}`, start) ? start : null;
+  if (!after.startsWith(`@${c.query}`, start)) return null;
+  // An empty query followed by `[` now is a reference landed on it.
+  if (c.query === "" && after.charAt(start + 1) === "[") return null;
+  return start;
 }
 
 /**
@@ -394,28 +404,47 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
  * The waiting picks after an edit of this instance's own that was not a
  * landing — typing, `+ 引用`'s `@`, a line kind, a snippet: moved when they
  * lie after it, carried when it went around them (claimThrough), left alone
- * otherwise. Only the claim of the *open* mention is
- * followed by `trackClaims`; one whose mention was closed during the read (a
- * 「，」 typed after it) kept its old place, and anything written ahead of it
- * left it pointing into the wrong text, so the landing found no `@潮` there.
- * Unlike `shiftClaims`, `glued` is kept: typing on through a query is not a
+ * otherwise. Only the claim of the *open* mention is followed by
+ * `trackClaims`; one whose mention was closed during the read (a 「，」 typed
+ * after it) kept its old place, and anything written ahead of it left it
+ * pointing into the wrong text, so the landing found no `@潮` there. Unlike
+ * `shiftClaims`, `glued` is kept: typing on through a query is not a
  * reference landed on it.
+ *
+ * `caret`, where the host's caret is after the write, says where a pure
+ * insertion or deletion was made when `editRange` cannot: inserted or
+ * deleted text repeating its neighbours reads as made anywhere along the
+ * repeat (`@` put in right ahead of `@潮`, or right after an empty `@`, or
+ * taken out again), and reading it on the wrong side of a claim's `@` hands
+ * the claim to the neighbour `@` — where the mention `sync` opens takes it
+ * over (trackClaims matches on `start`). Used only when it is a reading of
+ * the edit; without it, the greedy one.
  */
-export function moveClaims(pending: Map<number, MentionClaim>, before: string, after: string): void {
-  const edit = editRange(before, after);
+export function moveClaims(pending: Map<number, MentionClaim>, before: string, after: string, caret?: number): void {
+  if (pending.size === 0) return;
+  let edit = editRange(before, after);
   if (edit.start === edit.end && edit.delta === 0) return;
-  // A pure insertion repeating what stands before a claim's `@` (an `@` put
-  // in right ahead of `@潮` — `+ 引用` with the caret there) reads as made
-  // anywhere along the repeat; ours were made at the caret, ahead of the
-  // claim, so the leftmost reading (`lo`) is the bound. Read the other way
-  // the claim stays on the new `@`, and the mention `sync` opens there takes
-  // it over (trackClaims matches on `start`).
-  const bound = edit.start === edit.end ? edit.lo : edit.end;
+  const at = caret === undefined ? null : pureEditAt(before, after, edit.delta, caret);
+  if (at !== null) edit = { ...edit, start: at, end: at + Math.max(0, -edit.delta) };
   for (const [id, c] of pending) {
-    if (c.start >= bound) { pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
+    if (c.start >= edit.end) { pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
     const carried = c.start >= edit.start ? claimThrough(c, before, after, edit) : null;
     if (carried !== null) pending.set(id, { ...c, start: carried });
   }
+}
+
+/**
+ * Where a pure insertion (`delta > 0`) or deletion (`delta < 0`) that left
+ * the caret at `caret` began — if that is a reading of `before` → `after`,
+ * else null (the write was not a pure one at the caret).
+ */
+function pureEditAt(before: string, after: string, delta: number, caret: number): number | null {
+  if (delta === 0) return null;
+  const at = delta > 0 ? caret - delta : caret;
+  if (at < 0 || at > Math.min(before.length, after.length)) return null;
+  const head = before.slice(0, at) === after.slice(0, at);
+  const tail = delta > 0 ? before.slice(at) === after.slice(at + delta) : after.slice(at) === before.slice(at - delta);
+  return head && tail ? at : null;
 }
 
 /**
@@ -717,7 +746,7 @@ export function useMentionState(): MentionState {
       shiftClaims(pending.current, before, after);
       setState((s) => shiftCore(s, before, after));
     },
-    edited: (before, after) => moveClaims(pending.current, before, after),
+    edited: (before, after, caret) => moveClaims(pending.current, before, after, caret),
     claim: (text) => claimOf(pending.current, state, text),
     accept: (value, item, claim, projectPath, sel) => {
       const { text, landed } = acceptPick(
@@ -766,13 +795,14 @@ export function useMentionState(): MentionState {
  * on a read are moved here, after the write (`MentionState.edited`) — a
  * mention closed during the read no longer follows the typing. Except for a
  * landing (`{ landing: true }`): `accept` has moved the picks after it by
- * then, and moving them again would put them past their `@`.
+ * then, and moving them again would put them past their `@`. `caret`: where
+ * the host's caret is after the write, when it knows (see moveClaims).
  */
 export function useOwnDraft(
   draft: string,
   read: () => string,
   mention: MentionState,
-): (write: () => void, opts?: { landing?: boolean }) => void {
+): (write: () => void, opts?: { landing?: boolean; caret?: number }) => void {
   const own = useRef(draft);
   // Through refs, so `own` is stable and a host's `setDraft` built on it is too.
   const readNow = useRef(read);
@@ -786,13 +816,13 @@ export function useOwnDraft(
     m.current.external(before, now);
   }, []);
   useEffect(() => { catchUp(draft); }, [draft, catchUp]);
-  return useCallback((write: () => void, opts?: { landing?: boolean }) => {
+  return useCallback((write: () => void, opts?: { landing?: boolean; caret?: number }) => {
     catchUp(readNow.current());
     const before = own.current;
     write();
     const after = readNow.current();
     own.current = after;
-    if (!opts?.landing && after !== before) m.current.edited(before, after);
+    if (!opts?.landing && after !== before) m.current.edited(before, after, opts?.caret);
   }, [catchUp]);
 }
 

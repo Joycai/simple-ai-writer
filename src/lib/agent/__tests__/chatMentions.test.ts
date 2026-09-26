@@ -462,10 +462,24 @@ describe("moveClaims", () => {
     expect(p.get(1)!.start).toBe(3);
   });
 
-  it("reads an `@` put in right ahead of a pick's `@` as ahead of it", () => {
+  it("places an insertion that repeats its neighbours by the caret", () => {
+    // `@` put in right ahead of the pick's `@` (caret now after it, at 3).
+    const ahead = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
+    moveClaims(ahead, "看看@潮，", "看看@@潮，", 3);
+    expect(ahead.get(1)!.start).toBe(3);
+    // ` @` put in right after an empty `@` (`+ 引用` pads it): the pick stays.
+    const behind = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "", glued: false }]]);
+    moveClaims(behind, "看看@夜", "看看@ @夜", 5);
+    expect(behind.get(1)!.start).toBe(2);
+    // And taken out again with Backspace: the pick goes back with the text.
+    moveClaims(ahead, "看看@@潮，", "看看@潮，", 2);
+    expect(ahead.get(1)!.start).toBe(2);
+  });
+
+  it("ignores a caret that is not where the edit could have been made", () => {
     const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
-    moveClaims(p, "看看@潮，", "看看@@潮，");
-    expect(p.get(1)!.start).toBe(3);
+    moveClaims(p, "看看@潮，", "看看@潮，好", 1);
+    expect(p.get(1)!.start).toBe(2);
   });
 });
 
@@ -473,9 +487,18 @@ describe("shiftClaims through a span that covers a pick", () => {
   it("carries a pick another instance's edits went around — ahead of it and after it at once", () => {
     // The instance that lands after a switch catches up in one diff: 「你」 at
     // the head and 「，」 at the tail are one span with the claim inside.
-    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: true }]]);
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
     shiftClaims(p, "我看@潮", "你我看@潮，");
-    expect(p.get(1)).toEqual({ id: 1, start: 3, query: "潮", glued: true });
+    expect(p.get(1)).toEqual({ id: 1, start: 3, query: "潮", glued: false });
+  });
+
+  it("never carries a glued pick, nor an empty one a reference now follows — both read as landed on", () => {
+    const glued = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: true }]]);
+    shiftClaims(glued, "我@[草稿]", "你我@[潮汐.png][草稿]，");
+    expect(glued.get(1)!.start).toBe(1);
+    const empty = new Map<number, MentionClaim>([[1, { id: 1, start: 1, query: "", glued: false }]]);
+    moveClaims(empty, "我@夜", "你我@[潮汐.png]夜，");
+    expect(empty.get(1)!.start).toBe(1);
   });
 
   it("still leaves a pick a reference was landed on, and drops its glue", () => {
@@ -498,7 +521,7 @@ describe("a pick across a file read", () => {
     const spent = new Set<number>();
     let text = "";
     /** Typing, or any other write of the host's own but a landing: `useOwnDraft` moves the waiting picks, then `sync`. */
-    const type = (next: string, caret = next.length) => { moveClaims(pending, text, next); text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
+    const type = (next: string, caret = next.length) => { moveClaims(pending, text, next, caret); text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
     /** Another instance wrote the draft: what `useOwnDraft` does for both chat hosts. */
     const external = (next: string) => { shiftClaims(pending, text, next); core = shiftCore(core, text, next); text = next; trackClaims(pending, core); };
     const claim = () => claimOf(pending, core, text)!;
@@ -541,12 +564,25 @@ describe("a pick across a file read", () => {
     h.type("看看@潮");
     const a = h.claim();
     h.type("看看@潮，");
-    h.type("看看@@潮，", 3); // `+ 引用` with the caret on the `@`
+    h.type("看看@@潮，", 3); // `+ 引用` with the caret on the `@`: the caret ends after the new one
     for (const t of ["看看@雾@潮，"]) h.type(t, 4);
     const b = h.claim();
     const afterA = h.accept("看看@雾@潮，", pic("插图/潮汐.png"), a);
     expect(afterA).toBe("看看@雾@[潮汐.png]，");
     expect(h.accept(afterA, pic("插图/雾港.png"), b)).toBe("看看@[雾港.png]@[潮汐.png]，");
+  });
+
+  it("an empty `@` still reading, then `+ 引用` right after it: each pick lands on its own `@`", () => {
+    const h = host();
+    h.type("看看@");
+    const a = h.claim();
+    h.type("看看@夜", 3); // typed on, then moved back to right after the `@`
+    h.type("看看@ @夜", 5); // `+ 引用` pads the `@` and puts the caret after its own
+    const b = h.claim();
+    const afterA = h.accept("看看@ @夜", pic("插图/潮汐.png"), a);
+    expect(afterA).toBe("看看@[潮汐.png] @夜");
+    // The second `@` was picked empty, the caret right after it: `夜` stays prose.
+    expect(h.accept(afterA, pic("插图/夜航.png"), b)).toBe("看看@[潮汐.png] @[夜航.png]夜");
   });
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
