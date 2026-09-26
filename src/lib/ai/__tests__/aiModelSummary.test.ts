@@ -59,6 +59,17 @@ describe("wireSummary", () => {
     ]);
   });
 
+  // Anthropic's only tier is the schema; once an endpoint refuses it the
+  // request carries the cue alone, and the line must not claim a json_object
+  // the family has no field for.
+  it("shows Anthropic's schema tier, and nothing once it is refused", () => {
+    const claude: WireInput = { ...base, modelId: "claude-sonnet-5" };
+    const url = "https://api.anthropic.com";
+    expect(wireSummary(claude, "anthropic", url)).toContainEqual({ key: "output_config.format", value: "json_schema", scope: "structured" });
+    noteJsonModeRefused({ standard: "anthropic", baseUrl: url, modelId: "claude-sonnet-5" }, "json_schema");
+    expect(keys(wireSummary(claude, "anthropic", url))).not.toContain("output_config.format");
+  });
+
   it("spells a Qwen thinking model the way the OpenAI adapter does", () => {
     const items = wireSummary({
       ...base,

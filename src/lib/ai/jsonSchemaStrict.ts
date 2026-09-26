@@ -145,12 +145,17 @@ export function forAnthropic(schema: JsonSchema): JsonSchema {
     } else if (key === "items" && value && typeof value === "object") {
       out.items = Array.isArray(value) ? (value as JsonSchema[]).map(forAnthropic) : forAnthropic(value as JsonSchema);
     } else if ((key === "anyOf" || key === "allOf" || key === "oneOf") && Array.isArray(value)) {
-      const merged = [...((out.anyOf as JsonSchema[] | undefined) ?? []), ...(value as JsonSchema[]).map(forAnthropic)];
-      if (key === "allOf") out.allOf = (value as JsonSchema[]).map(forAnthropic);
-      else out.anyOf = merged;
+      out[key === "oneOf" ? "anyOf" : key] = (value as JsonSchema[]).map(forAnthropic);
     } else {
       out[key] = value;
     }
+  }
+  // Both on one node means "one of A and one of B"; merged into a single
+  // anyOf it would loosen to "any of A or B", so each keeps its own anyOf.
+  if (Array.isArray(schema.anyOf) && Array.isArray(schema.oneOf)) {
+    const pair = [{ anyOf: (schema.anyOf as JsonSchema[]).map(forAnthropic) }, { anyOf: (schema.oneOf as JsonSchema[]).map(forAnthropic) }];
+    delete out.anyOf;
+    out.allOf = [...((out.allOf as JsonSchema[] | undefined) ?? []), ...pair];
   }
   return out;
 }

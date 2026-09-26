@@ -1992,6 +1992,7 @@ Responses adapter：
 | 流式 | JSON 走普通 `text_delta`，没有新的块类型 |
 | schema 带 `minLength` / `maximum` / `pattern` / `minItems: 3`、缺或为 `true` 的 `additionalProperties` | 经网关都 200（请求侧结论，只对网关成立；官方文档把它们列为不支持） |
 | `["string","null"]` 联合、带 `null` 的 enum、`anyOf` 含 `null`、对象数组 | 200，输出合 schema |
+| 想取一个真实的拒绝报文：`type: "foo"`、递归 `$ref`、`format` 缺 `schema` | 经网关**全是 200**（缺 schema 时照 prompt 自由答）——拿不到 Anthropic 对 `output_config.format` 的 400 原文 |
 
 据此本项目打开 ④ 族的结构化输出（只有严格档）：[`structured-output-plan.md`](structured-output-plan.md) §13。
 本项目 Claude 的「关闭」思考档本来就发 `adaptive` + `effort: low` 而不是 `disabled`，所以 Opus 5.5 / Fable 5.1

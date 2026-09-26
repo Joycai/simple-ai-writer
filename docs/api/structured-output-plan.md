@@ -415,6 +415,13 @@ enum，而同一 prompt 去掉 enum 的对照组照 prompt 答——强制是真
    `oneOf` 写成 `anyOf`（文档只列 `anyOf` / `allOf`）。经 OrcaRouter 发这些关键字都是 200，
    但网关会重新序列化请求，这不能当官方接受的证据，所以按文档剥。
 3. **不带 cue**。与 ① 的严格档一致：schema 本身就是形状说明，系统提示里的 JSON 指令照旧。
+4. **拒绝的判据按字段路径认**（`isJsonModeRejection` 加了 `output_config.format` / 旧的
+   `output_format`）。这是按 Anthropic 其余 400 都以字段路径开头（`messages.1.content.0: …`）
+   推的；经网关构造不出真实的拒绝报文（非法 type、递归、缺 schema 都是 200），样本仍欠着。
+   只有作者手动声明才会走到这条路——自动档只在实测过的线路 + 名单型号上抬升。
+5. **被拒之后显示为「关闭」**。拒绝记成 `json_object` 封顶，而这一族没有那一档：
+   `effectiveStructuredOutput` 对没有该档的族返回 `off`，「将发送」与抽屉的降级提示读的
+   都是它，所以不会显示一个线上根本没发的 `json_object`。
 
 **名单**：官方支持表里 Claude 4.5 起的型号，官方连字符与中转站点号两种拼法都列
 （`claude-opus-4-5` / `claude-opus-4.5`）。平台格：`anthropic`（官方）与 `orcarouter` 的 ④

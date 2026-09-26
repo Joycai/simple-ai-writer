@@ -389,7 +389,11 @@ function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode |
  * tool attempt worth making" check all read — so they cannot disagree.
  */
 export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMode {
-  return capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  const mode = capJsonMode(resolveStructuredOutput(t), jsonModeCeiling(t));
+  // A refused schema tier caps at json_object, which a family without that
+  // tier (Anthropic) sends as the cue alone — say so here too, so the 将发送
+  // line and the drawer read what the wire gets, not a tier it doesn't have.
+  return structuredOutputModesFor(t.standard).includes(mode) ? mode : "off";
 }
 
 /**

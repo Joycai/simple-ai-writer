@@ -6,7 +6,7 @@
  * stripped, has the shape a caller written against the original expects.
  */
 import { describe, expect, it } from "vitest";
-import { strictify, stripNulls } from "../jsonSchemaStrict";
+import { forAnthropic, strictify, stripNulls } from "../jsonSchemaStrict";
 
 /** The consistency scan's shape, in miniature: optional fields, enum, nesting. */
 const FINDINGS = {
@@ -107,5 +107,14 @@ describe("stripNulls", () => {
     const out = stripNulls(reply) as typeof reply;
     expect("suggestion" in out.issues[0]).toBe(false);
     expect(out.issues[0].entity).toBe("a");
+  });
+});
+
+describe("forAnthropic", () => {
+  // "one of A and one of B" must not loosen into "any of A or B".
+  it("keeps anyOf and oneOf on one node as two constraints", () => {
+    const A = [{ type: "string" }, { type: "integer" }];
+    const B = [{ type: "integer" }, { type: "null" }];
+    expect(forAnthropic({ anyOf: A, oneOf: B })).toEqual({ allOf: [{ anyOf: A }, { anyOf: B }] });
   });
 });
