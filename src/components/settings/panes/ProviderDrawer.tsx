@@ -23,7 +23,7 @@ import {
 import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, channelHost, endpointBaseUrl, keyOptional, newChannelEndpoints, normalizeChannel,
-  ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
+  pinnableRoute, ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
 } from "../../../lib/ai/routes";
 import { SERVER_TOOL_IDS } from "../../../lib/ai/serverTools";
 import { isRelayPlatform, parseUpstreamPrefixes } from "../../../lib/ai/relayUpstream";
@@ -82,8 +82,8 @@ type StarterModel = Pick<Model, "modelId" | "name"> &
  *   caching and structured output were all measured there.
  * - Gemini 3.8 Flash on Gemini: the response is Vertex AI's own.
  * The pinned route may be one the author removed before saving; `handleSave`
- * then drops the pin and the row follows the primary route (OrcaRouter serves
- * every model on Chat).
+ * then drops the pin (`pinnableRoute`) and the row follows the primary route
+ * (OrcaRouter serves every model on Chat).
  */
 const orcaStarter = (modelId: string, name: string, activeRoute: ProtocolFamily): StarterModel => ({
   modelId, name, activeRoute, ...platformModelCalibration("orcarouter", modelId),
@@ -473,10 +473,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCrea
             pdfInput: m.pdfInput,
             routes: m.routes,
             caps: m.caps,
-            // A pin to a route the author removed before saving would leave a
-            // row that cannot run (conn.ts: routeNotFound); unpinned, it
-            // follows the primary route instead.
-            activeRoute: m.activeRoute && channel.endpoints!.some((e) => e.family === m.activeRoute) ? m.activeRoute : undefined,
+            activeRoute: pinnableRoute(m.activeRoute, channel.endpoints!),
           });
         }
         if (comfyMode && onComfyCreated) {
