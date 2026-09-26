@@ -92,10 +92,12 @@ const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
  * there eating ↑↓, Tab and the first Esc. So `@[` never opens, an `@` inside
  * an unclosed `@[…` (a name that itself holds one, `封面@2x.png`) never opens,
  * and a name that starts with `[` is reached by a word inside it — the same
- * as a name starting with `【`, which was always a terminator. The unclosed
- * `@[…` ends at a newline or a CJK terminator, not at a space (names have
- * spaces), so an author-typed `@[` costs the `@`s up to the next 「，」 on that
- * line — a deliberate price.
+ * as a name starting with `【`, which was always a terminator. Brackets are
+ * counted the way the token's readers count them (mentionText
+ * `endsInsideToken`). The unclosed `@[…` ends at a newline, at the next `@[`
+ * (a name never holds one) or at a CJK terminator, not at a space (names
+ * have spaces), so an author-typed `@[` costs the `@`s up to the next 「，」
+ * or `@[` on that line — a deliberate price.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);

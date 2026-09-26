@@ -116,6 +116,9 @@ describe("findMention", () => {
     expect(findMention("看看@[手稿[旧]@2x", 13)).toBeNull();
     // Closed by its own `]`: an `@` after it opens as usual.
     expect(findMention("看看@[手稿[旧]]@潮", 12)).toEqual({ start: 10, query: "潮" });
+    // An author-typed `@[` ends at the next `@[` — a landed reference, never
+    // part of a name — so an `@` after that reference opens as usual.
+    expect(findMention("@[草稿 看@[潮汐.md] @夜", 17)).toEqual({ start: 15, query: "夜" });
   });
 
   it("still opens on an @ that runs straight out of Chinese prose", () => {
