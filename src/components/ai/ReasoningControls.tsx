@@ -10,7 +10,7 @@
  * **The dial adapts to the model's thinking category.** Each per-vendor
  * category (`resolveThinkingCategory`) declares its own legal menu, so this
  * renders exactly what the endpoint accepts: level chips for a `levels`
- * category (Gemini's minimal/low/medium/high, Qwen-Max's xhigh, …), an on/off
+ * category (Gemini's low/medium/high, Qwen-Max's xhigh, …), an on/off
  * toggle for a switch-style one (MiniMax, Qwen's enable_thinking), and a token
  * field for a `budget` one (Claude extended, Qwen). The label follows what the
  * level governs — the whole response on Anthropic, thinking alone elsewhere.

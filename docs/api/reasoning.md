@@ -72,7 +72,8 @@
 - **`minimal` 不等于关闭。** 文档原话：*"`minimal` does not guarantee that
   thinking is off"*。③ 族**没有关闭思考的手段**，这比 ④ 族更彻底（④ 至少部分
   模型接受 `disabled`）。实测补一句：3.8 Flash 上旧的 `thinkingBudget` 仍被接受，
-  但 **`thinkingBudget: 0` 照样思考**（312 token）——在 3 代上它关不掉，也不能拿来
+  但 **`thinkingBudget: 0` 照样思考**（312 token）——经 OrcaRouter 测得，网关重新序列化
+  时可能把 `0` 当空值丢了，所以只能说「经那台网关关不掉」；无论哪种，都不能拿它来
   代替缺席的 `minimal`（[`landscape.md`](landscape.md) §7 第十八个样本）。
 - **`minimal` 不是每个型号都有**，而且缺的时候是 400 而不是降级。一个「尽量少
   想」的选项要映射到**所有型号都收的最低档** `low`，不是 `minimal`。

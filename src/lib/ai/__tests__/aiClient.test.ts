@@ -613,8 +613,9 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(JSON.parse(toolChunk.toolCalls[0].arguments)).toEqual({ dir: "writing" });
   });
 
-  // Vertex refuses a bare `{text:""}` on the echo (400 "required oneof field
-  // 'data'"), and the stream closes on exactly that part after a tool call;
+  // A bare `{text:""}` echoed back was refused through OrcaRouter's Vertex route
+  // (400 "required oneof field 'data'"), and the stream closes on exactly that
+  // part after a tool call;
   // an empty text carrying a signature is accepted and must survive
   // (landscape.md §7 第十八个样本).
   it("keeps every model part for the echo except a bare empty text", async () => {
@@ -633,6 +634,21 @@ describe("streamCompletion — Gemini SSE", () => {
       { functionCall: { name: "a", args: {}, id: "call_2" } },
       { text: "", thoughtSignature: "S2" },
     ]);
+  });
+
+  // History saved before the capture-side filter still holds the bare part.
+  it("drops a bare empty text from saved model parts on the way out", async () => {
+    const { convertToGeminiContents } = await import("../gemini");
+    const contents = convertToGeminiContents([
+      { role: "user", content: "hi" },
+      {
+        role: "assistant", content: null,
+        tool_calls: [{ id: "t1", type: "function", function: { name: "a", arguments: "{}" } }],
+        _geminiModelParts: [{ functionCall: { name: "a", args: {} }, thoughtSignature: "S1" }, { text: "" }],
+      },
+      { role: "tool", tool_call_id: "t1", content: "ok" },
+    ]);
+    expect(contents[1].parts).toEqual([{ functionCall: { name: "a", args: {} }, thoughtSignature: "S1" }]);
   });
 
   it("throws a descriptive error when the prompt is safety-blocked", async () => {

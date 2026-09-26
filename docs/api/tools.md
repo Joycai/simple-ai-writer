@@ -104,9 +104,13 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
     `functionResponse` 带不带 `id` 都被接受，按顺序配对。
   - 缺签名是 **HTTP 400** `Function call is missing a thought_signature in
     functionCall parts`，不是 200 + 某个 finishReason。
-  - 流以一个**光秃秃的 `{text: ""}`** 收尾。「原样回传」要把它排除：Vertex 对它
-    回 400 `required oneof field 'data' must have one initialized field`；带签名的
-    `{text: "", thoughtSignature}` 则照收。
+  - 流以一个**光秃秃的 `{text: ""}`** 收尾。经 OrcaRouter 原样回传它得到 400
+    `required oneof field 'data' must have one initialized field`；带签名的
+    `{text: "", thoughtSignature}` 则照收。这可能是网关重新序列化时把空串丢了、
+    剩下 `{}`，不一定是 Vertex 本身——但这个 part 什么都不带，回传时排除它在哪
+    都不亏。
+  - 以上「会不会 400」的结论（缺签名、空 part）都是经网关得到的；网关的请求侧
+    不是透传（见第十八个样本开头）。
 
 ## 6. ④ Anthropic Messages
 
@@ -130,7 +134,8 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   `thoughtSignature`。
   实测（Sonnet 5 adaptive，第十八个样本）：原样回灌 200、**签名被改 400**
   `Invalid \`signature\` in \`thinking\` block`；但**整个丢掉 thinking block 也是
-  200**——「必须带上」在这一代上已不是硬约束，带上仍是正路（连续性靠它）。
+  200**——这是经网关的结果（网关请求侧不透传），不能据此改写官方规则：带上仍是
+  正路，连续性也靠它。
 - 响应里的 `tool_use` 多了 **`caller: {"type": "direct"}`**（程序化工具调用的来源
   标记）；回灌时去掉它也 200。
 - **`tools` 里可以混入服务端工具**（`{type:"web_search_20250305", name:"web_search"}`

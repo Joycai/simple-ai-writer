@@ -3,7 +3,7 @@
 > **状态：四刀全部实现。** 目标 **Gemini 3+**。剩下的是 §5 那几条只能靠真实请求定论的验证。
 >
 > **2026-09 更新**：Gemini 的思考映射现在是具名类目 `gemini3`（`thinkingLevel`
-> 大写枚举 minimal/low/medium/high + `includeThoughts`，`off`→`MINIMAL`）。wire 形状不变；
+> 大写枚举 low/medium/high + `includeThoughts`，`off`→`LOW`——2026-09-26 前是 `MINIMAL`，3.8 Flash 对它回 400，见 [`landscape.md`](landscape.md) §7 第十八个样本）。wire 形状不变；
 > 类目模型见 [`reasoning-plan.md`](reasoning-plan.md) §0。
 >
 > 核对分两轮，第二轮（API 参考的 markdown 原文）纠正了第一轮的两个判断 ——
@@ -77,7 +77,7 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
   `minimal`（3.1 Flash-Lite）。
 - **思考不可关闭**，`minimal` 也只是「最少」而非关闭。
 
-对 UI 的直接后果：**③ 族的「关闭」档只能映射到 `minimal`**，与 ④ 族「关闭
+对 UI 的直接后果：**③ 族的「关闭」档只能映射到最低档**（原定 `minimal`；2026-09-26 起改为 `low`，因为 `minimal` 不是每个型号都收），与 ④ 族「关闭
 映射到最低 effort」的处理完全同构 —— `ANTHROPIC_EFFORT` 那套注释可以照搬。
 
 ### 2.5 ③ 族有两套 surface —— 本轮只做经典那套
@@ -118,13 +118,13 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
 | 本项目档位 | Gemini |
 | --- | --- |
 | 跟随默认 | 不发 `thinkingLevel` |
-| 关闭 | `MINIMAL`（③ 族关不掉，`minimal` 也只是「最少」） |
+| 关闭 | `LOW`（③ 族关不掉；2026-09-26 前是 `MINIMAL`，3.8 Flash 拒收） |
 | 低 / 中 / 高 | `LOW` / `MEDIUM` / `HIGH` |
 | 最高 | `HIGH`（没有更高的） |
 
 「关闭 → 最低档」与 ④ 族的处理完全同构，`ANTHROPIC_EFFORT` 那段注释的理由可
-照搬。**3.1 Pro 没有 `MINIMAL`** —— 若实测发现它拒绝，这正是 `thinkingDialect`
-或探测该管的事。
+照搬。**3.1 Pro 没有 `MINIMAL`**，3.8 Flash 实测拒收——所以「关闭」改发所有型号都收
+的 `LOW`，这条不再需要探测。
 
 ### 3.2 `thinkingBudget` 不实现
 

@@ -184,7 +184,7 @@ adapter 只调用它拿一段 body 片段合并进去，永远不自己写档位
 | 项目档位 | OpenAI / DeepSeek | Anthropic 新代 | Anthropic 旧代 | Gemini 新代 / 2.5 |
 | --- | --- | --- | --- | --- |
 | 跟随默认 | 不发 | 不发 | 不发 | 不发 |
-| 关闭 | `reasoning_effort:"none"` + `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinkingLevel:"minimal"` / `thinkingBudget:0` |
+| 关闭 | `reasoning_effort:"none"` + `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinkingLevel:"minimal"` / `thinkingBudget:0`（2026-09-26 起实际发 `LOW`，见 `gemini-plan.md`） |
 | 低 | `"low"` | `effort:"low"` | budget 2048 | `"low"` / 2048 |
 | 中 | `"medium"` | `effort:"medium"` | budget 8192 | `"medium"` / 8192 |
 | 高 | `"high"` | `effort:"high"` | budget 16384 | `"high"` / 16384 |

@@ -1,6 +1,6 @@
 # OrcaRouter 付费实测：三家官方协议的结构与特性（方案）
 
-> **状态**：done（2026-09-26 起草、同日测完）。§7 是逐条的「测了什么 → 落在哪」。
+> **状态**：shipped（2026-09-26 起草、同日测完并落地三处修复）。§7 是逐条的「测了什么 → 落在哪」。
 >
 > 这份文件写**这一轮要测什么、怎么测、结果落到哪**。测出来的协议事实不写在
 > 这里——它们进 `landscape.md` 第十八个样本与各主题文件；这里只留方案与取舍。
@@ -163,7 +163,7 @@ live 测试。每条后面是它要关掉的那个未决项。
 
 1. Gemini「关闭」`MINIMAL` → `LOW`（`reasoning.ts` `GEMINI_LEVEL`）：3.8 Flash 对 `MINIMAL` 回 400，
    「尽量少想」这一档报错是最坏的结果；多想几百 token 是便宜的那一边。
-2. Gemini 回灌跳过光秃秃的 `{text:""}`（`gemini.ts`）：流式工具轮的第二轮在 Vertex 上必 400。
+2. Gemini 回灌跳过光秃秃的 `{text:""}`（`gemini.ts`）：流式工具轮的第二轮经这台网关（Vertex 后端）必 400。
 3. `orcarouter` 能力格子按实测填（`capabilities.ts`），`capability-matrix.md` 重新生成。
 
 **留作后续、本轮不做**：④ 的 `output_config.format` 已证明可用，本项目 ④ 族结构化输出仍恒为
