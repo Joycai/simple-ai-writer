@@ -273,11 +273,11 @@ describe("acceptPick", () => {
   it("keeps prose typed after the mention when it is not a narrowing, and falls back to the snapshot", () => {
     expect(acceptPick(new Set(), table({ ...claim, query: "潮的图" }), claim, "看看@潮的图", "潮汐.png", nameHas("潮汐.png")).text)
       .toBe("看看@[潮汐.png]的图");
-    // The grown query matches the name but is no longer in the text (a
-    // 「，」 closed the mention, then backspace reopened it and cut it back to
-    // `@潮`): the snapshot lands.
-    expect(acceptPick(new Set(), table({ ...claim, query: "潮汐" }), claim, "看看@潮", "潮汐.png", nameHas("潮汐.png")).text)
-      .toBe("看看@[潮汐.png]");
+    // The grown query matches the name but is no longer in the text (「汐」
+    // was selected and overtyped with 「，」: the mention closed with the claim
+    // still at `潮汐`, and the text reads `@潮，`): the snapshot lands.
+    expect(acceptPick(new Set(), table({ ...claim, query: "潮汐" }), claim, "看看@潮，", "潮汐.png", nameHas("潮汐.png")).text)
+      .toBe("看看@[潮汐.png]，");
     // Only the tracked place is tried: a retry at the snapshot's place could
     // land on a never-picked `@潮` that happens to sit `delta` back.
     expect(acceptPick(new Set(), table({ ...claim, start: 5 }), claim, "看看@潮，看看@潮", "潮汐.png", nameHas("潮汐.png")))
@@ -510,8 +510,11 @@ describe("a pick across a file read", () => {
     expect(editRange("aa", "aaa")).toEqual({ start: 2, end: 2, delta: 1, lo: 0 });
     expect(editRange("看看@潮汐", "看看@[潮汐.png]汐")).toEqual({ start: 3, end: 4, delta: 7, lo: 3 });
     expect(editRange("看@[草稿]", "看@[潮汐.png][草稿]")).toEqual({ start: 3, end: 3, delta: 8, lo: 2 });
-    // Every landing another instance can make: `lo` sits right after the
-    // `@` that got the reference, so the mention on it closes and no other.
+    // Every empty-query landing — a pure insertion, the one shape whose span
+    // is ambiguous: `lo` still sits right after the `@` that got the
+    // reference, so the mention on it closes and no other. A non-empty query
+    // is a replacement, which starts right after the `@` anyway (a query
+    // never opens with `[` or holds `]`); the explicit cases above pin that.
     const texts = ["看看@", "看看@潮", "看@[草稿]第一章", "@潮@潮", "看看@，和@夜", "@[沈砚]@", "a@b @c"];
     const labels = ["潮汐.png", "[草稿]第一章.md", "沈砚", "@2x.png"];
     for (const text of texts) {
