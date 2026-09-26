@@ -32,6 +32,7 @@ import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
 import { endsInsideToken, mentionToken } from "../../lib/agent/mentionText";
+import { diffIndices } from "../../lib/diff/myers";
 import {
   failMentionRead,
   isMentionReading,
@@ -342,10 +343,38 @@ export function shiftCore(core: MentionCore, before: string, after: string): Men
   return core;
 }
 
+/** Past these a span is not worth aligning; a claim in it stays put, as before. */
+const CLAIM_SPAN_MAX = 4000;
+const CLAIM_SPAN_DISTANCE = 400;
+
 /**
- * The waiting picks after the same edit: moved when they lie after it. One
- * the edit ran over is left where it is — at landing, the text there no
- * longer reads as its mention, and nothing is spliced — and loses `glued`:
+ * Where the `@` of a claim lying *inside* an edit's replaced span went, or
+ * null. One span is what `editRange` can say, and a claim in it is either
+ * run over or carried along by edits on both sides of it — a roleplay line
+ * kind wraps the whole line (`我看着@潮，` → `*我看着@潮，*`), and an instance
+ * catching up after a switch sees the new instance's edits ahead of and after
+ * the claim as one. The span alone is aligned character by character
+ * (lib/diff's Myers) and the claim's `@` followed through it; it counts as
+ * carried only if the new text there still reads as its mention — a landing
+ * on that `@` (now `@[`) or a rewrite of its letters stays run over.
+ */
+function claimThrough(c: MentionClaim, before: string, after: string, edit: { start: number; end: number; delta: number }): number | null {
+  const was = before.slice(edit.start, edit.end);
+  const now = after.slice(edit.start, edit.end + edit.delta);
+  if (was.length + now.length > CLAIM_SPAN_MAX) return null;
+  const script = diffIndices(was.length, now.length, (i, j) => was.charCodeAt(i) === now.charCodeAt(j), CLAIM_SPAN_DISTANCE);
+  const at = c.start - edit.start;
+  const kept = script?.find((step) => step.type === "equal" && step.a === at);
+  if (!kept) return null;
+  const start = edit.start + kept.b;
+  return after.startsWith(`@${c.query}`, start) ? start : null;
+}
+
+/**
+ * The waiting picks after the same edit: moved when they lie after it, or
+ * carried when it went around them (claimThrough). One the edit ran over is
+ * left where it is — at landing, the text there no longer reads as its
+ * mention, and nothing is spliced — and loses `glued`:
  * whatever `[` now follows its `@` is the reference just landed there, not
  * the prose it was glued to (the same reset `acceptPick` makes for a
  * landing by this instance).
@@ -354,7 +383,9 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
   const edit = editRange(before, after);
   if (edit.delta === 0 && edit.start === edit.end) return;
   for (const [id, c] of pending) {
-    if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); }
+    if (c.start >= edit.end) { if (edit.delta !== 0) pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
+    const carried = c.start >= edit.start ? claimThrough(c, before, after, edit) : null;
+    if (carried !== null) pending.set(id, { ...c, start: carried });
     else if (c.glued && inEdit(c.start, c.query, edit)) pending.set(id, { ...c, glued: false });
   }
 }
@@ -362,7 +393,8 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
 /**
  * The waiting picks after an edit of this instance's own that was not a
  * landing — typing, `+ 引用`'s `@`, a line kind, a snippet: moved when they
- * lie after it, left alone otherwise. Only the claim of the *open* mention is
+ * lie after it, carried when it went around them (claimThrough), left alone
+ * otherwise. Only the claim of the *open* mention is
  * followed by `trackClaims`; one whose mention was closed during the read (a
  * 「，」 typed after it) kept its old place, and anything written ahead of it
  * left it pointing into the wrong text, so the landing found no `@潮` there.
@@ -371,9 +403,18 @@ export function shiftClaims(pending: Map<number, MentionClaim>, before: string, 
  */
 export function moveClaims(pending: Map<number, MentionClaim>, before: string, after: string): void {
   const edit = editRange(before, after);
-  if (edit.delta === 0) return;
+  if (edit.start === edit.end && edit.delta === 0) return;
+  // A pure insertion repeating what stands before a claim's `@` (an `@` put
+  // in right ahead of `@潮` — `+ 引用` with the caret there) reads as made
+  // anywhere along the repeat; ours were made at the caret, ahead of the
+  // claim, so the leftmost reading (`lo`) is the bound. Read the other way
+  // the claim stays on the new `@`, and the mention `sync` opens there takes
+  // it over (trackClaims matches on `start`).
+  const bound = edit.start === edit.end ? edit.lo : edit.end;
   for (const [id, c] of pending) {
-    if (c.start >= edit.end) pending.set(id, { ...c, start: c.start + edit.delta });
+    if (c.start >= bound) { pending.set(id, { ...c, start: c.start + edit.delta }); continue; }
+    const carried = c.start >= edit.start ? claimThrough(c, before, after, edit) : null;
+    if (carried !== null) pending.set(id, { ...c, start: carried });
   }
 }
 

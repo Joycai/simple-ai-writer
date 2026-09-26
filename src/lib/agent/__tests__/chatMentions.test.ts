@@ -41,6 +41,7 @@ vi.mock("../../lore/entity", () => ({
 
 const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, landSelection, mentionKeyDown, moveClaims, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
+const { applyLineKind } = await import("../../roleplay/markup");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -438,6 +439,50 @@ describe("moveClaims", () => {
     moveClaims(p, "看看@潮，再看@夜", "看看@潮。再看@夜");
     expect(p.get(2)!.start).toBe(7);
   });
+
+  it("carries a pick through a line kind, which rewrites both ends of its line", () => {
+    const one = (start: number) => new Map<number, MentionClaim>([[1, { id: 1, start, query: "潮", glued: false }]]);
+    const line = "我看着@潮，";
+    const action = applyLineKind(line, line.length, "action").text;
+    expect(action).toBe("*我看着@潮，*");
+    const p = one(3);
+    moveClaims(p, line, action);
+    expect(p.get(1)!.start).toBe(4);
+    // One kind for another: both marks replaced.
+    const speech = applyLineKind(action, 4, "speech").text;
+    expect(speech).toBe("「我看着@潮，」");
+    moveClaims(p, action, speech);
+    expect(p.get(1)!.start).toBe(4);
+    expect(speech.startsWith("@潮", p.get(1)!.start)).toBe(true);
+  });
+
+  it("leaves a pick whose own letters were rewritten inside the span", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 3, query: "潮", glued: false }]]);
+    moveClaims(p, "我看着@潮，", "*我看着@夜，*");
+    expect(p.get(1)!.start).toBe(3);
+  });
+
+  it("reads an `@` put in right ahead of a pick's `@` as ahead of it", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: false }]]);
+    moveClaims(p, "看看@潮，", "看看@@潮，");
+    expect(p.get(1)!.start).toBe(3);
+  });
+});
+
+describe("shiftClaims through a span that covers a pick", () => {
+  it("carries a pick another instance's edits went around — ahead of it and after it at once", () => {
+    // The instance that lands after a switch catches up in one diff: 「你」 at
+    // the head and 「，」 at the tail are one span with the claim inside.
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: true }]]);
+    shiftClaims(p, "我看@潮", "你我看@潮，");
+    expect(p.get(1)).toEqual({ id: 1, start: 3, query: "潮", glued: true });
+  });
+
+  it("still leaves a pick a reference was landed on, and drops its glue", () => {
+    const p = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "", glued: true }]]);
+    shiftClaims(p, "看看@[草稿]", "看看@[潮汐.png][草稿]");
+    expect(p.get(1)).toEqual({ id: 1, start: 2, query: "", glued: false });
+  });
 });
 
 describe("a pick across a file read", () => {
@@ -489,6 +534,19 @@ describe("a pick across a file read", () => {
     const afterA = h.accept("@看看@潮，", pic("插图/潮汐.png"), a);
     expect(afterA).toBe("@看看@[潮汐.png]，");
     expect(h.accept(afterA, pic("插图/夜航.png"), b)).toBe("@[夜航.png]看看@[潮汐.png]，");
+  });
+
+  it("closed during the read, then `+ 引用` right ahead of its `@`: the new mention does not take the pick over", () => {
+    const h = host();
+    h.type("看看@潮");
+    const a = h.claim();
+    h.type("看看@潮，");
+    h.type("看看@@潮，", 3); // `+ 引用` with the caret on the `@`
+    for (const t of ["看看@雾@潮，"]) h.type(t, 4);
+    const b = h.claim();
+    const afterA = h.accept("看看@雾@潮，", pic("插图/潮汐.png"), a);
+    expect(afterA).toBe("看看@雾@[潮汐.png]，");
+    expect(h.accept(afterA, pic("插图/雾港.png"), b)).toBe("看看@[雾港.png]@[潮汐.png]，");
   });
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
