@@ -62,9 +62,9 @@ export function mentionLabel(item: MentionItem): string {
  *
  * A space is the natural terminator, and Chinese prose does not have one — so
  * without a cap, a single `@` typed mid-sentence left the mention "open" for
- * the rest of the message. Nothing was on screen (the picker renders nothing
- * with no matches) while the composer kept treating every keystroke as part of
- * a mention. Longer than any entity or chapter name worth recognising.
+ * the rest of the message. Nothing was on screen (the picker then rendered
+ * nothing with no matches) while the composer kept treating every keystroke as
+ * part of a mention. Longer than any entity or chapter name worth recognising.
  */
 const MAX_QUERY_LEN = 24;
 
@@ -232,7 +232,7 @@ interface MentionPickerProps {
   anchorRef: React.RefObject<HTMLElement | null>;
   /** Already scoped, ranked and cut — `searchMentions(...).items`. */
   items: MentionItem[];
-  /** `searchMentions(...).hits`: where each shown row matched. Absent for an empty query. */
+  /** `searchMentions(...).hits`: where each shown row matched. Empty for an empty query. */
   hits?: ReadonlyMap<number, MentionHit>;
   /** The project root, for a document's group-path line. */
   projectPath: string | null;

@@ -402,6 +402,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     });
   }, [projectPath, agent, updateAgent]);
   const mention = useMentionState();
+  // 草稿按角色分开；这一位开着的提名在下一位那里没有对应的 @。
+  useEffect(() => { mention.close(); }, [agent.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
@@ -630,6 +632,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     if (!canSend) return;
     void send(agent.id, draft, refs, quote);
     clearComposer(agent.id);
+    // 放行发送的 Enter（哪个档都没命中的 @）不会自己关掉提名；空列表的选择器
+    // 现在会留在屏上，不关它就一直挂在空输入框上方吃 Tab 和方向键。
+    mention.close();
     setRefError(null);
     // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
     // 只做过一次的决定。想再带上，在编辑器里重新划一次。

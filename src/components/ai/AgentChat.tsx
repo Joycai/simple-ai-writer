@@ -397,6 +397,8 @@ export function AgentChat() {
   // A turn starting, or a switch to another session, withdraws the question:
   // the id it names may not even exist any more.
   useEffect(() => { setRewindTo(null); }, [chatRunning, chatSessionId]);
+  // The draft is per conversation; a mention open in one has no `@` in the next.
+  useEffect(() => { mention.close(); }, [activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const firstQuestionAt = turns.findIndex((tn) => tn.role === "user");
   const rewindIndex = rewindTo === null ? -1 : turns.findIndex((tn) => tn.id === rewindTo);
   const rewindExchanges = rewindIndex < 0
@@ -480,6 +482,10 @@ export function AgentChat() {
     // rarely about the same files, and the material stays in the conversation
     // history anyway.
     clearComposer();
+    // A send Enter let through (an `@` nothing matched) leaves the mention
+    // open otherwise — and the picker now stays on screen for an empty list,
+    // so it would sit over an empty composer eating Tab and the arrows.
+    mention.close();
     // Asking a question is an intent to watch the answer: re-arm the follow even
     // if the author had scrolled back into history to write it.
     stick.toBottom();

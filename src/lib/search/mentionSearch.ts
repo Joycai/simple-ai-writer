@@ -91,7 +91,8 @@ export function cycleScope(scopes: readonly MentionScope[], current: MentionScop
 /**
  * The picker row's second line: a document's group path relative to the
  * project, so two chapters with one name can be told apart. Nothing for an
- * entry (aliases are matched, not shown) and nothing for a file at the root.
+ * entry (an alias hit shows that alias instead — the picker reads it off
+ * `MentionHit`) and nothing for a file at the root.
  */
 export function mentionSub(item: MentionLike, projectPath: string | null): string | null {
   if (item.type !== "file") return null;
