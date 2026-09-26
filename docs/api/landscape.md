@@ -1977,6 +1977,26 @@ Responses adapter：
 - `orcarouter` 的能力格子填上实测：①②③ `jsonSchema` ✓，② / ④ `web_search` ✓；`gpt-6` 进 strict schema 名单与输出上限表
   （128K），`gemini-3` 进输出上限表（64K）。
 
+**补测：④ 的结构化输出（同日，curl 约 25 次 + live 用例 3 条）。** 统一用一个与 prompt 矛盾的 enum
+（prompt 要求 `yellow`，enum 只有 red / green / blue），对照组去掉 enum：
+
+| 条件 | 结果 |
+| --- | --- |
+| Sonnet 5 / Sonnet 4.6 / Opus 4.5，`thinking: disabled` | 都答 enum 内的值；对照组答 `yellow`——**强制是真的** |
+| Opus 5.5 / Fable 5.1，`thinking: disabled` | **400**：`claude-opus-5-5 requires adaptive thinking; omit thinking or use thinking.type=adaptive and output_config.effort`（Fable 同义）——与结构化输出无关，这两个型号**不收 `disabled`** |
+| Opus 5.5 / Fable 5.1，不发 `thinking` | 默认思考（文本空）+ enum 内的 JSON |
+| Sonnet 5 / Opus 5.5 + adaptive + `effort: high` + `display: summarized` | thinking block 在前（Opus 的摘要里明说「yellow 不在 enum 里」），JSON 在后，算术也对 |
+| Sonnet 4.6 + `thinking: {type: "enabled", budget_tokens: 1024}` | 同上 |
+| 带工具、`tool_choice` 自动 | 第一轮照常 `tool_use`；回灌结果后第二轮给合 schema 的 JSON |
+| 强制 `tool_choice`（`any` / 指名，含 adaptive 思考） | 照常强制出 `tool_use`，不冲突 |
+| 流式 | JSON 走普通 `text_delta`，没有新的块类型 |
+| schema 带 `minLength` / `maximum` / `pattern` / `minItems: 3`、缺或为 `true` 的 `additionalProperties` | 经网关都 200（请求侧结论，只对网关成立；官方文档把它们列为不支持） |
+| `["string","null"]` 联合、带 `null` 的 enum、`anyOf` 含 `null`、对象数组 | 200，输出合 schema |
+
+据此本项目打开 ④ 族的结构化输出（只有严格档）：[`structured-output-plan.md`](structured-output-plan.md) §13。
+本项目 Claude 的「关闭」思考档本来就发 `adaptive` + `effort: low` 而不是 `disabled`，所以 Opus 5.5 / Fable 5.1
+拒收 `disabled` 不影响本项目。
+
 ### 兼容层文档的通用规律（八个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

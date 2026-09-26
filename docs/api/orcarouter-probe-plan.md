@@ -87,7 +87,7 @@ live 测试。每条后面是它要关掉的那个未决项。
     （§2.8），顺带测最小可缓存长度。
 16. `web_search_20250305` 不带 beta 头、`usage.server_tool_use.web_search_requests`、
     `pause_turn` 续写（§2.7；解决 §1 的冲突）。
-17. 结构化输出：`output_config.format` json_schema 是否透传（本项目 ④ 恒为 `off`，
+17. 结构化输出：`output_config.format` json_schema 是否透传（当时本项目 ④ 恒为 `off`，2026-09-26 已打开，见 §7；
     若官方已支持则是新事实）；`count_tokens` 端点是否路由。
 18. base64 图片输入（第七个样本说 ④ 是给 Claude 看图的正路）。
 
@@ -166,5 +166,6 @@ live 测试。每条后面是它要关掉的那个未决项。
 2. Gemini 回灌跳过光秃秃的 `{text:""}`（`gemini.ts`）：流式工具轮的第二轮经这台网关（Vertex 后端）必 400。
 3. `orcarouter` 能力格子按实测填（`capabilities.ts`），`capability-matrix.md` 重新生成。
 
-**留作后续、本轮不做**：④ 的 `output_config.format` 已证明可用，本项目 ④ 族结构化输出仍恒为
-`off`——要不要按型号打开是另一个决定（型号范围、与思考 / 强制工具能否同用都还没测）。
+**同日补测并打开**：④ 的 `output_config.format` 在五个 Claude 型号上补测（与思考、工具、强制
+工具、流式同用都行），本项目 ④ 族的结构化输出随之打开——决定与理由见
+[`structured-output-plan.md`](structured-output-plan.md) §13，事实见第十八个样本「补测」段。
