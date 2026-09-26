@@ -3424,3 +3424,45 @@ describe("streamCompletion — server tools on the Gemini wire", () => {
     expect(calls[0].body.tools).toHaveLength(1);
   });
 });
+
+describe("streamCompletion — Gemini built-in tools in the stream", () => {
+  const ORCA = "https://api.orcarouter.ai/v1beta";
+
+  it("logs a code run, keeps its code out of the text, and echoes its parts on a tool round", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["code_interpreter"],
+      chunks: [
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"executableCode":{"language":"PYTHON","code":"print(6*7)","id":"x1"},"thoughtSignature":"sig"}]}}]}\n`,
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"codeExecutionResult":{"outcome":"OUTCOME_OK","output":"42\\n","id":"x1"}}]}}]}\n`,
+        `data: {"candidates":[{"content":{"role":"model","parts":[{"text":"It is 42."},{"functionCall":{"name":"save_note","args":{"text":"42"}}}]},"finishReason":"STOP"}]}\n`,
+      ],
+    });
+    const events = received.flatMap((c) => ("serverTool" in c ? [c.serverTool] : []));
+    expect(events).toEqual([
+      { phase: "call", id: "x1", name: "code_interpreter", input: { language: "PYTHON", code: "print(6*7)" } },
+      { phase: "result", id: "x1", name: "code_interpreter", results: [], output: "42" },
+    ]);
+    expect(text(received)).toBe("It is 42.");
+    const round = received.find((c): c is Extract<StreamChunk, { toolCalls: unknown }> => "toolCalls" in c);
+    // Echoed verbatim — measured 200 with the answer using the earlier run.
+    expect(round?._geminiModelParts).toEqual([
+      { executableCode: { language: "PYTHON", code: "print(6*7)", id: "x1" }, thoughtSignature: "sig" },
+      { codeExecutionResult: { outcome: "OUTCOME_OK", output: "42\n", id: "x1" } },
+      { text: "It is 42." },
+      { functionCall: { name: "save_note", args: { text: "42" } } },
+    ]);
+  });
+
+  it("logs a search once, from the block that carries the grounding", async () => {
+    const { received } = await collect({
+      standard: "gemini_compat", baseUrl: ORCA, serverTools: ["web_search"],
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"Ferries run hourly."}]}}]}\n`,
+        `data: {"candidates":[{"content":{"parts":[{"text":""}]},"finishReason":"STOP","groundingMetadata":{"webSearchQueries":["ferry timetable"],"groundingChunks":[{"web":{"uri":"https://r.example/1","title":"ferries.example"}}]}}]}\n`,
+      ],
+    });
+    const events = received.flatMap((c) => ("serverTool" in c ? [c.serverTool] : []));
+    expect(events.map((e) => [e.phase, e.name])).toEqual([["call", "web_search"], ["result", "web_search"]]);
+    expect(text(received)).toBe("Ferries run hourly.");
+  });
+});

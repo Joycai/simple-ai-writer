@@ -615,6 +615,104 @@ export function responsesServerToolEvent(
 }
 
 /**
+ * Gemini's built-in tools as reports, read one streamed candidate at a time.
+ *
+ * Measured shapes (OrcaRouter's Vertex route, 2026-09-26 — landscape.md §7
+ * 第十八个样本「再补测」):
+ *
+ *   - **Code execution** — parts of their own: `executableCode{language, code,
+ *     id}`, then `codeExecutionResult{outcome, output, id}`, then the text that
+ *     uses it. `outcome` other than `OUTCOME_OK` is the run failing; its name
+ *     is the error. The two halves share `id`; without one, a result pairs
+ *     with the latest code.
+ *   - **URL context** — `urlContextMetadata.urlMetadata[{retrievedUrl,
+ *     urlRetrievalStatus}]` on the candidate, already on the *first* block:
+ *     the pages are fetched before the answer starts. Each URL is one call and
+ *     its result at once; a status other than `…SUCCESS` is the error.
+ *   - **Search** — `groundingMetadata` on the last block: `webSearchQueries[]`
+ *     is the call, `groundingChunks[].web{uri, title}` the hits (`uri` a
+ *     redirect link, `title` the site's domain). Only `webSearchQueries` makes
+ *     it a search: a URL-context answer carries `groundingChunks` too, and no
+ *     search ran.
+ *
+ * Stateful, one reader per request: a candidate may repeat what an earlier
+ * block said (only the last carries grounding, but that is not assumed), and
+ * each row must reach the log once per phase.
+ */
+export function createGeminiServerToolReader(): (candidate: unknown) => ServerToolEvent[] {
+  const seen = new Set<string>();
+  let codeSeq = 0;
+  let lastCodeId: string | undefined;
+  return (candidate) => {
+    const out: ServerToolEvent[] = [];
+    const emit = (e: ServerToolEvent) => {
+      const key = `${e.phase}:${e.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(e);
+    };
+    if (!candidate || typeof candidate !== "object") return out;
+    const c = candidate as Record<string, unknown>;
+    const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+    const record = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : undefined);
+    const list = (v: unknown) => (Array.isArray(v) ? v : []);
+
+    for (const raw of list(record(c.content)?.parts)) {
+      const part = record(raw);
+      const code = record(part?.executableCode);
+      if (code) {
+        const id = text(code.id) ?? `gemini_code_${++codeSeq}`;
+        lastCodeId = id;
+        const lang = text(code.language);
+        emit({
+          phase: "call", id, name: "code_interpreter",
+          input: { ...(lang ? { language: lang } : {}), ...(typeof code.code === "string" ? { code: code.code } : {}) },
+        });
+      }
+      const result = record(part?.codeExecutionResult);
+      if (result) {
+        const id = text(result.id) ?? lastCodeId ?? `gemini_code_${++codeSeq}`;
+        const output = typeof result.output === "string" ? result.output.trim() : "";
+        const outcome = text(result.outcome);
+        emit({
+          phase: "result", id, name: "code_interpreter", results: [],
+          ...(output ? { output } : {}),
+          ...(outcome && outcome !== "OUTCOME_OK" ? { error: outcome } : {}),
+        });
+      }
+    }
+
+    for (const raw of list(record(c.urlContextMetadata)?.urlMetadata)) {
+      const meta = record(raw);
+      const url = text(meta?.retrievedUrl);
+      if (!url) continue;
+      const id = `gemini_url:${url}`;
+      const status = text(meta?.urlRetrievalStatus);
+      emit({ phase: "call", id, name: "web_extractor", input: { urls: [url] } });
+      emit({
+        phase: "result", id, name: "web_extractor", results: [{ title: url, url }],
+        ...(status && !status.endsWith("SUCCESS") ? { error: status } : {}),
+      });
+    }
+
+    const grounding = record(c.groundingMetadata);
+    const queries = list(grounding?.webSearchQueries).filter((q): q is string => typeof q === "string" && !!q.trim());
+    if (queries.length) {
+      const id = `gemini_search:${queries.join("\n")}`;
+      emit({ phase: "call", id, name: "web_search", input: { queries } });
+      const results: WebSearchResult[] = [];
+      for (const raw of list(grounding?.groundingChunks)) {
+        const web = record(record(raw)?.web);
+        const url = text(web?.uri);
+        if (url) results.push({ title: text(web?.title) ?? url, url });
+      }
+      emit({ phase: "result", id, name: "web_search", results });
+    }
+    return out;
+  };
+}
+
+/**
  * A `code_interpreter_call` item as a report. Measured shape (DashScope,
  * 2026-09-17): `code` is already whole on `output_item.added`; `outputs` —
  * `[{type:"logs", logs}]`, the text fenced in a markdown code block — arrives

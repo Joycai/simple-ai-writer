@@ -8,7 +8,7 @@ import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { wireOf } from "./platforms";
-import { geminiServerTools } from "./serverTools";
+import { createGeminiServerToolReader, geminiServerTools } from "./serverTools";
 import { geminiUrl } from "./urls";
 import type {
   AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
@@ -324,6 +324,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
   const geminiAllModelParts: unknown[] = [];
+  // Searches, pages read and code run by the endpoint itself, for the log.
+  const readServerTools = createGeminiServerToolReader();
 
   // Carry an incomplete trailing line across reads: a single SSE line can be split
   // across network chunks, and parsing the halves would silently drop content.
@@ -382,6 +384,9 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
         });
       }
     }
+    // After the parts: a code run's call and result are parts of this same
+    // block, and the answer's text that follows them streamed above.
+    for (const serverTool of readServerTools(candidate)) opts.onChunk({ serverTool });
     const usage = json.usageMetadata as {
       promptTokenCount?: number;
       candidatesTokenCount?: number;
