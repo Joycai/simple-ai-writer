@@ -444,6 +444,8 @@ export async function recordTranscriptionUsage(
     task: "asr",
     outputUnits: outcome.billedSeconds,
     spec: { seconds: outcome.billedSeconds },
+    // 转写不走四个对话适配器，没有上游报价。
+    reportedCost: null,
   } as const;
   await recordUsage(projectPath, input);
   // 确认卡上要显示「这次花了多少」，而那个数必须和记进库里的是同一个——

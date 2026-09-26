@@ -137,5 +137,7 @@ export async function recordImageUsage(
     outputUnits: images,
     spec,
     inputImages,
+    // 出图不走四个对话适配器，没有上游报价。
+    reportedCost: null,
   });
 }

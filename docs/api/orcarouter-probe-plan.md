@@ -185,6 +185,9 @@ live 测试。每条后面是它要关掉的那个未决项。
 2. **标定表 + 起步模型。** 八个付费 id 进标定表（目录数值、多模态、PDF），起步列表保留三个免费档，再加
    GPT-6 Luna（钉 ②：唯一流出可读推理摘要的线路）、Claude Sonnet 5（钉 ④）、Gemini 3.8 Flash（钉 ③）。
    起步是推荐不是目录，其余五个手动加时由标定表预填。作者保存前删掉了被钉的线路，起步行就不钉、跟主线路走。
+   PDF 标到全部八个：实测覆盖 luna（①②）、sonnet-5 与 opus-5.5（④）、gemini-3.8-flash（③），其余四个只靠目录的
+   `input_modalities: file` 加同族实测；Claude / Gemini 经 ① 送 PDF（手动加的行默认在 ①）没有单独测过——网关在 ①
+   上替上游翻译请求，读不读得到由它决定。
 3. **PDF 格。** orcarouter ④③ 与 anthropic 官方 ④ 打开：④ 回包是 Anthropic 原样，读到 `document` 是模型侧的事实。
    官方 google 不动：③ 背后是 Vertex，不是 AI Studio。
 4. **Gemini 内置工具**（用户追加）。沿用应用的三个 id，不新造：`web_search` → `googleSearch`、`web_extractor` →

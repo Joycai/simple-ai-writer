@@ -840,7 +840,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   // draft missing its tail.
                   stream.flush();
                   const { inputTokens, outputTokens, truncated, cachedTokens, reportedCost } = chunk;
-                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens, reportedCost);
+                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens ?? 0, reportedCost);
                   patchDraft(set, draft.id, {
                     usage: { inputTokens, outputTokens, cost },
                     done: true,

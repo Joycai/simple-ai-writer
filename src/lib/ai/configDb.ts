@@ -653,15 +653,16 @@ export function attachFees(models: Model[], groups: FeeGroup[]): Model[] {
  *
  * `reportedCost`：上游报的金额（空 = 没报）。报了就是它——和用量行
  * （`recordUsage`）同一个口径，草稿上显示的数与账上记的数不会是两个。
+ * 必填、没有默认值，理由同 `RecordedUsage`：漏传不会报错，只会显示 $0。
  */
 export function costFor(
   model: Pick<Model, "fee">,
   inputTokens: number,
   outputTokens: number,
-  cachedTokens = 0,
-  reportedCost: number | null = null,
+  cachedTokens: number,
+  reportedCost: number | null | undefined,
 ): number {
-  return totalOf(costOf({ ...billedForTokens(feeOf(model), inputTokens, outputTokens, cachedTokens), reportedCost }));
+  return totalOf(costOf({ ...billedForTokens(feeOf(model), inputTokens, outputTokens, cachedTokens), reportedCost: reportedCost ?? null }));
 }
 
 /** 一次对话请求的全部计费依据——记账把它原样快照进用量行。 */
