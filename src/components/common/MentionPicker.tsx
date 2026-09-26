@@ -621,6 +621,37 @@ export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>):
   }
 }
 
+/** A pick's read that failed — the refusal to show, in the author's words. */
+interface MentionReadFailure {
+  readonly message: string;
+}
+
+/**
+ * The last failed read of each draft, until an instance showing that draft
+ * takes it. Beside the count, for the same reason: the instance that started
+ * the read may be gone, and the one on screen now — or the next one mounted
+ * on this draft — must still drop a send queued around the attachment and
+ * say why no chip came. Kept until taken: a failure while no instance shows
+ * the draft is shown once when one does, next to the `@潮` still in it.
+ */
+const failures = new Map<string, MentionReadFailure>();
+
+export function failMentionRead(slot: string, message: string): void {
+  failures.set(slot, { message });
+  for (const l of readListeners) l();
+}
+
+export function mentionReadFailure(slot: string): MentionReadFailure | null {
+  return failures.get(slot) ?? null;
+}
+
+/** Take `failure` off `slot` — only if it is still the one there, so taking an older one never drops a newer. */
+export function takeMentionReadFailure(slot: string, failure: MentionReadFailure): void {
+  if (failures.get(slot) !== failure) return;
+  failures.delete(slot);
+  for (const l of readListeners) l();
+}
+
 /**
  * `reading`: a file picked into this draft is still being read — hosts gray
  * out sending, as they do for a paste still becoming chips. `track(pick)`
@@ -631,11 +662,25 @@ export async function trackMentionRead<T>(slot: string, pick: () => Promise<T>):
  * and that render, draft still unlanded, runs effects: the chat composer's
  * queued send would go out with it. Counted to the end of the landing, the
  * render that lets sending through already has both.
+ *
+ * `failure`: a read of this draft failed, here or in an instance since
+ * unmounted; the host shows it, drops anything queued, and `take`s it.
+ * `fail(message)` records one — inside `pick`, for the reason above: the
+ * render that sees the count drop must already see the failure.
  */
-export function useMentionReads(slot: string): { reading: boolean; track: <T>(pick: () => Promise<T>) => Promise<T> } {
+export function useMentionReads(slot: string): {
+  reading: boolean;
+  failure: MentionReadFailure | null;
+  track: <T>(pick: () => Promise<T>) => Promise<T>;
+  fail: (message: string) => void;
+  take: (failure: MentionReadFailure) => void;
+} {
   const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
+  const failure = useSyncExternalStore(subscribeReads, () => mentionReadFailure(slot));
   const track = useCallback(<T,>(pick: () => Promise<T>) => trackMentionRead(slot, pick), [slot]);
-  return { reading, track };
+  const fail = useCallback((message: string) => failMentionRead(slot, message), [slot]);
+  const take = useCallback((f: MentionReadFailure) => takeMentionReadFailure(slot, f), [slot]);
+  return { reading, failure, track, fail, take };
 }
 
 /**

@@ -406,7 +406,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 一样只属于这一位。
   const mention = useMentionState();
   // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
-  const { reading, track: trackRead } = useMentionReads(`roleplay:${agent.id}`);
+  // 读失败了也按角色记：发起读取的实例可能已经不在，拒绝提示由屏上这一个（或
+  // 下一个挂上这位角色的）显示，显示过就取走。
+  const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
+    useMentionReads(`roleplay:${agent.id}`);
+  useEffect(() => {
+    if (!readFailure) return;
+    takeReadFailure(readFailure);
+    setRefError(readFailure.message);
+  }, [readFailure, takeReadFailure]);
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
@@ -752,7 +760,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
           // 一条悄悄少了张图的消息从记录上根本看不出来。
           if (bytes.length > MAX_IMAGE_BYTES) {
-            setRefError(t("roleplay.composer.imageTooLarge", {
+            failRead(t("roleplay.composer.imageTooLarge", {
               name: item.file.name,
               size: (bytes.length / 1024 / 1024).toFixed(1),
               max: MAX_IMAGE_BYTES / 1024 / 1024,
@@ -762,7 +770,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           }
           attach({ kind: "image", file: item.file, dataUrl, downscaled });
         } catch {
-          setRefError(t("roleplay.composer.refUnreadable", {
+          failRead(t("roleplay.composer.refUnreadable", {
             name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;
@@ -772,7 +780,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           const content = await readFile(item.file.path);
           attach({ kind: "text", file: item.file, content });
         } catch {
-          setRefError(t("roleplay.composer.refUnreadable", {
+          failRead(t("roleplay.composer.refUnreadable", {
             name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
           }));
           return;

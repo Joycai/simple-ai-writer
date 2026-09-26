@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, isMentionReading, landSelection, mentionKeyDown, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, trackMentionRead, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, failMentionRead, findMention, isMentionReading, landSelection, mentionKeyDown, mentionReadFailure, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, takeMentionReadFailure, trackClaims, trackMentionRead, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -462,6 +462,51 @@ describe("a draft with a pick's file still reading", () => {
     expect(seen).toEqual([true]);
     expect(isMentionReading("lore:r1")).toBe(false);
     expect(draft).toBe("看看@[潮汐.png]");
+  });
+});
+
+describe("a pick's read that failed", () => {
+  it("stays on the draft until an instance showing it takes it", () => {
+    failMentionRead("chat:f1", "读不到 潮汐.png");
+    const failure = mentionReadFailure("chat:f1");
+    expect(failure?.message).toBe("读不到 潮汐.png");
+    // Read again (a render, a remount) it is the same one, until taken.
+    expect(mentionReadFailure("chat:f1")).toBe(failure);
+    takeMentionReadFailure("chat:f1", failure!);
+    expect(mentionReadFailure("chat:f1")).toBeNull();
+  });
+
+  it("never lets taking an older failure drop a newer one", () => {
+    failMentionRead("chat:f2", "读不到 潮汐.png");
+    const older = mentionReadFailure("chat:f2")!;
+    failMentionRead("chat:f2", "读不到 雾港.md");
+    const newer = mentionReadFailure("chat:f2");
+    takeMentionReadFailure("chat:f2", older);
+    expect(mentionReadFailure("chat:f2")).toBe(newer);
+    expect(newer?.message).toBe("读不到 雾港.md");
+  });
+
+  it("keeps drafts apart", () => {
+    failMentionRead("roleplay:林汀", "读不到 潮汐.png");
+    expect(mentionReadFailure("roleplay:林汀")).not.toBeNull();
+    expect(mentionReadFailure("roleplay:沈砚")).toBeNull();
+    takeMentionReadFailure("roleplay:林汀", mentionReadFailure("roleplay:林汀")!);
+  });
+
+  it("is already there when the count drops, recorded inside the pick", async () => {
+    // The render that lets a queued send through is the one the count drop
+    // brings; it must see the failure too, or the send goes out bare.
+    let finish!: () => void;
+    const read = new Promise<void>((res) => { finish = res; });
+    const tracked = trackMentionRead("chat:f3", async () => {
+      await read;
+      failMentionRead("chat:f3", "潮汐.png 太大");
+    });
+    expect(mentionReadFailure("chat:f3")).toBeNull();
+    finish();
+    await tracked;
+    expect(isMentionReading("chat:f3")).toBe(false);
+    expect(mentionReadFailure("chat:f3")?.message).toBe("潮汐.png 太大");
   });
 });
 

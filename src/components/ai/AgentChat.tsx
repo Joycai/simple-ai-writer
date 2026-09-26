@@ -275,8 +275,10 @@ export function AgentChat() {
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
   const { onPaste: handlePaste, restore: restoreImages, pasting } = usePasteImages(activeKey, setRefs, setRefError);
   // An `@` pick's file still reading into this draft — possibly started by the
-  // instance before a switch away and back.
-  const { reading, track: trackRead } = useMentionReads(`chat:${activeKey}`);
+  // instance before a switch away and back — and a read of it that failed,
+  // likewise (handled with the queue, below).
+  const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
+    useMentionReads(`chat:${activeKey}`);
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -361,12 +363,10 @@ export function AgentChat() {
         // a path, as it always was.
         const outcome = await attachProjectFile(item.file, { video: canVideo });
         if (!outcome.ok) {
-          // A send queued while this read ran was written around the
-          // attachment: sent now it would go as a bare `@潮`, and `handleSend`
-          // would clear the refusal below before the author saw it. Held
-          // back, in the same render that lets sending through again.
-          setQueued(false);
-          setRefError(outcome.reason === "too-large"
+          // Recorded against the draft, not shown here: this instance may be
+          // gone, and whichever one shows the draft drops its queue and shows
+          // the refusal (the queue effect below).
+          failRead(outcome.reason === "too-large"
             ? t("ai.chat.imageTooLarge", {
                 defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
                 name: item.file.name,
@@ -565,14 +565,27 @@ export function AgentChat() {
   // still becoming chips holds it too, as does an `@` pick still reading —
   // sending now would leave the picture behind (and `canSend` would refuse,
   // dropping the queue for nothing).
+  // A read of this draft that failed — started here, or by the instance before
+  // a switch away and back — drops the queue instead: the message was written
+  // around the attachment, sent now it would go as a bare `@潮`, and
+  // `handleSend` would clear the refusal before the author saw it. Checked in
+  // this effect, first: the render that lets the queue through is the one that
+  // brings the failure, and a separate effect's `setQueued(false)` would not
+  // reach the `queued` this one closed over.
   const [queued, setQueued] = useState(false);
   useEffect(() => {
+    if (readFailure) {
+      takeReadFailure(readFailure);
+      setQueued(false);
+      setRefError(readFailure.message);
+      return;
+    }
     if (chatRunning || pasting || reading || !queued) return;
     setQueued(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, pasting, reading, queued]);
+  }, [chatRunning, pasting, reading, queued, readFailure]);
 
   const handleStop = () => {
     setQueued(false);
