@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, findMention, mentionKeyDown, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, findMention, mentionKeyDown, nextLive, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -98,11 +98,11 @@ describe("findMention", () => {
 // ── The mention's state transition ───────────────────────────────────────────
 
 describe("syncMention", () => {
-  const closed: MentionCore = { open: false, query: "", active: 0, scope: "all", start: 0 };
-  const inEntries: MentionCore = { open: true, query: "潮", active: 2, scope: "lore", start: 3 };
+  const closed: MentionCore = { open: false, id: 0, query: "", active: 0, scope: "all", start: 0 };
+  const inEntries: MentionCore = { open: true, id: 1, query: "潮", active: 2, scope: "lore", start: 3 };
 
-  it("opens a fresh `@` at 全部, row 0", () => {
-    expect(syncMention(closed, "看看@潮", 4)).toEqual({ open: true, query: "潮", active: 0, scope: "all", start: 2 });
+  it("opens a fresh `@` at 全部, row 0, with the next serial", () => {
+    expect(syncMention(closed, "看看@潮", 4)).toEqual({ open: true, id: 1, query: "潮", active: 0, scope: "all", start: 2 });
   });
 
   it("keeps the scope while the mention continues; a changed query goes back to row 0", () => {
@@ -114,17 +114,31 @@ describe("syncMention", () => {
   it("a second `@` while one is open is a fresh mention too — the scope does not carry over", () => {
     // `@潮` in 图片, then `@` typed right after it: the picker is for the new `@`.
     expect(syncMention({ ...inEntries, scope: "image", start: 0 }, "@潮@", 3))
-      .toEqual({ open: true, query: "", active: 0, scope: "all", start: 2 });
+      .toEqual({ open: true, id: 2, query: "", active: 0, scope: "all", start: 2 });
   });
 
   it("closes on a terminator and forgets: reopening is a fresh `@`", () => {
     const shut = syncMention(inEntries, "看看 @潮，", 6);
-    expect(shut.open).toBe(false);
+    expect(shut).toEqual({ ...closed, id: 1 });
     // Backspace over the 「，」: same query as before, but 全部's list now —
-    // the row index reached in 条目 would name a different item here.
-    expect(syncMention(shut, "看看 @潮", 5)).toEqual({ open: true, query: "潮", active: 0, scope: "all", start: 3 });
+    // the row index reached in 条目 would name a different item here, and a
+    // pick still in flight from the old mention must not land on this one.
+    expect(syncMention(shut, "看看 @潮", 5)).toEqual({ open: true, id: 2, query: "潮", active: 0, scope: "all", start: 3 });
     // Closed stays the same object, so React can bail on the no-op.
     expect(syncMention(shut, "看看 潮", 4)).toBe(shut);
+  });
+});
+
+describe("nextLive", () => {
+  it("follows an open mention and keeps the last one past a close — the file read outlives the mention", () => {
+    const none = { id: 0, start: 0, query: "" };
+    const open: MentionCore = { open: true, id: 1, query: "潮", active: 0, scope: "all", start: 2 };
+    const at = nextLive(none, open);
+    expect(at).toEqual({ id: 1, start: 2, query: "潮" });
+    expect(nextLive(at, { ...open, query: "潮汐" })).toEqual({ id: 1, start: 2, query: "潮汐" });
+    // Closed (a 「，」 typed while the picture was still decoding): unchanged,
+    // so the splice still lands at 2 and not at CLOSED's 0.
+    expect(nextLive(at, { ...open, open: false, start: 0, query: "" })).toBe(at);
   });
 });
 
@@ -139,9 +153,13 @@ describe("spliceMention", () => {
     expect(spliceMention("再看看@潮，", 2, "潮", "潮汐.png")).toBe("再看看@潮，");
     // Deleted outright.
     expect(spliceMention("看看", 2, "潮", "潮汐.png")).toBe("看看");
-    // Extended after the mention closed (Esc, then more letters): the `@潮`
-    // is still there, so it is still the thing being replaced.
-    expect(spliceMention("看看@潮汐，", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png]汐，");
+    // Grown under it without a `sync` (a snippet insert): `@潮` is there but
+    // runs on into `汐` — replacing only `@潮` would strand the `汐`.
+    expect(spliceMention("看看@潮汐，", 2, "潮", "潮汐.png")).toBe("看看@潮汐，");
+    // A terminator or the end after it is fine.
+    expect(spliceMention("看看@潮 ", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png] ");
+    // Just landed: `@[A]` at the same `@`, an empty query — the `[` says so.
+    expect(spliceMention("看看@[A.png]", 2, "", "B.png")).toBe("看看@[A.png]");
   });
 });
 

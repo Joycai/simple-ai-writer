@@ -202,6 +202,10 @@ export function AgentChat() {
   // large file takes long enough for the author to have kept typing.
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // Which conversation is on screen *now* — a file pick reads the file before
+  // it splices, and the author may have switched meanwhile.
+  const activeKeyRef = useRef(activeKey);
+  activeKeyRef.current = activeKey;
   // The selection is attached by default when one exists — that is nearly always
   // why the author opened the assistant with text highlighted. Detaching is one
   // click; re-selecting in the editor re-attaches.
@@ -310,9 +314,18 @@ export function AgentChat() {
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    // Taken before any await: the mention this pick came from, and the
+    // conversation it was made in.
+    const claim = mention.claim();
+    if (!claim) return;
+    const key = activeKey;
     setRefError(null);
+    // Appended to whatever the list is *then*, and only once: a second pick
+    // of the same file while the first is still reading is one attachment.
+    const attach = (ref: AttachedItem) =>
+      setRefs((prev) => (prev.some((r) => attachedKey(r) === mentionKey(item)) ? prev : [...prev, ref]));
     if (item.type === "lore") {
-      setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
+      attach({ kind: "lore", entity: item.entity });
     } else {
       // Shared with the file tree's 发送到助手 — one construction path, so a
       // file attached from either side is the same attachment. An oversized
@@ -343,12 +356,16 @@ export function AgentChat() {
             }));
         return;
       }
-      setRefs((prev) => [...prev, outcome.item]);
+      attach(outcome.item);
     }
+    // Switched conversation while the file read: the chip went to the right
+    // one (`setRefs` is bound to it), but the draft on screen is another
+    // session's — nothing to splice into.
+    if (activeKeyRef.current !== key) return;
     // Not inside a state updater: `accept` calls setState itself, and React
     // runs an updater twice under StrictMode. The ref supplies the live value
     // the updater was being used for.
-    setDraft(mention.accept(draftRef.current, mentionLabel(item)));
+    setDraft(mention.accept(draftRef.current, mentionLabel(item), claim));
     inputRef.current?.focus();
   };
 

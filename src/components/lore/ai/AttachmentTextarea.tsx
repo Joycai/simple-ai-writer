@@ -90,6 +90,9 @@ export function AttachmentTextarea({
 
   const handlePick = async (item: MentionItem) => {
     if (attachedKeys.has(mentionKey(item))) { mention.close(); return; }
+    // Before the await: the mention this pick came from.
+    const claim = mention.claim();
+    if (!claim) return;
     if (item.type === "lore") {
       onAttachedChange([...latest.current.attached, { kind: "lore", entity: item.entity }]);
     } else {
@@ -109,7 +112,7 @@ export function AttachmentTextarea({
         return; // skip unreadable
       }
     }
-    onInstructionChange(mention.accept(latest.current.instruction, mentionLabel(item)));
+    onInstructionChange(mention.accept(latest.current.instruction, mentionLabel(item), claim));
     textareaRef.current?.focus();
   };
 

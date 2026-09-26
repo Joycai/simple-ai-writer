@@ -110,8 +110,18 @@ export interface MentionState {
   scope: MentionScope;
   /** Call from the textarea's onChange, after the value is committed. */
   sync: (value: string, caret: number) => void;
-  /** Replace the in-progress mention with `@[label]`, returning the new text. */
-  accept: (value: string, label: string) => string;
+  /**
+   * A pick's handle on the mention it came from — take it *before* any
+   * await, hand it to `accept` after. Null when no mention is open.
+   */
+  claim: () => MentionClaim | null;
+  /**
+   * Replace the claimed mention with `@[label]`, returning the new text.
+   * A second accept on the same claim's mention is a no-op on the text (a
+   * double-click, or Enter twice on a slow file), and a mention opened
+   * since is left alone.
+   */
+  accept: (value: string, label: string, claim: MentionClaim) => string;
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
@@ -127,6 +137,8 @@ export interface MentionState {
 /** The mention's state, one object: `sync` transitions from the committed value, never from a stale closure. */
 export interface MentionCore {
   open: boolean;
+  /** Serial of the mention: each fresh `@` gets the next one, and a close keeps the last. */
+  id: number;
   query: string;
   active: number;
   scope: MentionScope;
@@ -134,8 +146,15 @@ export interface MentionCore {
   start: number;
 }
 
-/** Never mutated, so `close` can hand it back as-is and React bails on the no-op. */
-const CLOSED: MentionCore = { open: false, query: "", active: 0, scope: "all", start: 0 };
+/** What a pick holds on to across its file read: which mention, and where it was. */
+interface MentionClaim {
+  id: number;
+  start: number;
+  query: string;
+}
+
+const CLOSED: MentionCore = { open: false, id: 0, query: "", active: 0, scope: "all", start: 0 };
+const shut = (s: MentionCore): MentionCore => ({ ...CLOSED, id: s.id });
 
 /**
  * One keystroke's transition, pure: what the mention becomes when the host's
@@ -157,38 +176,54 @@ const CLOSED: MentionCore = { open: false, query: "", active: 0, scope: "all", s
  */
 export function syncMention(prev: MentionCore, value: string, caret: number): MentionCore {
   const hit = findMention(value, caret);
-  if (!hit) return prev === CLOSED ? prev : CLOSED;
-  if (!prev.open || prev.start !== hit.start) return { open: true, query: hit.query, active: 0, scope: "all", start: hit.start };
+  if (!hit) return prev.open ? shut(prev) : prev;
+  if (!prev.open || prev.start !== hit.start) {
+    return { open: true, id: prev.id + 1, query: hit.query, active: 0, scope: "all", start: hit.start };
+  }
   return { ...prev, query: hit.query, active: hit.query === prev.query ? prev.active : 0 };
+}
+
+/**
+ * What `accept` splices by: the last *open* mention's place, kept past a
+ * close. A file pick splices only after the file has been read, and the
+ * mention can close in between (a 「，」 typed, Esc, a click outside) —
+ * `CLOSED`'s 0 / "" would splice at the head of the draft, which once ate its
+ * first character. Pure, so the "closed keeps" rule has a test.
+ */
+export function nextLive(prev: MentionClaim, core: MentionCore): MentionClaim {
+  return core.open ? { id: core.id, start: core.start, query: core.query } : prev;
 }
 
 /**
  * Replace the mention at `start` (its `@` plus `query`) with `@[label]`.
  * Pure, and defensive: a file pick reads the file *before* it splices, and
- * during that read the author may have typed on — if the text at `start` is
- * no longer `@query`, the mention is gone and nothing is spliced (the
- * attachment the host already made stands on its own). Splicing blind here
- * once ate the first character of the draft.
+ * during that read the text may have changed under it — through a snippet
+ * insert or anything else that bypasses `sync`. If the text at `start` is no
+ * longer `@query`, or `@query` now runs straight into more query characters
+ * (the mention grew), the mention as claimed is gone and nothing is spliced;
+ * the attachment the host already made stands on its own.
  */
 export function spliceMention(value: string, start: number, query: string, label: string): string {
-  if (value.slice(start, start + 1 + query.length) !== `@${query}`) return value;
-  return `${value.slice(0, start)}@[${label}]${value.slice(start + 1 + query.length)}`;
+  const end = start + 1 + query.length;
+  if (value.slice(start, end) !== `@${query}`) return value;
+  const next = value.charAt(end);
+  if (next !== "" && !/\s/.test(next) && !CJK_TERMINATORS.test(next)) return value;
+  return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
 }
 
 /** @-detection and splicing over a controlled text value. */
 export function useMentionState(): MentionState {
   const [state, setState] = useState<MentionCore>(CLOSED);
-  // Where the last *open* mention was, for `accept`: the committed start and
-  // query rather than the ones the render that made the handler closed over —
-  // and kept past a close, because a file pick splices only after the file
-  // has been read, and the mention can close in between (a 「，」 typed, Esc,
-  // a click outside, a conversation switch). `CLOSED`'s 0 / "" would splice
-  // at the head of the draft.
-  const live = useRef({ start: state.start, query: state.query });
-  if (state.open) live.current = { start: state.start, query: state.query };
+  // The committed place of the last open mention (see nextLive) — the render
+  // that made a handler may have closed over an older one.
+  const live = useRef<MentionClaim>({ id: 0, start: 0, query: "" });
+  live.current = nextLive(live.current, state);
+  // Mentions a pick has already landed on: the second Enter on a slow file,
+  // or a double-click, must not splice `@[名字]` a second time.
+  const spent = useRef(new Set<number>());
   // Stable: the picker's outside-click listener depends on it, and a chat
   // host re-renders on every streamed flush.
-  const close = useCallback(() => setState((s) => (s === CLOSED ? s : CLOSED)), []);
+  const close = useCallback(() => setState((s) => (s.open ? shut(s) : s)), []);
 
   return {
     open: state.open,
@@ -196,10 +231,14 @@ export function useMentionState(): MentionState {
     active: state.active,
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
-    accept: (value, label) => {
-      const { start, query } = live.current;
-      setState(CLOSED);
-      return spliceMention(value, start, query, label);
+    claim: () => (state.open ? { ...live.current } : null),
+    accept: (value, label, claim) => {
+      if (spent.current.has(claim.id)) return value;
+      spent.current.add(claim.id);
+      // Close only the claimed mention: one opened since (the author moved
+      // on to `@夜` while the file read) is theirs to keep.
+      setState((s) => (s.open && s.id === claim.id ? shut(s) : s));
+      return spliceMention(value, claim.start, claim.query, label);
     },
     move: (delta, count) => {
       if (count <= 0) return;

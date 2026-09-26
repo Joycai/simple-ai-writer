@@ -19,15 +19,18 @@
  *   than one token: a space ends a mention (`findMention`), so the tokenized
  *   form exists for ⌘K parity and for callers with their own input, not for
  *   the picker. What the picker does reach is a single word that straddles
- *   the `/`: `@潮汐门篇/第五` finds `正文/潮汐门篇/第五章 归途.md` through the
- *   full relative path (`searchFiles`'s 0.5 tier), and `@潮汐门篇/归途` finds
- *   it too — a word with a `/` is also split at its last `/`, the left part
- *   held to the group path and the right part matched against the name the
- *   way any name is (subsequence included), so the author who remembers the
- *   group and *a word of* the title is not asked for the title's first
- *   characters. A name hit outranks an alias hit outranks a group-path hit
- *   outranks a path hit: ×1 / ×0.9 / ×0.6 / ×0.5, the alias weight from
- *   `searchLore`, the other two from `searchFiles`. The group path and the
+ *   the `/`: `@潮汐门篇/第五` and `@潮汐门篇/归途` both find
+ *   `正文/潮汐门篇/第五章 归途.md` through the *split* tier — a word with an
+ *   interior `/` is split at its last `/`, the left part held to the group
+ *   path and the right part matched against the name the way any name is
+ *   (subsequence included), so the author who remembers the group and *a
+ *   word of* the title is not asked for the title's first characters; the
+ *   two halves' scores are averaged, then ×0.5. The full-relative-path tier
+ *   (`searchFiles`'s 0.5) is kept for a `/` at either end of the word
+ *   (`/第五`, `潮汐门篇/`), which the split cannot read. A name hit outranks
+ *   an alias hit outranks a group-path hit outranks either path tier: ×1 /
+ *   ×0.9 / ×0.6 / ×0.5, the alias weight from `searchLore`, the other two
+ *   from `searchFiles`. The group path and the
  *   full path are matched by substring and word start only — never by
  *   subsequence: a directory subsequence is noise, and here a hit has teeth
  *   (Enter replaces the author's text and attaches the file), so `@小李` must

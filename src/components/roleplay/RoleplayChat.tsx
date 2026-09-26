@@ -717,8 +717,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    const claim = mention.claim();
+    if (!claim) return;
     setRefError(null);
-    setDraft((prev) => mention.accept(prev, mentionLabel(item)));
+    // 先落字再读图：这里 setDraft 是 zustand 的同步更新，updater 只跑一次。
+    setDraft((prev) => mention.accept(prev, mentionLabel(item), claim));
     mention.close();
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
