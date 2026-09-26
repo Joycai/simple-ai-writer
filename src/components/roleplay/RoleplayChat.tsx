@@ -69,7 +69,7 @@ import type { AttachedItem } from "../../lib/lore/aiTask";
 import type {
   AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
 } from "../../lib/roleplay/model";
-import { availableScopes, countByScope, searchMentions } from "../../lib/search/mentionSearch";
+import { availableScopes, countByScope, hasHits, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./RoleplayChat.module.css";
 
 /** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
@@ -708,17 +708,24 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // 选择器开着就接管——空档也开着（chip 行留着），作者才能 Tab 出去或 Esc 关掉。
-    if (mention.open && !composing) {
+    if (mention.open) {
+      // Esc 关选择器，组字期间也是——从前就这样。
       if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      // Tab 切档，与 ⌘K 一致；只有 Enter 选中（设计稿 02i 1z §1）。
-      if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
-      if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if (e.key === "Enter" && !e.shiftKey) {
-        // 空档吞掉 Enter：既不选中也不发送。
-        e.preventDefault();
-        if (mentionItems.length) void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
-        return;
+      if (!composing) {
+        // Tab 切档，与 ⌘K 一致；只有 Enter 选中（设计稿 02i 1z §1）。
+        if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
+        if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
+        if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
+        if (e.key === "Enter" && !e.shiftKey) {
+          if (mentionItems.length) {
+            e.preventDefault();
+            void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
+            return;
+          }
+          // 别的档有命中时空档吞掉 Enter——此刻发送等于发出半截提名；哪儿都没有
+          // 命中时这个 @ 多半只是个 @，Enter 照常发送。
+          if (mentionCounts && hasHits(mentionCounts)) { e.preventDefault(); return; }
+        }
       }
     }
     if (e.key === "Enter" && !e.shiftKey && !composing) {

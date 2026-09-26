@@ -282,6 +282,7 @@ export function MentionPicker({
   const terms = appTerms(i18n.language.startsWith("zh"));
   const [style, setStyle] = useState<React.CSSProperties>({});
   const listRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
   // The chips keep the author's own words — 条目 / 文档 are whatever the
@@ -296,6 +297,11 @@ export function MentionPicker({
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
+  // A new scope is a new list: back to its top, whatever the old one had
+  // scrolled to (the highlight index is already 0 and would not move it).
+  useEffect(() => {
+    if (rowsRef.current) rowsRef.current.scrollTop = 0;
+  }, [scope]);
 
   // Below the anchor by default, flipping above when the viewport is short on
   // room; `preferAbove` swaps the roles and falls back below the same way.
@@ -347,13 +353,22 @@ export function MentionPicker({
       : q
         ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
         : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
-    const parts = others.map((k) => t(
-      k === "lore" ? "ai.mention.countLore" : k === "text" ? "ai.mention.countText" : "ai.mention.countImage",
-      { scope: scopeLabel(k), n: counts?.[k] ?? 0, defaultValue: "{{scope}}里有 {{n}} 条" },
-    ));
+    // The count is the one thing on this line worth the eye: interpolate a
+    // sentinel for {{n}} and put the number back in a <b>.
+    const SENT = "\u0000";
+    const parts = others.map((k) => {
+      const n = counts?.[k] ?? 0;
+      const text = t(
+        k === "lore" ? "ai.mention.countLore" : k === "text" ? "ai.mention.countText" : "ai.mention.countImage",
+        { scope: scopeLabel(k), n: SENT, defaultValue: k === "lore" ? "{{scope}}里有 {{n}} 条" : k === "text" ? "{{scope}}里有 {{n}} 篇" : "{{scope}}里有 {{n}} 张" },
+      );
+      const [before, after] = text.split(SENT);
+      return <span key={k}>{before}<b>{n}</b>{after ?? ""}</span>;
+    });
     return (
       <>
-        {[head, ...parts].filter(Boolean).join(" · ")}
+        {head && <>{head}{" · "}</>}
+        {parts.map((p, i) => <span key={i}>{i > 0 && " · "}{p}</span>)}
         {" · "}<i>Tab</i> {t("ai.mention.switchOver", { defaultValue: "切过去" })}
       </>
     );
@@ -376,13 +391,18 @@ export function MentionPicker({
         ))}
         <span className={styles.scopeHint}><b>Tab</b> {t("ai.mention.tabHint", { defaultValue: "切档" })}</span>
       </div>
+      <div ref={rowsRef} className={styles.list}>
       {items.length === 0 && <div className={styles.empty}>{emptyLine()}</div>}
       {items.map((item, i) => {
         const key = mentionKey(item);
         const used = usedKeys.has(key);
         const isActive = i === activeIndex;
         const hit = hits?.get(i);
-        const sub = mentionSub(item, projectPath);
+        // Second line: a document's group, or — for an entry found by one of
+        // its aliases — that alias, else a name with no visible match would
+        // look like a wrong answer.
+        const sub = hit?.alias ?? mentionSub(item, projectPath);
+        const subRanges = hit?.alias ? hit.aliasRanges : hit?.sub;
         return (
           <button
             key={key}
@@ -399,7 +419,7 @@ export function MentionPicker({
               <span className={styles.pickerName}><Highlighted text={mentionLabel(item)} ranges={hit?.label} /></span>
               {/* A document's group: two chapters with one name are told apart
                   here, and a hit on the group path is shown where it landed. */}
-              {sub && <span className={styles.pickerSub}><Highlighted text={sub} ranges={hit?.sub} /></span>}
+              {sub && <span className={styles.pickerSub}><Highlighted text={sub} ranges={subRanges} /></span>}
             </span>
             {noteFor?.(item) && <span className={styles.pickerNote}>{noteFor(item)}</span>}
             {/* Lore keeps its category verbatim — that is the author's own
@@ -425,6 +445,7 @@ export function MentionPicker({
           </button>
         );
       })}
+      </div>
     </div>,
     document.body,
   );

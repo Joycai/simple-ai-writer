@@ -23,7 +23,8 @@ import { readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
 import { imageForModel } from "../../../lib/image/normalize";
 import { attachedKey, type AttachedItem } from "../../../lib/lore/aiTask";
 import type { LoreEntity } from "../../../lib/lore";
-import { availableScopes, countByScope, searchMentions } from "../../../lib/search/mentionSearch";
+import { useImeGuard } from "../../../lib/ime";
+import { availableScopes, countByScope, hasHits, searchMentions } from "../../../lib/search/mentionSearch";
 import { useProjectStore } from "../../../stores/projectStore";
 import styles from "./AttachmentTextarea.module.css";
 
@@ -58,6 +59,8 @@ export function AttachmentTextarea({
   textareaClassName,
 }: AttachmentTextareaProps) {
   const mention = useMentionState();
+  // A pinyin Enter commits the word being typed; it must not also pick a row.
+  const ime = useImeGuard();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   // `attached` and `instruction` are props captured at render. Reading a large
@@ -140,17 +143,21 @@ export function AttachmentTextarea({
             // Consume Escape here so it closes the picker without also
             // dismissing the surrounding modal (ModalShell).
             if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+            if (ime.isComposing(e)) return;
             // Tab cycles the scope, as in ⌘K; Enter alone picks (设计稿 02i).
             if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
             if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return; }
             if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return; }
             if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (items.length > 0) void handlePick(items[mention.active] ?? items[0]);
+              if (items.length > 0) { e.preventDefault(); void handlePick(items[mention.active] ?? items[0]); return; }
+              // Swallowed only while another scope has the hit; with nothing
+              // anywhere the newline goes through as it always did.
+              if (counts && hasHits(counts)) e.preventDefault();
             }
           }}
           disabled={disabled}
           autoFocus={autoFocus}
+          {...ime.imeProps}
         />
       </div>
 

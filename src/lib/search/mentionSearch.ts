@@ -105,8 +105,10 @@ export interface MentionHit {
   label: MatchRange[];
   /** Highlight ranges over the second line (group path), when the hit is there. */
   sub: MatchRange[];
-  /** Highlight ranges over the alias that matched, when the hit is there. */
+  /** The alias that matched, when the hit is there — shown as the row's second line. */
   alias: string | null;
+  /** Highlight ranges over that alias. */
+  aliasRanges: MatchRange[];
 }
 
 interface MentionSearchResult<T> {
@@ -140,6 +142,7 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
   const labelRanges: MatchRange[] = [];
   const subRanges: MatchRange[] = [];
   let alias: string | null = null;
+  const aliasRanges: MatchRange[] = [];
   for (const tok of tokens) {
     let best = 0;
     let where: { field: "label" | "alias" | "sub"; ranges: MatchRange[]; alias?: string } | null = null;
@@ -148,7 +151,7 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
     if (item.type === "lore") {
       for (const a of item.entity.aliases) {
         const m = matchText(a, tok);
-        if (m && m.score * ALIAS_WEIGHT > best) { best = m.score * ALIAS_WEIGHT; where = { field: "alias", ranges: [], alias: a }; }
+        if (m && m.score * ALIAS_WEIGHT > best) { best = m.score * ALIAS_WEIGHT; where = { field: "alias", ranges: m.ranges, alias: a }; }
       }
     } else if (sub) {
       const m = matchText(sub, tok);
@@ -158,9 +161,14 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
     score += best;
     if (where.field === "label") labelRanges.push(...where.ranges);
     else if (where.field === "sub") subRanges.push(...where.ranges);
-    else alias ??= where.alias ?? null;
+    else if (alias === null || alias === where.alias) {
+      // One alias is shown; a second token that matched a different alias
+      // still counts for the score but has nowhere to be highlighted.
+      alias = where.alias ?? null;
+      aliasRanges.push(...where.ranges);
+    }
   }
-  return { item, score, hit: { label: mergeRanges(labelRanges), sub: mergeRanges(subRanges), alias } };
+  return { item, score, hit: { label: mergeRanges(labelRanges), sub: mergeRanges(subRanges), alias, aliasRanges: mergeRanges(aliasRanges) } };
 }
 
 /**
@@ -226,6 +234,11 @@ export function searchMentions<T extends MentionLike>(
     items: top.map((s) => s.item),
     hits: new Map(top.map((s, i) => [i, s.hit])),
   };
+}
+
+/** Whether any scope has a hit at all — an empty list with nothing anywhere lets Enter through to the host. */
+export function hasHits(counts: Record<ScopedKind, number>): boolean {
+  return counts.lore + counts.text + counts.image > 0;
 }
 
 /**

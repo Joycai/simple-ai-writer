@@ -88,7 +88,7 @@ import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { chatAutoApproveKey } from "../../lib/agent/autoApprove";
 import type { AttachedItem } from "../../lib/lore/aiTask";
-import { availableScopes, countByScope, searchMentions } from "../../lib/search/mentionSearch";
+import { availableScopes, countByScope, hasHits, searchMentions } from "../../lib/search/mentionSearch";
 import styles from "./AgentChat.module.css";
 import { providerFor } from "../../lib/ai/routes";
 
@@ -601,17 +601,27 @@ export function AgentChat() {
     // Tab out of an empty scope or Esc the whole thing. An `@` mid-sentence
     // no longer keeps a mention open past a terminator (findMention), which
     // is what used to leave this branch swallowing Enter with nothing shown.
-    if (mention.open && !ime.isComposing(e)) {
+    if (mention.open) {
+      // Esc closes the picker even mid-composition — it always did, and with
+      // a run live the alternative is that Esc stops the run instead.
       if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      // Tab cycles the scope, as in ⌘K — Enter alone picks (设计稿 02i 1z §1).
-      if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
-      if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
-      if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
-      if (e.key === "Enter" && !e.shiftKey) {
-        // An empty scope swallows Enter: neither a pick nor a send.
-        e.preventDefault();
-        if (mentionItems.length > 0) void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
-        return;
+      if (!ime.isComposing(e)) {
+        // Tab cycles the scope, as in ⌘K — Enter alone picks (设计稿 02i 1z §1).
+        if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return; }
+        if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
+        if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
+        if (e.key === "Enter" && !e.shiftKey) {
+          if (mentionItems.length > 0) {
+            e.preventDefault();
+            void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
+            return;
+          }
+          // An empty scope swallows Enter while another scope has the hit —
+          // sending now would send a half-formed mention. When nothing
+          // matches anywhere, the `@` is probably just an `@`: let Enter
+          // send, as it did before the picker learned to stay open.
+          if (mentionCounts && hasHits(mentionCounts)) { e.preventDefault(); return; }
+        }
       }
     }
     // 2d: Esc 同效 — while a run is live, Esc anywhere in the composer stops

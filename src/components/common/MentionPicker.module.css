@@ -2,23 +2,31 @@
    so this owns the look and not the placement. */
 
 .picker {
+  display: flex;
+  flex-direction: column;
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  overflow-y: auto;
   max-height: 240px;
+}
+
+/* The rows scroll under a fixed chip row. A sticky row *inside* the scroller
+   was the first cut, and `scrollIntoView({block: "nearest"})` does not know
+   about sticky headers: the ↑/↓ highlight on row 0 landed under the chips. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ── Scope chips (设计稿 02i) ──────────────────────────────────────────────
    The ⌘K palette's 档位组 vocabulary, verbatim (design-system.md → 全局搜索):
    idle dim + panel border, hover elevated, selected accent-text on selected
-   bg with a sienna border. Sticky so the row stays put while ten rows scroll. */
+   bg with a sienna border. */
 
 .scopes {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -95,10 +103,15 @@
   flex-shrink: 0;
 }
 
-/* Name over an optional second line (a document's group path). */
+/* Name over an optional second line (a document's group path, or the alias
+   that matched). A column, so the two are lines and not one run of inline
+   text — and so the name's ellipsis has a width to work with. */
 .pickerText {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .pickerName {

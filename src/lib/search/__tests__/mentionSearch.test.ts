@@ -11,6 +11,7 @@ import {
   availableScopes,
   countByScope,
   cycleScope,
+  hasHits,
   mentionSub,
   scopeOf,
   searchMentions,
@@ -101,9 +102,14 @@ describe("searchMentions — typed query", () => {
     expect(searchMentions(pair, "潮汐门", "all", ROOT).hits.get(0)?.alias).toBe("潮汐门");
   });
 
-  it("reports which alias matched so the row can say so", () => {
-    const r = searchMentions(items, "阿砚", "all", ROOT);
-    expect(r.hits.get(0)?.alias).toBe("阿砚");
+  it("reports which alias matched, and where in it, so the row can show it", () => {
+    const r = searchMentions(items, "砚", "all", ROOT);
+    // The name itself has 砚 — the alias is not consulted.
+    expect(r.hits.get(0)?.alias).toBeNull();
+    const byAlias = searchMentions(items, "阿", "all", ROOT);
+    expect(byAlias.hits.get(0)?.alias).toBe("阿砚");
+    expect(byAlias.hits.get(0)?.aliasRanges).toEqual([{ start: 0, end: 1 }]);
+    expect(byAlias.hits.get(0)?.label).toEqual([]);
   });
 
   it("matches anywhere in the name, case-insensitively, and by subsequence", () => {
@@ -154,5 +160,7 @@ describe("countByScope", () => {
     expect(countByScope(items, "潮", ROOT)).toEqual({ lore: 1, text: 1, image: 0 });
     expect(countByScope(items, "", ROOT)).toEqual({ lore: 2, text: 2, image: 1 });
     expect(countByScope(items, "无", ROOT)).toEqual({ lore: 0, text: 0, image: 0 });
+    expect(hasHits(countByScope(items, "无", ROOT))).toBe(false);
+    expect(hasHits(countByScope(items, "潮", ROOT))).toBe(true);
   });
 });
