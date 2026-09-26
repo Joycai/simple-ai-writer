@@ -14,7 +14,7 @@
 | **缓存写入** | — | — | — | `usage.cache_creation_input_tokens` |
 | **思考 token** | `completion_tokens_details.reasoning_tokens` | `output_tokens_details.reasoning_tokens` | `usageMetadata.thoughtsTokenCount` | `output_tokens_details.thinking_tokens` |
 | **服务端工具** | — | `tool_usage`（原样线路可见） | `usageMetadata.toolUsePromptTokenCount`（工具结果回灌的 token，**在 `promptTokenCount` 之外**） | `usage.server_tool_use.{web_search_requests, web_fetch_requests}` |
-| **花费（非协议字段，中转加的）** | OrcaRouter：`usage.cost`（流式末块；非流式另有 `cost_usd`） | OrcaRouter 默认线路：`usage.cost` | OrcaRouter：`usageMetadata.costUsd`（要带头） | OrcaRouter：`usage.cost_usd`，在 `message_delta`（要带头） |
+| **花费（非协议字段，中转加的）** | OrcaRouter：`usage.cost`（流式末块；非流式另有 `cost_usd`）；原样线路只在带头时有 `cost_usd` | OrcaRouter 默认线路：`usage.cost`；原样线路没有 | OrcaRouter：`usageMetadata.costUsd`（要带头） | OrcaRouter：`usage.cost_usd`，在 `message_delta`（要带头） |
 
 实测补充（[`landscape.md`](landscape.md) §7 第十八个样本，2026-09-26）：
 
@@ -26,8 +26,14 @@
 - ③ `toolUsePromptTokenCount` 不在 `promptTokenCount` 里：prompt 20 + candidates 65 + toolUse 77 = total 162（「再补测」D）。
   本项目把它计进输入 token，和 `thoughtsTokenCount` 计进输出同理。
 - 花费一行：OrcaRouter 的 ④③ 要带 `X-OrcaRouter-Include-Cost: true` 请求头才报；① ② 不管带不带都报；② 原样线路
-  （`store: true`）不报。与网关账单 `GET /v1/generation` 的 `total_cost` 相等（① ② 差不到一个 1/500,000 美元的计价单位）。
+  （`store: true`，以及 GPT-5.6 luna / sol 的默认线路）不报。与网关账单 `GET /v1/generation` 的 `total_cost` 相等（① ② 差不到一个 1/500,000 美元的计价单位）。
   哪些平台的报价被信任、怎么进账，见 [`01-fee-groups.md`](../feature/billing/01-fee-groups.md)「上游报价」。
+- **GPT-5.6 luna / sol 在 OrcaRouter 上默认走 OpenAI 原样线路**（2026-09-27，第十八个样本「GPT 全家补测」）：① 的流式末块
+  只在带 `X-OrcaRouter-Include-Cost: true` 时有 `usage.cost_usd`（本项目四个适配器都带这个头，所以收得到）；② 带不带头都
+  **没有任何花费字段**。同一个 id 的少数请求会被分流到 OpenRouter 形态层（那时照常有 `usage.cost`），所以一次多轮任务里可能
+  有的轮报、有的轮不报。
+- ② 原样线路的 `usage` 与官方一致：`input_tokens_details.cached_tokens`、`output_tokens_details.reasoning_tokens`；
+  ① 原样线路的 `completion_tokens_details.reasoning_tokens` 有数，但**没有任何思维链文本**（官方 ① 本来就不给）。
 
 ## 2. 两个口径陷阱
 

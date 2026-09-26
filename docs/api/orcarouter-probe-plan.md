@@ -1,6 +1,6 @@
 # OrcaRouter 付费实测：三家官方协议的结构与特性（方案）
 
-> **状态**：shipped（2026-09-26 起草、同日测完并落地三处修复）。§7 是逐条的「测了什么 → 落在哪」，§8 是再补测后把它当内置渠道调好的决定。
+> **状态**：shipped（2026-09-26 起草、同日测完并落地三处修复）。§7 是逐条的「测了什么 → 落在哪」，§8 是再补测后把它当内置渠道调好的决定，§9 是 2026-09-27 的 GPT 全家补测。
 >
 > 这份文件写**这一轮要测什么、怎么测、结果落到哪**。测出来的协议事实不写在
 > 这里——它们进 `landscape.md` 第十八个样本与各主题文件；这里只留方案与取舍。
@@ -200,3 +200,33 @@ live 测试。每条后面是它要关掉的那个未决项。
 
 live：`live.orcarouter.test.ts` 加四面报价、④③ PDF、Gemini 三个内置工具（代码执行含带函数工具的两轮回灌），
 共 40 条全过（两条旧用例首跑遇上游偶发错误，重跑通过）。
+
+## 9. GPT 全家补测（2026-09-27）
+
+**为什么补。** 第一轮只把 `gpt-6-luna` 测透，另三个 GPT 各跑一条冒烟用例，`gpt-5.6-luna` / `-sol` 没测过。作者给了六个 id，
+说明两面都支持，要求 ① ② 都测。
+
+**怎么测。** 先 curl（约 230 次，12 路并发）：六个 id × 两面，effort 全档与乱写值、`mode:"pro"`、`summary`、温度、输出上限、
+`verbosity`、与 prompt 矛盾的 strict schema、`json_object`、`web_search`、并行 / 强制工具、`store: true`；有歧义的几条
+（线路分流、astra 的输出下限、5.6-sol ① 的拒收）重复 3–5 次。再用 `live.orcarouter.test.ts` 的「GPT」一组驱动真实适配器，
+每个 id 每面 7–8 条。判定「官方形态」沿用 §3：回包的 id 形态（`chatcmpl-` / `resp_` vs `gen-`）、`provider` 字段、推理
+`format`、错误原文。花费约 $0.35。
+
+**结果落在哪。**
+
+| 结果 | 落点 |
+| --- | --- |
+| 事实、逐档数据、搜索花费 | [`landscape.md`](landscape.md) 第十八个样本「GPT 全家补测」 |
+| OpenAI 族的越界 / 拒收 / 改写、摘要不保证 | [`reasoning.md`](reasoning.md) §1.10、§2 |
+| 原样线路的花费字段 | [`usage.md`](usage.md) §1；[`01-fee-groups.md`](../feature/billing/01-fee-groups.md)「上游报价」（推翻了「② 原样线路走不到」） |
+| ① 上 effort + 工具、GPT-5 温度 | [`responses.md`](responses.md) §7、§9 |
+| 目录的两档价 | [`issues/tiered-pricing.md`](../issues/tiered-pricing.md) 第二个样本 |
+| 验证清单 | [`issues/thinking-verification.md`](../issues/thinking-verification.md)「OrcaRouter GPT 补测」 |
+
+**落进代码的**（PR #714）：`gpt-5.6-luna` / `-sol` 进标定表；两格新能力 `effortWithTools`（5.6-sol 走 ① 带工具时发 `none`，
+官方 `openai` ① 上 5.4 起同理）与 `reasoningOff`（astra 不列「关闭」，`off` 发 `low`），决定与理由在
+[`capability-gating-plan.md`](capability-gating-plan.md) §8.13。live 文件修复前 GPT 组 83/90，落地后整份 139/139。
+
+**没做的**：5.6-sol 在 ② 上设温度仍 400（错误点名参数）；5.6-sol ① 拒 `max` / `minimal` 没进表（只见一个 id，② 上同档可用）；
+5.6-luna / -sol 走 ② 不报价，没有替作者自动建计费组——绑组是作者的事，文档里写明了。
+
