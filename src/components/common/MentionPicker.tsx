@@ -747,26 +747,37 @@ export function useMentionState(): MentionState {
  * its file read finishes; the picker would otherwise sit open over the landed
  * reference, and a pick claimed on a `@` after it would miss its mention.
  *
- * Returns `owned`: call it right after every write this instance makes — it
- * records the draft as `read()` gives it then. A value, not a flag: a write
- * that leaves the draft as it was (a pick that landed nothing, a clear of an
- * empty draft) never renders, and a flag set for it would swallow the next
- * write that was not ours. Our own writes either carry their own `sync`
- * (typing, `+ 引用`) or land text the picker's outside click has already
- * closed on (a snippet insert, 回到这里重说).
+ * Returns `own(write)`: every write this instance makes to the draft goes
+ * through it. Before the write, a store value that is not the one we last
+ * wrote is someone else's edit not rendered yet — two reads finishing in the
+ * same tick — and is moved by first, or our own landing would splice with an
+ * unshifted claim and then record the other's edit as ours. After it, the
+ * value is recorded; otherwise the render's effect finds the difference. A
+ * value, not a flag: a write that leaves the draft as it was (a pick that
+ * landed nothing, a clear of an empty draft) never renders, and a flag set for
+ * it would swallow the next write that was not ours. Our own writes either
+ * carry their own `sync` (typing, `+ 引用`) or land text the picker's outside
+ * click has already closed on (a snippet insert, 回到这里重说).
  */
-export function useOwnDraft(draft: string, read: () => string, mention: MentionState): () => void {
+export function useOwnDraft(draft: string, read: () => string, mention: MentionState): (write: () => void) => void {
   const own = useRef(draft);
-  // Through a ref, so `owned` is stable and a host's `setDraft` built on it is too.
+  // Through refs, so `own` is stable and a host's `setDraft` built on it is too.
   const readNow = useRef(read);
   readNow.current = read;
-  useEffect(() => {
+  const external = useRef(mention.external);
+  external.current = mention.external;
+  const catchUp = useCallback((now: string) => {
     const before = own.current;
-    if (draft === before) return;
-    own.current = draft;
-    mention.external(before, draft);
-  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
-  return useCallback(() => { own.current = readNow.current(); }, []);
+    if (now === before) return;
+    own.current = now;
+    external.current(before, now);
+  }, []);
+  useEffect(() => { catchUp(draft); }, [draft, catchUp]);
+  return useCallback((write: () => void) => {
+    catchUp(readNow.current());
+    write();
+    own.current = readNow.current();
+  }, [catchUp]);
 }
 
 // ── Thumbnails ───────────────────────────────────────────────────────────────

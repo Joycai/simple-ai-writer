@@ -203,15 +203,12 @@ export function AgentChat() {
   const mention = useMentionState();
   // An instance unmounted by a conversation switch can still land a `@`
   // reference into this draft once its file read finishes (handlePickMention);
-  // every write of ours reports itself, so that one is told apart and the open
+  // every write of ours goes through `ownDraft`, so that one is told apart and the open
   // mention moved by it.
-  const ownedDraft = useOwnDraft(draft, () => chatComposerOf(useComposerStore.getState(), activeKey).draft, mention);
+  const ownDraft = useOwnDraft(draft, () => chatComposerOf(useComposerStore.getState(), activeKey).draft, mention);
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => {
-      setChatDraft(activeKey, update);
-      ownedDraft();
-    },
-    [setChatDraft, activeKey, ownedDraft],
+    (update: string | ((prev: string) => string)) => ownDraft(() => setChatDraft(activeKey, update)),
+    [setChatDraft, activeKey, ownDraft],
   );
   // Mirrors `draft` for the synchronous handlers that read it in the same
   // tick they wrote it (openMentionFor) or from a keydown (the queue check):
@@ -246,8 +243,8 @@ export function AgentChat() {
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
   const clearComposer = useCallback(
-    () => { clearChatComposer(activeKey); ownedDraft(); },
-    [clearChatComposer, activeKey, ownedDraft],
+    () => ownDraft(() => clearChatComposer(activeKey)),
+    [clearChatComposer, activeKey, ownDraft],
   );
   // Right-click → 存为片段, shared by the composer and every turn on screen.
   const snippetSave = useSnippetSave();

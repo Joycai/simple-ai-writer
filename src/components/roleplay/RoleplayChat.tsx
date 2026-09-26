@@ -305,20 +305,17 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 一样只属于这一位。
   const mention = useMentionState();
   // 读文件期间切走角色再切回，旧实例读完照样把 `@[名字]` 落进这份草稿——那不是
-  // 这个实例写的。自己的每次写入都报一声，别人的就认得出来，开着的提名和等着读完
+  // 这个实例写的。自己的每次写入都经 `ownDraft`，别人的就认得出来，开着的提名和等着读完
   // 的 claim 跟着改动段平移（对话助手同一个 hook）。
-  const ownedDraft = useOwnDraft(draft, () => roleplayComposerOf(useComposerStore.getState(), agent.id).draft, mention);
+  const ownDraft = useOwnDraft(draft, () => roleplayComposerOf(useComposerStore.getState(), agent.id).draft, mention);
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => {
-      setRoleplayDraft(agent.id, update);
-      ownedDraft();
-    },
-    [agent.id, setRoleplayDraft, ownedDraft],
+    (update: string | ((prev: string) => string)) => ownDraft(() => setRoleplayDraft(agent.id, update)),
+    [agent.id, setRoleplayDraft, ownDraft],
   );
-  const clearComposer = useCallback(() => {
-    clearRoleplayComposer(agent.id);
-    ownedDraft();
-  }, [agent.id, clearRoleplayComposer, ownedDraft]);
+  const clearComposer = useCallback(
+    () => ownDraft(() => clearRoleplayComposer(agent.id)),
+    [agent.id, clearRoleplayComposer, ownDraft],
+  );
   const setRefs = useCallback(
     (update: AttachedItem[] | ((prev: AttachedItem[]) => AttachedItem[])) => setRoleplayRefs(agent.id, update),
     [agent.id, setRoleplayRefs],
