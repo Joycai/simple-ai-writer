@@ -587,7 +587,17 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // refused on others with an error that never names the parameter (第十四个样本).
   // json_schema: a 200 that ignores it — prose in a code fence, Chinese keys.
   zhipu: { families: { all: { forcedToolChoice: false, jsonSchema: false } } },
-  orcarouter: {},
+  // Every cell measured on paid models (landscape.md §7 第十八个样本): a strict
+  // schema held against a prompt that contradicted its enum on ①②③, and the
+  // Responses built-in and Anthropic's versioned `web_search` both searched.
+  orcarouter: {
+    families: {
+      openai: { jsonSchema: true },
+      responses: { jsonSchema: true, web_search: true },
+      gemini: { jsonSchema: true },
+      anthropic: { web_search: true },
+    },
+  },
   newapi: RELAY,
   ollama: LOCAL,
   comfyui: LOCAL,

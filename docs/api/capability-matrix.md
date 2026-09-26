@@ -254,7 +254,7 @@
 | volcengine | ? unmeasured | ? unmeasured |  |  |
 | volcengine-plan | ✓ measured | ✓ measured |  | · |
 | zhipu | · |  |  |  |
-| orcarouter | ? unmeasured | ? unmeasured | ? unmeasured | · |
+| orcarouter | ✓ measured | ✓ measured | ✓ measured | · |
 | newapi | ? 按上游 unmeasured | ? 按上游 unmeasured | ? unmeasured | · |
 | ollama | ? unmeasured |  |  |  |
 | comfyui | ? unmeasured |  |  |  |
@@ -277,7 +277,7 @@
 | volcengine | · | ? unmeasured |  |  |
 | volcengine-plan | · | ✓ measured |  | ✓ measured |
 | zhipu | · |  |  |  |
-| orcarouter | · | ? unmeasured | · | ? unmeasured |
+| orcarouter | · | ✓ measured | · | ✓ measured |
 | newapi | · | ? 按上游 unmeasured | · | ? 按上游 unmeasured |
 | ollama | · |  |  |  |
 | comfyui | · |  |  |  |

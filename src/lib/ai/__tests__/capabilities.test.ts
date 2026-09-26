@@ -399,7 +399,9 @@ const runsCodeInterpreter = (family: ProtocolFamily, modelId: string) => codeInt
 describe("server tools, per wire", () => {
   it("answers yes where the platform lists a tool, unknown for a protocol-native one it doesn't, no otherwise", () => {
     expect(status({ platform: "minimax", standard: "anthropic_compat" }, "web_search")).toBe("yes");
-    expect(status({ platform: "orcarouter", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
+    // Measured on paid models (landscape.md §7 第十八个样本).
+    expect(status({ platform: "orcarouter", standard: "anthropic_compat" }, "web_search")).toBe("yes");
+    expect(status({ platform: "deepseek", standard: "anthropic_compat" }, "web_search")).toBe("unknown");
     expect(status({ platform: "newapi", standard: "openai_responses_compat" }, "web_search")).toBe("unknown");
     expect(status({ platform: "newapi", standard: "openai_responses_compat" }, "web_extractor")).toBe("no");
     expect(status({ platform: "newapi", standard: "openai_compat" }, "web_search")).toBe("no");
