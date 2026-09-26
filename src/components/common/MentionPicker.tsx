@@ -129,10 +129,17 @@ export interface MentionState {
   /** Call from the textarea's onChange, after the value is committed. */
   sync: (value: string, caret: number) => void;
   /**
-   * A pick's handle on the mention it came from — take it *before* any
-   * await, hand it to `accept` after. Null when no mention is open.
+   * For a change to the text that was not the author's typing (another
+   * instance landing a reference into the same draft): keep the open
+   * mention, moved to where it is now. See relocateMention.
    */
-  claim: () => MentionClaim | null;
+  relocate: (value: string, caret: number) => void;
+  /**
+   * A pick's handle on the mention it came from — take it *before* any
+   * await, with the text as it is then, and hand it to `accept` after. Null
+   * when no mention is open.
+   */
+  claim: (text: string) => MentionClaim | null;
   /**
    * Replace the claimed mention with `@[名字]`, returning the new text — at
    * the place the mention is *now*, after whatever was typed or landed
@@ -167,11 +174,18 @@ export interface MentionCore {
   start: number;
 }
 
-/** What a pick holds on to across its file read: which mention, and where it was. */
+/** What a pick holds on to across its file read: which mention, where it was, and what stood after it. */
 interface MentionClaim {
   id: number;
   start: number;
   query: string;
+  /**
+   * A `[` already followed the mention when the claim was taken — the `@` was
+   * put in front of prose like `[草稿]第一章` (`+ 引用`, or typed there). Then
+   * `@[` at the place of landing is that prose, not a reference landed
+   * since, and `spliceMention`'s guard must let the pick through.
+   */
+  glued: boolean;
 }
 
 const CLOSED: MentionCore = { open: false, id: 0, query: "", active: 0, scope: "all", start: 0 };
@@ -218,18 +232,37 @@ export function syncMention(prev: MentionCore, value: string, caret: number): Me
  * left every such mention as a bare `@沈` with the chip attached.
  *
  * One thing that can stand at `start` and still pass an empty query's check
- * is a reference already landed there — `@[夜航.png]` begins with `@`. A
- * live mention is never followed by `[` (`findMention` refuses that query),
- * so `@[` here is always a landed one, and landing again would give
- * `@[A][B]`. The `spent` set cannot see it across instances: the chat
- * composer remounts per conversation, and an instance unmounted mid-read
- * lands into the draft the new one has been writing.
+ * is a reference already landed there — `@[夜航.png]` begins with `@`, and
+ * landing again would give `@[A][B]`. The `spent` set cannot see it across
+ * instances: the chat composer remounts per conversation, and an instance
+ * unmounted mid-read lands into the draft the new one has been writing. But
+ * `@[` is also what an `@` put in front of `[草稿]第一章` looks like —
+ * `findMention` reads only up to the caret, so that empty-query mention is
+ * live. The two are told apart by `glued`, recorded when the claim was
+ * taken: a `[` that was already there is prose; one that was not is a
+ * reference landed since.
  */
-export function spliceMention(value: string, start: number, query: string, label: string): string {
+export function spliceMention(value: string, start: number, query: string, label: string, glued = false): string {
   const end = start + 1 + query.length;
   if (value.slice(start, end) !== `@${query}`) return value;
-  if (value.charAt(start + 1) === "[") return value;
+  if (!glued && value.charAt(start + 1) === "[") return value;
   return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
+}
+
+/**
+ * The open mention after the text changed under it *without* the author
+ * typing — another instance of the chat composer landing a reference into
+ * the same draft. The same query at a new place is the same mention, moved:
+ * it keeps its id (so the claims table keeps following it), its scope and
+ * its highlight. Anything else — the mention landed on, or gone — is what
+ * `syncMention` says it is. (`syncMention` itself reads a moved `start` as a
+ * fresh `@`, which is right for typing: `@潮@`, or a click to another `@`.)
+ */
+export function relocateMention(prev: MentionCore, value: string, caret: number): MentionCore {
+  if (!prev.open) return prev;
+  const hit = findMention(value, caret);
+  if (hit && hit.query === prev.query) return hit.start === prev.start ? prev : { ...prev, start: hit.start };
+  return syncMention(prev, value, caret);
 }
 
 /**
@@ -267,18 +300,20 @@ export function afterAccept(core: MentionCore, landed: Pick<MentionClaim, "id" |
 export function trackClaims(pending: Map<number, MentionClaim>, core: MentionCore): void {
   if (!core.open) return;
   for (const [id, c] of pending) {
-    if (id === core.id || c.start === core.start) pending.set(id, { id, start: core.start, query: core.query });
+    if (id === core.id || c.start === core.start) pending.set(id, { ...c, start: core.start, query: core.query });
   }
 }
 
 /**
  * A pick's claim on the open mention, registered in `pending` so
  * `trackClaims` follows it from here on. Null when no mention is open. The
- * one place a claim is made, for the hook and the tests alike.
+ * one place a claim is made, for the hook and the tests alike. `text` is
+ * the draft as it is now, for `glued` (see MentionClaim).
  */
-export function claimOf(pending: Map<number, MentionClaim>, core: MentionCore): MentionClaim | null {
+export function claimOf(pending: Map<number, MentionClaim>, core: MentionCore, text: string): MentionClaim | null {
   if (!core.open) return null;
-  const c: MentionClaim = { id: core.id, start: core.start, query: core.query };
+  const glued = text.charAt(core.start + 1 + core.query.length) === "[";
+  const c: MentionClaim = { id: core.id, start: core.start, query: core.query, glued };
   pending.set(c.id, c);
   return c;
 }
@@ -324,8 +359,8 @@ export function acceptPick(
   pending.delete(claim.id);
   const grown = cur.query !== claim.query && stillMatches(cur.query);
   const at = cur.start;
-  let text = grown ? spliceMention(value, at, cur.query, label) : value;
-  if (text === value) text = spliceMention(value, at, claim.query, label);
+  let text = grown ? spliceMention(value, at, cur.query, label, cur.glued) : value;
+  if (text === value) text = spliceMention(value, at, claim.query, label, cur.glued);
   if (text === value) return { text, landed: null };
   spent.add(claim.id);
   const delta = text.length - value.length;
@@ -361,7 +396,8 @@ export function useMentionState(): MentionState {
     active: state.active,
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
-    claim: () => claimOf(pending.current, state),
+    relocate: (value, caret) => setState((s) => relocateMention(s, value, caret)),
+    claim: (text) => claimOf(pending.current, state, text),
     accept: (value, item, claim, projectPath) => {
       const { text, landed } = acceptPick(
         spent.current, pending.current, claim, value, mentionLabel(item),

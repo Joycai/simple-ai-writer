@@ -717,7 +717,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
-    const claim = mention.claim();
+    const claim = mention.claim(draft);
     if (!claim) return;
     setRefError(null);
     // 先落字再读图：这里 setDraft 是 zustand 的同步更新，updater 只跑一次。

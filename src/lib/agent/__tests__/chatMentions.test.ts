@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, claimOf, findMention, mentionKeyDown, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, claimOf, findMention, mentionKeyDown, relocateMention, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -165,6 +165,9 @@ describe("spliceMention", () => {
     // same `@` re-picked after an Esc): an empty query's check would pass on
     // its `@` alone, and `@[A][B]` is not a mention anything can read.
     expect(spliceMention("看看@[夜航.png]", 2, "", "潮汐.mp4")).toBe("看看@[夜航.png]");
+    // But an `@` put in front of `[草稿]第一章` (`+ 引用` there) was glued to
+    // that `[` from the start: the claim says so, and the pick lands.
+    expect(spliceMention("@[草稿]第一章", 0, "", "沈砚.png", true)).toBe("@[沈砚.png][草稿]第一章");
     // Deleted outright.
     expect(spliceMention("看看", 2, "潮", "潮汐.png")).toBe("看看");
   });
@@ -208,35 +211,39 @@ describe("afterAccept", () => {
 
 describe("trackClaims", () => {
   it("follows a claimed mention while it is open and keeps its last place past a close", () => {
-    const pending = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮" }]]);
+    const pending = new Map<number, MentionClaim>([[1, { id: 1, start: 2, query: "潮", glued: true }]]);
     trackClaims(pending, { open: true, id: 1, query: "潮汐", active: 0, scope: "all", start: 2 });
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐" });
+    // `glued` rides along: it is about the claim, not the place.
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐", glued: true });
     // A 「，」 typed while the picture was still decoding: unchanged, so the
     // splice still lands at 2 and not at CLOSED's 0.
     trackClaims(pending, { open: false, id: 1, query: "", active: 0, scope: "all", start: 0 });
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐" });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐", glued: true });
     // Another mention, not claimed: nothing to track.
     trackClaims(pending, { open: true, id: 2, query: "夜", active: 0, scope: "all", start: 7 });
     expect(pending.size).toBe(1);
     // The same `@` reopened under a new id (Esc, then more letters): followed.
     trackClaims(pending, { open: true, id: 3, query: "潮汐门", active: 0, scope: "all", start: 2 });
-    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门" });
+    expect(pending.get(1)).toEqual({ id: 1, start: 2, query: "潮汐门", glued: true });
   });
 });
 
 describe("claimOf", () => {
   it("registers the open mention and hands back the same entry; nothing when closed", () => {
     const pending = new Map<number, MentionClaim>();
-    expect(claimOf(pending, { open: false, id: 3, query: "", active: 0, scope: "all", start: 0 })).toBeNull();
+    expect(claimOf(pending, { open: false, id: 3, query: "", active: 0, scope: "all", start: 0 }, "")).toBeNull();
     expect(pending.size).toBe(0);
-    const c = claimOf(pending, { open: true, id: 3, query: "潮", active: 0, scope: "all", start: 2 });
-    expect(c).toEqual({ id: 3, start: 2, query: "潮" });
+    const c = claimOf(pending, { open: true, id: 3, query: "潮", active: 0, scope: "all", start: 2 }, "看看@潮");
+    expect(c).toEqual({ id: 3, start: 2, query: "潮", glued: false });
     expect(pending.get(3)).toEqual(c);
+    // An `@` in front of `[草稿]`: the `[` was there when the claim was taken.
+    const g = claimOf(pending, { open: true, id: 4, query: "", active: 0, scope: "all", start: 2 }, "看看@[草稿]第一章");
+    expect(g).toMatchObject({ id: 4, glued: true });
   });
 });
 
 describe("acceptPick", () => {
-  const claim = { id: 1, start: 2, query: "潮" };
+  const claim = { id: 1, start: 2, query: "潮", glued: false };
   const nameHas = (label: string) => (q: string) => label.includes(q);
   const table = (...claims: MentionClaim[]) => new Map(claims.map((c) => [c.id, c]));
 
@@ -250,7 +257,7 @@ describe("acceptPick", () => {
     // stops it where the set cannot see (another instance's pick).
     const again = acceptPick(spent, table(), { ...claim, query: "" }, first.text, "B.png", () => true);
     expect(again).toEqual({ text: "看看@[潮汐.png]", landed: null });
-    const other = acceptPick(new Set(), table(), { id: 9, start: 2, query: "" }, first.text, "B.png", () => true);
+    const other = acceptPick(new Set(), table(), { id: 9, start: 2, query: "", glued: false }, first.text, "B.png", () => true);
     expect(other).toEqual({ text: "看看@[潮汐.png]", landed: null });
   });
 
@@ -279,7 +286,7 @@ describe("acceptPick", () => {
 
   it("records and shifts nothing when nothing landed — the `@` the author is looking at is still theirs", () => {
     const spent = new Set<number>();
-    const later = { id: 2, start: 7, query: "夜" };
+    const later = { id: 2, start: 7, query: "夜", glued: false };
     const pending = table(claim, later);
     // The mention was retyped as `@夜` during the read: `@潮` is gone.
     const r = acceptPick(spent, pending, claim, "看看@夜", "潮汐.png", nameHas("潮汐.png"));
@@ -290,11 +297,11 @@ describe("acceptPick", () => {
   });
 
   it("moves the claims after it by what the splice added", () => {
-    const later = { id: 2, start: 7, query: "夜" };
-    const earlier = { id: 3, start: 0, query: "" };
+    const later = { id: 2, start: 7, query: "夜", glued: false };
+    const earlier = { id: 3, start: 0, query: "", glued: false };
     const pending = table(claim, later, earlier);
     acceptPick(new Set(), pending, claim, "看看@潮，和@夜", "潮汐.png", nameHas("潮汐.png"));
-    expect(pending.get(2)).toEqual({ id: 2, start: 14, query: "夜" });
+    expect(pending.get(2)).toEqual({ id: 2, start: 14, query: "夜", glued: false });
     expect(pending.get(3)).toEqual(earlier);
   });
 });
@@ -312,14 +319,19 @@ describe("a pick across a file read", () => {
     let core = closed;
     const pending = new Map<number, MentionClaim>();
     const spent = new Set<number>();
-    const type = (text: string, caret = text.length) => { core = syncMention(core, text, caret); trackClaims(pending, core); };
-    const claim = () => claimOf(pending, core)!;
+    let text = "";
+    const type = (next: string, caret = next.length) => { text = next; core = syncMention(core, next, caret); trackClaims(pending, core); };
+    /** Another instance wrote the draft: what AgentChat's `ownDraft` effect does. */
+    const relocate = (next: string, caret = next.length) => { text = next; core = relocateMention(core, next, caret); trackClaims(pending, core); };
+    const claim = () => claimOf(pending, core, text)!;
+    /** Tab in the picker: the host's `cycleScope`, reduced to what this test needs. */
+    const narrow = (scope: MentionCore["scope"]) => { core = { ...core, scope }; };
     const accept = (value: string, item: MentionItem, c: MentionClaim) => {
       const r = acceptPick(spent, pending, c, value, label(item), (q) => matchesMention(item, q, "/p"));
       if (r.landed) { core = afterAccept(core, r.landed, r.landed.delta); trackClaims(pending, core); }
       return r.text;
     };
-    return { type, claim, accept, state: () => core };
+    return { type, relocate, claim, narrow, accept, state: () => core };
   }
 
   it("two slow files reading at once: the second lands where its mention is after the first", () => {
@@ -397,6 +409,33 @@ describe("a pick across a file read", () => {
     const landedFirst = fresh.accept("看看@夜", pic("夜航.png"), fresh.claim());
     expect(landedFirst).toBe("看看@[夜航.png]");
     expect(stale.accept(landedFirst, pic("插图/潮汐.mp4"), s)).toBe("看看@[夜航.png]");
+  });
+
+  it("a reference landed ahead by another instance moves the open mention, keeping its scope and its waiting pick", () => {
+    // A1 (unmounted) had `@潮` reading; A2 typed `，和@夜`, switched to 图片 and
+    // picked a slow file there. A1 lands first, into the store; A2 sees the
+    // draft change that was not its own.
+    const a2 = host();
+    for (const t of ["看看@潮，和@", "看看@潮，和@夜"]) a2.type(t);
+    a2.narrow("image");
+    const b = a2.claim();
+    a2.relocate("看看@[潮汐.png]，和@夜");
+    expect(a2.state()).toMatchObject({ open: true, id: 1, query: "夜", scope: "image", start: 13 });
+    expect(a2.accept("看看@[潮汐.png]，和@夜", pic("插图/夜航.png"), b)).toBe("看看@[潮汐.png]，和@[夜航.png]");
+    expect(a2.state().open).toBe(false);
+    // Landed on the mention itself (`@潮` → `@[潮汐.png]汐`): the picker closes.
+    const same = host();
+    same.type("看看@潮汐");
+    same.relocate("看看@[潮汐.png]汐");
+    expect(same.state().open).toBe(false);
+  });
+
+  it("an `@` put in front of `[草稿]` lands its pick; a reference landed there since does not", () => {
+    const h = host();
+    h.type("@[草稿]第一章", 1);
+    const g = h.claim();
+    expect(g.glued).toBe(true);
+    expect(h.accept("@[草稿]第一章", pic("沈砚.png"), g)).toBe("@[沈砚.png][草稿]第一章");
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {
