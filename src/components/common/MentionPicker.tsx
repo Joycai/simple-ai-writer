@@ -23,7 +23,7 @@
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -574,6 +574,55 @@ export function useKeptSelection(
   return useCallback((sel: TextSelection | null, text: string) => {
     want.current = sel === null ? null : { sel, text };
   }, []);
+}
+
+/**
+ * Drafts with a pick's file still being read, by slot (one per draft: the
+ * chat key, the roleplay character, a lore modal's own id). Such a draft must
+ * not be sent: the message would leave as `@潮` without the attachment, and
+ * the read, finishing, would put the attachment into the emptied composer to
+ * ride along with the next one. Module state, as chatStash's `pasting`, for
+ * the same reason: the instance that started the read may be gone — the chat
+ * composer remounts per conversation — and the one on screen now must still
+ * see the draft is not ready.
+ */
+const reads = new Map<string, number>();
+const readListeners = new Set<() => void>();
+
+function markMentionRead(slot: string, on: boolean): void {
+  const n = (reads.get(slot) ?? 0) + (on ? 1 : -1);
+  if (n > 0) reads.set(slot, n);
+  else reads.delete(slot);
+  for (const l of readListeners) l();
+}
+
+export function isMentionReading(slot: string): boolean {
+  return reads.has(slot);
+}
+
+function subscribeReads(listener: () => void): () => void {
+  readListeners.add(listener);
+  return () => { readListeners.delete(listener); };
+}
+
+/** Count `read` against `slot` until it settles, resolved or rejected; its outcome passes through. */
+export function trackMentionRead<T>(slot: string, read: Promise<T>): Promise<T> {
+  markMentionRead(slot, true);
+  return read.finally(() => markMentionRead(slot, false));
+}
+
+/**
+ * `reading`: a file picked into this draft is still being read — hosts gray
+ * out sending, as they do for a paste still becoming chips. `track(read)`
+ * wraps the read and counts it until it settles, either way. The count drops
+ * in `finally`, a microtask ahead of the code after the host's `await`, and
+ * no click can run between the two: by the time sending is allowed again the
+ * attachment and the landed `@[名字]` are both in the draft.
+ */
+export function useMentionReads(slot: string): { reading: boolean; track: <T>(read: Promise<T>) => Promise<T> } {
+  const reading = useSyncExternalStore(subscribeReads, () => isMentionReading(slot));
+  const track = useCallback(<T,>(read: Promise<T>) => trackMentionRead(slot, read), [slot]);
+  return { reading, track };
 }
 
 /**

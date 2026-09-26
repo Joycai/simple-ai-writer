@@ -25,6 +25,7 @@ import {
   mentionKeyDown,
   selectionOf,
   useKeptSelection,
+  useMentionReads,
   useMentionSearch,
   useMentionState,
   type MentionItem,
@@ -273,6 +274,9 @@ export function AgentChat() {
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
   const { onPaste: handlePaste, restore: restoreImages, pasting } = usePasteImages(activeKey, setRefs, setRefError);
+  // An `@` pick's file still reading into this draft — possibly started by the
+  // instance before a switch away and back.
+  const { reading, track: trackRead } = useMentionReads(`chat:${activeKey}`);
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -351,7 +355,7 @@ export function AgentChat() {
       // minutes later is unexplainable from the transcript.
       // A video is read only for a model that can take it; otherwise it stays
       // a path, as it always was.
-      const outcome = await attachProjectFile(item.file, { video: canVideo });
+      const outcome = await trackRead(attachProjectFile(item.file, { video: canVideo }));
       if (!outcome.ok) {
         setRefError(outcome.reason === "too-large"
           ? t("ai.chat.imageTooLarge", {
@@ -512,10 +516,12 @@ export function AgentChat() {
   const attachedQuote = !detached && selection ? selection : undefined;
   // chatCompacting too: a manual compaction is swapping the history a send
   // would append onto, so the composer waits it out (agentStore guards as well).
-  // Not while a paste is still becoming chips: the message would leave without
-  // the picture the author pasted a moment before pressing Enter.
+  // Not while a paste is still becoming chips, nor while an `@` pick's file is
+  // still reading: the message would leave without the picture the author
+  // pasted or picked a moment before, and the chip would land in the emptied
+  // composer.
   // hasMessage: words, or a picture on its own (chat-image-paste-plan §10).
-  const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !!activeModelId;
+  const canSend = hasMessage(draft, refs) && !chatRunning && !chatQueued && !chatCompacting && !pasting && !reading && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -540,16 +546,17 @@ export function AgentChat() {
   // instead of sending — it goes on the wire the moment the run settles. A
   // manual stop (Esc or the ■ button) clears the queue: stopping is an
   // intervention, and auto-firing the held message would undo it. A paste
-  // still becoming chips holds it too — sending now would leave the picture
-  // behind (and `canSend` would refuse, dropping the queue for nothing).
+  // still becoming chips holds it too, as does an `@` pick still reading —
+  // sending now would leave the picture behind (and `canSend` would refuse,
+  // dropping the queue for nothing).
   const [queued, setQueued] = useState(false);
   useEffect(() => {
-    if (chatRunning || pasting || !queued) return;
+    if (chatRunning || pasting || reading || !queued) return;
     setQueued(false);
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, pasting, queued]);
+  }, [chatRunning, pasting, reading, queued]);
 
   const handleStop = () => {
     setQueued(false);

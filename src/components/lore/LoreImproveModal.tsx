@@ -69,6 +69,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   // Result phase: false = highlighted read-only preview, true = raw textarea.
   const [editRaw, setEditRaw] = useState(false);
   const [attached, setAttached] = useState<AttachedItem[]>([]);
+  // An `@` pick still reading into the attachments: generating now would leave it out.
+  const [reading, setReading] = useState(false);
   const projectFiles = useProjectFiles();
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
@@ -450,7 +452,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 )}
                 <span style={{ flex: 1 }} />
                 {phase === "result" && (
-                  <button className={styles.diffToggle} onClick={handleGenerate} disabled={!modelId}>
+                  <button className={styles.diffToggle} onClick={handleGenerate} disabled={!modelId || reading}>
                     ⟳ {t("lore.improve.regenerate")}
                   </button>
                 )}
@@ -467,6 +469,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                   onInstructionChange={setInstruction}
                   attached={attached}
                   onAttachedChange={setAttached}
+                  onReadingChange={setReading}
                   entities={otherEntities}
                   projectFiles={projectFiles}
                   disabled={phase === "generating"}
@@ -626,7 +629,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           <div className={styles.footerRight}>
             <button className={styles.btnGhost} onClick={requestClose}>{t("lore.improve.cancel")}</button>
             {phase === "input" && (
-              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId}>
+              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId || reading}>
                 <Sparkles size={13} /> {t("lore.improve.generate")}
               </button>
             )}
@@ -638,7 +641,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             )}
             {phase === "result" && (
               <>
-                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId}>
+                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId || reading}>
                   <RotateCw size={12} /> {t("lore.improve.regenerate")}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleApply} disabled={saving || !output.trim()}>

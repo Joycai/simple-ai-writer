@@ -60,7 +60,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  selectionOf, useKeptSelection, useMentionSearch, useMentionState, type MentionItem,
+  selectionOf, useKeptSelection, useMentionReads, useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -405,6 +405,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 这个组件按 agent 重挂（RoleplayPanel 的 `key={active.id}`），提名状态和草稿
   // 一样只属于这一位。
   const mention = useMentionState();
+  // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
+  const { reading, track: trackRead } = useMentionReads(`roleplay:${agent.id}`);
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
@@ -630,8 +632,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       .getElementById(`rp-turn-${turn}`)
       ?.scrollIntoView({ block: "center", behavior: reduced ? "auto" : "smooth" });
   };
-  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。
-  const canSend = draft.trim().length > 0 && !compacting;
+  // 归纳中不发：store 会拒绝，这里让按钮先说清楚。`@` 选中的文件还在读也不发：
+  // 发出去的是不带附件的 `@潮`，读完的附件落进清空的输入框。
+  const canSend = draft.trim().length > 0 && !compacting && !reading;
 
   const doSend = () => {
     if (!canSend) return;
@@ -738,7 +741,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     } else if (item.file.kind === "image") {
       try {
         // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
-        const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
+        const { dataUrl, bytes, downscaled } = await trackRead(imageForModel(item.file.path));
         // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
         // 一条悄悄少了张图的消息从记录上根本看不出来。
         if (bytes.length > MAX_IMAGE_BYTES) {
@@ -759,7 +762,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       }
     } else if (projectPath) {
       try {
-        const content = await readFile(item.file.path);
+        const content = await trackRead(readFile(item.file.path));
         attach({ kind: "text", file: item.file, content });
       } catch {
         setRefError(t("roleplay.composer.refUnreadable", {

@@ -9,7 +9,7 @@
  * components/common/MentionPicker.
  */
 
-import { useMemo, useRef } from "react";
+import { useEffect, useId, useMemo, useRef } from "react";
 import { Image, X } from "lucide-react";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import {
@@ -18,6 +18,7 @@ import {
   mentionKeyDown,
   selectionOf,
   useKeptSelection,
+  useMentionReads,
   useMentionSearch,
   useMentionState,
   type MentionItem,
@@ -45,6 +46,12 @@ interface AttachmentTextareaProps {
   autoFocus?: boolean;
   /** Class for the textarea itself; the host owns its look. */
   textareaClassName?: string;
+  /**
+   * An `@` pick's file is still being read. The host holds its generate
+   * buttons meanwhile: a request sent now would go without the attachment
+   * the author just picked, which then turns up in the list after the fact.
+   */
+  onReadingChange?: (reading: boolean) => void;
 }
 
 export function AttachmentTextarea({
@@ -59,12 +66,21 @@ export function AttachmentTextarea({
   placeholder,
   autoFocus = false,
   textareaClassName,
+  onReadingChange,
 }: AttachmentTextareaProps) {
   const mention = useMentionState();
   // A pinyin Enter commits the word being typed; it must not also pick a row.
   const ime = useImeGuard();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const placeSelection = useKeptSelection(textareaRef, instruction);
+  const slot = useId();
+  const { reading, track: trackRead } = useMentionReads(`lore:${slot}`);
+  useEffect(() => {
+    if (!onReadingChange) return;
+    onReadingChange(reading);
+    // Gone mid-read: the host must not stay held for a read nobody shows.
+    return () => { if (reading) onReadingChange(false); };
+  }, [reading, onReadingChange]);
   const wrapRef = useRef<HTMLDivElement>(null);
   // `attached` and `instruction` are props captured at render. Reading a large
   // image as base64 takes long enough for the author to keep typing, and for a
@@ -103,8 +119,8 @@ export function AttachmentTextarea({
         // to the array this closure captured would drop a chip attached while
         // the read was in flight.
         const attachment: AttachedItem = item.file.kind === "image"
-          ? { kind: "image", file: item.file, dataUrl: (await imageForModel(item.file.path)).dataUrl }
-          : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
+          ? { kind: "image", file: item.file, dataUrl: (await trackRead(imageForModel(item.file.path))).dataUrl }
+          : { kind: "text", file: item.file, content: await trackRead(readTextFileContent(item.file.path)) };
         // Picked twice while the read was running: the first pick's accept
         // already closed the claimed mention, and a mention opened since is
         // not this pick's to close.

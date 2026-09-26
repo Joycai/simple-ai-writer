@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, landSelection, mentionKeyDown, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, acceptPick, afterAccept, caretThrough, claimOf, editRange, findMention, isMentionReading, landSelection, mentionKeyDown, selectionThrough, shiftClaims, shiftCore, spliceMention, syncMention, trackClaims, trackMentionRead, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { matchesMention } = await import("../../search/mentionSearch");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
@@ -395,6 +395,61 @@ describe("a selection through an edit someone else made", () => {
 
   it("leaves a selection alone when nothing changed", () => {
     expect(selectionThrough(sel(1, 3, "backward"), before, before)).toEqual(sel(1, 3, "backward"));
+  });
+});
+
+describe("a draft with a pick's file still reading", () => {
+  /** A read the test settles by hand. */
+  function deferred<T>() {
+    let resolve!: (v: T) => void, reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  }
+
+  it("counts from the read's start until it settles, and passes its result through", async () => {
+    const read = deferred<string>();
+    const tracked = trackMentionRead("chat:c1", read.promise);
+    expect(isMentionReading("chat:c1")).toBe(true);
+    read.resolve("潮汐.png");
+    await expect(tracked).resolves.toBe("潮汐.png");
+    expect(isMentionReading("chat:c1")).toBe(false);
+  });
+
+  it("stops counting a read that fails, and passes the failure through", async () => {
+    const read = deferred<string>();
+    const tracked = trackMentionRead("roleplay:沈砚", read.promise);
+    read.reject(new Error("读不到"));
+    await expect(tracked).rejects.toThrow("读不到");
+    expect(isMentionReading("roleplay:沈砚")).toBe(false);
+  });
+
+  it("keeps drafts apart, and holds one until every read in it is done", async () => {
+    const a = deferred<void>(), b = deferred<void>(), other = deferred<void>();
+    const ta = trackMentionRead("chat:c2", a.promise);
+    const tb = trackMentionRead("chat:c2", b.promise);
+    const to = trackMentionRead("chat:c3", other.promise);
+    a.resolve();
+    await ta;
+    expect(isMentionReading("chat:c2")).toBe(true);
+    other.resolve();
+    await to;
+    expect(isMentionReading("chat:c3")).toBe(false);
+    expect(isMentionReading("chat:c2")).toBe(true);
+    b.resolve();
+    await tb;
+    expect(isMentionReading("chat:c2")).toBe(false);
+  });
+
+  it("is done by the time the code after the host's await runs", async () => {
+    const read = deferred<string>();
+    const seen: boolean[] = [];
+    const pick = (async () => {
+      await trackMentionRead("lore:r1", read.promise);
+      seen.push(isMentionReading("lore:r1"));
+    })();
+    read.resolve("夜航");
+    await pick;
+    expect(seen).toEqual([false]);
   });
 });
 
