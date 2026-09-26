@@ -36,6 +36,7 @@ import { estimateCost, formatBytes } from "../../lib/asr/cost";
 import { probeDurationSeconds } from "../../lib/asr/duration";
 import { formatClock } from "../../lib/asr/render";
 import { subAgentModel } from "../../lib/agent/subagentModel";
+import { mentionToken } from "../../lib/agent/mentionText";
 import { useAiStore } from "../../stores/aiStore";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
@@ -1534,7 +1535,7 @@ export function FileTree() {
       composer.setChatRefs(chatKey, (prev) => [...prev, outcome.item]);
       composer.setChatDraft(chatKey, (prev) => {
         const sep = prev && !/\s$/.test(prev) ? " " : "";
-        return `${prev}${sep}@[${file.name}] `;
+        return `${prev}${sep}${mentionToken(file.name)} `;
       });
     }
     // 已经挂着同一份时只打开抽屉——重复的 chip 和重复的 @ 都是噪声。

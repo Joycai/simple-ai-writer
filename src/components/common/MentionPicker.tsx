@@ -31,6 +31,7 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
+import { mentionToken } from "../../lib/agent/mentionText";
 import {
   availableScopes,
   countByScope,
@@ -241,12 +242,15 @@ export function syncMention(prev: MentionCore, value: string, caret: number): Me
  * live. The two are told apart by `glued`, recorded when the claim was
  * taken: a `[` that was already there is prose; one that was not is a
  * reference landed since.
+ *
+ * The token itself is `mentionToken`'s, the definition its readers share — a
+ * name holding brackets lands in the shape they can read back.
  */
 export function spliceMention(value: string, start: number, query: string, label: string, glued = false): string {
   const end = start + 1 + query.length;
   if (value.slice(start, end) !== `@${query}`) return value;
   if (!glued && value.charAt(start + 1) === "[") return value;
-  return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
+  return `${value.slice(0, start)}${mentionToken(label)}${value.slice(end)}`;
 }
 
 /**

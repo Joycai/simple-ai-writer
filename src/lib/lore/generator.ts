@@ -11,6 +11,7 @@ import i18n from "../../i18n";
 import type { AgentEvent } from "../agent/events";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
+import { stripMentions } from "../agent/mentionText";
 import { withJsonModeFallback, type JsonSchemaSource } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { imagePart } from "../ai/imagePart";
@@ -67,7 +68,7 @@ export async function generateLore(opts: ConnOptions & {
   allowedCategories?: CategoryId[];
 }): Promise<GeneratedLore> {
   // Strip @[filename] visual placeholders from the user description — they're UI labels only.
-  const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
+  const cleanDesc = stripMentions(opts.description).trim();
 
   // Build the text portion of the prompt.
   // 500 000 chars ≈ 125–250 k tokens — covers even large settings docs on modern

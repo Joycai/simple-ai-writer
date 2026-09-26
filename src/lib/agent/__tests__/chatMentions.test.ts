@@ -156,6 +156,9 @@ describe("spliceMention", () => {
   it("replaces `@query` at start with `@[label]` and keeps the rest", () => {
     expect(spliceMention("看看@潮，", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png]，");
     expect(spliceMention("@", 0, "", "沈砚")).toBe("@[沈砚]");
+    // Brackets in the name land in the shape the readers count (mentionText).
+    expect(spliceMention("看看@潮，", 2, "潮", "潮汐[旧].png")).toBe("看看@[潮汐[旧].png]，");
+    expect(spliceMention("看看@夜，", 2, "夜", "夜航].png")).toBe("看看@[夜航］.png]，");
   });
 
   it("leaves the text alone when the mention is no longer there — a file read finished after the author moved on", () => {
