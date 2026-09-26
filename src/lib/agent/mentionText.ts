@@ -29,14 +29,20 @@ interface MentionSegment {
  * way it can be read back at all. A backslash escape was the other option,
  * and it would show in the draft and reach the model on every paired name
  * too, which never needed it.
+ *
+ * A `[` straight after an `@` counts as lone too (`封面@[2x]` →
+ * `@[封面@［2x］]`): readers take an `@[` inside a token as the start of a
+ * new one (see {@link closeOf}), so the name must not contain one.
  */
 export function mentionToken(label: string): string {
   const chars = [...label];
   const open: number[] = [];
   const lone = new Set<number>();
   chars.forEach((c, i) => {
-    if (c === "[") open.push(i);
-    else if (c === "]") {
+    if (c === "[") {
+      if (chars[i - 1] === "@") lone.add(i);
+      else open.push(i);
+    } else if (c === "]") {
       if (open.length > 0) open.pop();
       else lone.add(i);
     }
@@ -46,27 +52,39 @@ export function mentionToken(label: string): string {
   return `@[${body}]`;
 }
 
+/** {@link closeOf}: cut short by a newline, a nested `@[` or a `stop` character. */
+const CUT = -1;
+/** {@link closeOf}: still open at the end of the text. */
+const OPEN = -2;
+
 /**
  * From the `@[` at `at`, count the brackets — `[` opens, `]` closes. Returns
- * the index of the `]` that brings the count back to zero, or -1 when a
- * newline, a `stop` character or the end of the text comes first.
+ * the index of the `]` that brings the count back to zero; {@link CUT} when a
+ * newline, a `stop` character or another `@[` comes first; {@link OPEN} when
+ * the text ends first.
+ *
+ * A nested `@[` ends the attempt because {@link mentionToken} never writes
+ * one inside a name — so it is a new token, and the `@[` before it was typed
+ * by the author. Counting through it read `按@[旧稿，参考@[潮汐.md]里的写法]`
+ * as one reference, swallowing the real one inside.
  */
 function closeOf(text: string, at: number, stop?: (c: string) => boolean): number {
   let depth = 1;
   for (let i = at + 2; i < text.length; i++) {
     const c = text[i];
-    if (c === "\n" || stop?.(c)) return -1;
+    if (c === "\n" || stop?.(c)) return CUT;
+    if (c === "@" && text[i + 1] === "[") return CUT;
     if (c === "[") depth++;
     else if (c === "]" && --depth === 0) return i;
   }
-  return -1;
+  return OPEN;
 }
 
 /**
  * Every token in `text`, as `[start, end)` spans in order: from each `@[` to
- * the `]` that closes it ({@link closeOf}). A newline or the end of the text
- * before that, or an empty `@[]`, is not a token: none of them is something
- * {@link mentionToken} produces, so they stay the author's typed text.
+ * the `]` that closes it ({@link closeOf}). One cut short or left open, or an
+ * empty `@[]`, is not a token: none of them is something {@link mentionToken}
+ * produces, so they stay the author's typed text.
  */
 function mentionSpans(text: string): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
@@ -97,15 +115,8 @@ export function endsInsideToken(text: string, stop?: (c: string) => boolean): bo
     const at = text.indexOf("@[", from);
     if (at === -1) return false;
     const close = closeOf(text, at, stop);
-    if (close !== -1) {
-      from = close + 1;
-      continue;
-    }
-    // Cut short or ran out: only running out means the text ends inside it.
-    let i = at + 2;
-    while (i < text.length && text[i] !== "\n" && !stop?.(text[i])) i++;
-    if (i === text.length) return true;
-    from = at + 1;
+    if (close === OPEN) return true;
+    from = close === CUT ? at + 1 : close + 1;
   }
 }
 

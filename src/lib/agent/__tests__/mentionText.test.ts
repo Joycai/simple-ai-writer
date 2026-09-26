@@ -58,7 +58,7 @@ describe("splitMentions", () => {
   });
 
   it("reads every token mentionToken writes back as exactly that token", () => {
-    for (const name of ["沈砚", "潮汐[旧]", "夜航]", "[夜航", "a]b[c", "[[潮汐]", "封面@2x.png", "]["]) {
+    for (const name of ["沈砚", "潮汐[旧]", "夜航]", "[夜航", "a]b[c", "[[潮汐]", "封面@2x.png", "][", "封面@[2x]", "手稿[旧]@2x.png"]) {
       const token = mentionToken(name);
       expect(splitMentions(`看看${token}的`)).toEqual([
         { kind: "text", text: "看看" },
@@ -77,6 +77,14 @@ describe("splitMentions", () => {
   });
 });
 
+describe("a typed `@[` before a real reference", () => {
+  it("does not swallow the reference: a nested `@[` starts a new token", () => {
+    const text = "按@[旧稿，参考@[潮汐.md]里的写法]重写";
+    expect(splitMentions(text).filter((s) => s.kind === "mention").map((s) => s.text)).toEqual(["@[潮汐.md]"]);
+    expect(stripMentions(text)).toBe("按@[旧稿，参考里的写法]重写");
+  });
+});
+
 describe("mentionToken", () => {
   it("keeps a name without brackets as it is", () => {
     expect(mentionToken("潮汐.png")).toBe("@[潮汐.png]");
@@ -88,6 +96,8 @@ describe("mentionToken", () => {
     expect(mentionToken("[夜航")).toBe("@[［夜航]");
     expect(mentionToken("a]b[c")).toBe("@[a］b［c]");
     expect(mentionToken("[[潮汐]")).toBe("@[［[潮汐]]");
+    // `@[` never appears inside a name: readers would take it as a new token.
+    expect(mentionToken("封面@[2x]")).toBe("@[封面@［2x］]");
   });
 });
 
