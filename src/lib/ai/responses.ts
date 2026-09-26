@@ -63,7 +63,7 @@ import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
 import { platformResponsesInclude, wireOf, type PlatformId } from "./platforms";
-import { costReportHeaders, reportedCostOf } from "./reportedCost";
+import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
@@ -204,7 +204,7 @@ function toResponsesToolChoice(tc: StreamOptions["toolChoice"]): unknown {
 }
 
 /** Usage from a terminal event's `response` object, in this app's vocabulary. */
-function readUsage(response: unknown, platform: PlatformId): { inputTokens: number; outputTokens: number; cachedTokens: number; reportedCost?: number } {
+function readUsage(response: unknown, platform: PlatformId | undefined): { inputTokens: number; outputTokens: number; cachedTokens: number; reportedCost?: number } {
   const usage = (response as { usage?: Record<string, unknown> } | undefined)?.usage;
   const n = (v: unknown) => (typeof v === "number" ? v : 0);
   const details = usage?.input_tokens_details as Record<string, unknown> | undefined;
@@ -226,6 +226,7 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
   const wire = wireOf(opts);
+  const costPlatform = costReportingPlatform(opts);
   // Asked with the relay upstream: behind some, a temperature is rewritten to 1
   // or fails the request, and one appends a guard to `instructions`
   // (capabilities.ts UPSTREAM_CAPABILITIES).
@@ -300,7 +301,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     headers: {
       "Content-Type": "application/json",
       ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
-      ...costReportHeaders(wire.platform),
+      ...costReportHeaders(costPlatform),
     },
     body: JSON.stringify(body),
     signal: opts.signal,
@@ -367,7 +368,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   };
 
   const readTerminalUsage = (response: unknown) => {
-    const u = readUsage(response, wire.platform);
+    const u = readUsage(response, costPlatform);
     inputTokens = u.inputTokens;
     outputTokens = u.outputTokens;
     cachedTokens = u.cachedTokens;

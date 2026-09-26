@@ -29,7 +29,7 @@ import {
 } from "./serverTools";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { wireOf } from "./platforms";
-import { addReportedCost, costReportHeaders, reportedCostOf } from "./reportedCost";
+import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { anthropicUrl } from "./urls";
@@ -633,7 +633,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
    * (`addReportedCost`).
    */
   let turnCost: number | null | undefined;
-  const { platform } = wireOf(opts);
+  const platform = costReportingPlatform(opts);
   let truncated = false;
   /** The endpoint's own `stop_reason`, carried to the API log verbatim. */
   let stopReason: string | undefined;
@@ -731,7 +731,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
      * from these when the request ends.
      */
     let usage: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
-    /** This request's reported cost — `message_delta` carries it (`reportedCost.ts`). */
+    /** This request's reported cost — the last `message_delta` carries it (`reportedCost.ts`). */
     let legCost: number | undefined;
     /**
      * Every content block of *this* response, verbatim and in arrival order.
@@ -821,7 +821,6 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         case "message_start": {
           const message = json.message as Record<string, unknown> | undefined;
           usage = readUsage(message?.usage, usage);
-          legCost = reportedCostOf(platform, "anthropic", message?.usage) ?? legCost;
           return;
         }
         case "content_block_start": {
@@ -919,7 +918,9 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         }
         case "message_delta": {
           usage = readUsage(json.usage, usage);
-          legCost = reportedCostOf(platform, "anthropic", json.usage) ?? legCost;
+          // The cost of the whole response rides here only — never the opening
+          // snapshot, whose numbers are partial (landscape.md §7 第十八个样本「再补测」).
+          legCost = reportedCostOf(platform, "anthropic", json.usage);
           const stop = (json.delta as { stop_reason?: string } | undefined)?.stop_reason;
           if (stop) stopReason = stop;
           if (stop && ANTHROPIC_REFUSAL_STOP_REASONS.has(stop)) {

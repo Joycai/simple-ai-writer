@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addReportedCost, costReportHeaders, reportedCostOf } from "../reportedCost";
+import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "../reportedCost";
 
 describe("reportedCostOf — 只收声明过的平台", () => {
   it("OrcaRouter 四族各读自己的字段", () => {
@@ -63,5 +63,27 @@ describe("addReportedCost — 全报才加，缺一次整行回落计费组", ()
     expect(addReportedCost(undefined, undefined)).toBeNull();
     expect(addReportedCost(0.25, undefined)).toBeNull();
     expect(addReportedCost(null, 0.5)).toBeNull();
+  });
+});
+
+describe("costReportingPlatform — 标签和地址都得是它", () => {
+  it("OrcaRouter 的四条线路地址都认", () => {
+    expect(costReportingPlatform({ baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_compat" })).toBe("orcarouter");
+    expect(costReportingPlatform({ baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_responses_compat" })).toBe("orcarouter");
+    expect(costReportingPlatform({ baseUrl: "https://api.orcarouter.ai", standard: "anthropic_compat", platform: "orcarouter" })).toBe("orcarouter");
+    expect(costReportingPlatform({ baseUrl: "https://api.orcarouter.ai/v1beta", standard: "gemini_compat" })).toBe("orcarouter");
+  });
+
+  it("给别的主机贴上 OrcaRouter 标签不算", () => {
+    expect(costReportingPlatform({ baseUrl: "https://relay.example.com/v1", standard: "openai_compat", platform: "orcarouter" })).toBeUndefined();
+  });
+
+  it("OrcaRouter 的地址被标成别的平台也不算（作者说它不是）", () => {
+    expect(costReportingPlatform({ baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_compat", platform: "newapi" })).toBeUndefined();
+  });
+
+  it("没声明报价的平台一律没有", () => {
+    expect(costReportingPlatform({ baseUrl: "https://api.deepseek.com", standard: "openai_compat" })).toBeUndefined();
+    expect(costReportingPlatform({ baseUrl: "", standard: "anthropic" })).toBeUndefined();
   });
 });

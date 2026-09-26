@@ -10,7 +10,7 @@ import {
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
 import { wireOf } from "./platforms";
-import { costReportHeaders, reportedCostOf } from "./reportedCost";
+import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { hasCapability } from "./capabilities";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
@@ -163,7 +163,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   // shows only the caller's messages — without the wire body there is no way
   // to tell whether the field the author chose ever went out.
   opts._onRequestBody?.(body);
-  const { platform } = wireOf(opts);
+  const platform = costReportingPlatform(opts);
   const res = await fetch(url, {
     method: "POST",
     headers: {

@@ -3307,6 +3307,49 @@ describe("streamCompletion — upstream-reported cost", () => {
     expect(done && "reportedCost" in done).toBe(false);
   });
 
+  it("a relay merely labelled OrcaRouter gets no header and its cost is not taken", async () => {
+    const { headers, done } = await run("openai_compat", "https://relay.example.com/v1", [CHAT], "orcarouter");
+    expect(headers[0].has("X-OrcaRouter-Include-Cost")).toBe(false);
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
+  it("Chat: a stream that ends without [DONE] still carries the cost", async () => {
+    const { done } = await run("openai_compat", "https://api.orcarouter.ai/v1", [CHAT.slice(0, 2)]);
+    expect(done?.reportedCost).toBe(9.9e-6);
+  });
+
+  it("Chat: `cost_usd` is read when that is the spelling", async () => {
+    const chunks = [CHAT[0], `data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2,"cost_usd":3e-6}}\n`, CHAT[2]];
+    const { done } = await run("openai_compat", "https://api.orcarouter.ai/v1", [chunks]);
+    expect(done?.reportedCost).toBe(3e-6);
+  });
+
+  it("Gemini: the last block's cost wins", async () => {
+    const chunks = [
+      `data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":5,"costUsd":1e-6}}\n`,
+      GEMINI[1],
+    ];
+    const { done } = await run("gemini_compat", "https://api.orcarouter.ai/v1beta", [chunks]);
+    expect(done?.reportedCost).toBe(1.4e-5);
+  });
+
+  it("Responses: a response cut short on max_output_tokens still carries the cost", async () => {
+    const chunks = [
+      RESPONSES[0],
+      `data: {"type":"response.incomplete","response":{"incomplete_details":{"reason":"max_output_tokens"},"usage":{"input_tokens":5,"output_tokens":2,"cost":2e-6}}}\n\n`,
+    ];
+    const { done } = await run("openai_responses_compat", "https://api.orcarouter.ai/v1", [chunks]);
+    expect(done?.truncated).toBe(true);
+    expect(done?.reportedCost).toBe(2e-6);
+  });
+
+  it("Anthropic: a cost in the opening snapshot alone is not the response's cost", async () => {
+    const chunks = anthropic(undefined);
+    chunks[0] = `data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1,"cost_usd":1e-6}}}\n\n`;
+    const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [chunks]);
+    expect(done && "reportedCost" in done).toBe(false);
+  });
+
   it("a reported 0 stays 0 — free, not missing", async () => {
     const { done } = await run("anthropic_compat", "https://api.orcarouter.ai", [anthropic(0)]);
     expect(done?.reportedCost).toBe(0);

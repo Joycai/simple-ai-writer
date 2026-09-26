@@ -6,8 +6,7 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
-import { wireOf } from "./platforms";
-import { costReportHeaders, reportedCostOf } from "./reportedCost";
+import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
 import { geminiUrl } from "./urls";
 import type {
   AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
@@ -289,7 +288,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // alone cannot show what was sent.
   opts._onRequestBody?.(body);
 
-  const { platform } = wireOf(opts);
+  const platform = costReportingPlatform(opts);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode), ...costReportHeaders(platform) },

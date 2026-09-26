@@ -4,12 +4,25 @@
  *
  * 报价一旦记上用量行，就压过整张计费组表（`feeGroup.ts` `costOf`），所以收不收它是
  * 信任问题，不是解析问题：只收平台表里声明过 `reportsCost` 的平台——测过它报的数等于
- * 它实际扣的钱（`platforms.ts`）。别的中转回包里起个同名字段，这里一律当没报。
+ * 它实际扣的钱（`platforms.ts`）——而且请求的地址本身也得指向它
+ * （{@link costReportingPlatform}）。别的中转回包里起个同名字段，这里一律当没报。
  *
  * 「没报」是 `undefined`，不是 `0`：`0` 是上游说这次免费，会把整行记成 0。
  */
-import { platformCostReport, type PlatformId } from "./platforms";
-import type { ProtocolFamily } from "./types";
+import { inferPlatform, platformCostReport, wireOf, type PlatformId } from "./platforms";
+import type { ApiStandard, ProtocolFamily } from "./types";
+
+/**
+ * 这次请求的报价归哪个平台：标签和地址都得是它，否则 `undefined`（不发头、不收数）。
+ *
+ * 平台标签作者可以给任何主机贴——抽屉里选了 OrcaRouter 再改地址，标签不跟着变。别处
+ * 信标签是对的（能力表问的就是作者说这是谁），但报价压过整张计费组表：一个贴错标签的
+ * OpenRouter 形中转在 ① 上本来就回 `usage.cost`，它的数不能拿来定账。
+ */
+export function costReportingPlatform(o: { platform?: PlatformId; baseUrl: string; standard: ApiStandard }): PlatformId | undefined {
+  const { platform } = wireOf(o);
+  return platformCostReport(platform) && inferPlatform(o.baseUrl, o.standard) === platform ? platform : undefined;
+}
 
 /** 各族回包里放花费的字段（OrcaRouter 实测，landscape.md §7 第十八个样本「再补测」）。 */
 function rawCost(family: ProtocolFamily, u: Record<string, unknown>): unknown {
@@ -30,7 +43,7 @@ function rawCost(family: ProtocolFamily, u: Record<string, unknown>): unknown {
  * 一段 usage 对象里的上游报价（美元），或 `undefined` = 没报 / 不收。
  *
  * `usage` 是该族放 token 数的那个对象原样：④ `message_delta.usage`、③ `usageMetadata`、
- * ① 末块 `usage`、② `response.usage`。
+ * ① 末块 `usage`、② `response.usage`。`platform` 取 {@link costReportingPlatform}。
  */
 export function reportedCostOf(platform: PlatformId | undefined, family: ProtocolFamily, usage: unknown): number | undefined {
   if (!platform || !platformCostReport(platform)) return undefined;
