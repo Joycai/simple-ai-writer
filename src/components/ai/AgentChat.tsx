@@ -23,9 +23,10 @@ import {
   MentionPicker,
   mentionKey,
   mentionKeyDown,
+  selectionOf,
+  useKeptSelection,
   useMentionSearch,
   useMentionState,
-  usePendingCaret,
   type MentionItem,
 } from "../common/MentionPicker";
 import { useStickToBottom } from "../common/useStickToBottom";
@@ -267,7 +268,7 @@ export function AgentChat() {
     });
   };
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const placeCaret = usePendingCaret(inputRef, draft);
+  const placeSelection = useKeptSelection(inputRef, draft);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
   // ⌘V a picture: it lands as a chip like an `@` one, refusals on refError.
@@ -382,12 +383,13 @@ export function AgentChat() {
     // leaving; splicing into it would write that stale draft over what they
     // typed. `setDraft` is bound to this conversation's key, so the write
     // lands in the same draft whichever instance is on screen.
-    // The caret as it is now, carried through the splice and put back after
-    // the render (usePendingCaret) — null if this instance is gone.
-    const caret = inputRef.current?.selectionStart ?? null;
+    // The selection as it is now, carried through the splice and put back
+    // after the render (useKeptSelection) — null if this instance is gone;
+    // then the new instance keeps its own by reading the edit.
+    const sel = selectionOf(inputRef.current);
     setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, caret);
-      placeCaret(landed.caret, landed.text);
+      const landed = mention.accept(now, item, claim, projectPath, sel);
+      placeSelection(landed.sel, landed.text);
       return landed.text;
     });
     inputRef.current?.focus();

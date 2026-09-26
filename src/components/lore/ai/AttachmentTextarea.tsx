@@ -16,9 +16,10 @@ import {
   MentionPicker,
   mentionKey,
   mentionKeyDown,
+  selectionOf,
+  useKeptSelection,
   useMentionSearch,
   useMentionState,
-  usePendingCaret,
   type MentionItem,
 } from "../../common/MentionPicker";
 import { readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
@@ -63,7 +64,7 @@ export function AttachmentTextarea({
   // A pinyin Enter commits the word being typed; it must not also pick a row.
   const ime = useImeGuard();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const placeCaret = usePendingCaret(textareaRef, instruction);
+  const placeSelection = useKeptSelection(textareaRef, instruction);
   const wrapRef = useRef<HTMLDivElement>(null);
   // `attached` and `instruction` are props captured at render. Reading a large
   // image as base64 takes long enough for the author to keep typing, and for a
@@ -115,9 +116,9 @@ export function AttachmentTextarea({
     }
     const landed = mention.accept(
       latest.current.instruction, item, claim, projectPath,
-      textareaRef.current?.selectionStart ?? null,
+      selectionOf(textareaRef.current),
     );
-    placeCaret(landed.caret, landed.text);
+    placeSelection(landed.sel, landed.text);
     onInstructionChange(landed.text);
     textareaRef.current?.focus();
   };

@@ -60,7 +60,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, mentionKey, mentionKeyDown,
-  useMentionSearch, useMentionState, usePendingCaret, type MentionItem,
+  selectionOf, useKeptSelection, useMentionSearch, useMentionState, type MentionItem,
 } from "../common/MentionPicker";
 import { useImeGuard } from "../../lib/ime";
 import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
@@ -340,7 +340,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const placeCaret = usePendingCaret(taRef, draft);
+  const placeSelection = useKeptSelection(taRef, draft);
   // 右键 → 存为片段：输入框和每条气泡共用。
   const snippetSave = useSnippetSave();
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -770,11 +770,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     }
     // 落进 store 里**此刻**的草稿：updater 的参数由 zustand 给、只跑一次，读的
     // 期间作者接着打的字不会被闭包里的旧草稿盖掉。落上了 `accept` 会自己关掉选择器。
-    // 光标取此刻的，经这次替换平移，渲染之后放回去（usePendingCaret）。
-    const caret = taRef.current?.selectionStart ?? null;
+    // 选区取此刻的（两端都要），经这次替换平移，渲染之后放回去（useKeptSelection）；
+    // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
+    const sel = selectionOf(taRef.current);
     setDraft((now) => {
-      const landed = mention.accept(now, item, claim, projectPath, caret);
-      placeCaret(landed.caret, landed.text);
+      const landed = mention.accept(now, item, claim, projectPath, sel);
+      placeSelection(landed.sel, landed.text);
       return landed.text;
     });
   };
