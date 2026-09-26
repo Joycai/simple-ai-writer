@@ -21,13 +21,28 @@ vi.mock("../../../i18n", () => ({
       ),
   },
 }));
+// The picker's own strings go through react-i18next; same stand-in, plus a
+// language switch so the English spellings can be read back.
+const i18nLang = vi.hoisted(() => ({ current: "zh-CN" }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (_k: string, o?: Record<string, unknown>) =>
+      String(o?.defaultValue ?? _k).replace(
+        /\{\{(\w+)\}\}/g,
+        (whole, key: string) => (key in (o ?? {}) ? String(o![key]) : whole),
+      ),
+    i18n: { language: i18nLang.current },
+  }),
+}));
 vi.mock("../../lore/entity", () => ({
   readEntityFile: vi.fn(async (dir: string) =>
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { findMention, mentionKeyDown, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, findMention, mentionKeyDown, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
+type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
 type MentionState = import("../../../components/common/MentionPicker").MentionState;
 type MentionSearch = import("../../../components/common/MentionPicker").MentionSearch;
 const { createElement } = await import("react");
@@ -77,6 +92,33 @@ describe("findMention", () => {
   it("still opens on an @ that runs straight out of Chinese prose", () => {
     // The everyday case: nobody types a space before `@` in Chinese.
     expect(findMention("参考@第三", 5)).toEqual({ start: 2, query: "第三" });
+  });
+});
+
+// ── The mention's state transition ───────────────────────────────────────────
+
+describe("syncMention", () => {
+  const closed: MentionCore = { open: false, query: "", active: 0, scope: "all", start: 0 };
+  const inEntries: MentionCore = { open: true, query: "潮", active: 2, scope: "lore", start: 3 };
+
+  it("opens a fresh `@` at 全部, row 0", () => {
+    expect(syncMention(closed, "看看@潮", 4)).toEqual({ open: true, query: "潮", active: 0, scope: "all", start: 2 });
+  });
+
+  it("keeps the scope while the mention continues; a changed query goes back to row 0", () => {
+    expect(syncMention(inEntries, "看看 @潮汐", 6)).toEqual({ ...inEntries, query: "潮汐", active: 0 });
+    // Same query (a keystroke elsewhere in the text): the highlight stays.
+    expect(syncMention(inEntries, "看看 @潮", 5)).toEqual({ ...inEntries, start: 3 });
+  });
+
+  it("closes on a terminator and forgets: reopening is a fresh `@`", () => {
+    const shut = syncMention(inEntries, "看看 @潮，", 6);
+    expect(shut.open).toBe(false);
+    // Backspace over the 「，」: same query as before, but 全部's list now —
+    // the row index reached in 条目 would name a different item here.
+    expect(syncMention(shut, "看看 @潮", 5)).toEqual({ open: true, query: "潮", active: 0, scope: "all", start: 3 });
+    // Closed stays the same object, so React can bail on the no-op.
+    expect(syncMention(shut, "看看 潮", 4)).toBe(shut);
   });
 });
 
@@ -131,9 +173,9 @@ describe("mentionKeyDown", () => {
     const pick = vi.fn();
     const s = fakeSearch();
     expect(mentionKeyDown(key("Tab"), m, s, false, pick)).toBe(true);
-    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, 1);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, 1, undefined);
     expect(mentionKeyDown(key("Tab", true), m, s, false, pick)).toBe(true);
-    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, -1);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, -1, undefined);
     expect(pick).not.toHaveBeenCalled();
     expect(mentionKeyDown(key("Enter"), m, s, false, pick)).toBe(true);
     expect(pick).toHaveBeenCalledWith(s.items[1]);
@@ -147,6 +189,33 @@ describe("mentionKeyDown", () => {
     expect(m.move).toHaveBeenLastCalledWith(1, 2);
     expect(mentionKeyDown(key("ArrowUp"), m, fakeSearch(), false, vi.fn())).toBe(true);
     expect(m.move).toHaveBeenLastCalledWith(-1, 2);
+  });
+
+  it("from an empty list, Tab hands the counts over so the step lands where the hits are", () => {
+    const m = fakeMention();
+    const counts = { lore: 0, text: 0, image: 2 };
+    const s = fakeSearch({ items: [], counts });
+    expect(mentionKeyDown(key("Tab"), m, s, false, vi.fn())).toBe(true);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(s.scopes, 1, counts);
+    // With rows on screen the plain step: an empty chip is a fact worth seeing.
+    expect(mentionKeyDown(key("Tab"), m, fakeSearch(), false, vi.fn())).toBe(true);
+    expect(m.cycleScope).toHaveBeenLastCalledWith(expect.anything(), 1, undefined);
+  });
+
+  it("still claims ↑ / ↓ on an empty list, and Enter falls back to row 0 when the highlight is past the end", () => {
+    const m = fakeMention(7);
+    const pick = vi.fn();
+    expect(mentionKeyDown(key("ArrowDown"), m, fakeSearch({ items: [] }), false, pick)).toBe(true);
+    expect(m.move).toHaveBeenLastCalledWith(1, 0);
+    const s = fakeSearch();
+    expect(mentionKeyDown(key("Enter"), m, s, false, pick)).toBe(true);
+    expect(pick).toHaveBeenCalledWith(s.items[0]);
+  });
+
+  it("lets Enter through on an empty list when no counts were computed", () => {
+    const e = key("Enter");
+    expect(mentionKeyDown(e, fakeMention(), fakeSearch({ items: [], counts: undefined }), false, vi.fn())).toBe(false);
+    expect(e.preventDefault).not.toHaveBeenCalled();
   });
 
   it("swallows Enter on an empty scope only while another scope has the hit", () => {
@@ -201,6 +270,54 @@ describe("useMentionSearch", () => {
     const empty = run(items, { query: "潮", scope: "lore" });
     expect(empty.items).toEqual([]);
     expect(empty.counts).toEqual({ lore: 0, text: 1, image: 0 });
+  });
+});
+
+// ── What the picker draws for an empty scope, and how a hit is painted ───────
+
+describe("EmptyLine", () => {
+  const text = (el: React.ReactElement) => renderToString(el).replace(/<!-- -->/g, "");
+  const line = (over: Partial<Parameters<typeof EmptyLine>[0]>) =>
+    text(createElement(EmptyLine, { scope: "lore", query: "夜航", scopes: ["all", "lore", "text", "image"], counts: { lore: 0, text: 1, image: 0 }, ...over }));
+
+  it("says what is missing here, where it is, and the key — the count in a <b>", () => {
+    expect(line({})).toBe("条目里没有「夜航」<span> · 文档里有 <b>1</b> 篇</span> · <i>Tab</i> 切过去");
+  });
+
+  it("with no query, says the scope is empty rather than quoting nothing", () => {
+    expect(line({ query: "  ", counts: { lore: 0, text: 3, image: 2 } }))
+      .toBe("条目里还没有内容<span> · 文档里有 <b>3</b> 篇</span><span> · 图片里有 <b>2</b> 张</span> · <i>Tab</i> 切过去");
+  });
+
+  it("nothing anywhere is one plain sentence, no Tab hint", () => {
+    expect(line({ counts: { lore: 0, text: 0, image: 0 } })).toBe("没有匹配「夜航」");
+    expect(line({ query: "", counts: { lore: 0, text: 0, image: 0 } })).toBe("条目里还没有内容");
+  });
+
+  it("only names chips that are on offer", () => {
+    expect(line({ scopes: ["all", "lore", "text"], counts: { lore: 0, text: 0, image: 5 } })).toBe("没有匹配「夜航」");
+  });
+
+  it("spells the scopes as plain plurals in English", () => {
+    i18nLang.current = "en";
+    try {
+      expect(line({})).toBe("entries里没有「夜航」<span> · documents里有 <b>1</b> 篇</span> · <i>Tab</i> 切过去");
+    } finally {
+      i18nLang.current = "zh-CN";
+    }
+  });
+});
+
+describe("Highlighted", () => {
+  const html = (t: string, ranges: { start: number; end: number }[] | undefined) =>
+    renderToString(createElement(Highlighted, { text: t, ranges })).replace(/<!-- -->/g, "").replace(/ class="[^"]*"/g, "");
+
+  it("paints each range and nothing else", () => {
+    expect(html("第三章 潮汐门.md", [{ start: 4, end: 7 }])).toBe("第三章 <span>潮汐门</span>.md");
+    expect(html("潮汐门", [{ start: 0, end: 3 }])).toBe("<span>潮汐门</span>");
+    expect(html("ab", [{ start: 0, end: 1 }, { start: 1, end: 2 }])).toBe("<span>a</span><span>b</span>");
+    expect(html("plain", [])).toBe("plain");
+    expect(html("plain", undefined)).toBe("plain");
   });
 });
 

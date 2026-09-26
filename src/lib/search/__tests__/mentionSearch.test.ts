@@ -53,6 +53,15 @@ describe("cycleScope", () => {
     // The image scope vanished with the last picture: start over.
     expect(cycleScope(scopes, "image", 1)).toBe("all");
   });
+
+  it("from an empty list, skips the chips that are empty too — «Tab 切过去» is one press", () => {
+    const scopes = ["all", "lore", "text", "image"] as const;
+    const onlyImages = { lore: 0, text: 0, image: 2 };
+    expect(cycleScope(scopes, "lore", 1, onlyImages)).toBe("image");
+    expect(cycleScope(scopes, "lore", -1, onlyImages)).toBe("all");
+    // Nothing anywhere: the plain step, so Tab still moves.
+    expect(cycleScope(scopes, "lore", 1, { lore: 0, text: 0, image: 0 })).toBe("text");
+  });
 });
 
 describe("mentionSub", () => {
@@ -88,7 +97,26 @@ describe("searchMentions — typed query", () => {
     expect(r.hits.get(2)?.sub).toEqual([{ start: 3, end: 4 }]);
   });
 
-  it("lets each word hit a different field, as ⌘K does", () => {
+  it("finds a document by 分组/名字 in one word — the form a host can actually type", () => {
+    // A space ends a mention, so the picker never sends two tokens; the `/`
+    // is how one word names both the group and the document.
+    const r = searchMentions(items, "潮汐门篇/第五", "all", ROOT);
+    expect(names(r)).toEqual(["第五章 归途.md"]);
+    // Ranges split back onto the two lines, the `/` on neither.
+    expect(r.hits.get(0)?.sub).toEqual([{ start: 3, end: 7 }]);
+    expect(r.hits.get(0)?.label).toEqual([{ start: 0, end: 2 }]);
+  });
+
+  it("never matches the group path or the full path by subsequence — a hit here has teeth", () => {
+    const docs = [file("正文/小镇/李家.md"), file("正文/小镇/第一章 李家.md")];
+    // `@小李` before Enter must not turn into `@[李家.md]` plus an attachment.
+    expect(names(searchMentions(docs, "小李", "all", ROOT))).toEqual([]);
+    expect(countByScope(docs, "小李", ROOT)).toEqual({ lore: 0, text: 0, image: 0 });
+    // Substring and word start on the group still count.
+    expect(names(searchMentions(docs, "小镇", "all", ROOT))).toEqual(["李家.md", "第一章 李家.md"]);
+  });
+
+  it("lets each word hit a different field, as ⌘K does (lib-level parity; a host sends one word)", () => {
     expect(names(searchMentions(items, "潮汐门篇 归途", "all", ROOT))).toEqual(["第五章 归途.md"]);
     const r = searchMentions(items, "潮汐门篇 归途", "all", ROOT);
     expect(r.hits.get(0)?.label).toEqual([{ start: 4, end: 6 }]);

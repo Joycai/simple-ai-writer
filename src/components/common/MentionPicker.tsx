@@ -23,7 +23,7 @@
  * inside it, the picker is clipped by the panel it is anchored to.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AudioLines, FileText, Film, Image as ImageIcon } from "lucide-react";
@@ -116,68 +116,81 @@ export interface MentionState {
   move: (delta: number, count: number) => void;
   /** Pick a scope chip; the highlight goes back to the top of the new list. */
   setScope: (scope: MentionScope) => void;
-  /** Tab / Shift+Tab: the next chip among those on offer. */
-  cycleScope: (scopes: readonly MentionScope[], dir: 1 | -1) => void;
+  /**
+   * Tab / Shift+Tab: the next chip among those on offer. With `counts` (an
+   * empty list), the step skips chips that hold nothing for this query.
+   */
+  cycleScope: (scopes: readonly MentionScope[], dir: 1 | -1, counts?: Record<ScopedKind, number>) => void;
   close: () => void;
+}
+
+/** The mention's state, one object: `sync` transitions from the committed value, never from a stale closure. */
+export interface MentionCore {
+  open: boolean;
+  query: string;
+  active: number;
+  scope: MentionScope;
+  /** Index of the `@` in the host's text; meaningful while open. */
+  start: number;
+}
+
+/** Never mutated, so `close` can hand it back as-is and React bails on the no-op. */
+const CLOSED: MentionCore = { open: false, query: "", active: 0, scope: "all", start: 0 };
+
+/**
+ * One keystroke's transition, pure: what the mention becomes when the host's
+ * text is `value` with the caret at `caret`.
+ *
+ * - No live mention → closed, and closed keeps nothing: the next `@` is a
+ *   fresh one.
+ * - A fresh `@` searches everything, from the top. The scope is not
+ *   remembered across mentions: one message can open the picker a dozen
+ *   times, and a narrow scope left over from the last one is a silent trap —
+ *   the author types `@` for a picture and concludes the picture is gone.
+ *   Nor is the highlight: a closed-and-reopened mention shows 全部's list,
+ *   and the row index the author had reached in 条目 names another item there.
+ * - Continuing one keeps the scope. A changed query is a different list, so
+ *   the old highlight index means nothing — back to the top rather than
+ *   pointing at whatever happens to occupy that slot now.
+ */
+export function syncMention(prev: MentionCore, value: string, caret: number): MentionCore {
+  const hit = findMention(value, caret);
+  if (!hit) return prev === CLOSED ? prev : CLOSED;
+  if (!prev.open) return { open: true, query: hit.query, active: 0, scope: "all", start: hit.start };
+  return { ...prev, query: hit.query, start: hit.start, active: hit.query === prev.query ? prev.active : 0 };
 }
 
 /** @-detection and splicing over a controlled text value. */
 export function useMentionState(): MentionState {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const [scope, setScopeState] = useState<MentionScope>("all");
-  const startRef = useRef(0);
-  // Mirrors `query` so the splice length and the "did it change" test read the
-  // committed value rather than the one this render closed over.
-  const queryRef = useRef("");
-  // Mirrors `open` for the same reason: `sync` must know whether this
-  // keystroke *opens* the mention (scope resets) or continues one (it keeps).
-  const openRef = useRef(false);
-
-  const setScope = (s: MentionScope) => { setScopeState(s); setActive(0); };
+  const [state, setState] = useState<MentionCore>(CLOSED);
+  // For `accept`, which splices by the committed start and query rather than
+  // the ones the render that made the handler closed over.
+  const ref = useRef(state);
+  ref.current = state;
+  // Stable: the picker's outside-click listener depends on it, and a chat
+  // host re-renders on every streamed flush.
+  const close = useCallback(() => setState((s) => (s === CLOSED ? s : CLOSED)), []);
 
   return {
-    open,
-    query,
-    active,
-    scope,
-    sync: (value, caret) => {
-      const hit = findMention(value, caret);
-      if (!hit) { setOpen(false); openRef.current = false; return; }
-      startRef.current = hit.start;
-      // A changed query is a different list, so the old highlight index means
-      // nothing — start from the top rather than pointing at whatever happens
-      // to occupy that slot now.
-      if (queryRef.current !== hit.query) {
-        queryRef.current = hit.query;
-        setActive(0);
-      }
-      // A fresh `@` searches everything. The scope is not remembered across
-      // mentions: one message can open the picker a dozen times, and a
-      // narrow scope left over from the last one is a silent trap — the
-      // author types `@` for a picture and concludes the picture is gone.
-      if (!openRef.current) setScopeState("all");
-      openRef.current = true;
-      setQuery(hit.query);
-      setOpen(true);
-    },
+    open: state.open,
+    query: state.query,
+    active: state.active,
+    scope: state.scope,
+    sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
     accept: (value, label) => {
-      const start = startRef.current;
-      const after = value.slice(start + 1 + queryRef.current.length);
-      queryRef.current = "";
-      openRef.current = false;
-      setOpen(false);
-      setActive(0);
+      const { start, query } = ref.current;
+      const after = value.slice(start + 1 + query.length);
+      setState(CLOSED);
       return `${value.slice(0, start)}@[${label}]${after}`;
     },
     move: (delta, count) => {
       if (count <= 0) return;
-      setActive((i) => (((i + delta) % count) + count) % count);
+      setState((s) => ({ ...s, active: (((s.active + delta) % count) + count) % count }));
     },
-    setScope,
-    cycleScope: (scopes, dir) => setScope(cycleScope(scopes, scope, dir)),
-    close: () => { openRef.current = false; setOpen(false); setActive(0); },
+    setScope: (scope) => setState((s) => ({ ...s, scope, active: 0 })),
+    cycleScope: (scopes, dir, counts) =>
+      setState((s) => ({ ...s, scope: cycleScope(scopes, s.scope, dir, counts), active: 0 })),
+    close,
   };
 }
 
@@ -290,8 +303,9 @@ interface KeyEventLike {
  * - While an IME owns the keys (`composing` — pass `useImeGuard().isComposing(e)`,
  *   not a bare composition flag; lib/ime says why), the rest is left alone: a
  *   pinyin Enter commits letters, not a row.
- * - Tab / Shift+Tab cycle the scope, as ⌘K does; ↑ / ↓ move; Enter alone picks
- *   (设计稿 02i 1z §1).
+ * - Tab / Shift+Tab cycle the scope, as ⌘K does — and from an empty list they
+ *   skip chips that are empty too, so the line's «Tab 切过去» is one press;
+ *   ↑ / ↓ move; Enter alone picks (设计稿 02i 1z §1).
  * - Enter on an empty list is swallowed only while another scope has the hit —
  *   sending now would send a half-formed mention. With nothing anywhere the
  *   `@` is probably just an `@`, and Enter goes through to the host.
@@ -307,7 +321,11 @@ export function mentionKeyDown(
   if (e.key === "Escape") { e.preventDefault(); mention.close(); return true; }
   if (composing) return false;
   const { items, scopes, counts } = search;
-  if (e.key === "Tab") { e.preventDefault(); mention.cycleScope(scopes, e.shiftKey ? -1 : 1); return true; }
+  if (e.key === "Tab") {
+    e.preventDefault();
+    mention.cycleScope(scopes, e.shiftKey ? -1 : 1, items.length === 0 ? counts : undefined);
+    return true;
+  }
   if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return true; }
   if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return true; }
   if (e.key === "Enter" && !e.shiftKey) {
@@ -320,7 +338,7 @@ export function mentionKeyDown(
 // ── The list ─────────────────────────────────────────────────────────────────
 
 interface MentionPickerProps {
-  /** Element the list anchors to — usually the textarea's wrapper. */
+  /** Element the list anchors to — the textarea itself (chat, roleplay) or its wrapper (the lore modals). */
   anchorRef: React.RefObject<HTMLElement | null>;
   /** The host's `useMentionState()`: query, scope, the highlighted row, and the chip / dismiss actions. */
   mention: MentionState;
@@ -351,25 +369,91 @@ interface MentionPickerProps {
   onPick: (item: MentionItem) => void;
 }
 
+/**
+ * The scopes' names. The chips keep the app's own words — 条目 / 文档 from
+ * `appTerms`, the same words the row badges use; only 全部 and 图片 are the
+ * picker's. Two spellings because English has them and Chinese does not: a
+ * chip is a title («Entries»), the empty line's sentence wants the plain
+ * plural («3 in entries»).
+ */
+function useScopeLabels() {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
+  const terms = appTerms(isZh);
+  const word = (s: MentionScope): string =>
+    s === "all" ? t("ai.mention.scopeAll", { defaultValue: "全部" })
+      : s === "lore" ? terms.entries
+        : s === "text" ? terms.docs
+          : t("ai.mention.scopeImage", { defaultValue: "图片" });
+  const chip = (s: MentionScope): string => {
+    const w = word(s);
+    return isZh ? w : w.charAt(0).toUpperCase() + w.slice(1);
+  };
+  const plain = (s: MentionScope): string => (isZh ? word(s) : word(s).toLowerCase());
+  return { t, terms, chip, plain };
+}
+
+/**
+ * The empty scope's one line: what is missing here, what the other chips
+ * hold, and the key that gets there. Three cases — nothing anywhere, nothing
+ * here for this query, nothing here at all (a scope emptied by a model
+ * change) — each a plain fact, never an instruction to click. Its own
+ * component so the tests can render it without the portal around it.
+ */
+export function EmptyLine({ scope, query, scopes, counts }: {
+  scope: MentionScope;
+  query: string;
+  scopes: readonly MentionScope[];
+  counts: Record<ScopedKind, number> | undefined;
+}) {
+  const { t, plain } = useScopeLabels();
+  const here = plain(scope);
+  const q = query.trim();
+  const others = (["lore", "text", "image"] as const)
+    .filter((k) => k !== scope && scopes.includes(k) && (counts?.[k] ?? 0) > 0);
+  if (others.length === 0) {
+    return q
+      ? t("ai.mention.emptyAll", { q, defaultValue: "没有匹配「{{q}}」" })
+      : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
+  }
+  // Past this point the scope is a narrow one: 全部 with an empty list means
+  // nothing matched anywhere, which the branch above has already answered.
+  const head = q
+    ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
+    : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
+  // The count is the one thing on this line worth the eye: interpolate a
+  // sentinel for {{n}} and put the number back in a <b>. A translation that
+  // lost its {{n}} still reads: the whole sentence lands in `before` and the
+  // number follows it.
+  const SENT = "\u0000";
+  const parts = others.map((k) => {
+    const n = counts?.[k] ?? 0;
+    const text = t(
+      k === "lore" ? "ai.mention.countLore" : k === "text" ? "ai.mention.countText" : "ai.mention.countImage",
+      { scope: plain(k), n: SENT, defaultValue: k === "lore" ? "{{scope}}里有 {{n}} 条" : k === "text" ? "{{scope}}里有 {{n}} 篇" : "{{scope}}里有 {{n}} 张" },
+    );
+    const [before, after] = text.split(SENT);
+    return <span key={k}>{" · "}{before}<b>{n}</b>{after ?? ""}</span>;
+  });
+  return (
+    <>
+      {head}
+      {parts}
+      {" · "}<i>Tab</i> {t("ai.mention.switchOver", { defaultValue: "切过去" })}
+    </>
+  );
+}
+
 export function MentionPicker({
   anchorRef, mention, search, projectPath, usedKeys, preferAbove = false, noteFor, onPick,
 }: MentionPickerProps) {
   const { items, hits, scopes, counts } = search;
   const { scope, query, active: activeIndex, setScope, close: onDismiss } = mention;
-  const { t, i18n } = useTranslation();
-  const terms = appTerms(i18n.language.startsWith("zh"));
+  const { t, terms, chip } = useScopeLabels();
   const [style, setStyle] = useState<React.CSSProperties>({});
   const listRef = useRef<HTMLDivElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
-
-  // The chips keep the author's own words — 条目 / 文档 are whatever the
-  // workspace calls them; only 全部 and 图片 are the picker's.
-  const scopeLabel = (s: MentionScope): string =>
-    s === "all" ? t("ai.mention.scopeAll", { defaultValue: "全部" })
-      : s === "lore" ? terms.entry
-        : s === "text" ? terms.doc
-          : t("ai.mention.scopeImage", { defaultValue: "图片" });
 
   // Keep the keyboard highlight in view — the list scrolls at 10 items.
   useEffect(() => {
@@ -410,48 +494,6 @@ export function MentionPicker({
     return () => document.removeEventListener("mousedown", handler, true);
   }, [anchorRef, onDismiss]);
 
-  /**
-   * The empty scope's one line: what is missing here, what the other chips
-   * hold, and the key that gets there. Three cases — nothing anywhere,
-   * nothing here for this query, nothing here at all (a scope emptied by a
-   * model change) — each a plain fact, never an instruction to click.
-   */
-  const emptyLine = () => {
-    const here = scopeLabel(scope);
-    const q = query.trim();
-    const others = (["lore", "text", "image"] as const)
-      .filter((k) => k !== scope && scopes.includes(k) && (counts?.[k] ?? 0) > 0);
-    if (others.length === 0) {
-      return q
-        ? t("ai.mention.emptyAll", { q, defaultValue: "没有匹配「{{q}}」" })
-        : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
-    }
-    // Past this point the scope is a narrow one: 全部 with an empty list means
-    // nothing matched anywhere, which the branch above has already answered.
-    const head = q
-      ? t("ai.mention.emptyIn", { scope: here, q, defaultValue: "{{scope}}里没有「{{q}}」" })
-      : t("ai.mention.emptyScope", { scope: here, defaultValue: "{{scope}}里还没有内容" });
-    // The count is the one thing on this line worth the eye: interpolate a
-    // sentinel for {{n}} and put the number back in a <b>.
-    const SENT = "\u0000";
-    const parts = others.map((k) => {
-      const n = counts?.[k] ?? 0;
-      const text = t(
-        k === "lore" ? "ai.mention.countLore" : k === "text" ? "ai.mention.countText" : "ai.mention.countImage",
-        { scope: scopeLabel(k), n: SENT, defaultValue: k === "lore" ? "{{scope}}里有 {{n}} 条" : k === "text" ? "{{scope}}里有 {{n}} 篇" : "{{scope}}里有 {{n}} 张" },
-      );
-      const [before, after] = text.split(SENT);
-      return <span key={k}>{before}<b>{n}</b>{after ?? ""}</span>;
-    });
-    return (
-      <>
-        {head}{" · "}
-        {parts.map((p, i) => <span key={i}>{i > 0 && " · "}{p}</span>)}
-        {" · "}<i>Tab</i> {t("ai.mention.switchOver", { defaultValue: "切过去" })}
-      </>
-    );
-  };
-
   return createPortal(
     <div ref={listRef} className={styles.picker} style={{ position: "fixed", zIndex: 500, ...style }}>
       <div className={styles.scopes}>
@@ -464,13 +506,13 @@ export function MentionPicker({
             // its caret, the same reason the rows do it.
             onMouseDown={(e) => { e.preventDefault(); setScope(s); }}
           >
-            {scopeLabel(s)}
+            {chip(s)}
           </button>
         ))}
         <span className={styles.scopeHint}><b>Tab</b> {t("ai.mention.tabHint", { defaultValue: "切档" })}</span>
       </div>
       <div ref={rowsRef} className={styles.list}>
-      {items.length === 0 && <div className={styles.empty}>{emptyLine()}</div>}
+      {items.length === 0 && <div className={styles.empty}><EmptyLine scope={scope} query={query} scopes={scopes} counts={counts} /></div>}
       {items.map((item, i) => {
         const key = mentionKey(item);
         const used = usedKeys.has(key);

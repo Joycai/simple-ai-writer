@@ -15,12 +15,20 @@
  *
  * - **Scoring is ⌘K's** — substring > word start > subsequence per token,
  *   every space-separated token must hit, and each token may hit a different
- *   field (`潮汐门篇 归途` finds `正文/潮汐门篇/第五章 归途.md`, one word in
- *   the group, one in the name — exactly as `searchFiles` does). A name hit
- *   outranks an alias hit outranks a group-path hit: ×1 / ×0.9 / ×0.6, the
- *   alias weight from `searchLore` and the *directory* weight from
- *   `searchFiles` (its 0.5 is for a word that straddles the `/`, a tier this
- *   list has no use for).
+ *   field, exactly as `searchFiles` does. Note that a *host* never sends more
+ *   than one token: a space ends a mention (`findMention`), so the tokenized
+ *   form exists for ⌘K parity and for callers with their own input, not for
+ *   the picker. What the picker does reach is a single word that straddles
+ *   the `/`: `@潮汐门篇/归途` finds `正文/潮汐门篇/第五章 归途.md` through the
+ *   full relative path, `searchFiles`'s 0.5 tier. A name hit outranks an alias
+ *   hit outranks a group-path hit outranks a path hit: ×1 / ×0.9 / ×0.6 /
+ *   ×0.5, the alias weight from `searchLore`, the other two from
+ *   `searchFiles`. The group path and the full path are matched by substring
+ *   and word start only — never by subsequence: a directory subsequence is
+ *   noise, and here a hit has teeth (Enter replaces the author's text and
+ *   attaches the file), so `@小李` must not land on `正文/小镇/李家.md`. Name
+ *   and alias keep the subsequence tier, as `searchLore` does — `@chth` for
+ *   `Chapter Three.md` is how a long name is recalled.
  * - **An empty query interleaves by kind** — entry, document, image, entry …
  *   — instead of scoring. Ten rows are for recognising, and the author who
  *   just typed `@` should see that both kinds are there; the scope chips are
@@ -80,12 +88,28 @@ export function availableScopes(items: readonly MentionLike[]): MentionScope[] {
  * The chip Tab lands on next: one step through `scopes` in either direction,
  * wrapping at both ends. A scope that is not offered (the current one after
  * candidates changed) starts over from `"all"`.
+ *
+ * With `counts` (the empty-scope case, where the line promises «Tab 切过去»),
+ * the step skips scopes that hold nothing for this query, so one Tab lands
+ * where the hits are rather than on another empty chip. Falls back to the
+ * plain step when no scope has anything.
  */
-export function cycleScope(scopes: readonly MentionScope[], current: MentionScope, dir: 1 | -1): MentionScope {
+export function cycleScope(
+  scopes: readonly MentionScope[],
+  current: MentionScope,
+  dir: 1 | -1,
+  counts?: Record<ScopedKind, number>,
+): MentionScope {
   if (scopes.length === 0) return "all";
   const i = scopes.indexOf(current);
   if (i < 0) return scopes[0];
-  return scopes[(i + dir + scopes.length) % scopes.length];
+  const step = (from: number) => (from + dir + scopes.length) % scopes.length;
+  if (!counts) return scopes[step(i)];
+  const has = (s: MentionScope) => (s === "all" ? hasHits(counts) : counts[s] > 0);
+  for (let j = step(i), n = 0; n < scopes.length - 1; j = step(j), n++) {
+    if (has(scopes[j])) return scopes[j];
+  }
+  return scopes[step(i)];
 }
 
 /**
@@ -120,6 +144,9 @@ interface MentionSearchResult<T> {
 
 const ALIAS_WEIGHT = 0.9;
 const DIR_WEIGHT = 0.6;
+const PATH_WEIGHT = 0.5;
+/** Group path and full path: substring or word start only (see the header). */
+const EXACT = { subsequence: false } as const;
 
 interface Scored<T> {
   item: T;
@@ -130,15 +157,20 @@ interface Scored<T> {
 
 /**
  * Score one candidate against the tokenized query. Each token takes the best
- * of the fields it hits — name, alias (entries) or group path (files) — and
- * the candidate scores only when every token hits somewhere. Taking the best
- * rather than the first is the one place this departs from `searchLore`,
- * whose name-first short-circuit lets a weak subsequence on the name beat a
- * whole-word alias; here an alias is as good as the name it stands for.
+ * of the fields it hits — name, alias (entries), group path or full relative
+ * path (files) — and the candidate scores only when every token hits
+ * somewhere. Taking the best rather than the first is the one place this
+ * departs from `searchLore`, whose name-first short-circuit lets a weak
+ * subsequence on the name beat a whole-word alias; here an alias is as good
+ * as the name it stands for.
  */
 function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], projectPath: string | null): Omit<Scored<T>, "order"> | null {
   const label = item.type === "lore" ? item.entity.name : item.file.name;
   const sub = item.type === "file" ? mentionSub(item, projectPath) : null;
+  // `分组/名字`, so one word can straddle the `/` — the only way a host's
+  // single-token query names both (the header says why there is no second
+  // token). Ranges over it are split back onto the two lines below.
+  const rel = sub ? `${sub}/${label}` : null;
   let score = 0;
   const labelRanges: MatchRange[] = [];
   const subRanges: MatchRange[] = [];
@@ -146,7 +178,7 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
   const aliasRanges: MatchRange[] = [];
   for (const tok of tokens) {
     let best = 0;
-    let where: { field: "label" | "alias" | "sub"; ranges: MatchRange[]; alias?: string } | null = null;
+    let where: { field: "label" | "alias" | "sub" | "path"; ranges: MatchRange[]; alias?: string } | null = null;
     const byName = matchText(label, tok);
     if (byName) { best = byName.score; where = { field: "label", ranges: byName.ranges }; }
     if (item.type === "lore") {
@@ -154,15 +186,24 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
         const m = matchText(a, tok);
         if (m && m.score * ALIAS_WEIGHT > best) { best = m.score * ALIAS_WEIGHT; where = { field: "alias", ranges: m.ranges, alias: a }; }
       }
-    } else if (sub) {
-      const m = matchText(sub, tok);
+    } else if (sub && rel) {
+      const m = matchText(sub, tok, EXACT);
       if (m && m.score * DIR_WEIGHT > best) { best = m.score * DIR_WEIGHT; where = { field: "sub", ranges: m.ranges }; }
+      const byPath = matchText(rel, tok, EXACT);
+      if (byPath && byPath.score * PATH_WEIGHT > best) { best = byPath.score * PATH_WEIGHT; where = { field: "path", ranges: byPath.ranges }; }
     }
     if (!where) return null;
     score += best;
     if (where.field === "label") labelRanges.push(...where.ranges);
     else if (where.field === "sub") subRanges.push(...where.ranges);
-    else if (alias === null || alias === where.alias) {
+    else if (where.field === "path") {
+      // Same split as `searchFiles`: the `/` at `sub.length` belongs to neither line.
+      const cut = sub!.length + 1;
+      for (const r of where.ranges) {
+        if (r.start < sub!.length) subRanges.push({ start: r.start, end: Math.min(r.end, sub!.length) });
+        if (r.end > cut) labelRanges.push({ start: Math.max(r.start, cut) - cut, end: r.end - cut });
+      }
+    } else if (alias === null || alias === where.alias) {
       // One alias is shown; a second token that matched a different alias
       // still counts for the score but has nowhere to be highlighted.
       alias = where.alias ?? null;
@@ -209,8 +250,8 @@ function interleave<T extends MentionLike>(items: readonly T[], limit: number): 
  * The picker's list for one keystroke: scope, then query, then the cut.
  *
  * `projectPath` is what makes a document's group path searchable and
- * showable; pass null where there is no project (the list then matches names
- * only, as before).
+ * showable; pass null where there is no project (files then match on their
+ * name only; entries still match on name and alias).
  */
 export function searchMentions<T extends MentionLike>(
   items: readonly T[],
