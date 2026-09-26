@@ -19,6 +19,16 @@ qwen3.7-plus 的定价页（`qianwenai.com/models/qwen3.7-plus`）不是一张�
 现在的 `priceCachedIn` 只有命中价，没有写入价——Anthropic 式 cache write
 计费是同一个洞。Batch 档（Batch File / Batch Chat）不用管，app 不走 batch 端点。
 
+### 第二个样本：OrcaRouter 的目录（2026-09-27）
+
+OrcaRouter `GET /v1/models` 的 `pricing.tiers` 把分档写成了机读字段（[`landscape.md`](../api/landscape.md) §7 第十八个样本
+「GPT 全家补测」）：六个 GPT id 都是两档，**单次输入 ≤ 272K** 一档、以上一档；高档输入与缓存读 ×2、输出 ×1.5
+（如 gpt-5.6-sol：$4 / $20 / $0.4 → $8 / $30 / $0.8 每百万）。门槛比千问的 256K 略高，结构相同。
+
+那里的失真比千问小：OrcaRouter 的回包自带上游报价，本项目信任它、压过计费组（[`01-fee-groups.md`](../feature/billing/01-fee-groups.md)
+「上游报价」），报价里已经按档算好。**只在不报价的地方回落到平价**——目前是 gpt-5.6-luna / -sol 走 ② 的请求（OpenAI 原样线路），
+单次输入过 272K 时会按低档少记。
+
 ## 现状与影响圈
 
 `Model` 行只有三个平价字段（`priceIn` / `priceCachedIn` / `priceOut`，USD per 1M），

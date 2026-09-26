@@ -1,6 +1,6 @@
 # 思考功能的验证清单
 
-> **状态：MiniMax-M3 已验掉一部分（§2.6）；2026-09-26 经 OrcaRouter 付费实测又验掉一批（见下方「OrcaRouter 实测」），其余未验证。**（§2.8 提示缓存不是
+> **状态：MiniMax-M3 已验掉一部分（§2.6）；2026-09-26 经 OrcaRouter 付费实测又验掉一批（见下方「OrcaRouter 实测」），2026-09-27 补了 OpenAI 族六个 GPT id（「OrcaRouter GPT 补测」），其余未验证。**（§2.8 提示缓存不是
 > 思考功能，但它与本文其余各条是同一类问题——发出去了不等于对面照做——所以放在这里。） 三族的思考支持
 > （强度 / 思维链 / 回传）都已实现并通过单元测试，但单元测试验的是"我们发出了
 > 什么"，这份清单验的是"对面怎么理解"。
@@ -32,6 +32,18 @@
 | 3.2 | ✅ `LOW` / `MEDIUM` / `HIGH` 同题 193 / 641 / 1,348 思考 token；`thinkingBudget: 0` 经网关关不掉思考 |
 | 3.3 | ✅ camelCase `inlineData` 被看见（snake_case 也收） |
 | 3.4 | ✅ Bearer 下聊天、工具轮、图片都通 |
+
+## OrcaRouter GPT 补测（2026-09-27，[`landscape.md`](../api/landscape.md) §7 第十八个样本「GPT 全家补测」）
+
+六个 GPT id × ① ②。gpt-5.6-luna / -sol 的回包是 OpenAI 原样，其余四个经一层 OpenRouter 形态的翻译（上游 OpenAI 或 Azure）。
+
+| 条目 | 结论 |
+| --- | --- |
+| 1.3 | 原样 ①：只有 `reasoning_tokens`，没有任何思维链文本（与官方一致）；翻译层 ①：高档时 `message.reasoning` 摘要 + `reasoning_details` 密文。`REASONING_CONTENT_FIELDS` 不用加名字 |
+| 4.x（新） | ✅ 官方 ①「5.4 起 effort ≠ `none` 不能带函数工具」属实，**不发 effort 也拒**。已按能力格 `effortWithTools` 处理（[`capability-gating-plan.md`](../api/capability-gating-plan.md) §8.13） |
+| 4.x（新） | ✅ gpt-6-astra 没有 `none`（① ② 都拒，原因被网关吞）。已按能力格 `reasoningOff` 处理 |
+| ② 摘要 | ⚠️ `summary: "auto"` 下有推理也可能没有摘要事件——live 用例改成三次里有一次即可（[`reasoning.md`](../api/reasoning.md) §1.10） |
+| ② `mode: "pro"` | 六个 id 都回显 `standard`；官方直连仍未验 |
 
 ## 怎么验
 

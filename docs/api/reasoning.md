@@ -17,7 +17,7 @@
 
 | 协议 | 参数位置 | 档位 | 默认 | 关闭 |
 | --- | --- | --- | --- | --- |
-| **①** | 顶层 `reasoning_effort` | `none/minimal/low/medium/high/xhigh/max`，**每个模型只支持子集** | 模型自定 | `reasoning_effort:"none"` |
+| **①** | 顶层 `reasoning_effort` | `none/minimal/low/medium/high/xhigh/max`，**每个模型只支持子集**；OpenAI 官方 5.4 起**带函数工具时只收 `none`**，不发也拒（默认档不是 `none`），见 §1.10 | 模型自定 | `reasoning_effort:"none"`（有的模型没有，见 §1.10） |
 | **② Responses** | `reasoning:{effort, summary, context, mode}` | 同上，但**越界是 400 不是折叠**（gpt-5.4 收 `max` → `Unsupported value`）；5.4 到 `xhigh`，5.6 到 `max` | 按模型：5.4 `none`，5.5 / 5.6 `medium`（响应回显） | `effort:"none"`，此时无 `reasoning` 条目 |
 | **③ Gemini 3+** | `thinking_level`（Interactions）；经典 surface 上的位置**文档已不给**，见 §1.5 | `minimal/low/medium/high` | **按模型分三种**，见 §1.4 | **不可关**，`minimal` 也只是「最少」 |
 | **③ 2.5 代** | `generationConfig.thinkingConfig.thinkingBudget` | `-1` 动态 / `0` 关 / 具体 token 数 | `-1` | `0`，但 2.5 Pro 拒绝 |
@@ -142,7 +142,26 @@
 **①：思考模式不支持 `temperature`、`top_p`、`presence_penalty`、
 `frequency_penalty`**（DeepSeek 文档明示，OpenAI 推理模型同样不支持
 `temperature`）。任何同时提供"温度"与"思考强度"两个设置的界面，都会在推理模型
-上让二者互相打架。
+上让二者互相打架。GPT-5.6 上的实测见 §1.10。
+
+### 1.10 OpenAI 族：越界、拒收与改写（2026-09-27，经 OrcaRouter）
+
+[`landscape.md`](landscape.md) §7 第十八个样本「GPT 全家补测」，六个 GPT id × ① ②。回包是 OpenAI 原样的两个 id（gpt-5.6-luna /
+-sol）上看到的是官方行为；其余走一层 OpenRouter 形态的翻译，只能算那台网关的行为。
+
+- **① 函数工具 + effort**（官方原文）：`Function tools with reasoning_effort are not supported for gpt-5.6-sol in
+  /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'.` 不发 effort 也是这句。
+  ② 没有这条限制。本项目的处理：能力格 `effortWithTools`（[`capability-gating-plan.md`](capability-gating-plan.md) §8.13）。
+- **没有 `none` 的模型**：gpt-6-astra（Azure 上游）① ② 两面都拒 `none`，网关把原因吞成 `upstream_rejected_request`。
+  本项目的处理：能力格 `reasoningOff`，「关闭」不列出，已存的 `off` 发 `low`。
+- **① 与 ② 的枚举不一样宽**：gpt-5.6-sol 在 ① 上拒 `minimal` 与 `max`（原因被吞），同一 id 在 ② 上 `max` 是 200、
+  `minimal` 回显成 `none`。
+- **`minimal` 在翻译层被改写成 `low`**（回显 `low`，照样思考）；在原样线路上回显 `none`。
+- **`mode: "pro"`** 六个 id 都回显 `standard`，与两台 New API 中转站一致（[`responses.md`](responses.md) §9 仍列为官方未验）。
+- **② 的思考摘要不保证出现**：`summary: "auto"` 下有推理 token 也可能一条 `reasoning_summary_text` 都没有
+  （astra 五次里一次有，6-luna 在短题上也有过一次没有），见 §2 表。§1.3、§1.7 是「关闭」在别族上的样子。
+- **温度**（§1.9）：gpt-5.6-sol 的 ② 原样线路拒 `temperature: 0.5`（`Unsupported parameter: 'temperature' is not supported
+  with this model.`），同一 id 的 ① 原样线路收下、200——生没生效没比。翻译层两面都收并回显 0.5。
 
 ---
 
@@ -153,7 +172,7 @@
 | **① OpenAI 官方** | **没有内容**，只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | 想看思维链，官方 Chat Completions 这条路是不通的 |
 | **① 兼容层扩展** | `delta.reasoning_content`（DeepSeek）/ `delta.reasoning`（OpenRouter 等）/ 部分中继内联 `<think>…</think>` | **字段名没有标准**，见 §2.1 |
 | **① 火山方舟（豆包 Seed 2.1 起）** | `delta.reasoning_content` 是**思考摘要**；原文加密在 `delta.encrypted_content`，整串落在某一个 delta 上 | 摘要默认开；密文只为回传，不显示（landscape.md §7 第十二个样本，2026-09-23） |
-| **②** | `reasoning` 条目的 `summary[]`（需 opt-in `summary: auto/concise/detailed`，流式走 `response.reasoning_summary_text.delta`）+ `store:false` 时默认自带的 `encrypted_content` | 是摘要不是原文；**模型没推理（`reasoning_tokens: 0`）时连条目都没有**，同一请求两次可能一有一无 |
+| **②** | `reasoning` 条目的 `summary[]`（需 opt-in `summary: auto/concise/detailed`，流式走 `response.reasoning_summary_text.delta`）+ `store:false` 时默认自带的 `encrypted_content` | 是摘要不是原文；**模型没推理（`reasoning_tokens: 0`）时连条目都没有**，同一请求两次可能一有一无；**有推理也不保证有摘要**（§1.10） |
 | **③** | 经典 surface：`part.thought === true` 的文本 part + `thoughtSignature`。Interactions：`steps[]` 里 `type:"thought"` 的 step，含 `signature` 与 `summary` | 摘要；Interactions 需 `thinking_summaries: "auto"` 开启 |
 | **④** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 摘要；**且默认可能一个字都不给**，见 §2.3 |
 

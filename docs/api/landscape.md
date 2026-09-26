@@ -2106,6 +2106,48 @@ curl（effort 全档与乱写值、`mode:"pro"`、`summary`、温度、输出上
 | strict `json_schema` / `json_object` | 六个都生效 |
 | 思维链 | OpenRouter 形态层在高档时给 `message.reasoning` 摘要 + `reasoning_details`；原样线路只有 `reasoning_tokens`，没有可显示的文本 |
 
+**逐档数据**（同一道「球拍与球」题，非流式，`reasoning_tokens`；「400」= 被拒）。这道题太熟，多数档只想几十个 token，
+**看不出档位是否单调**——这张表能用来读「收不收、回显成什么、想没想」，不能用来比深浅。gpt-5.6-sol 在这道题上每档都是 0，
+但同一个 id 在 strict schema 那条上想了 35 个 token，所以不是「关不掉思考」的反面，只是题太简单。
+
+② Responses：
+
+| 模型 | none | minimal | low | medium | high | xhigh | max |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `gpt-6-luna` | 0 | 18（回显 low） | 29 | 28 | 24 | 22 | 31 |
+| `gpt-6-sol` | 0 | 26（回显 low） | 25 | 13 | 18 | 43 | 55 |
+| `gpt-6-astra` | 400 | 0（回显 low） | 9 | 10 | 14 | 26 | 62 |
+| `gpt-5.6-luna` | 0 | 0（回显 none） | 0 | 22 | 22 | 24 | 22 |
+| `gpt-5.6-terra` | 0 | 14（回显 low） | 14 | 13 | 13 | 13 | 46 |
+| `gpt-5.6-sol` | 0 | 0（回显 none） | 0 | 0 | 0 | 0 | 0 |
+
+① Chat Completions（没有 `medium` 这一列：探针没发）：
+
+| 模型 | none | minimal | low | high | xhigh | max |
+| --- | --- | --- | --- | --- | --- | --- |
+| `gpt-6-luna` | 0 | 25 | 36 | 20 | 23 | 23 |
+| `gpt-6-sol` | 0 | 25 | 27 | 16 | 22 | 42 |
+| `gpt-6-astra` | 400 | 9 | 8 | 17 | 22 | 64 |
+| `gpt-5.6-luna` | 0 | 0（分流） | 0 | 20 | 19 | 33（分流） |
+| `gpt-5.6-terra` | 0 | 15 | 18 | 13 | 14 | 26 |
+| `gpt-5.6-sol` | 0 | 400 | 0 | 0 | 0 | 400 |
+
+② `web_search` 一次（同一问题，`effort: low`）：
+
+| 模型 | 输入 token | 报价（$） | 耗时 |
+| --- | --- | --- | --- |
+| `gpt-6-luna` | 8,601 | 0.0110 | 4.4 s |
+| `gpt-6-sol` | 8,521 | 0.0300 | 4.8 s |
+| `gpt-6-astra` | 8,444 | 0.1096 | 5.2 s |
+| `gpt-5.6-terra` | 8,337 | 0.0297 | 3.0 s |
+| `gpt-5.6-luna` / `-sol` | 8,745 / 8,601 | 原样线路不报 | 4.4 / 5.5 s |
+
+按目录单价扣掉 token 费，luna / sol / terra 每次搜索另有约 $0.01 的检索费；astra 多出约 $0.02，说不清是搜了两次还是另有加价。
+检索结果回灌约 8.5K 输入 token，按模型自己的输入单价算——**在 astra 上一次搜索的 token 费就是 $0.08**。
+
+耗时：非搜索请求的均值 1.7–3.1 s（astra 最慢、5.6-luna / -sol 最快），单次最长 6.2 s；这一轮没有一次超时或 5xx。
+全部 curl 的上游报价合计 $0.25（原样线路那部分不在内），加上 live 用例约 $0.35。
+
 **花费**：OpenRouter 形态层两面都有 `usage.cost`。原样线路上，① 流式末块**只在带 `X-OrcaRouter-Include-Cost: true` 时**有
 `usage.cost_usd`（本项目 `reportedCost.ts` 的 `cost_usd ?? cost` 正好接住）；**② 带了头也没有任何花费字段**——5.6-luna / -sol
 走 Responses 的用量行按计费组定价，这是「没报 = 空」的设计本意，不是缺陷。
