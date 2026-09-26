@@ -561,7 +561,10 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   },
   // `output_config.format`: GA per Anthropic; held a contradicted enum on five
   // Claude models behind OrcaRouter's verbatim Anthropic route (第十八个样本，补测).
-  anthropic: { families: { anthropic: { web_search: true, jsonSchema: true } } },
+  // `document` block: read end to end on sonnet-5 and opus-5.5 behind that same
+  // verbatim route (第十八个样本「再补测」) — the reading is the model's, and the
+  // vendor documents the block.
+  anthropic: { families: { anthropic: { web_search: true, jsonSchema: true, pdfInput: true } } },
   // `responseJsonSchema`, Gemini 2.5 on (structured-output-plan.md).
   google: { families: { gemini: { jsonSchema: true } } },
   // Chat Completions: none. Its Anthropic-shaped path stays at the protocol's
@@ -593,12 +596,14 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // Every cell measured on paid models (landscape.md §7 第十八个样本): a strict
   // schema held against a prompt that contradicted its enum on ①②③④, and the
   // Responses built-in and Anthropic's versioned `web_search` both searched.
+  // PDF: a one-page file's passphrase read back on all four; ①② need no cell.
+  // Not the official `google` cell: ③ here is Vertex AI, not AI Studio.
   orcarouter: {
     families: {
       openai: { jsonSchema: true },
       responses: { jsonSchema: true, web_search: true },
-      gemini: { jsonSchema: true },
-      anthropic: { web_search: true, jsonSchema: true },
+      gemini: { jsonSchema: true, pdfInput: true },
+      anthropic: { web_search: true, jsonSchema: true, pdfInput: true },
     },
   },
   newapi: RELAY,

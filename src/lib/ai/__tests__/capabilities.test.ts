@@ -505,6 +505,15 @@ describe("pdfInput", () => {
     expect(hasCapability("pdfInput", { platform: "volcengine-plan", standard: "openai_compat" })).toBe(true);
     expect(hasCapability("pdfInput", { platform: "volcengine-plan", standard: "openai_responses_compat" })).toBe(true);
   });
+
+  it("reads PDFs on OrcaRouter's Messages and Gemini routes and on Anthropic's own (第十八个样本「再补测」)", () => {
+    expect(capabilityVerdict("pdfInput", { platform: "orcarouter", standard: "anthropic_compat" })).toEqual({ status: "yes", reason: "measured" });
+    expect(capabilityVerdict("pdfInput", { platform: "orcarouter", standard: "gemini_compat" })).toEqual({ status: "yes", reason: "measured" });
+    expect(capabilityVerdict("pdfInput", { platform: "anthropic", standard: "anthropic" })).toEqual({ status: "yes", reason: "measured" });
+    // ③ behind OrcaRouter is Vertex AI, not AI Studio: the official cell stays.
+    expect(hasCapability("pdfInput", { platform: "google", standard: "gemini" })).toBe(false);
+    expect(hasCapability("pdfInput", { platform: "newapi", standard: "gemini_compat" })).toBe(false);
+  });
 });
 
 // 智谱 (landscape.md §7 第十四个样本): forcing a tool is sent as auto.

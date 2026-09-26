@@ -366,6 +366,14 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // report it only when asked with this header; ① ② report it either way.
     // ②'s verbatim route (`store: true`, the web-search path) reports none.
     reportsCost: { header: ["X-OrcaRouter-Include-Cost", "true"] },
+    // Two things this app must not start doing here (第十八个样本):
+    // - Call a token-count endpoint. ③'s `:countTokens` runs — and bills — a
+    //   full generateContent; ④'s `/v1/messages/count_tokens` is not routed
+    //   (a 301 to a web page).
+    // - Classify an error by its envelope's `type`. Every error the sample saw
+    //   was rewritten into the OpenAI shape, ④'s with `type: "<nil>"` and ③'s
+    //   with `invalid_argument` whatever went wrong; the HTTP status and the
+    //   message are the signal.
     models: ORCAROUTER_MODELS,
     source: "landscape.md §7 第七个样本 (probe, free tier) + 第十八个样本 (paid models, 2026-09-26) — relay; Responses and Anthropic web_search measured",
   },

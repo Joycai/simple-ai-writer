@@ -14,7 +14,7 @@
 | 平台 | Chat | Resp | Gemini | Anth |
 | --- | --- | --- | --- | --- |
 | openai | ✓ protocol | ✓ protocol |  |  |
-| anthropic |  |  |  | · |
+| anthropic |  |  |  | ✓ measured |
 | google |  |  | · |  |
 | deepseek | ✓ protocol | ✓ protocol |  | · |
 | dashscope | ✓ protocol | ✓ protocol |  | · |
@@ -24,7 +24,7 @@
 | volcengine | ✓ protocol | ✓ protocol |  |  |
 | volcengine-plan | ✓ protocol | ✓ protocol |  | ✓ measured |
 | zhipu | ✓ protocol |  |  |  |
-| orcarouter | ✓ protocol | ✓ protocol | · | · |
+| orcarouter | ✓ protocol | ✓ protocol | ✓ measured | ✓ measured |
 | newapi | ✓ 按上游 protocol | ✓ 按上游 protocol | · | · 按上游 |
 | ollama | ✓ protocol |  |  |  |
 | comfyui | ✓ protocol |  |  |  |
