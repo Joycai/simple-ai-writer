@@ -14,6 +14,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useIsPresent } from "motion/react";
 import { ArrowUp, AudioLines, Check, ChevronDown, ChevronRight, ChevronsDown, Film, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ImageLightbox } from "../common/ImageLightbox";
@@ -272,6 +273,9 @@ export function AgentChat() {
   // likewise (handled with the queue, below).
   const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
     useMentionReads(`chat:${activeKey}`);
+  // False while the drawer's exit animation still has this mounted: a failure
+  // taken then would be shown to no one — left for the next instance instead.
+  const isPresent = useIsPresent();
   // The chips' own previews — every picture chip, `@` and pasted alike, since
   // a row where half the pictures show and half don't reads as two mechanisms.
   // 48 = the 16px tile at 3×; a rendering read, never the model-bound one.
@@ -561,6 +565,8 @@ export function AgentChat() {
   const queue = (on: boolean) => { queuedRef.current = on; setQueued(on); };
   useEffect(() => {
     if (readFailure) {
+      // On the way out: not taken, and nothing sent — the queue dies with us.
+      if (!isPresent) return;
       takeReadFailure(readFailure);
       queue(false);
       setRefError(readFailure.message);
@@ -571,7 +577,7 @@ export function AgentChat() {
     handleSend();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
     // settling, not on every keystroke re-creating handleSend
-  }, [chatRunning, pasting, reading, queued, readFailure]);
+  }, [chatRunning, pasting, reading, queued, readFailure, isPresent]);
 
   const handleStop = () => {
     queue(false);

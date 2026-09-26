@@ -755,9 +755,15 @@ export function useMentionState(): MentionState {
  * value is recorded; otherwise the render's effect finds the difference. A
  * value, not a flag: a write that leaves the draft as it was (a pick that
  * landed nothing, a clear of an empty draft) never renders, and a flag set for
- * it would swallow the next write that was not ours. Our own writes either
- * carry their own `sync` (typing, `+ 引用`) or land text the picker's outside
- * click has already closed on (a snippet insert, 回到这里重说).
+ * it would swallow the next write that was not ours. The instance that lands
+ * after a switch is the unmounted one, and it catches up the same way: the
+ * author's edits in the new instance move its waiting claim too.
+ *
+ * Our own writes move the *open* mention themselves: they carry their own
+ * `sync` (typing, `+ 引用`) or land text the picker's outside click has
+ * already closed on (a snippet insert, 回到这里重说). A claim still waiting
+ * on a read whose mention was closed is not moved by an own rewrite ahead of
+ * it (`+ 引用`, roleplay's line kinds) — see the brief's 未做、可做.
  */
 export function useOwnDraft(draft: string, read: () => string, mention: MentionState): (write: () => void) => void {
   const own = useRef(draft);

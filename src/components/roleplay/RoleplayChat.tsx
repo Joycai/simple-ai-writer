@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useIsPresent } from "motion/react";
 import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { roleplayComposerOf, useComposerStore } from "../../stores/composerStore";
@@ -415,14 +416,16 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   }, [projectPath, agent, updateAgent]);
   // `@` 选中的文件还在读：按角色记，切走再切回的新实例也看得见旧实例在读。
   // 读失败了也按角色记：发起读取的实例可能已经不在，拒绝提示由屏上这一个（或
-  // 下一个挂上这位角色的）显示，显示过就取走。
+  // 下一个挂上这位角色的）显示，显示过就取走。抽屉收起的退场动画期间这个实例
+  // 还挂着、但没人看得见，那时不取，留给下一个。
   const { reading, failure: readFailure, track: trackRead, fail: failRead, take: takeReadFailure } =
     useMentionReads(`roleplay:${agent.id}`);
+  const isPresent = useIsPresent();
   useEffect(() => {
-    if (!readFailure) return;
+    if (!readFailure || !isPresent) return;
     takeReadFailure(readFailure);
     setRefError(readFailure.message);
-  }, [readFailure, takeReadFailure]);
+  }, [readFailure, takeReadFailure, isPresent]);
   // 键盘的组字判断走这里，不看下面那个裸 `composing`：那个只为镜像层服务，而
   // Windows 上 compositionend 先于同一下 Enter 的 keydown 到，它已经翻回 false
   // 了（lib/ime）——拿它当门，输入法提交拼音的那一下 Enter 会选中一行或把话发出去。
