@@ -110,6 +110,12 @@ describe("findMention", () => {
     // A name with an `@` past a 「（」, where the rule above stops: the `]`
     // in the would-be query says the caret is after a landed reference.
     expect(findMention("看看@[图标（深色）@2x.png]的", 21)).toBeNull();
+    // A name with paired brackets and an `@` after them: counted, not cut at
+    // the first `]` — the caret after the inner `@` is inside the reference.
+    expect(findMention("看看@[手稿[旧]@2x.png]的", 13)).toBeNull();
+    expect(findMention("看看@[手稿[旧]@2x", 13)).toBeNull();
+    // Closed by its own `]`: an `@` after it opens as usual.
+    expect(findMention("看看@[手稿[旧]]@潮", 12)).toEqual({ start: 10, query: "潮" });
   });
 
   it("still opens on an @ that runs straight out of Chinese prose", () => {

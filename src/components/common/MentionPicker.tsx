@@ -31,7 +31,7 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import { videoMimeOf } from "../../lib/fs/video";
 import type { LoreEntity } from "../../lib/lore";
-import { mentionToken } from "../../lib/agent/mentionText";
+import { endsInsideToken, mentionToken } from "../../lib/agent/mentionText";
 import {
   availableScopes,
   countByScope,
@@ -79,8 +79,6 @@ const MAX_QUERY_LEN = 24;
 
 /** What ends a mention besides ASCII whitespace: full-width space and CJK punctuation. */
 const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
-/** An `@[` still open at the end of the text before an `@`: see findMention. */
-const INSIDE_LANDED = new RegExp(`@\\[[^\\]\\n${CJK_TERMINATORS.source.slice(1, -1)}]*$`);
 
 /**
  * Where an `@` mention begins, given the text and the caret.
@@ -109,7 +107,9 @@ export function findMention(text: string, caret: number): { start: number; query
   // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
   // Inside a landed reference: `@[图标@2x.png]的` — the last `@` is the name's.
-  if (INSIDE_LANDED.test(before.slice(0, at))) return null;
+  // Brackets counted the way the token's readers count them (mentionText):
+  // `@[手稿[旧]@2x.png]` is still open after its inner `@`.
+  if (endsInsideToken(before.slice(0, at), (c) => CJK_TERMINATORS.test(c))) return null;
   const query = before.slice(at + 1);
   // A landed reference, or the caret after one whose name held an `@` past a
   // 「（」 or 「，」 (where the rule above stops): a query never holds `]`.

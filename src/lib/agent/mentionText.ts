@@ -47,10 +47,25 @@ export function mentionToken(label: string): string {
 }
 
 /**
- * Every token in `text`, as `[start, end)` spans in order. From each `@[` the
- * brackets are counted — `[` opens, `]` closes — and the token ends where the
- * count returns to zero. A newline before that, an end of text before that,
- * or an empty `@[]` is not a token: none of them is something
+ * From the `@[` at `at`, count the brackets — `[` opens, `]` closes. Returns
+ * the index of the `]` that brings the count back to zero, or -1 when a
+ * newline, a `stop` character or the end of the text comes first.
+ */
+function closeOf(text: string, at: number, stop?: (c: string) => boolean): number {
+  let depth = 1;
+  for (let i = at + 2; i < text.length; i++) {
+    const c = text[i];
+    if (c === "\n" || stop?.(c)) return -1;
+    if (c === "[") depth++;
+    else if (c === "]" && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Every token in `text`, as `[start, end)` spans in order: from each `@[` to
+ * the `]` that closes it ({@link closeOf}). A newline or the end of the text
+ * before that, or an empty `@[]`, is not a token: none of them is something
  * {@link mentionToken} produces, so they stay the author's typed text.
  */
 function mentionSpans(text: string): Array<[number, number]> {
@@ -59,20 +74,38 @@ function mentionSpans(text: string): Array<[number, number]> {
   for (;;) {
     const at = text.indexOf("@[", from);
     if (at === -1) return spans;
-    let depth = 1;
-    let i = at + 2;
-    for (; i < text.length; i++) {
-      const c = text[i];
-      if (c === "\n") break;
-      if (c === "[") depth++;
-      else if (c === "]" && --depth === 0) break;
-    }
-    if (depth === 0 && i > at + 2) {
-      spans.push([at, i + 1]);
-      from = i + 1;
+    const close = closeOf(text, at);
+    if (close > at + 2) {
+      spans.push([at, close + 1]);
+      from = close + 1;
     } else {
       from = at + 1;
     }
+  }
+}
+
+/**
+ * Whether `text` ends inside a token still open: an `@[` whose brackets have
+ * not come back to zero by the end, counted the way the readers count them —
+ * so a landed `@[手稿[旧]@2x.png]` is still "inside" after its inner `@`, which
+ * a pattern that merely stops at the first `]` got wrong. `stop` cuts an open
+ * token short (the picker ends it at a CJK terminator; see findMention).
+ */
+export function endsInsideToken(text: string, stop?: (c: string) => boolean): boolean {
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf("@[", from);
+    if (at === -1) return false;
+    const close = closeOf(text, at, stop);
+    if (close !== -1) {
+      from = close + 1;
+      continue;
+    }
+    // Cut short or ran out: only running out means the text ends inside it.
+    let i = at + 2;
+    while (i < text.length && text[i] !== "\n" && !stop?.(text[i])) i++;
+    if (i === text.length) return true;
+    from = at + 1;
   }
 }
 
