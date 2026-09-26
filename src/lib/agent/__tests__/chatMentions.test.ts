@@ -39,7 +39,7 @@ vi.mock("../../lore/entity", () => ({
     dir.includes("missing") ? Promise.reject(new Error("nope")) : "身高一米八，左眉有疤。"),
 }));
 
-const { EmptyLine, findMention, mentionKeyDown, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
+const { EmptyLine, findMention, mentionKeyDown, spliceMention, syncMention, useMentionSearch } = await import("../../../components/common/MentionPicker");
 const { Highlighted } = await import("../../../components/common/Highlighted");
 type MentionItem = import("../../../components/common/MentionPicker").MentionItem;
 type MentionCore = import("../../../components/common/MentionPicker").MentionCore;
@@ -111,6 +111,12 @@ describe("syncMention", () => {
     expect(syncMention(inEntries, "看看 @潮", 5)).toEqual({ ...inEntries, start: 3 });
   });
 
+  it("a second `@` while one is open is a fresh mention too — the scope does not carry over", () => {
+    // `@潮` in 图片, then `@` typed right after it: the picker is for the new `@`.
+    expect(syncMention({ ...inEntries, scope: "image", start: 0 }, "@潮@", 3))
+      .toEqual({ open: true, query: "", active: 0, scope: "all", start: 2 });
+  });
+
   it("closes on a terminator and forgets: reopening is a fresh `@`", () => {
     const shut = syncMention(inEntries, "看看 @潮，", 6);
     expect(shut.open).toBe(false);
@@ -119,6 +125,23 @@ describe("syncMention", () => {
     expect(syncMention(shut, "看看 @潮", 5)).toEqual({ open: true, query: "潮", active: 0, scope: "all", start: 3 });
     // Closed stays the same object, so React can bail on the no-op.
     expect(syncMention(shut, "看看 潮", 4)).toBe(shut);
+  });
+});
+
+describe("spliceMention", () => {
+  it("replaces `@query` at start with `@[label]` and keeps the rest", () => {
+    expect(spliceMention("看看@潮，", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png]，");
+    expect(spliceMention("@", 0, "", "沈砚")).toBe("@[沈砚]");
+  });
+
+  it("leaves the text alone when the mention is no longer there — a file read finished after the author moved on", () => {
+    // Text inserted ahead of it: `start` now points into prose.
+    expect(spliceMention("再看看@潮，", 2, "潮", "潮汐.png")).toBe("再看看@潮，");
+    // Deleted outright.
+    expect(spliceMention("看看", 2, "潮", "潮汐.png")).toBe("看看");
+    // Extended after the mention closed (Esc, then more letters): the `@潮`
+    // is still there, so it is still the thing being replaced.
+    expect(spliceMention("看看@潮汐，", 2, "潮", "潮汐.png")).toBe("看看@[潮汐.png]汐，");
   });
 });
 

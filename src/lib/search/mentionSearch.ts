@@ -19,16 +19,21 @@
  *   than one token: a space ends a mention (`findMention`), so the tokenized
  *   form exists for ⌘K parity and for callers with their own input, not for
  *   the picker. What the picker does reach is a single word that straddles
- *   the `/`: `@潮汐门篇/归途` finds `正文/潮汐门篇/第五章 归途.md` through the
- *   full relative path, `searchFiles`'s 0.5 tier. A name hit outranks an alias
- *   hit outranks a group-path hit outranks a path hit: ×1 / ×0.9 / ×0.6 /
- *   ×0.5, the alias weight from `searchLore`, the other two from
- *   `searchFiles`. The group path and the full path are matched by substring
- *   and word start only — never by subsequence: a directory subsequence is
- *   noise, and here a hit has teeth (Enter replaces the author's text and
- *   attaches the file), so `@小李` must not land on `正文/小镇/李家.md`. Name
- *   and alias keep the subsequence tier, as `searchLore` does — `@chth` for
- *   `Chapter Three.md` is how a long name is recalled.
+ *   the `/`: `@潮汐门篇/第五` finds `正文/潮汐门篇/第五章 归途.md` through the
+ *   full relative path (`searchFiles`'s 0.5 tier), and `@潮汐门篇/归途` finds
+ *   it too — a word with a `/` is also split at its last `/`, the left part
+ *   held to the group path and the right part matched against the name the
+ *   way any name is (subsequence included), so the author who remembers the
+ *   group and *a word of* the title is not asked for the title's first
+ *   characters. A name hit outranks an alias hit outranks a group-path hit
+ *   outranks a path hit: ×1 / ×0.9 / ×0.6 / ×0.5, the alias weight from
+ *   `searchLore`, the other two from `searchFiles`. The group path and the
+ *   full path are matched by substring and word start only — never by
+ *   subsequence: a directory subsequence is noise, and here a hit has teeth
+ *   (Enter replaces the author's text and attaches the file), so `@小李` must
+ *   not land on `正文/小镇/李家.md`. Name and alias keep the subsequence tier,
+ *   as `searchLore` does — `@chth` for `Chapter Three.md` is how a long name
+ *   is recalled.
  * - **An empty query interleaves by kind** — entry, document, image, entry …
  *   — instead of scoring. Ten rows are for recognising, and the author who
  *   just typed `@` should see that both kinds are there; the scope chips are
@@ -178,7 +183,10 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
   const aliasRanges: MatchRange[] = [];
   for (const tok of tokens) {
     let best = 0;
-    let where: { field: "label" | "alias" | "sub" | "path"; ranges: MatchRange[]; alias?: string } | null = null;
+    let where:
+      | { field: "label" | "alias" | "sub"; ranges: MatchRange[]; alias?: string }
+      | { field: "split"; ranges: MatchRange[]; subRanges: MatchRange[] }
+      | null = null;
     const byName = matchText(label, tok);
     if (byName) { best = byName.score; where = { field: "label", ranges: byName.ranges }; }
     if (item.type === "lore") {
@@ -190,19 +198,38 @@ function scoreOne<T extends MentionLike>(item: T, tokens: readonly string[], pro
       const m = matchText(sub, tok, EXACT);
       if (m && m.score * DIR_WEIGHT > best) { best = m.score * DIR_WEIGHT; where = { field: "sub", ranges: m.ranges }; }
       const byPath = matchText(rel, tok, EXACT);
-      if (byPath && byPath.score * PATH_WEIGHT > best) { best = byPath.score * PATH_WEIGHT; where = { field: "path", ranges: byPath.ranges }; }
+      if (byPath && byPath.score * PATH_WEIGHT > best) {
+        // Same split as `searchFiles`: the `/` at `sub.length` belongs to neither line.
+        const cut = sub.length + 1;
+        const subR: MatchRange[] = [];
+        const labelR: MatchRange[] = [];
+        for (const r of byPath.ranges) {
+          if (r.start < sub.length) subR.push({ start: r.start, end: Math.min(r.end, sub.length) });
+          if (r.end > cut) labelR.push({ start: Math.max(r.start, cut) - cut, end: r.end - cut });
+        }
+        best = byPath.score * PATH_WEIGHT;
+        where = { field: "split", ranges: labelR, subRanges: subR };
+      }
+      // `分组/一个词`: the left of the last `/` held to the group, the right
+      // matched against the name like any query — so the word need not be
+      // the title's opening characters.
+      const slash = tok.lastIndexOf("/");
+      if (slash > 0 && slash < tok.length - 1) {
+        const left = matchText(sub, tok.slice(0, slash), EXACT);
+        const right = left ? matchText(label, tok.slice(slash + 1)) : null;
+        if (left && right) {
+          const s = ((left.score + right.score) / 2) * PATH_WEIGHT;
+          if (s > best) { best = s; where = { field: "split", ranges: right.ranges, subRanges: left.ranges }; }
+        }
+      }
     }
     if (!where) return null;
     score += best;
     if (where.field === "label") labelRanges.push(...where.ranges);
     else if (where.field === "sub") subRanges.push(...where.ranges);
-    else if (where.field === "path") {
-      // Same split as `searchFiles`: the `/` at `sub.length` belongs to neither line.
-      const cut = sub!.length + 1;
-      for (const r of where.ranges) {
-        if (r.start < sub!.length) subRanges.push({ start: r.start, end: Math.min(r.end, sub!.length) });
-        if (r.end > cut) labelRanges.push({ start: Math.max(r.start, cut) - cut, end: r.end - cut });
-      }
+    else if (where.field === "split") {
+      labelRanges.push(...where.ranges);
+      subRanges.push(...where.subRanges);
     } else if (alias === null || alias === where.alias) {
       // One alias is shown; a second token that matched a different alias
       // still counts for the score but has nowhere to be highlighted.

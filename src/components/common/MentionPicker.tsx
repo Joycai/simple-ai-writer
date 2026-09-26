@@ -143,30 +143,49 @@ const CLOSED: MentionCore = { open: false, query: "", active: 0, scope: "all", s
  *
  * - No live mention → closed, and closed keeps nothing: the next `@` is a
  *   fresh one.
- * - A fresh `@` searches everything, from the top. The scope is not
- *   remembered across mentions: one message can open the picker a dozen
- *   times, and a narrow scope left over from the last one is a silent trap —
- *   the author types `@` for a picture and concludes the picture is gone.
- *   Nor is the highlight: a closed-and-reopened mention shows 全部's list,
- *   and the row index the author had reached in 条目 names another item there.
- * - Continuing one keeps the scope. A changed query is a different list, so
- *   the old highlight index means nothing — back to the top rather than
- *   pointing at whatever happens to occupy that slot now.
+ * - A fresh `@` — one that opens the mention, or one at a different `@`
+ *   than the open one (`@潮@`, or a click to another `@` in the text) —
+ *   searches everything, from the top. The scope is not remembered across
+ *   mentions: one message can open the picker a dozen times, and a narrow
+ *   scope left over from the last one is a silent trap — the author types
+ *   `@` for a picture and concludes the picture is gone. Nor is the
+ *   highlight: a closed-and-reopened mention shows 全部's list, and the row
+ *   index the author had reached in 条目 names another item there.
+ * - Continuing one (same `@`) keeps the scope. A changed query is a different
+ *   list, so the old highlight index means nothing — back to the top rather
+ *   than pointing at whatever happens to occupy that slot now.
  */
 export function syncMention(prev: MentionCore, value: string, caret: number): MentionCore {
   const hit = findMention(value, caret);
   if (!hit) return prev === CLOSED ? prev : CLOSED;
-  if (!prev.open) return { open: true, query: hit.query, active: 0, scope: "all", start: hit.start };
-  return { ...prev, query: hit.query, start: hit.start, active: hit.query === prev.query ? prev.active : 0 };
+  if (!prev.open || prev.start !== hit.start) return { open: true, query: hit.query, active: 0, scope: "all", start: hit.start };
+  return { ...prev, query: hit.query, active: hit.query === prev.query ? prev.active : 0 };
+}
+
+/**
+ * Replace the mention at `start` (its `@` plus `query`) with `@[label]`.
+ * Pure, and defensive: a file pick reads the file *before* it splices, and
+ * during that read the author may have typed on — if the text at `start` is
+ * no longer `@query`, the mention is gone and nothing is spliced (the
+ * attachment the host already made stands on its own). Splicing blind here
+ * once ate the first character of the draft.
+ */
+export function spliceMention(value: string, start: number, query: string, label: string): string {
+  if (value.slice(start, start + 1 + query.length) !== `@${query}`) return value;
+  return `${value.slice(0, start)}@[${label}]${value.slice(start + 1 + query.length)}`;
 }
 
 /** @-detection and splicing over a controlled text value. */
 export function useMentionState(): MentionState {
   const [state, setState] = useState<MentionCore>(CLOSED);
-  // For `accept`, which splices by the committed start and query rather than
-  // the ones the render that made the handler closed over.
-  const ref = useRef(state);
-  ref.current = state;
+  // Where the last *open* mention was, for `accept`: the committed start and
+  // query rather than the ones the render that made the handler closed over —
+  // and kept past a close, because a file pick splices only after the file
+  // has been read, and the mention can close in between (a 「，」 typed, Esc,
+  // a click outside, a conversation switch). `CLOSED`'s 0 / "" would splice
+  // at the head of the draft.
+  const live = useRef({ start: state.start, query: state.query });
+  if (state.open) live.current = { start: state.start, query: state.query };
   // Stable: the picker's outside-click listener depends on it, and a chat
   // host re-renders on every streamed flush.
   const close = useCallback(() => setState((s) => (s === CLOSED ? s : CLOSED)), []);
@@ -178,10 +197,9 @@ export function useMentionState(): MentionState {
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
     accept: (value, label) => {
-      const { start, query } = ref.current;
-      const after = value.slice(start + 1 + query.length);
+      const { start, query } = live.current;
       setState(CLOSED);
-      return `${value.slice(0, start)}@[${label}]${after}`;
+      return spliceMention(value, start, query, label);
     },
     move: (delta, count) => {
       if (count <= 0) return;

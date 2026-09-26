@@ -105,6 +105,17 @@ describe("searchMentions — typed query", () => {
     // Ranges split back onto the two lines, the `/` on neither.
     expect(r.hits.get(0)?.sub).toEqual([{ start: 3, end: 7 }]);
     expect(r.hits.get(0)?.label).toEqual([{ start: 0, end: 2 }]);
+    // The word after the `/` need not open the title: the group plus any
+    // word of the name, as an author remembers a chapter.
+    const mid = searchMentions(items, "潮汐门篇/归途", "all", ROOT);
+    expect(names(mid)).toEqual(["第五章 归途.md"]);
+    expect(mid.hits.get(0)?.sub).toEqual([{ start: 3, end: 7 }]);
+    expect(mid.hits.get(0)?.label).toEqual([{ start: 4, end: 6 }]);
+    // But the left side is still held to the group, exactly: no subsequence.
+    expect(names(searchMentions(items, "潮篇/归途", "all", ROOT))).toEqual([]);
+    // A bare `/` at either end is no split — the path tier alone decides.
+    expect(names(searchMentions(items, "/第五", "all", ROOT))).toEqual(["第五章 归途.md"]);
+    expect(names(searchMentions(items, "潮汐门篇/", "all", ROOT))).toEqual(["第五章 归途.md"]);
   });
 
   it("never matches the group path or the full path by subsequence — a hit here has teeth", () => {
