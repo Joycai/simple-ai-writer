@@ -110,7 +110,9 @@ export function findMention(text: string, caret: number): { start: number; query
   // Inside a landed reference: `@[图标@2x.png]的` — the last `@` is the name's.
   if (INSIDE_LANDED.test(before.slice(0, at))) return null;
   const query = before.slice(at + 1);
-  if (query.startsWith("[")) return null;
+  // A landed reference, or the caret after one whose name held an `@` past a
+  // 「（」 or 「，」 (where the rule above stops): a query never holds `]`.
+  if (query.startsWith("[") || query.includes("]")) return null;
   // The author moved on and is writing prose again.
   if (/\s/.test(query) || CJK_TERMINATORS.test(query)) return null;
   if (query.length > MAX_QUERY_LEN) return null;
@@ -132,11 +134,13 @@ export interface MentionState {
    */
   claim: () => MentionClaim | null;
   /**
-   * Replace the claimed mention with `@[名字]`, returning the new text.
-   * A second accept on the same claim's mention is a no-op on the text (a
-   * double-click, or Enter twice on a slow file); a mention opened since is
-   * shifted by the splice and otherwise left alone. `projectPath` is for
-   * judging whether letters typed during the read still point at `item`.
+   * Replace the claimed mention with `@[名字]`, returning the new text — at
+   * the place the mention is *now*, after whatever was typed or landed
+   * during the read (see acceptPick). A second accept on the same mention
+   * is a no-op (a double-click, or Enter twice on a slow file); a mention
+   * opened since on a later `@` is shifted by the splice; one reopened on
+   * the claimed `@` closes with it. `projectPath` is for judging whether
+   * letters typed during the read still point at `item`.
    */
   accept: (value: string, item: MentionItem, claim: MentionClaim, projectPath: string | null) => string;
   /** Move the highlight within a list of `count` items, wrapping at both ends. */
@@ -201,17 +205,6 @@ export function syncMention(prev: MentionCore, value: string, caret: number): Me
 }
 
 /**
- * What `accept` splices by: the last *open* mention's place, kept past a
- * close. A file pick splices only after the file has been read, and the
- * mention can close in between (a 「，」 typed, Esc, a click outside) —
- * `CLOSED`'s 0 / "" would splice at the head of the draft, which once ate its
- * first character. Pure, so the "closed keeps" rule has a test.
- */
-export function nextLive(prev: MentionClaim, core: MentionCore): MentionClaim {
-  return core.open ? { id: core.id, start: core.start, query: core.query } : prev;
-}
-
-/**
  * Replace the mention at `start` (its `@` plus `query`) with `@[label]`.
  * Pure, and defensive: a file pick reads the file *before* it splices, and
  * during that read the text may have changed under it. If the text at
@@ -241,49 +234,80 @@ export function spliceMention(value: string, start: number, query: string, label
  *   re-read its position, and a stale `start` would make its own pick land
  *   nothing.
  */
-export function afterAccept(core: MentionCore, claim: MentionClaim, delta: number): MentionCore {
+export function afterAccept(core: MentionCore, landed: Pick<MentionClaim, "id" | "start">, delta: number): MentionCore {
   if (!core.open) return core;
-  if (core.id === claim.id || core.start === claim.start) return shut(core);
-  if (core.start > claim.start) return { ...core, start: core.start + delta };
+  if (core.id === landed.id || core.start === landed.start) return shut(core);
+  if (core.start > landed.start) return { ...core, start: core.start + delta };
   return core;
 }
 
 /**
- * The text a pick lands, pure. `spent` holds the mentions a pick has already
- * landed on (and is written here, so the once-only rule is one place): a
- * second Enter on a slow file, or a double-click, is one splice — `spend`
- * false, text unchanged. `live` is the mention as it is *now*: when it is
- * the same `@` (open, or closed since) and the author has kept narrowing it
- * while the file read (`@潮` → `@潮汐`, `@插图/潮` → `@插图/潮汐`), and the
- * grown query still finds the picked item by the picker's own rule
- * (`stillMatches`), the whole current query is replaced, not the snapshot's —
- * otherwise the extra letters would be left as a tail after `@[潮汐.png]`.
- * Prose typed after it that does not match (`@潮的图`) is prose, and stays.
+ * The claims still waiting on a file read, by mention id, each kept at that
+ * mention's *current* place. Called on every render: while the claimed
+ * mention is open, its entry follows the author's typing (`@潮` → `@潮汐`),
+ * and it keeps its last place once the mention closes (a 「，」 typed, Esc, a
+ * click outside — `CLOSED`'s 0 / "" would splice at the head of the draft,
+ * which once ate its first character). Keyed by id, so a claim is found
+ * again however many mentions were opened after it.
  */
-export function acceptMention(
+export function trackClaims(pending: Map<number, MentionClaim>, core: MentionCore): void {
+  if (core.open && pending.has(core.id)) pending.set(core.id, { id: core.id, start: core.start, query: core.query });
+}
+
+/** Where a pick landed, for `afterAccept` — and which mention it was. */
+interface Landed {
+  id: number;
+  start: number;
+  /** The length the splice added; later claims and mentions move by it. */
+  delta: number;
+}
+
+/**
+ * Land a pick's text, pure. In order:
+ * - `spent` holds the mentions a pick has already landed on: a second Enter
+ *   on a slow file, or a double-click, is one splice — text unchanged.
+ * - The mention is spliced where it is *now* (`pending`, see trackClaims),
+ *   not where the claim was taken: a landing before this one moved it.
+ * - If the author kept narrowing that same mention while the file read
+ *   (`@潮` → `@潮汐`, `@插图/潮` → `@插图/潮汐`) and the grown query still
+ *   finds the picked item by the picker's own rule (`stillMatches`), the
+ *   whole current query is replaced — otherwise the extra letters would be
+ *   left as a tail after `@[潮汐.png]`. Failing that, the snapshot's query;
+ *   prose typed after it that does not match (`@潮的图`) is prose, and stays.
+ * - Nothing landed (the text at that place is no longer the mention) means
+ *   nothing is recorded and nothing closes: the `@` the author is looking at
+ *   is still theirs. Only a landing is spent, and only a landing shifts the
+ *   claims after it — by `delta`, as `afterAccept` shifts the open mention.
+ */
+export function acceptPick(
   spent: Set<number>,
+  pending: Map<number, MentionClaim>,
   claim: MentionClaim,
-  live: MentionClaim,
   value: string,
   label: string,
   stillMatches: (query: string) => boolean,
-): { text: string; spend: boolean } {
-  if (spent.has(claim.id)) return { text: value, spend: false };
+): { text: string; landed: Landed | null } {
+  if (spent.has(claim.id)) return { text: value, landed: null };
+  const cur = pending.get(claim.id) ?? claim;
+  pending.delete(claim.id);
+  const grown = cur.query !== claim.query && stillMatches(cur.query);
+  let text = grown ? spliceMention(value, cur.start, cur.query, label) : value;
+  if (text === value) text = spliceMention(value, cur.start, claim.query, label);
+  if (text === value) return { text, landed: null };
   spent.add(claim.id);
-  const grown = live.start === claim.start && live.query !== claim.query && stillMatches(live.query);
-  const query = grown ? live.query : claim.query;
-  return { text: spliceMention(value, claim.start, query, label), spend: true };
+  const delta = text.length - value.length;
+  for (const [id, c] of pending) if (c.start > cur.start) pending.set(id, { ...c, start: c.start + delta });
+  return { text, landed: { id: claim.id, start: cur.start, delta } };
 }
 
 /** @-detection and splicing over a controlled text value. */
 export function useMentionState(): MentionState {
   const [state, setState] = useState<MentionCore>(CLOSED);
-  // The committed place of the last open mention (see nextLive) — the render
-  // that made a handler may have closed over an older one.
-  const live = useRef<MentionClaim>({ id: 0, start: 0, query: "" });
-  live.current = nextLive(live.current, state);
-  // Mentions a pick has already landed on: the second Enter on a slow file,
-  // or a double-click, must not splice `@[名字]` a second time.
+  // Picks waiting on a file read, at their mention's current place (see
+  // trackClaims — the render that made a handler may hold an older one).
+  const pending = useRef(new Map<number, MentionClaim>());
+  trackClaims(pending.current, state);
+  // Mentions a pick has already landed on (see acceptPick).
   const spent = useRef(new Set<number>());
   // Stable: the picker's outside-click listener depends on it, and a chat
   // host re-renders on every streamed flush.
@@ -295,16 +319,18 @@ export function useMentionState(): MentionState {
     active: state.active,
     scope: state.scope,
     sync: (value, caret) => setState((s) => syncMention(s, value, caret)),
-    claim: () => (state.open ? { ...live.current } : null),
+    claim: () => {
+      if (!state.open) return null;
+      const c: MentionClaim = { id: state.id, start: state.start, query: state.query };
+      pending.current.set(c.id, c);
+      return c;
+    },
     accept: (value, item, claim, projectPath) => {
-      const { text, spend } = acceptMention(
-        spent.current, claim, live.current, value, mentionLabel(item),
+      const { text, landed } = acceptPick(
+        spent.current, pending.current, claim, value, mentionLabel(item),
         (q) => matchesMention(item, q, projectPath),
       );
-      if (spend) {
-        const delta = text.length - value.length;
-        setState((s) => afterAccept(s, claim, delta));
-      }
+      if (landed) setState((s) => afterAccept(s, landed, landed.delta));
       return text;
     },
     move: (delta, count) => {
