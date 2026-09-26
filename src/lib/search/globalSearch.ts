@@ -271,7 +271,7 @@ export interface LoreHit<E extends LoreLike> {
 const ALIAS_WEIGHT = 0.9;
 
 /** 条目在哪儿命中：名字，或某个别名（附上是哪个）。 */
-export interface LoreNameMatch {
+interface LoreNameMatch {
   score: number;
   via: "name" | "alias";
   alias: string | null;
