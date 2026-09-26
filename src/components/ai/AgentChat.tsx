@@ -193,12 +193,21 @@ export function AgentChat() {
   // tab must not appear under the next.
   const draft = useComposerStore((s) => chatComposerOf(s, activeKey).draft);
   const setChatDraft = useComposerStore((s) => s.setChatDraft);
+  // Whether the last change to the store's draft was this instance's own.
+  // An instance unmounted by a conversation switch can still land a `@`
+  // reference into this draft once its file read finishes (handlePickMention);
+  // that write is not ours, and the effect below re-reads the mention around
+  // it — the picker would otherwise sit open over the landed reference, and a
+  // later `@` in the draft would keep a stale start.
+  const ownWrite = useRef(false);
   const setDraft = useCallback(
-    (update: string | ((prev: string) => string)) => setChatDraft(activeKey, update),
+    (update: string | ((prev: string) => string)) => { ownWrite.current = true; setChatDraft(activeKey, update); },
     [setChatDraft, activeKey],
   );
-  // Mirrors `draft` for the handlers that read it after an await — reading a
-  // large file takes long enough for the author to have kept typing.
+  // Mirrors `draft` for the synchronous handlers that read it in the same
+  // tick they wrote it (openMentionFor) or from a keydown (the queue check):
+  // the render that made them may hold an older value. Not for anything
+  // after an await — see handlePickMention.
   const draftRef = useRef(draft);
   draftRef.current = draft;
   // The selection is attached by default when one exists — that is nearly always
@@ -227,7 +236,10 @@ export function AgentChat() {
     [setChatRefs, activeKey],
   );
   const clearChatComposer = useComposerStore((s) => s.clearChatComposer);
-  const clearComposer = useCallback(() => clearChatComposer(activeKey), [clearChatComposer, activeKey]);
+  const clearComposer = useCallback(
+    () => { ownWrite.current = true; clearChatComposer(activeKey); },
+    [clearChatComposer, activeKey],
+  );
   // This instance is one conversation's: AiDrawer remounts the chat per
   // conversation (`key={activeChatKey}`), so the mention state, like the
   // draft, never spans two.
@@ -354,19 +366,26 @@ export function AgentChat() {
       }
       attach(outcome.item);
     }
-    // The draft as the store holds it *now*, not this instance's `draftRef`:
-    // switching conversation (or closing the drawer) unmounts this instance
-    // while the read goes on, and if the author comes back and keeps typing
-    // in the new instance, the ref here is frozen at the moment of leaving —
-    // splicing into it would write that stale draft over what they typed.
-    // `setDraft` is bound to this conversation's key, so read and write are
-    // the same draft either way. Not inside a state updater: `accept` calls
-    // setState itself, and React runs an updater twice under StrictMode.
-    const now = chatComposerOf(useComposerStore.getState(), activeKey).draft;
-    setDraft(mention.accept(now, item, claim, projectPath));
+    // Spliced into the draft as the store holds it *now* — the updater's
+    // argument, which zustand supplies once — not into this instance's
+    // `draftRef`: switching conversation (or closing the drawer) unmounts this
+    // instance while the read goes on, and if the author comes back and keeps
+    // typing in the new instance, the ref here is frozen at the moment of
+    // leaving; splicing into it would write that stale draft over what they
+    // typed. `setDraft` is bound to this conversation's key, so the write
+    // lands in the same draft whichever instance is on screen.
+    setDraft((now) => mention.accept(now, item, claim, projectPath));
     inputRef.current?.focus();
   };
 
+  // A change to the draft that was not ours (see `ownWrite`): if a mention
+  // is open, re-read it around the new text — it may have been landed on,
+  // or shifted by a reference landed ahead of it. Our own writes carry their
+  // own `sync` (or close the mention themselves).
+  useEffect(() => {
+    if (ownWrite.current) { ownWrite.current = false; return; }
+    if (mention.open) mention.sync(draft, inputRef.current?.selectionStart ?? draft.length);
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
 

@@ -161,6 +161,10 @@ describe("spliceMention", () => {
   it("leaves the text alone when the mention is no longer there — a file read finished after the author moved on", () => {
     // Text inserted ahead of it: `start` now points into prose.
     expect(spliceMention("再看看@潮，", 2, "潮", "潮汐.png")).toBe("再看看@潮，");
+    // A reference already landed on that `@` (another instance's pick, or the
+    // same `@` re-picked after an Esc): an empty query's check would pass on
+    // its `@` alone, and `@[A][B]` is not a mention anything can read.
+    expect(spliceMention("看看@[夜航.png]", 2, "", "潮汐.mp4")).toBe("看看@[夜航.png]");
     // Deleted outright.
     expect(spliceMention("看看", 2, "潮", "潮汐.png")).toBe("看看");
   });
@@ -242,9 +246,12 @@ describe("acceptPick", () => {
     expect(first).toEqual({ text: "看看@[潮汐.png]", landed: { id: 1, start: 2, delta: 7 } });
     expect(spent.has(1)).toBe(true);
     // The `@` of the landed `@[潮汐.png]` is at the same start with an empty
-    // query — only the spent set stands between it and `@[B][A]`.
+    // query: the spent set stops it here, and `spliceMention`'s own guard
+    // stops it where the set cannot see (another instance's pick).
     const again = acceptPick(spent, table(), { ...claim, query: "" }, first.text, "B.png", () => true);
     expect(again).toEqual({ text: "看看@[潮汐.png]", landed: null });
+    const other = acceptPick(new Set(), table(), { id: 9, start: 2, query: "" }, first.text, "B.png", () => true);
+    expect(other).toEqual({ text: "看看@[潮汐.png]", landed: null });
   });
 
   it("replaces the whole current query when the author kept narrowing the same mention while the file read", () => {
@@ -363,10 +370,12 @@ describe("a pick across a file read", () => {
     expect(h.state().open).toBe(false);
   });
 
-  it("an instance unmounted by a conversation switch lands into the draft as it is now, losing nothing", () => {
+  it("accept fed the draft as it is now keeps what was typed since, and never lands on a landed reference", () => {
     // The chat composer remounts per conversation: the old instance keeps
-    // its table but sees no more typing. The host hands `accept` the store's
-    // current draft — what the author typed after coming back stays.
+    // its table but sees no more typing. What its host feeds `accept` is the
+    // store's current draft (AgentChat does that through the store updater;
+    // that line has no test of its own) — so what the author typed after
+    // coming back stays.
     const old = host();
     old.type("帮我看看这张图@潮");
     const a = old.claim();
@@ -377,6 +386,17 @@ describe("a pick across a file read", () => {
     moved.type("看看@潮");
     const m = moved.claim();
     expect(moved.accept("先看看@潮", pic("插图/潮汐.png"), m)).toBe("先看看@潮");
+    // A bare `@` picked in the old instance, then picked again in the new one
+    // before the first read finished: the new one's reference stands alone.
+    const stale = host();
+    stale.type("看看@");
+    const s = stale.claim();
+    const fresh = host();
+    fresh.type("看看@");
+    for (const t of ["看看@夜"]) fresh.type(t);
+    const landedFirst = fresh.accept("看看@夜", pic("夜航.png"), fresh.claim());
+    expect(landedFirst).toBe("看看@[夜航.png]");
+    expect(stale.accept(landedFirst, pic("插图/潮汐.mp4"), s)).toBe("看看@[夜航.png]");
   });
 
   it("narrowed by group while the file read: the picker's rule sees it and no tail is left", () => {

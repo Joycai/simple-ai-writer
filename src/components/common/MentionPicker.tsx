@@ -216,10 +216,19 @@ export function syncMention(prev: MentionCore, value: string, caret: number): Me
  * (`我想让@沈更生动`, or `+ 引用` with the caret mid-line) is followed by prose
  * that was always there; a rule that refused a following character once
  * left every such mention as a bare `@沈` with the chip attached.
+ *
+ * One thing that can stand at `start` and still pass an empty query's check
+ * is a reference already landed there — `@[夜航.png]` begins with `@`. A
+ * live mention is never followed by `[` (`findMention` refuses that query),
+ * so `@[` here is always a landed one, and landing again would give
+ * `@[A][B]`. The `spent` set cannot see it across instances: the chat
+ * composer remounts per conversation, and an instance unmounted mid-read
+ * lands into the draft the new one has been writing.
  */
 export function spliceMention(value: string, start: number, query: string, label: string): string {
   const end = start + 1 + query.length;
   if (value.slice(start, end) !== `@${query}`) return value;
+  if (value.charAt(start + 1) === "[") return value;
   return `${value.slice(0, start)}@[${label}]${value.slice(end)}`;
 }
 
