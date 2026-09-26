@@ -373,6 +373,11 @@ describe("a selection through an edit someone else made", () => {
   it("puts a caret the author was typing `@潮` with just after the landed `]`", () => {
     expect(selectionThrough(sel(4), before, after)).toEqual(sel(11));
     expect(after.slice(0, 11)).toBe("看看@[潮汐.png]");
+    // Right after the `@`: the common prefix keeps the `@`, so the span starts
+    // at this very caret — it still goes after the `]`, as `caretThrough`
+    // sends it; left there, the next key would split `@x[潮汐.png]`.
+    expect(selectionThrough(sel(3), before, after)).toEqual(sel(11));
+    expect(selectionThrough(sel(2), before, after)).toEqual(sel(2));
   });
 
   it("maps each end on its own: one across the edit covers the new text", () => {
@@ -389,6 +394,7 @@ describe("a selection through an edit someone else made", () => {
   it("goes to the end when the text replaced an empty draft or the whole of it", () => {
     expect(selectionThrough(sel(0), "", "回到这里重说")).toEqual(sel(6));
     expect(selectionThrough(sel(1, 3), "沈砚看书", "潮汐门夜航")).toEqual(sel(5));
+    expect(selectionThrough(sel(0), "沈砚看书", "潮汐门夜航")).toEqual(sel(5));
     // A send clearing the draft.
     expect(selectionThrough(sel(2, 4), "沈砚看书", "")).toEqual(sel(0));
   });

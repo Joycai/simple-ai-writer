@@ -614,6 +614,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           setRewindTo(null);
           void rewind(agent.id, at).then((text) => {
             if (text === null) return;
+            // 回退是整段换回那一问，不是作者在改：光标放到末尾，不按旧草稿里的位置搬。
+            placeSelection({ start: text.length, end: text.length, dir: "none" }, text);
             setDraft(text);
             taRef.current?.focus();
           });
@@ -780,7 +782,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       // 这个实例已经不在了就是 null，切回来的新实例按改动自己搬。
       const sel = selectionOf(taRef.current);
       setDraft((now) => {
-        const landed = mention.accept(now, item, claim, projectPath, sel);
+        // 框里显示的正是 `now` 时，读到的选区才在这段文本的坐标里；之前另一处落字
+        // 已写进 store 还没渲染，就交给渲染时读 DOM 那一份（useKeptSelection）。
+        const landed = mention.accept(now, item, claim, projectPath, taRef.current?.value === now ? sel : null);
         placeSelection(landed.sel, landed.text);
         return landed.text;
       });

@@ -396,7 +396,10 @@ export function AgentChat() {
       // then the new instance keeps its own by reading the edit.
       const sel = selectionOf(inputRef.current);
       setDraft((now) => {
-        const landed = mention.accept(now, item, claim, projectPath, sel);
+        // Only a selection read off the text being landed into means anything
+        // in it: a landing made since and not yet rendered shifted it, and
+        // then the render's own reading of the DOM (useKeptSelection) is right.
+        const landed = mention.accept(now, item, claim, projectPath, inputRef.current?.value === now ? sel : null);
         placeSelection(landed.sel, landed.text);
         return landed.text;
       });
@@ -468,6 +471,9 @@ export function AgentChat() {
     const known = turns.flatMap((tn) => tn.images ?? []);
     void rewindChat(id).then((back) => {
       if (back === null) return;
+      // The question comes back whole, not edited: the caret goes to its end,
+      // not wherever it sat in the draft it replaced (useKeptSelection).
+      placeSelection({ start: back.text.length, end: back.text.length, dir: "none" }, back.text);
       setDraft(back.text);
       restoreImages(back.images, known);
       inputRef.current?.focus();

@@ -449,25 +449,27 @@ export function landSelection(sel: TextSelection, landed: Landed): TextSelection
 /**
  * A selection carried through an edit this instance did not make and knows
  * nothing about but the texts on both sides — another instance landing a
- * reference into the same draft, a send clearing it, a rewind replacing it.
- * Read as one replaced span (`editRange`), each end:
- * - before the span: where it was;
- * - inside it, or where a pure insertion was made (typing inserts in front of
- *   the caret, and so does this): just after the new text — the author was
- *   writing the `@潮` that is now `@[潮汐.png]`;
+ * reference into the same draft, a send clearing it. Read as one replaced
+ * span (`editRange`), each end:
+ * - strictly before the span: where it was;
+ * - from its first character to its last, or at a pure insertion's place
+ *   (typing inserts in front of the caret, and so does this): just after the
+ *   new text. A caret at the span's very start counts as inside: the common
+ *   prefix swallows the `@` a reference lands on, so `@|潮` → `@[潮汐.png]`
+ *   puts the span's start right at that caret, and leaving it there would
+ *   split the token at the next key — `caretThrough` sends it after the `]`
+ *   too;
  * - after it: moved with the text by `delta`.
- * Empty → text puts the caret at the end, as the browser did; so does a
- * whole replacement, for a caret that was anywhere in the old text. Where a
- * pure insertion repeats its neighbours the span is read at its rightmost
- * place (`editRange`'s greedy prefix), so a caret in that repeat stays put
- * — off by the repeat's length at worst, and only the caret.
+ * Empty → text, and a replacement with nothing in common at the head, put
+ * the caret at the end. Where a pure insertion repeats its neighbours the
+ * span is read at its rightmost place (`editRange`'s greedy prefix), so a
+ * caret in that repeat stays put — off by the repeat's length at worst, and
+ * only the caret. A rewind is not an edit to map: its hosts place the caret
+ * at the end themselves.
  */
 export function selectionThrough(sel: TextSelection, before: string, after: string): TextSelection {
   const e = editRange(before, after);
-  const at = (pos: number) =>
-    pos < e.start || (pos === e.start && e.end > e.start) ? pos
-      : pos <= e.end ? e.end + e.delta
-        : pos + e.delta;
+  const at = (pos: number) => (pos < e.start ? pos : pos <= e.end ? e.end + e.delta : pos + e.delta);
   return { start: at(sel.start), end: at(sel.end), dir: sel.dir };
 }
 
