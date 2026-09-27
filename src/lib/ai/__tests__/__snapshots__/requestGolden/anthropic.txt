@@ -496,3 +496,48 @@ summary: thinking.type=adaptive output_config.effort=max
 - plain
 POST https://api.anthropic.com/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+
+### grok-4-fast-non-reasoning · bare
+summary: thinking.type=adaptive
+- plain
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"cache_control":{"type":"ephemeral"},"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: thinking.type=adaptive tools=web_search
+- plain
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"cache_control":{"type":"ephemeral"},"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:output_config.format=json_schema
+- plain (json json_schema)
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: thinking.type=adaptive output_config.effort=high
+- plain
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"cache_control":{"type":"ephemeral"},"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: thinking.type=adaptive output_config.effort=low
+- plain
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"cache_control":{"type":"ephemeral"},"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: thinking.type=adaptive output_config.effort=max
+- plain
+POST https://api.anthropic.com/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}

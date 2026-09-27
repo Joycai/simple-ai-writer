@@ -7,13 +7,13 @@ import {
   platformEndpoints,
   platformForAddress,
   platformHasHosts,
-  platformModelCalibration,
   platformOrigin,
   platformSource,
   platformToStore,
   resolvePlatform,
 } from "../platforms";
 import { THINKING_CATEGORIES } from "../reasoning";
+import { platformModelCalibration } from "../capabilities";
 import { knownMaxOutput } from "../modelLimits";
 
 describe("inferPlatform", () => {
@@ -238,7 +238,7 @@ describe("orcarouter model calibration", () => {
     expect(platformModelCalibration("orcarouter", "openai/gpt-6-luna")).toMatchObject({ contextSize: 1_050_000, maxOutput: 128_000 });
   });
   it("matches the id however the author cased or padded it", () => {
-    expect(platformModelCalibration("orcarouter", "  Anthropic/Claude-Sonnet-5 ")).toBe(platformModelCalibration("orcarouter", "anthropic/claude-sonnet-5"));
+    expect(platformModelCalibration("orcarouter", "  Anthropic/Claude-Sonnet-5 ")).toEqual(platformModelCalibration("orcarouter", "anthropic/claude-sonnet-5"));
   });
   it("knows nothing about the free tier or another platform's ids", () => {
     expect(platformModelCalibration("orcarouter", "tencent/hy3-free")).toBeUndefined();

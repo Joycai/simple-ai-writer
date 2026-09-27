@@ -61,7 +61,7 @@ export type CapabilityStatus = "yes" | "unknown" | "no";
  *   - `requires`: a capability it depends on is unavailable.
  *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
  *   - `upstream`: the relay's upstream behind this model was measured this way — either way,
- *     working or not (UPSTREAM_CAPABILITIES).
+ *     working or not (UPSTREAM_CELLS).
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",

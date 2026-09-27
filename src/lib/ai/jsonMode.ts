@@ -28,7 +28,7 @@
 import { capabilityVerdict } from "./capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { forAnthropic, strictify } from "./jsonSchemaStrict";
-import { normalizeModelId } from "./modelLimits";
+import { catalogFact } from "./capability/cells/catalog";
 import { resolvePlatform, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
@@ -75,44 +75,16 @@ export function parseStructuredOutputMode(v: unknown): StructuredOutputMode | un
 // ─── Auto: what an undeclared model gets ──────────────────────────────────────
 
 /**
- * modelId prefixes documented to accept strict `json_schema` mode.
+ * Whether this model id is documented to accept strict `json_schema` mode —
+ * the catalog's `strictSchemaModel` rows (`capability/cells/catalog.ts`).
  *
- * Lifts the family default *up* only: a model not listed here stays on
- * `json_object`, which is exactly what every model got before this table
- * existed. So a stale table costs at worst a missed upgrade, never a request
+ * Lifts the family default *up* only: a model not listed stays on
+ * `json_object`, which is exactly what every model got before the list
+ * existed. So a stale row costs at worst a missed upgrade, never a request
  * that used to work and now fails.
- *
- * Matched after `normalizeModelId` (lower-cased, `vendor/` prefix stripped),
- * longest prefix wins — the same rule as `KNOWN_OUTPUT_CAPS`. A relay alias like
- * `特价 | qwen3.8-max` matches neither table; that model is declared by hand.
  */
-const KNOWN_JSON_SCHEMA: ReadonlyArray<string> = [
-  // ── Qwen (DashScope) — the platform's own list, 2026-09 ──
-  "qwen3.7-plus", "qwen3.7-flash", "qwen3.7-max",
-  "qwen3.8-max", "qwen3.8-flash",
-  // ── OpenAI — gpt-6 held an enum the prompt contradicted, on ① and ②
-  // (landscape.md §7 第十八个样本) ──
-  "gpt-6", "gpt-5", "gpt-4.1", "gpt-4o",
-  // ── Google — `responseJsonSchema` is documented from Gemini 2.5 on ──
-  "gemini-2.5", "gemini-3",
-  // ── 火山方舟 Doubao Seed 2.1 — plan alias and dated id both. Not 2.0:
-  // 2.0-lite answered past a strict schema on both routes (第十二个样本) ──
-  "doubao-seed-2.1", "doubao-seed-2-1",
-  // ── Anthropic `output_config.format` — Claude 4.5 on, per Anthropic's list;
-  // held an enum the prompt contradicted on Sonnet 5 / 4.6, Opus 5.5 / 4.5 and
-  // Fable 5.1 (landscape.md §7 第十八个样本，补测). Both spellings: the
-  // official hyphen and the relays' dot. Haiku 4.5 is on the list, unmeasured. ──
-  "claude-fable-5", "claude-mythos-5", "claude-opus-5", "claude-sonnet-5",
-  "claude-opus-4-5", "claude-opus-4.5", "claude-opus-4-6", "claude-opus-4.6",
-  "claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8",
-  "claude-sonnet-4-5", "claude-sonnet-4.5", "claude-sonnet-4-6", "claude-sonnet-4.6",
-  "claude-haiku-4-5", "claude-haiku-4.5",
-];
-
-/** Whether this model id is documented to accept strict `json_schema` mode. */
 export function knownJsonSchemaModel(modelId: string): boolean {
-  const id = normalizeModelId(modelId);
-  return KNOWN_JSON_SCHEMA.some((prefix) => id.startsWith(prefix));
+  return catalogFact("strictSchemaModel", modelId) === true;
 }
 
 /** The transport facts the resolution reads — a subset of `ConnOptions`. */

@@ -28,9 +28,13 @@
  * The authority on any specific endpoint remains 「探测真实上限」
  * (`lib/ai/endpointProbe`), which *measures* the cap and writes it onto the
  * model. This table is what the author sees before they bother.
+ *
+ * The numbers themselves are the `maxOutput` rows of the global model catalog
+ * (`capability/cells/catalog.ts`), beside the other facts a model id carries.
  */
 
 import { readPref } from "../prefs";
+import { catalogFact } from "./capability/cells/catalog";
 
 /** The app-wide fallback cap, set in Settings → 通用. 0 / unset = no opinion. */
 export const DEFAULT_MAX_OUTPUT_KEY = "app:defaultMaxOutput";
@@ -51,76 +55,6 @@ export function defaultMaxOutput(): number {
   return Number.isFinite(n) && n > 0 ? Math.min(n, DEFAULT_MAX_OUTPUT_MAX) : 0;
 }
 
-/** modelId prefix → documented single-reply output cap, in tokens. */
-const KNOWN_OUTPUT_CAPS: ReadonlyArray<[prefix: string, tokens: number]> = [
-  // ── OpenAI ──
-  // GPT-6: 128K, the same as GPT-5 (OrcaRouter's catalog for all three, 2026-09-26).
-  ["gpt-6", 128_000],
-  ["gpt-5", 128_000],
-  ["gpt-4.1", 32_768],
-  ["gpt-4o", 16_384],
-  ["gpt-4-turbo", 4_096],
-  ["gpt-4", 8_192],
-  ["gpt-3.5", 4_096],
-  ["o4-mini", 100_000],
-  ["o3", 100_000],
-  ["o1", 100_000],
-  // ── Google ──
-  ["gemini-3", 65_536],
-  ["gemini-2.5", 65_536],
-  ["gemini-2.0", 8_192],
-  ["gemini-1.5", 8_192],
-  // ── DeepSeek ──
-  ["deepseek-reasoner", 32_768],
-  ["deepseek-chat", 8_192],
-  // DeepSeek-V4.1-Flash, the vendor's own catalogue name (api-docs.deepseek.com
-  // 模型 & 价格, 2026-09): 1M window, 384K cap. Its id shares no prefix with any
-  // row above — `deepseek-flash` matched nothing and fell through to the
-  // app-wide default, which on an author who never filled the field in is a
-  // silent truncation rather than a wrong number.
-  ["deepseek-flash", 393_216],
-  // ── Qwen (DashScope) ──
-  ["qwen-max", 8_192],
-  ["qwen-plus", 8_192],
-  ["qwen-turbo", 8_192],
-  // ── 千问AI平台 catalogue, 2026-09 (docs/api/qianwen-compat-plan.md P6) ──
-  // Numbers are the platform's model pages; the third-party models are listed
-  // under the bare ids the platform uses (`kimi-k3`, `glm-5.2`), which is also
-  // what the vendors' own endpoints call them. Planning-only, per the header.
-  ["qwen3.8-flash", 131_072],
-  ["qwen3.7-flash", 131_072],
-  ["qwen3-vl-plus", 32_768],
-  ["deepseek-v4-pro", 393_216],
-  ["glm-5.2", 131_072],
-  ["kimi-k3", 1_000_000],
-  // ── 智谱 BigModel — the vendor's 核心参数 table, 2026-09 (landscape.md §7
-  // 第十四个样本; 4.5-air's 98,304 measured: one over is a 400 naming the range).
-  // `glm-5` covers every 5.x id (5-turbo, 5.1–5.3, 5.3-flash(x), 5v-turbo); the
-  // two vision rows exist because their text siblings' prefix would claim them.
-  ["glm-5", 131_072],
-  ["glm-4.7", 131_072],
-  ["glm-4.6", 131_072],
-  ["glm-4.6v", 32_768],
-  ["glm-4.5", 98_304],
-  ["glm-4.5v", 16_384],
-  ["minimax-m2.5", 32_768],
-];
-
-/**
- * Strip what a relay or a deployment adds around the model's own name:
- * `openai/gpt-4o`, `gpt-4o-2024-11-20`, `azure-gpt-4o`. The date suffix is left
- * alone — prefix matching steps over it — but the vendor prefix has to go or
- * nothing matches for OpenRouter-style ids.
- *
- * Exported for the other prefix table keyed by model id (`jsonMode.ts`'s
- * strict-schema list), so the two agree on what a model is called.
- */
-export function normalizeModelId(modelId: string): string {
-  const id = modelId.trim().toLowerCase();
-  const slash = id.lastIndexOf("/");
-  return slash >= 0 ? id.slice(slash + 1) : id;
-}
-
 /**
  * The documented output cap for this model id, or null when nothing is known.
  *
@@ -128,13 +62,7 @@ export function normalizeModelId(modelId: string): string {
  * Anthropic ids deliberately return null — see the file header.
  */
 export function knownMaxOutput(modelId: string): number | null {
-  const id = normalizeModelId(modelId);
-  let best: [string, number] | null = null;
-  for (const entry of KNOWN_OUTPUT_CAPS) {
-    if (!id.startsWith(entry[0])) continue;
-    if (!best || entry[0].length > best[0].length) best = entry as [string, number];
-  }
-  return best ? best[1] : null;
+  return catalogFact("maxOutput", modelId) ?? null;
 }
 
 /**

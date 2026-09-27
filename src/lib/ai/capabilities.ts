@@ -13,11 +13,11 @@
  *   - {@link CAPABILITY_RULES}: what the *protocol* says about a capability —
  *     which families spell it at all, and what to assume of a platform that
  *     has said nothing.
- *   - {@link PLATFORM_CAPABILITIES}: what each *platform* was measured to do,
+ *   - {@link PLATFORM_CELLS}: what each *platform* was measured to do,
  *     keyed platform × family × capability, with an optional model-id matcher
  *     as the third axis. Endpoint-run tools live here too: which tool a wire
  *     runs is a fact about the platform and the model id, like any other.
- *   - {@link UPSTREAM_CAPABILITIES}: on a relay, what each upstream behind it
+ *   - {@link UPSTREAM_CELLS}: on a relay, what each upstream behind it
  *     was measured to do — the same cells, consulted before the relay's own
  *     when the model's upstream is known (`relayUpstream.ts` resolves it).
  *
@@ -44,8 +44,8 @@ import { hasCapability, type CapabilityModel } from "./capability/resolve";
 
 export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type CapabilityId } from "./capability/facts";
 export { CAPABILITY_RULES } from "./capability/rules";
-export { PLATFORM_CAPABILITIES } from "./capability/cells/platform";
-export { UPSTREAM_CAPABILITIES } from "./capability/cells/upstream";
+export { PLATFORM_CELLS, platformModelCalibration, platformResponsesInclude } from "./capability/cells/platform";
+export { UPSTREAM_CELLS } from "./capability/cells/upstream";
 export { capabilityVerdict, familyVerdict, hasCapability, upstreamApplies } from "./capability/resolve";
 
 /** The two OpenAI wires — the only ones whose effort ladder the two effort cells speak about. */

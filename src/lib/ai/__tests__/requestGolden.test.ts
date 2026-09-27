@@ -39,12 +39,13 @@ import type { StreamOptions, ToolDefinition } from "../types";
  * Model ids that some table singles out, one or two per table: DashScope's
  * code-interpreter lists (both wires, Responses only, neither), a relay's Kiro
  * Claude, OpenAI's and OrcaRouter's GPT ids with effort cells, and one id from
- * each per-platform calibration and each model-id prefix list.
+ * each per-platform calibration and each model-id prefix list, and a
+ * non-reasoning id (xAI's `include` is withheld from it).
  */
 const MODEL_IDS = [
   "qwen3.5-plus", "qwen3.8-flash", "no-such-model", "[特价kiro量]claude-opus-5",
   "gpt-5.6-sol", "openai/gpt-5.6-sol", "openai/gpt-6-astra",
-  "claude-sonnet-5", "gemini-3.8-flash", "glm-5.3", "deepseek-v4-pro",
+  "claude-sonnet-5", "gemini-3.8-flash", "glm-5.3", "deepseek-v4-pro", "grok-4-fast-non-reasoning",
 ];
 
 /** On a relay only: every upstream, with a model its measurements cover and one they do not. */

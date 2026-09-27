@@ -497,6 +497,51 @@ summary: reasoning_effort=max structured:response_format=json_object
 POST https://api.minimaxi.com/v1/chat/completions
 {"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
+### grok-4-fast-non-reasoning · bare
+summary: structured:response_format=json_object
+- plain
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://api.minimaxi.com/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
 ## anthropic · anthropic_compat
 
 ### qwen3.5-plus · bare
@@ -993,3 +1038,48 @@ summary: thinking.type=adaptive output_config.effort=max
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+
+### grok-4-fast-non-reasoning · bare
+summary: thinking.type=adaptive
+- plain
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: thinking.type=adaptive tools=web_search
+- plain
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:output_config.format=json_schema
+- plain (json json_schema)
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: thinking.type=adaptive output_config.effort=high
+- plain
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: thinking.type=adaptive output_config.effort=low
+- plain
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: thinking.type=adaptive output_config.effort=max
+- plain
+POST https://api.minimaxi.com/anthropic/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}

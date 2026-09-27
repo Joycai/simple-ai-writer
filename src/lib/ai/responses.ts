@@ -62,9 +62,10 @@
 import { fetch } from "../http";
 import { reasoningBody, resolveThinkingCategory } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
-import { platformResponsesInclude, wireOf, type PlatformId } from "./platforms";
+import { wireOf, type PlatformId } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { effortOnWire, hasCapability } from "./capabilities";
+import { effortOnWire, hasCapability, platformResponsesInclude } from "./capabilities";
+import { catalogFact } from "./capability/cells/catalog";
 import { capabilityModelOf } from "./relayUpstream";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
@@ -229,7 +230,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const costPlatform = costReportingPlatform(opts);
   // Asked with the relay upstream: behind some, a temperature is rewritten to 1
   // or fails the request, and one appends a guard to `instructions`
-  // (capabilities.ts UPSTREAM_CAPABILITIES).
+  // (capabilities.ts UPSTREAM_CELLS).
   const capModel = capabilityModelOf(opts);
   const { instructions, input } = toResponsesInput(
     opts.messages, opts.modelId, hasCapability("instructionsField", wire, capModel) ? "instructions" : "developer",
@@ -241,10 +242,11 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
   const sendsTemperature = opts.temperature !== undefined
     && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
   const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;
-  // Not for a model that has no reasoning to encrypt: OpenAI answers that
-  // combination with a 400, and xAI's non-reasoning ids were never measured
-  // with it — the include buys nothing there and risks the whole route.
-  const include = /non-reasoning/i.test(opts.modelId) ? [] : platformResponsesInclude(wire.platform);
+  // Not for a model that has no reasoning to encrypt (the catalog's `reasons`
+  // rows): OpenAI answers that combination with a 400, and xAI's non-reasoning
+  // ids were never measured with it — the include buys nothing there and risks
+  // the whole route.
+  const include = catalogFact("reasons", opts.modelId) === false ? [] : platformResponsesInclude(wire.platform);
   const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
     thinkingOff: (reasoning?.reasoning as { effort?: unknown } | undefined)?.effort === "none",
   }, opts.relayUpstream);

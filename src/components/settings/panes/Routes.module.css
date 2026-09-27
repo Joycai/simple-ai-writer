@@ -298,7 +298,7 @@ button.badge:focus-visible {
 .cellNo {
   color: var(--color-text-ghost);
 }
-/* A cell decided by the relay's upstream (UPSTREAM_CAPABILITIES), not the platform. */
+/* A cell decided by the relay's upstream (UPSTREAM_CELLS), not the platform. */
 .upstreamTag {
   margin-left: 4px;
   padding: 0 3px;

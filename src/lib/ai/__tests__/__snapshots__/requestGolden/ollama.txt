@@ -496,3 +496,48 @@ summary: reasoning_effort=max structured:response_format=json_object
 - plain
 POST http://localhost:11434/v1/chat/completions
 {"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### grok-4-fast-non-reasoning · bare
+summary: structured:response_format=json_object
+- plain
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST http://localhost:11434/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}

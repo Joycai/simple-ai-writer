@@ -13,11 +13,12 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CAPABILITIES, SERVER_TOOL_CAPABILITIES, UPSTREAM_CAPABILITIES,
+  CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CELLS, SERVER_TOOL_CAPABILITIES, UPSTREAM_CELLS,
   capabilityVerdict, effortMenuOnWire, effortOnWire, familyVerdict, hasCapability,
   type CapabilityId,
 } from "../capabilities";
 import { RELAY_UPSTREAMS, capabilityModelOf } from "../relayUpstream";
+import { patternMatches } from "../capability/modelId";
 import { PLATFORM_IDS, platformEndpoints, type Wire } from "../platforms";
 import { SERVER_TOOL_IDS } from "../serverTools";
 import type { ProtocolFamily } from "../types";
@@ -38,10 +39,13 @@ const NO_SUCH_MODEL = "no-such-model";
 function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family: ProtocolFamily): string {
   if (!platformEndpoints(platform).some((e) => e.family === family)) return "";
   const v = familyVerdict(id, platform, family);
-  const perUpstream = !!PLATFORM_CAPABILITIES[platform].relay && upstreamCell(id, family).some((c) => c !== undefined);
+  const perUpstream = !!PLATFORM_CELLS[platform].relay && upstreamCell(id, family).some((c) => c !== undefined);
   if (v.status === "no") return perUpstream ? "· 按上游" : "·";
-  const families = PLATFORM_CAPABILITIES[platform].families;
-  const matcher = typeof (families?.[family]?.[id] ?? families?.all?.[id]) === "object";
+  // Decided per model id: the block that owns the capability lists ids for it, or says "per-model".
+  const families = PLATFORM_CELLS[platform].families;
+  const owner = [families?.[family], families?.all]
+    .find((b) => b && (b[id] !== undefined || !!b.models?.some((r) => r.set[id] !== undefined)));
+  const matcher = owner?.[id] === "per-model" || !!owner?.models?.some((r) => r.set[id] !== undefined);
   const perModel = matcher || familyVerdict(id, platform, family, { modelId: NO_SUCH_MODEL }).reason === "model-unlisted";
   return (v.status === "yes" ? "✓" : "?") + (perModel ? " 按模型" : "") + (perUpstream ? " 按上游" : "") + ` ${v.reason}`;
 }
@@ -49,7 +53,7 @@ function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family:
 /** Each upstream's own cell for this capability and family, in `RELAY_UPSTREAMS` order. */
 function upstreamCell(id: CapabilityId, family: ProtocolFamily): (boolean | undefined)[] {
   return RELAY_UPSTREAMS.map((u) => {
-    const f = UPSTREAM_CAPABILITIES[u].families;
+    const f = UPSTREAM_CELLS[u].families;
     return f[family]?.[id] ?? f.all?.[id];
   });
 }
@@ -61,7 +65,7 @@ function renderUpstreams(): string[] {
     "中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。",
     "上游的格子先于平台格生效，只作用于画像覆盖的模型（见表头各上游的作用域）。`✓` 实测可用 · `·` 实测不生效 · 空 = 不写，落回平台格与规则。",
     "",
-    `| 能力 | 族 | ${RELAY_UPSTREAMS.map((u) => `${u}（${UPSTREAM_CAPABILITIES[u].modelsLabel}）`).join(" | ")} |`,
+    `| 能力 | 族 | ${RELAY_UPSTREAMS.map((u) => `${u}（${UPSTREAM_CELLS[u].modelsLabel}）`).join(" | ")} |`,
     `| --- | --- | ${RELAY_UPSTREAMS.map(() => "---").join(" | ")} |`,
   ];
   for (const id of CAPABILITY_IDS) {
@@ -115,8 +119,9 @@ describe("a private capability does not leak", () => {
   it("is `no` wherever no cell lists it — a relay excepted only for a rule that says so", () => {
     expect(PRIVATE.length).toBeGreaterThan(0);
     for (const id of PRIVATE) for (const platform of PLATFORM_IDS) for (const family of FAMILIES) {
-      const caps = PLATFORM_CAPABILITIES[platform];
-      const listed = caps.families?.[family]?.[id] !== undefined || caps.families?.all?.[id] !== undefined;
+      const caps = PLATFORM_CELLS[platform];
+      const listed = [caps.families?.[family], caps.families?.all]
+        .some((b) => b?.[id] !== undefined || !!b?.models?.some((r) => r.set[id] !== undefined));
       if (listed) continue;
       const relayed = !!caps.relay && !!CAPABILITY_RULES[id].relay && CAPABILITY_RULES[id].families.includes(family)
         && (CAPABILITY_RULES[id].requires ?? []).every((dep) => familyVerdict(dep, platform, family).status !== "no");
@@ -126,7 +131,7 @@ describe("a private capability does not leak", () => {
 
   it("is never `yes` on a relay", () => {
     for (const id of PRIVATE) for (const platform of PLATFORM_IDS) {
-      if (!PLATFORM_CAPABILITIES[platform].relay) continue;
+      if (!PLATFORM_CELLS[platform].relay) continue;
       for (const family of FAMILIES) {
         expect(familyVerdict(id, platform, family).status, `${id} on ${platform}/${family}`).not.toBe("yes");
       }
@@ -374,8 +379,8 @@ describe("relay upstreams", () => {
 
     it("names its models as its measurements scope them", () => {
       for (const up of RELAY_UPSTREAMS) {
-        const { models, modelsLabel } = UPSTREAM_CAPABILITIES[up];
-        expect(models.test(modelsLabel.toLowerCase()), up).toBe(true);
+        const { models, modelsLabel } = UPSTREAM_CELLS[up];
+        expect(patternMatches(models, modelsLabel.toLowerCase()), up).toBe(true);
       }
     });
 

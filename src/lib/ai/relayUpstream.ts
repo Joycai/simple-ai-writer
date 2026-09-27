@@ -14,12 +14,12 @@
  * longest matching prefix → the upstream's product name in the id (`kiro`,
  * `bedrock`; nothing a relay owner invents) → none. Only on a relay platform.
  *
- * What each upstream was measured to do is `UPSTREAM_CAPABILITIES` in
+ * What each upstream was measured to do is `UPSTREAM_CELLS` in
  * `capabilities.ts`; this file decides which one a model has. Plan:
  * docs/api/capability-gating-plan.md §8.11.
  */
 
-import { PLATFORM_CAPABILITIES, capabilityVerdict, type CapabilityId } from "./capabilities";
+import { PLATFORM_CELLS, capabilityVerdict, type CapabilityId } from "./capabilities";
 import { providerWire, type PlatformId } from "./platforms";
 import type { ApiStandard } from "./types";
 
@@ -64,7 +64,7 @@ function isRelayUpstream(v: unknown): v is RelayUpstreamId {
 
 /** A platform with no host of its own, which may front anything — the only kind an upstream means anything on. */
 export function isRelayPlatform(platform: PlatformId | undefined): boolean {
-  return !!platform && !!PLATFORM_CAPABILITIES[platform]?.relay;
+  return !!platform && !!PLATFORM_CELLS[platform]?.relay;
 }
 
 /** The upstream a product name in the id names. Owners' abbreviations are never guessed at. */

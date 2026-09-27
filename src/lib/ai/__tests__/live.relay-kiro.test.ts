@@ -13,7 +13,7 @@
  * dropped, `max_tokens` is ignored, Chat's `reasoning_effort: "max"` turns
  * thinking off). If one starts failing, the relay changed — re-probe and
  * update docs/api/landscape.md §7 第十五个样本 (2026-09-23), which these facts
- * pin, and the `kiro` entry of `UPSTREAM_CAPABILITIES` in capabilities.ts.
+ * pin, and the `kiro` entry of `UPSTREAM_CELLS` in capabilities.ts.
  */
 import { describe, expect, it } from "vitest";
 import { streamCompletion } from "../index";
