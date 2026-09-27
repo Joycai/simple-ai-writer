@@ -25,15 +25,16 @@
  *      migration. An id this build does not know reads as `custom`.
  *
  * What a platform *can do* — server tools, PDF input, a vendor's private knobs —
- * moved to the capability table (`capabilities.ts`); this file keeps where a
- * platform lives (hosts, routes) and what it knows about its own model ids.
+ * and what it knows about its own model ids (the values a new row starts with,
+ * the `include` its Responses route needs) live in the capability cells
+ * (`capability/cells/platform.ts`); this file keeps where a platform lives:
+ * hosts, routes, cost reporting.
  *
  * Every entry should point back at a measurement — the `source` field says
  * which one.
  */
 
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode, type ProtocolFamily } from "./types";
-import type { ThinkingCategoryId } from "./reasoning";
 
 export type PlatformId =
   | "openai"
@@ -90,26 +91,6 @@ const GENERIC_ENDPOINTS: readonly PlatformEndpoint[] = [
   { family: "anthropic", path: "" },
 ];
 
-/**
- * What a platform knows about one of its own model ids — the values a model
- * row should start with when the author adds that id. A prefill, never a
- * runtime default: the model drawer writes these into the form (only into
- * fields the author has not touched) and the row stores them like anything
- * the author typed, so nothing on the wire depends on this table afterwards.
- *
- * It exists because the family default is wrong for a whole platform: on 智谱
- * the ① family's `reasoning_effort` fails silently on every one of eleven
- * models, in three different ways (docs/api/zhipu-plan.md G11).
- */
-export interface ModelCalibration {
-  thinkingCategory?: ThinkingCategoryId;
-  contextSize?: number;
-  maxOutput?: number;
-  /** Absent = the drawer's own default (`text`). */
-  type?: "multimodal";
-  pdfInput?: true;
-}
-
 interface PlatformProfile {
   /** `scheme://host` of the platform's own server; absent = the author types it (New API, custom). */
   origin?: string;
@@ -128,20 +109,6 @@ interface PlatformProfile {
    */
   hosts: readonly string[];
   /**
-   * Per-model prefills, keyed by the exact lower-case model id the platform
-   * serves ({@link ModelCalibration}). Only ids a sample measured.
-   */
-  models?: Readonly<Record<string, ModelCalibration>>;
-  /**
-   * `include` entries the Responses route must ask for. Only for what a
-   * platform withholds unless asked: xAI returns a reasoning item's
-   * `encrypted_content` only on request, and the echo without it still 200s —
-   * the next turn just silently starts its reasoning over (landscape.md §7
-   * 第十一个样本). Absent = send no `include`, which is what the relays that
-   * attach it unasked were measured with (responses.md §2.4).
-   */
-  responsesInclude?: readonly string[];
-  /**
    * The platform reports each request's cost in its response, and the number
    * is what it actually charged — only where a sample compared it against the
    * platform's own ledger. That is the trust boundary for billing: a reported
@@ -158,67 +125,6 @@ interface PlatformProfile {
   /** Where the entries above were measured. */
   source: string;
 }
-
-/**
- * 智谱's eleven chat models, all measured 2026-09-19 (landscape.md §7 第十四个样本
- * 「逐模型校准」). Three thinking controls: the 5.3 generation cannot stop and
- * takes low/high/max (`glm`); 5.2 stops only via the switch and has two real
- * levels (`glm-effort`); everything older ignores reasoning_effort (`glm-switch`).
- * Output caps are the measured `max_tokens` bounds, except glm-4.5 — it
- * accepts 131,072 but its documented cap is 96K, and the lower number never 400s.
- */
-const GLM_1M = 1_048_576;
-const GLM_200K = 204_800;
-const GLM_128K = 131_072;
-const ZHIPU_MODELS: Record<string, ModelCalibration> = {
-  "glm-5.3": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072 },
-  "glm-5.3-flash": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072, type: "multimodal", pdfInput: true },
-  "glm-5.3-flashx": { thinkingCategory: "glm", contextSize: GLM_1M, maxOutput: 131_072, type: "multimodal", pdfInput: true },
-  "glm-5.2": { thinkingCategory: "glm-effort", contextSize: GLM_1M, maxOutput: 131_072 },
-  "glm-5.1": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
-  "glm-5": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
-  "glm-5-turbo": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
-  "glm-4.7": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
-  "glm-4.6": { thinkingCategory: "glm-switch", contextSize: GLM_200K, maxOutput: 131_072 },
-  "glm-4.5": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
-  "glm-4.5-air": { thinkingCategory: "glm-switch", contextSize: GLM_128K, maxOutput: 98_304 },
-};
-
-/**
- * DeepSeek's two listed models (landscape.md §2.1, `/models` 2026-09-17). The
- * `deepseek` category is the point: the family default spells off as
- * `reasoning_effort:"none"`, which DeepSeek does not read as off — its off is
- * the `thinking:{type:"disabled"}` switch (qianwen-compat-plan.md P1). Without
- * this a hand-added row thought on after the author pressed 关.
- */
-const DEEPSEEK_MODELS: Record<string, ModelCalibration> = {
-  "deepseek-flash": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216, type: "multimodal" },
-  "deepseek-v4-pro": { thinkingCategory: "deepseek", contextSize: 1_048_576, maxOutput: 393_216 },
-};
-
-/**
- * OrcaRouter's ten paid models measured 2026-09-26 / -27 (landscape.md §7
- * 第十八个样本, its 再补测 and GPT 全家补测). Context and output caps are the
- * catalog's own `context_length` / `max_completion_tokens` (`GET /v1/models`).
- * Every one lists `file` among its input modalities; PDF was read end to end on
- * all six GPT ids (① ②), sonnet-5 and opus-5.5 (④) and gemini-3.8-flash (③).
- * No thinking category: each route's family default is the one the sample
- * measured with.
- */
-const ORCA_OPENAI = { contextSize: 1_050_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
-const ORCA_CLAUDE = { contextSize: 1_000_000, maxOutput: 128_000, type: "multimodal", pdfInput: true } as const;
-const ORCAROUTER_MODELS: Record<string, ModelCalibration> = {
-  "openai/gpt-6-luna": ORCA_OPENAI,
-  "openai/gpt-6-sol": ORCA_OPENAI,
-  "openai/gpt-6-astra": ORCA_OPENAI,
-  "openai/gpt-5.6-luna": ORCA_OPENAI,
-  "openai/gpt-5.6-terra": ORCA_OPENAI,
-  "openai/gpt-5.6-sol": ORCA_OPENAI,
-  "anthropic/claude-sonnet-5": ORCA_CLAUDE,
-  "anthropic/claude-opus-5.5": ORCA_CLAUDE,
-  "anthropic/claude-fable-5.1": ORCA_CLAUDE,
-  "google/gemini-3.8-flash": { contextSize: 1_048_576, maxOutput: 65_536, type: "multimodal", pdfInput: true },
-};
 
 const PROFILES: Record<PlatformId, PlatformProfile> = {
   openai: {
@@ -248,7 +154,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "anthropic", path: "/anthropic" },
     ],
     hosts: ["api.deepseek.com"],
-    models: DEEPSEEK_MODELS,
     source: "landscape.md §2.1 — no server tools on Chat Completions; the Anthropic-shaped path is unmeasured",
   },
   dashscope: {
@@ -281,7 +186,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
       { family: "openai", path: "/v1" },
     ],
     hosts: ["api.x.ai"],
-    responsesInclude: ["reasoning.encrypted_content"],
     // web_search measured on grok-4.3; web_extractor and the image searches
     // are DashScope's names and are refused.
     source: "landscape.md §7 第十一个样本 (2026-09-14)",
@@ -355,7 +259,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     // detection is turned off. Not offered until it is wired (plan P2).
     // Documented `auto` only; measured: 5.3-flash / 4.7 ignore forcing, 4.7
     // refuses a named one while thinking with a bare 1210.
-    models: ZHIPU_MODELS,
     source: "landscape.md §7 第十四个样本 (2026-09-19)",
   },
   orcarouter: {
@@ -388,7 +291,6 @@ const PROFILES: Record<PlatformId, PlatformProfile> = {
     //   was rewritten into the OpenAI shape, ④'s with `type: "<nil>"` and ③'s
     //   with `invalid_argument` whatever went wrong; the HTTP status and the
     //   message are the signal.
-    models: ORCAROUTER_MODELS,
     source: "landscape.md §7 第七个样本 (probe, free tier) + 第十八个样本 (paid models, 2026-09-26) — relay; Responses and Anthropic web_search measured",
   },
   newapi: {
@@ -566,19 +468,9 @@ export function platformToStore(p: { platform?: PlatformId; baseUrl: string; api
   return p.platform === inferPlatform(p.baseUrl, p.apiStandard) ? undefined : p.platform;
 }
 
-/** What this platform knows about one of its model ids, or undefined — see {@link ModelCalibration}. */
-export function platformModelCalibration(id: PlatformId, modelId: string): ModelCalibration | undefined {
-  return PROFILES[id]?.models?.[modelId.trim().toLowerCase()];
-}
-
 /** Where a platform's entries were measured — for tests and the drawer's tooltip. */
 export function platformSource(id: PlatformId): string {
   return PROFILES[id].source;
-}
-
-/** `include` entries a platform's Responses route must send — see {@link PlatformProfile.responsesInclude}. */
-export function platformResponsesInclude(id: PlatformId): readonly string[] {
-  return PROFILES[id]?.responsesInclude ?? [];
 }
 
 /** Whether (and how) a platform reports each request's cost — see {@link PlatformProfile.reportsCost}. */

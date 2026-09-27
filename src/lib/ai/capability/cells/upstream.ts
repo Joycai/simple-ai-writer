@@ -7,6 +7,7 @@
 import type { ProtocolFamily } from "../../types";
 import type { RelayUpstreamId } from "../../relayUpstream";
 import type { CapabilityId } from "../facts";
+import type { ModelPattern } from "../modelId";
 
 /**
  * What an upstream behind a relay applies to, and what it was measured doing.
@@ -18,7 +19,7 @@ import type { CapabilityId } from "../facts";
  */
 interface UpstreamCapabilities {
   /** The models the measurements cover. Any other id is treated as having no upstream. */
-  models: RegExp;
+  models: ModelPattern;
   /**
    * Those models' family name as the drawer says it to the author ("only
    * measured with …"). A product name, the same in every language; held to
@@ -51,7 +52,7 @@ const GPT = /gpt/;
  * An absent cell falls to the relay's own cell and the rule, as it would
  * with no upstream — write only what a sample saw.
  */
-export const UPSTREAM_CAPABILITIES: Record<RelayUpstreamId, UpstreamCapabilities> = {
+export const UPSTREAM_CELLS: Record<RelayUpstreamId, UpstreamCapabilities> = {
   /**
    * Kiro (AWS's IDE backend, translated by the relay). Named by the upstream's
    * product, so relays spell it alike — `[特价kiro量]claude-opus-5`,

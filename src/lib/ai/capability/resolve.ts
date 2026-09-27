@@ -12,8 +12,9 @@ import type { ThinkingCategoryId } from "../reasoning";
 import type { RelayUpstreamId } from "../relayUpstream";
 import type { CapabilityId, CapabilityReason, CapabilityStatus, CapabilityVerdict } from "./facts";
 import { CAPABILITY_RULES } from "./rules";
-import { PLATFORM_CAPABILITIES, type CapabilityCell } from "./cells/platform";
-import { UPSTREAM_CAPABILITIES } from "./cells/upstream";
+import { PLATFORM_CELLS, platformCell } from "./cells/platform";
+import { UPSTREAM_CELLS } from "./cells/upstream";
+import { patternMatches, rawModelKey } from "./modelId";
 
 /** What is known of the model. Every field optional: an absent one is not consulted. */
 export interface CapabilityModel {
@@ -35,23 +36,18 @@ export interface CapabilityModel {
 
 const verdict = (status: CapabilityStatus, reason: CapabilityReason): CapabilityVerdict => ({ status, reason });
 
-function cellFor(platform: PlatformId, family: ProtocolFamily, id: CapabilityId): CapabilityCell | undefined {
-  const families = PLATFORM_CAPABILITIES[platform]?.families;
-  return families?.[family]?.[id] ?? families?.all?.[id];
-}
-
 /** Whether an upstream's measurements cover this model id. A blank id is covered by none. */
 export function upstreamApplies(upstream: RelayUpstreamId, modelId: string | undefined): boolean {
-  const mid = modelId?.trim().toLowerCase();
-  return !!mid && UPSTREAM_CAPABILITIES[upstream].models.test(mid);
+  const key = rawModelKey(modelId);
+  return !!key && patternMatches(UPSTREAM_CELLS[upstream].models, key);
 }
 
 function upstreamCellFor(
   platform: PlatformId, family: ProtocolFamily, id: CapabilityId, model: CapabilityModel,
 ): boolean | undefined {
-  if (!model.upstream || !PLATFORM_CAPABILITIES[platform]?.relay) return undefined;
+  if (!model.upstream || !PLATFORM_CELLS[platform]?.relay) return undefined;
   if (!upstreamApplies(model.upstream, model.modelId)) return undefined;
-  const families = UPSTREAM_CAPABILITIES[model.upstream].families;
+  const families = UPSTREAM_CELLS[model.upstream].families;
   return families[family]?.[id] ?? families.all?.[id];
 }
 
@@ -81,23 +77,21 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   if (up === false) return verdict("no", "upstream");
   if (up === true) return verdict("yes", "upstream");
 
-  const cell = cellFor(platform, family, id);
-  if (cell === false) return verdict("no", "platform-absent");
-  if (cell === true) return verdict("yes", "measured");
-  if (cell) {
-    // Blank = nothing typed yet: the axis is not consulted.
-    const mid = model.modelId?.trim().toLowerCase();
-    if (mid && cell.refuses?.some((re) => re.test(mid))) return verdict("no", "model");
-    if (cell.runs) {
-      if (!mid) return verdict("yes", "measured");
-      return cell.runs.some((re) => re.test(mid)) ? verdict("yes", "measured") : verdict("unknown", "model-unlisted");
-    }
-    // A refuses-only matcher: the ids it does not name fall to the rule below.
+  // The platform's cell: a model-id row, else the block's own value. A row is a
+  // measurement about that id and wins over the block (cells/platform.ts).
+  const cell = platformCell(platform, family, id, model.modelId);
+  if (cell?.byRow) return cell.cell ? verdict("yes", "measured") : verdict("no", "model");
+  if (cell?.cell === false) return verdict("no", "platform-absent");
+  if (cell?.cell === true) return verdict("yes", "measured");
+  if (cell?.cell === "per-model") {
+    // Blank = nothing typed yet: the platform does run it for some ids.
+    return rawModelKey(model.modelId) ? verdict("unknown", "model-unlisted") : verdict("yes", "measured");
   }
+  // No cell, or rows that single other ids out: the rule below decides.
 
   if (!rule.families.includes(family)) return verdict("no", "family");
   if (rule.origin === "private") {
-    return rule.relay && PLATFORM_CAPABILITIES[platform]?.relay
+    return rule.relay && PLATFORM_CELLS[platform]?.relay
       ? verdict(rule.relay, "relay")
       : verdict("no", "platform-unlisted");
   }

@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0、P1 已落成（§9.1、§9.2），P2 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P2 已落成（§9.1–§9.3），P3 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -509,6 +509,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | B7 | 规范化 id 去掉作者前缀与 `[…]` | P6b | 中转站上 `[x]gpt-5…`、`[x]claude-…` 开始命中目录。自动档里，Azure 上游 GPT 的 JSON 会提到 json_schema（该上游 `jsonSchema: true`）；规划用的上限会变。排在 P6 之后，所以不会再改 Anthropic 的 `max_tokens`（§3.1） | 同一个模型不因前缀失去已知事实 |
 | B10 | 「将发送」摘要读计划 | P5 | 摘要写线上真实的 effort（gpt-6-astra 设 off 显示 `low`）；④ 行总显示 `max_tokens`（§3.8） | 摘要与适配器逐字一致，不再靠测试钉 |
 | B11 | Chat 与 Gemini 适配器的温度开始问格 | P5 | 零：这两族今天没有温度的 `false` 格 | 同 B3 |
+| B12 | 火山方舟 Plan 上手加的 Doubao Seed id 得到预填 | P2 | 只在模型抽屉：窗口、上限、多模态、PDF、`doubao` 类目，与起步行相同。线上请求零差异 | 起步行与手加的行不再不一致（§9.3） |
 | B8 | agent 的思考回退问 `effortMenuOnWire` | P4 | OrcaRouter gpt-6-astra 在预算耗尽时从「关思考」变成「提示立即作答」 | 今天那个 off 在线上是 low，回退其实没生效 |
 | B9 | `vlHighResolution` 带着 subject（id 与上游）裁决 | P5 | 零：没有哪个上游写了这一格。请求路径上 subject 仍不带模型类型——`ConnOptions` 没有这个字段，本方案不加 | 与其它能力同一种问法 |
 
@@ -709,6 +710,68 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 3. **`ProviderDrawer.tsx` 的 `pickPlatform` 改问 `platformHasHosts`，而不是 §6 写的 `isRelayPlatform`。** 这一处的语义是「没有主机名能认出的平台，改地址时保留作者的选择」。
    `platformForAddress` 用的正是 `platformHasHosts` 这个判据。中转站标记今天恰好圈出同一组平台（newapi、custom），但语义不同。
    B5 零差异；棘轮里 `ProviderDrawer.tsx` 的 platform 上限从 4 降到 2，剩下的两处是 ComfyUI 的界面分支。
+
+### 9.3 P2：模型 id 轴合一（2026-09-27）
+
+这一期拆成两个提交：
+
+1. **先钉住旧行为**，不动表。`modelIdAxis.test.ts` 用当时的代码生成 `__snapshots__/modelIdAxis.txt`：
+   约 110 个 id，每个取 5 种写法（原样、大写带空格、带命名空间、带日期、带中转方括号），记下四样东西：
+   - 输出上限；
+   - 是否在严格 schema 名单上；
+   - 各平台的校准；
+   - 12 个按模型裁决的格，对每个 id 的裁决。
+
+   请求体金标同时加了一个 xAI 的 non-reasoning id，把 Responses 的 `include` 也钉住。
+2. **再重构**。
+
+新增两个文件：
+
+- `capability/modelId.ts`：
+  - 一种模式类型 `ModelPattern`，可以是精确 id、普通 `startsWith` 或正则；
+  - `bySpecificity` 把行排成「精确 → 更长的前缀 → 正则按书写顺序」；
+  - `rowSetting` 取第一个「说了这个事实、且匹配」的行；
+  - 两种匹配键：`rawModelKey`（小写去空格）与 `canonicalModelId`（再去掉 `vendor/`）。
+- `capability/cells/catalog.ts`：全局模型目录，合并了三处——
+  - `KNOWN_OUTPUT_CAPS`；
+  - `KNOWN_JSON_SCHEMA`（前缀完全相同的两行并成一行）；
+  - `responses.ts` 里的 `/non-reasoning/i`。
+
+  `knownMaxOutput` / `knownJsonSchemaModel` 保留原签名，改为读目录；`normalizeModelId` 删除，由 `canonicalModelId` 代替。
+
+平台格的改动（`cells/platform.ts`）：
+
+- `ModelMatcher {runs, refuses}` 改成块上的值 `"per-model"`，加上 `models` 行。refuses 行写在前面。
+- 「块只要为某个能力写了行就拥有它」，这条语义由 `platformCell` 一处实现，与旧的 `cellFor` 等价。
+- `PROFILES[*].models` 的校准迁成 `all` 块里的精确 id 行：
+  - `set` 里放思考类目、窗口、上限；
+  - `prefill` 里放类型与 PDF。
+- 起步行里写死的 Doubao 三件套迁进火山方舟 Plan 的格：`doubao` 类目在 `all` 块，`doubao-switch` 在 `anthropic` 块。
+  `platformModelCalibration(platform, id, family?)` 带族时只读那一族的行。
+- xAI 的 `responsesInclude` 迁成 responses 块上的值。
+- `platformModelCalibration` 与 `platformResponsesInclude` 从 `platforms.ts` 迁到这里，经门面转出。
+  `platforms.ts` 只剩地址、主机、线路与计费上报。
+- 两张格表改名：`PLATFORM_CAPABILITIES` → `PLATFORM_CELLS`，`UPSTREAM_CAPABILITIES` → `UPSTREAM_CELLS`。
+  上游的 `models` 类型改成 `ModelPattern`。
+
+**验收**：
+
+- 请求体金标、矩阵文档零差异；
+- 模型 id 轴快照只多两行，就是 B12：`doubao-seed-2.0-lite` 的原样与大写两种写法，现在得到校准；
+- `pnpm test` 全绿，`tsc` 通过；
+- 棘轮里 `responses.ts` 的 modelId 上限降到 0；
+- 新增冲突守卫：同一个块里两个正则行命中同一个 id、却对同一个事实给出不同的值，就失败。
+  故意加一条与 refuses 冲突的 runs 时，它会报红。
+
+**与 §6 P2 原文的出入**：
+
+1. **OrcaRouter 免费档留在起步行。** `platforms.test.ts` 钉着一条既有规则：校准行只收**实测过**的 id。
+   免费档的数值来自中转站的模型页，不是样本，所以不进格。起步行里写死的 `deepseek` 类目也随之保留，并写明理由。Doubao 的三件套是第十二个样本实测过的，所以迁了。
+2. **校准里的思考类目这一期仍放在 `all` 块。** 类目 id 自带族，抽屉按族过滤，行为因此不变。
+   只有 Doubao 的 Anthropic 路由需要不同的类目，它写在 `anthropic` 块里。所有类目按族归位，等 P6 让值类事实进裁决链时再做。
+3. **`CAPABILITY_RULES` 不改名。** 它的形状从 P0 到现在没变过，名字也准确。§4 里改名为 `PROTOCOL_RULES` 的那一行作废。
+4. **`/non-reasoning/` 目录行匹配的是 `canonicalModelId`**，也就是去掉 `vendor/` 之后的 id。旧写法对原始 id 做不分大小写的匹配。
+   两者只在「命名空间那一段里含 non-reasoning」时不同，没有这样的真实 id。
 
 ## 10. 待决
 

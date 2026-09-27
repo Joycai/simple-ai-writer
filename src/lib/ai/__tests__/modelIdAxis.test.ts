@@ -10,10 +10,11 @@
  * facts updates the snapshot, and the diff names the id.
  */
 import { describe, expect, it } from "vitest";
-import { familyVerdict, type CapabilityId } from "../capabilities";
+import { PLATFORM_CELLS, familyVerdict, platformModelCalibration, type CapabilityId } from "../capabilities";
+import { patternMatches, rawModelKey } from "../capability/modelId";
 import { knownJsonSchemaModel } from "../jsonMode";
 import { knownMaxOutput } from "../modelLimits";
-import { PLATFORM_IDS, platformModelCalibration, type PlatformId } from "../platforms";
+import { PLATFORM_IDS, type PlatformId } from "../platforms";
 import type { ProtocolFamily } from "../types";
 
 /**
@@ -88,5 +89,33 @@ function axis(): string {
 describe("the model-id axis", () => {
   it("answers what the old tables answered", async () => {
     await expect(axis()).toMatchFileSnapshot("./__snapshots__/modelIdAxis.txt");
+  });
+
+  /**
+   * Rows are consulted in specificity order, and among regexes in the order
+   * written — so two regexes in one block that both match an id and disagree
+   * about a fact would make the answer depend on which was written first. That
+   * is never what a measurement means: a carve-out gets an exact id or a longer
+   * prefix, which outrank a regex by construction (capability-resolution-lld §3.2).
+   */
+  it("never has two regex rows in one block disagree about the same id", () => {
+    const clashes: string[] = [];
+    const keys = IDS.flatMap(variants).map(rawModelKey);
+    for (const [platform, cells] of Object.entries(PLATFORM_CELLS)) {
+      for (const [family, block] of Object.entries(cells.families ?? {})) {
+        const regexRows = (block?.models ?? []).filter((r) => r.match instanceof RegExp);
+        for (const key of keys) {
+          const said = new Map<string, unknown>();
+          for (const row of regexRows) {
+            if (!patternMatches(row.match, key)) continue;
+            for (const [fact, value] of Object.entries(row.set)) {
+              if (said.has(fact) && said.get(fact) !== value) clashes.push(`${platform}/${family} ${fact} ${key}`);
+              said.set(fact, value);
+            }
+          }
+        }
+      }
+    }
+    expect(clashes).toEqual([]);
   });
 });

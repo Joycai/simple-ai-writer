@@ -6,7 +6,7 @@
  * upstreams, and which one a model is behind decides what it can do. The
  * prefixes are the relay owner's own names, so they are the author's data,
  * typed here — the code only knows the upstreams and what each was measured
- * doing (`lib/ai/relayUpstream.ts`, `UPSTREAM_CAPABILITIES`).
+ * doing (`lib/ai/relayUpstream.ts`, `UPSTREAM_CELLS`).
  *
  * Wording: 「渠道」 is the provider row; 「上游」 is what sits behind a relay
  * (docs/reference/terminology.md).
@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { Select } from "../../common/Select";
 import { Field, Section } from "./ModelDrawerBits";
-import { UPSTREAM_CAPABILITIES, upstreamApplies } from "../../../lib/ai/capabilities";
+import { UPSTREAM_CELLS, upstreamApplies } from "../../../lib/ai/capabilities";
 import {
   RELAY_UPSTREAMS, bracketPrefixes,
   type RelayUpstreamChoice, type RelayUpstreamId, type ResolvedUpstream,
@@ -181,7 +181,7 @@ export function UpstreamSection({
         note={sourceLine(t, resolved, modelId)}
         noteTone={resolved.source === "inferred" || !up ? "faint" : "ok"}
         warn={up && modelId.trim() && !applies
-          ? t("aiConfig.upstream.notCovered", { models: UPSTREAM_CAPABILITIES[up].modelsLabel })
+          ? t("aiConfig.upstream.notCovered", { models: UPSTREAM_CELLS[up].modelsLabel })
           : undefined}
       >
         <Select

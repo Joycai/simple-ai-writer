@@ -475,6 +475,8 @@ deepseek "deepseek-flash" {"contextSize":1048576,"maxOutput":393216,"thinkingCat
 deepseek "  DEEPSEEK-FLASH  " {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek","type":"multimodal"}
 deepseek "deepseek-v4-pro" {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek"}
 deepseek "  DEEPSEEK-V4-PRO  " {"contextSize":1048576,"maxOutput":393216,"thinkingCategory":"deepseek"}
+volcengine-plan "doubao-seed-2.0-lite" {"contextSize":262144,"maxOutput":131072,"pdfInput":true,"thinkingCategory":"doubao","type":"multimodal"}
+volcengine-plan "  DOUBAO-SEED-2.0-LITE  " {"contextSize":262144,"maxOutput":131072,"pdfInput":true,"thinkingCategory":"doubao","type":"multimodal"}
 zhipu "glm-5.2" {"contextSize":1048576,"maxOutput":131072,"thinkingCategory":"glm-effort"}
 zhipu "  GLM-5.2  " {"contextSize":1048576,"maxOutput":131072,"thinkingCategory":"glm-effort"}
 zhipu "glm-5" {"contextSize":204800,"maxOutput":131072,"thinkingCategory":"glm-switch"}

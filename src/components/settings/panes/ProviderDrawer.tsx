@@ -17,10 +17,10 @@ import {
 } from "../../../lib/ai/safety";
 import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import {
-  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformHasHosts, platformModelCalibration,
-  platformOrigin, type PlatformId,
+  PLATFORM_IDS, platformDefaultPath, platformEndpoints, platformForAddress, platformHasHosts, platformOrigin,
+  type PlatformId,
 } from "../../../lib/ai/platforms";
-import { capabilityVerdict, hasCapability } from "../../../lib/ai/capabilities";
+import { capabilityVerdict, hasCapability, platformModelCalibration } from "../../../lib/ai/capabilities";
 import {
   activeFamily, channelEndpoints, channelHost, endpointBaseUrl, keyOptional, newChannelEndpoints, normalizeChannel,
   pinnableRoute, ROUTE_FAMILIES, ROUTE_LONG, ROUTE_SHORT, standardOf, type Endpoint,
@@ -69,13 +69,15 @@ type StarterModel = Pick<Model, "modelId" | "name"> &
  * The DeepSeek page lists `thinking` among its accepted parameters, which is
  * the `deepseek` category's dialect, so the author gets the on/off switch;
  * the other two stay on the family default (`reasoning_effort`, which the
- * relay translates per model).
+ * relay translates per model). Recommendations from the relay's pages, not
+ * measurements — which is why they are written here and not among the
+ * platform's calibration rows.
  *
  * Then three of the eight paid models the sample measured (2026-09-26), one per
  * vendor, each pinned to the route it was measured best on — the free tier
  * stays first as the zero-cost way in. Values come from the platform's
- * calibration table (`ORCAROUTER_MODELS` in lib/ai/platforms.ts), so these rows
- * and a hand-added one never disagree:
+ * calibration rows (`ORCAROUTER_MODELS` in lib/ai/capability/cells/platform.ts),
+ * so these rows and a hand-added one never disagree:
  * - GPT-6 Luna on Responses: the one route that streams a readable reasoning
  *   summary (Chat carries only the encrypted form).
  * - Claude Sonnet 5 on Messages: the response is Anthropic's own, and thinking,
@@ -140,21 +142,18 @@ const DASHSCOPE_MODELS: StarterModel[] = [
 ];
 
 /**
- * 火山方舟 Agent / Coding Plan's Doubao Seed trio (套餐概览, 2026-09-17: 256k
- * window; 128k cap, 256k for 2.1-turbo). All three are typed multimodal and
- * declared PDF readers because the sample read a picture and a PDF on both of
- * the plan's routes (docs/api/landscape.md §7 第十二个样本) — a capability the
- * author would otherwise have to guess from a model id that says nothing of
- * it. Their thinking is the `doubao` category on Chat and `doubao-switch`
- * parked for the Anthropic route: the endpoint defaults to thinking, so
- * without a declared off the author could not turn it down on either.
+ * 火山方舟 Agent / Coding Plan's Doubao Seed trio. Their values — window, caps,
+ * multimodal and PDF, the `doubao` category on Chat and `doubao-switch` parked
+ * for the Anthropic route — are the platform's calibration rows (`DOUBAO` in
+ * lib/ai/capability/cells/platform.ts, where the measurements are cited), so a
+ * starter row and a hand-added one never disagree.
  *
  * The plan's other models (DeepSeek, GLM, Kimi, MiniMax) are not listed: the
  * sample measured Doubao only, and a starter list is a recommendation.
  */
-const doubao = (modelId: string, name: string, maxOutput: number): StarterModel => ({
-  modelId, name, contextSize: 262_144, maxOutput, thinkingCategory: "doubao", type: "multimodal", pdfInput: true,
-  routes: { anthropic: { maxOutput, thinkingCategory: "doubao-switch" } },
+const doubao = (modelId: string, name: string): StarterModel => ({
+  modelId, name, ...platformModelCalibration("volcengine-plan", modelId),
+  routes: { anthropic: { ...platformModelCalibration("volcengine-plan", modelId, "anthropic") } },
 });
 /**
  * Seedream 5.0 lite and 5.0 pro — the two image models the plan serves, and the
@@ -175,9 +174,9 @@ const seedream = (modelId: string, name: string, dialect: "seedream-5-lite" | "s
   caps: { route: "ark", dialect, edit: true, maxRefs: dialect === "seedream-5-pro" ? 10 : 14 },
 });
 const VOLCENGINE_PLAN_MODELS: StarterModel[] = [
-  doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite", 131_072),
-  doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini", 131_072),
-  doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo", 262_144),
+  doubao("doubao-seed-2.0-lite", "Doubao Seed 2.0 Lite"),
+  doubao("doubao-seed-2.0-mini", "Doubao Seed 2.0 Mini"),
+  doubao("doubao-seed-2.1-turbo", "Doubao Seed 2.1 Turbo"),
   seedream("doubao-seedream-5.0-lite", "Seedream 5.0 Lite", "seedream-5-lite"),
   seedream("doubao-seedream-5.0-pro", "Seedream 5.0 Pro", "seedream-5-pro"),
 ];
@@ -197,7 +196,7 @@ const VOLCENGINE_MODELS: StarterModel[] = [
  * 智谱 BigModel — three of the eleven calibrated models (one per thinking
  * control, plus the natively multimodal one), with their values read from the
  * platform's calibration table so the starter rows and a hand-added row can
- * never disagree (lib/ai/platforms.ts `ZHIPU_MODELS`).
+ * never disagree (lib/ai/capability/cells/platform.ts `ZHIPU_MODELS`).
  */
 const zhipuStarter = (modelId: string, name: string): StarterModel => ({
   modelId, name, ...platformModelCalibration("zhipu", modelId),
