@@ -12,9 +12,12 @@
  */
 import { useTranslation } from "react-i18next";
 import type { Source } from "../../../lib/ai/capabilities";
+import type { Provider } from "../../../lib/ai/configDb";
 import { formatContextSize } from "../../../lib/ai/contextSize";
 import type { Model } from "../../../lib/ai/configDb";
+import { canonicalModelId } from "../../../lib/ai/capabilities";
 import { valueFacts } from "../../../lib/ai/modelSummary";
+import { isRelayPlatform } from "../../../lib/ai/relayUpstream";
 import type { Wire } from "../../../lib/ai/platforms";
 import { ROUTE_SHORT } from "../../../lib/ai/routes";
 import type { ProtocolFamily } from "../../../lib/ai/types";
@@ -25,7 +28,7 @@ import r from "./Routes.module.css";
 type RouteValues = Pick<Model, "thinkingCategory" | "thinkingDialect" | "maxOutput">;
 
 export function ValueFactMatrix({
-  label, routes, current, wireFor, modelId, contextSize, valuesFor, catalogId,
+  label, routes, current, wireFor, modelId, contextSize, valuesFor, upstreamPrefixes,
 }: {
   label: string;
   /** The channel's routes, in the channel's order. */
@@ -36,13 +39,19 @@ export function ValueFactMatrix({
   /** The model's window — one for every route. */
   contextSize?: number;
   valuesFor: (f: ProtocolFamily) => RouteValues;
-  /** What the model catalog is asked about (`ConnOptions.canonicalModelId`). */
-  catalogId?: string;
+  /**
+   * The channel's prefix table. Each route's catalog key is its own, as
+   * `connOptions()` has it (`catalogIdOf`): the table counts only on a relay,
+   * and routes of one channel can resolve to different platforms.
+   */
+  upstreamPrefixes?: Provider["upstreamPrefixes"];
 }) {
   const { t } = useTranslation();
   const columns = routes.flatMap((f) => {
     const w = wireFor(f);
-    return w ? [{ f, w, v: valueFacts({ modelId, contextSize, ...valuesFor(f) }, w.standard, w.platform, catalogId) }] : [];
+    if (!w) return [];
+    const catalogId = canonicalModelId(modelId, isRelayPlatform(w.platform) ? { prefixes: upstreamPrefixes } : undefined);
+    return [{ f, w, v: valueFacts({ modelId, contextSize, ...valuesFor(f) }, w.standard, w.platform, catalogId) }];
   });
   if (columns.length < 2) return null;
 

@@ -1410,7 +1410,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 their parked fields (设计稿 P6 界面 屏 3a). */}
             {route && multiRoute && (
               <ValueFactMatrix label={t("aiConfig.models.valueMatrixLabel")} routes={channelRoutes} current={route}
-                wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} catalogId={catalogId}
+                wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} upstreamPrefixes={channel?.upstreamPrefixes}
                 valuesFor={(f) => (f === route
                   ? { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, maxOutput: parsedOut || undefined }
                   : { thinkingCategory: parked[f]?.thinkingCategory, thinkingDialect: parked[f]?.thinkingDialect, maxOutput: parked[f]?.maxOutput })} />

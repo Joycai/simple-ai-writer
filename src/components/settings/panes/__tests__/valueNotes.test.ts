@@ -36,7 +36,7 @@ describe("the note under a value", () => {
   it("says what max_tokens carries where the wire sends one and the field does not say it", () => {
     const blank = valueFacts({ modelId: "deepseek-v4-pro" }, deepseekMessages.standard, deepseekMessages.platform);
     expect(maxOutputNote(t, blank.maxOutput, name("deepseek")))
-      .toBe("平台 · DeepSeek 官方 393,216 · 预算按它算；max_tokens 发 32,768（只发手填的值）");
+      .toBe("平台 · DeepSeek 官方 393,216 · 预算按它算；max_tokens 发默认 32,768（只认手填的值）");
     // Typed, max_tokens is the field: nothing to add.
     const typed = valueFacts({ modelId: "deepseek-v4-pro", maxOutput: 9000 }, deepseekMessages.standard, deepseekMessages.platform);
     expect(maxOutputNote(t, typed.maxOutput, name("deepseek"))).toBe("手填 · 覆盖平台 · DeepSeek 官方 393,216");
