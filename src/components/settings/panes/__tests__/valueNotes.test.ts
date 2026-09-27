@@ -82,7 +82,12 @@ describe("the note under a value", () => {
           if (!("eq" in row.match)) continue;
           const v = valueFacts({ modelId: row.match.eq }, "openai_compat", platform);
           const note = contextNote(t, v.contextSize, name(platform));
-          if (v.contextSize.table) expect(note).toContain(sourceName(t, v.contextSize.table.source, platform));
+          if (v.contextSize.table) {
+            expect(note).toContain(sourceName(t, v.contextSize.table.source, platform));
+            // The sentence says 不拦截 because TRUST.contextGate refuses the tables'
+            // window; the day it takes one, this goes red before the note lies.
+            expect(v.contextSize.gates).toBe(false);
+          }
           else expect(note).toBe("未知 · 发送前不拦截，预算用默认");
         }
       }

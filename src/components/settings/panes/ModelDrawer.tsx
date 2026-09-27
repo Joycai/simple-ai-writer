@@ -356,6 +356,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // read off the form so flipping the picker updates all three before saving.
   const formCategory = facts?.thinkingCategory.inForce.value;
   const valueSource = (src: Source) => sourceName(t, src, curWire?.platform);
+  const modelOwn = (v: { value: number; source: Source } | undefined) => (v && v.source !== "default" ? v.value : undefined);
   // With the upstream, as the adapters ask: behind some relay upstreams a
   // temperature is rewritten or refused, and the field would edit nothing.
   const temperatureReaches = !curWire || hasCapability("temperature", curWire, { ...capModel, thinkingCategory: formCategory?.id });
@@ -1382,10 +1383,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 providerId={providerId}
                 route={route}
                 modelId={form.modelId}
-                // What the planner takes for this row (every source) — the
-                // probe sizes its search and its cost estimate by it.
-                contextSize={String(facts?.contextSize.inForce?.value ?? "")}
-                maxOutput={String(facts?.maxOutput.inForce?.value ?? "")}
+                // What is known about this model — typed, the platform's row,
+                // the catalog — sizes the probe's search and its cost estimate.
+                // Not the app-wide default: it says nothing about this model.
+                contextSize={String(modelOwn(facts?.contextSize.inForce) ?? "")}
+                maxOutput={String(modelOwn(facts?.maxOutput.inForce) ?? "")}
                 priceIn={form.priceIn}
                 priceOut={form.priceOut}
                 onApply={(v) => {
