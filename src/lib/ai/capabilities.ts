@@ -44,6 +44,8 @@ export type CapabilityId =
   | "forcedToolChoice"
   | "effortWithTools"
   | "reasoningOff"
+  | "effortMax"
+  | "effortMinimal"
   | "temperature"
   | "textVerbosity"
   | "instructionsField"
@@ -174,6 +176,14 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // legal values, and the one gateway where this was measured swallows the
   // reason (第十八个样本「GPT 全家补测」).
   reasoningOff: { families: ["openai", "responses"], origin: "native" },
+  // The ladder's two ends past `high`/`low`: `max` and `minimal`. Same reason
+  // as `reasoningOff` for not leaving them to the 400 — the one refusal
+  // measured came through a gateway that swallows the reason. Where `no`, the
+  // dials drop the level (`effortMenuOnWire`) and a stored one goes out as the
+  // nearest level the model takes: `max` → `xhigh`, `minimal` → `low`
+  // (`effortOnWire`; capability-gating-plan.md §8.15).
+  effortMax: { families: ["openai", "responses"], origin: "native" },
+  effortMinimal: { families: ["openai", "responses"], origin: "native" },
   // Sampling temperature: every family spells it, but the Messages API accepts
   // `temperature: 1` and nothing else while extended thinking is on, and an
   // Anthropic model thinks unless the author declares otherwise. Clamping the
@@ -234,7 +244,7 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
  * `capabilities.test.ts` holds it complete.
  */
 export const CAPABILITY_IDS: readonly CapabilityId[] = [
-  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice", "effortWithTools", "reasoningOff",
+  "pdfInput", "vlHighResolution", "videoInput", "videoFps", "forcedToolChoice", "effortWithTools", "reasoningOff", "effortMax", "effortMinimal",
   "temperature", "textVerbosity", "instructionsField", "translateFormat", "structuredOutput", "jsonSchema",
   "web_search", "web_extractor", "web_search_image", "image_search", "code_interpreter",
 ];
@@ -631,7 +641,8 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
   // response schema alike (再补测). The GPT ids (GPT 全家补测): gpt-5.6-sol is
   // served by OpenAI's own Chat Completions and refuses tools beside any effort
   // (gpt-5.6-luna is rerouted and was not); gpt-6-astra refuses `none` on both;
-  // gpt-5.6-sol's Responses refuses any temperature (its Chat takes one).
+  // gpt-5.6-sol's Responses refuses any temperature (its Chat takes one), and
+  // its Chat refuses `max` and `minimal` (its Responses takes `max`).
   // gpt-5.6-luna's temperature is rerouted to the translating layer and echoed.
   orcarouter: {
     families: {
@@ -639,6 +650,8 @@ export const PLATFORM_CAPABILITIES: Record<PlatformId, PlatformCapabilities> = {
         jsonSchema: true,
         effortWithTools: { refuses: [/^openai\/gpt-5\.6-sol$/] },
         reasoningOff: { refuses: [/^openai\/gpt-6-astra$/] },
+        effortMax: { refuses: [/^openai\/gpt-5\.6-sol$/] },
+        effortMinimal: { refuses: [/^openai\/gpt-5\.6-sol$/] },
       },
       responses: {
         jsonSchema: true,
@@ -772,6 +785,10 @@ function effortLadderWire(wire: CapabilityWire): boolean {
  *     would fail on its first round; thinking is what gives way.
  *   - `reasoningOff` is `no` and the row says `off` → `low`, the least thinking
  *     the model takes (the gateway rewrites `minimal` to `low` anyway).
+ *   - `effortMax` is `no` and the row says `max` → `xhigh`, the ladder's next
+ *     rung down; `effortMinimal` is `no` and it says `minimal` → `low`, the
+ *     next rung up. The nearest level keeps what the author asked for as
+ *     close as the model allows.
  */
 export function effortOnWire(
   effort: ReasoningEffort | undefined,
@@ -782,21 +799,32 @@ export function effortOnWire(
   if (!effortLadderWire(wire)) return effort;
   if (withTools && !hasCapability("effortWithTools", wire, model)) return "off";
   if (effort === "off" && !hasCapability("reasoningOff", wire, model)) return "low";
+  if (effort === "max" && !hasCapability("effortMax", wire, model)) return "xhigh";
+  if (effort === "minimal" && !hasCapability("effortMinimal", wire, model)) return "low";
   return effort;
 }
 
+/** Each ladder level a cell can take away, and the cell that says so. */
+const LEVEL_CELLS: readonly [ReasoningEffort, CapabilityId][] = [
+  ["off", "reasoningOff"],
+  ["max", "effortMax"],
+  ["minimal", "effortMinimal"],
+];
+
 /**
  * A category's effort menu as this wire takes it — the category's own list,
- * less `off` where the model has none (`reasoningOff`). Every dial that lists
- * levels reads this, so the drawer and the panel cannot disagree.
+ * less each level the model refuses (`reasoningOff`, `effortMax`,
+ * `effortMinimal`). Every dial that lists levels reads this, so the drawer and
+ * the panel cannot disagree.
  */
 export function effortMenuOnWire(
   menu: readonly ReasoningEffort[],
   wire: CapabilityWire | undefined,
   model: CapabilityModel,
 ): ReasoningEffort[] {
-  if (!wire || !effortLadderWire(wire) || hasCapability("reasoningOff", wire, model)) return [...menu];
-  return menu.filter((e) => e !== "off");
+  if (!wire || !effortLadderWire(wire)) return [...menu];
+  const refused = new Set(LEVEL_CELLS.filter(([, id]) => !hasCapability(id, wire, model)).map(([level]) => level));
+  return menu.filter((e) => !refused.has(e));
 }
 
 /**

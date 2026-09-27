@@ -2166,6 +2166,8 @@ astra 「关闭」两面各 400、astra 摘要没流出（那次）、5.6-luna /
 - 作者给 `gpt-5.6-sol` 设的温度在 ② 上不再发出（`temperature` 按模型关掉，§8.14）；① 照发。
 - 模型抽屉的计费组一栏按「这个模型在这条线路上报不报价」说话：OrcaRouter 上报价的线路注明「不绑组也有钱数」，
   5.6-luna / -sol 的 ② 不绑组时给出「用量记 $0」的必读提示（[`01-fee-groups.md`](../feature/billing/01-fee-groups.md)「上游报价」）。
+- `gpt-5.6-sol` 在 ① 上不再提供「最高」「极简」，行上已存的 `max` / `minimal` 发成 `xhigh` / `low`（能力格 `effortMax` /
+  `effortMinimal`，§8.15）；live 用例六个 id × ① ② 的这两档 24 条全过。
 
 ### 兼容层文档的通用规律（八个样本的共同点）
 

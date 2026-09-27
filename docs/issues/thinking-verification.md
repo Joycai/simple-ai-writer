@@ -42,6 +42,7 @@
 | 1.3 | 原样 ①：只有 `reasoning_tokens`，没有任何思维链文本（与官方一致）；翻译层 ①：高档时 `message.reasoning` 摘要 + `reasoning_details` 密文。`REASONING_CONTENT_FIELDS` 不用加名字 |
 | 4.x（新） | ✅ 官方 ①「5.4 起 effort ≠ `none` 不能带函数工具」属实，**不发 effort 也拒**。已按能力格 `effortWithTools` 处理（[`capability-gating-plan.md`](../api/capability-gating-plan.md) §8.13） |
 | 4.x（新） | ✅ gpt-6-astra 没有 `none`（① ② 都拒，原因被网关吞）。已按能力格 `reasoningOff` 处理 |
+| 4.x（新） | ✅ gpt-5.6-sol 的 ① 没有 `max` / `minimal`（原因被网关吞；② 收 `max`）。已按能力格 `effortMax` / `effortMinimal` 处理，发 `xhigh` / `low`（[`capability-gating-plan.md`](../api/capability-gating-plan.md) §8.15） |
 | ② 摘要 | ⚠️ `summary: "auto"` 下有推理也可能没有摘要事件——live 用例改成三次里有一次即可（[`reasoning.md`](../api/reasoning.md) §1.10） |
 | ② `mode: "pro"` | 六个 id 都回显 `standard`；官方直连仍未验 |
 

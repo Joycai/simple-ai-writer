@@ -168,6 +168,52 @@
 | comfyui | ✓ protocol |  |  |  |
 | custom | ✓ protocol | ✓ protocol | · | · |
 
+## effortMax
+
+`native` · 规则缺省适用的协议族：Chat / Resp
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | ✓ protocol | ✓ protocol |  |  |
+| anthropic |  |  |  | · |
+| google |  |  | · |  |
+| deepseek | ✓ protocol | ✓ protocol |  | · |
+| dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-intl | ✓ protocol | ✓ protocol |  |  |
+| xai | ✓ protocol | ✓ protocol |  |  |
+| minimax | ✓ protocol |  |  | · |
+| volcengine | ✓ protocol | ✓ protocol |  |  |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | · |
+| zhipu | ✓ protocol |  |  |  |
+| orcarouter | ✓ 按模型 protocol | ✓ protocol | · | · |
+| newapi | ✓ protocol | ✓ protocol | · | · |
+| ollama | ✓ protocol |  |  |  |
+| comfyui | ✓ protocol |  |  |  |
+| custom | ✓ protocol | ✓ protocol | · | · |
+
+## effortMinimal
+
+`native` · 规则缺省适用的协议族：Chat / Resp
+
+| 平台 | Chat | Resp | Gemini | Anth |
+| --- | --- | --- | --- | --- |
+| openai | ✓ protocol | ✓ protocol |  |  |
+| anthropic |  |  |  | · |
+| google |  |  | · |  |
+| deepseek | ✓ protocol | ✓ protocol |  | · |
+| dashscope | ✓ protocol | ✓ protocol |  | · |
+| dashscope-intl | ✓ protocol | ✓ protocol |  |  |
+| xai | ✓ protocol | ✓ protocol |  |  |
+| minimax | ✓ protocol |  |  | · |
+| volcengine | ✓ protocol | ✓ protocol |  |  |
+| volcengine-plan | ✓ protocol | ✓ protocol |  | · |
+| zhipu | ✓ protocol |  |  |  |
+| orcarouter | ✓ 按模型 protocol | ✓ protocol | · | · |
+| newapi | ✓ protocol | ✓ protocol | · | · |
+| ollama | ✓ protocol |  |  |  |
+| comfyui | ✓ protocol |  |  |  |
+| custom | ✓ protocol | ✓ protocol | · | · |
+
 ## temperature
 
 `native` · 规则缺省适用的协议族：Chat / Resp / Gemini / Anth

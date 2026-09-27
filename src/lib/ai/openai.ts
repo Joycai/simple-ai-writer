@@ -120,9 +120,10 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
   // The row's effort as this wire takes it: `off` beside function tools where
-  // the wire refuses any other effort there, the lowest level where the model
-  // has no off (capabilities.ts `effortWithTools` / `reasoningOff`). Unchanged
-  // everywhere else, so an unset model still sends nothing.
+  // the wire refuses any other effort there, the nearest level the model takes
+  // where it refuses `off` / `max` / `minimal` (capabilities.ts
+  // `effortWithTools` / `reasoningOff` / `effortMax` / `effortMinimal`).
+  // Unchanged everywhere else, so an unset model still sends nothing.
   const effort = effortOnWire(opts.reasoningEffort, wireOf(opts), capabilityModelOf(opts), !!opts.tools?.length);
   const body: Record<string, unknown> = {
     model: opts.modelId,

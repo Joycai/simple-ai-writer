@@ -1,6 +1,6 @@
 # 模型能力判定：一张登记表、一个裁决函数
 
-> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）；思考档位的两格 `effortWithTools` / `reasoningOff` 见 §8.13，gpt-5.6-sol 的温度见 §8.14。实施记录见 §7、§8。**
+> **状态：`partial`——C0–C3 已实现（能力表、裁决函数、三道闸：矩阵文档、一致性测试、源码棘轮；行为不变）；C4（视频按平台）搁置，记入待办 [`issues/video-capability-per-platform.md`](../issues/video-capability-per-platform.md)；模型 id 轴没登记的 id 判「未实测」（§8.7），只写 `refuses` 的格子只点名、不连累别的 id（§8.10）；中转站上按模型背后的上游裁决，上游由作者声明、能力由内置画像给出（§8.11；GPT 的两种上游与 `instructionsField` 见 §8.12）；思考档位的两格 `effortWithTools` / `reasoningOff` 见 §8.13，gpt-5.6-sol 的温度见 §8.14，它在 ① 上的「最高」「极简」两档见 §8.15。实施记录见 §7、§8。**
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
@@ -546,7 +546,8 @@ Responses 上温度被改成 1；网关没有联网搜索，温度非 1 整条 5
 **有意留下的。**
 
 - ~~作者给 gpt-5.6-sol 设了温度、走 ② 仍然 400。~~ 后续（2026-09-27，作者决定改）：见 §8.14。
-- gpt-5.6-sol 在 ① 上 `reasoning_effort: "max"` / `"minimal"` 是 400（原因被吞）。只看到了这一个 id，② 上同档 200；没进表。
+- ~~gpt-5.6-sol 在 ① 上 `reasoning_effort: "max"` / `"minimal"` 是 400（原因被吞）。只看到了这一个 id，② 上同档 200；没进表。~~
+  后续（2026-09-27，作者决定改）：见 §8.15。
 - 官方 `openai` 的那格来自经网关的 OpenAI 原文，不是直连实测；`gpt-6` 在官方 ① 上是否同样拒收，没有样本，不写。
 
 ### 8.14 按模型关掉温度：gpt-5.6-sol 的 Responses（2026-09-27）
@@ -562,3 +563,36 @@ gpt-5.6-luna 的 ② 带温度会被网关分流到翻译层，200 且回显。
 **为什么只点名一个 id。** 5.6-luna 在网关上收温度（分流后），点名只会让它白白丢掉作者的设置；官方直连上 GPT-5 其他型号
 收不收，没有样本。§8.12 的「上游决定温度」是中转站上的事，这里是一个模型在它自己的线路上拒收，按模型格表达更准。
 
+### 8.15 档位两端也进表：`effortMax` 与 `effortMinimal`（2026-09-27）
+
+**问题。** §8.13 有意留下的一条：gpt-5.6-sol 走 ① Chat Completions，`reasoning_effort: "max"` 与 `"minimal"` 都是 400，
+网关把原因吞成 `upstream_rejected_request`。作者在抽屉里点「最高」，或者行上留着别的类目存下的 `minimal`，请求就失败，
+而且看不出为什么。同一 id 的 ② 收 `max`、`minimal` 回显成 `none`；① 上 `low` / `high` / `xhigh` 都是 200
+（[`landscape.md`](landscape.md) 第十八个样本「GPT 全家补测」逐档表）。
+
+**决定**（作者决定改）。
+
+- **两格新能力**，与 §8.13 同形：协议自带、缺省 yes，只作用于 ① ② 两族。
+  - `effortMax`：这条线收不收 effort 的 `max`。为 `no` 时「最高」不列出，行上已存的 `max` 发成 `xhigh`。
+  - `effortMinimal`：这条线收不收 effort 的 `minimal`。为 `no` 时「极简」不列出（`openai-generic` 的菜单本来就没有它），
+    行上已存的 `minimal` 发成 `low`。
+  - 格子：OrcaRouter ① 上只点名 `openai/gpt-5.6-sol`。② 不写（它收 `max`）。
+- **仍是一处实现**：`effortOnWire` 多两条映射，`effortMenuOnWire` 改成按「档位 → 格子」一张小表逐个去掉，`off` 也在这张表里。
+  一致性测试给两格各加探针（`xhigh` 对 `max`、`low` 对 `minimal` 的请求体，以及档位列表）。
+- live 用例从「5.6-sol ① 的 `max` 应被拒」改成两端都应答对，并断言发出去的是 `xhigh` / `low`；新增 `minimal` 一条，
+  六个 id × ① ② 共 24 条全过。
+
+**为什么这样映射。**
+
+| 做法 | 为什么没选 |
+| --- | --- |
+| `max` 发成 `high`（`openai-generic` 菜单里「最高」下面那一档） | 模型实际收 `xhigh`（实测 200）。作者要的是「最多」，发它收得下的最高一档更接近本意；菜单没有 `xhigh` 这个 chip 不妨碍线上发它 |
+| `max` / `minimal` 干脆不发（交给模型默认档） | 默认档是多少不知道，而且会把作者要的「最多 / 最少」变成「随便」；就近一档是可知的 |
+| 一格 `effortExtremes` 管两端 | 两端是两个独立的事实：别的模型完全可能只缺一头（GPT-5.4 就是停在 `xhigh`、没有 `max`，[`responses.md`](responses.md) §2.1）。分开写，将来点名不用拆格 |
+| 照「越界由端点说话」不处理 | 同 §8.13：那条规矩的前提是 400 会点名合法值，这里被吞了 |
+| 也点名官方 `openai` ① 上的 `gpt-5.6-sol` | 这条 400 的原因被吞，不能断定是 OpenAI 的规则还是网关的；官方直连没有样本，不写 |
+
+**有意留下的。**
+
+- 抽屉和面板里，行上存着 `max` 的 5.6-sol 在 ① 上不会有 chip 亮起（与 astra 存着 `off` 一样），发出去的是 `xhigh`。
+  作者重新点一档就恢复正常；没有为此另做提示。
