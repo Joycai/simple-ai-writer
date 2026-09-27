@@ -60,7 +60,7 @@ import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, structuredOutputModesFor, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
 import { isMeasured, valueFacts, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
-import { calibrationPrefill, categoryNote, contextNote, maxOutputNote, sourceName } from "./valueNotes";
+import { categoryNote, contextNote, effortForNewId, maxOutputNote, sourceName } from "./valueNotes";
 import {
   canSeeImages, defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, MODEL_TYPES,
   TRANSLATE_FORMATS, ASR_FORMATS,
@@ -411,25 +411,34 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // a typo re-prefills, and anything the author chose by hand stays.
   // Keyed by the id it ran for: blurring the id field again without changing it
   // must not take back a field the author has since set to its unset value.
-  const lastCalibration = useRef<{ id?: string; type?: ModelType; pdf?: boolean }>({});
+  // An edited row starts at its own id, so blurring the field unchanged does nothing.
+  const lastCalibration = useRef<{ id?: string; type?: ModelType; pdf?: boolean }>({ id: existing?.modelId.trim().toLowerCase() });
   const applyCalibration = (modelId: string) => {
-    if (existing || !provider) return;
+    if (!provider || !channel) return;
     const id = modelId.trim().toLowerCase();
     if (id === lastCalibration.current.id) return;
-    // Only what has no unset state (D1): the category, window and cap stay
-    // empty and follow the platform's rows (the notes under them say so).
-    const cal = calibrationPrefill(platformModelCalibration(providerWire(provider).platform, modelId) ?? {});
-    const next = { id, type: cal.type, pdf: cal.pdfInput };
+    // A category left on 自动 resolves anew for the new id, on every route —
+    // an edited row as much as a new one (valueNotes.ts `effortForNewId`).
+    const resolvedOn = (p: typeof provider) =>
+      thinkingCategoryOf({ modelId: modelId.trim() }, { standard: p.apiStandard, platform: providerWire(p).platform }).value;
+    setForm((f) => ({ ...f, reasoningEffort: effortForNewId(f.thinkingCategory, f.reasoningEffort, resolvedOn(provider)) }));
+    setParked((all) => {
+      const next = { ...all };
+      for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
+        const p = routeProvider(channel, f);
+        if (!p || !prof.reasoningEffort || prof.thinkingDialect) continue;
+        next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
+      }
+      return next;
+    });
+    if (existing) { lastCalibration.current = { id }; return; }
+    // A new row takes only what has no unset state (D1): the category, window
+    // and cap stay empty and follow the platform's rows (the notes say so).
+    const cal = platformModelCalibration(providerWire(provider).platform, modelId) ?? {};
+    const next = { id, type: cal.type as ModelType | undefined, pdf: cal.pdfInput };
     const prev = lastCalibration.current;
     const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
-    // A category left on 自动 now resolves for the new id: an effort picked
-    // under the old one (glm-5.2's off) is a 400 under the new one (glm-5.3).
-    const resolved = thinkingCategoryOf({ modelId: modelId.trim() }, { standard: provider.apiStandard, platform: curWire?.platform }).value;
-    setForm((f) => ({
-      ...f,
-      reasoningEffort: f.thinkingCategory === "auto" ? effortForCategory(resolved, f.reasoningEffort) : f.reasoningEffort,
-      type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type,
-    }));
+    setForm((f) => ({ ...f, type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type }));
     setPdfInput((cur) => (ours(cur, false, prev.pdf) ? !!next.pdf : cur));
     lastCalibration.current = next;
   };
@@ -979,7 +988,13 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   // field says more — the probe's number is the author's, with a date.
   const sourceNote = (value: number, probedValue: number | undefined, note: string | undefined) => {
     const measured = value > 0 ? measuredNote(value, probedValue) : {};
-    return "note" in measured ? measured : note ? { note, noteTone: "faint" as const } : {};
+    if ("note" in measured) return measured;
+    // Cleared after a probe: the measurement is kept, and said, not dropped.
+    const unused = value === 0 && probedValue !== undefined && probed.at
+      ? t("aiConfig.models.noteProbedUnused", { value: probedValue.toLocaleString(), date: shortDate(probed.at) })
+      : undefined;
+    const text = [note, unused].filter(Boolean).join("；");
+    return text ? { note: text, noteTone: "faint" as const } : {};
   };
 
   const soHint = family === "anthropic"
@@ -1367,8 +1382,10 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 providerId={providerId}
                 route={route}
                 modelId={form.modelId}
-                contextSize={form.contextSize}
-                maxOutput={form.maxOutput}
+                // What the planner takes for this row (every source) — the
+                // probe sizes its search and its cost estimate by it.
+                contextSize={String(facts?.contextSize.inForce?.value ?? "")}
+                maxOutput={String(facts?.maxOutput.inForce?.value ?? "")}
                 priceIn={form.priceIn}
                 priceOut={form.priceOut}
                 onApply={(v) => {

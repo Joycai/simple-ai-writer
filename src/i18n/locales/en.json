@@ -2830,7 +2830,6 @@
       "noteOutUnknownWire": "unknown · max_tokens sends {{sent}}",
       "noteSame": "same as {{source}} · clear it to follow",
       "noteOverrides": "typed · overrides {{source}} {{value}}",
-      "noteWithWire": "{{note}}; max_tokens sends {{sent}}",
       "noteCatAutoIs": "on Auto: {{cat}} · {{source}}",
       "limitsSumCtx": "window {{value}}",
       "limitsSumOut": "cap {{value}}",
@@ -2844,7 +2843,12 @@
         "default": "app"
       },
       "valueMatrixLabel": "Category, window and cap per route",
-      "valueMatrixLegend": "The small word is the source: platform · catalog · protocol · app; full ink is typed. Empty follows its source; the Anthropic protocol sends only a typed max_tokens."
+      "valueMatrixLegend": "The small word is the source: platform · catalog · protocol · app; full ink is typed. Empty follows its source; the Anthropic protocol sends only a typed max_tokens.",
+      "noteCtxUnknown": "unknown · no pre-send guard; budgets use defaults",
+      "noteOutUnknown": "unknown · budgets use defaults; not sent",
+      "noteSameLosesGate": "{{note}}, but the pre-send guard goes",
+      "noteSameChangesWire": "{{note}}; max_tokens then sends {{sent}}",
+      "noteProbedUnused": "measured {{value}} ({{date}}), not used"
     },
     "probe": {
       "title": "Probe real limits",

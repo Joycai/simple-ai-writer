@@ -2822,7 +2822,6 @@
       "noteOutUnknownWire": "未知 · max_tokens 发 {{sent}}",
       "noteSame": "与{{source}}一致 · 清空后跟随它",
       "noteOverrides": "手填 · 覆盖{{source}} {{value}}",
-      "noteWithWire": "{{note}}；max_tokens 发 {{sent}}",
       "noteCatAutoIs": "自动时为 {{cat}} · {{source}}",
       "limitsSumCtx": "窗口 {{value}}",
       "limitsSumOut": "上限 {{value}}",
@@ -2836,7 +2835,12 @@
         "default": "应用"
       },
       "valueMatrixLabel": "各线路的类目、窗口与上限",
-      "valueMatrixLegend": "小字是出处：平台 · 目录 · 协议 · 应用；实色为手填。留空跟随出处；Anthropic 协议的 max_tokens 只发手填的值。"
+      "valueMatrixLegend": "小字是出处：平台 · 目录 · 协议 · 应用；实色为手填。留空跟随出处；Anthropic 协议的 max_tokens 只发手填的值。",
+      "noteCtxUnknown": "未知 · 发送前不拦截，预算用默认",
+      "noteOutUnknown": "未知 · 预算用默认，不发送",
+      "noteSameLosesGate": "{{note}}，但发送前不再拦截",
+      "noteSameChangesWire": "{{note}}；max_tokens 改发 {{sent}}",
+      "noteProbedUnused": "实测 {{value}}（{{date}}）未采用"
     },
     "probe": {
       "title": "探测真实上限",

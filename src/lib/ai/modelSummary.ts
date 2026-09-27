@@ -205,10 +205,16 @@ interface ValueView<V> {
 export interface ValueFacts {
   /** Every family has a default category, so both are always answered. */
   thinkingCategory: ValueView<ThinkingCategory> & { table: Sourced<ThinkingCategory>; inForce: Sourced<ThinkingCategory> };
-  /** `gates`: the pre-send window check refuses an over-long request by it (`TRUST.contextGate`). */
-  contextSize: ValueView<number> & { gates: boolean };
-  /** `onWire`: the `max_tokens` this wire sends (`TRUST.anthropicMaxTokens`); absent = the wire sends no cap. */
-  maxOutput: ValueView<number> & { onWire?: number };
+  /**
+   * `gates`: the pre-send window check refuses an over-long request by it
+   * (`TRUST.contextGate`); `gatesIfEmpty`: whether it still would with the field cleared.
+   */
+  contextSize: ValueView<number> & { gates: boolean; gatesIfEmpty: boolean };
+  /**
+   * `onWire`: the `max_tokens` this wire sends (`TRUST.anthropicMaxTokens`), and
+   * `onWireIfEmpty` what it would send with the field cleared; absent = the wire sends no cap.
+   */
+  maxOutput: ValueView<number> & { onWire?: number; onWireIfEmpty?: number };
 }
 
 /**
@@ -238,18 +244,25 @@ export function valueFacts(
   // never resaved since categories came in). One the family cannot spell is
   // not what the request sends, so it is not reported as the author's.
   const category = thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory, thinkingDialect: m.thinkingDialect }, at);
-  const plan = planRequest({
+  const sentCap = (v: Sourced<number> | undefined) => planRequest({
     standard, baseUrl: "", platform, modelId: m.modelId, canonicalModelId,
-    maxOutput: out.inForce?.value, provenance: out.inForce && { maxOutput: out.inForce.source },
-  });
+    maxOutput: v?.value, provenance: v && { maxOutput: v.source },
+  }).maxTokensOnWire;
   return {
     thinkingCategory: {
       own: category.source === "author" ? category.value : undefined,
       table: thinkingCategoryOf(blank, at),
       inForce: category,
     },
-    contextSize: { ...ctx, gates: trusted(ctx.inForce, "contextGate") !== undefined },
-    maxOutput: { ...out, ...(SPELLING[familyOf(standard)].maxTokens ? { onWire: plan.maxTokensOnWire } : {}) },
+    contextSize: {
+      ...ctx,
+      gates: trusted(ctx.inForce, "contextGate") !== undefined,
+      gatesIfEmpty: trusted(ctx.table, "contextGate") !== undefined,
+    },
+    maxOutput: {
+      ...out,
+      ...(SPELLING[familyOf(standard)].maxTokens ? { onWire: sentCap(out.inForce), onWireIfEmpty: sentCap(out.table) } : {}),
+    },
   };
 }
 
