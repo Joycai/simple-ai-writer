@@ -574,7 +574,7 @@ export type AgentEvent = AgentEventScope & (
        *
        * Surfaced rather than swallowed because the cause is invisible from the
        * outside: some endpoints silently downgrade a forced tool_choice to
-       * "auto" (lib/ai/openai.ts toolChoiceFor). The handoff still happens —
+       * "auto" (lib/ai/capability/plan.ts toolChoiceOf). The handoff still happens —
        * but the author should know the work order was inferred.
        */
       degraded?: true;

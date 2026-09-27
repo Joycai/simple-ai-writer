@@ -54,8 +54,6 @@ const CEILING: Readonly<Record<string, number>> = {
   // 结构化输出的说明文字三族不同（2）；图像模型 Gemini 方言的预填（1）。服务端工具「为什么」按族的
   // 措辞已改成查表（SEARCH_HINT_KEY 等），不再占名额。
   "components/settings/panes/ModelDrawer.tsx": 3,
-  // 「将发送」按族拼字段名：thinking / max_tokens / 服务端工具的 body / 结构化输出的四种字段名。
-  "lib/ai/modelSummary.ts": 6,
   // Gemini 线路的安全设置默认值与其面板（2）；ComfyUI 渠道走自己的保存分支（1）。
   "components/settings/panes/ProviderDrawer.tsx": 3,
 };

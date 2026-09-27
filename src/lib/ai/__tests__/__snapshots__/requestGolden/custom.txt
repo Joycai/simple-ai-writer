@@ -3519,7 +3519,7 @@ POST https://relay.example.invalid/v1beta/models/[x]gpt-5.6-sol:streamGenerateCo
 ## anthropic · anthropic_compat
 
 ### qwen3.5-plus · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3528,19 +3528,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### qwen3.5-plus · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### qwen3.5-plus · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3549,7 +3549,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3558,13 +3558,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### qwen3.8-flash · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3573,19 +3573,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=131072 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### qwen3.8-flash · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=131072 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### qwen3.8-flash · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3594,7 +3594,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3603,13 +3603,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### no-such-model · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3618,19 +3618,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### no-such-model · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### no-such-model · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3639,7 +3639,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3648,13 +3648,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [特价kiro量]claude-opus-5 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3663,19 +3663,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · declared
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [特价kiro量]claude-opus-5 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [特价kiro量]claude-opus-5 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3684,7 +3684,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3693,13 +3693,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### gpt-5.6-sol · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3708,19 +3708,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### gpt-5.6-sol · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### gpt-5.6-sol · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3729,7 +3729,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3738,13 +3738,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### openai/gpt-5.6-sol · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3753,19 +3753,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### openai/gpt-5.6-sol · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### openai/gpt-5.6-sol · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3774,7 +3774,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3783,13 +3783,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### openai/gpt-6-astra · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3798,19 +3798,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### openai/gpt-6-astra · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### openai/gpt-6-astra · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3819,7 +3819,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3828,13 +3828,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### claude-sonnet-5 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3843,19 +3843,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### claude-sonnet-5 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### claude-sonnet-5 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3864,7 +3864,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3873,13 +3873,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### gemini-3.8-flash · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=65536
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3888,19 +3888,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=65536 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### gemini-3.8-flash · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=65536 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### gemini-3.8-flash · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=65536
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3909,7 +3909,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=65536
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3918,13 +3918,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=65536
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### glm-5.3 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3933,19 +3933,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=131072 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### glm-5.3 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=131072 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### glm-5.3 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3954,7 +3954,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3963,13 +3963,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=131072
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### deepseek-v4-pro · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=393216
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3978,19 +3978,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=393216 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### deepseek-v4-pro · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=393216 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### deepseek-v4-pro · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=393216
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -3999,7 +3999,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=393216
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4008,13 +4008,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=393216
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### grok-4-fast-non-reasoning · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4023,19 +4023,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### grok-4-fast-non-reasoning · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### grok-4-fast-non-reasoning · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4044,7 +4044,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4053,13 +4053,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @kiro · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4068,19 +4068,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @kiro · declared
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @kiro · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @kiro · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4089,7 +4089,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @kiro · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4098,13 +4098,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @kiro · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @kiro · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4113,19 +4113,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @kiro · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @kiro · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @kiro · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4134,7 +4134,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @kiro · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4143,13 +4143,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @kiro · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @cc · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4158,19 +4158,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @cc · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]claude-opus-4-6 @cc · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @cc · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4179,7 +4179,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @cc · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4188,13 +4188,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @cc · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @cc · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4203,19 +4203,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @cc · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @cc · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @cc · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4224,7 +4224,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @cc · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4233,13 +4233,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @cc · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @anti · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4248,19 +4248,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @anti · declared
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @anti · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @anti · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4269,7 +4269,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @anti · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4278,13 +4278,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"auto"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @anti · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @anti · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4293,19 +4293,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @anti · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @anti · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @anti · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4314,7 +4314,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @anti · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4323,13 +4323,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @anti · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @bedrock · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4338,19 +4338,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @bedrock · declared
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @bedrock · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @bedrock · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4359,7 +4359,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @bedrock · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4368,13 +4368,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @bedrock · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @bedrock · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4383,19 +4383,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @bedrock · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @bedrock · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @bedrock · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4404,7 +4404,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @bedrock · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4413,13 +4413,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @bedrock · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @official · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4428,19 +4428,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @official · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]claude-opus-4-6 @official · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @official · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4449,7 +4449,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @official · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4458,13 +4458,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @official · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @official · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4473,19 +4473,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @official · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @official · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @official · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4494,7 +4494,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @official · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4503,13 +4503,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @official · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @codex · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4518,19 +4518,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @codex · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]claude-opus-4-6 @codex · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @codex · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4539,7 +4539,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @codex · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4548,13 +4548,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @codex · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @codex · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4563,19 +4563,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @codex · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @codex · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @codex · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4584,7 +4584,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @codex · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4593,13 +4593,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @codex · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @azure · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4608,19 +4608,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @azure · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]claude-opus-4-6 @azure · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]claude-opus-4-6 @azure · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4629,7 +4629,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @azure · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4638,13 +4638,13 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]claude-opus-4-6 @azure · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]claude-opus-4-6","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]gpt-5.6-sol @azure · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4653,19 +4653,19 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @azure · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [x]gpt-5.6-sol @azure · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [x]gpt-5.6-sol @azure · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4674,7 +4674,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @azure · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -4683,7 +4683,7 @@ POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [x]gpt-5.6-sol @azure · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":32768,"model":"[x]gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}

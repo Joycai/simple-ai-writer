@@ -60,14 +60,11 @@
  */
 
 import { fetch } from "../http";
-import { reasoningBody, resolveThinkingCategory } from "./reasoning";
+import { reasoningBody } from "./reasoning";
 import { responsesServerToolEvent, responsesServerTools } from "./serverTools";
-import { wireOf, type PlatformId } from "./platforms";
+import type { PlatformId } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { effortOnWire, hasCapability, platformResponsesInclude } from "./capabilities";
-import { catalogFact } from "./capability/cells/catalog";
-import { wireThinks } from "./capability/conditions";
-import { capabilityModelOf } from "./relayUpstream";
+import { planRequest } from "./capability/plan";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import type {
@@ -227,31 +224,19 @@ function isEchoItem(item: unknown): item is Record<string, unknown> {
 
 export async function streamResponses(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/responses");
-  const wire = wireOf(opts);
   const costPlatform = costReportingPlatform(opts);
-  // Asked with the relay upstream: behind some, a temperature is rewritten to 1
-  // or fails the request, and one appends a guard to `instructions`
-  // (capabilities.ts UPSTREAM_CELLS).
-  const capModel = capabilityModelOf(opts);
+  // Every decision about what this request carries is the plan's
+  // (capability/plan.ts) — asked with the relay upstream: behind some, a
+  // temperature is rewritten to 1 or fails the request, and one appends a
+  // guard to `instructions` (UPSTREAM_CELLS). This function only spells it.
+  const plan = opts._plan ?? planRequest(opts);
   const { instructions, input } = toResponsesInput(
-    opts.messages, opts.modelId, hasCapability("instructionsField", wire, capModel) ? "instructions" : "developer",
+    opts.messages, opts.modelId, plan.instructionsField ? "instructions" : "developer",
   );
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  // The nearest level the model takes where it refuses the row's (capabilities.ts
-  // `reasoningOff` / `effortMax` / `effortMinimal`).
-  const effort = effortOnWire(opts.reasoningEffort, wire, capModel, !!opts.tools?.length);
-  const reasoning = reasoningBody(category, effort);
-  const sendsTemperature = opts.temperature !== undefined
-    && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });
-  const verbosity = opts.textVerbosity && hasCapability("textVerbosity", wire, capModel) ? opts.textVerbosity : undefined;
-  // Not for a model that has no reasoning to encrypt (the catalog's `reasons`
-  // rows): OpenAI answers that combination with a 400, and xAI's non-reasoning
-  // ids were never measured with it — the include buys nothing there and risks
-  // the whole route.
-  const include = catalogFact("reasons", opts.modelId) === false ? [] : platformResponsesInclude(wire.platform);
-  const serverTools = responsesServerTools(wire, opts.serverTools, opts.modelId, {
-    thinking: wireThinks(category, effort),
-  }, opts.relayUpstream);
+  const reasoning = reasoningBody(plan.thinking.category, plan.thinking.effort);
+  const verbosity = plan.textVerbosity;
+  const include = plan.responsesInclude;
+  const serverTools = responsesServerTools(plan.serverTools);
   // `text` has two writers — this model's verbosity and a structured task's
   // `text.format` (jsonMode, arriving through extraBody) — merged below so
   // neither erases the other.
@@ -267,7 +252,7 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     store: false,
     // Same `!== undefined` rule as the Chat Completions adapter: 0 is a real
     // value for all three, and an unset one must send nothing.
-    ...(sendsTemperature ? { temperature: opts.temperature } : {}),
+    ...(plan.temperature !== undefined ? { temperature: plan.temperature } : {}),
     ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
     ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
     // Function tools first, then the endpoint's built-in ones (web_search /
@@ -277,7 +262,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     ...(opts.tools || serverTools.length
       ? { tools: [...toResponsesTools(opts.tools ?? []), ...serverTools] }
       : {}),
-    ...(opts.tools ? { tool_choice: toResponsesToolChoice(opts.toolChoice) } : {}),
+    // A forced choice the plan downgraded goes out as `auto` (RequestPlan.toolChoice).
+    ...(opts.tools ? { tool_choice: toResponsesToolChoice(plan.toolChoice?.sent) } : {}),
     // `reasoning: {effort, summary}` — absent unless the author set an effort
     // on this model, for the same reason as every other adapter: an unset
     // model must keep sending exactly what it sent before, and each model's
@@ -287,7 +273,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     // category reaches here as the family default too.
     ...reasoning,
     // Only where the platform withholds something unless asked (xAI's
-    // encrypted reasoning) — see platformResponsesInclude.
+    // encrypted reasoning), and never for a model with no reasoning to
+    // encrypt — see RequestPlan.responsesInclude.
     ...(include.length ? { include: [...include] } : {}),
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,

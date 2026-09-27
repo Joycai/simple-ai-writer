@@ -144,18 +144,23 @@ const PROBES: Record<CapabilityId, Probe> = {
   effortWithTools: async (ctx) => (effortLadder(ctx) ? {
     adapter: await adapterSends(ctx, { tools: [FUNCTION_TOOL], reasoningEffort: "low" }, { tools: [FUNCTION_TOOL], reasoningEffort: "high" }),
   } : NO_ASKER),
-  // `off` goes out as off — the adapter's body, and the chip every dial lists.
+  // `off` goes out as off — the adapter's body, the 将发送 line (both spell the
+  // request plan; the line used to show the row's effort, LLD B10), and the
+  // chip every dial lists.
   reasoningOff: async (ctx) => (effortLadder(ctx) ? {
     adapter: await adapterSends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "off" }),
+    summary: summarySends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "off" }),
     menu: effortMenuOnWire(["off", "low"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("off"),
   } : NO_ASKER),
   // `max` goes out as max rather than the rung below it; likewise `minimal`.
   effortMax: async (ctx) => (effortLadder(ctx) ? {
     adapter: await adapterSends(ctx, { reasoningEffort: "xhigh" }, { reasoningEffort: "max" }),
+    summary: summarySends(ctx, { reasoningEffort: "xhigh" }, { reasoningEffort: "max" }),
     menu: effortMenuOnWire(["high", "max"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("max"),
   } : NO_ASKER),
   effortMinimal: async (ctx) => (effortLadder(ctx) ? {
     adapter: await adapterSends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "minimal" }),
+    summary: summarySends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "minimal" }),
     menu: effortMenuOnWire(["minimal", "low"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("minimal"),
   } : NO_ASKER),
   // The adapter and the summary both run with the row's (unset) category, so

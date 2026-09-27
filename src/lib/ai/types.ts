@@ -35,6 +35,7 @@ import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolEvent, ServerToolId } from "./serverTools";
 import type { PlatformId } from "./platforms";
 import type { RelayUpstreamChoice } from "./relayUpstream";
+import type { RequestPlan } from "./capability/plan";
 import i18n from "../../i18n";
 
 /**
@@ -470,6 +471,12 @@ export interface StreamOptions {
    * found in that resume path so far was found by reading these bodies.
    */
   _onRequestBody?: (body: unknown) => void;
+  /**
+   * What this request carries, decided once (`capability/plan.ts`). Set by
+   * `streamCompletion`, never by a task; an adapter called without it — the
+   * consistency test, a live probe — plans for itself from the same options.
+   */
+  _plan?: RequestPlan;
   /**
    * Optional model context window (tokens). When set, a request whose
    * estimated prompt size exceeds it is rejected with ContextSizeError

@@ -12,6 +12,7 @@ import { streamOpenAI } from "./openai";
 import { streamResponses } from "./responses";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
 import { classify, noteLearned } from "./capability/learned";
+import { planRequest } from "./capability/plan";
 import { forcedToolChoiceRefused, isForcedToolChoice } from "./toolChoice";
 import { applyPrefix, ContextSizeError, familyOf, ImagePayloadError, StreamStallError, type StreamOptions } from "./types";
 import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "./imagePart";
@@ -133,6 +134,8 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   const watch = createStallWatch(merged.signal, firstChunkDeadlineMs(estimated), STREAM_IDLE_MS);
   const wrapped: StreamOptions = {
     ...merged,
+    // What the request carries, decided once for whichever adapter spells it.
+    _plan: planRequest(merged),
     signal: watch.signal,
     // Wired here, not by callers: it is the log's own plumbing. An adapter that
     // sends several requests for one call reports each of them through it.

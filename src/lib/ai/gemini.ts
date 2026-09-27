@@ -4,10 +4,10 @@
  */
 
 import { fetch } from "../http";
-import { reasoningBody, resolveThinkingCategory } from "./reasoning";
+import { reasoningBody } from "./reasoning";
+import { planRequest } from "./capability/plan";
 import { toSafetySettingsArray } from "./safety";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { wireOf } from "./platforms";
 import { createGeminiServerToolReader, geminiServerTools } from "./serverTools";
 import { geminiUrl } from "./urls";
 import type {
@@ -225,6 +225,9 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // into proxy/server logs and error messages.
   const url = geminiUrl(opts.baseUrl, `/models/${opts.modelId}:streamGenerateContent?alt=sse`);
 
+  // Every decision about what this request carries is the plan's
+  // (capability/plan.ts); this function only spells it.
+  const plan = opts._plan ?? planRequest(opts);
   const systemText = geminiSystemText(opts.messages);
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
 
@@ -246,7 +249,9 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     // Translate toolChoice → Gemini's functionCallingConfig. "auto"/undefined
     // leaves the default (AUTO). "required"/a specific function force a call
     // (ANY), optionally restricted to one allowed function name.
-    const tc = opts.toolChoice;
+    // A forced choice the plan downgraded is `auto` here — the default, so no
+    // config at all (RequestPlan.toolChoice).
+    const tc = plan.toolChoice?.sent;
     if (tc && tc !== "auto") {
       const mode = tc === "none" ? "NONE" : "ANY";
       const allowed = typeof tc === "object" ? [tc.function.name] : undefined;
@@ -261,7 +266,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // The endpoint's own tools, each its own `tools[]` entry beside the function
   // declarations — and sent without them too: a standing permission, not a
   // per-task input (lib/ai/serverTools.ts).
-  const builtIn = geminiServerTools(wireOf(opts), opts.serverTools, opts.modelId, opts.relayUpstream);
+  const builtIn = geminiServerTools(plan.serverTools);
   if (builtIn.length) {
     body.tools = [...((body.tools as unknown[] | undefined) ?? []), ...builtIn];
   }
@@ -273,18 +278,17 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Same shared-territory merge as the thinking block below — and before it, so
   // a dialect that ever wanted to pin a temperature would still win. Absent
   // unless the author set one; 0 is a real value, hence the `!== undefined`.
-  if (opts.temperature !== undefined) {
+  if (plan.temperature !== undefined) {
     body.generationConfig = {
       ...(body.generationConfig as Record<string, unknown> | undefined),
-      temperature: opts.temperature,
+      temperature: plan.temperature,
     };
   }
 
   // Merged one level deep rather than assigned: `generationConfig` is shared
   // territory — JSON mode already puts `responseMimeType` there via extraBody,
   // and a plain assign in either direction would drop the other's field.
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  const thinking = reasoningBody(category, opts.reasoningEffort);
+  const thinking = reasoningBody(plan.thinking.category, plan.thinking.effort);
   if (thinking) {
     body.generationConfig = {
       ...(body.generationConfig as Record<string, unknown> | undefined),
