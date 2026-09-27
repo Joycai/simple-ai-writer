@@ -14,9 +14,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_IDS, CAPABILITY_REASONS, CAPABILITY_RULES, PLATFORM_CELLS, SERVER_TOOL_CAPABILITIES, UPSTREAM_CELLS,
-  capabilityVerdict, effortMenuOnWire, effortOnWire, familyVerdict, hasCapability,
+  TRUST, capabilityVerdict, effortMenuOnWire, effortOnWire, familyVerdict, hasCapability, modelValue, thinkingCategoryOf,
   type CapabilityId,
 } from "../capabilities";
+import { standardOf } from "../routes";
 import { RELAY_UPSTREAMS, capabilityModelOf } from "../relayUpstream";
 import { patternMatches } from "../capability/modelId";
 import { PLATFORM_IDS, platformEndpoints, type Wire } from "../platforms";
@@ -81,6 +82,71 @@ function renderUpstreams(): string[] {
   return out;
 }
 
+/** Every exact id a platform's rows name, in table order. */
+function platformIds(platform: (typeof PLATFORM_IDS)[number]): string[] {
+  const ids = Object.values(PLATFORM_CELLS[platform].families ?? {})
+    .flatMap((b) => b?.models ?? [])
+    .flatMap((r) => ("eq" in r.match ? [r.match.eq] : []));
+  return [...new Set(ids)];
+}
+
+/**
+ * The value facts, rendered from the resolver (`capability/values.ts`) rather
+ * than from the rows: what a row that leaves the field unset gets on each of
+ * the platform's routes (D1), and which consumer trusts which source.
+ */
+function renderValues(): string[] {
+  const at = (p: (typeof PLATFORM_IDS)[number], family: ProtocolFamily) => {
+    const route = platformEndpoints(p).find((e) => e.family === family)!;
+    return { standard: standardOf({ family, official: route.official === true }), platform: p };
+  };
+  const defaults = FAMILIES.map((f) => `${FAMILY_LABEL[f]} \`${thinkingCategoryOf({}, at("custom", f)).value.id}\``);
+  const out = [
+    "## 思考类目缺省",
+    "",
+    "模型行的思考类目留在「自动」时的取值：作者声明 → 旧方言迁移 → 平台格里这个 id 的行（只取本线路能拼的类目）→ 协议族缺省。",
+    `协议族缺省：${defaults.join(" · ")}。下表只列平台行给出的、与族缺省不同来源的格。`,
+    "",
+    "| 平台 | 族 | 模型 id | 类目 |",
+    "| --- | --- | --- | --- |",
+  ];
+  for (const p of PLATFORM_IDS) for (const e of platformEndpoints(p)) {
+    for (const id of platformIds(p)) {
+      const c = thinkingCategoryOf({ modelId: id }, at(p, e.family));
+      if (c.source === "platform") out.push(`| ${p} | ${FAMILY_LABEL[e.family]} | \`${id}\` | \`${c.value.id}\` |`);
+    }
+  }
+  out.push(
+    "",
+    "## 输出上限来源",
+    "",
+    "窗口与单次输出上限留空时的取值：作者值（含探测写入的）→ 平台格里这个 id 的行 → 全局模型目录（`cells/catalog.ts`，只有上限）→ 应用缺省（设置 → 通用，只有上限）。",
+    "每个值带着出处走，消费方只信自己收的出处：",
+    "",
+    "| 消费方 | 收哪些出处 |",
+    "| --- | --- |",
+    ...Object.entries(TRUST).map(([c, sources]) => `| ${c} | ${sources.join(" · ")} |`),
+    "",
+    "平台行给出的值（留空的行在该线路上得到的）：",
+    "",
+    "| 平台 | 族 | 模型 id | 窗口 | 上限 |",
+    "| --- | --- | --- | --- | --- |",
+  );
+  for (const p of PLATFORM_IDS) for (const e of platformEndpoints(p)) {
+    for (const id of platformIds(p)) {
+      const v = (fact: "contextSize" | "maxOutput") => {
+        const r = modelValue(fact, { modelId: id }, at(p, e.family));
+        return r?.source === "platform" ? r.value.toLocaleString("en-US") : "";
+      };
+      const ctx = v("contextSize");
+      const cap = v("maxOutput");
+      if (ctx || cap) out.push(`| ${p} | ${FAMILY_LABEL[e.family]} | \`${id}\` | ${ctx} | ${cap} |`);
+    }
+  }
+  out.push("");
+  return out;
+}
+
 function renderMatrix(): string {
   const out = [
     "# 能力矩阵（生成物，勿手改）",
@@ -101,6 +167,7 @@ function renderMatrix(): string {
     for (const p of PLATFORM_IDS) out.push(`| ${p} | ${FAMILIES.map((f) => cell(id, p, f)).join(" | ")} |`);
     out.push("");
   }
+  out.push(...renderValues());
   out.push(...renderUpstreams());
   return out.join("\n");
 }

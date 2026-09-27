@@ -97,7 +97,7 @@ import { fileExists } from "../lib/fs/fileio";
 import { loadApiKey } from "../lib/keyStore";
 import { canSeeImages } from "../lib/ai/configDb";
 import { canReadVideo, sentVideoFps } from "../lib/ai/videoInput";
-import { connOptions, resolveConn } from "../lib/ai/conn";
+import { connOptions, plannedLimits, resolveConn } from "../lib/ai/conn";
 import { notify } from "../lib/notify";
 import { baseName, isSamePath, joinPath } from "../lib/paths";
 
@@ -931,7 +931,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       useAiStore.getState().subAgents, chat.disabledSubAgents,
     );
     const messageCeiling = messageCeilingFor(
-      model.contextSize,
+      plannedLimits({ model, provider }).contextSize,
       useAppStore.getState().contextUtilization,
       chatAgentPreset(),
       effectiveSubs,

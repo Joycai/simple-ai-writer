@@ -24,6 +24,7 @@ import { listArchives, loadPersonaCard, type ArchivedScene } from "../../lib/rol
 import { currentSceneNo } from "../../lib/roleplay/scene";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
+import { usePlannedLimits } from "../ai/usePlannedLimits";
 import { AgentLog } from "../ai/AgentLog";
 import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
@@ -447,6 +448,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     () => models.find((m) => m.id === (agent.modelId ?? activeModelId)),
     [models, agent.modelId, activeModelId],
   );
+  // The window the run plans with — the author's, else the platform's.
+  const contextWindow = usePlannedLimits(boundModel).contextSize;
   const disabledSubs = session?.disabledSubAgents ?? EMPTY_SUBS;
   // 过 `subAgentsFor`：下面两个消费者都必须和 `roleplayStore` 跑时看到的是
   // 同一份 subs——`canSeeImages` 决定附件候选，`toolTokens` 画的是折叠线。
@@ -500,14 +503,14 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       session?.history ?? null,
       session?.meta ?? null,
       toolTokens,
-      effectiveInputCeiling(boundModel?.contextSize, contextUtilization, toolTokens),
-      boundModel?.contextSize ?? 0,
+      effectiveInputCeiling(contextWindow, contextUtilization, toolTokens),
+      contextWindow ?? 0,
       { autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio },
-      inputCeilingFor(boundModel?.contextSize, contextUtilization),
+      inputCeilingFor(contextWindow, contextUtilization),
     ),
     // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization,
+    [session?.history, session?.meta, contextVersion, toolTokens, contextWindow, contextUtilization,
       autoCompact, compactTriggerTokens, compactTriggerRatio],
   );
 
@@ -525,14 +528,14 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       pre: computePreflightBreakdown(
         preflight,
         toolTokens,
-        effectiveInputCeiling(boundModel?.contextSize, contextUtilization, toolTokens),
-        boundModel?.contextSize ?? 0,
+        effectiveInputCeiling(contextWindow, contextUtilization, toolTokens),
+        contextWindow ?? 0,
       ),
       resident: preflight.resident.filter((p) => p.kind === "primary").map((p) => p.name),
       unexpanded: preflight.resident.filter((p) => p.unexpanded).length,
       stale: preflight.stalePaths.length,
     };
-  }, [preflight, toolTokens, boundModel?.contextSize, contextUtilization]);
+  }, [preflight, toolTokens, contextWindow, contextUtilization]);
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),

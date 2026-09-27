@@ -40,7 +40,7 @@ import {
 } from "../lib/agent/subagentModel";
 import { toolAppState } from "./toolAppState";
 import { useAppStore } from "./appStore";
-import { connOptions, resolveConn } from "../lib/ai/conn";
+import { connOptions, plannedLimits, resolveConn } from "../lib/ai/conn";
 import { canSeeImages, costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { recordUsage } from "../lib/ai/usageRow";
@@ -538,8 +538,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     // 留给**消息**的上限：工具 schema 那一份已经扣掉了（lib/agent/toolCost）。
     // 压缩和 runtime 的历史裁剪都量这个数——两边各算各的，就是上下文条越过
     // 压缩线却什么都没发生的那种错位。这里算一次，下面用两次。
+    const contextWindow = plannedLimits({ model, provider }).contextSize;
     const messageCeiling = messageCeilingFor(
-      model.contextSize,
+      contextWindow,
       contextUtilization,
       presetFor(agent.kind),
       subAgentsFor(
@@ -650,7 +651,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           // 同 agentStore.sendChat：自动归纳的开关和触发线（三条线取最小）。
           autoCompact,
           triggerTokens: compactTriggerFor({
-            contextSize: model.contextSize, messageCeiling,
+            contextSize: contextWindow, messageCeiling,
             triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
           }).tokens,
           summarize: (input) =>
@@ -1456,7 +1457,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         const { model, provider } = resolved;
         // 同 runJob 的天花板，同一个函数算——手动折叠和自动折叠不能对预算各执一词。
         const messageCeiling = messageCeilingFor(
-          model.contextSize,
+          plannedLimits({ model, provider }).contextSize,
           useAppStore.getState().contextUtilization,
           presetFor(agent.kind),
           subAgentsFor(agent.kind, withSessionOverrides(subAgents, session.disabledSubAgents)),

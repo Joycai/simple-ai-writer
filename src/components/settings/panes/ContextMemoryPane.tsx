@@ -14,6 +14,7 @@ import { compactTriggerFor } from "../../../lib/agent/compact";
 import { messageCeilingFor } from "../../../lib/agent/toolCost";
 import { chatAgentPreset } from "../../../lib/agent/packs";
 import { Slider, type SliderTick } from "../../common/Slider";
+import { usePlannedLimits } from "../../ai/usePlannedLimits";
 import { Select } from "../../common/Select";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import common from "../settingsCommon.module.css";
@@ -75,6 +76,8 @@ export function ContextMemoryPane() {
   const providers = useAiStore((s) => s.providers);
   const subAgents = useAiStore((s) => s.subAgents);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId) ?? null);
+  // The window the chat plans with — the author's, else the platform's.
+  const contextWindow = usePlannedLimits(activeModel).contextSize;
 
   // The worked example runs the same resolver the chat runs, fed the same
   // ceiling (`messageCeilingFor` with the chat's toolset), so the line this
@@ -82,17 +85,17 @@ export function ContextMemoryPane() {
   const example = useMemo(() => {
     if (!activeModel) return null;
     const messageCeiling = messageCeilingFor(
-      activeModel.contextSize, contextUtilization, chatAgentPreset(), subAgents, models,
+      contextWindow, contextUtilization, chatAgentPreset(), subAgents, models,
       { handoff: true, packs: true, providers },
     );
     return compactTriggerFor({
-      contextSize: activeModel.contextSize, messageCeiling, triggerTokens, triggerRatio,
+      contextSize: contextWindow, messageCeiling, triggerTokens, triggerRatio,
     });
-  }, [activeModel, contextUtilization, subAgents, models, providers, triggerTokens, triggerRatio]);
+  }, [activeModel, contextWindow, contextUtilization, subAgents, models, providers, triggerTokens, triggerRatio]);
 
   const ratioPct = Math.round(triggerRatio * 100);
   const utilPct = Math.round(contextUtilization * 100);
-  const hasWindow = !!activeModel?.contextSize;
+  const hasWindow = !!contextWindow;
 
   // 生效中 sits on the row whose line won; the ratio row instead says why it
   // cannot compete when the model declares no window. Neither when off.
@@ -181,7 +184,7 @@ export function ContextMemoryPane() {
           {t("systemSettings.contextMemory.exampleLead")}
           <span className={styles.exampleName}>{activeModel.name}</span>
           （<span className={styles.exampleMono}>
-            {hasWindow ? formatTokens(activeModel.contextSize!) : t("systemSettings.contextMemory.noWindow")}
+            {hasWindow ? formatTokens(contextWindow!) : t("systemSettings.contextMemory.noWindow")}
           </span>）
           {t("systemSettings.contextMemory.exampleAt")}
           <span className={`${styles.exampleMono} ${styles.exampleTrigger}`}>{formatTokens(example.tokens)}</span>
@@ -230,8 +233,8 @@ export function ContextMemoryPane() {
                       })
                     : t("systemSettings.contextMemory.utilizationCeiling", {
                         name: activeModel.name,
-                        window: formatTokens(activeModel.contextSize!),
-                        tokens: formatTokens(Math.floor(activeModel.contextSize! * contextUtilization)),
+                        window: formatTokens(contextWindow!),
+                        tokens: formatTokens(Math.floor(contextWindow! * contextUtilization)),
                       })}
               </div>
             }

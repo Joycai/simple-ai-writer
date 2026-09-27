@@ -45,6 +45,7 @@ import { canReadVideo, estimateVideoTokens, sentVideoFps } from "../../lib/ai/vi
 import { videoMimeOf } from "../../lib/fs/video";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { usePasteImages } from "./usePasteImages";
+import { usePlannedLimits } from "./usePlannedLimits";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
 import {
@@ -165,6 +166,7 @@ export function AgentChat() {
     + pendingTruncations.length + pendingQuestions.length > 0;
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
+  const contextWindow = usePlannedLimits(activeModel).contextSize;
   const subAgents = useAiStore((s) => s.subAgents);
   const disabledSubAgents = useActiveChat((c) => c.disabledSubAgents);
   const models = useAiStore((s) => s.models);
@@ -750,20 +752,20 @@ export function AgentChat() {
         // The ceiling the run actually trims to — raised when the tool schemas
         // crowd the author's share — with the author's own beside it, so the bar
         // can say when the two differ.
-        effectiveInputCeiling(activeModel?.contextSize, contextUtilization, toolTokens),
-        activeModel?.contextSize ?? 0,
+        effectiveInputCeiling(contextWindow, contextUtilization, toolTokens),
+        contextWindow ?? 0,
         {
           autoCompact, triggerTokens: compactTriggerTokens, triggerRatio: compactTriggerRatio,
           // The mode as the *next* send will see it: the chip's value, gated on
           // the Beta the same way sendChat gates it.
           stateMode: stateMemory && isSkillStateEnabled(),
         },
-        inputCeilingFor(activeModel?.contextSize, contextUtilization),
+        inputCeilingFor(contextWindow, contextUtilization),
       ),
     // `chatContextVersion` is the real trigger — the history array is mutated
     // in place, so its reference alone would never announce a change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization,
+    [chatHistory, chatMeta, chatContextVersion, toolTokens, contextWindow, contextUtilization,
       autoCompact, compactTriggerTokens, compactTriggerRatio, stateMemory],
   );
   // The 立即归纳 affordance appears only when a forced fold would actually fold

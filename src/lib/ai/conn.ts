@@ -21,15 +21,16 @@
 
 import i18n from "../../i18n";
 import type { Model, Provider } from "./configDb";
-import { resolveThinkingCategory, type ReasoningEffort, type ThinkingCategoryId } from "./reasoning";
+import type { ReasoningEffort, ThinkingCategoryId } from "./reasoning";
+import { modelValue, resolveThinkingCategory, type Sourced } from "./capabilities";
+import type { Provenance } from "./capability/intent";
 import type { GeminiSafetySettings } from "./safety";
-import { resolvePlatform, type PlatformId } from "./platforms";
-import { activeFamily, channelEndpoints, ROUTE_LONG, routeProvider } from "./routes";
+import { providerWire, resolvePlatform, type PlatformId } from "./platforms";
+import { activeFamily, channelEndpoints, providerFor, ROUTE_LONG, routeProvider } from "./routes";
 import type { ServerToolId } from "./serverTools";
 import { relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { StructuredOutputMode } from "./jsonMode";
 import type { ApiStandard, AuthMode, TextVerbosity } from "./types";
-import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
 
 /**
  * A resolved endpoint + model + credential: everything a request needs except
@@ -72,10 +73,24 @@ export interface ConnOptions {
   modelId: string;
   /** Optional model-scoped prefix prompt, prepended as a leading system message. */
   prefix?: string;
-  /** Optional context window (tokens); oversized prompts are rejected before sending. */
+  /**
+   * The context window (tokens) — the author's, else the tables' (`provenance`
+   * says which). Planners take any; an oversized prompt is rejected before
+   * sending only against the author's.
+   */
   contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  /**
+   * The per-reply cap — the author's, else the tables' or the app default.
+   * Sent as `max_tokens` on the Anthropic path only when it is the author's;
+   * planning-only elsewhere.
+   */
   maxOutput?: number;
+  /**
+   * Where `contextSize` and `maxOutput` came from (`capability/intent.ts`):
+   * each consumer trusts only some sources (`TRUST`). `connOptions()` fills
+   * it; absent in a hand-built bag, whose numbers are the caller's own.
+   */
+  provenance?: Provenance;
   /**
    * Sampling temperature, or absent to leave the endpoint's own default alone.
    * Every family sends it; the Anthropic path clamps it to 1 and drops it while
@@ -114,6 +129,47 @@ export interface ConnOptions {
 }
 
 /**
+ * A model's window and per-reply cap on the route it takes, each with its
+ * source (`capability/values.ts`): the author's value, else the platform's
+ * row, the catalog, the app default.
+ */
+function sourcedLimits(pair: ConnPair): { contextSize?: Sourced<number>; maxOutput?: Sourced<number> } {
+  const { model, provider } = pair;
+  const at = { standard: provider.apiStandard, platform: providerWire(provider).platform };
+  return { contextSize: modelValue("contextSize", model, at), maxOutput: modelValue("maxOutput", model, at) };
+}
+
+export interface PlannedLimits {
+  contextSize?: number;
+  maxOutput?: number;
+}
+
+/**
+ * A model's window and per-reply cap as a planner takes them — every source
+ * (`TRUST.planner`). The one answer every budget, ceiling, trigger and
+ * forecast plans with, so the forecast the author reads and the run it
+ * describes measure against the same numbers; the request's own copy is
+ * `connOptions()`'s, from the same {@link sourcedLimits}.
+ */
+export function plannedLimits(pair: ConnPair): PlannedLimits {
+  const { contextSize, maxOutput } = sourcedLimits(pair);
+  return { contextSize: contextSize?.value, maxOutput: maxOutput?.value };
+}
+
+/**
+ * {@link plannedLimits} for a model picked from the store, on the route it
+ * takes. A model whose channel is gone has only its own values — no request
+ * can be built for it either (`resolveConn`).
+ */
+export function plannedLimitsOf(model: Model | undefined, providers: readonly Provider[]): PlannedLimits {
+  if (!model) return {};
+  const provider = providerFor(model, providers);
+  if (provider) return plannedLimits({ model, provider });
+  const own = (n: number | undefined) => (n && n > 0 ? n : undefined);
+  return { contextSize: own(model.contextSize), maxOutput: own(model.maxOutput) };
+}
+
+/**
  * Flatten a resolved connection into the transport fields of a request.
  *
  * Note what is *not* here: a default for an empty `baseUrl`. An empty base means
@@ -124,6 +180,11 @@ export interface ConnOptions {
 export function connOptions(conn: AiConn): ConnOptions {
   const { provider, model, apiKey } = conn;
   const platform = resolvePlatform(provider.platform, provider.baseUrl, provider.apiStandard);
+  // Resolved, not copied: an unconfigured model still has a window and a
+  // per-reply ceiling, and the one place every request is built is the one
+  // place that can make the planner and the wire agree on them. Each carries
+  // its source, and the wire takes only the author's (capability/intent.ts).
+  const { contextSize, maxOutput } = sourcedLimits(conn);
   return {
     baseUrl: provider.baseUrl,
     apiKey,
@@ -133,16 +194,19 @@ export function connOptions(conn: AiConn): ConnOptions {
     platform,
     modelId: model.modelId,
     prefix: model.prefix,
-    contextSize: model.contextSize,
-    // Resolved, not copied: an unconfigured model still has a real per-reply
-    // ceiling, and the one place every request is built is the one place that
-    // can make the planner and the wire agree on what it is. See ./modelLimits.
-    maxOutput: effectiveMaxOutput(model, defaultMaxOutput()),
+    contextSize: contextSize?.value,
+    maxOutput: maxOutput?.value,
+    provenance: {
+      ...(contextSize ? { contextSize: contextSize.source } : {}),
+      ...(maxOutput ? { maxOutput: maxOutput.source } : {}),
+    },
     temperature: model.temperature,
     reasoningEffort: model.reasoningEffort,
     // Resolved (and migrated from a legacy dialect) here, the one place with the
     // provider's standard in hand — the model row alone can't name its family.
-    thinkingCategory: resolveThinkingCategory(model, provider.apiStandard).id,
+    // An unset one takes the platform's category for the id before the
+    // family's default (capability/values.ts, D1).
+    thinkingCategory: resolveThinkingCategory(model, provider.apiStandard, platform).id,
     thinkingBudget: model.thinkingBudget,
     serverTools: model.serverTools,
     structuredOutput: model.structuredOutput,
@@ -173,6 +237,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     prefix: o.prefix,
     contextSize: o.contextSize,
     maxOutput: o.maxOutput,
+    provenance: o.provenance,
     temperature: o.temperature,
     reasoningEffort: o.reasoningEffort,
     thinkingCategory: o.thinkingCategory,

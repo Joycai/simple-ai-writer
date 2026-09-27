@@ -429,28 +429,28 @@ POST https://open.bigmodel.cn/api/paas/v4/chat/completions
 {"model":"glm-5.3","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
 
 ### glm-5.3 · effortHigh
-summary: reasoning_effort=high structured:response_format=json_object
+summary: thinking.clear_thinking=false reasoning_effort=high structured:response_format=json_object
 - plain
 POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"thinking":{"clear_thinking":false}}
 - tools+required
 POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"thinking":{"clear_thinking":false},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### glm-5.3 · effortOff
-summary: reasoning_effort=none structured:response_format=json_object
+summary: thinking.clear_thinking=false reasoning_effort=none structured:response_format=json_object
 - plain
 POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"thinking":{"clear_thinking":false}}
 - tools+required
 POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"thinking":{"clear_thinking":false},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
 
 ### glm-5.3 · effortMax
-summary: reasoning_effort=max structured:response_format=json_object
+summary: thinking.clear_thinking=false reasoning_effort=max structured:response_format=json_object
 - plain
 POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-{"model":"glm-5.3","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+{"model":"glm-5.3","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true},"thinking":{"clear_thinking":false}}
 
 ### deepseek-v4-pro · bare
 summary: structured:response_format=json_object

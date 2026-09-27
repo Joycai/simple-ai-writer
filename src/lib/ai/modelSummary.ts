@@ -17,11 +17,10 @@
  */
 
 import type { Model } from "./configDb";
-import { hasCapability } from "./capabilities";
+import { hasCapability, modelValue } from "./capabilities";
 import { planRequest, type RequestPlan } from "./capability/plan";
 import type { StructuredOutputMode } from "./jsonMode";
-import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
-import type { PlatformId } from "./platforms";
+import { wireOf, type PlatformId } from "./platforms";
 import { reasoningBody, thinkingBody } from "./reasoning";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import { geminiServerTools, openaiServerToolsBody, type ServerToolId } from "./serverTools";
@@ -136,7 +135,8 @@ function spellSummary(plan: RequestPlan, budgetDeclared: boolean): WireItem[] {
  * What this row adds to a request beyond `model` and the messages.
  *
  * Planned the way a request from this row is (`connOptions()`): the output
- * cap resolved, the relay upstream as resolved. Summarised as a request
+ * cap resolved with its source (so `max_tokens` shows only the author's cap,
+ * else the adapter's default), the relay upstream as resolved. Summarised as a request
  * without function tools — the conditions that drop `enable_code_interpreter`
  * and the `agent_max` strategy are the request's, not the model's.
  *
@@ -165,10 +165,11 @@ export function wireSummary(
     return out;
   }
 
+  const maxOutput = modelValue("maxOutput", m, { standard, platform: wireOf({ standard, baseUrl: baseUrl ?? "", platform }).platform });
   const plan = planRequest({
     standard, baseUrl: baseUrl ?? "", platform, modelId: m.modelId, relayUpstream,
     thinkingCategory: m.thinkingCategory, reasoningEffort: m.reasoningEffort, thinkingBudget: m.thinkingBudget,
-    temperature: m.temperature, maxOutput: effectiveMaxOutput(m, defaultMaxOutput()),
+    temperature: m.temperature, maxOutput: maxOutput?.value, provenance: maxOutput && { maxOutput: maxOutput.source },
     serverTools: m.serverTools, structuredOutput: m.structuredOutput,
     textVerbosity: m.textVerbosity, vlHighResolution: m.vlHighResolution,
   });

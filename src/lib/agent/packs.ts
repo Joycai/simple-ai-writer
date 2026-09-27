@@ -31,7 +31,7 @@
 import i18n from "../../i18n";
 import type { StreamMessage } from "../ai/types";
 import { canSeeImages, type Model } from "../ai/configDb";
-import { connOptions, type AiConn } from "../ai/conn";
+import { connOptions, plannedLimits, type AiConn } from "../ai/conn";
 import { recordUsage } from "../ai/usageRow";
 import { CONTEXT_UTILIZATION_DEFAULT } from "../context/budget";
 import { withCurrentTime } from "../context/clock";
@@ -331,7 +331,7 @@ export async function executeRunPack(call: ToolCall, ctx: ToolContext): Promise<
   // the pack's resident half — the runtime shrinks it further if the shared
   // plan gate loads a deferred group mid-run.
   const inputCeilingTokens = subRun.messageCeilingForTools(
-    conn.model.contextSize,
+    plannedLimits(conn).contextSize,
     ctx.contextUtilization ?? CONTEXT_UTILIZATION_DEFAULT,
     preset.tools,
     preset.residentGroups,

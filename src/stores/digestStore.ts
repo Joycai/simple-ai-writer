@@ -17,7 +17,7 @@ import { chapterTitle, type Volume } from "../lib/context/outline";
 import { readFile } from "../lib/fs/fileio";
 import { type Model } from "../lib/ai/configDb";
 import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
-import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
+import { connOptions, plannedLimits, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
@@ -90,7 +90,7 @@ export const useDigestStore = create<DigestState>((set, get) => ({
         chapterMeta.push({ rel: ch.relPath, hash: hashText(content) });
       }
 
-      const body = buildDigestInput(items, segmentTargetChars(model.contextSize));
+      const body = buildDigestInput(items, segmentTargetChars(plannedLimits({ model, provider }).contextSize));
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       let summary = "";

@@ -19,7 +19,7 @@ import { readFile } from "../lib/fs/fileio";
 import { type Model, type Provider } from "../lib/ai/configDb";
 import { recordUsage as recordUsageRow } from "../lib/ai/usageRow";
 import { addReportedCost } from "../lib/ai/reportedCost";
-import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
+import { connOptions, plannedLimits, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
@@ -76,7 +76,7 @@ async function runMemoryGeneration(opts: {
   const startFrom = keep.length > 0 ? keep[keep.length - 1].to : 0;
   if (coverEnd - startFrom < (force ? 1 : 500)) return { skipped: "upToDate" };
 
-  const ranges = splitRange(content, startFrom, coverEnd, segmentTargetChars(model.contextSize));
+  const ranges = splitRange(content, startFrom, coverEnd, segmentTargetChars(plannedLimits({ model, provider }).contextSize));
   onProgress({ done: 0, total: ranges.length });
 
   let totalIn = 0;

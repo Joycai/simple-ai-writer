@@ -18,7 +18,11 @@
  *    `max_tokens` above the model's own ceiling with a 400 — a wrong entry
  *    would break every request to that model rather than degrade politely. The
  *    adapter's own conservative default (`DEFAULT_MAX_TOKENS` below) keeps
- *    that job, and an author who wants more raises it explicitly.
+ *    that job, and an author who wants more raises it explicitly. Since
+ *    capability-resolution P6 this is data, not a promise: every cap travels
+ *    with its source, and the Anthropic `max_tokens` trusts only the author's
+ *    (`capability/intent.ts` `TRUST`). Before it, the app default and these
+ *    numbers did reach the wire (HLD §1.3).
  * 2. **Everywhere else the value is planning-only.** The OpenAI and Gemini
  *    adapters send no cap at all, letting the endpoint apply the model's real
  *    one; the number here only sizes the context budget. Guessing low there
@@ -31,6 +35,9 @@
  *
  * The numbers themselves are the `maxOutput` rows of the global model catalog
  * (`capability/cells/catalog.ts`), beside the other facts a model id carries.
+ * A row that leaves the cap unset takes, in order, the platform's value for
+ * the id, the catalog's, then the app-wide default below
+ * (`capability/values.ts` `modelValue`).
  */
 
 import { readPref } from "../prefs";
@@ -63,26 +70,6 @@ export function defaultMaxOutput(): number {
  */
 export function knownMaxOutput(modelId: string): number | null {
   return catalogFact("maxOutput", modelId) ?? null;
-}
-
-/**
- * What a model's per-reply cap should be taken as, in priority order:
- * the author's own value → this table → the app-wide default they set in
- * Settings → nothing (each protocol's own fallback).
- *
- * One function so every consumer — the request adapters, the budget planner,
- * the model editor's placeholder — agrees on the answer. A planner that
- * assumed one number while the request sent another is exactly how an author
- * ends up with a "context budget" that doesn't match what the endpoint did.
- */
-export function effectiveMaxOutput(
-  model: { modelId: string; maxOutput?: number },
-  appDefault?: number,
-): number | undefined {
-  if (model.maxOutput && model.maxOutput > 0) return model.maxOutput;
-  const known = knownMaxOutput(model.modelId);
-  if (known) return known;
-  return appDefault && appDefault > 0 ? appDefault : undefined;
 }
 
 /**

@@ -6,7 +6,9 @@
  * `capabilities.ts` re-exports everything here, so callers import from there.
  */
 
+import type { ThinkingCategoryId } from "../reasoning";
 import type { ServerToolId } from "../serverTools";
+import type { ProtocolFamily } from "../types";
 
 
 /** What can be asked about. A server tool's id is a capability id. */
@@ -102,3 +104,45 @@ const SERVER_TOOL_FLAGS: Record<ServerToolId, true> = {
   web_search: true, web_extractor: true, web_search_image: true, image_search: true, code_interpreter: true,
 };
 export const SERVER_TOOL_CAPABILITIES = Object.keys(SERVER_TOOL_FLAGS) as ServerToolId[];
+
+/**
+ * Facts whose answer is a value rather than a yes / no
+ * (docs/api/capability-resolution-lld.md §2, P6). A model row may leave each
+ * one unset; the tables then answer, and every answer says where it came from
+ * (`intent.ts`), because not every consumer may trust every source.
+ */
+export type ValueFactId = "thinkingCategory" | "maxOutput" | "contextSize";
+
+export interface ValueFactMap {
+  thinkingCategory: ThinkingCategoryId;
+  maxOutput: number;
+  contextSize: number;
+}
+
+interface ValueFactSpec<V> {
+  /**
+   * `intrinsic`: a fact about the model, whoever serves it — the global
+   * catalog may answer it. `transport`: how a server spells or serves it —
+   * only a platform's cells may.
+   */
+  scope: "intrinsic" | "transport";
+  /** The protocol family's own answer when no table has one; absent = none. */
+  familyDefault?: Record<ProtocolFamily, V>;
+}
+
+/**
+ * Every value fact and how it resolves. A `Record`, so a new one does not
+ * compile until it says whether the catalog may answer it and what its
+ * family default is.
+ */
+export const VALUE_FACTS: { [F in ValueFactId]: ValueFactSpec<ValueFactMap[F]> } = {
+  // What `defaultCategoryId` used to switch on: each family's own dialect.
+  thinkingCategory: {
+    scope: "transport",
+    familyDefault: {
+      openai: "openai-generic", responses: "responses-effort", gemini: "gemini3", anthropic: "claude-adaptive",
+    },
+  },
+  maxOutput: { scope: "intrinsic" },
+  contextSize: { scope: "intrinsic" },
+};

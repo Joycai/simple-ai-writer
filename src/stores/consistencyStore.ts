@@ -15,7 +15,7 @@
 
 import { create } from "zustand";
 import i18n from "../i18n";
-import { resolveConn } from "../lib/ai/conn";
+import { plannedLimitsOf, resolveConn } from "../lib/ai/conn";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { CONSISTENCY_PRESET } from "../lib/agent/presets";
 import { resolveSubAgentConn, withSessionOverrides } from "../lib/agent/subagentModel";
@@ -138,7 +138,6 @@ export function reportMatchesOpenDocument(report: ConsistencyReport | null): boo
 /** The forecast the settings block draws — a pure derivation of store + app state. */
 export function forecastReview(docText: string, scope: ReviewScope): ReviewPlan {
   const { models, providers, activeModelId, subAgents } = useAiStore.getState();
-  const model = models.find((m) => m.id === activeModelId);
   const subs = withSessionOverrides(subAgents, activeChat(useAgentStore.getState()).disabledSubAgents);
   const index = useLoreStore.getState().index;
   // Entries mode: the pins' own text is the knowledge-base segment. Their size
@@ -153,7 +152,7 @@ export function forecastReview(docText: string, scope: ReviewScope): ReviewPlan 
   const memory = useMemoryStore.getState().memory;
   const recapChars = memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0;
   return planReview({
-    contextSize: model?.contextSize,
+    contextSize: plannedLimitsOf(models.find((m) => m.id === activeModelId), providers).contextSize,
     utilization: useAppStore.getState().contextUtilization,
     toolTokens: plannedToolTokens(CONSISTENCY_PRESET, subs, models, { providers }),
     fixedChars: 1_600,

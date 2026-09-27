@@ -20,8 +20,8 @@ import { imagePart, imagePayload, MAX_REQUEST_IMAGE_CHARS } from "../ai/imagePar
 import { nonWebServerTools } from "../ai/serverTools";
 import { addReportedCost } from "../ai/reportedCost";
 import { ImagePayloadError } from "../ai/types";
-import { isOnOffCategory, resolveThinkingCategory, type NativeReasoning } from "../ai/reasoning";
-import { effortMenuOnWire } from "../ai/capabilities";
+import { isOnOffCategory, type NativeReasoning } from "../ai/reasoning";
+import { effortMenuOnWire, resolveThinkingCategory } from "../ai/capabilities";
 import { wireOf } from "../ai/platforms";
 import { capabilityModelOf } from "../ai/relayUpstream";
 import type {
@@ -1330,8 +1330,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     if (thinkingCut && !opts.signal.aborted) {
       thinkingCutUsed = true;
       retryingAfterCut = true;
-      const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-      const offOnWire = effortMenuOnWire(category.menu, wireOf(opts), capabilityModelOf(opts)).includes("off");
+      const wire = wireOf(opts);
+      const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform);
+      const offOnWire = effortMenuOnWire(category.menu, wire, capabilityModelOf(opts)).includes("off");
       thinkingFallback = offOnWire || isOnOffCategory(category) ? "off" : "nudge";
       opts.onEvent({
         kind: "output-truncated",

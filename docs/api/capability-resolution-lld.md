@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6 的逻辑部分已落成（§9.7），P6 的界面（等设计稿）、P6b、P7 未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -943,6 +943,102 @@ B3、B9、B11 在网格里零差异：
    旧的 `PROBES` 照旧保留。
 3. **`streamCompletion` 仍在请求前把学到的强制降成 `auto`。** 重试执行器合一是 P7 的事。
    计划里 `learned` 这个原因在直接问计划时生效，例如 `structured.ts`。
+
+### 9.7 P6：值类事实与出处——逻辑部分（2026-09-27）
+
+思考类目、窗口、单次输出上限这三个值类事实走同一条链，每个值带着出处；消费方按出处决定信不信。
+界面上的出处显示（抽屉的占位与说明、矩阵组件的值类一栏）按 D7 等设计稿，另开一期，本期只动逻辑。
+
+**新文件与挪动**：
+
+- `capability/intent.ts`：
+  - `Source`（`author` · `platform` · `catalog` · `protocol` · `default`）、`Sourced`；
+  - `TRUST` 表：`planner` 收全部出处，`contextGate` 与 `anthropicMaxTokens` 只收 `author`；
+  - `trusted()`；
+  - `carried()`：把请求里带的数和它的出处配成对；没有出处的手搭参数袋算调用方自己的值。
+- `capability/values.ts`：
+  - 取值链：作者值 → 平台格里这个 id 的行（先族块，后 `all` 块；只取本族能拼的类目）→ 全局目录（只对固有类事实）→ 协议族缺省 → 应用缺省；
+  - `modelValue`（窗口、上限）、`thinkingCategoryOf`、`resolveThinkingCategory`。
+- `facts.ts`：新增 `ValueFactId`、`ValueFactMap`、`VALUE_FACTS`。原 `reasoning.ts` 里 `defaultCategoryId` 的按族 switch，变成 `thinkingCategory.familyDefault` 这一行数据。
+- `cells/platform.ts`：新增 `platformValue`。`cells/catalog.ts` 给 `contextSize` 留了位置，但今天没有行。
+- `resolveThinkingCategory` 从 `reasoning.ts` 挪进 `values.ts`，经 `capabilities.ts` 门面导出；它多了一个可选的 `platform` 参数。
+  - 挪的原因：它要读平台格，平台格要读类目表，留在 `reasoning.ts` 会成环。
+  - `reasoning.ts` 只留两个拼法层的函数：`fitsFamily`（类目能不能在这一族上拼），`migrateDialect`（旧方言迁到哪个类目）。
+- `modelLimits.ts` 删掉 `effectiveMaxOutput`，头注第 1 条改写成「由 `TRUST` 保证」。`knownMaxOutput` 保留，作为读目录的门面。
+
+**请求路径**：
+
+- `connOptions()` 用 `conn.ts` 内部的 `sourcedLimits` 算出窗口与上限，连同出处放进新字段 `ConnOptions.provenance`（`StreamOptions` 同名）。
+  - 类目按链解析，带上平台。
+- 请求计划的 `maxTokensOnWire` 只收作者值（D2），否则用 `DEFAULT_MAX_TOKENS`。
+- `streamCompletion` 发送前的窗口闸只收作者值。
+- agent 运行时拿 `opts.contextSize` 算思考预算和截断原因，属于规划，收全部出处。
+- 计划、agent 的思考回退（B8 那一处）、摘要都按同一条链解析类目，带上模型 id 与平台。
+  - 摘要的上限也按 `connOptions()` 的算法求出并带出处，所以 ④ 的 `max_tokens` 行与请求体一致。
+
+**规划路径**：新增 `conn.ts` 的 `plannedLimits(pair)`、`plannedLimitsOf(model, providers)`，以及组件用的 `usePlannedLimits`。
+所有预算、上限、压缩触发线和预估都改读它们，不再直接读 `model.contextSize`：
+
+- stores：`aiTaskStore`、`agentStore`、`agent/chatJob`、`roleplayStore`（两处）、`memoryStore`、`digestStore`、`consistencyStore`；
+- `lib`：`agent/packs`、`consistency/review`；
+- 组件：`AiPanel`（三处）、`AgentChat`、`RoleplayChat`、`ContextMemoryPane`、`ModelSelector`（窗口标签与「长上下文」筛选）。
+
+顺带修掉一处不一致：`AiPanel` 的预估用的是行上的原值 `maxOutput`，`runTask` 用的却是 `effectiveMaxOutput`。现在两边都读 `plannedLimits`。
+
+**`pdf_input` 列**：`configDb.ts` 保存时写成 `m.pdfInput ? 1 : null`，存不出「未设」与 `false` 的区别。按 D1，它仍只做预填。
+
+**金标差异**恰好是 B1 与 B2，共 851 行：
+
+- **B1**：504 条请求体、336 行摘要，都是 ④ 线路上的 `max_tokens`。
+  - 目录值（GPT 128000、GLM 131072、DeepSeek 393216、Gemini 65536）退回 32768，出现在每个平台的 ④ 线路上。
+  - 「设了应用缺省的 Anthropic 行」不在网格里（金标不设偏好），由 `values.test.ts` 钉住。
+- **B2**：7 条请求体、4 行摘要。
+  - DeepSeek 平台上 `deepseek-v4-pro` 设关：从 `reasoning_effort:"none"` 变成 `thinking.type:disabled`，是 `deepseek` 类目的拼法。
+  - 智谱上 `glm-5.3` 设了档位：多带 `thinking.clear_thinking:false`，是 `glm` 类目的拼法。
+  - 同一个 id 走智谱或火山方舟 Plan 的 ④ 时不变：`all` 块里的类目是 ① 族的，按族过滤后落回 `claude-adaptive`；火山方舟 Plan 的 ④ 有自己那一块的 `doubao-switch`。
+
+**矩阵文档**多出两节：
+
+- 「思考类目缺省」：各族缺省，以及各平台、各线路上由平台行给出的类目；
+- 「输出上限来源」：`TRUST` 表，以及各平台、各线路上由平台行给出的窗口与上限。
+
+两节都由解析函数渲染，不从行里抄。
+
+**测试**：新增 `values.test.ts`，全部走真实的 `connOptions` / `planRequest` / `streamCompletion`：
+
+- 链的顺序；类目的族过滤（Doubao 在 ①、③、④ 上各得其所）；
+- **留空的行与预填过的行解析出同样的值**：遍历每个平台、每条线路、每个精确 id 行；
+- ④ 只发作者的上限：应用缺省与目录值都不发；
+- 规划读到的值等于请求携带的值；
+- 窗口闸只按作者的窗口拦截；
+- 手搭参数袋里的上限算调用方自己的值。
+
+变异检查（用备份还原，逐字节比对）：
+
+- 让 `anthropicMaxTokens` 也收表值：金标 9 个平台报红，`values.test` 报红；
+- 让窗口闸收平台值：窗口闸那条报红；
+- 去掉平台行的按族过滤：金标 DeepSeek 与 `values.test` 报红。
+
+**与 §2、§3.3、§3.9、§6 P6 原文的出入**：
+
+1. **值类事实有自己的解析函数（`values.ts`），没有并进 `resolve.ts` 的 `resolve()`。**
+   开关事实的链上有原因码、请求条件、`"per-model"` 这些东西，值类事实一样都不用。
+   两者共用的是格、模型 id 轴与目录。硬塞进一个函数，只会多出一堆对两边都不适用的分支。
+2. **`Source` 里没有 `upstream` 与 `learned`，`TRUST` 里没有 `placeholder`。**
+   - 今天没有上游写值类格，也没有学到的值类事实；
+   - 占位符属于界面那一期。
+
+   等其中任何一样出现时再加。
+3. **`responsesInclude` 没有进 `VALUE_FACTS`。** 模型行上没有这个字段，也就没有「未设」可言。它仍由 `platformResponsesInclude` 读格。
+4. **抽屉的预填照旧。** 停掉预填、改成留空加「出处」占位，是界面那一期的事。在那之前，新建的行仍会把预填值存成作者值。
+   `values.test.ts` 保证预填过的行与留空的行解析出同样的值，所以两种行在线上没有区别。
+5. **`ASSUMED_INPUT_CEILING_TOKENS` 仍是常量。** §3.9 的原意是「规划可信的 `contextSize`，否则 32000」，
+   这一点已经由规划路径改读 `plannedLimits` 做到了。常量只在谁都不知道窗口时才起作用。
+6. **已有界面元素里的值变了，但没有新增元素。**
+   - 抽屉「自动」的注释（`noteCatAuto`）与档位菜单改显示平台给的类目，原来显示族缺省；
+   - 窗口标签、上下文条与预估改读 `plannedLimits`。
+
+   这些不涉及新的界面，所以不等设计稿。
 
 ## 10. 待决
 
