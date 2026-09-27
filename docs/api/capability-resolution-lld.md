@@ -2,7 +2,7 @@
 
 > **状态：`planned`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0 起按 §6 分期实施，尚未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
-> 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。行号以 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）为准。
+> 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
 ## 0. 定下来的取舍（作者 2026-09-27 拍板）
 
@@ -49,7 +49,7 @@ src/lib/ai/
 export type FlagFactId =
   | CapabilityId                 // 今天的 20 个，名字不变
   | "jsonObjectTier"             // 这一族有没有「任意 JSON 对象」档（替 structuredOutputModesFor 的按族分支）
-  | "promptCache"                // 显式缓存断点（替 anthropic.ts:533 的 standard ===）
+  | "promptCache"                // 显式缓存断点（替 anthropic.ts 的 cachesPrompt 里的 standard ===）
   | "strictSchemaModel"          // 模型守不守严格 schema（原 KNOWN_JSON_SCHEMA）——固有类
   | "reasons";                   // 模型有没有可加密的推理（原 /non-reasoning/i）——固有类
 export type ValueFactId = "thinkingCategory" | "maxOutput" | "contextSize" | "responsesInclude";
@@ -211,9 +211,9 @@ return id
 - **P2 不启用前两步**，canonical 就等于今天的 `normalizeModelId`。平台格与上游格的正则仍对**原始 id** 匹配，
   所以 OrcaRouter 的 `openai/gpt-6-astra` 原样保留。结果逐字节不变。
 - **P6b 才启用前两步**，平台格同时改写成对规范化 id 的模式（`{eq: "gpt-6-astra"}`，作用域 orcarouter）。
-  它排在 P6 之后，因为 P6 之前 `effectiveMaxOutput` 的结果会被当作 Anthropic 的 `max_tokens` 发出去（`conn.ts:140` →
-  `anthropic.ts:334`）；先扩大目录命中面，就会把 `[x]kimi-k3` 的 1,000,000 发到中转站的 ④ 线路上。差异见 §5 的 B7。
-- **请求路径上要有前缀表**：`ConnOptions` 今天只带解析好的 `relayUpstream`，不带渠道的前缀表（`conn.ts:153`）。
+  它排在 P6 之后，因为 P6 之前 `effectiveMaxOutput` 的结果会被当作 Anthropic 的 `max_tokens` 发出去（`conn.ts` 的 `connOptions` →
+  `anthropic.ts` 的 `resolveMaxTokens`）；先扩大目录命中面，就会把 `[x]kimi-k3` 的 1,000,000 发到中转站的 ④ 线路上。差异见 §5 的 B7。
+- **请求路径上要有前缀表**：`ConnOptions` 今天只带解析好的 `relayUpstream`，不带渠道的前缀表（`conn.ts` 的 `connOptions`）。
   P6b 在 `ConnOptions` 加一个字段 `canonicalModelId`，由 `connOptions()` 用渠道的前缀表算好。按 Hard Rule，
   它声明在 `ConnOptions` 这一处。否则抽屉会剥掉 `特价kiro | `，线上却不剥，两边答案不同。
 - 上游格的 `models`（`/claude/`、`/gpt/`）保持子串匹配：`特价kiro | claude-opus-4-6` 的上游来自产品名推断，
@@ -234,7 +234,7 @@ return id
   - 没有 id（抽屉里还没填）：返回 `yes / measured`，因为平台确实对某些模型跑这个能力。
   - 今天只写 `refuses` 的格，块上不写这个事实，只写 `false` 行。没命中的 id 落到**协议规则**，与 §8.10 相同。
   - **一个块只要为事实 F 写了模型行，它就「拥有」F**：没命中任何行的 id 直接落到协议规则，跳过同平台的 `all` 块。
-    这就是今天的行为——族格里有 matcher 时，`cellFor` 不会再看 `all`（`capabilities.ts:698-701`、`:755`）。
+    这就是今天的行为——族格里有 matcher 时，`cellFor` 不会再看 `all`（`capabilities.ts` 的 `cellFor` 与 `familyVerdict` 里「refuses-only matcher」那一支）。
     今天没有平台同时写了两者，所以这一条暂时零差异；写明它，是为了不让迁移悄悄改掉它。
 
 ### 3.3 `resolve(fact, wire, subject, ctx?)`
@@ -243,7 +243,7 @@ return id
 spec   = FACTS[fact]; family = familyOf(wire.standard)
 // ── 0 守卫（开关事实） ──
 if subject.type && spec.rule.modelTypes && subject.type ∉ modelTypes   → no / model-type
-                                  // 只在有类型时才查（capabilities.ts:730）：请求路径不带类型
+                                  // 只在有类型时才查（familyVerdict 的第一行）：请求路径不带类型
 for dep in spec.rule.requires: if resolve(dep).status == no → no / requires
 conds  = spec.unless ∪ 命中那一块的 unless[fact]
 for c in conds:
@@ -275,7 +275,7 @@ value: spec.fallback?.()
 
 `planRequest` 分别问 `resolve` 和学到的存储，所以降级能正确地归到「格」还是「学到」（§3.6）。
 
-**等价性**：对 20 个开关事实，第 0–3 层与第 5 层逐行对应今天的 `familyVerdict`（`capabilities.ts:728-765`）。
+**等价性**：对 20 个开关事实，第 0–3 层与第 5 层逐行对应今天的 `familyVerdict`（`capabilities.ts`）。
 唯一的形式变化是 `thinkingOff` 改成了条件（§3.5）。P1 用矩阵文档逐字节相同来证明。
 
 ### 3.4 意图合成：`effective(fact, intent, resolution, learned)`
@@ -287,7 +287,7 @@ value: spec.fallback?.()
 | tier | 见下；最后与学到的上限取较低者 |
 | none | `resolution` 原样；学到的 `no` 仍然生效 |
 
-`structuredOutput` 档位，逐格复现 `resolveStructuredOutput`（`jsonMode.ts:140-177`）：
+`structuredOutput` 档位，逐格复现 `resolveStructuredOutput`（`jsonMode.ts`）：
 
 ```
 if resolve(structuredOutput).status == no:  return off
@@ -319,7 +319,7 @@ if tier == json_object && resolve(jsonObjectTier).status == no: tier = off   // 
 
 | 类目 | off 在线上 | 未设在线上 | off → | 未设 → |
 | --- | --- | --- | --- | --- |
-| `off`（类目） | 不发 | 不发 | unknown（火山方舟的 ④ 什么都不发也在想，`reasoning.ts:340-345`） | unknown |
+| `off`（类目） | 不发 | 不发 | unknown（火山方舟的 ④ 什么都不发也在想，见 `reasoning.ts` 里 `doubao-switch` 的注释） | unknown |
 | openai-generic | `reasoning_effort:"none"` | 不发 | off | unknown |
 | deepseek / glm-effort / doubao | `thinking:{type:"disabled"}` | 不发 | off | unknown（doubao：on，第十二个样本） |
 | qwen-budget / qwen-effort | `enable_thinking:false` | 不发 | off | unknown |
@@ -337,8 +337,8 @@ if tier == json_object && resolve(jsonObjectTier).status == no: tier = off   // 
 | --- | --- | --- | --- |
 | `temperature` 在 Anthropic 族（`thinkingOff: ["anthropic"]`） | 类目不是 `off` 就算在想；缺类目也算 | P4：规则上的 `{when:"categoryThinks", absent:"fire"}`，只挂在 anthropic 族 | 是（矩阵文档里那一格仍是 `· thinking`）。换成 `{when:"thinking", is:"on"}` 会让 minimax / doubao-switch 关思考时开始带温度，这是 **B6**，等实测 |
 | `forcesToolChoiceAuto`（`while-thinking`） | effort 显式且不是 off 才算在想 | `unknownAs: "off"` | 是：未设 → unknown → off；off → off；其余 → on |
-| Responses 的代码解释器（`serverTools.ts:360`） | 请求体里 `effort === "none"` 才丢 | 块条件 `{when:"thinking", is:"off", unknownAs:"on"}` | 是：只有 responses-effort 的 off 是 off（effortOnWire 之后） |
-| agent 的思考回退（`runtime.ts:1328`） | `menu` 含 off，或者是开关型 | 改问 `effortMenuOnWire(category.menu, wire, subject).includes("off") \|\| isOnOffCategory` | 否：gpt-6-astra 在 OrcaRouter 上从 `off` 变 `nudge`。这是 **B8**，属于修正：`reasoningOff` 格说这个模型没有关闭档，今天发出的 off 被 `effortOnWire` 改成了 low，回退其实没生效 |
+| Responses 的代码解释器（`serverTools.ts` 的 `responsesServerTools`） | 请求体里 `effort === "none"` 才丢 | 块条件 `{when:"thinking", is:"off", unknownAs:"on"}` | 是：只有 responses-effort 的 off 是 off（effortOnWire 之后） |
+| agent 的思考回退（`runtime.ts` 的 `runAgent`，`thinkingCut` 分支） | `menu` 含 off，或者是开关型 | 改问 `effortMenuOnWire(category.menu, wire, subject).includes("off") \|\| isOnOffCategory` | 否：gpt-6-astra 在 OrcaRouter 上从 `off` 变 `nudge`。这是 **B8**，属于修正：`reasoningOff` 格说这个模型没有关闭档，今天发出的 off 被 `effortOnWire` 改成了 low，回退其实没生效 |
 
 gemini3 与 claude-adaptive 的 off 在线上也是最低档（`offSpelling: "lowest"`），回退同样关不掉思考。
 但它们的菜单里有 off，而且是作者可以选的档，所以本方案不改它们。
@@ -366,19 +366,19 @@ function toolChoiceOf(req, category, effort, wire, subject, learned): RequestPla
 - 四个适配器都读 `plan.toolChoice.sent`。
   - `openai.ts` 删掉 `toolChoiceFor`。
   - `anthropic.ts` 的 `toolChoiceBody` 只管拼法。
-  - `gemini.ts:249` 与 `responses.ts:276` 第一次受这个格约束，这是 **B3**。平台自己列出的线路上零差异。
-    但智谱的格写在 `all` 上（`capabilities.ts:634`），而作者在 `open.bigmodel.cn/api/paas` 下手建的
-    `openai_responses_compat` / `gemini_compat` 渠道也会被推断成智谱（`platforms.ts:445-458`）。那样的渠道上，强制会变成 `auto`。
+  - `gemini.ts` 的 `toolConfig` 与 `responses.ts` 的 `tool_choice` 第一次受这个格约束，这是 **B3**。平台自己列出的线路上零差异。
+    但智谱的格写在 `all` 上（`PLATFORM_CAPABILITIES.zhipu`），而作者在 `open.bigmodel.cn/api/paas` 下手建的
+    `openai_responses_compat` / `gemini_compat` 渠道也会被推断成智谱（`platforms.ts` 的 `inferPlatform`）。那样的渠道上，强制会变成 `auto`。
 - `structured.ts` 的 `forcedToolIsWasted` 改成 `plan.toolChoice.downgradedBy !== undefined && plan.structured.tier === "json_schema"`。
   这是 **B4**，不是零差异：今天它看不到格，所以在格为 `false`、档位却到了 json_schema 的线路上，会白跑一轮注定降成 `auto` 的强制调用。
   这样的线路有三种：
   - 中转站 Kiro / anti 上游的 Claude 走 ④，且作者声明了 json_schema（中转站的 `jsonSchema` 是 `unknown`，声明照发）；
-  - anti 上游的 Claude 走 ①，且作者声明了 json_schema（anti 在 ① 上没有 `structuredOutput` 格，`capabilities.ts:489`）；
+  - anti 上游的 Claude 走 ①，且作者声明了 json_schema（anti 在 ① 上没有 `structuredOutput` 格，见 `UPSTREAM_CAPABILITIES.anti`）；
   - Azure 上游的 GPT 走 ①（该上游 `jsonSchema: true`）。
 
   智谱与 Kiro ① 不在其中：前者 `jsonSchema` 是 `false`，后者 `structuredOutput` 是 `false`。
   改后这几种直接走 JSON 路径，省一轮请求。金标看不到 `structured.ts`，由 `agent/__tests__/agentStructured.test.ts` 逐条钉住。
-- `index.ts:106-113` 的预降级，以及 `:181` 的重试，改走 §3.7 的执行器。
+- `index.ts` 的 `streamCompletion` 里的预降级与失败后的重试，改走 §3.7 的执行器。
 
 ### 3.7 学到的降级
 
@@ -393,10 +393,10 @@ interface LearnRule {
   lower: (plan: RequestPlan) => Ceiling | undefined;   // undefined = 已经到底，不学
 }
 export const LEARN_RULES: readonly LearnRule[] = [
-  // 看「请求了」强制，不看「发出了」：今天的重试条件就是 requested（index.ts:181），即使适配器已经降成 auto。
+  // 看「请求了」强制，不看「发出了」：今天 streamCompletion 的重试条件就是 requested，即使适配器已经降成 auto。
   { fact: "forcedToolChoice", match: /tool[_ ]?choice/i,
     used: (p) => isForced(p.toolChoice?.requested), lower: () => false },
-  // 降的是实际拼进 body 的那一档（今天的 shaping.mode，jsonMode.ts:476）。没有 schema 时它会低于计划档，
+  // 降的是实际拼进 body 的那一档（今天 withJsonModeFallback 里的 shaping.mode）。没有 schema 时它会低于计划档，
   // 所以 plan.structured 记两个值：tier（决定的）与 shaped（拼出来的）。
   { fact: "structuredOutput", match: /response_format|text\.format|response_?json_?schema|output_config\.format|output_format/i,
     used: (p) => !!p.structured && p.structured.shaped !== "off", lower: (p) => downgradeJsonMode(p.structured!.shaped) },
@@ -426,18 +426,18 @@ export function __resetLearned(): void;
 
 | 今天 | 行 | 计划字段 |
 | --- | --- | --- |
-| `resolveThinkingCategory` + `effortOnWire` | openai.ts:121,127 · responses.ts:237-239 · gemini.ts:286-293 · anthropic.ts:354-367 | `thinking` |
-| 温度的 `hasCapability` + 类目 | responses.ts:241 等 | `temperature` |
-| `resolveMaxTokens` | anthropic.ts:333 | `maxTokens.onWire` |
-| `toolChoiceFor` / `toolChoiceBody` | openai.ts:112 · anthropic.ts:393 | `toolChoice.sent` |
-| 温度（**不问格**） | openai.ts:137 · gemini.ts:276 | `temperature`（开始问格，B11） |
-| 服务端工具的 `effective*` 与请求期丢弃 | serverTools.ts:200-380 | `serverTools`（拼法函数改收 id 列表） |
-| `vl_high_resolution_images` | openai.ts:163（没带 subject） | `vlHighResolution`（带 subject，**B9**：今天 upstream 为空时零差异） |
-| `include` + `/non-reasoning/i` | responses.ts:247 | `responsesInclude`（`reasons` 事实为 no 时为空） |
-| `cachesPrompt` | anthropic.ts:532-533 | `promptCache` |
+| `resolveThinkingCategory` + `effortOnWire` | `streamOpenAI` · `streamResponses` · `streamGemini` · `anthropic.ts` 的 `thinkingFor` | `thinking` |
+| 温度的 `hasCapability` + 类目 | `streamResponses` 的 `sendsTemperature` 等 | `temperature` |
+| `resolveMaxTokens` | `anthropic.ts` | `maxTokens.onWire` |
+| `toolChoiceFor` / `toolChoiceBody` | `openai.ts` · `anthropic.ts` | `toolChoice.sent` |
+| 温度（**不问格**） | `streamOpenAI` · `streamGemini` | `temperature`（开始问格，B11） |
+| 服务端工具的 `effective*` 与请求期丢弃 | `serverTools.ts` 的 `effectiveServerTools` 起的一组函数 | `serverTools`（拼法函数改收 id 列表） |
+| `vl_high_resolution_images` | `streamOpenAI`（没带 subject） | `vlHighResolution`（带 subject，**B9**：今天 upstream 为空时零差异） |
+| `include` + `/non-reasoning/i` | `streamResponses` | `responsesInclude`（`reasons` 事实为 no 时为空） |
+| `cachesPrompt` | `anthropic.ts` | `promptCache` |
 | `instructionsField` | responses.ts | `instructionsField` |
 
-`wireSummary`（`modelSummary.ts:75`）改成 `spellSummary(planRequest(summaryOpts))`：
+`wireSummary`（`modelSummary.ts`）改成 `spellSummary(planRequest(summaryOpts))`：
 
 - 六处 `family ===` 退到拼法层，与适配器共用 `spell*` 片段。
 - `capabilityFamilyRatchet` 里 `modelSummary.ts` 的上限从 6 降到 0。
@@ -445,12 +445,12 @@ export function __resetLearned(): void;
 
 摘要今天有两处与适配器不一致，读了计划以后会变成一致。这是 **B10**，金标里摘要那一列会动：
 
-- 摘要用的是原始 effort（`modelSummary.ts:111`），不是 `effortOnWire` 之后的值。OrcaRouter 的 `openai/gpt-6-astra` 设了 off，
+- 摘要用的是原始 effort（`wireSummary` 里的 `reasoningBody(category, m.reasoningEffort, …)`），不是 `effortOnWire` 之后的值。OrcaRouter 的 `openai/gpt-6-astra` 设了 off，
   摘要写 `none`，线上发的是 `low`。
-- 摘要只在行上填了 `maxOutput` 时才写 `max_tokens`（`:114`），适配器却总是发。计划的 `onWire` 会让每条 ④ 行都显示一个值。
+- 摘要只在行上填了 `maxOutput` 时才写 `max_tokens`，适配器却总是发。计划的 `onWire` 会让每条 ④ 行都显示一个值。
   P6 之前这个值是表值、应用缺省或 32768；P6 之后按 `TRUST` 表来。
 
-一致性测试的 `PROBES.reasoningOff` 从不比对摘要（`capabilityConsistency.test.ts:146-149`），所以前一处一直没被抓到。
+一致性测试的 `PROBES.reasoningOff` 从不比对摘要（`capabilityConsistency.test.ts`），所以前一处一直没被抓到。
 P5 的总断言会把它补上。
 
 ### 3.9 值类事实的出处信任（P6）
@@ -466,7 +466,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 ```
 
 `connOptions()` 不再把 `effectiveMaxOutput` 的结果当成 `maxOutput` 传下去，改为传 `{value, source}`。
-`budget.ts:131` 的 32000 改为「planner 可信的 `contextSize`，否则 32000」。
+`budget.ts` 的 `ASSUMED_INPUT_CEILING_TOKENS`（32000） 改为「planner 可信的 `contextSize`，否则 32000」。
 
 ## 4. 符号迁移表
 
@@ -481,15 +481,15 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 | `KNOWN_OUTPUT_CAPS` / `knownMaxOutput` | `cells/catalog.ts` 的 `maxOutput` 行；函数成为门面 | P2 |
 | `KNOWN_JSON_SCHEMA` / `knownJsonSchemaModel` | 目录的 `strictSchemaModel` 行 | P2 |
 | `normalizeModelId` | `canonicalModelId`（P2 行为相同） | P2 |
-| `/non-reasoning/i`（responses.ts:247） | 目录行 `{match: /non-reasoning/, set: {reasons: false}}` | P2 |
+| `/non-reasoning/i`（`streamResponses`） | 目录行 `{match: /non-reasoning/, set: {reasons: false}}` | P2 |
 | `platformResponsesInclude` | 值类事实 `responsesInclude`（xAI 块） | P2 |
 | `CapabilityWire` + `ServerToolWire` | `Wire` | P1 |
 | `toolChoice.ts` 的 Set、`jsonMode.ts` 的 Map | `learned.ts` | P3 |
 | `thinkingOff` 规则字段 | 规则上的 `unless` 条件 | P4 |
 | serverTools 的请求期丢弃（:320、:330、:360） | DashScope 块的 `unless` | P4 |
 | `structuredOutputModesFor` 的按族分支 | `jsonObjectTier` 事实推出 | P4 |
-| `cachesPrompt` | `promptCache` 事实：规则 `{families:["anthropic"], origin:"private", official:"yes"}`——官方标准上缺省 yes，兼容标准上照 private 缺省 no，直到某个平台格写了实测。**不能**写成 anthropic 平台格：指向 api.anthropic.com 的 `anthropic_compat` 渠道也解析成 anthropic 平台（`platforms.ts:437-472`），今天它不带缓存断点 | P4 |
-| `ProviderDrawer.tsx:310` 的 `newapi \|\| custom` | `isRelayPlatform()` | P1 |
+| `cachesPrompt` | `promptCache` 事实：规则 `{families:["anthropic"], origin:"private", official:"yes"}`——官方标准上缺省 yes，兼容标准上照 private 缺省 no，直到某个平台格写了实测。**不能**写成 anthropic 平台格：指向 api.anthropic.com 的 `anthropic_compat` 渠道也解析成 anthropic 平台（`platforms.ts` 的 `resolvePlatform`），今天它不带缓存断点 | P4 |
+| `ProviderDrawer.tsx` 的 `pickPlatform` 里的 `newapi \|\| custom` | `isRelayPlatform()` | P1 |
 | `toolChoiceFor` / `forcedToolIsWasted` 各拼两源 | `plan.toolChoice` | P5 |
 | `defaultCategoryId` 的 switch | `FACTS.thinkingCategory.familyDefault` | P6 |
 | `effectiveMaxOutput` | `maxOutput` 值类事实 + `TRUST` | P6 |
@@ -525,18 +525,18 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
   - 同一网格再跑一遍 `wireSummary`，与 body 并排存。
   规模大约 3000 格，每格百余字节。
 - **`src/lib/__tests__/capabilityFamilyRatchet.test.ts`** 加三种模式，起点等于当时的实际计数：
-  - `\b(standard|apiStandard)\s*[!=]==\s*["']`：今天 `anthropic.ts:533`（1 处）、`types.ts:131`（2 处，同一行）；
-  - `\bplatform\w*\s*[!=]==\s*["']`：今天 `ProviderDrawer.tsx:310`（2 处，同一行）、`:344`、`:813`；
-  - 格文件之外对 `modelId` 的 `.test(` / `.includes(` / `.startsWith(`：今天 `responses.ts:247`、`reportedCost.ts:36`，搜索框两处除外。
-  白名单沿用 `WIRE_SHAPE`，所以 `routes.ts:438` 不计入。另外加两项：`relayUpstream.ts`（理由见 §3.1）与 `lib/asr/`（不在本方案范围，照 HLD §2 非目标），
-  所以 `asr/formats.ts:47,58` 不计入。以上计数是 grep 的估计，入库时以词法扫描的实际结果为起点。
+  - `\b(standard|apiStandard)\s*[!=]==\s*["']`：今天 `anthropic.ts` 的 `cachesPrompt`（1 处）、`types.ts` 的 `authModesFor`（2 处）；
+  - `\bplatform\w*\s*[!=]==\s*["']`：今天 `ProviderDrawer.tsx` 的 `pickPlatform`（2 处）、`comfyMode`、`PlatformPreview` 各 1 处；
+  - 格文件之外对 `modelId` 的 `.test(` / `.includes(` / `.startsWith(`：今天 `streamResponses` 的 `/non-reasoning/i`、`reportedCost.ts` 的 `reportsCostFor`，搜索框两处除外。
+  白名单沿用 `WIRE_SHAPE`，所以 `routes.ts` 的 `newChannelEndpoints` 不计入。另外加两项：`relayUpstream.ts`（理由见 §3.1）与 `lib/asr/`（不在本方案范围，照 HLD §2 非目标），
+  所以 `asr/formats.ts` 的 `looksLikeFiletransModel` / `looksLikeSyncAsrModel` 不计入。以上计数是 grep 的估计，入库时以词法扫描的实际结果为起点。
 - 验收：`pnpm test` 绿，快照入库。
 
 ### P1 —— 拆目录、建登记表（`refactor/`）
 
 - 新建 `capability/facts.ts`、`rules.ts`、`cells/platform.ts`、`cells/upstream.ts`、`resolve.ts`，从 `capabilities.ts` 原样搬迁。
   `capabilities.ts` 只剩转出与 `effortOnWire` / `effortMenuOnWire` / `hasAnyServerTool`。
-- 合并 `Wire` 类型；把 `ProviderDrawer.tsx:310` 改成 `isRelayPlatform`（B5）。
+- 合并 `Wire` 类型；把 `ProviderDrawer.tsx` 的 `pickPlatform` 改用 `isRelayPlatform`（B5）。
 - 验收：
   - `capability-matrix.md` 逐字节相同；
   - 金标零差异；

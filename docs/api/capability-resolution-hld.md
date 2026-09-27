@@ -33,12 +33,12 @@
 **A. 表只回答「有没有」，不回答「取什么值」。** `capabilityVerdict` 只给 yes / unknown / no。
 下面这些「取什么值」的问题各有各的函数，各有各的回退：
 
-- 思考类目：`resolveThinkingCategory`，缺省按族 `switch`（`reasoning.ts:365`）。
-- JSON 档位：`resolveStructuredOutput`，Anthropic 走 `if (family === "anthropic")`（`jsonMode.ts:155`）。
+- 思考类目：`resolveThinkingCategory`，缺省按族 `switch`（`reasoning.ts` 的 `defaultCategoryId`）。
+- JSON 档位：`resolveStructuredOutput`，Anthropic 走 `if (family === "anthropic")`（`jsonMode.ts` 的 `resolveStructuredOutput`）。
 - 输出上限：`effectiveMaxOutput`。
 - 上下文窗口：只在模型行上，没有目录。
-- Responses 的 `include`：`platforms.ts` 的字段，加 `/non-reasoning/i`（`responses.ts:247`）。
-- 提示缓存：`standard === "anthropic"`（`anthropic.ts:533`）。
+- Responses 的 `include`：`platforms.ts` 的字段，加 `/non-reasoning/i`（`responses.ts` 的 `streamResponses`）。
+- 提示缓存：`standard === "anthropic"`（`anthropic.ts` 的 `cachesPrompt`）。
 
 **B. 模型 id 轴散在七处，匹配方式有四种。**
 
@@ -62,11 +62,11 @@
 
 | 机制 | 位置 | 键 | 存在哪 | 裁决和抽屉能否看到 |
 | --- | --- | --- | --- | --- |
-| JSON 档位降级 | `jsonMode.ts:417-478` | standard + baseUrl + modelId | 内存 Map | 否 |
-| 强制 tool_choice 降级 | `toolChoice.ts`，`index.ts:109,181` | 同上 | 内存 Set | 否 |
-| 结构化任务改走 JSON 路径 | `agent/structured.ts:61-90` | 每次请求重判 | — | 否 |
-| 思考预算耗尽后关思考 | `agent/runtime.ts:1328` | 当次运行 | — | 否 |
-| 数值缺省链 | `modelLimits`、`context/budget.ts:131`（32000） | — | — | 部分 |
+| JSON 档位降级 | `jsonMode.ts` 的 `noteJsonModeRefused` / `withJsonModeFallback` | standard + baseUrl + modelId | 内存 Map | 否 |
+| 强制 tool_choice 降级 | `toolChoice.ts`，`index.ts` 的 `streamCompletion` | 同上 | 内存 Set | 否 |
+| 结构化任务改走 JSON 路径 | `agent/structured.ts` 的 `TOOL_CAPABILITY_ERROR` / `forcedToolIsWasted` | 每次请求重判 | — | 否 |
+| 思考预算耗尽后关思考 | `agent/runtime.ts` 的 `runAgent`（`thinkingCut` 分支） | 当次运行 | — | 否 |
+| 数值缺省链 | `modelLimits`、`context/budget.ts` 的 `ASSUMED_INPUT_CEILING_TOKENS`（32000） | — | — | 部分 |
 
 同一个问题被回答不止一次：
 
@@ -84,12 +84,12 @@
 
 ### 1.3 顺带核实的两处不一致
 
-1. **Gemini 与 Responses 适配器不读 `forcedToolChoice` 格**（`gemini.ts:249`、`responses.ts:276`）。
+1. **Gemini 与 Responses 适配器不读 `forcedToolChoice` 格**（`gemini.ts` 的 `streamGemini` 拼 `toolConfig` 处、`responses.ts` 的 `toResponsesToolChoice`）。
    在平台自己列出的线路上，今天这两族没有 `false` 格。但智谱的格写在 `all` 上，作者在智谱主机下手建的 ② / ③ 渠道
    会被推断成智谱，那里的强制照发。一致性测试只走平台列出的线路，所以抓不到这一格。
-   同类的还有 Chat 与 Gemini 适配器发温度时不问格（`openai.ts:137`、`gemini.ts:276`），今天没有 `false` 格，零差异。
+   同类的还有 Chat 与 Gemini 适配器发温度时不问格（`openai.ts` 的 `streamOpenAI`、`gemini.ts` 的 `streamGemini`），今天没有 `false` 格，零差异。
 2. **Anthropic 的 `max_tokens` 违反 `modelLimits.ts` 头注第 1 条。** 头注说「表里的值绝不发给 Anthropic」，
-   但 `conn.ts:140` 传过去的是 `effectiveMaxOutput`，里面含表值和应用缺省，`anthropic.ts:333` 原样发出。
+   但 `conn.ts` 的 `connOptions` 传过去的是 `effectiveMaxOutput`，里面含表值和应用缺省，`anthropic.ts` 的 `resolveMaxTokens` 原样发出。
    两处出自同一个提交（`b0993266`），从一开始就矛盾。取哪边是 §6 的 D2。
 
 ## 2. 目标与非目标
