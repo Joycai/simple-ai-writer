@@ -33,7 +33,7 @@ import {
   type ApiStandard, type AuthMode, type ProtocolFamily,
 } from "./types";
 import { platformDefaultPath, platformEndpoints, resolvePlatform, type PlatformId } from "./platforms";
-import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
+import { parseReasoningEffort, parseThinkingCategory } from "./reasoning";
 import { parseStructuredOutputMode } from "./jsonMode";
 import { isPrivateNetworkUrl } from "../http";
 
@@ -69,7 +69,6 @@ export interface RouteProfile {
   reasoningEffort?: Model["reasoningEffort"];
   thinkingCategory?: Model["thinkingCategory"];
   thinkingBudget?: number;
-  thinkingDialect?: Model["thinkingDialect"];
   structuredOutput?: Model["structuredOutput"];
   textVerbosity?: Model["textVerbosity"];
   vlHighResolution?: boolean;
@@ -80,7 +79,7 @@ export interface RouteProfile {
 
 /** The keys of `RouteProfile`, as a list — what moves when a model switches route. */
 export const ROUTE_PROFILE_KEYS = [
-  "maxOutput", "temperature", "reasoningEffort", "thinkingCategory", "thinkingBudget", "thinkingDialect",
+  "maxOutput", "temperature", "reasoningEffort", "thinkingCategory", "thinkingBudget",
   "structuredOutput", "textVerbosity", "vlHighResolution", "probedAt", "probedContextSize", "probedMaxOutput",
 ] as const satisfies readonly (keyof RouteProfile)[];
 
@@ -406,7 +405,6 @@ function parseRouteProfile(raw: unknown): RouteProfile {
     reasoningEffort: parseReasoningEffort(r.reasoningEffort),
     thinkingCategory: parseThinkingCategory(r.thinkingCategory),
     thinkingBudget: num(r.thinkingBudget),
-    thinkingDialect: parseThinkingDialect(r.thinkingDialect),
     structuredOutput: parseStructuredOutputMode(r.structuredOutput),
     textVerbosity: parseTextVerbosity(r.textVerbosity),
     vlHighResolution: r.vlHighResolution === true ? true : undefined,

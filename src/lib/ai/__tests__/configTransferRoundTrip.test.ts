@@ -126,7 +126,6 @@ const model: Required<Omit<Model, "fee">> = {
   reasoningEffort: "high",
   thinkingCategory: "qwen-budget",
   thinkingBudget: 4000,
-  thinkingDialect: "extended",
   serverTools: ["web_search", "web_extractor"],
   structuredOutput: "json_schema",
   pdfInput: true,
@@ -144,7 +143,7 @@ const model: Required<Omit<Model, "fee">> = {
   routes: {
     anthropic: {
       maxOutput: 4096, temperature: 1, reasoningEffort: "low", thinkingCategory: "claude-adaptive",
-      thinkingBudget: 2048, thinkingDialect: "extended", structuredOutput: "off", textVerbosity: "high",
+      thinkingBudget: 2048, structuredOutput: "off", textVerbosity: "high",
       vlHighResolution: true, probedAt: 1_700_000_000_900, probedContextSize: 200_000, probedMaxOutput: 64_000,
     },
   },

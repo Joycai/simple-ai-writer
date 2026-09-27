@@ -11,17 +11,22 @@
  * machine (PDF input, the translation format) shape which pickers offer the
  * model, not the request.
  *
+ * `valueFacts` is what the editor says under 上下文 / 最大输出 / 思考类目 and in
+ * the value matrix: the author's value, what the chain answers when the field
+ * is left empty (`capability/values.ts`), and what each consumer does with the
+ * one in force — read off `TRUST` and the request plan, not restated.
+ *
  * `declarationMarks` is the list row's badges: the declarations an author made
  * explicitly, so a long provider list can be scanned for "which one thinks,
  * which one may search". Auto is never marked — it is not a declaration.
  */
 
 import type { Model } from "./configDb";
-import { hasCapability, modelValue } from "./capabilities";
+import { hasCapability, modelValue, thinkingCategoryOf, trusted, type Sourced } from "./capabilities";
 import { planRequest, type RequestPlan } from "./capability/plan";
 import type { StructuredOutputMode } from "./jsonMode";
 import { wireOf, type PlatformId } from "./platforms";
-import { reasoningBody, thinkingBody } from "./reasoning";
+import { reasoningBody, thinkingBody, type ThinkingCategory } from "./reasoning";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import { geminiServerTools, openaiServerToolsBody, type ServerToolId } from "./serverTools";
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
@@ -185,6 +190,79 @@ export function wireSummary(
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });
   return out;
+}
+
+/** One value fact as the editor shows it. */
+interface ValueView<V> {
+  /** The author's value — the form's; undefined = left empty. */
+  own?: V;
+  /** The chain's answer without the author: the placeholder, and what `own` covers. */
+  table?: Sourced<V>;
+  /** What a request carries: `own` as the author's, else `table`. */
+  inForce?: Sourced<V>;
+}
+
+export interface ValueFacts {
+  /** Every family has a default category, so both are always answered. */
+  thinkingCategory: ValueView<ThinkingCategory> & { table: Sourced<ThinkingCategory>; inForce: Sourced<ThinkingCategory> };
+  /**
+   * `gates`: the pre-send window check refuses an over-long request by it
+   * (`TRUST.contextGate`); `gatesIfEmpty`: whether it still would with the field cleared.
+   */
+  contextSize: ValueView<number> & { gates: boolean; gatesIfEmpty: boolean };
+  /**
+   * `onWire`: the `max_tokens` this wire sends (`TRUST.anthropicMaxTokens`), and
+   * `onWireIfEmpty` what it would send with the field cleared; absent = the wire sends no cap.
+   */
+  maxOutput: ValueView<number> & { onWire?: number; onWireIfEmpty?: number };
+}
+
+/**
+ * The three value facts of a model on one wire, each with its source and what
+ * it does there. Read through the same chain and the same request plan a
+ * request from this row takes (`connOptions()`, `planRequest`), so the note
+ * under a field and the request cannot disagree.
+ */
+export function valueFacts(
+  m: Pick<Model, "modelId" | "thinkingCategory" | "contextSize" | "maxOutput">,
+  standard: ApiStandard,
+  /** The wire's resolved platform (`providerWire`), as `connOptions()` has it; absent = no platform's rows. */
+  platform?: PlatformId,
+  /** What the model catalog is asked about (`ConnOptions.canonicalModelId`); absent = the id as typed. */
+  canonicalModelId?: string,
+): ValueFacts {
+  const at = { standard, platform, canonicalModelId };
+  const blank = { modelId: m.modelId };
+  const number = (fact: "contextSize" | "maxOutput") => {
+    const own = m[fact] && m[fact]! > 0 ? m[fact] : undefined;
+    return { own, table: modelValue(fact, blank, at), inForce: modelValue(fact, { ...blank, [fact]: own }, at) };
+  };
+  const ctx = number("contextSize");
+  const out = number("maxOutput");
+  // The author's category is the one in force when the chain says so: one
+  // the family cannot spell is not what the request sends, so it is not
+  // reported as the author's.
+  const category = thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory }, at);
+  const sentCap = (v: Sourced<number> | undefined) => planRequest({
+    standard, baseUrl: "", platform, modelId: m.modelId, canonicalModelId,
+    maxOutput: v?.value, provenance: v && { maxOutput: v.source },
+  }).maxTokensOnWire;
+  return {
+    thinkingCategory: {
+      own: category.source === "author" ? category.value : undefined,
+      table: thinkingCategoryOf(blank, at),
+      inForce: category,
+    },
+    contextSize: {
+      ...ctx,
+      gates: trusted(ctx.inForce, "contextGate") !== undefined,
+      gatesIfEmpty: trusted(ctx.table, "contextGate") !== undefined,
+    },
+    maxOutput: {
+      ...out,
+      ...(SPELLING[familyOf(standard)].maxTokens ? { onWire: sentCap(out.inForce), onWireIfEmpty: sentCap(out.table) } : {}),
+    },
+  };
 }
 
 type ModelMark = "think" | "web" | "code" | "pdf" | "video" | "translate";

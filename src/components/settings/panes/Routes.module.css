@@ -336,3 +336,31 @@ button.badge:focus-visible {
   flex-wrap: wrap;
   flex: initial;
 }
+
+/* ── Value matrix (P6 界面): a number per route, with its source ──────────── */
+.valueMatrix {
+  width: 100%;
+}
+.valueMatrix td:first-child {
+  white-space: nowrap;
+}
+/* The author's value: full ink. */
+.valueTyped {
+  color: var(--color-text-primary);
+}
+/* Answered by the tables: muted, the source beside it. */
+.valueFollowed {
+  color: var(--color-text-muted);
+}
+.valueSource {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-ghost);
+}
+/* What `max_tokens` carries where it is not the number above. */
+.valueWire {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+}

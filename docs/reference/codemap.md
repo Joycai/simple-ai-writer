@@ -143,7 +143,7 @@ Lore browser, LoreGenerator, LoreImproveModal, LoreWall, LoreReadView（条目**
 
 #### 模型抽屉
 
-- The model drawer (`ModelDrawer.tsx` + `ModelDrawerBits.tsx`, 设计稿 05c) folds its six sections by **"has a value"** (decided once from the stored row, never from the live form), spells **unset as a dashed edge** everywhere — an empty input, a selected 自动 chip, an off toggle, a folded empty section — because unset means *nothing is sent* and must not look like "set to 0", and ends in a 「将发送」 line computed by `lib/ai/modelSummary` from the adapters' own body functions; see `docs/reference/design-system.md` → 模型编辑抽屉.
+- The model drawer (`ModelDrawer.tsx` + `ModelDrawerBits.tsx`, 设计稿 05c) folds its six sections by **"has a value"** (decided once from the stored row, never from the live form), spells **unset as a dashed edge** everywhere — an empty input, a selected 自动 chip, an off toggle, a folded empty section — because unset means *nothing is sent* and must not look like "set to 0", and ends in a 「将发送」 line computed by `lib/ai/modelSummary` from the adapters' own body functions; see `docs/reference/design-system.md` → 模型编辑抽屉. Under 上下文 / 最大输出 / 思考类目 one line says where a value comes from and who uses it (`panes/valueNotes.ts` over `modelSummary.valueFacts`, the same chain and request plan a request takes); a multi-route channel adds `panes/ValueFactMatrix.tsx`. A new row prefills only its type and PDF declaration — the value facts stay empty and follow the platform's rows (LLD §9.9). The legacy `thinkingDialect` no longer exists downstream: `lib/ai/legacyThinking.ts` rewrites it once, at `config.db` open and in `parseConfigBundle` (LLD §9.10).
 
 #### 实验室与上下文记忆
 

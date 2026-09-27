@@ -41,6 +41,8 @@ GLM-5.3 根本无法关闭思考。旧设计用「作者声明 + 端点 400 纠�
 minimax，**switch+openai→qwen-budget 且预算留空**——只发 `enable_thinking`，与旧
 switch 逐字节一致，这条不变量由 `aiClient.test.ts` 钉住），作者下次保存该模型时
 才把类目落盘、`thinking_dialect` 清空。
+（2026-09-27 起改为一次性迁移：打开配置库与解析备份时就把旧方言改写成类目，请求路径不再读方言，
+见 `capability-resolution-lld.md` §9.10。）
 
 **新出现在 wire 上、此前从未发送**（列为待验证）：DeepSeek 的 `off`→
 `extra_body.thinking:disabled`、`qwen-effort` 的 `enable_thinking`+`reasoning_effort`

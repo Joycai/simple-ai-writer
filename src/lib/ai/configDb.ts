@@ -13,8 +13,8 @@ import {
 } from "./types";
 import type { ImageDialect } from "./imageDialects";
 import {
-  parseReasoningEffort, parseThinkingCategory, parseThinkingDialect,
-  type ReasoningEffort, type ThinkingCategoryId, type ThinkingDialect,
+  parseReasoningEffort, parseThinkingCategory,
+  type ReasoningEffort, type ThinkingCategoryId,
 } from "./reasoning";
 import { parseServerTools, type ServerToolId } from "./serverTools";
 import { parsePlatform, platformToStore, providerWire, type PlatformId } from "./platforms";
@@ -24,7 +24,7 @@ import {
   type RelayUpstreamChoice, type UpstreamPrefix,
 } from "./relayUpstream";
 import {
-  channelEndpoints, legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily,
+  activeFamily, channelEndpoints, legacyColumnsDiverged, legacyEndpoint, normalizeChannel, parseEndpoints, parseRouteFamily,
   parseRouteProfiles, routeProvider, standardOf, writtenBaseOf,
   type Endpoint, type RouteProfile,
 } from "./routes";
@@ -34,6 +34,7 @@ import { migrateLegacyStandard } from "./urls";
 import { clampVideoFps } from "./videoInput";
 import { ensureFeeGroupSchema, listFeeGroups, migrateModelPricesToFeeGroups } from "./feeGroupDb";
 import { ensureUsageSchema } from "./usageSchema";
+import { migrateLegacyThinking } from "./legacyThinking";
 import {
   costOf, feeConfigOf, priceSpec, totalOf, ZERO_BILLED, ZERO_FEE,
   type Billed, type FeeConfig, type FeeGroup, type PricedSpec,
@@ -328,12 +329,6 @@ export interface Model {
    * Qwen `thinking_budget`). Absent leaves the endpoint/adapter default.
    */
   thinkingBudget?: number;
-  /**
-   * Legacy: the coarse thinking *shape*, superseded by `thinkingCategory`. Kept
-   * only so `resolveThinkingCategory` can migrate a model configured before
-   * categories existed; new saves write `thinkingCategory` and null this out.
-   */
-  thinkingDialect?: ThinkingDialect;
   /**
    * Tools this model may have the **endpoint** run for it — `web_search`, and
    * `web_extractor` only beside it (see `lib/ai/serverTools.ts` for which wire
@@ -941,6 +936,47 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
     // 搬不动不该挡住应用启动：模型还在，价暂时读成 0，下次启动再试。
     console.warn("[configDb] 计费组迁移未完成：", e);
   }
+  // Same place, same reason: every read of this database passes here first.
+  try {
+    await migrateThinkingDialects(db);
+  } catch (e) {
+    // A row left unmigrated thinks by the tables' category (自动) until the next start.
+    console.warn("[configDb] 旧思考方言迁移未完成：", e);
+  }
+}
+
+/**
+ * Rewrite every row still carrying a legacy `thinking_dialect` — on the row or
+ * in a parked route profile — into a category (`legacyThinking.ts`). The
+ * column stays in the schema for older databases, and nothing reads it after
+ * this. Idempotent: a migrated row carries no dialect. An old backup is
+ * migrated by the same function as it is parsed (`parseConfigBundle`), so it
+ * lands the way an upgraded machine does.
+ */
+export async function migrateThinkingDialects(db: Awaited<ReturnType<typeof Database.load>>): Promise<number> {
+  const rows = await db.select<Record<string, unknown>[]>(
+    `SELECT id, provider_id, thinking_category, thinking_dialect, active_route, routes FROM models
+     WHERE thinking_dialect IS NOT NULL OR routes LIKE '%thinkingDialect%'`,
+  );
+  if (rows.length === 0) return 0;
+  const channels = new Map((await listProviders(db)).map((p) => [p.id, p]));
+  let n = 0;
+  for (const r of rows) {
+    const channel = channels.get(r.provider_id as string);
+    let routes: unknown;
+    try { routes = typeof r.routes === "string" ? JSON.parse(r.routes) : undefined; } catch { routes = undefined; }
+    const pinned = parseRouteFamily(r.active_route);
+    const family = pinned ?? (channel ? activeFamily({}, channel) : undefined);
+    const out = migrateLegacyThinking({ thinkingCategory: r.thinking_category, thinkingDialect: r.thinking_dialect, routes }, family);
+    if (!out) continue;
+    const kept = out.routes && typeof out.routes === "object" && Object.keys(out.routes).length ? JSON.stringify(out.routes) : null;
+    await db.execute(
+      "UPDATE models SET thinking_category = ?, thinking_dialect = NULL, routes = ? WHERE id = ?",
+      [out.thinkingCategory ?? null, kept, r.id],
+    );
+    n++;
+  }
+  return n;
 }
 
 // ─── Legacy plaintext key storage (migration only) ────────────────────────────
@@ -1257,11 +1293,11 @@ export function modelUpsert(m: Model, pricing: ModelPricing): SqlStatement {
   const keep = pricing === "local" && !m.feeGroupId;
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, relay_upstream, fee_migrated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_category, thinking_budget, server_tools, pdf_input, temperature, translate_format, structured_output, probed_context_size, probed_max_output, asr_format, price_per_second, text_verbosity, vl_high_resolution, video_input, video_fps, active_route, routes, fee_group_id, relay_upstream, fee_migrated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${keep ? "(SELECT fee_migrated FROM models WHERE id = ?)" : "?"})`,
     // The flat columns are the current route's (lib/ai/routes.ts), which is
     // also all an older build reads; the other routes ride in `routes`.
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, m.relayUpstream ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingCategory ?? null, m.thinkingBudget ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null, m.structuredOutput ?? null, m.probedContextSize ?? null, m.probedMaxOutput ?? null, m.asrFormat ?? null, m.pricePerSecond ?? null, m.textVerbosity ?? null, m.vlHighResolution ? 1 : null, m.videoInput ? 1 : null, m.videoFps ?? null, m.activeRoute ?? null, m.routes && Object.keys(m.routes).length ? JSON.stringify(m.routes) : null, m.feeGroupId ?? null, m.relayUpstream ?? null, keep ? m.id : pricing === "legacy" ? null : 1],
   };
 }
 
@@ -1344,7 +1380,6 @@ function rowToModel(r: Record<string, unknown>): Model {
     pricePerImage: (r.price_per_image as number | null) ?? undefined,
     caps: parseImageCaps(r.caps),
     reasoningEffort: parseReasoningEffort(r.reasoning_effort),
-    thinkingDialect: parseThinkingDialect(r.thinking_dialect),
     thinkingCategory: parseThinkingCategory(r.thinking_category),
     thinkingBudget: typeof r.thinking_budget === "number" ? r.thinking_budget : undefined,
     serverTools: parseServerTools(r.server_tools),

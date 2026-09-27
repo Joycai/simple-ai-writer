@@ -12,7 +12,8 @@
  *     a row saved before a platform's rows existed behaves like a new one (D1);
  *   - the Anthropic `max_tokens` sends the author's cap and nothing else (B1,
  *     D2), while the planner takes every source;
- *   - the pre-send window gate refuses only against the author's window.
+ *   - the pre-send window gate refuses only against the author's window;
+ *   - what the editor says about a field (`valueFacts`) is what the request carries.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -25,13 +26,14 @@ vi.mock("../../prefs", async (importOriginal) => {
   };
 });
 
-import { canonicalModelId, modelValue, PLATFORM_CELLS, platformModelCalibration, thinkingCategoryOf } from "../capabilities";
+import { canonicalModelId, carried, modelValue, PLATFORM_CELLS, platformModelCalibration, thinkingCategoryOf, trusted } from "../capabilities";
 import { planRequest } from "../capability/plan";
 import { jsonModeShaping } from "../jsonMode";
 import type { Model, Provider } from "../configDb";
 import { connOptions, plannedLimits } from "../conn";
 import { streamCompletion } from "../index";
-import { PLATFORM_IDS, platformEndpoints, platformOrigin, type PlatformId } from "../platforms";
+import { valueFacts } from "../modelSummary";
+import { PLATFORM_IDS, platformEndpoints, platformOrigin, providerWire, type PlatformId } from "../platforms";
 import { fitsFamily, THINKING_CATEGORIES } from "../reasoning";
 import { routeProvider, standardOf, type Endpoint } from "../routes";
 import { ContextSizeError, type ProtocolFamily, type StreamOptions } from "../types";
@@ -102,11 +104,10 @@ describe("the chain", () => {
     expect(modelValue("contextSize", { modelId: "glm-5.3" }, { standard: "openai_compat" })).toBeUndefined();
   });
 
-  it("answers a category from the author, a legacy dialect, the platform's row, the family default", () => {
+  it("answers a category from the author, the platform's row, the family default", () => {
     const at = { standard: "openai_compat" as const, platform: "zhipu" as const };
     expect(thinkingCategoryOf({ thinkingCategory: "deepseek", modelId: "glm-5.3" }, at))
       .toEqual({ value: THINKING_CATEGORIES.deepseek, source: "author" });
-    expect(thinkingCategoryOf({ thinkingDialect: "switch", modelId: "glm-5.3" }, at).source).toBe("author");
     expect(thinkingCategoryOf({ modelId: "glm-5.3" }, at)).toEqual({ value: THINKING_CATEGORIES.glm, source: "platform" });
     expect(thinkingCategoryOf({ modelId: "mystery-model" }, at))
       .toEqual({ value: THINKING_CATEGORIES["openai-generic"], source: "protocol" });
@@ -241,5 +242,61 @@ describe("the catalog's key on a relay", () => {
     const req = request({ ...messages, upstreamPrefixes: [] }, modelOf("[x]kimi-k3"));
     expect(req.maxOutput).toBe(1_000_000);
     expect((await bodyOf(req)).max_tokens).toBe(32_768);
+  });
+});
+
+/**
+ * P6's interface half: the note under 上下文 / 最大输出 / 思考类目 and the
+ * value matrix read `valueFacts`. It must say what a request from the row
+ * carries — every platform's rows, every route, blank and author-set.
+ */
+describe("what the editor says about a value", () => {
+  const ids = (platform: PlatformId): string[] => [
+    ...Object.values(PLATFORM_CELLS[platform]?.families ?? {})
+      .flatMap((block) => block?.models ?? [])
+      .flatMap((row) => ("eq" in row.match ? [row.match.eq] : [])),
+    // A catalog id, an unknown one.
+    "gpt-5.6-sol", "mystery-model",
+  ];
+
+  it("is what the request carries, with the same source, the same gate and the same max_tokens", async () => {
+    prefs.appDefaultMaxOutput = "50000";
+    const differ: string[] = [];
+    for (const platform of PLATFORM_IDS) for (const endpoint of platformEndpoints(platform)) {
+      const provider = routeOf(platform, endpoint.family);
+      for (const id of ids(platform)) for (const model of [
+        modelOf(id), modelOf(id, { contextSize: 64_000, maxOutput: 9_000 }),
+      ]) {
+        const req = request(provider, model);
+        const v = valueFacts(model, provider.apiStandard, providerWire(provider).platform, req.canonicalModelId);
+        const at = `${platform}/${endpoint.family}/${id}${model.maxOutput ? " (set)" : ""}`;
+        const got = {
+          category: v.thinkingCategory.inForce.value.id, ctx: v.contextSize.inForce?.value, out: v.maxOutput.inForce?.value,
+          ctxSource: v.contextSize.inForce?.source, outSource: v.maxOutput.inForce?.source, gates: v.contextSize.gates,
+          maxTokens: v.maxOutput.onWire,
+        };
+        const want = {
+          category: req.thinkingCategory, ctx: req.contextSize, out: req.maxOutput,
+          ctxSource: req.provenance?.contextSize, outSource: req.provenance?.maxOutput,
+          gates: trusted(carried(req.contextSize, req.provenance?.contextSize), "contextGate") !== undefined,
+          maxTokens: (await bodyOf(req)).max_tokens,
+        };
+        if (JSON.stringify(got) !== JSON.stringify(want)) differ.push(`${at}: ${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`);
+      }
+    }
+    expect(differ).toEqual([]);
+  });
+
+  it("keeps the tables' answer beside the author's, so the note can say what a typed value covers", () => {
+    const zhipu = { standard: "openai_compat" as const, platform: "zhipu" as const };
+    const v = valueFacts({ modelId: "glm-4.5-air", maxOutput: 4000, thinkingCategory: "deepseek" }, zhipu.standard, zhipu.platform);
+    expect(v.maxOutput).toMatchObject({ own: 4000, table: { value: 98_304, source: "platform" }, inForce: { value: 4000, source: "author" } });
+    expect(v.thinkingCategory.table.source).toBe("platform");
+    expect(v.thinkingCategory.inForce).toEqual({ value: THINKING_CATEGORIES.deepseek, source: "author" });
+    // Left empty: nothing of the author's, the table in force.
+    const blank = valueFacts({ modelId: "glm-4.5-air" }, zhipu.standard, zhipu.platform);
+    expect(blank.maxOutput.own).toBeUndefined();
+    expect(blank.maxOutput.inForce).toEqual(blank.maxOutput.table);
+    expect(blank.contextSize.gates).toBe(false);
   });
 });

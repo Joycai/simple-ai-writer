@@ -47,7 +47,7 @@ import {
 import { providerWire } from "../../../lib/ai/platforms";
 import {
   canonicalModelId, capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration,
-  resolveThinkingCategory, type CapabilityId,
+  thinkingCategoryOf, type CapabilityId, type Source,
 } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
@@ -59,7 +59,8 @@ import {
 import {
   jsonModeCeiling, knownJsonSchemaModel, STRUCTURED_OUTPUT_MODES, structuredOutputModesFor, type StructuredOutputMode,
 } from "../../../lib/ai/jsonMode";
-import { isMeasured, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
+import { isMeasured, valueFacts, wireSummary, type WireItem } from "../../../lib/ai/modelSummary";
+import { categoryNote, contextNote, effortForNewId, maxOutputNote, sourceName } from "./valueNotes";
 import {
   canSeeImages, defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, MODEL_TYPES,
   TRANSLATE_FORMATS, ASR_FORMATS,
@@ -77,6 +78,7 @@ import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
 import r from "./Routes.module.css";
 import { CapabilityMatrix } from "./CapabilityMatrix";
+import { ValueFactMatrix } from "./ValueFactMatrix";
 import { UpstreamSection } from "./UpstreamFields";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
@@ -283,13 +285,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
     capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
-    // "auto" ↔ stored undefined. A model configured before categories existed
-    // (a legacy dialect, no category) shows its migrated category so the author
-    // sees what it resolves to; a truly unset model shows "auto".
-    thinkingCategory: (existing?.thinkingCategory
-      ?? (existing?.thinkingDialect && provider
-        ? resolveThinkingCategory(existing, provider.apiStandard, providerWire(provider).platform).id
-        : "auto")) as ThinkingCategoryId | "auto",
+    // "auto" ↔ stored undefined.
+    thinkingCategory: (existing?.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
     thinkingBudget: existing?.thinkingBudget != null ? String(existing.thinkingBudget) : "",
     // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
     translateFormat: (existing?.translateFormat ?? "") as TranslateFormat | "",
@@ -304,18 +301,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // "auto" ↔ stored undefined: nothing sent (Responses family only).
     textVerbosity: (existing?.textVerbosity ?? "auto") as TextVerbosity | "auto",
   });
-  // The category the current form selection resolves to (auto → the
-  // platform's category for the id, else the family default — what the wire
-  // will send). The source of truth for the effort dial, the budget field, and
-  // temperature — read off the form so flipping the picker updates all three
-  // immediately, before anything is saved.
-  const formCategory = provider
-    ? resolveThinkingCategory(
-        { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, modelId: form.modelId },
-        provider.apiStandard,
-        curWire?.platform,
-      )
-    : undefined;
   // What the probe wrote, and when — kept out of `form` because it is
   // provenance, not something the author edits. The values stay when the
   // author overwrites the field, so the badge can say what was measured.
@@ -346,6 +331,27 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const capModel = capabilityModelOf({ modelId: form.modelId.trim(), relayUpstream: upstreamChoice });
   // What the model catalog is asked about — the id less this relay's own prefix (connOptions does the same).
   const catalogId = canonicalModelId(form.modelId, onRelay ? { prefixes: channel?.upstreamPrefixes } : undefined);
+  const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
+  const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
+  // The three value facts on this route (lib/ai/modelSummary.ts): the
+  // author's, the tables' answer when a field is left empty, and what each
+  // consumer does with the one in force — the notes under the fields, the
+  // placeholders and the section summaries all read this one answer.
+  const facts = provider
+    ? valueFacts({
+        modelId: form.modelId.trim(),
+        thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
+        contextSize: parsedCtx || undefined,
+        maxOutput: parsedOut || undefined,
+      }, provider.apiStandard, curWire?.platform, catalogId)
+    : undefined;
+  // The category the current selection resolves to (auto → the platform's
+  // category for the id, else the family default — what the wire will send).
+  // The source of truth for the effort dial, the budget field and temperature,
+  // read off the form so flipping the picker updates all three before saving.
+  const formCategory = facts?.thinkingCategory.inForce.value;
+  const valueSource = (src: Source) => sourceName(t, src, curWire?.platform);
+  const modelOwn = (v: { value: number; source: Source } | undefined) => (v && v.source !== "default" ? v.value : undefined);
   // With the upstream, as the adapters ask: behind some relay upstreams a
   // temperature is rewritten or refused, and the field would edit nothing.
   const temperatureReaches = !curWire || hasCapability("temperature", curWire, { ...capModel, thinkingCategory: formCategory?.id });
@@ -393,48 +399,42 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const toggleWhyAll = () => { setWhyAll((v) => !v); setWhy({}); };
   const whyProps = (k: WhyKey, text: string) => ({ why: text, whyOpen: whyOpen(k), onWhy: toggleWhy(k) });
 
-  // The platform's own values for a model id it knows (platforms.ts
-  // `ModelCalibration`), written into a *new* row's form when the author picks
-  // or finishes typing the id. A field is ours to write only while it is
+  // The platform's type and PDF declaration for a model id it knows
+  // (`ModelCalibration`), written into a *new* row's form when the author
+  // picks or finishes typing the id — the two declarations with no unset
+  // state; the value facts follow the chain instead (valueNotes.ts). A field is ours to write only while it is
   // unset or still holds what the previous prefill put there — so correcting
   // a typo re-prefills, and anything the author chose by hand stays.
   // Keyed by the id it ran for: blurring the id field again without changing it
   // must not take back a field the author has since set to its unset value.
-  const lastCalibration = useRef<{ id?: string; category?: ThinkingCategoryId; ctx?: string; out?: string; type?: ModelType; pdf?: boolean }>({});
+  // An edited row starts at its own id, so blurring the field unchanged does nothing.
+  const lastCalibration = useRef<{ id?: string; type?: ModelType; pdf?: boolean }>({ id: existing?.modelId.trim().toLowerCase() });
   const applyCalibration = (modelId: string) => {
-    if (existing || !provider) return;
+    if (!provider || !channel) return;
     const id = modelId.trim().toLowerCase();
     if (id === lastCalibration.current.id) return;
+    // A category left on 自动 resolves anew for the new id, on every route —
+    // an edited row as much as a new one (valueNotes.ts `effortForNewId`).
+    const resolvedOn = (p: typeof provider) =>
+      thinkingCategoryOf({ modelId: modelId.trim() }, { standard: p.apiStandard, platform: providerWire(p).platform }).value;
+    setForm((f) => ({ ...f, reasoningEffort: effortForNewId(f.thinkingCategory, f.reasoningEffort, resolvedOn(provider)) }));
+    setParked((all) => {
+      const next = { ...all };
+      for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
+        const p = routeProvider(channel, f);
+        if (!p || !prof.reasoningEffort) continue;
+        next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
+      }
+      return next;
+    });
+    if (existing) { lastCalibration.current = { id }; return; }
+    // A new row takes only what has no unset state (D1): the category, window
+    // and cap stay empty and follow the platform's rows (the notes say so).
     const cal = platformModelCalibration(providerWire(provider).platform, modelId) ?? {};
-    // A category of another family would be refused by resolveThinkingCategory
-    // anyway; don't show one the route can't send.
-    const category = cal.thinkingCategory && THINKING_CATEGORIES[cal.thinkingCategory].family === family
-      ? cal.thinkingCategory : undefined;
-    const next = {
-      id,
-      category,
-      ctx: cal.contextSize ? String(cal.contextSize) : undefined,
-      out: cal.maxOutput ? String(cal.maxOutput) : undefined,
-      type: cal.type as ModelType | undefined,
-      pdf: cal.pdfInput,
-    };
+    const next = { id, type: cal.type as ModelType | undefined, pdf: cal.pdfInput };
     const prev = lastCalibration.current;
     const ours = <T,>(cur: T, unset: T, prevVal: T | undefined) => cur === unset || (prevVal !== undefined && cur === prevVal);
-    setForm((f) => {
-      const thinkingCategory = ours<ThinkingCategoryId | "auto">(f.thinkingCategory, "auto", prev.category)
-        ? (next.category ?? "auto") : f.thinkingCategory;
-      return {
-        ...f,
-        thinkingCategory,
-        // The same coercion as the category chips: an effort picked under the
-        // previous category (glm-5.2's off) is a 400 under the new one (glm-5.3).
-        reasoningEffort: thinkingCategory === f.thinkingCategory ? f.reasoningEffort
-          : effortForCategory(thinkingCategory === "auto" ? undefined : THINKING_CATEGORIES[thinkingCategory], f.reasoningEffort),
-        contextSize: ours(f.contextSize, "", prev.ctx) ? (next.ctx ?? "") : f.contextSize,
-        maxOutput: ours(f.maxOutput, "", prev.out) ? (next.out ?? "") : f.maxOutput,
-        type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type,
-      };
-    });
+    setForm((f) => ({ ...f, type: ours<ModelType>(f.type, "text", prev.type) ? (next.type ?? "text") : f.type }));
     setPdfInput((cur) => (ours(cur, false, prev.pdf) ? !!next.pdf : cur));
     lastCalibration.current = next;
   };
@@ -517,8 +517,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const videoFpsWire = can("videoFps", { type: form.type });
   const videoFps = videoFpsWire && videoInput ? clampVideoFps(videoFpsText) : undefined;
   const isComfy = isImageModel && form.capsRoute === "comfyui";
-  const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
-  const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
   // Empty stays empty (send nothing); anything parseable is clamped into
   // range. Written this way rather than `|| 0` because 0 is a value here.
   const parsedTemp = form.temperature.trim() === "" ? NaN : Number(form.temperature);
@@ -628,8 +626,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       maxOutput: prof.maxOutput ? String(prof.maxOutput) : "",
       temperature: prof.temperature !== undefined ? String(prof.temperature) : "",
       reasoningEffort: prof.reasoningEffort ?? "default",
-      thinkingCategory: (prof.thinkingCategory
-        ?? (prof.thinkingDialect ? resolveThinkingCategory(prof, nextProvider.apiStandard, providerWire(nextProvider).platform).id : "auto")) as ThinkingCategoryId | "auto",
+      thinkingCategory: (prof.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
       thinkingBudget: prof.thinkingBudget != null ? String(prof.thinkingBudget) : "",
       structuredOutput: prof.structuredOutput ?? "auto",
       textVerbosity: prof.textVerbosity ?? "auto",
@@ -734,10 +731,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             ? undefined
             : form.reasoningEffort,
         thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
-        // Legacy shape is superseded by the category; clear it so a resaved
-        // model stops carrying the field resolveThinkingCategory reads only for
-        // one-time migration.
-        thinkingDialect: undefined,
         // Only meaningful for a budget-shape category; parsed, positive, else absent.
         thinkingBudget,
         // The grant, whole — not cut to the wire (see declaredServerTools):
@@ -826,9 +819,18 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     : costReported ? t("aiConfig.models.feeGroupHintReported") : t("aiConfig.models.feeGroupHintUnbound");
 
   const limitsHas = parsedCtx > 0 || parsedOut > 0;
+  const ctxLabel = (n: number) => (CONTEXT_SIZE_STOPS.includes(n) ? formatContextSize(n) : n.toLocaleString());
   const limitsSum = [
-    parsedCtx > 0 && (CONTEXT_SIZE_STOPS.includes(parsedCtx) ? formatContextSize(parsedCtx) : parsedCtx.toLocaleString()),
+    parsedCtx > 0 && ctxLabel(parsedCtx),
     parsedOut > 0 && parsedOut.toLocaleString(),
+  ].filter(Boolean).join(" · ");
+  // Left empty, what the section follows: the dashed square stays (nothing
+  // typed), the numbers say what a request carries anyway.
+  const ctxTable = facts?.contextSize.table?.value;
+  const outTable = facts?.maxOutput.table?.value;
+  const limitsFollow = [
+    ctxTable && t("aiConfig.models.limitsSumCtx", { value: ctxLabel(ctxTable) }),
+    outTable && t("aiConfig.models.limitsSumOut", { value: outTable.toLocaleString() }),
   ].filter(Boolean).join(" · ");
 
   const catLabel = form.thinkingCategory === "auto"
@@ -971,6 +973,19 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
           note: t("aiConfig.models.manualOverrides", { date: shortDate(probed.at), value: probedValue.toLocaleString() }),
           noteTone: "faint" as const,
         };
+  };
+
+  // Where a value comes from (valueNotes.ts). A measured badge on a filled
+  // field says more — the probe's number is the author's, with a date.
+  const sourceNote = (value: number, probedValue: number | undefined, note: string | undefined) => {
+    const measured = value > 0 ? measuredNote(value, probedValue) : {};
+    if ("note" in measured) return measured;
+    // Cleared after a probe: the measurement is kept, and said, not dropped.
+    const unused = value === 0 && probedValue !== undefined && probed.at
+      ? t("aiConfig.models.noteProbedUnused", { value: probedValue.toLocaleString(), date: shortDate(probed.at) })
+      : undefined;
+    const text = [note, unused].filter(Boolean).join("；");
+    return text ? { note: text, noteTone: "faint" as const } : {};
   };
 
   const soHint = family === "anthropic"
@@ -1310,27 +1325,31 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             label={t("aiConfig.models.secLimits")}
             open={open.limits}
             onToggle={() => toggleSection("limits")}
-            summary={limitsHas ? limitsSum : t("aiConfig.models.secLimitsUnset")}
+            summary={limitsHas ? limitsSum
+              : limitsFollow ? t("aiConfig.models.secLimitsFollow", { items: limitsFollow }) : t("aiConfig.models.secLimitsUnset")}
             unset={!limitsHas}
           >
             <Field label={t("aiConfig.models.ctxLabel")} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefCtx")} {...whyProps("ctx", t("aiConfig.models.contextSizeHint"))}
-              {...measuredNote(parsedCtx, probed.ctx)}>
+              {...sourceNote(parsedCtx, probed.ctx, facts && contextNote(t, facts.contextSize, valueSource))}>
               <div className={s.chips}>
                 {/* The windows models actually ship with; the active one clears
                     on a second click, so unset is one click away. */}
+                {/* Left empty, the stop the tables answer is shown dashed —
+                    followed, not typed (the drawer's "chosen, sends nothing"). */}
                 {CONTEXT_SIZE_STOPS.map((n) => (
                   <DashChip
                     key={n}
                     label={formatContextSize(n)}
-                    active={parsedCtx === n}
+                    active={parsedCtx > 0 ? parsedCtx === n : ctxTable === n}
+                    auto={parsedCtx === 0}
                     onClick={() => setForm({ ...form, contextSize: parsedCtx === n ? "" : String(n) })}
                   />
                 ))}
                 <input
                   className={inputCls(parsedCtx === 0, s.exact)}
                   type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024"
-                  placeholder={t("aiConfig.hub.exactValue")}
+                  placeholder={ctxTable && !CONTEXT_SIZE_STOPS.includes(ctxTable) ? ctxTable.toLocaleString() : t("aiConfig.hub.exactValue")}
                   value={form.contextSize}
                   onChange={(e) => setForm({ ...form, contextSize: e.target.value })}
                   aria-label={t("aiConfig.models.ctxLabel")}
@@ -1339,12 +1358,12 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             </Field>
             <Field label={t("aiConfig.models.maxOutLabel")} scope={routeScope} sub={t("aiConfig.models.unitTokens")}
               hint={t("aiConfig.models.briefMaxOut")} {...whyProps("maxOut", t("aiConfig.models.maxOutputHint"))}
-              {...measuredNote(parsedOut, probed.out)}>
+              {...sourceNote(parsedOut, probed.out, facts && maxOutputNote(t, facts.maxOutput, valueSource))}>
               <div className={s.numRow}>
                 <input
                   className={inputCls(parsedOut === 0, s.num)}
                   type="number" min="0" max={MAX_OUTPUT_SIZE} step="512"
-                  placeholder={t("aiConfig.models.phAppDefault")}
+                  placeholder={outTable ? outTable.toLocaleString() : t("aiConfig.models.phUnknown")}
                   value={form.maxOutput}
                   onChange={(e) => setForm({ ...form, maxOutput: e.target.value })} />
               </div>
@@ -1354,8 +1373,11 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 providerId={providerId}
                 route={route}
                 modelId={form.modelId}
-                contextSize={form.contextSize}
-                maxOutput={form.maxOutput}
+                // What is known about this model — typed, the platform's row,
+                // the catalog — sizes the probe's search and its cost estimate.
+                // Not the app-wide default: it says nothing about this model.
+                contextSize={String(modelOwn(facts?.contextSize.inForce) ?? "")}
+                maxOutput={String(modelOwn(facts?.maxOutput.inForce) ?? "")}
                 priceIn={form.priceIn}
                 priceOut={form.priceOut}
                 onApply={(v) => {
@@ -1375,6 +1397,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 <Note text={t("aiConfig.probe.probedAt", { date: new Date(probed.at).toLocaleString() })} tone="ok" />
               )}
             </Field>
+            {/* Each route's category, window and cap with its source — the
+                current route's are the fields above; the others' come from
+                their parked fields (设计稿 P6 界面 屏 3a). */}
+            {route && multiRoute && (
+              <ValueFactMatrix label={t("aiConfig.models.valueMatrixLabel")} routes={channelRoutes} current={route}
+                wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} upstreamPrefixes={channel?.upstreamPrefixes}
+                valuesFor={(f) => (f === route
+                  ? { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, maxOutput: parsedOut || undefined }
+                  : { thinkingCategory: parked[f]?.thinkingCategory, maxOutput: parked[f]?.maxOutput })} />
+            )}
           </Section>
 
           <Section
@@ -1382,7 +1414,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             scope={routeScope}
             open={open.think}
             onToggle={() => toggleSection("think")}
-            summary={thinkHas ? thinkSum : t("aiConfig.models.secThinkingUnset")}
+            summary={thinkHas ? thinkSum
+              : t("aiConfig.models.secThinkingUnset", { cat: facts ? t(facts.thinkingCategory.table.value.labelKey) : "" })}
             unset={!thinkHas}
           >
             {/* Which thinking-parameter category this model uses — a per-vendor
@@ -1396,9 +1429,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 {...whyProps("cat", form.thinkingCategory === "auto"
                   ? t("aiConfig.models.thinkingCatAutoHint")
                   : t(THINKING_CATEGORIES[form.thinkingCategory].hintKey))}
-                {...(form.thinkingCategory === "auto"
-                  ? { note: t("aiConfig.models.noteCatAuto", { cat: t(THINKING_CATEGORIES[formCategory.id].labelKey) }) }
-                  : {})}>
+                {...sourceNote(0, undefined, facts && categoryNote(t, facts.thinkingCategory, valueSource))}>
                 <div className={s.chips}>
                   {(["auto", "off", ...categoryChoices] as (ThinkingCategoryId | "auto")[]).map((c, i) => (
                     <Fragment key={c}>
@@ -1411,7 +1442,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                           ...f,
                           thinkingCategory: c,
                           // A stale `medium` can't survive onto e.g. a GLM model (low/high/max only).
-                          reasoningEffort: effortForCategory(c === "auto" ? undefined : THINKING_CATEGORIES[c], f.reasoningEffort),
+                          reasoningEffort: effortForCategory(c === "auto" ? facts?.thinkingCategory.table.value : THINKING_CATEGORIES[c], f.reasoningEffort),
                         }))}
                       />
                     </Fragment>

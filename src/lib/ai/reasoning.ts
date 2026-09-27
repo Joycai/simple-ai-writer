@@ -85,7 +85,7 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
  *
  * Absent means "assume the family's current generation" — see `defaultDialect`.
  */
-export type ThinkingDialect = "adaptive" | "extended" | "switch" | "none";
+type ThinkingDialect = "adaptive" | "extended" | "switch" | "none";
 
 const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "switch", "none"];
 
@@ -408,9 +408,9 @@ export function fitsFamily(category: ThinkingCategory, family: ProtocolFamily): 
  * and an imported / hand-edited bundle can pair an OpenAI model with an
  * Anthropic-only dialect (`adaptive`/`extended`); without this guard that
  * would resolve to a Claude category and emit Anthropic fields
- * (`output_config`) onto an OpenAI request. Old rows are never rewritten
- * until the author next saves the model; the resolution that calls this is
- * `capability/values.ts`'s `resolveThinkingCategory`.
+ * (`output_config`) onto an OpenAI request. Called only by the one-time
+ * migration that rewrites such rows (`legacyThinking.ts`); nothing reads a
+ * dialect at request time.
  */
 export function migrateDialect(dialect: ThinkingDialect | undefined, family: ProtocolFamily): ThinkingCategory | undefined {
   switch (dialect) {
