@@ -496,3 +496,48 @@ summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generatio
 - plain
 POST https://generativelanguage.googleapis.com/v1beta/models/deepseek-v4-pro:streamGenerateContent?alt=sse
 {"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+
+### grok-4-fast-non-reasoning · bare
+summary: structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 tools=googleSearch structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"temperature":0.4},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"tools":[{"googleSearch":{}}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:generationConfig.responseJsonSchema=strict
+- plain (json json_schema)
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"responseJsonSchema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"responseMimeType":"application/json"},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: generationConfig.thinkingConfig.thinkingLevel=LOW structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"LOW"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"LOW"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://generativelanguage.googleapis.com/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}

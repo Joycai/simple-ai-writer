@@ -497,6 +497,51 @@ summary: reasoning_effort=max structured:response_format=json_object
 POST https://relay.example.invalid/v1/chat/completions
 {"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
+### grok-4-fast-non-reasoning · bare
+summary: structured:response_format=json_object
+- plain
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 structured:response_format=json_object vl_high_resolution_images=true video:video_url.fps=1
+- plain
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"temperature":0.4,"vl_high_resolution_images":true}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://relay.example.invalid/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
 ### [x]claude-opus-4-6 @kiro · bare
 summary: —
 - plain
@@ -1623,6 +1668,51 @@ summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json
 - plain
 POST https://relay.example.invalid/v1/responses
 {"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### grok-4-fast-non-reasoning · bare
+summary: structured:text.format=json_object
+- plain
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true}
+- tools+required
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 tools=web_search structured:text.format=json_object text.verbosity=low
+- plain
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://relay.example.invalid/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
 
 ### [x]claude-opus-4-6 @kiro · bare
 summary: structured:text.format=json_object
@@ -2751,6 +2841,51 @@ summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generatio
 POST https://relay.example.invalid/v1beta/models/deepseek-v4-pro:streamGenerateContent?alt=sse
 {"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
 
+### grok-4-fast-non-reasoning · bare
+summary: structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 tools=googleSearch structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"temperature":0.4},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"tools":[{"googleSearch":{}}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:generationConfig.responseJsonSchema=strict
+- plain (json json_schema)
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"responseJsonSchema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"responseMimeType":"application/json"},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: generationConfig.thinkingConfig.thinkingLevel=LOW structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"LOW"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+- tools+required
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"LOW"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]},"toolConfig":{"functionCallingConfig":{"mode":"ANY"}},"tools":[{"functionDeclarations":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}}]}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: generationConfig.thinkingConfig.thinkingLevel=HIGH structured:generationConfig.responseMimeType=application/json
+- plain
+POST https://relay.example.invalid/v1beta/models/grok-4-fast-non-reasoning:streamGenerateContent?alt=sse
+{"generationConfig":{"thinkingConfig":{"includeThoughts":true,"thinkingLevel":"HIGH"}},"systemInstruction":{"parts":[{"text":"Be brief. Answer in JSON."}]}}
+
 ### [x]claude-opus-4-6 @kiro · bare
 summary: structured:generationConfig.responseMimeType=application/json
 - plain
@@ -3877,6 +4012,51 @@ summary: thinking.type=adaptive output_config.effort=max
 - plain
 POST https://relay.example.invalid/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+
+### grok-4-fast-non-reasoning · bare
+summary: thinking.type=adaptive
+- plain
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: thinking.type=adaptive tools=web_search
+- plain
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:output_config.format=json_schema
+- plain (json json_schema)
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: thinking.type=adaptive output_config.effort=high
+- plain
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: thinking.type=adaptive output_config.effort=low
+- plain
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
+- tools+required
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: thinking.type=adaptive output_config.effort=max
+- plain
+POST https://relay.example.invalid/v1/messages
+{"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [x]claude-opus-4-6 @kiro · bare
 summary: thinking.type=adaptive

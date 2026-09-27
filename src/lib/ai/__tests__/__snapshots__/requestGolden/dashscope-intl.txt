@@ -497,6 +497,51 @@ summary: reasoning_effort=max structured:response_format=json_object
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
 {"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
 
+### grok-4-fast-non-reasoning · bare
+summary: structured:response_format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 enable_search=true search_options.search_strategy=agent_max enable_code_interpreter=true structured:response_format=json_object vl_high_resolution_images=true video:video_url.fps=1
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"enable_code_interpreter":true,"enable_search":true,"model":"grok-4-fast-non-reasoning","search_options":{"search_strategy":"agent_max"},"stream":true,"stream_options":{"include_usage":true},"temperature":0.4,"vl_high_resolution_images":true}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:response_format=json_schema
+- plain (json json_schema)
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","response_format":{"json_schema":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"strict":true},"type":"json_schema"},"stream":true,"stream_options":{"include_usage":true}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"required","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions
+{"model":"grok-4-fast-non-reasoning","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
 ## responses · openai_responses_compat
 
 ### qwen3.5-plus · bare
@@ -993,3 +1038,48 @@ summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json
 - plain
 POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
 {"instructions":"Be brief. Answer in JSON.","model":"deepseek-v4-pro","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
+
+### grok-4-fast-non-reasoning · bare
+summary: structured:text.format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · declared
+summary: temperature=0.4 tools=web_search,web_extractor,web_search_image,image_search,code_interpreter structured:text.format=json_object text.verbosity=low
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"temperature":0.4,"text":{"verbosity":"low"},"tools":[{"type":"web_search"},{"type":"web_extractor"},{"type":"web_search_image"},{"type":"image_search"},{"type":"code_interpreter"}]}
+
+### grok-4-fast-non-reasoning · structured
+summary: structured:text.format=json_schema
+- plain (json json_schema)
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","store":false,"stream":true,"text":{"format":{"name":"answer","schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}}}
+
+### grok-4-fast-non-reasoning · effortHigh
+summary: reasoning.effort=high reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"high","summary":"auto"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortOff
+summary: reasoning.effort=none structured:text.format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"none"},"store":false,"stream":true}
+- tools+required
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"none"},"store":false,"stream":true,"tool_choice":"required","tools":[{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"},"strict":false,"type":"function"}]}
+
+### grok-4-fast-non-reasoning · effortMax
+summary: reasoning.effort=max reasoning.summary=auto structured:text.format=json_object
+- plain
+POST https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses
+{"instructions":"Be brief. Answer in JSON.","model":"grok-4-fast-non-reasoning","reasoning":{"effort":"max","summary":"auto"},"store":false,"stream":true}
