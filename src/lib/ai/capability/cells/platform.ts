@@ -7,8 +7,7 @@
 
 import type { ProtocolFamily } from "../../types";
 import type { PlatformId } from "../../platforms";
-import type { ThinkingCategoryId } from "../../reasoning";
-import type { CapabilityId } from "../facts";
+import type { CapabilityId, ValueFactId, ValueFactMap } from "../facts";
 import { bySpecificity, eq, rawModelKey, rowSetting, type ModelPattern } from "../modelId";
 
 /**
@@ -30,18 +29,15 @@ import { bySpecificity, eq, rawModelKey, rowSetting, type ModelPattern } from ".
 type FlagCell = boolean | "per-model";
 
 /** What a platform knows about one of its model ids besides its capabilities. */
-interface PlatformValueFacts {
-  thinkingCategory?: ThinkingCategoryId;
-  contextSize?: number;
-  maxOutput?: number;
-}
+type PlatformValueFacts = Partial<ValueFactMap>;
 
 /**
- * The values a model row should start with when the author adds that id. A
- * prefill, never a runtime default (until capability-resolution P6): the model
- * drawer writes these into the form (only into fields the author has not
- * touched) and the row stores them like anything the author typed, so nothing
- * on the wire depends on them afterwards.
+ * The values a model row should start with when the author adds that id. The
+ * model drawer writes these into the form (only into fields the author has not
+ * touched), and since capability-resolution P6 the same values are also the
+ * runtime default of a row that leaves the field unset
+ * (`capability/values.ts`, D1) — so a row saved before a platform's rows
+ * existed gets them too.
  *
  * It exists because the family default is wrong for a whole platform: on 智谱
  * the ① family's `reasoning_effort` fails silently on every one of eleven
@@ -466,6 +462,33 @@ export function platformModelCalibration(
     ...(maxOutput !== undefined ? { maxOutput } : {}),
     ...row.prefill,
   };
+}
+
+/**
+ * The platform's value for one of its model ids on one family: the family's
+ * own block's row, else the `all` block's. `accepts` skips a value the family
+ * cannot use — the `all` block's `doubao` category is a Chat Completions
+ * dialect, and a Responses route on the same platform must not take it.
+ */
+export function platformValue<F extends ValueFactId>(
+  platform: PlatformId,
+  family: ProtocolFamily,
+  fact: F,
+  modelId: string | undefined,
+  accepts: (v: ValueFactMap[F]) => boolean = () => true,
+): ValueFactMap[F] | undefined {
+  const key = rawModelKey(modelId);
+  if (!key) return undefined;
+  const families = PLATFORM_CELLS[platform]?.families;
+  const valueOf = (r: PlatformModelRow) => r.set[fact] as ValueFactMap[F] | undefined;
+  for (const block of [families?.[family], families?.all]) {
+    const row = rowSetting(modelRows(block), key, (r) => {
+      const v = valueOf(r);
+      return v !== undefined && accepts(v);
+    });
+    if (row) return valueOf(row);
+  }
+  return undefined;
 }
 
 /** `include` entries a platform's Responses route must send — see `FamilyCells.responsesInclude`. */

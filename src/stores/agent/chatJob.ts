@@ -50,7 +50,7 @@ import { loadApiKey } from "../../lib/keyStore";
 import { expandAuthorIntent } from "../../lib/context/expand";
 import { recordRunOutcome } from "../../lib/ai/modelHealth";
 import { canSeeImages, costFor } from "../../lib/ai/configDb";
-import { connOptions } from "../../lib/ai/conn";
+import { connOptions, plannedLimits } from "../../lib/ai/conn";
 import { notify } from "../../lib/notify";
 import { isSamePath } from "../../lib/paths";
 import type { ChatTurn, LiveChat, ChatJob, AgentState } from "./types";
@@ -381,8 +381,9 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
     // The Beta switch decides the tier for the WHOLE turn: ceiling, routing,
     // round cap and briefing all read this one value (lib/agent/packs).
     const chatPreset = chatAgentPreset();
+    const contextWindow = plannedLimits({ model, provider }).contextSize;
     const messageCeiling = messageCeilingFor(
-      model.contextSize,
+      contextWindow,
       contextUtilization,
       chatPreset,
       effectiveSubs,
@@ -575,7 +576,7 @@ async function runChatJob(job: ChatJob, set: Set, get: Get): Promise<void> {
           meta,
           ceilingTokens: messageCeiling,
           triggerTokens: compactTriggerFor({
-            contextSize: model.contextSize,
+            contextSize: contextWindow,
             messageCeiling,
             triggerTokens: compactTriggerTokens,
             triggerRatio: compactTriggerRatio,

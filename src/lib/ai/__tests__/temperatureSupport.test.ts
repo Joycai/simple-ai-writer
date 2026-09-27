@@ -13,9 +13,9 @@
  * an absent one as the family default (thinking), which one case below pins.
  */
 import { describe, expect, it } from "vitest";
-import { hasCapability } from "../capabilities";
+import { hasCapability, resolveThinkingCategory } from "../capabilities";
 import { wireOf } from "../platforms";
-import { resolveThinkingCategory, type ThinkingCategoryId } from "../reasoning";
+import type { ThinkingCategoryId } from "../reasoning";
 import type { ApiStandard } from "../types";
 
 function temperatureReaches(standard: ApiStandard, thinkingCategory?: ThinkingCategoryId): boolean {

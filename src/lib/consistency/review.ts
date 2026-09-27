@@ -16,7 +16,7 @@
  * it — the same seam `delegate` / `run_pack` use, so the log needs no new band.
  */
 
-import { connOptions, type AiConn } from "../ai/conn";
+import { connOptions, plannedLimits, type AiConn } from "../ai/conn";
 import { extractJsonObject } from "../ai/json";
 import { canSeeImages, type Model, type Provider } from "../ai/configDb";
 import type { StreamMessage } from "../ai/types";
@@ -346,7 +346,7 @@ async function runWindow(
     let finalText = "";
     const run = await runAgent({
       ...connOptions(args.conn),
-      inputCeilingTokens: messageCeilingForTools(args.conn.model.contextSize, args.contextUtilization, routed.tools, preset.residentGroups),
+      inputCeilingTokens: messageCeilingForTools(plannedLimits(args.conn).contextSize, args.contextUtilization, routed.tools, preset.residentGroups),
       preset,
       messages,
       toolContext,

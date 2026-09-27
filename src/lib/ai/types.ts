@@ -36,6 +36,7 @@ import type { ServerToolEvent, ServerToolId } from "./serverTools";
 import type { PlatformId } from "./platforms";
 import type { RelayUpstreamChoice } from "./relayUpstream";
 import type { RequestPlan } from "./capability/plan";
+import type { Provenance } from "./capability/intent";
 import i18n from "../../i18n";
 
 /**
@@ -478,22 +479,26 @@ export interface StreamOptions {
    */
   _plan?: RequestPlan;
   /**
-   * Optional model context window (tokens). When set, a request whose
-   * estimated prompt size exceeds it is rejected with ContextSizeError
-   * before anything is sent — servers like ollama would otherwise silently
-   * truncate the head of the prompt (dropping the system instructions).
+   * Optional model context window (tokens). When it is the author's own
+   * (`provenance`), a request whose estimated prompt size exceeds it is
+   * rejected with ContextSizeError before anything is sent — servers like
+   * ollama would otherwise silently truncate the head of the prompt (dropping
+   * the system instructions). A table's window only plans.
    */
   contextSize?: number;
   /**
    * Optional cap on how many tokens the model may emit in one reply.
    *
-   * Only the Anthropic path sends it: the Messages API requires `max_tokens` on
-   * every request, so an unset value there falls back to a constant rather than
+   * Only the Anthropic path sends it, and only the author's own
+   * (`provenance`): the Messages API requires `max_tokens` on every request,
+   * so an unset or untrusted value there falls back to a constant rather than
    * to the server's own default (there isn't one). On the OpenAI and Gemini
    * paths this stays a planning-only input, used by context/budget.ts to stop
    * reserving window the model could never fill.
    */
   maxOutput?: number;
+  /** Where `contextSize` and `maxOutput` came from — `ConnOptions.provenance`. */
+  provenance?: Provenance;
   /**
    * Sampling temperature, or absent to send nothing and leave the endpoint's
    * own default alone.
@@ -547,7 +552,8 @@ export interface StreamOptions {
   reasoningEffort?: ReasoningEffort;
   /**
    * Which thinking-parameter category this model uses. Absent means the
-   * family's default — see `resolveThinkingCategory` in `lib/ai/reasoning.ts`.
+   * platform's category for the id, else the family's default — see
+   * `resolveThinkingCategory` in `lib/ai/capability/values.ts`.
    */
   thinkingCategory?: ThinkingCategoryId;
   /** Token budget for a budget-shape category (Claude extended, Qwen). */

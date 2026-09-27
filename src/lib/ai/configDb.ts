@@ -318,8 +318,9 @@ export interface Model {
   /**
    * Which thinking-parameter **category** this model uses — the author-facing
    * choice (a per-vendor preset carrying its own legal effort menu). Absent =
-   * the `auto` state, which `resolveThinkingCategory` turns into the family
-   * default. See `THINKING_CATEGORIES` in `lib/ai/reasoning.ts`.
+   * the `auto` state, which `resolveThinkingCategory` turns into the
+   * platform's category for the id, else the family default
+   * (`lib/ai/capability/values.ts`). See `THINKING_CATEGORIES` in `lib/ai/reasoning.ts`.
    */
   thinkingCategory?: ThinkingCategoryId;
   /**

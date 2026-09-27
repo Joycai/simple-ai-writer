@@ -23,6 +23,7 @@ import { contextLabel, parseModelLabel, parseProviderLabel } from "../../lib/ai/
 import { MOD_KEY } from "../../lib/platform";
 import styles from "./ModelSelector.module.css";
 import { activeFamily, channelEndpoints, providerFor, ROUTE_SHORT } from "../../lib/ai/routes";
+import { plannedLimitsOf } from "../../lib/ai/conn";
 
 /** Context size at which a model is worth surfacing under 「长上下文」. */
 const LONG_CONTEXT_MIN = 128_000;
@@ -51,6 +52,8 @@ function isLocalProvider(provider: Provider): boolean {
 interface Row {
   model: Model;
   provider: Provider | undefined;
+  /** The window the run will plan with — the author's, else the platform's (`plannedLimitsOf`). */
+  contextSize: number | undefined;
 }
 
 interface ModelSelectorProps {
@@ -171,16 +174,18 @@ export function ModelSelector({
 
   // ── Filtering ──────────────────────────────────────────────────────────────
   const allRows: Row[] = useMemo(
-    () => models.map((model) => ({ model, provider: providerFor(model, providers) })),
+    () => models.map((model) => ({
+      model, provider: providerFor(model, providers), contextSize: plannedLimitsOf(model, providers).contextSize,
+    })),
     [models, providers],
   );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return allRows.filter(({ model, provider }) => {
+    return allRows.filter(({ model, provider, contextSize }) => {
       if (filter === "recent" && !recent.includes(model.id)) return false;
       if (filter === "local" && !(provider && isLocalProvider(provider))) return false;
-      if (filter === "long" && (model.contextSize ?? 0) < LONG_CONTEXT_MIN) return false;
+      if (filter === "long" && (contextSize ?? 0) < LONG_CONTEXT_MIN) return false;
       if (!q) return true;
       // Search the raw name too, so a qualifier lifted into a chip is still findable.
       return `${model.name} ${model.modelId} ${provider?.name ?? ""}`.toLowerCase().includes(q);
@@ -280,7 +285,7 @@ export function ModelSelector({
   };
 
   const triggerLabel = activeModel ? parseModelLabel(activeModel.name, activeModel.modelId) : null;
-  const triggerContext = contextLabel(activeModel?.contextSize);
+  const triggerContext = contextLabel(allRows.find((r) => r.model === activeModel)?.contextSize);
   const modKeyM = MOD_KEY === "⌘" ? "⌘M" : "Ctrl M";
 
   return (
@@ -385,7 +390,7 @@ export function ModelSelector({
                     {group.rows.map((row) => {
                       const idx = flat.indexOf(row);
                       const label = parseModelLabel(row.model.name, row.model.modelId);
-                      const ctx = contextLabel(row.model.contextSize);
+                      const ctx = contextLabel(row.contextSize);
                       const selected = row.model.id === selectedId;
                       return (
                         <button

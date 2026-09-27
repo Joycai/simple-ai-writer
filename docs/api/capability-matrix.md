@@ -514,6 +514,115 @@
 | comfyui | · |  |  |  |
 | custom | · | · | · | · |
 
+## 思考类目缺省
+
+模型行的思考类目留在「自动」时的取值：作者声明 → 旧方言迁移 → 平台格里这个 id 的行（只取本线路能拼的类目）→ 协议族缺省。
+协议族缺省：Chat `openai-generic` · Resp `responses-effort` · Gemini `gemini3` · Anth `claude-adaptive`。下表只列平台行给出的、与族缺省不同来源的格。
+
+| 平台 | 族 | 模型 id | 类目 |
+| --- | --- | --- | --- |
+| deepseek | Chat | `deepseek-flash` | `deepseek` |
+| deepseek | Chat | `deepseek-v4-pro` | `deepseek` |
+| volcengine-plan | Chat | `doubao-seed-2.0-lite` | `doubao` |
+| volcengine-plan | Chat | `doubao-seed-2.0-mini` | `doubao` |
+| volcengine-plan | Chat | `doubao-seed-2.1-turbo` | `doubao` |
+| volcengine-plan | Anth | `doubao-seed-2.0-lite` | `doubao-switch` |
+| volcengine-plan | Anth | `doubao-seed-2.0-mini` | `doubao-switch` |
+| volcengine-plan | Anth | `doubao-seed-2.1-turbo` | `doubao-switch` |
+| zhipu | Chat | `glm-5.3` | `glm` |
+| zhipu | Chat | `glm-5.3-flash` | `glm` |
+| zhipu | Chat | `glm-5.3-flashx` | `glm` |
+| zhipu | Chat | `glm-5.2` | `glm-effort` |
+| zhipu | Chat | `glm-5.1` | `glm-switch` |
+| zhipu | Chat | `glm-5` | `glm-switch` |
+| zhipu | Chat | `glm-5-turbo` | `glm-switch` |
+| zhipu | Chat | `glm-4.7` | `glm-switch` |
+| zhipu | Chat | `glm-4.6` | `glm-switch` |
+| zhipu | Chat | `glm-4.5` | `glm-switch` |
+| zhipu | Chat | `glm-4.5-air` | `glm-switch` |
+
+## 输出上限来源
+
+窗口与单次输出上限留空时的取值：作者值（含探测写入的）→ 平台格里这个 id 的行 → 全局模型目录（`cells/catalog.ts`，只有上限）→ 应用缺省（设置 → 通用，只有上限）。
+每个值带着出处走，消费方只信自己收的出处：
+
+| 消费方 | 收哪些出处 |
+| --- | --- |
+| planner | author · platform · catalog · protocol · default |
+| contextGate | author |
+| anthropicMaxTokens | author |
+
+平台行给出的值（留空的行在该线路上得到的）：
+
+| 平台 | 族 | 模型 id | 窗口 | 上限 |
+| --- | --- | --- | --- | --- |
+| deepseek | Chat | `deepseek-flash` | 1,048,576 | 393,216 |
+| deepseek | Chat | `deepseek-v4-pro` | 1,048,576 | 393,216 |
+| deepseek | Resp | `deepseek-flash` | 1,048,576 | 393,216 |
+| deepseek | Resp | `deepseek-v4-pro` | 1,048,576 | 393,216 |
+| deepseek | Anth | `deepseek-flash` | 1,048,576 | 393,216 |
+| deepseek | Anth | `deepseek-v4-pro` | 1,048,576 | 393,216 |
+| volcengine-plan | Chat | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
+| volcengine-plan | Chat | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
+| volcengine-plan | Chat | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Resp | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
+| volcengine-plan | Resp | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
+| volcengine-plan | Resp | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| volcengine-plan | Anth | `doubao-seed-2.0-lite` | 262,144 | 131,072 |
+| volcengine-plan | Anth | `doubao-seed-2.0-mini` | 262,144 | 131,072 |
+| volcengine-plan | Anth | `doubao-seed-2.1-turbo` | 262,144 | 262,144 |
+| zhipu | Chat | `glm-5.3` | 1,048,576 | 131,072 |
+| zhipu | Chat | `glm-5.3-flash` | 1,048,576 | 131,072 |
+| zhipu | Chat | `glm-5.3-flashx` | 1,048,576 | 131,072 |
+| zhipu | Chat | `glm-5.2` | 1,048,576 | 131,072 |
+| zhipu | Chat | `glm-5.1` | 204,800 | 131,072 |
+| zhipu | Chat | `glm-5` | 204,800 | 131,072 |
+| zhipu | Chat | `glm-5-turbo` | 204,800 | 131,072 |
+| zhipu | Chat | `glm-4.7` | 204,800 | 131,072 |
+| zhipu | Chat | `glm-4.6` | 204,800 | 131,072 |
+| zhipu | Chat | `glm-4.5` | 131,072 | 98,304 |
+| zhipu | Chat | `glm-4.5-air` | 131,072 | 98,304 |
+| orcarouter | Chat | `openai/gpt-6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `openai/gpt-6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `openai/gpt-6-astra` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `openai/gpt-5.6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `openai/gpt-5.6-terra` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `openai/gpt-5.6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Chat | `anthropic/claude-sonnet-5` | 1,000,000 | 128,000 |
+| orcarouter | Chat | `anthropic/claude-opus-5.5` | 1,000,000 | 128,000 |
+| orcarouter | Chat | `anthropic/claude-fable-5.1` | 1,000,000 | 128,000 |
+| orcarouter | Chat | `google/gemini-3.8-flash` | 1,048,576 | 65,536 |
+| orcarouter | Resp | `openai/gpt-6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `openai/gpt-6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `openai/gpt-6-astra` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `openai/gpt-5.6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `openai/gpt-5.6-terra` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `openai/gpt-5.6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Resp | `anthropic/claude-sonnet-5` | 1,000,000 | 128,000 |
+| orcarouter | Resp | `anthropic/claude-opus-5.5` | 1,000,000 | 128,000 |
+| orcarouter | Resp | `anthropic/claude-fable-5.1` | 1,000,000 | 128,000 |
+| orcarouter | Resp | `google/gemini-3.8-flash` | 1,048,576 | 65,536 |
+| orcarouter | Anth | `openai/gpt-6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `openai/gpt-6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `openai/gpt-6-astra` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `openai/gpt-5.6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `openai/gpt-5.6-terra` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `openai/gpt-5.6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Anth | `anthropic/claude-sonnet-5` | 1,000,000 | 128,000 |
+| orcarouter | Anth | `anthropic/claude-opus-5.5` | 1,000,000 | 128,000 |
+| orcarouter | Anth | `anthropic/claude-fable-5.1` | 1,000,000 | 128,000 |
+| orcarouter | Anth | `google/gemini-3.8-flash` | 1,048,576 | 65,536 |
+| orcarouter | Gemini | `openai/gpt-6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `openai/gpt-6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `openai/gpt-6-astra` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `openai/gpt-5.6-luna` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `openai/gpt-5.6-terra` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `openai/gpt-5.6-sol` | 1,050,000 | 128,000 |
+| orcarouter | Gemini | `anthropic/claude-sonnet-5` | 1,000,000 | 128,000 |
+| orcarouter | Gemini | `anthropic/claude-opus-5.5` | 1,000,000 | 128,000 |
+| orcarouter | Gemini | `anthropic/claude-fable-5.1` | 1,000,000 | 128,000 |
+| orcarouter | Gemini | `google/gemini-3.8-flash` | 1,048,576 | 65,536 |
+
 ## 中转站上游画像
 
 中转站平台（`newapi` / `custom`）上，模型背后的上游由 `relayUpstream.ts` 解析（模型手选 → 渠道前缀表 → id 里的产品名）。

@@ -61,6 +61,8 @@ describe("connOptions", () => {
       prefix: "always answer in Chinese",
       contextSize: 128_000,
       maxOutput: 8_192,
+      // Both typed on the row, so both are the author's (capability/intent.ts).
+      provenance: { contextSize: "author", maxOutput: "author" },
       reasoningEffort: "high",
       thinkingCategory: "openai-generic",
       thinkingBudget: 4000,
@@ -115,7 +117,7 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
-      "modelId", "platform", "prefix", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
+      "modelId", "platform", "prefix", "provenance", "reasoningEffort", "relayUpstream", "safetySettings", "serverTools",
       "standard", "structuredOutput", "temperature", "textVerbosity", "thinkingBudget", "thinkingCategory", "vlHighResolution",
     ]);
   });

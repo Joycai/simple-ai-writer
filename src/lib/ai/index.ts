@@ -11,6 +11,7 @@ import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
 import { streamResponses } from "./responses";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
+import { carried, trusted } from "./capability/intent";
 import { classify, noteLearned } from "./capability/learned";
 import { planRequest } from "./capability/plan";
 import { forcedToolChoiceRefused, isForcedToolChoice } from "./toolChoice";
@@ -115,8 +116,11 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   const merged: StreamOptions = { ...base, messages: applyPrefix(base.messages, base.prefix) };
   const log = beginApiLog(merged);
   const estimated = estimateMessagesTokens(merged.messages) + estimateToolsTokens(merged.tools);
-  if (merged.contextSize && merged.contextSize > 0 && estimated > merged.contextSize) {
-    const err = new ContextSizeError(estimated, merged.contextSize);
+  // Only the author's window refuses a request: a table's may be wrong for this
+  // endpoint, and a wrong one here means nothing is sent at all (TRUST.contextGate).
+  const gate = trusted(carried(merged.contextSize, merged.provenance?.contextSize), "contextGate");
+  if (gate && estimated > gate) {
+    const err = new ContextSizeError(estimated, gate);
     log.error(err);
     throw err;
   }

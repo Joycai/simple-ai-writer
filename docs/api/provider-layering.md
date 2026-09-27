@@ -206,6 +206,15 @@ task takes"，`SummarizeRequestConfig` 写着 "same fields sendChat holds"。看
 
 **未修**，因为它需要先决定 §7 的第一条未决问题。
 
+**被动的一半有了位置（capability-resolution P6，2026-09-27）。** 表里的值不再只是预填：
+模型行留空的窗口、上限、思考类目，运行时按「平台格 → 模型目录 → 协议族缺省 / 应用缺省」取值，
+每个值带着出处（`capability/intent.ts` 的 `Source`：`author` · `platform` · `catalog` · `protocol` · `default`），
+消费方按出处决定信不信（`TRUST`）。探测写进的值仍算 `author`——它测的就是这个端点，
+而发送前的窗口闸与 Anthropic 的 `max_tokens` 只信 `author`。
+所以「这个 128k 是填的还是测的」仍只能靠 `probedAt` / `probedContextSize` 回答；
+主动的一半（探测报告持久化、作者值与测得值各占一格）仍等 §7。
+设计与理由：[`capability-resolution-hld.md`](capability-resolution-hld.md) §4.3、D1、D2，实施记录 LLD §9.7。
+
 ### 偏离四：L2→L3 的隐式继承已经存在一处
 
 `ImageCaps.route` 未设时由 provider 的 `apiStandard` 推导，而 `configDb.ts`

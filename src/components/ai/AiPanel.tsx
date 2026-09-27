@@ -23,6 +23,7 @@ import {
   Repeat, RotateCw, Square, X,
 } from "lucide-react";
 import { PromptViewer } from "./PromptViewer";
+import { usePlannedLimits } from "./usePlannedLimits";
 import type { StreamMessage } from "../../lib/ai/types";
 import { BatchRunModal } from "./BatchRunModal";
 import { SnippetPicker } from "./SnippetPicker";
@@ -188,7 +189,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const contextUtilization = useAppStore((s) => s.contextUtilization);
   const openSettings = useAppStore((s) => s.openSettings);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
-  const contextSize = activeModel?.contextSize ?? 0;
+  const contextSize = usePlannedLimits(activeModel).contextSize ?? 0;
 
   const LEGEND: Record<ForecastSegmentKey, { labelKey: string; fallback: string }> = {
     // 与助手那条同名同色——它折进的东西也一样（工具 schema + 系统层）。
@@ -433,7 +434,7 @@ function LoreSection({
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
-  const contextSize = activeModel?.contextSize ?? 0;
+  const contextSize = usePlannedLimits(activeModel).contextSize ?? 0;
   // Without a declared window there is no dynamic plan *and* no pre-flight
   // check, so the planner hard-caps lore. Say so rather than silently ignoring
   // a bigger setting the author just typed in.
@@ -1044,6 +1045,9 @@ export function AiPanel() {
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providerFor(activeModel, providers) : null;
+  // What the run will plan with (aiTaskStore.runTask reads the same), so the
+  // forecast describes the request that will be sent.
+  const limits = usePlannedLimits(activeModel);
   const hasConfig = !!activeModel;
 
   const isContinue = !!task.continuation;
@@ -1342,8 +1346,8 @@ export function AiPanel() {
     () =>
       planForecast({
         runTask: runTaskDef,
-        contextSize: activeModel?.contextSize ?? 0,
-        maxOutputTokens: activeModel?.maxOutput,
+        contextSize: limits.contextSize ?? 0,
+        maxOutputTokens: limits.maxOutput,
         utilization: contextUtilization,
         loreBudgetTokens,
         subAgents,
@@ -1363,7 +1367,7 @@ export function AiPanel() {
         memoryChars,
       }),
     [
-      runTaskDef, activeModel?.contextSize, activeModel?.maxOutput, contextUtilization,
+      runTaskDef, limits.contextSize, limits.maxOutput, contextUtilization,
       loreBudgetTokens, subAgents, models, providers, systemPrompt.length, instructionText.length,
       docxRosterChars, isZh,
       selection.length, outline.length, additionalKnowledge.length, content, anchorOffset,

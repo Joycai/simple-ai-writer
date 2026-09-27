@@ -20,7 +20,7 @@
  * until it says who acts on it.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_IDS, effortMenuOnWire, hasCapability, type CapabilityId } from "../capabilities";
+import { CAPABILITY_IDS, effortMenuOnWire, hasCapability, resolveThinkingCategory, type CapabilityId } from "../capabilities";
 import { PLATFORM_IDS, platformEndpoints, type PlatformId } from "../platforms";
 import { readsPdf } from "../configDb";
 import { wireSummary, type WireInput } from "../modelSummary";
@@ -30,7 +30,6 @@ import { streamAnthropic } from "../anthropic";
 import { streamGemini } from "../gemini";
 import { streamOpenAI } from "../openai";
 import { streamResponses } from "../responses";
-import { resolveThinkingCategory } from "../reasoning";
 import { familyOf, type ApiStandard, type ProtocolFamily, type StreamOptions } from "../types";
 import type { ServerToolId } from "../serverTools";
 import { RELAY_UPSTREAMS, capabilityModelOf, type RelayUpstreamChoice } from "../relayUpstream";
@@ -231,8 +230,9 @@ describe("every asker agrees with the capability table", () => {
       const standard = standardOf({ family: endpoint.family, official: !!endpoint.official });
       for (const { modelId, relayUpstream } of CASES) {
         const ctx = { platform, standard, modelId, relayUpstream };
-        // The model as the probes build it: no category declared, so the family default.
-        const thinkingCategory = resolveThinkingCategory({}, standard).id;
+        // The model as the probes build it: no category declared, so what the
+        // adapters resolve it to — the platform's category for the id, else the family default.
+        const thinkingCategory = resolveThinkingCategory({ modelId }, standard, platform).id;
         const model = { ...capabilityModelOf({ modelId, relayUpstream }), type: TYPE, thinkingCategory };
         const expected = hasCapability(id, { platform, standard }, model);
         const label = `${platform}/${standard}/${modelId}${relayUpstream ? `@${relayUpstream}` : ""}`;

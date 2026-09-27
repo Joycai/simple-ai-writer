@@ -37,7 +37,7 @@ import {
 } from "../../../lib/comfy/workflow";
 import { readFile } from "../../../lib/fs/fileio";
 import {
-  categoriesForFamily, effortForCategory, isOnOffCategory, onEffort, resolveThinkingCategory,
+  categoriesForFamily, effortForCategory, isOnOffCategory, onEffort,
   thinkingIsOn, THINKING_CATEGORIES,
   type ReasoningEffort, type ThinkingCategoryId,
 } from "../../../lib/ai/reasoning";
@@ -46,7 +46,8 @@ import {
 } from "../../../lib/ai/serverTools";
 import { providerWire } from "../../../lib/ai/platforms";
 import {
-  capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration, type CapabilityId,
+  capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration, resolveThinkingCategory,
+  type CapabilityId,
 } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
@@ -287,7 +288,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // sees what it resolves to; a truly unset model shows "auto".
     thinkingCategory: (existing?.thinkingCategory
       ?? (existing?.thinkingDialect && provider
-        ? resolveThinkingCategory(existing, provider.apiStandard).id
+        ? resolveThinkingCategory(existing, provider.apiStandard, providerWire(provider).platform).id
         : "auto")) as ThinkingCategoryId | "auto",
     thinkingBudget: existing?.thinkingBudget != null ? String(existing.thinkingBudget) : "",
     // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
@@ -303,14 +304,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // "auto" ↔ stored undefined: nothing sent (Responses family only).
     textVerbosity: (existing?.textVerbosity ?? "auto") as TextVerbosity | "auto",
   });
-  // The category the current form selection resolves to (auto → family
-  // default). The source of truth for the effort dial, the budget field, and
+  // The category the current form selection resolves to (auto → the
+  // platform's category for the id, else the family default — what the wire
+  // will send). The source of truth for the effort dial, the budget field, and
   // temperature — read off the form so flipping the picker updates all three
   // immediately, before anything is saved.
   const formCategory = provider
     ? resolveThinkingCategory(
-        { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory },
+        { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, modelId: form.modelId },
         provider.apiStandard,
+        curWire?.platform,
       )
     : undefined;
   // What the probe wrote, and when — kept out of `form` because it is
@@ -624,7 +627,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       temperature: prof.temperature !== undefined ? String(prof.temperature) : "",
       reasoningEffort: prof.reasoningEffort ?? "default",
       thinkingCategory: (prof.thinkingCategory
-        ?? (prof.thinkingDialect ? resolveThinkingCategory(prof, nextProvider.apiStandard).id : "auto")) as ThinkingCategoryId | "auto",
+        ?? (prof.thinkingDialect ? resolveThinkingCategory(prof, nextProvider.apiStandard, providerWire(nextProvider).platform).id : "auto")) as ThinkingCategoryId | "auto",
       thinkingBudget: prof.thinkingBudget != null ? String(prof.thinkingBudget) : "",
       structuredOutput: prof.structuredOutput ?? "auto",
       textVerbosity: prof.textVerbosity ?? "auto",

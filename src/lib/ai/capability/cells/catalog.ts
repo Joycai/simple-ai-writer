@@ -27,6 +27,8 @@ import { bySpecificity, canonicalModelId, prefix, rowSetting, type ModelPattern 
 
 interface IntrinsicFacts {
   maxOutput?: number;
+  /** No rows yet: every window the app knows is a platform's (`platform.ts`). */
+  contextSize?: number;
   strictSchemaModel?: true;
   reasons?: false;
 }

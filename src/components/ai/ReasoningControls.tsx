@@ -22,12 +22,12 @@ import { ChevronDown } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { usePopoverDismiss } from "./usePopoverDismiss";
 import {
-  categoryHasControl, isOnOffCategory, onEffort, resolveThinkingCategory, thinkingIsOn,
+  categoryHasControl, isOnOffCategory, onEffort, thinkingIsOn,
   type ReasoningEffort, type ThinkingBudgetSpec,
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
 import { providerFor } from "../../lib/ai/routes";
-import { effortMenuOnWire } from "../../lib/ai/capabilities";
+import { effortMenuOnWire, resolveThinkingCategory } from "../../lib/ai/capabilities";
 import { providerWire } from "../../lib/ai/platforms";
 import { capabilityModelOf } from "../../lib/ai/relayUpstream";
 
@@ -96,7 +96,7 @@ export function ReasoningControls({ variant }: Props) {
 
   if (!model || !provider) return null;
 
-  const cat = resolveThinkingCategory(model, provider.apiStandard);
+  const cat = resolveThinkingCategory(model, provider.apiStandard, providerWire(provider).platform);
   // A category with no control (the `off` category, or a model that resolves to
   // it) gets no row at all, rather than a dead one: a control that never lights
   // up is worse than its absence.

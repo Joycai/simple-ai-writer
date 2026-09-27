@@ -8,24 +8,24 @@
  * `qwen-budget` so it stays byte-identical to the old switch, and (2) a legacy
  * dialect must only migrate to a category of the **same protocol family** — a
  * cross-family map would emit e.g. Anthropic `output_config` onto an OpenAI
- * request. See reasoning.ts.
+ * request. See reasoning.ts (`migrateDialect`, `fitsFamily`) and
+ * capability/values.ts, where the resolution now lives.
  */
 import { describe, expect, it } from "vitest";
 import {
   categoriesForFamily,
-  defaultCategoryId,
   effortForCategory,
   parseThinkingCategory,
   forcesToolChoiceAuto,
   isOnOffCategory,
   onEffort,
   reasoningBody,
-  resolveThinkingCategory,
   THINKING_CATEGORIES,
   thinkingBody,
   thinkingIsOn,
   type ThinkingCategory,
 } from "../reasoning";
+import { resolveThinkingCategory } from "../capabilities";
 import type { ApiStandard } from "../types";
 
 describe("resolveThinkingCategory", () => {
@@ -98,18 +98,18 @@ describe("resolveThinkingCategory", () => {
   });
 });
 
-describe("defaultCategoryId / categoriesForFamily", () => {
+describe("the family default / categoriesForFamily", () => {
   it("defaults each family to its current-generation category", () => {
-    expect(defaultCategoryId("openai_compat")).toBe("openai-generic");
-    expect(defaultCategoryId("gemini")).toBe("gemini3");
-    expect(defaultCategoryId("anthropic")).toBe("claude-adaptive");
+    expect(resolveThinkingCategory({}, "openai_compat").id).toBe("openai-generic");
+    expect(resolveThinkingCategory({}, "gemini").id).toBe("gemini3");
+    expect(resolveThinkingCategory({}, "anthropic").id).toBe("claude-adaptive");
   });
 
   it("gives the Responses family its own category, never a Chat Completions one", () => {
     // `openai-generic` would put Chat Completions' `reasoning_effort` on a
     // wire that spells it `reasoning.effort`.
-    expect(defaultCategoryId("openai_responses")).toBe("responses-effort");
-    expect(defaultCategoryId("openai_responses_compat")).toBe("responses-effort");
+    expect(resolveThinkingCategory({}, "openai_responses").id).toBe("responses-effort");
+    expect(resolveThinkingCategory({}, "openai_responses_compat").id).toBe("responses-effort");
     expect(categoriesForFamily("responses")).toEqual(["responses-effort", "off"]);
     expect(categoriesForFamily("openai")).not.toContain("responses-effort");
   });

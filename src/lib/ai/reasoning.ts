@@ -17,7 +17,7 @@
  */
 
 import { thinkingAs, wireThinks } from "./capability/conditions";
-import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
+import type { ProtocolFamily } from "./types";
 
 /**
  * How hard the author wants this model to think.
@@ -119,7 +119,8 @@ type ThinkingShape = "levels" | "onoff" | "budget" | "none";
  * exactly what the endpoint will accept, not a lowest-common-denominator six.
  *
  * `auto` is not a category id — it is the UI sentinel for "unset", which
- * `resolveThinkingCategory` turns into the family's default. `off` is a real
+ * `resolveThinkingCategory` (`capability/values.ts`) turns into the
+ * platform's category for the id, else the family's default. `off` is a real
  * category (send nothing) so it can sit in the picker beside the others.
  */
 export type ThinkingCategoryId =
@@ -386,65 +387,46 @@ export function parseThinkingCategory(v: unknown): ThinkingCategoryId | undefine
     : undefined;
 }
 
-/** The category to assume when the author hasn't declared one (the `auto` state). */
-export function defaultCategoryId(standard: ApiStandard): ThinkingCategoryId {
-  switch (familyOf(standard)) {
-    case "anthropic": return "claude-adaptive";
-    case "gemini": return "gemini3";
-    case "responses": return "responses-effort";
-    default: return "openai-generic";
-  }
+/**
+ * Whether a category can be spelled on this family — its own, or `off`, which
+ * sends nothing and so belongs to every family. A declared category is
+ * honoured only when it fits: the model editor offers same-family categories
+ * alone, so a mismatch arrives from an imported bundle or a provider whose
+ * standard was switched under an existing model — an `openai-generic` row
+ * moved to a Responses provider would otherwise put `reasoning_effort` on a
+ * wire that spells it `reasoning.effort`.
+ */
+export function fitsFamily(category: ThinkingCategory, family: ProtocolFamily): boolean {
+  return category.shape === "none" || category.family === family;
 }
 
 /**
- * The category in force for a model: the author's declared one, else a
- * migration of the legacy `thinkingDialect`, else the family default.
+ * The category a legacy `thinkingDialect` becomes on this family, or
+ * undefined when it has none there.
  *
- * This is the single seam where an old `thinking_dialect` row becomes a
- * category — the model row carries no family, so the mapping can only happen
- * where the provider's `standard` is known (conn / model editor / chat dial).
- * Old rows are never rewritten until the author next saves the model.
+ * Only to a category of the **same family**: the model row carries no family,
+ * and an imported / hand-edited bundle can pair an OpenAI model with an
+ * Anthropic-only dialect (`adaptive`/`extended`); without this guard that
+ * would resolve to a Claude category and emit Anthropic fields
+ * (`output_config`) onto an OpenAI request. Old rows are never rewritten
+ * until the author next saves the model; the resolution that calls this is
+ * `capability/values.ts`'s `resolveThinkingCategory`.
  */
-export function resolveThinkingCategory(
-  m: { thinkingCategory?: ThinkingCategoryId; thinkingDialect?: ThinkingDialect },
-  standard: ApiStandard,
-): ThinkingCategory {
-  const family = familyOf(standard);
-  if (m.thinkingCategory && THINKING_CATEGORIES[m.thinkingCategory]) {
-    const declared = THINKING_CATEGORIES[m.thinkingCategory];
-    // Honoured only within its own family (`off` belongs to every family).
-    // The model editor offers same-family categories alone, so a mismatch
-    // arrives from the two paths the guard below already covers for dialects:
-    // an imported bundle, or a provider whose standard was switched under an
-    // existing model — e.g. a `openai-generic` row moved to a Responses
-    // provider, which would otherwise put `reasoning_effort` on a wire that
-    // spells it `reasoning.effort`. Same fallthrough as a cross-family dialect.
-    if (declared.shape === "none" || declared.family === family) return declared;
-  }
-  // Migrate a legacy dialect, but only to a category of the **same family**.
-  // The model row carries no family, and an imported / hand-edited bundle can
-  // pair an OpenAI model with an Anthropic-only dialect (`adaptive`/`extended`);
-  // without this guard that would resolve to a Claude category and emit
-  // Anthropic fields (`output_config`) onto an OpenAI request. A cross-family
-  // dialect falls through to the family's own default instead.
-  switch (m.thinkingDialect) {
+export function migrateDialect(dialect: ThinkingDialect | undefined, family: ProtocolFamily): ThinkingCategory | undefined {
+  switch (dialect) {
     case "adaptive":
-      if (family === "anthropic") return THINKING_CATEGORIES["claude-adaptive"];
-      break;
+      return family === "anthropic" ? THINKING_CATEGORIES["claude-adaptive"] : undefined;
     case "extended":
-      if (family === "anthropic") return THINKING_CATEGORIES["claude-budget"];
-      break;
+      return family === "anthropic" ? THINKING_CATEGORIES["claude-budget"] : undefined;
     // switch → the family's on/off category. openai keeps `thinkingBudget`
     // unset so it emits only `enable_thinking`, byte-identical to old `switch`.
     case "switch":
-      return family === "anthropic"
-        ? THINKING_CATEGORIES["minimax"]
-        : THINKING_CATEGORIES["qwen-budget"];
+      return family === "anthropic" ? THINKING_CATEGORIES["minimax"] : THINKING_CATEGORIES["qwen-budget"];
     // `off` is family-agnostic (send nothing), safe on any family.
     case "none":
       return THINKING_CATEGORIES["off"];
   }
-  return THINKING_CATEGORIES[defaultCategoryId(standard)];
+  return undefined;
 }
 
 /** Category ids offered in the model editor for a family, plus the always-present `off`. */

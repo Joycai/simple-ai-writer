@@ -20,14 +20,16 @@ import { effortOnWire, hasCapability, platformResponsesInclude } from "../capabi
 import { effectiveStructuredOutput, type StructuredOutputMode } from "../jsonMode";
 import { requiredMaxTokens } from "../modelLimits";
 import { wireOf, type Wire } from "../platforms";
-import { forcesToolChoiceAuto, resolveThinkingCategory, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
+import { forcesToolChoiceAuto, type ReasoningEffort, type ThinkingCategory } from "../reasoning";
 import { capabilityModelOf } from "../relayUpstream";
 import { effectiveServerTools, type ServerToolId } from "../serverTools";
 import type { StreamOptions, TextVerbosity } from "../types";
 import { catalogFact } from "./cells/catalog";
 import { wireThinks, type ThinkingState } from "./conditions";
+import { carried, trusted } from "./intent";
 import { learnedCeiling } from "./learned";
 import type { CapabilityModel } from "./resolve";
+import { resolveThinkingCategory } from "./values";
 
 type ToolChoice = NonNullable<StreamOptions["toolChoice"]>;
 
@@ -35,7 +37,7 @@ type ToolChoice = NonNullable<StreamOptions["toolChoice"]>;
 export type PlanInput = Pick<
   StreamOptions,
   | "standard" | "baseUrl" | "platform" | "modelId" | "relayUpstream"
-  | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput"
+  | "thinkingCategory" | "reasoningEffort" | "thinkingBudget" | "temperature" | "maxOutput" | "provenance"
   | "tools" | "toolChoice" | "serverTools" | "structuredOutput" | "textVerbosity" | "vlHighResolution"
 >;
 
@@ -54,7 +56,11 @@ export interface RequestPlan {
   };
   /** Absent = not sent: none declared, or the wire refuses one under this request. */
   temperature?: number;
-  /** The `max_tokens` a wire that requires one sends (the Messages API); the others send no cap. */
+  /**
+   * The `max_tokens` a wire that requires one sends (the Messages API); the
+   * others send no cap. Only the author's cap (`TRUST.anthropicMaxTokens`, D2),
+   * else the adapter's own default.
+   */
   maxTokensOnWire: number;
   /**
    * Only when the request carries a function-tool list. `sent` is what goes on the
@@ -122,7 +128,7 @@ function toolChoiceOf(
 export function planRequest(opts: PlanInput): RequestPlan {
   const wire = wireOf(opts);
   const model = capabilityModelOf(opts);
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory, modelId: opts.modelId }, opts.standard, wire.platform);
   const functionTools = !!opts.tools?.length;
   // The row's effort as this wire takes it: `off` beside function tools where
   // the wire refuses any other effort there, the nearest level the model takes
@@ -137,7 +143,7 @@ export function planRequest(opts: PlanInput): RequestPlan {
     model,
     thinking: { category, effort, budget: opts.thinkingBudget, state },
     ...(opts.temperature !== undefined && hasCapability("temperature", wire, request) ? { temperature: opts.temperature } : {}),
-    maxTokensOnWire: requiredMaxTokens(opts.maxOutput),
+    maxTokensOnWire: requiredMaxTokens(trusted(carried(opts.maxOutput, opts.provenance?.maxOutput), "anthropicMaxTokens")),
     toolChoice: toolChoiceOf(opts, category, effort, wire, model),
     serverTools: effectiveServerTools(wire, opts.serverTools, opts.modelId, opts.relayUpstream, request) ?? [],
     structured: effectiveStructuredOutput({
