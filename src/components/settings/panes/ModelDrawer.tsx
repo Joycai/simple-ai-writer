@@ -1028,6 +1028,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   });
   const matrixProps = (current: ProtocolFamily) => ({
     routes: channelRoutes, current, wireFor: routeWire, modelId: form.modelId, type: form.type, relayUpstream: upstreamChoice,
+    baseUrlFor: (f: ProtocolFamily) => (channel ? routeProvider(channel, f)?.baseUrl : undefined),
   });
   /** One route's fields as the diff card lines them up (屏 06); null = unset, sends nothing. */
   const describeRoute = (p: RouteProfile | undefined, f: ProtocolFamily): { key: string; value: string | null }[] => {

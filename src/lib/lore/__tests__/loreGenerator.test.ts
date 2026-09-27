@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../agent/runtime", () => ({ runAgent: vi.fn() }));
 import { runAgent } from "../../agent/runtime";
-import { __resetJsonModeMemo } from "../../ai/jsonMode";
+import { __resetLearned } from "../../ai/capability/learned";
 import { generateLore, loreEntitySchema } from "../generator";
 
 const mockRun = vi.mocked(runAgent);
@@ -35,7 +35,7 @@ const ENTITY = '{"name":"Ava","category":"characters","aliases":["A"],"summary":
 
 beforeEach(() => {
   mockRun.mockReset();
-  __resetJsonModeMemo();
+  __resetLearned();
 });
 
 describe("loreEntitySchema", () => {

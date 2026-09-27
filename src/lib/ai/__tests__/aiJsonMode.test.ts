@@ -12,9 +12,9 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
+import { __resetLearned } from "../capability/learned";
 import {
-  __resetJsonModeMemo, downgradeJsonMode, effectiveStructuredOutput, isJsonModeRejection, JSON_ONLY_CUE, jsonModeCeiling,
-  jsonModeShaping, knownJsonSchemaModel, noteJsonModeRefused, parseStructuredOutputMode,
+  effectiveStructuredOutput, JSON_ONLY_CUE, jsonModeCeiling, jsonModeShaping, knownJsonSchemaModel, noteJsonModeRefused, parseStructuredOutputMode,
   resolveStructuredOutput, withJsonModeFallback,
 } from "../jsonMode";
 
@@ -344,7 +344,7 @@ describe("jsonModeShaping · the Responses family", () => {
 // ─── The session memo: refusals learned from the endpoint's 400 ──────────────
 
 describe("json-mode refusal memo", () => {
-  beforeEach(() => __resetJsonModeMemo());
+  beforeEach(() => __resetLearned());
 
   const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
 
@@ -379,34 +379,11 @@ describe("json-mode refusal memo", () => {
     noteJsonModeRefused(qwen, "json_object");
     noteJsonModeRefused(qwen, "json_schema");
     expect(jsonModeCeiling(qwen)).toBe("off");
-    expect(downgradeJsonMode("off")).toBeUndefined();
-  });
-
-  it("recognises only errors that name the parameter", () => {
-    expect(isJsonModeRejection(new Error(
-      "400 Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.",
-    ))).toBe(true);
-    expect(isJsonModeRejection(new Error("'messages' must contain the word 'json' in some form to use 'response_format'"))).toBe(true);
-    // The Responses family's name for the same parameter (docs/api/responses.md §2.2).
-    expect(isJsonModeRejection(new Error(
-      "400 Response input messages must contain the word 'json' in some form to use 'text.format' of type 'json_object'.",
-    ))).toBe(true);
-    // Anthropic names the field path (as its other 400s do, `messages.1.content.0: …`).
-    expect(isJsonModeRejection(new Error(
-      "Anthropic API error 400: output_config.format: Extra inputs are not permitted",
-    ))).toBe(true);
-    // Gemini names the generationConfig field it did not recognise.
-    expect(isJsonModeRejection(new Error(
-      "Invalid JSON payload received. Unknown name \"responseJsonSchema\" at 'generation_config': Cannot find field.",
-    ))).toBe(true);
-    expect(isJsonModeRejection(new Error("400 This model does not support json output"))).toBe(false);
-    expect(isJsonModeRejection(new Error("401 invalid api key"))).toBe(false);
-    expect(isJsonModeRejection(new DOMException("Aborted", "AbortError"))).toBe(false);
   });
 });
 
 describe("withJsonModeFallback", () => {
-  beforeEach(() => __resetJsonModeMemo());
+  beforeEach(() => __resetLearned());
 
   const qwen = { standard: "openai_compat" as const, platform: "dashscope" as const, baseUrl: "https://relay/v1", modelId: "qwen3.8-max" };
   const refusal = (mode: string) =>

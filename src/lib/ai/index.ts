@@ -11,10 +11,8 @@ import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
 import { streamResponses } from "./responses";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
-import {
-  forcedToolChoiceRefused, isForcedToolChoice, isForcedToolChoiceRejection,
-  noteForcedToolChoiceRefused,
-} from "./toolChoice";
+import { classify, noteLearned } from "./capability/learned";
+import { forcedToolChoiceRefused, isForcedToolChoice } from "./toolChoice";
 import { applyPrefix, ContextSizeError, familyOf, ImagePayloadError, StreamStallError, type StreamOptions } from "./types";
 import { imagePayload, MAX_REQUEST_IMAGE_CHARS } from "./imagePart";
 
@@ -107,7 +105,8 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   // Some endpoints answer a forced `tool_choice` with a 400 rather than
   // honouring or quietly ignoring it, and nothing in the config predicts which
   // (DeepSeek V4 thinks unconditionally, and forcing is illegal while it does).
-  // Once one has said so, stop asking — see ./toolChoice.
+  // Once one has said so, stop asking — see ./toolChoice and the learned
+  // store it reads (./capability/learned).
   const base: StreamOptions =
     isForcedToolChoice(opts.toolChoice) && forcedToolChoiceRefused(opts)
       ? { ...opts, toolChoice: "auto" }
@@ -178,8 +177,9 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
     // request cost nothing (it was rejected before generation) and both callers
     // that force already handle "the model didn't call it". The recursion ends
     // here: `auto` is not a forced choice, so this branch can't run again.
-    if (!streamed && isForcedToolChoice(merged.toolChoice) && isForcedToolChoiceRejection(err)) {
-      noteForcedToolChoiceRefused(merged);
+    const learned = streamed ? undefined : classify(err, { forcedToolChoice: isForcedToolChoice(merged.toolChoice) });
+    if (learned) {
+      noteLearned(merged, learned.fact, learned.ceiling);
       return streamCompletion({ ...base, toolChoice: "auto" });
     }
     throw err;

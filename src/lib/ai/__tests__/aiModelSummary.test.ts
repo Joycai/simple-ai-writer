@@ -4,10 +4,11 @@
  * spelled as the wire spells it, and an undeclared model shows nothing at all.
  */
 import { afterEach, describe, expect, it } from "vitest";
-import { __resetJsonModeMemo, noteJsonModeRefused } from "../jsonMode";
+import { __resetLearned } from "../capability/learned";
+import { noteJsonModeRefused } from "../jsonMode";
 import { declarationMarks, isMeasured, wireSummary, type WireInput } from "../modelSummary";
 
-afterEach(() => __resetJsonModeMemo());
+afterEach(() => __resetLearned());
 
 const base: WireInput = { type: "text", modelId: "some-model" };
 

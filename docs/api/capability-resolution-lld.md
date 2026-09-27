@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P2 已落成（§9.1–§9.3），P3 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P3 已落成（§9.1–§9.4），P4 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -577,6 +577,7 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 - 新增 `jsonObjectTier`、`promptCache` 两个事实的规则与格。`strictSchemaModel`、`reasons` 已在 P2 随目录落地，此期只给它们补提问者。
   `structuredOutputModesFor` 与 `cachesPrompt` 改读表；`capabilityConsistency.test.ts` 的 `PROBES` 为它们各加一个提问者。
   `PROBES` 是 `Record`，不加就编译不过。
+- `learned.ts` 的 `TAKES_AWAY` 改读 `jsonObjectTier`：一族没有 JSON 对象档时，`json_object` 上限也拿掉 `structuredOutput`（§9.4 出入 4）。
 - agent 的思考回退（B8）。
 - 新测试 `wireThinks.test.ts`：§3.5 两张表逐格断言，外加「三处旧判法 ≡ 新条件」的穷举：15 个类目 × 8 个 effort × 4 族。
 - 验收：金标除 B8 外零差异。B8 不在请求体里，它在 agent 事件里，由 runtime 测试钉住。
@@ -772,6 +773,54 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
 3. **`CAPABILITY_RULES` 不改名。** 它的形状从 P0 到现在没变过，名字也准确。§4 里改名为 `PROTOCOL_RULES` 的那一行作废。
 4. **`/non-reasoning/` 目录行匹配的是 `canonicalModelId`**，也就是去掉 `vendor/` 之后的 id。旧写法对原始 id 做不分大小写的匹配。
    两者只在「命名空间那一段里含 non-reasoning」时不同，没有这样的真实 id。
+
+### 9.4 P3：学到的降级合成一个存储（2026-09-27）
+
+新建 `capability/learned.ts`。原来的两份记忆合成了这一个存储：`toolChoice.ts` 里的 Set 和 `jsonMode.ts` 里的 Map。
+
+- **存储**：每个端点 + 模型、每个事实一个上限。键沿用旧的 `${standard} ${baseUrl} ${modelId}`，两份记忆原本就用这个键，所以同一个端点的两个事实现在落在同一条记录里。
+  `noteLearned` 只降不升；`learnedCeiling` 读；`__resetLearned` 代替原来的两个 `__reset…Memo`。
+- **分类表 `LEARN_RULES`**：每个事实一行，写三样——
+  - 报错里要出现的参数名；
+  - 这次请求有没有用上这个事实（`used`）；
+  - 要学的上限（`lower`）。
+
+  两个 `is…Rejection` 由此删除，它们的正则和注释搬进了对应的行。`classify(err, attempt)` 只在「报错点了这个参数的名」且「请求用上了它」时才学。
+  例如一条同时提到 `tool_choice` 与 `response_format` 的报错，学到的是请求实际用上的那一个。
+- **两处重试改走分类表**：`streamCompletion` 的强制降级、`withJsonModeFallback` 的逐档下降。重试的条件与降到哪一档都和以前逐条相同。
+- **门面 `capabilityVerdict(id, wire, model, baseUrl?)`**：给了地址时，在表的结果上套学到的上限，原因码 `learned`。
+  对应关系由 `TAKES_AWAY` 这张小表给出：
+  - 强制被拒，拿掉 `forcedToolChoice`；
+  - 严格档被拒，拿掉 `jsonSchema`；
+  - JSON 模式也被拒，再拿掉 `structuredOutput`。
+
+  表上已经是 `no` 的格保留它自己的原因。`resolve.ts` 没有改动，它仍然只读表。
+- **抽屉**：`CapabilityMatrix` 多了一个 `baseUrlFor` 属性，模型抽屉传入每条线路的地址。学到的格显示「—」，悬停写「本会话实测：端点拒绝过它」。
+  这里没有新增元素，只是已有的格多了一种原因，所以没有先出设计稿（D7 管的是 P6 的新界面）。
+  抽屉里有学到状态的只有输出一栏的两行（`structuredOutput`、`jsonSchema`）；`forcedToolChoice` 不在任何抽屉矩阵里。
+- 语言文件新增 `aiConfig.capReason.learned`，两种语言。
+
+**验收**：
+
+- 请求体金标、矩阵文档、模型 id 轴快照零差异；
+- `pnpm test` 全绿，`tsc` 通过；
+- 新测试 `learned.test.ts`：
+  - 两条规则各自的正反例（`aiJsonMode.test.ts` 里的识别用例迁来，强制那一条补了 DeepSeek V4 的原文）；
+  - 只降不升；
+  - 逐档重试必然终止（每次学到的上限都严格低于发出的那一档）；
+  - 抽屉的裁决在学到之后变成 `no / learned`，且不带地址时仍是表的答案。
+
+**与 §3.7、§6 P3 原文的出入**：
+
+1. **`used` 与 `lower` 读的是 `Attempt`，不是 `RequestPlan`。** 计划要到 P5 才有。`Attempt` 只记两样：请求了强制没有、实际拼进 body 的 JSON 档位。
+   到 P5，它由计划推出，规则本身不用改。
+2. **门面保留四个函数名**：`forcedToolChoiceRefused`、`noteForcedToolChoiceRefused`、`jsonModeCeiling`、`noteJsonModeRefused`，改成转调存储。
+   两个 `is…Rejection` 与两个 `__reset…Memo` 直接删掉，前者成了分类表的行，后者由 `__resetLearned` 代替。
+3. **「`effective()` 接上上限」落在 `effectiveStructuredOutput` 上。** `effective()` 本身要到 P4 / P5 才建，今天与它对应的就是这个函数，它读同一个存储。
+4. **Anthropic 上的一个缺口，留到 P4。** 严格档被拒之后，上限是 `json_object`。Anthropic 没有这一档，所以线上实际是 off，但矩阵里的 `structuredOutput` 仍按表显示 ✓。
+   要判断「这一族有没有 JSON 对象档」，就得在 `learned.ts` 里写族分支，而这正是 P4 用 `jsonObjectTier` 事实去掉的东西。
+   P4 的 `TAKES_AWAY` 改成读这个事实即可；在那之前，抽屉的「本会话实测 · 端点拒绝了…」一句仍然写明线上实际发的是哪一档。
+5. **`streamCompletion` 仍然只学强制这一个事实**，JSON 的逐档下降仍在 `withJsonModeFallback` 里。两个执行器合一是 P7 的事（D4）。
 
 ## 10. 待决
 

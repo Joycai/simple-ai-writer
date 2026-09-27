@@ -2974,7 +2974,8 @@
       "model-type": "这个模型的类型用不上它（比如纯文本模型不看图）",
       "requires": "它依赖的另一项在这条线路上不可用",
       "thinking": "思考开着时这条线路不收它",
-      "upstream": "中转站上游「{{upstream}}」实测如此"
+      "upstream": "中转站上游「{{upstream}}」实测如此",
+      "learned": "本会话实测：端点拒绝过它，之后不再发送；重启应用后再试"
     },
     "upstream": {
       "label": "上游",

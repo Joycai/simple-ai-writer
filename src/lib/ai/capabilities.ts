@@ -32,7 +32,8 @@
  * `resolve`, docs/api/capability-resolution-lld.md P1) and are re-exported
  * here, so every caller keeps importing from `capabilities`. What stays in
  * this file is what is built on the verdict: the effort ladder and the
- * server-tool section gate.
+ * server-tool section gate — and the one place the session's learned
+ * refusals meet the tables (`capability/learned.ts`).
  */
 
 import { familyOf } from "./types";
@@ -40,13 +41,31 @@ import type { Wire } from "./platforms";
 import type { ReasoningEffort } from "./reasoning";
 import type { CapabilityId } from "./capability/facts";
 import { SERVER_TOOL_CAPABILITIES } from "./capability/facts";
-import { hasCapability, type CapabilityModel } from "./capability/resolve";
+import type { CapabilityVerdict } from "./capability/facts";
+import { learnedRefuses } from "./capability/learned";
+import { capabilityVerdict as tableVerdict, hasCapability, type CapabilityModel } from "./capability/resolve";
 
 export { CAPABILITY_IDS, CAPABILITY_REASONS, SERVER_TOOL_CAPABILITIES, type CapabilityId } from "./capability/facts";
 export { CAPABILITY_RULES } from "./capability/rules";
 export { PLATFORM_CELLS, platformModelCalibration, platformResponsesInclude } from "./capability/cells/platform";
 export { UPSTREAM_CELLS } from "./capability/cells/upstream";
-export { capabilityVerdict, familyVerdict, hasCapability, upstreamApplies } from "./capability/resolve";
+export { familyVerdict, hasCapability, upstreamApplies } from "./capability/resolve";
+
+/**
+ * The one answer, from the tables (`capability/resolve.ts`) — and, given the
+ * endpoint's address, capped by what that endpoint+model refused this session
+ * (reason `learned`). The resolution itself stays a pure function of the
+ * tables; the cap is laid on here, after it, so a table `no` keeps its own
+ * reason. Only the drawer passes the address: the request path reads the same
+ * store through `effectiveStructuredOutput` and the forced-choice checks.
+ */
+export function capabilityVerdict(id: CapabilityId, wire: Wire, model: CapabilityModel = {}, baseUrl?: string): CapabilityVerdict {
+  const v = tableVerdict(id, wire, model);
+  if (baseUrl === undefined || v.status === "no") return v;
+  return learnedRefuses(id, { standard: wire.standard, baseUrl, modelId: model.modelId })
+    ? { status: "no", reason: "learned" }
+    : v;
+}
 
 /** The two OpenAI wires — the only ones whose effort ladder the two effort cells speak about. */
 function effortLadderWire(wire: Wire): boolean {

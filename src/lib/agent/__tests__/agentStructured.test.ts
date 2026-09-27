@@ -5,8 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamOptions, ToolDefinition } from "../../ai/types";
 import { runStructuredTask, type StructuredTaskArgs } from "../structured";
-import { __resetJsonModeMemo } from "../../ai/jsonMode";
-import { __resetForcedToolChoiceMemo, noteForcedToolChoiceRefused } from "../../ai/toolChoice";
+import { __resetLearned } from "../../ai/capability/learned";
+import { noteForcedToolChoiceRefused } from "../../ai/toolChoice";
 
 vi.mock("../../ai", () => ({ streamCompletion: vi.fn() }));
 import { streamCompletion } from "../../ai";
@@ -38,8 +38,7 @@ function makeArgs(overrides: Partial<StructuredTaskArgs> = {}): StructuredTaskAr
 
 beforeEach(() => {
   mockStream.mockReset();
-  __resetJsonModeMemo();
-  __resetForcedToolChoiceMemo();
+  __resetLearned();
 });
 
 describe("runStructuredTask", () => {
