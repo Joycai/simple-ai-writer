@@ -202,7 +202,7 @@ interface ValueView<V> {
   inForce?: Sourced<V>;
 }
 
-interface ValueFacts {
+export interface ValueFacts {
   /** Every family has a default category, so both are always answered. */
   thinkingCategory: ValueView<ThinkingCategory> & { table: Sourced<ThinkingCategory>; inForce: Sourced<ThinkingCategory> };
   /** `gates`: the pre-send window check refuses an over-long request by it (`TRUST.contextGate`). */
