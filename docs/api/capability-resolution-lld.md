@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P4 已落成（§9.1–§9.5），P5 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P5 已落成（§9.1–§9.6），P6 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -886,6 +886,63 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
    要经裁决链问，就得先有 §3.3 的第 4 层（按作用域查目录），而这一层今天没人需要。
    它们的读者（自动档提升、Responses 的 `include`）已由模型 id 轴快照和金标钉住。到 P6 值类事实进链时一起做。
 6. **`jsonObjectTier` 依赖 `structuredOutput`。** 这样中转站 Kiro 上游（`structuredOutput` 为 no）上，它与「将发送」一致。
+
+### 9.6 P5：请求计划（2026-09-27）
+
+新建 `capability/plan.ts`：`planRequest(opts)` 把一次请求要带什么一次决定完，四个适配器和「将发送」摘要只负责拼写。它是纯函数，只读传入的参数、能力表和学到的存储。
+`streamCompletion` 算一次，放进 `StreamOptions._plan`；直接调适配器的调用方（一致性测试、live 探针）由适配器自己算，两条路径结果相同。
+
+**计划里有什么**，对照 §3.8 的迁移表逐项搬过来：
+
+- 思考：类目、线上的 effort（`effortOnWire` 之后）、预算、`wireThinks` 给出的思考状态；
+- 温度：问格，带上请求条件；
+- `maxTokensOnWire`：原 `resolveMaxTokens`。`DEFAULT_MAX_TOKENS` 迁进 `modelLimits.ts`，与新函数 `requiredMaxTokens` 放在一起；
+- `toolChoice`：记请求的值、实际发出的值，以及降级原因——类目、格、学到的，三选一。
+  原 `openai.ts` 的 `toolChoiceFor` 删除；`anthropic.ts` 的 `toolChoiceBody` 只剩拼法；Gemini 与 Responses 第一次读这一格（B3）；
+- `serverTools`：已经按线路和请求条件裁好的 id 列表。四个拼法函数改成只收 id 列表，不再判断；
+- `structured`：`effectiveStructuredOutput` 的结果；
+- `textVerbosity`、`vlHighResolution`（带上模型 id 与上游，B9）、`instructionsField`、`responsesInclude`、`promptCache`。
+
+**「将发送」摘要**：`wireSummary` 的签名不变，内部改成先按 `connOptions()` 的算法求出计划（输出上限用 `effectiveMaxOutput`），再交给 `spellSummary`。
+四族的拼法差异收进一张 `Record<ProtocolFamily, SummarySpelling>`，六处 `family ===` 全部去掉，棘轮里 `modelSummary.ts` 的上限从 6 降到 0。
+
+**`structured.ts`**：`forcedToolIsWasted` 改成 `plan.toolChoice.downgradedBy !== undefined && plan.structured === "json_schema"`（B4）。
+
+**金标差异**：请求体一行没变。改的全是摘要行，共 747 行，都属于 B10：
+
+- 744 行：④ 线路的摘要多了 `max_tokens`，值与请求体一致。有 32768（缺省）、目录值（128000、131072、65536、393216）。
+  非 Claude 的 id 走 ④ 时发出目录值，这正是 B1 要在 P6 处理的事，摘要现在如实显示；
+- 3 行：OrcaRouter 上的 effort 改成线上实际发出的值。`openai/gpt-6-astra` 设 off，Chat 与 Responses 上显示 `low`；`openai/gpt-5.6-sol` 设 max，Chat 上显示 `xhigh`。
+
+B3、B9、B11 在网格里零差异：
+- 网格中没有哪条 Gemini / Responses 线路的 `forcedToolChoice` 格是 `false`，只有作者在智谱主机下手建的 ② / ③ 渠道会碰到（账本 B3 原话）；
+- 没有上游给 `vlHighResolution` 写格；
+- Chat 与 Gemini 两族没有温度的 `false` 格。
+
+**测试**：
+
+- 新增 `plan.test.ts`：
+  - 计划是纯函数；
+  - 把计划传给适配器，与适配器自己算计划，发出的 body 逐字节相同；
+  - **适配器只从计划读决定**：给适配器一份「什么都不发」的计划，而参数里声明了全部内容，body 里七类字段一个都不许出现。
+    变异测试：让 Gemini 的温度改回读参数，四条 Gemini 线路都报红；
+  - 强制降级的三种原因各有一例。
+- `agentStructured.test.ts` 加了 B4 的三种线路：Kiro 的 Claude 走 ④ 并声明严格档、anti 的 Claude 走 ①、Azure 的 GPT 走 ① 的自动档。
+  变异测试：换回旧判法（只看类目和学到的），三条都报红。
+- `capabilityConsistency.test.ts` 的三个 effort 格（`reasoningOff` / `effortMax` / `effortMinimal`）加了摘要作为提问者，补上 B10 那个一直没被抓到的缺口。
+
+**与 §2、§3.8、§6 P5 原文的出入**：
+
+1. **`withheld`、`effortRewrittenBy`、`categorySource`，以及带出处的 `maxTokens {value, source}` 都没建。** 今天没有读它们的地方：
+   - 抽屉里「已声明、不发送」的提示仍按字段问 `capabilityVerdict`；
+   - 出处是 P6 的事。计划里只有 `maxTokensOnWire`。
+2. **一致性测试的「总断言」收窄了。** 没有逐事实比对 body 的拼法，而是用两样东西代替：
+   - `plan.test.ts` 的「适配器只从计划读决定」，覆盖全部平台与线路；
+   - 三个 effort 格补上摘要提问者。
+
+   旧的 `PROBES` 照旧保留。
+3. **`streamCompletion` 仍在请求前把学到的强制降成 `auto`。** 重试执行器合一是 P7 的事。
+   计划里 `learned` 这个原因在直接问计划时生效，例如 `structured.ts`。
 
 ## 10. 待决
 

@@ -301,6 +301,32 @@ describe("runStructuredTask", () => {
       expect(mockStream.mock.calls[0][0].tools).toBeUndefined();
     });
 
+    // The table's cell is a reason too (capability-resolution-lld.md B4): a
+    // relay upstream that takes forcing with a 200 and ignores it, on a wire
+    // whose JSON path has the strict tier. The skip used to see only the
+    // category and the learned store, and ran the forced round to lose it.
+    it.each([
+      ["Kiro's Claude on the Messages route, strict declared", {
+        standard: "anthropic_compat", platform: "newapi", modelId: "[x]claude-opus-4-6", relayUpstream: "kiro",
+        structuredOutput: "json_schema",
+      }],
+      ["anti's Claude on Chat Completions, strict declared", {
+        standard: "openai_compat", platform: "newapi", modelId: "[x]claude-opus-4-6", relayUpstream: "anti",
+        structuredOutput: "json_schema",
+      }],
+      ["Azure's GPT on Chat Completions, strict by auto", {
+        standard: "openai_compat", platform: "newapi", modelId: "gpt-5.6-sol", relayUpstream: "azure",
+      }],
+    ] as const)("also skips where the table says forcing is ignored: %s", async (_label, conn) => {
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ text: '{"name":"Ava"}' });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+      await runStructuredTask(makeArgs({ ...conn, baseUrl: "https://relay.example/v1" }));
+      expect(mockStream).toHaveBeenCalledTimes(1);
+      expect(mockStream.mock.calls[0][0].tools).toBeUndefined();
+    });
+
     it("stops skipping once the endpoint has also refused json_schema", async () => {
       // Both memos say no: forcing is downgraded and strict mode is gone, so
       // the tool attempt under `auto` is again the stronger bet.

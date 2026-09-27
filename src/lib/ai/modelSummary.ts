@@ -3,11 +3,11 @@
  *
  * `wireSummary` is the editor's 「将发送」 line: which request-body fields this
  * row's declarations actually put on the wire, spelled the way the wire spells
- * them. It is built from the **adapters' own body functions** (`reasoningBody`,
- * `thinkingBody`, `openaiServerToolsBody`, `resolveStructuredOutput`), not from
- * a second table of what they do — a summary that disagreed with the request
- * would be worse than none, and the only way to keep two tables in step is to
- * have one. What it omits is deliberate: declarations that never leave the
+ * them. It spells the same **request plan** the adapters spell
+ * (`capability/plan.ts`), with the adapters' own body functions (`reasoningBody`,
+ * `thinkingBody`, the server-tool spellers) — not a second table of what they
+ * do: a summary that disagreed with the request would be worse than none, and
+ * the only way to keep two tables in step is to have one. What it omits is deliberate: declarations that never leave the
  * machine (PDF input, the translation format) shape which pickers offer the
  * model, not the request.
  *
@@ -17,15 +17,15 @@
  */
 
 import type { Model } from "./configDb";
-import { effectiveStructuredOutput } from "./jsonMode";
-import {
-  reasoningBody, resolveThinkingCategory, thinkingBody,
-} from "./reasoning";
-import { effectiveServerTools, geminiServerTools, openaiServerToolsBody } from "./serverTools";
-import { wireOf, type PlatformId } from "./platforms";
-import { hasAnyServerTool, hasCapability } from "./capabilities";
-import { familyOf, type ApiStandard } from "./types";
-import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
+import { hasCapability } from "./capabilities";
+import { planRequest, type RequestPlan } from "./capability/plan";
+import type { StructuredOutputMode } from "./jsonMode";
+import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
+import type { PlatformId } from "./platforms";
+import { reasoningBody, thinkingBody } from "./reasoning";
+import type { RelayUpstreamChoice } from "./relayUpstream";
+import { geminiServerTools, openaiServerToolsBody, type ServerToolId } from "./serverTools";
+import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 
 export interface WireItem {
   /** Dotted path of the field, e.g. `thinking.type`, `response_format`. */
@@ -64,11 +64,84 @@ function flatten(body: Record<string, unknown>, prefix = ""): WireItem[] {
 /** Fields the adapters always pair with another and that say nothing on their own. */
 const NOISE = new Set(["thinking.display", "generationConfig.thinkingConfig.includeThoughts"]);
 
+/** How one family spells the plan's summary items — a spelling, never a decision. */
+interface SummarySpelling {
+  /** Items beside `reasoningBody`'s (the Messages API's `thinking` block). */
+  thinking?: (plan: RequestPlan, budgetDeclared: boolean) => WireItem[];
+  /** The wire requires `max_tokens` on every request, so it is always sent. */
+  maxTokens?: true;
+  serverTools: (ids: readonly ServerToolId[]) => WireItem[];
+  /** The field a structured task's JSON tier goes out in. */
+  structured: (mode: Exclude<StructuredOutputMode, "off">) => WireItem;
+}
+
+const toolsItem = (names: readonly string[]): WireItem[] => (names.length ? [{ key: "tools", value: names.join(",") }] : []);
+
+/** 四条线四种拼法。A `Record` so a new family does not compile until it says how. */
+const SPELLING: Record<ProtocolFamily, SummarySpelling> = {
+  openai: {
+    serverTools: (ids) => flatten(openaiServerToolsBody(ids)),
+    structured: (mode) => ({ key: "response_format", value: mode, scope: "structured" }),
+  },
+  responses: {
+    serverTools: toolsItem,
+    structured: (mode) => ({ key: "text.format", value: mode, scope: "structured" }),
+  },
+  gemini: {
+    // Spelled apart from the ids (`googleSearch`, …); an id with no entry of
+    // its own is listed as itself.
+    serverTools: (ids) => {
+      const names = geminiServerTools(ids).flatMap((t) => Object.keys(t));
+      return toolsItem(names.length ? names : ids);
+    },
+    // The strict tier is responseJsonSchema; below it, only responseMimeType.
+    structured: (mode) => (mode === "json_schema"
+      ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
+      : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }),
+  },
+  anthropic: {
+    // The adapter sends `thinking` on every request for a dialect that has
+    // one; the budget it fills in when unset is its own.
+    thinking: (plan, budgetDeclared) => {
+      const body = thinkingBody(plan.thinking.category.dialect, plan.thinking.budget ?? 0, plan.thinking.effort);
+      if (!body) return [];
+      return flatten(body)
+        .filter((i) => !NOISE.has(i.key))
+        .map((i) => (i.key === "thinking.budget_tokens" && !budgetDeclared ? { ...i, value: "…" } : i));
+    },
+    maxTokens: true,
+    serverTools: toolsItem,
+    // Only the strict tier exists here (`output_config.format`).
+    structured: (mode) => ({ key: "output_config.format", value: mode, scope: "structured" }),
+  },
+};
+
+/** The plan's request-body fields, spelled the way `plan.wire`'s family spells them. */
+function spellSummary(plan: RequestPlan, budgetDeclared: boolean): WireItem[] {
+  const spelling = SPELLING[familyOf(plan.wire.standard)];
+  const out: WireItem[] = [...(spelling.thinking?.(plan, budgetDeclared) ?? [])];
+  const reasoning = reasoningBody(plan.thinking.category, plan.thinking.effort, plan.thinking.budget);
+  if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
+  if (spelling.maxTokens) out.push({ key: "max_tokens", value: String(plan.maxTokensOnWire) });
+  if (plan.temperature !== undefined) out.push({ key: "temperature", value: String(plan.temperature) });
+  out.push(...spelling.serverTools(plan.serverTools));
+  if (plan.structured !== "off") out.push(spelling.structured(plan.structured));
+  // Sent on every request, beside (not instead of) a structured task's text.format.
+  if (plan.textVerbosity) out.push({ key: "text.verbosity", value: plan.textVerbosity });
+  if (plan.vlHighResolution) out.push({ key: "vl_high_resolution_images", value: "true" });
+  return out;
+}
+
 /**
  * What this row adds to a request beyond `model` and the messages.
  *
- * `baseUrl` names the endpoint for the session memo of refused JSON modes: with
- * it, the structured-output item is what will *actually* be sent, not what the
+ * Planned the way a request from this row is (`connOptions()`): the output
+ * cap resolved, the relay upstream as resolved. Summarised as a request
+ * without function tools — the conditions that drop `enable_code_interpreter`
+ * and the `agent_max` strategy are the request's, not the model's.
+ *
+ * `baseUrl` names the endpoint for the session's learned refusals: with it,
+ * the structured-output item is what will *actually* be sent, not what the
  * config alone would say. `platform` decides which server tools can be spelled
  * (`lib/ai/platforms.ts`); absent = inferred from `baseUrl`, as the adapters do.
  */
@@ -80,12 +153,9 @@ export function wireSummary(
   /** The resolved relay upstream (`resolveRelayUpstream`); absent = a product name in the id. */
   relayUpstream?: RelayUpstreamChoice,
 ): WireItem[] {
-  const out: WireItem[] = [];
-  const family = familyOf(standard);
-  const wire = wireOf({ platform, baseUrl: baseUrl ?? "", standard });
-
   if (m.type === "image") {
     // An image model's declarations steer the client, not a chat body.
+    const out: WireItem[] = [];
     if (m.caps?.route) out.push({ key: "route", value: m.caps.route });
     if (m.caps?.dialect) out.push({ key: "dialect", value: m.caps.dialect });
     if (m.caps?.sizes?.length) {
@@ -95,65 +165,17 @@ export function wireSummary(
     return out;
   }
 
-  const category = resolveThinkingCategory({ thinkingCategory: m.thinkingCategory }, standard);
-
-  if (family === "anthropic") {
-    // The Messages adapter sends `thinking` on every request for a dialect
-    // that has one; the budget it fills in when unset is the adapter's own.
-    const body = thinkingBody(category.dialect, m.thinkingBudget ?? 0, m.reasoningEffort);
-    if (body) {
-      for (const item of flatten(body)) {
-        if (NOISE.has(item.key)) continue;
-        out.push(item.key === "thinking.budget_tokens" && !m.thinkingBudget ? { ...item, value: "…" } : item);
-      }
-    }
-  }
-  const reasoning = reasoningBody(category, m.reasoningEffort, m.thinkingBudget);
-  if (reasoning) out.push(...flatten(reasoning).filter((i) => !NOISE.has(i.key)));
-
-  if (family === "anthropic" && m.maxOutput) out.push({ key: "max_tokens", value: String(m.maxOutput) });
-  // With the upstream, as the adapters ask: behind a relay it can decide either way.
-  const capModel = capabilityModelOf({ modelId: m.modelId, relayUpstream });
-  if (m.temperature !== undefined && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id })) {
-    out.push({ key: "temperature", value: String(m.temperature) });
-  }
-  if (m.serverTools?.length && hasAnyServerTool(wire)) {
-    // Summarised as a request without function tools: the condition that
-    // drops `enable_code_interpreter` and the `agent_max` strategy is the
-    // request's, not the model's.
-    if (family === "openai") out.push(...flatten(openaiServerToolsBody(wire, m.serverTools, m.modelId, { functionTools: false }, relayUpstream)));
-    else {
-      // Gemini's entries are spelled apart from the ids (`googleSearch`, …);
-      // on any other wire this is empty and the ids are the spelling.
-      const gemini = geminiServerTools(wire, m.serverTools, m.modelId, relayUpstream).flatMap((t) => Object.keys(t));
-      const ids = gemini.length ? gemini : effectiveServerTools(wire, m.serverTools, m.modelId, relayUpstream);
-      if (ids?.length) out.push({ key: "tools", value: ids.join(",") });
-    }
-  }
-
-  const so = effectiveStructuredOutput({
-    standard, baseUrl, platform: wire.platform, modelId: m.modelId, structuredOutput: m.structuredOutput, relayUpstream,
+  const plan = planRequest({
+    standard, baseUrl: baseUrl ?? "", platform, modelId: m.modelId, relayUpstream,
+    thinkingCategory: m.thinkingCategory, reasoningEffort: m.reasoningEffort, thinkingBudget: m.thinkingBudget,
+    temperature: m.temperature, maxOutput: effectiveMaxOutput(m, defaultMaxOutput()),
+    serverTools: m.serverTools, structuredOutput: m.structuredOutput,
+    textVerbosity: m.textVerbosity, vlHighResolution: m.vlHighResolution,
   });
-  if (so !== "off") {
-    // 四条线四个字段名：Gemini 的 generationConfig（严格档是 responseJsonSchema，
-    // 否则只是 responseMimeType）、Responses 的 text.format、Anthropic 的
-    // output_config.format（只有严格档）、其余的 response_format。
-    out.push(family === "anthropic"
-      ? { key: "output_config.format", value: so, scope: "structured" }
-      : family === "gemini"
-      ? so === "json_schema"
-        ? { key: "generationConfig.responseJsonSchema", value: "strict", scope: "structured" }
-        : { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" }
-      : family === "responses"
-        ? { key: "text.format", value: so, scope: "structured" }
-        : { key: "response_format", value: so, scope: "structured" });
-  }
-  // Sent on every request, beside (not instead of) a structured task's text.format.
-  if (m.textVerbosity && hasCapability("textVerbosity", wire, capModel)) out.push({ key: "text.verbosity", value: m.textVerbosity });
-  if (m.vlHighResolution && hasCapability("vlHighResolution", wire)) out.push({ key: "vl_high_resolution_images", value: "true" });
+  const out = spellSummary(plan, !!m.thinkingBudget);
   // Not a body field — `fps` sits on the clip's content part. Listed anyway: it
   // changes the request, and the bill (4× between fps 0.5 and the default).
-  if (m.videoInput && m.videoFps !== undefined && hasCapability("videoFps", wire)) {
+  if (m.videoInput && m.videoFps !== undefined && hasCapability("videoFps", plan.wire)) {
     out.push({ key: "video_url.fps", value: String(m.videoFps), scope: "video" });
   }
   if (m.prefix?.trim()) out.push({ key: "system", value: "", scope: "prefix" });

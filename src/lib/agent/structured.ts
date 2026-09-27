@@ -18,9 +18,8 @@
 
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
-import { effectiveStructuredOutput, withJsonModeFallback } from "../ai/jsonMode";
-import { forcesToolChoiceAuto, resolveThinkingCategory } from "../ai/reasoning";
-import { forcedToolChoiceRefused } from "../ai/toolChoice";
+import { withJsonModeFallback } from "../ai/jsonMode";
+import { planRequest } from "../ai/capability/plan";
 import { stripNulls } from "../ai/jsonSchemaStrict";
 import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
@@ -74,19 +73,20 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
 /**
  * Whether the forced-tool attempt is a round trip we already know we will lose.
  *
- * Two facts, both already in hand before sending: this endpoint downgrades a
- * forced `tool_choice` to `auto` — predictably (Qwen's `switch` dialect with
- * thinking on, MiniMax always; see `forcesToolChoiceAuto`) or as learned from
- * its own 400 (`toolChoice.ts`) — **and** it takes strict `json_schema`. Under
- * `auto` the model may still call the tool, so with only `json_object` to fall
- * back on the attempt is a gamble worth making. With `json_schema` available
- * the JSON path enforces the same schema, so the gamble buys nothing and costs
- * a whole request — tens of seconds on the local models this happens on most.
+ * Two facts, both in the request plan before sending: the forced
+ * `tool_choice` goes out as `auto` — for any of the plan's reasons: the
+ * thinking dialect (Qwen's switch with thinking on, MiniMax always), the
+ * table's cell (智谱; a relay's Kiro or anti upstream; Azure's Chat route), or
+ * the endpoint's own 400 learned this session — **and** the JSON path gets
+ * strict `json_schema`. Under `auto` the model may still call the tool, so
+ * with only `json_object` to fall back on the attempt is a gamble worth
+ * making. With `json_schema` available the JSON path enforces the same schema,
+ * so the gamble buys nothing and costs a whole request — tens of seconds on
+ * the local models this happens on most.
  */
-function forcedToolIsWasted(o: ConnOptions): boolean {
-  const category = resolveThinkingCategory({ thinkingCategory: o.thinkingCategory }, o.standard);
-  const downgraded = forcesToolChoiceAuto(category, o.reasoningEffort) || forcedToolChoiceRefused(o);
-  return downgraded && effectiveStructuredOutput(o) === "json_schema";
+function forcedToolIsWasted(o: ConnOptions, outputTool: ToolDefinition): boolean {
+  const plan = planRequest({ ...o, tools: [outputTool], toolChoice: "required" });
+  return plan.toolChoice?.downgradedBy !== undefined && plan.structured === "json_schema";
 }
 
 /** The text a multimodal user turn carries, for the "json" precondition check. */
@@ -196,7 +196,7 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     },
   );
 
-  if (forcedToolIsWasted(common)) return runJson();
+  if (forcedToolIsWasted(common, args.outputTool)) return runJson();
 
   try {
     return await runTool();

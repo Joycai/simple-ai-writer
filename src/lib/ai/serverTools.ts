@@ -112,10 +112,9 @@
  * six queries for one question once.
  */
 
-import { familyOf } from "./types";
 import { providerWire, type Wire } from "./platforms";
 import { hasCapability } from "./capabilities";
-import type { RequestContext, ThinkingState } from "./capability/conditions";
+import type { RequestContext } from "./capability/conditions";
 import { capabilityModelOf, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
@@ -256,16 +255,18 @@ export function serverToolsSent(
  */
 const MAX_SEARCHES_PER_REQUEST = 10;
 
+/*
+ * ── Spelling ──────────────────────────────────────────────────────────────────
+ *
+ * The four functions below spell ids the request plan already decided
+ * (`capability/plan.ts` → `RequestPlan.serverTools`: the declaration cut to
+ * what the wire grants and the request's conditions allow). They decide
+ * nothing; an id they are handed is sent.
+ */
+
 /** The `tools[]` entries these ids become on the Anthropic wire. */
-export function anthropicServerTools(
-  wire: Wire,
-  ids: readonly ServerToolId[] | undefined,
-  modelId?: string,
-  relayUpstream?: RelayUpstreamChoice,
-): { type: string; name: string; max_uses?: number }[] {
-  if (familyOf(wire.standard) !== "anthropic") return [];
-  const model = capabilityModelOf({ modelId, relayUpstream });
-  return (ids ?? []).filter((id) => hasCapability(id, wire, model)).flatMap((id) => {
+export function anthropicServerTools(ids: readonly ServerToolId[]): { type: string; name: string; max_uses?: number }[] {
+  return ids.flatMap((id) => {
     const type = ANTHROPIC_WIRE_TYPE[id];
     if (!type) return [];
     return [{
@@ -282,7 +283,7 @@ export function anthropicServerTools(
  * of the request. No other platform has a Chat Completions spelling, so on
  * every other platform this is `{}`.
  *
- * Gated on the wire here rather than trusting the caller: the drawer stops
+ * Gated on the wire by the plan rather than trusting the row: the drawer stops
  * offering a switch the wire can't say, but a config row travels (import, hand
  * edits, a provider moved to another platform), and these fields on
  * api.openai.com are a guaranteed 400 — on a relay, a silent no-op the author
@@ -291,18 +292,9 @@ export function anthropicServerTools(
  * bills per call at a rate three orders of magnitude below Anthropic's, so the
  * missing brake is not the same hazard.
  */
-export function openaiServerToolsBody(
-  wire: Wire,
-  ids: readonly ServerToolId[] | undefined,
-  modelId: string,
-  request: { functionTools: boolean },
-  relayUpstream?: RelayUpstreamChoice,
-): Record<string, unknown> {
-  if (familyOf(wire.standard) !== "openai") return {};
-  // Asked with the request: beside function tools, page reading and the
-  // interpreter are ruled out by their rules' conditions (capability/rules.ts).
-  const granted = effectiveServerTools(wire, ids, modelId, relayUpstream, request);
-  if (!granted) return {};
+export function openaiServerToolsBody(granted: readonly ServerToolId[]): Record<string, unknown> {
+  // Beside function tools, page reading and the interpreter are already out of
+  // `granted`: their rules' conditions (capability/rules.ts).
   const out: Record<string, unknown> = {};
   if (granted.includes("web_search")) {
     // Extraction has no field of its own on this wire: it is the `agent_max`
@@ -337,25 +329,17 @@ export function openaiServerToolsBody(
  * The built-in `tools[]` entries these ids become on the Responses wire —
  * bare `{type}` objects, on DashScope's `/responses` and on OpenAI's own.
  *
- * Filtered per id through the platform rather than trusting the row: a row on
- * the official endpoint or on xAI must carry only `web_search` there —
+ * The plan filters per id through the platform rather than trusting the row: a
+ * row on the official endpoint or on xAI must carry only `web_search` there —
  * `web_extractor` and the image searches are DashScope's names, and xAI
- * refuses them (landscape.md §7 第十一个样本). Re-normalised too, because
+ * refuses them (landscape.md §7 第十一个样本). It re-normalises too, because
  * DashScope answers a lone extractor with `response.failed` rather than
  * ignoring it.
  */
-export function responsesServerTools(
-  wire: Wire,
-  ids: readonly ServerToolId[] | undefined,
-  modelId: string,
-  request: { thinking: ThinkingState },
-  relayUpstream?: RelayUpstreamChoice,
-): { type: ServerToolId }[] {
-  if (familyOf(wire.standard) !== "responses") return [];
-  // Asked with the request's thinking state: the interpreter needs the model
-  // thinking on this wire (the rule's condition). The author turned thinking
-  // off on purpose; the interpreter yields.
-  return (effectiveServerTools(wire, ids, modelId, relayUpstream, request) ?? []).map((type) => ({ type }));
+export function responsesServerTools(granted: readonly ServerToolId[]): { type: ServerToolId }[] {
+  // With thinking off the interpreter is already out of `granted` (the rule's
+  // condition): the author turned thinking off on purpose; the interpreter yields.
+  return granted.map((type) => ({ type }));
 }
 
 /** The `tools[]` entry each id becomes on the Gemini wire. */
@@ -371,14 +355,8 @@ const GEMINI_WIRE_TOOL: Partial<Record<ServerToolId, string>> = {
  * `functionDeclarations` entry, never inside it. Gated and normalised like the
  * other wires: only what the platform's cell grants reaches the request.
  */
-export function geminiServerTools(
-  wire: Wire,
-  ids: readonly ServerToolId[] | undefined,
-  modelId: string,
-  relayUpstream?: RelayUpstreamChoice,
-): Record<string, Record<string, never>>[] {
-  if (familyOf(wire.standard) !== "gemini") return [];
-  return (effectiveServerTools(wire, ids, modelId, relayUpstream) ?? []).flatMap((id) => {
+export function geminiServerTools(granted: readonly ServerToolId[]): Record<string, Record<string, never>>[] {
+  return granted.flatMap((id) => {
     const key = GEMINI_WIRE_TOOL[id];
     return key ? [{ [key]: {} }] : [];
   });

@@ -4,15 +4,12 @@
 
 import { fetch } from "../http";
 import {
-  createThinkTagSplitter, forcesToolChoiceAuto, readReasoningDelta, reasoningBody,
-  resolveThinkingCategory, type NativeReasoning, type ThinkingCategory,
+  createThinkTagSplitter, readReasoningDelta, reasoningBody, type NativeReasoning,
   ENCRYPTED_REASONING_FIELD, readEncryptedReasoning,
 } from "./reasoning";
 import { openaiServerToolsBody } from "./serverTools";
-import { wireOf } from "./platforms";
 import { costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { effortOnWire, hasCapability } from "./capabilities";
-import { capabilityModelOf } from "./relayUpstream";
+import { planRequest } from "./capability/plan";
 import { openaiUrl } from "./urls";
 import { createToolArgsProgress } from "./toolArgsProgress";
 import { mergeConcatenatedArgs } from "./toolArgs";
@@ -78,53 +75,12 @@ function deltaText(content: unknown): string {
   return out;
 }
 
-/**
- * `tool_choice` for this request, with one endpoint-specific downgrade.
- *
- * The `switch` dialect describes endpoints whose thinking is a bare
- * `enable_thinking` boolean (Qwen on DashScope compatible-mode), and those
- * endpoints document that **while thinking is on, `tool_choice` accepts only
- * `auto` and `none`** — a forced function (or `required`) is a 400 before a
- * single token is generated. So a forced choice is downgraded to `auto`
- * exactly when this request also says `enable_thinking: true` — that is,
- * dialect declared *and* an effort other than `off`/`default` set (see
- * `reasoningBody`: `off` sends `false`, `default` sends nothing, and the
- * models this dialect exists for default thinking to off, so both leave
- * forcing legal).
- *
- * Same safety argument as the Anthropic adapter's `toolChoiceBody`: neither
- * caller that forces relies on it — `agent/structured.ts` treats "the model
- * declined to call the tool" as its cue to fall back to JSON mode, and the
- * agent runtime's handoff round hands off on the round's prose instead. The
- * worst case is that fallback firing one turn earlier; not downgrading is a
- * guaranteed failed request followed by the same fallback.
- *
- * This is the *predictable* half of the problem — an endpoint whose declared
- * dialect says forcing is illegal. Endpoints that refuse it with nothing in
- * the config to warn us (DeepSeek V4) are learned from their own 400 instead;
- * see `lib/ai/toolChoice.ts`.
- *
- * A platform can also declare `auto` its only value (the `forcedToolChoice`
- * cell in capabilities.ts) — 智谱, whose models ignore forcing or refuse it with an error
- * that never names the parameter, so the learned downgrade cannot catch it —
- * or single out a relay upstream that ignores it (Kiro, anti — relayUpstream.ts).
- */
-function toolChoiceFor(opts: StreamOptions, category: ThinkingCategory, effort: StreamOptions["reasoningEffort"]): StreamOptions["toolChoice"] {
-  const tc = opts.toolChoice ?? "auto";
-  const forced = tc === "required" || typeof tc === "object";
-  if (!forced) return tc;
-  return forcesToolChoiceAuto(category, effort) || !hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts)) ? "auto" : tc;
-}
-
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  // The row's effort as this wire takes it: `off` beside function tools where
-  // the wire refuses any other effort there, the nearest level the model takes
-  // where it refuses `off` / `max` / `minimal` (capabilities.ts
-  // `effortWithTools` / `reasoningOff` / `effortMax` / `effortMinimal`).
-  // Unchanged everywhere else, so an unset model still sends nothing.
-  const effort = effortOnWire(opts.reasoningEffort, wireOf(opts), capabilityModelOf(opts), !!opts.tools?.length);
+  // Every decision about what this request carries — the effort as the wire
+  // takes it, the temperature, the tool choice, the server tools — is the
+  // plan's (capability/plan.ts); this function only spells it.
+  const plan = opts._plan ?? planRequest(opts);
   const body: Record<string, unknown> = {
     model: opts.modelId,
     messages: toWireMessages(opts.messages, opts.modelId),
@@ -134,7 +90,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // the reasoning fields below: an unset model must keep sending exactly
     // what it sent before this setting existed. 0 is a real value here, so
     // the test is `!== undefined` rather than truthiness.
-    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    ...(plan.temperature !== undefined ? { temperature: plan.temperature } : {}),
     // Same `!== undefined` rule, and for the same reason: 0 is a real value
     // for both (frequency_penalty 0 is the vendor's own default). These two
     // come from the task rather than from the model's config — today only the
@@ -145,22 +101,24 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     // A task's per-request cap (StreamOptions.maxTokens), never the model's
     // maxOutput — see the field for why the two are kept apart.
     ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
-    ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts, category, effort) } : {}),
+    // A forced choice the plan downgraded goes out as `auto` — the reasons are
+    // listed on `RequestPlan.toolChoice`.
+    ...(opts.tools ? { tools: opts.tools, tool_choice: plan.toolChoice?.sent ?? "auto" } : {}),
     // A standing permission the author granted this model, spelled the way
     // this wire wants it (enable_search / enable_code_interpreter — see
     // lib/ai/serverTools.ts). Empty object for every model without the
     // declaration, so their requests are byte-identical to before this existed.
-    ...openaiServerToolsBody(wireOf(opts), opts.serverTools, opts.modelId, { functionTools: !!opts.tools?.length }, opts.relayUpstream),
+    ...openaiServerToolsBody(plan.serverTools),
     // Absent unless the author set an effort on this model — an unset model
     // must keep sending exactly what it sent before this existed, because a
     // volunteered field is a field some relay can reject. The category carries
     // the vendor spelling (reasoning_effort / enable_thinking / disable
     // switch); the budget is read only by Qwen's budget category.
-    ...reasoningBody(category, effort, opts.thinkingBudget),
+    ...reasoningBody(plan.thinking.category, plan.thinking.effort, plan.thinking.budget),
     // DashScope's high-resolution image reading, declared per model (see
     // Model.vlHighResolution). Absent unless declared, same rule as above —
     // and unless the platform reads it (智谱 takes it and ignores it).
-    ...(opts.vlHighResolution && hasCapability("vlHighResolution", wireOf(opts)) ? { vl_high_resolution_images: true } : {}),
+    ...(plan.vlHighResolution ? { vl_high_resolution_images: true } : {}),
     // Last: extraBody is the per-request escape hatch and outranks config.
     ...opts.extraBody,
   };

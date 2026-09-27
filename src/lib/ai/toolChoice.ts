@@ -1,10 +1,11 @@
 /**
  * Forced `tool_choice`, and the endpoints that refuse it.
  *
- * Two adapters already downgrade a forced choice *before* sending it, on the
- * one endpoint whose docs say plainly that forcing is illegal while thinking is
- * on (the `switch` dialect — see `openai.ts` `toolChoiceFor` and `anthropic.ts`
- * `toolChoiceBody`). That covers the endpoints recognisable from the config.
+ * The request plan already downgrades a forced choice *before* sending it
+ * where the config predicts a refusal — the `switch` dialect, whose docs say
+ * plainly that forcing is illegal while thinking is on, and the table's cell
+ * (`capability/plan.ts` `toolChoiceOf`). That covers the endpoints
+ * recognisable from the config.
  * This file covers the ones that aren't.
  *
  * The sample it was written for is DeepSeek V4 (`deepseek-v4-flash`/`-pro`):

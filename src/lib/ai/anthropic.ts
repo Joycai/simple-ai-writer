@@ -7,7 +7,7 @@
  * trap rather than a style difference:
  *
  *   1. `max_tokens` is **required**. OpenAI and Gemini both default it
- *      server-side; Anthropic 400s without it. See `resolveMaxTokens`.
+ *      server-side; Anthropic 400s without it. See `RequestPlan.maxTokensOnWire`.
  *   2. Usage arrives in three *disjoint* buckets, not the subset relationship
  *      the rest of the app assumes. See `readUsage`.
  *   3. Thinking is on by default and conflicts with a forced tool choice.
@@ -17,7 +17,7 @@
 import i18n from "../../i18n";
 import { fetch } from "../http";
 import {
-  forcesToolChoiceAuto, reasoningBody, resolveThinkingCategory,
+  reasoningBody,
   thinkingBody, type ThinkingCategory,
 } from "./reasoning";
 import {
@@ -28,10 +28,8 @@ import {
   type ServerToolEvent,
 } from "./serverTools";
 import { createToolArgsProgress } from "./toolArgsProgress";
-import { wireOf } from "./platforms";
 import { addReportedCost, costReportHeaders, costReportingPlatform, reportedCostOf } from "./reportedCost";
-import { hasCapability } from "./capabilities";
-import { capabilityModelOf } from "./relayUpstream";
+import { planRequest } from "./capability/plan";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -45,23 +43,6 @@ import type {
 /** Messages API version. Pinned, not "latest" — the wire shape is versioned by it. */
 const ANTHROPIC_VERSION = "2023-06-01";
 
-/**
- * `max_tokens` when the model has no `maxOutput` configured.
- *
- * Anthropic requires the field on every request, so there is no "let the server
- * decide" option to fall back on.
- *
- * 32k, not the 8k this used to be. Thinking tokens count against `max_tokens`
- * and it is a hard limit, so once thinking is on the old value left the model
- * splitting 8k between reasoning and prose — the documented symptom is a
- * response that stops with `stop_reason: "max_tokens"` and truncated or missing
- * text. Every model in this app's supported Claude range (4.6+) accepts at
- * least 64k output, so the old worry about overshooting a small model's ceiling
- * doesn't apply to them; 32k stays well inside that while leaving real room to
- * think. A value above the model's own cap is itself a 400, which is why this
- * is not simply set to the 128k the range allows.
- */
-export const DEFAULT_MAX_TOKENS = 32_768;
 
 /**
  * Thinking budget for the `extended` dialect, when the author declared that
@@ -330,11 +311,6 @@ function labelAuthorText(blocks: AnthropicBlock[]): AnthropicBlock[] {
 
 // ─── Request shaping ─────────────────────────────────────────────────────────
 
-function resolveMaxTokens(opts: StreamOptions): number {
-  const configured = opts.maxOutput;
-  return configured && configured > 0 ? Math.floor(configured) : DEFAULT_MAX_TOKENS;
-}
-
 /**
  * The `thinking` field for this request, or undefined to send none.
  *
@@ -367,38 +343,17 @@ function thinkingFor(
 }
 
 /**
- * `tool_choice`, in Anthropic's own spelling.
- *
- * The `switch` clause is the one place a *thinking* declaration decides
- * something about tools, and it is deliberate. That dialect describes one real
- * endpoint — MiniMax's Messages implementation — whose documented `tool_choice`
- * enum is `auto | none` only: no `any`, no `{type:"tool"}` (`docs/api/landscape.md`
- * §7 第四个样本). Forcing there is a 400 before a single token is generated, so
- * a forced choice is downgraded to `auto` rather than sent to fail.
- *
- * Downgrading is safe because forcing was never load-bearing on its own:
- * `agent/structured.ts` treats "the model declined to call the tool" as its cue
- * to re-run in JSON mode, and the agent runtime's handoff round hands off on
- * the round's prose instead. The worst case here is that fallback firing one
- * turn earlier than it would have; the alternative — a guaranteed failed
- * request first — costs the same fallback plus a wasted round trip.
- *
- * Endpoints that refuse a forced choice with nothing in the config to predict
- * it are handled the other way round, from their own 400 — see
- * `lib/ai/toolChoice.ts`. Ones that take it with a 200 and ignore it are the
- * capability table's `forcedToolChoice` cell — on a relay, the upstream's
- * (`UPSTREAM_CELLS`: Kiro and anti ignore it, landscape.md §7 第十五、
- * 十六个样本): a silent ignore teaches the memo nothing.
+ * `tool_choice`, in Anthropic's own spelling. Whether a forced choice goes
+ * out forced is the plan's decision (`capability/plan.ts` `toolChoiceOf`):
+ * MiniMax's Messages enum is `auto | none` only (landscape.md §7 第四个样本),
+ * and relay upstreams that take forcing with a 200 and ignore it (Kiro, anti —
+ * 第十五、十六个样本) are the table's `forcedToolChoice` cell.
  */
 function toolChoiceBody(
-  opts: StreamOptions,
-  category: ThinkingCategory,
+  tc: StreamOptions["toolChoice"],
 ): { type: "auto" | "any" | "none" } | { type: "tool"; name: string } | undefined {
-  const tc = opts.toolChoice;
   if (!tc || tc === "auto") return { type: "auto" };
   if (tc === "none") return { type: "none" };
-  if (forcesToolChoiceAuto(category, opts.reasoningEffort)) return { type: "auto" };
-  if (!hasCapability("forcedToolChoice", wireOf(opts), capabilityModelOf(opts))) return { type: "auto" };
   if (tc === "required") return { type: "any" };
   return { type: "tool", name: tc.function.name };
 }
@@ -529,11 +484,15 @@ const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
 
 export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const url = anthropicUrl(opts.baseUrl, "/messages");
-  const caching = hasCapability("promptCache", wireOf(opts), capabilityModelOf(opts));
+  // Every decision about what this request carries is the plan's
+  // (capability/plan.ts); this function only spells it, with this protocol's
+  // own constraints (temperature capped at 1, the budget below max_tokens).
+  const plan = opts._plan ?? planRequest(opts);
+  const caching = plan.promptCache;
 
   const system = extractSystem(opts.messages);
-  const maxTokens = resolveMaxTokens(opts);
-  const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
+  const maxTokens = plan.maxTokensOnWire;
+  const category = plan.thinking.category;
   const thinking = thinkingFor(opts, category, maxTokens);
 
   const baseBody: Record<string, unknown> = {
@@ -556,17 +515,17 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // request refuses everything but 1 — the `temperature` rule in
   // capabilities.ts, which the model editor asks too so it never renders a
   // control this would drop. 0 is a real value, hence the `!== undefined` test.
-  if (opts.temperature !== undefined && hasCapability("temperature", wireOf(opts), { ...capabilityModelOf(opts), thinkingCategory: category.id })) {
-    baseBody.temperature = Math.max(0, Math.min(1, opts.temperature));
+  if (plan.temperature !== undefined) {
+    baseBody.temperature = Math.max(0, Math.min(1, plan.temperature));
   }
   // Absent unless the author set an effort on this model. Governs the whole
   // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
-  Object.assign(baseBody, reasoningBody(category, opts.reasoningEffort, opts.thinkingBudget));
+  Object.assign(baseBody, reasoningBody(category, plan.thinking.effort, plan.thinking.budget));
   // Server-side tools ride in the same array as ours: one list, two kinds of
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
   // a standing permission on the model, not something a task opts into.
-  const serverTools = anthropicServerTools(wireOf(opts), opts.serverTools, opts.modelId, opts.relayUpstream);
+  const serverTools = anthropicServerTools(plan.serverTools);
   if (opts.tools?.length || serverTools.length) {
     const tools: Record<string, unknown>[] = [
       ...serverTools,
@@ -589,7 +548,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     // calls, and a request whose only tool is the server's has nothing to
     // choose — `{type:"auto"}` there would be an opinion about a decision the
     // endpoint makes internally.
-    if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(opts, category);
+    if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(plan.toolChoice?.sent);
   }
   // `opts.extraBody` is deliberately NOT spread in: an OpenAI-shaped field
   // (`response_format`) is a 400 on the Messages API. The one thing taken from

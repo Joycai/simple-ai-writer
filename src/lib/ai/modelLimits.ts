@@ -17,7 +17,7 @@
  * 1. **Nothing here is sent to an Anthropic endpoint.** Anthropic rejects a
  *    `max_tokens` above the model's own ceiling with a 400 — a wrong entry
  *    would break every request to that model rather than degrade politely. The
- *    adapter's own conservative default (`anthropic.DEFAULT_MAX_TOKENS`) keeps
+ *    adapter's own conservative default (`DEFAULT_MAX_TOKENS` below) keeps
  *    that job, and an author who wants more raises it explicitly.
  * 2. **Everywhere else the value is planning-only.** The OpenAI and Gemini
  *    adapters send no cap at all, letting the endpoint apply the model's real
@@ -83,4 +83,32 @@ export function effectiveMaxOutput(
   const known = knownMaxOutput(model.modelId);
   if (known) return known;
   return appDefault && appDefault > 0 ? appDefault : undefined;
+}
+
+/**
+ * `max_tokens` when the model has no `maxOutput` configured.
+ *
+ * Anthropic requires the field on every request, so there is no "let the server
+ * decide" option to fall back on.
+ *
+ * 32k, not the 8k this used to be. Thinking tokens count against `max_tokens`
+ * and it is a hard limit, so once thinking is on the old value left the model
+ * splitting 8k between reasoning and prose — the documented symptom is a
+ * response that stops with `stop_reason: "max_tokens"` and truncated or missing
+ * text. Every model in this app's supported Claude range (4.6+) accepts at
+ * least 64k output, so the old worry about overshooting a small model's ceiling
+ * doesn't apply to them; 32k stays well inside that while leaving real room to
+ * think. A value above the model's own cap is itself a 400, which is why this
+ * is not simply set to the 128k the range allows.
+ */
+const DEFAULT_MAX_TOKENS = 32_768;
+
+/**
+ * The `max_tokens` a wire that requires one sends (the Messages API): the
+ * request's cap when it has one, else {@link DEFAULT_MAX_TOKENS}. One function
+ * so the adapter and the 将发送 summary cannot disagree (the request plan reads
+ * it, `capability/plan.ts`).
+ */
+export function requiredMaxTokens(maxOutput: number | undefined): number {
+  return maxOutput && maxOutput > 0 ? Math.floor(maxOutput) : DEFAULT_MAX_TOKENS;
 }

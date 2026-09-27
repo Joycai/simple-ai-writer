@@ -545,7 +545,7 @@ POST https://api.minimaxi.com/v1/chat/completions
 ## anthropic · anthropic_compat
 
 ### qwen3.5-plus · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -554,19 +554,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### qwen3.5-plus · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### qwen3.5-plus · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -575,7 +575,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -584,13 +584,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.5-plus · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"qwen3.5-plus","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### qwen3.8-flash · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -599,19 +599,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=131072 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### qwen3.8-flash · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=131072 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### qwen3.8-flash · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -620,7 +620,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -629,13 +629,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### qwen3.8-flash · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"qwen3.8-flash","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### no-such-model · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -644,19 +644,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### no-such-model · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### no-such-model · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -665,7 +665,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -674,13 +674,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### no-such-model · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"no-such-model","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### [特价kiro量]claude-opus-5 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -689,19 +689,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### [特价kiro量]claude-opus-5 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### [特价kiro量]claude-opus-5 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -710,7 +710,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -719,13 +719,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### [特价kiro量]claude-opus-5 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"[特价kiro量]claude-opus-5","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### gpt-5.6-sol · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -734,19 +734,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### gpt-5.6-sol · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### gpt-5.6-sol · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -755,7 +755,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -764,13 +764,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gpt-5.6-sol · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### openai/gpt-5.6-sol · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -779,19 +779,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### openai/gpt-5.6-sol · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### openai/gpt-5.6-sol · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -800,7 +800,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -809,13 +809,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-5.6-sol · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-5.6-sol","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### openai/gpt-6-astra · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -824,19 +824,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=128000 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### openai/gpt-6-astra · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=128000 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### openai/gpt-6-astra · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -845,7 +845,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -854,13 +854,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### openai/gpt-6-astra · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=128000
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":128000,"model":"openai/gpt-6-astra","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### claude-sonnet-5 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -869,19 +869,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### claude-sonnet-5 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### claude-sonnet-5 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -890,7 +890,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -899,13 +899,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### claude-sonnet-5 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"claude-sonnet-5","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### gemini-3.8-flash · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=65536
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -914,19 +914,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=65536 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### gemini-3.8-flash · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=65536 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### gemini-3.8-flash · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=65536
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -935,7 +935,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=65536
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -944,13 +944,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### gemini-3.8-flash · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=65536
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":65536,"model":"gemini-3.8-flash","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### glm-5.3 · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -959,19 +959,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=131072 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### glm-5.3 · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=131072 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### glm-5.3 · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -980,7 +980,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -989,13 +989,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### glm-5.3 · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=131072
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":131072,"model":"glm-5.3","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### deepseek-v4-pro · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=393216
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1004,19 +1004,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=393216 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### deepseek-v4-pro · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=393216 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### deepseek-v4-pro · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=393216
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1025,7 +1025,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=393216
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1034,13 +1034,13 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### deepseek-v4-pro · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=393216
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":393216,"model":"deepseek-v4-pro","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
 
 ### grok-4-fast-non-reasoning · bare
-summary: thinking.type=adaptive
+summary: thinking.type=adaptive max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1049,19 +1049,19 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · declared
-summary: thinking.type=adaptive tools=web_search
+summary: thinking.type=adaptive max_tokens=32768 tools=web_search
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tools":[{"max_uses":10,"name":"web_search","type":"web_search_20250305"}]}
 
 ### grok-4-fast-non-reasoning · structured
-summary: structured:output_config.format=json_schema
+summary: max_tokens=32768 structured:output_config.format=json_schema
 - plain (json json_schema)
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"format":{"schema":{"additionalProperties":false,"properties":{"ok":{"type":"boolean"}},"required":["ok"],"type":"object"},"type":"json_schema"}},"stream":true}
 
 ### grok-4-fast-non-reasoning · effortHigh
-summary: thinking.type=adaptive output_config.effort=high
+summary: thinking.type=adaptive output_config.effort=high max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1070,7 +1070,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"high"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · effortOff
-summary: thinking.type=adaptive output_config.effort=low
+summary: thinking.type=adaptive output_config.effort=low max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}
@@ -1079,7 +1079,7 @@ POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"low"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"},"tool_choice":{"type":"any"},"tools":[{"description":"Pick one.","input_schema":{"properties":{"id":{"type":"string"}},"type":"object"},"name":"pick"}]}
 
 ### grok-4-fast-non-reasoning · effortMax
-summary: thinking.type=adaptive output_config.effort=max
+summary: thinking.type=adaptive output_config.effort=max max_tokens=32768
 - plain
 POST https://api.minimaxi.com/anthropic/v1/messages
 {"max_tokens":32768,"model":"grok-4-fast-non-reasoning","output_config":{"effort":"max"},"stream":true,"thinking":{"display":"summarized","type":"adaptive"}}

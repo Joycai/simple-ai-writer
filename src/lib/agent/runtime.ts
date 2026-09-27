@@ -1132,9 +1132,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             ? undefined
             : handoffPreset ? [...toolDefinitions, handoffToolDefinition()] : toolDefinitions,
         // Forced — but never *relied* upon: some endpoints downgrade a forced
-        // choice to "auto" without saying so (lib/ai/openai.ts toolChoiceFor,
-        // lib/ai/anthropic.ts toolChoiceBody, both on the `switch` thinking
-        // dialect), and some reject it outright with a 400, after which
+        // choice to "auto" without saying so (the request plan's tool choice,
+        // lib/ai/capability/plan.ts — the `switch` thinking dialect, a table
+        // cell), and some reject it outright with a 400, after which
         // lib/ai/toolChoice.ts resends this same round with "auto". The handoff
         // below therefore runs whether or not the call arrives; see
         // handoff.fallbackBrief.
@@ -1362,8 +1362,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // the author has said the final text comes from the writer, so accepting
       // it here would turn a deterministic switch back into the model's choice.
       // One retry with the tool pinned; if that round still comes back as prose
-      // the endpoint is downgrading the forced choice (lib/ai/openai.ts
-      // toolChoiceFor), and we hand off anyway with its words as the order.
+      // the endpoint is downgrading the forced choice (lib/ai/capability/plan.ts
+      // toolChoiceOf), and we hand off anyway with its words as the order.
       if (!call && roundToolCalls.length === 0 && !forceHandoff) {
         handoffForced = true;
         opts.onOutputText(committedText);

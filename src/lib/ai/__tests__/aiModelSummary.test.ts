@@ -43,14 +43,19 @@ describe("wireSummary", () => {
     // *is* sent on structured tasks — so the line says so rather than showing
     // the reassuring emptiness the author might expect. Anthropic has no such
     // field; what its adapter always sends instead is the adaptive `thinking`
-    // block of the family's default category.
+    // block of the family's default category, and the `max_tokens` the
+    // Messages API requires — the adapter's default when the row has no cap
+    // (capability-resolution-lld.md B10: the line used to omit it).
     expect(wireSummary(base, "openai")).toEqual([
       { key: "response_format", value: "json_object", scope: "structured" },
     ]);
     expect(wireSummary(base, "gemini")).toEqual([
       { key: "generationConfig.responseMimeType", value: "application/json", scope: "structured" },
     ]);
-    expect(wireSummary(base, "anthropic")).toEqual([{ key: "thinking.type", value: "adaptive" }]);
+    expect(wireSummary(base, "anthropic")).toEqual([
+      { key: "thinking.type", value: "adaptive" },
+      { key: "max_tokens", value: "32768" },
+    ]);
     // The Responses family's own spelling of the same knob.
     expect(wireSummary(base, "openai_responses")).toEqual([
       { key: "text.format", value: "json_object", scope: "structured" },
