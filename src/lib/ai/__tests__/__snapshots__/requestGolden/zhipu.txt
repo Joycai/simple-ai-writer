@@ -1,0 +1,498 @@
+# zhipu
+
+## openai · openai_compat
+
+### qwen3.5-plus · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### qwen3.5-plus · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.5-plus · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.5-plus · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.5-plus","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.8-flash · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### qwen3.8-flash · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### qwen3.8-flash · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### qwen3.8-flash · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"qwen3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### no-such-model · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### no-such-model · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### no-such-model · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### no-such-model · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"no-such-model","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### [特价kiro量]claude-opus-5 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### [特价kiro量]claude-opus-5 · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### [特价kiro量]claude-opus-5 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### [特价kiro量]claude-opus-5 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"[特价kiro量]claude-opus-5","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### gpt-5.6-sol · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### gpt-5.6-sol · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### gpt-5.6-sol · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gpt-5.6-sol · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gpt-5.6-sol","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-5.6-sol · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### openai/gpt-5.6-sol · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-5.6-sol · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-5.6-sol · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-5.6-sol","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-6-astra · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### openai/gpt-6-astra · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### openai/gpt-6-astra · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### openai/gpt-6-astra · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"openai/gpt-6-astra","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### claude-sonnet-5 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### claude-sonnet-5 · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### claude-sonnet-5 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### claude-sonnet-5 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"claude-sonnet-5","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### gemini-3.8-flash · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### gemini-3.8-flash · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### gemini-3.8-flash · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### gemini-3.8-flash · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"gemini-3.8-flash","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### glm-5.3 · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### glm-5.3 · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### glm-5.3 · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### glm-5.3 · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"glm-5.3","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
+
+### deepseek-v4-pro · bare
+summary: structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · declared
+summary: temperature=0.4 structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","stream":true,"stream_options":{"include_usage":true},"temperature":0.4}
+
+### deepseek-v4-pro · structured
+summary: structured:response_format=json_object
+- plain (json json_object)
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","response_format":{"type":"json_object"},"stream":true,"stream_options":{"include_usage":true}}
+
+### deepseek-v4-pro · effortHigh
+summary: reasoning_effort=high structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"high","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · effortOff
+summary: reasoning_effort=none structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true}}
+- tools+required
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"none","stream":true,"stream_options":{"include_usage":true},"tool_choice":"auto","tools":[{"function":{"description":"Pick one.","name":"pick","parameters":{"properties":{"id":{"type":"string"}},"type":"object"}},"type":"function"}]}
+
+### deepseek-v4-pro · effortMax
+summary: reasoning_effort=max structured:response_format=json_object
+- plain
+POST https://open.bigmodel.cn/api/paas/v4/chat/completions
+{"model":"deepseek-v4-pro","reasoning_effort":"max","stream":true,"stream_options":{"include_usage":true}}
