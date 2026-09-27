@@ -4,7 +4,7 @@ import {
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../index";
 import type { ReasoningEffort, ThinkingCategoryId } from "../reasoning";
-import { __resetForcedToolChoiceMemo } from "../toolChoice";
+import { __resetLearned } from "../capability/learned";
 import type { ServerToolId } from "../serverTools";
 import type { PlatformId } from "../platforms";
 
@@ -86,10 +86,10 @@ const text = (received: StreamChunk[]) =>
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  // Session-scoped by design (lib/ai/toolChoice.ts), so one test teaching it
+  // Session-scoped by design (lib/ai/capability/learned.ts), so one test teaching it
   // that this endpoint refuses forcing would silently rewrite the next test's
   // request body.
-  __resetForcedToolChoiceMemo();
+  __resetLearned();
 });
 
 describe("streamCompletion — context size guard", () => {

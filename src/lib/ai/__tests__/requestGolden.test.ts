@@ -23,16 +23,16 @@
  * whether the system prompt rides there is a capability (`instructionsField`).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __resetLearned } from "../capability/learned";
 import { connOptions } from "../conn";
 import type { Model, Provider } from "../configDb";
 import { streamCompletion } from "../index";
-import { __resetJsonModeMemo, jsonModeShaping } from "../jsonMode";
+import { jsonModeShaping } from "../jsonMode";
 import { wireSummary } from "../modelSummary";
 import { PLATFORM_IDS, platformEndpoints, platformOrigin, type PlatformId } from "../platforms";
 import { RELAY_UPSTREAMS, isRelayPlatform, type RelayUpstreamChoice } from "../relayUpstream";
 import { routeProvider, standardOf, type Endpoint } from "../routes";
 import { SERVER_TOOL_IDS } from "../serverTools";
-import { __resetForcedToolChoiceMemo } from "../toolChoice";
 import type { StreamOptions, ToolDefinition } from "../types";
 
 /**
@@ -183,8 +183,7 @@ async function platformGolden(platform: PlatformId): Promise<string> {
 }
 
 beforeEach(() => {
-  __resetForcedToolChoiceMemo();
-  __resetJsonModeMemo();
+  __resetLearned();
 });
 
 afterEach(() => {

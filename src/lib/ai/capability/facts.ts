@@ -62,10 +62,12 @@ export type CapabilityStatus = "yes" | "unknown" | "no";
  *   - `thinking`: this family refuses it while the model thinks (Anthropic's temperature).
  *   - `upstream`: the relay's upstream behind this model was measured this way — either way,
  *     working or not (UPSTREAM_CELLS).
+ *   - `learned`: the tables allow it, but this endpoint+model answered it with a 400 earlier this
+ *     session (`capability/learned.ts`); it is no longer sent until the app restarts.
  */
 export const CAPABILITY_REASONS = [
   "measured", "protocol", "unmeasured", "relay", "platform-absent", "platform-unlisted",
-  "family", "model", "model-unlisted", "model-type", "requires", "thinking", "upstream",
+  "family", "model", "model-unlisted", "model-type", "requires", "thinking", "upstream", "learned",
 ] as const;
 export type CapabilityReason = (typeof CAPABILITY_REASONS)[number];
 

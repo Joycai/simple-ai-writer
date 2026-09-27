@@ -27,13 +27,14 @@
  * runtime's handoff round hands off on the round's prose when no call arrives
  * (`handoff.fallbackBrief`). Neither ever *relied* on forcing.
  *
- * The memo is deliberately in-memory and session-scoped: it is a fact about an
- * endpoint, not about the author's config, and re-learning it costs one failed
- * request. It is also deliberately not keyed by thinking effort — an endpoint
- * that refuses forcing only while thinking is on is treated as refusing it
- * always, which costs at worst the JSON fallback firing a turn early.
+ * The memo is the shared learned store (`capability/learned.ts`, one store
+ * for every refusal an endpoint can teach, session-scoped by decision D3). The
+ * two functions below keep their names for one phase as its facade
+ * (docs/api/capability-resolution-lld.md P3); the classifier is its
+ * `forcedToolChoice` rule.
  */
 
+import { learnedCeiling, noteLearned, type EndpointKey } from "./capability/learned";
 import type { StreamOptions } from "./types";
 
 /** Whether this request tells the model to call a tool rather than offering. */
@@ -41,45 +42,11 @@ export function isForcedToolChoice(tc: StreamOptions["toolChoice"]): boolean {
   return tc === "required" || (typeof tc === "object" && tc !== null);
 }
 
-/**
- * Whether this error is the endpoint rejecting the forced choice itself.
- *
- * Narrow on purpose — the parameter's own name has to appear. Broader
- * phrasings ("does not support", "thinking mode") also match genuine,
- * unrelated failures, and a retry there would resend the whole context only to
- * fail a second time. The messages this is written for all name it:
- * `Thinking mode does not support this tool_choice`,
- * `Invalid value for 'tool_choice'`.
- */
-export function isForcedToolChoiceRejection(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return false;
-  const msg = err instanceof Error ? err.message : String(err ?? "");
-  return /tool[_ ]?choice/i.test(msg);
-}
-
-/**
- * One endpoint+model. The standard is in the key because one host can serve
- * several protocol families and they don't have to agree.
- */
-/** The three fields that name an endpoint+model — a `ConnOptions` bag qualifies too. */
-type Endpoint = Pick<StreamOptions, "standard" | "baseUrl" | "modelId">;
-
-function endpointKey(opts: Endpoint): string {
-  return `${opts.standard} ${opts.baseUrl} ${opts.modelId}`;
-}
-
-const refused = new Set<string>();
-
 /** Has this endpoint+model already answered a forced choice with a 400? */
-export function forcedToolChoiceRefused(opts: Endpoint): boolean {
-  return refused.has(endpointKey(opts));
+export function forcedToolChoiceRefused(opts: EndpointKey): boolean {
+  return learnedCeiling(opts, "forcedToolChoice") === false;
 }
 
-export function noteForcedToolChoiceRefused(opts: Endpoint): void {
-  refused.add(endpointKey(opts));
-}
-
-/** Tests only — the memo outlives a single request by design. */
-export function __resetForcedToolChoiceMemo(): void {
-  refused.clear();
+export function noteForcedToolChoiceRefused(opts: EndpointKey): void {
+  noteLearned(opts, "forcedToolChoice", false);
 }

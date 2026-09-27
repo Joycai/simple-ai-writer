@@ -29,6 +29,7 @@ import { capabilityVerdict } from "./capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { catalogFact } from "./capability/cells/catalog";
+import { classify, downgradeJsonMode, learnedCeiling, noteLearned, STRUCTURED_RANK } from "./capability/learned";
 import { resolvePlatform, type PlatformId } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
@@ -245,8 +246,8 @@ export function jsonModeShaping(
         // `nullable: true` and rejects `additionalProperties`; the two fields
         // are mutually exclusive and the newer one is the documented input
         // for every model this app's Gemini support starts at. An endpoint
-        // that lacks the field says so with a 400 naming it (see
-        // `isJsonModeRejection`), and the memo steps down to JSON mode.
+        // that lacks the field says so with a 400 naming it (the learned
+        // store's `structuredOutput` rule), and the memo steps down to JSON mode.
         return {
           mode,
           extraBody: {
@@ -327,31 +328,24 @@ export function jsonModeShaping(
 // ─── The endpoints that refuse a mode, learned from their own 400 ─────────────
 
 /**
- * Same shape as `toolChoice.ts`, for the same reason. Which models take strict
- * `json_schema` — and which relays reject `response_format` outright — is not
- * recoverable from the config, but the endpoint's 400 says so definitively,
- * arrives before a single token is generated, and costs nothing to act on. So
- * a refusal is remembered for the session, per endpoint+model, as a **ceiling**
- * on the mode: `json_schema` refused → `json_object` from now on; `json_object`
- * refused → `off` (the cue is the whole mechanism). The memo is in-memory and
- * session-scoped on purpose: it is a fact about an endpoint, not about the
- * author's config, and re-learning it costs one failed request.
+ * Which models take strict `json_schema` — and which relays reject
+ * `response_format` outright — is not recoverable from the config, but the
+ * endpoint's 400 says so definitively, arrives before a single token is
+ * generated, and costs nothing to act on. So a refusal is remembered for the
+ * session, per endpoint+model, as a **ceiling** on the mode: `json_schema`
+ * refused → `json_object` from now on; `json_object` refused → `off` (the cue is
+ * the whole mechanism). The memo is the shared learned store
+ * (`capability/learned.ts`), whose `structuredOutput` rule is the classifier;
+ * `jsonModeCeiling` and `noteJsonModeRefused` keep their names for one phase as
+ * its facade (docs/api/capability-resolution-lld.md P3).
  *
  * An author's explicit declaration is capped too (§5.4 of the plan): picking a
  * mode the endpoint rejects should cost "that mode didn't take", not "lore
  * generation is broken until I find the setting".
  */
 
-/** Strength order: the memo only ever moves a mode *down* this list. */
-const MODE_RANK: Record<StructuredOutputMode, number> = { off: 0, json_object: 1, json_schema: 2 };
-
-/** The next weaker mode, or undefined when there is nothing weaker than `off`. */
-export function downgradeJsonMode(mode: StructuredOutputMode): StructuredOutputMode | undefined {
-  return mode === "json_schema" ? "json_object" : mode === "json_object" ? "off" : undefined;
-}
-
 function capJsonMode(mode: StructuredOutputMode, ceiling: StructuredOutputMode | undefined): StructuredOutputMode {
-  return ceiling && MODE_RANK[ceiling] < MODE_RANK[mode] ? ceiling : mode;
+  return ceiling && STRUCTURED_RANK[ceiling] < STRUCTURED_RANK[mode] ? ceiling : mode;
 }
 
 /**
@@ -368,58 +362,15 @@ export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMo
   return structuredOutputModesFor(t.standard).includes(mode) ? mode : "off";
 }
 
-/**
- * Whether this error is the endpoint rejecting the JSON-mode parameter itself.
- *
- * Narrow on purpose, like `isForcedToolChoiceRejection`: the parameter's own
- * name has to appear. The messages this is written for all name it — OpenAI's
- * `Invalid parameter: 'response_format' of type 'json_schema' is not supported
- * with this model`, and the `'messages' must contain the word 'json' … to use
- * 'response_format'` precondition error. A DashScope sample is still owed
- * (`docs/api/structured-output-plan.md` §11.3); until it arrives this is the
- * OpenAI spelling, which the compatible endpoints have so far reproduced.
- *
- * The Responses family names its parameter `text.format` — the precondition
- * error there reads `… to use 'text.format' of type 'json_object'`
- * (docs/api/responses.md §2.2). Whether a Responses endpoint that lacks the
- * parameter (Qianwen's, per landscape.md §7 第六个样本) says so in those words
- * or ignores it silently is unverified; a silent ignore is the one case this
- * cannot learn from, and then the cue is still there to catch the fall.
- */
-export function isJsonModeRejection(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === "AbortError") return false;
-  const msg = err instanceof Error ? err.message : String(err ?? "");
-  // Four spellings, because four wires: `response_format` (chat completions),
-  // `text.format` (the Responses API), the generationConfig field a Gemini
-  // endpoint names when it does not recognise it (`Unknown name
-  // "responseJsonSchema"`), in either casing, and Anthropic's
-  // `output_config.format` (or the retired beta `output_format`).
-  return /response_format|text\.format|response_?json_?schema|output_config\.format|output_format/i.test(msg);
-}
-
-/** One endpoint+model; the standard is in the key because one host can serve several families. */
-function endpointKey(t: JsonModeTarget): string {
-  return `${t.standard} ${t.baseUrl ?? ""} ${t.modelId ?? ""}`;
-}
-
-const ceilings = new Map<string, StructuredOutputMode>();
-
 /** The strongest mode this endpoint+model is still allowed, or undefined when nothing was refused. */
 export function jsonModeCeiling(t: JsonModeTarget): StructuredOutputMode | undefined {
-  return ceilings.get(endpointKey(t));
+  return learnedCeiling(t, "structuredOutput");
 }
 
 /** Remember that `refused` was rejected: from now on this endpoint gets the next weaker mode. */
 export function noteJsonModeRefused(t: JsonModeTarget, refused: StructuredOutputMode): void {
   const next = downgradeJsonMode(refused);
-  if (!next) return;
-  const current = ceilings.get(endpointKey(t));
-  if (!current || MODE_RANK[next] < MODE_RANK[current]) ceilings.set(endpointKey(t), next);
-}
-
-/** Tests only — the memo outlives a single request by design. */
-export function __resetJsonModeMemo(): void {
-  ceilings.clear();
+  if (next) noteLearned(t, "structuredOutput", next);
 }
 
 /**
@@ -444,8 +395,12 @@ export async function withJsonModeFallback<T>(
     try {
       return await attempt(shaping);
     } catch (err) {
-      if (shaping.mode === "off" || !isJsonModeRejection(err)) throw err;
-      noteJsonModeRefused(target, shaping.mode);
+      // A request in `off` mode used no JSON parameter, so nothing is learned
+      // and the loop ends; every learned ceiling is strictly lower, so it ends
+      // anyway within two refusals.
+      const learned = classify(err, { structuredOutput: shaping.mode });
+      if (!learned) throw err;
+      noteLearned(target, learned.fact, learned.ceiling);
     }
   }
 }

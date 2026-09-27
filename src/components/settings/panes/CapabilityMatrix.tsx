@@ -24,7 +24,7 @@ const GLYPH = { yes: "✓", unknown: "?", no: "—" } as const;
 const CELL = { yes: r.cellYes, unknown: r.cellUnknown, no: r.cellNo } as const;
 
 export function CapabilityMatrix({
-  label, ids, rowLabel, routes, current, wireFor, modelId, type, relayUpstream,
+  label, ids, rowLabel, routes, current, wireFor, baseUrlFor, modelId, type, relayUpstream,
 }: {
   /** The table's accessible name, e.g. 「服务端工具 · 各线路可用性」. */
   label: string;
@@ -35,6 +35,11 @@ export function CapabilityMatrix({
   /** The model's current route — the column the switches' hints speak for. */
   current: ProtocolFamily;
   wireFor: (f: ProtocolFamily) => Wire | undefined;
+  /**
+   * The route's address — with it, a cell the endpoint refused this session
+   * reads `— · learned` (lib/ai/capability/learned.ts). Absent = the tables alone.
+   */
+  baseUrlFor?: (f: ProtocolFamily) => string | undefined;
   /** Blank = the model-id axis is not consulted (nothing typed yet). */
   modelId: string;
   type: ModelType;
@@ -65,7 +70,7 @@ export function CapabilityMatrix({
               <td>{rowLabel(id)}</td>
               {routes.map((f) => {
                 const w = wireFor(f);
-                const v = w ? capabilityVerdict(id, w, model) : { status: "no" as const, reason: "family" as const };
+                const v = w ? capabilityVerdict(id, w, model, baseUrlFor?.(f)) : { status: "no" as const, reason: "family" as const };
                 const why = t(`aiConfig.capReason.${v.reason}`, {
                   platform: w ? t(`aiConfig.platforms.${w.platform}`) : "",
                   model: model.modelId ?? "",
