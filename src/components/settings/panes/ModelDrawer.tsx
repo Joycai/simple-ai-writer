@@ -47,7 +47,7 @@ import {
 import { providerWire } from "../../../lib/ai/platforms";
 import {
   canonicalModelId, capabilityVerdict, effortMenuOnWire, hasAnyServerTool, hasCapability, platformModelCalibration,
-  resolveThinkingCategory, thinkingCategoryOf, type CapabilityId, type Source,
+  thinkingCategoryOf, type CapabilityId, type Source,
 } from "../../../lib/ai/capabilities";
 import {
   capabilityModelOf, isRelayPlatform, resolveRelayUpstream, type RelayUpstreamChoice,
@@ -285,13 +285,8 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
     capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
-    // "auto" ↔ stored undefined. A model configured before categories existed
-    // (a legacy dialect, no category) shows its migrated category so the author
-    // sees what it resolves to; a truly unset model shows "auto".
-    thinkingCategory: (existing?.thinkingCategory
-      ?? (existing?.thinkingDialect && provider
-        ? resolveThinkingCategory(existing, provider.apiStandard, providerWire(provider).platform).id
-        : "auto")) as ThinkingCategoryId | "auto",
+    // "auto" ↔ stored undefined.
+    thinkingCategory: (existing?.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
     thinkingBudget: existing?.thinkingBudget != null ? String(existing.thinkingBudget) : "",
     // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
     translateFormat: (existing?.translateFormat ?? "") as TranslateFormat | "",
@@ -427,7 +422,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       const next = { ...all };
       for (const [f, prof] of Object.entries(all) as [ProtocolFamily, RouteProfile][]) {
         const p = routeProvider(channel, f);
-        if (!p || !prof.reasoningEffort || prof.thinkingDialect) continue;
+        if (!p || !prof.reasoningEffort) continue;
         next[f] = { ...prof, reasoningEffort: effortForNewId(prof.thinkingCategory, prof.reasoningEffort, resolvedOn(p)) };
       }
       return next;
@@ -631,8 +626,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
       maxOutput: prof.maxOutput ? String(prof.maxOutput) : "",
       temperature: prof.temperature !== undefined ? String(prof.temperature) : "",
       reasoningEffort: prof.reasoningEffort ?? "default",
-      thinkingCategory: (prof.thinkingCategory
-        ?? (prof.thinkingDialect ? resolveThinkingCategory(prof, nextProvider.apiStandard, providerWire(nextProvider).platform).id : "auto")) as ThinkingCategoryId | "auto",
+      thinkingCategory: (prof.thinkingCategory ?? "auto") as ThinkingCategoryId | "auto",
       thinkingBudget: prof.thinkingBudget != null ? String(prof.thinkingBudget) : "",
       structuredOutput: prof.structuredOutput ?? "auto",
       textVerbosity: prof.textVerbosity ?? "auto",
@@ -737,10 +731,6 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
             ? undefined
             : form.reasoningEffort,
         thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory,
-        // Legacy shape is superseded by the category; clear it so a resaved
-        // model stops carrying the field resolveThinkingCategory reads only for
-        // one-time migration.
-        thinkingDialect: undefined,
         // Only meaningful for a budget-shape category; parsed, positive, else absent.
         thinkingBudget,
         // The grant, whole — not cut to the wire (see declaredServerTools):
@@ -1415,7 +1405,7 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} upstreamPrefixes={channel?.upstreamPrefixes}
                 valuesFor={(f) => (f === route
                   ? { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, maxOutput: parsedOut || undefined }
-                  : { thinkingCategory: parked[f]?.thinkingCategory, thinkingDialect: parked[f]?.thinkingDialect, maxOutput: parked[f]?.maxOutput })} />
+                  : { thinkingCategory: parked[f]?.thinkingCategory, maxOutput: parked[f]?.maxOutput })} />
             )}
           </Section>
 

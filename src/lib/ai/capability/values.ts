@@ -25,7 +25,7 @@
 import { defaultMaxOutput } from "../modelLimits";
 import type { PlatformId } from "../platforms";
 import {
-  fitsFamily, migrateDialect, THINKING_CATEGORIES, type ThinkingCategory, type ThinkingCategoryId, type ThinkingDialect,
+  fitsFamily, THINKING_CATEGORIES, type ThinkingCategory, type ThinkingCategoryId,
 } from "../reasoning";
 import { familyOf, type ApiStandard, type ProtocolFamily } from "../types";
 import { catalogFact } from "./cells/catalog";
@@ -103,22 +103,19 @@ export function modelValue(
 /** What a model row says about its thinking. */
 interface ThinkingDeclaration {
   thinkingCategory?: ThinkingCategoryId;
-  thinkingDialect?: ThinkingDialect;
   modelId?: string;
 }
 
 /**
  * The category in force for a model, and where it came from: the author's
- * declared one (if it fits the family, `fitsFamily`) → a migration of the
- * legacy `thinkingDialect` (the author's too, spelled the old way) → the
- * platform's row for the id → the family's default.
+ * declared one (if it fits the family, `fitsFamily`) → the platform's row
+ * for the id → the family's default. A legacy `thinkingDialect` is no longer
+ * a step: rows carrying one are rewritten once (`legacyThinking.ts`).
  */
 export function thinkingCategoryOf(m: ThinkingDeclaration, at: Omit<ValueSubject, "modelId">): Sourced<ThinkingCategory> {
   const family: ProtocolFamily = familyOf(at.standard);
   const declared = m.thinkingCategory ? THINKING_CATEGORIES[m.thinkingCategory] : undefined;
   if (declared && fitsFamily(declared, family)) return { value: declared, source: "author" };
-  const migrated = migrateDialect(m.thinkingDialect, family);
-  if (migrated) return { value: migrated, source: "author" };
   // Every family has a default, so the table always answers.
   const table = tableValue("thinkingCategory", { ...at, modelId: m.modelId }, (id) => fitsFamily(THINKING_CATEGORIES[id], family))!;
   return { value: THINKING_CATEGORIES[table.value], source: table.source };

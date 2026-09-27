@@ -224,7 +224,7 @@ export interface ValueFacts {
  * under a field and the request cannot disagree.
  */
 export function valueFacts(
-  m: Pick<Model, "modelId" | "thinkingCategory" | "thinkingDialect" | "contextSize" | "maxOutput">,
+  m: Pick<Model, "modelId" | "thinkingCategory" | "contextSize" | "maxOutput">,
   standard: ApiStandard,
   /** The wire's resolved platform (`providerWire`), as `connOptions()` has it; absent = no platform's rows. */
   platform?: PlatformId,
@@ -239,11 +239,10 @@ export function valueFacts(
   };
   const ctx = number("contextSize");
   const out = number("maxOutput");
-  // The author's category is the one in force when the chain says so: a
-  // declared one that fits the family, or a legacy dialect migrated (a row
-  // never resaved since categories came in). One the family cannot spell is
-  // not what the request sends, so it is not reported as the author's.
-  const category = thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory, thinkingDialect: m.thinkingDialect }, at);
+  // The author's category is the one in force when the chain says so: one
+  // the family cannot spell is not what the request sends, so it is not
+  // reported as the author's.
+  const category = thinkingCategoryOf({ ...blank, thinkingCategory: m.thinkingCategory }, at);
   const sentCap = (v: Sourced<number> | undefined) => planRequest({
     standard, baseUrl: "", platform, modelId: m.modelId, canonicalModelId,
     maxOutput: v?.value, provenance: v && { maxOutput: v.source },

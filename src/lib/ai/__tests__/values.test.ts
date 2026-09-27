@@ -104,11 +104,10 @@ describe("the chain", () => {
     expect(modelValue("contextSize", { modelId: "glm-5.3" }, { standard: "openai_compat" })).toBeUndefined();
   });
 
-  it("answers a category from the author, a legacy dialect, the platform's row, the family default", () => {
+  it("answers a category from the author, the platform's row, the family default", () => {
     const at = { standard: "openai_compat" as const, platform: "zhipu" as const };
     expect(thinkingCategoryOf({ thinkingCategory: "deepseek", modelId: "glm-5.3" }, at))
       .toEqual({ value: THINKING_CATEGORIES.deepseek, source: "author" });
-    expect(thinkingCategoryOf({ thinkingDialect: "switch", modelId: "glm-5.3" }, at).source).toBe("author");
     expect(thinkingCategoryOf({ modelId: "glm-5.3" }, at)).toEqual({ value: THINKING_CATEGORIES.glm, source: "platform" });
     expect(thinkingCategoryOf({ modelId: "mystery-model" }, at))
       .toEqual({ value: THINKING_CATEGORIES["openai-generic"], source: "protocol" });
@@ -267,12 +266,10 @@ describe("what the editor says about a value", () => {
       const provider = routeOf(platform, endpoint.family);
       for (const id of ids(platform)) for (const model of [
         modelOf(id), modelOf(id, { contextSize: 64_000, maxOutput: 9_000 }),
-        // A row saved before categories: only the legacy dialect.
-        modelOf(id, { thinkingDialect: "switch" }),
       ]) {
         const req = request(provider, model);
         const v = valueFacts(model, provider.apiStandard, providerWire(provider).platform, req.canonicalModelId);
-        const at = `${platform}/${endpoint.family}/${id}${model.maxOutput ? " (set)" : model.thinkingDialect ? " (dialect)" : ""}`;
+        const at = `${platform}/${endpoint.family}/${id}${model.maxOutput ? " (set)" : ""}`;
         const got = {
           category: v.thinkingCategory.inForce.value.id, ctx: v.contextSize.inForce?.value, out: v.maxOutput.inForce?.value,
           ctxSource: v.contextSize.inForce?.source, outSource: v.maxOutput.inForce?.source, gates: v.contextSize.gates,

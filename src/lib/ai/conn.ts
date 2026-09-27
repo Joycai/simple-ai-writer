@@ -109,8 +109,8 @@ export interface ConnOptions {
   /** How hard to think, in this app's vocabulary — each adapter translates. */
   reasoningEffort?: ReasoningEffort;
   /**
-   * The resolved thinking-parameter category. `connOptions()` always fills it
-   * (migrating any legacy dialect); optional only so hand-built option bags and
+   * The resolved thinking-parameter category. `connOptions()` always fills it;
+   * optional only so hand-built option bags and
    * task callers may omit it — the adapters re-resolve to the family default.
    */
   thinkingCategory?: ThinkingCategoryId;
@@ -221,7 +221,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     },
     temperature: model.temperature,
     reasoningEffort: model.reasoningEffort,
-    // Resolved (and migrated from a legacy dialect) here, the one place with the
+    // Resolved here, the one place with the
     // provider's standard in hand — the model row alone can't name its family.
     // An unset one takes the platform's category for the id before the
     // family's default (capability/values.ts, D1).

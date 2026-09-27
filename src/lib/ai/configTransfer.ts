@@ -39,11 +39,12 @@ import {
   type Prompt,
   type Provider,
 } from "./configDb";
-import { parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
+import { activeFamily, parseEndpoints, parseRouteFamily, parseRouteProfiles } from "./routes";
 import { parseRelayUpstreamChoice, parseUpstreamPrefixes } from "./relayUpstream";
 import { feeGroupUpsert, listFeeGroups, migrateModelPricesToFeeGroups, rowToFeeGroup } from "./feeGroupDb";
 import type { FeeGroup } from "./feeGroup";
-import { parseReasoningEffort, parseThinkingCategory, parseThinkingDialect } from "./reasoning";
+import { parseReasoningEffort, parseThinkingCategory } from "./reasoning";
+import { migrateLegacyThinking } from "./legacyThinking";
 import { parseServerTools } from "./serverTools";
 import { parsePlatform } from "./platforms";
 import { parseStructuredOutputMode } from "./jsonMode";
@@ -299,6 +300,15 @@ export function parseConfigBundle(
     const modelId = str(r.modelId);
     const name = str(r.name);
     if (!id || !providerId || !modelId || !name || !knownProviders.has(providerId)) continue;
+    // A backup from before thinking categories carries the legacy dialect:
+    // migrated here the way `migrateThinkingDialects` migrates a database row,
+    // by the family of the route the row's own fields belong to. A row whose
+    // channel is not in this bundle keeps its category and drops the dialect.
+    const channel = providers.find((p) => p.id === providerId);
+    const legacy = migrateLegacyThinking(
+      { thinkingCategory: r.thinkingCategory, thinkingDialect: r.thinkingDialect, routes: r.routes },
+      channel ? activeFamily({ activeRoute: parseRouteFamily(r.activeRoute) }, channel) : undefined,
+    );
     // Normalised like a DB row: a backup from before `asr` was a type carries
     // the identity on `asrFormat` alone and must not land in the chat pickers.
     models.push(normalizeAsrIdentity({
@@ -322,8 +332,7 @@ export function parseConfigBundle(
       // hand) can carry a level this build doesn't know, and an unknown level
       // must degrade to "send nothing" rather than reach the wire.
       reasoningEffort: parseReasoningEffort(r.reasoningEffort),
-      thinkingDialect: parseThinkingDialect(r.thinkingDialect),
-      thinkingCategory: parseThinkingCategory(r.thinkingCategory),
+      thinkingCategory: legacy ? legacy.thinkingCategory : parseThinkingCategory(r.thinkingCategory),
       thinkingBudget: typeof r.thinkingBudget === "number" ? r.thinkingBudget : undefined,
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
@@ -351,7 +360,7 @@ export function parseConfigBundle(
       // without a second check, so a malformed value crashes a page later.
       caps: parseImageCaps(r.caps),
       activeRoute: parseRouteFamily(r.activeRoute),
-      routes: parseRouteProfiles(r.routes),
+      routes: parseRouteProfiles(legacy ? legacy.routes : r.routes),
       // 模型自己选的中转站上游；不认识的值读成「跟随渠道」。
       relayUpstream: parseRelayUpstreamChoice(r.relayUpstream),
     }));

@@ -29,52 +29,13 @@ import { resolveThinkingCategory } from "../capabilities";
 import type { ApiStandard } from "../types";
 
 describe("resolveThinkingCategory", () => {
-  it("prefers an explicitly declared category over any legacy dialect", () => {
-    const cat = resolveThinkingCategory(
-      { thinkingCategory: "glm", thinkingDialect: "adaptive" },
-      "openai_compat",
-    );
-    expect(cat.id).toBe("glm");
-  });
-
-  it("ignores an unknown declared category and falls back to migration/default", () => {
+  it("ignores an unknown declared category and falls back to the default", () => {
     // parseThinkingCategory would have nulled a bad column, but guard here too.
     const cat = resolveThinkingCategory(
       { thinkingCategory: "nope" as never },
       "gemini",
     );
     expect(cat.id).toBe("gemini3");
-  });
-
-  it("migrates the legacy dialects to their same-family category", () => {
-    expect(resolveThinkingCategory({ thinkingDialect: "adaptive" }, "anthropic").id)
-      .toBe("claude-adaptive");
-    expect(resolveThinkingCategory({ thinkingDialect: "extended" }, "anthropic_compat").id)
-      .toBe("claude-budget");
-    expect(resolveThinkingCategory({ thinkingDialect: "switch" }, "anthropic").id)
-      .toBe("minimax");
-    // switch on the OpenAI family → qwen-budget, and the budget is left unset by
-    // the caller so it emits only enable_thinking (byte-identical to old switch).
-    expect(resolveThinkingCategory({ thinkingDialect: "switch" }, "openai_compat").id)
-      .toBe("qwen-budget");
-  });
-
-  it("maps the `none` dialect to `off` on any family", () => {
-    for (const s of ["openai", "gemini", "anthropic"] as ApiStandard[]) {
-      expect(resolveThinkingCategory({ thinkingDialect: "none" }, s).id).toBe("off");
-    }
-  });
-
-  it("does NOT migrate an Anthropic-only dialect onto a non-Anthropic family", () => {
-    // The cross-family guard: an OpenAI/Gemini model carrying `adaptive` or
-    // `extended` (only reachable via an imported/hand-edited bundle) must fall
-    // to its own family default, never to a Claude category.
-    expect(resolveThinkingCategory({ thinkingDialect: "adaptive" }, "openai_compat").id)
-      .toBe("openai-generic");
-    expect(resolveThinkingCategory({ thinkingDialect: "extended" }, "gemini").id)
-      .toBe("gemini3");
-    expect(resolveThinkingCategory({ thinkingDialect: "adaptive" }, "gemini_compat").family)
-      .toBe("gemini");
   });
 
   it("falls back to the family default when nothing is declared", () => {
