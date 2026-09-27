@@ -182,8 +182,6 @@ const NEIGHBOUR_WHITELIST: Readonly<Record<string, string>> = {
  * 起点 = P0 合并时的实际计数。每一条都写明是哪一处；P1 起逐期往下降（LLD §4）。
  */
 const NEIGHBOUR_CEILING: Readonly<Record<string, Partial<Record<keyof typeof NEIGHBOURS, number>>>> = {
-  // `cachesPrompt`：只有官方标准带缓存断点——P4 改成 `promptCache` 事实。
-  "lib/ai/anthropic.ts": { standard: 1 },
   // `authModesFor`：哪两个兼容标准可选鉴权头——拼法（鉴权），留着。
   "lib/ai/types.ts": { standard: 2 },
   // ComfyUI 的保存分支与预览（2）：选的是界面形态，不是能力。`pickPlatform` 的 newapi / custom 已在 P1 改问

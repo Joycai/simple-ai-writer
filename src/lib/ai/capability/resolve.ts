@@ -1,30 +1,31 @@
 /**
- * The one verdict: model type → what it requires → thinking → the relay
- * upstream's cell → the platform's cell → the rule's families → its default.
+ * The one verdict: model type → what it requires → the request's conditions →
+ * the relay upstream's cell → the platform's cell → the rule's families → the
+ * official standard → its default.
  * Reads the tables only; never imports `platforms.ts` at runtime, so the two
  * cannot form a cycle.
  */
 
-import { familyOf, type ProtocolFamily } from "../types";
+import { familyOf, isCompatStandard, type ProtocolFamily } from "../types";
 import type { ModelType } from "../configDb";
 import type { PlatformId, Wire } from "../platforms";
-import type { ThinkingCategoryId } from "../reasoning";
 import type { RelayUpstreamId } from "../relayUpstream";
 import type { CapabilityId, CapabilityReason, CapabilityStatus, CapabilityVerdict } from "./facts";
 import { CAPABILITY_RULES } from "./rules";
 import { PLATFORM_CELLS, platformCell } from "./cells/platform";
 import { UPSTREAM_CELLS } from "./cells/upstream";
+import { conditionFires, type RequestContext } from "./conditions";
 import { patternMatches, rawModelKey } from "./modelId";
 
-/** What is known of the model. Every field optional: an absent one is not consulted. */
-export interface CapabilityModel {
+/**
+ * What is known of the model — and, from an adapter, of the request
+ * ({@link RequestContext}: the rules' `unless` conditions read it; each
+ * condition says what its absence means). Every field optional: an absent one
+ * is not consulted.
+ */
+export interface CapabilityModel extends RequestContext {
   modelId?: string;
   type?: ModelType;
-  /**
-   * The *resolved* category (`resolveThinkingCategory`). Consulted only by a
-   * `thinkingOff` rule, where absent reads as the family default — thinking.
-   */
-  thinkingCategory?: ThinkingCategoryId;
   /**
    * The relay upstream behind the model, already resolved
    * (`relayUpstream.ts` → `capabilityModelOf` / `resolveRelayUpstream`).
@@ -52,24 +53,30 @@ function upstreamCellFor(
 }
 
 /**
- * The one answer. Order is fixed: model type → what it requires → thinking →
- * the relay upstream's cell → the platform's cell (a measurement wins) → the
- * rule's families → its default.
+ * The one answer. Order is fixed: model type → what it requires → the
+ * request's conditions → the relay upstream's cell → the platform's cell (a
+ * measurement wins) → the rule's families → the official standard → its default.
  */
 export function capabilityVerdict(id: CapabilityId, wire: Wire, model: CapabilityModel = {}): CapabilityVerdict {
-  return familyVerdict(id, wire.platform, familyOf(wire.standard), model);
+  return familyVerdict(id, wire.platform, familyOf(wire.standard), model, !isCompatStandard(wire.standard));
 }
 
-/** {@link capabilityVerdict} for a caller that already holds the family. */
-export function familyVerdict(id: CapabilityId, platform: PlatformId, family: ProtocolFamily, model: CapabilityModel = {}): CapabilityVerdict {
+/**
+ * {@link capabilityVerdict} for a caller that holds the family rather than the
+ * standard. `official` = the vendor's own standard on that family; absent
+ * means compatible, which is the answer every rule but an `official` one gives
+ * either way.
+ */
+export function familyVerdict(
+  id: CapabilityId, platform: PlatformId, family: ProtocolFamily, model: CapabilityModel = {}, official = false,
+): CapabilityVerdict {
   const rule = CAPABILITY_RULES[id];
   if (model.type && rule.modelTypes && !rule.modelTypes.includes(model.type)) return verdict("no", "model-type");
   for (const dep of rule.requires ?? []) {
-    if (familyVerdict(dep, platform, family, model).status === "no") return verdict("no", "requires");
+    if (familyVerdict(dep, platform, family, model, official).status === "no") return verdict("no", "requires");
   }
-  if (rule.thinkingOff?.includes(family) && model.thinkingCategory !== "off") {
-    return verdict("no", "thinking");
-  }
+  const fired = rule.unless?.[family]?.find((c) => conditionFires(c, model));
+  if (fired) return verdict("no", fired.when === "categoryThinks" ? "thinking" : "condition");
 
   // Behind a relay the upstream is the more specific measurement: the relay's
   // own cells hold for whatever upstream a model has, these for one.
@@ -90,6 +97,7 @@ export function familyVerdict(id: CapabilityId, platform: PlatformId, family: Pr
   // No cell, or rows that single other ids out: the rule below decides.
 
   if (!rule.families.includes(family)) return verdict("no", "family");
+  if (rule.official === "yes" && official) return verdict("yes", "protocol");
   if (rule.origin === "private") {
     return rule.relay && PLATFORM_CELLS[platform]?.relay
       ? verdict(rule.relay, "relay")

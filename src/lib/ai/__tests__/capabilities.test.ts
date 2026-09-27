@@ -37,8 +37,10 @@ const FAMILY_LABEL: Record<ProtocolFamily, string> = { openai: "Chat", responses
 const NO_SUCH_MODEL = "no-such-model";
 
 function cell(id: CapabilityId, platform: (typeof PLATFORM_IDS)[number], family: ProtocolFamily): string {
-  if (!platformEndpoints(platform).some((e) => e.family === family)) return "";
-  const v = familyVerdict(id, platform, family);
+  const route = platformEndpoints(platform).find((e) => e.family === family);
+  if (!route) return "";
+  // Asked as the platform's own route is: official or compatible (a rule's `official`).
+  const v = familyVerdict(id, platform, family, {}, route.official === true);
   const perUpstream = !!PLATFORM_CELLS[platform].relay && upstreamCell(id, family).some((c) => c !== undefined);
   if (v.status === "no") return perUpstream ? "· 按上游" : "·";
   // Decided per model id: the block that owns the capability lists ids for it, or says "per-model".
@@ -88,6 +90,7 @@ function renderMatrix(): string {
     ">",
     "> `✓` 会发送 · `?` 未实测、照发并在抽屉里注明 · `·` 不发送。符号后面是原因码；「按模型」= 该格还要过模型 id 这一轴；",
     "> 「按上游」= 中转站上还要看模型背后的上游（本文末节）。表里是没有上游时的答案。",
+    "> 每格按该平台自己的那条线路问：官方标准还是兼容标准（规则的 `official`）。",
     "> 空格 = 这个平台没有这一族的线路。模型类型（看图的能力只对多模态 / 视觉模型成立）不在此表内——那是模型行上的事，不是线路上的。",
     "",
   ];

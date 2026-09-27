@@ -16,6 +16,7 @@
  * on its category (`openaiWire`, `forcing`), never a branch on the category id.
  */
 
+import { thinkingAs, wireThinks } from "./capability/conditions";
 import { familyOf, type ApiStandard, type ProtocolFamily } from "./types";
 
 /**
@@ -186,9 +187,27 @@ export interface ThinkingCategory {
   /**
    * Whether the endpoint thinks when the request says nothing — what an on/off
    * toggle shows for an unset effort. Absent = the family's habit (Anthropic
-   * categories on, the rest off); see `thinkingIsOn`.
+   * categories on, the rest off); see `thinkingIsOn`. The *display* only: what
+   * the wire does is `unsetThinks` below.
    */
   defaultOn?: boolean;
+  /**
+   * What `off` becomes on the wire, for every category that has a dial:
+   * `disable` — thinking really stops (`reasoning_effort:"none"`, the
+   * `thinking:{type:"disabled"}` switch, `enable_thinking:false`); `lowest` —
+   * the family has no true off and the request goes out at its lowest level,
+   * still thinking (Gemini's LOW, Claude's adaptive at low / enabled with a
+   * budget, GLM-5.3 which cannot stop). Read by `wireThinks`
+   * (`capability/conditions.ts`); `wireThinks.test.ts` holds every category to
+   * having one.
+   */
+  offSpelling?: "disable" | "lowest";
+  /**
+   * The endpoint thinks when the request sends nothing about it — measured or
+   * documented. Absent = unknown: the endpoint's own default, which the app
+   * cannot see. Unlike `defaultOn` this is about the wire, not a toggle.
+   */
+  unsetThinks?: true;
 }
 
 /**
@@ -211,7 +230,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatOpenaiGeneric",
     hintKey: "aiConfig.models.thinkingCatOpenaiGenericHint",
     family: "openai", dialect: "none", shape: "levels",
-    menu: ["off", "low", "medium", "high", "max"],
+    menu: ["off", "low", "medium", "high", "max"], offSpelling: "disable",
   },
   deepseek: {
     id: "deepseek",
@@ -222,7 +241,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // that silently means another. `off` sends the disable switch (not
     // reasoning_effort:"none") — see reasoningBody.
     menu: ["off", "low", "high", "max"],
-    openaiWire: "effort-or-disable",
+    openaiWire: "effort-or-disable", offSpelling: "disable",
   },
   "qwen-budget": {
     id: "qwen-budget",
@@ -231,7 +250,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "openai", dialect: "switch", shape: "budget",
     menu: [],
     budget: { min: 1, max: 32768, default: 4000 },
-    openaiWire: "switch-budget", forcing: "while-thinking",
+    openaiWire: "switch-budget", forcing: "while-thinking", offSpelling: "disable",
   },
   "qwen-effort": {
     id: "qwen-effort",
@@ -240,7 +259,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "openai", dialect: "none", shape: "levels",
     // Qwen-Max tops out at `xhigh`, not `max`; `medium` between low and xhigh.
     menu: ["off", "low", "medium", "xhigh"],
-    openaiWire: "switch-effort", forcing: "while-thinking",
+    openaiWire: "switch-effort", forcing: "while-thinking", offSpelling: "disable",
   },
   glm: {
     id: "glm",
@@ -250,6 +269,8 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // GLM-5.3 cannot disable thinking, so there is no `off`; it defaults to max.
     menu: ["low", "high", "max"], defaultEffort: "max",
     extra: { thinking: { clear_thinking: false } },
+    // No off in the menu; one carried in by an import still thinks.
+    offSpelling: "lowest", unsetThinks: true,
   },
   // GLM-5.2 on 智谱's own endpoint: the one generation that both stops
   // thinking and takes a depth. `none` does *not* stop it (it thought as much
@@ -263,7 +284,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     hintKey: "aiConfig.models.thinkingCatGlmEffortHint",
     family: "openai", dialect: "none", shape: "levels",
     menu: ["off", "high", "max"],
-    openaiWire: "effort-or-disable",
+    openaiWire: "effort-or-disable", offSpelling: "disable",
   },
   // GLM before 5.3 (4.5 / 4.6 / 4.7 / 5 / 5.1) on 智谱's own endpoint: thinking
   // is on unless `thinking.type` says `disabled`, and `reasoning_effort` is
@@ -275,7 +296,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatGlmSwitch",
     hintKey: "aiConfig.models.thinkingCatGlmSwitchHint",
     family: "openai", dialect: "switch", shape: "onoff", menu: [], defaultOn: true,
-    openaiWire: "thinking-type",
+    openaiWire: "thinking-type", offSpelling: "disable", unsetThinks: true,
   },
   doubao: {
     id: "doubao",
@@ -288,7 +309,9 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // prompt), and the endpoint refuses `high` + `disabled` together, so off
     // must carry the switch alone (landscape.md §7 第十二个样本).
     menu: ["off", "low", "medium", "high"],
-    openaiWire: "effort-or-disable",
+    openaiWire: "effort-or-disable", offSpelling: "disable",
+    // Thinks when nothing is sent (第十二个样本).
+    unsetThinks: true,
   },
   "responses-effort": {
     id: "responses-effort",
@@ -303,7 +326,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     // The exception is a level refused behind a gateway that hides the 400's
     // reason — the capability table's `reasoningOff` / `effortMax` /
     // `effortMinimal`, which the dials read through `effortMenuOnWire`.
-    menu: ["off", "low", "medium", "high", "xhigh", "max"],
+    menu: ["off", "low", "medium", "high", "xhigh", "max"], offSpelling: "disable",
   },
   gemini3: {
     id: "gemini3",
@@ -312,7 +335,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "gemini", dialect: "none", shape: "levels",
     // `off` maps to LOW (this family has no true off, and MINIMAL is not
     // taken everywhere) — see GEMINI_LEVEL.
-    menu: ["off", "low", "medium", "high"],
+    menu: ["off", "low", "medium", "high"], offSpelling: "lowest",
   },
   "claude-adaptive": {
     id: "claude-adaptive",
@@ -320,6 +343,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     hintKey: "aiConfig.models.thinkingCatClaudeAdaptiveHint",
     family: "anthropic", dialect: "adaptive", shape: "levels",
     menu: ["off", "low", "medium", "high", "max"], governsWholeResponse: true,
+    offSpelling: "lowest", unsetThinks: true,
   },
   "claude-budget": {
     id: "claude-budget",
@@ -328,13 +352,14 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     family: "anthropic", dialect: "extended", shape: "budget",
     menu: [],
     budget: { min: 1024, max: 32768, default: 16384 },
+    offSpelling: "lowest", unsetThinks: true,
   },
   minimax: {
     id: "minimax",
     labelKey: "aiConfig.models.thinkingCatMinimax",
     hintKey: "aiConfig.models.thinkingCatMinimaxHint",
     family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
-    forcing: "always",
+    forcing: "always", offSpelling: "disable", unsetThinks: true,
   },
   // Doubao Seed on 火山方舟's Anthropic-shaped route. It thinks unless told
   // not to, and the Claude categories cannot say "not": `claude-budget` sends
@@ -347,6 +372,7 @@ export const THINKING_CATEGORIES: Record<ThinkingCategoryId, ThinkingCategory> =
     labelKey: "aiConfig.models.thinkingCatDoubaoSwitch",
     hintKey: "aiConfig.models.thinkingCatDoubaoSwitchHint",
     family: "anthropic", dialect: "switch", shape: "onoff", menu: [],
+    offSpelling: "disable", unsetThinks: true,
   },
 };
 
@@ -460,7 +486,11 @@ export function effortForCategory(next: ThinkingCategory | undefined, effort: Re
   return next?.defaultEffort ?? "default";
 }
 
-/** Whether an on/off toggle should read as "on" for this stored effort. */
+/**
+ * Whether an on/off toggle should read as "on" for this stored effort — the
+ * control's display only. Nothing on the wire is decided here: whether a
+ * request thinks is `wireThinks` (`capability/conditions.ts`).
+ */
 export function thinkingIsOn(category: ThinkingCategory, effort: ReasoningEffort | undefined): boolean {
   if (effort === "off") return false;
   // Unset/default: the category says (GLM's switch thinks unless told not to),
@@ -496,8 +526,10 @@ export function forcesToolChoiceAuto(
   category: ThinkingCategory,
   effort: ReasoningEffort | undefined,
 ): boolean {
-  const thinkingOn = effort !== undefined && effort !== "default" && effort !== "off";
-  return category.forcing === "always" || (category.forcing === "while-thinking" && thinkingOn);
+  // An unknown state counts as not thinking: DashScope's switch is off unless
+  // the request turns it on, so only an effort that says "on" downgrades.
+  return category.forcing === "always"
+    || (category.forcing === "while-thinking" && thinkingAs(wireThinks(category, effort), "off") === "on");
 }
 
 /**

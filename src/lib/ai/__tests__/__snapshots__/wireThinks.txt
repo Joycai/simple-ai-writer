@@ -1,0 +1,570 @@
+# forced tool_choice downgraded (category · effort)
+off unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+openai-generic unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+deepseek unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+qwen-budget unset:- default:- off:- minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
+qwen-effort unset:- default:- off:- minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
+glm unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+glm-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+glm-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+doubao unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+responses-effort unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+gemini3 unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+claude-adaptive unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+claude-budget unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+minimax unset:auto default:auto off:auto minimal:auto low:auto medium:auto high:auto xhigh:auto max:auto
+doubao-switch unset:- default:- off:- minimal:- low:- medium:- high:- xhigh:- max:-
+
+# temperature sent (family · category)
+openai off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
+responses off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
+gemini off:yes openai-generic:yes deepseek:yes qwen-budget:yes qwen-effort:yes glm:yes glm-effort:yes glm-switch:yes doubao:yes responses-effort:yes gemini3:yes claude-adaptive:yes claude-budget:yes minimax:yes doubao-switch:yes
+anthropic off:yes openai-generic:- deepseek:- qwen-budget:- qwen-effort:- glm:- glm-effort:- glm-switch:- doubao:- responses-effort:- gemini3:- claude-adaptive:- claude-budget:- minimax:- doubao-switch:-
+
+# DashScope openai_compat, server tools declared
+off unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+off max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+openai-generic unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+openai-generic default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+openai-generic off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+openai-generic minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+openai-generic low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+openai-generic medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+openai-generic high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+openai-generic xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+openai-generic max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+deepseek unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+deepseek default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+deepseek off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+deepseek minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+deepseek low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+deepseek medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+deepseek high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+deepseek xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+deepseek max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+qwen-budget unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen-budget default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen-budget off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=false
+qwen-budget minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-budget low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-budget medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-budget high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-budget xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-budget max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true
+qwen-effort unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen-effort default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+qwen-effort off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=false
+qwen-effort minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="minimal"
+qwen-effort low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="low"
+qwen-effort medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="medium"
+qwen-effort high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="high"
+qwen-effort xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="xhigh"
+qwen-effort max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true enable_thinking=true reasoning_effort="max"
+glm unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+glm minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+glm low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+glm medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+glm high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+glm xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+glm max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+glm-effort unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-effort default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-effort off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-effort minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+glm-effort low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+glm-effort medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+glm-effort high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+glm-effort xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+glm-effort max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+glm-switch unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+glm-switch max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+doubao low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+doubao medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+doubao high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+doubao xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+doubao max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+responses-effort unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+responses-effort default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+responses-effort off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+responses-effort minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+responses-effort low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+responses-effort medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+responses-effort high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+responses-effort xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+responses-effort max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+gemini3 unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+gemini3 default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+gemini3 off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+gemini3 minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+gemini3 low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+gemini3 medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+gemini3 high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+gemini3 xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+gemini3 max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+claude-adaptive unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+claude-adaptive default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+claude-adaptive off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+claude-adaptive minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+claude-adaptive low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+claude-adaptive medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+claude-adaptive high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+claude-adaptive xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+claude-adaptive max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+claude-budget unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+claude-budget default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+claude-budget off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+claude-budget minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+claude-budget low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+claude-budget medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+claude-budget high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+claude-budget xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+claude-budget max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+minimax unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+minimax default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+minimax off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+minimax minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+minimax low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+minimax medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+minimax high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+minimax xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+minimax max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+doubao-switch unset tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao-switch default tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true
+doubao-switch off tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="none"
+doubao-switch minimal tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="minimal"
+doubao-switch low tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="low"
+doubao-switch medium tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="medium"
+doubao-switch high tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="high"
+doubao-switch xhigh tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="xhigh"
+doubao-switch max tools=- enable_search=true search_options={"search_strategy":"agent_max"} enable_code_interpreter=true reasoning_effort="max"
+
+# DashScope openai_compat, server tools declared, function tools
+off unset tools=function enable_search=true
+off default tools=function enable_search=true
+off off tools=function enable_search=true
+off minimal tools=function enable_search=true
+off low tools=function enable_search=true
+off medium tools=function enable_search=true
+off high tools=function enable_search=true
+off xhigh tools=function enable_search=true
+off max tools=function enable_search=true
+openai-generic unset tools=function enable_search=true
+openai-generic default tools=function enable_search=true
+openai-generic off tools=function enable_search=true reasoning_effort="none"
+openai-generic minimal tools=function enable_search=true reasoning_effort="minimal"
+openai-generic low tools=function enable_search=true reasoning_effort="low"
+openai-generic medium tools=function enable_search=true reasoning_effort="medium"
+openai-generic high tools=function enable_search=true reasoning_effort="high"
+openai-generic xhigh tools=function enable_search=true reasoning_effort="xhigh"
+openai-generic max tools=function enable_search=true reasoning_effort="max"
+deepseek unset tools=function enable_search=true
+deepseek default tools=function enable_search=true
+deepseek off tools=function enable_search=true
+deepseek minimal tools=function enable_search=true reasoning_effort="minimal"
+deepseek low tools=function enable_search=true reasoning_effort="low"
+deepseek medium tools=function enable_search=true reasoning_effort="medium"
+deepseek high tools=function enable_search=true reasoning_effort="high"
+deepseek xhigh tools=function enable_search=true reasoning_effort="xhigh"
+deepseek max tools=function enable_search=true reasoning_effort="max"
+qwen-budget unset tools=function enable_search=true
+qwen-budget default tools=function enable_search=true
+qwen-budget off tools=function enable_search=true enable_thinking=false
+qwen-budget minimal tools=function enable_search=true enable_thinking=true
+qwen-budget low tools=function enable_search=true enable_thinking=true
+qwen-budget medium tools=function enable_search=true enable_thinking=true
+qwen-budget high tools=function enable_search=true enable_thinking=true
+qwen-budget xhigh tools=function enable_search=true enable_thinking=true
+qwen-budget max tools=function enable_search=true enable_thinking=true
+qwen-effort unset tools=function enable_search=true
+qwen-effort default tools=function enable_search=true
+qwen-effort off tools=function enable_search=true enable_thinking=false
+qwen-effort minimal tools=function enable_search=true enable_thinking=true reasoning_effort="minimal"
+qwen-effort low tools=function enable_search=true enable_thinking=true reasoning_effort="low"
+qwen-effort medium tools=function enable_search=true enable_thinking=true reasoning_effort="medium"
+qwen-effort high tools=function enable_search=true enable_thinking=true reasoning_effort="high"
+qwen-effort xhigh tools=function enable_search=true enable_thinking=true reasoning_effort="xhigh"
+qwen-effort max tools=function enable_search=true enable_thinking=true reasoning_effort="max"
+glm unset tools=function enable_search=true
+glm default tools=function enable_search=true
+glm off tools=function enable_search=true reasoning_effort="none"
+glm minimal tools=function enable_search=true reasoning_effort="minimal"
+glm low tools=function enable_search=true reasoning_effort="low"
+glm medium tools=function enable_search=true reasoning_effort="medium"
+glm high tools=function enable_search=true reasoning_effort="high"
+glm xhigh tools=function enable_search=true reasoning_effort="xhigh"
+glm max tools=function enable_search=true reasoning_effort="max"
+glm-effort unset tools=function enable_search=true
+glm-effort default tools=function enable_search=true
+glm-effort off tools=function enable_search=true
+glm-effort minimal tools=function enable_search=true reasoning_effort="minimal"
+glm-effort low tools=function enable_search=true reasoning_effort="low"
+glm-effort medium tools=function enable_search=true reasoning_effort="medium"
+glm-effort high tools=function enable_search=true reasoning_effort="high"
+glm-effort xhigh tools=function enable_search=true reasoning_effort="xhigh"
+glm-effort max tools=function enable_search=true reasoning_effort="max"
+glm-switch unset tools=function enable_search=true
+glm-switch default tools=function enable_search=true
+glm-switch off tools=function enable_search=true
+glm-switch minimal tools=function enable_search=true
+glm-switch low tools=function enable_search=true
+glm-switch medium tools=function enable_search=true
+glm-switch high tools=function enable_search=true
+glm-switch xhigh tools=function enable_search=true
+glm-switch max tools=function enable_search=true
+doubao unset tools=function enable_search=true
+doubao default tools=function enable_search=true
+doubao off tools=function enable_search=true
+doubao minimal tools=function enable_search=true reasoning_effort="minimal"
+doubao low tools=function enable_search=true reasoning_effort="low"
+doubao medium tools=function enable_search=true reasoning_effort="medium"
+doubao high tools=function enable_search=true reasoning_effort="high"
+doubao xhigh tools=function enable_search=true reasoning_effort="xhigh"
+doubao max tools=function enable_search=true reasoning_effort="max"
+responses-effort unset tools=function enable_search=true
+responses-effort default tools=function enable_search=true
+responses-effort off tools=function enable_search=true reasoning_effort="none"
+responses-effort minimal tools=function enable_search=true reasoning_effort="minimal"
+responses-effort low tools=function enable_search=true reasoning_effort="low"
+responses-effort medium tools=function enable_search=true reasoning_effort="medium"
+responses-effort high tools=function enable_search=true reasoning_effort="high"
+responses-effort xhigh tools=function enable_search=true reasoning_effort="xhigh"
+responses-effort max tools=function enable_search=true reasoning_effort="max"
+gemini3 unset tools=function enable_search=true
+gemini3 default tools=function enable_search=true
+gemini3 off tools=function enable_search=true reasoning_effort="none"
+gemini3 minimal tools=function enable_search=true reasoning_effort="minimal"
+gemini3 low tools=function enable_search=true reasoning_effort="low"
+gemini3 medium tools=function enable_search=true reasoning_effort="medium"
+gemini3 high tools=function enable_search=true reasoning_effort="high"
+gemini3 xhigh tools=function enable_search=true reasoning_effort="xhigh"
+gemini3 max tools=function enable_search=true reasoning_effort="max"
+claude-adaptive unset tools=function enable_search=true
+claude-adaptive default tools=function enable_search=true
+claude-adaptive off tools=function enable_search=true reasoning_effort="none"
+claude-adaptive minimal tools=function enable_search=true reasoning_effort="minimal"
+claude-adaptive low tools=function enable_search=true reasoning_effort="low"
+claude-adaptive medium tools=function enable_search=true reasoning_effort="medium"
+claude-adaptive high tools=function enable_search=true reasoning_effort="high"
+claude-adaptive xhigh tools=function enable_search=true reasoning_effort="xhigh"
+claude-adaptive max tools=function enable_search=true reasoning_effort="max"
+claude-budget unset tools=function enable_search=true
+claude-budget default tools=function enable_search=true
+claude-budget off tools=function enable_search=true reasoning_effort="none"
+claude-budget minimal tools=function enable_search=true reasoning_effort="minimal"
+claude-budget low tools=function enable_search=true reasoning_effort="low"
+claude-budget medium tools=function enable_search=true reasoning_effort="medium"
+claude-budget high tools=function enable_search=true reasoning_effort="high"
+claude-budget xhigh tools=function enable_search=true reasoning_effort="xhigh"
+claude-budget max tools=function enable_search=true reasoning_effort="max"
+minimax unset tools=function enable_search=true
+minimax default tools=function enable_search=true
+minimax off tools=function enable_search=true reasoning_effort="none"
+minimax minimal tools=function enable_search=true reasoning_effort="minimal"
+minimax low tools=function enable_search=true reasoning_effort="low"
+minimax medium tools=function enable_search=true reasoning_effort="medium"
+minimax high tools=function enable_search=true reasoning_effort="high"
+minimax xhigh tools=function enable_search=true reasoning_effort="xhigh"
+minimax max tools=function enable_search=true reasoning_effort="max"
+doubao-switch unset tools=function enable_search=true
+doubao-switch default tools=function enable_search=true
+doubao-switch off tools=function enable_search=true reasoning_effort="none"
+doubao-switch minimal tools=function enable_search=true reasoning_effort="minimal"
+doubao-switch low tools=function enable_search=true reasoning_effort="low"
+doubao-switch medium tools=function enable_search=true reasoning_effort="medium"
+doubao-switch high tools=function enable_search=true reasoning_effort="high"
+doubao-switch xhigh tools=function enable_search=true reasoning_effort="xhigh"
+doubao-switch max tools=function enable_search=true reasoning_effort="max"
+
+# DashScope openai_responses_compat, server tools declared
+off unset tools=web_search,web_extractor,code_interpreter
+off default tools=web_search,web_extractor,code_interpreter
+off off tools=web_search,web_extractor,code_interpreter
+off minimal tools=web_search,web_extractor,code_interpreter
+off low tools=web_search,web_extractor,code_interpreter
+off medium tools=web_search,web_extractor,code_interpreter
+off high tools=web_search,web_extractor,code_interpreter
+off xhigh tools=web_search,web_extractor,code_interpreter
+off max tools=web_search,web_extractor,code_interpreter
+openai-generic unset tools=web_search,web_extractor,code_interpreter
+openai-generic default tools=web_search,web_extractor,code_interpreter
+openai-generic off tools=web_search,web_extractor reasoning={"effort":"none"}
+openai-generic minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+openai-generic low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+openai-generic medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+openai-generic high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+openai-generic xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+openai-generic max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+deepseek unset tools=web_search,web_extractor,code_interpreter
+deepseek default tools=web_search,web_extractor,code_interpreter
+deepseek off tools=web_search,web_extractor reasoning={"effort":"none"}
+deepseek minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+deepseek low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+deepseek medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+deepseek high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+deepseek xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+deepseek max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen-budget unset tools=web_search,web_extractor,code_interpreter
+qwen-budget default tools=web_search,web_extractor,code_interpreter
+qwen-budget off tools=web_search,web_extractor reasoning={"effort":"none"}
+qwen-budget minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen-budget low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen-budget medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen-budget high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen-budget xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen-budget max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen-effort unset tools=web_search,web_extractor,code_interpreter
+qwen-effort default tools=web_search,web_extractor,code_interpreter
+qwen-effort off tools=web_search,web_extractor reasoning={"effort":"none"}
+qwen-effort minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen-effort low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen-effort medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen-effort high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen-effort xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen-effort max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm unset tools=web_search,web_extractor,code_interpreter
+glm default tools=web_search,web_extractor,code_interpreter
+glm off tools=web_search,web_extractor reasoning={"effort":"none"}
+glm minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm-effort unset tools=web_search,web_extractor,code_interpreter
+glm-effort default tools=web_search,web_extractor,code_interpreter
+glm-effort off tools=web_search,web_extractor reasoning={"effort":"none"}
+glm-effort minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm-effort low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm-effort medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm-effort high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm-effort xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm-effort max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm-switch unset tools=web_search,web_extractor,code_interpreter
+glm-switch default tools=web_search,web_extractor,code_interpreter
+glm-switch off tools=web_search,web_extractor reasoning={"effort":"none"}
+glm-switch minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm-switch low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm-switch medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm-switch high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm-switch xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm-switch max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+doubao unset tools=web_search,web_extractor,code_interpreter
+doubao default tools=web_search,web_extractor,code_interpreter
+doubao off tools=web_search,web_extractor reasoning={"effort":"none"}
+doubao minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+doubao low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+doubao medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+doubao high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+doubao xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+doubao max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+responses-effort unset tools=web_search,web_extractor,code_interpreter
+responses-effort default tools=web_search,web_extractor,code_interpreter
+responses-effort off tools=web_search,web_extractor reasoning={"effort":"none"}
+responses-effort minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+responses-effort low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+responses-effort medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+responses-effort high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+responses-effort xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+responses-effort max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+gemini3 unset tools=web_search,web_extractor,code_interpreter
+gemini3 default tools=web_search,web_extractor,code_interpreter
+gemini3 off tools=web_search,web_extractor reasoning={"effort":"none"}
+gemini3 minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+gemini3 low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+gemini3 medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+gemini3 high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+gemini3 xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+gemini3 max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+claude-adaptive unset tools=web_search,web_extractor,code_interpreter
+claude-adaptive default tools=web_search,web_extractor,code_interpreter
+claude-adaptive off tools=web_search,web_extractor reasoning={"effort":"none"}
+claude-adaptive minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+claude-adaptive low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+claude-adaptive medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+claude-adaptive high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+claude-adaptive xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+claude-adaptive max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+claude-budget unset tools=web_search,web_extractor,code_interpreter
+claude-budget default tools=web_search,web_extractor,code_interpreter
+claude-budget off tools=web_search,web_extractor reasoning={"effort":"none"}
+claude-budget minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+claude-budget low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+claude-budget medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+claude-budget high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+claude-budget xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+claude-budget max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+minimax unset tools=web_search,web_extractor,code_interpreter
+minimax default tools=web_search,web_extractor,code_interpreter
+minimax off tools=web_search,web_extractor reasoning={"effort":"none"}
+minimax minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+minimax low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+minimax medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+minimax high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+minimax xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+minimax max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+doubao-switch unset tools=web_search,web_extractor,code_interpreter
+doubao-switch default tools=web_search,web_extractor,code_interpreter
+doubao-switch off tools=web_search,web_extractor reasoning={"effort":"none"}
+doubao-switch minimal tools=web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+doubao-switch low tools=web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+doubao-switch medium tools=web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+doubao-switch high tools=web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+doubao-switch xhigh tools=web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+doubao-switch max tools=web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+
+# DashScope openai_responses_compat, server tools declared, function tools
+off unset tools=function,web_search,web_extractor,code_interpreter
+off default tools=function,web_search,web_extractor,code_interpreter
+off off tools=function,web_search,web_extractor,code_interpreter
+off minimal tools=function,web_search,web_extractor,code_interpreter
+off low tools=function,web_search,web_extractor,code_interpreter
+off medium tools=function,web_search,web_extractor,code_interpreter
+off high tools=function,web_search,web_extractor,code_interpreter
+off xhigh tools=function,web_search,web_extractor,code_interpreter
+off max tools=function,web_search,web_extractor,code_interpreter
+openai-generic unset tools=function,web_search,web_extractor,code_interpreter
+openai-generic default tools=function,web_search,web_extractor,code_interpreter
+openai-generic off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+openai-generic minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+openai-generic low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+openai-generic medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+openai-generic high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+openai-generic xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+openai-generic max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+deepseek unset tools=function,web_search,web_extractor,code_interpreter
+deepseek default tools=function,web_search,web_extractor,code_interpreter
+deepseek off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+deepseek minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+deepseek low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+deepseek medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+deepseek high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+deepseek xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+deepseek max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen-budget unset tools=function,web_search,web_extractor,code_interpreter
+qwen-budget default tools=function,web_search,web_extractor,code_interpreter
+qwen-budget off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+qwen-budget minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen-budget low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen-budget medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen-budget high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen-budget xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen-budget max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+qwen-effort unset tools=function,web_search,web_extractor,code_interpreter
+qwen-effort default tools=function,web_search,web_extractor,code_interpreter
+qwen-effort off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+qwen-effort minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+qwen-effort low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+qwen-effort medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+qwen-effort high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+qwen-effort xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+qwen-effort max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm unset tools=function,web_search,web_extractor,code_interpreter
+glm default tools=function,web_search,web_extractor,code_interpreter
+glm off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+glm minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm-effort unset tools=function,web_search,web_extractor,code_interpreter
+glm-effort default tools=function,web_search,web_extractor,code_interpreter
+glm-effort off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+glm-effort minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm-effort low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm-effort medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm-effort high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm-effort xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm-effort max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+glm-switch unset tools=function,web_search,web_extractor,code_interpreter
+glm-switch default tools=function,web_search,web_extractor,code_interpreter
+glm-switch off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+glm-switch minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+glm-switch low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+glm-switch medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+glm-switch high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+glm-switch xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+glm-switch max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+doubao unset tools=function,web_search,web_extractor,code_interpreter
+doubao default tools=function,web_search,web_extractor,code_interpreter
+doubao off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+doubao minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+doubao low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+doubao medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+doubao high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+doubao xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+doubao max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+responses-effort unset tools=function,web_search,web_extractor,code_interpreter
+responses-effort default tools=function,web_search,web_extractor,code_interpreter
+responses-effort off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+responses-effort minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+responses-effort low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+responses-effort medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+responses-effort high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+responses-effort xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+responses-effort max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+gemini3 unset tools=function,web_search,web_extractor,code_interpreter
+gemini3 default tools=function,web_search,web_extractor,code_interpreter
+gemini3 off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+gemini3 minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+gemini3 low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+gemini3 medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+gemini3 high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+gemini3 xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+gemini3 max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+claude-adaptive unset tools=function,web_search,web_extractor,code_interpreter
+claude-adaptive default tools=function,web_search,web_extractor,code_interpreter
+claude-adaptive off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+claude-adaptive minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+claude-adaptive low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+claude-adaptive medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+claude-adaptive high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+claude-adaptive xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+claude-adaptive max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+claude-budget unset tools=function,web_search,web_extractor,code_interpreter
+claude-budget default tools=function,web_search,web_extractor,code_interpreter
+claude-budget off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+claude-budget minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+claude-budget low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+claude-budget medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+claude-budget high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+claude-budget xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+claude-budget max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+minimax unset tools=function,web_search,web_extractor,code_interpreter
+minimax default tools=function,web_search,web_extractor,code_interpreter
+minimax off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+minimax minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+minimax low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+minimax medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+minimax high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+minimax xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+minimax max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}
+doubao-switch unset tools=function,web_search,web_extractor,code_interpreter
+doubao-switch default tools=function,web_search,web_extractor,code_interpreter
+doubao-switch off tools=function,web_search,web_extractor reasoning={"effort":"none"}
+doubao-switch minimal tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"minimal","summary":"auto"}
+doubao-switch low tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"low","summary":"auto"}
+doubao-switch medium tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"medium","summary":"auto"}
+doubao-switch high tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"high","summary":"auto"}
+doubao-switch xhigh tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"xhigh","summary":"auto"}
+doubao-switch max tools=function,web_search,web_extractor,code_interpreter reasoning={"effort":"max","summary":"auto"}

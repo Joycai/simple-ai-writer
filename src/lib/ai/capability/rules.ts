@@ -7,6 +7,7 @@
 import type { ProtocolFamily } from "../types";
 import type { ModelType } from "../configDb";
 import type { CapabilityId } from "./facts";
+import type { Condition } from "./conditions";
 
 interface CapabilityRule {
   /**
@@ -36,16 +37,28 @@ interface CapabilityRule {
   /** Capabilities that must not be `no` on the same wire. */
   requires?: readonly CapabilityId[];
   /**
-   * Families where it exists only while thinking is off — `no / thinking`
-   * for any category but `off`. An absent category counts as thinking: every
-   * family's default category thinks (`defaultCategoryId`), so a caller that
-   * forgot to resolve it gets the safe answer, not a field the endpoint
-   * refuses. Only an explicit `off` opens it.
+   * Conditions of the request under which it is `no` on a family, whatever
+   * the cells say (`conditions.ts`). A verdict asked without the request's
+   * input answers per the condition's `absent`. Ruled out by a condition, the
+   * reason is `condition` — `thinking` for `categoryThinks`, the reason the
+   * drawer has always shown for it.
    */
-  thinkingOff?: readonly ProtocolFamily[];
+  unless?: Partial<Record<ProtocolFamily, readonly Condition[]>>;
+  /**
+   * `yes` on a vendor's **official** standard, before the `origin` default: a
+   * field the vendor's own endpoint documents and a compatible one may not
+   * implement. The compat half still takes `origin`'s answer until a platform
+   * cell says otherwise. Keyed on the standard, not the platform: an
+   * `anthropic_compat` channel at api.anthropic.com resolves to the same
+   * platform as the official one.
+   */
+  official?: "yes";
 }
 
 const SEES_IMAGES: readonly ModelType[] = ["multimodal", "vision"];
+
+const CATEGORY_THINKS: Condition = { when: "categoryThinks", absent: "fire" };
+const WITH_FUNCTION_TOOLS: Condition = { when: "functionTools", absent: "defer" };
 
 /**
  * The protocol's side. `Record<CapabilityId, …>` on purpose: a new capability
@@ -99,7 +112,9 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // they asked for under the name of honouring it, so the adapter omits it —
   // and the drawer, asking the same cell, never renders a control that does
   // nothing.
-  temperature: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", thinkingOff: ["anthropic"] },
+  temperature: {
+    families: ["openai", "responses", "gemini", "anthropic"], origin: "native", unless: { anthropic: [CATEGORY_THINKS] },
+  },
   // `text.verbosity` exists on the Responses family only.
   textVerbosity: { families: ["responses"], origin: "native" },
   // The system prompt as the top-level `instructions` field. Where the wire
@@ -128,6 +143,18 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // it (jsonMode.ts). A capability of the wire, not the model id: DashScope
   // serves GLM with json_schema working, 智谱 serves the same GLM ignoring it.
   jsonSchema: { families: ["openai", "responses", "gemini", "anthropic"], origin: "native", assumed: "unknown", requires: ["structuredOutput"] },
+  // The tier below it: "any JSON object" (`response_format: json_object` /
+  // `text.format` json_object / `responseMimeType`). The Messages API has the
+  // schema tier and nothing weaker, so an Anthropic model's only JSON mode is
+  // strict — asked without a schema, or capped below it, it gets the cue alone.
+  jsonObjectTier: { families: ["openai", "responses", "gemini"], origin: "native", requires: ["structuredOutput"] },
+  // Explicit `cache_control` breakpoints on the system prompt and the toolset
+  // (anthropic.ts). The official endpoint documents them; a compatible one is
+  // `no` until measured — MiniMax documents `cache_control` on `system` but
+  // says nothing about `tools`, and a rejected field costs a whole failed round
+  // at the start of a stream (agent-tool-context-lld.md §2.3 says what to
+  // measure first). The other families cache long prefixes on their own.
+  promptCache: { families: ["anthropic"], origin: "private", official: "yes" },
   // Anthropic's versioned `web_search_*` tool, the Responses built-in
   // `{type:"web_search"}` and Gemini's `googleSearch` are the protocol's own;
   // whether a relay passes them on is unmeasured until a platform cell says so.
@@ -139,8 +166,24 @@ export const CAPABILITY_RULES: Record<CapabilityId, CapabilityRule> = {
   // explicitly. On Gemini they are `urlContext` / `codeExecution`, the
   // protocol's own tools; kept private there too, so they reach only a
   // platform whose cell a sample wrote (OrcaRouter, 第十八个样本「再补测」).
-  web_extractor: { families: ["openai", "responses", "gemini"], origin: "private" },
+  //
+  // Two request conditions, both DashScope's own 400s. Beside function tools
+  // on Chat Completions page reading is the `agent_max` search strategy —
+  // "agent mode" — and the interpreter is the same mode, and both answer
+  // `Agent mode does not support tools` (measured 2026-09-17); the request
+  // keeps plain search and gives page reading up. On Responses the
+  // interpreter needs the model thinking: with `reasoning.effort: "none"` the
+  // whole response fails (`Normal mode does not support Code interpreter`,
+  // same day). An unknown thinking state counts as thinking there — only an
+  // effort the request itself turned off is off.
+  web_extractor: { families: ["openai", "responses", "gemini"], origin: "private", unless: { openai: [WITH_FUNCTION_TOOLS] } },
   web_search_image: { families: ["responses"], origin: "private" },
   image_search: { families: ["responses"], origin: "private" },
-  code_interpreter: { families: ["openai", "responses", "gemini"], origin: "private" },
+  code_interpreter: {
+    families: ["openai", "responses", "gemini"], origin: "private",
+    unless: {
+      openai: [WITH_FUNCTION_TOOLS],
+      responses: [{ when: "thinking", is: "off", unknownAs: "on", absent: "defer" }],
+    },
+  },
 };

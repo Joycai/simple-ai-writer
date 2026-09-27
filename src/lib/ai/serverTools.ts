@@ -115,6 +115,7 @@
 import { familyOf } from "./types";
 import { providerWire, type Wire } from "./platforms";
 import { hasCapability } from "./capabilities";
+import type { RequestContext, ThinkingState } from "./capability/conditions";
 import { capabilityModelOf, relayUpstreamFor, type RelayUpstreamChoice } from "./relayUpstream";
 import type { Model, Provider } from "./configDb";
 import { providerFor } from "./routes";
@@ -200,8 +201,9 @@ export function effectiveServerTools(
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
   relayUpstream?: RelayUpstreamChoice,
+  request: RequestContext = {},
 ): ServerToolId[] | undefined {
-  const model = capabilityModelOf({ modelId, relayUpstream });
+  const model = { ...capabilityModelOf({ modelId, relayUpstream }), ...request };
   return normalizeServerTools((ids ?? []).filter((id) => hasCapability(id, wire, model)));
 }
 
@@ -297,7 +299,9 @@ export function openaiServerToolsBody(
   relayUpstream?: RelayUpstreamChoice,
 ): Record<string, unknown> {
   if (familyOf(wire.standard) !== "openai") return {};
-  const granted = effectiveServerTools(wire, ids, modelId, relayUpstream);
+  // Asked with the request: beside function tools, page reading and the
+  // interpreter are ruled out by their rules' conditions (capability/rules.ts).
+  const granted = effectiveServerTools(wire, ids, modelId, relayUpstream, request);
   if (!granted) return {};
   const out: Record<string, unknown> = {};
   if (granted.includes("web_search")) {
@@ -308,24 +312,22 @@ export function openaiServerToolsBody(
     // doesn't offer the strategy answers 400 (qwen3.8-flash: `does not support
     // the "agent" search strategy`) — loud, and the author's declaration to fix.
     //
-    // And never beside function tools: the strategy is DashScope's "agent
-    // mode", which refuses them with the same 400 as the interpreter below
-    // (`Agent mode does not support tools`, measured 2026-09-17). Such a
-    // request keeps plain search — measured fine beside tools — and gives up
-    // page reading for that request only. The search subagent, the one caller
-    // whose job is reading pages, sends no function tools, so it keeps it.
+    // Never beside function tools (the rule's condition — "agent mode" refuses
+    // them): such a request keeps plain search, measured fine beside tools, and
+    // gives up page reading for that request only. The search subagent, the
+    // one caller whose job is reading pages, sends no function tools, so it
+    // keeps it.
     out.enable_search = true;
-    if (granted.includes("web_extractor") && !request.functionTools) {
+    if (granted.includes("web_extractor")) {
       out.search_options = { search_strategy: "agent_max" };
     }
   }
-  // Only on a request without function tools: this wire refuses the pair
-  // outright (400 `Agent mode does not support tools`, measured 2026-09-17),
-  // and an agent round's own tools are not the thing to give up. So on Chat
-  // Completions the interpreter reaches tool-less requests only — the drawer's
-  // hint says so, and points agent runs at the Responses wire, which takes
-  // both. Streaming is the wire's other condition; this adapter always streams.
-  if (granted.includes("code_interpreter") && !request.functionTools) {
+  // Only on a request without function tools (the rule's condition): an agent
+  // round's own tools are not the thing to give up. So on Chat Completions the
+  // interpreter reaches tool-less requests only — the drawer's hint says so,
+  // and points agent runs at the Responses wire, which takes both. Streaming
+  // is the wire's other condition; this adapter always streams.
+  if (granted.includes("code_interpreter")) {
     out.enable_code_interpreter = true;
   }
   return out;
@@ -346,17 +348,14 @@ export function responsesServerTools(
   wire: Wire,
   ids: readonly ServerToolId[] | undefined,
   modelId: string,
-  request: { thinkingOff: boolean },
+  request: { thinking: ThinkingState },
   relayUpstream?: RelayUpstreamChoice,
 ): { type: ServerToolId }[] {
   if (familyOf(wire.standard) !== "responses") return [];
-  return (effectiveServerTools(wire, ids, modelId, relayUpstream) ?? [])
-    // The interpreter needs the model thinking on this wire: with
-    // `reasoning.effort: "none"` DashScope fails the whole response
-    // (`Normal mode does not support Code interpreter`, measured 2026-09-17).
-    // The author turned thinking off on purpose; the interpreter yields.
-    .filter((id) => id !== "code_interpreter" || !request.thinkingOff)
-    .map((type) => ({ type }));
+  // Asked with the request's thinking state: the interpreter needs the model
+  // thinking on this wire (the rule's condition). The author turned thinking
+  // off on purpose; the interpreter yields.
+  return (effectiveServerTools(wire, ids, modelId, relayUpstream, request) ?? []).map((type) => ({ type }));
 }
 
 /** The `tools[]` entry each id becomes on the Gemini wire. */

@@ -143,6 +143,30 @@ describe("thinking guard", () => {
     expect(opts.messages.some((m) => typeof m.content === "string" && m.content.includes(NOTICE))).toBe(false);
   });
 
+  // A model measured without an off level (capability table `reasoningOff`) has
+  // its off rewritten to low on the wire, so off would not stop it thinking —
+  // the dial there does not list off, and neither does the guard
+  // (capability-resolution-lld.md B8).
+  it("nudges rather than sending off where the model has no off level on this wire", async () => {
+    const orca = { platform: "orcarouter" as const, baseUrl: "https://api.orcarouter.ai/v1" };
+    spiral();
+    answer("写好了。");
+    const astra = makeOptions({ ...orca, modelId: "openai/gpt-6-astra" });
+    await runAgent(astra);
+    expect(sent[1].reasoningEffort).toBeUndefined();
+    expect(String(sent[1].messages[sent[1].messages.length - 1].content)).toContain(NOTICE);
+    expect(truncations(astra.events)[0].recovery).toEqual({ kind: "answer-now", attempt: 1 });
+
+    // A sibling that takes off still gets it.
+    sent.length = 0;
+    spiral();
+    answer("写好了。");
+    const sol = makeOptions({ ...orca, modelId: "openai/gpt-6-sol" });
+    await runAgent(sol);
+    expect(sent[1].reasoningEffort).toBe("off");
+    expect(truncations(sol.events)[0].recovery).toEqual({ kind: "thinking-off", attempt: 1 });
+  });
+
   it("cuts at most once per run", async () => {
     spiral();
     spiral();

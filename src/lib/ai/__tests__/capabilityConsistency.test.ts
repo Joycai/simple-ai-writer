@@ -195,6 +195,19 @@ const PROBES: Record<CapabilityId, Probe> = {
   jsonSchema: async (ctx) => ({
     summary: summarySends(ctx, { structuredOutput: "json_object" }, { structuredOutput: "json_schema" }),
   }),
+  // A JSON-object declaration reaches the request as JSON mode exactly where
+  // the wire has that tier; elsewhere (Anthropic) it goes out as the cue alone.
+  jsonObjectTier: async (ctx) => ({
+    summary: summarySends(ctx, { structuredOutput: "off" }, { structuredOutput: "json_object" }),
+  }),
+  // Not a declaration: the adapter marks cache breakpoints on the system prompt
+  // and the toolset, or does not.
+  promptCache: async (ctx) => ({
+    adapter: (await bodyOf(ctx, {
+      messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "hi" }],
+      tools: [FUNCTION_TOOL],
+    })).includes("cache_control"),
+  }),
   web_search: serverTool("web_search"),
   web_extractor: serverTool("web_extractor"),
   web_search_image: serverTool("web_search_image"),

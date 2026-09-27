@@ -1,6 +1,6 @@
 # 能力解析层重构：LLD
 
-> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P3 已落成（§9.1–§9.4），P4 起未开工。**
+> **状态：`partial`——HLD §6 的七个决定已由作者于 2026-09-27 全部按推荐拍板（§0）；P0–P4 已落成（§9.1–§9.5），P5 起未开工。**
 > HLD：[`capability-resolution-hld.md`](capability-resolution-hld.md)。本文回答：分几个 PR、每个 PR 动哪些文件哪些函数、
 > 类型长什么样、算法怎样逐格复现今天的行为、怎么测、怎么回滚。对照的是 2026-09-27 的 `main`（`d31ab9fc`，#717 之后）；引用一律写文件 + 符号，不写行号（`docSourceRefs.test.ts`）。
 
@@ -821,6 +821,71 @@ export const TRUST: Record<Consumer, readonly Source[]> = {
    要判断「这一族有没有 JSON 对象档」，就得在 `learned.ts` 里写族分支，而这正是 P4 用 `jsonObjectTier` 事实去掉的东西。
    P4 的 `TAKES_AWAY` 改成读这个事实即可；在那之前，抽屉的「本会话实测 · 端点拒绝了…」一句仍然写明线上实际发的是哪一档。
 5. **`streamCompletion` 仍然只学强制这一个事实**，JSON 的逐档下降仍在 `withJsonModeFallback` 里。两个执行器合一是 P7 的事（D4）。
+
+### 9.5 P4：请求条件与思考状态进表（2026-09-27）
+
+同样拆成两个提交。
+
+1. **先钉住旧行为。** `wireThinks.test.ts` 用当时的代码生成 `__snapshots__/wireThinks.txt`，网格是全部 15 个类目 × 9 种 effort（含未设），记三样：
+   - 强制 tool_choice 是否降级；
+   - 四族上温度发不发；
+   - DashScope 两条 OpenAI 线路在声明了服务端工具、带与不带函数工具时，实际带哪些服务端工具。
+2. **再重构。** 快照零差异。
+
+**改了什么**：
+
+- **思考状态只有一个定义**：新建 `capability/conditions.ts`，内有 `wireThinks(category, effortOnWire)`。
+  类目数据多了两个字段：`offSpelling`（`disable` / `lowest`）与 `unsetThinks`，逐类目的取值就是 §3.5 那张表，`wireThinks.test.ts` 逐格断言。
+  `thinkingIsOn` 只剩开关的显示，注释里写明了。
+- **请求条件是规则上的数据**：`CAPABILITY_RULES` 的 `thinkingOff` 字段换成按族的 `unless`。三种条件：
+  - `functionTools`：带函数工具；
+  - `categoryThinks`：类目不是 off，缺类目算在想；
+  - `thinking`：线上思考状态，`unknown` 按条件自己说的方向读。
+
+  挂上条件的有四处：
+  - Anthropic 的温度（原 `thinkingOff`）；
+  - Chat 上的网页读取与代码解释器（带函数工具时不发，原来写在 `openaiServerToolsBody` 里）；
+  - Responses 上的代码解释器（思考关掉时不发，原来是 `responsesServerTools` 看 body 里的 `effort === "none"`）。
+
+  `effectiveServerTools` 多收一个请求上下文，两个适配器把各自的上下文传进去，自己不再判断。
+  条件触发时的原因码：`categoryThinks` 仍是 `thinking`，另两种是新的 `condition`，两种语言都加了说明。
+- **表里新增两个事实**：
+  - `jsonObjectTier`：Chat / Resp / Gemini 有「任意 JSON 对象」档，依赖 `structuredOutput`。
+    `structuredOutputModesFor(wire)` 改读它；`resolveStructuredOutput` 改成 §3.4 的 `below` 写法，Anthropic 分支就此消失。
+  - `promptCache`：规则 `{families: ["anthropic"], origin: "private", official: "yes"}`。`anthropic.ts` 的 `cachesPrompt` 删掉，改问这个事实；
+    棘轮里 `anthropic.ts` 的 standard 上限降到 0。
+- **B8**：agent 的思考回退改问 `effortMenuOnWire(category.menu, wire, model)`。
+  OrcaRouter 的 `openai/gpt-6-astra` 在预算耗尽时，由「关思考」（线上其实是 low）改成「提示立即作答」；同平台的 `gpt-6-sol` 仍是关思考。
+  由 `agentRuntimeThinkingGuard.test.ts` 钉住。
+- **补上 §9.4 出入 4**：`learned.ts` 的 `TAKES_AWAY` 改读 `jsonObjectTier`。
+  Anthropic 上严格档被拒之后，抽屉里 `structuredOutput` 与 `jsonSchema` 都显示 `no / learned`。
+
+**验收**：
+
+- 请求体金标、模型 id 轴快照、思考状态快照零差异。
+- 矩阵文档的差异只有三处：新增 `jsonObjectTier`、`promptCache` 两节，以及表头一行说明「每格按平台自己的那条线路问官方还是兼容」。原有的格一个没变。
+- `capabilityConsistency.test.ts` 的 `PROBES` 为两个新事实各加了提问者：
+  - `jsonObjectTier` 问「将发送」；
+  - `promptCache` 问适配器 body 里有没有 `cache_control`。
+- 变异测试：
+  - 把 Responses 代码解释器条件的 `unknownAs` 改成 `off`，快照报红；
+  - 去掉 Chat 网页读取的函数工具条件，快照报红。
+- `pnpm test` 全绿，`tsc` 通过。
+
+**与 §2、§3.3、§6 P4 原文的出入**：
+
+1. **条件挂在规则上，按族分，不挂在 DashScope 的块上。**
+   今天的三处丢弃在各自那一族上是无条件的，不分平台。挂在规则上才逐格等价；挂在块上会让别的平台上同名工具的行为变。
+   块上的 `unless` 这一期不建，等哪个平台与规则不同时再加。
+2. **`RequestContext` 并进了 `CapabilityModel`（`extends`），不是独立的第四个参数。** `thinkingCategory` 原本就在那里。
+   把「模型」与「请求」分开，是 P5 请求计划的事。
+3. **`Resolution.conditions`（未求值的条件）不建。** 今天没有读它的地方，抽屉里「带函数工具时不发」的提示仍是手写的。
+4. **规则多了一个 `official` 字段，`familyVerdict` 多了同名参数。** §4 给 `promptCache` 定的规则形状要求裁决知道标准。
+   矩阵生成器按平台自己那一族线路的官方或兼容去问。
+5. **`strictSchemaModel` 与 `reasons` 不进能力 id。** 它们是目录里的固有类事实，由 `catalogFact` 读。
+   要经裁决链问，就得先有 §3.3 的第 4 层（按作用域查目录），而这一层今天没人需要。
+   它们的读者（自动档提升、Responses 的 `include`）已由模型 id 轴快照和金标钉住。到 P6 值类事实进链时一起做。
+6. **`jsonObjectTier` 依赖 `structuredOutput`。** 这样中转站 Kiro 上游（`structuredOutput` 为 no）上，它与「将发送」一致。
 
 ## 10. 待决
 

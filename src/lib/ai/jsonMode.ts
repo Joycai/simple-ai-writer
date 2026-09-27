@@ -25,12 +25,12 @@
  * when the model takes `json_schema`, what keeps the schema enforced there too.
  */
 
-import { capabilityVerdict } from "./capabilities";
+import { capabilityVerdict, hasCapability } from "./capabilities";
 import { capabilityModelOf, type RelayUpstreamChoice } from "./relayUpstream";
 import { forAnthropic, strictify } from "./jsonSchemaStrict";
 import { catalogFact } from "./capability/cells/catalog";
 import { classify, downgradeJsonMode, learnedCeiling, noteLearned, STRUCTURED_RANK } from "./capability/learned";
-import { resolvePlatform, type PlatformId } from "./platforms";
+import { resolvePlatform, type PlatformId, type Wire } from "./platforms";
 import { familyOf, type ApiStandard } from "./types";
 
 // ─── The author's declaration ─────────────────────────────────────────────────
@@ -56,14 +56,15 @@ export type StructuredOutputMode = "off" | "json_object" | "json_schema";
 export const STRUCTURED_OUTPUT_MODES: StructuredOutputMode[] = ["off", "json_object", "json_schema"];
 
 /**
- * The modes a family can be asked for. The Messages API has a schema mode
- * (`output_config.format`) and nothing weaker — no "any JSON object" switch —
+ * The modes a wire can be asked for — all three, less `json_object` where the
+ * capability table says the wire has no such tier (`jsonObjectTier`): the
+ * Messages API has a schema mode (`output_config.format`) and nothing weaker,
  * so an Anthropic row offers off and the strict tier only.
  */
-export function structuredOutputModesFor(standard: ApiStandard): StructuredOutputMode[] {
-  return familyOf(standard) === "anthropic"
-    ? STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_object")
-    : STRUCTURED_OUTPUT_MODES;
+export function structuredOutputModesFor(wire: Wire): StructuredOutputMode[] {
+  return hasCapability("jsonObjectTier", wire)
+    ? STRUCTURED_OUTPUT_MODES
+    : STRUCTURED_OUTPUT_MODES.filter((m) => m !== "json_object");
 }
 
 /** Narrow a stored string to the union — the DB column is free text. */
@@ -102,20 +103,22 @@ interface JsonModeTarget {
   relayUpstream?: RelayUpstreamChoice;
 }
 
+/** The wire a target is on — the platform inferred from the address when the row names none. */
+function targetWire(target: JsonModeTarget): Wire {
+  return { platform: resolvePlatform(target.platform, target.baseUrl ?? "", target.standard), standard: target.standard };
+}
+
 /**
  * The mode this request will actually use, as far as the config can tell.
  *
- * The Anthropic family has a schema mode and nothing weaker, so it resolves to
- * `json_schema` or `off` — never `json_object`, which it has no field for. A
- * `json_object` declaration that survived a provider change to Anthropic
- * therefore reads as `off`, not as a field the Messages API would reject.
+ * A wire without a JSON-object tier (the Anthropic family: a schema mode and
+ * nothing weaker) resolves to `json_schema` or `off` — never `json_object`,
+ * which it has no field for. A `json_object` declaration that survived a
+ * provider change to Anthropic therefore reads as `off`, not as a field the
+ * Messages API would reject.
  */
 export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutputMode {
-  const family = familyOf(target.standard);
-  const wire = {
-    platform: resolvePlatform(target.platform, target.baseUrl ?? "", target.standard),
-    standard: target.standard,
-  };
+  const wire = targetWire(target);
   // A wire measured to ignore JSON mode for this model gets the cue alone —
   // what Anthropic gets. The declaration stays on the row, not sent (a relay's
   // Kiro upstream answers `response_format` with fenced prose).
@@ -125,28 +128,23 @@ export function resolveStructuredOutput(target: JsonModeTarget): StructuredOutpu
   // `jsonSchema` cell — a fact about the platform, not the model id: 智谱
   // serves GLM and ignores json_schema, DashScope serves GLM and honours it.
   const strict = capabilityVerdict("jsonSchema", wire, model).status;
-  if (family === "anthropic") {
-    // Same rules as below, with `off` where the others would fall to
-    // `json_object`: a declared strict mode is sent unless the wire is
-    // measured to ignore it; auto lifts only on a measured wire + listed id.
-    if (target.structuredOutput) {
-      return target.structuredOutput === "json_schema" && strict !== "no" ? "json_schema" : "off";
-    }
-    return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId) ? "json_schema" : "off";
-  }
+  // The tier a request falls to below strict: JSON mode where the wire has
+  // one, else nothing — the cue alone.
+  const below: StructuredOutputMode = hasCapability("jsonObjectTier", wire, model) ? "json_object" : "off";
   if (target.structuredOutput) {
-    // A declaration the platform is measured to ignore is sent one tier down —
-    // the 200 it would get is prose, not the schema the author asked for.
-    return target.structuredOutput === "json_schema" && strict === "no" ? "json_object" : target.structuredOutput;
+    // A strict declaration the platform is measured to ignore is sent one tier
+    // down — the 200 it would get is prose, not the schema the author asked
+    // for. A JSON-object declaration on a wire without that tier is the cue.
+    if (target.structuredOutput === "json_schema") return strict === "no" ? below : "json_schema";
+    return target.structuredOutput === "json_object" ? below : "off";
   }
   // The auto tier lifts only where the wire is *measured* to honour it
   // (OpenAI's two wires, Gemini, DashScope's compatible-mode, xAI, 火山方舟's
-  // plan wires): a relay serving `gpt-4o` over `openai_compat` is a different
+  // plan wires, Anthropic's own) and the model id is on the catalog's strict
+  // list: a relay serving `gpt-4o` over `openai_compat` is a different
   // endpoint with its own idea of what it accepts, and earns the strict tier by
   // declaration or not at all. This used to be keyed on the family, which lifted exactly those.
-  return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId)
-    ? "json_schema"
-    : "json_object";
+  return strict === "yes" && target.modelId && knownJsonSchemaModel(target.modelId) ? "json_schema" : below;
 }
 
 // ─── Shaping ──────────────────────────────────────────────────────────────────
@@ -359,7 +357,7 @@ export function effectiveStructuredOutput(t: JsonModeTarget): StructuredOutputMo
   // A refused schema tier caps at json_object, which a family without that
   // tier (Anthropic) sends as the cue alone — say so here too, so the 将发送
   // line and the drawer read what the wire gets, not a tier it doesn't have.
-  return structuredOutputModesFor(t.standard).includes(mode) ? mode : "off";
+  return structuredOutputModesFor(targetWire(t)).includes(mode) ? mode : "off";
 }
 
 /** The strongest mode this endpoint+model is still allowed, or undefined when nothing was refused. */
