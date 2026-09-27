@@ -4,6 +4,8 @@
 > 表渲染出来的样子在 [`capability-matrix.md`](capability-matrix.md)（生成物）。§7 是实施记录与作者的三条决定。起因是 2026-09-19 的一次盘点（`ModelDrawer.tsx` 的全部能力选项）
 > 和它之前的一个缺陷（千问的 `vl_high_resolution_images` 按协议族放行，出现在智谱的模型上，
 > [`zhipu-plan.md`](zhipu-plan.md) G12 / P6）。那次修的是一个字段；本文要修的是**让这种缺陷能够出现的形状**。
+> **下一阶段**：值类决定、模型 id 轴、学到的降级与请求计划的模块级重构，见 [`capability-resolution-hld.md`](capability-resolution-hld.md) /
+> [`-lld.md`](capability-resolution-lld.md)（`planned`）；本文 §5 的「明确不做」由它全部继承。
 > 分层的原则在 [`provider-layering.md`](provider-layering.md)，平台画像在
 > [`channel-model-route-plan.md`](../feature/channel-model-route-plan.md) §4；本文只在它们之上加一层，不改它们的结论。
 
