@@ -792,7 +792,7 @@ describe("streamCompletion — reasoning effort", () => {
 // OpenAI's own Chat Completions refuses function tools beside any effort but
 // `none`, the model's default included (GPT-5.4 on); gpt-6-astra behind
 // OrcaRouter has no `none` (landscape.md §7 第十八个样本「GPT 全家补测」).
-describe("streamCompletion — effort on the wire (effortWithTools / reasoningOff)", () => {
+describe("streamCompletion — effort on the wire (effortWithTools / reasoningOff / effortMax / effortMinimal)", () => {
   const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
   const TOOL: ToolDefinition = { type: "function", function: { name: "pick", description: "", parameters: { type: "object", properties: {} } } };
   const official = (modelId: string, o: { tools?: boolean; reasoningEffort?: ReasoningEffort }) => collect({
@@ -831,6 +831,16 @@ describe("streamCompletion — effort on the wire (effortWithTools / reasoningOf
     });
     expect((await orca("openai/gpt-6-astra")).calls[0].body.reasoning_effort).toBe("low");
     expect((await orca("openai/gpt-6-sol")).calls[0].body.reasoning_effort).toBe("none");
+  });
+
+  it("sends the nearest level for max / minimal where the model refuses them", async () => {
+    const orca = (modelId: string, reasoningEffort: ReasoningEffort) => collect({
+      chunks: done, baseUrl: "https://api.orcarouter.ai/v1", standard: "openai_compat", platform: "orcarouter",
+      modelId, reasoningEffort,
+    });
+    expect((await orca("openai/gpt-5.6-sol", "max")).calls[0].body.reasoning_effort).toBe("xhigh");
+    expect((await orca("openai/gpt-5.6-sol", "minimal")).calls[0].body.reasoning_effort).toBe("low");
+    expect((await orca("openai/gpt-5.6-terra", "max")).calls[0].body.reasoning_effort).toBe("max");
   });
 });
 

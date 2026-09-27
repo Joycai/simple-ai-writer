@@ -155,7 +155,8 @@
 - **没有 `none` 的模型**：gpt-6-astra（Azure 上游）① ② 两面都拒 `none`，网关把原因吞成 `upstream_rejected_request`。
   本项目的处理：能力格 `reasoningOff`，「关闭」不列出，已存的 `off` 发 `low`。
 - **① 与 ② 的枚举不一样宽**：gpt-5.6-sol 在 ① 上拒 `minimal` 与 `max`（原因被吞），同一 id 在 ② 上 `max` 是 200、
-  `minimal` 回显成 `none`。
+  `minimal` 回显成 `none`。本项目的处理：能力格 `effortMax` / `effortMinimal`，两档在 ① 上不列出，已存的发成 `xhigh` / `low`
+  （[`capability-gating-plan.md`](capability-gating-plan.md) §8.15）。
 - **`minimal` 在翻译层被改写成 `low`**（回显 `low`，照样思考）；在原样线路上回显 `none`。
 - **`mode: "pro"`** 六个 id 都回显 `standard`，与两台 New API 中转站一致（[`responses.md`](responses.md) §9 仍列为官方未验）。
 - **② 的思考摘要不保证出现**：`summary: "auto"` 下有推理 token 也可能一条 `reasoning_summary_text` 都没有

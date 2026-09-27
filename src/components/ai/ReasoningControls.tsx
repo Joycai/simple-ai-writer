@@ -125,8 +125,8 @@ export function ReasoningControls({ variant }: Props) {
   const onOff = isOnOffCategory(cat);
   const hasBudget = cat.shape === "budget";
   const levels = cat.shape === "levels";
-  // The levels this model takes on this wire — the category's menu, less `off`
-  // for a model that has none (capabilities.ts `reasoningOff`).
+  // The levels this model takes on this wire — the category's menu, less the
+  // ones it refuses (capabilities.ts `reasoningOff` / `effortMax` / `effortMinimal`).
   const menu = effortMenuOnWire(cat.menu, providerWire(provider), capabilityModelOf({ modelId: model.modelId, relayUpstream: model.relayUpstream }));
 
   const onOffChips = (

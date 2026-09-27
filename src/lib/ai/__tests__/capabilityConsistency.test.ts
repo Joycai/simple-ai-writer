@@ -149,6 +149,15 @@ const PROBES: Record<CapabilityId, Probe> = {
     adapter: await adapterSends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "off" }),
     menu: effortMenuOnWire(["off", "low"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("off"),
   } : NO_ASKER),
+  // `max` goes out as max rather than the rung below it; likewise `minimal`.
+  effortMax: async (ctx) => (effortLadder(ctx) ? {
+    adapter: await adapterSends(ctx, { reasoningEffort: "xhigh" }, { reasoningEffort: "max" }),
+    menu: effortMenuOnWire(["high", "max"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("max"),
+  } : NO_ASKER),
+  effortMinimal: async (ctx) => (effortLadder(ctx) ? {
+    adapter: await adapterSends(ctx, { reasoningEffort: "low" }, { reasoningEffort: "minimal" }),
+    menu: effortMenuOnWire(["minimal", "low"], { platform: ctx.platform, standard: ctx.standard }, capabilityModelOf(ctx)).includes("minimal"),
+  } : NO_ASKER),
   // The adapter and the summary both run with the row's (unset) category, so
   // an Anthropic model thinks and the table says no — see `expected` below.
   temperature: async (ctx) => ({

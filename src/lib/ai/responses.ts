@@ -235,7 +235,8 @@ export async function streamResponses(opts: StreamOptions): Promise<void> {
     opts.messages, opts.modelId, hasCapability("instructionsField", wire, capModel) ? "instructions" : "developer",
   );
   const category = resolveThinkingCategory({ thinkingCategory: opts.thinkingCategory }, opts.standard);
-  // The lowest level for a model with no off (capabilities.ts `reasoningOff`).
+  // The nearest level the model takes where it refuses the row's (capabilities.ts
+  // `reasoningOff` / `effortMax` / `effortMinimal`).
   const reasoning = reasoningBody(category, effortOnWire(opts.reasoningEffort, wire, capModel, !!opts.tools?.length));
   const sendsTemperature = opts.temperature !== undefined
     && hasCapability("temperature", wire, { ...capModel, thinkingCategory: category.id });

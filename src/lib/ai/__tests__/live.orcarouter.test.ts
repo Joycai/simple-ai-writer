@@ -317,7 +317,6 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
   // -sol answered by OpenAI's own bodies (`chatcmpl-` / `resp_` ids). The cases
   // that pin a refusal or an absence are the sample's findings, not wishes.
   const RAW_OPENAI = ["openai/gpt-5.6-luna", "openai/gpt-5.6-sol"];
-  const REJECTED = /400.*upstream_rejected_request/;
   describe.each([
     "openai/gpt-6-astra", "openai/gpt-6-sol", "openai/gpt-6-luna",
     "openai/gpt-5.6-luna", "openai/gpt-5.6-terra", "openai/gpt-5.6-sol",
@@ -347,12 +346,23 @@ describe.skipIf(!KEY)("LIVE OrcaRouter, four surfaces", () => {
         expect(sent).toBe(modelId === "openai/gpt-6-astra" ? "low" : "none");
       }, 120_000);
 
-      // gpt-5.6-sol's raw Chat refuses `max` (reason hidden); on Responses it
-      // takes it. gpt-5.6-luna's is served — through the OpenRouter layer.
+      // gpt-5.6-sol's raw Chat refuses `max` and `minimal` (reason hidden), so
+      // they go out as `xhigh` / `low` there (capabilities.ts `effortMax` /
+      // `effortMinimal`); on Responses it takes `max`. gpt-5.6-luna's are
+      // served — through the OpenRouter layer.
+      const narrowed = route === CHAT && modelId === "openai/gpt-5.6-sol";
+      const sentEffort = (c: Awaited<ReturnType<typeof ask>>) =>
+        route === CHAT ? c.body!.reasoning_effort : (c.body!.reasoning as { effort: string }).effort;
       it("answers at effort max", async () => {
-        const run = ask(route, user(PUZZLE), { reasoningEffort: "max" }, modelId);
-        if (route === CHAT && modelId === "openai/gpt-5.6-sol") await expect(run).rejects.toThrow(REJECTED);
-        else expect((await run).text).toMatch(/0?\.05/);
+        const c = await ask(route, user(PUZZLE), { reasoningEffort: "max" }, modelId);
+        expect(c.text).toMatch(/0?\.05/);
+        expect(sentEffort(c)).toBe(narrowed ? "xhigh" : "max");
+      }, 180_000);
+
+      it("answers at effort minimal", async () => {
+        const c = await ask(route, user(PUZZLE), { reasoningEffort: "minimal" }, modelId);
+        expect(c.text).toMatch(/0?\.05/);
+        expect(sentEffort(c)).toBe(narrowed ? "low" : "minimal");
       }, 180_000);
 
       it("sees the image and reads the PDF", async () => {

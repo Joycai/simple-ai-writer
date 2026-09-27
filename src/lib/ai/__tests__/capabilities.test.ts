@@ -567,6 +567,25 @@ describe("effort cells", () => {
     expect(effortMenuOnWire(menu, orcaResp, { modelId: "openai/gpt-6-luna" })).toEqual([...menu]);
     expect(effortMenuOnWire(menu, undefined, { modelId: "openai/gpt-6-astra" })).toEqual([...menu]);
   });
+
+  it("gpt-5.6-sol's Chat has no max and no minimal: the nearest level goes out, and only there", () => {
+    const sol = { modelId: "openai/gpt-5.6-sol" };
+    expect(effortOnWire("max", orcaChat, sol, false)).toBe("xhigh");
+    expect(effortOnWire("minimal", orcaChat, sol, false)).toBe("low");
+    expect(effortOnWire("high", orcaChat, sol, false)).toBe("high");
+    // Its Responses takes max (GPT 全家补测), and so do the ids beside it.
+    expect(effortOnWire("max", orcaResp, sol, false)).toBe("max");
+    expect(effortOnWire("max", orcaChat, { modelId: "openai/gpt-6-sol" }, false)).toBe("max");
+    // Tools still win: off beside tools, whatever the row says.
+    expect(effortOnWire("max", orcaChat, sol, true)).toBe("off");
+  });
+
+  it("effortMenuOnWire drops max and minimal for gpt-5.6-sol's Chat, keeps them on its Responses", () => {
+    const menu = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+    const sol = { modelId: "openai/gpt-5.6-sol" };
+    expect(effortMenuOnWire(menu, orcaChat, sol)).toEqual(["off", "low", "medium", "high", "xhigh"]);
+    expect(effortMenuOnWire(menu, orcaResp, sol)).toEqual([...menu]);
+  });
 });
 
 describe("zhipu", () => {
