@@ -78,6 +78,7 @@ import hub from "./ProvidersModels.module.css";
 import s from "./ModelDrawer.module.css";
 import r from "./Routes.module.css";
 import { CapabilityMatrix } from "./CapabilityMatrix";
+import { ValueFactMatrix } from "./ValueFactMatrix";
 import { UpstreamSection } from "./UpstreamFields";
 
 /** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
@@ -1387,6 +1388,16 @@ export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
                 <Note text={t("aiConfig.probe.probedAt", { date: new Date(probed.at).toLocaleString() })} tone="ok" />
               )}
             </Field>
+            {/* Each route's category, window and cap with its source — the
+                current route's are the fields above; the others' come from
+                their parked fields (设计稿 P6 界面 屏 3a). */}
+            {route && multiRoute && (
+              <ValueFactMatrix label={t("aiConfig.models.valueMatrixLabel")} routes={channelRoutes} current={route}
+                wireFor={routeWire} modelId={form.modelId.trim()} contextSize={parsedCtx || undefined} catalogId={catalogId}
+                valuesFor={(f) => (f === route
+                  ? { thinkingCategory: form.thinkingCategory === "auto" ? undefined : form.thinkingCategory, maxOutput: parsedOut || undefined }
+                  : { thinkingCategory: parked[f]?.thinkingCategory, maxOutput: parked[f]?.maxOutput })} />
+            )}
           </Section>
 
           <Section

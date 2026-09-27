@@ -2827,7 +2827,16 @@
       "limitsSumCtx": "窗口 {{value}}",
       "limitsSumOut": "上限 {{value}}",
       "secLimitsFollow": "跟随 · {{items}}",
-      "phUnknown": "未知"
+      "phUnknown": "未知",
+      "valueSourceShort": {
+        "author": "手填",
+        "platform": "平台",
+        "catalog": "目录",
+        "protocol": "协议",
+        "default": "应用"
+      },
+      "valueMatrixLabel": "各线路的类目、窗口与上限",
+      "valueMatrixLegend": "小字是出处：平台 · 目录 · 协议 · 应用；实色为手填。留空跟随出处；Anthropic 协议的 max_tokens 只发手填的值。"
     },
     "probe": {
       "title": "探测真实上限",

@@ -2835,7 +2835,16 @@
       "limitsSumCtx": "window {{value}}",
       "limitsSumOut": "cap {{value}}",
       "secLimitsFollow": "following · {{items}}",
-      "phUnknown": "unknown"
+      "phUnknown": "unknown",
+      "valueSourceShort": {
+        "author": "typed",
+        "platform": "platform",
+        "catalog": "catalog",
+        "protocol": "protocol",
+        "default": "app"
+      },
+      "valueMatrixLabel": "Category, window and cap per route",
+      "valueMatrixLegend": "The small word is the source: platform · catalog · protocol · app; full ink is typed. Empty follows its source; the Anthropic protocol sends only a typed max_tokens."
     },
     "probe": {
       "title": "Probe real limits",
